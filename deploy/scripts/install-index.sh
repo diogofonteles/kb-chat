@@ -13,11 +13,16 @@
 # previous index. Older index files are pruned, the previous one kept.
 set -euo pipefail
 
+# Read by sync-vault.sh (grep -qx) before it asks for --hot: an install-index.sh without this
+# line ignores --hot and restarts the API (KBC-100 review 3). Keep it exactly as it is.
+KB_CHAT_INSTALL_INDEX_HOT=1
+: "$KB_CHAT_INSTALL_INDEX_HOT"
+
 HOT=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --hot) HOT=1; shift ;;
-    -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,13p' "$0"; exit 0 ;;
     *) echo "install-index: unknown option $1" >&2; exit 1 ;;
   esac
 done
@@ -43,8 +48,10 @@ fi
 TRIGGER="$CACHE/reload-index"
 RELOAD_WAIT_S="${KB_CHAT_RELOAD_WAIT_S:-60}"
 
-# One rename: a reader opens either the old index or the new one, never none.
+# One rename: a reader opens either the old index or the new one, never none. A link left by
+# an interrupted run is replaced (review 4); anything else there makes the swap fail.
 point_index_at() {
+  rm -f "$CACHE/.index.sqlite.next"
   ln -s "$1" "$CACHE/.index.sqlite.next"
   mv -f "$CACHE/.index.sqlite.next" "$CACHE/index.sqlite"
 }
@@ -78,8 +85,24 @@ prune() {
   rm -f "$CACHE/index.sqlite-wal" "$CACHE/index.sqlite-shm" "$CACHE/index.sqlite.previous"
 }
 
+# A swap cut short (set -e, a signal) puts the config and the link back together, so the API
+# never reads a new config over the old index (review 4). `changing` while files move.
+HOT_STATE=idle
+HOT_PREVIOUS=""
+# shellcheck disable=SC2329 # invoked by the EXIT trap set in install_hot
+undo_hot() {
+  [ "$HOT_STATE" = changing ] || return 0
+  HOT_STATE=settled
+  echo "install-index: the swap stopped half way; putting the previous index and config back" >&2
+  if [ -f "$CONFIG/index.yml.previous" ]; then mv -f "$CONFIG/index.yml.previous" "$CONFIG/index.yml" || true; fi
+  if [ -n "$HOT_PREVIOUS" ] && [ -e "$CACHE/$HOT_PREVIOUS" ]; then
+    ln -sf "$HOT_PREVIOUS" "$CACHE/index.sqlite" || true
+  fi
+}
+
 install_hot() {
   local stamp name previous=""
+  trap undo_hot EXIT
   stamp="$(date -u +%Y%m%d%H%M%S)"
   name="index-$stamp.sqlite"
   [ -e "$CACHE/$name" ] && name="index-$stamp-$$.sqlite"
@@ -90,6 +113,10 @@ install_hot() {
     previous="index-before-$stamp.sqlite"
     ln "$CACHE/index.sqlite" "$CACHE/$previous"
   fi
+  HOT_PREVIOUS="$previous"
+  # A .previous left by an older run must never be what a rollback puts back.
+  rm -f "$CONFIG/index.yml.previous"
+  HOT_STATE=changing
   mv -f "$INCOMING/index.sqlite" "$CACHE/$name"
   if [ -f "$CONFIG/index.yml" ]; then cp -f "$CONFIG/index.yml" "$CONFIG/index.yml.previous"; fi
   install -m 0644 "$INCOMING/index.yml" "$CONFIG/index.yml"
@@ -99,15 +126,18 @@ install_hot() {
   ask_reload "$name"
 
   if [ ! -f "$DEPLOY_DIR/release.env" ]; then
+    HOT_STATE=settled
     echo "install-index: index installed; the first deploy will start the API"
     return 0
   fi
   if acked "$name" && "$DEPLOY_DIR/scripts/smoke.sh"; then
+    HOT_STATE=settled
     prune "$name" "$previous"
     echo "install-index: new index live, the API kept running ($name)"
     return 0
   fi
 
+  HOT_STATE=settled
   echo "install-index: the API did not take $name; going back to the previous index" >&2
   if [ -n "$previous" ]; then
     point_index_at "$previous"

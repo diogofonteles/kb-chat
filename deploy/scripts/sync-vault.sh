@@ -10,7 +10,8 @@
 #                      needs passwordless sudo on the VM (they are written as the API user)
 #   --max-delete <n>   refuse when rsync would delete more than n vault files (default 200)
 #   --hot              swap the index without restarting the API (install-index.sh --hot);
-#                      what the transcriber runs by itself after a publication (KBC-100)
+#                      what the transcriber runs by itself after a publication (KBC-100).
+#                      Refused, with nothing sent, when the VM's install-index.sh has none
 #   --dry-run          list the changes, send nothing
 # Safeguards: the source must be a kb vault with at least one topic; deletions on the VM are
 # capped; the vault is written under the VM's deploy lock (deploy.sh's), so never during a
@@ -42,7 +43,7 @@ while [ $# -gt 0 ]; do
     --with-models) WITH_MODELS=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --hot) HOT=1; shift ;;
-    -h | --help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,19p' "$0"; exit 0 ;;
     *) die "unknown option $1" ;;
   esac
 done
@@ -72,6 +73,20 @@ awk -v prefix="$VAULT/" '
   }
   { print }
 ' "$QMD_CONFIG" >"$server_config_dir/index.yml"
+
+# --hot only to a VM whose install-index.sh swaps hot: an older one (a release before KBC-100)
+# ignores --hot and restarts production's API. Asked by reading the script, never running it,
+# before anything is sent (review 3).
+if [ "$HOT" -eq 1 ]; then
+  probe=0
+  # shellcheck disable=SC2029 # the path is meant to expand here, on the Mac
+  ssh "$HOST" grep -qx KB_CHAT_INSTALL_INDEX_HOT=1 "$REMOTE_ROOT/deploy/scripts/install-index.sh" || probe=$?
+  case "$probe" in
+    0) ;;
+    1) die "the VM's install-index.sh has no hot swap (the release with KBC-100 is not in production yet); nothing was sent and the API was not touched. Deploy that release first, or sync by hand without --hot" ;;
+    *) die "could not ask the VM whether install-index.sh swaps hot (exit $probe); nothing was sent" ;;
+  esac
+fi
 
 RSYNC=(rsync -az --human-readable --itemize-changes --partial)
 # The VM's rsync runs holding the deploy lock: a deploy and a sync never run together.

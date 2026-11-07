@@ -206,6 +206,8 @@ deploy/scripts/sync-vault.sh --host ubuntu@<IP> --with-models   # 1ª vez: tamb�
 
 Com o Mac marcado **Publica no acervo**, o transcritor publica os documentos das faixas e manda o acervo à produção sozinho, no máximo a cada 30 min e só com mudança pendente:
 
+> **Atenção: só ligue `--sync-host` depois que a release com o KBC-100 estiver em produção.** O transcritor roda o `sync-vault.sh` do checkout do Mac, mas o `install-index.sh` que vale é o da VM. Um `install-index.sh` anterior ao KBC-100 ignora `--hot` e reinicia a API. Por isso o `sync-vault.sh --hot` lê antes o script da VM (`grep -qx KB_CHAT_INSTALL_INDEX_HOT=1`, sem executá-lo). Se a linha não estiver lá, ele recusa sem mandar nada e sem tocar na API, e o transcritor mostra a sincronização como **falhou** até a release chegar à produção.
+
 ```bash
 uv run --project tools/transcriber transcriber pair --api-url <url> --vault ~/dev/personal/hermetismo --sync-host ubuntu@<IP>
 # ou, num pareamento já feito: transcriber run --sync-host ubuntu@<IP>   (--no-sync desliga)
@@ -215,6 +217,7 @@ uv run --project tools/transcriber transcriber pair --api-url <url> --vault ~/de
 - O rsync do lado da VM espera a trava do deploy (`flock -w 600 /srv/kb-chat/deploy/.lock`): nunca roda junto com um deploy. O limite de remoções (`--max-delete`, 200) continua valendo.
 - `install-index.sh --hot` não para a API: instala o índice como `index-<hora UTC>.sqlite`, troca o link `index.sqlite` num só `rename`, escreve `qmd/cache/reload-index`; a API sobe um `qmd mcp` novo, relê o catálogo e responde em `reload-index.ack`. Sem resposta em 60 s (ou com o smoke falhando) o link volta ao índice anterior. Sem `--hot`, o script reinicia a API como antes.
 - A trava `deploy/.lock` precisa existir (o primeiro deploy a cria) e ser legível pelo usuário SSH.
+- Uma troca interrompida no meio (SSH caído, timeout) devolve juntos o `index.yml` anterior e o link anterior. Um `.index.sqlite.next` que sobrou de uma execução morta é substituído na próxima troca.
 
 ## 8. Primeiro deploy
 

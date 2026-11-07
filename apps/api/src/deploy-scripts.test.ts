@@ -193,6 +193,52 @@ describe('install-index.sh --hot (KBC-100 FR-5, AC-13)', () => {
     ).toBe(true);
   });
 
+  it('review 4: a link left by an interrupted run does not stop the next swap', async () => {
+    const vm = await aVm({ previous: 'link' });
+    await symlink('index-0.sqlite', join(vm.cache, '.index.sqlite.next'));
+    const done = await run(join(vm.root, 'deploy/scripts/install-index.sh'), {
+      args: ['--hot'],
+      env: vm.env,
+      whileRunning: answerTrigger(vm.cache),
+    });
+
+    expect(done.code, done.output).toBe(0);
+    const target = await readlink(join(vm.cache, 'index.sqlite'));
+    expect(target).toMatch(/^index-\d{14}\.sqlite$/);
+    expect(await readFile(join(vm.cache, target), 'utf8')).toContain('new');
+    expect((await readdir(vm.cache)).includes('.index.sqlite.next')).toBe(
+      false,
+    );
+  });
+
+  it('review 4: a swap that fails half way puts the config and the index back together', async () => {
+    const vm = await aVm({ previous: 'link' });
+    const config = join(vm.root, 'qmd', 'config');
+    await mkdir(config, { recursive: true });
+    await writeFile(join(config, 'index.yml'), 'collections: {} # old\n');
+    // Something the swap cannot replace: the rename onto index.sqlite fails.
+    await mkdir(join(vm.cache, '.index.sqlite.next', 'stuck'), {
+      recursive: true,
+    });
+    const done = await run(join(vm.root, 'deploy/scripts/install-index.sh'), {
+      args: ['--hot'],
+      env: vm.env,
+    });
+
+    expect(done.code).not.toBe(0);
+    expect(done.output).toContain('putting the previous index and config back');
+    expect(await readlink(join(vm.cache, 'index.sqlite'))).toBe(
+      'index-1.sqlite',
+    );
+    expect(await readFile(join(config, 'index.yml'), 'utf8')).toBe(
+      'collections: {} # old\n',
+    );
+    // Nothing was asked of the API.
+    expect(
+      await readFile(join(vm.cache, 'reload-index'), 'utf8').catch(() => null),
+    ).toBeNull();
+  });
+
   it('before the first deploy it only puts the files in place', async () => {
     const vm = await aVm({ previous: 'none' });
     await rm(join(vm.root, 'deploy', 'release.env'));
@@ -222,7 +268,19 @@ async function aMac() {
     join(home, '.config', 'qmd', 'index.yml'),
     `collections:\n  hermetismo:\n    path: ${vault}/hermetismo\n`,
   );
-  await fakeBin(bin, 'ssh', `echo "ssh $*" >>"${log}"`);
+  // A read of the VM's install-index.sh (the hot swap probe) reads FAKE_VM_INSTALL_INDEX.
+  await fakeBin(
+    bin,
+    'ssh',
+    [
+      `echo "ssh $*" >>"${log}"`,
+      'if [ "$2" = grep ]; then',
+      '  [ -n "${FAKE_SSH_DOWN:-}" ] && exit 255',
+      '  shift 2',
+      '  exec grep "${@:1:$#-1}" "$FAKE_VM_INSTALL_INDEX"',
+      'fi',
+    ].join('\n'),
+  );
   await fakeBin(
     bin,
     'rsync',
@@ -238,6 +296,8 @@ async function aMac() {
     XDG_CONFIG_HOME: join(home, '.config'),
     KB_VAULT: vault,
     PATH: `${bin}:${process.env['PATH'] ?? ''}`,
+    // The VM runs this checkout's install-index.sh unless a test says otherwise.
+    FAKE_VM_INSTALL_INDEX: join(SCRIPTS, 'install-index.sh'),
   };
   return { home, log, env };
 }
@@ -280,5 +340,46 @@ describe('sync-vault.sh (KBC-100 FR-4, BR-7)', () => {
     expect(ssh).toBe(
       'ssh ubuntu@vm sudo /srv/kb-chat/deploy/scripts/install-index.sh',
     );
+  });
+
+  it('review 3: a VM whose install-index.sh has no hot swap gets nothing, and its API is never restarted', async () => {
+    const mac = await aMac();
+    // The install-index.sh of a release before KBC-100: it ignores --hot and restarts the API.
+    const old = join(mac.home, 'old-install-index.sh');
+    await writeFile(
+      old,
+      '#!/usr/bin/env bash\nset -euo pipefail\ncompose stop api\n',
+    );
+    const done = await run(join(SCRIPTS, 'sync-vault.sh'), {
+      args: ['--host', 'ubuntu@vm', '--hot'],
+      env: { ...mac.env, FAKE_VM_INSTALL_INDEX: old },
+    });
+
+    expect(done.code).not.toBe(0);
+    expect(done.output).toContain('has no hot swap');
+    expect(done.output).toContain('nothing was sent');
+    const log = await calls(mac.log);
+    expect(log).not.toContain('rsync');
+    expect(log).not.toContain('install-index.sh --hot');
+    expect(log.trim().split('\n')).toEqual([
+      'ssh ubuntu@vm grep -qx KB_CHAT_INSTALL_INDEX_HOT=1 /srv/kb-chat/deploy/scripts/install-index.sh',
+    ]);
+  });
+
+  it('review 3: a VM that cannot be asked gets nothing either', async () => {
+    const mac = await aMac();
+    const done = await run(join(SCRIPTS, 'sync-vault.sh'), {
+      args: ['--host', 'ubuntu@vm', '--hot'],
+      env: { ...mac.env, FAKE_SSH_DOWN: '1' },
+    });
+
+    expect(done.code).not.toBe(0);
+    expect(done.output).toContain('could not ask the VM');
+    expect(await calls(mac.log)).not.toContain('rsync');
+  });
+
+  it("review 3: this release's install-index.sh says it swaps hot", async () => {
+    const script = await readFile(join(SCRIPTS, 'install-index.sh'), 'utf8');
+    expect(script.split('\n')).toContain('KB_CHAT_INSTALL_INDEX_HOT=1');
   });
 });
