@@ -15,10 +15,16 @@ class FakeQmd {
   /** Spawns waiting for `admit` (an open still in flight). */
   private readonly held: (() => void)[] = [];
   holdOpens = false;
+  /** How many of the next spawns fail (the new index does not open). */
+  failOpens = 0;
   private slow: (() => void)[] = [];
 
   readonly open = async (): Promise<QmdClient> => {
     if (this.holdOpens) await new Promise<void>((go) => this.held.push(go));
+    if (this.failOpens > 0) {
+      this.failOpens -= 1;
+      throw new Error('qmd mcp did not start');
+    }
     const child = new FakeChild(this.spawned.length + 1, this);
     this.spawned.push(child);
     return child;
@@ -104,6 +110,45 @@ describe('QmdMcpAdapter swaps (KBC-100 review 2, NFR-2)', () => {
     expect(fake.spawned).toHaveLength(2);
     expect(fake.alive()).toEqual([2]);
     expect(await pidOf(adapter)).toBe(2);
+  });
+
+  it('a reload that fails while the process is down schedules the reconnect again (review 3)', async () => {
+    const fake = new FakeQmd();
+    adapter = new QmdMcpAdapter({
+      command: 'qmd',
+      openClient: fake.open,
+      backoffMs: [30],
+      drainMs: 1_000,
+    });
+    await adapter.start();
+    fake.spawned[0]?.crash();
+    fake.failOpens = 1;
+
+    await expect(adapter.reload()).rejects.toThrow('qmd mcp did not start');
+    await tick(100); // past the reconnect's backoff
+
+    expect(fake.alive()).toEqual([2]);
+    expect(adapter.status()).toBe('ok');
+    expect(await pidOf(adapter)).toBe(2);
+  });
+
+  it('a reload that fails while the process serves keeps it and schedules nothing', async () => {
+    const fake = new FakeQmd();
+    adapter = new QmdMcpAdapter({
+      command: 'qmd',
+      openClient: fake.open,
+      backoffMs: [30],
+      drainMs: 1_000,
+    });
+    await adapter.start();
+    fake.failOpens = 1;
+
+    await expect(adapter.reload()).rejects.toThrow('qmd mcp did not start');
+    await tick(100);
+
+    expect(fake.spawned).toHaveLength(1);
+    expect(fake.alive()).toEqual([1]);
+    expect(await pidOf(adapter)).toBe(1);
   });
 
   it('a reload that crosses a reconnect in flight closes the one that lost', async () => {

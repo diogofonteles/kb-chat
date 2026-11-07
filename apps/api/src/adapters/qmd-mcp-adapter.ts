@@ -157,12 +157,20 @@ export class QmdMcpAdapter implements SearchIndexPort {
    * A new index is in place (KBC-100 FR-5): a new `qmd mcp` opens it and takes the next
    * searches; the old one finishes what it was doing, then closes. Search is never down: if
    * the new process does not start, the old one keeps serving and the error is thrown.
-   * A reconnect waiting for its turn is dropped: the new process is the reconnect.
+   * A reconnect waiting for its turn is dropped: the new process is the reconnect. If it
+   * fails and no process serves, the reconnect is scheduled again (review 3): search must
+   * not stay on the `kb search` fallback until the next trigger.
    */
   async reload(): Promise<void> {
     if (this.closed) return;
     this.cancelRestart();
-    const next = await this.open();
+    let next: QmdClient;
+    try {
+      next = await this.open();
+    } catch (err) {
+      if (!this.client) this.scheduleRestart();
+      throw err;
+    }
     if (this.closed) {
       await next.close();
       return;
