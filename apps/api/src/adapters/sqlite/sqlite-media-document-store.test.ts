@@ -226,6 +226,29 @@ describe('SqliteMediaDocumentStore (KBC-100)', () => {
     expect(store.queueSummary()).toMatchObject({ waiting: 1, failed: [] });
   });
 
+  it('review suggestion: failed reads the 20 newest, one per media, however many failed', () => {
+    const { db, store } = aStore();
+    const at = (minute: number) =>
+      `2026-11-07T14:${String(minute).padStart(2, '0')}:00.000Z`;
+    for (let n = 0; n < 30; n += 1)
+      db.prepare(
+        `INSERT INTO media_documents (media_id, topic, path, desired_sha256, state, attempts,
+           last_error, updated_at) VALUES (?, 'hermetismo', ?, ?, 'failed', 4, 'x', ?)`,
+      ).run(`m${n}`, `raw/media/r/m${n}.md`, A, at(n));
+    // m29, the newest, also left a removal given up on, older than its document.
+    db.prepare(
+      `INSERT INTO media_document_removals (topic, path, media_id, attempts, last_error,
+         created_at, updated_at) VALUES ('udv', 'raw/media/r/old.md', 'm29', 4, 'y', ?, ?)`,
+    ).run(at(0), at(0));
+
+    const failed = store.queueSummary().failed;
+
+    expect(failed.map((one) => one.mediaId)).toEqual(
+      Array.from({ length: 20 }, (_, at) => `m${29 - at}`),
+    );
+    expect(failed[0]).toMatchObject({ topic: 'hermetismo', error: 'x' });
+  });
+
   it('review 5: retry leaves a removal still being tried as it is', () => {
     const { db, store } = aStore();
     want(store);

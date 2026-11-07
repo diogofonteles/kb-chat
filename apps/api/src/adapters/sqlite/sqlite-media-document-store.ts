@@ -294,12 +294,14 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
 
   /**
    * The documents and the removals given up on, newest first: what masters may retry. A
-   * media with both (a move) shows once; one deleted since is named by its file.
+   * media with both (a move) shows once, by its newest row (SQLite takes the other columns
+   * from the row MAX picks); one deleted since is named by its file. Read up to the shown
+   * count only, however long kb has been failing (review suggestion).
    */
   private failed(): QueueSummary['failed'] {
     const rows = this.db
       .prepare(
-        `SELECT media_id, topic, title, last_error, updated_at FROM (
+        `SELECT media_id, topic, title, last_error, MAX(updated_at) AS updated_at FROM (
            SELECT d.media_id, d.topic, COALESCE(m.title, '') AS title, d.last_error,
              d.updated_at FROM media_documents d LEFT JOIN media m ON m.id = d.media_id
            WHERE d.attempts >= ? AND ${NOT_PUBLISHED}
@@ -307,22 +309,18 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
            SELECT r.media_id, r.topic, COALESCE(m.title, r.path), r.last_error, r.updated_at
            FROM media_document_removals r LEFT JOIN media m ON m.id = r.media_id
            WHERE r.attempts >= ?)
-         ORDER BY updated_at DESC, media_id`,
+         GROUP BY media_id
+         ORDER BY updated_at DESC, media_id
+         LIMIT ?`,
       )
-      .all(MAX_DOCUMENT_ATTEMPTS, MAX_DOCUMENT_ATTEMPTS);
-    const byMedia = new Map<string, QueueSummary['failed'][number]>();
-    for (const row of rows) {
-      const mediaId = String(row['media_id']);
-      if (byMedia.has(mediaId)) continue;
-      byMedia.set(mediaId, {
-        mediaId,
-        topic: String(row['topic']),
-        title: String(row['title']),
-        error: String(row['last_error'] ?? 'kb failed'),
-        since: String(row['updated_at']),
-      });
-    }
-    return [...byMedia.values()].slice(0, FAILED_SHOWN);
+      .all(MAX_DOCUMENT_ATTEMPTS, MAX_DOCUMENT_ATTEMPTS, FAILED_SHOWN);
+    return rows.map((row) => ({
+      mediaId: String(row['media_id']),
+      topic: String(row['topic']),
+      title: String(row['title']),
+      error: String(row['last_error'] ?? 'kb failed'),
+      since: String(row['updated_at']),
+    }));
   }
 
   recordSync(sync: VaultSyncRecord): void {
