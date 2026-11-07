@@ -16,6 +16,8 @@ from .secret import CachedToken, TokenError, load_token, save_keychain
 CONFIG_FILE = (
     Path.home() / "Library" / "Application Support" / "nova-alexandria-transcriber" / "config.json"
 )
+# What the automatic sync left pending, and when it last ran (KBC-100 FR-4).
+SYNC_STATE_FILE = CONFIG_FILE.parent / "vault-sync.json"
 # This checkout's sync script (tools/transcriber/src/transcriber → the repository's root).
 SYNC_SCRIPT = Path(__file__).resolve().parents[4] / "deploy" / "scripts" / "sync-vault.sh"
 
@@ -113,7 +115,7 @@ def run(args: argparse.Namespace) -> int:
     return worker.run(once=args.once, exit_when_idle=args.exit_when_idle)
 
 
-def vault_sync_of(args: argparse.Namespace, config: dict, kb):
+def vault_sync_of(args: argparse.Namespace, config: dict, kb, state_file: Path = SYNC_STATE_FILE):
     """The automatic sync with production (KBC-100 FR-4): only with kb and a host to send to."""
     from .vault_sync import VaultSync
 
@@ -121,9 +123,9 @@ def vault_sync_of(args: argparse.Namespace, config: dict, kb):
     if kb is None or not host or args.no_sync:
         return None
     script = Path(args.sync_script).expanduser() if args.sync_script else SYNC_SCRIPT
-    sync = VaultSync(script=script, host=host, vault=kb.vault)
-    # What a previous run published may not have reached production yet.
-    sync.mark_pending()
+    sync = VaultSync(script=script, host=host, vault=kb.vault, state_file=state_file)
+    # What a previous run published and did not send is still pending; a restart alone is not.
+    sync.load()
     return sync
 
 

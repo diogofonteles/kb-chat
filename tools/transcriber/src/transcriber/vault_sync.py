@@ -4,8 +4,10 @@ After a publication the change is pending; `sync-vault.sh --hot` runs at most on
 minutes, only with a change pending, from the worker's own loop (never during a job). The
 script takes the VM's deploy lock and caps deletions; `install-index.sh --hot` then swaps the
 index without restarting the API. A failed sync keeps the change pending for the next turn.
+What is pending and when it last ran are kept in a file, so a restart is not a change.
 """
 
+import json
 import subprocess
 import time
 from collections.abc import Callable
@@ -50,9 +52,34 @@ class VaultSync:
     runner: Callable[[list[str]], tuple[int, str]] = field(default=run_script)
     last_run: float | None = None
     pending: bool = False
+    # Where `pending` and `last_run` survive a restart (launchd restarts the worker).
+    state_file: Path | None = None
+
+    def load(self) -> None:
+        """The state of the previous run; none (or unreadable) is a change: sync once."""
+        if self.state_file is None:
+            self.pending = True
+            return
+        try:
+            saved = json.loads(self.state_file.read_text(encoding="utf-8"))
+            self.pending = bool(saved["pending"])
+            last = saved.get("last_run")
+            self.last_run = float(last) if last is not None else None
+        except (OSError, ValueError, KeyError, TypeError):
+            self.pending = True
+
+    def _save(self) -> None:
+        if self.state_file is None:
+            return
+        self.state_file.parent.mkdir(parents=True, exist_ok=True)
+        self.state_file.write_text(
+            json.dumps({"pending": self.pending, "last_run": self.last_run}) + "\n",
+            encoding="utf-8",
+        )
 
     def mark_pending(self) -> None:
         self.pending = True
+        self._save()
 
     def due(self) -> bool:
         if not self.pending:
@@ -70,6 +97,7 @@ class VaultSync:
         code, output = self.runner(self.command())
         self.last_run = self.clock()
         self.pending = code != 0
+        self._save()
         return {
             "ok": code == 0,
             "detail": (output or f"exit {code}")[-REPORT_CHARS:],

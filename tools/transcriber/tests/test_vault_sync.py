@@ -189,10 +189,85 @@ def test_the_cli_syncs_only_with_kb_and_a_host_to_send_to(tmp_path):
     args = Namespace(sync_host=None, sync_script=None, no_sync=False)
     assert vault_sync_of(args, {}, kb) is None
     assert vault_sync_of(args, {"sync_host": "ubuntu@vm"}, None) is None
-    sync = vault_sync_of(args, {"sync_host": "ubuntu@vm"}, kb)
+    sync = vault_sync_of(args, {"sync_host": "ubuntu@vm"}, kb, state_file=tmp_path / "s.json")
     assert sync is not None
     assert sync.script == SYNC_SCRIPT
     assert SYNC_SCRIPT.name == "sync-vault.sh" and SYNC_SCRIPT.exists()
     assert sync.pending is True
     off = Namespace(sync_host="ubuntu@vm", sync_script=None, no_sync=True)
     assert vault_sync_of(off, {}, kb) is None
+
+
+def test_a_restart_with_nothing_pending_does_not_sync_again(tmp_path):
+    """Review suggestion: a start of the transcriber is not a change (launchd restarts it)."""
+    state = tmp_path / "vault-sync.json"
+    runner = Runner()
+    clock = Clock()
+    first = VaultSync(
+        script=tmp_path / "sync-vault.sh",
+        host="ubuntu@vm",
+        vault=tmp_path,
+        clock=clock,
+        runner=runner,
+        state_file=state,
+    )
+    first.load()
+    assert first.pending is True  # never synced from this Mac: whatever was published goes
+    assert first.run_if_due() is not None
+
+    again = VaultSync(
+        script=tmp_path / "sync-vault.sh",
+        host="ubuntu@vm",
+        vault=tmp_path,
+        clock=clock,
+        runner=runner,
+        state_file=state,
+    )
+    again.load()
+    assert again.pending is False
+    assert again.run_if_due() is None
+    assert len(runner.commands) == 1
+
+
+def test_a_change_or_a_failure_left_pending_survives_a_restart(tmp_path):
+    state = tmp_path / "vault-sync.json"
+    clock = Clock()
+    failing = VaultSync(
+        script=tmp_path / "sync-vault.sh",
+        host="ubuntu@vm",
+        vault=tmp_path,
+        clock=clock,
+        runner=Runner(code=1, output="sync-vault: ssh down"),
+        state_file=state,
+    )
+    failing.load()
+    failing.run_if_due()
+    restarted = VaultSync(
+        script=tmp_path / "sync-vault.sh",
+        host="ubuntu@vm",
+        vault=tmp_path,
+        clock=clock,
+        runner=Runner(),
+        state_file=state,
+    )
+    restarted.load()
+    assert restarted.pending is True
+    # The 30-minute interval counts from the last run, across the restart.
+    assert restarted.run_if_due() is None
+    clock.now += SYNC_INTERVAL_S
+    assert restarted.run_if_due() is not None
+
+
+def test_a_state_file_that_cannot_be_read_counts_as_a_change(tmp_path):
+    state = tmp_path / "vault-sync.json"
+    state.write_text("{not json", encoding="utf-8")
+    sync = VaultSync(
+        script=tmp_path / "sync-vault.sh",
+        host="ubuntu@vm",
+        vault=tmp_path,
+        clock=Clock(),
+        runner=Runner(),
+        state_file=state,
+    )
+    sync.load()
+    assert sync.pending is True
