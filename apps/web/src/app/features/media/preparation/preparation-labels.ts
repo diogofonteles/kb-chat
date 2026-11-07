@@ -53,6 +53,27 @@ export const usdText = (value: number, locale: string): string =>
     maximumFractionDigits: value < 0.01 ? 4 : 2,
   }).format(value);
 
+/** `value` rounded up at `digits` decimals; the scale is settled first (0.024 stays 0.024). */
+export function roundUp(value: number, digits: number): number {
+  const scale = 10 ** digits;
+  return Math.ceil(Number((value * scale).toPrecision(12))) / scale;
+}
+
+/**
+ * An estimate or a most to spend: rounded up at the 3 decimals shown (2 from a dollar on),
+ * so the value on screen is never below the limit the run holds to (KBC-112 BR-7):
+ * "US$ 0,024", "US$ 0,002". What was spent keeps the common rounding (`usdText`).
+ */
+export function usdUpText(value: number, locale: string): string {
+  const digits = value >= 1 ? 2 : 3;
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(roundUp(value, digits));
+}
+
 const FAILURES: Record<StageFailure, () => string> = {
   work: () =>
     $localize`:@@prep.failure.work:Falhou: o trabalho não terminou no computador do transcritor.`,
@@ -62,6 +83,8 @@ const FAILURES: Record<StageFailure, () => string> = {
     $localize`:@@prep.failure.invalidOutput:Falhou: a resposta da IA veio incompleta.`,
   interrupted: () =>
     $localize`:@@prep.failure.interrupted:Falhou: a análise foi interrompida.`,
+  'accepted-limit': () =>
+    $localize`:@@prep.failure.acceptedLimit:A análise parou no valor aceito, antes de gastar mais do que ele.`,
   'run-cap': () =>
     $localize`:@@prep.failure.runCap:A análise passaria do teto por gravação, então a IA parou aqui.`,
   'monthly-cap': () =>

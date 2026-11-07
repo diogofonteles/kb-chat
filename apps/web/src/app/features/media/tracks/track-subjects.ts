@@ -55,6 +55,9 @@ const FAILURES: Record<ProposalFailure, () => string> = {
     $localize`:@@subjects.ai.failed.cap:Esta sugestão passaria do teto por análise.`,
   interrupted: () =>
     $localize`:@@subjects.ai.failed.interrupted:A sugestão foi interrompida.`,
+  // The failures are the track proposals' (KBC-112); a suggestion has no value limit yet.
+  'accepted-limit': () =>
+    $localize`:@@subjects.ai.failed.acceptedLimit:A sugestão parou no valor aceito.`,
 };
 
 const refOf = (subject: TrackSubject): SubjectRef =>

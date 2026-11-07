@@ -9,6 +9,12 @@ export interface Migration {
   readonly name: string;
   /** A function reads the database first: its SQL depends on what is already there. */
   readonly sql: string | ((db: DatabaseSync) => string);
+  /**
+   * Rebuilds a table other tables reference: foreign keys go off around its transaction (they
+   * cannot inside one), or dropping the old table would cascade into its children. The keys
+   * are checked before the commit (SQLite's "other kinds of table schema changes").
+   */
+  readonly rebuildsReferenced?: boolean;
 }
 
 const TRACK_REVISION_TABLES = `
@@ -124,6 +130,39 @@ function rebuildAccepting(
     `DROP TABLE ${table};`,
     `ALTER TABLE ${table}_rebuilt RENAME TO ${table};`,
     ...indexes,
+  ].join('\n');
+}
+
+/**
+ * Rebuilds `media_proposal_runs` from the table as it stands with `failure` taking
+ * `accepted-limit` (KBC-112): every column, check and index kept, as `rebuildAccepting` does.
+ */
+function rebuildRunsAcceptingLimit(db: DatabaseSync): string {
+  const table = 'media_proposal_runs';
+  const ddl = String(
+    db
+      .prepare(
+        `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '${table}'`,
+      )
+      .get()?.['sql'],
+  );
+  const failures = /failure\s+IN\s*\(([^)]*)\)/.exec(ddl);
+  if (!failures?.[1])
+    throw new Error(`${table} has no failure check to extend`);
+  if (failures[1].includes("'accepted-limit'")) return '';
+  const rebuilt = ddl
+    .replace(failures[0], `failure IN (${failures[1]}, 'accepted-limit')`)
+    .replace(
+      new RegExp(`^CREATE TABLE\\s+"?${table}"?`),
+      `CREATE TABLE ${table}_rebuilt`,
+    );
+  const columns = columnsOf(db, table);
+  return [
+    `${rebuilt};`,
+    `INSERT INTO ${table}_rebuilt (${columns}) SELECT ${columns} FROM ${table};`,
+    `DROP TABLE ${table};`,
+    `ALTER TABLE ${table}_rebuilt RENAME TO ${table};`,
+    ...indexesOf(db, table),
   ].join('\n');
 }
 
@@ -1305,6 +1344,19 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       ${rebuildAccepting(db, { table: 'media_spend', kind: 'kb-publish' })}
 
       ${MEDIA_DOCUMENT_TABLES}
+    `,
+  },
+  {
+    // KBC-112: a run stops before a call that could pass the value accepted, and keeps that
+    // limit. SQLite cannot change a CHECK in place and the draft's tables reference the runs
+    // (ON DELETE CASCADE), so the table is rebuilt with foreign keys off.
+    version: 27,
+    name: 'proposal-accepted-limit',
+    rebuildsReferenced: true,
+    sql: (db) => `
+      ${rebuildRunsAcceptingLimit(db)}
+      ALTER TABLE media_proposal_runs ADD COLUMN limit_usd REAL
+        CHECK (limit_usd IS NULL OR limit_usd >= 0);
     `,
   },
 ];

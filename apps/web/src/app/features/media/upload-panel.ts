@@ -24,6 +24,7 @@ import {
 } from '@angular/forms';
 import { Router } from '@angular/router';
 import {
+  PLAN_ESTIMATE_TOLERANCE,
   duplicateDetailsSchema,
   quotaDetailsSchema,
   type MediaItem,
@@ -68,7 +69,7 @@ import {
 import { AuthorCombobox } from './author-combobox.js';
 import { planShare, sameChoices } from './preparation/plan-choices.js';
 import { PlanForm } from './preparation/plan-form.js';
-import { usdText } from './preparation/preparation-labels.js';
+import { usdUpText } from './preparation/preparation-labels.js';
 import { PreparationOptions } from './preparation/preparation-options.js';
 import { PreparationSteps } from './preparation/preparation-steps.js';
 import {
@@ -165,7 +166,7 @@ export class UploadPanel implements OnInit {
     const usd = this.uploads.keptUsd();
     return usd === null
       ? $localize`:@@media.upload.planKept:O que continua de um envio anterior mantém as escolhas daquele envio.`
-      : $localize`:@@media.upload.planKeptPaid:O que continua de um envio anterior mantém as escolhas daquele envio, com IA paga de até ${usdText(usd, this.locale)}:value:.`;
+      : $localize`:@@media.upload.planKeptPaid:O que continua de um envio anterior mantém as escolhas daquele envio, com IA paga de até ${this.mostText(usd)}:value:.`;
   });
 
   constructor() {
@@ -478,12 +479,17 @@ export class UploadPanel implements OnInit {
     );
   }
 
+  /** "de até": the most the plan's run may spend, its limit (KBC-112 BR-6). */
+  private mostText(usd: number): string {
+    return usdUpText(usd * PLAN_ESTIMATE_TOLERANCE, this.locale);
+  }
+
   /** An item that left "uploading" is not its sender's to remove: its plan stands. */
   private keptProblem({ draft: { plan } }: Created): string {
     const usd = plan?.tracks === 'ai' ? plan.acceptedUsd : null;
     return usd === null || usd === undefined
       ? $localize`:@@media.upload.alreadyArrived:Este áudio já tinha chegado, então segue com as escolhas daquele envio. Só um master pode apagá-lo.`
-      : $localize`:@@media.upload.alreadyArrivedPaid:Este áudio já tinha chegado, então segue com as escolhas daquele envio, com IA paga de até ${usdText(usd, this.locale)}:value:. Só um master pode apagá-lo.`;
+      : $localize`:@@media.upload.alreadyArrivedPaid:Este áudio já tinha chegado, então segue com as escolhas daquele envio, com IA paga de até ${this.mostText(usd)}:value:. Só um master pode apagá-lo.`;
   }
 
   /** Not tied to this panel's life: the removal must reach the server after it closes. */

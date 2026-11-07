@@ -264,6 +264,9 @@ export class TrackEditorPage {
   protected readonly lastFailure = computed(
     () => this.draft.edit()?.lastFailure ?? null,
   );
+  protected readonly stopped = computed(
+    () => this.draft.edit()?.stopped ?? null,
+  );
   /** Who the voices are, also from here: a wrong name is never a dead end (KBC-090). */
   private readonly preparation = httpResource(
     () => (this.id() ? preparationUrl(this.id()) : undefined),

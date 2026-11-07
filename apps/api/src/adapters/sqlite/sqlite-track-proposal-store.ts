@@ -6,6 +6,7 @@ import {
   proposalFailureSchema,
   proposalStatusSchema,
   trackKindSchema,
+  type AcceptedLimitStop,
   type DraftTrack,
   type DraftTracks,
   type ProposalFailure,
@@ -33,7 +34,7 @@ const numberOrNull = (row: Row, column: string): number | null =>
   row[column] === null ? null : Number(row[column]);
 
 const RUN_COLUMNS = `r.id, r.media_id, r.status, r.model, r.windows_total, r.windows_done,
-  r.estimate_usd, r.spent_usd, r.failure, r.created_at, r.finished_at,
+  r.estimate_usd, r.limit_usd, r.spent_usd, r.failure, r.created_at, r.finished_at,
   (SELECT count(*) FROM media_draft_tracks t WHERE t.run_id = r.id) AS tracks`;
 
 function toRun(row: Row): ProposalRun {
@@ -47,6 +48,7 @@ function toRun(row: Row): ProposalRun {
     windowsDone: Number(row['windows_done']),
     tracks: Number(row['tracks']),
     estimateUsd: Number(row['estimate_usd']),
+    limitUsd: numberOrNull(row, 'limit_usd'),
     spentUsd: Number(row['spent_usd']),
     failure: failure === null ? null : proposalFailureSchema.parse(failure),
     createdAt: text(row, 'created_at'),
@@ -161,9 +163,9 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     this.db
       .prepare(
         `INSERT INTO media_proposal_runs (id, media_id, transcript_id, principal, model,
-           spend_id, status, windows_total, windows_done, estimate_usd, spent_usd, carried_usd,
-           created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?)`,
+           spend_id, status, windows_total, windows_done, estimate_usd, limit_usd, spent_usd,
+           carried_usd, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         run.id,
@@ -175,6 +177,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
         run.windowsTotal,
         run.resumes?.windowsDone ?? 0,
         run.estimateUsd,
+        run.limitUsd,
         run.carriedUsd,
         run.carriedUsd,
         run.now.toISOString(),
@@ -491,20 +494,43 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       )
       .all(run?.id ?? null)
       .map(toVoice);
-    return { run, lastFailure: this.lastFailure(mediaId), tracks, voices };
+    const newest = this.newestRow(mediaId);
+    return {
+      run,
+      lastFailure: this.lastFailure(newest),
+      stopped: this.stoppedAt(newest),
+      tracks,
+      voices,
+    };
   }
 
-  /** The newest run, failed or not, decides: a later one clears the failure (FR-5). */
-  private lastFailure(mediaId: string): ProposalFailure | null {
-    const row = this.db
+  private newestRow(mediaId: string): Row | undefined {
+    return this.db
       .prepare(
-        `SELECT r.status, r.failure FROM media_proposal_runs r WHERE r.media_id = ?
+        `SELECT r.status, r.failure, r.limit_usd, r.spent_usd - r.carried_usd AS own_usd,
+           r.windows_done, r.windows_total
+         FROM media_proposal_runs r WHERE r.media_id = ?
          ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1`,
       )
       .get(mediaId);
-    return row?.['status'] === 'failed'
-      ? proposalFailureSchema.parse(row['failure'])
+  }
+
+  /** The newest run, failed or not, decides: a later one clears the failure (FR-5). */
+  private lastFailure(newest: Row | undefined): ProposalFailure | null {
+    return newest?.['status'] === 'failed'
+      ? proposalFailureSchema.parse(newest['failure'])
       : null;
+  }
+
+  /** Where the newest run stopped at the value accepted (KBC-112 FR-3); else null. */
+  private stoppedAt(newest: Row | undefined): AcceptedLimitStop | null {
+    if (newest?.['failure'] !== 'accepted-limit') return null;
+    return {
+      limitUsd: Number(newest['limit_usd']),
+      spentUsd: Math.max(0, Number(newest['own_usd'])),
+      windowsDone: Number(newest['windows_done']),
+      windowsTotal: Number(newest['windows_total']),
+    };
   }
 
   isApproved(mediaId: string): boolean {

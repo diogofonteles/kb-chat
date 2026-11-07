@@ -24,7 +24,8 @@ afterEach(closeApp);
 const HOUSE_KEY = 'sk-or-v1-house-oauth-wxyz';
 const MODEL = {
   id: 'deepseek/deepseek-v4-flash',
-  pricing: { prompt: '0.000000091', completion: '0.000000182' },
+  // A call's worst case (3,000 tokens out) stays above what the fake bills, as a real one.
+  pricing: { prompt: '0.000001', completion: '0.000002' },
 };
 
 /** A transcribed recording, the house account connected and the media model listed. */
@@ -152,6 +153,7 @@ describe('Track proposals over HTTP (KBC-067)', () => {
     expect(draft).toEqual({
       run: null,
       lastFailure: 'provider',
+      stopped: null,
       tracks: [],
       voices: [],
     });

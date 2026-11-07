@@ -24,6 +24,7 @@ import type {
   TranscriptSpeakers,
   VoiceSuggestion,
 } from '@kb-chat/contracts';
+import { PLAN_ESTIMATE_TOLERANCE } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { MediaEditStorePort } from '../../ports/media-edit-store.js';
 import type {
@@ -131,7 +132,7 @@ export interface PreparationServiceDeps {
  * How far past what the person saw a run may be, reading the real words instead of the
  * length: above it the paid stage waits for a click (BR-4).
  */
-export const ESTIMATE_TOLERANCE = 1.25;
+export const ESTIMATE_TOLERANCE = PLAN_ESTIMATE_TOLERANCE;
 
 /** A plan only goes on once its file arrived: an upload given up never gets there. */
 const hasWholeFile = ({ status, failure }: MediaItem): boolean =>
@@ -413,10 +414,11 @@ export class PreparationService {
     const { proposals } = this.deps;
     const { estimateUsd, refusal } = await proposals.estimate(actor, mediaId);
     if (refusal) return this.stopProposal(mediaId, refusal, estimateUsd);
+    // The most the screen showed at the send (KBC-112 BR-6): the run's limit too.
     const agreed = (plan.acceptedUsd ?? 0) * ESTIMATE_TOLERANCE;
     if (estimateUsd > agreed)
       return this.stopProposal(mediaId, 'estimate-rose', estimateUsd);
-    await proposals.start(actor, mediaId, { seenRunId });
+    await proposals.start(actor, mediaId, { seenRunId, acceptedUsd: agreed });
   }
 
   private stopProposal(

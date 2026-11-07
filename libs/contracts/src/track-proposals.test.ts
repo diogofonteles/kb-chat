@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { stageFailureSchema } from './media-preparation.js';
 import {
+  acceptedLimitStopSchema,
   draftTrackSchema,
+  proposalFailureSchema,
   proposalRequestSchema,
   proposalRunSchema,
 } from './track-proposals.js';
@@ -50,6 +53,7 @@ describe('track proposal contracts (KBC-067)', () => {
       windowsDone: 2,
       tracks: 0,
       estimateUsd: 0.004,
+      limitUsd: 0.004,
       spentUsd: 0.001,
       failure: 'provider',
       createdAt: '2026-11-03T15:00:00.000Z',
@@ -58,6 +62,23 @@ describe('track proposal contracts (KBC-067)', () => {
     expect(proposalRunSchema.parse(run).failure).toBe('provider');
     expect(
       proposalRunSchema.safeParse({ ...run, failure: 'timeout' }).success,
+    ).toBe(false);
+  });
+
+  it('says a run stopped at the value accepted, with what it left (KBC-112 FR-2, FR-3)', () => {
+    expect(proposalFailureSchema.parse('accepted-limit')).toBe(
+      'accepted-limit',
+    );
+    expect(stageFailureSchema.parse('accepted-limit')).toBe('accepted-limit');
+    const stop = {
+      limitUsd: 0.024,
+      spentUsd: 0.018,
+      windowsDone: 7,
+      windowsTotal: 9,
+    };
+    expect(acceptedLimitStopSchema.parse(stop)).toEqual(stop);
+    expect(
+      acceptedLimitStopSchema.safeParse({ ...stop, windowsTotal: 0 }).success,
     ).toBe(false);
   });
 });

@@ -217,7 +217,8 @@ function runningTracks(run: ProposalRun, state: StageState): PreparationStage {
   return stageOf('tracks', state, {
     percent: Math.floor((run.windowsDone * 100) / run.windowsTotal),
     windows: { done: run.windowsDone, total: run.windowsTotal },
-    reservedUsd: run.estimateUsd,
+    // What the run reserved: its limit (KBC-112 BR-9); the estimate for a run before it.
+    reservedUsd: run.limitUsd ?? run.estimateUsd,
     spentUsd: run.spentUsd,
   });
 }

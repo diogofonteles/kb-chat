@@ -21,6 +21,7 @@ import {
   STAGE_NAMES,
   progressValueText,
   stageStateText,
+  usdUpText,
 } from './preparation-labels.js';
 
 /** A stage as a line of the list. */
@@ -97,7 +98,7 @@ export class PreparationStageList {
   /** The value of pressing "Tentar de novo" on a paid stage: in sight before the press. */
   protected retryCost(stage: PreparationStage): string {
     if (stage.stage !== 'tracks' || stage.estimateUsd === null) return '';
-    const value = this.usd(stage.estimateUsd);
+    const value = usdUpText(stage.estimateUsd, this.locale);
     return $localize`:@@prep.retryCost:Tentar de novo custa cerca de ${value}:value:, descontado do limite mensal da mídia.`;
   }
 

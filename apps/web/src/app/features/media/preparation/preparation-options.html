@@ -140,13 +140,15 @@
           >
           @if (estimateText(); as estimate) {
             @if (remainingText(); as remaining) {
-              &ngsp;<ng-container i18n="@@prep.option.aiCost"
-                >Estimativa: {{ estimate }}, descontado do limite mensal da
-                mídia (restam {{ remaining }}).</ng-container
+              &ngsp;<ng-container i18n="@@prep.option.aiCostMost"
+                >Estimativa: cerca de {{ estimate }}, no máximo
+                {{ mostText() }}, descontado do limite mensal da mídia (restam
+                {{ remaining }}).</ng-container
               >
             } @else {
-              &ngsp;<ng-container i18n="@@prep.option.aiCostAlone"
-                >Estimativa: {{ estimate }}, descontado do limite mensal da
+              &ngsp;<ng-container i18n="@@prep.option.aiCostMostAlone"
+                >Estimativa: cerca de {{ estimate }}, no máximo
+                {{ mostText() }}, descontado do limite mensal da
                 mídia.</ng-container
               >
             }

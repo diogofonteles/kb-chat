@@ -7,11 +7,12 @@ import {
   inject,
   input,
 } from '@angular/core';
-import type { TrackChoice } from '@kb-chat/contracts';
+import { PLAN_ESTIMATE_TOLERANCE, type TrackChoice } from '@kb-chat/contracts';
 import { PlanForm } from './plan-form.js';
 import {
   REFUSAL_TEXTS,
   usdText,
+  usdUpText,
   type PlanRefusal,
 } from './preparation-labels.js';
 
@@ -51,7 +52,12 @@ export class PreparationOptions {
   );
   protected readonly estimateText = computed(() => {
     const usd = this.offer()?.aiEstimateUsd ?? null;
-    return usd === null ? '' : this.usd(usd);
+    return usd === null ? '' : this.usdUp(usd);
+  });
+  /** The most the run may spend: its limit (KBC-112 BR-6). */
+  protected readonly mostText = computed(() => {
+    const usd = this.offer()?.aiEstimateUsd ?? null;
+    return usd === null ? '' : this.usdUp(usd * PLAN_ESTIMATE_TOLERANCE);
   });
   protected readonly remainingText = computed(() => {
     const usd = this.offer()?.monthRemainingUsd ?? null;
@@ -65,7 +71,7 @@ export class PreparationOptions {
       ? $localize`:@@prep.dropped.speakers:Sem indicar quem fala não dá para propor as faixas com IA.`
       : '';
   });
-  protected readonly summary = computed(() => summaryOf(this.form, this.usd));
+  protected readonly summary = computed(() => summaryOf(this.form, this.usdUp));
 
   protected done(id: 'transcribe' | 'speakers'): boolean {
     return this.form.option(id).done;
@@ -100,6 +106,8 @@ export class PreparationOptions {
   }
 
   private readonly usd = (value: number): string => usdText(value, this.locale);
+  private readonly usdUp = (value: number): string =>
+    usdUpText(value, this.locale);
 }
 
 /** "Depois do envio: transcrever, indicar quem fala…": changes with the choices (UP-01). */

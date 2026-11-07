@@ -160,12 +160,15 @@ export class StubLlm implements LlmPort {
   readonly model = 'stub/model';
   readonly billing = 'per-token' as const;
   readonly calls: LlmMessage[][] = [];
-  /** US$ the provider reports per call; null when it reports none. */
+  /**
+   * US$ the provider reports per call; null when it reports none. Below one call's worst case
+   * at the list price (about US$ 0.003 a window), as a real bill is (KBC-112).
+   */
   costPerCall: number | null = 0.001;
 
   constructor(
     readonly replies: StubReply[],
-    readonly priceList: LlmPrice = { input: 1e-7, output: 2e-7 },
+    readonly priceList: LlmPrice = { input: 1e-7, output: 1e-6 },
   ) {}
 
   configured(): boolean {

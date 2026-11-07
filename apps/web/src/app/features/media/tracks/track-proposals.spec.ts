@@ -23,6 +23,7 @@ const RUN: ProposalRun = {
   windowsDone: 2,
   tracks: 3,
   estimateUsd: 0.02,
+  limitUsd: 0.02,
   spentUsd: 0.01,
   failure: null,
   createdAt: '2026-11-04T00:00:00.000Z',
@@ -69,7 +70,7 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
     const rendered = await setup({ start });
     (await ask(rendered)).flush(ESTIMATE);
     await rendered.fixture.whenStable();
-    expect(screen.getByText(/Custa cerca de US\$\s0,02/)).toBeTruthy();
+    expect(screen.getByText(/Custa até US\$\s0,020\./)).toBeTruthy();
     expect(
       screen.getByText(/Este mês: US\$\s1,20 de US\$\s10,00/),
     ).toBeTruthy();
@@ -175,7 +176,7 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
     } finally {
       scrolled.mockRestore();
     }
-    expect(screen.getByText(/Custa cerca de US\$\s0,05/)).toBeTruthy();
+    expect(screen.getByText(/Custa até US\$\s0,050\./)).toBeTruthy();
     // Neutral: a price or a plan may have changed it, not only a save.
     const notice = screen.getByText(
       'O valor mudou. Nada foi gasto: confira o novo valor.',
@@ -311,5 +312,88 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
     });
     expect(screen.getByText('Não foi possível propor.')).toBeTruthy();
     expect(screen.queryByText(/Custou/)).toBeNull();
+  });
+
+  it('says the most it costs, rounded up, and that it stops there (KBC-112 AC-8, FR-4)', async () => {
+    const rendered = await setup();
+    (await ask(rendered)).flush({ ...ESTIMATE, estimateUsd: 0.0234 });
+    await rendered.fixture.whenStable();
+    expect(
+      screen.getByText(
+        /^Custa até US\$\s0,024\. Se a IA precisar perguntar de novo alguma parte, a análise para nesse valor e você decide se continua\.$/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it('says what was spent with common rounding (KBC-112 AC-8)', async () => {
+    await setup({
+      latestRun: { ...RUN, status: 'done', spentUsd: 0.0234 },
+    });
+    expect(screen.getByText('Custou US$ 0,023')).toBeTruthy();
+  });
+
+  it('a run stopped at the value says what is ready and what going on costs (KBC-112 AC-2, FR-3, AC-14)', async () => {
+    const rendered = await setup({
+      latestRun: { ...RUN, status: 'running' },
+    });
+    rendered.fixture.componentRef.setInput('latestRun', {
+      ...RUN,
+      status: 'failed',
+      failure: 'accepted-limit',
+      windowsDone: 7,
+      windowsTotal: 9,
+    });
+    rendered.fixture.componentRef.setInput('lastFailure', 'accepted-limit');
+    rendered.fixture.componentRef.setInput('stopped', {
+      limitUsd: 0.0234,
+      spentUsd: 0.018,
+      windowsDone: 7,
+      windowsTotal: 9,
+    });
+    await rendered.fixture.whenStable();
+    const going = rendered.http.expectOne(URL);
+    expect(going.request.body).toEqual({ dryRun: true });
+    going.flush({ ...ESTIMATE, estimateUsd: 0.0051, windows: 2 });
+    await rendered.fixture.whenStable();
+    expect(
+      screen.getByText(
+        'A análise parou no valor aceito (US$ 0,024): 7 de 9 janelas prontas. Continuar custa cerca de US$ 0,006.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText('Não foi possível propor.')).toBeNull();
+    const retry = screen.getByRole('button', { name: 'Tentar de novo' });
+    expect(document.activeElement).toBe(retry);
+    expect(retry.closest('[role="status"]')).toBeTruthy();
+    fireEvent.click(retry);
+    rendered.http.expectOne(URL).flush({ ...ESTIMATE, estimateUsd: 0.0051 });
+    await rendered.fixture.whenStable();
+    expect(screen.getByText(/Custa até US\$\s0,006\./)).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Confirmar e propor' }),
+    ).toBeTruthy();
+    rendered.http.verify();
+  });
+
+  it('a stop without the cost of going on still offers to try again (KBC-112 FR-3)', async () => {
+    const rendered = await setup({
+      lastFailure: 'accepted-limit',
+      stopped: {
+        limitUsd: 0.02,
+        spentUsd: 0.01,
+        windowsDone: 1,
+        windowsTotal: 3,
+      },
+    });
+    rendered.http.expectOne(URL).flush(null, {
+      status: 503,
+      statusText: 'Unavailable',
+    });
+    await rendered.fixture.whenStable();
+    expect(
+      screen.getByText(
+        'A análise parou no valor aceito (US$ 0,020): 1 de 3 janelas prontas.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeTruthy();
   });
 });

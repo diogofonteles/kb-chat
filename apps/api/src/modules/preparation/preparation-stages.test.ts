@@ -70,6 +70,7 @@ const run = (over: Partial<ProposalRun>): ProposalRun => ({
   windowsDone: 1,
   tracks: 3,
   estimateUsd: 0.02,
+  limitUsd: 0.02,
   spentUsd: 0.005,
   failure: null,
   createdAt: '2026-11-04T05:00:00.000Z',

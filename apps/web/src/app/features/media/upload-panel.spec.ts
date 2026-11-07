@@ -1378,7 +1378,7 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       panel.http.expectNone(TOPIC);
       const said = screen.getByRole('alert').textContent;
       expect(said).toContain('já tinha chegado');
-      expect(said).toMatch(/IA paga de até .*0[.,]02/);
+      expect(said).toMatch(/IA paga de até .*0[.,]025/);
     });
 
     it('still replaces the item when the removal fails for another reason', async () => {
@@ -1446,7 +1446,7 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       await panel.fixture.whenStable();
       expect(
         screen.getByText(/mantém as escolhas daquele envio/).textContent,
-      ).toMatch(/IA paga de até .*0[.,]0016/);
+      ).toMatch(/IA paga de até .*0[.,]002\b/);
     });
 
     it('says only that the choices stay when the plan kept is free or unread', async () => {

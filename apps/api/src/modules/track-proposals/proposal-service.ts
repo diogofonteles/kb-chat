@@ -100,8 +100,18 @@ const canResume = (attempt: FailedAttempt, windows: number): boolean =>
 export interface StartTerms {
   /** The newest run they saw; by default, the newest at the press. */
   readonly seenRunId?: string | null;
-  /** The value they were told; a run that would cost more does not start (KBC-097). */
+  /**
+   * The value they were told; a run that would cost more does not start (KBC-097), and the
+   * run never spends past it (KBC-112). Without it, the estimate here is the limit (BR-10).
+   */
   readonly acceptedUsd?: number | undefined;
+}
+
+/** What a run may spend: the value accepted, and within it what the run cap has left. */
+interface RunLimit {
+  readonly acceptedUsd: number;
+  /** The reservation: the most the run can spend (KBC-112 BR-9). */
+  readonly maxUsd: number;
 }
 
 const ANALYSIS_TAKEN = 'analysis-taken';
@@ -243,14 +253,27 @@ export class ProposalService {
           estimateUsd: prepared.plan.estimateUsd,
         },
       });
-    const spendId = this.reserve(actor, prepared);
-    const run = this.startRun({ actor, prepared, spendId });
+    const limit = this.limitOf(prepared, acceptedUsd);
+    const spendId = this.reserve(actor, { prepared, limit });
+    const run = this.startRun({ actor, prepared, spendId, limit });
     if (!run) {
       this.closeSpend(spendId, { failure: 'interrupted', spentUsd: 0 });
       throw analysisTaken();
     }
-    this.track(run.id, this.execute({ runId: run.id, spendId, prepared }));
+    this.track(
+      run.id,
+      this.execute({ runId: run.id, spendId, prepared, limit }),
+    );
     return run;
+  }
+
+  private limitOf(prepared: Prepared, acceptedUsd?: number): RunLimit {
+    const accepted = acceptedUsd ?? prepared.plan.estimateUsd;
+    const capLeft = this.deps.caps.runUsd - prepared.carriedUsd;
+    return {
+      acceptedUsd: accepted,
+      maxUsd: Math.max(0, Math.min(accepted, capLeft)),
+    };
   }
 
   private assertNotTaken(mediaId: string, seenRunId: string | null): void {
@@ -264,6 +287,7 @@ export class ProposalService {
     readonly actor: MediaActor;
     readonly prepared: Prepared;
     readonly spendId: string;
+    readonly limit: RunLimit;
   }): ProposalRun | null {
     const { plan, resumes, carriedUsd } = input.prepared;
     try {
@@ -276,6 +300,7 @@ export class ProposalService {
         spendId: input.spendId,
         windowsTotal: plan.windows.length,
         estimateUsd: plan.estimateUsd,
+        limitUsd: input.limit.maxUsd,
         now: this.now(),
         carriedUsd,
         resumes,
@@ -338,8 +363,9 @@ export class ProposalService {
     readonly runId: string;
     readonly spendId: string;
     readonly prepared: Prepared;
+    readonly limit: RunLimit;
   }): Promise<void> {
-    const { runId, spendId, prepared } = input;
+    const { runId, spendId, prepared, limit } = input;
     let outcome: RunOutcome = { failure: 'provider', spentUsd: 0 };
     try {
       outcome = await new WindowRunner({
@@ -349,14 +375,35 @@ export class ProposalService {
         store: this.deps.store,
         runCapUsd: this.deps.caps.runUsd,
         carriedUsd: prepared.carriedUsd,
+        acceptedUsd: limit.acceptedUsd,
         signal: this.closing.signal,
         onWindowSaved: this.deps.onWindowSaved,
       }).run();
       if (outcome.error !== undefined)
         this.deps.onRunError?.(outcome.error, runId);
     } finally {
-      this.finish({ runId, spendId, outcome });
+      this.finish({ runId, spendId, outcome: this.within(outcome, input) });
     }
+  }
+
+  /**
+   * The ledger never closes a run above its limit (KBC-112 FR-7). The check before each call
+   * keeps it there; a provider billing past the worst case it was priced at is a defect to
+   * see in the log, and the entry stays at the limit.
+   */
+  private within(
+    outcome: RunOutcome,
+    input: { readonly runId: string; readonly limit: RunLimit },
+  ): RunOutcome {
+    const { maxUsd } = input.limit;
+    if (outcome.spentUsd <= maxUsd) return outcome;
+    this.deps.onRunError?.(
+      new Error(
+        `Proposal run spent ${outcome.spentUsd} past its limit of ${maxUsd}`,
+      ),
+      input.runId,
+    );
+    return { ...outcome, spentUsd: maxUsd };
   }
 
   private finish(input: {
@@ -404,9 +451,15 @@ export class ProposalService {
     return null;
   }
 
-  /** The estimate reserved in the media ledger, or the cap it would cross (BR-3). */
-  private reserve(actor: MediaActor, prepared: Prepared): string {
-    const { plan, carriedUsd } = prepared;
+  /**
+   * The run's limit reserved in the media ledger (KBC-112 BR-9), or the cap the estimate
+   * would cross (BR-3). A month that cannot hold the limit refuses: the run could spend it.
+   */
+  private reserve(
+    actor: MediaActor,
+    input: { readonly prepared: Prepared; readonly limit: RunLimit },
+  ): string {
+    const { plan, carriedUsd } = input.prepared;
     const since = startOfAppMonth(this.now());
     const refusal = this.refusalOf({
       estimateUsd: plan.estimateUsd,
@@ -420,7 +473,7 @@ export class ProposalService {
       kind: 'track-proposal',
       mediaId: plan.mediaId,
       principal: actor.principal,
-      usd: plan.estimateUsd,
+      usd: input.limit.maxUsd,
       capUsd: this.deps.caps.monthlyUsd,
       since,
       now: this.now(),

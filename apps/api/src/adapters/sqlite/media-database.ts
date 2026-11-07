@@ -92,14 +92,32 @@ function assertSameNames(
 }
 
 function applyMigration(db: DatabaseSync, migration: Migration): void {
-  inTransaction(db, () => {
-    db.exec(
-      typeof migration.sql === 'string' ? migration.sql : migration.sql(db),
+  const keysOn =
+    db.prepare('PRAGMA foreign_keys').get()?.['foreign_keys'] === 1;
+  const keysOff = migration.rebuildsReferenced === true && keysOn;
+  if (keysOff) db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    inTransaction(db, () => {
+      db.exec(
+        typeof migration.sql === 'string' ? migration.sql : migration.sql(db),
+      );
+      if (keysOff) assertForeignKeys(db, migration);
+      db.prepare(
+        'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
+      ).run(migration.version, migration.name, new Date().toISOString());
+    });
+  } finally {
+    if (keysOff) db.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
+/** A rebuild with the keys off must leave no row pointing nowhere. */
+function assertForeignKeys(db: DatabaseSync, migration: Migration): void {
+  const broken = db.prepare('PRAGMA foreign_key_check').all();
+  if (broken.length > 0)
+    throw new Error(
+      `Media migration ${migration.version} left ${broken.length} broken foreign keys`,
     );
-    db.prepare(
-      'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
-    ).run(migration.version, migration.name, new Date().toISOString());
-  });
 }
 
 /** The connections inside `inTransaction`: an inner call joins the outer transaction. */
