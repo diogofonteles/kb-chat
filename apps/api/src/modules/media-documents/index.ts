@@ -9,6 +9,9 @@ export { KbPublishService } from './kb-publish-service.js';
 export {
   BACKFILL_BATCH,
   MediaDocumentReconciler,
+  SWEEP_LIMIT,
+  SWEEP_SLICE,
+  type SweepReport,
   type TrackRender,
 } from './reconciler.js';
 export {

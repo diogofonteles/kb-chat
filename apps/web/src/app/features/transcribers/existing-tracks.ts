@@ -224,7 +224,7 @@ export class ExistingTracks {
       this.retrying.set(next);
     };
     this.api
-      .retry(failed.mediaId)
+      .retryFailed(failed.mediaId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {

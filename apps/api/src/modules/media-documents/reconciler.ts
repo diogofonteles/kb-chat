@@ -9,6 +9,19 @@ import {
 /** Recordings without tracks given a document per collection by each sweep (FR-7). */
 export const BACKFILL_BATCH = 50;
 
+/**
+ * Documents one sweep renders again at most; the next sweep goes on after the last one
+ * (a cursor), so a big library is covered over a few sweeps (KBC-100 review 6).
+ */
+export const SWEEP_LIMIT = 2_000;
+
+/** Media rendered between two turns of the event loop while sweeping. */
+export const SWEEP_SLICE = 20;
+
+/** Lets the event loop run (requests, research streams) between two slices of a sweep. */
+const nextTurn = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(resolve));
+
 export interface ReconcilerDeps {
   readonly source: Pick<TrackDocumentSource, 'inputOf' | 'tracksOf'>;
   readonly documents: Pick<
@@ -27,12 +40,24 @@ export interface ReconcilerDeps {
    * without one nothing is published there (KBC-100 AC-12).
    */
   readonly hasFolder: (topic: string) => boolean;
-  /** The media of a collection that may have a document (an authorship change, BR-1). */
+  /** The recordings of a collection (and its sub-collections): their tracks follow (BR-1). */
   readonly mediaOf?: (topic: string) => readonly string[];
   /** A media whose document could not be rendered (logged; the sweep tries it again). */
   readonly onError?: (mediaId: string, err: unknown) => void;
   readonly now?: () => Date;
   readonly newId?: () => string;
+  /** The sweep's bounds (defaults SWEEP_LIMIT, SWEEP_SLICE) and its pause between slices. */
+  readonly sweep?: {
+    readonly limit?: number;
+    readonly slice?: number;
+    readonly pause?: () => Promise<void>;
+  };
+}
+
+/** What one sweep did: media rendered again and the slices they were cut into. */
+export interface SweepReport {
+  readonly rendered: number;
+  readonly slices: number;
 }
 
 /** A rendered document with the media and collection it belongs to. */
@@ -57,6 +82,10 @@ export class MediaDocumentReconciler {
    * such a media gets its document at its next change.
    */
   private readonly unrendered = new Set<string>();
+  /** The last document the previous sweep rendered: the next one starts after it. */
+  private cursor: string | null = null;
+  /** A sweep still running when the next one is due: that one is skipped. */
+  private sweeping = false;
 
   constructor(private readonly deps: ReconcilerDeps) {
     this.now = deps.now ?? (() => new Date());
@@ -90,11 +119,16 @@ export class MediaDocumentReconciler {
    * recording's own document and every track it has, or had, follow (FR-1).
    */
   reconcileRecording(recordingId: string): void {
-    this.reconcile([
+    this.reconcile(this.familyOf(recordingId));
+  }
+
+  /** A recording, the tracks it has and the ones that still have a document under it. */
+  private familyOf(recordingId: string): readonly string[] {
+    return [
       recordingId,
       ...this.deps.source.tracksOf(recordingId),
       ...this.deps.documents.documentedUnder(recordingId),
-    ]);
+    ];
   }
 
   /**
@@ -108,22 +142,82 @@ export class MediaDocumentReconciler {
     this.reconcile(mediaIds);
   }
 
-  /** Something of a whole collection changed (its main author, an author's name). */
+  /**
+   * Something of a whole collection changed (its main author, an author's or a speaker's
+   * name): each of its recordings follows as one that changed, with every track it has or
+   * had (a track's authorship and speakers are its recording's).
+   */
   reconcileTopic(topic: string): void {
-    this.reconcile(this.deps.mediaOf?.(topic) ?? []);
+    this.reconcile(
+      (this.deps.mediaOf?.(topic) ?? []).flatMap((recordingId) =>
+        this.familyOf(recordingId),
+      ),
+    );
   }
 
   /**
-   * The backstop, every 10 minutes: every document the app has (a missed callback, a
-   * removal), the renders that failed, and a batch of recordings without tracks (FR-7).
+   * The backstop, every 10 minutes: the renders that failed, a batch of recordings without
+   * tracks (FR-7) and the documents the app has (a missed callback, a removal), at most
+   * SWEEP_LIMIT of them from where the last sweep stopped. Rendered in slices of SWEEP_SLICE
+   * with a turn of the event loop between them: a render reads a whole transcript with its
+   * speakers, so a big library would otherwise hold the API for seconds (review 6).
    */
-  reconcileAll(): void {
-    const { documents } = this.deps;
-    this.reconcile([
-      ...documents.documented(),
-      ...this.unrendered,
-      ...documents.undocumentedRecordings(BACKFILL_BATCH),
-    ]);
+  async reconcileAll(): Promise<SweepReport> {
+    if (this.sweeping) return { rendered: 0, slices: 0 };
+    this.sweeping = true;
+    try {
+      const due = [
+        ...new Set([
+          ...this.unrendered,
+          ...this.backfill(),
+          ...this.nextDocumented(),
+        ]),
+      ];
+      const slice = this.deps.sweep?.slice ?? SWEEP_SLICE;
+      const pause = this.deps.sweep?.pause ?? nextTurn;
+      let slices = 0;
+      for (let at = 0; at < due.length; at += slice) {
+        this.reconcile(due.slice(at, at + slice));
+        slices += 1;
+        await pause();
+      }
+      return { rendered: due.length, slices };
+    } finally {
+      this.sweeping = false;
+    }
+  }
+
+  /**
+   * Recordings without tracks that may get their whole text (FR-7), only in collections with
+   * a vault folder: the others would read a whole transcript for nothing every sweep.
+   */
+  private backfill(): readonly string[] {
+    return this.deps.documents
+      .undocumentedRecordings(BACKFILL_BATCH)
+      .filter((one) => this.deps.hasFolder(one.topic))
+      .map((one) => one.mediaId);
+  }
+
+  /** The next SWEEP_LIMIT documents after the cursor, going round to the first ones. */
+  private nextDocumented(): readonly string[] {
+    const all = [...this.deps.documents.documented()].sort();
+    const limit = this.deps.sweep?.limit ?? SWEEP_LIMIT;
+    if (all.length <= limit) {
+      this.cursor = null;
+      return all;
+    }
+    const after = this.cursor;
+    const start =
+      after === null
+        ? 0
+        : Math.max(
+            0,
+            all.findIndex((id) => id > after),
+          );
+    const taken = all.slice(start, start + limit);
+    taken.push(...all.slice(0, limit - taken.length));
+    this.cursor = taken.at(-1) ?? null;
+    return taken;
   }
 
   /**

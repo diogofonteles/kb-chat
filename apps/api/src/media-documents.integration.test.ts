@@ -19,7 +19,20 @@ import {
   removalsOf,
   writesOf,
 } from '../test/kb-publish-harness.js';
-import { finishCuts, say, transcribed } from '../test/track-items-harness.js';
+import {
+  leaseDiarization,
+  pairDiarizer,
+  requestVoices,
+  sendTurns,
+  transcribedItem,
+} from '../test/diarization-harness.js';
+import {
+  approve,
+  finishCuts,
+  libraryEntry,
+  say,
+  transcribed,
+} from '../test/track-items-harness.js';
 import { StubLlmAdapter, type StubReply } from './adapters/stub-llm-adapter.js';
 
 afterEach(closeApp);
@@ -327,6 +340,100 @@ describe('Track documents always up to date (KBC-100)', () => {
     expect(allRemovals(jobs)).toEqual(
       [first, second].map((one) => documentPath(recording.id, one.id)).sort(),
     );
+  });
+});
+
+describe('A change to a whole collection rewrites its tracks right away (KBC-100 FR-1, BR-4)', () => {
+  it("the collection's main author: every track of a recording by that author gets the main author's group", async () => {
+    const docs = await documentsWorld();
+    const { world } = docs;
+    const { recording, first, second } = await published(docs);
+    const added = await world.media.owner(
+      'POST',
+      '/api/v1/topics/hermetismo/authors',
+      { name: 'Autora Convidada' },
+    );
+    expect(added.statusCode, added.body).toBe(201);
+    const { slug } = added.json<{ slug: string }>();
+    const byHer = await world.media.owner('PATCH', urlOf(recording.id), {
+      author: slug,
+    });
+    expect(byHer.statusCode, byHer.body).toBe(200);
+    await runMac(docs);
+
+    const main = await world.media.owner('PATCH', '/api/v1/topics/hermetismo', {
+      mainAuthor: slug,
+    });
+    expect(main.statusCode, main.body).toBe(200);
+    // No sweep runs here (10 min): the job is queued by the change itself.
+    expect(jobStatuses(world)).toEqual(['hermetismo:queued']);
+    const jobs = await runMac(docs);
+
+    const paths = [first, second].map((one) =>
+      documentPath(recording.id, one.id),
+    );
+    expect(
+      jobs
+        .flatMap(writesOf)
+        .map((one) => one.path)
+        .sort(),
+    ).toEqual([...paths].sort());
+    for (const path of paths)
+      expect(await vaultText(docs, 'hermetismo', path)).toContain(
+        'author_group: mestre-laercio',
+      );
+  });
+
+  it('a collection speaker renamed: every track where that speaker talks names them anew', async () => {
+    const docs = await documentsWorld();
+    const { world } = docs;
+    const { media } = world;
+    const { token } = await pairDiarizer(media);
+    const recordingId = await transcribedItem(media, token);
+    expect((await requestVoices(media, recordingId)).statusCode).toBe(202);
+    const diarize = await leaseDiarization(media, token);
+    expect((await sendTurns(media, { token, job: diarize })).statusCode).toBe(
+      204,
+    );
+    await approve(media, recordingId, [
+      { startMs: 0, endMs: 22_000, title: 'Faixa um' },
+      { startMs: 22_000, endMs: 60_000, title: 'Faixa dois' },
+    ]);
+    await finishCuts(media);
+    const tracks = (await libraryEntry(media.owner, recordingId))?.tracks ?? [];
+    expect(tracks).toHaveLength(2);
+    const created = await media.owner(
+      'POST',
+      '/api/v1/topics/hermetismo/speakers',
+      { name: 'José' },
+    );
+    expect(created.statusCode, created.body).toBe(201);
+    const speaker = created.json<{ id: string }>();
+    const named = await media.owner(
+      'PUT',
+      `/api/v1/media/${recordingId}/voices/2`,
+      { version: 1, speakerId: speaker.id, audience: false },
+    );
+    expect(named.statusCode, named.body).toBe(200);
+    await runMac(docs);
+
+    const renamed = await media.owner(
+      'PATCH',
+      `/api/v1/topics/hermetismo/speakers/${speaker.id}`,
+      { name: 'Josué' },
+    );
+    expect(renamed.statusCode, renamed.body).toBe(200);
+    expect(jobStatuses(world)).toEqual(['hermetismo:queued']);
+    const jobs = await runMac(docs);
+
+    const written = jobs.flatMap(writesOf);
+    expect(written.map((one) => one.path).sort()).toEqual(
+      tracks.map((one) => documentPath(recordingId, one.id)).sort(),
+    );
+    for (const one of written) {
+      expect(one.markdown).toContain('**Josué:**');
+      expect(one.markdown).not.toContain('**José:**');
+    }
   });
 });
 

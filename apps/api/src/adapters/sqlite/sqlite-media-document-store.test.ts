@@ -184,12 +184,65 @@ describe('SqliteMediaDocumentStore (KBC-100)', () => {
         since: AT.toISOString(),
       },
     ]);
-    expect(store.retry('m1', LATER)).toBe(true);
+    expect(store.retry('m1', LATER)).toEqual(['hermetismo']);
     expect(store.statusOf('m1')).toMatchObject({
       attempts: 0,
       lastError: null,
     });
-    expect(store.retry('nada', LATER)).toBe(false);
+    expect(store.retry('nada', LATER)).toEqual([]);
+  });
+
+  it('review 5: a removal given up on is listed as failed, not waiting, and retry reopens it', () => {
+    const { store } = aStore();
+    want(store);
+    publish(store, {
+      items: [{ op: 'write', mediaId: 'm1', path: PATH, fingerprint: A }],
+    });
+    store.retire('m1', AT);
+    for (let attempt = 1; attempt <= 4; attempt += 1)
+      publish(store, {
+        items: [{ op: 'remove', mediaId: 'm1', path: PATH }],
+        ok: false,
+      });
+    expect(store.removalsOf('hermetismo', 50)).toEqual([]);
+    expect(store.hasPending('hermetismo')).toBe(false);
+    expect(store.queueSummary()).toMatchObject({
+      waiting: 0,
+      failed: [
+        {
+          mediaId: 'm1',
+          topic: 'hermetismo',
+          title: PATH,
+          error: 'kb index: exit 1',
+        },
+      ],
+    });
+
+    expect(store.retry('m1', LATER)).toEqual(['hermetismo']);
+
+    expect(store.removalsOf('hermetismo', 50)).toEqual([
+      { mediaId: 'm1', path: PATH },
+    ]);
+    expect(store.queueSummary()).toMatchObject({ waiting: 1, failed: [] });
+  });
+
+  it('review 5: retry leaves a removal still being tried as it is', () => {
+    const { db, store } = aStore();
+    want(store);
+    publish(store, {
+      items: [{ op: 'write', mediaId: 'm1', path: PATH, fingerprint: A }],
+    });
+    store.retire('m1', AT);
+    publish(store, {
+      items: [{ op: 'remove', mediaId: 'm1', path: PATH }],
+      ok: false,
+    });
+    expect(store.retry('m1', LATER)).toEqual([]);
+    expect(
+      db.prepare('SELECT attempts FROM media_document_removals').get()?.[
+        'attempts'
+      ],
+    ).toBe(1);
   });
 
   it('keeps the newest sync report, and none before the first', () => {

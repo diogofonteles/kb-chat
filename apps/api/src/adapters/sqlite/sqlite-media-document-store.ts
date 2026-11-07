@@ -176,11 +176,13 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       .map((row) => String(row['media_id']));
   }
 
-  undocumentedRecordings(perTopic: number): readonly string[] {
+  undocumentedRecordings(
+    perTopic: number,
+  ): readonly { mediaId: string; topic: string }[] {
     return this.db
       .prepare(
-        `SELECT id FROM (
-           SELECT m.id, ROW_NUMBER() OVER (PARTITION BY m.topic
+        `SELECT id, topic FROM (
+           SELECT m.id, m.topic, ROW_NUMBER() OVER (PARTITION BY m.topic
              ORDER BY m.created_at, m.id) AS place
            FROM media m
            WHERE ${UNTRACKED_RECORDING} AND ${HAS_TRANSCRIPT}
@@ -188,7 +190,10 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
          WHERE place <= ? ORDER BY id`,
       )
       .all(perTopic)
-      .map((row) => String(row['id']));
+      .map((row) => ({
+        mediaId: String(row['id']),
+        topic: String(row['topic']),
+      }));
   }
 
   hasTracks(recordingId: string): boolean {
@@ -219,15 +224,28 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
     };
   }
 
-  retry(mediaId: string, now: Date): boolean {
-    return (
-      this.db
+  retry(mediaId: string, now: Date): readonly string[] {
+    const at = now.toISOString();
+    return inTransaction(this.db, () => {
+      const documents = this.db
         .prepare(
           `UPDATE media_documents SET attempts = 0, state = 'pending', last_error = NULL,
-             updated_at = ? WHERE media_id = ?`,
+             updated_at = ? WHERE media_id = ? RETURNING topic`,
         )
-        .run(now.toISOString(), mediaId).changes === 1
-    );
+        .all(at, mediaId);
+      // Only removals given up on: one still being tried keeps its place in the queue.
+      const removals = this.db
+        .prepare(
+          `UPDATE media_document_removals SET attempts = 0, last_error = NULL, updated_at = ?
+           WHERE media_id = ? AND attempts >= ? RETURNING topic`,
+        )
+        .all(at, mediaId, MAX_DOCUMENT_ATTEMPTS);
+      return [
+        ...new Set(
+          [...documents, ...removals].map((row) => String(row['topic'])),
+        ),
+      ];
+    });
   }
 
   markLive(
@@ -259,11 +277,13 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       .prepare(
         `SELECT
            (SELECT COUNT(*) FROM media_documents
-              WHERE live_sha256 IS NULL OR live_sha256 <> desired_sha256)
-           + (SELECT COUNT(*) FROM media_document_removals) AS waiting,
+              WHERE (live_sha256 IS NULL OR live_sha256 <> desired_sha256)
+                AND NOT (attempts >= ? AND ${NOT_PUBLISHED}))
+           + (SELECT COUNT(*) FROM media_document_removals WHERE attempts < ?) AS waiting,
            (SELECT MAX(published_at) FROM media_documents) AS last_published`,
       )
-      .get();
+      // What failed is under "Falhou", never counted as waiting (review 5).
+      .get(MAX_DOCUMENT_ATTEMPTS, MAX_DOCUMENT_ATTEMPTS);
     const last = counts?.['last_published'];
     return {
       waiting: Number(counts?.['waiting'] ?? 0),
@@ -272,23 +292,37 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
     };
   }
 
-  /** The documents given up on, newest first: what masters may retry. */
+  /**
+   * The documents and the removals given up on, newest first: what masters may retry. A
+   * media with both (a move) shows once; one deleted since is named by its file.
+   */
   private failed(): QueueSummary['failed'] {
-    return this.db
+    const rows = this.db
       .prepare(
-        `SELECT d.media_id, d.topic, COALESCE(m.title, '') AS title, d.last_error,
-           d.updated_at FROM media_documents d LEFT JOIN media m ON m.id = d.media_id
-         WHERE d.attempts >= ? AND ${NOT_PUBLISHED}
-         ORDER BY d.updated_at DESC, d.media_id LIMIT ?`,
+        `SELECT media_id, topic, title, last_error, updated_at FROM (
+           SELECT d.media_id, d.topic, COALESCE(m.title, '') AS title, d.last_error,
+             d.updated_at FROM media_documents d LEFT JOIN media m ON m.id = d.media_id
+           WHERE d.attempts >= ? AND ${NOT_PUBLISHED}
+           UNION ALL
+           SELECT r.media_id, r.topic, COALESCE(m.title, r.path), r.last_error, r.updated_at
+           FROM media_document_removals r LEFT JOIN media m ON m.id = r.media_id
+           WHERE r.attempts >= ?)
+         ORDER BY updated_at DESC, media_id`,
       )
-      .all(MAX_DOCUMENT_ATTEMPTS, FAILED_SHOWN)
-      .map((row) => ({
-        mediaId: String(row['media_id']),
+      .all(MAX_DOCUMENT_ATTEMPTS, MAX_DOCUMENT_ATTEMPTS);
+    const byMedia = new Map<string, QueueSummary['failed'][number]>();
+    for (const row of rows) {
+      const mediaId = String(row['media_id']);
+      if (byMedia.has(mediaId)) continue;
+      byMedia.set(mediaId, {
+        mediaId,
         topic: String(row['topic']),
         title: String(row['title']),
         error: String(row['last_error'] ?? 'kb failed'),
         since: String(row['updated_at']),
-      }));
+      });
+    }
+    return [...byMedia.values()].slice(0, FAILED_SHOWN);
   }
 
   recordSync(sync: VaultSyncRecord): void {

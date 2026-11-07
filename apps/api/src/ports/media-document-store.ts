@@ -131,13 +131,18 @@ export interface MediaDocumentStorePort {
    * Transcribed recordings with no track at all and no document yet, at most `perTopic` of
    * each collection: the backfill (KBC-100 FR-7), a batch per sweep.
    */
-  undocumentedRecordings(perTopic: number): readonly string[];
+  undocumentedRecordings(
+    perTopic: number,
+  ): readonly { mediaId: string; topic: string }[];
   /** Whether a recording has, or ever had, a track (live, archived or being cut). */
   hasTracks(recordingId: string): boolean;
   /** A document's row; null without one. */
   statusOf(mediaId: string): DocumentStatus | null;
-  /** **Tentar de novo**: the attempts start over. False without a row. */
-  retry(mediaId: string, now: Date): boolean;
+  /**
+   * **Tentar de novo**: the attempts of its document and of its removals start over (a
+   * removal given up on too, review 5). The collections touched; none without a row.
+   */
+  retry(mediaId: string, now: Date): readonly string[];
   /**
    * What production's catalog sees (FR-6): a document whose desired fingerprint is the one
    * seen becomes live. How many changed.

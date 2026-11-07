@@ -423,10 +423,12 @@ describe('ExistingTracks: the publishing queue (KBC-100 FR-3, FR-4, T22)', () =>
     });
     fireEvent.click(retry);
     fireEvent.click(retry);
-    http.expectOne(`/api/v1/media/${FAILED.mediaId}/publication/retry`).flush({
-      mediaId: FAILED.mediaId,
-      publication: { state: 'updating', since: today(14, 50) },
-    });
+    http
+      .expectOne(`/api/v1/media/track-documents/failed/${FAILED.mediaId}/retry`)
+      .flush({
+        mediaId: FAILED.mediaId,
+        publication: { state: 'updating', since: today(14, 50) },
+      });
     TestBed.tick();
     http.expectOne(URL).flush(
       anOverview({

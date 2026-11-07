@@ -10,6 +10,7 @@ import {
   documentPath,
   documentsWorld,
   jobStatuses,
+  onTrack,
   publicationOf,
   runMac,
   type DocumentsWorld,
@@ -19,6 +20,7 @@ import {
   leaseAs,
   leaseKb,
   publishedTracks,
+  removalsOf,
   spendTheCap,
   writeAsMac,
 } from '../test/kb-publish-harness.js';
@@ -276,7 +278,8 @@ describe('The publishing queue for masters in Transcritores (KBC-100 FR-3, FR-4)
     );
     expect(read.statusCode, read.body).toBe(200);
     const { queue } = read.json<TrackDocumentsOverview>();
-    expect(queue?.waiting).toBe(2);
+    // Given up on, they are under "Falhou", not waiting (review 5).
+    expect(queue?.waiting).toBe(0);
     expect(queue?.lastSync).toEqual(report);
     expect(queue?.failed.map((one) => one.mediaId).sort()).toEqual(
       tracks.map((one) => one.id).sort(),
@@ -298,5 +301,144 @@ describe('The publishing queue for masters in Transcritores (KBC-100 FR-3, FR-4)
       },
     });
     expect(refused.statusCode).toBe(404);
+  });
+
+  describe('a removal given up on (review 5)', () => {
+    const queueOf = async (docs: DocumentsWorld) => {
+      const read = await docs.world.media.owner(
+        'GET',
+        '/api/v1/media/track-documents',
+      );
+      expect(read.statusCode, read.body).toBe(200);
+      return read.json<TrackDocumentsOverview>().queue;
+    };
+
+    const retryFromQueue = (docs: DocumentsWorld, mediaId: string) =>
+      docs.world.media.owner(
+        'POST',
+        `/api/v1/media/track-documents/failed/${mediaId}/retry`,
+      );
+
+    it('shows as failed in Transcritores, is not counted as waiting, and "Tentar de novo" sends it again', async () => {
+      const docs = await documentsWorld();
+      const { world, mac } = docs;
+      const { recording, tracks } = await publishedTracks(world);
+      const track = tracks[0];
+      if (!track) throw new Error('no track');
+      await runMac(docs);
+      const archived = await onTrack(world, {
+        method: 'DELETE',
+        url: urlOf(track.id),
+        trackId: track.id,
+      });
+      expect(archived.statusCode, archived.body).toBeLessThan(300);
+      for (let attempt = 1; attempt <= 4; attempt += 1)
+        await failOnce(docs, 'kb remove: permission denied');
+      expect((await leaseAs(world.media, mac.token)).statusCode).toBe(204);
+
+      const queue = await queueOf(docs);
+      expect(queue?.waiting).toBe(0);
+      // The removal, and the other track's new text (its "1 of 2" became "1 of 1").
+      expect(queue?.failed).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            mediaId: track.id,
+            topic: 'hermetismo',
+            title: track.title,
+            error: 'kb remove: permission denied',
+          }),
+        ]),
+      );
+
+      const retried = await retryFromQueue(docs, track.id);
+      expect(retried.statusCode, retried.body).toBe(202);
+      // PD-10: the same retry from a second tab queues nothing more.
+      expect((await retryFromQueue(docs, track.id)).statusCode).toBe(202);
+      expect(
+        jobStatuses(world).filter((one) => one === 'hermetismo:queued'),
+      ).toHaveLength(1);
+      const again = await leaseKb(world.media, mac.token);
+      expect(removalsOf(again)).toEqual([documentPath(recording.id, track.id)]);
+      expect(
+        (await queueOf(docs))?.failed.map((one) => one.mediaId),
+      ).not.toContain(track.id);
+    });
+
+    it("of a deleted recording, it still reaches the queue's retry", async () => {
+      const docs = await documentsWorld();
+      const { world, mac } = docs;
+      const { recording, tracks } = await publishedTracks(world);
+      await runMac(docs);
+      const removed = await world.media.owner(
+        'DELETE',
+        `${urlOf(recording.id)}?cascade=true`,
+      );
+      expect(removed.statusCode, removed.body).toBeLessThan(300);
+      for (let attempt = 1; attempt <= 4; attempt += 1)
+        await failOnce(docs, 'kb remove: permission denied');
+
+      const failed = (await queueOf(docs))?.failed ?? [];
+      expect(failed.map((one) => one.mediaId).sort()).toEqual(
+        tracks.map((one) => one.id).sort(),
+      );
+      for (const one of failed)
+        expect((await retryFromQueue(docs, one.mediaId)).statusCode).toBe(202);
+
+      const again = await leaseKb(world.media, mac.token);
+      expect([...removalsOf(again)].sort()).toEqual(
+        tracks.map((one) => documentPath(recording.id, one.id)).sort(),
+      );
+    });
+
+    it("the queue's retry is for masters only", async () => {
+      const docs = await documentsWorld();
+      const { world } = docs;
+      const { tracks } = await publishedTracks(world);
+      const editor = await member(world.media, {
+        email: 'edita@example.com',
+        topics: ['hermetismo'],
+        features: ['media', 'media-tracks', 'media-edit'],
+      });
+      const refused = await editor.call(
+        'POST',
+        `/api/v1/media/track-documents/failed/${tracks[0]?.id}/retry`,
+      );
+      expect(refused.statusCode).toBe(403);
+    });
+  });
+
+  it('TE-13: without a session or a token the new routes answer 401', async () => {
+    const docs = await documentsWorld();
+    const { world } = docs;
+    const { tracks } = await publishedTracks(world);
+    const id = tracks[0]?.id ?? '';
+    const { app } = world.media.started;
+    // The browser's headers (origin, CSRF) without the session cookie.
+    const headers = Object.fromEntries(
+      Object.entries(world.media.ownerHeaders).filter(
+        ([name]) => name !== 'cookie',
+      ),
+    );
+    const anonymous = (method: 'GET' | 'POST', url: string) =>
+      app.inject({ method, url, headers });
+
+    for (const [method, url] of [
+      ['GET', `${urlOf(id)}/publication`],
+      ['POST', `${urlOf(id)}/publication/retry`],
+      ['POST', `/api/v1/media/track-documents/failed/${id}/retry`],
+    ] as const)
+      expect((await anonymous(method, url)).statusCode, url).toBe(401);
+    const noToken = await app.inject({
+      method: 'POST',
+      url: '/api/v1/media-worker/vault-sync',
+      headers,
+      payload: {
+        ok: true,
+        detail: 'sync-vault: done',
+        startedAt: '2026-11-07T14:00:00.000Z',
+        finishedAt: '2026-11-07T14:00:09.000Z',
+      },
+    });
+    expect(noToken.statusCode).toBe(401);
   });
 });

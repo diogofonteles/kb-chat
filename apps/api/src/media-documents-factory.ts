@@ -90,7 +90,8 @@ function reconcilerOf(
     source,
     documents: media.documents,
     hasFolder: hasVaultFolder(wiring.catalog),
-    // A sub-collection uses its parent's authors and speakers (ADR 0028).
+    // A sub-collection uses its parent's authors and speakers (ADR 0028); each recording
+    // brings its tracks along (MediaDocumentReconciler.reconcileTopic).
     mediaOf: (topic) =>
       wiring.catalog
         .scope(topic)
@@ -156,11 +157,16 @@ export function startDocumentBackstop(
   intervalMs: number,
 ): void {
   const timer = setInterval(() => {
-    try {
-      reconciler.reconcileAll();
-    } catch (err) {
-      app.log.error({ err }, 'track documents: the backstop failed');
-    }
+    const started = performance.now();
+    reconciler.reconcileAll().then(
+      (report) =>
+        app.log.debug(
+          { ...report, ms: Math.round(performance.now() - started) },
+          'track documents: backstop swept',
+        ),
+      (err: unknown) =>
+        app.log.error({ err }, 'track documents: the backstop failed'),
+    );
   }, intervalMs);
   timer.unref();
   app.addHook('onClose', async () => clearInterval(timer));

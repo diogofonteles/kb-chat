@@ -67,6 +67,16 @@ export class TrackDocumentsApi {
       .post(`${publicationUrl(mediaId)}/retry`, {})
       .pipe(map((body) => mediaPublicationSchema.parse(body)));
   }
+
+  /**
+   * "Tentar de novo" from the queue's failed list (masters): a document or a removal, even
+   * of a media deleted since (KBC-100 review 5).
+   */
+  retryFailed(mediaId: string): Observable<MediaPublication> {
+    return this.http
+      .post(`${trackDocumentsUrl()}/failed/${mediaId}/retry`, {})
+      .pipe(map((body) => mediaPublicationSchema.parse(body)));
+  }
 }
 
 /** Where a media stands in the AI research (KBC-100 FR-3), for who edits it. */

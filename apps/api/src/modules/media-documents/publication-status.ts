@@ -96,12 +96,15 @@ export class PublicationStatus {
     return { state: 'updating', since: row.updatedAt };
   }
 
-  /** **Tentar de novo** (AC-10): the attempts start over and the collection's job waits. */
+  /**
+   * **Tentar de novo** (AC-10): the attempts of its document and of a removal given up on
+   * start over, and each collection touched gets its job (review 5). Nothing to retry: the
+   * media is rendered again.
+   */
   retry(mediaId: string): TrackPublication | null {
-    const status = this.deps.documents.statusOf(mediaId);
-    if (status && this.deps.documents.retry(mediaId, this.now()))
-      this.deps.reconciler.enqueueIfPending(status.topic);
-    else this.deps.reconciler.reconcileTracks([mediaId]);
+    const topics = this.deps.documents.retry(mediaId, this.now());
+    for (const topic of topics) this.deps.reconciler.enqueueIfPending(topic);
+    if (topics.length === 0) this.deps.reconciler.reconcileTracks([mediaId]);
     return this.of(mediaId);
   }
 
