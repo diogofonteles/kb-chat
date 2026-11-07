@@ -2,6 +2,7 @@ import { mediaIdSchema, mediaPublicationSchema } from '@kb-chat/contracts';
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { AppError } from '../../app-error.js';
 import type { RouteAccess } from '../auth/index.js';
 import { actorOf, type MediaActor } from '../media/index.js';
 import type { PublicationStatus } from './publication-status.js';
@@ -71,9 +72,10 @@ function registerQueueRetry(
     },
     async (request, reply) => {
       const mediaId = request.params.id;
-      return reply
-        .code(202)
-        .send({ mediaId, publication: status.retry(mediaId) });
+      const publication = status.retryFailed(mediaId);
+      if (publication === undefined)
+        throw new AppError('MEDIA_NOT_FOUND', 'Unknown media');
+      return reply.code(202).send({ mediaId, publication });
     },
   );
 }

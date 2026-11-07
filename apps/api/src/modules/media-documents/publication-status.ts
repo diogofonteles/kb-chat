@@ -103,6 +103,25 @@ export class PublicationStatus {
    */
   retry(mediaId: string): TrackPublication | null {
     const topics = this.deps.documents.retry(mediaId, this.now());
+    return this.sendAgain(mediaId, topics);
+  }
+
+  /**
+   * **Tentar de novo** from the queue's "Falhou": also a media deleted since, whose removal
+   * was given up on. Undefined when there is nothing of that id to retry nor to render
+   * (the route answers 404).
+   */
+  retryFailed(mediaId: string): TrackPublication | null | undefined {
+    const topics = this.deps.documents.retry(mediaId, this.now());
+    if (topics.length === 0 && !this.deps.store.getMedia(mediaId))
+      return undefined;
+    return this.sendAgain(mediaId, topics);
+  }
+
+  private sendAgain(
+    mediaId: string,
+    topics: readonly string[],
+  ): TrackPublication | null {
     for (const topic of topics) this.deps.reconciler.enqueueIfPending(topic);
     if (topics.length === 0) this.deps.reconciler.reconcileTracks([mediaId]);
     return this.of(mediaId);

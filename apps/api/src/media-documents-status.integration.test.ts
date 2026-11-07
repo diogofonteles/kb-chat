@@ -405,6 +405,16 @@ describe('The publishing queue for masters in Transcritores (KBC-100 FR-3, FR-4)
       );
       expect(refused.statusCode).toBe(403);
     });
+
+    it('an id the app knows nothing of is 404, and nothing is queued', async () => {
+      const docs = await documentsWorld();
+      const unknown = await retryFromQueue(
+        docs,
+        '0b9c1f7e-9999-4a2b-8c3d-000000000009',
+      );
+      expect(unknown.statusCode, unknown.body).toBe(404);
+      expect(jobStatuses(docs.world)).toEqual([]);
+    });
   });
 
   it('TE-13: without a session or a token the new routes answer 401', async () => {
