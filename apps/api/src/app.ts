@@ -520,10 +520,7 @@ function mediaService({
 }): MediaService {
   const { store, files, listening } = media;
   return new MediaService({
-    ...(documents && {
-      onRemoved: (mediaId: string) =>
-        documents.reconciler.reconcileRecording(mediaId),
-    }),
+    ...removalsOf(documents),
     store,
     files,
     listening,
@@ -538,6 +535,15 @@ function mediaService({
     rootOf: (topic) => authors.rootOf(topic),
   });
 }
+
+/** A deleted recording's documents leave the vault (KBC-100 BR-2). */
+const removalsOf = (documents?: MediaDocuments) =>
+  documents
+    ? {
+        onRemoved: (mediaId: string) =>
+          documents.reconciler.reconcileRecording(mediaId),
+      }
+    : {};
 
 /** Changing an item's details (KBC-050): the author and speaker lists follow a move. */
 function mediaEditor({
@@ -918,7 +924,22 @@ async function startDocuments(
     documents.reconciler,
     wiring.config.KB_CHAT_RECONCILE_MS,
   );
-  // What the catalog sees is what production searches (KBC-100 FR-6): now and at every reload.
+  observeCatalog(app, { catalog, documents });
+  wiring.authors.onMainChanged((topic) =>
+    documents.reconciler.reconcileTopic(topic),
+  );
+  await app.register(existingTracksRoutes(documents.existing));
+  return documents;
+}
+
+/** What the catalog sees is what production searches (KBC-100 FR-6): now and at every reload. */
+function observeCatalog(
+  app: FastifyInstance,
+  {
+    catalog,
+    documents,
+  }: { catalog: CatalogRegistry; documents: MediaDocuments },
+): void {
   const observe = () => {
     try {
       documents.status.observe(seenIn(catalog));
@@ -928,11 +949,6 @@ async function startDocuments(
   };
   catalog.onReload(observe);
   observe();
-  wiring.authors.onMainChanged((topic) =>
-    documents.reconciler.reconcileTopic(topic),
-  );
-  await app.register(existingTracksRoutes(documents.existing));
-  return documents;
 }
 
 /**
@@ -942,25 +958,9 @@ async function startDocuments(
 function documentSpeakers(
   wiring: MediaWiring & { transcribers: TranscriberService },
 ) {
-  const diarization = diarizationService(wiring);
-  const reader = new TranscriptService({
-    transcripts: wiring.media.transcripts,
-    // The documents are the app's own reading: any media, archived or not.
-    media: { get: () => ({ archived: false }) },
-    recording: wiring.media.store,
-    voices: (mediaId, transcript) => diarization.voicesOn(mediaId, transcript),
-    trackVoices: trackVoiceNames(wiring.media, (topic, slug) =>
-      wiring.authors.authorOf(topic, slug),
-    ),
-  });
-  const SYSTEM: MediaActor = {
-    principal: 'kb-chat',
-    isMaster: true,
-    canUpload: false,
-    canSee: () => true,
-  };
+  const reader = transcriptReader(wiring);
   return (mediaId: string): readonly (string | null)[] => {
-    const transcript = reader.current(SYSTEM, mediaId, {
+    const transcript = reader.current(SYSTEM_READER, mediaId, {
       withVoices: false,
       withNames: true,
     });
@@ -975,6 +975,44 @@ function documentSpeakers(
   };
 }
 
+/** The app reading its own media for the documents: any collection, nothing to upload. */
+const SYSTEM_READER: MediaActor = {
+  principal: 'kb-chat',
+  isMaster: true,
+  canUpload: false,
+  canSee: () => true,
+};
+
+/** The transcripts with who speaks, as listeners get them, for any media. */
+function transcriptReader(
+  wiring: MediaWiring & { transcribers: TranscriberService },
+): TranscriptService {
+  const diarization = diarizationService(wiring);
+  return new TranscriptService({
+    transcripts: wiring.media.transcripts,
+    // The documents are the app's own reading: any media, archived or not.
+    media: { get: () => ({ archived: false }) },
+    recording: wiring.media.store,
+    voices: (mediaId, transcript) => diarization.voicesOn(mediaId, transcript),
+    trackVoices: trackVoiceNames(wiring.media, (topic, slug) =>
+      wiring.authors.authorOf(topic, slug),
+    ),
+  });
+}
+
+/** Where a media stands in the AI research, and **Tentar de novo** (KBC-100 FR-3). */
+async function registerPublication(
+  app: FastifyInstance,
+  { documents, media }: { documents: MediaDocuments; media: MediaService },
+): Promise<void> {
+  await app.register(
+    publicationRoutes({
+      status: documents.status,
+      findMedia: (actor, mediaId) => media.get(actor, mediaId),
+    }),
+  );
+}
+
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
 async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const transcribers = transcriberService(wiring.media);
@@ -983,12 +1021,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const media = mediaService({ ...wiring, transcribers, groq, documents });
   const publisher = trackPublisher(wiring, documents);
   const withDocuments = { ...wiring, documents };
-  await app.register(
-    publicationRoutes({
-      status: documents.status,
-      findMedia: (actor, mediaId) => media.get(actor, mediaId),
-    }),
-  );
+  await registerPublication(app, { documents, media });
   await registerTranscribers(app, { transcribers, media, wiring });
   await app.register(groqRoutes({ groq, media }));
   await registerListening(app, withDocuments, {
@@ -1008,6 +1041,21 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
     transcribers,
     publisher,
   });
+  await registerMediaRoutes(app, { wiring, media, publisher, edited });
+  startJanitor(app, { ...measures, ...edited, media: wiring.media, groq });
+}
+
+/** People's routes over their media: details, the guided flow's plans, tracks. */
+async function registerMediaRoutes(
+  app: FastifyInstance,
+  input: {
+    wiring: MediaWiring;
+    media: MediaService;
+    publisher: TrackPublisher;
+    edited: Awaited<ReturnType<typeof registerEditing>>;
+  },
+): Promise<void> {
+  const { wiring, media, publisher, edited } = input;
   await app.register(
     mediaRoutes(media, mediaEditor({ ...wiring, publisher }), {
       createPerMinute: wiring.media.createPerMinute,
@@ -1015,7 +1063,6 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
       tracks: edited.revisions,
     }),
   );
-  startJanitor(app, { ...measures, ...edited, media: wiring.media, groq });
 }
 
 /** Proposals, the draft, subjects and the guided flow over them (KBC-066, 067, 069, 072). */

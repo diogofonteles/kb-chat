@@ -107,7 +107,10 @@ describe('Where a track stands in the AI research (KBC-100 BR-4, FR-3)', () => {
     } finally {
       db.close();
     }
-    const read = await world.media.owner('GET', `${urlOf(track.id)}/track-edit`);
+    const read = await world.media.owner(
+      'GET',
+      `${urlOf(track.id)}/track-edit`,
+    );
     const renamed = await world.media.started.app.inject({
       method: 'PATCH',
       url: urlOf(track.id),
@@ -151,9 +154,9 @@ describe('Where a track stands in the AI research (KBC-100 BR-4, FR-3)', () => {
     );
     expect(jobStatuses(world)).toContain('hermetismo:queued');
     const again = await leaseKb(world.media, mac.token);
-    expect(again.items.some((item) => item.path.endsWith(`${track.id}.md`))).toBe(
-      true,
-    );
+    expect(
+      again.items.some((item) => item.path.endsWith(`${track.id}.md`)),
+    ).toBe(true);
   });
 
   it('AC-11: with the media ceiling spent no job goes out and the track says why', async () => {
@@ -243,14 +246,12 @@ describe('Where a track stands in the AI research (KBC-100 BR-4, FR-3)', () => {
     expect((await listener.call('GET', url)).statusCode).toBe(403);
     expect((await listener.call('POST', `${url}/retry`)).statusCode).toBe(403);
     expect((await elsewhere.call('GET', url)).statusCode).toBe(404);
-    expect((await elsewhere.call('POST', `${url}/retry`)).statusCode).toBe(
-      404,
-    );
+    expect((await elsewhere.call('POST', `${url}/retry`)).statusCode).toBe(404);
   });
 });
 
 describe('The publishing queue for masters in Transcritores (KBC-100 FR-3, FR-4)', () => {
-  it('counts what waits, names what failed and keeps the Mac\'s last sync report', async () => {
+  it("counts what waits, names what failed and keeps the Mac's last sync report", async () => {
     const docs = await documentsWorld();
     const { world, mac } = docs;
     const { tracks } = await publishedTracks(world);
@@ -269,7 +270,10 @@ describe('The publishing queue for masters in Transcritores (KBC-100 FR-3, FR-4)
     });
     expect(sent.statusCode, sent.body).toBe(204);
 
-    const read = await world.media.owner('GET', '/api/v1/media/track-documents');
+    const read = await world.media.owner(
+      'GET',
+      '/api/v1/media/track-documents',
+    );
     expect(read.statusCode, read.body).toBe(200);
     const { queue } = read.json<TrackDocumentsOverview>();
     expect(queue?.waiting).toBe(2);

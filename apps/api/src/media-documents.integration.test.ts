@@ -145,9 +145,7 @@ describe('Track documents always up to date (KBC-100)', () => {
     expect(
       world.media.started.catalog.get('hermetismo')?.entries.has(path),
     ).toBe(false);
-    expect(
-      rows(world, 'SELECT * FROM media_document_removals').length,
-    ).toBe(0);
+    expect(rows(world, 'SELECT * FROM media_document_removals').length).toBe(0);
 
     const restored = await world.media.owner(
       'POST',
@@ -219,9 +217,7 @@ describe('Track documents always up to date (KBC-100)', () => {
     const [item] = writesOf(job);
     expect(item?.path).toBe(documentPath(recording.id, recording.id));
     expect(item?.markdown).toContain('kb_chat_media_kind: recording');
-    expect(item?.markdown).toContain(
-      '[0:30] Uma palestra inteira sem faixas',
-    );
+    expect(item?.markdown).toContain('[0:30] Uma palestra inteira sem faixas');
   });
 
   it('AC-8: a recording that gets tracks gives its whole document up for the tracks', async () => {

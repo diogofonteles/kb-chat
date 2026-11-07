@@ -270,8 +270,7 @@ export const workerRoutes =
     registerSilences(app, deps);
     registerWaveform(app, deps);
     registerCut(app, deps);
-    registerKbResult(app, deps);
-    registerVaultSync(app, deps);
+    registerKbPublish(app, deps);
     registerTranscriberReads(app, deps.transcription);
     registerTranscript(app, deps.transcription);
     registerDiarization(app, deps.diarization);
@@ -436,6 +435,12 @@ function registerCut(app: FastifyInstance, deps: WorkerRoutesDeps): void {
       return reply.code(204).send();
     },
   );
+}
+
+/** The Mac that publishes track documents: kb's results and its syncs (KBC-099/100). */
+function registerKbPublish(app: FastifyInstance, deps: WorkerRoutesDeps): void {
+  registerKbResult(app, deps);
+  registerVaultSync(app, deps);
 }
 
 /** What kb did on the Mac to the documents a kb-publish job delivered (KBC-099 FR-2). */

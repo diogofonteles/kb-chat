@@ -134,6 +134,22 @@ export async function aCollection(api: APIRequestContext): Promise<string> {
 }
 
 /**
+ * A collection of its own that also has a folder in the kb vault (KBC-100 AC-12): its track
+ * documents are published there, as in a collection the owner made with kb.
+ */
+export async function aCollectionInVault(
+  api: APIRequestContext,
+): Promise<string> {
+  const topic = await aCollection(api);
+  const made = await api.post('/api/e2e/kb-publish/folder', {
+    headers: CSRF,
+    data: { topic },
+  });
+  expect(made.status(), await made.text()).toBe(204);
+  return topic;
+}
+
+/**
  * A tone of `seconds` silenced over `pauses` ([start, end] in seconds), as the lavfi
  * source of `makeMp3` (KBC-044: pauses of known length).
  */

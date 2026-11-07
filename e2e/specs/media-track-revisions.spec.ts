@@ -9,7 +9,12 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { aCollection, audioState, useTheme } from './media-helpers.js';
+import {
+  aCollection,
+  aCollectionInVault,
+  audioState,
+  useTheme,
+} from './media-helpers.js';
 import { approve, audioWithTracks, openCollection } from './tracks-helpers.js';
 
 // KBC-073: a track changes after its approval, cut for real by the E2E's media worker.
@@ -39,8 +44,10 @@ interface LibraryRow {
   readonly tracks: readonly { readonly id: string; readonly title: string }[];
 }
 
-async function approvedTracks(owner: APIRequestContext) {
-  const topic = await aCollection(owner);
+async function approvedTracks(owner: APIRequestContext, inVault = false) {
+  const topic = inVault
+    ? await aCollectionInVault(owner)
+    : await aCollection(owner);
   const media = await audioWithTracks(owner, undefined, topic);
   await approve(owner, media.id);
   await publishedIn(owner, media.id);
@@ -634,3 +641,67 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await owner.dispose();
   });
 }
+
+// KBC-100 AC-15 (T22 "Estado da publicação"): where the track stands in the AI research.
+test('KBC-100 AC-15: the publication state is words in a status line, follows the Mac, and fits at 390', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { first, topic } = await approvedTracks(owner, true);
+  await page.goto(trackPage(first.id));
+  const line = page.locator('app-track-publication-status').getByRole('status');
+  // No Mac paired in the E2E: the document waits for it, and says so in words.
+  await expect(line).toContainText('Pesquisa com IA:');
+  await expect(line).toContainText('Aguardando o Mac do dono');
+
+  const ran = await owner.post('/api/e2e/kb-publish/run', {
+    data: { topic },
+    headers: CSRF,
+  });
+  expect(ran.status(), await ran.text()).toBe(200);
+  await page.reload();
+  await expect(line).toContainText(/Na pesquisa · desde \d\d:\d\d/);
+  await expect(line.locator('[aria-hidden="true"]')).toHaveText('✓');
+
+  const fits = await page.evaluate(
+    () => document.documentElement.scrollWidth <= window.innerWidth,
+  );
+  expect(fits).toBe(true);
+  const box = await line.boundingBox();
+  expect(box?.width ?? 0).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
+  const axe = await new AxeBuilder({ page })
+    .include('app-track-publication-status')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
+    .analyze();
+  expect(axe.violations).toEqual([]);
+  const width = page.viewportSize()?.width ?? 0;
+  await page.screenshot({
+    path: `../work/KBC-100/evidence/publication-live-${width}-${test.info().project.name}.png`,
+  });
+
+  // Renamed: the document is wanted again, so it waits for the Mac once more.
+  const view = await viewOf(owner, first.id);
+  const renamed = await owner.patch(`/api/v1/media/${first.id}`, {
+    headers: { ...CSRF, 'if-match': `"${view.version}"` },
+    data: { title: 'Título que muda o documento' },
+  });
+  expect(renamed.status(), await renamed.text()).toBe(200);
+  await page.reload();
+  await expect(line).toContainText('Aguardando o Mac do dono');
+  await page.screenshot({
+    path: `../work/KBC-100/evidence/publication-waiting-${width}-${test.info().project.name}.png`,
+  });
+  await owner.dispose();
+});
+
+test('KBC-100 AC-12: a collection with no folder in the kb says the track is out of the research', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { first } = await approvedTracks(owner);
+  await page.goto(trackPage(first.id));
+  await expect(
+    page.locator('app-track-publication-status').getByRole('status'),
+  ).toContainText('Fora da pesquisa: o acervo ainda não tem pasta no kb');
+  await owner.dispose();
+});

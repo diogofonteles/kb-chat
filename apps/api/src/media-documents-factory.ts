@@ -42,7 +42,12 @@ export const seenIn = (catalog: CatalogRegistry): SeenDocument[] =>
   catalog.topics().flatMap((one) =>
     [...one.entries.values()].flatMap((entry) =>
       entry.media
-        ? [{ mediaId: entry.media.mediaId, fingerprint: entry.media.fingerprint }]
+        ? [
+            {
+              mediaId: entry.media.mediaId,
+              fingerprint: entry.media.fingerprint,
+            },
+          ]
         : [],
     ),
   );
@@ -75,10 +80,13 @@ export function documentSource(wiring: DocumentsWiring): TrackDocumentSource {
   });
 }
 
-export function createMediaDocuments(wiring: DocumentsWiring): MediaDocuments {
+/** The reconciler over media.db and the vault's folders. */
+function reconcilerOf(
+  wiring: DocumentsWiring,
+  source: TrackDocumentSource,
+): MediaDocumentReconciler {
   const { media } = wiring;
-  const source = documentSource(wiring);
-  const reconciler = new MediaDocumentReconciler({
+  return new MediaDocumentReconciler({
     source,
     documents: media.documents,
     hasFolder: hasVaultFolder(wiring.catalog),
@@ -90,6 +98,12 @@ export function createMediaDocuments(wiring: DocumentsWiring): MediaDocuments {
         .map((one) => one.id),
     ...(wiring.onRenderError && { onError: wiring.onRenderError }),
   });
+}
+
+export function createMediaDocuments(wiring: DocumentsWiring): MediaDocuments {
+  const { media } = wiring;
+  const source = documentSource(wiring);
+  const reconciler = reconcilerOf(wiring, source);
   const kb = new KbPublishService({
     documents: media.documents,
     reconciler,
@@ -98,15 +112,7 @@ export function createMediaDocuments(wiring: DocumentsWiring): MediaDocuments {
     leaseMs: JOB_LEASE_MS,
     maxAttempts: MAX_JOB_ATTEMPTS,
   });
-  const status = new PublicationStatus({
-    documents: media.documents,
-    reconciler,
-    store: media.store,
-    isDocumentable: (one) => source.isDocumentable(one),
-    hasFolder: hasVaultFolder(wiring.catalog),
-    budgetUsd: () => kb.budgetUsd(),
-    presence: wiring.presence ?? (() => NO_PUBLISHER),
-  });
+  const status = publicationStatus(wiring, { source, reconciler, kb });
   const existing = new ExistingTracks({
     documents: media.documents,
     reconciler,
@@ -115,6 +121,28 @@ export function createMediaDocuments(wiring: DocumentsWiring): MediaDocuments {
     queue: () => status.queue(),
   });
   return { reconciler, kb, existing, status };
+}
+
+/** Where each document stands (KBC-100 BR-4), from the same parts. */
+function publicationStatus(
+  wiring: DocumentsWiring,
+  parts: {
+    source: TrackDocumentSource;
+    reconciler: MediaDocumentReconciler;
+    kb: KbPublishService;
+  },
+): PublicationStatus {
+  const { media } = wiring;
+  const { source, reconciler, kb } = parts;
+  return new PublicationStatus({
+    documents: media.documents,
+    reconciler,
+    store: media.store,
+    isDocumentable: (one) => source.isDocumentable(one),
+    hasFolder: hasVaultFolder(wiring.catalog),
+    budgetUsd: () => kb.budgetUsd(),
+    presence: wiring.presence ?? (() => NO_PUBLISHER),
+  });
 }
 
 /** Every 10 minutes, whatever a missed callback left behind is published (ADR 0035 §4). */

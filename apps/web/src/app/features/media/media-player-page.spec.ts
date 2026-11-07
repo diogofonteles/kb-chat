@@ -429,9 +429,16 @@ describe('MediaPlayerPage: link to a minute (KBC-038 FR-5, AC-5)', () => {
 });
 
 /** Lets the page ask for what the answer needs (whenStable would wait for those requests). */
-/** "Faixas apagadas" reads its list on a recording, for who edits (KBC-073). */
-const answerArchivedTracks = (http: HttpTestingController): void =>
+/**
+ * What a recording's page reads for who edits: "Faixas apagadas" (KBC-073) and where it
+ * stands in the AI research (KBC-100: a recording with no document, here).
+ */
+const answerArchivedTracks = (http: HttpTestingController): void => {
   http.expectOne(`${ITEM_URL}/archived-tracks`).flush({ tracks: [] });
+  http
+    .expectOne(`${ITEM_URL}/publication`)
+    .flush({ mediaId: ITEM.id, publication: null });
+};
 
 async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve));

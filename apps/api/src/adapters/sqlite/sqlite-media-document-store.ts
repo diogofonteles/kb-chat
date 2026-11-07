@@ -207,8 +207,7 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       )
       .get(mediaId);
     if (!row) return null;
-    const text = (value: unknown) =>
-      typeof value === 'string' ? value : null;
+    const text = (value: unknown) => (typeof value === 'string' ? value : null);
     return {
       topic: String(row['topic']),
       desiredFingerprint: String(row['desired_sha256']),
@@ -265,7 +264,17 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
            (SELECT MAX(published_at) FROM media_documents) AS last_published`,
       )
       .get();
-    const failed = this.db
+    const last = counts?.['last_published'];
+    return {
+      waiting: Number(counts?.['waiting'] ?? 0),
+      lastPublishedAt: typeof last === 'string' ? last : null,
+      failed: this.failed(),
+    };
+  }
+
+  /** The documents given up on, newest first: what masters may retry. */
+  private failed(): QueueSummary['failed'] {
+    return this.db
       .prepare(
         `SELECT d.media_id, d.topic, COALESCE(m.title, '') AS title, d.last_error,
            d.updated_at FROM media_documents d LEFT JOIN media m ON m.id = d.media_id
@@ -280,12 +289,6 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
         error: String(row['last_error'] ?? 'kb failed'),
         since: String(row['updated_at']),
       }));
-    const last = counts?.['last_published'];
-    return {
-      waiting: Number(counts?.['waiting'] ?? 0),
-      lastPublishedAt: typeof last === 'string' ? last : null,
-      failed,
-    };
   }
 
   recordSync(sync: VaultSyncRecord): void {
@@ -322,7 +325,10 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
     };
   }
 
-  private stillWantedAt(topic: string, item: { mediaId: string; path: string }) {
+  private stillWantedAt(
+    topic: string,
+    item: { mediaId: string; path: string },
+  ) {
     const row = this.db
       .prepare('SELECT topic, path FROM media_documents WHERE media_id = ?')
       .get(item.mediaId);
@@ -565,7 +571,11 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
    */
   private markFailed(
     topic: string,
-    input: { delivered: readonly DeliveredDocument[]; error: string; now: Date },
+    input: {
+      delivered: readonly DeliveredDocument[];
+      error: string;
+      now: Date;
+    },
   ): void {
     const at = input.now.toISOString();
     const write = this.db.prepare(

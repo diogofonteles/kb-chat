@@ -92,9 +92,11 @@ describe('kb-publish: track documents through the Mac (KBC-099)', () => {
       expect(document['state']).toBe('published');
       expect(document['published_sha256']).toBe(document['desired_sha256']);
     }
-    expect(writesOf(job).map((item) => item.fingerprint).sort()).toEqual(
-      documents.map((one) => one['published_sha256']).sort(),
-    );
+    expect(
+      writesOf(job)
+        .map((item) => item.fingerprint)
+        .sort(),
+    ).toEqual(documents.map((one) => one['published_sha256']).sort());
     // Nothing left: the next lease finds no work.
     expect((await leaseAs(world.media, mac.token)).statusCode).toBe(204);
     // kb's spend is on the media ledger, per document (ADR 0035 §11).

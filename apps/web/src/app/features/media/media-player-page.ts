@@ -59,6 +59,7 @@ import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
 import { TracksStore } from '@core/media/tracks-store.js';
 import { editPagePath, mediaEditUrl } from '@core/media/media-edit-api.js';
+import { TrackPublicationStatus } from './track-publication/track-publication-status.js';
 import { TrackPreparationStatus } from './tracks/track-preparation.js';
 import { preparationPagePath } from '@core/media/preparation-api.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
@@ -129,6 +130,7 @@ import { TrackActions } from './track-edit/track-actions.js';
     TrackActions,
     ArchivedTracks,
     MovedBookmarksNotice,
+    TrackPublicationStatus,
   ],
   templateUrl: './media-player-page.html',
   styleUrl: './media-player-page.css',

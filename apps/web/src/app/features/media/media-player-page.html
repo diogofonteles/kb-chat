@@ -66,6 +66,9 @@
             <span class="transcription">{{ text }}</span>
           }
         </p>
+        @if (canEdit() || canEditTrack()) {
+          <app-track-publication-status [mediaId]="current.id" />
+        }
         @if (canReadAbout()) {
           <app-track-about-view
             [mediaId]="current.id"

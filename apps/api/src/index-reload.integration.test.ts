@@ -111,7 +111,10 @@ describe('Hot swap of the search index (KBC-100 FR-5, AC-13, NFR-2)', () => {
     await mkdir(join(vault, 'hermetismo', 'raw', 'media', 'r'), {
       recursive: true,
     });
-    await writeFile(join(vault, 'hermetismo', 'raw', 'media', 'r', 't.md'), TRACK);
+    await writeFile(
+      join(vault, 'hermetismo', 'raw', 'media', 'r', 't.md'),
+      TRACK,
+    );
     const long = adapter.search(query('slow'));
     await writeFile(trigger, 'index-20261107140200.sqlite\n');
 
