@@ -16,6 +16,8 @@ from .secret import CachedToken, TokenError, load_token, save_keychain
 CONFIG_FILE = (
     Path.home() / "Library" / "Application Support" / "nova-alexandria-transcriber" / "config.json"
 )
+# This checkout's sync script (tools/transcriber/src/transcriber → the repository's root).
+SYNC_SCRIPT = Path(__file__).resolve().parents[4] / "deploy" / "scripts" / "sync-vault.sh"
 
 
 def load_config(path: Path = CONFIG_FILE) -> dict:
@@ -51,6 +53,8 @@ def pair(args: argparse.Namespace) -> int:
     saved = {"api_url": api_url, "name": args.name or socket.gethostname()}
     if args.vault:
         saved["vault_path"] = str(Path(args.vault).expanduser())
+    if args.sync_host:
+        saved["sync_host"] = args.sync_host
     save_config(saved)
     print("Pareado. Rode `uv run --project tools/transcriber transcriber run` ou carregue o plist.")
     return 0
@@ -105,7 +109,22 @@ def run(args: argparse.Namespace) -> int:
     )
     if args.poll:
         worker.poll_s = args.poll
+    worker.sync = vault_sync_of(args, config, kb)
     return worker.run(once=args.once, exit_when_idle=args.exit_when_idle)
+
+
+def vault_sync_of(args: argparse.Namespace, config: dict, kb):
+    """The automatic sync with production (KBC-100 FR-4): only with kb and a host to send to."""
+    from .vault_sync import VaultSync
+
+    host = args.sync_host or os.environ.get("KB_CHAT_SYNC_HOST") or config.get("sync_host")
+    if kb is None or not host or args.no_sync:
+        return None
+    script = Path(args.sync_script).expanduser() if args.sync_script else SYNC_SCRIPT
+    sync = VaultSync(script=script, host=host, vault=kb.vault)
+    # What a previous run published may not have reached production yet.
+    sync.mark_pending()
+    return sync
 
 
 def _mlx():
@@ -128,6 +147,10 @@ def main(argv: list[str] | None = None) -> int:
     pairing.add_argument(
         "--vault", help="the kb vault on this Mac, for 'Publica no acervo' (KBC-099)"
     )
+    pairing.add_argument(
+        "--sync-host",
+        help="user@host of production: the vault is synced there by itself (KBC-100)",
+    )
     pairing.set_defaults(handler=pair)
     running = commands.add_parser("run", help="lease and transcribe jobs until stopped")
     running.add_argument("--once", action="store_true", help="at most one job, then exit")
@@ -145,6 +168,15 @@ def main(argv: list[str] | None = None) -> int:
         "--no-kb-publish",
         action="store_true",
         help="never write track documents into the vault nor run kb (KBC-099)",
+    )
+    running.add_argument(
+        "--sync-host", help="user@host of production, over the paired one (KBC-100)"
+    )
+    running.add_argument("--sync-script", help="sync-vault.sh to run (this checkout's)")
+    running.add_argument(
+        "--no-sync",
+        action="store_true",
+        help="never sync the vault with production by itself (KBC-100)",
     )
     running.set_defaults(handler=run)
     args = parser.parse_args(argv)

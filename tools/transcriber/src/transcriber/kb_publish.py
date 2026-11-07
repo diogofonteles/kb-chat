@@ -1,6 +1,7 @@
 """Track documents into the vault, through kb (KBC-099, ADR 0035 §3).
 
-A kb-publish job carries the rendered Markdown of a collection's tracks. On this Mac, under a
+A kb-publish job carries the rendered Markdown of a collection's tracks, and the documents to
+take out of it (KBC-100: archived, deleted or moved). On this Mac, under a
 lock in the vault, each file is written where the API said (`<vault>/<topic>/raw/media/…`,
 never anywhere else), keeping the keys kb already wrote into it, then kb runs the steps a
 text gets, over the whole topic: `classify`, `index`, `link`, `index`. kb is reached through
@@ -259,6 +260,8 @@ class KbPublisher:
     def write(self, topic: str, items: list[dict]) -> list[Path]:
         files = []
         for item in items:
+            if item.get("op", "write") != "write":
+                continue
             target = self.file_of(topic, item["path"])
             target.parent.mkdir(parents=True, exist_ok=True)
             markdown = item["markdown"]
@@ -269,6 +272,18 @@ class KbPublisher:
             os.replace(partial, target)
             files.append(target)
         return files
+
+    def remove(self, topic: str, items: list[dict]) -> None:
+        """Takes out the documents the API no longer wants (KBC-100 BR-2): an archived, deleted
+        or moved track. A file already gone is fine; the recording's folder goes when empty."""
+        for item in items:
+            if item.get("op") != "remove":
+                continue
+            target = self.file_of(topic, item["path"])
+            target.unlink(missing_ok=True)
+            folder = target.parent
+            if folder.is_dir() and not any(folder.iterdir()):
+                folder.rmdir()
 
     def run_kb(self, topic: str, budget_usd: float) -> tuple[float, set[str], bool]:
         """The steps in order, classify and link within what is left of the budget.
@@ -292,12 +307,28 @@ class KbPublisher:
     def publish(self, job: dict) -> dict:
         """The kb-result body; raises KbStepFailed with kb's output (the files stay)."""
         topic = job["topic"]
+        items = job["items"]
+        writes = [item for item in items if item.get("op", "write") == "write"]
+        # Checked before anything changes: one unsafe path refuses the whole job.
+        for item in items:
+            self.file_of(topic, item["path"])
         with self.locked():
-            files = self.write(topic, job["items"])
+            written = self.write(topic, writes)
+            files = dict(zip((item["path"] for item in writes), written, strict=True))
+            self.remove(topic, items)
+            # kb runs after a removal too: its index drops the file (spike, "Remoção").
             spent, undecided, unnamed = self.run_kb(topic, float(job["budgetUsd"]))
-        share = min(round(spent / len(files), 6) if files else 0.0, float(job["budgetUsd"]))
+        # kb's spend goes to what it judged: the written documents (all, when none is).
+        payers = len(files) or len(items)
+        share = min(round(spent / payers, 6) if payers else 0.0, float(job["budgetUsd"]))
         documents = []
-        for item, file in zip(job["items"], files, strict=True):
+        for item in items:
+            file = files.get(item["path"])
+            if file is None:
+                documents.append(
+                    {"path": item["path"], "ok": True, "spendUsd": 0.0 if files else share}
+                )
+                continue
             document = {
                 "path": item["path"],
                 "ok": True,
