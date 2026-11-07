@@ -7,14 +7,14 @@ const SHA = 'a'.repeat(64);
 const upTo = (version: number) =>
   MEDIA_MIGRATIONS.filter((one) => one.version <= version);
 
-describe('Migration 27: track documents always up to date (KBC-100, PD-21)', () => {
-  it('keeps the documents of 26 and adds what production sees, removals and syncs', () => {
-    const db = openMediaDatabase(':memory:', upTo(26));
+describe('Migration 28: track documents always up to date (KBC-100, PD-21)', () => {
+  it('keeps the documents of 26, the runs of 27 and adds what production sees, removals and syncs', () => {
+    const db = openMediaDatabase(':memory:', upTo(27));
     db.prepare(
       `INSERT INTO media_documents (media_id, topic, path, desired_sha256, state, updated_at)
        VALUES ('m1', 'hermetismo', 'raw/media/r/m1.md', ?, 'pending', ?)`,
     ).run(SHA, AT);
-    expect(applyMigrations(db, upTo(27))).toEqual([27]);
+    expect(applyMigrations(db, upTo(28))).toEqual([28]);
 
     expect(
       db
