@@ -86,9 +86,12 @@ prune() {
 }
 
 # A swap cut short (set -e, a signal) puts the config and the link back together, so the API
-# never reads a new config over the old index (review 4). `changing` while files move.
+# never reads a new config over the old index (review 4). `changing` while files move. Cut
+# short after the API was asked (an SSH hang-up while waiting for its answer), the API is
+# asked again for the previous index: it may have taken the new one already (review 3).
 HOT_STATE=idle
 HOT_PREVIOUS=""
+HOT_ASKED=0
 # shellcheck disable=SC2329 # invoked by the EXIT trap set in install_hot
 undo_hot() {
   [ "$HOT_STATE" = changing ] || return 0
@@ -96,13 +99,19 @@ undo_hot() {
   echo "install-index: the swap stopped half way; putting the previous index and config back" >&2
   if [ -f "$CONFIG/index.yml.previous" ]; then mv -f "$CONFIG/index.yml.previous" "$CONFIG/index.yml" || true; fi
   if [ -n "$HOT_PREVIOUS" ] && [ -e "$CACHE/$HOT_PREVIOUS" ]; then
-    ln -sf "$HOT_PREVIOUS" "$CACHE/index.sqlite" || true
+    # The same single rename as the swap: never a moment without index.sqlite.
+    point_index_at "$HOT_PREVIOUS" || true
+    if [ "$HOT_ASKED" -eq 1 ]; then ask_reload "$HOT_PREVIOUS" || true; fi
   fi
 }
 
 install_hot() {
   local stamp name previous=""
   trap undo_hot EXIT
+  # A signal ends the script by exit, so the EXIT trap runs whatever the signal was.
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   stamp="$(date -u +%Y%m%d%H%M%S)"
   name="index-$stamp.sqlite"
   [ -e "$CACHE/$name" ] && name="index-$stamp-$$.sqlite"
@@ -123,6 +132,7 @@ install_hot() {
   rm -f "$INCOMING/index.yml"
   if [ "$(id -u)" -eq 0 ]; then chown -R "$APP_UID:$APP_UID" "$CACHE" "$CONFIG"; fi
   point_index_at "$name"
+  HOT_ASKED=1
   ask_reload "$name"
 
   if [ ! -f "$DEPLOY_DIR/release.env" ]; then

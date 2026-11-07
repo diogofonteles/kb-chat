@@ -2,7 +2,7 @@
  * The production sync scripts (KBC-100 FR-4, FR-5, BR-7), run against temporary folders with
  * fake docker, flock, ssh, rsync and sqlite3: nothing reaches a VM, nothing stops an API.
  */
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import {
   chmod,
   cp,
@@ -37,7 +37,7 @@ function run(
   options: {
     args?: readonly string[];
     env: Record<string, string>;
-    whileRunning?: () => Promise<void>;
+    whileRunning?: (child: ChildProcess) => Promise<void>;
   },
 ): Promise<Run> {
   return new Promise((resolve, reject) => {
@@ -49,7 +49,7 @@ function run(
     child.stderr.on('data', (chunk: Buffer) => (output += chunk.toString()));
     child.on('error', reject);
     child.on('close', (code) => resolve({ code: code ?? -1, output }));
-    void options.whileRunning?.();
+    void options.whileRunning?.(child);
   });
 }
 
@@ -237,6 +237,33 @@ describe('install-index.sh --hot (KBC-100 FR-5, AC-13)', () => {
     expect(
       await readFile(join(vm.cache, 'reload-index'), 'utf8').catch(() => null),
     ).toBeNull();
+  });
+
+  it('review 3: cut short while waiting for the API, it asks the API again for the previous index', async () => {
+    const vm = await aVm({ previous: 'link' });
+    const trigger = join(vm.cache, 'reload-index');
+    const done = await run(join(vm.root, 'deploy/scripts/install-index.sh'), {
+      args: ['--hot'],
+      env: { ...vm.env, KB_CHAT_RELOAD_WAIT_S: '30' },
+      // The SSH session drops once the API was asked for the new index.
+      whileRunning: async (child) => {
+        for (let tries = 0; tries < 200; tries += 1) {
+          if (await readFile(trigger, 'utf8').catch(() => null)) break;
+          await new Promise((wait) => setTimeout(wait, 25));
+        }
+        child.kill('SIGHUP');
+      },
+    });
+
+    expect(done.code).not.toBe(0);
+    expect(done.output).toContain('putting the previous index and config back');
+    expect(await readlink(join(vm.cache, 'index.sqlite'))).toBe(
+      'index-1.sqlite',
+    );
+    expect((await readFile(trigger, 'utf8')).trim()).toBe('index-1.sqlite');
+    expect((await readdir(vm.cache)).includes('.index.sqlite.next')).toBe(
+      false,
+    );
   });
 
   it('before the first deploy it only puts the files in place', async () => {
