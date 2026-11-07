@@ -523,18 +523,24 @@ test('AC-5: "Ouvir o início" marks nothing before the start and the first word 
   await openStep3(page, 2);
   await page.getByRole('button', { name: 'Ouvir o início' }).click();
   await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
-  const samples = await page.evaluate(async () => {
+  // The audition goes from 28 s to 33 s. `paused` turns false as soon as play() is called,
+  // before the seek to 28 s lands and the data arrives, which a loaded WebKit takes seconds
+  // to do: the frames are sampled once the audio moves on from 28 s, and until it is past
+  // "agora" or stops, not for a fixed time from the click.
+  const samples = await audition(page).evaluate(async (element) => {
     interface Registry {
       get(name: string): Iterable<Range> | undefined;
     }
     const registry = (CSS as unknown as { highlights: Registry }).highlights;
-    const audio = document.querySelector<HTMLAudioElement>(
-      'audio[hidden]:not([data-media-engine])',
-    );
+    const audio = element as HTMLAudioElement;
+    const frame = () =>
+      new Promise((resolve) => requestAnimationFrame(resolve));
     const found: { at: number; word: string | null }[] = [];
-    const until = performance.now() + 4_000;
-    while (performance.now() < until && audio && !audio.paused) {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
+    const until = performance.now() + 15_000;
+    const going = () => performance.now() < until && !audio.paused;
+    while (going() && (audio.seeking || audio.currentTime <= 28)) await frame();
+    while (going() && audio.currentTime < 30.4) {
+      await frame();
       const [range] = Array.from(registry.get('track-word') ?? []);
       found.push({ at: audio.currentTime, word: range?.toString() ?? null });
     }

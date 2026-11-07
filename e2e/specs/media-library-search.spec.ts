@@ -405,8 +405,17 @@ test('AC-10: a long passage shows the word and never widens the page', async ({
   await page.context().close();
 });
 
+/**
+ * The key that moves focus to the next link. Safari on macOS skips links on Tab unless the
+ * person turned on "Press Tab to highlight each item"; Option+Tab is its key for them, and
+ * the WebKit that Playwright runs on a Mac keeps that default (on Linux, Tab reaches them).
+ */
+const toNextLink = (browserName: string) =>
+  browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab';
+
 test('AC-11: by keyboard from the box to the player, and axe finds nothing serious', async ({
   browser,
+  browserName,
 }) => {
   const page = await listener(browser);
   await useTheme(page, 'dark');
@@ -433,7 +442,7 @@ test('AC-11: by keyboard from the box to the player, and axe finds nothing serio
     if (await play.evaluate((el) => el === document.activeElement)) break;
   }
   await expect(play).toBeFocused();
-  await page.keyboard.press('Tab');
+  await page.keyboard.press(toNextLink(browserName));
   await expect(link).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/midia\/[^?]+\?t=\d+$/);
