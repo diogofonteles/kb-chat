@@ -1,6 +1,6 @@
 # 0035 — Transcribed tracks become kb documents: written and classified by `kb` on the owner's Mac, cited to the millisecond through `media.db`
 
-- Status: proposed (2026-11-05; amended 2026-11-06 by the KBC-099 spike on kb 0.0.12 and its review)
+- Status: accepted (2026-11-07, the owner's decisions; proposed 2026-11-05; amended 2026-11-06 by the KBC-099 spike on kb 0.0.12 and its review, and 2026-11-07 by the owner: track documents are part of the collection's document search, see "Amendment 2026-11-07")
 - Supersedes: [0024](0024-media-search-outside-the-vault.md) §4 ("not in the vault, for now"; phase C as tools over the FTS5 index)
 - Amends: [0023](0023-transcription-pull-worker-on-the-owners-mac.md) (a new job kind; the worker writes into the vault on the Mac), [0029](0029-recording-edits-speakers-tracks-and-subjects.md) option 5 (accepted subjects are rendered into the track's document; `media.db` stays their authority), [0021](0021-app-driven-exhaustive-sweep.md) (tracks are documents of the sweep's set; coverage names them), [0010](0010-deploy-oracle-cloud-always-free.md) (the vault sync runs by itself and the index swap stops being an API restart)
 - Keeps: Q7 (the API never writes to the vault or the QMD index); 0024 §1–§3 (the FTS5 index still serves "Na fala", the Library search and exact times)
@@ -36,7 +36,7 @@ The two objections 0024 raised against option 2 (a Markdown copy in the vault) w
 
 7. **Opening a track citation opens the transcript, not the Markdown.** The web routes a source with `media` to a panel in the reading slot that shows the transcript from `media.db` (always the current version, with words for the spoken-word highlight, KBC-045) with the cited passage highlighted and scrolled into view, and the track's player beside it, positioned 2 s before `startMs`, paused, ready to play. The vault Markdown is never shown to people; it exists for kb and for the agent.
 
-8. **Search outside the conversation does not change.** Entries with `media` stay out of the T2 document group, its facet counts and the document panel's "Veja também" until KBC-101 shows them there as tracks; "Na fala", the Library search (KBC-096) and subjects (KBC-069/070) keep reading `media.db` as before.
+8. **Search outside the conversation does not change (until KBC-101; amended 2026-11-07).** Entries with `media` stay out of the T2 document group, its facet counts and the document panel's "Veja também" until KBC-101 shows them there as tracks (see "Amendment 2026-11-07"); "Na fala", the Library search (KBC-096) and subjects (KBC-069/070) keep reading `media.db` as before.
 
 9. **Publishing to production.** In KBC-099 the owner's existing `sync-vault.sh` publishes the documents. In KBC-100 the worker runs the sync by itself after a publish batch (at most once every 30 minutes, none during a deploy, the existing lock and deletion cap), and `install-index.sh` gains a hot mode: the API restarts only its long-lived `qmd mcp` child on a trigger file, without stopping the API (live research turns, KBC-029, survive); the catalog already follows the vault through chokidar. The API learns that a document reached production when the catalog sees its `kb_chat_fingerprint`; only then is the track "na pesquisa com IA".
 
@@ -51,7 +51,7 @@ The two objections 0024 raised against option 2 (a Markdown copy in the vault) w
 3. **The API writes the document into the vault or the QMD index.** Breaks Q7 and ADR 0010 (the VM vault is read-only and is overwritten by every sync from the Mac).
 4. **Run kb on the VM.** kb and the vault's source of truth live on the Mac; two writers to the vault would diverge; QMD embedding on the A1 VM is slow. Revisit with ADR 0031.
 5. **`kb ingest file --force` for each track.** The literal "same as texts", but ingest converts and renames the file, re-ingesting an edited track creates a second document, and its gates are meant for unknown sources. Kept as the fallback if the KBC-099 spike finds that kb 0.0.12 does not classify a file it did not ingest.
-6. **Human confirmation of kb's classification per track (as KBC-069).** Safer facets, but the owner asked for it by default; it stays an owner question.
+6. **Human confirmation of kb's classification per track (as KBC-069).** Safer facets, but the owner asked for it by default; rejected by the owner on 2026-11-07.
 
 ## Consequences
 
@@ -63,3 +63,14 @@ The two objections 0024 raised against option 2 (a Markdown copy in the vault) w
 - Risk: kb 0.0.12 is unstable (overview constraint); a change to how classify/link pick files or to frontmatter ownership breaks publishing. KBC-099 ran the spike on the real binary (2026-11-06, a scratch copy of the vault, US$ 0.0053): classify and link take a file written straight into `raw/media` without ingest and keep the app's keys and anchors; the worker's tests replay kb's real output (receipts, `undecided` lines, list indentation) with a fake kb (Q5).
 - Compliance: unit tests of the renderer (deterministic, anchors, owner keys) and of passage resolution (a, b, c); integration tests of the reconciler (each change kind → write or remove), of the visibility filter (archived, other collection, no `media`, no `media-research`) and of the tools and citations on the fixture vault with track documents; the worker's tests with a fake kb; an E2E from question to citation to the panel with the player at −2 s.
 - Revisit: when ADR 0031 moves processing off the Mac; if kb gains a library API; if the vault grows past 50k documents (ADR 0003).
+
+## Amendment 2026-11-07 (owner's decisions)
+
+The owner answered the open questions of KBC-098 in conversation. Approved as written: kb classifies and links tracks with no person confirming (§3); `media-research` is not granted by itself to people who hold `research` and `media`; the cited track's player opens paused at −2 s (§7); a transcribed recording without tracks becomes one document (KBC-100); low-confidence transcripts are searchable, labelled for the agent and in the source chip; the production sync runs at most every 30 minutes (§9).
+
+Changed: **track documents are part of the collection's document search.** In the owner's words, "cada faixa transcrita é um «documento» do acervo": a visible track appears in the T2 document list, its facets (kb's `genre`, `depth`, `relevance`, `concepts`), its counts (summary, authorship, "Buscar em", chips) and "Mostrar mais", with the ♪ marker, and opens the T22 transcript panel with the player at the matched passage. This replaces the exclusion of §8 once KBC-101 ships. Rules (KBC-101 BR-6 to BR-11):
+
+- Visibility is §5's `media.db` check done before facets, totals and pages are computed. T2 is not AI research, so it needs the collection, `media` and `media-tracks` (what already shows the track in the Library and "Na fala"), not `media-research`; research tools keep §5 as written. Access levels (ADR 0036 §3, KBC-106) apply to track entries here too.
+- One card per track: a track document hit and a "Na fala" hit of the same track (or of a recording without tracks and its document) merge into one item before paging and counting, carrying the passage's time; "Na fala" hits of recordings whose tracks have no visible document stay as they are.
+- In "Buscar em", tracks count under "Áudios"; tracks are never grouped as copies of a text or of another track.
+- The search result item grows additively with `media? { mediaId, kind, recordingTitle, ordinal?, total?, startMs, confidence, stale }`.
