@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { SYSTEM_PROMPT, windowPrompt } from './prompt.js';
+import {
+  PREVIOUS_TRACKS_CHARS,
+  SYSTEM_PROMPT,
+  windowPrompt,
+  type PreviousTrack,
+} from './prompt.js';
 import { buildPlan, callCeiling } from './proposal-plan.js';
 import {
   clock,
@@ -176,5 +181,48 @@ describe('the prompt and the estimate (KBC-067 BR-3)', () => {
     const oneCall = callCeiling([{ role: 'user', content: 'x' }], price);
     expect(plan.estimateUsd).toBeGreaterThan(2 * oneCall);
     expect(plan.estimateUsd).toBeLessThan(0.01);
+  });
+
+  const previousBlock = (previous: readonly PreviousTrack[]): string[] => {
+    const lines = windowPrompt({
+      context: { ...context, voices: [] },
+      window: [segment(100, 0)],
+      before: null,
+      position: { index: 1, total: 2 },
+      previous,
+    }).split('\n');
+    const from = lines.findIndex((line) => line.includes('janela anterior'));
+    return lines.slice(
+      from,
+      lines.findIndex((line) => line.startsWith('Janela ')),
+    );
+  };
+  const tracks = (count: number): PreviousTrack[] =>
+    Array.from({ length: count }, (_, index) => ({
+      firstSegment: index * 2 + 1,
+      lastSegment: index * 2 + 2,
+      kind: 'talk',
+      title: `Um título longo de faixa ${index + 1} sobre o tema da palestra e suas partes`,
+    }));
+
+  it('gives the tracks of the window before whole when they fit their room', () => {
+    expect(previousBlock(tracks(2))).toEqual([
+      'Faixas da janela anterior (para dar continuidade):',
+      '- ids 1–2 (exposicao): Um título longo de faixa 1 sobre o tema da palestra e suas partes',
+      '- ids 3–4 (exposicao): Um título longo de faixa 2 sobre o tema da palestra e suas partes',
+    ]);
+  });
+
+  it('keeps the newest tracks of the window before within the room the estimate gives them (QA-1)', () => {
+    const block = previousBlock(tracks(40));
+    expect(block.join('\n').length).toBeLessThanOrEqual(PREVIOUS_TRACKS_CHARS);
+    const kept = block.length - 1;
+    expect(kept).toBeGreaterThan(5);
+    expect(kept).toBeLessThan(40);
+    expect(block[0]).toBe(
+      `Últimas ${kept} faixas da janela anterior (para dar continuidade):`,
+    );
+    expect(block.at(-1)).toContain('ids 79–80');
+    expect(block[1]).toContain(`ids ${(40 - kept) * 2 + 1}–`);
   });
 });

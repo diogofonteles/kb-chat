@@ -21,6 +21,7 @@ import {
   ProposalService,
   roseEstimateOf,
 } from './modules/track-proposals/index.js';
+import { callCeiling } from './modules/track-proposals/proposal-plan.js';
 import type { MediaActor } from './modules/media/index.js';
 
 const OWNER: MediaActor = {
@@ -1781,6 +1782,42 @@ describe('ProposalService: never past the value accepted (KBC-112)', () => {
     expect(String(ctx.errors[0])).toMatch(/past its limit/);
   });
 
+  it('a clean pass billed at its worst case, with long tracks before each window, fits the estimate (QA-1)', async () => {
+    // Every window answers a track per two segments with a long title: the block of the
+    // window before (about 30 tracks) is far past the room the estimate gives it unless the
+    // prompt bounds it.
+    const manyTracks: StubReply = (user) => {
+      const { first, last } = windowIds(user);
+      const faixas = [];
+      for (let id = first; id <= last; id += 2)
+        faixas.push({
+          primeiro_id: id,
+          ultimo_id: Math.min(id + 1, last),
+          tipo: 'exposicao',
+          quem_pergunta: null,
+          quem_responde: null,
+          titulo: `Um título longo de faixa ${id} sobre o tema da palestra e suas partes`,
+          continua_faixa_anterior: false,
+        });
+      return JSON.stringify({ faixas });
+    };
+    const ctx = setup({
+      segments: evenSegments(250),
+      price: { input: 1e-6, output: 1e-6 },
+    });
+    const { estimateUsd, windows } = await ctx.service.estimate(
+      OWNER,
+      ctx.mediaId,
+    );
+    ctx.llm.replies.push(...Array.from({ length: windows }, () => manyTracks));
+    ctx.llm.billOf = (messages) => callCeiling(messages, ctx.llm.priceList);
+    const run = await runToEnd(ctx, OWNER, { acceptedUsd: estimateUsd });
+    expect(windows).toBeGreaterThan(2);
+    expect(run).toMatchObject({ status: 'done', failure: null });
+    expect(ctx.llm.calls).toHaveLength(windows);
+    expect(run.spentUsd).toBeLessThanOrEqual(estimateUsd);
+  });
+
   it('no run ever closes past its limit: 200 synthetic runs (NFR-1)', async () => {
     let seed = 112;
     const random = () => {
@@ -1800,6 +1837,7 @@ describe('ProposalService: never past the value accepted (KBC-112)', () => {
         new BrokenStream('{"faixas": ['),
         new Error('HTTP 503'),
       ]);
+    const failures: (string | null)[] = [];
     for (let index = 0; index < 200; index++) {
       const ctx = setup({
         segments: evenSegments(pick([30, 70, 130])),
@@ -1819,7 +1857,20 @@ describe('ProposalService: never past the value accepted (KBC-112)', () => {
       for (const row of spendRows(ctx))
         expect(row.spentUsd).toBeLessThanOrEqual(limit);
       expect(run.spentUsd).toBeLessThanOrEqual(limit);
+      // The bills drawn stay under a call's worst case, so the ledger's clamp (FR-7) never
+      // acts: what holds the limit is the check before each call.
+      expect(
+        ctx.errors.map(String).filter((error) => /past its limit/.test(error)),
+      ).toEqual([]);
+      failures.push(run.failure);
     }
+    // The draw reaches the limit often, not just runs that never come near it.
+    expect(
+      failures.filter((failure) => failure === 'accepted-limit').length,
+    ).toBeGreaterThanOrEqual(10);
+    expect(
+      failures.filter((failure) => failure === null).length,
+    ).toBeGreaterThanOrEqual(20);
     // 200 databases with every migration: seconds, not the default 5 s budget.
   }, 30_000);
 });

@@ -165,6 +165,8 @@ export class StubLlm implements LlmPort {
    * at the list price (about US$ 0.003 a window), as a real bill is (KBC-112).
    */
   costPerCall: number | null = 0.001;
+  /** When set, what the provider bills each call from its prompt (overrides `costPerCall`). */
+  billOf: ((messages: readonly LlmMessage[]) => number) | null = null;
 
   constructor(
     readonly replies: StubReply[],
@@ -203,7 +205,11 @@ export class StubLlm implements LlmPort {
     yield { type: 'token', text };
     yield {
       type: 'usage',
-      usage: { inputTokens: 100, outputTokens: 50, usd: this.costPerCall },
+      usage: {
+        inputTokens: 100,
+        outputTokens: 50,
+        usd: this.billOf ? this.billOf(messages) : this.costPerCall,
+      },
     };
   }
 }

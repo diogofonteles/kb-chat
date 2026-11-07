@@ -1,13 +1,16 @@
 import type { LlmMessage, LlmPrice } from '../../ports/llm.js';
 import { tokensOf } from '../spend/index.js';
-import { SYSTEM_PROMPT, windowPrompt, type FixedContext } from './prompt.js';
+import {
+  PREVIOUS_TRACKS_CHARS,
+  SYSTEM_PROMPT,
+  windowPrompt,
+  type FixedContext,
+} from './prompt.js';
 import { wordsOf, type NameEvidence } from './proposal-validation.js';
 import { splitWindows, voiceStats, type PromptSegment } from './windows.js';
 
 /** Output budget per window: enough for ~40 compact tracks (KBC-063: 3,000 held one window). */
 export const MAX_OUTPUT_TOKENS = 3_000;
-/** Room for the previous window's tracks, which only exist once the run goes. */
-const PREVIOUS_TRACKS_CHARS = 1_500;
 
 /** Everything a run needs, computed once for the estimate and the run alike. */
 export interface ProposalPlan {
@@ -59,6 +62,8 @@ function estimateOf(
   price: LlmPrice,
   fromWindow: number,
 ): number {
+  // Room for the previous window's tracks, which only exist once the run goes: the prompt
+  // never gives them more (`windowPrompt`), so a clean pass fits the estimate.
   const padding = tokensOf('x'.repeat(PREVIOUS_TRACKS_CHARS)) * price.input;
   const total = plan.windows
     .slice(fromWindow)
