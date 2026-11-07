@@ -801,6 +801,8 @@ Configurações → **Termos da transcrição**: só masters, onde a mídia est�
 - **Conflito:** quando outra pessoa salvou antes, a edição fica na tela, com **Recarregar**.
 - **Versões da lista:** fechado por padrão; versão, termos, data e autor.
 
+- **Sugestões das correções** (KBC-113, decisão do dono de 2026-11-07): bloco entre "Adicionar termos" e a lista, com "(4 novas)" no título. Uma linha por termo corrigido à mão: "Tiuaco · 7 correções em 3 gravações", até 3 exemplos "Tiuako → Tiuaco" com a gravação, o tempo e **Ouvir**; **Adicionar à lista** (secundária; põe o termo na lista em edição, "Na lista (falta salvar)", e só vale depois de **Salvar lista**) e **Dispensar** (texto, grava na hora). **Dispensadas** fica fechado por padrão, com **Restaurar**. Vazio: "Nenhuma sugestão das correções por enquanto." Nomes acessíveis com o termo ("Adicionar Tiuaco à lista"); resultado em região viva educada; 390 px em uma coluna.
+
 Player (T15), só masters: **Transcrever de novo** abaixo de "Esconder transcrição", com confirmação em linha e o foco em **Cancelar**. Enquanto refaz, quem vê a mídia lê "Retranscrevendo…" ou "Retranscrevendo · aguardando o transcritor", e o texto, as legendas e a busca continuam os atuais. Uma tentativa que falha diz, a masters, "A nova transcrição falhou. O texto atual foi mantido." O painel da transcrição mostra a masters "Feita com a lista de termos v3 (28/10/2026)".
 
 ---
