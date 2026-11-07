@@ -21,6 +21,7 @@ import {
   ProposalService,
   roseEstimateOf,
 } from './modules/track-proposals/index.js';
+import { callCeiling } from './modules/track-proposals/proposal-plan.js';
 import type { MediaActor } from './modules/media/index.js';
 
 const OWNER: MediaActor = {
@@ -65,11 +66,37 @@ function setup(options: Setup = {}) {
 
 type Ctx = ReturnType<typeof setup>;
 
-async function runToEnd(ctx: Ctx, actor: MediaActor = OWNER) {
-  const run = await ctx.service.start(actor, ctx.mediaId);
+async function runToEnd(
+  ctx: Ctx,
+  actor: MediaActor = OWNER,
+  terms: { acceptedUsd?: number } = {},
+) {
+  const run = await ctx.service.start(actor, ctx.mediaId, terms);
   await ctx.service.idle();
   return ctx.service.getRun(actor, ctx.mediaId, run.id);
 }
+
+/** A call's worst case, exactly: no input price and 3,000 tokens out at US$ 0.075. */
+const DEAR_CALL_USD = 0.075;
+const DEAR_PRICE = { input: 0, output: DEAR_CALL_USD / 3_000 };
+
+/**
+ * Three windows of US$ 0.075 at most each (US$ 0.225 in all, within the US$ 0.25 cap), the
+ * provider billing every call its worst case. A value accepted above the cap (the guided
+ * send's 1.25x, KBC-112 BR-6) is what lets the cap be the limit a run meets.
+ */
+function dear(replies: StubReply[]) {
+  const ctx = setup({
+    segments: evenSegments(130),
+    replies,
+    price: DEAR_PRICE,
+  });
+  ctx.llm.costPerCall = DEAR_CALL_USD;
+  return ctx;
+}
+const ABOVE_CAP = { acceptedUsd: 0.3 };
+/** One window's run (about US$ 0.0032) with room to ask it twice. */
+const ROOM_FOR_A_RETRY = { acceptedUsd: 0.01 };
 
 const monthUsed = (ctx: Ctx) =>
   ctx.ledger.usedSince(new Date('2026-11-01T03:00:00Z'));
@@ -265,7 +292,8 @@ describe('ProposalService: a run (KBC-067 FR-2, FR-3)', () => {
       ],
     });
     const ctx = setup({ replies: ['{"faixas": [', overlapping] });
-    const run = await runToEnd(ctx);
+    // Room for the window asked again: it counts against the value accepted (KBC-112).
+    const run = await runToEnd(ctx, OWNER, ROOM_FOR_A_RETRY);
     expect(run).toMatchObject({ status: 'done', tracks: 2, spentUsd: 0.002 });
     expect(ctx.llm.calls).toHaveLength(2);
     expect(ctx.llm.calls[1]?.at(-1)?.content).toContain('JSON inválido');
@@ -279,7 +307,7 @@ describe('ProposalService: a run (KBC-067 FR-2, FR-3)', () => {
     const ctx = setup({ replies: [wholeWindow({ title: 'Antiga' })] });
     await runToEnd(ctx);
     ctx.llm.replies.push('nada', 'de novo nada');
-    const run = await runToEnd(ctx);
+    const run = await runToEnd(ctx, OWNER, ROOM_FOR_A_RETRY);
     expect(run).toMatchObject({ status: 'failed', failure: 'invalid-output' });
     const draft = ctx.service.draft(OWNER, ctx.mediaId);
     expect(draft.tracks.map((track) => track.title)).toEqual(['Antiga']);
@@ -304,31 +332,24 @@ describe('ProposalService: a run (KBC-067 FR-2, FR-3)', () => {
   });
 
   it('stops a run that would cross its own cap', async () => {
-    const ctx = setup({
-      segments: evenSegments(130),
-      replies: ['nada', 'nada'],
-    });
-    const estimate = await ctx.service.estimate(OWNER, ctx.mediaId);
-    ctx.llm.costPerCall = estimate.estimateUsd * 1.4;
-    const capped = new ProposalService({
-      ...ctxDeps(ctx),
-      caps: { runUsd: estimate.estimateUsd * 1.5, monthlyUsd: 10 },
-    });
-    const started = await capped.start(OWNER, ctx.mediaId);
-    await capped.idle();
-    expect(capped.getRun(OWNER, ctx.mediaId, started.id)).toMatchObject({
+    const ctx = dear([wholeWindow(), 'nada', wholeWindow(), wholeWindow()]);
+    const run = await runToEnd(ctx, OWNER, ABOVE_CAP);
+    // US$ 0.225 after the second window asked again; a third call would reach US$ 0.30.
+    expect(run).toMatchObject({
       status: 'failed',
       failure: 'run-cap',
+      windowsDone: 2,
     });
-    expect(ctx.llm.calls).toHaveLength(1);
+    expect(run.spentUsd).toBeCloseTo(0.225, 9);
+    expect(ctx.llm.calls).toHaveLength(3);
   });
 
   it('prices a call from the list when the provider reports no cost', async () => {
     const ctx = setup({ replies: [wholeWindow()] });
     ctx.llm.costPerCall = null;
     const run = await runToEnd(ctx);
-    // 100 input and 50 output tokens at US$ 1e-7 and 2e-7.
-    expect(run.spentUsd).toBeCloseTo(100 * 1e-7 + 50 * 2e-7, 12);
+    // 100 input and 50 output tokens at US$ 1e-7 and 1e-6.
+    expect(run.spentUsd).toBeCloseTo(100 * 1e-7 + 50 * 1e-6, 12);
   });
 
   it('refuses a second run while one is running', async () => {
@@ -432,6 +453,7 @@ describe('ProposalService: windows and the draft (KBC-067 FR-3, BR-6)', () => {
       spendId: 'spend-1',
       windowsTotal: 1,
       estimateUsd: 0.01,
+      limitUsd: 0.01,
       now: NOW,
       carriedUsd: 0,
       resumes: null,
@@ -577,6 +599,7 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
       spendId: 'spend-1',
       windowsTotal: 3,
       estimateUsd: 0.01,
+      limitUsd: 0.01,
       now: NOW,
       carriedUsd: 0,
       resumes: null,
@@ -688,47 +711,38 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
   });
 
   it('holds the run cap over the whole analysis, not each attempt', async () => {
-    const ctx = setup({
-      segments: THREE_WINDOWS,
-      replies: [wholeWindow(), new Error('HTTP 503')],
-    });
-    ctx.llm.costPerCall = 0.2;
-    await runToEnd(ctx);
-    ctx.llm.replies.push(wholeWindow(), wholeWindow());
-    const second = await runToEnd(ctx);
+    const ctx = dear([wholeWindow(), new Error('HTTP 503')]);
+    await runToEnd(ctx, OWNER, ABOVE_CAP);
+    ctx.llm.replies.push('ilegível', wholeWindow(), wholeWindow());
+    const second = await runToEnd(ctx, OWNER, ABOVE_CAP);
+    // US$ 0.075 carried leaves US$ 0.175: the window asked again fits, the last does not.
     expect(second).toMatchObject({
       status: 'failed',
       failure: 'run-cap',
       windowsDone: 2,
     });
-    expect(second.spentUsd).toBeCloseTo(0.4, 9);
+    expect(second.spentUsd).toBeCloseTo(0.225, 9);
+    expect(monthUsed(ctx)).toBeCloseTo(0.225, 9);
   });
 
   it('holds the run cap over attempts that finished no window', async () => {
-    const ctx = setup({
-      segments: THREE_WINDOWS,
-      replies: ['ilegível', 'ilegível', 'ilegível', 'ilegível'],
-    });
-    ctx.llm.costPerCall = 0.1;
-    const first = await runToEnd(ctx);
+    const ctx = dear(['ilegível', 'ilegível']);
+    const first = await runToEnd(ctx, OWNER, ABOVE_CAP);
     expect(first).toMatchObject({ failure: 'invalid-output', windowsDone: 0 });
-    expect(first.spentUsd).toBeCloseTo(0.2, 9);
-    const second = await runToEnd(ctx);
-    expect(second).toMatchObject({ status: 'failed', failure: 'run-cap' });
-    expect(second.spentUsd).toBeCloseTo(0.3, 9);
-    expect(ctx.llm.calls).toHaveLength(3);
-    expect(monthUsed(ctx)).toBeCloseTo(0.3, 9);
+    expect(first.spentUsd).toBeCloseTo(0.15, 9);
+    await expect(
+      ctx.service.start(OWNER, ctx.mediaId, ABOVE_CAP),
+    ).rejects.toMatchObject({
+      code: 'MEDIA_SPEND_CAP',
+      details: { cap: 'run-cap' },
+    });
+    expect(ctx.llm.calls).toHaveLength(2);
+    expect(monthUsed(ctx)).toBeCloseTo(0.15, 9);
   });
 
   it('refuses, in the estimate and at the start, an analysis past its cap (BUG-9)', async () => {
-    const ctx = setup({
-      segments: THREE_WINDOWS,
-      replies: [wholeWindow(), new Error('HTTP 503')],
-    });
-    ctx.llm.costPerCall = 0.2;
-    await runToEnd(ctx);
-    ctx.llm.replies.push(wholeWindow(), wholeWindow());
-    await runToEnd(ctx);
+    const ctx = dear([wholeWindow(), 'ilegível', 'ilegível']);
+    await runToEnd(ctx, OWNER, ABOVE_CAP);
     const calls = ctx.llm.calls.length;
     const estimate = await ctx.service.estimate(OWNER, ctx.mediaId);
     expect(estimate).toMatchObject({ allowed: false, refusal: 'run-cap' });
@@ -1539,4 +1553,324 @@ describe('ProposalService: a retry loses no track (KBC-097)', () => {
     expect(ctx.service.draft(OWNER, ctx.mediaId).lastFailure).toBe('provider');
     expect(titles(ctx)).toEqual(['Antiga 1', 'Antiga 2', 'Dela']);
   });
+});
+
+describe('ProposalService: never past the value accepted (KBC-112)', () => {
+  const THREE_WINDOWS = evenSegments(130);
+  const spendRows = (ctx: Ctx) =>
+    ctx.db
+      .prepare('SELECT status, spent_usd FROM media_spend ORDER BY rowid')
+      .all()
+      .map((row) => ({
+        status: String(row['status']),
+        spentUsd: Number(row['spent_usd']),
+      }));
+  const titles = (ctx: Ctx) =>
+    ctx.service.draft(OWNER, ctx.mediaId).tracks.map(({ title }) => title);
+  /** An answer that cannot be read, longer than the room the estimate keeps per window. */
+  const LONG_UNREADABLE = 'x'.repeat(4_000);
+
+  /**
+   * QA BUG-2 of KBC-097: each call bills a third of the estimate and the second window is
+   * asked again: before KBC-112 the run went on to 4/3 of the value accepted.
+   */
+  async function askedAgain() {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [LONG_UNREADABLE, wholeWindow(), wholeWindow()],
+    });
+    const { estimateUsd } = await ctx.service.estimate(OWNER, ctx.mediaId);
+    ctx.llm.replies.unshift(wholeWindow());
+    ctx.llm.costPerCall = estimateUsd / 3;
+    return { ctx, estimateUsd };
+  }
+
+  it('asks a window again only when it fits, and closes within the value (AC-1)', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [wholeWindow(), 'ilegível', wholeWindow(), wholeWindow()],
+    });
+    ctx.llm.costPerCall = null;
+    const { estimateUsd } = await ctx.service.estimate(OWNER, ctx.mediaId);
+    const run = await runToEnd(ctx, OWNER, { acceptedUsd: estimateUsd });
+    expect(run).toMatchObject({ status: 'done', windowsDone: 3 });
+    expect(ctx.llm.calls).toHaveLength(4);
+    expect(run.limitUsd).toBe(estimateUsd);
+    expect(run.spentUsd).toBeLessThanOrEqual(estimateUsd);
+    const [row] = spendRows(ctx);
+    expect(row?.status).toBe('settled');
+    expect(row?.spentUsd).toBeLessThanOrEqual(estimateUsd);
+  });
+
+  it('stops before a window asked again that does not fit, keeping what is done (AC-2, AC-11)', async () => {
+    const { ctx, estimateUsd } = await askedAgain();
+    const run = await runToEnd(ctx, OWNER, { acceptedUsd: estimateUsd });
+    expect(run).toMatchObject({
+      status: 'failed',
+      failure: 'accepted-limit',
+      windowsDone: 1,
+      limitUsd: estimateUsd,
+    });
+    expect(ctx.llm.calls).toHaveLength(2);
+    expect(titles(ctx)).toEqual(['Janela 1']);
+    const draft = ctx.service.draft(OWNER, ctx.mediaId);
+    expect(draft.lastFailure).toBe('accepted-limit');
+    expect(draft.stopped).toEqual({
+      limitUsd: estimateUsd,
+      spentUsd: run.spentUsd,
+      windowsDone: 1,
+      windowsTotal: 3,
+    });
+    expect(run.spentUsd).toBeCloseTo((estimateUsd * 2) / 3, 12);
+    // The house account's ledger: one entry, the unspent part of the reservation given back.
+    expect(spendRows(ctx)).toEqual([
+      { status: 'refunded', spentUsd: run.spentUsd },
+    ]);
+    expect(monthUsed(ctx)).toBeLessThanOrEqual(estimateUsd);
+    expect(ctx.errors.map(String)).toEqual([
+      'ProposalStop: proposal stopped: accepted-limit',
+    ]);
+  });
+
+  it('a retry asks only the windows left, within its own new value (AC-3)', async () => {
+    const { ctx } = await askedAgain();
+    const first = await runToEnd(ctx, OWNER, {
+      acceptedUsd: (await ctx.service.estimate(OWNER, ctx.mediaId)).estimateUsd,
+    });
+    const rest = await ctx.service.estimate(OWNER, ctx.mediaId);
+    expect(rest.windows).toBe(2);
+    ctx.llm.costPerCall = rest.estimateUsd / 4;
+    ctx.llm.replies.splice(
+      0,
+      ctx.llm.replies.length,
+      wholeWindow(),
+      wholeWindow(),
+    );
+    const asked = ctx.llm.calls.length;
+    const second = await runToEnd(ctx, OWNER, {
+      acceptedUsd: rest.estimateUsd,
+    });
+    expect(second).toMatchObject({
+      status: 'done',
+      windowsDone: 3,
+      limitUsd: rest.estimateUsd,
+    });
+    const firstIds = ctx.llm.calls
+      .slice(asked)
+      .map((call) => windowIds(String(call.at(-1)?.content)).first);
+    expect(firstIds).toHaveLength(2);
+    expect(Math.min(...firstIds)).toBeGreaterThan(1);
+    const rows = spendRows(ctx);
+    expect(rows[1]?.spentUsd).toBeLessThanOrEqual(rest.estimateUsd);
+    expect(second.spentUsd).toBeCloseTo(
+      first.spentUsd + (rows[1]?.spentUsd ?? 0),
+      12,
+    );
+    expect(second.spentUsd).toBeLessThanOrEqual(0.25);
+  });
+
+  it('meets the run cap, not the value, when what the cap has left is less (AC-4)', async () => {
+    const ctx = dear([wholeWindow(), new Error('HTTP 503')]);
+    await runToEnd(ctx);
+    ctx.llm.replies.push('ilegível', wholeWindow(), wholeWindow());
+    // US$ 0.20 accepted, US$ 0.175 left of the cap: the cap is the limit.
+    const second = await runToEnd(ctx, OWNER, { acceptedUsd: 0.2 });
+    expect(second).toMatchObject({ failure: 'run-cap', windowsDone: 2 });
+    expect(second.limitUsd).toBeCloseTo(0.175, 12);
+    expect(spendRows(ctx)[1]?.spentUsd).toBeLessThanOrEqual(0.175);
+  });
+
+  it('a restart pays the windows again within the value accepted (AC-5)', async () => {
+    const { ctx } = await askedAgain();
+    await runToEnd(ctx, OWNER, {
+      acceptedUsd: (await ctx.service.estimate(OWNER, ctx.mediaId)).estimateUsd,
+    });
+    ctx.db
+      .prepare(
+        `UPDATE media_proposal_runs SET windows_total = 99 WHERE status = 'failed'`,
+      )
+      .run();
+    const whole = await ctx.service.estimate(OWNER, ctx.mediaId);
+    expect(whole).toMatchObject({ restarts: true, windows: 3 });
+    ctx.llm.replies.splice(
+      0,
+      ctx.llm.replies.length,
+      wholeWindow(),
+      LONG_UNREADABLE,
+    );
+    const asked = ctx.llm.calls.length;
+    const again = await runToEnd(ctx, OWNER, {
+      acceptedUsd: whole.estimateUsd,
+    });
+    expect(windowIds(String(ctx.llm.calls[asked]?.at(-1)?.content)).first).toBe(
+      1,
+    );
+    expect(again).toMatchObject({ failure: 'accepted-limit' });
+    expect(spendRows(ctx)[1]?.spentUsd).toBeLessThanOrEqual(whole.estimateUsd);
+  });
+
+  it('without a value sent, the estimate here is the limit (AC-10)', async () => {
+    const { ctx, estimateUsd } = await askedAgain();
+    const run = await runToEnd(ctx);
+    expect(run).toMatchObject({
+      failure: 'accepted-limit',
+      windowsDone: 1,
+      limitUsd: estimateUsd,
+    });
+    expect(spendRows(ctx)[0]?.spentUsd).toBeLessThanOrEqual(estimateUsd);
+  });
+
+  it('reserves the limit, not the estimate, in the media month (BR-9)', async () => {
+    const ctx = setup({ segments: THREE_WINDOWS, replies: [HANG] });
+    const { estimateUsd } = await ctx.service.estimate(OWNER, ctx.mediaId);
+    await ctx.service.start(OWNER, ctx.mediaId, {
+      acceptedUsd: estimateUsd * 1.25,
+    });
+    expect(monthUsed(ctx)).toBeCloseTo(estimateUsd * 1.25, 12);
+    await ctx.service.stop();
+  });
+
+  it('an API that stops keeps the windows done, closes within the value and waits for a person (AC-12)', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [wholeWindow(), HANG],
+    });
+    const { estimateUsd } = await ctx.service.estimate(OWNER, ctx.mediaId);
+    await ctx.service.start(OWNER, ctx.mediaId, { acceptedUsd: estimateUsd });
+    await vi.waitFor(() => expect(ctx.llm.calls).toHaveLength(2));
+    await ctx.service.stop();
+    const after = new ProposalService(ctxDeps(ctx));
+    after.recover();
+    const draft = after.draft(OWNER, ctx.mediaId);
+    expect(draft).toMatchObject({
+      lastFailure: 'interrupted',
+      tracks: [{ title: 'Janela 1' }],
+    });
+    const [row] = spendRows(ctx);
+    expect(row?.status).toBe('refunded');
+    expect(row?.spentUsd).toBeLessThanOrEqual(estimateUsd);
+    await after.idle();
+    expect(ctx.llm.calls).toHaveLength(2);
+  });
+
+  it('of two presses at once, only one runs, at its own limit (AC-13)', async () => {
+    const ctx = setup({ segments: THREE_WINDOWS, replies: [HANG] });
+    const { estimateUsd } = await ctx.service.estimate(OWNER, ctx.mediaId);
+    const results = await Promise.allSettled([
+      ctx.service.start(OWNER, ctx.mediaId, { acceptedUsd: estimateUsd }),
+      ctx.service.start(OWNER, ctx.mediaId, { acceptedUsd: estimateUsd * 2 }),
+    ]);
+    const started = results.flatMap((result) =>
+      result.status === 'fulfilled' ? [result.value] : [],
+    );
+    expect(started).toHaveLength(1);
+    expect([estimateUsd, estimateUsd * 2]).toContain(started[0]?.limitUsd);
+    expect(spendRows(ctx)).toHaveLength(1);
+    expect(monthUsed(ctx)).toBeCloseTo(started[0]?.limitUsd ?? -1, 12);
+    await ctx.service.stop();
+  });
+
+  it('a provider billing past a call worst case is logged and the ledger stays at the limit (FR-7)', async () => {
+    const ctx = setup({ replies: [wholeWindow()] });
+    const { estimateUsd } = await ctx.service.estimate(OWNER, ctx.mediaId);
+    ctx.llm.costPerCall = estimateUsd * 3;
+    const run = await runToEnd(ctx, OWNER, { acceptedUsd: estimateUsd });
+    expect(run.status).toBe('done');
+    expect(spendRows(ctx)).toEqual([
+      { status: 'settled', spentUsd: estimateUsd },
+    ]);
+    expect(String(ctx.errors[0])).toMatch(/past its limit/);
+  });
+
+  it('a clean pass billed at its worst case, with long tracks before each window, fits the estimate (QA-1)', async () => {
+    // Every window answers a track per two segments with a long title: the block of the
+    // window before (about 30 tracks) is far past the room the estimate gives it unless the
+    // prompt bounds it.
+    const manyTracks: StubReply = (user) => {
+      const { first, last } = windowIds(user);
+      const faixas = [];
+      for (let id = first; id <= last; id += 2)
+        faixas.push({
+          primeiro_id: id,
+          ultimo_id: Math.min(id + 1, last),
+          tipo: 'exposicao',
+          quem_pergunta: null,
+          quem_responde: null,
+          titulo: `Um título longo de faixa ${id} sobre o tema da palestra e suas partes`,
+          continua_faixa_anterior: false,
+        });
+      return JSON.stringify({ faixas });
+    };
+    const ctx = setup({
+      segments: evenSegments(250),
+      price: { input: 1e-6, output: 1e-6 },
+    });
+    const { estimateUsd, windows } = await ctx.service.estimate(
+      OWNER,
+      ctx.mediaId,
+    );
+    ctx.llm.replies.push(...Array.from({ length: windows }, () => manyTracks));
+    ctx.llm.billOf = (messages) => callCeiling(messages, ctx.llm.priceList);
+    const run = await runToEnd(ctx, OWNER, { acceptedUsd: estimateUsd });
+    expect(windows).toBeGreaterThan(2);
+    expect(run).toMatchObject({ status: 'done', failure: null });
+    expect(ctx.llm.calls).toHaveLength(windows);
+    expect(run.spentUsd).toBeLessThanOrEqual(estimateUsd);
+  });
+
+  it('no run ever closes past its limit: 200 synthetic runs (NFR-1)', async () => {
+    let seed = 112;
+    const random = () => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return seed / 2_147_483_648;
+    };
+    const pick = <T>(items: readonly T[]): T =>
+      items[Math.floor(random() * items.length)] as T;
+    const sixPlaces = (low: number, high: number) =>
+      Math.round((low + random() * (high - low)) * 1e6) / 1e6 / 1e6;
+    const reply = (): StubReply =>
+      pick<StubReply>([
+        wholeWindow(),
+        wholeWindow(),
+        'ilegível',
+        LONG_UNREADABLE,
+        new BrokenStream('{"faixas": ['),
+        new Error('HTTP 503'),
+      ]);
+    const failures: (string | null)[] = [];
+    for (let index = 0; index < 200; index++) {
+      const ctx = setup({
+        segments: evenSegments(pick([30, 70, 130])),
+        replies: Array.from({ length: 8 }, reply),
+        price: { input: sixPlaces(0.05, 2), output: sixPlaces(0.2, 8) },
+      });
+      const { estimateUsd } = await ctx.service.estimate(OWNER, ctx.mediaId);
+      ctx.llm.costPerCall = pick([null, (estimateUsd / 3) * random()]);
+      const terms = pick([
+        {},
+        { acceptedUsd: estimateUsd },
+        { acceptedUsd: estimateUsd * (1 + random() / 4) },
+      ]);
+      const run = await runToEnd(ctx, OWNER, terms);
+      const limit = run.limitUsd ?? -1;
+      expect(limit).toBeGreaterThanOrEqual(estimateUsd);
+      for (const row of spendRows(ctx))
+        expect(row.spentUsd).toBeLessThanOrEqual(limit);
+      expect(run.spentUsd).toBeLessThanOrEqual(limit);
+      // The bills drawn stay under a call's worst case, so the ledger's clamp (FR-7) never
+      // acts: what holds the limit is the check before each call.
+      expect(
+        ctx.errors.map(String).filter((error) => /past its limit/.test(error)),
+      ).toEqual([]);
+      failures.push(run.failure);
+    }
+    // The draw reaches the limit often, not just runs that never come near it.
+    expect(
+      failures.filter((failure) => failure === 'accepted-limit').length,
+    ).toBeGreaterThanOrEqual(10);
+    expect(
+      failures.filter((failure) => failure === null).length,
+    ).toBeGreaterThanOrEqual(20);
+    // 200 databases with every migration: seconds, not the default 5 s budget.
+  }, 30_000);
 });

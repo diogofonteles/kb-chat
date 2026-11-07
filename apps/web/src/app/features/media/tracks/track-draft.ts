@@ -612,7 +612,7 @@ export class TrackDraft {
     return this.api.propose(this.mediaId, acceptedUsd).pipe(
       map((run) => {
         this.server.update(
-          (edit) => edit && { ...edit, run, lastFailure: null },
+          (edit) => edit && { ...edit, run, lastFailure: null, stopped: null },
         );
         this.to({ kind: 'clean', saved: false });
         return { kind: 'started' } as const;

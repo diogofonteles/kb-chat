@@ -6,14 +6,17 @@ import {
   LOCALE_ID,
   afterRenderEffect,
   computed,
+  effect,
   inject,
   input,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
+  AcceptedLimitStop,
   ProposalEstimate,
   ProposalFailure,
   ProposalRun,
@@ -26,7 +29,17 @@ import {
   type ProposeResult,
   type SaveResult,
 } from './track-draft-state.js';
+import { usdUpText } from '../preparation/preparation-labels.js';
 import { notDoneText } from './track-labels.js';
+
+/**
+ * Focuses a button with its row brought into view by the row's scroll margin: a plain
+ * focus scrolls just enough to leave it under the editor's bottom bar on a phone.
+ */
+function focusClearOfTheBar(row: HTMLElement, button: HTMLElement): void {
+  row.scrollIntoView({ block: 'nearest' });
+  button.focus({ preventScroll: true });
+}
 
 /** Where the person is in asking for a run. */
 type Asking =
@@ -67,6 +80,9 @@ export class TrackProposals {
   /** The draft has proposals a new run may swap: said before the press (KBC-097). */
   readonly replaces = input(false);
 
+  /** Where the newest run stopped at the value accepted, from the server (KBC-112 FR-3). */
+  readonly stopped = input<AcceptedLimitStop | null>(null);
+
   private readonly asking = signal<Asking>({ kind: 'idle' });
   protected readonly error = signal('');
   /**
@@ -76,6 +92,16 @@ export class TrackProposals {
   private readonly rose = signal(false);
   private readonly notice = viewChild<ElementRef<HTMLElement>>('notice');
   private readonly actions = viewChild<ElementRef<HTMLElement>>('actions');
+  private readonly retryButton = viewChild<ElementRef<HTMLElement>>('retry');
+  /** What going on from a stop costs: read when the stop is shown (KBC-112 FR-3). */
+  private readonly going = signal<{
+    readonly key: string;
+    readonly estimate: ProposalEstimate | null;
+  } | null>(null);
+  /** A run followed here stopped: the focus goes to "Tentar de novo" (KBC-112 AC-14). */
+  private followed = false;
+  /** The pressed button goes with the estimate: the focus goes to the actions (PD-01). */
+  private focusActions = false;
 
   protected readonly estimate = computed(() => {
     const asking = this.asking();
@@ -88,6 +114,27 @@ export class TrackProposals {
   protected readonly run = computed(() => this.latestRun());
   protected readonly running = computed(() => this.run()?.status === 'running');
   protected readonly failed = computed(() => this.lastFailure() !== null);
+  protected readonly stop = computed(() =>
+    this.lastFailure() === 'accepted-limit' ? this.stopped() : null,
+  );
+  private readonly stopKey = computed(() => {
+    const stop = this.stop();
+    return stop
+      ? `${stop.limitUsd}:${stop.windowsDone}:${stop.windowsTotal}`
+      : null;
+  });
+  protected readonly stopText = computed(() => {
+    const stop = this.stop();
+    if (!stop) return '';
+    const limit = this.usdUp(stop.limitUsd);
+    const { windowsDone: done, windowsTotal: total } = stop;
+    const going = this.going();
+    const estimate =
+      going?.key === this.stopKey() ? going.estimate?.estimateUsd : undefined;
+    return estimate === undefined
+      ? $localize`:@@tracks.ai.stopped:A análise parou no valor aceito (${limit}:limit:): ${done}:done: de ${total}:total: janelas prontas.`
+      : $localize`:@@tracks.ai.stoppedGoingOn:A análise parou no valor aceito (${limit}:limit:): ${done}:done: de ${total}:total: janelas prontas. Continuar custa cerca de ${this.usdUp(estimate)}:value:.`;
+  });
   protected readonly cost = computed(() => {
     const run = this.run();
     return run?.status === 'done' && !this.failed()
@@ -96,7 +143,7 @@ export class TrackProposals {
   });
   protected readonly estimateText = computed(() => {
     const estimate = this.estimate();
-    return estimate ? this.usd(estimate.estimateUsd) : '';
+    return estimate ? this.usdUp(estimate.estimateUsd) : '';
   });
   protected readonly refusal = computed(() => {
     const refusal = this.estimate()?.refusal;
@@ -112,6 +159,11 @@ export class TrackProposals {
       ? $localize`:@@tracks.ai.month:Este mês: ${this.usd(month.spentUsd)}:spent: de ${this.usd(month.capUsd)}:cap:`
       : '';
   });
+  /** An estimate or a limit: rounded up, never below what the run holds to (KBC-112 BR-7). */
+  private usdUp(value: number): string {
+    return usdUpText(value, this.locale);
+  }
+
   private usd(value: number): string {
     return new Intl.NumberFormat(this.locale, {
       style: 'currency',
@@ -128,18 +180,71 @@ export class TrackProposals {
           actions.scrollIntoView({ block: 'nearest' });
       },
     });
+    this.watchStop();
+    this.keepFocus();
+  }
+
+  /** A stop at the value reads what going on costs, once per stop (KBC-112 FR-3). */
+  private watchStop(): void {
+    effect(() => {
+      if (this.running()) this.followed = true;
+    });
+    effect(() => {
+      const key = this.stopKey();
+      if (key !== null) untracked(() => this.readGoingOn(key));
+    });
+  }
+
+  /** A button that goes leaves the focus on what comes in its place (PD-01, AC-14). */
+  private keepFocus(): void {
+    afterRenderEffect({
+      write: () => {
+        const actions = this.actions()?.nativeElement;
+        const first = actions?.querySelector('button');
+        if (!actions || !first || !this.focusActions) return;
+        this.focusActions = false;
+        focusClearOfTheBar(actions, first);
+      },
+    });
+    afterRenderEffect({
+      write: () => {
+        const retry = this.retryButton()?.nativeElement;
+        const actions = retry?.parentElement;
+        if (!retry || !actions || !this.followed) return;
+        this.followed = false;
+        focusClearOfTheBar(actions, retry);
+      },
+    });
+  }
+
+  /** The free estimate of the windows left; without it the stop still offers a retry. */
+  private readGoingOn(key: string): void {
+    if (this.going()?.key === key) return;
+    this.going.set({ key, estimate: null });
+    this.api
+      .estimate(this.mediaId())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (estimate) => {
+          if (this.going()?.key === key) this.going.set({ key, estimate });
+        },
+        // Not a failure to show: the stop is said, and "Tentar de novo" asks the value again.
+        error: () => undefined,
+      });
   }
 
   protected askEstimate(): void {
     this.rose.set(false);
     this.error.set('');
     this.asking.set({ kind: 'estimating' });
+    this.focusActions = true;
     this.api
       .estimate(this.mediaId())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (estimate) => this.asking.set({ kind: 'estimated', estimate }),
         error: (err: unknown) => {
+          this.focusActions = false;
           this.asking.set({ kind: 'idle' });
           this.showError(err);
         },

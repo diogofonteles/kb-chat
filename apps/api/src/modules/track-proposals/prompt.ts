@@ -89,6 +89,33 @@ function contextLines(context: FixedContext): string[] {
   ];
 }
 
+/**
+ * The most the block of the previous window's tracks takes in a prompt, in characters. The
+ * estimate gives it this room (KBC-112 QA-1): a bigger block would make a clean pass cost more
+ * than the value shown, and a run stop at it with nothing asked again.
+ */
+export const PREVIOUS_TRACKS_CHARS = 1_500;
+
+const trackLine = (track: PreviousTrack): string =>
+  `- ids ${track.firstSegment}–${track.lastSegment} (${KIND_WORD[track.kind]}): ${track.title ? asData(track.title) : 'sem título'}`;
+
+/** The newest tracks that fit the room, in order: the window's end is what the next continues. */
+function newestThatFit(
+  lines: readonly string[],
+  header: string,
+): readonly string[] {
+  let size = header.length;
+  let from = lines.length;
+  while (
+    from > 0 &&
+    size + 1 + (lines[from - 1]?.length ?? 0) <= PREVIOUS_TRACKS_CHARS
+  ) {
+    from--;
+    size += 1 + (lines[from]?.length ?? 0);
+  }
+  return lines.slice(from);
+}
+
 function previousLines(
   previous: readonly PreviousTrack[],
   index: number,
@@ -96,12 +123,16 @@ function previousLines(
   if (index === 0) return ['Esta é a primeira janela da gravação.'];
   if (previous.length === 0)
     return ['A janela anterior não deixou faixas novas.'];
+  const lines = previous.map(trackLine);
+  const all = 'Faixas da janela anterior (para dar continuidade):';
+  if ([all, ...lines].join('\n').length <= PREVIOUS_TRACKS_CHARS)
+    return [all, ...lines];
+  // The header counts the tracks kept, so its widest form is measured.
+  const widest = `Últimas ${lines.length} faixas da janela anterior (para dar continuidade):`;
+  const kept = newestThatFit(lines, widest);
   return [
-    'Faixas da janela anterior (para dar continuidade):',
-    ...previous.map(
-      (track) =>
-        `- ids ${track.firstSegment}–${track.lastSegment} (${KIND_WORD[track.kind]}): ${track.title ? asData(track.title) : 'sem título'}`,
-    ),
+    `Últimas ${kept.length} faixas da janela anterior (para dar continuidade):`,
+    ...kept,
   ];
 }
 

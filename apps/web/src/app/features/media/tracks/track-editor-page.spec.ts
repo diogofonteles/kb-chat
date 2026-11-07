@@ -130,6 +130,7 @@ const RUN: ProposalRun = {
   windowsDone: 1,
   tracks: 2,
   estimateUsd: 0.01,
+  limitUsd: 0.01,
   spentUsd: 0,
   failure: null,
   createdAt: '2026-11-04T00:00:00.000Z',

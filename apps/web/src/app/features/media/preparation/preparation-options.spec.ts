@@ -98,15 +98,29 @@ describe('PreparationOptions (T20, step 1)', () => {
     fireEvent.click(radio('Propor as faixas com IA'));
     await fixture.whenStable();
     expect(
-      screen.getByText(/US\$\s0,02, descontado do limite mensal/),
+      screen.getByText(/US\$\s0,020, no máximo US\$\s0,025, descontado/),
     ).toBeTruthy();
     expect(screen.getByText(/restam US\$\s8,40/)).toBeTruthy();
     const summary = screen.getByTestId('plan-summary').textContent;
     expect(summary).toContain('propor faixas com IA');
     expect(summary).toContain('≈ 7 min');
-    expect(summary).toMatch(/US\$\s0,02/);
+    expect(summary).toMatch(/US\$\s0,020/);
     expect(summary).toContain('você valida as faixas');
     expect(form.plan().acceptedUsd).toBe(0.02);
+  });
+
+  it('shows the estimate and the most the run may spend, rounded up (KBC-112 FR-5, AC-8)', async () => {
+    const { fixture } = await renderOptions(anOffer({ aiEstimateUsd: 0.0234 }));
+    fireEvent.click(radio('Propor as faixas com IA'));
+    await fixture.whenStable();
+    expect(
+      screen.getByText(
+        /Estimativa: cerca de US\$\s0,024, no máximo US\$\s0,030, descontado do limite mensal da mídia \(restam US\$\s8,40\)\./,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByTestId('plan-summary').textContent).toMatch(
+      /≈ US\$\s0,024/,
+    );
   });
 
   it('unticking "Transcrever" unticks and turns off the rest, with the warning (AC-2)', async () => {

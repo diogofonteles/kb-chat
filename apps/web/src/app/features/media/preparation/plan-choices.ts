@@ -84,7 +84,9 @@ export const planOf = (
 
 /**
  * One file's part of a plan sent for several: the value the person saw is for them all, and
- * each file may only spend its share of it, by length (BR-4).
+ * each file may only spend its share of it, by length (BR-4). Rounded down to the
+ * micro-dollar, so the files together never pass what was shown (KBC-112 QA-3);
+ * `toPrecision` keeps a share that is exact (0.02) from losing a micro-dollar to the float.
  */
 export function planShare(
   plan: PreparationPlanRequest,
@@ -94,7 +96,8 @@ export function planShare(
   if (acceptedUsd === null || acceptedUsd === undefined) return plan;
   if (lengthMs === allMs) return plan;
   const share = (acceptedUsd * lengthMs) / allMs;
-  return { ...plan, acceptedUsd: Math.ceil(share * 1e6) / 1e6 };
+  const micro = Math.floor(Number((share * 1e6).toPrecision(12)));
+  return { ...plan, acceptedUsd: micro / 1e6 };
 }
 
 /** The same choices, whatever the estimate of the moment says. */

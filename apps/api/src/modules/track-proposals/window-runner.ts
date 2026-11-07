@@ -44,6 +44,11 @@ export interface WindowRunnerDeps {
   readonly runCapUsd: number;
   /** What the failed runs before this one spent: the cap holds over the whole analysis. */
   readonly carriedUsd: number;
+  /**
+   * The value the person accepted for this run (KBC-112 BR-1): its calls, a window asked
+   * again included, never add up past it. Earlier attempts do not count against it (BR-4).
+   */
+  readonly acceptedUsd: number;
   /** Aborted when the API stops. */
   readonly signal: AbortSignal;
   readonly onWindowSaved?: (mediaId: string) => void;
@@ -143,7 +148,7 @@ export class WindowRunner {
       extendLast: accepted.extendLast,
       tracks: accepted.tracks,
       voices: acceptVoices(reply.vozes, plan.evidence),
-      spentUsd: this.spentUsd,
+      spentUsd: Math.min(this.spentUsd, this.limitUsd()),
     });
     this.deps.onWindowSaved?.(plan.mediaId);
     this.remember(accepted, extended);
@@ -179,12 +184,14 @@ export class WindowRunner {
     throw new ProposalStop('invalid-output');
   }
 
-  /** One call, refused before it starts when it could cross the run's cap (BR-3). */
+  /**
+   * One call, refused before it starts when its worst case could cross the run's cap (BR-3)
+   * or the value accepted (KBC-112 BR-2), whichever is less: the stop names that one.
+   * Compared exactly: a call that reaches the limit to the cent's fraction is made.
+   */
   private async call(messages: readonly LlmMessage[]): Promise<string> {
-    const { llm, plan, runCapUsd, carriedUsd, signal } = this.deps;
-    const ceiling = callCeiling(messages, plan.price);
-    if (carriedUsd + this.spentUsd + ceiling > runCapUsd)
-      throw new ProposalStop('run-cap');
+    const { llm, plan, signal } = this.deps;
+    this.assertFits(callCeiling(messages, plan.price));
     const stream = llm.stream(messages, {
       maxTokens: MAX_OUTPUT_TOKENS,
       signal: AbortSignal.any([signal, AbortSignal.timeout(CALL_TIMEOUT_MS)]),
@@ -199,6 +206,26 @@ export class WindowRunner {
     }
     this.spentUsd += this.costOf({ messages, ...read });
     return read.answer;
+  }
+
+  /** What the run's cap has left after the attempts before it. */
+  private capLeft(): number {
+    return this.deps.runCapUsd - this.deps.carriedUsd;
+  }
+
+  /**
+   * The run's limit: the value accepted or the cap left, whichever is less (the service's
+   * `limitOf`). A window billed past its worst case is recorded at it, as the ledger is (FR-7).
+   */
+  private limitUsd(): number {
+    return Math.max(0, Math.min(this.deps.acceptedUsd, this.capLeft()));
+  }
+
+  private assertFits(ceiling: number): void {
+    if (this.spentUsd + ceiling <= this.limitUsd()) return;
+    throw new ProposalStop(
+      this.capLeft() <= this.deps.acceptedUsd ? 'run-cap' : 'accepted-limit',
+    );
   }
 
   private async consume(

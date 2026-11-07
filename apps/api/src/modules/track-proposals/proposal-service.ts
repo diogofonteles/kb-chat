@@ -6,7 +6,10 @@ import type {
   ProposalRun,
   SpendCap,
 } from '@kb-chat/contracts';
-import { estimateRoseDetailsSchema } from '@kb-chat/contracts';
+import {
+  PLAN_ESTIMATE_TOLERANCE,
+  estimateRoseDetailsSchema,
+} from '@kb-chat/contracts';
 import { z } from 'zod';
 import { startOfAppMonth } from '../../app-calendar.js';
 import { AppError } from '../../app-error.js';
@@ -100,8 +103,18 @@ const canResume = (attempt: FailedAttempt, windows: number): boolean =>
 export interface StartTerms {
   /** The newest run they saw; by default, the newest at the press. */
   readonly seenRunId?: string | null;
-  /** The value they were told; a run that would cost more does not start (KBC-097). */
+  /**
+   * The value they were told; a run that would cost more does not start (KBC-097), and the
+   * run never spends past it (KBC-112). Without it, the estimate here is the limit (BR-10).
+   */
   readonly acceptedUsd?: number | undefined;
+}
+
+/** What a run may spend: the value accepted, and within it what the run cap has left. */
+interface RunLimit {
+  readonly acceptedUsd: number;
+  /** The reservation: the most the run can spend (KBC-112 BR-9). */
+  readonly maxUsd: number;
 }
 
 const ANALYSIS_TAKEN = 'analysis-taken';
@@ -124,6 +137,14 @@ export function roseEstimateOf(error: unknown): number | null {
     return null;
   const details = estimateRoseDetailsSchema.safeParse(error.details);
   return details.success ? details.data.estimateUsd : null;
+}
+
+/** A run dearer than the value the person was told does not start (KBC-097). */
+function assertAgreed(estimateUsd: number, acceptedUsd?: number): void {
+  if (acceptedUsd !== undefined && estimateUsd > acceptedUsd)
+    throw new AppError('MEDIA_CONFLICT', 'The estimate rose', {
+      details: { reason: 'estimate-rose', estimateUsd },
+    });
 }
 
 const capError = (cap: SpendCap) =>
@@ -204,10 +225,12 @@ export class ProposalService {
       model: { id: llm.model, price: await this.priceOf(llm) },
     });
     const used = this.deps.ledger.usedSince(startOfAppMonth(this.now()));
+    // The guided run this offers reserves its most (KBC-112 BR-6), so the month must hold it.
     const refusal = this.refusalOf({
       estimateUsd,
       usedUsd: used,
       carriedUsd: 0,
+      reservedUsd: estimateUsd * PLAN_ESTIMATE_TOLERANCE,
     });
     return { estimateUsd, refusal };
   }
@@ -236,21 +259,28 @@ export class ProposalService {
       throw new AppError('MEDIA_CONFLICT', 'Reopen this edit first', {
         details: { reason: 'approved' },
       });
-    if (acceptedUsd !== undefined && prepared.plan.estimateUsd > acceptedUsd)
-      throw new AppError('MEDIA_CONFLICT', 'The estimate rose', {
-        details: {
-          reason: 'estimate-rose',
-          estimateUsd: prepared.plan.estimateUsd,
-        },
-      });
-    const spendId = this.reserve(actor, prepared);
-    const run = this.startRun({ actor, prepared, spendId });
+    assertAgreed(prepared.plan.estimateUsd, acceptedUsd);
+    const limit = this.limitOf(prepared, acceptedUsd);
+    const spendId = this.reserve(actor, { prepared, limit });
+    const run = this.startRun({ actor, prepared, spendId, limit });
     if (!run) {
       this.closeSpend(spendId, { failure: 'interrupted', spentUsd: 0 });
       throw analysisTaken();
     }
-    this.track(run.id, this.execute({ runId: run.id, spendId, prepared }));
+    this.track(
+      run.id,
+      this.execute({ runId: run.id, spendId, prepared, limit }),
+    );
     return run;
+  }
+
+  private limitOf(prepared: Prepared, acceptedUsd?: number): RunLimit {
+    const accepted = acceptedUsd ?? prepared.plan.estimateUsd;
+    const capLeft = this.deps.caps.runUsd - prepared.carriedUsd;
+    return {
+      acceptedUsd: accepted,
+      maxUsd: Math.max(0, Math.min(accepted, capLeft)),
+    };
   }
 
   private assertNotTaken(mediaId: string, seenRunId: string | null): void {
@@ -264,6 +294,7 @@ export class ProposalService {
     readonly actor: MediaActor;
     readonly prepared: Prepared;
     readonly spendId: string;
+    readonly limit: RunLimit;
   }): ProposalRun | null {
     const { plan, resumes, carriedUsd } = input.prepared;
     try {
@@ -276,6 +307,7 @@ export class ProposalService {
         spendId: input.spendId,
         windowsTotal: plan.windows.length,
         estimateUsd: plan.estimateUsd,
+        limitUsd: input.limit.maxUsd,
         now: this.now(),
         carriedUsd,
         resumes,
@@ -338,8 +370,9 @@ export class ProposalService {
     readonly runId: string;
     readonly spendId: string;
     readonly prepared: Prepared;
+    readonly limit: RunLimit;
   }): Promise<void> {
-    const { runId, spendId, prepared } = input;
+    const { runId, spendId, prepared, limit } = input;
     let outcome: RunOutcome = { failure: 'provider', spentUsd: 0 };
     try {
       outcome = await new WindowRunner({
@@ -349,14 +382,35 @@ export class ProposalService {
         store: this.deps.store,
         runCapUsd: this.deps.caps.runUsd,
         carriedUsd: prepared.carriedUsd,
+        acceptedUsd: limit.acceptedUsd,
         signal: this.closing.signal,
         onWindowSaved: this.deps.onWindowSaved,
       }).run();
       if (outcome.error !== undefined)
         this.deps.onRunError?.(outcome.error, runId);
     } finally {
-      this.finish({ runId, spendId, outcome });
+      this.finish({ runId, spendId, outcome: this.within(outcome, input) });
     }
+  }
+
+  /**
+   * The ledger never closes a run above its limit (KBC-112 FR-7). The check before each call
+   * keeps it there; a provider billing past the worst case it was priced at is a defect to
+   * see in the log, and the entry stays at the limit.
+   */
+  private within(
+    outcome: RunOutcome,
+    input: { readonly runId: string; readonly limit: RunLimit },
+  ): RunOutcome {
+    const { maxUsd } = input.limit;
+    if (outcome.spentUsd <= maxUsd) return outcome;
+    this.deps.onRunError?.(
+      new Error(
+        `Proposal run spent ${outcome.spentUsd} past its limit of ${maxUsd}`,
+      ),
+      input.runId,
+    );
+    return { ...outcome, spentUsd: maxUsd };
   }
 
   private finish(input: {
@@ -392,26 +446,38 @@ export class ProposalService {
     });
   }
 
-  /** The cap this would cross: the run's over all of the analysis' attempts (BR-3). */
+  /**
+   * The cap this would cross: the run's over all of the analysis' attempts (BR-3), and the
+   * month's over what the run reserves (its limit, KBC-112 BR-9; the estimate by default).
+   */
   private refusalOf(cost: {
     readonly estimateUsd: number;
     readonly usedUsd: number;
     readonly carriedUsd: number;
+    readonly reservedUsd?: number;
   }): SpendCap | null {
     const { estimateUsd, usedUsd, carriedUsd } = cost;
+    const reservedUsd = cost.reservedUsd ?? estimateUsd;
     if (carriedUsd + estimateUsd > this.deps.caps.runUsd) return 'run-cap';
-    if (usedUsd + estimateUsd > this.deps.caps.monthlyUsd) return 'monthly-cap';
+    if (usedUsd + reservedUsd > this.deps.caps.monthlyUsd) return 'monthly-cap';
     return null;
   }
 
-  /** The estimate reserved in the media ledger, or the cap it would cross (BR-3). */
-  private reserve(actor: MediaActor, prepared: Prepared): string {
-    const { plan, carriedUsd } = prepared;
+  /**
+   * The run's limit reserved in the media ledger (KBC-112 BR-9), or the cap the estimate
+   * would cross (BR-3). A month that cannot hold the limit refuses: the run could spend it.
+   */
+  private reserve(
+    actor: MediaActor,
+    input: { readonly prepared: Prepared; readonly limit: RunLimit },
+  ): string {
+    const { plan, carriedUsd } = input.prepared;
     const since = startOfAppMonth(this.now());
     const refusal = this.refusalOf({
       estimateUsd: plan.estimateUsd,
       usedUsd: this.deps.ledger.usedSince(since),
       carriedUsd,
+      reservedUsd: input.limit.maxUsd,
     });
     if (refusal) throw capError(refusal);
     const id = randomUUID();
@@ -420,7 +486,7 @@ export class ProposalService {
       kind: 'track-proposal',
       mediaId: plan.mediaId,
       principal: actor.principal,
-      usd: plan.estimateUsd,
+      usd: input.limit.maxUsd,
       capUsd: this.deps.caps.monthlyUsd,
       since,
       now: this.now(),

@@ -46,9 +46,18 @@ import {
 
 afterEach(closeApp);
 
+// A call's worst case (3,000 tokens out) stays above what the fake bills, as a real one.
 const MODEL = {
   id: 'deepseek/deepseek-v4-flash',
-  pricing: { prompt: '0.000000091', completion: '0.000000182' },
+  pricing: { prompt: '0.000001', completion: '0.000002' },
+};
+/**
+ * A dear model: each call's worst case is exactly US$ 0.075 (no input price), so three
+ * windows cost at most US$ 0.225 and the run cap (US$ 0.25) is what a long run meets.
+ */
+const DEAR_MODEL = {
+  id: 'deepseek/deepseek-v4-flash',
+  pricing: { prompt: '0', completion: '0.000025' },
 };
 
 const AI_PLAN: PreparationPlanRequest = {
@@ -58,6 +67,8 @@ const AI_PLAN: PreparationPlanRequest = {
   subjects: false,
   acceptedUsd: 0.05,
 };
+/** Seen at the send: US$ 0.20, at most US$ 0.25 (KBC-112 BR-6). */
+const DEAR_PLAN: PreparationPlanRequest = { ...AI_PLAN, acceptedUsd: 0.2 };
 const FREE_PLAN: PreparationPlanRequest = {
   transcribe: true,
   speakers: true,
@@ -101,10 +112,10 @@ const stage = (prep: MediaPreparation, id: string) =>
   prep.stages.find((one) => one.stage === id);
 
 /** An owner with the house AI connected and a Mac that transcribes and separates. */
-async function connected() {
+async function connected(model = MODEL) {
   const media = await startMedia();
   const { token } = await pairDiarizer(media);
-  media.started.fake.models = [...FAKE_FREE_MODELS, MODEL];
+  media.started.fake.models = [...FAKE_FREE_MODELS, model];
   await connectHouse(media.started, media.owner);
   return { media, token };
 }
@@ -181,8 +192,12 @@ async function upToProposal(
 }
 
 /** The same, over a recording of three windows. */
-async function upToLongProposal(media: Media, token: string): Promise<string> {
-  const item = await uploaded(media, AI_PLAN, { durationMs: LONG_TALK_MS });
+async function upToLongProposal(
+  media: Media,
+  token: string,
+  plan = AI_PLAN,
+): Promise<string> {
+  const item = await uploaded(media, plan, { durationMs: LONG_TALK_MS });
   await transcribe(media, token, longTalk());
   return separated(media, token, item.id);
 }
@@ -707,41 +722,83 @@ describe('money (BR-2, BR-4, KBC-066 BR-1)', () => {
     expect(after.json().tracks).toEqual([]);
   });
 
-  it('shows what attempts with no window cost, and holds the cap over them (BUG-8)', async () => {
-    const { media, token } = await connected();
-    const unreadable = () => ({ content: 'ilegível', cost: 0.06 });
+  it('runs within the most the send showed, a window asked again included (KBC-112 AC-6)', async () => {
+    // No input price: each call costs at most US$ 0.0198 and three windows US$ 0.0594,
+    // above the US$ 0.05 seen and within the US$ 0.0625 the send showed as the most.
+    const { media, token } = await connected({
+      id: MODEL.id,
+      pricing: { prompt: '0', completion: '0.0000066' },
+    });
+    const billed =
+      (cost: number, reply: (body: FakeChatBody) => { content: string }) =>
+      (body: FakeChatBody) => ({ ...reply(body), cost });
     media.started.fake.scripted.push(
-      ...Array<typeof unreadable>(6).fill(unreadable),
+      billed(0.0198, oneTrack('Primeira')),
+      () => ({ content: 'ilegível', cost: 0.0198 }),
+      // Asked again, the window's own prompt is the first user message, not the last.
+      billed(0.002, (body) =>
+        oneTrack('Segunda')({ ...body, messages: body.messages?.slice(0, 2) }),
+      ),
+      billed(0.0198, oneTrack('Terceira')),
     );
     const id = await upToLongProposal(media, token);
+    const ended = await settled(media, id);
+    // US$ 0.0416 spent: the last window's worst case reaches US$ 0.0614, past the estimate
+    // and within the most shown.
+    expect(stage(ended, 'tracks')).toMatchObject({
+      state: 'done',
+      windows: { done: 3, total: 3 },
+      reservedUsd: 0.0625,
+    });
+    expect(stage(ended, 'tracks')?.spentUsd).toBeCloseTo(0.0614, 9);
+    expect(media.started.fake.chatBodies).toHaveLength(4);
+    expect(ended.tracks.map(({ title }) => title)).toEqual([
+      'Primeira',
+      'Segunda',
+      'Terceira',
+    ]);
+  });
+
+  it('shows what attempts with no window cost, and holds the cap over them (BUG-8)', async () => {
+    const { media, token } = await connected(DEAR_MODEL);
+    const unreadable = () => ({ content: 'ilegível', cost: 0.075 });
+    media.started.fake.scripted.push(unreadable, unreadable);
+    const id = await upToLongProposal(media, token, DEAR_PLAN);
     const first = await settled(media, id);
+    // US$ 0.15 spent and the windows still cost US$ 0.225: past the run cap, no retry.
     expect(stage(first, 'tracks')).toMatchObject({
-      failure: 'invalid-output',
+      failure: 'run-cap',
+      canRetry: false,
       windows: { done: 0, total: 3 },
     });
-    expect(stage(first, 'tracks')?.spentUsd).toBeCloseTo(0.12, 9);
+    expect(stage(first, 'tracks')?.spentUsd).toBeCloseTo(0.15, 9);
     const retryPath = `${preparation(id)}/steps/tracks/retry`;
-    expect((await media.owner('POST', retryPath, {})).statusCode).toBe(200);
-    const second = await settled(media, id);
-    expect(stage(second, 'tracks')?.spentUsd).toBeCloseTo(0.24, 9);
-    expect((await media.owner('POST', retryPath, {})).statusCode).toBe(200);
-    const third = await settled(media, id);
-    expect(stage(third, 'tracks')).toMatchObject({ failure: 'run-cap' });
-    expect(stage(third, 'tracks')?.spentUsd).toBeCloseTo(0.3, 9);
-    expect(media.started.fake.chatBodies).toHaveLength(5);
+    expect((await media.owner('POST', retryPath, {})).statusCode).toBe(409);
+    expect(media.started.fake.chatBodies).toHaveLength(2);
   });
 
   it('after a real run cap offers no retry, and the way out stays (BUG-9)', async () => {
-    const { media, token } = await connected();
-    const unreadable = () => ({ content: 'ilegível', cost: 0.15 });
-    media.started.fake.scripted.push(unreadable, unreadable);
-    const id = await upToLongProposal(media, token);
+    const { media, token } = await connected(DEAR_MODEL);
+    const answer = (title: string) => (body: FakeChatBody) => ({
+      ...oneTrack(title)(body),
+      cost: 0.075,
+    });
+    const unreadable = () => ({ content: 'ilegível', cost: 0.075 });
+    media.started.fake.scripted.push(
+      answer('Primeira'),
+      unreadable,
+      answer('Segunda'),
+      answer('Não roda'),
+    );
+    const id = await upToLongProposal(media, token, DEAR_PLAN);
     const failed = await settled(media, id);
+    // The second window asked again fits (US$ 0.225); the third would pass US$ 0.25.
     expect(stage(failed, 'tracks')).toMatchObject({
       failure: 'run-cap',
       canRetry: false,
+      windows: { done: 2, total: 3 },
     });
-    expect(stage(failed, 'tracks')?.spentUsd).toBeCloseTo(0.3, 9);
+    expect(stage(failed, 'tracks')?.spentUsd).toBeCloseTo(0.225, 9);
     expect(failed.canSwitchToManual).toBe(true);
     const pressed = await media.owner(
       'POST',
@@ -749,7 +806,7 @@ describe('money (BR-2, BR-4, KBC-066 BR-1)', () => {
       {},
     );
     expect(pressed.statusCode).toBe(409);
-    expect(media.started.fake.chatBodies).toHaveLength(2);
+    expect(media.started.fake.chatBodies).toHaveLength(3);
   });
 
   it('a person takes the windows done to step 3 by hand, as proposals (AC-11)', async () => {

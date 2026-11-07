@@ -24,6 +24,7 @@ import type {
   TranscriptSpeakers,
   VoiceSuggestion,
 } from '@kb-chat/contracts';
+import { PLAN_ESTIMATE_TOLERANCE } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { MediaEditStorePort } from '../../ports/media-edit-store.js';
 import type {
@@ -126,12 +127,6 @@ export interface PreparationServiceDeps {
   readonly now?: () => Date;
   readonly onError?: (error: unknown, mediaId: string) => void;
 }
-
-/**
- * How far past what the person saw a run may be, reading the real words instead of the
- * length: above it the paid stage waits for a click (BR-4).
- */
-export const ESTIMATE_TOLERANCE = 1.25;
 
 /** A plan only goes on once its file arrived: an upload given up never gets there. */
 const hasWholeFile = ({ status, failure }: MediaItem): boolean =>
@@ -284,7 +279,9 @@ export class PreparationService {
     const { proposals } = this.deps;
     if (!proposals.connected())
       throw refuse([{ option: 'ai', refusal: 'not-connected' }]);
-    if ((plan.acceptedUsd ?? 0) > proposals.monthRemainingUsd())
+    // The run reserves its most, not the estimate (KBC-112 BR-6): the month must hold that.
+    const mostUsd = (plan.acceptedUsd ?? 0) * PLAN_ESTIMATE_TOLERANCE;
+    if (mostUsd > proposals.monthRemainingUsd())
       throw refuse([{ option: 'ai', refusal: 'monthly-cap' }]);
   }
 
@@ -413,10 +410,11 @@ export class PreparationService {
     const { proposals } = this.deps;
     const { estimateUsd, refusal } = await proposals.estimate(actor, mediaId);
     if (refusal) return this.stopProposal(mediaId, refusal, estimateUsd);
-    const agreed = (plan.acceptedUsd ?? 0) * ESTIMATE_TOLERANCE;
+    // The most the screen showed at the send (KBC-112 BR-6): the run's limit too.
+    const agreed = (plan.acceptedUsd ?? 0) * PLAN_ESTIMATE_TOLERANCE;
     if (estimateUsd > agreed)
       return this.stopProposal(mediaId, 'estimate-rose', estimateUsd);
-    await proposals.start(actor, mediaId, { seenRunId });
+    await proposals.start(actor, mediaId, { seenRunId, acceptedUsd: agreed });
   }
 
   private stopProposal(

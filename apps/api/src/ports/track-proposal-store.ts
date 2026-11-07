@@ -18,6 +18,8 @@ export interface NewProposalRun {
   readonly spendId: string;
   readonly windowsTotal: number;
   readonly estimateUsd: number;
+  /** The most the run may spend (KBC-112 BR-1); it is also what is reserved. */
+  readonly limitUsd: number;
   readonly now: Date;
   /** What the failed attempts before it spent: the run cap holds over the whole analysis. */
   readonly carriedUsd: number;

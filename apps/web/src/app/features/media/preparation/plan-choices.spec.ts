@@ -153,9 +153,20 @@ describe('a plan sent for several files (KBC-035 × KBC-072)', () => {
     expect(planShare(paid, { lengthMs: 5, allMs: 5 })).toBe(paid);
   });
 
-  it('gives a file its share by length, rounded up', () => {
+  it('gives a file its share by length, rounded down', () => {
     const { acceptedUsd } = planShare(paid, { lengthMs: 1, allMs: 3 });
-    expect(acceptedUsd).toBe(0.013334);
+    expect(acceptedUsd).toBe(0.013333);
+  });
+
+  it('never gives the files together more than the value seen (KBC-112 QA-3)', () => {
+    const lengths = [1, 1, 1, 7, 13];
+    const allMs = lengths.reduce((sum, ms) => sum + ms, 0);
+    const shares = lengths.map(
+      (lengthMs) => planShare(paid, { lengthMs, allMs }).acceptedUsd ?? 0,
+    );
+    expect(shares.reduce((sum, usd) => sum + usd, 0)).toBeLessThanOrEqual(
+      paid.acceptedUsd,
+    );
   });
 
   it('leaves a plan with nothing paid as it is', () => {

@@ -49,6 +49,7 @@ const aRun = (mediaId: string, status: string, windowsDone: number) => ({
   windowsDone,
   windowsTotal: 2,
   estimateUsd: 0.02,
+  limitUsd: 0.02,
   spentUsd: status === 'done' ? 0.018 : 0.01,
   failure: status === 'failed' ? 'provider' : null,
   createdAt: '2026-11-04T05:00:00.000Z',
@@ -132,7 +133,7 @@ async function script(page: Page, mediaId: string, end: 'done' | 'failed') {
 
 const startRun = async (page: Page) => {
   await page.getByRole('button', { name: 'Propor faixas com IA' }).click();
-  await expect(page.getByText('Custa cerca de')).toContainText('0,02');
+  await expect(page.getByText('Custa até')).toContainText('0,020');
   await expect(page.getByText(/Este mês:/)).toBeVisible();
   await page.getByRole('button', { name: 'Confirmar e propor' }).click();
   await expect(page.getByText(/Propondo… janela/)).toBeVisible();
@@ -246,11 +247,11 @@ test('KBC-097: a retry says what it costs, also after a reload, and a dearer one
   await page.goto(`/midia/${media.id}/faixas`);
   await page.reload();
   await page.getByRole('button', { name: 'Propor faixas com IA' }).click();
-  await expect(page.getByText('Custa cerca de')).toContainText('0,02');
+  await expect(page.getByText('Custa até')).toContainText('0,020');
   await expect(page.getByText(/recomeça do início/)).toBeHidden();
   await page.getByRole('button', { name: 'Confirmar e propor' }).click();
 
-  await expect(page.getByText('Custa cerca de')).toContainText('0,05');
+  await expect(page.getByText('Custa até')).toContainText('0,050');
   await expect(page.getByText(/recomeça do início/)).toBeVisible();
   const notice = page.getByText(
     'O valor mudou. Nada foi gasto: confira o novo valor.',
@@ -294,6 +295,116 @@ test('KBC-097: a retry says what it costs, also after a reload, and a dearer one
   await expect(page.getByText(/Propondo… janela/)).toBeVisible();
   expect(sent).toHaveLength(2);
   expect(sent[1]).toEqual({ dryRun: false, acceptedUsd: 0.05 });
+  await owner.dispose();
+});
+
+test('KBC-112 AC-2, AC-3, AC-14: a run stopped at the value says what is ready, and a retry asks a new value', async ({
+  page,
+}, testInfo) => {
+  const owner = await ownerApi();
+  const media = await separated(owner);
+  const sent: { acceptedUsd?: number }[] = [];
+  let reads = 0;
+  await page.route(
+    new RegExp(`/api/v1/media/${media.id}/edit/proposals$`),
+    async (route: Route) => {
+      const body = route.request().postDataJSON() as {
+        dryRun?: boolean;
+        acceptedUsd?: number;
+      };
+      if (body.dryRun)
+        return route.fulfill({
+          json: sent.length
+            ? { ...ESTIMATE, estimateUsd: 0.0051, windows: 1 }
+            : ESTIMATE,
+        });
+      sent.push(body);
+      return route.fulfill({ status: 202, json: aRun(media.id, 'running', 0) });
+    },
+  );
+  await page.route(
+    new RegExp(`/api/v1/media/${media.id}/edit$`),
+    async (route: Route) => {
+      if (route.request().method() !== 'GET' || sent.length !== 1)
+        return route.continue();
+      reads += 1;
+      const response = await route.fetch();
+      const edit = (await response.json()) as { version: number };
+      const stopped = reads > 1;
+      await route.fulfill({
+        response,
+        json: {
+          ...edit,
+          version: edit.version + reads,
+          started: true,
+          tracks: [FIRST],
+          run: stopped
+            ? {
+                ...aRun(media.id, 'failed', 1),
+                failure: 'accepted-limit',
+                spentUsd: 0.0187,
+              }
+            : aRun(media.id, 'running', 1),
+          lastFailure: stopped ? 'accepted-limit' : null,
+          stopped: stopped
+            ? {
+                limitUsd: 0.02,
+                spentUsd: 0.0187,
+                windowsDone: 1,
+                windowsTotal: 2,
+              }
+            : null,
+          voices: [],
+        },
+      });
+    },
+  );
+  await page.goto(`/midia/${media.id}/faixas`);
+  await startRun(page);
+  const said = page.getByText(
+    'A análise parou no valor aceito (US$ 0,020): 1 de 2 janelas prontas. Continuar custa cerca de US$ 0,006.',
+  );
+  await expect(said).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByText('Não foi possível propor.')).toBeHidden();
+  const retry = page.getByRole('button', { name: 'Tentar de novo' });
+  await expect(retry).toBeFocused();
+  await expect(page.locator('.proposals[role="status"]')).toContainText(
+    'parou no valor aceito',
+  );
+  // Clear of the editor's bottom bar on a phone, with no sideways scroll (AC-14).
+  const foot = await page.locator('.foot').boundingBox();
+  for (const shown of [said, retry]) {
+    const box = await shown.boundingBox();
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(
+      foot?.y ?? Infinity,
+    );
+  }
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  expect(
+    await new AxeBuilder({ page }).include('.proposals').analyze(),
+  ).toMatchObject({ violations: [] });
+  await page.screenshot({
+    path: `../work/KBC-112/stopped-${testInfo.project.name}.png`,
+  });
+
+  await retry.click();
+  await expect(page.getByText('Custa até')).toContainText('0,006');
+  await expect(
+    page.getByText(/a análise para nesse valor e você decide se continua/),
+  ).toBeVisible();
+  await page.screenshot({
+    path: `../work/KBC-112/retry-${testInfo.project.name}.png`,
+  });
+  await page.getByRole('button', { name: 'Confirmar e propor' }).click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent).toEqual([
+    { dryRun: false, acceptedUsd: 0.02 },
+    { dryRun: false, acceptedUsd: 0.0051 },
+  ]);
   await owner.dispose();
 });
 

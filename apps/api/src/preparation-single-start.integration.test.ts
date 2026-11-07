@@ -163,3 +163,49 @@ describe('the plan meets an analysis started on the tracks screen (BUG-10)', () 
     await ctx.proposals.stop();
   });
 });
+
+describe('the month against the most a guided run may spend (KBC-112 QA-2)', () => {
+  /** This month already spent all but `leftUsd` of the US$ 10 cap. */
+  const monthLeaves = (ctx: Ctx, leftUsd: number) =>
+    ctx.ledger.reserve({
+      id: 'earlier',
+      kind: 'track-proposal',
+      mediaId: ctx.mediaId,
+      principal: 'owner',
+      usd: 10 - leftUsd,
+      capUsd: 10,
+      since: new Date(0),
+      now: new Date('2026-11-04T12:00:00Z'),
+    });
+
+  it('refuses a send whose estimate fits the month but whose most does not', () => {
+    const ctx = setup([]);
+    monthLeaves(ctx, 0.055);
+    const plan = {
+      transcribe: true,
+      speakers: true,
+      tracks: 'ai',
+      subjects: false,
+      acceptedUsd: 0.05,
+    } as const;
+    expect(() => ctx.service.assertAllowed(OWNER, plan)).toThrow(
+      expect.objectContaining({
+        code: 'PLAN_REFUSED',
+        details: { options: [{ option: 'ai', refusal: 'monthly-cap' }] },
+      }),
+    );
+    expect(() =>
+      ctx.service.assertAllowed(OWNER, { ...plan, acceptedUsd: 0.04 }),
+    ).not.toThrow();
+  });
+
+  it('does not offer the AI when the month holds the estimate but not its most', async () => {
+    const ctx = setup([]);
+    const durationMs = 3_720_000;
+    const { estimateUsd } = await ctx.proposals.estimateByDuration(durationMs);
+    monthLeaves(ctx, estimateUsd * 1.1);
+    const offer = await ctx.service.options(OWNER, { durationMs });
+    expect(offer.aiEstimateUsd).toBe(estimateUsd);
+    expect(offer.options.ai.refusal).toBe('monthly-cap');
+  });
+});

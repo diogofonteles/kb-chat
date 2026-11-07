@@ -71,6 +71,8 @@ export const PROPOSAL_FAILURES = [
   'invalid-output',
   'run-cap',
   'interrupted',
+  /** The run stopped before a call that could pass the value the person accepted (KBC-112). */
+  'accepted-limit',
 ] as const;
 export const proposalFailureSchema = z.enum(PROPOSAL_FAILURES);
 export type ProposalFailure = z.infer<typeof proposalFailureSchema>;
@@ -86,6 +88,11 @@ export const proposalRunSchema = z.object({
   /** Tracks this run has written so far. */
   tracks: z.number().int().nonnegative(),
   estimateUsd: z.number().nonnegative(),
+  /**
+   * The most the run may spend: the value accepted, within what the run cap has left
+   * (KBC-112 BR-1, BR-4); null for a run from before the limit.
+   */
+  limitUsd: z.number().nonnegative().nullable().default(null),
   /** What the run really cost so far ("Custou US$ 0,02", FR-4). */
   spentUsd: z.number().nonnegative(),
   failure: proposalFailureSchema.nullable(),
@@ -131,6 +138,19 @@ export const estimateRoseDetailsSchema = z.object({
   estimateUsd: z.number().nonnegative(),
 });
 
+/**
+ * The newest run stopped at the value accepted (KBC-112 FR-3): what it left and what it
+ * spent, to say before a new value is accepted.
+ */
+export const acceptedLimitStopSchema = z.object({
+  limitUsd: z.number().nonnegative(),
+  /** What this run spent, without what earlier attempts carried. */
+  spentUsd: z.number().nonnegative(),
+  windowsDone: z.number().int().nonnegative(),
+  windowsTotal: z.number().int().positive(),
+});
+export type AcceptedLimitStop = z.infer<typeof acceptedLimitStopSchema>;
+
 /** GET /api/v1/media/{id}/edit/draft-tracks: the draft as it is now. */
 export const draftTracksSchema = z.object({
   /**
@@ -140,6 +160,8 @@ export const draftTracksSchema = z.object({
   run: proposalRunSchema.nullable(),
   /** Why the newest run failed; null once a later one runs or ends well (FR-5). */
   lastFailure: proposalFailureSchema.nullable(),
+  /** Set when the newest run stopped at the value accepted (KBC-112). */
+  stopped: acceptedLimitStopSchema.nullable().optional(),
   tracks: z.array(draftTrackSchema),
   voices: z.array(voiceSuggestionSchema),
 });

@@ -5,6 +5,7 @@ import {
   TRACK_TITLE_MAX,
   draftTrackSchema,
   draftTrackSourceSchema,
+  acceptedLimitStopSchema,
   proposalFailureSchema,
   proposalRunSchema,
   trackKindSchema,
@@ -54,6 +55,8 @@ export const mediaEditSchema = z.object({
   run: proposalRunSchema.nullable(),
   /** Why the newest run failed: it stays said until a later run (KBC-067 FR-5). */
   lastFailure: proposalFailureSchema.nullable(),
+  /** The newest run stopped at the value accepted (KBC-112 FR-3). */
+  stopped: acceptedLimitStopSchema.nullable().optional(),
   voices: z.array(voiceSuggestionSchema),
   /** How many tracks listeners see now. */
   approvedTracks: z.number().int().nonnegative(),

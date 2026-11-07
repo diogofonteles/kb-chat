@@ -8,7 +8,10 @@
     @if (refusal()) {
       <p class="refusal">{{ refusal() }}</p>
     } @else {
-      <p i18n="@@tracks.ai.estimate">Custa cerca de {{ estimateText() }}.</p>
+      <p i18n="@@tracks.ai.estimateUpTo">
+        Custa até {{ estimateText() }}. Se a IA precisar perguntar de novo
+        alguma parte, a análise para nesse valor e você decide se continua.
+      </p>
       @if (shown.restarts) {
         <p class="hint" i18n="@@tracks.ai.restarts">
           A tentativa anterior não pode continuar: a análise recomeça do início
@@ -46,6 +49,22 @@
         i18n="@@tracks.ai.cancel"
       >
         Cancelar
+      </button>
+    </div>
+  } @else if (stop()) {
+    <!-- Above the button: on a phone the bar at the bottom would hide it (KBC-112 AC-14). -->
+    <p class="stopped">{{ stopText() }}</p>
+    <ng-container *ngTemplateOutlet="errorText" />
+    <div class="buttons">
+      <button
+        #retry
+        type="button"
+        class="secondary"
+        [disabled]="busy() || blocked()"
+        (click)="askEstimate()"
+        i18n="@@tracks.ai.retry"
+      >
+        Tentar de novo
       </button>
     </div>
   } @else {
