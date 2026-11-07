@@ -101,35 +101,39 @@ function insertSegments(db: DatabaseSync, mediaId: string, count: number) {
     );
 }
 
+/** One talk and its six tracks, each with its own share of the speech; the tracks' ids. */
+function insertTalk(db: DatabaseSync, talk: number): [string, string[]] {
+  const parent = idOf('00000000', talk);
+  const length = TALK_MS / TRACKS_PER_TALK;
+  insertMedia(db, {
+    id: parent,
+    title: `Palestra ${talk}`,
+    durationMs: TALK_MS,
+  });
+  insertSegments(db, parent, TALK_MS / SEGMENT_MS);
+  const ids: string[] = [];
+  for (let ordinal = 1; ordinal <= TRACKS_PER_TALK; ordinal++) {
+    const id = idOf('10000000', talk * 10 + ordinal);
+    const startMs = (ordinal - 1) * length;
+    insertMedia(db, {
+      id,
+      title: `Pergunta ${ordinal} da palestra ${talk}`,
+      durationMs: length,
+      parent: { parent, startMs, endMs: startMs + length, ordinal },
+    });
+    insertSegments(db, id, length / SEGMENT_MS);
+    ids.push(id);
+  }
+  return [parent, ids];
+}
+
 /** Talks cut into tracks; the tracks of each talk, by talk id. */
 function buildLibrary(db: DatabaseSync): Map<string, string[]> {
   const talks = Math.ceil(HOURS / 1.5);
   const tracks = new Map<string, string[]>();
-  const length = TALK_MS / TRACKS_PER_TALK;
   inTransaction(db, () => {
-    for (let talk = 1; talk <= talks; talk++) {
-      const parent = idOf('00000000', talk);
-      insertMedia(db, {
-        id: parent,
-        title: `Palestra ${talk}`,
-        durationMs: TALK_MS,
-      });
-      insertSegments(db, parent, TALK_MS / SEGMENT_MS);
-      const ids: string[] = [];
-      for (let ordinal = 1; ordinal <= TRACKS_PER_TALK; ordinal++) {
-        const id = idOf('10000000', talk * 10 + ordinal);
-        const startMs = (ordinal - 1) * length;
-        insertMedia(db, {
-          id,
-          title: `Pergunta ${ordinal} da palestra ${talk}`,
-          durationMs: length,
-          parent: { parent, startMs, endMs: startMs + length, ordinal },
-        });
-        insertSegments(db, id, length / SEGMENT_MS);
-        ids.push(id);
-      }
-      tracks.set(parent, ids);
-    }
+    for (let talk = 1; talk <= talks; talk++)
+      tracks.set(...insertTalk(db, talk));
   });
   return tracks;
 }
