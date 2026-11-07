@@ -29,7 +29,13 @@ export interface QmdMcpOptions {
   /** Collection queried once per mode right after connecting, so the first search is warm. */
   readonly warmCollection?: string;
   readonly onLog?: (message: string) => void;
+  /** How long a swapped-out process may finish its searches before it is closed, in ms. */
+  readonly drainMs?: number;
 }
+
+/** A research turn's search is seconds long; a turn's tool loop, minutes at most. */
+const DEFAULT_DRAIN_MS = 5 * 60 * 1000;
+const DRAIN_POLL_MS = 50;
 
 const DEFAULT_BACKOFF_MS = [500, 2_000, 10_000, 30_000] as const;
 const WARM_QUERY = 'warm up';
@@ -37,6 +43,10 @@ const WARM_QUERY = 'warm up';
 /** Keeps one `qmd mcp` child alive so the embedding model stays loaded (ADR 0002). */
 export class QmdMcpAdapter implements SearchIndexPort {
   private client: Client | null = null;
+  /** Searches running on each process, so a swapped-out one is closed only when idle. */
+  private readonly inFlight = new Map<Client, number>();
+  /** Swapped-out processes finishing their searches (closed with the adapter). */
+  private readonly retiring = new Set<Promise<void>>();
   private failures = 0;
   private closed = false;
   private restartTimer: NodeJS.Timeout | null = null;
@@ -60,15 +70,21 @@ export class QmdMcpAdapter implements SearchIndexPort {
   async search(query: IndexQuery): Promise<readonly IndexHit[]> {
     const client = this.client;
     if (!client) throw new Error('qmd mcp is not connected');
-    const raw = await client.callTool({
-      name: 'query',
-      arguments: {
-        searches: toTypedSearches(query.mode, query.q),
-        collections: [query.collection],
-        limit: query.limit,
-        rerank: false,
-      },
-    });
+    this.inFlight.set(client, (this.inFlight.get(client) ?? 0) + 1);
+    let raw: unknown;
+    try {
+      raw = await client.callTool({
+        name: 'query',
+        arguments: {
+          searches: toTypedSearches(query.mode, query.q),
+          collections: [query.collection],
+          limit: query.limit,
+          rerank: false,
+        },
+      });
+    } finally {
+      this.inFlight.set(client, (this.inFlight.get(client) ?? 1) - 1);
+    }
     const parsed = resultSchema.parse(raw);
     return parsed.structuredContent.results.map((hit) => ({
       id: toTopicRelativeId(hit.file, query.collection),
@@ -84,10 +100,21 @@ export class QmdMcpAdapter implements SearchIndexPort {
     const client = this.client;
     this.client = null;
     await client?.close();
+    await Promise.all(this.retiring);
   }
 
   private async connect(): Promise<void> {
     if (this.closed) return;
+    const client = await this.open();
+    if (this.closed) {
+      // close() ran while this reconnect was in flight: do not leave the child alive.
+      await client.close();
+      return;
+    }
+    this.use(client);
+  }
+
+  private async open(): Promise<Client> {
     const transport = new StdioClientTransport({
       command: this.options.command,
       args: [...(this.options.args ?? ['mcp'])],
@@ -95,17 +122,54 @@ export class QmdMcpAdapter implements SearchIndexPort {
     });
     const client = new Client({ name: 'kb-chat', version: '0.0.0' });
     await client.connect(transport);
-    if (this.closed) {
-      // close() ran while this reconnect was in flight: do not leave the child alive.
-      await client.close();
-      return;
-    }
+    return client;
+  }
+
+  private use(client: Client): void {
     // Registered after a successful connect (a failed start is retried by start() only);
     // Client.onclose keeps the SDK's own transport handler that rejects pending calls.
     client.onclose = () => this.handleClose(client);
     this.client = client;
     this.failures = 0;
     void this.warmUp();
+  }
+
+  /**
+   * A new index is in place (KBC-100 FR-5): a new `qmd mcp` opens it and takes the next
+   * searches; the old one finishes what it was doing, then closes. Search is never down: if
+   * the new process does not start, the old one keeps serving and the error is thrown.
+   */
+  async reload(): Promise<void> {
+    if (this.closed) return;
+    const next = await this.open();
+    if (this.closed) {
+      await next.close();
+      return;
+    }
+    const previous = this.client;
+    this.use(next);
+    // Drained apart: the swap is done as soon as the new process answers.
+    if (!previous) return;
+    const retired = this.retire(previous).finally(() =>
+      this.retiring.delete(retired),
+    );
+    this.retiring.add(retired);
+  }
+
+  private async retire(client: Client): Promise<void> {
+    const until = Date.now() + (this.options.drainMs ?? DEFAULT_DRAIN_MS);
+    while (
+      !this.closed &&
+      (this.inFlight.get(client) ?? 0) > 0 &&
+      Date.now() < until
+    )
+      await new Promise((done) => setTimeout(done, DRAIN_POLL_MS));
+    this.inFlight.delete(client);
+    await client.close().catch((err: unknown) => {
+      this.options.onLog?.(
+        `qmd mcp (swapped out) did not close: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
   }
 
   private async warmUp(): Promise<void> {

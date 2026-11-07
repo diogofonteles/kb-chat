@@ -6,7 +6,18 @@ export {
 export { ExistingTracks, type ExistingTracksDeps } from './existing-tracks.js';
 export { existingTracksRoutes } from './existing-tracks-routes.js';
 export { KbPublishService } from './kb-publish-service.js';
-export { MediaDocumentReconciler, type TrackRender } from './reconciler.js';
+export {
+  BACKFILL_BATCH,
+  MediaDocumentReconciler,
+  type TrackRender,
+} from './reconciler.js';
+export {
+  PUBLICATION_ATTEMPTS,
+  PublicationStatus,
+  type PublisherPresence,
+  type SeenDocument,
+} from './publication-status.js';
+export { publicationRoutes } from './publication-routes.js';
 export {
   renderTrackDocument,
   trackDocumentPath,

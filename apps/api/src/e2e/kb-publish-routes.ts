@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
@@ -23,12 +23,16 @@ const FAKE_KB_FACETS = [
   'summary: Faixa publicada pelo Mac de teste.',
 ].join('\n');
 
-/** Writes one job's documents into the vault, as the Mac does, with the fake kb's facets. */
+/** Writes (or removes) one job's documents in the vault, as the Mac does, with fixed facets. */
 async function writeDocuments(vault: string, job: KbPublishJob): Promise<void> {
   const folder = resolve(vault, job.topic);
   for (const item of job.items) {
     const file = resolve(folder, item.path);
     if (!file.startsWith(folder + sep)) throw new Error(`unsafe ${item.path}`);
+    if (item.op === 'remove') {
+      await rm(file, { force: true });
+      continue;
+    }
     await mkdir(dirname(file), { recursive: true });
     const classified = item.markdown.replace(
       /^---\n/,

@@ -1,5 +1,6 @@
 import {
   KB_PUBLISH_USD_PER_TRACK,
+  type PublicationQueue,
   type PublishExistingTracksResult,
   type TrackDocumentsCollection,
   type TrackDocumentsOverview,
@@ -21,6 +22,8 @@ export interface ExistingTracksDeps {
   readonly budget: { remainingUsd(): number; budgetUsd(): number };
   /** A collection's title in the vault; null when it has no folder there. */
   readonly titleOf: (topic: string) => string | null;
+  /** The publishing queue as masters see it (KBC-100 FR-3). */
+  readonly queue?: () => PublicationQueue;
 }
 
 const capReached = () =>
@@ -65,6 +68,7 @@ export class ExistingTracks {
       usdPerTrack: KB_PUBLISH_USD_PER_TRACK,
       remainingUsd: this.deps.budget.remainingUsd(),
       collections,
+      ...(this.deps.queue && { queue: this.deps.queue() }),
     };
   }
 

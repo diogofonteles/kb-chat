@@ -13,6 +13,8 @@ import type {
 import { toCollectionSpeaker, type AuthorLookup } from './voice-labels.js';
 
 export interface SpeakersServiceDeps {
+  /** A speaker's name changed: the collection's documents follow (KBC-100 FR-1). */
+  readonly onRenamed?: (collection: string) => void;
   readonly speakers: SpeakerStorePort;
   /** The top-level collection whose lists a collection uses (BR-1). */
   readonly rootOf: (topic: string) => string;
@@ -91,6 +93,7 @@ export class SpeakersService {
     });
     if (!saved)
       throw new AppError('MEDIA_CONFLICT', 'Another speaker has that name');
+    this.deps.onRenamed?.(collection);
     return this.toView({ ...current, name: input.name, authorSlug });
   }
 

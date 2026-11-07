@@ -3,7 +3,7 @@
  * transcriber marked "Publica no acervo" leases kb-publish jobs, and a fake Mac writes the
  * documents into the test's vault copy and plays kb (fixed facets, no model, no spend).
  */
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
@@ -70,13 +70,25 @@ export const FAKE_FACETS = {
   summary: 'Uma faixa sobre o ritmo.',
 };
 
-/** Writes the job's documents into the vault, as the Mac does, with the fake kb's facets. */
+/** The documents a job writes (KBC-100: a job also removes). */
+export const writesOf = (job: KbPublishJob) =>
+  job.items.flatMap((item) => (item.op === 'write' ? [item] : []));
+
+/** The paths a job removes from the vault. */
+export const removalsOf = (job: KbPublishJob) =>
+  job.items.flatMap((item) => (item.op === 'remove' ? [item.path] : []));
+
+/** Writes (or removes) the job's documents in the vault, as the Mac does, with fixed facets. */
 export async function writeAsMac(
   vault: string,
   job: KbPublishJob,
 ): Promise<void> {
   for (const item of job.items) {
     const file = join(vault, job.topic, item.path);
+    if (item.op === 'remove') {
+      await rm(file, { force: true });
+      continue;
+    }
     await mkdir(dirname(file), { recursive: true });
     const classified = item.markdown.replace(
       /^---\n/,

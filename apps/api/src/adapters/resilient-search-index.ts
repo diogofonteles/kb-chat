@@ -31,4 +31,9 @@ export class ResilientSearchIndex implements SearchIndexPort {
   async close(): Promise<void> {
     await Promise.all([this.primary.close(), this.fallback.close()]);
   }
+
+  /** The fallback reads the index file at every call; only the primary keeps it open. */
+  async reload(): Promise<void> {
+    await this.primary.reload?.();
+  }
 }

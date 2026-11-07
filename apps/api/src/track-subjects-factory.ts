@@ -1,3 +1,4 @@
+import type { MediaDocumentReconciler } from './modules/media-documents/index.js';
 import type { FastifyBaseLogger } from 'fastify';
 import type { HouseAi } from './house-ai-factory.js';
 import type { MediaDeps } from './media-factory.js';
@@ -19,6 +20,8 @@ export interface TrackSubjectWiring {
   readonly authors: AuthorsService;
   readonly service: MediaService;
   readonly log: FastifyBaseLogger;
+  /** Track documents follow a track's subjects and summary (KBC-100 FR-1). */
+  readonly documents?: { readonly reconciler: MediaDocumentReconciler };
 }
 
 const capsOf = ({ ai }: MediaDeps) => ({
@@ -55,6 +58,10 @@ export function createTrackSubjects(wiring: TrackSubjectWiring) {
     conceptsOf: (root) => catalog.get(root)?.relations.conceptNames() ?? [],
     directory: createSubjectDirectory(wiring),
     history: media.trackRevisions,
+    ...(wiring.documents && {
+      onChanged: (mediaId: string) =>
+        wiring.documents?.reconciler.reconcileTracks([mediaId]),
+    }),
   });
   return {
     subjects,

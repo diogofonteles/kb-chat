@@ -7,6 +7,7 @@ import {
   mediaDb,
   publishedTracks,
   publisherMac,
+  writesOf,
 } from '../test/kb-publish-harness.js';
 import { worker } from '../test/media-harness.js';
 import { asTranscriber } from '../test/transcription-harness.js';
@@ -72,7 +73,7 @@ describe('kb-publish: track documents through the Mac (KBC-099)', () => {
     expect(job.items.map((item) => item.path).sort()).toEqual(
       tracks.map((track) => `raw/media/${recording.id}/${track.id}.md`).sort(),
     );
-    const first = job.items.find((item) =>
+    const first = writesOf(job).find((item) =>
       item.path.endsWith(`${tracks[0]?.id}.md`),
     );
     expect(first?.markdown).toContain(`kb_chat_media_id: ${tracks[0]?.id}`);
@@ -91,7 +92,7 @@ describe('kb-publish: track documents through the Mac (KBC-099)', () => {
       expect(document['state']).toBe('published');
       expect(document['published_sha256']).toBe(document['desired_sha256']);
     }
-    expect(job.items.map((item) => item.fingerprint).sort()).toEqual(
+    expect(writesOf(job).map((item) => item.fingerprint).sort()).toEqual(
       documents.map((one) => one['published_sha256']).sort(),
     );
     // Nothing left: the next lease finds no work.
