@@ -91,6 +91,8 @@ export class TrackProposals {
   } | null>(null);
   /** A run followed here stopped: the focus goes to "Tentar de novo" (KBC-112 AC-14). */
   private followed = false;
+  /** The pressed button goes with the estimate: the focus goes to the actions (PD-01). */
+  private focusActions = false;
 
   protected readonly estimate = computed(() => {
     const asking = this.asking();
@@ -169,12 +171,30 @@ export class TrackProposals {
           actions.scrollIntoView({ block: 'nearest' });
       },
     });
+    this.watchStop();
+    this.keepFocus();
+  }
+
+  /** A stop at the value reads what going on costs, once per stop (KBC-112 FR-3). */
+  private watchStop(): void {
     effect(() => {
       if (this.running()) this.followed = true;
     });
     effect(() => {
       const key = this.stopKey();
       if (key !== null) untracked(() => this.readGoingOn(key));
+    });
+  }
+
+  /** A button that goes leaves the focus on what comes in its place (PD-01, AC-14). */
+  private keepFocus(): void {
+    afterRenderEffect({
+      write: () => {
+        const first = this.actions()?.nativeElement.querySelector('button');
+        if (!first || !this.focusActions) return;
+        this.focusActions = false;
+        first.focus();
+      },
     });
     afterRenderEffect({
       write: () => {
@@ -197,6 +217,7 @@ export class TrackProposals {
         next: (estimate) => {
           if (this.going()?.key === key) this.going.set({ key, estimate });
         },
+        // Not a failure to show: the stop is said, and "Tentar de novo" asks the value again.
         error: () => undefined,
       });
   }
@@ -205,12 +226,14 @@ export class TrackProposals {
     this.rose.set(false);
     this.error.set('');
     this.asking.set({ kind: 'estimating' });
+    this.focusActions = true;
     this.api
       .estimate(this.mediaId())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (estimate) => this.asking.set({ kind: 'estimated', estimate }),
         error: (err: unknown) => {
+          this.focusActions = false;
           this.asking.set({ kind: 'idle' });
           this.showError(err);
         },

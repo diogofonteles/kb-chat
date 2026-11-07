@@ -136,6 +136,14 @@ export function roseEstimateOf(error: unknown): number | null {
   return details.success ? details.data.estimateUsd : null;
 }
 
+/** A run dearer than the value the person was told does not start (KBC-097). */
+function assertAgreed(estimateUsd: number, acceptedUsd?: number): void {
+  if (acceptedUsd !== undefined && estimateUsd > acceptedUsd)
+    throw new AppError('MEDIA_CONFLICT', 'The estimate rose', {
+      details: { reason: 'estimate-rose', estimateUsd },
+    });
+}
+
 const capError = (cap: SpendCap) =>
   new AppError('MEDIA_SPEND_CAP', `The media ${cap} would be crossed`, {
     details: { cap },
@@ -246,13 +254,7 @@ export class ProposalService {
       throw new AppError('MEDIA_CONFLICT', 'Reopen this edit first', {
         details: { reason: 'approved' },
       });
-    if (acceptedUsd !== undefined && prepared.plan.estimateUsd > acceptedUsd)
-      throw new AppError('MEDIA_CONFLICT', 'The estimate rose', {
-        details: {
-          reason: 'estimate-rose',
-          estimateUsd: prepared.plan.estimateUsd,
-        },
-      });
+    assertAgreed(prepared.plan.estimateUsd, acceptedUsd);
     const limit = this.limitOf(prepared, acceptedUsd);
     const spendId = this.reserve(actor, { prepared, limit });
     const run = this.startRun({ actor, prepared, spendId, limit });

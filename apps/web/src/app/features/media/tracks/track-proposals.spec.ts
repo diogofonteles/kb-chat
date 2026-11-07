@@ -368,9 +368,10 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
     rendered.http.expectOne(URL).flush({ ...ESTIMATE, estimateUsd: 0.0051 });
     await rendered.fixture.whenStable();
     expect(screen.getByText(/Custa até US\$\s0,006\./)).toBeTruthy();
-    expect(
+    // The pressed button went: the focus is on the next action, not lost (PD-01).
+    expect(document.activeElement).toBe(
       screen.getByRole('button', { name: 'Confirmar e propor' }),
-    ).toBeTruthy();
+    );
     rendered.http.verify();
   });
 
