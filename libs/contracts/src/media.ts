@@ -216,13 +216,13 @@ export const TRACK_CHOICES = ['none', 'manual', 'ai'] as const;
 export const trackChoiceSchema = z.enum(TRACK_CHOICES);
 export type TrackChoice = z.infer<typeof trackChoiceSchema>;
 
-/** What a person asks for an audio in the guided flow "Preparar áudio" (KBC-072 FR-1). */
 /**
  * How far past the estimate seen at the send the real one may be (KBC-072 BR-4): the most
  * the send shows, and the limit of the run it starts (KBC-112 BR-6).
  */
 export const PLAN_ESTIMATE_TOLERANCE = 1.25;
 
+/** What a person asks for an audio in the guided flow "Preparar áudio" (KBC-072 FR-1). */
 export const preparationPlanSchema = z.strictObject({
   transcribe: z.boolean(),
   speakers: z.boolean(),

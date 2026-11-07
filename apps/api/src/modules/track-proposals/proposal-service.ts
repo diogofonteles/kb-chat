@@ -6,7 +6,10 @@ import type {
   ProposalRun,
   SpendCap,
 } from '@kb-chat/contracts';
-import { estimateRoseDetailsSchema } from '@kb-chat/contracts';
+import {
+  PLAN_ESTIMATE_TOLERANCE,
+  estimateRoseDetailsSchema,
+} from '@kb-chat/contracts';
 import { z } from 'zod';
 import { startOfAppMonth } from '../../app-calendar.js';
 import { AppError } from '../../app-error.js';
@@ -222,10 +225,12 @@ export class ProposalService {
       model: { id: llm.model, price: await this.priceOf(llm) },
     });
     const used = this.deps.ledger.usedSince(startOfAppMonth(this.now()));
+    // The guided run this offers reserves its most (KBC-112 BR-6), so the month must hold it.
     const refusal = this.refusalOf({
       estimateUsd,
       usedUsd: used,
       carriedUsd: 0,
+      reservedUsd: estimateUsd * PLAN_ESTIMATE_TOLERANCE,
     });
     return { estimateUsd, refusal };
   }
@@ -441,15 +446,20 @@ export class ProposalService {
     });
   }
 
-  /** The cap this would cross: the run's over all of the analysis' attempts (BR-3). */
+  /**
+   * The cap this would cross: the run's over all of the analysis' attempts (BR-3), and the
+   * month's over what the run reserves (its limit, KBC-112 BR-9; the estimate by default).
+   */
   private refusalOf(cost: {
     readonly estimateUsd: number;
     readonly usedUsd: number;
     readonly carriedUsd: number;
+    readonly reservedUsd?: number;
   }): SpendCap | null {
     const { estimateUsd, usedUsd, carriedUsd } = cost;
+    const reservedUsd = cost.reservedUsd ?? estimateUsd;
     if (carriedUsd + estimateUsd > this.deps.caps.runUsd) return 'run-cap';
-    if (usedUsd + estimateUsd > this.deps.caps.monthlyUsd) return 'monthly-cap';
+    if (usedUsd + reservedUsd > this.deps.caps.monthlyUsd) return 'monthly-cap';
     return null;
   }
 
@@ -467,6 +477,7 @@ export class ProposalService {
       estimateUsd: plan.estimateUsd,
       usedUsd: this.deps.ledger.usedSince(since),
       carriedUsd,
+      reservedUsd: input.limit.maxUsd,
     });
     if (refusal) throw capError(refusal);
     const id = randomUUID();

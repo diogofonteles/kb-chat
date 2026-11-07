@@ -128,12 +128,6 @@ export interface PreparationServiceDeps {
   readonly onError?: (error: unknown, mediaId: string) => void;
 }
 
-/**
- * How far past what the person saw a run may be, reading the real words instead of the
- * length: above it the paid stage waits for a click (BR-4).
- */
-export const ESTIMATE_TOLERANCE = PLAN_ESTIMATE_TOLERANCE;
-
 /** A plan only goes on once its file arrived: an upload given up never gets there. */
 const hasWholeFile = ({ status, failure }: MediaItem): boolean =>
   status !== 'uploading' && failure !== 'upload-abandoned';
@@ -285,7 +279,9 @@ export class PreparationService {
     const { proposals } = this.deps;
     if (!proposals.connected())
       throw refuse([{ option: 'ai', refusal: 'not-connected' }]);
-    if ((plan.acceptedUsd ?? 0) > proposals.monthRemainingUsd())
+    // The run reserves its most, not the estimate (KBC-112 BR-6): the month must hold that.
+    const mostUsd = (plan.acceptedUsd ?? 0) * PLAN_ESTIMATE_TOLERANCE;
+    if (mostUsd > proposals.monthRemainingUsd())
       throw refuse([{ option: 'ai', refusal: 'monthly-cap' }]);
   }
 
@@ -415,7 +411,7 @@ export class PreparationService {
     const { estimateUsd, refusal } = await proposals.estimate(actor, mediaId);
     if (refusal) return this.stopProposal(mediaId, refusal, estimateUsd);
     // The most the screen showed at the send (KBC-112 BR-6): the run's limit too.
-    const agreed = (plan.acceptedUsd ?? 0) * ESTIMATE_TOLERANCE;
+    const agreed = (plan.acceptedUsd ?? 0) * PLAN_ESTIMATE_TOLERANCE;
     if (estimateUsd > agreed)
       return this.stopProposal(mediaId, 'estimate-rose', estimateUsd);
     await proposals.start(actor, mediaId, { seenRunId, acceptedUsd: agreed });
