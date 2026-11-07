@@ -21,6 +21,17 @@ const resultSchema = z.object({
   }),
 });
 
+/** What the adapter uses of an MCP client: one per `qmd mcp` child process. */
+export interface QmdClient {
+  callTool(params: {
+    name: string;
+    arguments: Record<string, unknown>;
+  }): Promise<unknown>;
+  close(): Promise<void>;
+  /** Called when the child exits or the transport closes. */
+  onclose?: (() => void) | undefined;
+}
+
 export interface QmdMcpOptions {
   readonly command: string;
   readonly args?: readonly string[];
@@ -31,6 +42,8 @@ export interface QmdMcpOptions {
   readonly onLog?: (message: string) => void;
   /** How long a swapped-out process may finish its searches before it is closed, in ms. */
   readonly drainMs?: number;
+  /** Starts a `qmd mcp` and connects to it (tests count processes with a fake one). */
+  readonly openClient?: () => Promise<QmdClient>;
 }
 
 /** A research turn's search is seconds long; a turn's tool loop, minutes at most. */
@@ -42,9 +55,9 @@ const WARM_QUERY = 'warm up';
 
 /** Keeps one `qmd mcp` child alive so the embedding model stays loaded (ADR 0002). */
 export class QmdMcpAdapter implements SearchIndexPort {
-  private client: Client | null = null;
+  private client: QmdClient | null = null;
   /** Searches running on each process, so a swapped-out one is closed only when idle. */
-  private readonly inFlight = new Map<Client, number>();
+  private readonly inFlight = new Map<QmdClient, number>();
   /** Swapped-out processes finishing their searches (closed with the adapter). */
   private readonly retiring = new Set<Promise<void>>();
   private failures = 0;
@@ -95,8 +108,7 @@ export class QmdMcpAdapter implements SearchIndexPort {
 
   async close(): Promise<void> {
     this.closed = true;
-    if (this.restartTimer) clearTimeout(this.restartTimer);
-    this.restartTimer = null;
+    this.cancelRestart();
     const client = this.client;
     this.client = null;
     await client?.close();
@@ -114,7 +126,8 @@ export class QmdMcpAdapter implements SearchIndexPort {
     this.use(client);
   }
 
-  private async open(): Promise<Client> {
+  private async open(): Promise<QmdClient> {
+    if (this.options.openClient) return this.options.openClient();
     const transport = new StdioClientTransport({
       command: this.options.command,
       args: [...(this.options.args ?? ['mcp'])],
@@ -125,12 +138,18 @@ export class QmdMcpAdapter implements SearchIndexPort {
     return client;
   }
 
-  private use(client: Client): void {
+  /**
+   * The process that takes the next searches. Whichever connected before it (a reload and a
+   * reconnect that crossed) finishes its searches and closes: never two left alive (review 2).
+   */
+  private use(client: QmdClient): void {
     // Registered after a successful connect (a failed start is retried by start() only);
     // Client.onclose keeps the SDK's own transport handler that rejects pending calls.
     client.onclose = () => this.handleClose(client);
+    const previous = this.client;
     this.client = client;
     this.failures = 0;
+    if (previous && previous !== client) this.drainApart(previous);
     void this.warmUp();
   }
 
@@ -138,25 +157,35 @@ export class QmdMcpAdapter implements SearchIndexPort {
    * A new index is in place (KBC-100 FR-5): a new `qmd mcp` opens it and takes the next
    * searches; the old one finishes what it was doing, then closes. Search is never down: if
    * the new process does not start, the old one keeps serving and the error is thrown.
+   * A reconnect waiting for its turn is dropped: the new process is the reconnect.
    */
   async reload(): Promise<void> {
     if (this.closed) return;
+    this.cancelRestart();
     const next = await this.open();
     if (this.closed) {
       await next.close();
       return;
     }
-    const previous = this.client;
+    // A reconnect scheduled while this one was opening would start a third process.
+    this.cancelRestart();
     this.use(next);
-    // Drained apart: the swap is done as soon as the new process answers.
-    if (!previous) return;
+  }
+
+  private cancelRestart(): void {
+    if (this.restartTimer) clearTimeout(this.restartTimer);
+    this.restartTimer = null;
+  }
+
+  /** Drained apart: the swap is done as soon as the new process answers. */
+  private drainApart(previous: QmdClient): void {
     const retired = this.retire(previous).finally(() =>
       this.retiring.delete(retired),
     );
     this.retiring.add(retired);
   }
 
-  private async retire(client: Client): Promise<void> {
+  private async retire(client: QmdClient): Promise<void> {
     const until = Date.now() + (this.options.drainMs ?? DEFAULT_DRAIN_MS);
     while (
       !this.closed &&
@@ -186,7 +215,7 @@ export class QmdMcpAdapter implements SearchIndexPort {
     }
   }
 
-  private handleClose(client: Client): void {
+  private handleClose(client: QmdClient): void {
     if (this.client !== client) return;
     this.client = null;
     this.scheduleRestart();

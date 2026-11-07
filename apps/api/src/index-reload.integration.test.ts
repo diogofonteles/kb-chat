@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -52,19 +52,8 @@ describe('Hot swap of the search index (KBC-100 FR-5, AC-13, NFR-2)', () => {
     expect(adapter.status()).toBe('ok');
   });
 
-  it('NFR-2: ten swaps with a long search running interrupt none and never leave search down', async () => {
-    adapter = new QmdMcpAdapter({ command: process.execPath, args: [fakeQmd] });
-    await adapter.start();
-    const running: Promise<unknown>[] = [];
-    for (let swap = 0; swap < 10; swap += 1) {
-      running.push(adapter.search(query('slow')));
-      const reloading = adapter.reload();
-      expect(adapter.status()).toBe('ok');
-      await reloading;
-    }
-    const results = await Promise.allSettled(running);
-    expect(results.filter((one) => one.status === 'rejected')).toEqual([]);
-  });
+  // NFR-2 (ten swaps, none interrupted) runs over fake children in
+  // qmd-mcp-adapter-swap.test.ts: ten real spawns took 3.6–4.2 s here, near the 5 s timeout.
 
   it('a new process that does not start leaves the old one serving', async () => {
     adapter = new QmdMcpAdapter({ command: process.execPath, args: [fakeQmd] });
@@ -126,6 +115,63 @@ describe('Hot swap of the search index (KBC-100 FR-5, AC-13, NFR-2)', () => {
     await expect(long).resolves.toHaveLength(1);
     expect(await pidOf(adapter)).not.toBe(before);
     expect(seen.at(-1)).toBe('ffff');
+  });
+
+  it('review 1: a trigger that cannot be read is logged and the watcher keeps watching', async () => {
+    const state = await mkdtemp(join(tmpdir(), 'kbchat-qmd-'));
+    const trigger = join(state, 'reload-index');
+    const errors: string[] = [];
+    let reloads = 0;
+    watcher = new IndexReloadWatcher({
+      trigger,
+      reloadIndex: async () => {
+        reloads += 1;
+      },
+      reloadCatalog: async () => undefined,
+      log: {
+        info: () => undefined,
+        error: (_, msg) => errors.push(String(msg)),
+      },
+      pollMs: 20,
+    });
+    await watcher.start();
+
+    // A directory where the file should be: stat sees it, reading it fails (EISDIR).
+    await mkdir(trigger);
+    await expect
+      .poll(() => errors.length, { timeout: 2_000 })
+      .toBeGreaterThan(0);
+    expect(reloads).toBe(0);
+    await rm(trigger, { recursive: true });
+    await writeFile(trigger, 'index-20261107150000.sqlite\n');
+
+    await expect
+      .poll(() => readFile(`${trigger}.ack`, 'utf8').catch(() => ''), {
+        timeout: 2_000,
+      })
+      .toBe('index-20261107150000.sqlite\n');
+    expect(reloads).toBe(1);
+  });
+
+  it('review 1: check never rejects, whatever fails in it', async () => {
+    const state = await mkdtemp(join(tmpdir(), 'kbchat-qmd-'));
+    const trigger = join(state, 'reload-index');
+    const errors: string[] = [];
+    watcher = new IndexReloadWatcher({
+      trigger,
+      reloadIndex: async () => undefined,
+      reloadCatalog: async () => undefined,
+      log: {
+        info: () => undefined,
+        error: (_, msg) => errors.push(String(msg)),
+      },
+      pollMs: 60_000,
+    });
+    await watcher.start();
+    await mkdir(trigger);
+
+    await expect(watcher.check()).resolves.toBeUndefined();
+    expect(errors).toEqual(['search index trigger could not be read']);
   });
 
   it('a trigger already there at start is the index the API opened: nothing is reloaded', async () => {

@@ -45,7 +45,12 @@ export class IndexReloadWatcher {
   async start(): Promise<void> {
     this.seen = await changedAt(this.deps.trigger);
     this.timer = setInterval(() => {
-      this.running = this.running.then(() => this.check());
+      // check() never rejects; the catch keeps the chain alive whatever happens (review 1).
+      this.running = this.running
+        .then(() => this.check())
+        .catch((err: unknown) =>
+          this.deps.log.error({ err }, 'search index trigger check failed'),
+        );
     }, this.deps.pollMs ?? INDEX_TRIGGER_POLL_MS);
     this.timer.unref();
   }
@@ -56,12 +61,22 @@ export class IndexReloadWatcher {
     await this.running;
   }
 
-  /** One look at the trigger; a swap when it changed since the last one. */
+  /**
+   * One look at the trigger; a swap when it changed since the last one. Never rejects: a
+   * failure is logged and the next look goes on (an unhandled rejection would stop the API).
+   */
   async check(): Promise<void> {
     const now = await changedAt(this.deps.trigger);
     if (now === null || now === this.seen) return;
     this.seen = now;
-    const asked = (await readFile(this.deps.trigger, 'utf8')).trim();
+    let asked: string;
+    try {
+      asked = (await readFile(this.deps.trigger, 'utf8')).trim();
+    } catch (err) {
+      // Read again at its next change; install-index.sh puts the old index back meanwhile.
+      this.deps.log.error({ err }, 'search index trigger could not be read');
+      return;
+    }
     try {
       await this.deps.reloadIndex();
       await this.deps.reloadCatalog();
