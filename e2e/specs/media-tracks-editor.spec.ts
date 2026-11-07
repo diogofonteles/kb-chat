@@ -191,7 +191,10 @@ test('AC-10: dividing makes two touching tracks, joining keeps the first title',
     { startMs: 0, endMs: 30_000, title: 'Duas perguntas' },
   ]);
   await open(page, media.id);
-  if (isMobile) await page.getByRole('button', { name: 'Transcrição' }).click();
+  if (isMobile)
+    await page
+      .getByRole('button', { name: 'Transcrição', exact: true })
+      .click();
   await page.getByRole('button', { name: '0:15', exact: true }).click();
   if (isMobile) await page.getByRole('button', { name: '1 faixa' }).click();
   await page.getByRole('button', { name: 'Mais ações da faixa' }).click();

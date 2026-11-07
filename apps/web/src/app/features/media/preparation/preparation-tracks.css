@@ -82,6 +82,29 @@
   color: var(--color-text);
 }
 
+.actions {
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* The track's text, under its row (KBC-092). */
+.text {
+  grid-column: 2 / -1;
+}
+
+/* On a phone the buttons go under the row, side by side, with full targets (MA-01). */
+@media (max-width: 40rem) {
+  .tracks li {
+    grid-template-columns: 2rem minmax(0, 1fr);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 2 / -1;
+  }
+}
+
 .end {
   display: block;
   height: 1px;

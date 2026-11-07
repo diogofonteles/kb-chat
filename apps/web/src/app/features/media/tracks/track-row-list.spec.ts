@@ -1,8 +1,18 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideHttpClient } from '@angular/common/http';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import type { DraftTrack } from '@kb-chat/contracts';
 import { describe, expect, it, vi } from 'vitest';
+import { TrackAudition } from './track-audition.js';
 import { TrackRowList } from './track-row-list.js';
+import { TrackTextSource } from './track-text-source.js';
+
+const MEDIA = '11111111-1111-4111-8111-111111111111';
 
 const track = (n: number, startMs: number, endMs: number): DraftTrack => ({
   id: `00000000-0000-4000-8000-00000000000${n}`,
@@ -42,7 +52,13 @@ function setup(selectedId: string, extra: object = {}) {
     stopPlaying: vi.fn(),
   };
   return render(TrackRowList, {
-    providers: [provideZonelessChangeDetection()],
+    providers: [
+      provideZonelessChangeDetection(),
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      TrackTextSource,
+      { provide: TrackAudition, useValue: { positionMs: signal(null) } },
+    ],
     inputs: {
       tracks: [ONE, TWO],
       selectedId,
@@ -168,5 +184,51 @@ describe('TrackRowList (KBC-066)', () => {
     await setup(IDS.one, { playing: 'track' });
     expect(screen.getByRole('button', { name: '■ Parar' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '▶ Ouvir' })).toBeNull();
+  });
+
+  it('shows the selected track’s text below its fields (AC-4, FR-2)', async () => {
+    const { fixture } = await setup(IDS.two);
+    TestBed.inject(TrackTextSource).follow(
+      signal({ mediaId: MEDIA, status: 'done', key: '1' }),
+    );
+    TestBed.tick();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/v1/media/${MEDIA}/transcript?v=1`).flush({
+      mediaId: MEDIA,
+      version: 1,
+      confidence: 'normal',
+      segments: [
+        { startMs: 2_000, endMs: 4_000, text: 'antes da faixa' },
+        { startMs: 12_000, endMs: 14_000, text: 'a segunda faixa fala' },
+      ],
+    });
+    await fixture.whenStable();
+    http
+      .match(() => true)
+      .forEach((one) => one.flush({ mediaId: MEDIA, version: 1, words: [] }));
+    await fixture.whenStable();
+    const texts = screen.getAllByRole('region', { name: /^Texto da faixa/ });
+    expect(texts.map((one) => one.getAttribute('aria-label'))).toEqual([
+      'Texto da faixa 2',
+    ]);
+    expect(texts[0]?.textContent).toContain('a segunda faixa fala');
+    expect(texts[0]?.textContent).not.toContain('antes da faixa');
+    // Below the fields (FR-2): after the actions in the row.
+    const row = texts[0]?.closest('li');
+    const fields = row?.querySelector('.fields');
+    expect(
+      fields &&
+        texts[0] &&
+        fields.compareDocumentPosition(texts[0]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('shows the text alone, to read, while proposals lock editing (AC-7)', async () => {
+    await setup(IDS.one, { readOnly: true });
+    expect(screen.queryByRole('textbox', { name: 'Título' })).toBeNull();
+    expect(
+      screen.getByRole('region', { name: 'Texto da faixa 1' }),
+    ).toBeTruthy();
   });
 });

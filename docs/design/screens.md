@@ -758,6 +758,14 @@ Todo par texto/fundo e acento/fundo deve passar 4,5:1 (AA). A verificação entr
 - **Enquanto a IA propõe:** as faixas aparecem conforme cada janela termina, sem alças nem edição, até a análise acabar.
 - **Dividir aqui** usa o cursor (um clique no detalhe, numa palavra ou no tempo da transcrição); fora dos 5 s de cada lado, vai ao ponto válido mais próximo.
 
+**Texto da faixa (KBC-092):** o que a faixa diz, sem procurar na transcrição. O pedido completo, com a tabela de estados, está em [`KBC-092`](../backlog/KBC-092-track-text-and-spoken-word-highlight.md). Como foi construído:
+
+- **Passo 2:** **Ver texto** em cada faixa, ao lado de **▶ Ouvir** (no celular, abaixo, com alvo de 44 px); **Ouvir** também abre o texto. Um texto aberto por vez; fechar não para o áudio. O botão diz "Ver texto da faixa N" ou "Esconder texto da faixa N" ao leitor de tela, com `aria-expanded` e `aria-controls`.
+- **Passo 3:** o bloco **Texto da faixa** fica na linha selecionada, abaixo dos campos, e sozinho enquanto a IA propõe; segue início e fim enquanto a pessoa ajusta.
+- **Bloco:** região "Texto da faixa N", altura máxima de 16rem (40vh no celular), rolagem própria e palavra longa quebrada. Uma palavra pertence à faixa em que começa; a palavra falada tem o mesmo desenho do player (sublinhado grosso e peso), e o segmento sem tempos de palavra fica inteiro com fundo e barra lateral. O bloco rola só por dentro e para de seguir por 5 s quando a pessoa rola.
+- **Ver transcrição completa / Ver só a faixa:** a transcrição inteira, com as linhas da faixa marcadas por uma barra lateral e a palavra falada destacada; abre na primeira linha da faixa e não para o áudio.
+- **Estados:** carregando (três linhas de esqueleto), "O texto aparece quando a transcrição terminar.", "A transcrição falhou: não há texto para mostrar.", "Este áudio não foi transcrito.", "Nenhuma fala transcrita neste trecho." e "Não consegui carregar o texto." com **Tentar de novo**.
+
 
 ### Assuntos, passo 4 (KBC-069)
 

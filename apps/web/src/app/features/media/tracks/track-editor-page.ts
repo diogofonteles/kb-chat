@@ -28,7 +28,6 @@ import {
   mediaItemSchema,
   mediaPreparationSchema,
   mediaSilencesSchema,
-  mediaTranscriptSchema,
   mediaWaveformSchema,
   type DraftTrack,
   type TrackKind,
@@ -49,11 +48,7 @@ import {
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { editWordsUrl, mediaWaveformUrl } from '@core/media/media-edit-api.js';
-import {
-  mediaPagePath,
-  mediaTranscriptUrl,
-  mediaUrl,
-} from '@core/media/media-api.js';
+import { mediaPagePath, mediaUrl } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import {
   preparationPagePath,
@@ -91,6 +86,7 @@ import {
 } from './track-row-list.js';
 import { TrackSubjects } from './track-subjects.js';
 import { TrackTimeline, type ListenKind } from './track-timeline.js';
+import { TrackTextSource, itemTarget } from './track-text-source.js';
 import { TrackTranscript, type TextSpan } from './track-transcript.js';
 
 /** How long "Faixa 5 apagada · Desfazer" stays (screen spec: 10 s). */
@@ -175,7 +171,7 @@ function copyableLine(
   ],
   templateUrl: './track-editor-page.html',
   styleUrl: './track-editor-page.css',
-  providers: [TrackDraft, TrackAudition],
+  providers: [TrackDraft, TrackAudition, TrackTextSource],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown)': 'pageKey($event)' },
 })
@@ -210,15 +206,9 @@ export class TrackEditorPage {
   private readonly transcriptVersion = computed(
     () => this.media()?.transcription.version ?? null,
   );
-  private readonly transcript = httpResource(
-    () => {
-      const version = this.transcriptVersion();
-      return version === null
-        ? undefined
-        : { url: mediaTranscriptUrl(this.id()), params: { v: version } };
-    },
-    { parse: (body) => mediaTranscriptSchema.parse(body) },
-  );
+  /** The transcript, read once for the column and the track's text (KBC-092 FR-3). */
+  private readonly text = inject(TrackTextSource);
+  private readonly transcript = this.text.transcript;
   private readonly words = httpResource(
     () =>
       this.transcriptVersion() === null ? undefined : editWordsUrl(this.id()),
@@ -360,15 +350,11 @@ export class TrackEditorPage {
   protected readonly speakerList = computed(() =>
     this.speakers.hasValue() ? this.speakers.value().items : [],
   );
-  protected readonly separation = computed(() =>
-    this.transcript.hasValue()
-      ? (this.transcript.value().speakers?.version ?? null)
-      : null,
+  protected readonly separation = computed(
+    () => this.transcript()?.speakers?.version ?? null,
   );
   protected readonly people = computed<PersonChoice[]>(() => {
-    const labels = this.transcript.hasValue()
-      ? (this.transcript.value().voiceNames ?? [])
-      : [];
+    const labels = this.transcript()?.voiceNames ?? [];
     return [
       ...labels.map(voiceChoice),
       ...this.speakerList().map((one) => ({
@@ -389,8 +375,8 @@ export class TrackEditorPage {
   protected readonly playingElsewhere = computed(
     () => this.audition.playing() && this.playingKind() === null,
   );
-  protected readonly segments = computed(() =>
-    this.transcript.hasValue() ? this.transcript.value().segments : [],
+  protected readonly segments = computed(
+    () => this.transcript()?.segments ?? [],
   );
   protected readonly wordList = computed(() =>
     this.words.hasValue() ? this.words.value().words : [],
@@ -500,6 +486,7 @@ export class TrackEditorPage {
         return slug ? { kind: 'topic', slug } : null;
       }),
     );
+    this.followText();
     this.leaveForProcessing();
     this.stopOtherPlayback();
     this.route.paramMap
@@ -726,6 +713,17 @@ export class TrackEditorPage {
     this.list()?.focusRow();
   }
 
+  /** The transcript is read at once: a track is always selected, with its text (KBC-092). */
+  private followText(): void {
+    this.text.follow(
+      computed(() => {
+        const media = this.media();
+        return media ? itemTarget(media) : null;
+      }),
+    );
+    this.text.open();
+  }
+
   protected undo(): void {
     this.draft.undo();
   }
@@ -869,7 +867,7 @@ export class TrackEditorPage {
 
   /** The names, and the titles that may have changed with them. */
   protected voicesNamed(): void {
-    this.transcript.reload();
+    this.text.reload();
     this.preparation.reload();
     this.draft
       .reload()

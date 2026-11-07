@@ -138,6 +138,13 @@
           </div>
         </div>
       }
+      @if (row.selected) {
+        <app-track-text
+          class="text"
+          [span]="row.track"
+          [ordinal]="row.ordinal"
+        />
+      }
     </li>
   }
 </ol>

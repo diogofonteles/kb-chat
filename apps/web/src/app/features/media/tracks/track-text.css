@@ -1,0 +1,105 @@
+:host {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.caption {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.switch,
+.retry {
+  justify-self: start;
+  min-height: var(--target);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Scrolls inside, never the page (FR-4); a long word breaks rather than widen it (AC-14). */
+.body {
+  display: grid;
+  gap: var(--space-2);
+  max-height: 16rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * No content-visibility here: in WebKit a line skipped in this grid keeps a sliver of height
+ * once seen, so the words overlap, the block cannot scroll to the word (AC-13) and the
+ * controls above shift under the pointer.
+ * Plain lines lay out fast enough without it: NFR-3 measures a 60 min track.
+ */
+.line {
+  margin: 0;
+  padding-inline-start: var(--space-2);
+  border-left: 3px solid transparent;
+  font-family: var(--font-reading);
+  line-height: 1.6;
+}
+
+/* The whole transcript: the track's lines carry a bar at the side, not only a colour. */
+.line.inside {
+  border-left-color: var(--color-accent);
+}
+
+/* A line without word times, while it plays (BR-4): background and a bar (UP-20). */
+.line.speaking {
+  border-left-color: var(--color-accent-strong);
+  background: var(--color-mark);
+}
+
+.note {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.skeleton {
+  display: block;
+  height: 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+}
+
+.skeleton.short {
+  width: 60%;
+}
+
+@media (max-width: 40rem) {
+  .body {
+    max-height: 40vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .body {
+    scroll-behavior: auto;
+  }
+}
+
+@media (forced-colors: active) {
+  .line.speaking {
+    border-left-color: Highlight;
+  }
+}
