@@ -877,3 +877,43 @@ Quem tem `media-upload` vê o que está sendo processado nos acervos que enxerga
 Seções: **Precisa de você** (só o que esta pessoa pode mover: falha, "Validar faixas", "Concluir", "Continuar"), **Agora**, **A seguir** e **Parados no acervo** (parado, sem ação para esta pessoa), com etapa em palavras, barra, posição e "Depois: …". Transcritor desligado: "Aguardando o transcritor". O "Tentar de novo" da etapa paga leva a `/preparar`, onde o valor aparece antes do clique. Lê a cada 5 s só com algo ativo e aba visível.
 
 A Biblioteca segue o acervo selecionado, com "Todos os acervos" como escolha; o cabeçalho nomeia o que a página mostra (KBC-091). Nos passos 2 e 3, cada voz tem "Aceitar", "Corrigir" e "Recusar", também depois de aceita. O nome dado muda quem pergunta e responde em toda faixa. No texto, só troca o nome inteiro sugerido em título que a IA escreveu e ninguém editou, e em resumo sugerido ainda não aceito; nome de uma palavra, texto de pessoa e nome recusado não mudam e aparecem em "Reveja estes títulos". Faixa publicada muda pelo histórico (KBC-073), com nova versão.
+
+## T24 — Níveis de acesso do acervo (KBC-103, KBC-107, KBC-108; ADR 0036; só masters)
+
+**Objetivo:** o master define a escala de níveis de um acervo de topo, vê o que está sem nível e muda a escala sabendo o impacto. **Sucesso:** criar uma escala de 5 níveis em ≤ 2 min, sem ajuda; nenhuma mudança que abra ou feche conteúdo sem uma confirmação que diga quantos itens e pessoas mudam (UP-07, MA-27).
+
+### Onde fica
+- Em **Editar acervo** (T5), num acervo de topo, o link **Níveis de acesso** (com "Sem níveis" ou "5 níveis · 3 sem nível" ao lado); rota `/acervos/{slug}/niveis`. Num sub-acervo, o diálogo diz "Este sub-acervo usa os níveis de <pai>." com o link para o pai. Some para quem não é master.
+- No celular, tela cheia com "← Voltar" (UP-04).
+
+### Escala
+- Ajuda acima da lista, sempre visível (MA-20): "O primeiro nível é o mais aberto. Cada nível vê o seu conteúdo e o de todos os níveis abaixo dele. Masters veem tudo."
+- Lista ordenada, do mais baixo (topo) ao mais alto, cada linha: código (pílula), descrição, "N documentos · N áudios · N pessoas", e ações **Renomear**, **Mover para cima**, **Mover para baixo** (botões, não só arrastar: MA-10), **Apagar** (KBC-108). Mover anuncia a nova posição numa região viva ("CDC agora é o 2º de 5").
+- **Novo nível**: campos **Código** (até 12 caracteres, rótulo acima, ex.: "QS") e **Descrição** (opcional), botão primário **Adicionar**; entra no topo da escala (o mais alto). Erro no campo: "Já existe um nível com o código CI.".
+- **Primeira escala**: antes de criar o primeiro nível, a confirmação na linha diz: "Todos os N documentos e N áudios deste acervo e dos sub-acervos, e as N pessoas com acesso, ficam neste nível. Nada muda para ninguém até você subir algo." · **Criar nível** · **Cancelar**.
+- **Mover** (KBC-108): antes de aplicar, a prévia na linha: "2 pessoas passam a ver 14 itens; 1 pessoa deixa de ver 6." · **Confirmar** · **Cancelar**; se outra pessoa mudou a escala: "A escala mudou. Confira de novo." No KBC-103, mover aplica com uma confirmação simples sem as contagens.
+- **Apagar** (KBC-108): diálogo que nomeia o nível e o que ele tem, com dois selects pré-escolhidos e editáveis: "Conteúdo de CI vai para: [CDC]" e "Pessoas em CI vão para: [QS]", e o botão de perigo **Apagar CI**. Com um só nível, vira **Tirar todos os níveis**: campo "Digite o nome do acervo para confirmar" e o aviso "Todos com acesso ao acervo passam a ver todo o conteúdo.".
+
+### Sem nível (KBC-103 contagem; KBC-107 lista)
+- Seção **Sem nível (N)**, só quando N > 0, para masters e quem tem "Classificar nível de conteúdo": no KBC-103 só a contagem e a frase "Documentos novos do kb chegam sem nível e ficam visíveis só para masters até alguém escolher."; no KBC-107, a lista (título, sub-acervo, origem, autoria, "chegou em dd/mm"), filtros com rótulo visível, caixa por linha, "Selecionar os N filtrados", e a barra "N selecionados · Nível: [ ] · **Dar nível**" fixa no rodapé no celular (UP-13), com confirmação na linha "Dar o nível CI a 37 documentos?".
+- Vazio: "Todos os documentos têm nível.".
+
+### Histórico de níveis (KBC-108)
+- Seção recolhível **Histórico de níveis** (aria-expanded): lista com data, quem ("Diogo agindo como Ana" quando for o caso), o quê ("CI → CDC: 'Aula 12'", "Lote: 37 documentos → CI", "Ordem: QS, CI, CDC → QS, CDC, CI") e filtros por tipo, pessoa e período; paginação por "Carregar mais".
+
+### Estados
+| Estado | Mostra | Ação |
+|---|---|---|
+| Carregando | Esqueleto de 5 linhas | — |
+| Sem escala | "Este acervo não tem níveis. Todos com acesso veem todo o conteúdo." + **Novo nível** | Criar |
+| Erro ao carregar | "Não consegui carregar os níveis deste acervo." + **Tentar de novo** | Tentar |
+| Erro ao salvar | A mensagem na linha, com o que foi digitado mantido (MA-26) | Corrigir |
+| Sem permissão | A rota mostra a tela de não encontrado | — |
+| Conteúdo extremo | 20 níveis; códigos de 12 caracteres e descrições de 200 quebram em 2 linhas | — |
+
+### Emendas em outras telas (2026-11-06)
+- **T9 Pessoas:** no editor da pessoa e no editor de preset (convite e perfis, KBC-109), abaixo de cada acervo marcado que tenha escala, o select **Nível em <acervo>** (rótulo visível; padrão o mais baixo); para master, nenhum select ("Masters veem todos os níveis."). A lista mostra "Hermetismo · CI". Barra em lote: "Nível em [acervo]: [nível] · Aplicar". Funcionalidade nova "Classificar nível de conteúdo" na lista de funcionalidades.
+- **T14 Envio e "Editar informações" (KBC-105):** num acervo com escala, o campo **Nível** obrigatório, depois de **Autor**: grupo de rádios (até 6 níveis; acima disso, select), **sem pré-seleção** (SL-28), com a ajuda "Quem tem este nível ou um acima poderá ouvir." e só os níveis até o de quem envia; sem escolha, **Enviar** não envia e o campo diz "Escolha o nível deste áudio.". Ao trocar para um acervo com outra escala, o campo se esvazia e pede de novo. Repetido num nível oculto: "Este arquivo já está no acervo, num nível que você não vê. Fale com um master.". Masters e quem gere níveis veem o selo do nível nas linhas.
+- **T3 Painel do documento (KBC-103, KBC-107):** para masters e quem tem "Classificar nível de conteúdo", o selo "Nível: CI" (ou "Sem nível", cor de aviso + texto) na área de metadados e **Mudar nível** (select + **Salvar**, resultado anunciado). Para os demais, nada sobre níveis.
+- **T4 Pesquisa com IA (KBC-103, KBC-110):** até o KBC-104, num acervo com escala, quem não é master vê no lugar da caixa "A pesquisa com IA ainda não está disponível neste acervo.". No histórico, uma fonte restrita aparece como chip sem link "Fonte restrita" e a resposta tem a nota "N fontes desta resposta não estão disponíveis para você." (texto, não só cor).
+- **T15 Player e T20 faixas (KBC-106):** **Nível** na linha da faixa (validação e edição), padrão "O da gravação (QS)"; no player de quem não vê uma faixa, o intervalo fica hachurado na barra com o rótulo "Trecho restrito" (texto acessível) e é pulado.
