@@ -32,6 +32,15 @@ import {
 import { usdUpText } from '../preparation/preparation-labels.js';
 import { notDoneText } from './track-labels.js';
 
+/**
+ * Focuses a button with its row brought into view by the row's scroll margin: a plain
+ * focus scrolls just enough to leave it under the editor's bottom bar on a phone.
+ */
+function focusClearOfTheBar(row: HTMLElement, button: HTMLElement): void {
+  row.scrollIntoView({ block: 'nearest' });
+  button.focus({ preventScroll: true });
+}
+
 /** Where the person is in asking for a run. */
 type Asking =
   | { readonly kind: 'idle' | 'estimating' }
@@ -190,18 +199,20 @@ export class TrackProposals {
   private keepFocus(): void {
     afterRenderEffect({
       write: () => {
-        const first = this.actions()?.nativeElement.querySelector('button');
-        if (!first || !this.focusActions) return;
+        const actions = this.actions()?.nativeElement;
+        const first = actions?.querySelector('button');
+        if (!actions || !first || !this.focusActions) return;
         this.focusActions = false;
-        first.focus();
+        focusClearOfTheBar(actions, first);
       },
     });
     afterRenderEffect({
       write: () => {
         const retry = this.retryButton()?.nativeElement;
-        if (!retry || !this.followed) return;
+        const actions = retry?.parentElement;
+        if (!retry || !actions || !this.followed) return;
         this.followed = false;
-        retry.focus();
+        focusClearOfTheBar(actions, retry);
       },
     });
   }

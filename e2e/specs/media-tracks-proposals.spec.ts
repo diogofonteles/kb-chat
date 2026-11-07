@@ -372,7 +372,6 @@ test('KBC-112 AC-2, AC-3, AC-14: a run stopped at the value says what is ready, 
     'parou no valor aceito',
   );
   // Clear of the editor's bottom bar on a phone, with no sideways scroll (AC-14).
-  await retry.scrollIntoViewIfNeeded();
   const foot = await page.locator('.foot').boundingBox();
   for (const shown of [said, retry]) {
     const box = await shown.boundingBox();
