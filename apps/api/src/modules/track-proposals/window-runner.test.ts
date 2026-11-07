@@ -62,7 +62,7 @@ function oneWindow(input: {
     acceptedUsd: input.acceptedUsd,
     signal: new AbortController().signal,
   });
-  return { runner, llm };
+  return { runner, llm, store: db.store, runId };
 }
 
 describe('WindowRunner: the value accepted (KBC-112)', () => {
@@ -112,6 +112,20 @@ describe('WindowRunner: the value accepted (KBC-112)', () => {
     });
     expect(await runner.run()).toMatchObject({ failure: 'run-cap' });
     expect(llm.calls).toHaveLength(0);
+  });
+
+  it('records a window billed past its worst case at the cap left, not at the value (FR-7)', async () => {
+    const { runner, llm, store, runId } = oneWindow({
+      outputUsd: 0.01,
+      acceptedUsd: 0.04,
+      runCapUsd: 0.25,
+      carriedUsd: 0.23,
+      replies: [wholeWindow()],
+    });
+    llm.costPerCall = 0.05;
+    expect(await runner.run()).toEqual({ failure: null, spentUsd: 0.05 });
+    // The run's row counts the carried spend too: 0.23 + 0.02, the run cap.
+    expect(store.getRun(runId)?.spentUsd).toBeCloseTo(0.25, 12);
   });
 
   it('does not count what earlier attempts spent against the value (BR-4)', async () => {

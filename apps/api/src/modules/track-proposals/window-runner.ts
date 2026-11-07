@@ -148,7 +148,7 @@ export class WindowRunner {
       extendLast: accepted.extendLast,
       tracks: accepted.tracks,
       voices: acceptVoices(reply.vozes, plan.evidence),
-      spentUsd: Math.min(this.spentUsd, this.deps.acceptedUsd),
+      spentUsd: Math.min(this.spentUsd, this.limitUsd()),
     });
     this.deps.onWindowSaved?.(plan.mediaId);
     this.remember(accepted, extended);
@@ -208,12 +208,23 @@ export class WindowRunner {
     return read.answer;
   }
 
+  /** What the run's cap has left after the attempts before it. */
+  private capLeft(): number {
+    return this.deps.runCapUsd - this.deps.carriedUsd;
+  }
+
+  /**
+   * The run's limit: the value accepted or the cap left, whichever is less (the service's
+   * `limitOf`). A window billed past its worst case is recorded at it, as the ledger is (FR-7).
+   */
+  private limitUsd(): number {
+    return Math.max(0, Math.min(this.deps.acceptedUsd, this.capLeft()));
+  }
+
   private assertFits(ceiling: number): void {
-    const { runCapUsd, carriedUsd, acceptedUsd } = this.deps;
-    const capLeft = runCapUsd - carriedUsd;
-    if (this.spentUsd + ceiling <= Math.min(acceptedUsd, capLeft)) return;
+    if (this.spentUsd + ceiling <= this.limitUsd()) return;
     throw new ProposalStop(
-      capLeft <= acceptedUsd ? 'run-cap' : 'accepted-limit',
+      this.capLeft() <= this.deps.acceptedUsd ? 'run-cap' : 'accepted-limit',
     );
   }
 
