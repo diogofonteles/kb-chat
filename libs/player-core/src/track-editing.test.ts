@@ -157,6 +157,25 @@ describe('dividing and joining (FR-6)', () => {
     ).toBeNull();
   });
 
+  it('refuses a second part whose id another track already has', () => {
+    // Every rule finds a track by its id: two with one id would move together and overlap.
+    const tracks = [span('a', 0, 20_000), span('c', 20_000, 30_000)];
+    expect(
+      splitTrack(tracks, {
+        trackId: 'a',
+        atMs: 10_000,
+        second: (track, startMs) => ({ ...track, id: 'c', startMs }),
+      }),
+    ).toBeNull();
+    expect(
+      splitTrack(tracks, {
+        trackId: 'a',
+        atMs: 10_000,
+        second: (track, startMs) => ({ ...track, startMs }),
+      }),
+    ).toBeNull();
+  });
+
   it('joins with the next, to its end, keeping the first (AC-10)', () => {
     const joined = joinTracks(
       [
@@ -307,15 +326,21 @@ describe('any sequence of actions (BR-3, BR-4)', () => {
     }),
   );
 
+  const freshId = (tracks: readonly TrackSpan[], prefix: string): string => {
+    const taken = new Set(tracks.map((one) => one.id));
+    let id = prefix;
+    while (taken.has(id)) id = `${id}'`;
+    return id;
+  };
+
   function applyAction(tracks: TrackSpan[], action: Action): TrackSpan[] {
     if (action.kind === 'create') {
       const span = newTrackSpan(tracks, {
         atMs: action.atMs,
         durationMs: DURATION,
       });
-      return span
-        ? [...tracks, { id: `n${tracks.length}${action.atMs}`, ...span }]
-        : tracks;
+      // The screen gives a new track a fresh id (a UUID); the split keeps a guessable one.
+      return span ? [...tracks, { id: freshId(tracks, 'n'), ...span }] : tracks;
     }
     const track = tracks[action.index % Math.max(tracks.length, 1)];
     if (!track) return tracks;
@@ -342,25 +367,54 @@ describe('any sequence of actions (BR-3, BR-4)', () => {
     return withHandle(tracks, { trackId: track.id, edge: action.edge, ms });
   }
 
+  /** BR-3 and BR-4 on every state, and one track per id (the rules find tracks by id). */
+  function expectValid(tracks: readonly TrackSpan[]): void {
+    expect(new Set(tracks.map((one) => one.id)).size).toBe(tracks.length);
+    const ordered = [...tracks].sort((a, b) => a.startMs - b.startMs);
+    ordered.forEach((one, index) => {
+      expect(one.endMs - one.startMs).toBeGreaterThanOrEqual(
+        MIN_TRACK_LENGTH_MS,
+      );
+      expect(one.startMs).toBeGreaterThanOrEqual(0);
+      expect(one.endMs).toBeLessThanOrEqual(DURATION);
+      const next = ordered[index + 1];
+      if (next) expect(one.endMs).toBeLessThanOrEqual(next.startMs);
+    });
+  }
+
+  const START: TrackSpan[] = [span('a', 100_000, 200_000)];
+
+  /** The CI counterexample (seed 1910727954): a split whose second part reused an id. */
+  const SPLIT_REUSES_AN_ID: Action[] = [
+    { kind: 'split', index: 0, atMs: 0 },
+    { kind: 'split', index: 7, atMs: 115_000 },
+    { kind: 'move', index: 16, edge: 'start', toMs: 109_900 },
+    { kind: 'move', index: 0, edge: 'end', toMs: 110_001 },
+    { kind: 'split', index: 0, atMs: 0 },
+    { kind: 'move', index: 7, edge: 'start', toMs: 0 },
+  ];
+
+  it('keeps the rules when a split would reuse an id (CI counterexample)', () => {
+    let tracks = START;
+    for (const action of SPLIT_REUSES_AN_ID) {
+      tracks = applyAction(tracks, action);
+      expectValid(tracks);
+    }
+  });
+
   it('never overlaps and never leaves a track under 5 s', () => {
     fc.assert(
       fc.property(fc.array(anAction, { maxLength: 60 }), (actions) => {
-        let tracks: TrackSpan[] = [span('a', 100_000, 200_000)];
+        let tracks = START;
         for (const action of actions) {
           tracks = applyAction(tracks, action);
-          const ordered = [...tracks].sort((a, b) => a.startMs - b.startMs);
-          ordered.forEach((one, index) => {
-            expect(one.endMs - one.startMs).toBeGreaterThanOrEqual(
-              MIN_TRACK_LENGTH_MS,
-            );
-            expect(one.startMs).toBeGreaterThanOrEqual(0);
-            expect(one.endMs).toBeLessThanOrEqual(DURATION);
-            const next = ordered[index + 1];
-            if (next) expect(one.endMs).toBeLessThanOrEqual(next.startMs);
-          });
+          expectValid(tracks);
         }
       }),
-      { numRuns: 300 },
+      {
+        numRuns: 300,
+        examples: [[SPLIT_REUSES_AN_ID]],
+      },
     );
   });
 });
