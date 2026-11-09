@@ -69,7 +69,7 @@ function world() {
       undocumentedRecordings: () => [],
       statusOf: () => null,
     },
-    hasFolder: (topic) => topic === 'hermetismo',
+    isCollection: (topic) => topic === 'hermetismo',
     mediaOf: (topic) => (topic === 'hermetismo' ? [RECORDING] : []),
     onError: (mediaId) => errors.push(mediaId),
   });
@@ -128,11 +128,11 @@ describe('MediaDocumentReconciler (KBC-100)', () => {
     expect(queued).toEqual(['hermetismo']);
   });
 
-  it('AC-12: a collection with no folder in the vault gets no document', () => {
+  it('a collection the app no longer knows gets no document (KBC-114 BR-6)', () => {
     const { state, desired, reconciler } = world();
     state.broken = false;
     expect(reconciler.preview(GOOD)?.topic).toBe('hermetismo');
-    const noFolder = new MediaDocumentReconciler({
+    const unknown = new MediaDocumentReconciler({
       source: {
         inputOf: (mediaId) => ({ ...inputOf(mediaId), topic: 'nova' }),
         tracksOf: () => [GOOD],
@@ -151,10 +151,10 @@ describe('MediaDocumentReconciler (KBC-100)', () => {
         undocumentedRecordings: () => [],
         statusOf: () => null,
       },
-      hasFolder: () => false,
+      isCollection: () => false,
     });
-    expect(() => noFolder.reconcileRecording(RECORDING)).not.toThrow();
-    expect(noFolder.preview(GOOD)).toBeNull();
+    expect(() => unknown.reconcileRecording(RECORDING)).not.toThrow();
+    expect(unknown.preview(GOOD)).toBeNull();
     expect(desired).toEqual([]);
   });
 });
@@ -199,7 +199,7 @@ describe('MediaDocumentReconciler (KBC-100 fix round 1)', () => {
         undocumentedRecordings: () => [],
         statusOf: () => null,
       },
-      hasFolder: () => true,
+      isCollection: () => true,
       sweep: {
         ...sweep,
         pause: async () => {
@@ -256,7 +256,7 @@ describe('MediaDocumentReconciler (KBC-100 fix round 1)', () => {
     expect(rendered).toHaveLength(100);
   });
 
-  it('review suggestion: the backfill skips recordings of collections with no vault folder before rendering', async () => {
+  it('review suggestion: the backfill skips recordings of collections the app no longer knows before rendering', async () => {
     const read: string[] = [];
     const reconciler = new MediaDocumentReconciler({
       source: {
@@ -279,7 +279,7 @@ describe('MediaDocumentReconciler (KBC-100 fix round 1)', () => {
         ],
         statusOf: () => null,
       },
-      hasFolder: (topic) => topic === 'hermetismo',
+      isCollection: (topic) => topic === 'hermetismo',
     });
 
     await reconciler.reconcileAll();
@@ -335,7 +335,7 @@ describe('MediaDocumentReconciler: a whole collection off the request (KBC-100 r
         undocumentedRecordings: () => [],
         statusOf: () => null,
       },
-      hasFolder: () => true,
+      isCollection: () => true,
       mediaOf: (topic) => (topic === 'hermetismo' ? ids : []),
       sweep: {
         slice: 20,

@@ -11,6 +11,8 @@ import {
   TrackDocumentSource,
   type PublisherPresence,
   type SeenDocument,
+  collectionOf,
+  domainOfTopic,
 } from './modules/media-documents/index.js';
 import { JOB_LEASE_MS, MAX_JOB_ATTEMPTS } from './modules/media/index.js';
 
@@ -54,12 +56,29 @@ export const seenIn = (catalog: CatalogRegistry): SeenDocument[] =>
     ),
   );
 
-/** A collection with a folder in the kb vault: one created on the screen may have none. */
-export const hasVaultFolder =
+/**
+ * A collection the app knows, with a vault folder or made on the screen: every one gets
+ * documents, and the Mac creates a missing folder with `kb topic new` (KBC-114 BR-6).
+ */
+export const isCollection =
   (catalog: CatalogRegistry) =>
-  (topic: string): boolean => {
-    const found = catalog.get(topic);
-    return found !== undefined && found.topic.screenOnly !== true;
+  (topic: string): boolean =>
+    catalog.get(topic) !== undefined;
+
+const foldersOf = (catalog: CatalogRegistry) =>
+  catalog.topics().map((one) => one.topic);
+
+/**
+ * The domain a document is filed under: the vault topic's; for a collection made on the
+ * screen, the one the Mac will create its topic with (KBC-114 BR-4); null otherwise.
+ */
+const domainIn =
+  (catalog: CatalogRegistry) =>
+  (topic: string): string | null => {
+    const found = catalog.get(topic)?.topic;
+    if (!found) return null;
+    if (found.screenOnly) return domainOfTopic(foldersOf(catalog), topic);
+    return found.domain ?? null;
   };
 
 /** What a track's document is read from: media.db, the authors and the subjects. */
@@ -74,7 +93,7 @@ export function documentSource(wiring: DocumentsWiring): TrackDocumentSource {
     ...(wiring.speakersOf && { speakersOf: wiring.speakersOf }),
     mainOf: (topic) => authors.mainOf(topic)?.slug ?? null,
     authorOf: (topic, slug) => authors.authorOf(topic, slug),
-    domainOf: (topic) => wiring.catalog.get(topic)?.topic.domain ?? null,
+    domainOf: domainIn(wiring.catalog),
     subjectsOf: (track) =>
       (subjects.shownOn([track]).get(track.mediaId) ?? []).map(
         (subject) => subject.name,
@@ -91,7 +110,7 @@ function reconcilerOf(
   return new MediaDocumentReconciler({
     source,
     documents: media.documents,
-    hasFolder: hasVaultFolder(wiring.catalog),
+    isCollection: isCollection(wiring.catalog),
     // A sub-collection uses its parent's authors and speakers (ADR 0028); each recording
     // brings its tracks along (MediaDocumentReconciler.reconcileTopic).
     mediaOf: (topic) =>
@@ -115,17 +134,15 @@ export function createMediaDocuments(wiring: DocumentsWiring): MediaDocuments {
     monthlyCapUsd: media.ai.monthlyCapUsd,
     leaseMs: JOB_LEASE_MS,
     maxAttempts: MAX_JOB_ATTEMPTS,
+    collectionOf: (topic) => collectionOf(foldersOf(wiring.catalog), topic),
   });
   const status = publicationStatus(wiring, { source, reconciler, kb });
   const existing = new ExistingTracks({
     documents: media.documents,
     reconciler,
     budget: kb,
-    // A collection with no vault folder has nothing to publish yet (KBC-100 AC-12).
-    titleOf: (topic) =>
-      hasVaultFolder(wiring.catalog)(topic)
-        ? (wiring.catalog.get(topic)?.topic.title ?? null)
-        : null,
+    // Every collection the app knows, with a vault folder or not (KBC-114 BR-6).
+    titleOf: (topic) => wiring.catalog.get(topic)?.topic.title ?? null,
     queue: () => status.queue(),
   });
   return { reconciler, kb, existing, status };
@@ -147,7 +164,7 @@ function publicationStatus(
     reconciler,
     store: media.store,
     isDocumentable: (one) => source.isDocumentable(one),
-    hasFolder: hasVaultFolder(wiring.catalog),
+    isCollection: isCollection(wiring.catalog),
     budgetUsd: () => kb.budgetUsd(),
     presence: wiring.presence ?? (() => NO_PUBLISHER),
   });

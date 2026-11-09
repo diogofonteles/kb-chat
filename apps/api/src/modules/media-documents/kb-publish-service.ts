@@ -3,6 +3,7 @@ import {
   KB_PUBLISH_MAX_BUDGET_USD,
   KB_PUBLISH_MAX_ITEMS,
   type CompleteKbPublishRequest,
+  type KbCollection,
   type KbPublishItem,
   type KbPublishJob,
 } from '@kb-chat/contracts';
@@ -25,6 +26,8 @@ export interface KbPublishServiceDeps {
   readonly monthlyCapUsd: number;
   readonly leaseMs: number;
   readonly maxAttempts: number;
+  /** What the Mac needs to create the collection's vault topic (KBC-114 FR-2). */
+  readonly collectionOf?: (topic: string) => KbCollection | null;
   readonly now?: () => Date;
 }
 
@@ -127,7 +130,9 @@ export class KbPublishService {
     job: LeasedKbJob,
     { items, budgetUsd }: { items: KbPublishItem[]; budgetUsd: number },
   ): KbPublishJob {
+    const collection = this.deps.collectionOf?.(job.topic) ?? null;
     return {
+      ...(collection && { collection }),
       id: job.id,
       leaseId: job.leaseId,
       kind: 'kb-publish',

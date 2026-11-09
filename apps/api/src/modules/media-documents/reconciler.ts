@@ -36,10 +36,10 @@ export interface ReconcilerDeps {
     | 'statusOf'
   >;
   /**
-   * Whether a collection has a folder in the kb vault (one created on the screen may not):
-   * without one nothing is published there (KBC-100 AC-12).
+   * Whether the app knows the collection (from the vault or made on the screen): every one
+   * it knows gets documents, and the Mac creates a missing vault folder (KBC-114 BR-6).
    */
-  readonly hasFolder: (topic: string) => boolean;
+  readonly isCollection: (topic: string) => boolean;
   /** The recordings of a collection (and its sub-collections): their tracks follow (BR-1). */
   readonly mediaOf?: (topic: string) => readonly string[];
   /** A media whose document could not be rendered (logged; the sweep tries it again). */
@@ -113,7 +113,7 @@ export class MediaDocumentReconciler {
   /** The document of a media as it is now, without recording anything; null if none. */
   preview(mediaId: string): TrackRender | null {
     const input = this.deps.source.inputOf(mediaId);
-    if (!input || !this.deps.hasFolder(input.topic)) return null;
+    if (!input || !this.deps.isCollection(input.topic)) return null;
     return { ...renderTrackDocument(input), mediaId, topic: input.topic };
   }
 
@@ -281,13 +281,13 @@ export class MediaDocumentReconciler {
   }
 
   /**
-   * Recordings without tracks that may get their whole text (FR-7), only in collections with
-   * a vault folder: the others would read a whole transcript for nothing every sweep.
+   * Recordings without tracks that may get their whole text (FR-7), only in collections the
+   * app still knows: the others would read a whole transcript for nothing every sweep.
    */
   private backfill(): readonly string[] {
     return this.deps.documents
       .undocumentedRecordings(BACKFILL_BATCH)
-      .filter((one) => this.deps.hasFolder(one.topic))
+      .filter((one) => this.deps.isCollection(one.topic))
       .map((one) => one.mediaId);
   }
 

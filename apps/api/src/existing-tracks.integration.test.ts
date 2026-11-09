@@ -11,10 +11,15 @@ import {
   leaseKb,
   publishedTracks,
   publisherMac,
+  SPEECH,
   spendTheCap,
 } from '../test/kb-publish-harness.js';
 import { member } from '../test/media-harness.js';
-import { startWorld, type World } from '../test/track-items-harness.js';
+import {
+  startWorld,
+  transcribed,
+  type World,
+} from '../test/track-items-harness.js';
 
 afterEach(closeApp);
 
@@ -197,5 +202,64 @@ describe('Publicar no acervo as faixas que já existem (KBC-099 AC-16, scope of 
       (await call('POST', PUBLISH, { topics: ['hermetismo'] })).statusCode,
     ).toBe(403);
     expect((await hermetismoOf(world))?.queued).toBe(0);
+  });
+});
+
+describe('Transcrições pendentes, também nos acervos sem pasta no vault (KBC-114 AC-8)', () => {
+  /** Two tracks and a recording without tracks, moved into a collection made on the screen. */
+  async function screenCollection(): Promise<{ world: World; topic: string }> {
+    const world = await startWorld();
+    const { recording } = await publishedTracks(world);
+    const lone = await transcribed(world, SPEECH, { title: 'Sem faixas' });
+    const created = await world.media.owner('POST', '/api/v1/topics', {
+      title: 'UDV nova',
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const topic = created.json<{ slug: string }>().slug;
+    for (const id of [recording.id, lone.id]) {
+      const moved = await world.media.owner('PATCH', `/api/v1/media/${id}`, {
+        topic,
+        author: null,
+      });
+      expect(moved.statusCode, moved.body).toBe(200);
+    }
+    forgetDocuments(world.media);
+    return { world, topic };
+  }
+
+  it('counts tracks and recordings without tracks of a collection with no vault folder, and publishes them once', async () => {
+    const { world, topic } = await screenCollection();
+    const overview = await overviewOf(world);
+    expect(overview.collections.find((one) => one.topic === topic)).toEqual({
+      topic,
+      title: 'UDV nova',
+      tracks: 3,
+      toPublish: 3,
+      queued: 0,
+      published: 0,
+      failed: 0,
+    });
+
+    const done = await world.media.owner('POST', PUBLISH, { topics: [topic] });
+    expect(done.statusCode, done.body).toBe(200);
+    expect(done.json<PublishExistingTracksResult>()).toEqual({
+      queued: 3,
+      skipped: 0,
+    });
+    const mac = await publisherMac(world.media);
+    const job = await leaseKb(world.media, mac.token);
+    expect(job.topic).toBe(topic);
+    expect(job.items).toHaveLength(3);
+    expect(job.collection).toEqual({
+      title: 'UDV nova',
+      domain: 'esoterismo',
+      parent: null,
+    });
+
+    const again = await world.media.owner('POST', PUBLISH, { topics: [topic] });
+    expect(again.json<PublishExistingTracksResult>()).toEqual({
+      queued: 0,
+      skipped: 3,
+    });
   });
 });

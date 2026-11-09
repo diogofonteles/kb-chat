@@ -13,6 +13,7 @@ import {
   onTrack,
   publicationOf,
   runMac,
+  vaultText,
   type DocumentsWorld,
 } from '../test/documents-world.js';
 import {
@@ -176,9 +177,9 @@ describe('Where a track stands in the AI research (KBC-100 BR-4, FR-3)', () => {
     });
   });
 
-  it('AC-12: a collection created on the screen with no vault folder gets no job, and the track says so', async () => {
+  it('KBC-114 AC-6 (was KBC-100 AC-12): a collection created on the screen gets its documents, and the job tells the Mac how to create its vault folder', async () => {
     const docs = await documentsWorld();
-    const { world } = docs;
+    const { world, vault } = docs;
     const { recording, tracks } = await publishedTracks(world);
     const track = tracks[0];
     if (!track) throw new Error('no track');
@@ -195,23 +196,27 @@ describe('Where a track stands in the AI research (KBC-100 BR-4, FR-3)', () => {
     });
     expect(moved.statusCode, moved.body).toBe(200);
 
-    expect(await publicationOf(world, track.id)).toEqual({
-      state: 'out',
-      reason: 'no-folder',
-    });
-    // Only the removal from the old folder waits; nothing for the new collection.
-    expect(jobStatuses(world)).toEqual(['hermetismo:queued']);
+    expect((await publicationOf(world, track.id))?.state).not.toBe('out');
+    // The removal from the old folder and the writes into the new collection both wait.
+    expect(jobStatuses(world).sort()).toEqual(
+      [`${topic}:queued`, 'hermetismo:queued'].sort(),
+    );
     const jobs = await runMac(docs);
-    expect(jobs.map((job) => job.topic)).toEqual(['hermetismo']);
-    expect(jobs.flatMap((job) => job.items.map((item) => item.op))).toEqual([
-      'remove',
-      'remove',
-    ]);
-    expect(
-      world.media.started.catalog
-        .get('hermetismo')
-        ?.entries.has(documentPath(recording.id, track.id)),
-    ).toBe(false);
+    const fresh = jobs.find((job) => job.topic === topic);
+    expect(fresh?.collection).toEqual({
+      title: 'Coleção nova',
+      domain: 'esoterismo',
+      parent: null,
+    });
+    expect(fresh?.items.map((item) => item.op)).toContain('write');
+    // The rendered document is filed under the domain the Mac creates the topic with.
+    const written = await vaultText(
+      docs,
+      topic,
+      documentPath(recording.id, track.id),
+    );
+    expect(written).toContain('domain: esoterismo');
+    expect(vault).toBeTruthy();
   });
 
   it('a recording with tracks has no state of its own; an unknown or unseen media is 404', async () => {

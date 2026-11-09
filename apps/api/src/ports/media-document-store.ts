@@ -155,12 +155,12 @@ export interface MediaDocumentStorePort {
   recordSync(sync: VaultSyncRecord): void;
   lastSync(): VaultSyncRecord | null;
   /**
-   * Every published, ready, non-archived track with a transcript, in the library (or one
-   * collection), with a document or not: what "Publicar no acervo as faixas que já existem"
-   * goes over.
+   * Every published, ready, non-archived track with a transcript, and every such recording
+   * that never had a track (KBC-114 BR-8), in the library (or one collection), with a
+   * document or not: what "Publicar no acervo" goes over.
    */
   publishableTracks(topic?: string): readonly PublishableTrack[];
-  /** A collection's live tracks, by the state of their document (none yet included). */
+  /** A collection's publishable transcriptions, by the state of their document (none yet included). */
   countsOf(topic: string): DocumentCounts;
   /** The fingerprint the app last wanted for a track; null without a document. */
   desiredFingerprint(mediaId: string): string | null;

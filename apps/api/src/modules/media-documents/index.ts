@@ -27,3 +27,9 @@ export {
   type TrackDocumentInput,
 } from './track-document.js';
 export { MediaTrackShelf, type MediaTrackShelfDeps } from './track-shelf.js';
+export {
+  collectionOf,
+  domainOfTopic,
+  FALLBACK_DOMAIN,
+  toDomain,
+} from './vault-topic.js';
