@@ -43,7 +43,8 @@ export interface PublicationStatusDeps {
   readonly store: Pick<MediaStorePort, 'getMedia'>;
   /** Whether a media may have a document now (a published track, an untracked recording). */
   readonly isDocumentable: (media: MediaRecord | null) => boolean;
-  readonly hasFolder: (topic: string) => boolean;
+  /** Whether the app knows the collection (KBC-114 BR-6: every one it knows publishes). */
+  readonly isCollection: (topic: string) => boolean;
   /** What kb may still spend this month; zero is the media ceiling reached (BR-6). */
   readonly budgetUsd: () => number;
   readonly presence: () => PublisherPresence;
@@ -76,7 +77,7 @@ export class PublicationStatus {
   of(mediaId: string): TrackPublication | null {
     const media = this.deps.store.getMedia(mediaId);
     if (!media || !this.deps.isDocumentable(media)) return null;
-    if (!this.deps.hasFolder(media.topic))
+    if (!this.deps.isCollection(media.topic))
       return { state: 'out', reason: 'no-folder' };
     const row = this.deps.documents.statusOf(mediaId);
     const capped = this.deps.budgetUsd() <= 0;

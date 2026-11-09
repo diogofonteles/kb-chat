@@ -6,6 +6,7 @@ import { applyUsageRetention } from './modules/usage/index.js';
 import {
   assertAiConfigured,
   assertDeliveryConfigured,
+  assertLocalTranscriber,
   assertSignInConfigured,
   isHosted,
   loadConfig,
@@ -47,6 +48,7 @@ const config = loadConfig();
 assertSignInConfigured(config);
 assertDeliveryConfigured(config);
 assertAiConfigured(config);
+assertLocalTranscriber(config);
 const logger = createLogger(config.LOG_LEVEL);
 // Every provider key on disk is sealed with this key (ADR 0017).
 const secretsKey = await loadSecretsKey({

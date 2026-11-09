@@ -109,6 +109,8 @@ const config = loadConfig({
   KB_CHAT_MEDIA: 'on',
   KB_CHAT_MEDIA_DIR: mkdtempSync(join(tmpdir(), 'kbchat-e2e-media-')),
   KB_CHAT_MEDIA_WORKER_TOKEN: E2E_MEDIA_WORKER_TOKEN,
+  // "Ligar transcritor" (KBC-114), with the fake launchctl below: never the real one.
+  KB_CHAT_LOCAL_TRANSCRIBER: '1',
 });
 const logger = createLogger(config.LOG_LEVEL);
 const collections = new CollectionRegistry(
@@ -253,7 +255,11 @@ const media = await createMedia(
     consentKey: Buffer.alloc(32, 11),
     groqKey: Buffer.alloc(32, 12),
   },
-  { fetch: new FakeGroq().fetch },
+  {
+    fetch: new FakeGroq().fetch,
+    launchctl: () =>
+      Promise.resolve({ code: 0, output: 'kickstarted (E2E fake)' }),
+  },
 );
 const app = await buildApp({
   config,

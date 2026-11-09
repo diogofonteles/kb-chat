@@ -14,13 +14,14 @@ budget reached leaves documents "undecided" with exit 0, which is reported as in
 """
 
 import fcntl
+import logging
 import os
 import re
 import shutil
 import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -53,6 +54,7 @@ APP_KEYS = frozenset(
 )
 # A collection's vault folder, as the contract's topic slug (`hermetismo`, `a/b`).
 TOPIC = re.compile(r"^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*\Z")
+log = logging.getLogger("transcriber")
 UNDECIDED_ERROR = "kb left it undecided (budget reached): re-run"
 
 
@@ -67,6 +69,10 @@ class KbRun:
 
 class KbPort(Protocol):
     def run(self, step: str, topic: str, budget_usd: float) -> KbRun: ...
+
+    def new_topic(self, slug: str, title: str, domain: str) -> KbRun:
+        """`kb topic new`: the collection's folder in the vault (KBC-114)."""
+        ...
 
 
 class KbStepFailed(Exception):
@@ -114,6 +120,7 @@ class KbCli:
 
     vault: Path
     binary: str = "kb"
+    _version: str | None = field(default=None, init=False, repr=False, compare=False)
 
     def command(self, step: str, topic: str, budget_usd: float) -> list[str]:
         if step not in BUDGETED:
@@ -121,8 +128,39 @@ class KbCli:
         return [self.binary, step, topic, "--budget", f"{budget_usd:.4f}"]
 
     def run(self, step: str, topic: str, budget_usd: float) -> KbRun:
+        return self._run(self.command(step, topic, budget_usd))
+
+    def topic_command(self, slug: str, title: str, domain: str) -> list[str]:
+        """Each value its own argument: a title with spaces or a colon is never split."""
+        # `--` ends kb's flags: a title that starts with "-" is still a title.
+        return [self.binary, "topic", "new", "--", slug, title, domain]
+
+    def new_topic(self, slug: str, title: str, domain: str) -> KbRun:
+        """Scaffolds the folder (kb 0.0.12: local, spends nothing; refuses an existing one)."""
+        return self._run(self.topic_command(slug, title, domain))
+
+    def version(self) -> str | None:
+        """`kb version`'s first line ("0.0.12 (commit=…)"), for the status; None if it fails."""
+        if self._version is None:
+            try:
+                done = subprocess.run(
+                    [self.binary, "version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                return None
+            lines = done.stdout.strip().splitlines()
+            if done.returncode != 0 or not lines:
+                return None
+            self._version = lines[0][:100]
+        return self._version
+
+    def _run(self, command: list[str]) -> KbRun:
         done = subprocess.run(
-            self.command(step, topic, budget_usd),
+            command,
             cwd=self.vault,
             capture_output=True,
             text=True,
@@ -312,7 +350,13 @@ class KbPublisher:
         # Checked before anything changes: one unsafe path refuses the whole job.
         for item in items:
             self.file_of(topic, item["path"])
+        from .topic import ensure_topic
+
         with self.locked():
+            # A collection created on the screen gets its folder first (KBC-114).
+            made = ensure_topic(self.vault, topic, job.get("collection"), self.kb)
+            if made:
+                log.info("kb topic new: %s", ", ".join(made))
             written = self.write(topic, writes)
             files = dict(zip((item["path"] for item in writes), written, strict=True))
             self.remove(topic, items)

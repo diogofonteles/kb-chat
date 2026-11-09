@@ -181,7 +181,7 @@ function reconcilerOver(
   return new MediaDocumentReconciler({
     source: sourceOver(db, tracks),
     documents: new SqliteMediaDocumentStore(db),
-    hasFolder: () => true,
+    isCollection: () => true,
     mediaOf: (topic) => (topic === 'udv' ? [...tracks.keys()] : []),
     sweep: { pause, limit: LIMIT, slice: SLICE },
   });

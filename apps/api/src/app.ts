@@ -123,6 +123,11 @@ import {
   termRoutes,
   TermListService,
   transcriberRoutes,
+  TranscriberStatusBoard,
+  transcriberStatusRoutes,
+  STARTING_GRACE_MS,
+  TranscriberWaker,
+  watchForTranscriberWork,
   TranscriberService,
   TranscriptionService,
   TranscriptService,
@@ -616,6 +621,7 @@ interface WorkerWiring {
   readonly groq: GroqService;
   readonly documents: MediaDocuments;
   readonly corrections: TranscriptCorrectionService;
+  readonly statusBoard: TranscriberStatusBoard;
 }
 
 async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
@@ -633,6 +639,7 @@ async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
       cuts: publisher,
       kbResults: documents.kb,
       vaultSyncs: documents.status,
+      statusBoard: wiring.statusBoard,
       silences: wiring.silences,
       waveforms: wiring.waveforms,
       diarization: diarizationService(wiring),
@@ -929,13 +936,88 @@ async function registerTranscribers(
     transcribers: TranscriberService;
     media: MediaService;
     wiring: MediaWiring;
+    documents: MediaDocuments;
   },
-) {
+): Promise<TranscriberStatusBoard> {
   const { transcribers, media, wiring } = input;
   await app.register(transcriberRoutes({ transcribers, media }));
   await app.register(
     termRoutes(new TermListService({ transcripts: wiring.media.transcripts })),
   );
+  return registerTranscriberStatus(app, input);
+}
+
+/** A start the waker made in the last minutes, with no word since: still preparing (S-1). */
+function isStarting(
+  waker: TranscriberWaker | null,
+  board: TranscriberStatusBoard,
+): boolean {
+  const at = waker?.lastStartedAt();
+  return (
+    at != null &&
+    Date.now() - at.getTime() < STARTING_GRACE_MS &&
+    !board.saidSince(at)
+  );
+}
+
+/** The transcribers' own status for masters, and "Ligar transcritor" on the Mac (KBC-114). */
+async function registerTranscriberStatus(
+  app: FastifyInstance,
+  input: {
+    transcribers: TranscriberService;
+    documents: MediaDocuments;
+    wiring: MediaWiring;
+  },
+): Promise<TranscriberStatusBoard> {
+  const { transcribers, documents, wiring } = input;
+  const local = wiring.media.localTranscriber;
+  const kbWaiting = () => documents.status.queue().waiting;
+  // The waker reads the board and the board says what the waker sees: built in this order.
+  let waker: TranscriberWaker | null = null;
+  const board = new TranscriberStatusBoard({
+    transcribers,
+    kbWaiting,
+    canStartHere: local !== null,
+    attention: () => waker?.attention() ?? null,
+  });
+  const startingNow = () => isStarting(waker, board);
+  await app.register(transcriberStatusRoutes({ board, local, startingNow }));
+  waker = transcriberWaker(app, {
+    ...{ local, board, kbWaiting, wiring, documents },
+  });
+  watchForTranscriberWork(app, waker);
+  return board;
+}
+
+/** KBC-114 AC-15: the owner never starts the transcriber by hand, and only for work it takes. */
+function transcriberWaker(
+  app: FastifyInstance,
+  input: {
+    local: MediaDeps['localTranscriber'];
+    board: TranscriberStatusBoard;
+    kbWaiting: () => number;
+    wiring: MediaWiring;
+    documents: MediaDocuments;
+  },
+): TranscriberWaker {
+  const { local, board, kbWaiting, wiring, documents } = input;
+  return new TranscriberWaker({
+    local,
+    backlog: () => [
+      ...wiring.media.store.transcriberBacklog(),
+      { kind: 'kb-publish', ready: documents.kb.leasableJobs() },
+    ],
+    whyNot: (kind) => board.whyNot(kind),
+    // Documents the ceiling holds back: no lease gives them out, so they start nothing.
+    capped: () =>
+      documents.kb.budgetUsd() <= 0
+        ? [{ kind: 'kb-publish', ready: kbWaiting() }]
+        : [],
+    isOnline: () => board.anyOnline(),
+    stoppedSince: (at) => board.stoppedSince(at),
+    onWoken: (detail) => app.log.info({ detail }, 'transcriber: started'),
+    onError: (err) => app.log.warn({ err }, 'transcriber: could not start'),
+  });
 }
 
 /** Paired transcribers and the VM's token (ADR 0023). */
@@ -1068,13 +1150,11 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const publisher = trackPublisher(wiring, documents);
   const withDocuments = { ...wiring, documents };
   await registerPublication(app, { documents, media });
-  await registerTranscribers(app, { transcribers, media, wiring });
+  const setup = { transcribers, media, wiring, documents };
+  const statusBoard = await registerTranscribers(app, setup);
   await app.register(groqRoutes({ groq, media }));
-  await registerListening(app, withDocuments, {
-    media,
-    transcribers,
-    publisher,
-  });
+  const listeners = { media, transcribers, publisher };
+  await registerListening(app, withDocuments, listeners);
   const measures = await registerMeasures(app, { deps: wiring.media, media });
   await registerLibrary(app, { ...wiring, transcribers });
   await registerVoiceProfiles(app, { ...wiring, transcribers });
@@ -1086,7 +1166,9 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   });
   const { authors, media: deps } = wiring;
   const worker = { ...measures, media: deps, authors, transcribers, groq };
-  await registerWorker(app, { ...worker, publisher, documents, ...edited });
+  await registerWorker(app, {
+    ...{ ...worker, publisher, documents, ...edited, statusBoard },
+  });
   await registerMediaRoutes(app, { wiring, media, publisher, edited });
   startJanitor(app, { ...measures, ...edited, media: wiring.media, groq });
 }

@@ -3,7 +3,7 @@
  * transcriber marked "Publica no acervo" leases kb-publish jobs, and a fake Mac writes the
  * documents into the test's vault copy and plays kb (fixed facets, no model, no spend).
  */
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
@@ -83,6 +83,7 @@ export async function writeAsMac(
   vault: string,
   job: KbPublishJob,
 ): Promise<void> {
+  await scaffoldAsKb(vault, job);
   for (const item of job.items) {
     const file = join(vault, job.topic, item.path);
     if (item.op === 'remove') {
@@ -96,6 +97,22 @@ export async function writeAsMac(
     );
     await writeFile(file, classified, 'utf8');
   }
+}
+
+/** `kb topic new`, as the Mac runs it for a collection with no vault folder (KBC-114). */
+async function scaffoldAsKb(vault: string, job: KbPublishJob): Promise<void> {
+  const yaml = join(vault, job.topic, 'topic.yaml');
+  const exists = await access(yaml).then(
+    () => true,
+    () => false,
+  );
+  if (exists || !job.collection) return;
+  await mkdir(dirname(yaml), { recursive: true });
+  const { title, domain } = job.collection;
+  await writeFile(
+    yaml,
+    `slug: ${job.topic}\ntitle: ${title}\ndomain: ${domain}\n`,
+  );
 }
 
 export const kbResult = (

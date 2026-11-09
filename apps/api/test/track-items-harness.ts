@@ -95,13 +95,16 @@ export async function startWorld(
     readonly vault?: string;
     readonly env?: StartOptions['env'];
     readonly llm?: StartOptions['llm'];
+    readonly launchctl?: StartOptions['launchctl'];
   } = {},
 ): Promise<World> {
+  const { env, llm, launchctl } = options;
   const started = await start({
     media: true,
     vault: options.vault ?? (await vaultWithTwoCollections()),
-    ...(options.env ? { env: options.env } : {}),
-    ...(options.llm ? { llm: options.llm } : {}),
+    ...(env && { env }),
+    ...(llm && { llm }),
+    ...(launchctl && { launchctl }),
   });
   const ownerHeaders = await signIn(started, 'owner@example.com');
   const media: Media = {
@@ -110,8 +113,22 @@ export async function startWorld(
     ownerHeaders,
     mediaDir: join(started.state, 'media'),
   };
-  const { token } = await pair(media);
-  return { media, token };
+  return { media, token: await transcribingMac(media) };
+}
+
+/**
+ * The world's Mac only transcribes: a master unmarked "Publica no acervo", which comes on
+ * at pairing (KBC-114 BR-7); the tests that publish pair a Mac of their own.
+ */
+async function transcribingMac(media: Media): Promise<string> {
+  const { token, transcriber } = await pair(media);
+  const unmarked = await media.owner(
+    'PATCH',
+    `/api/v1/media/transcribers/${transcriber.id}`,
+    { kinds: ['transcribe'] },
+  );
+  expect(unmarked.statusCode, unmarked.body).toBe(200);
+  return token;
 }
 
 export async function convertLong(media: Media, job: WorkerJob): Promise<void> {

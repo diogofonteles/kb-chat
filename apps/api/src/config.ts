@@ -78,6 +78,14 @@ export const configSchema = z
      */
     KB_CHAT_AI_DEFAULTS: z.enum(['off', 'local']).default('off'),
     /**
+     * `1` when this API runs on the same Mac as the transcriber (development): masters get
+     * "Ligar transcritor", which runs `launchctl kickstart` (KBC-114 BR-10). Refused hosted.
+     */
+    KB_CHAT_LOCAL_TRANSCRIBER: z
+      .enum(['0', '1'])
+      .default('0')
+      .transform((value) => value === '1'),
+    /**
      * Master key of the provider keys kept on disk (AES-256-GCM, ADR 0016): 32 random bytes in
      * base64 (`openssl rand -base64 32`). Required in production.
      */
@@ -294,6 +302,17 @@ export function assertDeliveryConfigured(config: AppConfig): void {
   if (config.KB_CHAT_SMS === 'log')
     throw new Error(
       'KB_CHAT_SMS=log writes codes to the log: not in production',
+    );
+}
+
+/**
+ * Starting the Mac's transcriber from the API only works on that Mac: production runs on the
+ * VM, so the flag never boots there (KBC-114 BR-10).
+ */
+export function assertLocalTranscriber(config: AppConfig): void {
+  if (config.KB_CHAT_LOCAL_TRANSCRIBER && isHosted(config))
+    throw new Error(
+      'KB_CHAT_LOCAL_TRANSCRIBER=1 is for an API on the same Mac as the transcriber: not hosted',
     );
 }
 

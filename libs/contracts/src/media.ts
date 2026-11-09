@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { transcriptTermListSchema } from './media-terms.js';
 import { authorSchema, authorSlugSchema } from './authors.js';
-import { topicSlugSchema } from './topics.js';
+import { TOPIC_TITLE_MAX, topicSlugSchema } from './topics.js';
 import { MAX_VOICES, voiceIndexSchema } from './voice-index.js';
 import {
   voiceMatchSchema,
@@ -802,6 +802,36 @@ export const kbPublishItemSchema = z.discriminatedUnion('op', [
 ]);
 export type KbPublishItem = z.infer<typeof kbPublishItemSchema>;
 
+/** A kb domain (`espiritualidade`, `esoterismo`): one word, as `kb topic new` files it. */
+export const kbDomainSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,59}$/);
+
+/** A collection's name in the vault, up to what a title on the screen may hold (KBC-048). */
+const kbTopicTitleSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(TOPIC_TITLE_MAX)
+  // One line: kb would write a line break as a block in topic.yaml (review suggestion).
+  .regex(/^[^\p{Cc}\p{Zl}\p{Zp}]+$/u);
+
+/**
+ * What the Mac needs to create a collection's vault topic with `kb topic new` (KBC-114
+ * FR-2): its title and domain and, for a sub-collection, its parent's (created first when
+ * missing). The API still never writes the vault (Q7).
+ */
+export const kbCollectionSchema = z.object({
+  title: kbTopicTitleSchema,
+  domain: kbDomainSchema,
+  parent: z
+    .object({
+      slug: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+      title: kbTopicTitleSchema,
+      domain: kbDomainSchema,
+    })
+    .nullable(),
+});
+export type KbCollection = z.infer<typeof kbCollectionSchema>;
+
 /**
  * A leased kb-publish job: the collection's vault folder (`topic`), what to write there and
  * the most kb may spend on it (`budgetUsd`, passed as `--budget`).
@@ -815,6 +845,8 @@ export const kbPublishJobSchema = z.object({
   leaseMs: z.number().int().min(1),
   budgetUsd: z.number().min(0).max(KB_PUBLISH_MAX_BUDGET_USD),
   items: z.array(kbPublishItemSchema).min(1).max(KB_PUBLISH_MAX_ITEMS),
+  /** Additive (KBC-114): what `kb topic new` needs when the vault has no folder for it. */
+  collection: kbCollectionSchema.optional(),
 });
 export type KbPublishJob = z.infer<typeof kbPublishJobSchema>;
 
@@ -866,7 +898,10 @@ export const KB_PUBLISH_USD_PER_TRACK = 0.001;
 export const trackDocumentsCollectionSchema = z.object({
   topic: topicSlugSchema,
   title: z.string(),
-  /** Its published, non-archived tracks with a transcript. */
+  /**
+   * Its transcriptions that are, or are to be, documents: published, non-archived tracks
+   * and recordings that never had a track (KBC-114 BR-8), each with a transcript.
+   */
   tracks: z.number().int().min(0),
   /** Of those, the ones whose document is not in the vault as it is now. */
   toPublish: z.number().int().min(0),
@@ -1029,6 +1064,149 @@ export const transcriberListSchema = z.object({
   items: z.array(transcriberSchema),
 });
 export type TranscriberList = z.infer<typeof transcriberListSchema>;
+
+/* ---------- The transcriber's own status (KBC-114, ADR 0023 amendment 2026-11-09) ---------- */
+
+/** What a transcriber says it is doing; `offline` is the API's, when it stopped saying. */
+export const TRANSCRIBER_STATES = [
+  'idle',
+  'working',
+  'waiting',
+  'error',
+  /** Its last word as it exits: it runs only when needed (KBC-114 AC-18). */
+  'stopped',
+] as const;
+export const transcriberStateSchema = z.enum(TRANSCRIBER_STATES);
+export type TranscriberState = z.infer<typeof transcriberStateSchema>;
+
+/** A transcriber that sent no status for this long is shown as off (BR-9). */
+export const TRANSCRIBER_STATUS_STALE_MS = 2 * 60 * 1000;
+
+const workerJobLabelSchema = z.string().max(200);
+
+/** POST /api/v1/media-worker/status: the worker's heartbeat, every 30 s and on each change. */
+export const transcriberStatusReportSchema = z.strictObject({
+  state: transcriberStateSchema,
+  /** What it waits for, or why it failed, in a line. */
+  detail: z.string().max(300).nullable(),
+  /** The transcriber's version and its parameters' (`0.1.0 (2026-10-28.1)`). */
+  version: z.string().max(60),
+  kinds: z.array(mediaJobKindSchema).max(MEDIA_JOB_KINDS.length),
+  startedAt: z.iso.datetime(),
+  currentJob: z
+    .strictObject({
+      id: mediaJobIdSchema,
+      kind: mediaJobKindSchema,
+      label: workerJobLabelSchema,
+      startedAt: z.iso.datetime(),
+      progress: z.number().int().min(0).max(100).nullable(),
+    })
+    .nullable(),
+  /** The newest first. */
+  recentJobs: z
+    .array(
+      z.strictObject({
+        id: mediaJobIdSchema,
+        kind: mediaJobKindSchema,
+        label: workerJobLabelSchema,
+        outcome: z.enum(['done', 'failed', 'stopped']),
+        finishedAt: z.iso.datetime(),
+        detail: z.string().max(300).nullable(),
+      }),
+    )
+    .max(10),
+  lastError: z
+    .strictObject({ at: z.iso.datetime(), message: z.string().max(500) })
+    .nullable(),
+  /** Jobs it finished and failed since it started. */
+  counts: z.strictObject({
+    done: z.number().int().min(0),
+    failed: z.number().int().min(0),
+  }),
+  /** The kb vault on the Mac, when it publishes (KBC-099). */
+  vaultPath: z.string().max(500).nullable(),
+  kbVersion: z.string().max(100).nullable(),
+});
+export type TranscriberStatusReport = z.infer<
+  typeof transcriberStatusReportSchema
+>;
+
+/** The launchd service's label on the Mac (KBC-114 FR-7). */
+export const TRANSCRIBER_SERVICE_LABEL = 'br.com.nova-alexandria.transcriber';
+
+/**
+ * Why jobs of a kind wait with no transcriber taking them (review r2 S-2, N-2): none is
+ * paired, none is marked for it, the marked one could not load what it needs, or the media
+ * monthly ceiling stops publications.
+ */
+export const BLOCKED_REASONS = [
+  'none-paired',
+  'not-marked',
+  'not-installed',
+  'monthly-cap',
+] as const;
+export type BlockedReason = (typeof BLOCKED_REASONS)[number];
+
+/** One paired transcriber as masters see its status (KBC-114 FR-8, FR-10). */
+export const transcriberStatusItemSchema = z.object({
+  id: transcriberIdSchema,
+  name: z.string(),
+  kinds: z.array(mediaJobKindSchema),
+  lastSeenAt: z.iso.datetime().nullable(),
+  /** Its last status, or `offline` without one for TRANSCRIBER_STATUS_STALE_MS. */
+  state: z.enum(['idle', 'working', 'waiting', 'error', 'offline']),
+  report: transcriberStatusReportSchema
+    .extend({ receivedAt: z.iso.datetime() })
+    .nullable(),
+});
+export type TranscriberStatusItem = z.infer<typeof transcriberStatusItemSchema>;
+
+/** GET /api/v1/media/transcribers/status (masters). */
+export const transcriberStatusOverviewSchema = z.object({
+  items: z.array(transcriberStatusItemSchema),
+  /** Track documents waiting for the Mac (KBC-100's queue). */
+  kbQueue: z.object({ waiting: z.number().int().min(0) }),
+  /**
+   * How to turn it on, and whether this API can start it (development). Never a uv command:
+   * the service installs and starts itself (the owner, KBC-114 AC-17).
+   */
+  start: z.object({
+    label: z.string(),
+    startCommand: z.string(),
+    canStartHere: z.boolean(),
+  }),
+  /**
+   * Why work waits with the transcriber off (review BR-15, QA F-1): kinds no paired
+   * transcriber takes, and work it was started for and took none of.
+   */
+  attention: z.object({
+    blocked: z.array(
+      z.object({
+        kind: mediaJobKindSchema,
+        ready: z.number().int().min(1),
+        reason: z.enum(BLOCKED_REASONS),
+      }),
+    ),
+    stuck: z
+      .object({
+        ready: z.number().int().min(1),
+        /** Started and took nothing, or launchctl could not start it (`detail` says why). */
+        reason: z.enum(['took-nothing', 'start-failed']),
+        detail: z.string().max(500).nullable(),
+      })
+      .nullable(),
+  }),
+});
+export type TranscriberStatusOverview = z.infer<
+  typeof transcriberStatusOverviewSchema
+>;
+
+/** POST /api/v1/media/transcribers/local/start: what `launchctl kickstart` said. */
+export const localTranscriberStartSchema = z.object({
+  ok: z.boolean(),
+  detail: z.string().max(500),
+});
+export type LocalTranscriberStart = z.infer<typeof localTranscriberStartSchema>;
 
 /** POST /api/v1/media/transcribers: the name the Mac goes by. */
 export const pairTranscriberRequestSchema = z.strictObject({

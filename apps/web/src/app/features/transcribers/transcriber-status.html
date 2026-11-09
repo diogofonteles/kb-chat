@@ -1,0 +1,189 @@
+<button
+  #chip
+  type="button"
+  class="chip"
+  [attr.data-state]="state()"
+  aria-haspopup="dialog"
+  [disabled]="!loaded() && !unavailable()"
+  (click)="open()"
+>
+  <span class="sign" aria-hidden="true">{{ icon() }}</span>
+  <span class="words">{{ text() }}</span>
+</button>
+
+<dialog
+  #dialog
+  class="dialog"
+  [attr.aria-labelledby]="titleId"
+  (close)="backToChip()"
+>
+  <h2 [id]="titleId">
+    @if (item(); as current) {
+      <ng-container i18n="@@transcriberStatus.title"
+        >Transcritor "{{ current.name }}"</ng-container
+      >
+    } @else {
+      <ng-container i18n="@@transcriberStatus.titleNone"
+        >Transcritor</ng-container
+      >
+    }
+  </h2>
+
+  @if (unavailable()) {
+    <p class="error-line" i18n="@@transcriberStatus.readFailed">
+      <span aria-hidden="true">⚠</span> Não consegui ler o status do transcritor
+      agora.
+    </p>
+  }
+  @for (line of attention(); track line) {
+    <p class="attention"><span aria-hidden="true">⚠</span> {{ line }}</p>
+  }
+  @if (item(); as current) {
+    <p class="state" [attr.data-state]="current.state">
+      <span aria-hidden="true">{{ icon() }}</span> {{ stateWord() }}
+      @if (report()?.detail; as detail) {
+        <span>— {{ detail }}</span>
+      }
+    </p>
+    <dl class="facts">
+      @if (currentJob(); as job) {
+        <dt i18n="@@transcriberStatus.currentJob">Trabalho atual</dt>
+        <dd>{{ job }}</dd>
+      }
+      <dt i18n="@@transcriberStatus.lastSeen">Visto por último</dt>
+      <dd>
+        @if (report(); as last) {
+          {{ time(last.receivedAt) }}
+        } @else if (current.lastSeenAt; as seen) {
+          {{ time(seen) }}
+        } @else {
+          <ng-container i18n="@@transcriberStatus.neverSeen"
+            >ainda não foi visto</ng-container
+          >
+        }
+      </dd>
+      @if (report(); as last) {
+        <dt i18n="@@transcriberStatus.counts">Desde que ligou</dt>
+        <dd i18n="@@transcriberStatus.countsValue">
+          {{ last.counts.done }} feitos · {{ last.counts.failed }} falharam
+          (ligado às {{ time(last.startedAt) }})
+        </dd>
+        <dt i18n="@@transcriberStatus.version">Versão</dt>
+        <dd>{{ last.version }}</dd>
+        <dt i18n="@@transcriberStatus.vault">Pasta do vault</dt>
+        <dd class="path">
+          @if (last.vaultPath; as vault) {
+            {{ vault }}
+          } @else {
+            <ng-container i18n="@@transcriberStatus.noVault"
+              >nenhuma: não publica no acervo</ng-container
+            >
+          }
+        </dd>
+        <dt i18n="@@transcriberStatus.kb">Versão do kb</dt>
+        <dd>
+          @if (last.kbVersion; as kb) {
+            {{ kb }}
+          } @else {
+            <ng-container i18n="@@transcriberStatus.noKb">sem kb</ng-container>
+          }
+        </dd>
+      }
+      <dt i18n="@@transcriberStatus.kbQueue">Na fila do acervo</dt>
+      <dd i18n="@@transcriberStatus.kbQueueValue">
+        {kbWaiting(), plural,
+          =0 {nada}
+          =1 {1 documento}
+          other {{{ kbWaiting() }} documentos}
+        }
+      </dd>
+    </dl>
+
+    @if (report()?.lastError; as error) {
+      <h3 i18n="@@transcriberStatus.lastError">Último erro</h3>
+      <p class="error-line">
+        <span aria-hidden="true">⚠</span> {{ time(error.at) }} —
+        {{ error.message }}
+      </p>
+    }
+
+    @if (report()?.recentJobs; as recent) {
+      @if (recent.length > 0) {
+        <h3 i18n="@@transcriberStatus.recent">Últimos trabalhos</h3>
+        <ul class="recent">
+          @for (job of recent; track job.id) {
+            <li>
+              {{ time(job.finishedAt) }} · {{ recentLabel(job) }} ·
+              <strong>{{ outcomeOf(job.outcome) }}</strong>
+              @if (job.detail; as detail) {
+                &ngsp;<span class="detail">— {{ detail }}</span>
+              }
+            </li>
+          }
+        </ul>
+      }
+    }
+  } @else if (!unavailable()) {
+    <p class="hint" i18n="@@transcriberStatus.pairFirst">
+      Pareie o Mac em Configurações → Transcritores: o serviço é instalado com o
+      pareamento e liga sozinho quando há trabalho.
+    </p>
+  }
+
+  @if (offline() && paired() && start(); as how) {
+    <h3 i18n="@@transcriberStatus.howToStart">Como ligar</h3>
+    @if (how.canStartHere) {
+      @if (attention().length === 0) {
+        <p class="hint" i18n="@@transcriberStatus.startsByItself">
+          Ele liga sozinho assim que um áudio espera por ele. Para ligar agora:
+        </p>
+      }
+      <button
+        type="button"
+        class="primary"
+        [disabled]="starting()"
+        (click)="startHere()"
+      >
+        @if (starting()) {
+          <ng-container i18n="@@transcriberStatus.starting"
+            >Ligando…</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@transcriberStatus.startHere"
+            >Ligar transcritor</ng-container
+          >
+        }
+      </button>
+    } @else {
+      <p class="hint" i18n="@@transcriberStatus.startsWithTheMac">
+        O transcritor roda no Mac do dono e liga sozinho com ele: deixe o Mac
+        ligado. Se o Mac estiver ligado e ele continuar desligado, no Terminal
+        do Mac:
+      </p>
+      <div class="copy-row">
+        <code class="code">{{ how.startCommand }}</code>
+        <button
+          type="button"
+          class="secondary"
+          (click)="copy()"
+          i18n="@@transcriberStatus.copyStart"
+        >
+          Copiar
+        </button>
+      </div>
+    }
+  }
+
+  <p class="notice" role="status">{{ notice() }}</p>
+
+  <div class="actions">
+    <button
+      type="button"
+      class="secondary"
+      (click)="close()"
+      i18n="@@transcriberStatus.close"
+    >
+      Fechar
+    </button>
+  </div>
+</dialog>

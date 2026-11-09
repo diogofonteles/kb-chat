@@ -44,6 +44,9 @@ import { PreparationSteps, stepTitle } from './preparation-steps.js';
 import { PreparationTracks } from './preparation-tracks.js';
 import { PreparationVoices } from './preparation-voices.js';
 import { PREPARATION_POLL_MS, PreparationWatch } from './preparation-watch.js';
+import { SessionStore } from '@core/auth/session-store.js';
+import { TranscriberStatus } from '@features/transcribers/transcriber-status.js';
+import { TranscriberStatusStore } from '@features/transcribers/transcriber-status-store.js';
 
 /** Sent a moment ago, the audio is still on its way to playable. */
 const CONVERTING: ReadonlySet<MediaStatus> = new Set([
@@ -78,10 +81,17 @@ function concludedText({ tracks, voices }: MediaPreparation): string {
     PreparationSteps,
     PreparationTracks,
     PreparationVoices,
+    TranscriberStatus,
   ],
   templateUrl: './preparation-page.html',
   styleUrls: ['./preparation-buttons.css', './preparation-page.css'],
-  providers: [PlanForm, PreparationWatch, TrackAudition, TrackTextSource],
+  providers: [
+    PlanForm,
+    PreparationWatch,
+    TrackAudition,
+    TrackTextSource,
+    TranscriberStatusStore,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:visibilitychange)': 'watch.resume()',
@@ -96,6 +106,8 @@ export class PreparationPage {
   private readonly pageTitle = inject(Title);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly watch = inject(PreparationWatch);
+  /** The transcriber's status, beside the steps that wait for it (KBC-114 AC-16; masters). */
+  protected readonly master = inject(SessionStore).isMaster;
   protected readonly form = inject(PlanForm);
   protected readonly audition = inject(TrackAudition);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');

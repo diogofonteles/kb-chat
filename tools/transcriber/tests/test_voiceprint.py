@@ -230,7 +230,7 @@ def test_a_failed_print_job_logs_the_type_of_the_error_and_not_its_message(fake_
         raise RuntimeError("tensor([0.1234, 0.5678])")
 
     w = worker(fake_api, embedder=explodes)
-    assert w.step() == "error"
+    assert w.step() == "job-error"
     assert "RuntimeError" in caplog.text
     assert "0.1234" not in caplog.text
     assert "0.1234" not in str(fake_api.bodies("fail"))

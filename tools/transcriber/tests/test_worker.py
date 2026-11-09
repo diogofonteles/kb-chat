@@ -15,6 +15,7 @@ from .conftest import JOB, TOKEN, FakeModel
 
 
 def worker(api, model=None, find_speech=None, decode=None, token=TOKEN, **kwargs) -> Worker:
+    kwargs.setdefault("idle_grace_s", 0.01)
     return Worker(
         api=ApiClient(api.url, lambda: token, "mac-test"),
         model=model or FakeModel(),
@@ -62,6 +63,66 @@ def test_an_empty_queue_is_idle(fake_api):
     assert worker(fake_api).step() == "idle"
     assert worker(fake_api).run(exit_when_idle=True) == 0
     assert fake_api.bodies("transcript") == []
+
+
+def test_exit_when_idle_waits_a_grace_for_the_next_stage_then_exits(fake_api, monkeypatch):
+    """On only when needed (the owner, 2026-11-09): one empty lease, a short grace (the next
+    stage of the same audio may be queued meanwhile), a second empty lease, and it exits."""
+    later = dict(JOB, id="44444444-4444-4444-8444-444444444444")
+    fake_api.jobs[:] = [dict(JOB)]
+    agent = worker(fake_api, idle_grace_s=0.05)
+    graces: list[float] = []
+    real_wait = agent.stop.wait
+
+    def wait(seconds):
+        graces.append(seconds)
+        if len(graces) == 1:
+            fake_api.jobs.append(later)
+        return real_wait(0)
+
+    monkeypatch.setattr(agent.stop, "wait", wait)
+    assert agent.run(exit_when_idle=True) == 0
+    assert len(fake_api.bodies("transcript")) == 2
+    leases = [c for c in fake_api.calls if c[1].endswith("/lease")]
+    # job, empty (grace: the next stage arrives), job, empty (grace), empty: gone
+    assert len(leases) == 5
+    assert graces == [0.05, 0.05]
+
+
+def test_exit_when_idle_gives_up_after_a_few_lease_errors(fake_api):
+    """No API: it does not sit in memory retrying; it exits with an error after 3 tries."""
+    fake_api.status["lease"] = 503
+    assert worker(fake_api, idle_grace_s=0.01).run(exit_when_idle=True) == 1
+    leases = [c for c in fake_api.calls if c[1].endswith("/lease")]
+    assert len(leases) == 3
+
+
+def test_failed_jobs_never_count_as_lease_errors(fake_api):
+    """Review BR-15: a bad job is given back and the worker goes on; only the API being out
+    of reach ends a run early. Four jobs that crash, then an empty queue: exit 0, not 1."""
+    fake_api.jobs[:] = [dict(JOB, id=f"4444444{n}-4444-4444-8444-444444444444") for n in range(4)]
+
+    def crash(_path):
+        raise RuntimeError("the decoder fell over")
+
+    agent = worker(fake_api, decode=crash)
+    assert agent.run(exit_when_idle=True) == 0
+    assert len(fake_api.bodies("fail")) == 4
+
+
+def test_exit_when_idle_exits_at_once_with_a_revoked_token(fake_api):
+    assert worker(fake_api, token="revoked" * 6).run(exit_when_idle=True) == 1
+
+
+def test_it_says_it_stopped_when_it_exits(fake_api):
+    """The API then knows it is off and starts it again for the next job."""
+    from transcriber.status import StatusReporter
+
+    fake_api.jobs.clear()
+    agent = worker(fake_api, idle_grace_s=0.01)
+    agent.reporter = StatusReporter(agent.api, every_s=60)
+    assert agent.run(exit_when_idle=True) == 0
+    assert fake_api.bodies("status")[-1]["state"] == "stopped"
 
 
 def test_a_revoked_token_logs_and_backs_off(fake_api, caplog):
@@ -165,14 +226,14 @@ def test_audio_that_is_not_ours_is_dropped(fake_api):
 
 def test_an_unreachable_api_backs_off():
     api = type("Api", (), {"url": "http://127.0.0.1:9"})()
-    assert worker(api).step() == "error"
+    assert worker(api).step() == "lease-error"
 
 
 def test_an_unexpected_error_gives_the_job_back_and_the_loop_goes_on(fake_api):
     def decode(path):
         raise KeyError("sample_rate")
 
-    assert worker(fake_api, decode=decode).step() == "error"
+    assert worker(fake_api, decode=decode).step() == "job-error"
     (fail,) = fake_api.bodies("fail")
     assert fail["failure"] == "conversion-failed"
     assert "KeyError" in fail["detail"]

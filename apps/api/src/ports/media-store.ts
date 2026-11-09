@@ -13,6 +13,12 @@ import type {
 /** Where a job is in the queue (ADR 0022 §2). */
 export type JobStatus = 'queued' | 'leased' | 'done' | 'failed' | 'dead';
 
+/** How many jobs of a kind a transcriber could lease now. */
+export interface TranscriberBacklog {
+  readonly kind: MediaJobKind;
+  readonly ready: number;
+}
+
 /** An item's transcription as stored: its newest transcribe job and current transcript. */
 export interface TranscriptionRecord {
   /** The newest transcribe job's status; null when none was ever made. */
@@ -226,6 +232,11 @@ export interface MediaStorePort {
   leaseJob(request: LeaseRequest): LeasedJob | null;
   /** Whether this worker holds a lease of the queue now (one job at a time, ADR 0023). */
   holdsLease(worker: string): boolean;
+  /**
+   * Jobs only the Mac's transcriber takes that it could lease now, by kind, under the lease's
+   * own predicate (KBC-114: the API starts it only for work it can do).
+   */
+  transcriberBacklog(): readonly TranscriberBacklog[];
   /** What a job is; null when it does not exist (anymore). */
   kindOfJob(jobId: string): MediaJobKind | null;
   /** The media item a job converts; null when the job does not exist (anymore). */

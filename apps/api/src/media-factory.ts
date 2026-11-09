@@ -1,3 +1,9 @@
+import {
+  LaunchctlLocalTranscriber,
+  execLaunchctl,
+  type LaunchctlRunner,
+} from './adapters/media/launchctl-local-transcriber.js';
+import type { LocalTranscriberPort } from './ports/local-transcriber.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import type { AppConfig } from './config.js';
@@ -136,6 +142,8 @@ export interface MediaDeps {
   readonly tokenKey: Buffer;
   /** Items created per minute per client (MEDIA_CREATE_RATE_LIMIT). */
   readonly createPerMinute: number;
+  /** "Ligar transcritor" on the transcriber's own Mac (KB_CHAT_LOCAL_TRANSCRIBER=1); else null. */
+  readonly localTranscriber: LocalTranscriberPort | null;
 }
 
 /** Keys derived for the media library, one per purpose (ADR 0017). */
@@ -152,6 +160,20 @@ export interface MediaSecrets {
 /** What the media library talks to outside (KBC-037): tests and E2E fake Groq. */
 export interface MediaOptions {
   readonly fetch?: typeof fetch;
+  /** `launchctl` for "Ligar transcritor" (KBC-114): tests and E2E pass a fake. */
+  readonly launchctl?: LaunchctlRunner;
+}
+
+/** The transcriber's LaunchAgent, when this API runs on its Mac (KBC-114 BR-10). */
+function localTranscriberOf(
+  config: AppConfig,
+  options: MediaOptions,
+): LocalTranscriberPort | null {
+  if (!config.KB_CHAT_LOCAL_TRANSCRIBER) return null;
+  return new LaunchctlLocalTranscriber({
+    run: options.launchctl ?? execLaunchctl,
+    uid: process.getuid?.() ?? 0,
+  });
 }
 
 /**
@@ -177,6 +199,7 @@ export async function createMedia(
     workerToken,
     tokenKey: secrets.tokenKey,
     createPerMinute: config.MEDIA_CREATE_RATE_LIMIT,
+    localTranscriber: localTranscriberOf(config, options),
     ai: mediaAi(config, stores.settings),
     groq: {
       queue: groqQueue,

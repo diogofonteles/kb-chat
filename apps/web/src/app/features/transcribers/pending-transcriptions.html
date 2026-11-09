@@ -1,0 +1,32 @@
+@if (visible()) {
+  <section class="pending" aria-labelledby="pending-title">
+    @if (pending() > 0) {
+      <p id="pending-title" class="headline">{{ headline() }}</p>
+      <p class="hint">{{ cost() }}</p>
+      @if (capSpent()) {
+        <p class="field-error" i18n="@@pending.capSpent">
+          <span aria-hidden="true">⚠</span> Teto mensal da mídia atingido: nada
+          é publicado até o mês que vem.
+        </p>
+      }
+      <div class="row">
+        <button
+          type="button"
+          class="primary"
+          [disabled]="busy() || capSpent()"
+          (click)="publish()"
+          i18n="@@pending.publish"
+        >
+          Publicar no acervo
+        </button>
+        <app-transcriber-status />
+      </div>
+    } @else {
+      <p id="pending-title" class="headline">{{ queuedLine() }}</p>
+      <div class="row">
+        <app-transcriber-status />
+      </div>
+    }
+    <p class="status" role="status">{{ notice() }}</p>
+  </section>
+}

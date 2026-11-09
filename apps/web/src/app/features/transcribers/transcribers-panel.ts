@@ -22,6 +22,8 @@ import {
   type UpdateTranscriberRequest,
 } from '@kb-chat/contracts';
 import { seenAtFormat } from '@core/i18n/date-formats.js';
+import { TranscriberStatus } from './transcriber-status.js';
+import { TranscriberStatusStore } from './transcriber-status-store.js';
 import {
   TranscribersApi,
   transcribersUrl,
@@ -68,13 +70,16 @@ const isTranscriberKind = (kind: string): kind is Kind =>
  */
 @Component({
   selector: 'app-transcribers-panel',
-  imports: [DatePipe],
+  imports: [DatePipe, TranscriberStatus],
+  providers: [TranscriberStatusStore],
   templateUrl: './transcribers-panel.html',
   styleUrls: ['../settings/settings-form.css', './transcribers-panel.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TranscribersPanel {
   private readonly api = inject(TranscribersApi);
+  /** The rows' status chips: read again with the list, so a new pairing has its own. */
+  private readonly status = inject(TranscriberStatusStore);
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly view = inject(DOCUMENT).defaultView;
@@ -339,6 +344,7 @@ export class TranscribersPanel {
     this.busy.set(false);
     this.notice.set(notice);
     this.listVersion.update((version) => version + 1);
+    this.status.reload();
   }
 
   private flashCopy(what: Copied, state: CopyState): void {

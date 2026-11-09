@@ -42,10 +42,11 @@ export interface TranscriberServiceDeps {
 }
 
 /**
- * Transcribers lease transcriptions only (ADR 0023 §2); the VM converts, measures silences
- * (KBC-044) and cuts tracks (KBC-068).
+ * A transcriber pairs for transcriptions and track documents (ADR 0023 §2; KBC-114 BR-7:
+ * "Publica no acervo" comes on, and the Mac asks for it only with a vault and kb); the VM
+ * converts, measures silences (KBC-044) and cuts tracks (KBC-068).
  */
-const TRANSCRIBER_KINDS: readonly MediaJobKind[] = ['transcribe'];
+const TRANSCRIBER_KINDS: readonly MediaJobKind[] = ['transcribe', 'kb-publish'];
 const VM_WORKER: WorkerIdentity = {
   leaseName: null,
   // `transcribe`: only the ones routed to Groq (KBC-037); the lease filters the rest.

@@ -3,10 +3,15 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen } from '@testing-library/angular';
-import type { Transcriber } from '@kb-chat/contracts';
+import type {
+  Transcriber,
+  TranscriberStatusItem,
+  TranscriberStatusOverview,
+} from '@kb-chat/contracts';
+import { TranscriberStatusStore } from './transcriber-status-store.js';
 import { TranscribersPanel } from './transcribers-panel.js';
 
 const URL = '/api/v1/media/transcribers';
@@ -22,12 +27,40 @@ const aTranscriber = (overrides: Partial<Transcriber> = {}): Transcriber => ({
   ...overrides,
 });
 
-async function renderPanel(items: Transcriber[] = []) {
+/** The status of each row comes from its own store (KBC-114): here, fixed. */
+const statusStore = (items: TranscriberStatusItem[] = []) => {
+  const overview = signal<TranscriberStatusOverview>({
+    items,
+    kbQueue: { waiting: 0 },
+    start: {
+      label: 'br.com.nova-alexandria.transcriber',
+      startCommand: 'launchctl kickstart …',
+      canStartHere: false,
+    },
+    attention: { blocked: [], stuck: null },
+  });
+  return {
+    overview,
+    items: () => overview().items,
+    lead: () => overview().items[0] ?? null,
+    item: (id: string) => overview().items.find((one) => one.id === id) ?? null,
+    reload: () => undefined,
+    failed: () => false,
+  };
+};
+
+async function renderPanel(
+  items: Transcriber[] = [],
+  statuses: TranscriberStatusItem[] = [],
+) {
   const result = await render(TranscribersPanel, {
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
+    ],
+    componentProviders: [
+      { provide: TranscriberStatusStore, useValue: statusStore(statuses) },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
@@ -46,7 +79,7 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
     );
   });
 
-  it('lists each one on or off in words, when it was last seen and what it transcribes', async () => {
+  it("lists when each was last seen and what it transcribes; on or off is the chip's alone (review UP-02)", async () => {
     await renderPanel([
       aTranscriber({
         online: true,
@@ -63,12 +96,13 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
       }),
     ]);
     const [first, second] = screen.getAllByRole('listitem');
-    expect(first?.textContent).toContain('Ligado');
+    // The legacy "Ligado" (seen within the hour) said the opposite of the chip after an
+    // exit when idle: the row shows one state, the chip's (here, no status: "Desligado").
+    expect(first?.textContent).not.toContain('Ligado');
     expect(first?.textContent).toContain(
       'visto por último em 03/11/2026 às 14:05',
     );
     expect(first?.textContent).toContain('transcrevendo "Palestra de 1998"');
-    expect(second?.textContent).toContain('Desligado');
     expect(second?.textContent).toContain('ainda não foi visto');
   });
 
@@ -116,6 +150,9 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
+      ],
+      componentProviders: [
+        { provide: TranscriberStatusStore, useValue: statusStore() },
       ],
     });
     const http = TestBed.inject(HttpTestingController);
@@ -247,6 +284,9 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
+      ],
+      componentProviders: [
+        { provide: TranscriberStatusStore, useValue: statusStore() },
       ],
     });
     const http = TestBed.inject(HttpTestingController);
@@ -444,5 +484,63 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
       http.expectOne(URL).flush({ items: [aTranscriber()] });
       await fixture.whenStable();
     });
+  });
+
+  it("shows each row's status chip, in words (KBC-114 AC-12)", async () => {
+    const mac = aTranscriber({
+      online: true,
+      kinds: ['transcribe', 'kb-publish'],
+    });
+    await renderPanel(
+      [mac],
+      [
+        {
+          id: mac.id,
+          name: mac.name,
+          kinds: mac.kinds,
+          lastSeenAt: null,
+          state: 'offline',
+          report: null,
+        },
+      ],
+    );
+    expect(
+      screen.getByRole('button', { name: 'Transcritor: Desligado' }),
+    ).toBeTruthy();
+  });
+
+  it('a transcriber just paired reads "Desligado" at once, and the status is read again', async () => {
+    const reloads: number[] = [];
+    const store = { ...statusStore(), reload: () => reloads.push(1) };
+    const result = await render(TranscribersPanel, {
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+      componentProviders: [
+        { provide: TranscriberStatusStore, useValue: store },
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(URL).flush({ items: [] });
+    await result.fixture.whenStable();
+    fireEvent.input(screen.getByLabelText(/Nome do transcritor/), {
+      target: { value: 'Mac novo' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Parear transcritor' }));
+    http.expectOne({ method: 'POST', url: URL }).flush({
+      transcriber: aTranscriber({ name: 'Mac novo' }),
+      token: 'nat_the-secret-token-of-the-mac-0123456789',
+    });
+    TestBed.tick();
+    http
+      .expectOne({ method: 'GET', url: URL })
+      .flush({ items: [aTranscriber({ name: 'Mac novo' })] });
+    await result.fixture.whenStable();
+    expect(reloads.length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole('button', { name: 'Transcritor: Desligado' }),
+    ).toBeTruthy();
   });
 });

@@ -52,6 +52,7 @@ import { ResearchThread } from '@features/research/research-thread.js';
 import { ViewStore, type ChatView } from './view-store.js';
 import { ViewSwitch } from './view-switch.js';
 import { MiniPlayer } from '@features/media/player/mini-player.js';
+import { PendingTranscriptions } from '@features/transcribers/pending-transcriptions.js';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
@@ -77,6 +78,7 @@ const isMediaUrl = (url: string): boolean =>
     DecimalPipe,
     RouterOutlet,
     MiniPlayer,
+    PendingTranscriptions,
   ],
   providers: [
     ChatStore,
@@ -98,6 +100,8 @@ export class ChatPage {
   protected readonly guest = computed(
     () => this.session.me()?.role === 'member',
   );
+  /** Transcriptions not yet documents, with "Publicar" (KBC-114 FR-6): masters only. */
+  protected readonly master = this.session.isMaster;
   private readonly injector = inject(Injector);
   private readonly view = inject(DOCUMENT).defaultView;
   /** Absent on the media pages (/midia), which render in place of the conversation. */

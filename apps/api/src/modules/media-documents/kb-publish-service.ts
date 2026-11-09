@@ -3,6 +3,7 @@ import {
   KB_PUBLISH_MAX_BUDGET_USD,
   KB_PUBLISH_MAX_ITEMS,
   type CompleteKbPublishRequest,
+  type KbCollection,
   type KbPublishItem,
   type KbPublishJob,
 } from '@kb-chat/contracts';
@@ -25,6 +26,8 @@ export interface KbPublishServiceDeps {
   readonly monthlyCapUsd: number;
   readonly leaseMs: number;
   readonly maxAttempts: number;
+  /** What the Mac needs to create the collection's vault topic (KBC-114 FR-2). */
+  readonly collectionOf?: (topic: string) => KbCollection | null;
   readonly now?: () => Date;
 }
 
@@ -68,6 +71,18 @@ export class KbPublishService {
   /** What kb may still spend this month, capped per job; zero leaves the queue waiting. */
   budgetUsd(): number {
     return Math.min(KB_PUBLISH_MAX_BUDGET_USD, this.remainingUsd());
+  }
+
+  /**
+   * Jobs a Mac could lease now (KBC-114 review r2 N-2): none with the media ceiling spent,
+   * since the lease then gives out nothing.
+   */
+  leasableJobs(): number {
+    if (this.budgetUsd() <= 0) return 0;
+    return this.deps.documents.leasableJobs({
+      now: this.now(),
+      maxAttempts: this.deps.maxAttempts,
+    });
   }
 
   /** The next waiting job, rendered now; `topic` keeps to one collection (E2E's fake Mac). */
@@ -127,7 +142,9 @@ export class KbPublishService {
     job: LeasedKbJob,
     { items, budgetUsd }: { items: KbPublishItem[]; budgetUsd: number },
   ): KbPublishJob {
+    const collection = this.deps.collectionOf?.(job.topic) ?? null;
     return {
+      ...(collection && { collection }),
       id: job.id,
       leaseId: job.leaseId,
       kind: 'kb-publish',

@@ -64,9 +64,48 @@ The recipe is the one measured in KBC-063, not a calibrated one (threshold 0.4 a
 
 ## Track documents in the collection (KBC-099)
 
-**kb spends on the owner's key: off unless you turn it on, at both ends.** With a vault path (`transcriber pair --vault ~/dev/personal/hermetismo`, or `KB_CHAT_VAULT`) and `kb` on PATH, the worker asks for `kb-publish` jobs, and the API gives them only to a transcriber marked **Publica no acervo** in Transcritores. A job carries a collection's rendered track documents; the worker takes `<vault>/.kb-chat-publish.lock`, writes each one under `<vault>/<collection>/raw/media/`, then runs `kb classify <collection>`, `kb link <collection>` and `kb index --topic <collection>`, each with `--budget` (what is left of the media monthly cap, at most US$ 0.50). A step that fails fails the job with kb's output; the files stay and the next job runs kb again. `transcriber run --no-kb-publish` keeps the worker out of it. The owner's `sync-vault.sh` takes the documents to production.
+**kb spends on the owner's key, under the media monthly cap.** Publishing is on by default (KBC-114): with a vault path (`transcriber pair --vault ~/dev/personal/hermetismo`, `service install --vault`, or `KB_CHAT_VAULT`) and `kb` on PATH, the worker asks for `kb-publish` jobs, and the API gives them to a transcriber marked **Publica no acervo** in Transcritores, which a new pairing is by default. `transcriber run --no-kb-publish` (or unmarking it in Transcritores) keeps a Mac out of it. A job carries a collection's rendered track documents; the worker takes `<vault>/.kb-chat-publish.lock`, writes each one under `<vault>/<collection>/raw/media/`, then runs `kb classify <collection>`, `kb link <collection>` and `kb index --topic <collection>`, each with `--budget` (what is left of the media monthly cap, at most US$ 0.50). A step that fails fails the job with kb's output; the files stay and the next job runs kb again. `transcriber run --no-kb-publish` keeps the worker out of it. The owner's `sync-vault.sh` takes the documents to production.
+
+**The collection's folder is made here (KBC-114).** A collection created in the app has no
+folder in the vault until its first document. Each `kb-publish` job carries the collection's
+`title`, `domain` and `parent`; under the lock, before writing, the worker checks
+`<vault>/<collection>/topic.yaml` and, only when it is missing, runs
+`kb topic new <slug> <title> <domain>` (a sub-collection `parent/child` inside its parent's
+folder, the parent first when it is missing too, as kb lays out `udv/palavra-do-mestre`). A
+folder with `topic.yaml` is never scaffolded again; a folder without it, a slug that is not a
+collection's, a parent that does not match or a path outside the vault fails the job with the
+reason and writes nothing.
 
 **Pending:** the commands follow ADR 0035 §3; the flags, the receipts' spend format and whether kb 0.0.12 classifies a file it did not ingest are checked by the owner's spike on a vault copy (it spends money). If it does not, the fallback is `kb ingest file --force` (ADR 0035 option 5).
+
+## In the background (KBC-114)
+
+The worker runs as a LaunchAgent, only when needed (the owner's rule: never on for nothing): launchd runs `transcriber run --exit-when-idle` once at login, with no `KeepAlive`; it drains the queue, waits 30 s for the next stage and exits (also after 3 lease errors in a row, or at once with a revoked token), telling the app it `stopped`. An API on the same Mac (`KB_CHAT_LOCAL_TRANSCRIBER=1`) starts it again with `launchctl kickstart` whenever a job waits. `transcriber pair` installs it.
+
+```bash
+uv run --project tools/transcriber transcriber service install --vault ~/dev/personal/hermetismo
+uv run --project tools/transcriber transcriber service status
+tail -f ~/Library/Logs/nova-alexandria-transcriber/service.log
+uv run --project tools/transcriber transcriber service uninstall
+```
+
+`install` writes `~/Library/LaunchAgents/br.com.nova-alexandria.transcriber.plist` (label
+`br.com.nova-alexandria.transcriber`, `RunAtLoad`, no `KeepAlive`, `ExitTimeOut` 300 s) and loads it
+with `launchctl bootstrap gui/$UID`; installing again replaces it. The plist runs this
+checkout with `uv run --extra diarize --extra voiceprint` (`--extra` is repeatable and
+replaces the default): `uv run` installs a missing extra by itself before the worker starts,
+and the worker tells the app it is getting ready while the models load. The label is the one
+the owner's Mac already runs; installing again updates that agent, and one left under the old
+label (`com.nova-alexandria.transcriber`) is stopped and removed. It sets `KB_CHAT_VAULT` (from
+`--vault`, which is also kept in the config, or the paired one) and a `PATH` with the folders
+of `uv`, `kb` and `ffmpeg`. The token is never in it: it stays in the Keychain. `--no-load`
+only writes the file. To restart it: `launchctl kickstart -k gui/$(id -u)/br.com.nova-alexandria.transcriber`.
+
+The worker tells the app what it is doing (`POST /api/v1/media-worker/status`): idle, working
+on a job (with its progress), waiting (the vault's lock held by another publication) or an
+error, with its version, the last 10 jobs, counts since it started, the last error, the vault
+path and kb's version. It sends it on every change and every 30 s; masters see it in
+**Configurações → Transcritores** and where publishing is triggered.
 
 ## Run
 
@@ -76,14 +115,7 @@ uv run --project tools/transcriber transcriber run --once           # at most on
 uv run --project tools/transcriber transcriber run --exit-when-idle # until the queue is empty
 ```
 
-To run it while the Mac is awake, install the launchd agent (edit the two paths first):
-
-```bash
-cp tools/transcriber/launchd/com.nova-alexandria.transcriber.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.nova-alexandria.transcriber.plist
-tail -f ~/Library/Logs/nova-alexandria-transcriber.log
-launchctl bootout gui/$UID/com.nova-alexandria.transcriber          # stop it
-```
+To keep it on in the background, install the macOS service (next section).
 
 SIGTERM (launchctl bootout, Ctrl-C) stops between chunks without uploading; the job's lease
 expires and the API puts it back in the queue. A track transcribed whole (under 40 % speech,

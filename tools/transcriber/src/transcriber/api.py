@@ -164,6 +164,12 @@ class ApiClient:
         if status != 204:
             raise ApiError(f"vault-sync answered {status}")
 
+    def report_status(self, status: dict) -> None:
+        """The worker's sign of life for the app (KBC-114 FR-8): state, job, counts."""
+        status_code, _ = self._post("/api/v1/media-worker/status", status)
+        if status_code != 204:
+            raise ApiError(f"status answered {status_code}")
+
     def fail(self, job: dict, failure: str, detail: str, spend_usd: float = 0.0) -> bool:
         """Gives the job back; a kb-publish job also says what kb spent before it failed."""
         body: dict = {"failure": failure, "detail": detail[:2000]}

@@ -25,6 +25,9 @@
         [processed]="prep.next !== null"
         [mediaId]="id()"
       />
+      @if (master()) {
+        <app-transcriber-status class="transcriber" />
+      }
       @if (!choosing()) {
         <a
           class="secondary leave"

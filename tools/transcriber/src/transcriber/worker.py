@@ -22,6 +22,8 @@ from .config import (
     DIARIZE_PARAMETERS_VERSION,
     ERROR_BACKOFF_S,
     HEARTBEAT_S,
+    IDLE_GRACE_S,
+    MAX_IDLE_ERRORS,
     PARAMETERS,
     PARAMETERS_VERSION,
     POLL_S,
@@ -31,6 +33,8 @@ from .config import (
 from .diarize import Diarizer, separate
 from .kb_publish import KbPublisher, KbStepFailed, UnsafePath, VaultBusy
 from .secret import TokenError
+from .status import StatusReporter, WorkerStatus
+from .topic import TopicConflict
 from .transcribe import Stopped, TokenCounter, WhisperModel, build_prompt, estimate_tokens
 from .transcribe import transcribe_track as run_track
 from .vad import SpeechFinder
@@ -46,6 +50,7 @@ from .voiceprint import (
 )
 
 REVOKED = "Token revogado; pareie de novo."
+VAULT_BUSY = "trava do vault ocupada por outra publicação"
 # No message of a numeric library near a print goes to a log or to `jobs.error`.
 NO_PRINT = "A voice print could not be made from these sources."
 log = logging.getLogger("transcriber")
@@ -84,6 +89,30 @@ class Worker:
     publisher: KbPublisher | None = None
     # The automatic sync with production (KBC-100): without a host, the owner syncs by hand.
     sync: VaultSync | None = None
+    # The sign of life the app shows to masters (KBC-114): kept always, sent with a reporter.
+    status: WorkerStatus = field(default_factory=WorkerStatus)
+    reporter: StatusReporter | None = None
+    # `--exit-when-idle`: a second empty lease this long after the first one ends the run,
+    # and this many lease errors in a row end it too (the owner: never on for nothing).
+    idle_grace_s: float = IDLE_GRACE_S
+    max_idle_errors: int = MAX_IDLE_ERRORS
+
+    def __post_init__(self) -> None:
+        self.status.kinds = self.kinds
+
+    def _say(self, state: str, detail: str | None = None) -> None:
+        """A new state goes to the app at once; the same one again waits for the beat."""
+        changed = (
+            self.status.error(detail or state)
+            if state == "error"
+            else self.status.set_state(state, detail)
+        )
+        if changed:
+            self._report()
+
+    def _report(self) -> None:
+        if self.reporter is not None:
+            self.reporter.send(self.status)
 
     @property
     def kinds(self) -> tuple[str, ...]:
@@ -107,33 +136,71 @@ class Worker:
             PARAMETERS_VERSION,
             ", ".join(self.kinds),
         )
+        if self.reporter is not None:
+            self.reporter.start(self.status)
+        try:
+            return self._loop(once=once, exit_when_idle=exit_when_idle)
+        finally:
+            if self.reporter is not None:
+                self.reporter.stop()
+                # The API knows at once that it is off, and starts it for the next job.
+                self.status.set_state("stopped")
+                self.reporter.send(self.status)
+
+    def _loop(self, *, once: bool, exit_when_idle: bool) -> int:
+        idle_once = False
+        errors = 0
         while not self.stop.is_set():
             outcome = self.step()
-            if outcome == "job" and once:
-                break
-            if outcome == "idle":
-                if exit_when_idle or once:
+            # Only the API out of reach counts: a job that broke is given back (review BR-15).
+            errors = errors + 1 if outcome == "lease-error" else 0
+            if outcome == "job":
+                idle_once = False
+                if once:
                     break
-                self.stop.wait(self.poll_s)
+            elif outcome == "idle":
+                if once:
+                    break
+                if exit_when_idle:
+                    # On only when needed (the owner): a grace for the next stage, then off.
+                    if idle_once:
+                        break
+                    idle_once = True
+                    self.stop.wait(self.idle_grace_s)
+                else:
+                    self.stop.wait(self.poll_s)
+            elif exit_when_idle and (outcome == "revoked" or errors >= self.max_idle_errors):
+                # Never sits in memory retrying: launchd or the API starts it again later.
+                log.error("transcriber stopped: the API cannot be used now")
+                return 1
             elif outcome == "revoked":
                 self.stop.wait(self.unauthorized_backoff_s)
-            elif outcome == "error":
+            elif outcome in ("lease-error", "job-error"):
                 self.stop.wait(self.error_backoff_s)
         log.info("transcriber stopped")
         return 0
 
     def step(self) -> str:
-        """One lease attempt: 'job', 'idle', 'revoked' or 'error'."""
+        """One lease attempt: 'job', 'idle', 'revoked', 'lease-error' (the API out of reach)
+        or 'job-error' (a job that broke: given back, never a reason to stop)."""
+        kinds = self._kinds_now()
         try:
-            job = self.api.lease(self._kinds_now())
+            job = self.api.lease(kinds)
         except (Unauthorized, TokenError) as err:
-            log.error(REVOKED if isinstance(err, Unauthorized) else str(err))
+            message = REVOKED if isinstance(err, Unauthorized) else str(err)
+            log.error(message)
+            self._say("error", message)
             return "revoked"
         except ApiError as err:
             log.warning("could not lease a job: %s", err)
-            return "error"
+            self._say("error", f"sem resposta da API: {err}")
+            return "lease-error"
         if job is None:
             self._sync_if_due()
+            if len(kinds) < len(self.kinds):
+                self._say("waiting", VAULT_BUSY)
+            else:
+                self._say("idle")
             return "idle"
         return self._run_job(job)
 
@@ -156,16 +223,26 @@ class Worker:
         try:
             self.process(job)
         except (Unauthorized, TokenError) as err:
-            log.error(REVOKED if isinstance(err, Unauthorized) else str(err))
+            message = REVOKED if isinstance(err, Unauthorized) else str(err)
+            log.error(message)
+            self.status.finish_job("stopped", message)
+            self._say("error", message)
             return "revoked"
         except ApiError as err:
             log.warning("job %s: the API failed: %s", job["id"], err)
-            return "error"
+            self.status.finish_job("failed", f"a API falhou: {err}")
+            self._say("error", f"a API falhou: {err}")
+            return "job-error"
         # One bad job must not stop the Mac's worker: it is given back, the loop goes on.
         except Exception as err:
             self._log_crash(job, err)
             self._report_crash(job, err)
-            return "error"
+            detail = NO_PRINT if job["kind"] == "voice-profile" else f"{type(err).__name__}: {err}"
+            self.status.finish_job("failed", detail)
+            self._say("error", detail)
+            return "job-error"
+        self.status.finish_job("done")
+        self._report()
         return "job"
 
     @staticmethod
@@ -174,6 +251,11 @@ class Worker:
             log.error("job %s: unexpected failure: %s", job["id"], type(err).__name__)
         else:
             log.exception("job %s: unexpected failure", job["id"])
+
+    def _fail(self, job: dict, failure: str, detail: str, spend_usd: float = 0.0) -> bool:
+        """Gives the job back with why, and the status counts it as failed."""
+        self.status.job_failed(detail)
+        return self.api.fail(job, failure, detail, spend_usd=spend_usd)
 
     def _report_crash(self, job: dict, err: Exception) -> None:
         """Gives the job back as retryable; the lease would expire anyway if this fails."""
@@ -188,6 +270,8 @@ class Worker:
     def process(self, job: dict) -> None:
         stop = _JobStop(self.stop)
         progress = {"percent": 0}
+        self.status.start_job(job, progress)
+        self._report()
         done = threading.Event()
         beats = threading.Thread(target=self._beat, args=(job, progress, stop, done), daemon=True)
         beats.start()
@@ -231,7 +315,7 @@ class Worker:
             return
         except Exception as err:
             log.exception("job %s: transcription failed", job["id"])
-            self.api.fail(job, "conversion-failed", f"{type(err).__name__}: {err}")
+            self._fail(job, "conversion-failed", f"{type(err).__name__}: {err}")
             return
         elapsed_ms = int((time.monotonic() - started) * 1000)
         self._upload(job, terms, result, elapsed_ms, stop)
@@ -242,13 +326,13 @@ class Worker:
             raise RuntimeError("leased a kb-publish job without a vault and kb")
         try:
             result = self.publisher.publish(job)
-        except (KbStepFailed, VaultBusy, UnsafePath) as err:
+        except (KbStepFailed, VaultBusy, UnsafePath, TopicConflict) as err:
             log.error("job %s: publishing failed: %s", job["id"], err)
             # What kb spent before it failed is booked on the media ledger (ADR 0035 §11).
             spent = err.spent if isinstance(err, KbStepFailed) else 0.0
             # kb may pass --budget by one call; the API takes at most the job's budget.
             spent = min(spent, float(job["budgetUsd"]))
-            self.api.fail(job, "conversion-failed", str(err)[-2_000:], spend_usd=spent)
+            self._fail(job, "conversion-failed", str(err)[-2_000:], spend_usd=spent)
             return
         progress["percent"] = 100
         # The vault changed on this Mac whatever happens to the lease: production follows.
@@ -274,7 +358,7 @@ class Worker:
             turns = separate(pcm, diarizer=self.diarizer, voices=job.get("voices"), scratch=work)
         except Exception as err:
             log.exception("job %s: voice separation failed", job["id"])
-            self.api.fail(job, "conversion-failed", f"{type(err).__name__}: {err}")
+            self._fail(job, "conversion-failed", f"{type(err).__name__}: {err}")
             return
         progress["percent"] = 100
         if stop.is_set():
@@ -353,7 +437,7 @@ class Worker:
         except Stopped:
             log.warning("job %s stopped: nothing uploaded", job["id"])
         except ValueError:
-            self.api.fail(job, "conversion-failed", NO_PRINT)
+            self._fail(job, "conversion-failed", NO_PRINT)
         finally:
             hold.drop()
 
@@ -383,7 +467,7 @@ class Worker:
             return self.decode(audio)
         except InvalidAudio as err:
             log.error("job %s: the audio cannot be decoded", job["id"])
-            self.api.fail(job, "invalid-audio", str(err))
+            self._fail(job, "invalid-audio", str(err))
             return None
 
     def _upload(self, job: dict, terms: dict, result, elapsed_ms: int, stop: _JobStop) -> None:

@@ -54,7 +54,7 @@ Como quem edita o acervo de áudio, quero que toda mudança numa faixa chegue so
 - **AC-9** (BR-3): Given 10 mudanças na mesma faixa em 1 min, Then sai no máximo um job em curso e um na fila, e o documento final tem o último estado.
 - **AC-10** (BR-5, negativo): Given o kb falhando 4 vezes, Then o estado é **Falhou: <saída do kb resumida>**; **Tentar de novo** enfileira de novo.
 - **AC-11** (BR-6, negativo): Given o teto mensal da mídia atingido, Then nenhum job sai e o estado diz "Fora da pesquisa: teto mensal da mídia".
-- **AC-12** (BR-1 exceção do KBC-098): Given um acervo criado na tela sem pasta no vault, Then o estado diz "Fora da pesquisa: o acervo ainda não tem pasta no kb" e nenhum job sai.
+- **AC-12** (BR-1 exceção do KBC-098; *substituído em 2026-11-09 pelo KBC-114*: a autorização é implícita e o transcritor do Mac cria a pasta do acervo com `kb topic new`): Given um acervo criado na tela sem pasta no vault, Then o estado diz "Fora da pesquisa: o acervo ainda não tem pasta no kb" e nenhum job sai.
 - **AC-13** (BR-7, FR-4, FR-5): Given uma mudança publicada, When a sincronização roda, Then a API não reinicia, um turno de pesquisa em curso termina e o catálogo de produção vê o fingerprint novo.
 - **AC-14** (BR-7, negativo): Given um deploy em curso, Then a sincronização espera a trava e não roda junto.
 - **AC-15** (acessibilidade): Given o estado na página da faixa, Then ele é texto (não só cor), anunciado em `role="status"` quando muda, e cabe em 390 px.

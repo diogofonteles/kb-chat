@@ -1,6 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
+  localTranscriberStartSchema,
+  type LocalTranscriberStart,
   mediaPublicationSchema,
   type MediaPublication,
   pairedTranscriberSchema,
@@ -45,7 +47,17 @@ export class TranscribersApi {
       .delete(`${transcribersUrl()}/${id}`)
       .pipe(map(() => undefined));
   }
+
+  /** "Ligar transcritor": only where the API runs on the transcriber's Mac (KBC-114). */
+  startLocal(): Observable<LocalTranscriberStart> {
+    return this.http
+      .post(`${transcribersUrl()}/local/start`, {})
+      .pipe(map((body) => localTranscriberStartSchema.parse(body)));
+  }
 }
+
+/** What each transcriber says it is doing (KBC-114), for masters. */
+export const transcriberStatusUrl = (): string => `${transcribersUrl()}/status`;
 
 /** "Faixas que já existem" (KBC-099): what each collection has to publish into the vault. */
 export const trackDocumentsUrl = (): string => '/api/v1/media/track-documents';

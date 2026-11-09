@@ -36,7 +36,8 @@ describe('Transcribers: pairing (KBC-036 FR-5, BR-1)', () => {
     expect(paired.token).toMatch(/^nat_[\w-]{40,}$/);
     expect(paired.transcriber).toMatchObject({
       name: 'Mac do dono',
-      kinds: ['transcribe'],
+      // KBC-114 BR-7: "Publica no acervo" comes on; the Mac asks only with a vault and kb.
+      kinds: ['transcribe', 'kb-publish'],
       lastSeenAt: null,
       online: false,
       currentJob: null,

@@ -47,6 +47,16 @@ const FAILED_SHOWN = 20;
 /** A track the renderer can make a document of: it has a transcript of its own. */
 const HAS_TRANSCRIPT = `EXISTS (SELECT 1 FROM transcripts t WHERE t.media_id = m.id)`;
 
+/**
+ * A transcription that is, or is to be, a document (KBC-114 BR-8): a live track, or a live
+ * recording that never had a track; either with a transcript of its own.
+ */
+const PUBLISHABLE = `((m.parent_media_id IS NOT NULL AND m.status = 'ready'
+  AND m.archived_at IS NULL) OR (${UNTRACKED_RECORDING})) AND ${HAS_TRANSCRIPT}`;
+
+/** A kb-publish job a Mac may lease: waiting, or leased and expired (taken back). */
+const KB_LEASABLE = `(status = 'queued' OR (status = 'leased' AND lease_until < ?))`;
+
 /** A document kb failed on this often waits for a new render (ADR 0035 §10: 4 attempts). */
 const MAX_DOCUMENT_ATTEMPTS = 4;
 
@@ -398,9 +408,8 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
     const rows = this.db
       .prepare(
         `SELECT m.id, m.topic FROM media m
-         WHERE parent_media_id IS NOT NULL AND status = 'ready' AND archived_at IS NULL
-           AND (? IS NULL OR topic = ?) AND ${HAS_TRANSCRIPT}
-         ORDER BY topic, parent_media_id, track_ordinal, id`,
+         WHERE ${PUBLISHABLE} AND (? IS NULL OR m.topic = ?)
+         ORDER BY m.topic, COALESCE(m.parent_media_id, m.id), m.track_ordinal, m.id`,
       )
       .all(topic ?? null, topic ?? null);
     return rows.map((row) => ({
@@ -419,8 +428,7 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
            COALESCE(SUM(d.state = 'published'), 0) AS published,
            COALESCE(SUM(d.state = 'failed'), 0) AS failed
          FROM media m LEFT JOIN media_documents d ON d.media_id = m.id
-         WHERE m.topic = ? AND m.parent_media_id IS NOT NULL AND m.status = 'ready'
-           AND m.archived_at IS NULL AND ${HAS_TRANSCRIPT}`,
+         WHERE m.topic = ? AND ${PUBLISHABLE}`,
       )
       .get(topic);
     return {
@@ -458,6 +466,17 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       .run(input.id, input.topic, at, at);
   }
 
+  leasableJobs(input: { now: Date; maxAttempts: number }): number {
+    // The lease's own predicate, without the expired leases it would bury first.
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS ready FROM kb_publish_jobs
+         WHERE ${KB_LEASABLE} AND NOT (status = 'leased' AND attempts >= ?)`,
+      )
+      .get(input.now.getTime(), input.maxAttempts);
+    return Number(row?.['ready'] ?? 0);
+  }
+
   lease(input: {
     worker: string;
     leaseId: string;
@@ -471,8 +490,7 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       const row = this.db
         .prepare(
           `SELECT id, topic, attempts FROM kb_publish_jobs
-           WHERE (status = 'queued' OR (status = 'leased' AND lease_until < ?))
-             AND (? IS NULL OR topic = ?)
+           WHERE ${KB_LEASABLE} AND (? IS NULL OR topic = ?)
            ORDER BY created_at, id LIMIT 1`,
         )
         .get(input.now.getTime(), input.topic ?? null, input.topic ?? null);

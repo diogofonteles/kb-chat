@@ -20,7 +20,7 @@ export interface ExistingTracksDeps {
   >;
   /** The media monthly ceiling (ADR 0035 §11). */
   readonly budget: { remainingUsd(): number; budgetUsd(): number };
-  /** A collection's title in the vault; null when it has no folder there. */
+  /** A collection's title; null for one the app does not know (KBC-114: with a vault folder or not). */
   readonly titleOf: (topic: string) => string | null;
   /** The publishing queue as masters see it (KBC-100 FR-3). */
   readonly queue?: () => PublicationQueue;
