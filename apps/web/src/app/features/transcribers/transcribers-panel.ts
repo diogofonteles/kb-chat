@@ -78,6 +78,8 @@ const isTranscriberKind = (kind: string): kind is Kind =>
 })
 export class TranscribersPanel {
   private readonly api = inject(TranscribersApi);
+  /** The rows' status chips: read again with the list, so a new pairing has its own. */
+  private readonly status = inject(TranscriberStatusStore);
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly view = inject(DOCUMENT).defaultView;
@@ -342,6 +344,7 @@ export class TranscribersPanel {
     this.busy.set(false);
     this.notice.set(notice);
     this.listVersion.update((version) => version + 1);
+    this.status.reload();
   }
 
   private flashCopy(what: Copied, state: CopyState): void {

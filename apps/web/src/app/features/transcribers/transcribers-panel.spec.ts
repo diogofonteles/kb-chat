@@ -285,6 +285,9 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
       ],
+      componentProviders: [
+        { provide: TranscriberStatusStore, useValue: statusStore() },
+      ],
     });
     const http = TestBed.inject(HttpTestingController);
     http.expectOne(URL).flush({}, { status: 500, statusText: 'Error' });
@@ -501,6 +504,41 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
         },
       ],
     );
+    expect(
+      screen.getByRole('button', { name: 'Transcritor: Desligado' }),
+    ).toBeTruthy();
+  });
+
+  it('a transcriber just paired reads "Desligado" at once, and the status is read again', async () => {
+    const reloads: number[] = [];
+    const store = { ...statusStore(), reload: () => reloads.push(1) };
+    const result = await render(TranscribersPanel, {
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+      componentProviders: [
+        { provide: TranscriberStatusStore, useValue: store },
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(URL).flush({ items: [] });
+    await result.fixture.whenStable();
+    fireEvent.input(screen.getByLabelText(/Nome do transcritor/), {
+      target: { value: 'Mac novo' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Parear transcritor' }));
+    http.expectOne({ method: 'POST', url: URL }).flush({
+      transcriber: aTranscriber({ name: 'Mac novo' }),
+      token: 'nat_the-secret-token-of-the-mac-0123456789',
+    });
+    TestBed.tick();
+    http
+      .expectOne({ method: 'GET', url: URL })
+      .flush({ items: [aTranscriber({ name: 'Mac novo' })] });
+    await result.fixture.whenStable();
+    expect(reloads.length).toBeGreaterThan(0);
     expect(
       screen.getByRole('button', { name: 'Transcritor: Desligado' }),
     ).toBeTruthy();

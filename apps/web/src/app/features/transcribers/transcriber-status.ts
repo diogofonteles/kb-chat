@@ -184,6 +184,9 @@ export class TranscriberStatus {
       return $localize`:@@transcriberStatus.unavailable:Transcritor: status indisponível`;
     if (this.stalled())
       return $localize`:@@transcriberStatus.stalled:Transcritor: trabalho parado`;
+    // A row's transcriber the status has not caught up with yet (just paired): off.
+    if (this.transcriberId() !== null && this.item() === null)
+      return `${$localize`:@@transcriberStatus.prefix:Transcritor`}: ${STATE_WORD.offline()}`;
     return chipText(this.item());
   });
   protected readonly report = computed<Report | null>(
