@@ -81,6 +81,10 @@ export const API_ERROR_CODES = [
   'TRANSCRIPT_CHANGED',
   /** A correction's text or batch the rules refuse (KBC-093 BR-3, BR-12). */
   'CORRECTION_INVALID',
+  /** A level with that code (ignoring case and accents) is already in the scale (KBC-103). */
+  'LEVEL_CODE_TAKEN',
+  /** AI research in a collection with levels waits for KBC-104 (non-masters, KBC-103 BR-10). */
+  'LEVELS_PENDING',
   'INTERNAL',
 ] as const;
 

@@ -33,11 +33,14 @@ describe('auth contracts', () => {
       isOwner: false,
       media: true,
     };
-    // An older API sends neither: nobody acts, and the account may not act as anyone.
+    // An older API sends none: nobody acts, the account may not act as anyone, and no
+    // collection has levels for it (KBC-103).
     expect(meSchema.parse(me)).toEqual({
       ...me,
       canActAs: false,
       actingAs: null,
+      levels: {},
+      levelsManager: false,
     });
     expect(meSchema.safeParse({ ...me, topics: ['../x'] }).success).toBe(false);
   });
