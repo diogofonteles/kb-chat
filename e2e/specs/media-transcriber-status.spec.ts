@@ -140,9 +140,8 @@ test('AC-9: a master sees the transcriptions that are not documents yet, publish
       button.click();
       button.click();
     });
-  await expect(notice.getByRole('status')).toContainText(
-    '2 transcrições na fila para o Mac',
-  );
+  await expect(notice.getByRole('status')).toContainText('Publicação pedida');
+  await expect(notice).toContainText('2 transcrições na fila para o Mac.');
   expect(posts).toHaveLength(1);
   await shot(page, 'pending-queued');
 

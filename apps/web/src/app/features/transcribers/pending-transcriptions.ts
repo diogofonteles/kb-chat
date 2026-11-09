@@ -127,7 +127,7 @@ export class PendingTranscriptions {
     this.busy.set(false);
     this.notice.set(
       queued > 0
-        ? $localize`:@@pending.done:${transcriptions(queued)}:count: na fila para o Mac. Elas viram documentos quando ele as publicar.`
+        ? $localize`:@@pending.done:Publicação pedida: elas viram documentos quando o Mac as publicar.`
         : $localize`:@@pending.nothing:Nada novo: ${transcriptions(skipped)}:count: já estavam no acervo ou na fila.`,
     );
     this.overview.reload();

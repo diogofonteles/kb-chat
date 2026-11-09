@@ -132,7 +132,7 @@ describe('PendingTranscriptions (KBC-114 AC-9)', () => {
     });
     await flushStatus(fixture, http);
     expect(screen.getByRole('status').textContent).toContain(
-      '3 transcrições na fila para o Mac',
+      'Publicação pedida',
     );
     expect(screen.getByText('3 transcrições na fila para o Mac.')).toBeTruthy();
   });

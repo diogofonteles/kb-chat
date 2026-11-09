@@ -107,7 +107,7 @@
               {{ time(job.finishedAt) }} · {{ recentLabel(job) }} ·
               <strong>{{ outcomeOf(job.outcome) }}</strong>
               @if (job.detail; as detail) {
-                <span class="detail">— {{ detail }}</span>
+                &ngsp;<span class="detail">— {{ detail }}</span>
               }
             </li>
           }
