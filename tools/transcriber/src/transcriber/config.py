@@ -40,6 +40,8 @@ HEARTBEAT_S: Final = 15.0
 # keeps the 1 minute of the consent with the API out of reach or answering late.
 PRINT_ACK_S: Final = 40.0
 POLL_S: Final = 30.0
+# The sign of life to the app while nothing changes (KBC-114 FR-8); a change goes at once.
+STATUS_EVERY_S: Final = 30.0
 UNAUTHORIZED_BACKOFF_S: Final = 600.0
 ERROR_BACKOFF_S: Final = 60.0
 

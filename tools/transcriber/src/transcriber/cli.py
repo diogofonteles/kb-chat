@@ -66,7 +66,7 @@ def run(args: argparse.Namespace) -> int:
     from .api import ApiClient
     from .audio import decode_pcm16k, ffmpeg_bin
     from .diarize import senko_or_none
-    from .kb_publish import KbPublisher, kb_or_none
+    from .status import StatusReporter, WorkerStatus
     from .vad import silero_speech
     from .voiceprint import ecapa_or_none
     from .worker import Worker
@@ -87,7 +87,8 @@ def run(args: argparse.Namespace) -> int:
         print(str(err), file=sys.stderr)
         return 2
     vault = os.environ.get("KB_CHAT_VAULT") or config.get("vault_path")
-    kb = None if args.no_kb_publish else kb_or_none(vault)
+    publisher = publisher_of(args, vault)
+    kb = publisher.kb if publisher else None
     model, count = _mlx()
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -107,12 +108,28 @@ def run(args: argparse.Namespace) -> int:
         embedder=None if args.no_voice_profiles else ecapa_or_none(),
         # KBC-099: with a vault and kb on this Mac; the API gives track documents only to a
         # transcriber marked "Publica no acervo" in Transcritores, and kb spends on its key.
-        publisher=KbPublisher(kb.vault, kb) if kb else None,
+        publisher=publisher,
+        # KBC-114: what this Mac is doing, shown to masters in the app.
+        status=WorkerStatus(
+            vault_path=str(publisher.vault) if publisher else None,
+            kb_version=getattr(publisher.kb, "version", lambda: None)() if publisher else None,
+        ),
+        reporter=StatusReporter(api),
     )
     if args.poll:
         worker.poll_s = args.poll
     worker.sync = vault_sync_of(args, config, kb)
     return worker.run(once=args.once, exit_when_idle=args.exit_when_idle)
+
+
+def publisher_of(args: argparse.Namespace, vault: str | None):
+    """Publishing is on by default (KBC-114 BR-7): a vault and kb on PATH are enough, with no
+    mark on this Mac; `--no-kb-publish` keeps it out. The API still gives kb-publish jobs only
+    to a transcriber marked "Publica no acervo", which a new pairing is by default."""
+    from .kb_publish import KbPublisher, kb_or_none
+
+    kb = None if args.no_kb_publish else kb_or_none(vault)
+    return KbPublisher(kb.vault, kb) if kb else None
 
 
 def vault_sync_of(args: argparse.Namespace, config: dict, kb, state_file: Path = SYNC_STATE_FILE):
@@ -127,6 +144,42 @@ def vault_sync_of(args: argparse.Namespace, config: dict, kb, state_file: Path =
     # What a previous run published and did not send is still pending; a restart alone is not.
     sync.load()
     return sync
+
+
+def service_of(**kwargs):
+    """This Mac's LaunchAgent, with the real launchctl (KBC-114)."""
+    from .service import LaunchctlCli, Service
+
+    return Service(home=Path.home(), uid=os.getuid(), launchctl=LaunchctlCli(), **kwargs)
+
+
+def service(args: argparse.Namespace) -> int:
+    """`transcriber service install|uninstall|status`: the worker kept on by launchd."""
+    from .service import ServiceError, describe
+
+    agent = service_of()
+    try:
+        if args.action == "install":
+            config = load_config(CONFIG_FILE)
+            vault = args.vault or os.environ.get("KB_CHAT_VAULT") or config.get("vault_path")
+            if vault:
+                vault = str(Path(vault).expanduser())
+            if args.vault:
+                save_config({**config, "vault_path": vault}, CONFIG_FILE)
+            extras = args.extra if args.extra is not None else ["diarize"]
+            path = agent.install(vault=vault, extras=extras, load=not args.no_load)
+            print(f"Serviço instalado: {path}")
+            if not vault:
+                print("Sem vault: este Mac não publica no acervo (use --vault).")
+        elif args.action == "uninstall":
+            agent.uninstall()
+            print("Serviço removido.")
+        else:
+            print("\n".join(describe(agent.status())))
+    except ServiceError as err:
+        print(str(err), file=sys.stderr)
+        return 1
+    return 0
 
 
 def _mlx():
@@ -181,6 +234,20 @@ def main(argv: list[str] | None = None) -> int:
         help="never sync the vault with production by itself (KBC-100)",
     )
     running.set_defaults(handler=run)
+    background = commands.add_parser(
+        "service", help="keep the worker on in the background with launchd (KBC-114)"
+    )
+    background.add_argument("action", choices=("install", "uninstall", "status"))
+    background.add_argument("--vault", help="the kb vault on this Mac (KB_CHAT_VAULT)")
+    background.add_argument(
+        "--extra",
+        action="append",
+        help="uv extras to run with (repeatable; default: diarize)",
+    )
+    background.add_argument(
+        "--no-load", action="store_true", help="only write the plist, do not load it"
+    )
+    background.set_defaults(handler=service)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     return args.handler(args)

@@ -91,6 +91,8 @@ class FakeKb:
 @pytest.fixture
 def vault(tmp_path: Path) -> Path:
     (tmp_path / "hermetismo" / "raw").mkdir(parents=True)
+    # A folder kb made: kb-publish never scaffolds it again (KBC-114).
+    (tmp_path / "hermetismo" / "topic.yaml").write_text("slug: hermetismo\n", encoding="utf-8")
     return tmp_path
 
 
