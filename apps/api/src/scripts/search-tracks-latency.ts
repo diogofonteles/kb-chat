@@ -200,33 +200,39 @@ async function searcherOf(db: DatabaseSync, tracks: number) {
   return { combined, shelf };
 }
 
+type Searcher = Awaited<ReturnType<typeof searcherOf>>;
+
+/** One timed search; adds the track cards it counted. */
+async function timedSearch(
+  { combined, shelf }: Searcher,
+  { q, mode }: { q: string; mode: SearchMode },
+): Promise<{ ms: number; tracks: number }> {
+  const viewer = {
+    mayHear: true,
+    seesTracks: true,
+    canSee: () => true,
+    tracks: shelf(),
+  };
+  const started = performance.now();
+  const found = await combined.search(TOPIC, { q, mode }, { viewer });
+  return { ms: performance.now() - started, tracks: found.trackTotal };
+}
+
 async function measure(
   db: DatabaseSync,
   tracks: number,
 ): Promise<Record<SearchMode, number>> {
-  const { combined, shelf } = await searcherOf(db, tracks);
+  const searcher = await searcherOf(db, tracks);
   const result = {} as Record<SearchMode, number>;
   let seen = 0;
   for (const mode of ['exact', 'semantic', 'all'] as const) {
     const samples: number[] = [];
-    for (let run = 0; run < RUNS; run++)
-      for (const q of QUERIES) {
-        const started = performance.now();
-        const found = await combined.search(
-          TOPIC,
-          { q, mode },
-          {
-            viewer: {
-              mayHear: true,
-              seesTracks: true,
-              canSee: () => true,
-              tracks: shelf(),
-            },
-          },
-        );
-        samples.push(performance.now() - started);
-        seen += found.trackTotal;
-      }
+    const queries = Array.from({ length: RUNS }, () => QUERIES).flat();
+    for (const q of queries) {
+      const timed = await timedSearch(searcher, { q, mode });
+      samples.push(timed.ms);
+      seen += timed.tracks;
+    }
     result[mode] = p95(samples);
   }
   process.stdout.write(`track cards counted over every search: ${seen}\n`);
