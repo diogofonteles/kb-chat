@@ -183,7 +183,13 @@ describe('LearningPanel (KBC-113 FR-7, T21)', () => {
   it('states in words: any context, turned off by undos, in conflict, no room', async () => {
     await renderPanel({
       rules: [
-        rule({ id: '1'.repeat(32), contextBefore: null, contextAfter: null }),
+        rule({
+          id: '1'.repeat(32),
+          contextBefore: null,
+          contextAfter: null,
+          applied: 1,
+        }),
+        rule({ id: '4'.repeat(32), applied: 0, undone: 0 }),
         rule({ id: '2'.repeat(32), state: 'auto-off', undone: 2 }),
         rule({
           id: '3'.repeat(32),
@@ -197,6 +203,16 @@ describe('LearningPanel (KBC-113 FR-7, T21)', () => {
       tokens: { manual: 224, learned: 0, limit: 224 },
     });
     expect(screen.getByText('em qualquer contexto')).toBeTruthy();
+    expect(
+      screen.getByText(
+        '3 correções em 2 gravações · aplicada 1 vez · desfeita 1',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText('3 correções em 2 gravações · ainda não aplicada'),
+    ).toBeTruthy();
+    // A plain "Ligada" is left to the switch.
+    expect(screen.queryByText('Ligada', { selector: '.state' })).toBeNull();
     expect(screen.getByText('Desligada: desfeita 2 vezes')).toBeTruthy();
     expect(screen.getByText('Em conflito com «Amanta»')).toBeTruthy();
     expect(

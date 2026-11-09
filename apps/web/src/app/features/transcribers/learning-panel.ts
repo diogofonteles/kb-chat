@@ -54,7 +54,12 @@ function countsText(rule: LearnedRule): string {
     rule.recordings === 1
       ? $localize`:@@learning.oneRecording:em 1 gravação`
       : $localize`:@@learning.recordings:em ${rule.recordings}:n: gravações`;
-  const applied = $localize`:@@learning.applied:aplicada ${rule.applied}:n: vezes`;
+  const applied =
+    rule.applied === 0
+      ? $localize`:@@learning.notApplied:ainda não aplicada`
+      : rule.applied === 1
+        ? $localize`:@@learning.appliedOnce:aplicada 1 vez`
+        : $localize`:@@learning.applied:aplicada ${rule.applied}:n: vezes`;
   const undone =
     rule.undone === 0
       ? ''
@@ -150,6 +155,11 @@ export class LearningPanel {
     const tokens = this.learning()?.tokens;
     return tokens ? Math.max(0, tokens.limit - tokens.manual) : 0;
   });
+
+  /** A plain "Ligada" is the switch's own label: the line says only what it adds. */
+  protected saysMore(rule: LearnedRule): boolean {
+    return rule.state !== 'on' || rule.switchedBy !== null;
+  }
 
   protected isOn(rule: LearnedRule): boolean {
     return rule.state === 'on';

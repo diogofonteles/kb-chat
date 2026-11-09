@@ -44,10 +44,10 @@ export function rawOf(
  */
 export async function seedTranscript(
   api: APIRequestContext,
-  input: { id: string; raw: ReturnType<typeof rawOf> },
+  input: { id: string; raw: ReturnType<typeof rawOf>; learn?: boolean },
 ): Promise<void> {
   const stored = await api.post(`/api/e2e/media/${input.id}/transcript`, {
-    data: { raw: input.raw },
+    data: { raw: input.raw, learn: input.learn ?? false },
     headers: CSRF,
   });
   expect(stored.status(), await stored.text()).toBe(204);

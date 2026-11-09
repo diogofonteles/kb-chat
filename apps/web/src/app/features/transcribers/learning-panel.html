@@ -33,10 +33,12 @@
                 </p>
                 <p class="hint">{{ contextText(rule) }}</p>
                 <p class="hint">{{ countsText(rule) }}</p>
-                <p class="state" [class.off]="!isOn(rule)">
-                  <span aria-hidden="true">{{ isOn(rule) ? '✓' : '⊘' }}</span>
-                  {{ stateText(rule) }}
-                </p>
+                @if (saysMore(rule)) {
+                  <p class="state" [class.off]="!isOn(rule)">
+                    <span aria-hidden="true">{{ isOn(rule) ? '✓' : '⊘' }}</span>
+                    {{ stateText(rule) }}
+                  </p>
+                }
                 @if (rule.examples.length > 0) {
                   <details class="examples">
                     <summary i18n="@@learning.examples">Exemplos</summary>
