@@ -1,6 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
-import { CSRF, expect, ownerApi, test } from './fixtures.js';
+import {
+  CSRF,
+  expect,
+  invite,
+  ownerApi,
+  pageAs,
+  test,
+  uniqueEmail,
+} from './fixtures.js';
 import { aCollection, uniqueTag, uploadReady } from './media-helpers.js';
 import { approve, seedDraft } from './tracks-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
@@ -74,6 +82,37 @@ async function screenCollectionWithTracks(
   if (!title) throw new Error(`no title for ${topic}`);
   return { topic, title };
 }
+
+test('QA F-3, AC-9: a member, even with every media permission, sees no pending notice nor status', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { topic, title } = await screenCollectionWithTracks(owner);
+  const email = uniqueEmail('membro-pendentes');
+  await invite(owner, email, {
+    topics: [topic],
+    features: ['search', 'research', 'media', 'media-edit', 'media-tracks'],
+  });
+  const browser = page.context().browser();
+  if (!browser) throw new Error('no browser');
+  const member = await pageAs(browser, email, page.viewportSize());
+  const asked: string[] = [];
+  member.on('request', (request) => {
+    if (/track-documents|transcribers\/status/.test(request.url()))
+      asked.push(request.url());
+  });
+  await member.goto('/');
+  // A new member meets the welcome first (the mobile menu sits under it).
+  const skip = member.getByRole('button', { name: 'Pular' });
+  if (await skip.isVisible().catch(() => false)) await skip.click();
+  await openCollection(member, title);
+  await expect(member.getByLabel('Sua pergunta')).toBeVisible();
+  await expect(member.locator('app-pending-transcriptions')).toHaveCount(0);
+  await expect(member.getByText(/transcrições ainda não são/)).toHaveCount(0);
+  expect(asked).toEqual([]);
+  await member.context().close();
+  await owner.dispose();
+});
 
 test('AC-16: the preparation page shows the transcriber status beside its steps', async ({
   page,

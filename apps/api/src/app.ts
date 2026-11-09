@@ -973,8 +973,23 @@ async function registerTranscriberStatus(
     },
   });
   await app.register(transcriberStatusRoutes({ board, local }));
-  // KBC-114 AC-15: the owner never starts the transcriber by hand, and only for work it takes.
-  waker = new TranscriberWaker({
+  waker = transcriberWaker(app, { local, board, kbWaiting, wiring });
+  watchForTranscriberWork(app, waker);
+  return board;
+}
+
+/** KBC-114 AC-15: the owner never starts the transcriber by hand, and only for work it takes. */
+function transcriberWaker(
+  app: FastifyInstance,
+  input: {
+    local: MediaDeps['localTranscriber'];
+    board: TranscriberStatusBoard;
+    kbWaiting: () => number;
+    wiring: MediaWiring;
+  },
+): TranscriberWaker {
+  const { local, board, kbWaiting, wiring } = input;
+  return new TranscriberWaker({
     local,
     backlog: () => [
       ...wiring.media.store.transcriberBacklog(),
@@ -986,8 +1001,6 @@ async function registerTranscriberStatus(
     onWoken: (detail) => app.log.info({ detail }, 'transcriber: started'),
     onError: (err) => app.log.warn({ err }, 'transcriber: could not start'),
   });
-  watchForTranscriberWork(app, waker);
-  return board;
 }
 
 /** Paired transcribers and the VM's token (ADR 0023). */

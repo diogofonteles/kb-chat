@@ -191,11 +191,6 @@
             <span class="item-name">{{ item.name }}</span>
             <app-transcriber-status [transcriberId]="item.id" />
             <span class="item-meta">
-              @if (item.online) {
-                <span class="state on" i18n="@@transcribers.on">Ligado</span>
-              } @else {
-                <span class="state" i18n="@@transcribers.off">Desligado</span>
-              }
               @if (item.lastSeenAt; as seen) {
                 <span i18n="@@transcribers.lastSeen"
                   >visto por último em {{ seen | date: seenAtFormat }}</span

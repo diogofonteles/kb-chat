@@ -3,7 +3,8 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { SessionStore } from '@core/auth/session-store.js';
 import { TestBed } from '@angular/core/testing';
 import { render, screen } from '@testing-library/angular';
 import type {
@@ -45,10 +46,10 @@ const STATUS_BODY: TranscriberStatusOverview = {
   kbQueue: { waiting: 0 },
   start: {
     label: 'br.com.nova-alexandria.transcriber',
-    installCommand: 'uv run …',
     startCommand: 'launchctl kickstart …',
     canStartHere: false,
   },
+  attention: { blocked: [], stuck: null },
 };
 
 /** Answers the next request to `url`, once the resource has sent it. */
@@ -82,6 +83,12 @@ async function flushStatus(
   await fixture.whenStable();
 }
 
+/** Who is signed in: a master unless a test says otherwise. */
+const session = (master: boolean) => ({
+  provide: SessionStore,
+  useValue: { isMaster: signal(master) },
+});
+
 async function renderIt(overview: TrackDocumentsOverview, topic = 'udv') {
   const result = await render(PendingTranscriptions, {
     inputs: { topic },
@@ -89,6 +96,7 @@ async function renderIt(overview: TrackDocumentsOverview, topic = 'udv') {
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
+      session(true),
     ],
   });
   const http = TestBed.inject(HttpTestingController);
@@ -159,5 +167,23 @@ describe('PendingTranscriptions (KBC-114 AC-9)', () => {
     });
     expect(button.disabled).toBe(true);
     expect(screen.getByText(/Teto mensal da mídia atingido/)).toBeTruthy();
+  });
+
+  it('QA F-3: a member sees no notice and asks for nothing (AC-9)', async () => {
+    const result = await render(PendingTranscriptions, {
+      inputs: { topic: 'udv' },
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        session(false),
+      ],
+    });
+    await result.fixture.whenStable();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectNone(DOCS);
+    http.expectNone(STATUS);
+    expect(screen.queryByText(/transcriç/)).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
   });
 });

@@ -72,12 +72,11 @@ const anOverview = (
   kbQueue: { waiting: 3 },
   start: {
     label: 'br.com.nova-alexandria.transcriber',
-    installCommand:
-      'uv run --project tools/transcriber transcriber service install --vault /Users/owner/dev/personal/hermetismo',
     startCommand:
       'launchctl kickstart -k gui/$(id -u)/br.com.nova-alexandria.transcriber',
     canStartHere: false,
   },
+  attention: { blocked: [], stuck: null },
   ...over,
 });
 
@@ -101,6 +100,72 @@ async function renderIt(
 }
 
 describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
+  it('review PD-15: a status that could not be read says so, and tries again', async () => {
+    const result = await render(TranscriberStatus, {
+      inputs: { transcriberId: null },
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        TranscriberStatusStore,
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    http
+      .expectOne(STATUS)
+      .flush({}, { status: 500, statusText: 'Internal Server Error' });
+    await result.fixture.whenStable();
+    const chip = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Transcritor: status indisponível',
+    });
+    expect(chip.disabled).toBe(false);
+    expect(chip.textContent).toContain('⚠');
+    expect(screen.queryByText('Nenhum transcritor pareado')).toBeNull();
+    fireEvent.click(chip);
+    http.expectOne(STATUS).flush(anOverview());
+    await result.fixture.whenStable();
+    expect(
+      screen.getByRole('button', { name: /Transcritor: Trabalhando/ }),
+    ).toBeTruthy();
+  });
+
+  it('QA F-1: says what work waits that no transcriber does, and what to mark', async () => {
+    const { http, fixture } = await renderIt(
+      anOverview({
+        items: [anItem({ state: 'offline', report: null })],
+        attention: { blocked: [{ kind: 'diarize', ready: 2 }], stuck: null },
+      }),
+    );
+    expect(
+      screen.getByRole('button', { name: 'Transcritor: trabalho parado' }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /trabalho parado/ }));
+    http.expectOne(STATUS).flush(
+      anOverview({
+        items: [anItem({ state: 'offline', report: null })],
+        attention: { blocked: [{ kind: 'diarize', ready: 2 }], stuck: null },
+      }),
+    );
+    await fixture.whenStable();
+    expect(screen.getByRole('dialog').textContent).toContain(
+      '2 trabalhos de Vozes esperam: nenhum transcritor separa vozes. Marque "Separa vozes" em Transcritores.',
+    );
+  });
+
+  it('QA F-1: says when it was started and took nothing, and that it waits for the queue to change', async () => {
+    const stuck = anOverview({
+      items: [anItem({ state: 'offline', report: null })],
+      attention: { blocked: [], stuck: { ready: 1 } },
+    });
+    const { http, fixture } = await renderIt(stuck);
+    fireEvent.click(screen.getByRole('button', { name: /trabalho parado/ }));
+    http.expectOne(STATUS).flush(stuck);
+    await fixture.whenStable();
+    expect(screen.getByRole('dialog').textContent).toContain(
+      'O transcritor ligou e não pegou o trabalho da fila (1)',
+    );
+  });
+
   it('says since when it is on, or off (AC-16)', async () => {
     await renderIt(
       anOverview({

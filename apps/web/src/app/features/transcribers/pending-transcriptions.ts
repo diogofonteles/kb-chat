@@ -18,6 +18,7 @@ import {
   TrackDocumentsApi,
   trackDocumentsUrl,
 } from '@core/media/transcribers-api.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { TranscriberStatus } from './transcriber-status.js';
 import { TranscriberStatusStore } from './transcriber-status-store.js';
 
@@ -58,9 +59,12 @@ export class PendingTranscriptions {
   /** The collection on screen. */
   readonly topic = input.required<string>();
 
-  private readonly overview = httpResource(() => trackDocumentsUrl(), {
-    parse: (body) => trackDocumentsOverviewSchema.parse(body),
-  });
+  /** Masters only (AC-9): a member never sees it, and nothing is asked for them. */
+  private readonly master = inject(SessionStore).isMaster;
+  private readonly overview = httpResource(
+    () => (this.master() ? trackDocumentsUrl() : undefined),
+    { parse: (body) => trackDocumentsOverviewSchema.parse(body) },
+  );
   private readonly collections = computed(() =>
     this.overview.hasValue()
       ? this.overview

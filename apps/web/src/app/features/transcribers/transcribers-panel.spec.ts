@@ -34,10 +34,10 @@ const statusStore = (items: TranscriberStatusItem[] = []) => {
     kbQueue: { waiting: 0 },
     start: {
       label: 'br.com.nova-alexandria.transcriber',
-      installCommand: 'uv run …',
       startCommand: 'launchctl kickstart …',
       canStartHere: false,
     },
+    attention: { blocked: [], stuck: null },
   });
   return {
     overview,
@@ -45,6 +45,7 @@ const statusStore = (items: TranscriberStatusItem[] = []) => {
     lead: () => overview().items[0] ?? null,
     item: (id: string) => overview().items.find((one) => one.id === id) ?? null,
     reload: () => undefined,
+    failed: () => false,
   };
 };
 
@@ -78,7 +79,7 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
     );
   });
 
-  it('lists each one on or off in words, when it was last seen and what it transcribes', async () => {
+  it("lists when each was last seen and what it transcribes; on or off is the chip's alone (review UP-02)", async () => {
     await renderPanel([
       aTranscriber({
         online: true,
@@ -95,12 +96,13 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
       }),
     ]);
     const [first, second] = screen.getAllByRole('listitem');
-    expect(first?.textContent).toContain('Ligado');
+    // The legacy "Ligado" (seen within the hour) said the opposite of the chip after an
+    // exit when idle: the row shows one state, the chip's (here, no status: "Desligado").
+    expect(first?.textContent).not.toContain('Ligado');
     expect(first?.textContent).toContain(
       'visto por último em 03/11/2026 às 14:05',
     );
     expect(first?.textContent).toContain('transcrevendo "Palestra de 1998"');
-    expect(second?.textContent).toContain('Desligado');
     expect(second?.textContent).toContain('ainda não foi visto');
   });
 

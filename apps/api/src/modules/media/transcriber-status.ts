@@ -108,13 +108,12 @@ export class TranscriberStatusBoard {
    * it runs with (an extra that did not install, a Mac without a vault), only those.
    */
   takers(): ReadonlySet<MediaJobKind> {
-    const kinds = new Set<MediaJobKind>();
-    for (const one of this.deps.transcribers.list()) {
-      const runs = this.reports.get(one.id)?.kinds;
-      for (const kind of one.kinds)
-        if (!runs || runs.includes(kind)) kinds.add(kind);
-    }
-    return kinds;
+    return new Set(
+      this.deps.transcribers.list().flatMap((one) => {
+        const runs = this.reports.get(one.id)?.kinds;
+        return one.kinds.filter((kind) => !runs || runs.includes(kind));
+      }),
+    );
   }
 
   /** Whether a transcriber said it stopped at or after this moment. */

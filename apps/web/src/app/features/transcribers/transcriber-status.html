@@ -4,7 +4,7 @@
   class="chip"
   [attr.data-state]="state()"
   aria-haspopup="dialog"
-  [disabled]="!loaded()"
+  [disabled]="!loaded() && !unavailable()"
   (click)="open()"
 >
   <span class="sign" aria-hidden="true">{{ icon() }}</span>
@@ -29,6 +29,15 @@
     }
   </h2>
 
+  @if (unavailable()) {
+    <p class="error-line" i18n="@@transcriberStatus.readFailed">
+      <span aria-hidden="true">⚠</span> Não consegui ler o status do transcritor
+      agora.
+    </p>
+  }
+  @for (line of attention(); track line) {
+    <p class="attention"><span aria-hidden="true">⚠</span> {{ line }}</p>
+  }
   @if (item(); as current) {
     <p class="state" [attr.data-state]="current.state">
       <span aria-hidden="true">{{ icon() }}</span> {{ stateWord() }}
@@ -114,7 +123,7 @@
         </ul>
       }
     }
-  } @else {
+  } @else if (!unavailable()) {
     <p class="hint" i18n="@@transcriberStatus.pairFirst">
       Pareie o Mac em Configurações → Transcritores e depois ligue o serviço com
       o comando abaixo.
@@ -132,9 +141,16 @@
         class="primary"
         [disabled]="starting()"
         (click)="startHere()"
-        i18n="@@transcriberStatus.startHere"
       >
-        Ligar transcritor
+        @if (starting()) {
+          <ng-container i18n="@@transcriberStatus.starting"
+            >Ligando…</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@transcriberStatus.startHere"
+            >Ligar transcritor</ng-container
+          >
+        }
       </button>
     } @else {
       <p class="hint" i18n="@@transcriberStatus.startsWithTheMac">

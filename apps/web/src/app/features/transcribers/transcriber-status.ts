@@ -79,6 +79,22 @@ const sinceOf = (item: TranscriberStatusItem): string | null => {
     : null;
 };
 
+/** What waits and who should take it, per kind (QA F-1): words and the mark to set. */
+const BLOCKED_WORDS: Partial<Record<MediaJobKind, (ready: number) => string>> =
+  {
+    transcribe: (ready) =>
+      $localize`:@@transcriberStatus.blockedTranscribe:${ready}:ready: transcrições esperam: nenhum transcritor está marcado para transcrever.`,
+    diarize: (ready) =>
+      $localize`:@@transcriberStatus.blockedDiarize:${ready}:ready: trabalhos de Vozes esperam: nenhum transcritor separa vozes. Marque "Separa vozes" em Transcritores.`,
+    'voice-profile': (ready) =>
+      $localize`:@@transcriberStatus.blockedVoice:${ready}:ready: perfis de voz esperam: nenhum transcritor calcula perfis de voz. Marque "Perfis de voz" em Transcritores.`,
+    'kb-publish': (ready) =>
+      $localize`:@@transcriberStatus.blockedPublish:${ready}:ready: documentos esperam publicação: nenhum transcritor publica no acervo. Marque "Publica no acervo" em Transcritores.`,
+  };
+
+const stuckText = (ready: number): string =>
+  $localize`:@@transcriberStatus.stuck:O transcritor ligou e não pegou o trabalho da fila (${ready}:ready:). Ele liga de novo quando a fila mudar.`;
+
 /** The chip's words for a transcriber (BR-9). */
 export function chipText(item: TranscriberStatusItem | null): string {
   if (!item)
@@ -125,6 +141,22 @@ export class TranscriberStatus {
     return id ? this.store.item(id) : this.store.lead();
   });
   protected readonly loaded = computed(() => this.store.overview() !== null);
+  /** The status could not be read (review PD-15): never a false "none paired". */
+  protected readonly unavailable = computed(
+    () => this.store.failed() && !this.loaded(),
+  );
+  /** Work waiting that the transcriber will not do by itself (QA F-1). */
+  protected readonly attention = computed(() => {
+    const seen = this.store.overview()?.attention;
+    if (!seen) return [];
+    return [
+      ...seen.blocked.map(
+        (one) =>
+          BLOCKED_WORDS[one.kind]?.(one.ready) ?? `${one.kind}: ${one.ready}`,
+      ),
+      ...(seen.stuck ? [stuckText(seen.stuck.ready)] : []),
+    ];
+  });
   protected readonly start = computed(
     () => this.store.overview()?.start ?? null,
   );
@@ -134,8 +166,26 @@ export class TranscriberStatus {
   protected readonly state = computed<State | 'none'>(
     () => this.item()?.state ?? 'none',
   );
-  protected readonly icon = computed(() => ICON[this.state()]);
-  protected readonly text = computed(() => chipText(this.item()));
+  /**
+   * Off, with work it will not take by itself: the summary chip (where work is triggered)
+   * says so before anything else; a row of Transcritores keeps its own state.
+   */
+  private readonly stalled = computed(
+    () =>
+      this.transcriberId() === null &&
+      (this.state() === 'offline' || this.state() === 'none') &&
+      this.attention().length > 0,
+  );
+  protected readonly icon = computed(() =>
+    this.unavailable() || this.stalled() ? '⚠' : ICON[this.state()],
+  );
+  protected readonly text = computed(() => {
+    if (this.unavailable())
+      return $localize`:@@transcriberStatus.unavailable:Transcritor: status indisponível`;
+    if (this.stalled())
+      return $localize`:@@transcriberStatus.stalled:Transcritor: trabalho parado`;
+    return chipText(this.item());
+  });
   protected readonly report = computed<Report | null>(
     () => this.item()?.report ?? null,
   );

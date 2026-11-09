@@ -180,3 +180,8 @@ h3 {
     margin-bottom: var(--space-2);
   }
 }
+
+.attention {
+  margin: 0 0 var(--space-2);
+  font-weight: 600;
+}
