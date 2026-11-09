@@ -11,7 +11,8 @@ export interface DocumentHome {
  * A collection and its sub-collections as one set of documents (ADR 0028, KBC-101 FR-5): a
  * sub-collection's document gets an id relative to the parent's folder (`<sub>/raw/x.md`,
  * the file's real path there, never one of the parent's own `raw/` or `wiki/` ids) and its
- * `home`. Reading `<parent>` + that id reads the same file.
+ * `home`. Reading `<parent>` + that id reads the same file. Where such an id is already one
+ * of the parent's (a sub-collection named `raw` or `wiki`), the parent's document is kept.
  */
 export class ScopeView {
   readonly entries: ReadonlyMap<string, CatalogEntry>;
@@ -21,16 +22,21 @@ export class ScopeView {
     readonly children: readonly TopicCatalog[],
   ) {
     const entries = new Map(root.entries);
-    for (const child of children)
-      for (const entry of child.entries.values()) {
-        const id = this.idOf(child.topic.slug, entry.id);
-        entries.set(id, {
-          ...entry,
-          id,
-          home: { topic: child.topic.slug, id: entry.id },
-        });
-      }
+    // A sub-collection named `raw` or `wiki` would name its documents like the parent's own:
+    // the parent's document stays, never swapped for another one.
+    const scoped = children
+      .flatMap((child) => this.scopedOf(child))
+      .filter((entry) => !root.entries.has(entry.id));
+    for (const entry of scoped) entries.set(entry.id, entry);
     this.entries = entries;
+  }
+
+  /** A sub-collection's documents with their scope ids and homes. */
+  private scopedOf(child: TopicCatalog): CatalogEntry[] {
+    return [...child.entries.values()].map((entry) => {
+      const id = this.idOf(child.topic.slug, entry.id);
+      return { ...entry, id, home: { topic: child.topic.slug, id: entry.id } };
+    });
   }
 
   get topic(): string {
