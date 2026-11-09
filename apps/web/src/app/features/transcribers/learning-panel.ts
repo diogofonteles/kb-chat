@@ -1,8 +1,11 @@
 import { httpResource } from '@angular/common/http';
+import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  Injector,
+  afterNextRender,
   computed,
   inject,
   signal,
@@ -138,6 +141,8 @@ function termStateText(term: LearnedTerm): string {
 export class LearningPanel {
   private readonly api = inject(LearningApi);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
+  private readonly document = inject(DOCUMENT);
 
   protected readonly resource = httpResource(() => learningUrl(), {
     parse: (body) => transcriptLearningSchema.parse(body),
@@ -204,11 +209,14 @@ export class LearningPanel {
 
   /** The master's choice dropped: undos and the rules decide again (BR-8, BR-11). */
   protected automatic(kind: 'rules' | 'terms', id: string): void {
-    this.send(
-      { kind, id, enabled: null },
-      () =>
-        $localize`:@@learning.automaticDone:De volta ao automático. Vale para as próximas transcrições.`,
-    );
+    this.send({ kind, id, enabled: null }, () => {
+      // The button goes with the master's choice: the focus goes on to the switch (PD-01).
+      afterNextRender(
+        () => this.document.getElementById(`learning-${kind}-${id}`)?.focus(),
+        { injector: this.injector },
+      );
+      return $localize`:@@learning.automaticDone:De volta ao automático. Vale para as próximas transcrições.`;
+    });
   }
 
   protected isOn(rule: LearnedRule): boolean {

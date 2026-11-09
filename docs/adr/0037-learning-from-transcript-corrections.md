@@ -19,6 +19,13 @@ KBC-093 keeps an append-only log of word corrections (ADR 0034): who, when, the 
 6. **Global scope.** One set of rules and learned terms for every collection, like the term list.
 7. **Migration 30, expand only:** `transcript_corrections.rule_id` (nullable, indexed), `terms.source` (default `manual`), `learning_switches`. The previous image reads learned rows as ordinary corrections and learned terms as part of the list.
 
+## Amendment 2026-11-09 (review round 1)
+
+8. **What the transcriber said.** A rule's `before` is, word by word, the text before the oldest row still in force that wrote that word (a learned row included), over the span of the correction and of the older rows it overlaps. A person's correction that a newer one of theirs overlaps on the same transcript stops teaching; one on a newer version over a carried row stops the original from teaching.
+9. **A correction over a learned word is an undo.** A person's correction over a learned row, with other text than punctuation or case, counts as an undone replacement of that rule (rule 3) and never teaches from the learned text; the history no longer offers Desfazer on a learned row whose words no longer hold its text.
+10. **Context needs a word.** A segment's edge is kept in the rule but never matches alone: a side matches only when it is a word. A rule turned off (by a master or by undos) no longer competes for its place. Rules of the same `before` and different `after` with as many corrections that can meet on one occurrence are reported as a tie (`tiesWith`): there neither applies.
+11. **Rollback and the term list.** The previous image reads the terms of a version without `source` and would save the learned ones as the masters' if a master saved "Termos da transcrição" while it runs. Decision: do not save that list during a rollback (runbook); the new image keeps reading what it finds (a learned term saved as a master's stays one, which a master can remove). No guard in code: reclassifying a master's term by name could take away a term a master did type.
+
 ## Options considered
 
 1. **Derived rules applied on the API at the new version (chosen).** One place for both transcription paths, auditable and undoable through the existing log, no transcriber change.
@@ -35,4 +42,4 @@ KBC-093 keeps an append-only log of word corrections (ADR 0034): who, when, the 
 - Bad: term-list versions now also come from the learning; the versions list grows with "Aprendizado das correções" entries.
 - Threats: a person with `media-correct` could teach a wrong or offensive replacement to every recording; mitigated by context, the 3-context rule for "any context", auto-off on undo, masters' switches, and the log with authors (the source correction's author is shown in the examples).
 - Revisit when: rules per collection are wanted; a rule needs to edit word times; the volume of corrections makes deriving on read slow.
-- Compliance: unit tests of deriving and applying rules; integration tests of the new version with rules (Mac and Groq paths through `complete`), undo by a member, auto-off, switches, learned terms within the limit and versions, the T21 save without false conflicts; a failure-injection test of the transaction; migration test.
+- Compliance: unit tests of reading the log (the transcriber's text, overlaps, corrections over learned words) and of deriving and applying rules (ties, a word as context); integration tests of the new version with rules (Mac and Groq paths through `complete`); latency of `apply` inside a transaction and of the masters' reading on real transcripts, undo by a member, auto-off, switches, learned terms within the limit and versions, the T21 save without false conflicts; a failure-injection test of the transaction; migration test.

@@ -172,6 +172,9 @@ describe('LearningPanel (KBC-113 FR-7, T21)', () => {
     expect(
       screen.queryByRole('button', { name: /^Voltar ao automático/ }),
     ).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole('switch', { name: /^Regra a Manta → Atlântida: / }),
+    );
   });
 
   it('NG-21: closing the panel while a switch waits drops the answer', async () => {

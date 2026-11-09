@@ -255,6 +255,7 @@ O login fica em `/srv/kb-chat/claude` (no volume e no backup cifrado). Depois, e
 
 **Assinatura cedida (KBC-024):**
 - Se o login cair, cada pesquisa cedida falha com "faça login" e a assinatura fica indisponível por 10 minutos: quem a recebeu passa para a própria IA (ou fica sem IA) e a tela de pessoas avisa "não está disponível agora". Refaça o login com o comando acima e teste a conexão.
+- Voltando para uma versão anterior ao KBC-113 (rollback), **não salve "Termos da transcrição"** enquanto ela estiver no ar: a versão anterior não sabe quais termos são do aprendizado e os salvaria como termos dos masters (ADR 0037, emenda 11). Ler a lista e transcrever continuam seguros.
 - Antes de voltar para uma versão anterior ao KBC-024 (rollback), revogue todas as cessões (Pessoas e permissões → outra IA): a versão anterior não lê `claude-subscription` no `people.json`, e as respostas salvas da assinatura cedida ficam ilegíveis até a volta da versão nova.
 
 ## 9c. 👤 DONO — assinatura do ChatGPT (Codex), no contêiner isolado (opcional)
