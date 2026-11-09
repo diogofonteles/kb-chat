@@ -6,6 +6,7 @@
     [attr.data-media-id]="media()?.mediaId ?? null"
     [attr.aria-pressed]="active()"
     [attr.aria-label]="trackLabel()"
+    [attr.aria-describedby]="trackDescription()"
     (click)="open(hit(), $event)"
   >
     @if (media(); as track) {
@@ -16,7 +17,7 @@
           <span aria-hidden="true">·</span>
           <span class="clock">{{ clock() }}</span>
         </span>
-        <span class="recording">
+        <span class="recording" [id]="idOf('recording')">
           {{ track.recordingTitle }}
           @if (ordinal(); as where) {
             <span aria-hidden="true">·</span> {{ where }}
@@ -24,10 +25,14 @@
         </span>
       </span>
     }
-    <app-authorship-badge class="authorship" [authorship]="hit().authorship" />
+    <app-authorship-badge
+      class="authorship"
+      [attr.id]="idOf('authorship')"
+      [authorship]="hit().authorship"
+    />
     <span class="title">{{ hit().title }}</span>
     @if (spoken(); as parts) {
-      <span class="snippet spoken">
+      <span class="snippet spoken" [id]="idOf('snippet')">
         @for (part of parts; track $index) {
           @if (part.marked) {
             <mark>{{ part.text }}</mark>
@@ -37,16 +42,18 @@
         }
       </span>
     } @else {
-      <span class="snippet">{{ hit().snippet }}</span>
+      <span class="snippet" [id]="idOf('snippet')">{{ hit().snippet }}</span>
     }
     @if (place(); as where) {
-      <span class="place" i18n="@@card.place">em {{ where }}</span>
+      <span class="place" [id]="idOf('place')" i18n="@@card.place"
+        >em {{ where }}</span
+      >
     }
     @if (facets()) {
-      <span class="facets">{{ facets() }}</span>
+      <span class="facets" [id]="idOf('facets')">{{ facets() }}</span>
     }
     @if (concepts()) {
-      <span class="concepts">
+      <span class="concepts" [id]="idOf('concepts')">
         <span i18n="@@card.concepts">Assuntos:</span> {{ concepts() }}
         @if (extraConcepts()) {
           <span>(+{{ extraConcepts() }})</span>
@@ -55,7 +62,7 @@
     }
     @if (media(); as track) {
       @if (track.confidence === 'low' || track.stale) {
-        <span class="states">
+        <span class="states" [id]="idOf('states')">
           @if (track.confidence === 'low') {
             <span class="low" i18n="@@mediaHit.low">baixa confiança</span>
           }

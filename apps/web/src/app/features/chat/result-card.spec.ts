@@ -155,6 +155,58 @@ describe('ResultCard of a track (KBC-101)', () => {
     expect(screen.getByText('· atualizando')).toBeTruthy();
   });
 
+  it('a track card describes its recording, place, authorship, passage, facets and states to a screen reader', async () => {
+    const view = await render(ResultCard, {
+      providers,
+      inputs: {
+        hit: track({ confidence: 'low', stale: true }),
+        place: 'Palestras',
+      },
+    });
+    const card = screen.getByRole('button', {
+      name: 'Faixa de áudio, O que é o ritmo?, aos 8 minutos e 15 segundos',
+    });
+    const ids = (card.getAttribute('aria-describedby') ?? '').split(' ');
+    const description = ids
+      .map((id) => view.container.querySelector(`[id="${id}"]`)?.textContent)
+      .join(' ')
+      .replace(/\s+/g, ' ');
+    for (const part of [
+      'Palestra de 12/03/2017 · faixa 3 de 12',
+      'Autoria:',
+      'O ritmo é a lei do pêndulo',
+      'em Palestras',
+      'Aula ou palestra',
+      'Cosmologia Espiritual',
+      'baixa confiança',
+      'atualizando',
+    ])
+      expect(description).toContain(part);
+    expect(
+      ids.every((id) => view.container.querySelector(`[id="${id}"]`)),
+    ).toBe(true);
+  });
+
+  it('a track card without place or states describes only what it shows', async () => {
+    const view = await render(ResultCard, {
+      providers,
+      inputs: { hit: track() },
+    });
+    const ids = (
+      screen.getByRole('button').getAttribute('aria-describedby') ?? ''
+    ).split(' ');
+    expect(
+      ids.every((id) => view.container.querySelector(`[id="${id}"]`)),
+    ).toBe(true);
+  });
+
+  it('a text card keeps its content as its name, with no description', async () => {
+    await render(ResultCard, { providers, inputs: { hit: aHit() } });
+    const card = screen.getByRole('button');
+    expect(card.getAttribute('aria-label')).toBeNull();
+    expect(card.getAttribute('aria-describedby')).toBeNull();
+  });
+
   it('AC-19: Enter or a click opens the T22 panel on the card passage, never the document', async () => {
     const opened = vi.fn();
     const trackOpened = vi.fn();

@@ -16,6 +16,9 @@ import type { TrackOpening } from '@features/research/track-opening.js';
 
 const VISIBLE_CONCEPTS = 2;
 
+/** Each card's own ids, so a track card can point to what describes it. */
+let nextCard = 0;
+
 /** A result or one of its copies, with the collection it opens in (KBC-048). */
 export type OpenedHit = DocumentRef & { readonly topic: string };
 
@@ -66,6 +69,7 @@ export class ResultCard {
   /** A track's card opens the transcript and the player (KBC-101 FR-11). */
   readonly trackOpened = output<TrackOpening>();
 
+  private readonly cardId = nextCard++;
   protected readonly copiesOpen = signal(false);
   protected readonly facets = computed(() => describeFacets(this.hit()));
   protected readonly concepts = computed(() =>
@@ -92,6 +96,30 @@ export class ResultCard {
       ? $localize`:@@trackCard.label:Faixa de áudio, ${this.hit().title}:title:, aos ${speak(this.media()?.startMs ?? 0)}:clock:`
       : null,
   );
+  protected readonly idOf = (part: string) => `card-${this.cardId}-${part}`;
+  /**
+   * The rest of a track card, read after its name (WCAG 1.3.1, 4.1.2): the recording and its
+   * place, the authorship, the passage, the sub-collection, the facets, the subjects and the
+   * states; only the parts the card shows.
+   */
+  protected readonly trackDescription = computed(() => {
+    const media = this.media();
+    if (!media) return null;
+    const hit = this.hit();
+    const shown: Record<string, boolean> = {
+      recording: true,
+      authorship: hit.authorship !== undefined,
+      snippet: true,
+      place: this.place() !== null,
+      facets: this.facets() !== '',
+      concepts: this.concepts() !== '',
+      states: media.confidence === 'low' || media.stale,
+    };
+    return Object.keys(shown)
+      .filter((part) => shown[part])
+      .map((part) => this.idOf(part))
+      .join(' ');
+  });
   /** The spoken sentence of a merged "Na fala" passage, the words found marked (BR-8). */
   protected readonly spoken = computed(() => {
     const spoken = this.media()?.spoken;

@@ -151,6 +151,10 @@ test('AC-10, AC-15, AC-19: the track is one card among the documents; Enter open
   await expect(card).toContainText(recording);
   await expect(card).toContainText('faixa 1 de 2');
   await expect(card.locator('mark')).toHaveText('pêndulo');
+  // The name says what and when; the rest of the card is read as its description.
+  await expect(card).toHaveAccessibleDescription(
+    new RegExp(`${recording} · faixa 1 de 2 .*pêndulo`),
+  );
   // One card per track: no "Na fala" card of it (BR-8), and the summary counts it once.
   await expect(message.locator('app-media-hit-card')).toHaveCount(0);
   await expect(message.locator('.summary')).toContainText(
