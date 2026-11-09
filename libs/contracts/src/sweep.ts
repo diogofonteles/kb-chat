@@ -116,6 +116,11 @@ export const sweepCoverageSchema = z
     /** Of those, not analyzed yet (a continuation analyzes them). */
     missing: count,
     batches: count,
+    /**
+     * The tracks among them (KBC-101 BR-2): of the set, and of those the AI analyzed.
+     * Absent when the set has none (nothing says "faixas" then, AC-5).
+     */
+    tracks: z.strictObject({ documents: count, read: count }).optional(),
     reason: sweepStopReasonSchema.optional(),
     /** The counts include earlier turns of the same sweep ("Continuar varredura"). */
     continued: z.boolean().optional(),

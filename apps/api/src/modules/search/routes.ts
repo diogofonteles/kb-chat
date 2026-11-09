@@ -19,6 +19,7 @@ import {
   viewerOf,
   type RouteAccess,
 } from '../auth/index.js';
+import type { TrackShelf } from '../../ports/track-shelf.js';
 import type { SearchService } from './search-service.js';
 import type {
   MediaReport,
@@ -40,15 +41,29 @@ export interface SearchRouteOptions {
   readonly combined: SearchWithMedia;
   /** Requests per minute per client (ND-22); requires @fastify/rate-limit on the root. */
   readonly ratePerMinute: number;
+  /** media.db's word on track documents, one per request (absent with media off). */
+  readonly tracks?: () => TrackShelf;
 }
 
-/** Spoken passages only for whoever may listen, in the collections they see. */
-const searchViewerOf = (request: FastifyRequest): SearchViewer => ({
-  mayHear: hasFeature(viewerOf(request).person, 'media'),
-  seesTracks: hasFeature(viewerOf(request).person, 'media-tracks'),
-  seesSubjects: hasFeature(viewerOf(request).person, 'media-subjects'),
-  canSee: (topic) => canSee(request, topic),
-});
+/**
+ * Spoken passages only for whoever may listen, in the collections they see; track documents
+ * for who also sees tracks (`media` and `media-tracks`, KBC-101 BR-7), never `media-research`.
+ */
+function searchViewerOf(
+  request: FastifyRequest,
+  tracks: SearchRouteOptions['tracks'],
+): SearchViewer {
+  const { person } = viewerOf(request);
+  const mayHear = hasFeature(person, 'media');
+  const seesTracks = hasFeature(person, 'media-tracks');
+  return {
+    mayHear,
+    seesTracks,
+    seesSubjects: hasFeature(person, 'media-subjects'),
+    canSee: (topic) => canSee(request, topic),
+    ...(mayHear && seesTracks && tracks && { tracks: tracks() }),
+  };
+}
 
 /** The media query's time apart from the search's (ADR 0024: p95 ≤ 150 ms). */
 function logMedia(request: FastifyRequest, entry: MediaReport): void {
@@ -66,7 +81,7 @@ const subjectParams = topicParams.extend({ name: z.string().min(1).max(200) });
 /** POST …/searches: texts and spoken passages (KBC-039). */
 function registerSearch(
   app: FastifyInstance,
-  { combined, ratePerMinute }: SearchRouteOptions,
+  { combined, ratePerMinute, tracks }: SearchRouteOptions,
 ): void {
   app.withTypeProvider<ZodTypeProvider>().post(
     '/api/v1/topics/:topic/searches',
@@ -83,7 +98,7 @@ function registerSearch(
     },
     async (request) =>
       combined.search(request.params.topic, request.body, {
-        viewer: searchViewerOf(request),
+        viewer: searchViewerOf(request, tracks),
         report: (entry) => logMedia(request, entry),
       }),
   );
@@ -92,8 +107,9 @@ function registerSearch(
 /** GET …/concepts/{name}/media: the tracks linked to a subject (KBC-070 FR-3). */
 function registerSubjectTracks(
   app: FastifyInstance,
-  { combined }: SearchRouteOptions,
+  options: SearchRouteOptions,
 ): void {
+  const { combined } = options;
   app.withTypeProvider<ZodTypeProvider>().get(
     '/api/v1/topics/:topic/concepts/:name/media',
     {
@@ -108,7 +124,7 @@ function registerSubjectTracks(
       combined.subjectTracks(
         request.params,
         request.query,
-        searchViewerOf(request),
+        searchViewerOf(request, options.tracks),
       ),
   );
 }
@@ -129,7 +145,7 @@ export const searchRoutes =
       },
       async (request) =>
         options.combined.topicFacets(request.params.topic, {
-          viewer: searchViewerOf(request),
+          viewer: searchViewerOf(request, options.tracks),
           report: (entry) => logMedia(request, entry),
         }),
     );

@@ -39,6 +39,7 @@ import {
 } from './sweep-prompts.js';
 import type { SweepBatch, SweepLayout, SweepPlanner } from './sweep-planner.js';
 import { Slots } from './slots.js';
+import { placeTrackFindings } from './track-findings.js';
 
 export { SWEEP_PACE, type SweepClock } from './sweep-pacing.js';
 
@@ -189,7 +190,7 @@ class SweepRun {
   private async batch(batch: SweepBatch): Promise<void> {
     if (!(await this.mayStart())) return;
     const { request } = this;
-    const { text, labels } = await this.deps.sweeps.batchText(
+    const { text, labels, shown } = await this.deps.sweeps.batchText(
       request.topic,
       batch,
     );
@@ -202,6 +203,7 @@ class SweepRun {
     if (output === null || request.signal.aborted) return;
     const found = parseFindings(output, labels);
     this.findings.addFound(found);
+    placeTrackFindings(found, { book: request.book, labels, shown });
     this.done[batch.index] = true;
     this.deps.emit(this.progress(found));
   }

@@ -16,7 +16,9 @@ import type {
   AuthorRule,
   AuthorshipTally,
   MediaSearchPort,
+  TrackLinksPort,
 } from '../../ports/media-search.js';
+import type { TrackShelf } from '../../ports/track-shelf.js';
 import {
   authorRuleOf,
   hasDocumentOnlyFilters,
@@ -25,6 +27,7 @@ import {
   type AuthorView,
 } from './media-hits.js';
 import type { SearchService } from './search-service.js';
+import { withSpokenPassages } from './track-passages.js';
 import {
   withTrackCounts,
   type SubjectPage,
@@ -42,6 +45,11 @@ export interface SearchViewer {
   readonly seesSubjects?: boolean;
   /** The collection is one the person sees (ADR 0028 tree). */
   readonly canSee: (topic: string) => boolean;
+  /**
+   * The track documents this person may see (KBC-101 BR-7): built for who has `media` and
+   * `media-tracks`; absent, the documents search lists texts only.
+   */
+  readonly tracks?: TrackShelf;
 }
 
 /** Who asks, and where the media side's timing goes. */
@@ -58,7 +66,9 @@ export interface MediaReport {
 }
 
 export interface SearchWithMediaDeps {
-  readonly documents: Pick<SearchService, 'search' | 'topicFacets'>;
+  readonly documents: Pick<SearchService, 'searchDocuments' | 'topicFacets'>;
+  /** Each track's best passage, for its card (KBC-101 BR-8); absent with the media library. */
+  readonly passages?: Pick<TrackLinksPort, 'bestPassages'>;
   /** The collection and its sub-collections, by the catalog's tree (ADR 0028). */
   readonly scopeOf: (topic: string) => readonly string[];
   /** Absent when the media library is off (KB_CHAT_MEDIA=off). */
@@ -136,6 +146,41 @@ function withSpoken(
     : merged;
 }
 
+/** The collections a "Sub-acervo" choice keeps, among those the person sees. */
+const chosenTopics = (
+  visible: readonly string[],
+  filters: ParsedRequest['filters'],
+): string[] =>
+  filters.topics.length > 0
+    ? visible.filter((slug) => filters.topics.includes(slug))
+    : [...visible];
+
+/** A track whose document answers as a card is never a "Na fala" card too (BR-8). */
+function withoutMerged(
+  part: SpokenPart,
+  merged: ReadonlySet<string>,
+): SpokenPart {
+  if (merged.size === 0) return part;
+  return { ...part, hits: part.hits.filter((hit) => !merged.has(hit.mediaId)) };
+}
+
+/**
+ * "Buscar em" (BR-9): texts in "Textos"; tracks and the passages left in "♪ Áudios", each
+ * track once; null where the person has no audio to hear.
+ */
+function kindCounts(
+  totals: { readonly texts: number; readonly tracks: number },
+  spoken: SpokenPart,
+): KindCounts {
+  return {
+    text: totals.texts,
+    audio:
+      spoken.count === null
+        ? null
+        : Math.min(MEDIA_COUNT_CAP, totals.tracks + spoken.count),
+  };
+}
+
 /**
  * The free search over texts and spoken passages (KBC-039, ADR 0024 §2): the vault's
  * index as before and, beside it, the transcripts' own index; both always run so each
@@ -150,37 +195,98 @@ export class SearchWithMedia {
     context: SearchContext,
   ): Promise<SearchResponse> {
     const parsed = searchRequestSchema.parse(request);
-    // The vault's index answers over IO while the media index (synchronous SQLite) runs.
-    const pending = this.deps.documents.search(topic, parsed);
-    const spoken = this.spoken(topic, parsed, context);
-    const documents = await pending;
-    const kinds: KindCounts = { text: documents.total, audio: spoken.count };
-    const reach = effectiveKinds(parsed.kinds, kinds);
-    const texts = reach.includes('text')
-      ? documents
-      : {
-          ...documents,
-          items: [],
-          total: 0,
-          nextOffset: null,
-          hiddenOffTopic: 0,
-        };
-    const audio = reach.includes('audio');
-    const media = audio && parsed.offset === 0 ? spoken.hits : [];
-    const facets = audio ? withSpoken(texts.facets, spoken) : texts.facets;
-    return { ...texts, facets, media: [...media], kinds };
+    const audible = this.isAudible(topic, context.viewer);
+    let reach = effectiveKinds(parsed.kinds, {
+      text: 0,
+      audio: audible ? 0 : null,
+    });
+    let found = await this.documentsOf(topic, { parsed, context, reach });
+    const merged = new Set(found.matchedTracks);
+    const spoken = audible
+      ? this.spoken(topic, { request: parsed, context, merged })
+      : NO_AUDIO;
+    if (spoken.count === null && !reach.includes('text')) {
+      // A broken media index means texts only (ADR 0024), even for "Áudios" alone.
+      reach = ['text'];
+      found = await this.documentsOf(topic, { parsed, context, reach });
+    }
+    const { response } = found;
+    const audio = reach.includes('audio') && spoken.count !== null;
+    return {
+      ...response,
+      items: this.withPassages(response.items, parsed.q),
+      facets: audio ? withSpoken(response.facets, spoken) : response.facets,
+      media: audio && parsed.offset === 0 ? [...spoken.hits] : [],
+      kinds: kindCounts(found.totals, spoken),
+    };
+  }
+
+  private documentsOf(
+    topic: string,
+    {
+      parsed,
+      context,
+      reach,
+    }: {
+      parsed: ParsedRequest;
+      context: SearchContext;
+      reach: readonly SearchKind[];
+    },
+  ) {
+    return this.deps.documents.searchDocuments(topic, parsed, {
+      tracks: context.viewer.tracks,
+      kinds: reach,
+    });
+  }
+
+  /** A track's card carries its best spoken passage (KBC-101 BR-8, FR-9). */
+  private withPassages(
+    items: SearchResponse['items'],
+    q: string,
+  ): SearchResponse['items'] {
+    const { passages } = this.deps;
+    if (!passages || !items.some((item) => item.media)) return items;
+    return withSpokenPassages(items, { passages, terms: termsOf(q) });
+  }
+
+  /** Whether the collection has audio this person may hear (BR-1, BR-2). */
+  private isAudible(topic: string, viewer: SearchViewer): boolean {
+    const { media } = this.deps;
+    if (!media || !viewer.mayHear) return false;
+    try {
+      const visible = this.visibleScope(topic, viewer);
+      const subjects = this.subjectsFor(viewer);
+      return (
+        media.hasTranscripts(visible) ||
+        (subjects?.countsIn(topic, visible).length ?? 0) > 0
+      );
+    } catch {
+      // A broken media index means texts only, as the passages' search (ADR 0024).
+      return false;
+    }
   }
 
   /** The passages, timed and never failing the search: a broken index means texts only. */
   private spoken(
     topic: string,
-    request: ParsedRequest,
-    { viewer, report = () => undefined }: SearchContext,
+    {
+      request,
+      context,
+      merged,
+    }: {
+      request: ParsedRequest;
+      context: SearchContext;
+      merged: ReadonlySet<string>;
+    },
   ): SpokenPart {
+    const { viewer, report = () => undefined } = context;
     const startedAt = performance.now();
     const elapsed = () => Math.round(performance.now() - startedAt);
     try {
-      const part = this.findSpoken(topic, request, viewer);
+      const part = withoutMerged(
+        this.findSpoken(topic, { ...request, merged }, viewer),
+        merged,
+      );
       report({ mediaMs: elapsed(), mediaHits: part.hits.length });
       return part;
     } catch (err) {
@@ -192,20 +298,19 @@ export class SearchWithMedia {
   /** A linked track is audio to reach even where nothing was transcribed (BR-2). */
   private findSpoken(
     topic: string,
-    { q, filters }: ParsedRequest,
+    {
+      q,
+      filters,
+      merged,
+    }: ParsedRequest & { readonly merged: ReadonlySet<string> },
     viewer: SearchViewer,
   ): SpokenPart {
     const { media } = this.deps;
+    // Asked only where there is audio to hear (isAudible).
     if (!media || !viewer.mayHear) return NO_AUDIO;
-    const visible = this.visibleScope(topic, viewer);
     const subjects = this.subjectsFor(viewer);
-    const linked = () => (subjects?.countsIn(topic, visible).length ?? 0) > 0;
-    if (!media.hasTranscripts(visible) && !linked()) return NO_AUDIO;
     if (hasDocumentOnlyFilters(filters)) return { hits: [], count: 0 };
-    const topics =
-      filters.topics.length > 0
-        ? visible.filter((slug) => filters.topics.includes(slug))
-        : visible;
+    const topics = chosenTopics(this.visibleScope(topic, viewer), filters);
     const query = { topic, topics, q, filters };
     if (filters.concepts.length > 0 && !subjects) return { hits: [], count: 0 };
     const part =
@@ -216,6 +321,7 @@ export class SearchWithMedia {
             topics,
             filters,
             tracks: viewer.seesTracks ?? false,
+            exceptIds: [...merged],
           });
     return subjects ? this.withSubjectFacets(subjects, query, part) : part;
   }
@@ -249,7 +355,9 @@ export class SearchWithMedia {
     topic: string,
     { viewer, report = () => undefined }: SearchContext,
   ): TopicFacets {
-    const facets = this.deps.documents.topicFacets(topic);
+    const facets = this.deps.documents.topicFacets(topic, {
+      tracks: viewer.tracks,
+    });
     const subjects = this.subjectsFor(viewer);
     if (!subjects) return facets;
     const startedAt = performance.now();
@@ -285,19 +393,19 @@ export class SearchWithMedia {
       readonly topics: readonly string[];
       readonly filters: ParsedRequest['filters'];
       readonly tracks: boolean;
+      readonly exceptIds: readonly string[];
     },
   ): SpokenPart {
-    const { terms, topics, filters, tracks } = input;
     const { authors } = this.deps;
-    const mainOf = new Map(topics.map((slug) => [slug, authors.mainOf(slug)]));
-    const byAuthorship = media.tally({ terms, topics, mainOf, tracks });
-    const rule = authorRuleOf(filters.authorships, mainOf);
+    const mainOf = new Map(
+      input.topics.map((slug) => [slug, authors.mainOf(slug)]),
+    );
+    const byAuthorship = media.tally({ ...input, mainOf });
+    const rule = authorRuleOf(input.filters.authorships, mainOf);
     if (rule === null) return { hits: [], count: 0, byAuthorship };
     const found = media.search({
-      terms,
-      topics,
+      ...input,
       authors: rule,
-      tracks,
       limit: MAX_MEDIA_HITS,
       count: false,
     });

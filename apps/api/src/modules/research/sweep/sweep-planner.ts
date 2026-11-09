@@ -1,5 +1,6 @@
 import type { MainAuthorIdentity } from '../prompt.js';
 import type { SweepPlan } from '@kb-chat/contracts';
+import type { TrackShelf } from '../../../ports/track-shelf.js';
 import type { VaultReaderPort } from '../../../ports/vault-reader.js';
 import {
   splitFrontmatter,
@@ -8,6 +9,7 @@ import {
 } from '../../catalog/index.js';
 import { acceptsEntry, type DocFilter } from '../doc-filter.js';
 import type { TextFinder } from '../text-finder.js';
+import { isVisible } from '../tool-context.js';
 import { defaultPlan } from './plan-tool.js';
 import { authorshipLabels, oneLine } from '../tool-output.js';
 
@@ -60,6 +62,15 @@ export interface LayoutRequest {
   readonly batchChars: number;
   /** The cursor: the last document id already swept. */
   readonly after?: string;
+  /** The tracks the turn may research; without it, texts only (KBC-101 BR-1, AC-5). */
+  readonly tracks?: TrackShelf;
+}
+
+/** What of a track's body a batch showed (KBC-101 BR-4): to place its findings. */
+export interface ShownWindow {
+  readonly body: string;
+  readonly start: number;
+  readonly end: number;
 }
 
 /** A batch as the model reads it: fenced text, each document labelled [Dk]. */
@@ -67,6 +78,8 @@ export interface BatchText {
   readonly text: string;
   /** Label number → the document it names. */
   readonly labels: ReadonlyMap<number, CatalogEntry>;
+  /** Label number → the windows of a track's body the batch showed, in order. */
+  readonly shown: ReadonlyMap<number, readonly ShownWindow[]>;
 }
 
 export interface SweepPlannerDeps {
@@ -77,12 +90,30 @@ export interface SweepPlannerDeps {
   readonly mainAuthorOf?: (topic: string) => MainAuthorIdentity | null;
 }
 
-const filterOf = ({ target }: SweepPlan): DocFilter => ({
+const filterOf = (
+  { target }: SweepPlan,
+  visible: (entry: CatalogEntry) => boolean,
+): DocFilter => ({
   authorship: target.authorship,
   entity: target.entity,
   source: target.source,
   subjects: target.subjects ?? [],
+  visible,
 });
+
+/**
+ * A track's kind and recording, as the tools label it (KBC-101 FR-2): its anchors stay in
+ * the text, so a finding can be placed on its passage.
+ */
+function trackLabel(entry: CatalogEntry): string {
+  const { media } = entry;
+  if (!media) return '';
+  const place =
+    media.ordinal && media.total
+      ? ` · faixa ${media.ordinal} de ${media.total}`
+      : '';
+  return ` · faixa de áudio (transcrição automática) · gravação “${oneLine(media.recordingTitle, 120)}”${place}`;
+}
 
 /** [start, end) ranges merged when they touch or overlap. */
 function merged(
@@ -156,7 +187,7 @@ export class SweepPlanner {
     topic: string,
     request: LayoutRequest,
   ): Promise<SweepLayout | null> {
-    const entries = this.targetSet(topic, request.plan);
+    const entries = this.targetSet(topic, request);
     if (!entries) return null;
     const phrases = request.plan.phrases;
     const docs =
@@ -182,12 +213,21 @@ export class SweepPlanner {
     };
   }
 
-  /** The plan's documents in id order (the cursor's order); null for an unknown topic. */
-  private targetSet(topic: string, plan: SweepPlan): CatalogEntry[] | null {
-    const catalog = this.deps.catalog.get(topic);
-    if (!catalog) return null;
-    const filter = filterOf(plan);
-    return [...catalog.entries.values()]
+  /**
+   * The plan's documents in id order (the cursor's order), the collection's and its
+   * sub-collections', texts and the tracks the turn may see (KBC-101 BR-1, FR-5); null for
+   * an unknown topic.
+   */
+  private targetSet(
+    topic: string,
+    { plan, tracks }: LayoutRequest,
+  ): CatalogEntry[] | null {
+    const view = this.deps.catalog.scopeView(topic);
+    if (!view) return null;
+    const filter = filterOf(plan, (entry) =>
+      isVisible(entry, { topic, tracks }),
+    );
+    return [...view.entries.values()]
       .filter((entry) => acceptsEntry(filter, entry))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
@@ -200,7 +240,7 @@ export class SweepPlanner {
     const plan = defaultPlan(question);
     const wanted = plan.target.authorship;
     if (!wanted) return plan;
-    const entries = this.deps.catalog.get(topic)?.entries.values() ?? [];
+    const entries = this.deps.catalog.scopeView(topic)?.entries.values() ?? [];
     const has = [...entries].some((entry) => entry.authorship === wanted);
     return has ? plan : { ...plan, target: {} };
   }
@@ -209,26 +249,32 @@ export class SweepPlanner {
   async batchText(topic: string, batch: SweepBatch): Promise<BatchText> {
     const labels = new Map<number, CatalogEntry>();
     const numbers = new Map<string, number>();
+    const shown = new Map<number, ShownWindow[]>();
     const parts: string[] = [];
     for (const unit of batch.units) {
       const known = numbers.get(unit.entry.id);
       const label = known ?? numbers.size + 1;
       numbers.set(unit.entry.id, label);
       labels.set(label, unit.entry);
-      parts.push(await this.unitText(topic, unit, label));
+      const body = (await this.body(topic, unit.entry)) ?? '';
+      if (unit.entry.media)
+        shown.set(label, [
+          ...(shown.get(label) ?? []),
+          { body, start: unit.start, end: unit.end },
+        ]);
+      parts.push(this.unitText(topic, { unit, label, body }));
     }
-    return { text: parts.join('\n\n'), labels };
+    return { text: parts.join('\n\n'), labels, shown };
   }
 
-  private async unitText(
+  private unitText(
     topic: string,
-    unit: SweepUnit,
-    label: number,
-  ): Promise<string> {
-    const body = (await this.body(topic, unit.entry)) ?? '';
+    { unit, label, body }: { unit: SweepUnit; label: number; body: string },
+  ): string {
     const { entry } = unit;
     const labels = authorshipLabels(this.deps.mainAuthorOf?.(topic) ?? null);
-    const head = `[D${label}] ${oneLine(entry.title, 160)} · autoria: ${labels[entry.authorship]}${entry.author ? ` (${oneLine(entry.author, 80)})` : ''} — caracteres ${unit.start}–${unit.end} de ${body.length}`;
+    const author = entry.author ? ` (${oneLine(entry.author, 80)})` : '';
+    const head = `[D${label}] ${oneLine(entry.title, 160)}${trackLabel(entry)} · autoria: ${labels[entry.authorship]}${author} — caracteres ${unit.start}–${unit.end} de ${body.length}`;
     return `${head}\n<<<DOCUMENTO\n${body.slice(unit.start, unit.end)}\nDOCUMENTO>>>`;
   }
 

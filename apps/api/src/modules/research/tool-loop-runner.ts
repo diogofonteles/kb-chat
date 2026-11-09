@@ -370,6 +370,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
         book: turn.book,
         topicTitle: turn.topicTitle,
         mainAuthor: turn.mainAuthor,
+        ...(input.tracks && { tracks: input.tracks }),
       },
       input,
       engine: await this.batchEngine(turn, budget.sweep ?? SWEEP),

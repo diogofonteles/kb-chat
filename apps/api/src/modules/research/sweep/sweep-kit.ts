@@ -1,3 +1,4 @@
+import type { TrackShelf } from '../../../ports/track-shelf.js';
 import type { MainAuthorIdentity } from '../prompt.js';
 import type { SourceBook } from '../source-book.js';
 import type { SweepPlanner } from './sweep-planner.js';
@@ -9,4 +10,6 @@ export interface SweepKit {
   readonly topicTitle: string;
   /** The collection's main author (KBC-049), or null. */
   readonly mainAuthor: MainAuthorIdentity | null;
+  /** The tracks this turn may research (KBC-099 BR-4): the sweep reads them too (KBC-101). */
+  readonly tracks?: TrackShelf;
 }

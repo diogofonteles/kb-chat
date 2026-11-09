@@ -1,4 +1,4 @@
-import type { MediaStorePort } from '../../ports/media-store.js';
+import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
 import type {
   ShelfQuery,
   ShelfSegment,
@@ -11,6 +11,13 @@ import { isPublishable } from './document-source.js';
 export interface MediaTrackShelfDeps {
   readonly store: Pick<MediaStorePort, 'getMedia'>;
   readonly transcripts: Pick<TranscriptStorePort, 'transcripts' | 'segments'>;
+  /**
+   * Whether a recording has, or ever had, a track: a recording that never had one is a
+   * document of its own (KBC-100 FR-7). Without it, only tracks are seen.
+   */
+  readonly hasTracks?: (recordingId: string) => boolean;
+  /** The fingerprint media.db wants now (KBC-100); without it, nothing is "atualizando". */
+  readonly desiredOf?: (mediaId: string) => string | null;
 }
 
 /**
@@ -25,17 +32,43 @@ export class MediaTrackShelf implements TrackShelf {
   constructor(private readonly deps: MediaTrackShelfDeps) {}
 
   trackOf(topic: string, query: ShelfQuery): ShelfTrack | null {
-    const key = `${topic}\n${query.mediaId}`;
+    const key = `${topic}\n${query.mediaId}\n${query.fingerprint ?? ''}`;
     if (!this.tracks.has(key)) this.tracks.set(key, this.read(topic, query));
     return this.tracks.get(key) ?? null;
   }
 
-  private read(topic: string, { mediaId }: ShelfQuery): ShelfTrack | null {
+  private read(
+    topic: string,
+    { mediaId, fingerprint }: ShelfQuery,
+  ): ShelfTrack | null {
     const media = this.deps.store.getMedia(mediaId);
-    if (!isPublishable(media) || media.topic !== topic) return null;
+    if (!this.isDocument(media) || media.topic !== topic) return null;
     const [current] = this.deps.transcripts.transcripts(mediaId);
     if (!current) return null;
-    return { mediaId, title: media.title, confidence: current.confidence };
+    const desired = this.deps.desiredOf?.(mediaId) ?? null;
+    return {
+      mediaId,
+      title: media.title,
+      confidence: current.confidence,
+      stale:
+        fingerprint !== undefined &&
+        desired !== null &&
+        desired !== fingerprint,
+    };
+  }
+
+  /** A published track, or a live recording that never had one (ADR 0035 §1). */
+  private isDocument(media: MediaRecord | null): media is MediaRecord {
+    if (isPublishable(media)) return true;
+    const { hasTracks } = this.deps;
+    return (
+      hasTracks !== undefined &&
+      media !== null &&
+      media.track === null &&
+      media.status === 'ready' &&
+      media.archivedAt === null &&
+      !hasTracks(media.id)
+    );
   }
 
   segmentsOf(mediaId: string): readonly ShelfSegment[] {

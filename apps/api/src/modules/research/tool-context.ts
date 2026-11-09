@@ -14,13 +14,18 @@ export interface ToolContext {
   readonly tracks?: TrackShelf;
 }
 
-/** A text, or a track media.db and the person's permissions let this turn see (BR-4). */
+/**
+ * A text, or a track media.db and the person's permissions let this turn see (BR-4), in the
+ * collection it is in (a sub-collection's, seen from its parent: KBC-101 FR-5).
+ */
 export function isVisible(
-  entry: Pick<CatalogEntry, 'media'>,
+  entry: Pick<CatalogEntry, 'media' | 'home'>,
   { topic, tracks }: Pick<ToolContext, 'topic' | 'tracks'>,
 ): boolean {
   if (entry.media === null) return true;
-  return (tracks?.trackOf(topic, entry.media) ?? null) !== null;
+  return (
+    (tracks?.trackOf(entry.home?.topic ?? topic, entry.media) ?? null) !== null
+  );
 }
 
 /** A tool call ready to run: the steps shown to the reader and the text for the model. */
@@ -65,7 +70,8 @@ export function resolveEntry(
   const { topic, book } = context;
   const n = refNumber(ref);
   const id = n === null ? String(ref) : book.find(n)?.id;
-  const entry = id ? (catalog.get(topic)?.entries.get(id) ?? null) : null;
+  // The collection and its sub-collections (KBC-101 FR-5).
+  const entry = id ? (catalog.scopeView(topic)?.entries.get(id) ?? null) : null;
   return entry && isVisible(entry, context) ? entry : null;
 }
 

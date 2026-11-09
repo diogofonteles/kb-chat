@@ -1,10 +1,17 @@
 import type {
   SearchHit,
+  SearchHitMedia,
+  SearchKind,
   SearchRequest,
   SearchResponse,
   TopicFacets,
 } from '@kb-chat/contracts';
-import { MAX_RESULTS, searchRequestSchema } from '@kb-chat/contracts';
+import {
+  MAX_RESULTS,
+  SEARCH_KINDS,
+  searchRequestSchema,
+  snapToSegment,
+} from '@kb-chat/contracts';
 import type { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import type {
@@ -12,22 +19,26 @@ import type {
   IndexQuery,
   SearchIndexPort,
 } from '../../ports/search-index.js';
+import type { TrackShelf } from '../../ports/track-shelf.js';
 import type { VaultReaderPort } from '../../ports/vault-reader.js';
 import {
   isTrackEntry,
   splitFrontmatter,
   type CatalogEntry,
+  type CatalogMedia,
   type CatalogRegistry,
   type TopicCatalog,
 } from '../catalog/index.js';
 import {
   countFacets,
   groupCopies,
+  kindTotals,
   refine,
   type Candidate,
   type CopyGroup,
 } from './refine.js';
 import { cleanSnippet } from './snippet.js';
+import { trackSnippet } from './track-snippet.js';
 
 export interface SearchServiceDeps {
   readonly catalog: CatalogRegistry;
@@ -52,15 +63,43 @@ export const normalizeQuestion = (q: string): string =>
 type SearchFilterQuery = z.output<typeof searchRequestSchema>;
 
 /**
- * Which cataloged documents a search may return. The documents search (T2), its counts and
- * suggestions take texts only (ADR 0035 §8); the research tools admit the tracks the person
- * may research (KBC-099 BR-4).
+ * Which cataloged documents a search may return: texts, and the track documents a shelf
+ * confirms for this person (ADR 0035 §5): the documents search (T2) builds it for who has
+ * `media` and `media-tracks` (KBC-101 BR-7), the research tools for who may research tracks
+ * (KBC-099 BR-4). Without a shelf, texts only.
  */
 export interface SearchScope {
-  readonly admit?: (entry: CatalogEntry) => boolean;
+  readonly tracks?: TrackShelf | undefined;
+  /** What comes back (KBC-101 BR-9): texts, tracks or both (default); counts ignore it. */
+  readonly kinds?: readonly SearchKind[];
 }
 
-const textsOnly = (entry: CatalogEntry): boolean => !isTrackEntry(entry);
+/** The documents search with what the spoken passages need to merge into it (KBC-101). */
+export interface DocumentSearch {
+  readonly response: SearchResponse;
+  /** Tracks whose document matched the question, whatever the filters (BR-8). */
+  readonly matchedTracks: readonly string[];
+  /** Result cards per kind under the filters, whatever kinds were chosen (BR-9). */
+  readonly totals: { readonly texts: number; readonly tracks: number };
+}
+
+/** A track's document is a document of the collection while its shelf confirms it. */
+const admitted = (
+  entry: CatalogEntry,
+  { topic, tracks }: { topic: string; tracks: TrackShelf | undefined },
+): boolean =>
+  !isTrackEntry(entry) ||
+  (entry.media !== null &&
+    (tracks?.trackOf(topic, entry.media) ?? null) !== null);
+
+/** Every track whose document is among the candidates (BR-8). */
+const matchedTracksOf = (groups: readonly CopyGroup[]): string[] =>
+  groups.flatMap(({ lead }) =>
+    lead.entry.media ? [lead.entry.media.mediaId] : [],
+  );
+
+const ofKind = (kinds: readonly SearchKind[]) => (group: CopyGroup) =>
+  kinds.includes(group.lead.entry.media ? 'audio' : 'text');
 
 interface FoundGroups {
   readonly groups: readonly CopyGroup[];
@@ -89,31 +128,42 @@ export class SearchService {
   async search(
     topic: string,
     request: SearchRequest,
-    { admit = textsOnly }: SearchScope = {},
+    scope: SearchScope = {},
   ): Promise<SearchResponse> {
+    return (await this.searchDocuments(topic, request, scope)).response;
+  }
+
+  /** The search, the tracks it matched and the cards per kind (KBC-101). */
+  async searchDocuments(
+    topic: string,
+    request: SearchRequest,
+    { tracks, kinds = SEARCH_KINDS }: SearchScope = {},
+  ): Promise<DocumentSearch> {
     const { q, mode, limit, offset, filters } =
       searchRequestSchema.parse(request);
     const startedAt = performance.now();
-    const found = await this.foundIn(topic, { q, mode, filters, admit });
-    const { page, ...refined } = refine(mergeByScore(found), {
+    const found = await this.foundIn(topic, { q, mode, filters, tracks });
+    const groups = mergeByScore(found);
+    const { page, ...refined } = refine(groups.filter(ofKind(kinds)), {
       filters,
       offset,
       limit,
       maxResults: MAX_RESULTS,
     });
-    const items = await Promise.all(
-      page.map((group) => this.toSearchHit(group)),
-    );
-    return {
+    const items = await this.hitsOf(page, tracks);
+    const totals = kindTotals(groups, filters);
+    const response: SearchResponse = {
       ...refined,
       items,
+      trackTotal: kinds.includes('audio') ? totals.tracks : 0,
       capped: found.some((one) => one.capped),
-      // Texts only: SearchWithMedia adds the spoken passages (KBC-039).
+      // Documents only: SearchWithMedia adds the spoken passages (KBC-039).
       media: [],
-      kinds: { text: refined.total, audio: null },
+      kinds: { text: totals.texts, audio: null },
       mode,
       tookMs: Math.round(performance.now() - startedAt),
     };
+    return { response, matchedTracks: matchedTracksOf(groups), totals };
   }
 
   /** Each collection of the scope searched at once (a parent and its sub-collections). */
@@ -136,9 +186,9 @@ export class SearchService {
       q,
       mode,
       filters,
-      admit,
+      tracks,
     }: Pick<SearchFilterQuery, 'q' | 'mode' | 'filters'> & {
-      admit: (entry: CatalogEntry) => boolean;
+      tracks: TrackShelf | undefined;
     },
   ): Promise<FoundGroups> {
     if (catalog.entries.size === 0) return { groups: [], capped: false };
@@ -151,7 +201,7 @@ export class SearchService {
       base,
     });
     const groups = groupCopies(
-      this.keepCataloged(catalog, { hits: hits.kept, admit }),
+      this.keepCataloged(catalog, { hits: hits.kept, tracks }),
     );
     for (const group of groups) this.topicOf.set(group, catalog);
     return { groups, capped: hits.texts >= base };
@@ -212,25 +262,35 @@ export class SearchService {
     return count;
   }
 
-  /** Collection-wide counts per facet value (start-screen suggestions and "no acervo" counts). */
-  topicFacets(topic: string): TopicFacets {
-    const entries = this.requireScope(topic).flatMap((catalog) =>
-      [...catalog.entries.values()].filter(textsOnly).map((entry) => ({
-        ...entry,
-        topic: catalog.topic.slug,
-      })),
-    );
-    return countFacets(() => entries);
+  /**
+   * Collection-wide counts per facet value ("no acervo" counts): the texts, and the track
+   * documents the shelf confirms for this person (KBC-101 FR-7).
+   */
+  topicFacets(topic: string, { tracks }: SearchScope = {}): TopicFacets {
+    return countFacets(() => this.documentsIn(topic, tracks));
+  }
+
+  /** Every document of the scope this person may see, with its collection. */
+  documentsIn(
+    topic: string,
+    tracks?: TrackShelf,
+  ): (CatalogEntry & { readonly topic: string })[] {
+    return this.requireScope(topic).flatMap((catalog) => {
+      const slug = catalog.topic.slug;
+      return [...catalog.entries.values()]
+        .filter((entry) => admitted(entry, { topic: slug, tracks }))
+        .map((entry) => ({ ...entry, topic: slug }));
+    });
   }
 
   private keepCataloged(
     catalog: TopicCatalog,
     {
       hits,
-      admit,
+      tracks,
     }: {
       hits: readonly IndexHit[];
-      admit: (entry: CatalogEntry) => boolean;
+      tracks: TrackShelf | undefined;
     },
   ): Candidate[] {
     const known: Candidate[] = [];
@@ -238,7 +298,7 @@ export class SearchService {
     for (const hit of hits) {
       const entry = catalog.entries.get(hit.id);
       // The collection rides along for the "Sub-acervo" filter (KBC-048 FR-4).
-      if (entry && admit(entry))
+      if (entry && admitted(entry, { topic, tracks }))
         known.push({ hit, entry: { ...entry, topic } });
     }
     return known;
@@ -262,26 +322,84 @@ export class SearchService {
     }
   }
 
-  private async toSearchHit(group: CopyGroup): Promise<SearchHit> {
+  private async toSearchHit(
+    group: CopyGroup,
+    tracks: TrackShelf | undefined,
+  ): Promise<SearchHit> {
     const { lead, copies } = group;
     const { hit, entry } = lead;
     const catalog = this.topicOf.get(group);
     if (!catalog) throw new Error('search group without its collection');
-    const text = await this.deps.vault.readDocument(catalog.topic.slug, hit.id);
-    const body = text === null ? '' : splitFrontmatter(text).body;
+    const topic = catalog.topic.slug;
+    const source = {
+      body: await this.bodyOf(topic, hit.id),
+      summary: entry.summary,
+    };
+    const track =
+      entry.media && tracks
+        ? trackHit(entry.media, { raw: hit.snippet, source, topic, tracks })
+        : null;
     return {
-      topic: catalog.topic.slug,
+      ...facetsOf(entry),
+      topic,
       id: entry.id,
       title: entry.title,
-      snippet: cleanSnippet(hit.snippet, { body, summary: entry.summary }),
+      snippet: track?.snippet ?? cleanSnippet(hit.snippet, source),
       score: hit.score,
-      genre: entry.genre,
-      depth: entry.depth,
-      relevance: entry.relevance,
-      concepts: [...entry.concepts],
-      authorship: entry.authorship,
-      author: entry.author,
       copies: copies.map((copy) => ({ id: copy.id, title: copy.title })),
+      ...(track && { media: track.media }),
     };
   }
+
+  private hitsOf(
+    page: readonly CopyGroup[],
+    tracks: TrackShelf | undefined,
+  ): Promise<SearchHit[]> {
+    return Promise.all(page.map((group) => this.toSearchHit(group, tracks)));
+  }
+
+  private async bodyOf(topic: string, id: string): Promise<string> {
+    const text = await this.deps.vault.readDocument(topic, id);
+    return text === null ? '' : splitFrontmatter(text).body;
+  }
+}
+
+/** What a card says of a document's facets and authorship. */
+const facetsOf = (entry: CatalogEntry) => ({
+  genre: entry.genre,
+  depth: entry.depth,
+  relevance: entry.relevance,
+  concepts: [...entry.concepts],
+  authorship: entry.authorship,
+  author: entry.author,
+});
+
+/** A track's card: its snippet and where the T22 panel opens (KBC-101 FR-8, BR-11). */
+function trackHit(
+  media: CatalogMedia,
+  input: {
+    readonly raw: string;
+    readonly source: { body: string; summary: string | null };
+    readonly topic: string;
+    readonly tracks: TrackShelf;
+  },
+): { snippet: string; media: SearchHitMedia } {
+  const { raw, source, topic, tracks } = input;
+  const { snippet, seconds } = trackSnippet(raw, source);
+  const span = snapToSegment(tracks.segmentsOf(media.mediaId), seconds);
+  const shelf = tracks.trackOf(topic, media);
+  return {
+    snippet,
+    media: {
+      mediaId: media.mediaId,
+      kind: media.kind,
+      recordingTitle: media.recordingTitle,
+      ...(media.ordinal !== null && { ordinal: media.ordinal }),
+      ...(media.total !== null && { total: media.total }),
+      durationMs: media.durationMs,
+      ...span,
+      confidence: shelf?.confidence ?? media.confidence,
+      stale: shelf?.stale ?? false,
+    },
+  };
 }

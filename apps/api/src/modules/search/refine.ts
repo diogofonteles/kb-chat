@@ -44,6 +44,12 @@ export interface RefinedPage {
   readonly facets: ResultFacets;
 }
 
+/** A track is never a copy of a text nor of another track (KBC-101 BR-10). */
+const groupKeyOf = (entry: Candidate['entry']): string =>
+  entry.media
+    ? `\u0000track:${entry.topic ?? ''}:${entry.id}`
+    : copyKey(entry.title);
+
 /** Groups candidates by normalized title, keeping the index order of the best member. */
 export function groupCopies(candidates: readonly Candidate[]): CopyGroup[] {
   const groups = new Map<
@@ -51,7 +57,7 @@ export function groupCopies(candidates: readonly Candidate[]): CopyGroup[] {
     { lead: Candidate; copies: Candidate['entry'][] }
   >();
   for (const candidate of candidates) {
-    const key = copyKey(candidate.entry.title);
+    const key = groupKeyOf(candidate.entry);
     const group = groups.get(key);
     if (group) group.copies.push(candidate.entry);
     else groups.set(key, { lead: candidate, copies: [] });
@@ -152,6 +158,21 @@ export function countFacets(
     ),
     topics: countBy(collectionsOf(pick('topics'))),
   };
+}
+
+/** Result cards under the filters, per kind: texts and tracks (KBC-101 BR-9). */
+export function kindTotals(
+  groups: readonly CopyGroup[],
+  filters: SearchFilters,
+): { readonly texts: number; readonly tracks: number } {
+  let texts = 0;
+  let tracks = 0;
+  for (const { lead } of groups) {
+    if (!matchesExcept(lead.entry, filters)) continue;
+    if (lead.entry.media) tracks += 1;
+    else texts += 1;
+  }
+  return { texts, tracks };
 }
 
 /** Filters, counts and pages the copy groups of one search (ADR 0003). */

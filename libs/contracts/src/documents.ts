@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { documentFacetsSchema } from './facets.js';
 import { documentRefSchema } from './search.js';
+import { answerMediaSchema } from './track-citations.js';
 
 /**
  * "Veja também" groups (KBC-003). Sources point to concept articles through kb's
@@ -18,11 +19,15 @@ export const SEE_ALSO_GROUPS = [
 export const seeAlsoGroupNameSchema = z.enum(SEE_ALSO_GROUPS);
 export type SeeAlsoGroupName = z.infer<typeof seeAlsoGroupNameSchema>;
 
-/** A related document with the facets needed to judge it before opening (KBC-003 FR-3). */
-export const relatedDocumentSchema = documentRefSchema.extend(
-  documentFacetsSchema.pick({ genre: true, depth: true, relevance: true })
+/**
+ * A related document with the facets needed to judge it before opening (KBC-003 FR-3); a
+ * track linked by kb carries its media and opens the T22 panel (KBC-101 FR-6).
+ */
+export const relatedDocumentSchema = documentRefSchema.extend({
+  ...documentFacetsSchema.pick({ genre: true, depth: true, relevance: true })
     .shape,
-);
+  media: answerMediaSchema.optional(),
+});
 export type RelatedDocument = z.infer<typeof relatedDocumentSchema>;
 
 /** Up to 5 references plus the full count, for "ver todos (n)". */

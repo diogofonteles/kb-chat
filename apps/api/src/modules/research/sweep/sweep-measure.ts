@@ -16,6 +16,8 @@ export interface SweepMeasure {
   readonly needed: number;
   readonly missing: number;
   readonly after?: string;
+  /** The tracks of the set and of those analyzed (KBC-101 BR-2). */
+  readonly tracks: { readonly documents: number; readonly read: number };
 }
 
 /** The documents covered from the start of the set: each one's batches all done. */
@@ -48,8 +50,9 @@ export function measureSweep(
 ): SweepMeasure {
   const swept = prefixOf(layout, done);
   const withText = (doc: SweepLayout['docs'][number]) => doc.units.length > 0;
-  const read = layout.docs.slice(0, swept).filter(withText).length;
-  const needed = layout.docs.filter(withText).length;
+  const analyzed = layout.docs.slice(0, swept).filter(withText);
+  const { length: read } = analyzed;
+  const { length: needed } = layout.docs.filter(withText);
   const totals: SweepTotals = {
     documents: layout.docs.length,
     scanned: layout.withHits === null ? read : layout.scanned,
@@ -58,12 +61,20 @@ export function measureSweep(
     batches: previousBatches + done.filter(Boolean).length,
   };
   const after = layout.docs[swept - 1]?.entry.id;
+  const tracks = tracksAmong(layout.docs, analyzed);
+  return { totals, swept, needed, missing: needed - read, after, tracks };
+}
+
+/** The tracks of the set, and of those analyzed (KBC-101 BR-2). */
+function tracksAmong(
+  docs: SweepLayout['docs'],
+  analyzed: SweepLayout['docs'],
+): SweepMeasure['tracks'] {
+  const isTrack = (doc: SweepLayout['docs'][number]) =>
+    doc.entry.media !== null;
   return {
-    totals,
-    swept,
-    needed,
-    missing: needed - read,
-    ...(after && { after }),
+    documents: docs.filter(isTrack).length,
+    read: analyzed.filter(isTrack).length,
   };
 }
 
@@ -84,6 +95,8 @@ export function coverageOf(layout: SweepLayout, ending: Ending): SweepCoverage {
     phrases: layout.plan.phrases,
     needed: measure.needed,
     missing: measure.missing,
+    // Only a set with tracks names them (KBC-101 AC-5).
+    ...(measure.tracks.documents > 0 && { tracks: measure.tracks }),
     ...(reason && { reason }),
     ...(continued && { continued: true }),
   };

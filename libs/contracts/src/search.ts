@@ -103,6 +103,38 @@ export const documentRefSchema = z.object({
 });
 export type DocumentRef = z.infer<typeof documentRefSchema>;
 
+/** Characters of a passage's text that matched the question, end exclusive. */
+export const textRangeSchema = z.object({
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+});
+export type TextRange = z.infer<typeof textRangeSchema>;
+
+/**
+ * A track (or a recording without tracks) as a document of the collection (KBC-101 FR-8,
+ * ADR 0035 amendment 2026-11-07): what the ♪ card shows and where the T22 panel opens. The
+ * passage is exact from media.db, on the track's clock.
+ */
+export const searchHitMediaSchema = z.object({
+  mediaId: mediaIdSchema,
+  kind: z.enum(['track', 'recording']),
+  recordingTitle: z.string(),
+  ordinal: z.number().int().min(1).optional(),
+  total: z.number().int().min(1).optional(),
+  durationMs: z.number().int().nonnegative(),
+  /** The matched passage: the "Na fala" one when merged, else the index snippet's paragraph. */
+  startMs: z.number().int().nonnegative(),
+  endMs: z.number().int().nonnegative(),
+  confidence: transcriptConfidenceSchema,
+  /** The vault's text is behind media.db ("atualizando", KBC-100). */
+  stale: z.boolean(),
+  /** The spoken sentence of a merged "Na fala" passage, with the words found (BR-8). */
+  spoken: z
+    .object({ text: z.string(), highlights: z.array(textRangeSchema) })
+    .optional(),
+});
+export type SearchHitMedia = z.infer<typeof searchHitMediaSchema>;
+
 export const searchHitSchema = documentFacetsSchema.extend({
   /** The collection the document is in: a sub-collection when searching its parent. */
   topic: topicSlugSchema,
@@ -112,6 +144,8 @@ export const searchHitSchema = documentFacetsSchema.extend({
   score: z.number(),
   /** Other documents with the same normalized title (near-identical copies). */
   copies: z.array(documentRefSchema),
+  /** Present when the document is a track of the collection (KBC-101). */
+  media: searchHitMediaSchema.optional(),
 });
 export type SearchHit = z.infer<typeof searchHitSchema>;
 
@@ -141,13 +175,6 @@ export const resultFacetsSchema = z.object({
   topics: facetCountSchema(topicSlugSchema),
 });
 export type ResultFacets = z.infer<typeof resultFacetsSchema>;
-
-/** Characters of a passage's text that matched the question, end exclusive. */
-export const textRangeSchema = z.object({
-  start: z.number().int().nonnegative(),
-  end: z.number().int().nonnegative(),
-});
-export type TextRange = z.infer<typeof textRangeSchema>;
 
 /** A subject shown on a result: only accepted ones (KBC-069 BR-3) of the collection now. */
 export const hitSubjectSchema = z.object({
@@ -208,6 +235,8 @@ export const searchResponseSchema = z.object({
   kinds: kindCountsSchema.default({ text: 0, audio: null }),
   /** Result cards (copy groups) matching the filters among the index candidates. */
   total: z.number().int().nonnegative(),
+  /** Of those, track documents (KBC-101): "7 documentos (1 faixa)". */
+  trackTotal: z.number().int().nonnegative().default(0),
   /** True when the index returned its candidate cap, so there may be more. */
   capped: z.boolean(),
   /** Offset of the next page for "Mostrar mais", or null. */

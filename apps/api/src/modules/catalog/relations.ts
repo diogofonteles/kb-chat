@@ -1,5 +1,9 @@
 import type { RelatedDocument, SeeAlsoGroupName } from '@kb-chat/contracts';
-import type { CatalogEntry, RelationNames } from './catalog-entry.js';
+import type {
+  CatalogEntry,
+  CatalogMedia,
+  RelationNames,
+} from './catalog-entry.js';
 import { copyKey } from './titles.js';
 
 const CONCEPTS_FOLDER = 'wiki/concepts/';
@@ -18,6 +22,20 @@ const toRef = (entry: CatalogEntry): RelatedDocument => ({
   genre: entry.genre,
   depth: entry.depth,
   relevance: entry.relevance,
+  ...(entry.media && { media: toRefMedia(entry.media) }),
+});
+
+/** A track linked by kb (KBC-101 FR-6): what its "Veja também" line and the T22 need. */
+const toRefMedia = (
+  media: CatalogMedia,
+): NonNullable<RelatedDocument['media']> => ({
+  mediaId: media.mediaId,
+  kind: media.kind,
+  recordingTitle: media.recordingTitle,
+  ...(media.ordinal !== null && { ordinal: media.ordinal }),
+  ...(media.total !== null && { total: media.total }),
+  durationMs: media.durationMs,
+  confidence: media.confidence,
 });
 
 /** The concept a concept article is about, as written in its file name; null for sources. */
@@ -35,7 +53,8 @@ const conceptName = (id: string): string =>
 function uniqueByCopy(refs: readonly RelatedDocument[]): RelatedDocument[] {
   const seen = new Set<string>();
   return refs.filter((ref) => {
-    const key = copyKey(ref.title);
+    // A track is never a copy of a text nor of another track (KBC-101 BR-10).
+    const key = ref.media ? `\u0000track:${ref.id}` : copyKey(ref.title);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

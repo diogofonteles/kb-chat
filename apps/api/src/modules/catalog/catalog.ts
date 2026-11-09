@@ -2,6 +2,7 @@ import type { TopicFolder, VaultReaderPort } from '../../ports/vault-reader.js';
 import { toCatalogEntry, type CatalogEntry } from './catalog-entry.js';
 import { RelationIndex } from './relations.js';
 import { splitFrontmatter } from './frontmatter.js';
+import { ScopeView } from './scope-view.js';
 
 export interface TopicCatalog {
   readonly topic: TopicFolder;
@@ -42,6 +43,8 @@ async function loadTopicCatalog(
 /** In-memory facet catalog of every topic in the vault, derived from frontmatter (ADR 0003). */
 export class CatalogRegistry {
   private catalogs = new Map<string, TopicCatalog>();
+  /** One view per collection and load: a reload or a refresh makes new catalog objects. */
+  private readonly views = new WeakMap<TopicCatalog, ScopeView>();
   private readonly listeners: (() => void)[] = [];
 
   constructor(private readonly vault: VaultReaderPort) {}
@@ -106,6 +109,20 @@ export class CatalogRegistry {
     if (!catalog) return [];
     const children = this.topics().filter((one) => one.topic.parent === slug);
     return [catalog, ...children];
+  }
+
+  /** The collection and its sub-collections as one set (KBC-101 FR-5); undefined when unknown. */
+  scopeView(slug: string): ScopeView | undefined {
+    const [root, ...children] = this.scope(slug);
+    if (!root) return undefined;
+    const known = this.views.get(root);
+    const same =
+      known?.children.length === children.length &&
+      known.children.every((one, at) => one === children[at]);
+    if (known && same) return known;
+    const view = new ScopeView(root, children);
+    this.views.set(root, view);
+    return view;
   }
 
   documentCount(): number {

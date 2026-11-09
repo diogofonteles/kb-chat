@@ -32,6 +32,11 @@ export interface CatalogEntry extends DocumentFacets {
   readonly sourcePath: string | null;
   /** A track (or recording) of the collection written by the app (KBC-099, ADR 0035 §5). */
   readonly media: CatalogMedia | null;
+  /**
+   * Only on a sub-collection's document seen from its parent (`ScopeView`, KBC-101 FR-5):
+   * the collection it is in and its id there.
+   */
+  readonly home?: { readonly topic: string; readonly id: string };
 }
 
 /** The `kb_chat_*` keys of a document the app rendered from a track (ADR 0035 §2). */
@@ -181,6 +186,6 @@ export function toCatalogEntry(
   };
 }
 
-/** A track document stays out of every search outside the conversation (ADR 0035 §8). */
+/** A document the app rendered from a track: media.db decides who sees it (ADR 0035 §5). */
 export const isTrackEntry = (entry: Pick<CatalogEntry, 'media'>): boolean =>
   entry.media !== null;

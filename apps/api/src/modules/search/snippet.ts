@@ -3,20 +3,20 @@ const LINE_NUMBER_PREFIX = /^\d+:\s?/;
 const HUNK_HEADER = /^@@ .* @@/;
 const TRAILING_ELLIPSIS = /(\.\.\.|…)$/;
 
-function truncate(text: string): string {
+export function truncate(text: string): string {
   const collapsed = text.replace(/\s+/g, ' ').trim();
   if (collapsed.length <= MAX_SNIPPET_CHARS) return collapsed;
   return `${collapsed.slice(0, MAX_SNIPPET_CHARS).replace(/\s+\S*$/, '')}…`;
 }
 
-function snippetLines(raw: string): string[] {
+export function snippetLines(raw: string): string[] {
   return raw
     .split('\n')
     .map((line) => line.replace(LINE_NUMBER_PREFIX, ''))
     .filter((line) => !HUNK_HEADER.test(line));
 }
 
-function isBodyLine(line: string, body: string): boolean {
+export function isBodyLine(line: string, body: string): boolean {
   const probe = line.trim().replace(TRAILING_ELLIPSIS, '').trim();
   return probe.length > 0 && body.includes(probe);
 }

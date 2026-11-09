@@ -90,6 +90,15 @@ const NOT_INSIDE_TRACKS = `(NOT EXISTS (${LIVE_TRACK})
 const passagesFor = (tracks: boolean | undefined): string =>
   tracks ? NOT_INSIDE_TRACKS : ONLY_RECORDINGS;
 
+/** Media whose passages answer elsewhere (KBC-101 BR-8); none: an always-true clause. */
+const exceptClause = (ids: readonly string[] | undefined): Clause =>
+  ids && ids.length > 0
+    ? {
+        sql: `m.id NOT IN (SELECT value FROM json_each(?))`,
+        values: [JSON.stringify(ids)],
+      }
+    : { sql: '1', values: [] };
+
 /** A track someone may be told about: published, not archived (KBC-068 FR-1, BR-5). */
 const LIVE_TRACK_ROW = `m.parent_media_id IS NOT NULL AND m.status = 'ready'
   AND m.archived_at IS NULL AND m.kind = 'audio'`;
@@ -203,12 +212,18 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     limit,
     tracks,
     count = true,
+    exceptIds,
   }: MediaSearchQuery): MediaSearchResult {
     if (terms.length === 0 || topics.length === 0)
       return { matches: [], total: 0 };
     const scope = scopeClause(topics, authors);
-    const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql}`;
-    const values = [toMatchExpression(terms), ...scope.values];
+    const except = exceptClause(exceptIds);
+    const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql} AND ${except.sql}`;
+    const values = [
+      toMatchExpression(terms),
+      ...scope.values,
+      ...except.values,
+    ];
     const matches = this.top(where, values, limit);
     return { matches, total: count ? this.countWhere(where, values) : 0 };
   }
@@ -222,15 +237,18 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     topics,
     mainOf,
     tracks,
+    exceptIds,
   }: Parameters<MediaSearchPort['tally']>[0]): AuthorshipTally {
     if (terms.length === 0 || topics.length === 0)
       return { main: 0, others: 0 };
+    const except = exceptClause(exceptIds);
     const countFor = (kind: 'main' | 'others'): number => {
       const scope = scopeClause(topics, { kind, mainOf });
-      const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql}`;
+      const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql} AND ${except.sql}`;
       return this.countWhere(where, [
         toMatchExpression(terms),
         ...scope.values,
+        ...except.values,
       ]);
     };
     return { main: countFor('main'), others: countFor('others') };
