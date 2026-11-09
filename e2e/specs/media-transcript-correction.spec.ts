@@ -257,6 +257,88 @@ test('AC-25: in the whole transcript, a click on a word after the track keeps th
   expect((await auditionState(page)).paused).toBe(false);
 });
 
+/** Step 2 ("Preparar") served as it is after the tracks were proposed (its own shape). */
+async function openStep2(page: Page, media: Media) {
+  const stage = (name: string) => ({
+    stage: name,
+    state: 'done',
+    percent: null,
+    cuts: null,
+    ahead: null,
+    blockedBy: null,
+    failure: null,
+    canRetry: false,
+    windows: null,
+    reservedUsd: null,
+    spentUsd: null,
+    estimateUsd: null,
+  });
+  await page.route(`**/api/v1/media/${media.id}/preparation`, (route) =>
+    route.fulfill({
+      json: {
+        mediaId: media.id,
+        title: media.title,
+        topic: 'hermetismo',
+        author: null,
+        step: 2,
+        skipped: false,
+        finished: false,
+        plan: {
+          transcribe: true,
+          speakers: false,
+          tracks: 'ai',
+          subjects: false,
+          acceptedUsd: 0.02,
+        },
+        stages: ['upload', 'convert', 'transcribe', 'tracks'].map(stage),
+        separation: null,
+        voices: [],
+        suggestions: [],
+        tracks: TRACKS.map((track, index) => ({
+          id: `33333333-3333-4333-8333-${String(index + 1).padStart(12, '0')}`,
+          ...track,
+          asker: null,
+          answerer: null,
+          status: 'proposed',
+        })),
+        next: null,
+        canSwitchToManual: false,
+        transcriber: 'on',
+        transcriberOffSince: null,
+      },
+    }),
+  );
+  await page.goto(`/midia/${media.id}/preparar`);
+  await expect(
+    page.getByRole('button', { name: 'Ouvir a faixa 1' }),
+  ).toBeVisible();
+  await expect(audition(page)).toBeAttached();
+}
+
+test('FR-14: on step 2, the track text corrects a word as on step 3', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const owner = await ownerApi();
+  const media = await lecture(owner);
+  await owner.dispose();
+  await openStep2(page, media);
+  await page.getByRole('button', { name: /texto da faixa 1$/ }).click();
+  const region = textOf(page, 1);
+  await expect(region).toContainText('o mestre Tiuako disse assim');
+
+  await clickWord(region, 'Tiuako');
+  await expect(panel(page)).toHaveAccessibleName('Corrigir palavra, Tiuako');
+  expect((await auditionState(page)).time).toBeCloseTo(12.6, 0);
+  await field(page).fill('Tiuaco');
+  await field(page).press('Enter');
+
+  await expect(region).toContainText('o mestre Tiuaco disse assim');
+  await expect(page.locator('app-track-text .notice')).toContainText(
+    'Palavra corrigida.',
+  );
+});
+
 test('AC-22, AC-45: by keyboard, Procurar palavra leads to the word and the focus comes back to the occurrence', async ({
   page,
 }) => {
