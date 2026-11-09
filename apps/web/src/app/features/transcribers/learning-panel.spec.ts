@@ -31,6 +31,7 @@ const rule = (overrides: Partial<LearnedRule> = {}): LearnedRule => ({
   state: 'on',
   switchedBy: null,
   conflictWith: null,
+  tiesWith: null,
   examples: [
     {
       mediaId: 'm1',
@@ -106,7 +107,7 @@ describe('LearningPanel (KBC-113 FR-7, T21)', () => {
     expect(screen.getByText('Na lista do transcritor')).toBeTruthy();
     expect(
       screen
-        .getByRole('switch', { name: 'Regra a Manta → Atlântida' })
+        .getByRole('switch', { name: 'Regra a Manta → Atlântida: Ligada' })
         .getAttribute('aria-checked'),
     ).toBe('true');
   });
@@ -115,7 +116,7 @@ describe('LearningPanel (KBC-113 FR-7, T21)', () => {
     const view = await renderPanel();
 
     fireEvent.click(
-      screen.getByRole('switch', { name: 'Regra a Manta → Atlântida' }),
+      screen.getByRole('switch', { name: /^Regra a Manta → Atlântida: / }),
     );
     await view.fixture.whenStable();
     const put = http?.expectOne(`${URL}/rules/${RULE_ID}`);
@@ -123,7 +124,7 @@ describe('LearningPanel (KBC-113 FR-7, T21)', () => {
     expect(put?.request.body).toEqual({ enabled: false });
     // One request per click while the first waits (PD-02).
     fireEvent.click(
-      screen.getByRole('switch', { name: 'Regra a Manta → Atlântida' }),
+      screen.getByRole('switch', { name: /^Regra a Manta → Atlântida: / }),
     );
     put?.flush({
       ...LEARNING,
@@ -137,9 +138,51 @@ describe('LearningPanel (KBC-113 FR-7, T21)', () => {
     ).toContain('Regra desligada. Vale para as próximas transcrições.');
     expect(
       screen
-        .getByRole('switch', { name: 'Regra a Manta → Atlântida' })
+        .getByRole('switch', { name: /^Regra a Manta → Atlântida: / })
         .getAttribute('aria-checked'),
     ).toBe('false');
+  });
+
+  it('review round 1: a rule switched by a master goes back to automatic; a tie is said', async () => {
+    const view = await renderPanel({
+      ...LEARNING,
+      rules: [rule({ switchedBy: 'Diogo', tiesWith: 'Amanta' })],
+    });
+    expect(
+      screen.getByText(
+        'Ligada por Diogo · empata com «Amanta» quando os dois contextos batem; ali nenhuma se aplica',
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Voltar ao automático: Regra a Manta → Atlântida',
+      }),
+    );
+    await view.fixture.whenStable();
+    const put = http?.expectOne(`${URL}/rules/${RULE_ID}`);
+    expect(put?.request.body).toEqual({ enabled: null });
+    put?.flush(LEARNING);
+    await view.fixture.whenStable();
+    expect(
+      screen.getByText(
+        'De volta ao automático. Vale para as próximas transcrições.',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: /^Voltar ao automático/ }),
+    ).toBeNull();
+  });
+
+  it('NG-21: closing the panel while a switch waits drops the answer', async () => {
+    const view = await renderPanel();
+    fireEvent.click(
+      screen.getByRole('switch', { name: /^Regra a Manta → Atlântida: / }),
+    );
+    await view.fixture.whenStable();
+    const put = http?.expectOne(`${URL}/rules/${RULE_ID}`);
+    view.fixture.destroy();
+    expect(put?.cancelled).toBe(true);
   });
 
   it('a term turned off, and back on', async () => {
@@ -149,7 +192,7 @@ describe('LearningPanel (KBC-113 FR-7, T21)', () => {
     });
     expect(screen.getByText('Desligado por Diogo')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Termo Atlântida' }));
+    fireEvent.click(screen.getByRole('switch', { name: /^Termo Atlântida: / }));
     await view.fixture.whenStable();
     const put = http?.expectOne(`${URL}/terms/${TERM_ID}`);
     expect(put?.request.body).toEqual({ enabled: true });
@@ -163,7 +206,7 @@ describe('LearningPanel (KBC-113 FR-7, T21)', () => {
   it('a failed switch says so and keeps the state', async () => {
     const view = await renderPanel();
     fireEvent.click(
-      screen.getByRole('switch', { name: 'Regra a Manta → Atlântida' }),
+      screen.getByRole('switch', { name: /^Regra a Manta → Atlântida: / }),
     );
     await view.fixture.whenStable();
     http
@@ -175,7 +218,7 @@ describe('LearningPanel (KBC-113 FR-7, T21)', () => {
     ).toBeTruthy();
     expect(
       screen
-        .getByRole('switch', { name: 'Regra a Manta → Atlântida' })
+        .getByRole('switch', { name: /^Regra a Manta → Atlântida: / })
         .getAttribute('aria-checked'),
     ).toBe('true');
   });

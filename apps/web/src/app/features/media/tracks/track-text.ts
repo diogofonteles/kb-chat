@@ -219,6 +219,18 @@ export class TrackText {
     this.refocusWhenClosed();
   }
 
+  /** The learning's words in the lines shown (FR-6), said in words beside the mark. */
+  protected readonly learnedWords = computed(() => {
+    const learned = this.source.words.learned();
+    if (learned.size === 0) return 0;
+    return this.lines()
+      .flatMap((line) => line.words ?? [])
+      .filter((word) => {
+        const position = positionOf(word);
+        return position !== null && learned.has(position);
+      }).length;
+  });
+
   /**
    * The words the learning replaced get a subtle mark (KBC-113 FR-6), for everyone who
    * reads the text: one highlight, no element per word (KBC-093 NFR-5).

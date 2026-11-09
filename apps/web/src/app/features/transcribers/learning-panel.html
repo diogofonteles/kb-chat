@@ -24,21 +24,21 @@
         <ul class="items">
           @for (rule of rules(); track rule.id) {
             <li class="item">
-              <div class="what">
-                <p class="change">
-                  <span class="before">{{ rule.before }}</span>
-                  <span aria-hidden="true"> → </span>
-                  <span class="sr-only" i18n="@@learning.becomes">vira</span>
-                  <strong>{{ rule.after }}</strong>
+              <p class="change">
+                <del class="before">{{ rule.before }}</del>
+                <span aria-hidden="true"> → </span>
+                <span class="sr-only" i18n="@@learning.becomes">vira</span>
+                <strong>{{ rule.after }}</strong>
+              </p>
+              <p class="hint">{{ contextText(rule) }}</p>
+              <p class="hint">{{ countsText(rule) }}</p>
+              @if (saysMore(rule)) {
+                <p class="state" [class.off]="!isOn(rule)">
+                  <span aria-hidden="true">{{ isOn(rule) ? '✓' : '⊘' }}</span>
+                  {{ stateText(rule) }}
                 </p>
-                <p class="hint">{{ contextText(rule) }}</p>
-                <p class="hint">{{ countsText(rule) }}</p>
-                @if (saysMore(rule)) {
-                  <p class="state" [class.off]="!isOn(rule)">
-                    <span aria-hidden="true">{{ isOn(rule) ? '✓' : '⊘' }}</span>
-                    {{ stateText(rule) }}
-                  </p>
-                }
+              }
+              <div class="foot">
                 @if (rule.examples.length > 0) {
                   <details class="examples">
                     <summary i18n="@@learning.examples">Exemplos</summary>
@@ -46,7 +46,7 @@
                       @for (example of rule.examples; track $index) {
                         <li>
                           «{{ example.contextBefore }}
-                          <span class="before">{{ example.before }}</span>
+                          <del>{{ example.before }}</del>
                           {{ example.contextAfter }}» → {{ example.after }} ·
                           <a [href]="exampleHref(example)"
                             >{{ example.title }} ·
@@ -57,29 +57,37 @@
                     </ul>
                   </details>
                 }
+                <div class="controls">
+                  @if (rule.switchedBy !== null) {
+                    <button
+                      type="button"
+                      class="automatic"
+                      [disabled]="pending() !== null"
+                      [attr.aria-label]="automaticRuleName(rule)"
+                      (click)="automatic('rules', rule.id)"
+                      i18n="@@learning.automatic"
+                    >
+                      Voltar ao automático
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    class="switch"
+                    role="switch"
+                    [attr.aria-checked]="isOn(rule)"
+                    [attr.aria-label]="ruleSwitchName(rule)"
+                    [disabled]="pending() !== null"
+                    (click)="toggleRule(rule)"
+                  >
+                    <span class="track" aria-hidden="true"
+                      ><span class="thumb"></span
+                    ></span>
+                    <span class="switch-text">{{
+                      switchWord(isOn(rule))
+                    }}</span>
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                class="switch"
-                role="switch"
-                [attr.aria-checked]="isOn(rule)"
-                [attr.aria-label]="ruleName(rule)"
-                [disabled]="pending() !== null"
-                (click)="toggleRule(rule)"
-              >
-                <span class="track" aria-hidden="true"
-                  ><span class="thumb"></span
-                ></span>
-                @if (isOn(rule)) {
-                  <span class="switch-text" i18n="@@learning.switchOn"
-                    >Ligada</span
-                  >
-                } @else {
-                  <span class="switch-text" i18n="@@learning.switchOff"
-                    >Desligada</span
-                  >
-                }
-              </button>
             </li>
           }
         </ul>
@@ -126,28 +134,36 @@
                   {{ termStateText(term) }}
                 </p>
               </div>
-              <button
-                type="button"
-                class="switch"
-                role="switch"
-                [attr.aria-checked]="term.state !== 'off'"
-                [attr.aria-label]="termName(term)"
-                [disabled]="pending() !== null"
-                (click)="toggleTerm(term)"
-              >
-                <span class="track" aria-hidden="true"
-                  ><span class="thumb"></span
-                ></span>
-                @if (term.state !== 'off') {
-                  <span class="switch-text" i18n="@@learning.termSwitchOn"
-                    >Ligado</span
+              <div class="controls">
+                @if (term.switchedBy !== null) {
+                  <button
+                    type="button"
+                    class="automatic"
+                    [disabled]="pending() !== null"
+                    [attr.aria-label]="automaticTermName(term)"
+                    (click)="automatic('terms', term.id)"
+                    i18n="@@learning.automatic"
                   >
-                } @else {
-                  <span class="switch-text" i18n="@@learning.termSwitchOff"
-                    >Desligado</span
-                  >
+                    Voltar ao automático
+                  </button>
                 }
-              </button>
+                <button
+                  type="button"
+                  class="switch"
+                  role="switch"
+                  [attr.aria-checked]="term.state !== 'off'"
+                  [attr.aria-label]="termSwitchName(term)"
+                  [disabled]="pending() !== null"
+                  (click)="toggleTerm(term)"
+                >
+                  <span class="track" aria-hidden="true"
+                    ><span class="thumb"></span
+                  ></span>
+                  <span class="switch-text">{{
+                    termSwitchWord(term.state !== 'off')
+                  }}</span>
+                </button>
+              </div>
             </li>
           }
         </ul>

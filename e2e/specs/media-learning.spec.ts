@@ -136,6 +136,13 @@ test('AC-2, AC-8, AC-17: a learned word is marked on step 3, says what it was, a
   await expect(region).toContainText('e com Atlântida veio');
   await expect(region).toContainText(`na a ${word} disse`);
   await expect.poll(() => learnedPainted(page)).toEqual(['Atlântida']);
+  await expect(
+    region
+      .page()
+      .getByText(
+        '1 palavra corrigida pelo aprendizado (sublinhado pontilhado)',
+      ),
+  ).toBeVisible();
 
   await clickWord(region, 'Atlântida');
   const panel = page.getByRole('dialog', { name: /^Corrigir palavra/ });
@@ -167,13 +174,17 @@ test('AC-1, AC-15, AC-19: a master sees the rule with its context and turns it o
   await page.getByRole('button', { name: 'Configurações' }).click();
   const dialog = page.getByRole('dialog', { name: 'Configurações' });
   await dialog.getByRole('button', { name: 'Termos da transcrição' }).click();
-  const name = `Regra a ${word} → Atlântida`;
+  // The name holds what the switch shows, "Ligada"/"Desligada" (WCAG 2.5.3).
+  const name = new RegExp(`^Regra a ${word} → Atlântida: `);
   const rule = dialog.getByRole('switch', { name });
   // The list shows 20 rules at a time; other runs may have taught more.
   const more = dialog.getByRole('button', { name: /^Mostrar mais/ });
   while (!(await rule.isVisible()) && (await more.isVisible()))
     await more.click();
   await expect(rule).toHaveAttribute('aria-checked', 'true');
+  await expect(rule).toHaveAccessibleName(
+    `Regra a ${word} → Atlântida: Ligada`,
+  );
   // `has` is matched inside each item: rooted at the page, not the dialog.
   const item = dialog
     .getByRole('listitem')
@@ -192,9 +203,15 @@ test('AC-1, AC-15, AC-19: a master sees the rule with its context and turns it o
   await expect(
     dialog.getByText('Regra desligada. Vale para as próximas transcrições.'),
   ).toBeVisible();
+  await evidence(page, 'kbc-113-learning-panel-off');
+  // The master's choice can be dropped: undos and the rules decide again (BR-11).
+  await item.getByRole('button', { name: /^Voltar ao automático/ }).click();
+  await expect(rule).toHaveAttribute('aria-checked', 'true');
+  await expect(
+    item.getByRole('button', { name: /^Voltar ao automático/ }),
+  ).toHaveCount(0);
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth,
   );
   expect(overflow).toBe(false);
-  await evidence(page, 'kbc-113-learning-panel-off');
 });

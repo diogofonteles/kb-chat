@@ -636,6 +636,12 @@ describe('TrackText: a word the learning replaced (KBC-113)', () => {
   it('AC-17, FR-6: the word is marked, and the panel says it was learned, with Desfazer', async () => {
     const rendered = await renderText({ learned: LEARNED });
     expect(rendered.painted.get('learned-word')).toBe(1);
+    // Said in words too, not only drawn (review round 1).
+    expect(
+      screen.getByText(
+        '1 palavra corrigida pelo aprendizado (sublinhado pontilhado)',
+      ),
+    ).toBeTruthy();
 
     await clickWord(rendered, 'Tiuako');
 
@@ -662,6 +668,7 @@ describe('TrackText: a word the learning replaced (KBC-113)', () => {
 
   it('a word the person corrected has no learned note', async () => {
     const rendered = await renderText({ learned: LEARNED });
+    expect(rendered.painted.get('learned-word')).toBe(1);
     await clickWord(rendered, 'disse');
     expect(panel()).not.toBeNull();
     expect(screen.queryByText(/Corrigida pelo aprendizado/)).toBeNull();

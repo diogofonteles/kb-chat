@@ -2,10 +2,12 @@ import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   inject,
   signal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   transcriptLearningSchema,
   type LearnedExample,
@@ -29,6 +31,21 @@ const ruleName = (rule: LearnedRule): string =>
 
 const termName = (term: LearnedTerm): string =>
   $localize`:@@learning.termName:Termo ${term.term}:term:`;
+
+const failedText = (kind: 'rules' | 'terms'): string =>
+  kind === 'rules'
+    ? $localize`:@@learning.ruleFailed:Não foi possível mudar a regra. Tente de novo.`
+    : $localize`:@@learning.termFailed:Não foi possível mudar o termo. Tente de novo.`;
+
+const switchWord = (on: boolean): string =>
+  on
+    ? $localize`:@@learning.switchOn:Ligada`
+    : $localize`:@@learning.switchOff:Desligada`;
+
+const termSwitchWord = (on: boolean): string =>
+  on
+    ? $localize`:@@learning.termSwitchOn:Ligado`
+    : $localize`:@@learning.termSwitchOff:Desligado`;
 
 /** "depois de «com» · antes de «foi»", or "em qualquer contexto" (BR-2, BR-3). */
 function contextText(rule: LearnedRule): string {
@@ -70,10 +87,14 @@ function countsText(rule: LearnedRule): string {
 /** The rule's state in words, never only a colour (UP-20). */
 function stateText(rule: LearnedRule): string {
   const texts: Record<LearnedRule['state'], () => string> = {
-    on: () =>
-      rule.switchedBy
+    on: () => {
+      const on = rule.switchedBy
         ? $localize`:@@learning.onBy:Ligada por ${rule.switchedBy}:name:`
-        : $localize`:@@learning.on:Ligada`,
+        : $localize`:@@learning.on:Ligada`;
+      return rule.tiesWith === null
+        ? on
+        : `${on} · ${$localize`:@@learning.ties:empata com «${rule.tiesWith}:other:» quando os dois contextos batem; ali nenhuma se aplica`}`;
+    },
     off: () =>
       rule.switchedBy
         ? $localize`:@@learning.offBy:Desligada por ${rule.switchedBy}:name:`
@@ -116,6 +137,7 @@ function termStateText(term: LearnedTerm): string {
 })
 export class LearningPanel {
   private readonly api = inject(LearningApi);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly resource = httpResource(() => learningUrl(), {
     parse: (body) => transcriptLearningSchema.parse(body),
@@ -138,8 +160,8 @@ export class LearningPanel {
   protected readonly pending = signal<string | null>(null);
   protected readonly notice = signal<Notice | null>(null);
 
-  protected readonly ruleName = ruleName;
-  protected readonly termName = termName;
+  protected readonly switchWord = switchWord;
+  protected readonly termSwitchWord = termSwitchWord;
   protected readonly contextText = contextText;
   protected readonly countsText = countsText;
   protected readonly stateText = stateText;
@@ -158,7 +180,35 @@ export class LearningPanel {
 
   /** A plain "Ligada" is the switch's own label: the line says only what it adds. */
   protected saysMore(rule: LearnedRule): boolean {
-    return rule.state !== 'on' || rule.switchedBy !== null;
+    return (
+      rule.state !== 'on' || rule.switchedBy !== null || rule.tiesWith !== null
+    );
+  }
+
+  /** The name holds the words the switch shows (WCAG 2.5.3). */
+  protected ruleSwitchName(rule: LearnedRule): string {
+    return `${ruleName(rule)}: ${switchWord(this.isOn(rule))}`;
+  }
+
+  protected termSwitchName(term: LearnedTerm): string {
+    return `${termName(term)}: ${termSwitchWord(term.state !== 'off')}`;
+  }
+
+  protected automaticRuleName(rule: LearnedRule): string {
+    return $localize`:@@learning.automaticRule:Voltar ao automático: ${ruleName(rule)}:rule:`;
+  }
+
+  protected automaticTermName(term: LearnedTerm): string {
+    return $localize`:@@learning.automaticTerm:Voltar ao automático: ${termName(term)}:term:`;
+  }
+
+  /** The master's choice dropped: undos and the rules decide again (BR-8, BR-11). */
+  protected automatic(kind: 'rules' | 'terms', id: string): void {
+    this.send(
+      { kind, id, enabled: null },
+      () =>
+        $localize`:@@learning.automaticDone:De volta ao automático. Vale para as próximas transcrições.`,
+    );
   }
 
   protected isOn(rule: LearnedRule): boolean {
@@ -196,7 +246,7 @@ export class LearningPanel {
     change: {
       readonly kind: 'rules' | 'terms';
       readonly id: string;
-      readonly enabled: boolean;
+      readonly enabled: boolean | null;
     },
     done: () => string,
   ): void {
@@ -204,22 +254,19 @@ export class LearningPanel {
     if (this.pending() !== null) return;
     this.pending.set(id);
     this.notice.set(null);
-    this.api.switch(kind, id, enabled).subscribe({
-      next: (learning) => {
-        this.answered.set(learning);
-        this.pending.set(null);
-        this.notice.set({ kind: 'ok', text: done() });
-      },
-      error: () => {
-        this.pending.set(null);
-        this.notice.set({
-          kind: 'error',
-          text:
-            kind === 'rules'
-              ? $localize`:@@learning.ruleFailed:Não foi possível mudar a regra. Tente de novo.`
-              : $localize`:@@learning.termFailed:Não foi possível mudar o termo. Tente de novo.`,
-        });
-      },
-    });
+    this.api
+      .switch(kind, id, enabled)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (learning) => {
+          this.answered.set(learning);
+          this.pending.set(null);
+          this.notice.set({ kind: 'ok', text: done() });
+        },
+        error: () => {
+          this.pending.set(null);
+          this.notice.set({ kind: 'error', text: failedText(kind) });
+        },
+      });
   }
 }
