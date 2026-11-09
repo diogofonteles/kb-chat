@@ -195,9 +195,32 @@ const auditionState = (page: Page) =>
     paused: (element as HTMLAudioElement).paused,
   }));
 
+/**
+ * Waits for the listening to really play. `paused` turns false as play() is called, but the
+ * screen seeks to the range only once the metadata is in, which would undo a seek made
+ * before it; and a loaded WebKit can take seconds to get there. Once the audio moves on, not
+ * seeking, the range's seek is done.
+ */
+async function untilPlaying(page: Page) {
+  await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
+  const moved = await audition(page).evaluate(async (element) => {
+    const audio = element as HTMLAudioElement;
+    const until = performance.now() + 15_000;
+    let last: number | null = null;
+    while (performance.now() < until && !audio.paused) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (audio.seeking) last = null;
+      else if (last !== null && audio.currentTime > last) return true;
+      else last = audio.currentTime;
+    }
+    return false;
+  });
+  expect(moved, 'the listening plays on').toBe(true);
+}
+
 /** Waits for the listening to play, then moves it, as the audio going on would. */
 async function playingAt(page: Page, seconds: number) {
-  await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
+  await untilPlaying(page);
   await audition(page).evaluate((element, at) => {
     (element as HTMLAudioElement).currentTime = at;
   }, seconds);
@@ -214,7 +237,7 @@ async function paintedFrom(
   seconds: number,
   [first, last]: readonly [string, string],
 ): Promise<(string | null)[]> {
-  await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
+  await untilPlaying(page);
   const painted = await audition(page).evaluate(
     async (element, { at, first, last }) => {
       interface Registry {
@@ -517,34 +540,58 @@ const lineInBlock = (line: Locator) =>
     return top >= box.top && top < box.bottom;
   });
 
-test('AC-5: "Ouvir o início" marks nothing before the start and the first word as it starts', async ({
-  page,
-}) => {
-  await openStep3(page, 2);
+interface Sample {
+  readonly at: number;
+  readonly word: string | null;
+}
+
+/** "agora" runs from 30 s to 30.3 s: give or take a frame and NFR-1's 120 ms, it is painted here. */
+const onTheFirstWord = ({ at }: Sample) => at >= 30.13 && at < 30.28;
+
+/**
+ * Clicks "Ouvir o início" (28 s to 33 s) and records, frame by frame, the time and the
+ * painted word from when it plays until the audio is past "agora" or stops, not for a fixed
+ * time from the click.
+ */
+async function listenToTheStart(page: Page): Promise<Sample[]> {
   await page.getByRole('button', { name: 'Ouvir o início' }).click();
-  await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
-  const samples = await page.evaluate(async () => {
+  await untilPlaying(page);
+  return audition(page).evaluate(async (element) => {
     interface Registry {
       get(name: string): Iterable<Range> | undefined;
     }
     const registry = (CSS as unknown as { highlights: Registry }).highlights;
-    const audio = document.querySelector<HTMLAudioElement>(
-      'audio[hidden]:not([data-media-engine])',
-    );
-    const found: { at: number; word: string | null }[] = [];
-    const until = performance.now() + 4_000;
-    while (performance.now() < until && audio && !audio.paused) {
+    const audio = element as HTMLAudioElement;
+    const found: Sample[] = [];
+    const until = performance.now() + 15_000;
+    while (
+      performance.now() < until &&
+      !audio.paused &&
+      audio.currentTime < 30.4
+    ) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const [range] = Array.from(registry.get('track-word') ?? []);
       found.push({ at: audio.currentTime, word: range?.toString() ?? null });
     }
     return found;
   });
+}
+
+test('AC-5: "Ouvir o início" marks nothing before the start and the first word as it starts', async ({
+  page,
+}) => {
+  await openStep3(page, 2);
+  const samples = await listenToTheStart(page);
+  // A loaded WebKit can move currentTime in 0.2 s steps, over the 0.15 s that must show
+  // "agora": then it listens again (the button is back once the range ends) until a frame
+  // lands there. Every frame of every listening is checked below.
+  for (let again = 0; again < 2 && !samples.some(onTheFirstWord); again++) {
+    samples.push(...(await listenToTheStart(page)));
+  }
   const before = samples.filter(({ at }) => at < 29.95);
   expect(before.length).toBeGreaterThan(10);
   expect(before.every(({ word }) => word === null)).toBe(true);
-  // "agora" from 30 s to 30.3 s, give or take a frame and NFR-1's 120 ms.
-  const first = samples.filter(({ at }) => at >= 30.13 && at < 30.28);
+  const first = samples.filter(onTheFirstWord);
   expect(first.length).toBeGreaterThan(0);
   expect(first.every(({ word }) => word === 'agora')).toBe(true);
 });
@@ -774,7 +821,7 @@ test('AC-17: the marked word differs from the spoken one by at most 120 ms, one 
   await expect
     .poll(async () => (await auditionState(page)).time)
     .toBeGreaterThan(LONG_LINE_AT + 0.5);
-  const { samples, delaysMs, changes, writes } = await page.evaluate(
+  const { samples, delaysMs, changes, writes, skipped } = await page.evaluate(
     async ({ startMs, stepMs, words }) => {
       interface Registry {
         get(name: string): Iterable<Range> | undefined;
@@ -799,17 +846,38 @@ test('AC-17: the marked word differs from the spoken one by at most 120 ms, one 
       let samples = 0;
       let changes = 0;
       let last: string | null = null;
-      const until = performance.now() + 5_000;
+      const skipped = { frozen: 0, stalled: 0, outside: 0 };
+      const endMs = startMs + words * stepMs;
+      // Every frame until the line's last word is spoken or the audio stops, not a fixed time.
+      const until = performance.now() + 20_000;
       let previous = performance.now();
-      while (performance.now() < until) {
+      let previousTime = audio?.currentTime ?? 0;
+      while (
+        performance.now() < until &&
+        audio &&
+        !audio.paused &&
+        audio.currentTime * 1000 < endMs
+      ) {
         await new Promise((resolve) => requestAnimationFrame(resolve));
         const frameAt = performance.now();
+        // A frame after the page itself froze (a loaded machine), or with the audio waiting
+        // for data, shows nothing about the highlight: those are not samples. readyState
+        // alone cannot say the audio waits: after a seek while playing, Linux WebKit stays
+        // at 2 while currentTime runs normally (as in media-transcript's NFR-1).
         const frozen = frameAt - previous > 100;
+        const stalled =
+          audio.readyState < 3 && audio.currentTime <= previousTime;
         previous = frameAt;
-        if (frozen || !audio || audio.readyState < 3 || audio.paused) continue;
+        previousTime = audio.currentTime;
+        skipped.frozen += Number(frozen);
+        skipped.stalled += Number(stalled);
+        if (frozen || stalled || audio.paused) continue;
         const nowMs = audio.currentTime * 1000;
         const spoken = Math.floor((nowMs - startMs) / stepMs);
-        if (spoken < 0 || spoken >= words) continue;
+        if (spoken < 0 || spoken >= words) {
+          skipped.outside++;
+          continue;
+        }
         const [range] = Array.from(registry.get('track-word') ?? []);
         const text = range?.toString() ?? null;
         if (text !== last) changes++;
@@ -823,11 +891,14 @@ test('AC-17: the marked word differs from the spoken one by at most 120 ms, one 
         );
       }
       observer.disconnect();
-      return { samples, delaysMs: delays, changes, writes };
+      return { samples, delaysMs: delays, changes, writes, skipped };
     },
     { startMs: LONG_LINE_AT * 1000, stepMs: 300, words: WORD_COUNT },
   );
-  expect(samples).toBeGreaterThanOrEqual(100);
+  expect(
+    samples,
+    `frames skipped: ${JSON.stringify(skipped)}`,
+  ).toBeGreaterThanOrEqual(100);
   const worst = Math.max(0, ...delaysMs);
   process.stdout.write(
     `KBC-092 NFR-1: worst ${Math.round(worst)} ms over ${samples} samples; ${writes} DOM writes for ${changes} word changes\n`,
