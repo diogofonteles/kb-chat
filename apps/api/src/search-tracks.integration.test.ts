@@ -6,7 +6,9 @@ import type {
   SearchHit,
   SearchRequest,
   SearchResponse,
+  Topic,
   TopicFacets,
+  TopicList,
 } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { closeApp, type Call } from '../test/ai-app-harness.js';
@@ -51,6 +53,10 @@ async function search(
   expect(found.statusCode, found.body).toBe(200);
   return found.json<SearchResponse>();
 }
+
+/** The topic list by slug. */
+const topicsOf = (listed: { json: <T>() => T }): Map<string, Topic> =>
+  new Map(listed.json<TopicList>().items.map((one) => [one.slug, one]));
 
 const tracksOf = (found: SearchResponse): SearchHit[] =>
   found.items.filter((hit) => hit.media);
@@ -410,20 +416,45 @@ describe('tracks in the documents search (KBC-101)', () => {
     expect(all.items.filter((hit) => !hit.media).map((hit) => hit.id)).toEqual(
       texts.items.map((hit) => hit.id).slice(0, all.items.length - 1),
     );
-    const listed = await listener('GET', '/api/v1/topics');
-    const count = listed
-      .json<{ items: { slug: string; documentCount: number }[] }>()
-      .items.find((one) => one.slug === 'hermetismo')?.documentCount;
-    const readerCount = (await reader('GET', '/api/v1/topics'))
-      .json<{ items: { slug: string; documentCount: number }[] }>()
-      .items.find((one) => one.slug === 'hermetismo')?.documentCount;
-    expect(count).toBe(readerCount);
+    const listed = topicsOf(await reader('GET', '/api/v1/topics'));
+    // Who does not see tracks counts the texts alone, as before the tracks (KBC-099 AC-13).
+    expect(listed.get('hermetismo')?.trackCount).toBe(0);
     // The vault's Markdown is never shown to people (ADR 0035 §7).
     const opened = await listener(
       'GET',
       `/api/v1/topics/hermetismo/documents/${encodeURIComponent(tracks.path)}`,
     );
     expect(opened.statusCode).toBe(404);
+  });
+});
+
+describe('the collection counts its tracks as documents (KBC-101, owner decision C17)', () => {
+  it('counts the tracks the person sees, apart, in the parent and in the sub-collection, and drops one archived at once', async () => {
+    const tracks = await trackWorld();
+    await moveToSub(tracks, { otherAuthor: true });
+    const listener = await memberWith(tracks.world, LISTENER);
+    const reader = await memberWith(tracks.world, ['search']);
+    const hearsOnly = await memberWith(tracks.world, ['search', 'media']);
+    const read = async (who: Call) =>
+      topicsOf(await who('GET', '/api/v1/topics'));
+    const texts = await read(reader);
+    const seen = await read(listener);
+    expect(seen.get('hermetismo')).toMatchObject({
+      documentCount: (texts.get('hermetismo')?.documentCount ?? 0) + 2,
+      trackCount: 2,
+    });
+    expect(seen.get(SUB)).toMatchObject({
+      documentCount: (texts.get(SUB)?.documentCount ?? 0) + 1,
+      trackCount: 1,
+    });
+    expect(texts.get('hermetismo')?.trackCount).toBe(0);
+    expect(await read(hearsOnly)).toEqual(texts);
+
+    changeMedia(tracks.world, {
+      id: tracks.other.id,
+      set: { archived_at: new Date().toISOString() },
+    });
+    expect((await read(listener)).get('hermetismo')?.trackCount).toBe(1);
   });
 });
 

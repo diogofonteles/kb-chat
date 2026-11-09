@@ -11,9 +11,9 @@ export function describeResultCount(
 ): string {
   const tracks = response.trackTotal ?? 0;
   const documents = documentCount(response);
-  return tracks > 0
-    ? `${documents} (${describeTrackCount(tracks)})`
-    : documents;
+  if (tracks === 0) return documents;
+  const trackCount = describeTrackCount(tracks);
+  return $localize`:@@count.withTracks:${documents}:documents: (${trackCount}:tracks:)`;
 }
 
 function documentCount(

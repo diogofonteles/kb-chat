@@ -8,8 +8,9 @@ import {
   topicUpdateSchema,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
+import type { TrackShelf } from '../../ports/track-shelf.js';
 import {
-  isTrackEntry,
+  isSeenDocument,
   type CatalogRegistry,
   type TopicCatalog,
 } from '../catalog/index.js';
@@ -55,6 +56,8 @@ export interface TopicsView {
   readonly renamable?: (slug: string) => boolean;
   /** Each collection's main author (KBC-049); default: none. */
   readonly mainAuthorOf?: MainAuthorOf;
+  /** The tracks the person sees as documents (KBC-101, C17); default: none, texts only. */
+  readonly tracks?: TrackShelf | undefined;
 }
 
 const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
@@ -62,30 +65,40 @@ const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
 const byTitle = (a: TopicCatalog, b: TopicCatalog): number =>
   collator.compare(a.topic.title, b.topic.title);
 
-const textCount = (catalog: TopicCatalog): number => {
-  let count = 0;
-  for (const entry of catalog.entries.values())
-    if (!isTrackEntry(entry)) count += 1;
-  return count;
-};
+type Counts = Pick<Topic, 'documentCount' | 'trackCount'>;
+
+/** The documents of a scope this person sees, and the tracks among them (C17). */
+function countsOf(
+  scope: readonly TopicCatalog[],
+  tracks: TrackShelf | undefined,
+): Counts {
+  const seen = scope.flatMap((one) =>
+    [...one.entries.values()].filter((entry) =>
+      isSeenDocument(entry, { topic: one.topic.slug, tracks }),
+    ),
+  );
+  return {
+    documentCount: seen.length,
+    trackCount: seen.filter((entry) => entry.media !== null).length,
+  };
+}
+
+const NOTHING: Counts = { documentCount: 0, trackCount: 0 };
 
 function toTopic(
   catalog: TopicCatalog,
-  scope: readonly TopicCatalog[],
+  counts: Counts,
   access: Pick<Topic, 'canOpen' | 'canRename' | 'mainAuthor'>,
 ): Topic {
   const { slug, title, parent, description } = catalog.topic;
-  const { canOpen } = access;
   return {
     slug,
     title,
     parent: parent ?? null,
     description: description ?? '',
     ...access,
-    // Texts: a track document counts in "Na fala", not here (ADR 0035 §8).
-    documentCount: canOpen
-      ? scope.reduce((sum, one) => sum + textCount(one), 0)
-      : 0,
+    // A track is a document of its collection for who sees it (KBC-101, owner decision C17).
+    ...(access.canOpen ? counts : NOTHING),
   };
 }
 
@@ -93,18 +106,19 @@ function toTopic(
 function branchOf(
   root: TopicCatalog,
   children: readonly TopicCatalog[],
-  view: Required<Pick<TopicsView, 'visible' | 'renamable' | 'mainAuthorOf'>>,
+  view: Required<Pick<TopicsView, 'visible' | 'renamable' | 'mainAuthorOf'>> &
+    Pick<TopicsView, 'tracks'>,
 ): Topic[] {
   const canOpen = view.visible(root.topic.slug);
   if (!canOpen && children.length === 0) return [];
   return [
-    toTopic(root, [root, ...children], {
+    toTopic(root, countsOf([root, ...children], view.tracks), {
       canOpen,
       canRename: canOpen && view.renamable(root.topic.slug),
       mainAuthor: view.mainAuthorOf(root.topic.slug),
     }),
     ...children.map((child) =>
-      toTopic(child, [child], {
+      toTopic(child, countsOf([child], view.tracks), {
         canOpen: true,
         canRename: view.renamable(child.topic.slug),
         mainAuthor: view.mainAuthorOf(child.topic.slug),
@@ -113,19 +127,28 @@ function branchOf(
   ];
 }
 
+type BranchView = Parameters<typeof branchOf>[2];
+
+/** What the view leaves out: all seen, none renamable, no main author, texts only. */
+const withDefaults = (
+  view: Omit<TopicsView, 'preferredTopic'>,
+): BranchView => ({
+  visible: view.visible ?? (() => true),
+  renamable: view.renamable ?? (() => false),
+  mainAuthorOf: view.mainAuthorOf ?? (() => null),
+  tracks: view.tracks,
+});
+
 /**
  * The collections as a tree (FR-4): top level by name, each followed by its sub-collections.
  * A parent the person cannot open is kept as the title of a group it has a visible child in.
  */
 export function listTopics(
   { catalog }: Pick<TopicsServiceDeps, 'catalog'>,
-  {
-    preferredTopic,
-    visible = () => true,
-    renamable = () => false,
-    mainAuthorOf = () => null,
-  }: TopicsView = {},
+  { preferredTopic, ...given }: TopicsView = {},
 ): TopicList {
+  const view = withDefaults(given);
+  const { visible } = view;
   const all = catalog.topics();
   const known = new Set(all.map((one) => one.topic.slug));
   const roots = all
@@ -138,9 +161,7 @@ export function listTopics(
           one.topic.parent === root.topic.slug && visible(one.topic.slug),
       )
       .sort(byTitle);
-  const items = roots.flatMap((root) =>
-    branchOf(root, childrenOf(root), { visible, renamable, mainAuthorOf }),
-  );
+  const items = roots.flatMap((root) => branchOf(root, childrenOf(root), view));
   const opens = items.some(
     (item) => item.slug === preferredTopic && item.canOpen,
   );
@@ -311,10 +332,15 @@ export class TopicsService {
   }
 
   private topicOf(slug: string): Topic {
-    return toTopic(this.require(slug), this.deps.catalog.scope(slug), {
-      canOpen: true,
-      canRename: true,
-      mainAuthor: this.deps.authors?.mainOf(slug) ?? null,
-    });
+    // Texts only: the list the screen reloads counts the tracks each person sees.
+    return toTopic(
+      this.require(slug),
+      countsOf(this.deps.catalog.scope(slug), undefined),
+      {
+        canOpen: true,
+        canRename: true,
+        mainAuthor: this.deps.authors?.mainOf(slug) ?? null,
+      },
+    );
   }
 }

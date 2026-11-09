@@ -10,6 +10,7 @@ import {
   type Genre,
   type Relevance,
 } from '@kb-chat/contracts';
+import type { TrackShelf } from '../../ports/track-shelf.js';
 import { titleFromId, toDisplayTitle } from './titles.js';
 
 /** Concept names a document points to through kb's relation lists (unresolved). */
@@ -189,3 +190,18 @@ export function toCatalogEntry(
 /** A document the app rendered from a track: media.db decides who sees it (ADR 0035 §5). */
 export const isTrackEntry = (entry: Pick<CatalogEntry, 'media'>): boolean =>
   entry.media !== null;
+
+/**
+ * The one gate of a document (ADR 0035 §5): a text, or a track the person's shelf confirms in
+ * the collection `topic` (the one its document is in). Without a shelf, texts only. Search,
+ * facets, suggestions, the topic list and the research tools all ask here.
+ */
+export const isSeenDocument = (
+  entry: Pick<CatalogEntry, 'media'>,
+  {
+    topic,
+    tracks,
+  }: { readonly topic: string; readonly tracks?: TrackShelf | undefined },
+): boolean =>
+  entry.media === null ||
+  (tracks?.trackOf(topic, entry.media) ?? null) !== null;

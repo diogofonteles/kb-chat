@@ -116,6 +116,7 @@ export const aTopic = (
   topic: Pick<Topic, 'slug' | 'title'> & Partial<Topic>,
 ): Topic => ({
   documentCount: 0,
+  trackCount: 0,
   parent: null,
   description: '',
   canOpen: true,

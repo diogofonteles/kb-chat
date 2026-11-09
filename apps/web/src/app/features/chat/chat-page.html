@@ -64,14 +64,22 @@
         @if (topic(); as current) {
           <h1 class="topic">
             {{ current.title }}
-            <span
-              class="count"
-              i18n="@@page.count"
-              >{current.documentCount, plural,
+            <span class="count"
+              ><span i18n="@@page.count">{current.documentCount, plural,
                 =1 {1 documento}
                 other {{{ current.documentCount | number }} documentos}
-              }</span
-            >
+              }</span>
+              @if (current.trackCount > 0) {
+                <!-- The tracks the person sees are documents too (KBC-101, C17), as in the summary. -->
+                &ngsp;<span
+                  i18n="@@page.trackCount"
+                  >{current.trackCount, plural,
+                    =1 {(1 faixa)}
+                    other {({{ current.trackCount | number }} faixas)}
+                  }</span
+                >
+              }
+            </span>
           </h1>
         } @else if (allCollections()) {
           <h1 class="topic" i18n="@@page.allCollections">Todos os acervos</h1>

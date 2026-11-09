@@ -421,6 +421,7 @@ async function registerCollections(
       preferredTopic: (principal) =>
         deps.ai.settings.snapshot(principal)?.preferences.defaultTopic ??
         config.KB_TOPIC,
+      ...(deps.media && { tracks: trackShelf(deps.media) }),
     }),
   );
 }

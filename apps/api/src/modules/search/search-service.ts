@@ -23,6 +23,7 @@ import type {
 import type { TrackShelf } from '../../ports/track-shelf.js';
 import type { VaultReaderPort } from '../../ports/vault-reader.js';
 import {
+  isSeenDocument,
   isTrackEntry,
   splitFrontmatter,
   type CatalogEntry,
@@ -93,10 +94,7 @@ export interface DocumentSearch {
 const admitted = (
   entry: CatalogEntry,
   { topic, tracks }: { topic: string; tracks: TrackShelf | undefined },
-): boolean =>
-  !isTrackEntry(entry) ||
-  (entry.media !== null &&
-    (tracks?.trackOf(topic, entry.media) ?? null) !== null);
+): boolean => isSeenDocument(entry, { topic, tracks });
 
 const ofKind = (kinds: readonly SearchKind[]) => (group: CopyGroup) =>
   kinds.includes(group.lead.entry.media ? 'audio' : 'text');

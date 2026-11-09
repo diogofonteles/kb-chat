@@ -1,7 +1,11 @@
 import type { ResearchStep } from '@kb-chat/contracts';
 import type { z } from 'zod';
 import type { TrackShelf } from '../../ports/track-shelf.js';
-import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
+import {
+  isSeenDocument,
+  type CatalogEntry,
+  type CatalogRegistry,
+} from '../catalog/index.js';
 import type { SourceBook } from './source-book.js';
 import { quote, type AuthorshipLabels } from './tool-output.js';
 
@@ -22,10 +26,10 @@ export function isVisible(
   entry: Pick<CatalogEntry, 'media' | 'home'>,
   { topic, tracks }: Pick<ToolContext, 'topic' | 'tracks'>,
 ): boolean {
-  if (entry.media === null) return true;
-  return (
-    (tracks?.trackOf(entry.home?.topic ?? topic, entry.media) ?? null) !== null
-  );
+  return isSeenDocument(entry, {
+    topic: entry.home?.topic ?? topic,
+    tracks,
+  });
 }
 
 /** A tool call ready to run: the steps shown to the reader and the text for the model. */

@@ -6,7 +6,7 @@ import type {
   TrackShelf,
 } from '../../ports/track-shelf.js';
 import type { TranscriptStorePort } from '../../ports/transcript-store.js';
-import { isPublishable } from './document-source.js';
+import { isMediaDocument } from './document-source.js';
 
 export interface MediaTrackShelfDeps {
   readonly store: Pick<MediaStorePort, 'getMedia'>;
@@ -59,16 +59,9 @@ export class MediaTrackShelf implements TrackShelf {
 
   /** A published track, or a live recording that never had one (ADR 0035 §1). */
   private isDocument(media: MediaRecord | null): media is MediaRecord {
-    if (isPublishable(media)) return true;
     const { hasTracks } = this.deps;
-    return (
-      hasTracks !== undefined &&
-      media !== null &&
-      media.track === null &&
-      media.status === 'ready' &&
-      media.archivedAt === null &&
-      !hasTracks(media.id)
-    );
+    // Without `hasTracks`, only tracks are seen.
+    return isMediaDocument(media, hasTracks ?? (() => true));
   }
 
   segmentsOf(mediaId: string): readonly ShelfSegment[] {

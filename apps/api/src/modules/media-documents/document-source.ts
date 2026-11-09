@@ -47,6 +47,13 @@ const isLiveRecording = (media: MediaRecord | null): media is MediaRecord =>
   media.status === 'ready' &&
   media.archivedAt === null;
 
+/** A published track, or a live recording that never had one (ADR 0035 §1, KBC-100 FR-7). */
+export const isMediaDocument = (
+  media: MediaRecord | null,
+  hasTracks: (recordingId: string) => boolean,
+): media is MediaRecord =>
+  isPublishable(media) || (isLiveRecording(media) && !hasTracks(media.id));
+
 /**
  * What a media's document is made of, read from media.db at render time: its current
  * transcript (a track's slice on the track's clock), who it is by and where it sits in its
@@ -66,8 +73,7 @@ export class TrackDocumentSource {
 
   /** Whether a media may be in the AI research as a document now (ADR 0035 §5). */
   isDocumentable(media: MediaRecord | null): boolean {
-    if (isPublishable(media)) return true;
-    return isLiveRecording(media) && !this.deps.hasTracks(media.id);
+    return isMediaDocument(media, this.deps.hasTracks);
   }
 
   private trackInput(

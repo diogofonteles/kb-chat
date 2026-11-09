@@ -1,6 +1,7 @@
 export { CatalogRegistry, type TopicCatalog } from './catalog.js';
 export { ScopeView, type DocumentHome } from './scope-view.js';
 export {
+  isSeenDocument,
   isTrackEntry,
   toCatalogEntry,
   toConceptName,

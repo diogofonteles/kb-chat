@@ -76,4 +76,15 @@ describe('withTopic (KBC-048 FR-3)', () => {
       'Hermetismo',
     ]);
   });
+
+  it('keeps the counts the list had for this person when renamed (the answer counts texts alone)', () => {
+    const counted = { ...UDV, documentCount: 7, trackCount: 2 };
+    const renamed = { ...UDV, title: 'Abc', documentCount: 5, trackCount: 0 };
+    const [first] = withTopic([counted, PALAVRA], renamed);
+    expect(first).toMatchObject({
+      title: 'Abc',
+      documentCount: 7,
+      trackCount: 2,
+    });
+  });
 });

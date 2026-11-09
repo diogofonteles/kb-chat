@@ -9,12 +9,13 @@ import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import type { UsageLogPort } from '../../ports/usage-log.js';
 import type { TrackShelf } from '../../ports/track-shelf.js';
-import { SIGNED_IN, hasFeature, principalOf, viewerOf } from '../auth/index.js';
 import {
-  isTrackEntry,
-  type CatalogEntry,
-  type CatalogRegistry,
-} from '../catalog/index.js';
+  SIGNED_IN,
+  principalOf,
+  seesTrackDocuments,
+  viewerOf,
+} from '../auth/index.js';
+import { isSeenDocument, type CatalogRegistry } from '../catalog/index.js';
 import { topSuggestions } from './suggestions.js';
 
 export interface UsageDeps {
@@ -23,14 +24,6 @@ export interface UsageDeps {
   /** media.db's word on track documents (KBC-101 FR-7); absent with media off. */
   readonly tracks?: () => TrackShelf;
 }
-
-/** Texts, and the track documents a shelf confirms in their own collection. */
-const seenWith =
-  (shelf: TrackShelf | undefined, topic: string) =>
-  (entry: CatalogEntry): boolean =>
-    !isTrackEntry(entry) ||
-    (entry.media !== null &&
-      (shelf?.trackOf(topic, entry.media) ?? null) !== null);
 
 const EVENTS_PER_MINUTE = 600;
 
@@ -56,13 +49,16 @@ function registerSuggestions(
       if (scope.length === 0)
         throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
       // A track's concepts count for who sees tracks as documents (KBC-101 BR-7).
-      const { person } = viewerOf(request);
-      const sees =
-        hasFeature(person, 'media') && hasFeature(person, 'media-tracks');
+      const sees = seesTrackDocuments(viewerOf(request).person);
       const shelf = sees ? tracks?.() : undefined;
       return topSuggestions(
         scope.flatMap((one) =>
-          [...one.entries.values()].filter(seenWith(shelf, one.topic.slug)),
+          [...one.entries.values()].filter((entry) =>
+            isSeenDocument(entry, {
+              topic: one.topic.slug,
+              tracks: shelf,
+            }),
+          ),
         ),
       );
     },
