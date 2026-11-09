@@ -1328,6 +1328,11 @@ export const transcriptWordsQuerySchema = z.object({
 export type TranscriptWordsQuery = z.infer<typeof transcriptWordsQuerySchema>;
 
 export const transcriptWordSchema = z.object({
+  /**
+   * The word's place in the whole transcript (KBC-093 FR-7), what a correction names. Absent
+   * in words saved for offline listening before it existed.
+   */
+  position: z.number().int().min(0).optional(),
   /** The segment's index in the transcript. */
   segment: z.number().int().min(0),
   startMs: z.number().int().min(0),
@@ -1344,6 +1349,8 @@ export type TranscriptWord = z.infer<typeof transcriptWordSchema>;
 export const mediaTranscriptWordsSchema = z.object({
   mediaId: mediaIdSchema,
   version: z.number().int().min(1),
+  /** Goes up with each word correction or undo of this version (KBC-093 BR-4, ADR 0034 §2). */
+  revision: z.number().int().min(0).default(0),
   words: z.array(transcriptWordSchema),
 });
 export type MediaTranscriptWords = z.infer<typeof mediaTranscriptWordsSchema>;
@@ -1352,6 +1359,8 @@ export type MediaTranscriptWords = z.infer<typeof mediaTranscriptWordsSchema>;
 export const mediaTranscriptSchema = z.object({
   mediaId: mediaIdSchema,
   version: z.number().int().min(1),
+  /** Goes up with each word correction or undo of this version (KBC-093 BR-4, ADR 0034 §2). */
+  revision: z.number().int().min(0).default(0),
   /** `low`: always shown with the notice (KBC-036 BR-5, KBC-038 BR-2). */
   confidence: transcriptConfidenceSchema,
   segments: z.array(transcriptSegmentSchema),

@@ -45,6 +45,8 @@ export const FEATURES = [
    * collection, on top of `research` and `media`.
    */
   'media-research',
+  /** "Corrigir transcrição" (KBC-093, ADR 0034 §7): fix words of a recording's transcript. */
+  'media-correct',
 ] as const;
 export const featureSchema = z.enum(FEATURES);
 export type Feature = z.infer<typeof featureSchema>;

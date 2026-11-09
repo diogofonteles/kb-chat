@@ -174,6 +174,10 @@ import {
   trackRevisionRoutes,
   type TrackRevisionService,
 } from './modules/media-edit/index.js';
+import {
+  TranscriptCorrectionService,
+  correctionRoutes,
+} from './modules/media-corrections/index.js';
 import { houseAiRoutes } from './modules/house-ai/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
 import {
@@ -574,7 +578,30 @@ function trackPublisher(
     onPublished: (parentId) =>
       documents.reconciler.reconcileRecording(parentId),
     onChanged: (parentId) => documents.reconciler.reconcileRecording(parentId),
+    onTextChanged: (mediaIds) => documents.reconciler.reconcileTracks(mediaIds),
   });
+}
+
+/** Word corrections (KBC-093, ADR 0034): the tracks and their documents follow. */
+async function registerCorrections(
+  app: FastifyInstance,
+  input: {
+    readonly media: MediaDeps;
+    readonly service: MediaService;
+    readonly publisher: TrackPublisher;
+  },
+): Promise<TranscriptCorrectionService> {
+  const { media, service, publisher } = input;
+  const corrections = new TranscriptCorrectionService({
+    store: media.corrections,
+    media: service,
+    recordOf: (mediaId) => media.store.getMedia(mediaId),
+    afterChange: (recordingId, words) =>
+      publisher.afterCorrection(recordingId, words),
+    onCorrected: (event) => app.log.info(event, 'transcript.correction'),
+  });
+  await app.register(correctionRoutes(corrections));
+  return corrections;
 }
 
 /** The workers' protocol: the VM's conversions and the paired transcribers' (ADR 0023). */
@@ -588,6 +615,7 @@ interface WorkerWiring {
   readonly publisher: TrackPublisher;
   readonly groq: GroqService;
   readonly documents: MediaDocuments;
+  readonly corrections: TranscriptCorrectionService;
 }
 
 async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
@@ -598,7 +626,10 @@ async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
       groq,
       service: workerService(wiring.media, { voicePrints, groq, documents }),
       transcribers: wiring.transcribers,
-      transcription: transcriptionService(wiring.media, publisher),
+      transcription: transcriptionService(wiring.media, {
+        publisher,
+        corrections: wiring.corrections,
+      }),
       cuts: publisher,
       kbResults: documents.kb,
       vaultSyncs: documents.status,
@@ -637,13 +668,23 @@ function workerService(
 /** Transcripts landing, with the tracks that follow them (KBC-068 BR-4). */
 function transcriptionService(
   { store, transcripts, files }: MediaDeps,
-  publisher: TrackPublisher,
+  {
+    publisher,
+    corrections,
+  }: {
+    publisher: TrackPublisher;
+    corrections: TranscriptCorrectionService;
+  },
 ): TranscriptionService {
   return new TranscriptionService({
     store,
     transcripts,
     files,
-    onTranscript: (mediaId) => publisher.afterTranscript(mediaId),
+    // The corrections land on the new version before its tracks are cut (KBC-093 FR-8).
+    onTranscript: (mediaId) => {
+      corrections.carry(mediaId);
+      publisher.afterTranscript(mediaId);
+    },
   });
 }
 
@@ -1037,15 +1078,15 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const measures = await registerMeasures(app, { deps: wiring.media, media });
   await registerLibrary(app, { ...wiring, transcribers });
   await registerVoiceProfiles(app, { ...wiring, transcribers });
-  const { authors, media: deps } = wiring;
-  const worker = { ...measures, media: deps, authors, transcribers };
-  await registerWorker(app, { ...worker, publisher, groq, documents });
   const edited = await registerEditing(app, {
     ...withDocuments,
     service: media,
     transcribers,
     publisher,
   });
+  const { authors, media: deps } = wiring;
+  const worker = { ...measures, media: deps, authors, transcribers, groq };
+  await registerWorker(app, { ...worker, publisher, documents, ...edited });
   await registerMediaRoutes(app, { wiring, media, publisher, edited });
   startJanitor(app, { ...measures, ...edited, media: wiring.media, groq });
 }
@@ -1091,7 +1132,12 @@ async function registerEditing(
     proposals,
   });
   await app.register(preparationRoutes(preparation));
-  return { proposals, preparation, subjects, revisions };
+  const corrections = await registerCorrections(app, {
+    media: wiring.media,
+    service: wiring.service,
+    publisher: wiring.publisher,
+  });
+  return { proposals, preparation, subjects, revisions, corrections };
 }
 
 /** The person who asked for a plan, as they stand now (KBC-072 BR-4). */

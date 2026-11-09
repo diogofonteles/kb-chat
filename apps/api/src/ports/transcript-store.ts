@@ -25,6 +25,11 @@ export interface DerivedWord {
   readonly probability: number | null;
 }
 
+/** A stored word with its place in the whole transcript (KBC-093 FR-7). */
+export interface StoredWord extends DerivedWord {
+  readonly position: number;
+}
+
 /** One transcription as stored (ADR 0022 §1 `transcripts`), with what was derived from it. */
 export interface NewTranscript {
   readonly id: string;
@@ -56,6 +61,8 @@ export interface TranscriptSummary {
   readonly id: string;
   readonly mediaId: string;
   readonly version: number;
+  /** Goes up with each word correction or undo (KBC-093 BR-4, ADR 0034 §2). */
+  readonly revision: number;
   /** The engine's model; on a track, the id of the recording's transcript it was cut from. */
   readonly model: string;
   readonly confidence: TranscriptConfidence;
@@ -126,10 +133,10 @@ export interface TranscriptStorePort {
   /** Every version of an item's transcript, newest first. */
   transcripts(mediaId: string): TranscriptSummary[];
   segments(transcriptId: string): DerivedSegment[];
-  words(transcriptId: string): DerivedWord[];
+  words(transcriptId: string): StoredWord[];
   /** The words of `count` segments from `from`, reading only those (KBC-045 FR-1). */
   wordsOfSegments(
     transcriptId: string,
     range: { readonly from: number; readonly count: number },
-  ): DerivedWord[];
+  ): StoredWord[];
 }

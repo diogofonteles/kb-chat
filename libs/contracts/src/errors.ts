@@ -75,6 +75,12 @@ export const API_ERROR_CODES = [
   'PLAN_REFUSED',
   /** Groq is off, or has no key, for a transcription a master sends to it (KBC-037). */
   'GROQ_UNAVAILABLE',
+  /** A word correction refused (KBC-093): `details.reason` says why (word-changed, …). */
+  'CORRECTION_CONFLICT',
+  /** The recording was transcribed again since the person read it (KBC-093 BR-6). */
+  'TRANSCRIPT_CHANGED',
+  /** A correction's text or batch the rules refuse (KBC-093 BR-3, BR-12). */
+  'CORRECTION_INVALID',
   'INTERNAL',
 ] as const;
 

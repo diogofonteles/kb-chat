@@ -23,6 +23,8 @@ export const FEATURE_LABELS: Record<Feature, () => string> = {
   'media-subjects': () => $localize`:@@feature.mediaSubjects:Assuntos na mídia`,
   'media-research': () =>
     $localize`:@@feature.mediaResearch:Pesquisar faixas com IA`,
+  'media-correct': () =>
+    $localize`:@@feature.mediaCorrect:Corrigir transcrição`,
   'media-voice-profiles': () =>
     $localize`:@@feature.mediaVoiceProfiles:Cadastrar perfis de voz`,
 };

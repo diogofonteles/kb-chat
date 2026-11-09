@@ -30,6 +30,8 @@ import { SqliteTrackSubjectStore } from './adapters/sqlite/sqlite-track-subject-
 import { SqliteSilenceStore } from './adapters/sqlite/sqlite-silence-store.js';
 import { SqliteTranscriberStore } from './adapters/sqlite/sqlite-transcriber-store.js';
 import { SqliteTranscriptStore } from './adapters/sqlite/sqlite-transcript-store.js';
+import { SqliteTranscriptCorrectionStore } from './adapters/sqlite/sqlite-transcript-correction-store.js';
+import type { TranscriptCorrectionStorePort } from './ports/transcript-correction-store.js';
 import { SqliteWaveformStore } from './adapters/sqlite/sqlite-waveform-store.js';
 import { SqliteVoiceProfileStore } from './adapters/sqlite/sqlite-voice-profile-store.js';
 import type { DiarizationStorePort } from './ports/diarization-store.js';
@@ -72,6 +74,8 @@ export interface MediaDeps {
   readonly bookmarks: BookmarkStorePort;
   /** Transcripts and the term list (KBC-036). */
   readonly transcripts: TranscriptStorePort;
+  /** Word corrections and their log (KBC-093, ADR 0034). */
+  readonly corrections: TranscriptCorrectionStorePort;
   /** The items approved tracks become (KBC-068, ADR 0029 §5). */
   readonly trackItems: TrackItemStorePort;
   /** What changes a track after its approval (KBC-073). */
@@ -229,6 +233,7 @@ type MediaStores = { readonly groqQueue: GroqQueuePort } & Pick<
   | 'listening'
   | 'bookmarks'
   | 'transcripts'
+  | 'corrections'
   | 'transcribers'
   | 'trackProposals'
   | 'trackSubjects'
@@ -266,6 +271,7 @@ function storesOf(db: DatabaseSync): MediaStores {
     listening: new SqliteListeningStore(db),
     bookmarks: new SqliteBookmarkStore(db),
     transcripts,
+    corrections: new SqliteTranscriptCorrectionStore(db),
     trackItems: new SqliteTrackItemStore(db, transcripts),
     trackRevisions: new SqliteTrackRevisionStore(db),
     transcribers: new SqliteTranscriberStore(db),
