@@ -40,6 +40,11 @@ HEARTBEAT_S: Final = 15.0
 # keeps the 1 minute of the consent with the API out of reach or answering late.
 PRINT_ACK_S: Final = 40.0
 POLL_S: Final = 30.0
+# `--exit-when-idle` (KBC-114): the next stage of an audio is queued within seconds of the
+# last one; after this grace with nothing, the worker exits until the API starts it again.
+IDLE_GRACE_S: Final = 30.0
+# ...and it exits after this many lease errors in a row instead of waiting in memory.
+MAX_IDLE_ERRORS: Final = 3
 # The sign of life to the app while nothing changes (KBC-114 FR-8); a change goes at once.
 STATUS_EVERY_S: Final = 30.0
 UNAUTHORIZED_BACKOFF_S: Final = 600.0

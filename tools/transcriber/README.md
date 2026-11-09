@@ -80,7 +80,7 @@ reason and writes nothing.
 
 ## In the background (KBC-114)
 
-The worker runs as a LaunchAgent: launchd starts it at login and again whenever it stops.
+The worker runs as a LaunchAgent, only when needed (the owner's rule: never on for nothing): launchd runs `transcriber run --exit-when-idle` once at login, with no `KeepAlive`; it drains the queue, waits 30 s for the next stage and exits (also after 3 lease errors in a row, or at once with a revoked token), telling the app it `stopped`. An API on the same Mac (`KB_CHAT_LOCAL_TRANSCRIBER=1`) starts it again with `launchctl kickstart` whenever a job waits. `transcriber pair` installs it.
 
 ```bash
 uv run --project tools/transcriber transcriber service install --vault ~/dev/personal/hermetismo
@@ -90,7 +90,7 @@ uv run --project tools/transcriber transcriber service uninstall
 ```
 
 `install` writes `~/Library/LaunchAgents/br.com.nova-alexandria.transcriber.plist` (label
-`br.com.nova-alexandria.transcriber`, `RunAtLoad`, `KeepAlive`, `ExitTimeOut` 300 s) and loads it
+`br.com.nova-alexandria.transcriber`, `RunAtLoad`, no `KeepAlive`, `ExitTimeOut` 300 s) and loads it
 with `launchctl bootstrap gui/$UID`; installing again replaces it. The plist runs this
 checkout with `uv run --extra diarize --extra voiceprint` (`--extra` is repeatable and
 replaces the default): `uv run` installs a missing extra by itself before the worker starts,

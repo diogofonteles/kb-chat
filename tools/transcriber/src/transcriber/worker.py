@@ -22,6 +22,8 @@ from .config import (
     DIARIZE_PARAMETERS_VERSION,
     ERROR_BACKOFF_S,
     HEARTBEAT_S,
+    IDLE_GRACE_S,
+    MAX_IDLE_ERRORS,
     PARAMETERS,
     PARAMETERS_VERSION,
     POLL_S,
@@ -90,6 +92,10 @@ class Worker:
     # The sign of life the app shows to masters (KBC-114): kept always, sent with a reporter.
     status: WorkerStatus = field(default_factory=WorkerStatus)
     reporter: StatusReporter | None = None
+    # `--exit-when-idle`: a second empty lease this long after the first one ends the run,
+    # and this many lease errors in a row end it too (the owner: never on for nothing).
+    idle_grace_s: float = IDLE_GRACE_S
+    max_idle_errors: int = MAX_IDLE_ERRORS
 
     def __post_init__(self) -> None:
         self.status.kinds = self.kinds
@@ -137,16 +143,35 @@ class Worker:
         finally:
             if self.reporter is not None:
                 self.reporter.stop()
+                # The API knows at once that it is off, and starts it for the next job.
+                self.status.set_state("stopped")
+                self.reporter.send(self.status)
 
     def _loop(self, *, once: bool, exit_when_idle: bool) -> int:
+        idle_once = False
+        errors = 0
         while not self.stop.is_set():
             outcome = self.step()
-            if outcome == "job" and once:
-                break
-            if outcome == "idle":
-                if exit_when_idle or once:
+            errors = errors + 1 if outcome in ("error", "revoked") else 0
+            if outcome == "job":
+                idle_once = False
+                if once:
                     break
-                self.stop.wait(self.poll_s)
+            elif outcome == "idle":
+                if once:
+                    break
+                if exit_when_idle:
+                    # On only when needed (the owner): a grace for the next stage, then off.
+                    if idle_once:
+                        break
+                    idle_once = True
+                    self.stop.wait(self.idle_grace_s)
+                else:
+                    self.stop.wait(self.poll_s)
+            elif exit_when_idle and (outcome == "revoked" or errors >= self.max_idle_errors):
+                # Never sits in memory retrying: launchd or the API starts it again later.
+                log.error("transcriber stopped: the API cannot be used now")
+                return 1
             elif outcome == "revoked":
                 self.stop.wait(self.unauthorized_backoff_s)
             elif outcome == "error":

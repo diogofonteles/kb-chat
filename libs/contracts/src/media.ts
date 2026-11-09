@@ -1067,6 +1067,8 @@ export const TRANSCRIBER_STATES = [
   'working',
   'waiting',
   'error',
+  /** Its last word as it exits: it runs only when needed (KBC-114 AC-18). */
+  'stopped',
 ] as const;
 export const transcriberStateSchema = z.enum(TRANSCRIBER_STATES);
 export type TranscriberState = z.infer<typeof transcriberStateSchema>;
@@ -1133,7 +1135,7 @@ export const transcriberStatusItemSchema = z.object({
   kinds: z.array(mediaJobKindSchema),
   lastSeenAt: z.iso.datetime().nullable(),
   /** Its last status, or `offline` without one for TRANSCRIBER_STATUS_STALE_MS. */
-  state: z.enum([...TRANSCRIBER_STATES, 'offline']),
+  state: z.enum(['idle', 'working', 'waiting', 'error', 'offline']),
   report: transcriberStatusReportSchema
     .extend({ receivedAt: z.iso.datetime() })
     .nullable(),

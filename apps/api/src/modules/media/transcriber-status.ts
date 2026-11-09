@@ -60,12 +60,12 @@ export class TranscriberStatusBoard {
     const at = this.now().getTime();
     const fresh = (iso: string | null | undefined) =>
       iso != null && at - Date.parse(iso) <= TRANSCRIBER_STATUS_STALE_MS;
-    return this.deps.transcribers
-      .list()
-      .some(
-        (one) =>
-          fresh(one.lastSeenAt) || fresh(this.reports.get(one.id)?.receivedAt),
-      );
+    return this.deps.transcribers.list().some((one) => {
+      const report = this.reports.get(one.id);
+      // What it said last decides: "stopped" is off even though it was just seen.
+      if (report && fresh(report.receivedAt)) return report.state !== 'stopped';
+      return fresh(one.lastSeenAt);
+    });
   }
 
   private itemOf(transcriber: Transcriber): TranscriberStatusItem {
@@ -75,7 +75,10 @@ export class TranscriberStatusBoard {
       name: transcriber.name,
       kinds: transcriber.kinds,
       lastSeenAt: transcriber.lastSeenAt,
-      state: report && this.isFresh(report) ? report.state : 'offline',
+      state:
+        report && this.isFresh(report) && report.state !== 'stopped'
+          ? report.state
+          : 'offline',
       report,
     };
   }

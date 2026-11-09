@@ -1,12 +1,63 @@
 """A fake worker API on a local port: records every call, answers as configured."""
 
 import json
+import os
+import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import urlparse
 
 import numpy as np
 import pytest
+
+# This Mac's real config, read before any test moves HOME (the guard compares it at the end).
+REAL_CONFIG = (
+    Path(os.path.expanduser("~"))
+    / "Library"
+    / "Application Support"
+    / "nova-alexandria-transcriber"
+    / "config.json"
+)
+_REAL_RUN = subprocess.run
+_FORBIDDEN = ("security", "launchctl")
+
+
+def _fingerprint(path: Path) -> tuple[bool, bytes]:
+    try:
+        return True, path.read_bytes()
+    except OSError:
+        return False, b""
+
+
+@pytest.fixture(scope="session", autouse=True)
+def real_config_untouched():
+    """Fails the run if any test wrote this Mac's real transcriber config."""
+    before = _fingerprint(REAL_CONFIG)
+    yield
+    assert _fingerprint(REAL_CONFIG) == before, f"a test changed {REAL_CONFIG}"
+
+
+@pytest.fixture(autouse=True)
+def isolated_mac(tmp_path_factory, monkeypatch):
+    """Every test: a HOME of its own, the config under it, and no real Keychain or launchctl."""
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    from transcriber import cli
+
+    config = home / "Library" / "Application Support" / "nova-alexandria-transcriber"
+    monkeypatch.setattr(cli, "CONFIG_FILE", config / "config.json")
+    monkeypatch.setattr(cli, "SYNC_STATE_FILE", config / "vault-sync.json")
+
+    def guarded_run(args, *rest, **kwargs):
+        program = Path(str(args[0] if isinstance(args, (list, tuple)) else args)).name
+        if program in _FORBIDDEN:
+            raise AssertionError(f"{program} is never in a test: use a fake")
+        return _REAL_RUN(args, *rest, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", guarded_run)
+    return home
+
 
 TOKEN = "t" * 43
 JOB = {

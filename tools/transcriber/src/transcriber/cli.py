@@ -25,14 +25,17 @@ SYNC_STATE_FILE = CONFIG_FILE.parent / "vault-sync.json"
 SYNC_SCRIPT = Path(__file__).resolve().parents[4] / "deploy" / "scripts" / "sync-vault.sh"
 
 
-def load_config(path: Path = CONFIG_FILE) -> dict:
+def load_config(path: Path | None = None) -> dict:
+    """The paired config; `path` defaults to CONFIG_FILE as it is at the call (tests move it)."""
+    path = path or CONFIG_FILE
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {}
 
 
-def save_config(config: dict, path: Path = CONFIG_FILE) -> None:
+def save_config(config: dict, path: Path | None = None) -> None:
+    path = path or CONFIG_FILE
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     path.chmod(0o600)
@@ -76,7 +79,7 @@ def keep_on(vault: str | None) -> None:
     except ServiceError as err:
         print(f"O serviço em background não foi instalado: {err}", file=sys.stderr)
         return
-    print(f"Ligado em background (liga sozinho com o Mac): {path}")
+    print(f"Serviço instalado (liga quando há trabalho e desliga ao terminar): {path}")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -164,8 +167,9 @@ def publisher_of(args: argparse.Namespace, vault: str | None):
     return KbPublisher(kb.vault, kb) if kb else None
 
 
-def vault_sync_of(args: argparse.Namespace, config: dict, kb, state_file: Path = SYNC_STATE_FILE):
+def vault_sync_of(args: argparse.Namespace, config: dict, kb, state_file: Path | None = None):
     """The automatic sync with production (KBC-100 FR-4): only with kb and a host to send to."""
+    state_file = state_file or SYNC_STATE_FILE
     from .vault_sync import VaultSync
 
     host = args.sync_host or os.environ.get("KB_CHAT_SYNC_HOST") or config.get("sync_host")

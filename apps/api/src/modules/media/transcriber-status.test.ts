@@ -73,3 +73,18 @@ describe('TranscriberStatusBoard (KBC-114 FR-8)', () => {
     );
   });
 });
+
+describe('A transcriber that exits when idle (KBC-114 AC-18)', () => {
+  it('is off as soon as it says it stopped, though it was seen a moment ago', () => {
+    const board = boardOf({ ...MAC, currentJob: null });
+    board.record(MAC.id, { ...working, state: 'stopped', currentJob: null });
+    expect(board.overview().items[0]?.state).toBe('offline');
+    expect(board.anyOnline()).toBe(false);
+  });
+
+  it('is on while it works', () => {
+    const board = boardOf(MAC);
+    board.record(MAC.id, working);
+    expect(board.anyOnline()).toBe(true);
+  });
+});

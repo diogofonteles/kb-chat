@@ -1,8 +1,10 @@
 """The transcriber in the background: a macOS LaunchAgent (KBC-114 FR-7, ADR 0023 amendment).
 
 `transcriber service install` writes `~/Library/LaunchAgents/com.nova-alexandria.transcriber.plist`
-and loads it with `launchctl bootstrap`: launchd starts the worker at login (RunAtLoad) and
-again whenever it stops (KeepAlive), with its log under
+and loads it with `launchctl bootstrap`. The owner wants it on only when needed: launchd runs
+`transcriber run --exit-when-idle` once at login (RunAtLoad), never keeps it alive; it drains
+the queue and exits, and the API on the same Mac starts it again (`launchctl kickstart`) when a
+job waits. Its log is under
 `~/Library/Logs/nova-alexandria-transcriber/`. The plist carries the vault (`KB_CHAT_VAULT`)
 and a PATH that finds uv, kb and ffmpeg; never the token, which stays in the Keychain.
 launchctl is reached through `Launchctl`, so tests use a fake one.
@@ -93,12 +95,11 @@ class Service:
         log = str(self.log_path)
         return {
             "Label": LABEL,
-            "ProgramArguments": [*program, "transcriber", "run"],
+            "ProgramArguments": [*program, "transcriber", "run", "--exit-when-idle"],
             "WorkingDirectory": str(self.repo),
             "EnvironmentVariables": env,
             "RunAtLoad": True,
-            "KeepAlive": True,
-            "ThrottleInterval": 60,
+            "ThrottleInterval": 10,
             "ProcessType": "Standard",
             # A track transcribed whole is one call to the model: SIGTERM waits for it.
             "ExitTimeOut": 300,

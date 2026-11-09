@@ -67,6 +67,13 @@ const report = {
 };
 
 describe('transcriber status report (KBC-114 FR-8)', () => {
+  it('takes "stopped", what a worker says as it exits (KBC-114 AC-18)', () => {
+    expect(
+      transcriberStatusReportSchema.parse({ ...report, state: 'stopped' })
+        .state,
+    ).toBe('stopped');
+  });
+
   it('takes what the worker sends', () => {
     expect(transcriberStatusReportSchema.parse(report).state).toBe('working');
   });

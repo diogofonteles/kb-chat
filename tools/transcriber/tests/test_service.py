@@ -80,10 +80,14 @@ def test_ac10_install_writes_the_agent_and_bootstraps_it(tmp_path):
         "diarize",
         "transcriber",
         "run",
+        "--exit-when-idle",
     ]
     assert plist["WorkingDirectory"] == "/Users/o/kb-chat"
+    # The owner: on only when needed, off right after (2026-11-09). At login it runs once to
+    # drain what waits, then exits; the API starts it again when a job comes (launchctl
+    # kickstart). launchd never keeps it running.
     assert plist["RunAtLoad"] is True
-    assert plist["KeepAlive"] is True
+    assert "KeepAlive" not in plist
     logs = tmp_path / "Library" / "Logs" / "nova-alexandria-transcriber"
     assert plist["StandardOutPath"] == str(logs / "service.log")
     assert plist["StandardErrorPath"] == str(logs / "service.log")
@@ -194,7 +198,7 @@ def test_ac10_the_cli_installs_with_the_vault_and_keeps_it_in_the_config(
     # The owner: optional parts are installed by themselves when needed: `uv run` syncs the
     # extras before it starts the worker, so voices and voice prints never wait for a person.
     assert env["ProgramArguments"][4:8] == ["--extra", "diarize", "--extra", "voiceprint"]
-    assert env["ProgramArguments"][8:] == ["transcriber", "run"]
+    assert env["ProgramArguments"][8:] == ["transcriber", "run", "--exit-when-idle"]
     assert env["EnvironmentVariables"]["KB_CHAT_VAULT"] == "/Users/o/vault"
     assert '"vault_path": "/Users/o/vault"' in config.read_text(encoding="utf-8")
     assert main(["service", "status"]) == 0

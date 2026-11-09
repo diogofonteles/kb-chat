@@ -302,6 +302,19 @@ describe('The transcriber starts by itself on the same Mac (KBC-114 AC-15)', () 
     expect(calls).toEqual([]);
   });
 
+  it('a transcriber that exited when idle is started again for the next audio (AC-18)', async () => {
+    const { media, calls } = await onTheMac();
+    const { token } = await pair(media);
+    const stopped = await send(
+      media,
+      token,
+      report({ state: 'stopped', currentJob: null }),
+    );
+    expect(stopped.statusCode).toBe(204);
+    await readyForTranscription(media);
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+  });
+
   it('without KB_CHAT_LOCAL_TRANSCRIBER (production) nothing is ever started', async () => {
     const media = await startMedia();
     await readyForTranscription(media);
