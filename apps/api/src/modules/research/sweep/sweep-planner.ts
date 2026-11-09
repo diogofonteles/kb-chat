@@ -62,6 +62,12 @@ export interface LayoutRequest {
   readonly batchChars: number;
   /** The cursor: the last document id already swept. */
   readonly after?: string;
+  /**
+   * How many documents the cursor's set had. A set that changed since (a cursor from before
+   * sub-collections or tracks joined it, KBC-101) starts over: an id order that moved would
+   * count unread documents as read.
+   */
+  readonly cursorSet?: number;
   /** The tracks the turn may research; without it, texts only (KBC-101 BR-1, AC-5). */
   readonly tracks?: TrackShelf;
 }
@@ -162,6 +168,15 @@ function packed(units: readonly SweepUnit[], size: number): SweepBatch[] {
   return batches;
 }
 
+/** The documents a cursor covered; none when its set changed since (see `cursorSet`). */
+function skippedOf(
+  docs: readonly SweepDoc[],
+  { after, cursorSet = docs.length }: LayoutRequest,
+): number {
+  if (after === undefined || cursorSet !== docs.length) return 0;
+  return docs.filter((d) => d.entry.id <= after).length;
+}
+
 async function mapLimited<T, R>(
   items: readonly T[],
   map: (item: T) => Promise<R>,
@@ -196,9 +211,7 @@ export class SweepPlanner {
         : await mapLimited(entries, (entry) =>
             this.wholeDoc(topic, entry, request.batchChars),
           );
-    const after = request.after;
-    const skipped =
-      after === undefined ? 0 : docs.filter((d) => d.entry.id <= after).length;
+    const skipped = skippedOf(docs, request);
     const pending = docs.slice(skipped).flatMap((d) => d.units);
     return {
       plan: request.plan,

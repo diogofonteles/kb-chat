@@ -107,6 +107,27 @@ describe('SweepPlanner (KBC-030)', () => {
     ).not.toContain('raw/t1.md');
   });
 
+  it('starts over when the set changed since the cursor (a sub-collection or a track joined it)', async () => {
+    const sweeps = await planner();
+    const same = await sweeps.layout('hermetismo', {
+      plan: plan(),
+      batchChars: 30_000,
+      after: 'raw/t2.md',
+      cursorSet: 4,
+    });
+    expect(same?.skipped).toBe(2);
+    const changed = await sweeps.layout('hermetismo', {
+      plan: plan(),
+      batchChars: 30_000,
+      after: 'raw/t2.md',
+      cursorSet: 3,
+    });
+    expect(changed?.skipped).toBe(0);
+    expect(
+      changed?.batches.flatMap((b) => b.units.map((u) => u.entry.id)),
+    ).toContain('raw/t1.md');
+  });
+
   it('reads a batch as labelled, fenced document text', async () => {
     const sweeps = await planner();
     const layout = await sweeps.layout('hermetismo', {
