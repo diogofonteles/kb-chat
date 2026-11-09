@@ -97,6 +97,19 @@ def test_exit_when_idle_gives_up_after_a_few_lease_errors(fake_api):
     assert len(leases) == 3
 
 
+def test_failed_jobs_never_count_as_lease_errors(fake_api):
+    """Review BR-15: a bad job is given back and the worker goes on; only the API being out
+    of reach ends a run early. Four jobs that crash, then an empty queue: exit 0, not 1."""
+    fake_api.jobs[:] = [dict(JOB, id=f"4444444{n}-4444-4444-8444-444444444444") for n in range(4)]
+
+    def crash(_path):
+        raise RuntimeError("the decoder fell over")
+
+    agent = worker(fake_api, decode=crash)
+    assert agent.run(exit_when_idle=True) == 0
+    assert len(fake_api.bodies("fail")) == 4
+
+
 def test_exit_when_idle_exits_at_once_with_a_revoked_token(fake_api):
     assert worker(fake_api, token="revoked" * 6).run(exit_when_idle=True) == 1
 
@@ -213,14 +226,14 @@ def test_audio_that_is_not_ours_is_dropped(fake_api):
 
 def test_an_unreachable_api_backs_off():
     api = type("Api", (), {"url": "http://127.0.0.1:9"})()
-    assert worker(api).step() == "error"
+    assert worker(api).step() == "lease-error"
 
 
 def test_an_unexpected_error_gives_the_job_back_and_the_loop_goes_on(fake_api):
     def decode(path):
         raise KeyError("sample_rate")
 
-    assert worker(fake_api, decode=decode).step() == "error"
+    assert worker(fake_api, decode=decode).step() == "job-error"
     (fail,) = fake_api.bodies("fail")
     assert fail["failure"] == "conversion-failed"
     assert "KeyError" in fail["detail"]

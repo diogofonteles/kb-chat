@@ -305,7 +305,6 @@ export function assertDeliveryConfigured(config: AppConfig): void {
     );
 }
 
-/** Validates the environment once at boot; an invalid value stops the process. */
 /**
  * Starting the Mac's transcriber from the API only works on that Mac: production runs on the
  * VM, so the flag never boots there (KBC-114 BR-10).
@@ -317,6 +316,7 @@ export function assertLocalTranscriber(config: AppConfig): void {
     );
 }
 
+/** Validates the environment once at boot; an invalid value stops the process. */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = configSchema.safeParse(env);
   if (!parsed.success) {

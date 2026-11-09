@@ -152,7 +152,8 @@ class Worker:
         errors = 0
         while not self.stop.is_set():
             outcome = self.step()
-            errors = errors + 1 if outcome in ("error", "revoked") else 0
+            # Only the API out of reach counts: a job that broke is given back (review BR-15).
+            errors = errors + 1 if outcome == "lease-error" else 0
             if outcome == "job":
                 idle_once = False
                 if once:
@@ -174,13 +175,14 @@ class Worker:
                 return 1
             elif outcome == "revoked":
                 self.stop.wait(self.unauthorized_backoff_s)
-            elif outcome == "error":
+            elif outcome in ("lease-error", "job-error"):
                 self.stop.wait(self.error_backoff_s)
         log.info("transcriber stopped")
         return 0
 
     def step(self) -> str:
-        """One lease attempt: 'job', 'idle', 'revoked' or 'error'."""
+        """One lease attempt: 'job', 'idle', 'revoked', 'lease-error' (the API out of reach)
+        or 'job-error' (a job that broke: given back, never a reason to stop)."""
         kinds = self._kinds_now()
         try:
             job = self.api.lease(kinds)
@@ -192,7 +194,7 @@ class Worker:
         except ApiError as err:
             log.warning("could not lease a job: %s", err)
             self._say("error", f"sem resposta da API: {err}")
-            return "error"
+            return "lease-error"
         if job is None:
             self._sync_if_due()
             if len(kinds) < len(self.kinds):
@@ -230,7 +232,7 @@ class Worker:
             log.warning("job %s: the API failed: %s", job["id"], err)
             self.status.finish_job("failed", f"a API falhou: {err}")
             self._say("error", f"a API falhou: {err}")
-            return "error"
+            return "job-error"
         # One bad job must not stop the Mac's worker: it is given back, the loop goes on.
         except Exception as err:
             self._log_crash(job, err)
@@ -238,7 +240,7 @@ class Worker:
             detail = NO_PRINT if job["kind"] == "voice-profile" else f"{type(err).__name__}: {err}"
             self.status.finish_job("failed", detail)
             self._say("error", detail)
-            return "error"
+            return "job-error"
         self.status.finish_job("done")
         self._report()
         return "job"

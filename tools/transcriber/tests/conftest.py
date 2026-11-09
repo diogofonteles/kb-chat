@@ -11,15 +11,16 @@ from urllib.parse import urlparse
 import numpy as np
 import pytest
 
-# This Mac's real config, read before any test moves HOME (the guard compares it at the end).
-REAL_CONFIG = (
-    Path(os.path.expanduser("~"))
-    / "Library"
-    / "Application Support"
-    / "nova-alexandria-transcriber"
-    / "config.json"
+# This Mac's real transcriber, read before any test moves HOME (compared at the end).
+_REAL_HOME = Path(os.path.expanduser("~"))
+_REAL_SUPPORT = _REAL_HOME / "Library" / "Application Support" / "nova-alexandria-transcriber"
+REAL_CONFIG = _REAL_SUPPORT / "config.json"
+REAL_FILES = (
+    REAL_CONFIG,
+    _REAL_SUPPORT / "vault-sync.json",
+    _REAL_HOME / "Library" / "LaunchAgents" / "br.com.nova-alexandria.transcriber.plist",
 )
-_REAL_RUN = subprocess.run
+_REAL_POPEN = subprocess.Popen
 _FORBIDDEN = ("security", "launchctl")
 
 
@@ -32,10 +33,11 @@ def _fingerprint(path: Path) -> tuple[bool, bytes]:
 
 @pytest.fixture(scope="session", autouse=True)
 def real_config_untouched():
-    """Fails the run if any test wrote this Mac's real transcriber config."""
-    before = _fingerprint(REAL_CONFIG)
+    """Fails the run if any test wrote this Mac's real config, sync state or LaunchAgent."""
+    before = {path: _fingerprint(path) for path in REAL_FILES}
     yield
-    assert _fingerprint(REAL_CONFIG) == before, f"a test changed {REAL_CONFIG}"
+    changed = [str(path) for path in REAL_FILES if _fingerprint(path) != before[path]]
+    assert changed == [], f"a test changed {changed}"
 
 
 @pytest.fixture(autouse=True)
@@ -49,13 +51,21 @@ def isolated_mac(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(cli, "CONFIG_FILE", config / "config.json")
     monkeypatch.setattr(cli, "SYNC_STATE_FILE", config / "vault-sync.json")
 
-    def guarded_run(args, *rest, **kwargs):
-        program = Path(str(args[0] if isinstance(args, (list, tuple)) else args)).name
-        if program in _FORBIDDEN:
-            raise AssertionError(f"{program} is never in a test: use a fake")
-        return _REAL_RUN(args, *rest, **kwargs)
+    # The shell of whoever runs the tests (the owner's vault, host, token file) stays out.
+    for name in [one for one in os.environ if one.startswith("KB_CHAT_")]:
+        monkeypatch.delenv(name)
 
-    monkeypatch.setattr(subprocess, "run", guarded_run)
+    class GuardedPopen(_REAL_POPEN):
+        """Every child process goes through Popen (run, check_output, call): checked here."""
+
+        def __init__(self, args, *rest, **kwargs):
+            first = args[0] if isinstance(args, (list, tuple)) else str(args).split()[0]
+            program = Path(str(first)).name
+            if program in _FORBIDDEN:
+                raise AssertionError(f"{program} is never in a test: use a fake")
+            super().__init__(args, *rest, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", GuardedPopen)
     return home
 
 

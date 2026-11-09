@@ -1,6 +1,7 @@
 """The transcriber in the background: a macOS LaunchAgent (KBC-114 FR-7, ADR 0023 amendment).
 
-`transcriber service install` writes `~/Library/LaunchAgents/com.nova-alexandria.transcriber.plist`
+`transcriber service install` writes
+`~/Library/LaunchAgents/br.com.nova-alexandria.transcriber.plist`
 and loads it with `launchctl bootstrap`. The owner wants it on only when needed: launchd runs
 `transcriber run --exit-when-idle` once at login (RunAtLoad), never keeps it alive; it drains
 the queue and exits, and the API on the same Mac starts it again (`launchctl kickstart`) when a
