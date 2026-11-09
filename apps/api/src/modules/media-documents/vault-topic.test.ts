@@ -91,6 +91,11 @@ describe('what a kb-publish job tells the Mac about its collection (KBC-114 FR-2
     expect(collectionOf(VAULT, 'sumiu')).toBeNull();
   });
 
+  it('keeps a title on one line, as the contract and kb want it', () => {
+    const odd = [{ slug: 'x', title: 'Aula\n2\t"citada"', domain: 'geral' }];
+    expect(collectionOf(odd, 'x')?.title).toBe('Aula 2 "citada"');
+  });
+
   it('cuts a vault title longer than a screen title may be', () => {
     const long = [{ slug: 'x', title: 'a'.repeat(200), domain: 'geral' }];
     expect(collectionOf(long, 'x')?.title).toHaveLength(80);

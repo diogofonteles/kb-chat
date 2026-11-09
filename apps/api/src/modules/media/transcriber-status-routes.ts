@@ -1,4 +1,5 @@
 import {
+  type LocalTranscriberStart,
   localTranscriberStartSchema,
   transcriberStatusOverviewSchema,
   transcriberStatusReportSchema,
@@ -37,14 +38,38 @@ export const transcriberStatusRoutes =
       },
       async () => deps.board.overview(),
     );
-    if (deps.local) registerLocalStart(app, deps.local);
+    if (deps.local)
+      registerLocalStart(app, new LocalStarter(deps.local, deps.board));
   };
 
+/** Two presses this close start it once (QA F-2: a second `-k` would kill the first). */
+export const LOCAL_START_COOLDOWN_MS = 30_000;
+
+/**
+ * "Ligar transcritor" (QA F-2): a restart (`kickstart -k`) only when no transcriber is on;
+ * with one on, a plain `kickstart`, which never kills the job in hand; and once per
+ * LOCAL_START_COOLDOWN_MS.
+ */
+export class LocalStarter {
+  private lastAt = Number.NEGATIVE_INFINITY;
+
+  constructor(
+    private readonly local: LocalTranscriberPort,
+    private readonly board: Pick<TranscriberStatusBoard, 'anyOnline'>,
+    private readonly now: () => Date = () => new Date(),
+  ) {}
+
+  async start(): Promise<LocalTranscriberStart> {
+    const at = this.now().getTime();
+    if (at - this.lastAt < LOCAL_START_COOLDOWN_MS)
+      return { ok: true, detail: 'already asked a moment ago' };
+    this.lastAt = at;
+    return this.board.anyOnline() ? this.local.wake() : this.local.start();
+  }
+}
+
 /** BR-10: a fixed program with fixed arguments; the route exists only on the Mac. */
-function registerLocalStart(
-  app: FastifyInstance,
-  local: LocalTranscriberPort,
-): void {
+function registerLocalStart(app: FastifyInstance, local: LocalStarter): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   typed.post(
     '/api/v1/media/transcribers/local/start',

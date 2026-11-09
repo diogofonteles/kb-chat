@@ -28,6 +28,7 @@ import type {
   NewMedia,
   ReapResult,
   TranscodeResult,
+  TranscriberBacklog,
 } from '../../ports/media-store.js';
 import { inTransaction } from './media-database.js';
 import { closeLease, groqBackToTranscriber } from './sqlite-leases.js';
@@ -148,6 +149,10 @@ const DIARIZE_READY = `(kind <> 'diarize' OR (
     EXISTS (SELECT 1 FROM transcripts t WHERE t.media_id = jobs.media_id)
     AND NOT EXISTS (SELECT 1 FROM jobs p WHERE p.media_id = jobs.media_id
       AND p.kind = 'transcribe' AND p.status IN ('queued', 'leased'))))`;
+
+/** A transcription goes to the route asked for (KBC-037: the VM takes only Groq's). */
+const ROUTE_MATCH = `(kind <> 'transcribe' OR coalesce(route, 'transcriber') = ?)`;
+const TRANSCRIBER_ROUTE = 'transcriber';
 
 /** The media catalog and its queue in SQLite (ADR 0022); the API is the only writer. */
 export class SqliteMediaStore implements MediaStorePort {
@@ -388,15 +393,21 @@ export class SqliteMediaStore implements MediaStorePort {
     );
   }
 
-  waitingForTranscriber(now: Date): number {
-    const row = this.db
+  transcriberBacklog(): readonly TranscriberBacklog[] {
+    // The lease's own predicate (takeOldestQueued): queued, a separation only once its
+    // transcript exists, a transcription only when it is the transcriber's, not Groq's.
+    return this.db
       .prepare(
-        `SELECT COUNT(*) AS waiting FROM jobs
-         WHERE kind IN ('transcribe', 'diarize', 'voice-profile') AND route IS NULL
-           AND (status = 'queued' OR (status = 'leased' AND lease_until < ?))`,
+        `SELECT kind, COUNT(*) AS ready FROM jobs
+         WHERE status = 'queued' AND kind IN ('transcribe', 'diarize', 'voice-profile')
+           AND ${DIARIZE_READY} AND ${ROUTE_MATCH}
+         GROUP BY kind ORDER BY kind`,
       )
-      .get(now.getTime());
-    return Number(row?.['waiting'] ?? 0);
+      .all(TRANSCRIBER_ROUTE)
+      .map((row) => ({
+        kind: String(row['kind']) as MediaJobKind,
+        ready: Number(row['ready']),
+      }));
   }
 
   /** A cut count of this job replaces the last one of the recording (KBC-072 FR-3). */
@@ -658,8 +669,7 @@ export class SqliteMediaStore implements MediaStorePort {
         `UPDATE jobs SET status = 'leased', attempts = attempts + 1, lease_id = ?,
            worker = ?, lease_until = ?, heartbeat_at = ?, updated_at = ?
          WHERE id = (SELECT id FROM jobs WHERE status = 'queued' AND kind IN (${kinds})
-                       AND ${DIARIZE_READY}
-                       AND (kind <> 'transcribe' OR coalesce(route, 'transcriber') = ?)
+                       AND ${DIARIZE_READY} AND ${ROUTE_MATCH}
                      ORDER BY ${order} created_at, id LIMIT 1)
          RETURNING id, lease_id, kind, media_id, attempts, voices`,
       )
@@ -671,7 +681,7 @@ export class SqliteMediaStore implements MediaStorePort {
         request.now.toISOString(),
         ...request.kinds,
         // KBC-037: a paired transcriber never takes a job routed to Groq, nor the VM another.
-        request.transcribeRoute ?? 'transcriber',
+        request.transcribeRoute ?? TRANSCRIBER_ROUTE,
       );
   }
 

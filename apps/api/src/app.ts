@@ -957,19 +957,32 @@ async function registerTranscriberStatus(
 ): Promise<TranscriberStatusBoard> {
   const { transcribers, documents, wiring } = input;
   const local = wiring.media.localTranscriber;
+  const kbWaiting = () => documents.status.queue().waiting;
+  // The waker reads the board and the board says what the waker sees: built in this order.
+  let waker: TranscriberWaker | null = null;
   const board = new TranscriberStatusBoard({
     transcribers,
-    kbWaiting: () => documents.status.queue().waiting,
+    kbWaiting,
     canStartHere: local !== null,
+    attention: () => {
+      const seen = waker?.attention();
+      return {
+        blocked: [...(seen?.blocked ?? [])],
+        stuck: seen?.stuck ?? null,
+      };
+    },
   });
   await app.register(transcriberStatusRoutes({ board, local }));
-  // KBC-114 AC-15: the owner never starts the transcriber by hand.
-  const waker = new TranscriberWaker({
+  // KBC-114 AC-15: the owner never starts the transcriber by hand, and only for work it takes.
+  waker = new TranscriberWaker({
     local,
-    waiting: () =>
-      wiring.media.store.waitingForTranscriber(new Date()) +
-      documents.status.queue().waiting,
+    backlog: () => [
+      ...wiring.media.store.transcriberBacklog(),
+      { kind: 'kb-publish', ready: kbWaiting() },
+    ],
+    takers: () => board.takers(),
     isOnline: () => board.anyOnline(),
+    stoppedSince: (at) => board.stoppedSince(at),
     onWoken: (detail) => app.log.info({ detail }, 'transcriber: started'),
     onError: (err) => app.log.warn({ err }, 'transcriber: could not start'),
   });

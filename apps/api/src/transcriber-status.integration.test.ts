@@ -101,12 +101,12 @@ describe("The transcriber's status (KBC-114 AC-11, AC-12)", () => {
     expect(overview.kbQueue).toEqual({ waiting: 0 });
     expect(overview.start).toEqual({
       label: 'br.com.nova-alexandria.transcriber',
-      installCommand:
-        'uv run --project tools/transcriber transcriber service install --vault /Users/owner/dev/personal/hermetismo',
+      // Never a uv command (AC-17, QA F-5); a plain kickstart never kills a job.
       startCommand:
-        'launchctl kickstart -k gui/$(id -u)/br.com.nova-alexandria.transcriber',
+        'launchctl kickstart gui/$(id -u)/br.com.nova-alexandria.transcriber',
       canStartHere: false,
     });
+    expect(JSON.stringify(overview)).not.toContain('uv run');
   });
 
   it('is off without a status, and off again when it stops saying for over 2 minutes', async () => {
@@ -115,9 +115,6 @@ describe("The transcriber's status (KBC-114 AC-11, AC-12)", () => {
     const media = await startMedia();
     const { token } = await pair(media);
     expect((await overviewOf(media)).items[0]?.state).toBe('offline');
-    expect((await overviewOf(media)).start.installCommand).toContain(
-      "--vault '<pasta do vault do kb>'",
-    );
     await send(media, token, report({ state: 'idle', currentJob: null }));
     expect((await overviewOf(media)).items[0]?.state).toBe('idle');
     vi.setSystemTime(new Date('2026-11-09T12:03:00.000Z'));
@@ -276,6 +273,7 @@ describe('The transcriber starts by itself on the same Mac (KBC-114 AC-15)', () 
 
   it('an upload converted and waiting for its transcription starts it, without -k, once', async () => {
     const { media, calls } = await onTheMac();
+    await pair(media);
     await readyForTranscription(media);
     await vi.waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]).toEqual([
@@ -313,6 +311,59 @@ describe('The transcriber starts by itself on the same Mac (KBC-114 AC-15)', () 
     expect(stopped.statusCode).toBe(204);
     await readyForTranscription(media);
     await vi.waitFor(() => expect(calls).toHaveLength(1));
+  });
+
+  it('QA F-1: a transcription no paired transcriber takes starts nothing, and the app says why', async () => {
+    const { media, calls } = await onTheMac();
+    const { transcriber } = await pair(media);
+    // Only "Publica no acervo" marked: the transcription can never be leased by it.
+    const marked = await media.owner(
+      'PATCH',
+      `/api/v1/media/transcribers/${transcriber.id}`,
+      { kinds: ['kb-publish'] },
+    );
+    expect(marked.statusCode).toBe(200);
+    await readyForTranscription(media);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(calls).toEqual([]);
+    expect((await overviewOf(media)).attention).toEqual({
+      blocked: [{ kind: 'transcribe', ready: 1 }],
+      stuck: null,
+    });
+  });
+
+  it('QA F-1: a launch that took nothing is not repeated while the queue is the same', async () => {
+    const { media, calls } = await onTheMac();
+    const { token } = await pair(media);
+    await readyForTranscription(media);
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    // It ran and, say, its Whisper could not load: it took nothing and exited.
+    const stopped = await send(
+      media,
+      token,
+      report({ state: 'stopped', currentJob: null, kinds: ['transcribe'] }),
+    );
+    expect(stopped.statusCode).toBe(204);
+    // Another change in the media library: the waker looks again, and does not relaunch.
+    await media.owner('POST', '/api/v1/media/transcribers', { name: 'Outro' });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(calls).toHaveLength(1);
+    expect((await overviewOf(media)).attention.stuck).toEqual({ ready: 1 });
+  });
+
+  it('QA F-2: "Ligar transcritor" never kills a transcriber that is on, and counts once per 30 s', async () => {
+    const { media, calls } = await onTheMac();
+    const { token } = await pair(media);
+    await send(media, token, report({ state: 'working' }));
+    const first = await media.owner('POST', START);
+    const second = await media.owner('POST', START);
+    expect(first.statusCode).toBe(200);
+    expect(second.json<LocalTranscriberStart>().detail).toBe(
+      'already asked a moment ago',
+    );
+    const asked = calls.filter((args) => args[0] === 'kickstart');
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).not.toContain('-k');
   });
 
   it('without KB_CHAT_LOCAL_TRANSCRIBER (production) nothing is ever started', async () => {

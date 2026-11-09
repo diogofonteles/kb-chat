@@ -1,6 +1,7 @@
 import {
   TRANSCRIBER_SERVICE_LABEL,
   TRANSCRIBER_STATUS_STALE_MS,
+  type MediaJobKind,
   type Transcriber,
   type TranscriberStatusItem,
   type TranscriberStatusOverview,
@@ -14,11 +15,15 @@ export interface TranscriberStatusDeps {
   readonly kbWaiting: () => number;
   /** Whether this API runs on the transcriber's Mac (KB_CHAT_LOCAL_TRANSCRIBER=1). */
   readonly canStartHere: boolean;
+  /** Why work waits with it off (the waker's view, QA F-1). */
+  readonly attention?: () => TranscriberStatusOverview['attention'];
   readonly now?: () => Date;
 }
 
-/** Where the vault goes in the install command when no transcriber said where it is. */
-const VAULT_PLACEHOLDER = '<pasta do vault do kb>';
+const NO_ATTENTION: TranscriberStatusOverview['attention'] = {
+  blocked: [],
+  stuck: null,
+};
 
 type Received = TranscriberStatusReport & { readonly receivedAt: string };
 
@@ -52,6 +57,7 @@ export class TranscriberStatusBoard {
       items: paired.map((one) => this.itemOf(one)),
       kbQueue: { waiting: this.deps.kbWaiting() },
       start: this.startOf(),
+      attention: this.deps.attention?.() ?? NO_ATTENTION,
     };
   }
 
@@ -88,19 +94,35 @@ export class TranscriberStatusBoard {
     return age <= TRANSCRIBER_STATUS_STALE_MS;
   }
 
-  /** The commands that turn it on, with the vault a transcriber last said it uses. */
+  /** How it is turned on; never a uv command (the owner, AC-17). */
   private startOf(): TranscriberStatusOverview['start'] {
-    const vault =
-      [...this.reports.values()]
-        .filter((one) => one.vaultPath !== null)
-        .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))[0]
-        ?.vaultPath ?? VAULT_PLACEHOLDER;
     return {
       label: TRANSCRIBER_SERVICE_LABEL,
-      installCommand: `uv run --project tools/transcriber transcriber service install --vault ${quoted(vault)}`,
-      startCommand: `launchctl kickstart -k gui/$(id -u)/${TRANSCRIBER_SERVICE_LABEL}`,
+      startCommand: `launchctl kickstart gui/$(id -u)/${TRANSCRIBER_SERVICE_LABEL}`,
       canStartHere: this.deps.canStartHere,
     };
+  }
+
+  /**
+   * The kinds some paired transcriber takes: marked in Transcritores and, once it said what
+   * it runs with (an extra that did not install, a Mac without a vault), only those.
+   */
+  takers(): ReadonlySet<MediaJobKind> {
+    const kinds = new Set<MediaJobKind>();
+    for (const one of this.deps.transcribers.list()) {
+      const runs = this.reports.get(one.id)?.kinds;
+      for (const kind of one.kinds)
+        if (!runs || runs.includes(kind)) kinds.add(kind);
+    }
+    return kinds;
+  }
+
+  /** Whether a transcriber said it stopped at or after this moment. */
+  stoppedSince(at: Date): boolean {
+    return [...this.reports.values()].some(
+      (one) =>
+        one.state === 'stopped' && Date.parse(one.receivedAt) >= at.getTime(),
+    );
   }
 }
 
@@ -118,7 +140,3 @@ function withTitle(
   if (!job || !held || held.kind !== job.kind) return report;
   return { ...report, currentJob: { ...job, label: held.title } };
 }
-
-/** A path as a shell argument: single quotes when it has anything but plain characters. */
-const quoted = (path: string): string =>
-  /^[\w@%+=:,./~-]+$/.test(path) ? path : `'${path.replaceAll("'", `'\\''`)}'`;

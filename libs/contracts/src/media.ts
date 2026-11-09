@@ -806,7 +806,13 @@ export type KbPublishItem = z.infer<typeof kbPublishItemSchema>;
 export const kbDomainSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,59}$/);
 
 /** A collection's name in the vault, up to what a title on the screen may hold (KBC-048). */
-const kbTopicTitleSchema = z.string().trim().min(1).max(TOPIC_TITLE_MAX);
+const kbTopicTitleSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(TOPIC_TITLE_MAX)
+  // One line: kb would write a line break as a block in topic.yaml (review suggestion).
+  .regex(/^[^\p{Cc}]+$/u);
 
 /**
  * What the Mac needs to create a collection's vault topic with `kb topic new` (KBC-114
@@ -1147,12 +1153,24 @@ export const transcriberStatusOverviewSchema = z.object({
   items: z.array(transcriberStatusItemSchema),
   /** Track documents waiting for the Mac (KBC-100's queue). */
   kbQueue: z.object({ waiting: z.number().int().min(0) }),
-  /** How to turn it on: the commands, and whether this API can start it (development). */
+  /**
+   * How to turn it on, and whether this API can start it (development). Never a uv command:
+   * the service installs and starts itself (the owner, KBC-114 AC-17).
+   */
   start: z.object({
     label: z.string(),
-    installCommand: z.string(),
     startCommand: z.string(),
     canStartHere: z.boolean(),
+  }),
+  /**
+   * Why work waits with the transcriber off (review BR-15, QA F-1): kinds no paired
+   * transcriber takes, and work it was started for and took none of.
+   */
+  attention: z.object({
+    blocked: z.array(
+      z.object({ kind: mediaJobKindSchema, ready: z.number().int().min(1) }),
+    ),
+    stuck: z.object({ ready: z.number().int().min(1) }).nullable(),
   }),
 });
 export type TranscriberStatusOverview = z.infer<
