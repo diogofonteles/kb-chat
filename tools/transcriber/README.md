@@ -85,18 +85,21 @@ The worker runs as a LaunchAgent: launchd starts it at login and again whenever 
 ```bash
 uv run --project tools/transcriber transcriber service install --vault ~/dev/personal/hermetismo
 uv run --project tools/transcriber transcriber service status
-tail -f ~/Library/Logs/nova-alexandria-transcriber/transcriber.log
+tail -f ~/Library/Logs/nova-alexandria-transcriber/service.log
 uv run --project tools/transcriber transcriber service uninstall
 ```
 
-`install` writes `~/Library/LaunchAgents/com.nova-alexandria.transcriber.plist` (label
-`com.nova-alexandria.transcriber`, `RunAtLoad`, `KeepAlive`, `ExitTimeOut` 300 s) and loads it
+`install` writes `~/Library/LaunchAgents/br.com.nova-alexandria.transcriber.plist` (label
+`br.com.nova-alexandria.transcriber`, `RunAtLoad`, `KeepAlive`, `ExitTimeOut` 300 s) and loads it
 with `launchctl bootstrap gui/$UID`; installing again replaces it. The plist runs this
-checkout with `uv run --extra diarize` (`--extra` is repeatable and replaces the default;
-`--extra diarize --extra voiceprint` for voice profiles) and sets `KB_CHAT_VAULT` (from
+checkout with `uv run --extra diarize --extra voiceprint` (`--extra` is repeatable and
+replaces the default): `uv run` installs a missing extra by itself before the worker starts,
+and the worker tells the app it is getting ready while the models load. The label is the one
+the owner's Mac already runs; installing again updates that agent, and one left under the old
+label (`com.nova-alexandria.transcriber`) is stopped and removed and sets `KB_CHAT_VAULT` (from
 `--vault`, which is also kept in the config, or the paired one) and a `PATH` with the folders
 of `uv`, `kb` and `ffmpeg`. The token is never in it: it stays in the Keychain. `--no-load`
-only writes the file. To restart it: `launchctl kickstart -k gui/$(id -u)/com.nova-alexandria.transcriber`.
+only writes the file. To restart it: `launchctl kickstart -k gui/$(id -u)/br.com.nova-alexandria.transcriber`.
 
 The worker tells the app what it is doing (`POST /api/v1/media-worker/status`): idle, working
 on a job (with its progress), waiting (the vault's lock held by another publication) or an

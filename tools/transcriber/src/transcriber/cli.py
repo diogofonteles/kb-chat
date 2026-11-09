@@ -17,6 +17,9 @@ CONFIG_FILE = (
     Path.home() / "Library" / "Application Support" / "nova-alexandria-transcriber" / "config.json"
 )
 # What the automatic sync left pending, and when it last ran (KBC-100 FR-4).
+# What the service runs with: `uv run` installs a missing extra by itself before the worker
+# starts, so voices and voice prints never wait for a person (the owner, 2026-11-09).
+DEFAULT_EXTRAS = ("diarize", "voiceprint")
 SYNC_STATE_FILE = CONFIG_FILE.parent / "vault-sync.json"
 # This checkout's sync script (tools/transcriber/src/transcriber → the repository's root).
 SYNC_SCRIPT = Path(__file__).resolve().parents[4] / "deploy" / "scripts" / "sync-vault.sh"
@@ -89,6 +92,12 @@ def run(args: argparse.Namespace) -> int:
     vault = os.environ.get("KB_CHAT_VAULT") or config.get("vault_path")
     publisher = publisher_of(args, vault)
     kb = publisher.kb if publisher else None
+    status = WorkerStatus(
+        vault_path=str(publisher.vault) if publisher else None,
+        kb_version=getattr(publisher.kb, "version", lambda: None)() if publisher else None,
+    )
+    reporter = StatusReporter(api)
+    announce_preparing(status, reporter)
     model, count = _mlx()
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -110,16 +119,25 @@ def run(args: argparse.Namespace) -> int:
         # transcriber marked "Publica no acervo" in Transcritores, and kb spends on its key.
         publisher=publisher,
         # KBC-114: what this Mac is doing, shown to masters in the app.
-        status=WorkerStatus(
-            vault_path=str(publisher.vault) if publisher else None,
-            kb_version=getattr(publisher.kb, "version", lambda: None)() if publisher else None,
-        ),
-        reporter=StatusReporter(api),
+        status=status,
+        reporter=reporter,
     )
     if args.poll:
         worker.poll_s = args.poll
     worker.sync = vault_sync_of(args, config, kb)
     return worker.run(once=args.once, exit_when_idle=args.exit_when_idle)
+
+
+PREPARING = (
+    "preparando o transcritor: carregando os modelos e os componentes de separar vozes "
+    "e de perfis de voz (na primeira vez, o uv os instala sozinho)"
+)
+
+
+def announce_preparing(status, reporter) -> None:
+    """Before the models load (minutes on the first run): the app says it is getting ready."""
+    status.set_state("waiting", PREPARING)
+    reporter.send(status)
 
 
 def publisher_of(args: argparse.Namespace, vault: str | None):
@@ -166,7 +184,7 @@ def service(args: argparse.Namespace) -> int:
                 vault = str(Path(vault).expanduser())
             if args.vault:
                 save_config({**config, "vault_path": vault}, CONFIG_FILE)
-            extras = args.extra if args.extra is not None else ["diarize"]
+            extras = args.extra if args.extra is not None else list(DEFAULT_EXTRAS)
             path = agent.install(vault=vault, extras=extras, load=not args.no_load)
             print(f"Serviço instalado: {path}")
             if not vault:
@@ -242,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
     background.add_argument(
         "--extra",
         action="append",
-        help="uv extras to run with (repeatable; default: diarize)",
+        help="uv extras to run with (repeatable; default: diarize and voiceprint)",
     )
     background.add_argument(
         "--no-load", action="store_true", help="only write the plist, do not load it"

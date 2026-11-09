@@ -12,16 +12,16 @@ from transcriber.cli import main
 from transcriber.service import LABEL, Service, ServiceError
 
 REPO = Path("/Users/o/kb-chat")
-RUNNING = """gui/501/com.nova-alexandria.transcriber = {
+RUNNING = """gui/501/br.com.nova-alexandria.transcriber = {
 	active count = 1
-	path = /Users/o/Library/LaunchAgents/com.nova-alexandria.transcriber.plist
+	path = /Users/o/Library/LaunchAgents/br.com.nova-alexandria.transcriber.plist
 	state = running
 	program = /opt/homebrew/bin/uv
 	pid = 4242
 	last exit code = (never exited)
 }
 """
-STOPPED = """gui/501/com.nova-alexandria.transcriber = {
+STOPPED = """gui/501/br.com.nova-alexandria.transcriber = {
 	state = not running
 	last exit code = 1
 }
@@ -85,8 +85,8 @@ def test_ac10_install_writes_the_agent_and_bootstraps_it(tmp_path):
     assert plist["RunAtLoad"] is True
     assert plist["KeepAlive"] is True
     logs = tmp_path / "Library" / "Logs" / "nova-alexandria-transcriber"
-    assert plist["StandardOutPath"] == str(logs / "transcriber.log")
-    assert plist["StandardErrorPath"] == str(logs / "transcriber.log")
+    assert plist["StandardOutPath"] == str(logs / "service.log")
+    assert plist["StandardErrorPath"] == str(logs / "service.log")
     assert logs.is_dir()
     env = plist["EnvironmentVariables"]
     assert env["KB_CHAT_VAULT"] == "/Users/o/vault"
@@ -171,12 +171,7 @@ def test_ac10_status_reads_launchctl_print(tmp_path):
         "pid": None,
         "lastExit": None,
         "log": str(
-            tmp_path
-            / "other"
-            / "Library"
-            / "Logs"
-            / "nova-alexandria-transcriber"
-            / "transcriber.log"
+            tmp_path / "other" / "Library" / "Logs" / "nova-alexandria-transcriber" / "service.log"
         ),
     }
 
@@ -196,7 +191,10 @@ def test_ac10_the_cli_installs_with_the_vault_and_keeps_it_in_the_config(
     monkeypatch.setattr("transcriber.cli.CONFIG_FILE", config)
     assert main(["service", "install", "--vault", "/Users/o/vault"]) == 0
     env = read_plist(tmp_path)
-    assert env["ProgramArguments"][4:6] == ["--extra", "diarize"]
+    # The owner: optional parts are installed by themselves when needed: `uv run` syncs the
+    # extras before it starts the worker, so voices and voice prints never wait for a person.
+    assert env["ProgramArguments"][4:8] == ["--extra", "diarize", "--extra", "voiceprint"]
+    assert env["ProgramArguments"][8:] == ["transcriber", "run"]
     assert env["EnvironmentVariables"]["KB_CHAT_VAULT"] == "/Users/o/vault"
     assert '"vault_path": "/Users/o/vault"' in config.read_text(encoding="utf-8")
     assert main(["service", "status"]) == 0
@@ -204,3 +202,39 @@ def test_ac10_the_cli_installs_with_the_vault_and_keeps_it_in_the_config(
     assert "rodando (pid 4242)" in out
     assert main(["service", "uninstall"]) == 0
     assert launchctl.calls[-1][0] == "bootout"
+
+
+def test_the_owners_label_and_log_as_installed_by_hand_on_his_mac(tmp_path):
+    """The coordinator installed `br.com.nova-alexandria.transcriber` by hand (2026-11-09):
+    the same label, so installing updates it instead of adding a second agent."""
+    assert LABEL == "br.com.nova-alexandria.transcriber"
+    service(tmp_path, FakeLaunchctl()).install(vault="/Users/o/vault", extras=[])
+    plist = read_plist(tmp_path)
+    log = str(tmp_path / "Library" / "Logs" / "nova-alexandria-transcriber" / "service.log")
+    assert plist["StandardOutPath"] == log
+    assert plist["StandardErrorPath"] == log
+
+
+def test_installing_over_the_hand_made_agent_replaces_it_once(tmp_path):
+    agents = tmp_path / "Library" / "LaunchAgents"
+    agents.mkdir(parents=True)
+    (agents / f"{LABEL}.plist").write_bytes(plistlib.dumps({"Label": LABEL, "Old": True}))
+    launchctl = FakeLaunchctl(loaded=RUNNING)
+    service(tmp_path, launchctl).install(vault="/Users/o/vault", extras=[])
+    assert sorted(path.name for path in agents.iterdir()) == [f"{LABEL}.plist"]
+    assert "Old" not in read_plist(tmp_path)
+    ops = [call[0] for call in launchctl.calls]
+    assert ops.index("bootout") < ops.index("bootstrap")
+    assert ops.count("bootstrap") == 1
+
+
+def test_an_agent_left_under_the_old_label_is_taken_out_never_doubled(tmp_path):
+    old = "com.nova-alexandria.transcriber"
+    agents = tmp_path / "Library" / "LaunchAgents"
+    agents.mkdir(parents=True)
+    (agents / f"{old}.plist").write_bytes(plistlib.dumps({"Label": old}))
+    launchctl = FakeLaunchctl()
+    service(tmp_path, launchctl).install(vault="/Users/o/vault", extras=[])
+    assert not (agents / f"{old}.plist").exists()
+    assert ["bootout", f"gui/501/{old}"] in launchctl.calls
+    assert (agents / f"{LABEL}.plist").is_file()

@@ -17,9 +17,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-LABEL = "com.nova-alexandria.transcriber"
+# The label the owner's Mac already runs (installed by hand on 2026-11-09): installing again
+# updates that agent, never a second one.
+LABEL = "br.com.nova-alexandria.transcriber"
+# The label of the template before KBC-114: an agent left under it is taken out on install.
+LEGACY_LABELS = ("com.nova-alexandria.transcriber",)
 LOG_FOLDER = "nova-alexandria-transcriber"
-LOG_FILE = "transcriber.log"
+LOG_FILE = "service.log"
 BASE_PATH = ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
 # The tools the worker runs: uv runs it, kb publishes (KBC-099), ffmpeg decodes.
 TOOLS = ("uv", "kb", "ffmpeg")
@@ -106,8 +110,17 @@ class Service:
         code, output = self.launchctl.run(["print", self.target])
         return code == 0, output
 
+    def drop_legacy(self) -> None:
+        """An agent under an older label would run a second worker: stopped and removed."""
+        for label in LEGACY_LABELS:
+            old = self.plist_path.with_name(f"{label}.plist")
+            if old.exists():
+                self.launchctl.run(["bootout", f"{self.domain}/{label}"])
+                old.unlink()
+
     def install(self, vault: str | None, extras: list[str], load: bool = True) -> Path:
         content = plistlib.dumps(self.plist(vault, extras))
+        self.drop_legacy()
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.plist_path.parent.mkdir(parents=True, exist_ok=True)
         if load and self.loaded()[0]:

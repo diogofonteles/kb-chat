@@ -694,14 +694,14 @@ test('KBC-100 AC-15: the publication state is words in a status line, follows th
   await owner.dispose();
 });
 
-test('KBC-100 AC-12: a collection with no folder in the kb says the track is out of the research', async ({
+test('KBC-114 AC-6 (was KBC-100 AC-12): a collection with no folder in the kb still publishes: the track waits for the Mac', async ({
   page,
 }) => {
   const owner = await ownerApi();
   const { first } = await approvedTracks(owner);
   await page.goto(trackPage(first.id));
-  await expect(
-    page.locator('app-track-publication-status').getByRole('status'),
-  ).toContainText('Fora da pesquisa: o acervo ainda não tem pasta no kb');
+  const line = page.locator('app-track-publication-status').getByRole('status');
+  await expect(line).toContainText('Aguardando o Mac do dono');
+  await expect(line).not.toContainText('ainda não tem pasta');
   await owner.dispose();
 });
