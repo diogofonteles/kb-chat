@@ -8,6 +8,7 @@ import {
   initialPreferencesSchema,
   invitationSchema,
   mediaQuotaSchema,
+  personLevelsSchema,
   MEDIA_DEFAULT_QUOTA_BYTES,
   roleSchema,
   topicSlugSchema,
@@ -54,6 +55,8 @@ export const storedPersonSchema = z.object({
   mediaQuotaBytes: mediaQuotaSchema.nullable().optional(),
   /** Set in the invitation (KBC-028): the person's Settings until they save their own. */
   initialPreferences: initialPreferencesSchema.optional(),
+  /** Their level per top-level collection with a scale (KBC-103, ADR 0036 §2). */
+  levels: personLevelsSchema.optional(),
 });
 export type StoredPerson = z.infer<typeof storedPersonSchema>;
 
@@ -154,6 +157,8 @@ export interface MeScope {
   /** The collection tree, for access given through a parent (KBC-048). */
   readonly parentOf?: ParentOf;
   readonly media: boolean;
+  /** The person's level code per scaled collection they see (KBC-103 FR-8). */
+  readonly levels?: Record<string, string>;
 }
 
 export function toMe(viewer: Viewer, scope: MeScope): Me {
@@ -168,6 +173,8 @@ export function toMe(viewer: Viewer, scope: MeScope): Me {
     isOwner: viewer.isOwner,
     media: scope.media,
     canActAs: !viewer.actor && mayActAs(viewer),
+    levels: scope.levels ?? {},
+    levelsManager: hasFeature(person, 'collection-levels'),
     actingAs: viewer.actor
       ? {
           person: auditPersonOf(person),
@@ -197,6 +204,7 @@ export const toPerson = (person: StoredPerson, isOwner: boolean): Person => ({
   mediaQuotaBytes: person.mediaQuotaBytes ?? null,
   phone: person.phone ?? null,
   invitation: person.invitation ?? null,
+  levels: person.levels ?? {},
   invitedBy: person.invitedBy,
   createdAt: person.createdAt,
   lastLoginAt: person.lastLoginAt,

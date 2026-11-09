@@ -16,7 +16,12 @@ import type {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
-import { assertFeature, viewerOf, type RouteAccess } from '../auth/index.js';
+import {
+  assertFeature,
+  assertMediaOpen,
+  viewerOf,
+  type RouteAccess,
+} from '../auth/index.js';
 import type { SpeakersService } from './speakers-service.js';
 
 /**
@@ -95,6 +100,11 @@ export const collectionSpeakerRoutes =
     app.addHook('preHandler', async (request) =>
       assertFeature(request, 'media'),
     );
+    // A collection whose media waits for levels keeps its speakers too (KBC-103 BR-10).
+    app.addHook('preHandler', async (request) => {
+      const { topic } = request.params as { topic?: unknown };
+      if (typeof topic === 'string') assertMediaOpen(request, topic);
+    });
     const typed = app.withTypeProvider<ZodTypeProvider>();
     typed.get(
       '/api/v1/topics/:topic/speakers',

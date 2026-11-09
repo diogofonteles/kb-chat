@@ -50,6 +50,20 @@ export interface ResearchRouteOptions {
 }
 
 /**
+ * KBC-103 BR-10: in a collection with levels, research waits for KBC-104 to give the AI the
+ * person's view; until then only masters research there.
+ */
+function assertLevelsReachResearch(request: FastifyRequest, topic: string) {
+  if (
+    request.server.levelHooks?.closedUntilLevelsReachIt(
+      viewerOf(request).person,
+      topic,
+    )
+  )
+    throw new AppError('LEVELS_PENDING', 'Research waits for levels here');
+}
+
+/**
  * The tracks a turn may see (KBC-099 BR-4, FR-10): the route already checked the collection
  * and `research`; the person (the one a master acts as, in "Ver como") also needs `media`
  * and `media-research`, and `media-tracks`, without which a track item does not exist for
@@ -357,11 +371,13 @@ export const researchRoutes =
       .post(
         '/api/v1/topics/:topic/research',
         researchOptions(options.ratePerMinute),
-        (request, reply) =>
-          handleResearch(
+        (request, reply) => {
+          assertLevelsReachResearch(request, request.params.topic);
+          return handleResearch(
             options,
             { topic: request.params.topic, body: request.body },
             { request, reply },
-          ),
+          );
+        },
       );
   };

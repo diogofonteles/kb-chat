@@ -81,6 +81,14 @@ import type { DocumentStorePort } from './ports/document-store.js';
 import { MemoryPeopleStore } from './adapters/memory-people-store.js';
 import { MemorySessionStore } from './adapters/memory-session-store.js';
 import { MemoryActAsAudit } from './adapters/memory-act-as-audit.js';
+import { MemoryLevelAudit } from './adapters/memory-level-audit.js';
+import type { LevelAuditPort } from './ports/level-audit.js';
+import {
+  AccessLevelsService,
+  ContentGate,
+  LevelDirectory,
+  accessLevelRoutes,
+} from './modules/access-levels/index.js';
 import { createGoogleVerifier } from './adapters/google-id-token-verifier.js';
 import type { IdentityVerifierPort } from './ports/identity-verifier.js';
 import type { AgentLlmPort } from './ports/llm.js';
@@ -274,6 +282,17 @@ export interface AppDeps {
    * When `agent` is given it must have been built with the same directory's main authors.
    */
   readonly authorDirectory?: AuthorDirectory;
+  /**
+   * Access levels (KBC-103, ADR 0036): the scales and document levels and their audit; in
+   * memory when not given.
+   */
+  readonly levels?: LevelDeps;
+}
+
+/** The levels' state and audit (main: the state folder). */
+export interface LevelDeps {
+  readonly directory: LevelDirectory;
+  readonly audit: LevelAuditPort;
 }
 
 type FullDeps = AppDeps & {
@@ -288,6 +307,7 @@ type FullDeps = AppDeps & {
   conversations: ConversationStorePort;
   collections: CollectionRegistry;
   authors: AuthorsService;
+  levels: LevelDeps & { gate: ContentGate; service: AccessLevelsService };
   /** The collections the legacy seed wrote at this start (KBC-049 BR-4). */
   legacySeeded: readonly string[];
 };
@@ -493,6 +513,7 @@ async function registerRoutes(
   deps: FullDeps,
 ): Promise<void> {
   await registerSearch(app, deps);
+  await app.register(accessLevelRoutes(deps.levels.service));
   // Recorded research turns run apart from their request (KBC-029) and land in the history.
   const turns = new LiveTurns();
   const conversations = new ConversationsService({
@@ -1289,7 +1310,10 @@ function planActors(app: FastifyInstance, wiring: MediaWiring) {
       principal,
       isMaster: isMaster(person),
       canUpload: hasFeature(person, 'media-upload'),
-      canSee: (topic) => canSeeTopic(person, topic, parentOf),
+      // A collection with levels keeps its media for masters until KBC-105 (BR-10).
+      canSee: (topic) =>
+        canSeeTopic(person, topic, parentOf) &&
+        !app.contentGate?.closedUntilLevelsReachIt(person, topic),
       canEdit: hasFeature(person, 'media-edit'),
       canPropose: hasFeature(person, 'media-edit-ai'),
     };
@@ -1586,6 +1610,7 @@ async function registerPeople(
         setDefault: (appAi, by) => house.service.setDefault(appAi, by),
       },
       presets: presetsOf(deps, profiles),
+      levels: deps.levels.service,
     }),
   );
   await app.register(inviteProfilesRoutes(profiles, topics));
@@ -1833,11 +1858,37 @@ async function completeDeps(given: AppDeps): Promise<FullDeps> {
     agent,
     catalog,
     authors,
+    levels: await loadedLevels(deps, { catalog, people: auth.people }),
     legacySeeded: seeded,
     ledger,
     usage: deps.usage ?? new MemoryUsageLog(),
     conversations: deps.conversations ?? new MemoryConversationStore(),
   };
+}
+
+/** The scales and levels (KBC-103), loaded, with the gate every content route asks. */
+async function loadedLevels(
+  given: AppDeps,
+  built: { catalog: CatalogRegistry; people: PeopleService },
+): Promise<FullDeps['levels']> {
+  const levels = given.levels ?? {
+    directory: new LevelDirectory({
+      scales: new MemoryDocumentStore(),
+      documents: new MemoryDocumentStore(),
+    }),
+    audit: new MemoryLevelAudit(),
+  };
+  await levels.directory.load();
+  const { catalog, people } = built;
+  const gate = new ContentGate({ directory: levels.directory, catalog });
+  const service = new AccessLevelsService({
+    ...levels,
+    catalog,
+    gate,
+    people,
+    parentOf: (slug) => catalog.get(slug)?.topic.parent ?? null,
+  });
+  return { ...levels, gate, service };
 }
 
 /** Acting as a person (KBC-060): its audit in memory unless main gave one on disk. */
@@ -1854,6 +1905,20 @@ function withActAs(auth: AuthDeps): AuthDeps & { actAs: ActAsService } {
   };
 }
 
+/**
+ * The collection tree for every access check (ADR 0028): a parent's grant reaches its
+ * sub-collections, by the catalog, never by the slug's text; and the gate every content
+ * route asks for the person's view of a collection (ADR 0036 §7).
+ */
+function decorateTrees(app: FastifyInstance, full: FullDeps): void {
+  app.decorate(
+    'topicParentOf',
+    (slug: string) => full.catalog.get(slug)?.topic.parent ?? null,
+  );
+  app.decorate('contentGate', full.levels.gate);
+  app.decorate('levelHooks', full.levels.gate);
+}
+
 /** Assembles the API; only `main` listens (ND-01). */
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const full = await completeDeps(deps);
@@ -1867,12 +1932,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandler(app);
-  // The collection tree for every access check (ADR 0028): a parent's grant reaches its
-  // sub-collections, by the catalog, never by the slug's text.
-  app.decorate(
-    'topicParentOf',
-    (slug: string) => full.catalog.get(slug)?.topic.parent ?? null,
-  );
+  decorateTrees(app, full);
 
   // The Codex sandbox reaches only the MCP routes (KBC-027, ADR 0020).
   app.addHook('onRequest', peerOnlyMcp(deps.config.KB_CHAT_MCP_PEERS));

@@ -12,6 +12,7 @@ import type {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { TrackShelf } from '../../ports/track-shelf.js';
+import { levelViewOf } from '../access-levels/index.js';
 import { hasFeature, viewerOf, type RouteAccess } from '../auth/index.js';
 import type { DocumentReader, DocumentsService } from './documents-service.js';
 
@@ -30,13 +31,18 @@ const RESEARCHES_TRACKS = [
 
 function readerOf(
   request: FastifyRequest,
-  tracks: DocumentRouteOptions['tracks'],
+  { topic, tracks }: { topic: string; tracks: DocumentRouteOptions['tracks'] },
 ): DocumentReader {
   const { person } = viewerOf(request);
+  // What the reader's level reaches of this collection (KBC-103 BR-7, BR-8).
+  const level = levelViewOf(request, topic);
   if (!tracks || !RESEARCHES_TRACKS.every((one) => hasFeature(person, one)))
-    return {};
+    return { level };
   const shelf = tracks();
-  return { seesTrack: (topic, media) => shelf.trackOf(topic, media) !== null };
+  return {
+    level,
+    seesTrack: (topic, media) => shelf.trackOf(topic, media) !== null,
+  };
 }
 
 /** Reading needs only the collection: research answers cite documents too (KBC-010). */
@@ -66,7 +72,7 @@ function registerDocument(
       service.getDocument(
         request.params.topic,
         request.params.id,
-        readerOf(request, tracks),
+        readerOf(request, { topic: request.params.topic, tracks }),
       ),
   );
 }
@@ -89,7 +95,7 @@ function registerRelations(
       const { topic, id, group } = request.params;
       return service.relationPage(topic, id, {
         query: { group, ...request.query },
-        reader: readerOf(request, tracks),
+        reader: readerOf(request, { topic, tracks }),
       });
     },
   );

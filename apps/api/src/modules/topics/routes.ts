@@ -27,6 +27,7 @@ import {
   viewerOf,
   type RouteAccess,
 } from '../auth/index.js';
+import { levelViewsOf, type LevelView } from '../access-levels/index.js';
 import {
   listTopics,
   type CollectionActor,
@@ -50,9 +51,17 @@ export interface TopicsDeps {
 const CREATE: RouteAccess = { feature: 'collection-create' };
 const RENAME: RouteAccess = { ...CREATE, topicParam: 'topic' };
 
+/** Whether the person may see a document of a collection (KBC-103), one view per tree. */
+const documentsVisibleTo = (request: FastifyRequest) => {
+  const viewOf = levelViewsOf(request);
+  return (collection: string, entry: Parameters<LevelView['allows']>[1]) =>
+    viewOf(collection).allows(collection, entry);
+};
+
 const actorOf = (request: FastifyRequest): CollectionActor => {
   const viewer = viewerOf(request);
   return {
+    allows: documentsVisibleTo(request),
     personId: viewer.person.id,
     personEmail: viewer.person.email,
     isMaster: isMaster(viewer.person),
@@ -95,6 +104,7 @@ function registerList(typed: Typed, deps: TopicsDeps): void {
           : undefined,
         mainAuthorOf: deps.mainAuthorOf,
         tracks: tracksSeenBy(request, deps.tracks),
+        allows: documentsVisibleTo(request),
       }),
   );
 }

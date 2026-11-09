@@ -1,4 +1,5 @@
 import type { SearchResponse } from '@kb-chat/contracts';
+import { OPEN_VIEW } from '../access-levels/index.js';
 import { describe, expect, it, vi } from 'vitest';
 import type { MediaSearchPort } from '../../ports/media-search.js';
 import {
@@ -71,7 +72,7 @@ function searcher(media: MediaSearchPort | undefined) {
   return new SearchWithMedia({
     documents: {
       // Texts only, and only when "Textos" is among the kinds searched.
-      searchDocuments: async (_topic, _request, scope = {}) => ({
+      searchDocuments: async (_topic, _request, scope) => ({
         response: (scope.kinds ?? ['text']).includes('text')
           ? texts
           : { ...texts, items: [], total: 0 },
@@ -86,7 +87,10 @@ function searcher(media: MediaSearchPort | undefined) {
   });
 }
 
-const listener = { viewer: { mayHear: true, canSee: () => true } };
+const listener = {
+  viewer: { mayHear: true, canSee: () => true },
+  view: OPEN_VIEW,
+};
 
 describe('effectiveKinds (KBC-039 BR-4)', () => {
   it('keeps the chosen kinds the collection has, and the texts when none is left', () => {
@@ -147,7 +151,7 @@ describe('SearchWithMedia', () => {
     const notListener = await searcher(mediaIndex()).search(
       'udv',
       { q: 'hoasca', kinds: ['audio'] },
-      { viewer: { mayHear: false, canSee: () => true } },
+      { viewer: { mayHear: false, canSee: () => true }, view: OPEN_VIEW },
     );
     expect(offLibrary.items).toEqual([DOC]);
     expect(notListener.items).toEqual([DOC]);

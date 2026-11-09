@@ -42,6 +42,20 @@ export interface PeopleRouteDeps {
   readonly ai?: PeopleAiHooks;
   /** Invitation presets (KBC-028); absent, invitations are plain. */
   readonly presets?: PresetSource;
+  /** A person's level per scaled collection (KBC-103 FR-3); absent: none can be set. */
+  readonly levels?: PersonLevelRules;
+}
+
+/** What the access-levels module checks and records around a person's levels. */
+export interface PersonLevelRules {
+  /** Throws VALIDATION_FAILED unless every entry names a level of that collection's scale. */
+  assertLevels(levels: Readonly<Record<string, string>>): void;
+  /** Audits each level that changed (FR-10). */
+  recordChange(change: {
+    readonly before: StoredPerson;
+    readonly after: StoredPerson;
+    readonly by: string;
+  }): Promise<void>;
 }
 
 /** Where the people routes find a preset (KBC-028), and whether a person saved Settings. */
@@ -159,6 +173,23 @@ async function invite(
     : invited;
 }
 
+/** Everything a master's change must pass before anything is written. */
+function assertPatch(
+  deps: PeopleRouteDeps,
+  request: FastifyRequest,
+  body: z.infer<typeof personUpdateSchema>,
+): void {
+  // "Ver como outra pessoa" is the owner's to give (KBC-060 BR-1).
+  if (body.canActAs !== undefined && !viewerOf(request).isOwner)
+    throw new AppError('FORBIDDEN', 'Only the owner grants acting as a person');
+  assertKnownTopics(deps, body.topics);
+  assertMayLend(deps, request, body.ai?.appAi);
+  if (body.levels === undefined) return;
+  if (!deps.levels)
+    throw new AppError('VALIDATION_FAILED', 'Levels are not available');
+  deps.levels.assertLevels(body.levels);
+}
+
 function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
   app.withTypeProvider<ZodTypeProvider>().patch(
     '/api/v1/people/:id',
@@ -172,20 +203,15 @@ function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
     },
     async (request) => {
       const { params, body } = request;
-      // "Ver como outra pessoa" is the owner's to give (KBC-060 BR-1).
-      if (body.canActAs !== undefined && !viewerOf(request).isOwner)
-        throw new AppError(
-          'FORBIDDEN',
-          'Only the owner grants acting as a person',
-        );
-      assertKnownTopics(deps, body.topics);
-      assertMayLend(deps, request, body.ai?.appAi);
+      assertPatch(deps, request, body);
       const by = viewerOf(request).person.email;
       const before = await deps.people.find(params.id);
       assertMayChangeLent(deps, request, { before, ai: body.ai });
       const updated = await deps.people.update(params.id, body, by);
       if (body.ai && before)
         await syncAi(deps, { before, updated, by, log: request.log });
+      if (body.levels && before)
+        await deps.levels?.recordChange({ before, after: updated, by });
       return view(deps, updated);
     },
   );

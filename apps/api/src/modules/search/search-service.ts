@@ -42,6 +42,12 @@ import {
 } from './refine.js';
 import { cleanSnippet } from './snippet.js';
 import { trackSnippet } from './track-snippet.js';
+import type { LevelView } from '../access-levels/index.js';
+import {
+  candidateLimit,
+  deeperLimit,
+  needsDeeper,
+} from './candidate-budget.js';
 
 export interface SearchServiceDeps {
   readonly catalog: CatalogRegistry;
@@ -73,6 +79,11 @@ type SearchFilterQuery = z.output<typeof searchRequestSchema>;
  */
 export interface SearchScope {
   readonly tracks?: TrackShelf | undefined;
+  /**
+   * What the person's level reaches (KBC-103, ADR 0036 §7): required, so a new caller cannot
+   * forget it and search open.
+   */
+  readonly view: LevelView;
   /** What comes back (KBC-101 BR-9): texts, tracks or both (default); counts ignore it. */
   readonly kinds?: readonly SearchKind[];
 }
@@ -109,6 +120,17 @@ const cardsOf = (
     maxResults: MAX_RESULTS,
   });
 
+type GroupQuery = Pick<SearchFilterQuery, 'q' | 'mode' | 'filters'> & {
+  readonly tracks: TrackShelf | undefined;
+  readonly view: LevelView;
+};
+
+/** The level badge, for whoever manages levels in a scaled collection (T3, AC-9). */
+const levelOf = (view: LevelView, collection: string, id: string) => {
+  const level = view.levelOf(collection, id);
+  return level === undefined ? {} : { level };
+};
+
 interface FoundGroups {
   readonly groups: readonly CopyGroup[];
   readonly capped: boolean;
@@ -136,7 +158,7 @@ export class SearchService {
   async search(
     topic: string,
     request: SearchRequest,
-    scope: SearchScope = {},
+    scope: SearchScope,
   ): Promise<SearchResponse> {
     return (await this.searchDocuments(topic, request, scope)).response;
   }
@@ -145,12 +167,12 @@ export class SearchService {
   async searchDocuments(
     topic: string,
     request: SearchRequest,
-    { tracks, kinds = SEARCH_KINDS }: SearchScope = {},
+    { tracks, kinds = SEARCH_KINDS, view }: SearchScope,
   ): Promise<DocumentSearch> {
     const { q, mode, limit, offset, filters } =
       searchRequestSchema.parse(request);
     const startedAt = performance.now();
-    const found = await this.foundIn(topic, { q, mode, filters, tracks });
+    const found = await this.foundIn(topic, { q, mode, filters, tracks, view });
     const groups = mergeByScore(found);
     const { page, ...refined } = refine(groups.filter(ofKind(kinds)), {
       filters,
@@ -161,7 +183,7 @@ export class SearchService {
     const totals = kindTotals(groups, filters);
     const response: SearchResponse = {
       ...refined,
-      items: await this.hitsOf(page, tracks),
+      items: await this.hitsOf(page, { tracks, view }),
       trackTotal: kinds.includes('audio') ? totals.tracks : 0,
       capped: found.some((one) => one.capped),
       // Documents only: SearchWithMedia adds the spoken passages (KBC-039).
@@ -185,34 +207,56 @@ export class SearchService {
   }
 
   /**
-   * Index candidates for the question, kept when cataloged and grouped by copy. A collection
-   * with no documents (created on the screen, ADR 0028) has no index collection to ask.
+   * Index candidates for the question, kept when cataloged and visible, and grouped by copy.
+   * A collection with no documents (created on the screen, ADR 0028) has no index collection
+   * to ask. A viewer who sees part of it asks deeper (the adaptive budget, ADR 0036 §7).
    */
   private async findGroups(
     catalog: TopicCatalog,
-    {
-      q,
-      mode,
-      filters,
-      tracks,
-    }: Pick<SearchFilterQuery, 'q' | 'mode' | 'filters'> & {
-      tracks: TrackShelf | undefined;
-    },
+    query: GroupQuery,
   ): Promise<FoundGroups> {
     if (catalog.entries.size === 0) return { groups: [], capped: false };
+    const { filters, view } = query;
     const filtered = Object.values(filters).some((values) => values.length > 0);
     const base = filtered ? CANDIDATES.filtered : CANDIDATES.plain;
+    if (view.seesAll) {
+      const found = await this.candidates(catalog, query, base);
+      return this.grouped(catalog, found.kept, found.full);
+    }
+    const first = candidateLimit(base, view.visibleShare(catalog));
+    let found = await this.candidates(catalog, query, first);
+    const short = { visible: found.kept.length, base, limit: first };
+    if (needsDeeper({ ...short, indexFull: found.full }))
+      found = await this.candidates(catalog, query, deeperLimit(first));
+    const capped = found.full && found.kept.length >= base;
+    return this.grouped(catalog, found.kept, capped);
+  }
+
+  /** Up to `limit` texts (and the tracks among them), kept when the person may see them. */
+  private async candidates(
+    catalog: TopicCatalog,
+    { q, mode, filters, tracks, view }: GroupQuery,
+    limit: number,
+  ): Promise<{ kept: Candidate[]; full: boolean }> {
     const hits = await this.textsAndTracks(catalog, {
       // A subject alone (KBC-070): the documents are found by its name.
       q: normalizeQuestion(q) || normalizeQuestion(filters.concepts.join(' ')),
       mode,
-      base,
+      base: limit,
     });
-    const groups = groupCopies(
-      this.keepCataloged(catalog, { hits: hits.kept, tracks }),
-    );
+    const kept = this.keepCataloged(catalog, { hits: hits.kept, tracks, view });
+    return { kept, full: hits.texts >= limit };
+  }
+
+  private grouped(
+    catalog: TopicCatalog,
+    kept: readonly Candidate[],
+    capped: boolean,
+  ): FoundGroups {
+    // Copies are grouped after the filter: a hidden copy is never counted or named.
+    const groups = groupCopies(kept);
     for (const group of groups) this.topicOf.set(group, catalog);
-    return { groups, capped: hits.texts >= base };
+    return { groups, capped };
   }
 
   /**
@@ -274,19 +318,23 @@ export class SearchService {
    * Collection-wide counts per facet value ("no acervo" counts): the texts, and the track
    * documents the shelf confirms for this person (KBC-101 FR-7).
    */
-  topicFacets(topic: string, { tracks }: SearchScope = {}): TopicFacets {
-    return countFacets(() => this.documentsIn(topic, tracks));
+  topicFacets(topic: string, { tracks, view }: SearchScope): TopicFacets {
+    return countFacets(() => this.documentsIn(topic, { tracks, view }));
   }
 
   /** Every document of the scope this person may see, with its collection. */
   documentsIn(
     topic: string,
-    tracks?: TrackShelf,
+    { tracks, view }: SearchScope,
   ): (CatalogEntry & { readonly topic: string })[] {
     return this.requireScope(topic).flatMap((catalog) => {
       const slug = catalog.topic.slug;
       return [...catalog.entries.values()]
-        .filter((entry) => admitted(entry, { topic: slug, tracks }))
+        .filter(
+          (entry) =>
+            admitted(entry, { topic: slug, tracks }) &&
+            view.allows(slug, entry),
+        )
         .map((entry) => ({ ...entry, topic: slug }));
     });
   }
@@ -296,17 +344,24 @@ export class SearchService {
     {
       hits,
       tracks,
+      view,
     }: {
       hits: readonly IndexHit[];
       tracks: TrackShelf | undefined;
+      view: LevelView;
     },
   ): Candidate[] {
     const known: Candidate[] = [];
     const topic = catalog.topic.slug;
     for (const hit of hits) {
       const entry = catalog.entries.get(hit.id);
-      // The collection rides along for the "Sub-acervo" filter (KBC-048 FR-4).
-      if (entry && admitted(entry, { topic, tracks }))
+      // The collection rides along for the "Sub-acervo" filter (KBC-048 FR-4); the person's
+      // level filters before any grouping or count (KBC-103 BR-8).
+      if (
+        entry &&
+        admitted(entry, { topic, tracks }) &&
+        view.allows(topic, entry)
+      )
         known.push({ hit, entry: { ...entry, topic } });
     }
     return known;
@@ -332,7 +387,7 @@ export class SearchService {
 
   private async toSearchHit(
     group: CopyGroup,
-    tracks: TrackShelf | undefined,
+    { tracks, view }: Pick<SearchScope, 'tracks' | 'view'>,
   ): Promise<SearchHit> {
     const { lead, copies } = group;
     const { hit, entry } = lead;
@@ -356,14 +411,15 @@ export class SearchService {
       score: hit.score,
       copies: copies.map((copy) => ({ id: copy.id, title: copy.title })),
       ...(track && { media: track.media }),
+      ...levelOf(view, topic, entry.id),
     };
   }
 
   private hitsOf(
     page: readonly CopyGroup[],
-    tracks: TrackShelf | undefined,
+    scope: Pick<SearchScope, 'tracks' | 'view'>,
   ): Promise<SearchHit[]> {
-    return Promise.all(page.map((group) => this.toSearchHit(group, tracks)));
+    return Promise.all(page.map((group) => this.toSearchHit(group, scope)));
   }
 
   private async bodyOf(topic: string, id: string): Promise<string> {

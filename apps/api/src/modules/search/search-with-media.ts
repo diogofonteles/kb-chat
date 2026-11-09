@@ -26,6 +26,7 @@ import {
   toMediaHit,
   type AuthorView,
 } from './media-hits.js';
+import type { LevelView } from '../access-levels/index.js';
 import type { SearchService } from './search-service.js';
 import { withSpokenPassages } from './track-passages.js';
 import {
@@ -55,6 +56,8 @@ export interface SearchViewer {
 /** Who asks, and where the media side's timing goes. */
 export interface SearchContext {
   readonly viewer: SearchViewer;
+  /** What the person's level reaches of the collection's documents (KBC-103). */
+  readonly view: LevelView;
   readonly report?: (entry: MediaReport) => void;
 }
 
@@ -236,6 +239,7 @@ export class SearchWithMedia {
     return this.deps.documents.searchDocuments(topic, parsed, {
       tracks: context.viewer.tracks,
       kinds: reach,
+      view: context.view,
     });
   }
 
@@ -353,10 +357,11 @@ export class SearchWithMedia {
   /** Collection-wide counts, each subject with its tracks for who sees them (FR-2). */
   topicFacets(
     topic: string,
-    { viewer, report = () => undefined }: SearchContext,
+    { viewer, view, report = () => undefined }: SearchContext,
   ): TopicFacets {
     const facets = this.deps.documents.topicFacets(topic, {
       tracks: viewer.tracks,
+      view,
     });
     const subjects = this.subjectsFor(viewer);
     if (!subjects) return facets;

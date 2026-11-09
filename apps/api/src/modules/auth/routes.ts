@@ -19,7 +19,13 @@ import type {
   IdentityVerifierPort,
   VerifiedIdentity,
 } from '../../ports/identity-verifier.js';
-import { PUBLIC, SIGNED_IN, parentOfRequest, viewerOf } from './access.js';
+import {
+  PUBLIC,
+  SIGNED_IN,
+  levelCodesOf,
+  parentOfRequest,
+  viewerOf,
+} from './access.js';
 import {
   SESSION_COOKIE,
   clearedSessionCookie,
@@ -122,6 +128,7 @@ function registerSession(app: FastifyInstance, deps: AuthRouteDeps) {
         topics: deps.topics(),
         media: deps.mediaEnabled ?? false,
         parentOf: parentOfRequest(request),
+        levels: levelCodesOf(request),
       }),
   );
 }

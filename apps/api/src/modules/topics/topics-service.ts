@@ -11,6 +11,7 @@ import { AppError } from '../../app-error.js';
 import type { TrackShelf } from '../../ports/track-shelf.js';
 import {
   isSeenDocument,
+  type CatalogEntry,
   type CatalogRegistry,
   type TopicCatalog,
 } from '../catalog/index.js';
@@ -25,7 +26,15 @@ export interface CollectionActor {
   /** Who really did it, for the records: the master when acting as the person (ADR 0027). */
   readonly email: string;
   readonly canSee: (slug: string) => boolean;
+  /** Which documents the person may see (KBC-103): the counts leave out the others. */
+  readonly allows: VisibleDocument;
 }
+
+/** Whether the person may see one document of a collection (ADR 0036 §7). */
+export type VisibleDocument = (
+  collection: string,
+  entry: Pick<CatalogEntry, 'id' | 'media'>,
+) => boolean;
 
 /** A collection's main author (KBC-049, ADR 0030), as the topic list shows it. */
 export type MainAuthorOf = (slug: string) => Topic['mainAuthor'];
@@ -58,6 +67,8 @@ export interface TopicsView {
   readonly mainAuthorOf?: MainAuthorOf;
   /** The tracks the person sees as documents (KBC-101, C17); default: none, texts only. */
   readonly tracks?: TrackShelf | undefined;
+  /** Which documents the person may see (KBC-103): required, never open by default. */
+  readonly allows: VisibleDocument;
 }
 
 const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
@@ -70,11 +81,13 @@ type Counts = Pick<Topic, 'documentCount' | 'trackCount'>;
 /** The documents of a scope this person sees, and the tracks among them (C17). */
 function countsOf(
   scope: readonly TopicCatalog[],
-  tracks: TrackShelf | undefined,
+  { tracks, allows }: Pick<TopicsView, 'tracks' | 'allows'>,
 ): Counts {
   const seen = scope.flatMap((one) =>
-    [...one.entries.values()].filter((entry) =>
-      isSeenDocument(entry, { topic: one.topic.slug, tracks }),
+    [...one.entries.values()].filter(
+      (entry) =>
+        isSeenDocument(entry, { topic: one.topic.slug, tracks }) &&
+        allows(one.topic.slug, entry),
     ),
   );
   return {
@@ -107,23 +120,19 @@ function branchOf(
   root: TopicCatalog,
   children: readonly TopicCatalog[],
   view: Required<Pick<TopicsView, 'visible' | 'renamable' | 'mainAuthorOf'>> &
-    Pick<TopicsView, 'tracks'>,
+    Pick<TopicsView, 'tracks' | 'allows'>,
 ): Topic[] {
   const canOpen = view.visible(root.topic.slug);
   if (!canOpen && children.length === 0) return [];
   return [
     // Counted only for who opens the parent: nothing of media.db is read for a closed one.
-    toTopic(
-      root,
-      canOpen ? countsOf([root, ...children], view.tracks) : NOTHING,
-      {
-        canOpen,
-        canRename: canOpen && view.renamable(root.topic.slug),
-        mainAuthor: view.mainAuthorOf(root.topic.slug),
-      },
-    ),
+    toTopic(root, canOpen ? countsOf([root, ...children], view) : NOTHING, {
+      canOpen,
+      canRename: canOpen && view.renamable(root.topic.slug),
+      mainAuthor: view.mainAuthorOf(root.topic.slug),
+    }),
     ...children.map((child) =>
-      toTopic(child, countsOf([child], view.tracks), {
+      toTopic(child, countsOf([child], view), {
         canOpen: true,
         canRename: view.renamable(child.topic.slug),
         mainAuthor: view.mainAuthorOf(child.topic.slug),
@@ -142,6 +151,7 @@ const withDefaults = (
   renamable: view.renamable ?? (() => false),
   mainAuthorOf: view.mainAuthorOf ?? (() => null),
   tracks: view.tracks,
+  allows: view.allows,
 });
 
 /**
@@ -150,7 +160,7 @@ const withDefaults = (
  */
 export function listTopics(
   { catalog }: Pick<TopicsServiceDeps, 'catalog'>,
-  { preferredTopic, ...given }: TopicsView = {},
+  { preferredTopic, ...given }: TopicsView,
 ): TopicList {
   const view = withDefaults(given);
   const { visible } = view;
@@ -207,7 +217,7 @@ export class TopicsService {
       await this.undo(slug).catch(() => undefined);
       throw err;
     }
-    return this.topicOf(slug);
+    return this.topicOf(slug, actor);
   }
 
   private async undo(slug: string): Promise<void> {
@@ -247,7 +257,7 @@ export class TopicsService {
     }
     if (mainAuthor !== undefined)
       await this.authors().setMain(slug, mainAuthor);
-    return this.topicOf(slug);
+    return this.topicOf(slug, actor);
   }
 
   private authors(): TopicAuthors {
@@ -336,11 +346,11 @@ export class TopicsService {
     return catalog;
   }
 
-  private topicOf(slug: string): Topic {
+  private topicOf(slug: string, actor: CollectionActor): Topic {
     // Texts only: the list the screen reloads counts the tracks each person sees.
     return toTopic(
       this.require(slug),
-      countsOf(this.deps.catalog.scope(slug), undefined),
+      countsOf(this.deps.catalog.scope(slug), { allows: actor.allows }),
       {
         canOpen: true,
         canRename: true,

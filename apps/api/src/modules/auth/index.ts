@@ -2,13 +2,17 @@ export {
   PUBLIC,
   SIGNED_IN,
   assertFeature,
+  assertMediaOpen,
   assertNotActing,
   canSee,
+  canSeeMedia,
+  levelCodesOf,
   denialOf,
   parentOfRequest,
   principalOf,
   sessionOf,
   viewerOf,
+  type LevelHooks,
   type RouteAccess,
 } from './access.js';
 export { codeRoutes, identifierOf, type CodeRouteDeps } from './code-routes.js';
@@ -40,6 +44,7 @@ export { Invitations, type InvitationsDeps } from './invitations.js';
 export {
   peopleRoutes,
   type PeopleRouteDeps,
+  type PersonLevelRules,
   type PresetSource,
 } from './people-routes.js';
 export type { ApprovedRequest } from './people-rules.js';

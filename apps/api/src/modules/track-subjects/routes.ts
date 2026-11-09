@@ -28,6 +28,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import {
+  assertMediaOpen,
   assertFeature,
   hasFeature,
   viewerOf,
@@ -96,28 +97,32 @@ const COLLECTION_ROUTE = {
   schema: { params: topicParams },
 };
 
+const READ_SUBJECTS = {
+  ...COLLECTION_ROUTE,
+  schema: {
+    ...COLLECTION_ROUTE.schema,
+    response: { 200: collectionSubjectsSchema },
+  },
+};
+const CREATE_SUBJECT = {
+  ...COLLECTION_ROUTE,
+  schema: {
+    ...COLLECTION_ROUTE.schema,
+    body: createSubjectRequestSchema,
+    response: { 201: freeSubjectSchema },
+  },
+};
+
 function registerCollection(typed: Typed, deps: SubjectRoutesDeps): void {
   const { subjects } = deps;
   const url = '/api/v1/topics/:topic/subjects';
-  const read = {
-    ...COLLECTION_ROUTE,
-    schema: {
-      ...COLLECTION_ROUTE.schema,
-      response: { 200: collectionSubjectsSchema },
-    },
-  };
-  const create = {
-    ...COLLECTION_ROUTE,
-    schema: {
-      ...COLLECTION_ROUTE.schema,
-      body: createSubjectRequestSchema,
-      response: { 201: freeSubjectSchema },
-    },
-  };
-  typed.get(url, read, async (request) =>
-    subjects.collection(knownTopic(deps, request.params.topic)),
-  );
-  typed.post(url, create, async (request, reply) => {
+  typed.get(url, READ_SUBJECTS, async (request) => {
+    assertMediaOpen(request, request.params.topic);
+    return subjects.collection(knownTopic(deps, request.params.topic));
+  });
+  typed.post(url, CREATE_SUBJECT, async (request, reply) => {
+    // Before the name is looked at: a 409 must not confirm a hidden concept (QA-2).
+    assertMediaOpen(request, request.params.topic);
     const topic = knownTopic(deps, request.params.topic);
     const { name } = request.body;
     return reply

@@ -42,6 +42,7 @@ import { JsonlSpendLedger } from '../src/adapters/jsonl-spend-ledger.js';
 import { SealedSettingsStore } from '../src/adapters/sealed-settings-store.js';
 import { SecretBox } from '../src/adapters/secret-box.js';
 import { buildApp } from '../src/app.js';
+import { levelsOnDisk } from '../src/levels-factory.js';
 import { loadConfig, type AppConfig } from '../src/config.js';
 import { createHouseAi } from '../src/house-ai-factory.js';
 import { PeopleService, SessionService } from '../src/modules/auth/index.js';
@@ -321,6 +322,8 @@ async function appOf(
     ...core,
     ...rest,
     media: await testMedia(config, groq, options.launchctl),
+    // Access levels on disk (KBC-103), as main builds them.
+    levels: levelsOnDisk(config.KB_CHAT_STATE_DIR),
     ...(options.llm && { llm: options.llm }),
   });
 }

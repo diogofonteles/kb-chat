@@ -211,8 +211,27 @@ export function update(
     // Only a master may hold it; losing the role takes it away (KBC-060 BR-1).
     canActAs: role === 'master' && (patch.canActAs ?? target.canActAs ?? false),
     ...quotaChangeOf(patch),
+    ...(patch.levels && { levels: { ...target.levels, ...patch.levels } }),
   };
   return { people: replace(people, next), result: next };
+}
+
+/** One level of a top-level collection for several people at once (KBC-103 BR-4). */
+export function placePeople(
+  people: readonly StoredPerson[],
+  placement: {
+    readonly ids: readonly string[];
+    readonly root: string;
+    readonly level: string;
+  },
+): PeopleChange<number> {
+  const { ids, root, level } = placement;
+  const next = people.map((person) =>
+    ids.includes(person.id)
+      ? { ...person, levels: { ...person.levels, [root]: level } }
+      : person,
+  );
+  return { people: next, result: ids.length };
 }
 
 /** The quota only when it changes: null goes back to the default (KBC-035 BR-1). */
