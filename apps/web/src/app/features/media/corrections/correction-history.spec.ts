@@ -36,6 +36,7 @@ const row = (
   id: `00000000-0000-4000-8000-${String(++ids).padStart(12, '0')}`,
   kind: 'correct',
   state: 'active',
+  learned: false,
   version: 2,
   revision: 1,
   position: 2,
@@ -98,6 +99,30 @@ afterEach(() => {
 });
 
 describe('Correções (KBC-093 FR-9, FR-13)', () => {
+  it('KBC-113 FR-6: a learned group is named as the learning, with Desfazer o grupo', async () => {
+    const group = '33333333-3333-4333-8333-333333333333';
+    const learned = (position: number) =>
+      row({
+        learned: true,
+        groupId: group,
+        position,
+        before: ['a', 'Manta'],
+        after: 'Atlântida',
+        authorName: 'Aprendizado das correções',
+        mine: false,
+      });
+    await renderHistory(
+      historyOf([
+        { groupId: group, items: [learned(2), learned(9)], canUndoGroup: true },
+      ]),
+    );
+    expect(screen.getByText('Aprendizado:')).toBeTruthy();
+    expect(screen.getAllByText('Corrigida pelo aprendizado')).toHaveLength(2);
+    expect(
+      screen.getByRole('button', { name: 'Desfazer o grupo' }),
+    ).toBeTruthy();
+  });
+
   it('says when there is none', async () => {
     await renderHistory(historyOf([]));
     expect(screen.getByText('Nenhuma correção nesta gravação.')).toBeTruthy();

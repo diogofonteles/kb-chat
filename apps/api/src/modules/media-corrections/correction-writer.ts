@@ -32,6 +32,8 @@ export interface RowMeta {
   readonly at: string;
   readonly groupId?: string | null;
   readonly reverts?: string | null;
+  /** The learned rule that wrote it (KBC-113); a carried row keeps its original's. */
+  readonly ruleId?: string | null;
 }
 
 /** A new row: in force, not tried on another version yet. */
@@ -125,6 +127,7 @@ export function rowOf(
     reverts: meta.reverts ?? null,
     ...NOT_CARRIED_YET,
     groupId: meta.groupId ?? null,
+    ruleId: meta.ruleId ?? null,
     authorPrincipal: meta.author.principal,
     authorName: meta.author.name,
     createdAt: meta.at,

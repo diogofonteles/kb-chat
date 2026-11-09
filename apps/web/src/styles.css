@@ -115,6 +115,21 @@ textarea {
   }
 }
 
+/* A word the learning from corrections replaced (KBC-113 FR-6): a dotted underline, subtle,
+   never colour alone. */
+::highlight(learned-word) {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--color-text-muted);
+  text-decoration-thickness: 2px;
+}
+
+@media (forced-colors: active) {
+  ::highlight(learned-word) {
+    text-decoration-color: CanvasText;
+  }
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

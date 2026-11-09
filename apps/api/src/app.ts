@@ -120,6 +120,7 @@ import {
   VoiceNamesService,
   collectionSpeakerRoutes,
   speakerRoutes,
+  countPromptTokens,
   termRoutes,
   TermListService,
   transcriberRoutes,
@@ -180,8 +181,10 @@ import {
   type TrackRevisionService,
 } from './modules/media-edit/index.js';
 import {
+  LearningService,
   TranscriptCorrectionService,
   correctionRoutes,
+  learningRoutes,
 } from './modules/media-corrections/index.js';
 import { houseAiRoutes } from './modules/house-ai/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
@@ -636,6 +639,7 @@ interface WorkerWiring {
   readonly documents: MediaDocuments;
   readonly corrections: TranscriptCorrectionService;
   readonly statusBoard: TranscriberStatusBoard;
+  readonly learning: LearningService;
 }
 
 async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
@@ -644,11 +648,17 @@ async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
   await app.register(
     workerRoutes({
       groq,
-      service: workerService(wiring.media, { voicePrints, groq, documents }),
+      service: workerService(wiring.media, {
+        voicePrints,
+        groq,
+        documents,
+        learning: wiring.learning,
+      }),
       transcribers: wiring.transcribers,
       transcription: transcriptionService(wiring.media, {
         publisher,
         corrections: wiring.corrections,
+        learning: wiring.learning,
       }),
       cuts: publisher,
       kbResults: documents.kb,
@@ -664,22 +674,25 @@ async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
 
 /** The queue as workers see it, with what cut and voice-profile jobs carry. */
 function workerService(
-  { store, files, trackItems: tracks, transcripts }: MediaDeps,
+  { store, files, trackItems: tracks }: MediaDeps,
   {
     voicePrints,
     groq,
     documents,
+    learning,
   }: {
     voicePrints: VoicePrintService;
     groq: GroqService;
     documents: MediaDocuments;
+    learning: LearningService;
   },
 ): WorkerService {
   return new WorkerService({
     store,
     files,
     tracks,
-    termsVersion: () => transcripts.currentTerms().version,
+    // A job for Groq is prompted with the learned terms too (KBC-113 FR-4).
+    termsVersion: () => learning.termsForTranscriber().version,
     voiceJobOf: (job) => voicePrints.jobOf(job),
     groqWaits: () => groq.waits(),
     kb: documents.kb,
@@ -692,18 +705,23 @@ function transcriptionService(
   {
     publisher,
     corrections,
+    learning,
   }: {
     publisher: TrackPublisher;
     corrections: TranscriptCorrectionService;
+    learning: LearningService;
   },
 ): TranscriptionService {
   return new TranscriptionService({
     store,
     transcripts,
     files,
-    // The corrections land on the new version before its tracks are cut (KBC-093 FR-8).
+    terms: () => learning.termsForTranscriber(),
+    // The corrections land on the new version, then the learned rules, before its tracks are
+    // cut (KBC-093 FR-8, KBC-113 FR-1).
     onTranscript: (mediaId) => {
       corrections.carry(mediaId);
+      learning.apply(mediaId);
       publisher.afterTranscript(mediaId);
     },
   });
@@ -787,6 +805,8 @@ function transcriptService(
     transcripts: wiring.media.transcripts,
     media,
     recording: wiring.media.store,
+    learnedOn: (transcriptId, segments) =>
+      wiring.media.corrections.learnedOn(transcriptId, segments),
     voices: (mediaId, transcript) => diarization.voicesOn(mediaId, transcript),
     trackVoices: trackVoiceNames(wiring.media, (topic, slug) =>
       wiring.authors.authorOf(topic, slug),
@@ -951,13 +971,20 @@ async function registerTranscribers(
     media: MediaService;
     wiring: MediaWiring;
     documents: MediaDocuments;
+    learning: LearningService;
   },
 ): Promise<TranscriberStatusBoard> {
-  const { transcribers, media, wiring } = input;
+  const { transcribers, media, wiring, learning } = input;
   await app.register(transcriberRoutes({ transcribers, media }));
   await app.register(
-    termRoutes(new TermListService({ transcripts: wiring.media.transcripts })),
+    termRoutes(
+      new TermListService({
+        transcripts: wiring.media.transcripts,
+        learnedFor: (manual) => learning.learnedFor(manual),
+      }),
+    ),
   );
+  await app.register(learningRoutes(learning));
   return registerTranscriberStatus(app, input);
 }
 
@@ -1031,6 +1058,19 @@ function transcriberWaker(
     stoppedSince: (at) => board.stoppedSince(at),
     onWoken: (detail) => app.log.info({ detail }, 'transcriber: started'),
     onError: (err) => app.log.warn({ err }, 'transcriber: could not start'),
+  });
+}
+
+/** Learning from word corrections (KBC-113, ADR 0037): rules, learned terms, switches. */
+function learningService(
+  app: FastifyInstance,
+  media: MediaDeps,
+): LearningService {
+  return new LearningService({
+    corrections: media.corrections,
+    transcripts: media.transcripts,
+    countTokens: countPromptTokens,
+    onApplied: (event) => app.log.info(event, 'transcript.learning'),
   });
 }
 
@@ -1157,6 +1197,7 @@ async function registerPublication(
 
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
 async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
+  const learning = learningService(app, wiring.media);
   const transcribers = transcriberService(wiring.media);
   const groq = createGroq({ media: wiring.media, transcribers, log: app.log });
   const documents = await startDocuments(app, { ...wiring, transcribers });
@@ -1164,7 +1205,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const publisher = trackPublisher(wiring, documents);
   const withDocuments = { ...wiring, documents };
   await registerPublication(app, { documents, media });
-  const setup = { transcribers, media, wiring, documents };
+  const setup = { transcribers, media, wiring, documents, learning };
   const statusBoard = await registerTranscribers(app, setup);
   await app.register(groqRoutes({ groq, media }));
   const listeners = { media, transcribers, publisher };
@@ -1178,8 +1219,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
     transcribers,
     publisher,
   });
-  const { authors, media: deps } = wiring;
-  const worker = { ...measures, media: deps, authors, transcribers, groq };
+  const worker = { ...measures, ...wiring, transcribers, groq, learning };
   await registerWorker(app, {
     ...{ ...worker, publisher, documents, ...edited, statusBoard },
   });

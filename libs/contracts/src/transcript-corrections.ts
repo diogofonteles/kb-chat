@@ -98,6 +98,8 @@ export const transcriptCorrectionSchema = z.object({
   mine: z.boolean(),
   /** Whether the person asking may undo it now (BR-5). */
   canUndo: z.boolean(),
+  /** Written by the learning from corrections (KBC-113 BR-7). */
+  learned: z.boolean().default(false),
   createdAt: z.iso.datetime(),
 });
 export type TranscriptCorrection = z.infer<typeof transcriptCorrectionSchema>;

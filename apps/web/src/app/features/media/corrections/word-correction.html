@@ -15,6 +15,26 @@
     }
   </p>
 
+  @if (desk.learnedSpan(); as learned) {
+    <div class="learned">
+      <p>
+        <span aria-hidden="true">✦ </span>
+        <span i18n="@@correct.learned"
+          >Corrigida pelo aprendizado · era «{{ learned.before }}»</span
+        >
+      </p>
+      <button
+        type="button"
+        class="secondary"
+        [disabled]="desk.undoing() || saving()"
+        (click)="desk.undoLearned()"
+        i18n="@@correct.undoLearned"
+      >
+        Desfazer
+      </button>
+    </div>
+  }
+
   <label class="field" for="word-correction-field">
     <span i18n="@@correct.fieldLabel">Texto certo</span>
     <input

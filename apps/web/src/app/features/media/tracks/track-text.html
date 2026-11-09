@@ -67,6 +67,23 @@
     </button>
   </p>
 }
+@if (learnedWords(); as count) {
+  <!-- The dotted mark is drawn only (KBC-113 FR-6): said here in words too (review). -->
+  <p class="learned-note">
+    <span class="learned-sample" aria-hidden="true">✦</span>
+    @if (count === 1) {
+      <ng-container i18n="@@trackText.learnedOne"
+        >1 palavra corrigida pelo aprendizado (sublinhado
+        pontilhado)</ng-container
+      >
+    } @else {
+      <ng-container i18n="@@trackText.learnedMany"
+        >{{ count }} palavras corrigidas pelo aprendizado (sublinhado
+        pontilhado)</ng-container
+      >
+    }
+  </p>
+}
 @if (canCorrect && searching() && state() === 'ready') {
   <app-word-search [lines]="lines()" (chosen)="chosenHit($event)" />
 }

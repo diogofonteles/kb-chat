@@ -71,6 +71,7 @@ const saved: TranscriptCorrectionResult = {
     id: CORRECTION_ID,
     kind: 'correct',
     state: 'active',
+    learned: false,
     version: 1,
     revision: 1,
     position: 2,
@@ -103,6 +104,8 @@ let occurrenceTotal = 1;
 interface Server {
   revision: number;
   history: CorrectionHistory;
+  /** The learning's replacements on the words (KBC-113 FR-5). */
+  learned: MediaTranscriptWords['learned'];
   readonly served: Record<'transcript' | 'words' | 'history', number>;
 }
 
@@ -145,6 +148,7 @@ function answerRead(read: TestRequest, server: Server): void {
       version: 1,
       revision: server.revision,
       words: WORDS,
+      learned: server.learned,
     });
   } else if (url === `${BASE}/corrections`) {
     server.served.history++;
@@ -155,8 +159,13 @@ function answerRead(read: TestRequest, server: Server): void {
 }
 
 async function renderText(
-  options: { canCorrect?: boolean; history?: CorrectionHistory } = {},
+  options: {
+    canCorrect?: boolean;
+    history?: CorrectionHistory;
+    learned?: MediaTranscriptWords['learned'];
+  } = {},
 ) {
+  const painted = new Map<string, number>();
   const audition = {
     positionMs: signal<number | null>(null),
     cuedMs: signal<number | null>(null),
@@ -184,7 +193,8 @@ async function renderText(
         provide: SEARCH_HIGHLIGHTS,
         useValue: {
           paints: true,
-          show: () => undefined,
+          show: (name: string, ranges: readonly Range[]) =>
+            painted.set(name, ranges.length),
           clear: () => undefined,
         },
       },
@@ -198,12 +208,13 @@ async function renderText(
   const server: Server = {
     revision: 0,
     history: options.history ?? EMPTY_HISTORY,
+    learned: options.learned ?? [],
     served: { transcript: 0, words: 0, history: 0 },
   };
   const settle = () =>
     serve(controller, server, () => view.fixture.whenStable());
   await settle();
-  return { view, audition, http: controller, settle, server };
+  return { view, audition, http: controller, settle, server, painted };
 }
 
 type Rendered = Awaited<ReturnType<typeof renderText>>;
@@ -609,5 +620,64 @@ describe('TrackText: correcting a word (KBC-093)', () => {
     ).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Correções (2)' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Ver' })).toBeTruthy();
+  });
+});
+
+describe('TrackText: a word the learning replaced (KBC-113)', () => {
+  const LEARNED = [
+    {
+      position: 2,
+      count: 1,
+      correctionId: CORRECTION_ID,
+      before: 'Tiuacô',
+    },
+  ];
+
+  it('AC-17, FR-6: the word is marked, and the panel says it was learned, with Desfazer', async () => {
+    const rendered = await renderText({ learned: LEARNED });
+    expect(rendered.painted.get('learned-word')).toBe(1);
+    // Said in words too, not only drawn (review round 1).
+    expect(
+      screen.getByText(
+        '1 palavra corrigida pelo aprendizado (sublinhado pontilhado)',
+      ),
+    ).toBeTruthy();
+
+    await clickWord(rendered, 'Tiuako');
+
+    expect(panel()).not.toBeNull();
+    expect(
+      screen.getByText('Corrigida pelo aprendizado · era «Tiuacô»'),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Desfazer' }));
+    await rendered.settle();
+    const undo = rendered.http.expectOne(
+      (one) =>
+        one.method === 'POST' &&
+        one.url === `${BASE}/corrections/${CORRECTION_ID}/undo`,
+    );
+    rendered.server.revision = 2;
+    rendered.server.learned = [];
+    undo.flush({ ...saved, revision: 2 });
+    await rendered.settle();
+    expect(panel()).toBeNull();
+    expect(
+      screen.getAllByText('Palavra voltou a «Tiuacô».').length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('a word the person corrected has no learned note', async () => {
+    const rendered = await renderText({ learned: LEARNED });
+    expect(rendered.painted.get('learned-word')).toBe(1);
+    await clickWord(rendered, 'disse');
+    expect(panel()).not.toBeNull();
+    expect(screen.queryByText(/Corrigida pelo aprendizado/)).toBeNull();
+  });
+
+  it('without media-correct the mark is there and nothing opens', async () => {
+    const rendered = await renderText({ canCorrect: false, learned: LEARNED });
+    expect(rendered.painted.get('learned-word')).toBe(1);
+    await clickWord(rendered, 'Tiuako');
+    expect(panel()).toBeNull();
   });
 });

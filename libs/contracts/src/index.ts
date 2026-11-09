@@ -31,3 +31,4 @@ export * from './track-revisions.js';
 export * from './media-library.js';
 export * from './track-citations.js';
 export * from './transcript-corrections.js';
+export * from './transcript-learning.js';

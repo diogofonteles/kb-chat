@@ -12,8 +12,10 @@ import { countPromptTokens } from './whisper-tokens.js';
 export interface TermListServiceDeps {
   readonly transcripts: Pick<
     TranscriptStorePort,
-    'currentTerms' | 'termVersions' | 'saveTerms'
+    'currentTerms' | 'termPartsAt' | 'termVersions' | 'saveTerms'
   >;
+  /** The learned terms that fit after the masters' (KBC-113 BR-9, ADR 0037 §5). */
+  readonly learnedFor?: (manual: readonly string[]) => readonly string[];
   readonly now?: () => Date;
 }
 
@@ -42,15 +44,23 @@ export class TermListService {
     this.now = deps.now ?? (() => new Date());
   }
 
+  /** The masters' terms of a version: the learned ones are the learning's (BR-10). */
+  private manualAt(version: number): readonly string[] | null {
+    const parts = this.deps.transcripts.termPartsAt(version);
+    return parts ? parts.manual : null;
+  }
+
   list(): TermList {
     const { transcripts } = this.deps;
     const current = transcripts.currentTerms();
+    const terms = [...(this.manualAt(current.version) ?? current.terms)];
     const versions = transcripts.termVersions();
     const newest = versions[0];
     if (!newest) throw new Error('the term list has no version');
     return {
-      ...current,
-      ...this.measure(current.terms),
+      version: current.version,
+      terms,
+      ...this.measure(terms),
       createdAt: newest.createdAt,
       authorName: newest.authorName,
       versions,
@@ -64,17 +74,28 @@ export class TermListService {
     };
   }
 
-  /** The whole list, on the version the person edited (BR-1, BR-2). */
+  /**
+   * The masters' list, on the version the person edited (BR-1, BR-2). A version the learning
+   * made since is no conflict; one with other masters' terms is (KBC-113 BR-10).
+   */
   save(request: SaveTermsRequest, author: TermAuthor): TermList {
     const terms = normalizeTerms(request.terms);
     const { transcripts } = this.deps;
     const current = transcripts.currentTerms();
-    if (current.version !== request.baseVersion) throw changed(current.version);
-    if (sameList(terms, current.terms)) return this.list();
+    const manual = this.manualAt(current.version) ?? current.terms;
+    const base = this.manualAt(request.baseVersion);
+    if (
+      request.baseVersion > current.version ||
+      !base ||
+      !sameList(base, manual)
+    )
+      throw changed(current.version);
+    if (sameList(terms, manual)) return this.list();
     this.assertWithinLimit(terms);
     const saved = transcripts.saveTerms({
-      baseVersion: request.baseVersion,
+      baseVersion: current.version,
       terms,
+      learned: this.deps.learnedFor?.(terms) ?? [],
       author,
       now: this.now(),
     });
