@@ -106,3 +106,69 @@
   color: var(--color-text-muted);
   overflow-wrap: anywhere;
 }
+
+/* KBC-101: a track's first line, as "Na fala" draws it (media-hit-card.css). */
+.kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent-strong);
+}
+
+.kind-head,
+.recording {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* At 390 px the line breaks in two: kind and minute, then the recording (screens.md T2). */
+.kind-head::after {
+  content: '·' / '';
+}
+
+.clock {
+  font-variant-numeric: tabular-nums;
+}
+
+.spoken::before {
+  content: '“';
+}
+
+.spoken::after {
+  content: '”';
+}
+
+mark {
+  background: var(--color-mark);
+  color: inherit;
+}
+
+.states {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+
+/* A warning tone, never red (UP-19), with a sign besides the colour (UP-20). */
+.low {
+  padding: 0 var(--space-2);
+  border: 1px dashed var(--color-text-muted);
+  border-radius: 999px;
+  color: var(--color-text);
+}
+
+.low::before {
+  content: '⚠ ' / '';
+}
+
+.stale {
+  color: var(--color-text-muted);
+}

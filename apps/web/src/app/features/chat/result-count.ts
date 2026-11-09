@@ -1,7 +1,22 @@
 import type { MediaHit, SearchResponse } from '@kb-chat/contracts';
 
-/** "3 documentos", "10 de 26 documentos" or "10 de 50+ documentos" (the index candidate cap). */
+/**
+ * "3 documentos", "10 de 26 documentos" or "10 de 50+ documentos" (the index candidate cap);
+ * with tracks among them, "7 documentos (1 faixa)" (KBC-101 BR-6).
+ */
 export function describeResultCount(
+  response: Pick<SearchResponse, 'items' | 'total' | 'capped'> & {
+    readonly trackTotal?: number;
+  },
+): string {
+  const tracks = response.trackTotal ?? 0;
+  const documents = documentCount(response);
+  return tracks > 0
+    ? `${documents} (${describeTrackCount(tracks)})`
+    : documents;
+}
+
+function documentCount(
   response: Pick<SearchResponse, 'items' | 'total' | 'capped'>,
 ): string {
   const shown = response.items.length;

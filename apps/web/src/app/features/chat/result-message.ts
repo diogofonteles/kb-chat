@@ -24,6 +24,7 @@ import {
   type ActiveFilter,
 } from './filter-model.js';
 import { KindsChoice } from './kinds-choice.js';
+import type { TrackOpening } from '@features/research/track-opening.js';
 import { MediaHitCard } from './media-hit-card.js';
 import { mixReferences, passageKey } from './references.js';
 import { ResultCard, type OpenedHit } from './result-card.js';
@@ -49,6 +50,8 @@ export class ResultMessage {
   readonly activeId = input<string | null>(null);
   /** The passage open in the reading panel (`passageKey`), if any. */
   readonly activePassage = input<string | null>(null);
+  /** The track open in the T22 panel, if any (KBC-101): its card is marked. */
+  readonly activeTrack = input<string | null>(null);
   /** Every collection the person sees: names the message's sub-collections (ADR 0028). */
   readonly topics = input<readonly Topic[]>([]);
   readonly opened = output<OpenedHit>();
@@ -58,6 +61,8 @@ export class ResultMessage {
   readonly moreRequested = output();
   readonly passageOpened = output<OpenedPassage>();
   readonly kindsChanged = output<SearchKind[]>();
+  /** A track's card opens the T22 panel on its passage (KBC-101 FR-11). */
+  readonly trackOpened = output<TrackOpening>();
 
   protected readonly response = computed(() => this.message().response);
   /** The message's collection and its sub-collections, by name (the "Sub-acervo" filter). */
@@ -79,6 +84,15 @@ export class ResultMessage {
   protected readonly references = computed(() => {
     const response = this.response();
     return response ? mixReferences(response.items, response.media) : [];
+  });
+  /** The cards of the track open in the panel. */
+  protected readonly activeTracks = computed(() => {
+    const open = this.activeTrack();
+    return new Set(
+      this.references()
+        .filter((one) => one.kind === 'text' && one.hit.media?.mediaId === open)
+        .map((one) => one.key),
+    );
   });
   /** "Buscar em" shows only where the collection has audio for this person (UP-15). */
   protected readonly kindCounts = computed(() => {

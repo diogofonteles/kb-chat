@@ -25,6 +25,7 @@ import { formatClock } from '@kb-chat/player-core';
 import { KbApi, subjectTracksUrl } from '@core/api/kb-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { describeFacets } from '@core/i18n/facet-labels.js';
+import type { TrackOpening } from '@features/research/track-opening.js';
 
 const GROUP_TITLES: Record<SeeAlsoGroupName, string> = {
   exampleOf: $localize`:@@seeAlso.exampleOf:É exemplo de`,
@@ -37,6 +38,8 @@ const GROUP_TITLES: Record<SeeAlsoGroupName, string> = {
 
 interface ItemView extends DocumentRef {
   readonly facets: string;
+  /** A track kb linked (KBC-101 FR-6): it opens the T22 panel, not the document. */
+  readonly media?: RelatedDocument['media'];
 }
 
 interface GroupView {
@@ -55,6 +58,7 @@ const toItem = (ref: RelatedDocument): ItemView => ({
   id: ref.id,
   title: ref.title,
   facets: describeFacets(ref),
+  ...(ref.media && { media: ref.media }),
 });
 
 /**
@@ -79,6 +83,8 @@ export class SeeAlsoSection {
   /** The concept this article is about; null on a source. */
   readonly concept = input<string | null>(null);
   readonly opened = output<DocumentRef>();
+  /** A linked track opens at its start, with "← Voltar" to this document (KBC-101 AC-7). */
+  readonly trackOpened = output<TrackOpening>();
 
   /** Items loaded with "ver todos", reset whenever another document is shown. */
   private readonly expanded = linkedSignal<
@@ -155,6 +161,17 @@ export class SeeAlsoSection {
       failed: this.failed().has(name),
     })).filter((group) => group.total > 0),
   );
+
+  protected openTrack(ref: ItemView, event: Event): void {
+    if (!ref.media) return;
+    const trigger =
+      event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    this.trackOpened.emit({
+      source: { n: 1, id: ref.id, title: ref.title, media: ref.media },
+      at: '',
+      trigger,
+    });
+  }
 
   /** The rest of the tracks, up to a full page at a time. */
   protected showAllTracks(): void {

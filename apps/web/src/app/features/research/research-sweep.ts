@@ -84,19 +84,38 @@ export function progressText(progress: SweepProgress): string {
 const analyzedText = (read: number, needed: number): string =>
   $localize`:@@sweep.analyzed:a IA analisou ${n(read)}:read: de ${n(needed)}:needed: documentos`;
 
+/** " (145 faixas de áudio)", " (1 faixa de áudio)": the set's tracks (KBC-101 BR-2). */
+const setTracks = (count: number): string =>
+  count === 1
+    ? $localize`:@@sweep.covSetTrack: (1 faixa de áudio)`
+    : $localize`:@@sweep.covSetTracks: (${n(count)}:count: faixas de áudio)`;
+
+/** " (30 faixas)", " (1 faixa)": the tracks the AI analyzed (KBC-101 BR-2). */
+const readTracks = (count: number): string =>
+  count === 1
+    ? $localize`:@@sweep.covReadTrack: (1 faixa)`
+    : $localize`:@@sweep.covReadTracks: (${n(count)}:count: faixas)`;
+
 /** The coverage line the app measured (KBC-030): never the model's. */
 export function coverageText(coverage: SweepCoverage): string {
+  const { tracks } = coverage;
+  const set = tracks ? setTracks(tracks.documents) : '';
+  const read = tracks ? readTracks(tracks.read) : '';
   const parts =
     coverage.withHits === null
       ? [
-          $localize`:@@sweep.covSet:${n(coverage.documents)}:count: documentos no conjunto`,
-          $localize`:@@sweep.covReadWhole:${n(coverage.read)}:count: lidos por inteiro pela IA`,
+          $localize`:@@sweep.covSet:${n(coverage.documents)}:count: documentos no conjunto` +
+            set,
+          $localize`:@@sweep.covReadWhole:${n(coverage.read)}:count: lidos por inteiro pela IA` +
+            read,
         ]
       : [
-          $localize`:@@sweep.covSet:${n(coverage.documents)}:count: documentos no conjunto`,
+          $localize`:@@sweep.covSet:${n(coverage.documents)}:count: documentos no conjunto` +
+            set,
           $localize`:@@sweep.covScanned:${n(coverage.scanned)}:count: conferidos pelas expressões`,
           $localize`:@@sweep.covHits:${n(coverage.withHits)}:count: com ocorrências`,
-          $localize`:@@sweep.covAnalyzed:${n(coverage.read)}:count: analisados pela IA`,
+          $localize`:@@sweep.covAnalyzed:${n(coverage.read)}:count: analisados pela IA` +
+            read,
         ];
   const total = coverage.continued
     ? $localize`:@@sweep.covContinued: (somando as varreduras anteriores)`

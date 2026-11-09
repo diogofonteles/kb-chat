@@ -60,9 +60,13 @@
               } @else {
                 <app-result-card
                   [hit]="reference.hit"
-                  [active]="reference.hit.id === activeId()"
+                  [active]="
+                    reference.hit.id === activeId() ||
+                    activeTracks().has(reference.key)
+                  "
                   [place]="places().get(reference.hit.topic) ?? null"
                   (opened)="opened.emit($event)"
+                  (trackOpened)="trackOpened.emit($event)"
                 />
               }
             </li>

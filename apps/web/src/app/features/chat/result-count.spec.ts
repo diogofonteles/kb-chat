@@ -9,6 +9,25 @@ const hits = (n: number) =>
   Array.from({ length: n }, (_, i) => aHit({ id: `d${i}.md` }));
 
 describe('describeResultCount', () => {
+  it('KBC-101 AC-10: names the tracks among the documents', () => {
+    expect(
+      describeResultCount({
+        items: hits(7),
+        total: 7,
+        capped: false,
+        trackTotal: 1,
+      }),
+    ).toBe('7 documentos (1 faixa)');
+    expect(
+      describeResultCount({
+        items: hits(10),
+        total: 26,
+        capped: false,
+        trackTotal: 3,
+      }),
+    ).toBe('10 de 26 documentos (3 faixas)');
+  });
+
   it('counts a complete list', () => {
     expect(
       describeResultCount({ items: hits(1), total: 1, capped: false }),

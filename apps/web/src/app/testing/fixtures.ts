@@ -29,6 +29,7 @@ export const aResponse = (
 ): SearchResponse => ({
   items,
   total: items.length,
+  trackTotal: items.filter((hit) => hit.media).length,
   capped: false,
   nextOffset: null,
   hiddenOffTopic: 0,

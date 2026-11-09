@@ -30,6 +30,7 @@ import {
   markTerms,
 } from '@core/markdown/highlight.js';
 import { headingId, renderMarkdown } from '@core/markdown/render-markdown.js';
+import type { TrackOpening } from '@features/research/track-opening.js';
 import { SeeAlsoSection } from './see-also.js';
 
 const FEEDBACK_MS = 2000;
@@ -86,6 +87,8 @@ export class DocumentPanel {
   readonly closed = output();
   readonly back = output();
   readonly navigated = output<DocumentRef>();
+  /** A track linked in "Veja também" opens the T22 panel (KBC-101 AC-7). */
+  readonly trackOpened = output<TrackOpening>();
   readonly conceptSelected = output<string>();
 
   protected readonly document = httpResource(
