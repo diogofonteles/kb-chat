@@ -20,21 +20,26 @@ const LAUNCHCTL = '/bin/launchctl';
 const TIMEOUT_MS = 10_000;
 const OUTPUT_CHARS = 500;
 
+/** A runner of `file` with arguments only (no shell), its output and exit code. */
+export const execRunner =
+  (file: string): LaunchctlRunner =>
+  (args) =>
+    new Promise((resolve) => {
+      execFile(
+        file,
+        [...args],
+        { timeout: TIMEOUT_MS, shell: false },
+        (err, stdout, stderr) => {
+          const output = `${stdout}${stderr}`.trim();
+          if (err === null) return resolve({ code: 0, output });
+          const code = typeof err.code === 'number' ? err.code : 1;
+          resolve({ code, output: output || err.message });
+        },
+      );
+    });
+
 /** The real `launchctl` (the owner's Mac in development); tests pass a fake. */
-export const execLaunchctl: LaunchctlRunner = (args) =>
-  new Promise((resolve) => {
-    execFile(
-      LAUNCHCTL,
-      [...args],
-      { timeout: TIMEOUT_MS, shell: false },
-      (err, stdout, stderr) => {
-        const output = `${stdout}${stderr}`.trim();
-        const code =
-          err === null ? 0 : typeof err.code === 'number' ? err.code : 1;
-        resolve({ code, output: output || (err?.message ?? '') });
-      },
-    );
-  });
+export const execLaunchctl: LaunchctlRunner = execRunner(LAUNCHCTL);
 
 /** `launchctl kickstart -k gui/<uid>/<label>`: starts it, or restarts it when running. */
 export const kickstartArgs = (uid: number): readonly string[] => [
