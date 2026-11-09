@@ -29,6 +29,10 @@ export interface ShelfRow {
   readonly isTrack: boolean;
   /** The current transcript's confidence; null without a transcript. */
   readonly confidence: TranscriptConfidence | null;
+  /** The fingerprint media.db wants for its document now; null without one (KBC-100). */
+  readonly desired: string | null;
+  /** A recording that has, or ever had, a track (KBC-100 FR-7). */
+  readonly hasTracks: boolean;
 }
 
 /** One segment of a track's current transcript, on the track's clock. */

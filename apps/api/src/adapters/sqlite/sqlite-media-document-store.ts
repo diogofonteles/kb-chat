@@ -1,4 +1,4 @@
-import type { DatabaseSync, StatementSync } from 'node:sqlite';
+import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
 import { transcriptConfidenceSchema } from '@kb-chat/contracts';
 import { z } from 'zod';
 import type {
@@ -447,30 +447,24 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
 
   /**
    * Every media of a collection as the track shelf needs it, in one query (KBC-101 NFR-3):
-   * live (ready, not archived), a track or a recording, its current transcript's confidence.
+   * live (ready, not archived), a track or a recording, its current transcript's confidence,
+   * the fingerprint its document should have and whether a recording has tracks.
    */
   shelfRows(topic: string): ReadonlyMap<string, ShelfRow> {
     this.shelf ??= this.db.prepare(
       `SELECT m.id, m.title, m.parent_media_id IS NOT NULL AS is_track,
          m.status = 'ready' AND m.archived_at IS NULL AS live,
          (SELECT t.confidence FROM transcripts t WHERE t.media_id = m.id
-            ORDER BY t.version DESC LIMIT 1) AS confidence
-       FROM media m WHERE m.topic = ?`,
+            ORDER BY t.version DESC LIMIT 1) AS confidence,
+         d.desired_sha256 AS desired,
+         EXISTS (SELECT 1 FROM media c WHERE c.parent_media_id = m.id) AS has_tracks
+       FROM media m LEFT JOIN media_documents d ON d.media_id = m.id
+       WHERE m.topic = ?`,
     );
     const rows = new Map<string, ShelfRow>();
     for (const row of this.shelf.all(topic)) {
-      const id = String(row['id']);
-      const confidence = row['confidence'];
-      rows.set(id, {
-        id,
-        title: String(row['title']),
-        live: Number(row['live']) === 1,
-        isTrack: Number(row['is_track']) === 1,
-        confidence:
-          typeof confidence === 'string'
-            ? transcriptConfidenceSchema.parse(confidence)
-            : null,
-      });
+      const shelfRow = toShelfRow(row);
+      rows.set(shelfRow.id, shelfRow);
     }
     return rows;
   }
@@ -793,4 +787,21 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
         ...heldArgs(owner),
       );
   }
+}
+
+/** One row of `shelfRows` as the track shelf reads it. */
+function toShelfRow(row: Record<string, SQLOutputValue>): ShelfRow {
+  const { confidence, desired } = row;
+  return {
+    id: String(row['id']),
+    title: String(row['title']),
+    live: Number(row['live']) === 1,
+    isTrack: Number(row['is_track']) === 1,
+    confidence:
+      typeof confidence === 'string'
+        ? transcriptConfidenceSchema.parse(confidence)
+        : null,
+    desired: typeof desired === 'string' ? desired : null,
+    hasTracks: Number(row['has_tracks']) === 1,
+  };
 }

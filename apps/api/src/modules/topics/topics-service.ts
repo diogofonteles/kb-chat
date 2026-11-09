@@ -112,11 +112,16 @@ function branchOf(
   const canOpen = view.visible(root.topic.slug);
   if (!canOpen && children.length === 0) return [];
   return [
-    toTopic(root, countsOf([root, ...children], view.tracks), {
-      canOpen,
-      canRename: canOpen && view.renamable(root.topic.slug),
-      mainAuthor: view.mainAuthorOf(root.topic.slug),
-    }),
+    // Counted only for who opens the parent: nothing of media.db is read for a closed one.
+    toTopic(
+      root,
+      canOpen ? countsOf([root, ...children], view.tracks) : NOTHING,
+      {
+        canOpen,
+        canRename: canOpen && view.renamable(root.topic.slug),
+        mainAuthor: view.mainAuthorOf(root.topic.slug),
+      },
+    ),
     ...children.map((child) =>
       toTopic(child, countsOf([child], view.tracks), {
         canOpen: true,

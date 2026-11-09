@@ -54,7 +54,7 @@ export class MediaTrackShelf implements TrackShelf {
       ? this.fromRow(rows, query)
       : this.fromStore(topic, query);
     if (!found) return null;
-    const desired = this.deps.desiredOf?.(query.mediaId) ?? null;
+    const desired = this.desiredOf(rows, query.mediaId);
     const { fingerprint } = query;
     return {
       ...found,
@@ -63,6 +63,16 @@ export class MediaTrackShelf implements TrackShelf {
         desired !== null &&
         desired !== fingerprint,
     };
+  }
+
+  /** What media.db wants the document to be: from the rows once read (NFR-3). */
+  private desiredOf(
+    rows: ReadonlyMap<string, ShelfRow> | undefined,
+    mediaId: string,
+  ): string | null {
+    const { desiredOf } = this.deps;
+    if (!desiredOf) return null;
+    return rows ? (rows.get(mediaId)?.desired ?? null) : desiredOf(mediaId);
   }
 
   /** The collection's rows, read once it has been asked about often enough. */
@@ -86,7 +96,7 @@ export class MediaTrackShelf implements TrackShelf {
     const row = rows.get(mediaId);
     if (!row?.live || row.confidence === null) return null;
     // A live recording counts only while it never had a track (KBC-100 FR-7).
-    if (!row.isTrack && (this.deps.hasTracks?.(mediaId) ?? true)) return null;
+    if (!row.isTrack && (!this.deps.hasTracks || row.hasTracks)) return null;
     return { mediaId, title: row.title, confidence: row.confidence };
   }
 
