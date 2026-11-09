@@ -75,9 +75,10 @@ test('AC-3: a list past the limit is refused with the numbers, and nothing is sa
     /A lista passou do limite do transcritor \(\d+ de 224\)\. Remova alguns termos\./,
   );
   await dialog.getByRole('button', { name: 'Salvar lista' }).click();
-  await expect(dialog.getByRole('status').last()).toContainText(
-    'A lista passou do limite',
-  );
+  // The list's own live region: "Aprendido das correções" (KBC-113) has one after it.
+  await expect(
+    dialog.locator('app-terms-panel').getByRole('status').last(),
+  ).toContainText('A lista passou do limite');
   await expect(dialog.getByText(version)).toBeVisible();
   await dialog.getByRole('button', { name: 'Descartar mudanças' }).click();
   await expect(dialog.getByRole('alert')).toHaveCount(0);
