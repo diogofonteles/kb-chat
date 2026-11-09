@@ -53,3 +53,43 @@ def test_ac7_no_kb_publish_keeps_the_mac_out_of_it(kb_on_path):
 
 def test_ac7_without_a_vault_the_mac_never_asks_for_kb_publish(kb_on_path):
     assert publisher_of(argparse.Namespace(no_kb_publish=False), None) is None
+
+
+class InstallRecorder:
+    def __init__(self) -> None:
+        self.installs: list[dict] = []
+
+    def install(self, vault, extras, load=True):
+        self.installs.append({"vault": vault, "extras": extras, "load": load})
+        return Path("/Users/o/Library/LaunchAgents/br.com.nova-alexandria.transcriber.plist")
+
+
+def test_pairing_on_a_mac_also_keeps_it_on_in_the_background(tmp_path, monkeypatch):
+    """The owner never starts it by hand (KBC-114 AC-15): pairing installs the service."""
+    from transcriber import cli
+
+    agent = InstallRecorder()
+    monkeypatch.setattr(cli, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(cli, "save_keychain", lambda token: None)
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt: "nat_" + "x" * 40)
+    monkeypatch.setattr(cli, "service_of", lambda **kwargs: agent)
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    assert cli.main(["pair", "--api-url", "https://app.example", "--vault", str(vault)]) == 0
+    assert agent.installs == [
+        {"vault": str(vault), "extras": ["diarize", "voiceprint"], "load": True}
+    ]
+
+
+def test_pairing_with_no_service_only_pairs(tmp_path, monkeypatch):
+    from transcriber import cli
+
+    agent = InstallRecorder()
+    monkeypatch.setattr(cli, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(cli, "save_keychain", lambda token: None)
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt: "nat_" + "x" * 40)
+    monkeypatch.setattr(cli, "service_of", lambda **kwargs: agent)
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+    assert cli.main(["pair", "--api-url", "https://app.example", "--no-service"]) == 0
+    assert agent.installs == []

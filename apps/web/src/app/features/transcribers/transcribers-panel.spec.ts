@@ -33,7 +33,7 @@ const statusStore = (items: TranscriberStatusItem[] = []) => {
     items,
     kbQueue: { waiting: 0 },
     start: {
-      label: 'com.nova-alexandria.transcriber',
+      label: 'br.com.nova-alexandria.transcriber',
       installCommand: 'uv run …',
       startCommand: 'launchctl kickstart …',
       canStartHere: false,

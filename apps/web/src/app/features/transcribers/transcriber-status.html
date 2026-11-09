@@ -124,6 +124,9 @@
   @if (offline() && start(); as how) {
     <h3 i18n="@@transcriberStatus.howToStart">Como ligar</h3>
     @if (how.canStartHere) {
+      <p class="hint" i18n="@@transcriberStatus.startsByItself">
+        Ele liga sozinho assim que um áudio espera por ele. Para ligar agora:
+      </p>
       <button
         type="button"
         class="primary"
@@ -133,36 +136,24 @@
       >
         Ligar transcritor
       </button>
+    } @else {
+      <p class="hint" i18n="@@transcriberStatus.startsWithTheMac">
+        O transcritor roda no Mac do dono e liga sozinho com ele: deixe o Mac
+        ligado. Se o Mac estiver ligado e ele continuar desligado, no Terminal
+        do Mac:
+      </p>
+      <div class="copy-row">
+        <code class="code">{{ how.startCommand }}</code>
+        <button
+          type="button"
+          class="secondary"
+          (click)="copy()"
+          i18n="@@transcriberStatus.copyStart"
+        >
+          Copiar
+        </button>
+      </div>
     }
-    <p class="hint" i18n="@@transcriberStatus.installHint">
-      Na primeira vez, no Mac, na pasta do repositório (fica ligado sozinho,
-      também depois de reiniciar):
-    </p>
-    <div class="copy-row">
-      <code class="code">{{ how.installCommand }}</code>
-      <button
-        type="button"
-        class="secondary"
-        (click)="copy('install')"
-        i18n="@@transcriberStatus.copyInstall"
-      >
-        Copiar
-      </button>
-    </div>
-    <p class="hint" i18n="@@transcriberStatus.startHint">
-      Já instalado e parado:
-    </p>
-    <div class="copy-row">
-      <code class="code">{{ how.startCommand }}</code>
-      <button
-        type="button"
-        class="secondary"
-        (click)="copy('start')"
-        i18n="@@transcriberStatus.copyStart"
-      >
-        Copiar
-      </button>
-    </div>
   }
 
   <p class="notice" role="status">{{ notice() }}</p>

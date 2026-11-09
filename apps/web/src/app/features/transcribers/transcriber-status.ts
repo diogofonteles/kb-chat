@@ -22,7 +22,6 @@ import { TranscriberStatusStore } from './transcriber-status-store.js';
 
 type State = TranscriberStatusItem['state'];
 type Report = NonNullable<TranscriberStatusItem['report']>;
-type Command = 'install' | 'start';
 
 /** Never only color (AC-14): each state has its sign beside its words. */
 const ICON: Record<State | 'none', string> = {
@@ -35,7 +34,7 @@ const ICON: Record<State | 'none', string> = {
 };
 
 const STATE_WORD: Record<State, () => string> = {
-  idle: () => $localize`:@@transcriberStatus.idle:Ligado, sem trabalho`,
+  idle: () => $localize`:@@transcriberStatus.idle:Ligado`,
   working: () => $localize`:@@transcriberStatus.working:Trabalhando`,
   waiting: () => $localize`:@@transcriberStatus.waiting:Aguardando`,
   error: () => $localize`:@@transcriberStatus.error:Com erro`,
@@ -67,6 +66,19 @@ const jobText = (job: NonNullable<Report['currentJob']>): string => {
   return `${kind} ${job.label}${progress}`;
 };
 
+/** "desde 14:02": on since it started, off since it was last seen (AC-16). */
+const sinceOf = (item: TranscriberStatusItem): string | null => {
+  const at =
+    item.state === 'idle'
+      ? item.report?.startedAt
+      : item.state === 'offline'
+        ? item.lastSeenAt
+        : null;
+  return at
+    ? $localize`:@@transcriberStatus.since:desde ${publicationTime(at)}:time:`
+    : null;
+};
+
 /** The chip's words for a transcriber (BR-9). */
 export function chipText(item: TranscriberStatusItem | null): string {
   if (!item)
@@ -78,7 +90,8 @@ export function chipText(item: TranscriberStatusItem | null): string {
     return `${prefix}: ${state}, ${jobText(report.currentJob)}`;
   if ((item.state === 'waiting' || item.state === 'error') && report?.detail)
     return `${prefix}: ${state}, ${report.detail}`;
-  return `${prefix}: ${state}`;
+  const since = sinceOf(item);
+  return since ? `${prefix}: ${state} ${since}` : `${prefix}: ${state}`;
 }
 
 /**
@@ -170,10 +183,8 @@ export class TranscriberStatus {
     this.chip().nativeElement.focus();
   }
 
-  protected async copy(which: Command): Promise<void> {
-    const start = this.start();
-    const text =
-      which === 'install' ? start?.installCommand : start?.startCommand;
+  protected async copy(): Promise<void> {
+    const text = this.start()?.startCommand;
     const clipboard = this.view?.navigator.clipboard;
     if (!text || !clipboard) return this.copyFailed();
     try {
@@ -204,7 +215,7 @@ export class TranscriberStatus {
           this.notice.set(
             started.ok
               ? $localize`:@@transcriberStatus.started:Pedido enviado ao macOS. O status muda em até 30 segundos.`
-              : $localize`:@@transcriberStatus.startRefused:O macOS não ligou o transcritor: ${started.detail}:detail:. Instale o serviço com o primeiro comando.`,
+              : $localize`:@@transcriberStatus.startRefused:O macOS não ligou o transcritor: ${started.detail}:detail:`,
           );
           this.store.reload();
         },

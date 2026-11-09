@@ -71,11 +71,11 @@ const anOverview = (
   items: [anItem()],
   kbQueue: { waiting: 3 },
   start: {
-    label: 'com.nova-alexandria.transcriber',
+    label: 'br.com.nova-alexandria.transcriber',
     installCommand:
       'uv run --project tools/transcriber transcriber service install --vault /Users/owner/dev/personal/hermetismo',
     startCommand:
-      'launchctl kickstart -k gui/$(id -u)/com.nova-alexandria.transcriber',
+      'launchctl kickstart -k gui/$(id -u)/br.com.nova-alexandria.transcriber',
     canStartHere: false,
   },
   ...over,
@@ -101,6 +101,28 @@ async function renderIt(
 }
 
 describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
+  it('says since when it is on, or off (AC-16)', async () => {
+    await renderIt(
+      anOverview({
+        items: [
+          anItem({
+            state: 'idle',
+            report: report({ state: 'idle', currentJob: null }),
+          }),
+          anItem({
+            id: '44444444-4444-4444-8444-444444444444',
+            name: 'Outro',
+            state: 'offline',
+          }),
+        ],
+      }),
+      MAC,
+    );
+    expect(
+      screen.getByRole('button', { name: /^Transcritor: Ligado desde \d/ }),
+    ).toBeTruthy();
+  });
+
   it('says in words what the transcriber does, with a sign beside them', async () => {
     await renderIt(anOverview(), MAC);
     const chip = screen.getByRole('button', {
@@ -140,7 +162,7 @@ describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
     });
     const { http, fixture } = await renderIt(off, MAC);
     fireEvent.click(
-      screen.getByRole('button', { name: 'Transcritor: Desligado' }),
+      screen.getByRole('button', { name: /^Transcritor: Desligado desde / }),
     );
     http.expectOne(STATUS).flush(off);
     await fixture.whenStable();
@@ -148,10 +170,12 @@ describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
     expect(dialog.getByText('Como ligar')).toBeTruthy();
     expect(
       dialog.getByText(
-        'launchctl kickstart -k gui/$(id -u)/com.nova-alexandria.transcriber',
+        'launchctl kickstart -k gui/$(id -u)/br.com.nova-alexandria.transcriber',
       ),
     ).toBeTruthy();
-    expect(dialog.getByText(/service install --vault/)).toBeTruthy();
+    // The owner never runs a uv command (KBC-114): the service installs and starts itself.
+    expect(dialog.queryByText(/uv run|service install/)).toBeNull();
+    expect(dialog.getByText(/liga sozinho com ele/)).toBeTruthy();
     expect(
       dialog.queryByRole('button', { name: 'Ligar transcritor' }),
     ).toBeNull();

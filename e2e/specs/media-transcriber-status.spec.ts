@@ -75,6 +75,30 @@ async function screenCollectionWithTracks(
   return { topic, title };
 }
 
+test('AC-16: the preparation page shows the transcriber status beside its steps', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const topic = await aCollection(owner);
+  const media = await uploadReady(owner, {
+    title: `Palestra ${uniqueTag()}`,
+    seconds: 30,
+    topic,
+  });
+  await page.goto(`/midia/${media.id}/preparar`);
+  const chip = page
+    .locator('app-preparation-page')
+    .getByRole('button', { name: /^Transcritor|^Nenhum transcritor/ });
+  await expect(chip).toBeVisible();
+  await noSideScroll(page);
+  await shot(page, 'preparation-status');
+  await chip.click();
+  await expect(page.getByRole('dialog').last()).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(chip).toBeFocused();
+  await owner.dispose();
+});
+
 async function sidebar(page: Page): Promise<Locator> {
   const drawer = page.getByRole('dialog', { name: 'Menu' });
   if (!desktop(page) && !(await drawer.isVisible()))
@@ -294,18 +318,17 @@ test('AC-12, AC-13, AC-14: the status chip opens the details, and an off transcr
     const offChip = settings
       .getByRole('listitem')
       .filter({ hasText: off.name })
-      .getByRole('button', { name: 'Transcritor: Desligado' });
+      .getByRole('button', { name: /^Transcritor: Desligado desde / });
     await offChip.click();
     const offDetails = page.getByRole('dialog', {
       name: `Transcritor "${off.name}"`,
     });
     await expect(offDetails).toContainText('Como ligar');
+    // On the same Mac it starts by itself; never a uv command to run (KBC-114 AC-15).
     await expect(offDetails).toContainText(
-      'launchctl kickstart -k gui/$(id -u)/com.nova-alexandria.transcriber',
+      'Ele liga sozinho assim que um áudio espera por ele',
     );
-    await expect(offDetails).toContainText(
-      'transcriber service install --vault /Users/dono/dev/personal/hermetismo',
-    );
+    await expect(offDetails).not.toContainText('uv run');
     await shot(page, 'status-off');
     await noSideScroll(page);
     await offDetails.getByRole('button', { name: 'Ligar transcritor' }).click();

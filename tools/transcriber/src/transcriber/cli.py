@@ -61,8 +61,22 @@ def pair(args: argparse.Namespace) -> int:
     if args.sync_host:
         saved["sync_host"] = args.sync_host
     save_config(saved)
-    print("Pareado. Rode `uv run --project tools/transcriber transcriber run` ou carregue o plist.")
+    print("Pareado.")
+    if sys.platform == "darwin" and not args.no_service:
+        keep_on(saved.get("vault_path"))
     return 0
+
+
+def keep_on(vault: str | None) -> None:
+    """The service is installed with the pairing: nobody ever starts it by hand (KBC-114)."""
+    from .service import ServiceError
+
+    try:
+        path = service_of().install(vault=vault, extras=list(DEFAULT_EXTRAS))
+    except ServiceError as err:
+        print(f"O serviço em background não foi instalado: {err}", file=sys.stderr)
+        return
+    print(f"Ligado em background (liga sozinho com o Mac): {path}")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -223,6 +237,11 @@ def main(argv: list[str] | None = None) -> int:
     pairing.add_argument(
         "--sync-host",
         help="user@host of production: the vault is synced there by itself (KBC-100)",
+    )
+    pairing.add_argument(
+        "--no-service",
+        action="store_true",
+        help="do not install the background service (KBC-114: it is installed by default)",
     )
     pairing.set_defaults(handler=pair)
     running = commands.add_parser("run", help="lease and transcribe jobs until stopped")

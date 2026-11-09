@@ -96,7 +96,7 @@ checkout with `uv run --extra diarize --extra voiceprint` (`--extra` is repeatab
 replaces the default): `uv run` installs a missing extra by itself before the worker starts,
 and the worker tells the app it is getting ready while the models load. The label is the one
 the owner's Mac already runs; installing again updates that agent, and one left under the old
-label (`com.nova-alexandria.transcriber`) is stopped and removed and sets `KB_CHAT_VAULT` (from
+label (`com.nova-alexandria.transcriber`) is stopped and removed. It sets `KB_CHAT_VAULT` (from
 `--vault`, which is also kept in the config, or the paired one) and a `PATH` with the folders
 of `uv`, `kb` and `ffmpeg`. The token is never in it: it stays in the Keychain. `--no-load`
 only writes the file. To restart it: `launchctl kickstart -k gui/$(id -u)/br.com.nova-alexandria.transcriber`.
