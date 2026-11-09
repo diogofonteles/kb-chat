@@ -7,8 +7,6 @@
 // and the process id. `codex login status` answers "Logged in" (exit 0), or exits 1 with mode fail.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { SWEEP_PLAN, logRun, sweepReply } from './fake-sweep.mjs';
 
 // The CLI gets only allowlisted variables, so the test settings come from $HOME.
@@ -80,6 +78,12 @@ if (sweep !== null) {
   });
   process.exit(0);
 }
+// Loaded only by a turn that calls the tools: most runs (`login status`, sleep, fail, a
+// sweep) never need it, and it is most of a run's start-up, many times over on a busy machine.
+const [{ Client }, { StreamableHTTPClientTransport }] = await Promise.all([
+  import('@modelcontextprotocol/sdk/client/index.js'),
+  import('@modelcontextprotocol/sdk/client/streamableHttp.js'),
+]);
 const token = process.env[setting('bearer_token_env_var')];
 const client = new Client({ name: 'fake-codex', version: '0.0.0' });
 await client.connect(
