@@ -5,6 +5,8 @@
   border-radius: var(--radius-md);
   background: var(--color-surface);
   overflow: hidden;
+  /* The track line breaks by the card's own width, not the window's (the panel narrows it). */
+  container-type: inline-size;
   transition:
     border-color 150ms var(--ease),
     box-shadow 150ms var(--ease);
@@ -132,8 +134,9 @@
   content: '·' / '';
 }
 
-/* At 390 px the line breaks in two, kind and minute, then the recording: no "·" left hanging. */
-@media (max-width: 599px) {
+/* On a narrow card (390 px, or the document panel open) the line breaks in two, kind and
+   minute, then the recording: no "·" left hanging. */
+@container (max-width: 35rem) {
   .kind-head::after {
     content: none;
   }
