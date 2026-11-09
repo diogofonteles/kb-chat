@@ -1,0 +1,174 @@
+<button
+  type="button"
+  class="chip"
+  [attr.data-state]="state()"
+  aria-haspopup="dialog"
+  [disabled]="!loaded()"
+  (click)="open()"
+>
+  <span class="sign" aria-hidden="true">{{ icon() }}</span>
+  <span class="words">{{ text() }}</span>
+</button>
+
+<dialog #dialog class="dialog" [attr.aria-labelledby]="titleId">
+  <h2 [id]="titleId">
+    @if (item(); as current) {
+      <ng-container i18n="@@transcriberStatus.title"
+        >Transcritor "{{ current.name }}"</ng-container
+      >
+    } @else {
+      <ng-container i18n="@@transcriberStatus.titleNone"
+        >Transcritor</ng-container
+      >
+    }
+  </h2>
+
+  @if (item(); as current) {
+    <p class="state" [attr.data-state]="current.state">
+      <span aria-hidden="true">{{ icon() }}</span> {{ stateWord() }}
+      @if (report()?.detail; as detail) {
+        <span>— {{ detail }}</span>
+      }
+    </p>
+    <dl class="facts">
+      @if (currentJob(); as job) {
+        <dt i18n="@@transcriberStatus.currentJob">Trabalho atual</dt>
+        <dd>{{ job }}</dd>
+      }
+      <dt i18n="@@transcriberStatus.lastSeen">Visto por último</dt>
+      <dd>
+        @if (report(); as last) {
+          {{ time(last.receivedAt) }}
+        } @else if (current.lastSeenAt; as seen) {
+          {{ time(seen) }}
+        } @else {
+          <ng-container i18n="@@transcriberStatus.neverSeen"
+            >ainda não foi visto</ng-container
+          >
+        }
+      </dd>
+      @if (report(); as last) {
+        <dt i18n="@@transcriberStatus.counts">Desde que ligou</dt>
+        <dd i18n="@@transcriberStatus.countsValue">
+          {{ last.counts.done }} feitos · {{ last.counts.failed }} falharam
+          (ligado às {{ time(last.startedAt) }})
+        </dd>
+        <dt i18n="@@transcriberStatus.version">Versão</dt>
+        <dd>{{ last.version }}</dd>
+        <dt i18n="@@transcriberStatus.vault">Pasta do vault</dt>
+        <dd class="path">
+          @if (last.vaultPath; as vault) {
+            {{ vault }}
+          } @else {
+            <ng-container i18n="@@transcriberStatus.noVault"
+              >nenhuma: não publica no acervo</ng-container
+            >
+          }
+        </dd>
+        <dt i18n="@@transcriberStatus.kb">Versão do kb</dt>
+        <dd>
+          @if (last.kbVersion; as kb) {
+            {{ kb }}
+          } @else {
+            <ng-container i18n="@@transcriberStatus.noKb">sem kb</ng-container>
+          }
+        </dd>
+      }
+      <dt i18n="@@transcriberStatus.kbQueue">Na fila do acervo</dt>
+      <dd i18n="@@transcriberStatus.kbQueueValue">
+        {kbWaiting(), plural,
+          =0 {nada}
+          =1 {1 documento}
+          other {{{ kbWaiting() }} documentos}
+        }
+      </dd>
+    </dl>
+
+    @if (report()?.lastError; as error) {
+      <h3 i18n="@@transcriberStatus.lastError">Último erro</h3>
+      <p class="error-line">
+        <span aria-hidden="true">⚠</span> {{ time(error.at) }} —
+        {{ error.message }}
+      </p>
+    }
+
+    @if (report()?.recentJobs; as recent) {
+      @if (recent.length > 0) {
+        <h3 i18n="@@transcriberStatus.recent">Últimos trabalhos</h3>
+        <ul class="recent">
+          @for (job of recent; track job.id) {
+            <li>
+              {{ time(job.finishedAt) }} · {{ recentLabel(job) }} ·
+              <strong>{{ outcomeOf(job.outcome) }}</strong>
+              @if (job.detail; as detail) {
+                <span class="detail">— {{ detail }}</span>
+              }
+            </li>
+          }
+        </ul>
+      }
+    }
+  } @else {
+    <p class="hint" i18n="@@transcriberStatus.pairFirst">
+      Pareie o Mac em Configurações → Transcritores e depois ligue o serviço com
+      o comando abaixo.
+    </p>
+  }
+
+  @if (offline() && start(); as how) {
+    <h3 i18n="@@transcriberStatus.howToStart">Como ligar</h3>
+    @if (how.canStartHere) {
+      <button
+        type="button"
+        class="primary"
+        [disabled]="starting()"
+        (click)="startHere()"
+        i18n="@@transcriberStatus.startHere"
+      >
+        Ligar transcritor
+      </button>
+    }
+    <p class="hint" i18n="@@transcriberStatus.installHint">
+      Na primeira vez, no Mac, na pasta do repositório (fica ligado sozinho,
+      também depois de reiniciar):
+    </p>
+    <div class="copy-row">
+      <code class="code">{{ how.installCommand }}</code>
+      <button
+        type="button"
+        class="secondary"
+        (click)="copy('install')"
+        i18n="@@transcriberStatus.copyInstall"
+      >
+        Copiar
+      </button>
+    </div>
+    <p class="hint" i18n="@@transcriberStatus.startHint">
+      Já instalado e parado:
+    </p>
+    <div class="copy-row">
+      <code class="code">{{ how.startCommand }}</code>
+      <button
+        type="button"
+        class="secondary"
+        (click)="copy('start')"
+        i18n="@@transcriberStatus.copyStart"
+      >
+        Copiar
+      </button>
+    </div>
+  }
+
+  <p class="notice" role="status">{{ notice() }}</p>
+
+  <div class="actions">
+    <button
+      type="button"
+      class="secondary"
+      (click)="close()"
+      i18n="@@transcriberStatus.close"
+    >
+      Fechar
+    </button>
+  </div>
+</dialog>

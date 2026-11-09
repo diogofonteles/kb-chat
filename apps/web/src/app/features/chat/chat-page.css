@@ -428,3 +428,10 @@
 .thread > * {
   min-width: 0;
 }
+
+/* Transcriptions not yet documents (KBC-114): above the greeting, for masters. */
+.pending {
+  justify-self: center;
+  width: min(36rem, 100%);
+  margin: 0 0 var(--space-3);
+}

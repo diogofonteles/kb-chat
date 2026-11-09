@@ -3,10 +3,15 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen } from '@testing-library/angular';
-import type { Transcriber } from '@kb-chat/contracts';
+import type {
+  Transcriber,
+  TranscriberStatusItem,
+  TranscriberStatusOverview,
+} from '@kb-chat/contracts';
+import { TranscriberStatusStore } from './transcriber-status-store.js';
 import { TranscribersPanel } from './transcribers-panel.js';
 
 const URL = '/api/v1/media/transcribers';
@@ -22,12 +27,39 @@ const aTranscriber = (overrides: Partial<Transcriber> = {}): Transcriber => ({
   ...overrides,
 });
 
-async function renderPanel(items: Transcriber[] = []) {
+/** The status of each row comes from its own store (KBC-114): here, fixed. */
+const statusStore = (items: TranscriberStatusItem[] = []) => {
+  const overview = signal<TranscriberStatusOverview>({
+    items,
+    kbQueue: { waiting: 0 },
+    start: {
+      label: 'com.nova-alexandria.transcriber',
+      installCommand: 'uv run …',
+      startCommand: 'launchctl kickstart …',
+      canStartHere: false,
+    },
+  });
+  return {
+    overview,
+    items: () => overview().items,
+    lead: () => overview().items[0] ?? null,
+    item: (id: string) => overview().items.find((one) => one.id === id) ?? null,
+    reload: () => undefined,
+  };
+};
+
+async function renderPanel(
+  items: Transcriber[] = [],
+  statuses: TranscriberStatusItem[] = [],
+) {
   const result = await render(TranscribersPanel, {
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
+    ],
+    componentProviders: [
+      { provide: TranscriberStatusStore, useValue: statusStore(statuses) },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
@@ -116,6 +148,9 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
+      ],
+      componentProviders: [
+        { provide: TranscriberStatusStore, useValue: statusStore() },
       ],
     });
     const http = TestBed.inject(HttpTestingController);
@@ -444,5 +479,28 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
       http.expectOne(URL).flush({ items: [aTranscriber()] });
       await fixture.whenStable();
     });
+  });
+
+  it("shows each row's status chip, in words (KBC-114 AC-12)", async () => {
+    const mac = aTranscriber({
+      online: true,
+      kinds: ['transcribe', 'kb-publish'],
+    });
+    await renderPanel(
+      [mac],
+      [
+        {
+          id: mac.id,
+          name: mac.name,
+          kinds: mac.kinds,
+          lastSeenAt: null,
+          state: 'offline',
+          report: null,
+        },
+      ],
+    );
+    expect(
+      screen.getByRole('button', { name: 'Transcritor: Desligado' }),
+    ).toBeTruthy();
   });
 });

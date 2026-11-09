@@ -136,9 +136,12 @@
           </button>
         </div>
       </li>
-      <li i18n="@@transcribers.stepRun">
-        Deixe o transcritor ligado com o serviço do macOS, como explica
-        tools/transcriber/README.md.
+      <li i18n="@@transcribers.stepService">
+        Deixe-o ligado sozinho, com o vault do kb para publicar no acervo:
+        <code
+          >uv run --project tools/transcriber transcriber service install
+          --vault &lt;pasta do vault&gt;</code
+        >
       </li>
     </ol>
     <button
@@ -189,6 +192,7 @@
         <li class="item">
           <div class="item-main">
             <span class="item-name">{{ item.name }}</span>
+            <app-transcriber-status [transcriberId]="item.id" />
             <span class="item-meta">
               @if (item.online) {
                 <span class="state on" i18n="@@transcribers.on">Ligado</span>

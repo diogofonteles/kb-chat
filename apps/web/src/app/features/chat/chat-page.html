@@ -125,6 +125,9 @@
               @if (topicNotice()) {
                 <p class="topic-notice" role="status">{{ topicNotice() }}</p>
               }
+              @if (master() && store.topicSlug(); as slug) {
+                <app-pending-transcriptions class="pending" [topic]="slug" />
+              }
               @if (researching()) {
                 <p class="greeting" i18n="@@page.greetingResearch">
                   O que você quer pesquisar no acervo?
