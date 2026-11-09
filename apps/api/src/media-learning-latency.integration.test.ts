@@ -124,6 +124,71 @@ const INSERT = `INSERT INTO transcript_corrections (id, media_id, transcript_id,
     after, state, author_principal, author_name, created_at)
   VALUES (?, ?, ?, 1, 1, 'correct', ?, 1, ?, 0, 400, ?, ?, 'active', 'owner', 'Dono', ?)`;
 
+/** Copies the recording 499 times, words included, with 20 corrections on each (NFR-2). */
+function seedReading(db: DatabaseSync, recordingId: string): void {
+  try {
+    const source = transcriptOf(db, recordingId);
+    const copy = copiesOf(db);
+    const insert = db.prepare(INSERT);
+    db.exec('BEGIN');
+    for (let m = 0; m < 500; m++) {
+      const one =
+        m === 0
+          ? { mediaId: recordingId, transcriptId: source }
+          : copy(recordingId, source);
+      // 20 corrections a recording, each with a word on both sides.
+      Array.from({ length: 20 }, (_, c) =>
+        insert.run(
+          randomUUID(),
+          one.mediaId,
+          one.transcriptId,
+          1 + c * 2,
+          0,
+          JSON.stringify([`termo${1 + c * 2}`]),
+          `Certo${(m * 20 + c) % 2_000}`,
+          AT,
+        ),
+      );
+    }
+    db.exec('COMMIT');
+  } finally {
+    db.close();
+  }
+}
+
+/** A copy of a recording with its transcript and words, under new ids. */
+function copiesOf(db: DatabaseSync) {
+  const columns = (table: string) =>
+    db
+      .prepare('SELECT name FROM pragma_table_info(?)')
+      .all(table)
+      .map((row) => String(row['name']))
+      .filter((name) => name !== 'id' && name !== 'media_id');
+  const media = columns('media');
+  const transcripts = columns('transcripts');
+  const copyMedia = db.prepare(
+    `INSERT INTO media (id, ${media.join(', ')})
+     SELECT ?, ${media.join(', ')} FROM media WHERE id = ?`,
+  );
+  const copyTranscript = db.prepare(
+    `INSERT INTO transcripts (id, media_id, ${transcripts.join(', ')})
+     SELECT ?, ?, ${transcripts.join(', ')} FROM transcripts WHERE id = ?`,
+  );
+  const copyWords = db.prepare(
+    `INSERT INTO words (transcript_id, position, segment_position, start_ms, end_ms, text,
+       probability)
+     SELECT ?, position, segment_position, start_ms, end_ms, text, probability
+     FROM words WHERE transcript_id = ?`,
+  );
+  return (recordingId: string, transcriptId: string) => {
+    const one = { mediaId: randomUUID(), transcriptId: randomUUID() };
+    copyMedia.run(one.mediaId, recordingId);
+    copyTranscript.run(one.transcriptId, one.mediaId, transcriptId);
+    copyWords.run(one.transcriptId, transcriptId);
+    return one;
+  };
+}
+
 describe('Learning latency (KBC-113 NFR-1, NFR-2)', () => {
   it('NFR-1: 1 000 rules applied to a 20 000-word version in p95 ≤ 300 ms, inside the transaction', async () => {
     const world = await startWorld();
@@ -175,61 +240,7 @@ describe('Learning latency (KBC-113 NFR-1, NFR-2)', () => {
     const recording = await transcribed(world, [
       { at: 10, text: words.join(' ') },
     ]);
-    const db = openDb(world);
-    try {
-      const columns = (table: string) =>
-        db
-          .prepare('SELECT name FROM pragma_table_info(?)')
-          .all(table)
-          .map((row) => String(row['name']))
-          .filter((name) => name !== 'id' && name !== 'media_id');
-      const media = columns('media');
-      const transcripts = columns('transcripts');
-      const source = transcriptOf(db, recording.id);
-      const copyMedia = db.prepare(
-        `INSERT INTO media (id, ${media.join(', ')})
-         SELECT ?, ${media.join(', ')} FROM media WHERE id = ?`,
-      );
-      const copyTranscript = db.prepare(
-        `INSERT INTO transcripts (id, media_id, ${transcripts.join(', ')})
-         SELECT ?, ?, ${transcripts.join(', ')} FROM transcripts WHERE id = ?`,
-      );
-      const copyWords = db.prepare(
-        `INSERT INTO words (transcript_id, position, segment_position, start_ms, end_ms, text,
-           probability)
-         SELECT ?, position, segment_position, start_ms, end_ms, text, probability
-         FROM words WHERE transcript_id = ?`,
-      );
-      const insert = db.prepare(INSERT);
-      db.exec('BEGIN');
-      for (let m = 0; m < 500; m++) {
-        const mediaId = m === 0 ? recording.id : randomUUID();
-        const transcriptId = m === 0 ? source : randomUUID();
-        if (m > 0) {
-          copyMedia.run(mediaId, recording.id);
-          copyTranscript.run(transcriptId, mediaId, source);
-          copyWords.run(transcriptId, source);
-        }
-        // 20 corrections a recording, each with a word on both sides.
-        for (let c = 0; c < 20; c++) {
-          const position = 1 + c * 2;
-          const n = m * 20 + c;
-          insert.run(
-            randomUUID(),
-            mediaId,
-            transcriptId,
-            position,
-            0,
-            JSON.stringify([`termo${position}`]),
-            `Certo${n % 2_000}`,
-            AT,
-          );
-        }
-      }
-      db.exec('COMMIT');
-    } finally {
-      db.close();
-    }
+    seedReading(openDb(world), recording.id);
 
     const samples: number[] = [];
     let body: TranscriptLearning | null = null;
