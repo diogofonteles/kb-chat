@@ -80,9 +80,12 @@ const DEFAULT_CACHE_SIZE = 32;
 const noTranscript = () =>
   new AppError('MEDIA_NOT_READY', 'This media has no transcript yet');
 
-/** Changes with a new transcript, a new post-filter or new subtitle rules. */
+/**
+ * Changes with a new transcript, a word correction (its revision, KBC-093 FR-7), a new
+ * post-filter or new subtitle rules.
+ */
 const etagOf = (summary: TranscriptSummary): string =>
-  `"${summary.id}.f${summary.filterVersion}.s${SUBTITLE_RULES_VERSION}"`;
+  `"${summary.id}.r${summary.revision}.f${summary.filterVersion}.s${SUBTITLE_RULES_VERSION}"`;
 
 /**
  * The current transcript for reading and its WebVTT subtitles (KBC-038), for whoever may
@@ -113,6 +116,7 @@ export class TranscriptService {
     const transcript = {
       mediaId,
       version: summary.version,
+      revision: summary.revision,
       confidence: summary.confidence,
       segments,
       ...(options.withTermList ? this.termListOf(summary) : {}),
@@ -137,9 +141,11 @@ export class TranscriptService {
     return {
       mediaId,
       version: summary.version,
+      revision: summary.revision,
       words: this.deps.transcripts
         .wordsOfSegments(summary.id, range)
-        .map(({ segment, startMs, endMs, text }) => ({
+        .map(({ position, segment, startMs, endMs, text }) => ({
+          position,
           segment,
           startMs,
           endMs,

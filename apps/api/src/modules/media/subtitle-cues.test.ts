@@ -181,6 +181,31 @@ describe('cuesOf (KBC-038 FR-1, ADR 0023 §8)', () => {
     expectWithinRules(cues);
   });
 
+  it('KBC-093 F-5: words emptied by a correction make no cue, alone or in a segment', () => {
+    const emptied = (text: string, startMs: number, segment: number) =>
+      wordsOf(text, { startMs, segment }).map((word) => ({
+        ...word,
+        text: '',
+      }));
+    const cues = cuesOf({
+      segments: [
+        segmentAt(0, 1_000, 'Antes.'),
+        segmentAt(10_000, 12_000, ''),
+        segmentAt(20_000, 21_000, 'Depois.'),
+      ],
+      words: [
+        ...wordsOf('Antes.', { startMs: 0, segment: 0 }),
+        ...emptied('tudo isto apagado', 10_000, 1),
+        ...emptied('e', 20_000, 2),
+        ...wordsOf('Depois.', { startMs: 20_400, segment: 2 }),
+      ],
+    });
+    expect(cues.map((cue) => [cue.startMs, cue.text])).toEqual([
+      [0, 'Antes.'],
+      [20_400, 'Depois.'],
+    ]);
+  });
+
   it('cuts a single word longer than a whole cue', () => {
     const word = 'a'.repeat(100);
     const cues = cuesOf({

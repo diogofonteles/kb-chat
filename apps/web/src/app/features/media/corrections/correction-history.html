@@ -1,0 +1,140 @@
+<dialog
+  #dialog
+  class="dialog"
+  aria-labelledby="correction-history-title"
+  (close)="closed.emit()"
+>
+  <header class="head">
+    <h2 id="correction-history-title" i18n="@@history.title">Correções</h2>
+    <button
+      type="button"
+      class="secondary"
+      (click)="close()"
+      i18n="@@history.close"
+    >
+      Fechar
+    </button>
+  </header>
+
+  <div class="body">
+    <p class="visually-hidden" role="status">{{ desk.announcement() }}</p>
+    @if (desk.notice(); as notice) {
+      <p class="notice">{{ notice.text }}</p>
+    }
+    <ol class="entries">
+      @for (entry of entries(); track entry.groupId ?? first(entry)?.id) {
+        @let row = first(entry);
+        @if (row) {
+          <li class="entry">
+            @if (entry.groupId && entry.items.length > 1) {
+              <details>
+                <summary>
+                  <span class="swap"
+                    ><del>{{ before(row) }}</del> →
+                    <ins>{{ after(row) }}</ins></span
+                  >
+                  ·
+                  <span i18n="@@history.groupCount"
+                    >{{ entry.items.length }} ocorrências</span
+                  >
+                </summary>
+                <ol class="rows">
+                  @for (item of entry.items; track item.id) {
+                    <li class="row">
+                      <ng-container
+                        [ngTemplateOutlet]="line"
+                        [ngTemplateOutletContext]="{ $implicit: item }"
+                      />
+                    </li>
+                  }
+                </ol>
+              </details>
+              <p class="meta">{{ row.authorName ?? '' }} · {{ when(row) }}</p>
+              @if (entry.canUndoGroup) {
+                <button
+                  type="button"
+                  class="secondary"
+                  [disabled]="desk.undoing()"
+                  (click)="undoGroup(entry)"
+                  i18n="@@history.undoGroup"
+                >
+                  Desfazer o grupo
+                </button>
+              }
+            } @else {
+              <ng-container
+                [ngTemplateOutlet]="line"
+                [ngTemplateOutletContext]="{ $implicit: row }"
+              />
+            }
+          </li>
+        }
+      } @empty {
+        <li class="hint" i18n="@@history.empty">
+          Nenhuma correção nesta gravação.
+        </li>
+      }
+    </ol>
+    @if (page()?.next !== null && page()?.next !== undefined) {
+      <button
+        type="button"
+        class="secondary"
+        (click)="more()"
+        i18n="@@history.more"
+      >
+        Mostrar mais
+      </button>
+    }
+  </div>
+</dialog>
+
+<ng-template #line let-row>
+  <p class="what">
+    <span class="kind">{{ kindOf(row) }}</span>
+    <span class="swap"
+      ><del>{{ before(row) }}</del> → <ins>{{ after(row) }}</ins></span
+    >
+  </p>
+  <p class="meta">
+    {{ clock(row) }} · {{ row.authorName ?? '' }} · {{ when(row) }} ·
+    <span class="state">{{ stateOf(row) }}</span>
+  </p>
+  @if (row.state === 'not-carried') {
+    <p class="meta" i18n="@@history.found">
+      Não reaplicada: a transcrição nova diz «{{ row.found ?? '' }}».
+    </p>
+  }
+  <div class="actions">
+    <button
+      type="button"
+      class="secondary"
+      [attr.aria-label]="'Ouvir ' + clock(row)"
+      i18n-aria-label="@@history.hearAt"
+      (click)="hear(row)"
+      i18n="@@history.hear"
+    >
+      Ouvir
+    </button>
+    @if (row.canUndo) {
+      <button
+        type="button"
+        class="secondary"
+        [disabled]="desk.undoing()"
+        (click)="undo(row)"
+        i18n="@@history.undo"
+      >
+        Desfazer
+      </button>
+    }
+    @if (row.state === 'not-carried') {
+      <button
+        type="button"
+        class="secondary"
+        (click)="correctHere(row)"
+        i18n="@@history.fixHere"
+      >
+        Corrigir aqui
+      </button>
+    }
+  </div>
+</ng-template>

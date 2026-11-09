@@ -17,8 +17,11 @@ export interface TranscriptSlice {
 const midpointOf = (item: { startMs: number; endMs: number }): number =>
   (item.startMs + item.endMs) / 2;
 
-const holds = (window: TrackWindow, item: { startMs: number; endMs: number }) =>
-  midpointOf(item) >= window.startMs && midpointOf(item) < window.endMs;
+/** KBC-068's rule: a word or segment belongs where its midpoint falls. */
+export const holds = (
+  window: TrackWindow,
+  item: { startMs: number; endMs: number },
+) => midpointOf(item) >= window.startMs && midpointOf(item) < window.endMs;
 
 /** Times from the start of the track, never outside it. */
 const shifted = <T extends { startMs: number; endMs: number }>(
@@ -39,7 +42,11 @@ const textOf = (
 ): string =>
   kept.length === all.length
     ? segment.text
-    : kept.map((word) => word.text.trim()).join(' ');
+    : kept
+        .map((word) => word.text.trim())
+        // A word a correction emptied is not said (KBC-093 BR-2).
+        .filter((text) => text !== '')
+        .join(' ');
 
 /**
  * The transcript inside a track (KBC-068 FR-3, BR-4): a word belongs where its midpoint

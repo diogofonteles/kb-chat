@@ -12,7 +12,8 @@ export type SearchHighlightName =
   | 'transcript-current'
   | 'transcript-passage'
   | 'transcript-word'
-  | 'track-word';
+  | 'track-word'
+  | 'correcting-word';
 
 /**
  * Paints ranges of text without touching the DOM (CSS Custom Highlight API): marking
@@ -44,6 +45,8 @@ const PRIORITY: Readonly<Record<SearchHighlightName, number>> = {
   'transcript-passage': 1,
   'transcript-word': 0,
   'track-word': 0,
+  // The words being corrected (KBC-093) read over the word going by.
+  'correcting-word': 1,
 };
 
 export const SEARCH_HIGHLIGHTS = new InjectionToken<SearchHighlights>(

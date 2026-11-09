@@ -456,6 +456,7 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
   const TRANSCRIPT: MediaTranscript = {
     mediaId: ITEM.id,
     version: 2,
+    revision: 0,
     confidence: 'low',
     segments: [{ startMs: 0, endMs: 3_000, text: 'Existia um rei.' }],
   };
@@ -696,6 +697,7 @@ describe('MediaPlayerPage: the transcript reads its voices again (KBC-064 FR-5)'
   const TWO_SEGMENTS: MediaTranscript = {
     mediaId: ITEM.id,
     version: 1,
+    revision: 0,
     confidence: 'normal',
     segments: [
       { startMs: 0, endMs: 3_000, text: 'Existia um rei.' },

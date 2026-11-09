@@ -23,7 +23,17 @@ type AskForWords = (
   range: { readonly from: number; readonly count: number },
 ) => Observable<MediaTranscriptWords>;
 
-type PageWords = ReadonlyMap<number, readonly SpokenWord[]>;
+/**
+ * A word placed in its segment's text, with its place in the transcript and its own text
+ * (a correction names them, KBC-093). Empty words have no place in the text: they are
+ * not here.
+ */
+export interface PlacedWord extends SpokenWord {
+  readonly position: number | null;
+  readonly text: string;
+}
+
+type PageWords = ReadonlyMap<number, readonly PlacedWord[]>;
 
 /** The page a segment's words come in. */
 export const wordsPageOf = (segment: number): number =>
@@ -48,11 +58,8 @@ function groupBySegment(
  * stays unasked: its segments keep their own highlight until something asks again.
  */
 export class TranscriptWords {
-  /** Which transcript the words are for: its media and version. */
-  readonly key = computed(() => {
-    const { mediaId, version } = this.transcript();
-    return `${mediaId}.${version}`;
-  });
+  /** Which transcript the words are for: its media, version and revision (KBC-093). */
+  readonly key = computed(() => keyOf(this.transcript()));
   private readonly pages = linkedSignal<string, ReadonlyMap<number, PageWords>>(
     {
       source: this.key,
@@ -67,7 +74,7 @@ export class TranscriptWords {
   ) {}
 
   /** A segment's words; empty without word times; null while its page is not here. */
-  of(segment: number): readonly SpokenWord[] | null {
+  of(segment: number): readonly PlacedWord[] | null {
     const page = this.pages().get(wordsPageOf(segment));
     return page ? (page.get(segment) ?? NO_WORDS) : null;
   }
@@ -82,21 +89,19 @@ export class TranscriptWords {
   }
 
   private ask(page: number, key: string): Observable<unknown> {
-    const { mediaId, version, segments } = this.transcript();
+    const transcript = this.transcript();
+    const { mediaId, segments } = transcript;
     return this.askForWords(mediaId, {
       from: page * WORDS_PAGE_SEGMENTS,
       count: WORDS_PAGE_SEGMENTS,
     }).pipe(
       tap((answer) => {
         // A transcript newer than the open one: its words do not fit this text.
-        const words = answer.version === version ? answer.words : [];
-        const aligned = new Map<number, readonly SpokenWord[]>();
-        for (const [segment, group] of groupBySegment(words))
-          aligned.set(
-            segment,
-            alignWords(segments[segment]?.text ?? '', group),
-          );
-        if (this.key() === `${mediaId}.${version}`)
+        const fits = keyOf(answer) === keyOf(transcript);
+        const aligned = new Map<number, readonly PlacedWord[]>();
+        for (const [segment, group] of groupBySegment(fits ? answer.words : []))
+          aligned.set(segment, placed(segments[segment]?.text ?? '', group));
+        if (this.key() === keyOf(transcript))
           this.pages.update((pages) => new Map(pages).set(page, aligned));
       }),
       // The caller reads `of`: what matters is that the wait is over.
@@ -107,4 +112,24 @@ export class TranscriptWords {
   }
 }
 
-const NO_WORDS: readonly SpokenWord[] = [];
+const NO_WORDS: readonly PlacedWord[] = [];
+
+const keyOf = ({
+  mediaId,
+  version,
+  revision,
+}: Pick<MediaTranscript, 'mediaId' | 'version' | 'revision'>): string =>
+  `${mediaId}.${version}.${revision}`;
+
+/** `alignWords` with each word's place and text: it keeps the non-empty ones, in order. */
+function placed(
+  text: string,
+  words: readonly TranscriptWord[],
+): readonly PlacedWord[] {
+  const spoken = words.filter((word) => word.text !== '');
+  return alignWords(text, spoken).map((word, index) => ({
+    ...word,
+    position: spoken[index]?.position ?? null,
+    text: spoken[index]?.text ?? '',
+  }));
+}

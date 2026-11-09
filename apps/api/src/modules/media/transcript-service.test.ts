@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type {
   DerivedSegment,
-  DerivedWord,
+  StoredWord,
   TranscriptStorePort,
   TranscriptSummary,
 } from '../../ports/transcript-store.js';
@@ -19,6 +19,7 @@ const summaryOf = (id: string, version: number): TranscriptSummary => ({
   id,
   mediaId: id,
   version,
+  revision: 0,
   model: 'large-v3',
   confidence: 'normal',
   vad: 'applied',
@@ -42,7 +43,8 @@ function fakeStore(ids: readonly string[]) {
     compressionRatio: null,
     noSpeechProb: null,
   };
-  const word: DerivedWord = {
+  const word: StoredWord = {
+    position: 0,
     segment: 0,
     startMs: 0,
     endMs: 1_000,

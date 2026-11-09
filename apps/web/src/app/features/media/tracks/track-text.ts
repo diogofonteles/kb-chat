@@ -17,8 +17,16 @@ import {
   viewChildren,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import type { TimedSpan } from '@kb-chat/player-core';
+import type { TranscriptCorrection } from '@kb-chat/contracts';
+import { wordAtOffset, type TimedSpan } from '@kb-chat/player-core';
+import { SessionStore } from '@core/auth/session-store.js';
+import { CorrectAll } from '../corrections/correct-all.js';
+import { CorrectionDesk } from '../corrections/correction-desk.js';
+import { CorrectionHistory } from '../corrections/correction-history.js';
+import { WordCorrection } from '../corrections/word-correction.js';
+import { WordSearch, type WordHit } from '../corrections/word-search.js';
 import { SEARCH_HIGHLIGHTS } from '../transcript/search-highlights.js';
+import { CARET_AT_POINT } from '../transcript/text-caret.js';
 import { wordsPageOf } from '../transcript/transcript-words.js';
 import { TrackAudition } from './track-audition.js';
 import {
@@ -28,8 +36,21 @@ import {
   trackLines,
   wholeLines,
   type Spoken,
+  type TextLine,
 } from './track-text-lines.js';
 import { TrackTextSource } from './track-text-source.js';
+
+/** Where a choice falls in a line's text. */
+interface Offsets {
+  readonly start: number;
+  readonly end: number;
+}
+
+/** A word's place in the transcript, which the words of a line carry (KBC-093). */
+const positionOf = (word: object | null): number | null =>
+  word !== null && 'position' in word && typeof word.position === 'number'
+    ? word.position
+    : null;
 
 /** After the person scrolls the block, it does not follow the word for this long (FR-4). */
 export const OWN_SCROLL_MS = 5_000;
@@ -58,6 +79,8 @@ const SCROLL_KEYS = new Set([
  */
 @Component({
   selector: 'app-track-text',
+  imports: [WordCorrection, WordSearch, CorrectAll, CorrectionHistory],
+  providers: [CorrectionDesk],
   templateUrl: './track-text.html',
   styleUrl: './track-text.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -69,6 +92,10 @@ export class TrackText {
   private readonly document = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
   private readonly renderer = inject(Renderer2);
+  private readonly caretAt = inject(CARET_AT_POINT);
+  protected readonly desk = inject(CorrectionDesk);
+  /** Words react to a click only for whoever may correct them (BR-5, AC-16, AC-46). */
+  protected readonly canCorrect = inject(SessionStore).can('media-correct');
 
   readonly span = input.required<TimedSpan>();
   readonly ordinal = input.required<number>();
@@ -77,6 +104,7 @@ export class TrackText {
 
   private readonly body = viewChild.required<ElementRef<HTMLElement>>('body');
   private readonly lineElements = viewChildren<ElementRef<HTMLElement>>('line');
+  private readonly search = viewChild(WordSearch);
 
   protected readonly state = this.source.state;
   /** "Tentar de novo" is reading: the error stays until it answers. */
@@ -145,6 +173,16 @@ export class TrackText {
     },
     { equal: (a, b) => a.key === b.key && a.pages.join() === b.pages.join() },
   );
+  /** "Procurar palavra" open (FR-4) and the history (FR-9). */
+  protected readonly searching = signal(false);
+  protected readonly historyOpen = signal(false);
+  protected readonly corrections = computed(
+    () => this.desk.history()?.total ?? 0,
+  );
+  /** "1 correção reaplicada; 1 não coube na transcrição nova" (FR-8, AC-19). */
+  protected readonly carry = computed(() => this.desk.history()?.carry ?? null);
+  /** Where the chosen word came from: the focus goes back there (FR-3, AC-22). */
+  private chosenFrom: 'text' | 'search' = 'text';
   /** When the person last scrolled the block themselves. */
   private ownScrollAt = Number.NEGATIVE_INFINITY;
   /** The retry button disappears with the error: the focus goes on to the text. */
@@ -158,6 +196,158 @@ export class TrackText {
     this.showTrackInWhole();
     this.focusAfterRetry();
     afterNextRender(() => this.listenPassively());
+    if (this.canCorrect) this.followCorrections();
+  }
+
+  /** The history once the text is there, the chosen words painted, the focus kept. */
+  private followCorrections(): void {
+    effect(() => {
+      this.desk.playUntil(this.span().endMs);
+      if (this.state() === 'ready')
+        untracked(() => {
+          if (this.desk.history() === null) this.desk.loadHistory();
+        });
+    });
+    afterRenderEffect({
+      write: () => {
+        const range = this.chosenRange();
+        this.highlights.show('correcting-word', range ? [range] : []);
+      },
+    });
+    this.destroyRef.onDestroy(() => this.highlights.clear('correcting-word'));
+    this.refocusWhenClosed();
+  }
+
+  /** A word clicked (BR-17): the audio goes to it and the panel opens on it, once. */
+  protected clickedText(event: MouseEvent): void {
+    if (!this.canCorrect || this.state() !== 'ready') return;
+    const caret = this.caretAt(event.clientX, event.clientY);
+    if (!caret) return;
+    const index = this.lineElements().findIndex(({ nativeElement }) =>
+      nativeElement.contains(caret.node),
+    );
+    const line = this.lines()[index];
+    if (!line) return;
+    this.chosenFrom = 'text';
+    const selected = this.selectedOffsets(index);
+    this.pick(line, selected ?? { start: caret.offset, end: caret.offset });
+  }
+
+  /** "Procurar palavra": an occurrence chosen with Enter or a click (FR-4, FR-14). */
+  protected chosenHit(hit: WordHit): void {
+    const line = this.lines()[hit.line];
+    if (!line) return;
+    this.chosenFrom = 'search';
+    this.pick(line, { start: hit.offset, end: hit.offset });
+  }
+
+  /** The line's words, brought in when their page is not here yet. */
+  private pick(
+    line: TextLine,
+    at: Offsets | ((line: TextLine) => Offsets | null),
+  ): void {
+    const where = typeof at === 'function' ? at : () => at;
+    if (line.words !== null) {
+      this.pickIn(line, where(line));
+      return;
+    }
+    this.source.words
+      .load(wordsPageOf(line.segment))
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        complete: () => {
+          const now = this.lines().find((one) => one.segment === line.segment);
+          if (now?.words) this.pickIn(now, where(now));
+        },
+      });
+  }
+
+  private pickIn(line: TextLine, at: Offsets | null): void {
+    if (!at) return;
+    const words = line.words ?? [];
+    const first = positionOf(wordAtOffset(words, at.start));
+    const last = positionOf(
+      wordAtOffset(words, Math.max(at.start, at.end - 1)),
+    );
+    if (first === null) return;
+    this.desk.choose(line.segment, first, last ?? first);
+  }
+
+  /** A stretch selected in one line when clicking: the choice starts from it (FR-2). */
+  private selectedOffsets(
+    index: number,
+  ): { start: number; end: number } | null {
+    const selection = this.document.getSelection();
+    const node = this.lineOf(index)?.firstChild;
+    if (!selection || selection.isCollapsed || !node) return null;
+    const range = selection.getRangeAt(0);
+    if (range.startContainer !== node || range.endContainer !== node)
+      return null;
+    return { start: range.startOffset, end: range.endOffset };
+  }
+
+  /** The chosen words in their line's text, to paint them (NFR-5). */
+  private chosenRange(): Range | null {
+    const words = this.desk.words();
+    const selection = this.desk.selection();
+    const lines = this.lines();
+    if (!selection || words.length === 0) return null;
+    const index = lines.findIndex((line) => line.segment === selection.segment);
+    const placed = (lines[index]?.words ?? []).filter((word) => {
+      const position = positionOf(word);
+      return (
+        position !== null && words.some((one) => one.position === position)
+      );
+    });
+    const first = placed[0];
+    const last = placed.at(-1);
+    if (!first || !last) return null;
+    return this.rangeOf({
+      line: index,
+      start: first.charStart,
+      end: last.charEnd,
+      whole: false,
+    });
+  }
+
+  /** The panel closed with the focus inside it: back where the word was chosen (PD-01). */
+  private refocusWhenClosed(): void {
+    let open = false;
+    afterRenderEffect(() => {
+      const now = this.desk.selection() !== null;
+      if (open && !now) {
+        const active = this.document.activeElement;
+        if (active === null || active === this.document.body) this.refocus();
+      }
+      open = now;
+    });
+  }
+
+  protected refocus(): void {
+    if (this.chosenFrom === 'search' && this.search()) this.search()?.refocus();
+    else this.body().nativeElement.focus();
+  }
+
+  protected toggleSearch(): void {
+    this.searching.update((open) => !open);
+  }
+
+  protected openHistory(): void {
+    this.desk.loadHistory();
+    this.historyOpen.set(true);
+  }
+
+  /** "Corrigir aqui": the word now said where the correction was (FR-8). */
+  protected fixHere(row: TranscriptCorrection): void {
+    const lines = this.lines();
+    const line =
+      lines.find((one) => one.endMs > row.startMs) ?? lines.at(-1) ?? null;
+    if (!line) return;
+    this.chosenFrom = 'text';
+    this.pick(line, (now) => {
+      const word = now.words?.find((one) => one.endMs > row.startMs);
+      return word ? { start: word.charStart, end: word.charEnd } : null;
+    });
   }
 
   protected switchView(): void {

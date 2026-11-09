@@ -1,0 +1,220 @@
+<section
+  class="panel"
+  role="dialog"
+  [attr.aria-label]="label()"
+  aria-describedby="word-correction-context"
+>
+  <h3 class="title" i18n="@@correct.title">Corrigir palavra</h3>
+  <p id="word-correction-context" class="context">
+    @if (desk.contextBefore()) {
+      <span>…{{ desk.contextBefore() }} </span>
+    }
+    <mark class="chosen">{{ desk.original() }}</mark>
+    @if (desk.contextAfter()) {
+      <span> {{ desk.contextAfter() }}…</span>
+    }
+  </p>
+
+  <label class="field" for="word-correction-field">
+    <span i18n="@@correct.fieldLabel">Texto certo</span>
+    <input
+      #field
+      id="word-correction-field"
+      type="text"
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+      enterkeyhint="done"
+      [value]="desk.draft()"
+      [readOnly]="saving()"
+      [attr.aria-invalid]="invalid() ? 'true' : null"
+      [attr.aria-describedby]="invalid() ? 'word-correction-error' : null"
+      (input)="typed($event)"
+    />
+  </label>
+  @if (invalid()) {
+    <p id="word-correction-error" class="error" i18n="@@correct.invalid">
+      Use até {{ maxChars }} caracteres, numa linha só.
+    </p>
+  }
+
+  <div class="moves">
+    <button
+      type="button"
+      class="secondary"
+      [disabled]="!desk.hasPrevious() || saving()"
+      (click)="desk.move(-1)"
+      i18n="@@correct.previous"
+    >
+      ◀ Anterior
+    </button>
+    <button
+      type="button"
+      class="secondary"
+      [disabled]="!desk.hasNext() || saving()"
+      (click)="desk.move(1)"
+      i18n="@@correct.next"
+    >
+      Próxima ▶
+    </button>
+    <button
+      type="button"
+      class="secondary"
+      [disabled]="!desk.canIncludePrevious() || saving()"
+      [attr.aria-describedby]="
+        desk.canIncludePrevious() ? null : 'word-correction-inside'
+      "
+      (click)="desk.include(-1)"
+      i18n="@@correct.includePrevious"
+    >
+      Incluir a anterior
+    </button>
+    <button
+      type="button"
+      class="secondary"
+      [disabled]="!desk.canIncludeNext() || saving()"
+      [attr.aria-describedby]="
+        desk.canIncludeNext() ? null : 'word-correction-inside'
+      "
+      (click)="desk.include(1)"
+      i18n="@@correct.includeNext"
+    >
+      Incluir a próxima
+    </button>
+    <button
+      type="button"
+      class="secondary"
+      [disabled]="!desk.timed()"
+      [attr.aria-describedby]="desk.timed() ? null : 'word-correction-untimed'"
+      (click)="hear()"
+      i18n="@@correct.hear"
+    >
+      Ouvir a palavra
+    </button>
+  </div>
+  @if (!desk.canIncludeNext() || !desk.canIncludePrevious()) {
+    <p id="word-correction-inside" class="hint" i18n="@@correct.inside">
+      A correção fica dentro de um trecho, com até 5 palavras.
+    </p>
+  }
+  @if (!desk.timed()) {
+    <p id="word-correction-untimed" class="hint" i18n="@@correct.untimed">
+      Esta palavra não tem tempo na transcrição.
+    </p>
+  }
+
+  <div class="status" role="status">
+    @switch (phase().kind) {
+      @case ('saving') {
+        <p class="hint" i18n="@@correct.saving">Salvando…</p>
+      }
+      @case ('blocked') {
+        <p class="error" i18n="@@correct.blocked">
+          Salve ou cancele esta correção antes de escolher outra palavra.
+        </p>
+      }
+      @case ('stale') {
+        <p class="error" i18n="@@correct.stale">
+          A transcrição foi refeita. Confira a palavra no texto novo.
+        </p>
+      }
+      @case ('failed') {
+        <p class="error" i18n="@@correct.failed">
+          Não consegui salvar. Sua correção continua aqui.
+        </p>
+      }
+      @case ('refused') {
+        <p class="error" i18n="@@correct.refused">
+          Este trecho não pode ser corrigido aqui. Avise quem cuida do acervo.
+        </p>
+      }
+      @case ('conflict') {
+        @if (conflictAuthor(); as author) {
+          <p class="error" i18n="@@correct.conflictBy">
+            {{ author }} corrigiu esta palavra para «{{ conflictText() }}» agora
+            há pouco.
+          </p>
+        } @else {
+          <p class="error" i18n="@@correct.conflict">
+            Esta palavra mudou para «{{ conflictText() }}» agora há pouco.
+          </p>
+        }
+      }
+    }
+  </div>
+
+  @if (elsewhere() > 1) {
+    <p class="all">
+      <span i18n="@@correct.elsewhere"
+        >Esta palavra aparece {{ elsewhere() }} vezes na gravação</span
+      >
+      ·
+      <button
+        type="button"
+        class="link"
+        (click)="correctAll()"
+        i18n="@@correct.all"
+      >
+        Corrigir todas
+      </button>
+    </p>
+  }
+
+  <div class="actions">
+    @if (phase().kind === 'conflict') {
+      <button type="button" class="secondary" (click)="desk.useTheirs()">
+        @if (conflictAuthor(); as author) {
+          <ng-container i18n="@@correct.useTheirs"
+            >Usar a de {{ author }}</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@correct.useOther">Usar a outra</ng-container>
+        }
+      </button>
+      <button
+        type="button"
+        class="primary"
+        (click)="desk.saveMine()"
+        i18n="@@correct.saveMine"
+      >
+        Salvar a minha
+      </button>
+    } @else {
+      <button
+        type="button"
+        class="secondary"
+        [disabled]="saving() || refused()"
+        (click)="remove()"
+        i18n="@@correct.remove"
+      >
+        Apagar palavra
+      </button>
+      <button
+        type="button"
+        class="secondary"
+        (click)="cancel()"
+        i18n="@@correct.cancel"
+      >
+        Cancelar
+      </button>
+      <button
+        type="button"
+        class="primary"
+        [disabled]="desk.unchanged() || saving() || invalid() || refused()"
+        (click)="save()"
+      >
+        @switch (phase().kind) {
+          @case ('saving') {
+            <ng-container i18n="@@correct.savingButton">Salvando…</ng-container>
+          }
+          @case ('failed') {
+            <ng-container i18n="@@correct.retry">Tentar de novo</ng-container>
+          }
+          @default {
+            <ng-container i18n="@@correct.save">Salvar</ng-container>
+          }
+        }
+      </button>
+    }
+  </div>
+</section>

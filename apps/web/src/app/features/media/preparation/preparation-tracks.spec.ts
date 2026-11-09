@@ -12,6 +12,7 @@ import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import type { PreparationTrack } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SessionStore } from '@core/auth/session-store.js';
 import type { AuditionRange } from '../tracks/track-audition.js';
 import { TrackAudition } from '../tracks/track-audition.js';
 import { TrackTextSource } from '../tracks/track-text-source.js';
@@ -73,6 +74,8 @@ async function setup() {
       provideHttpClientTesting(),
       TrackTextSource,
       { provide: TrackAudition, useValue: audition },
+      // Correcting words is KBC-093's: these texts are only read here.
+      { provide: SessionStore, useValue: { can: () => false } },
       {
         provide: PreparationWatch,
         useValue: {
@@ -143,10 +146,12 @@ describe('PreparationTracks: the track text (KBC-092)', () => {
     const { view, audition } = await setup();
     fireEvent.click(screen.getByRole('button', { name: 'Ouvir a faixa 2' }));
     await settle(view);
-    expect(audition.play).toHaveBeenCalledWith({
-      fromMs: 30_000,
-      toMs: 70_000,
-    });
+    // From where a word click left the audio, if inside the track (KBC-093 AC-41).
+    expect(audition.play).toHaveBeenCalledWith(
+      { fromMs: 30_000, toMs: 70_000 },
+      null,
+      { fromCue: true },
+    );
     expect(regions().map((one) => one.getAttribute('aria-label'))).toEqual([
       'Texto da faixa 2',
     ]);

@@ -101,7 +101,9 @@ export class PreparationTracks {
     }
     this.playing.set(track.id);
     this.textOpen.set(track.id);
-    this.audition.play({ fromMs: track.startMs, toMs: track.endMs });
+    this.audition.play({ fromMs: track.startMs, toMs: track.endMs }, null, {
+      fromCue: true,
+    });
   }
 
   protected textLabel({ track, ordinal }: TrackLine): string {

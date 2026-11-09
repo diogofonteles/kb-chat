@@ -97,6 +97,24 @@ textarea {
   }
 }
 
+/* The words being corrected (KBC-093 AC-23, NFR-5): a background and a double underline,
+   never colour alone. Longhands, for WebKit (see above). */
+::highlight(correcting-word) {
+  background-color: var(--color-mark);
+  color: var(--color-text);
+  text-decoration-line: underline;
+  text-decoration-style: double;
+  text-decoration-color: var(--color-accent-strong);
+  text-decoration-thickness: 2px;
+}
+
+@media (forced-colors: active) {
+  ::highlight(correcting-word) {
+    background-color: Highlight;
+    color: HighlightText;
+  }
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

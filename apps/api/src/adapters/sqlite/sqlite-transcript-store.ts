@@ -8,9 +8,9 @@ import {
 import type { LeaseOwner } from '../../ports/media-store.js';
 import type {
   DerivedSegment,
-  DerivedWord,
   JobLease,
   NewTranscript,
+  StoredWord,
   TranscriptStorePort,
   TranscriptSummary,
 } from '../../ports/transcript-store.js';
@@ -32,6 +32,7 @@ function toSummary(row: Row): TranscriptSummary {
     id: text(row, 'id'),
     mediaId: text(row, 'media_id'),
     version: Number(row['version']),
+    revision: Number(row['revision']),
     model: text(row, 'model'),
     confidence: transcriptConfidenceSchema.parse(row['confidence']),
     vad: vadOf(row['vad']),
@@ -58,7 +59,8 @@ const TERM_VERSIONS = `SELECT v.version, v.created_at, v.author_name,
     (SELECT count(*) FROM terms t WHERE t.version = v.version) AS term_count
   FROM term_versions v`;
 
-const toWord = (row: Row): DerivedWord => ({
+export const toWord = (row: Row): StoredWord => ({
+  position: Number(row['position']),
   segment: Number(row['segment_position']),
   startMs: Number(row['start_ms']),
   endMs: Number(row['end_ms']),
@@ -199,7 +201,7 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
   transcripts(mediaId: string): TranscriptSummary[] {
     return this.db
       .prepare(
-        `SELECT id, media_id, version, model, confidence, vad, terms_version, raw_path,
+        `SELECT id, media_id, version, revision, model, confidence, vad, terms_version, raw_path,
             filter_version,
            confidence_version, word_count, removed_words, created_at
          FROM transcripts WHERE media_id = ? ORDER BY version DESC`,
@@ -225,10 +227,10 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
       }));
   }
 
-  words(transcriptId: string): DerivedWord[] {
+  words(transcriptId: string): StoredWord[] {
     return this.db
       .prepare(
-        `SELECT segment_position, start_ms, end_ms, text, probability
+        `SELECT position, segment_position, start_ms, end_ms, text, probability
          FROM words WHERE transcript_id = ? ORDER BY position`,
       )
       .all(transcriptId)
@@ -238,10 +240,10 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
   wordsOfSegments(
     transcriptId: string,
     range: { readonly from: number; readonly count: number },
-  ): DerivedWord[] {
+  ): StoredWord[] {
     return this.db
       .prepare(
-        `SELECT segment_position, start_ms, end_ms, text, probability
+        `SELECT position, segment_position, start_ms, end_ms, text, probability
          FROM words INDEXED BY words_by_segment_position
          WHERE transcript_id = ? AND segment_position >= ? AND segment_position < ?
          ORDER BY segment_position, position`,

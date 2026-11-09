@@ -1392,4 +1392,48 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX vault_syncs_by_time ON vault_syncs (finished_at);
     `,
   },
+  {
+    // KBC-093 (ADR 0034 §2-3, amendment 8): a correction edits the current version in place
+    // and bumps its revision; the log keeps every correction, undo and carry-over, never
+    // deleted (it goes with its media). Expand only: the previous image ignores the column
+    // and the table. `checked_version` is the version a carry-over was tried on (FR-8).
+    version: 29,
+    name: 'transcript-word-corrections',
+    sql: `
+      ALTER TABLE transcripts ADD COLUMN revision INTEGER NOT NULL DEFAULT 0
+        CHECK (revision >= 0);
+
+      CREATE TABLE transcript_corrections (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        transcript_id TEXT NOT NULL,
+        version INTEGER NOT NULL CHECK (version >= 1),
+        revision INTEGER NOT NULL CHECK (revision >= 0),
+        kind TEXT NOT NULL CHECK (kind IN ('correct', 'undo', 'carried')),
+        first_position INTEGER NOT NULL CHECK (first_position >= 0),
+        word_count INTEGER NOT NULL CHECK (word_count BETWEEN 1 AND 5),
+        segment_position INTEGER NOT NULL CHECK (segment_position >= 0),
+        start_ms INTEGER NOT NULL,
+        end_ms INTEGER NOT NULL,
+        before TEXT NOT NULL CHECK (json_valid(before)),
+        after TEXT NOT NULL,
+        reverts TEXT,
+        state TEXT NOT NULL
+          CHECK (state IN ('active', 'undone', 'carried', 'not-carried')),
+        carried_to TEXT,
+        checked_version INTEGER,
+        found TEXT,
+        group_id TEXT,
+        author_principal TEXT NOT NULL,
+        author_name TEXT,
+        created_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX transcript_corrections_by_media
+        ON transcript_corrections (media_id, created_at);
+      CREATE INDEX transcript_corrections_by_transcript
+        ON transcript_corrections (transcript_id, first_position);
+      CREATE INDEX transcript_corrections_by_group
+        ON transcript_corrections (group_id) WHERE group_id IS NOT NULL;
+    `,
+  },
 ];

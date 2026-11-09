@@ -747,7 +747,10 @@ export class TrackEditorPage {
       start: () => startRange(track.startMs),
       end: () => endRange(track.endMs),
     };
-    this.audition.play(ranges[kind](), `${track.id}:${kind}`);
+    // A word click left the audio paused at it: the whole track goes on from there (AC-41).
+    this.audition.play(ranges[kind](), `${track.id}:${kind}`, {
+      fromCue: kind === 'track',
+    });
   }
 
   /** Space stops whatever plays: a key never swaps the audio under the person. */

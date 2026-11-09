@@ -98,4 +98,105 @@ describe('TrackAudition (KBC-066 FR-5)', () => {
     expect(audition.failed()).toBe(true);
     expect(audition.playing()).toBe(false);
   });
+
+  describe('a word chosen in the text (KBC-093 BR-17)', () => {
+    const loaded = (element: HTMLMediaElement) =>
+      Object.defineProperty(element, 'readyState', {
+        value: HTMLMediaElement.HAVE_METADATA,
+      });
+
+    it('AC-40: playing, it goes on from the word, at least to the end asked', async () => {
+      const { audition, media } = setup();
+      loaded(media.element);
+      audition.play({ fromMs: 30_000, toMs: 40_000 }, 't1:track');
+      await Promise.resolve();
+      const plays = media.calls.filter((call) => call === 'play').length;
+
+      audition.seek(72_000, 90_000);
+
+      expect(media.element.currentTime).toBe(72);
+      expect(audition.positionMs()).toBe(72_000);
+      expect(audition.playing()).toBe(true);
+      expect(media.calls.filter((call) => call === 'play')).toHaveLength(plays);
+      media.setCurrentTime(85);
+      media.emit('timeupdate');
+      expect(audition.playing()).toBe(true);
+      media.setCurrentTime(90.1);
+      media.emit('timeupdate');
+      expect(audition.playing()).toBe(false);
+    });
+
+    it('AC-25: playing, a word after the track (whole transcript) goes on to the recording end', async () => {
+      const { audition, media } = setup();
+      loaded(media.element);
+      audition.play({ fromMs: 0, toMs: 30_000 }, 't1:track');
+      await Promise.resolve();
+
+      audition.seek(40_000, 30_000);
+
+      expect(media.element.currentTime).toBe(40);
+      expect(audition.playing()).toBe(true);
+      media.setCurrentTime(40.3);
+      media.emit('timeupdate');
+      expect(media.calls).not.toContain('pause');
+      expect(audition.playing()).toBe(true);
+      expect(audition.positionMs()).toBe(40_300);
+      media.setCurrentTime(3_600);
+      media.emit('timeupdate');
+      expect(audition.playing()).toBe(true);
+      media.emit('ended');
+      expect(audition.playing()).toBe(false);
+    });
+
+    it('AC-25: playing, a word before the track goes on from it to the track end', async () => {
+      const { audition, media } = setup();
+      loaded(media.element);
+      audition.play({ fromMs: 60_000, toMs: 90_000 }, 't1:track');
+      await Promise.resolve();
+
+      audition.seek(20_000, 90_000);
+
+      media.setCurrentTime(20.5);
+      media.emit('timeupdate');
+      expect(audition.playing()).toBe(true);
+      media.setCurrentTime(90.1);
+      media.emit('timeupdate');
+      expect(audition.playing()).toBe(false);
+    });
+
+    it('AC-41: paused, it waits at the word, and the whole track then starts there', () => {
+      const { audition, media } = setup();
+      loaded(media.element);
+
+      audition.seek(72_000, 90_000);
+
+      expect(media.element.currentTime).toBe(72);
+      expect(audition.playing()).toBe(false);
+      expect(media.calls).not.toContain('play');
+      expect(audition.cuedMs()).toBe(72_000);
+      audition.play({ fromMs: 60_000, toMs: 90_000 }, null, { fromCue: true });
+      expect(audition.positionMs()).toBe(72_000);
+      expect(audition.cuedMs()).toBeNull();
+    });
+
+    it('a cue outside the track, or a range that is not the track, starts at its own start', () => {
+      const { audition } = setup();
+      audition.seek(10_000, 20_000);
+      audition.play({ fromMs: 60_000, toMs: 90_000 }, null, { fromCue: true });
+      expect(audition.positionMs()).toBe(60_000);
+      audition.stop();
+      audition.seek(72_000, 90_000);
+      audition.play({ fromMs: 58_000, toMs: 63_000 });
+      expect(audition.positionMs()).toBe(58_000);
+    });
+
+    it('waits for the audio to load before moving it', () => {
+      const { audition, media } = setup();
+      audition.seek(72_000, 90_000);
+      expect(media.element.currentTime).toBe(0);
+      expect(audition.cuedMs()).toBe(72_000);
+      media.emit('loadedmetadata');
+      expect(media.element.currentTime).toBe(72);
+    });
+  });
 });

@@ -27,7 +27,7 @@ import type {
 } from '../../ports/transcript-store.js';
 import { legacyAuthorshipOf } from '../media/index.js';
 import { matchTracks } from './track-matching.js';
-import { sliceTranscript, type TrackWindow } from './track-slice.js';
+import { holds, sliceTranscript, type TrackWindow } from './track-slice.js';
 
 export interface TrackPublisherDeps {
   readonly items: TrackItemStorePort;
@@ -54,6 +54,11 @@ export interface TrackPublisherDeps {
    * change's transaction.
    */
   readonly onChanged?: (parentId: string) => void;
+  /**
+   * Only the text of these media changed (KBC-093's correction): their documents follow
+   * (KBC-100 FR-2), inside the correction's transaction.
+   */
+  readonly onTextChanged?: (mediaIds: readonly string[]) => void;
   readonly now?: () => Date;
 }
 
@@ -177,6 +182,28 @@ export class TrackPublisher {
       if (transcript) transcripts.replaceDerived(transcript, now);
     }
     this.deps.onChanged?.(parentId);
+  }
+
+  /**
+   * Inside a word correction's transaction (KBC-093 BR-10, BR-15): only the published items
+   * whose window holds a changed word are cut again, once each, and only their documents
+   * (and the recording's own) are rendered again.
+   */
+  afterCorrection(parentId: string, words: readonly TrackWindow[]): void {
+    const { items, transcripts } = this.deps;
+    const touched = items
+      .published(parentId)
+      .filter((item) => words.some((word) => holds(item, word)));
+    const slice = this.slicerOf(parentId);
+    const now = this.now();
+    for (const item of touched) {
+      const transcript = slice(item);
+      if (transcript) transcripts.replaceDerived(transcript, now);
+    }
+    this.deps.onTextChanged?.([
+      parentId,
+      ...touched.map((item) => item.mediaId),
+    ]);
   }
 
   /**
