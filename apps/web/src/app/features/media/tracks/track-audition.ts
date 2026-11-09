@@ -92,8 +92,11 @@ export class TrackAudition {
       return;
     }
     this.cue.set(ms);
-    if (element.readyState >= HTMLMediaElement.HAVE_METADATA)
-      element.currentTime = ms / 1000;
+    const move = () => {
+      if (this.cue() === ms && !this.range) element.currentTime = ms / 1000;
+    };
+    if (element.readyState >= HTMLMediaElement.HAVE_METADATA) move();
+    else element.addEventListener('loadedmetadata', move, { once: true });
   }
 
   /** Before the metadata there is nothing to seek in, as in the player's own engine. */

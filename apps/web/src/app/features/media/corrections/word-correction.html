@@ -1,13 +1,10 @@
 <section
   class="panel"
   role="dialog"
-  aria-labelledby="word-correction-title"
+  [attr.aria-label]="label()"
   aria-describedby="word-correction-context"
 >
-  <h3 id="word-correction-title" class="title">
-    <ng-container i18n="@@correct.title">Corrigir palavra</ng-container
-    ><span class="visually-hidden">, {{ desk.original() }}</span>
-  </h3>
+  <h3 class="title" i18n="@@correct.title">Corrigir palavra</h3>
   <p id="word-correction-context" class="context">
     @if (desk.contextBefore()) {
       <span>…{{ desk.contextBefore() }} </span>

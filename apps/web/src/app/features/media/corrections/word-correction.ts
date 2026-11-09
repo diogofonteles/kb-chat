@@ -51,6 +51,11 @@ export class WordCorrection {
     viewChild.required<ElementRef<HTMLInputElement>>('field');
 
   protected readonly maxChars = CORRECTION_MAX_CHARS;
+  /** "Corrigir palavra, Tiuako": what the screen reader says as it opens (AC-45). */
+  protected readonly label = computed(
+    () =>
+      $localize`:@@correct.name:Corrigir palavra, ${this.desk.original()}:words:`,
+  );
   protected readonly phase = this.desk.phase;
   protected readonly saving = computed(() => this.phase().kind === 'saving');
   /** Said next to the field as soon as it is so (AC-8, MA-23). */

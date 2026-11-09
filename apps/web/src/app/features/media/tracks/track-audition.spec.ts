@@ -157,6 +157,8 @@ describe('TrackAudition (KBC-066 FR-5)', () => {
       audition.seek(72_000, 90_000);
       expect(media.element.currentTime).toBe(0);
       expect(audition.cuedMs()).toBe(72_000);
+      media.emit('loadedmetadata');
+      expect(media.element.currentTime).toBe(72);
     });
   });
 });

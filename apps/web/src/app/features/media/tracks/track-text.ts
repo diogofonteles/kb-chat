@@ -40,6 +40,12 @@ import {
 } from './track-text-lines.js';
 import { TrackTextSource } from './track-text-source.js';
 
+/** Where a choice falls in a line's text. */
+interface Offsets {
+  readonly start: number;
+  readonly end: number;
+}
+
 /** A word's place in the transcript, which the words of a line carry (KBC-093). */
 const positionOf = (word: object | null): number | null =>
   word !== null && 'position' in word && typeof word.position === 'number'
@@ -236,9 +242,13 @@ export class TrackText {
   }
 
   /** The line's words, brought in when their page is not here yet. */
-  private pick(line: TextLine, at: { start: number; end: number }): void {
+  private pick(
+    line: TextLine,
+    at: Offsets | ((line: TextLine) => Offsets | null),
+  ): void {
+    const where = typeof at === 'function' ? at : () => at;
     if (line.words !== null) {
-      this.pickIn(line, at);
+      this.pickIn(line, where(line));
       return;
     }
     this.source.words
@@ -247,12 +257,13 @@ export class TrackText {
       .subscribe({
         complete: () => {
           const now = this.lines().find((one) => one.segment === line.segment);
-          if (now?.words) this.pickIn(now, at);
+          if (now?.words) this.pickIn(now, where(now));
         },
       });
   }
 
-  private pickIn(line: TextLine, at: { start: number; end: number }): void {
+  private pickIn(line: TextLine, at: Offsets | null): void {
+    if (!at) return;
     const words = line.words ?? [];
     const first = positionOf(wordAtOffset(words, at.start));
     const last = positionOf(
@@ -328,14 +339,15 @@ export class TrackText {
 
   /** "Corrigir aqui": the word now said where the correction was (FR-8). */
   protected fixHere(row: TranscriptCorrection): void {
-    const line = this.lines().find((one) =>
-      (one.words ?? []).some((word) => word.startMs >= row.startMs),
-    );
-    const word = line?.words?.find((one) => one.startMs >= row.startMs);
-    const position = word ? positionOf(word) : null;
-    if (!line || position === null) return;
+    const lines = this.lines();
+    const line =
+      lines.find((one) => one.endMs > row.startMs) ?? lines.at(-1) ?? null;
+    if (!line) return;
     this.chosenFrom = 'text';
-    this.desk.choose(line.segment, position);
+    this.pick(line, (now) => {
+      const word = now.words?.find((one) => one.endMs > row.startMs);
+      return word ? { start: word.charStart, end: word.charEnd } : null;
+    });
   }
 
   protected switchView(): void {
