@@ -363,10 +363,9 @@ test('AC-12, AC-13, AC-14: the status chip opens the details, and an off transcr
       name: `Transcritor "${off.name}"`,
     });
     await expect(offDetails).toContainText('Como ligar');
-    // On the same Mac it starts by itself; never a uv command to run (KBC-114 AC-15).
-    await expect(offDetails).toContainText(
-      'Ele liga sozinho assim que um áudio espera por ele',
-    );
+    // On the same Mac it starts by itself; never a uv command to run (KBC-114 AC-15). Whether
+    // it promises to start by itself depends on what other specs left waiting in this shared
+    // server (with work blocked it does not, review r2): the component specs cover both.
     await expect(offDetails).not.toContainText('uv run');
     await shot(page, 'status-off');
     await noSideScroll(page);
