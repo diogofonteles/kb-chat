@@ -109,7 +109,10 @@ async function scaffoldAsKb(vault: string, job: KbPublishJob): Promise<void> {
   if (exists || !job.collection) return;
   await mkdir(dirname(yaml), { recursive: true });
   const { title, domain } = job.collection;
-  await writeFile(yaml, `slug: ${job.topic}\ntitle: ${title}\ndomain: ${domain}\n`);
+  await writeFile(
+    yaml,
+    `slug: ${job.topic}\ntitle: ${title}\ndomain: ${domain}\n`,
+  );
 }
 
 export const kbResult = (

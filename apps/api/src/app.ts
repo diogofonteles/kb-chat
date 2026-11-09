@@ -123,6 +123,8 @@ import {
   termRoutes,
   TermListService,
   transcriberRoutes,
+  TranscriberStatusBoard,
+  transcriberStatusRoutes,
   TranscriberService,
   TranscriptionService,
   TranscriptService,
@@ -616,6 +618,7 @@ interface WorkerWiring {
   readonly groq: GroqService;
   readonly documents: MediaDocuments;
   readonly corrections: TranscriptCorrectionService;
+  readonly statusBoard: TranscriberStatusBoard;
 }
 
 async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
@@ -633,6 +636,7 @@ async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
       cuts: publisher,
       kbResults: documents.kb,
       vaultSyncs: documents.status,
+      statusBoard: wiring.statusBoard,
       silences: wiring.silences,
       waveforms: wiring.waveforms,
       diarization: diarizationService(wiring),
@@ -929,13 +933,35 @@ async function registerTranscribers(
     transcribers: TranscriberService;
     media: MediaService;
     wiring: MediaWiring;
+    documents: MediaDocuments;
   },
-) {
+): Promise<TranscriberStatusBoard> {
   const { transcribers, media, wiring } = input;
   await app.register(transcriberRoutes({ transcribers, media }));
   await app.register(
     termRoutes(new TermListService({ transcripts: wiring.media.transcripts })),
   );
+  return registerTranscriberStatus(app, input);
+}
+
+/** The transcribers' own status for masters, and "Ligar transcritor" on the Mac (KBC-114). */
+async function registerTranscriberStatus(
+  app: FastifyInstance,
+  input: {
+    transcribers: TranscriberService;
+    documents: MediaDocuments;
+    wiring: MediaWiring;
+  },
+): Promise<TranscriberStatusBoard> {
+  const { transcribers, documents, wiring } = input;
+  const local = wiring.media.localTranscriber;
+  const board = new TranscriberStatusBoard({
+    transcribers,
+    kbWaiting: () => documents.status.queue().waiting,
+    canStartHere: local !== null,
+  });
+  await app.register(transcriberStatusRoutes({ board, local }));
+  return board;
 }
 
 /** Paired transcribers and the VM's token (ADR 0023). */
@@ -1068,13 +1094,11 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const publisher = trackPublisher(wiring, documents);
   const withDocuments = { ...wiring, documents };
   await registerPublication(app, { documents, media });
-  await registerTranscribers(app, { transcribers, media, wiring });
+  const setup = { transcribers, media, wiring, documents };
+  const statusBoard = await registerTranscribers(app, setup);
   await app.register(groqRoutes({ groq, media }));
-  await registerListening(app, withDocuments, {
-    media,
-    transcribers,
-    publisher,
-  });
+  const listeners = { media, transcribers, publisher };
+  await registerListening(app, withDocuments, listeners);
   const measures = await registerMeasures(app, { deps: wiring.media, media });
   await registerLibrary(app, { ...wiring, transcribers });
   await registerVoiceProfiles(app, { ...wiring, transcribers });
@@ -1086,7 +1110,9 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   });
   const { authors, media: deps } = wiring;
   const worker = { ...measures, media: deps, authors, transcribers, groq };
-  await registerWorker(app, { ...worker, publisher, documents, ...edited });
+  await registerWorker(app, {
+    ...{ ...worker, publisher, documents, ...edited, statusBoard },
+  });
   await registerMediaRoutes(app, { wiring, media, publisher, edited });
   startJanitor(app, { ...measures, ...edited, media: wiring.media, groq });
 }

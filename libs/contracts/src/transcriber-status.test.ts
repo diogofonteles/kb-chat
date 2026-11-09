@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  kbPublishJobSchema,
-  transcriberStatusReportSchema,
-} from './media.js';
+import { kbPublishJobSchema, transcriberStatusReportSchema } from './media.js';
 
 const RECORDING = '7d2f4a10-5c3e-4b8a-9f01-3a6e2b9c0d01';
 const TRACK = '7d2f4a10-5c3e-4b8a-9f01-3a6e2b9c0d11';

@@ -70,6 +70,14 @@ export { TermListService } from './term-list-service.js';
 export { termRoutes } from './term-routes.js';
 export { transcriberRoutes } from './transcriber-routes.js';
 export {
+  TranscriberStatusBoard,
+  type TranscriberStatusDeps,
+} from './transcriber-status.js';
+export {
+  transcriberStatusRoutes,
+  type TranscriberStatusRouteDeps,
+} from './transcriber-status-routes.js';
+export {
   TranscriptService,
   type Subtitles,
   type TranscriptServiceDeps,

@@ -1,4 +1,5 @@
 /** The app as main builds it, for the AI integration tests (KBC-022, KBC-023). */
+import type { LaunchctlRunner } from '../src/adapters/media/launchctl-local-transcriber.js';
 import { createMedia } from '../src/media-factory.js';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, readFile, readdir } from 'node:fs/promises';
@@ -112,6 +113,8 @@ export interface StartOptions {
   readonly state?: string;
   /** The media library on (KBC-034), under `<state>/media`, with MEDIA_WORKER_TOKEN. */
   readonly media?: boolean;
+  /** A fake `launchctl` for "Ligar transcritor" (KBC-114; with KB_CHAT_LOCAL_TRANSCRIBER=1). */
+  readonly launchctl?: LaunchctlRunner;
   /** Another vault than the fixture one (a copy with sub-collections, KBC-048). */
   readonly vault?: string;
   /** Settings on top of the test ones. */
@@ -279,7 +282,11 @@ function fakeProviders() {
 }
 
 /** The media library when on, with fresh keys and the fake Groq (KBC-037). */
-const testMedia = (config: AppConfig, groq: FakeGroq) =>
+const testMedia = (
+  config: AppConfig,
+  groq: FakeGroq,
+  launchctl: LaunchctlRunner = refuseLaunchctl,
+) =>
   createMedia(
     config,
     {
@@ -288,8 +295,12 @@ const testMedia = (config: AppConfig, groq: FakeGroq) =>
       consentKey: randomBytes(32),
       groqKey: randomBytes(32),
     },
-    { fetch: groq.fetch },
+    { fetch: groq.fetch, launchctl },
   );
+
+/** No test ever reaches the real launchctl (KBC-114). */
+const refuseLaunchctl: LaunchctlRunner = () =>
+  Promise.reject(new Error('the real launchctl is never run by a test'));
 
 /** The app over the built pieces, with the model the test asks for (KBC-099). */
 async function appOf(
@@ -309,7 +320,7 @@ async function appOf(
     config,
     ...core,
     ...rest,
-    media: await testMedia(config, groq),
+    media: await testMedia(config, groq, options.launchctl),
     ...(options.llm && { llm: options.llm }),
   });
 }

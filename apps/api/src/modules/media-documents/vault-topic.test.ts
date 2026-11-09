@@ -42,7 +42,10 @@ describe('the domain of a new vault topic (KBC-114 BR-4)', () => {
 
   it('falls back to geral in an empty vault', () => {
     expect(
-      domainOfTopic([{ slug: 'nova', title: 'Nova', screenOnly: true }], 'nova'),
+      domainOfTopic(
+        [{ slug: 'nova', title: 'Nova', screenOnly: true }],
+        'nova',
+      ),
     ).toBe('geral');
   });
 

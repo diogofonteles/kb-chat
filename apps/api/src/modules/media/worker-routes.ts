@@ -44,6 +44,8 @@ import type {
   WorkerIdentity,
 } from './transcriber-service.js';
 import type { SilenceService } from './silence-service.js';
+import type { TranscriberStatusBoard } from './transcriber-status.js';
+import { registerWorkerStatus } from './transcriber-status-routes.js';
 import type { TranscriptionService } from './transcription-service.js';
 import type { WaveformService } from './waveform-service.js';
 import type { VoicePrintService } from './voice-print-service.js';
@@ -78,6 +80,8 @@ export interface WorkerRoutesDeps {
   readonly kbResults?: KbResultReceiver;
   /** What the Mac reported of its syncs with production (KBC-100 FR-4). */
   readonly vaultSyncs?: VaultSyncReceiver;
+  /** Each paired transcriber's own status (KBC-114 FR-8). */
+  readonly statusBoard?: TranscriberStatusBoard;
 }
 
 /** Who keeps the Mac's sync reports: the track documents' side, outside this module. */
@@ -441,6 +445,7 @@ function registerCut(app: FastifyInstance, deps: WorkerRoutesDeps): void {
 function registerKbPublish(app: FastifyInstance, deps: WorkerRoutesDeps): void {
   registerKbResult(app, deps);
   registerVaultSync(app, deps);
+  if (deps.statusBoard) registerWorkerStatus(app, deps.statusBoard);
 }
 
 /** What kb did on the Mac to the documents a kb-publish job delivered (KBC-099 FR-2). */

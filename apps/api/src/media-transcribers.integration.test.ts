@@ -38,14 +38,14 @@ describe('TranscriberService (KBC-036)', () => {
     expect(service.identify('not-a-paired-token')).toBeNull();
   });
 
-  it('names a paired transcriber by its token, for transcriptions only', () => {
+  it('names a paired transcriber by its token, for transcriptions and track documents (KBC-114 AC-7)', () => {
     const { token, transcriber } = service.pair({
       name: 'Mac',
       pairedBy: 'owner',
     });
     expect(service.identify(token)).toEqual({
       leaseName: `transcriber:${transcriber.id}`,
-      kinds: ['transcribe'],
+      kinds: ['transcribe', 'kb-publish'],
     });
     expect(service.identify(`${token}x`)).toBeNull();
   });

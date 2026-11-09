@@ -1062,7 +1062,12 @@ export type TranscriberList = z.infer<typeof transcriberListSchema>;
 /* ---------- The transcriber's own status (KBC-114, ADR 0023 amendment 2026-11-09) ---------- */
 
 /** What a transcriber says it is doing; `offline` is the API's, when it stopped saying. */
-export const TRANSCRIBER_STATES = ['idle', 'working', 'waiting', 'error'] as const;
+export const TRANSCRIBER_STATES = [
+  'idle',
+  'working',
+  'waiting',
+  'error',
+] as const;
 export const transcriberStateSchema = z.enum(TRANSCRIBER_STATES);
 export type TranscriberState = z.infer<typeof transcriberStateSchema>;
 
