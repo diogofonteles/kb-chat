@@ -1,0 +1,244 @@
+:host {
+  display: block;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.levels {
+  display: grid;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-8);
+}
+
+.back {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  color: var(--color-accent-strong);
+  font-weight: 600;
+}
+
+.heading {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  overflow-wrap: anywhere;
+}
+
+.collection {
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  font-weight: normal;
+}
+
+.help,
+.empty,
+.notice p {
+  margin: 0;
+}
+
+.help {
+  color: var(--color-text-muted);
+}
+
+.notice,
+.banner {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow-wrap: anywhere;
+}
+
+.notice {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.banner {
+  border-left-color: var(--color-danger);
+}
+
+.scale {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: level;
+}
+
+.level {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.summary {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.pill {
+  flex: none;
+  max-width: 12ch;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-accent-strong);
+  border-radius: 999px;
+  color: var(--color-accent-strong);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.about {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.description {
+  overflow-wrap: anywhere;
+}
+
+.counts,
+.hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.hint {
+  margin: 0;
+}
+
+.new,
+.rename {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.new {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.new h3,
+.unassigned h3 {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  font-weight: 600;
+}
+
+input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--target);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: normal;
+}
+
+input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+.actions,
+.confirm-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.confirm {
+  flex-basis: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+button {
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.secondary {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.primary {
+  border: none;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.link {
+  padding: 0 var(--space-2);
+  border: none;
+  background: none;
+  color: var(--color-accent-strong);
+  text-decoration: underline;
+}
+
+.unassigned {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+}
+
+.unassigned p {
+  margin: 0;
+}
+
+.skeletons {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.skeleton {
+  height: 4rem;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}

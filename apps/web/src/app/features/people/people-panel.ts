@@ -21,6 +21,7 @@ import {
 } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import {
+  levelScalesSchema,
   topicListSchema,
   type InvitationPreset,
   type Person,
@@ -28,6 +29,7 @@ import {
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { topicsUrl } from '@core/api/kb-api.js';
+import { levelScalesUrl } from '@core/levels/levels-api.js';
 import { PeopleApi, type InviteSetup } from '@core/auth/auth-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { formatSpend } from '@core/spend/spend-store.js';
@@ -109,6 +111,13 @@ export class PeoplePanel {
     viewChildren<ElementRef<HTMLButtonElement>>('resendButton');
 
   protected readonly people = rxResource({ stream: () => this.api.list() });
+  /** The collections with access levels (KBC-103), for "Nível em <acervo>". */
+  private readonly levelScales = httpResource(() => levelScalesUrl(), {
+    parse: (body) => levelScalesSchema.parse(body),
+  });
+  protected readonly scales = computed(() =>
+    this.levelScales.hasValue() ? this.levelScales.value().items : [],
+  );
   /** The house default, to name each person's "Padrão" (KBC-022). */
   private readonly house = rxResource({
     stream: () => this.houseApi.houseDefault(),
@@ -506,10 +515,23 @@ export class PeoplePanel {
   protected topicNames(person: Person): string {
     if (person.role === 'master')
       return $localize`:@@people.allCollections:Todos os acervos`;
-    const names = person.topics.map((slug) => this.titles().get(slug) ?? slug);
+    // "Hermetismo · CI": the level in a collection with levels (T9, KBC-103).
+    const names = person.topics.map((slug) => {
+      const name = this.titles().get(slug) ?? slug;
+      const level = this.levelCodeOf(person, slug);
+      return level ? `${name} · ${level}` : name;
+    });
     return names.length > 0
       ? names.join(', ')
       : $localize`:@@people.noCollection:Nenhum acervo`;
+  }
+
+  /** Her level's code in a top-level collection with levels; the lowest when none is held. */
+  private levelCodeOf(person: Person, slug: string): string | null {
+    const scale = this.scales().find((one) => one.collection === slug);
+    if (!scale) return null;
+    const held = scale.levels.find((one) => one.id === person.levels[slug]);
+    return (held ?? scale.levels[0])?.code ?? null;
   }
 
   /** "IA: Plano da casa (sempre)": which app AI the master gave the person (KBC-022). */

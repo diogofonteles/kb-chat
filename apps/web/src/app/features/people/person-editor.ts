@@ -20,6 +20,7 @@ import {
   type AppAi,
   type Feature,
   type InviteProfile,
+  type LevelScales,
   type Person,
   type PersonUpdate,
   type Topic,
@@ -74,6 +75,8 @@ export class PersonEditor {
   readonly mayActAs = input(false);
   /** The owner looks: only it grants "Ver como" to a master (BR-1). */
   readonly ownerView = input(false);
+  /** The collections with access levels and their levels (KBC-103, T9). */
+  readonly scales = input<LevelScales['items']>([]);
   readonly changed = output<PersonUpdate>();
   /** A box of "Acervos" or "Funcionalidades": the panel builds the change when it goes out. */
   readonly toggled = output<Toggle>();
@@ -129,6 +132,42 @@ export class PersonEditor {
   protected readonly collections = computed(() =>
     collectionChoices(this.topics(), this.checkedTopics(), this.isMaster()),
   );
+
+  /**
+   * "Nível em <acervo>" for each collection with levels the person reaches (directly or
+   * through a sub-collection); absent or unknown is the lowest (KBC-103 BR-5).
+   */
+  protected readonly levelChoices = computed(() => {
+    const reached = this.checkedTopics();
+    const levels = this.person().levels;
+    return (
+      this.scales()
+        // By the tree the topics carry, never by the slug's text (ADR 0028).
+        .filter(({ collection }) =>
+          reached.some(
+            (slug) =>
+              slug === collection ||
+              this.topics().some(
+                (topic) => topic.slug === slug && topic.parent === collection,
+              ),
+          ),
+        )
+        .map(({ collection, levels: choices }) => ({
+          collection,
+          title:
+            this.topics().find((topic) => topic.slug === collection)?.title ??
+            collection,
+          choices,
+          current: choices.some((one) => one.id === levels[collection])
+            ? levels[collection]
+            : choices[0]?.id,
+        }))
+    );
+  });
+
+  protected chooseLevel(collection: string, level: string): void {
+    this.changed.emit({ levels: { [collection]: level } });
+  }
 
   /** Masters may give someone who sends another quota; the owner has none (KBC-035 BR-1). */
   protected readonly hasQuota = computed(

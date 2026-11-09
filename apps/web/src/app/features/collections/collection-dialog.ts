@@ -14,6 +14,7 @@ import {
   TOPIC_DESCRIPTION_MAX,
   TOPIC_TITLE_MAX,
   authorListSchema,
+  topicLevelsSchema,
   topicSlugOf,
   type Topic,
   type TopicUpdate,
@@ -21,6 +22,9 @@ import {
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { KbApi } from '@core/api/kb-api.js';
 import { authorsUrl } from '@core/media/authors-api.js';
+import { SessionStore } from '@core/auth/session-store.js';
+import { levelsPagePath, topicLevelsUrl } from '@core/levels/levels-api.js';
+import { RouterLink } from '@angular/router';
 import type { Observable } from 'rxjs';
 
 /** No parent: a top-level collection. */
@@ -37,6 +41,7 @@ const NO_AUTHOR = '';
  */
 @Component({
   selector: 'app-collection-dialog',
+  imports: [RouterLink],
   template: `
     <dialog
       #dialog
@@ -163,6 +168,27 @@ const NO_AUTHOR = '';
             }
           </div>
         }
+        @if (levelsTarget(); as target) {
+          <p class="levels-link">
+            @if (target.inherited) {
+              <ng-container i18n="@@collection.levelsInherited"
+                >Este sub-acervo usa os níveis de
+                <a [routerLink]="target.path" (click)="close()">{{
+                  target.title
+                }}</a
+                >.</ng-container
+              >
+            } @else {
+              <a
+                [routerLink]="target.path"
+                (click)="close()"
+                i18n="@@collection.levels"
+                >Níveis de acesso</a
+              >
+              <span class="hint-inline">{{ levelsSummary() }}</span>
+            }
+          </p>
+        }
         @if (!editing()) {
           <label class="field" for="collection-parent">
             <span i18n="@@collection.parent">Dentro de</span>
@@ -226,6 +252,7 @@ const NO_AUTHOR = '';
 })
 export class CollectionDialog {
   private readonly api = inject(KbApi);
+  private readonly session = inject(SessionStore);
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private readonly nameInput =
@@ -283,6 +310,42 @@ export class CollectionDialog {
       this.editing()?.mainAuthor?.name ??
       $localize`:@@collection.noMainAuthor:Nenhum`,
   );
+
+  /** T24 is the masters' (KBC-103): the scale of the collection being edited. */
+  protected readonly levels = httpResource(
+    () => {
+      const current = this.editing();
+      return current && this.session.me()?.levelsManager
+        ? topicLevelsUrl(current.slug)
+        : undefined;
+    },
+    { parse: (body) => topicLevelsSchema.parse(body) },
+  );
+  /** Where "Níveis de acesso" goes: this collection's page, or its parent's (BR-1). */
+  protected readonly levelsTarget = computed(() => {
+    const current = this.editing();
+    if (!current || !this.session.me()?.levelsManager) return null;
+    const parent = current.parent;
+    const title =
+      this.topics().find((topic) => topic.slug === parent)?.title ?? parent;
+    return parent === null
+      ? { inherited: false, path: levelsPagePath(current.slug), title: '' }
+      : { inherited: true, path: levelsPagePath(parent), title: title ?? '' };
+  });
+  /** "Sem níveis" or "5 níveis · 3 sem nível" (T5, screens.md T24). */
+  protected readonly levelsSummary = computed(() => {
+    if (!this.levels.hasValue()) return '';
+    const { levels, unassigned } = this.levels.value();
+    if (levels.length === 0)
+      return $localize`:@@collection.noLevels:Sem níveis`;
+    const count =
+      levels.length === 1
+        ? $localize`:@@collection.oneLevel:1 nível`
+        : $localize`:@@collection.levelCount:${levels.length}:count: níveis`;
+    return unassigned === 0
+      ? count
+      : $localize`:@@collection.levelsUnassigned:${count}:count: · ${unassigned}:unassigned: sem nível`;
+  });
 
   /** The address the collection gets (or keeps, when editing). */
   protected readonly address = computed(() => {

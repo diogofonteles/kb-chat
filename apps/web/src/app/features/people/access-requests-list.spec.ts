@@ -49,6 +49,7 @@ const approvedAna: Person = {
   invitedBy: 'owner@example.com',
   createdAt: '2026-10-25T10:05:00.000Z',
   lastLoginAt: null,
+  levels: {},
   ai: DEFAULT_PERSON_AI,
 };
 
@@ -73,6 +74,8 @@ async function renderAsMaster(requests: AccessRequest[]) {
   http.expectOne('/api/v1/spend/people').flush({ items: [] });
   http.expectOne('/api/v1/access-requests').flush({ items: requests });
   http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
+  // The collections with access levels (KBC-103): none here.
+  http.expectOne('/api/v1/levels').flush({ items: [] });
   await result.fixture.whenStable();
   return { ...result, http };
 }
