@@ -1,4 +1,5 @@
 <button
+  #chip
   type="button"
   class="chip"
   [attr.data-state]="state()"
@@ -10,7 +11,12 @@
   <span class="words">{{ text() }}</span>
 </button>
 
-<dialog #dialog class="dialog" [attr.aria-labelledby]="titleId">
+<dialog
+  #dialog
+  class="dialog"
+  [attr.aria-labelledby]="titleId"
+  (close)="backToChip()"
+>
   <h2 [id]="titleId">
     @if (item(); as current) {
       <ng-container i18n="@@transcriberStatus.title"

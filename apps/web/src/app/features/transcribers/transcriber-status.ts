@@ -101,6 +101,8 @@ export class TranscriberStatus {
   private readonly view = inject(DOCUMENT).defaultView;
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly chip =
+    viewChild.required<ElementRef<HTMLButtonElement>>('chip');
 
   /** One transcriber (a row of Transcritores); none: the one that publishes. */
   readonly transcriberId = input<string | null>(null);
@@ -158,6 +160,14 @@ export class TranscriberStatus {
 
   protected close(): void {
     this.dialog().nativeElement.close();
+  }
+
+  /**
+   * The focus goes back to the chip however the dialog closed (Esc, "Fechar"): Safari does
+   * not focus a button on a click, so the dialog alone would give it back elsewhere.
+   */
+  protected backToChip(): void {
+    this.chip().nativeElement.focus();
   }
 
   protected async copy(which: Command): Promise<void> {

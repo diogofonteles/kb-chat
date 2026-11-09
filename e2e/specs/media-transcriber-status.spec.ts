@@ -89,9 +89,16 @@ async function openCollection(page: Page, title: string): Promise<void> {
     name: 'Acervo',
     exact: true,
   });
-  const label = (await select.locator('option').allTextContents()).find(
-    (text) => text.trim().startsWith(title),
-  );
+  // The list comes with the page: wait for this test's collection in it.
+  let label: string | undefined;
+  await expect
+    .poll(async () => {
+      label = (await select.locator('option').allTextContents())
+        .map((text) => text.trim())
+        .find((text) => text.startsWith(title));
+      return label;
+    })
+    .toBeTruthy();
   if (!label) throw new Error(`no option for ${title}`);
   await select.selectOption({ label });
   if (!desktop(page)) await page.keyboard.press('Escape');
