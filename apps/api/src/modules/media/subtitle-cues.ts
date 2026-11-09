@@ -7,7 +7,7 @@ import type {
  * The subtitle rules of ADR 0023 §8, applied to the stored words (never to the raw JSON).
  * Bump the version whenever a rule changes: cached WebVTT is keyed by it and re-derived.
  */
-export const SUBTITLE_RULES_VERSION = 2;
+export const SUBTITLE_RULES_VERSION = 3;
 
 export const SUBTITLE_RULES = {
   /** A pause this long between two words starts a new cue. */
@@ -179,15 +179,18 @@ function spreadText(text: string, span: Span): SubtitleCue[] {
   });
 }
 
+/** A word a correction emptied (KBC-093 BR-2) says nothing: it makes no cue nor its time. */
 const cuesOfWords = (words: readonly TimedWord[]): SubtitleCue[] =>
-  groupWords(wordsFitting(words)).flatMap((group) => {
-    const first = group[0];
-    const last = group[group.length - 1];
-    if (!first || !last) return [];
-    return [
-      { startMs: first.startMs, endMs: last.endMs, text: joinWords(group) },
-    ];
-  });
+  groupWords(wordsFitting(words.filter((word) => word.text !== ''))).flatMap(
+    (group) => {
+      const first = group[0];
+      const last = group[group.length - 1];
+      if (!first || !last) return [];
+      return [
+        { startMs: first.startMs, endMs: last.endMs, text: joinWords(group) },
+      ];
+    },
+  );
 
 /**
  * The caption's lines: never more than 42 characters each. The cues are built to fit two
