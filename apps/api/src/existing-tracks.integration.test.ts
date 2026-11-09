@@ -230,6 +230,8 @@ describe('Transcrições pendentes, também nos acervos sem pasta no vault (KBC-
   it('counts tracks and recordings without tracks of a collection with no vault folder, and publishes them once', async () => {
     const { world, topic } = await screenCollection();
     const overview = await overviewOf(world);
+    // QA F-4: kb's estimated cost, as the notice shows it: 3 × US$ 0.001.
+    expect(overview.usdPerTrack * 3).toBeCloseTo(0.003, 6);
     expect(overview.collections.find((one) => one.topic === topic)).toEqual({
       topic,
       title: 'UDV nova',
