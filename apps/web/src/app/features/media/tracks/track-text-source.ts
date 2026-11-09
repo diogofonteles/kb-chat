@@ -96,6 +96,7 @@ function notDone(status: MediaItem['transcription']['status']) {
 const NO_TRANSCRIPT: MediaTranscript = {
   mediaId: '00000000-0000-4000-8000-000000000000',
   version: 1,
+  revision: 0,
   confidence: 'normal',
   segments: [],
 };

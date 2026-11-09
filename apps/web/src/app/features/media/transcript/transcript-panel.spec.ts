@@ -33,6 +33,7 @@ const transcriptOf = (
 ): MediaTranscript => ({
   mediaId: MEDIA,
   version: 1,
+  revision: 0,
   confidence: 'normal',
   segments: [
     { startMs: 0, endMs: 4_000, text: 'Existia um rei chamado Salomão.' },

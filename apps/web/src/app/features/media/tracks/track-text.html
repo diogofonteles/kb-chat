@@ -2,6 +2,27 @@
   <span class="caption" aria-hidden="true" i18n="@@trackText.caption"
     >Texto da faixa</span
   >
+  @if (canCorrect && state() === 'ready') {
+    <span class="tools">
+      <button
+        type="button"
+        class="switch"
+        [attr.aria-expanded]="searching()"
+        (click)="toggleSearch()"
+        i18n="@@trackText.findWord"
+      >
+        Procurar palavra
+      </button>
+      <button
+        type="button"
+        class="switch"
+        (click)="openHistory()"
+        i18n="@@trackText.corrections"
+      >
+        Correções ({{ corrections() }})
+      </button>
+    </span>
+  }
   @if (canSwitch()) {
     <button type="button" class="switch" (click)="switchView()">
       @if (whole()) {
@@ -14,8 +35,46 @@
     </button>
   }
 </div>
+@if (canCorrect && carry(); as carried) {
+  <p class="carry">
+    @if (carried.carried === 1) {
+      <ng-container i18n="@@trackText.carriedOne"
+        >1 correção reaplicada</ng-container
+      >
+    } @else {
+      <ng-container i18n="@@trackText.carried"
+        >{{ carried.carried }} correções reaplicadas</ng-container
+      >
+    }
+    @if (carried.notCarried === 1) {
+      <ng-container i18n="@@trackText.notCarriedOne"
+        >; 1 não coube na transcrição nova</ng-container
+      >
+    } @else if (carried.notCarried > 1) {
+      <ng-container i18n="@@trackText.notCarried"
+        >; {{ carried.notCarried }} não couberam na transcrição
+        nova</ng-container
+      >
+    }
+    ·
+    <button
+      type="button"
+      class="link"
+      (click)="openHistory()"
+      i18n="@@trackText.seeCarry"
+    >
+      Ver
+    </button>
+  </p>
+}
+@if (canCorrect && searching() && state() === 'ready') {
+  <app-word-search [lines]="lines()" (chosen)="chosenHit($event)" />
+}
 <!-- Outside the region: it is busy while retrying, and a busy region may stay silent. -->
 <p class="visually-hidden" role="status">{{ announcement() }}</p>
+@if (canCorrect) {
+  <p class="visually-hidden" role="status">{{ desk.announcement() }}</p>
+}
 <div
   #body
   class="body"
@@ -24,8 +83,10 @@
   [attr.aria-label]="label()"
   [attr.aria-busy]="state() === 'loading' || retrying() ? 'true' : null"
   [attr.tabindex]="state() === 'ready' ? 0 : null"
+  [class.correctable]="canCorrect"
   (keydown)="scrolledByKey($event)"
   (pointerdown)="pressed($event)"
+  (click)="clickedText($event)"
 >
   @switch (state()) {
     @case ('ready') {
@@ -100,3 +161,32 @@
     }
   }
 </div>
+@if (canCorrect) {
+  @if (desk.selection()) {
+    <app-word-correction (closed)="refocus()" />
+  }
+  @if (desk.notice(); as notice) {
+    <p class="notice">
+      {{ notice.text }}
+      @if (notice.undo) {
+        <button
+          type="button"
+          class="link"
+          (click)="notice.undo()"
+          i18n="@@trackText.undo"
+        >
+          Desfazer
+        </button>
+      }
+    </p>
+  }
+  @if (desk.correctingAll(); as text) {
+    <app-correct-all [find]="text" [window]="span()" (closed)="refocus()" />
+  }
+  @if (historyOpen()) {
+    <app-correction-history
+      (closed)="historyOpen.set(false)"
+      (fixHere)="fixHere($event)"
+    />
+  }
+}

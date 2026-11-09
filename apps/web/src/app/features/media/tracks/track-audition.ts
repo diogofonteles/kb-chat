@@ -29,6 +29,8 @@ export class TrackAudition {
   private readonly position = signal<number | null>(null);
   private readonly key = signal<string | null>(null);
   private readonly failure = signal(false);
+  /** Where a word click left the paused audio (KBC-093 BR-17); the next "Ouvir" starts there. */
+  private readonly cue = signal<number | null>(null);
 
   /** Where the cursor is while something plays; null otherwise. */
   readonly positionMs = this.position.asReadonly();
@@ -37,6 +39,7 @@ export class TrackAudition {
   readonly playingKey = this.key.asReadonly();
   /** It could not play (a network error, a browser refusal): the page says so. */
   readonly failed = this.failure.asReadonly();
+  readonly cuedMs = this.cue.asReadonly();
 
   /** The element in the page's template. */
   attach(element: HTMLMediaElement): void {
@@ -46,9 +49,23 @@ export class TrackAudition {
     element.addEventListener('pause', this.finished);
   }
 
-  play(range: AuditionRange, key: string | null = null): void {
+  /**
+   * `fromCue`: a whole track starts where a word click left the audio, when that is inside
+   * it (KBC-093 AC-41).
+   */
+  play(
+    asked: AuditionRange,
+    key: string | null = null,
+    options: { readonly fromCue?: boolean } = {},
+  ): void {
     const { element } = this;
     if (!element) return;
+    const cue = this.cue();
+    this.cue.set(null);
+    const range =
+      options.fromCue && cue !== null && cue >= asked.fromMs && cue < asked.toMs
+        ? { ...asked, fromMs: cue }
+        : asked;
     this.failure.set(false);
     this.range = range;
     this.key.set(key);
@@ -58,6 +75,25 @@ export class TrackAudition {
       this.failure.set(true);
       this.finished();
     });
+  }
+
+  /**
+   * A word chosen in the text (KBC-093 BR-17, FR-14): the audio goes to its start and keeps
+   * its state. Playing, it goes on from there (up to `untilMs` at least); paused, it waits
+   * there for the next play.
+   */
+  seek(ms: number, untilMs: number): void {
+    const { element, range } = this;
+    if (!element) return;
+    if (range && this.playing()) {
+      this.range = { fromMs: ms, toMs: Math.max(range.toMs, untilMs) };
+      element.currentTime = ms / 1000;
+      this.position.set(ms);
+      return;
+    }
+    this.cue.set(ms);
+    if (element.readyState >= HTMLMediaElement.HAVE_METADATA)
+      element.currentTime = ms / 1000;
   }
 
   /** Before the metadata there is nothing to seek in, as in the player's own engine. */

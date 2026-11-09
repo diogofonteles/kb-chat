@@ -20,6 +20,7 @@ const transcript = (
 ): MediaTranscript => ({
   mediaId: '22222222-2222-4222-8222-222222222222',
   version: 1,
+  revision: 0,
   confidence: 'normal',
   segments: voices.map((voice, index) => ({
     startMs: index * 1000,
@@ -98,6 +99,7 @@ describe('speakerChanges (KBC-065 FR-4, BR-6)', () => {
     const read: MediaTranscript = {
       mediaId: '22222222-2222-4222-8222-222222222222',
       version: 1,
+      revision: 0,
       confidence: 'normal',
       segments: [{ startMs: 0, endMs: 900, text: 'a' }],
     };

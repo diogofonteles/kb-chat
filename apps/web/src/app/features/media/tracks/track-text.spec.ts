@@ -12,6 +12,7 @@ import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import type { MediaTranscript, MediaTranscriptWords } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
+import { SessionStore } from '@core/auth/session-store.js';
 import { SEARCH_HIGHLIGHTS } from '../transcript/search-highlights.js';
 import { TrackAudition } from './track-audition.js';
 import { TrackText } from './track-text.js';
@@ -49,6 +50,7 @@ function transcriptOf(
     transcript: {
       mediaId: MEDIA,
       version,
+      revision: 0,
       confidence: 'normal',
       segments: lines.map(([at, text]) => ({
         startMs: at * 1000,
@@ -56,7 +58,7 @@ function transcriptOf(
         text,
       })),
     },
-    words: { mediaId: MEDIA, version, words },
+    words: { mediaId: MEDIA, version, revision: 0, words },
   };
 }
 
@@ -82,6 +84,8 @@ async function renderText({ target, paints = true }: Setup = {}) {
       provideHttpClientTesting(),
       TrackTextSource,
       { provide: TrackAudition, useValue: { positionMs: position } },
+      // Correcting words is KBC-093's (track-text-corrections.spec.ts).
+      { provide: SessionStore, useValue: { can: () => false } },
       {
         provide: SEARCH_HIGHLIGHTS,
         useValue: {

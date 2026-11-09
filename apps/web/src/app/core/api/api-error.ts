@@ -150,6 +150,12 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.planRefused:Uma das opções escolhidas não está disponível. Confira as opções e tente de novo.`,
   TRACKS_INVALID: () =>
     $localize`:@@error.tracksInvalid:Há faixas com problema. Corrija e tente de novo.`,
+  CORRECTION_CONFLICT: () =>
+    $localize`:@@error.correctionConflict:Esta palavra mudou enquanto você corrigia. Confira o texto.`,
+  TRANSCRIPT_CHANGED: () =>
+    $localize`:@@error.transcriptChanged:A transcrição foi refeita. Confira a palavra no texto novo.`,
+  CORRECTION_INVALID: () =>
+    $localize`:@@error.correctionInvalid:Use até 80 caracteres, numa linha só.`,
   GROQ_UNAVAILABLE: () =>
     $localize`:@@error.groqUnavailable:O Groq não está ligado ou está sem chave. Veja "Groq de reserva" nas Configurações.`,
   TERMS_OVER_LIMIT: () =>
