@@ -116,12 +116,29 @@ export async function historyOf(
 }
 
 /** The spoken hits of a search in `hermetismo`: media, start and text. */
+/**
+ * The passages said with the words: "Na fala", and those a track's card took over when its
+ * document matched too (KBC-101 BR-8: one card per track).
+ */
 export async function spokenHits(call: Call, q: string) {
   const found = await call('POST', '/api/v1/topics/hermetismo/searches', { q });
   expect(found.statusCode, found.body).toBe(200);
-  return found
-    .json<SearchResponse>()
-    .media.map(({ mediaId, startMs, text }) => ({ mediaId, startMs, text }));
+  const { items, media } = found.json<SearchResponse>();
+  const onCards = items.flatMap(({ media: track }) =>
+    track?.spoken
+      ? [
+          {
+            mediaId: track.mediaId,
+            startMs: track.startMs,
+            text: track.spoken.text,
+          },
+        ]
+      : [],
+  );
+  return [
+    ...onCards,
+    ...media.map(({ mediaId, startMs, text }) => ({ mediaId, startMs, text })),
+  ];
 }
 
 /** Rows of the media database, read apart from the app. */
