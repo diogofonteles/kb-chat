@@ -86,7 +86,7 @@ def run(args: argparse.Namespace) -> int:
     from .api import ApiClient
     from .audio import decode_pcm16k, ffmpeg_bin
     from .diarize import senko_or_none
-    from .status import StatusReporter, WorkerStatus
+    from .status import StatusReporter
     from .vad import silero_speech
     from .voiceprint import ecapa_or_none
     from .worker import Worker
@@ -109,10 +109,7 @@ def run(args: argparse.Namespace) -> int:
     vault = os.environ.get("KB_CHAT_VAULT") or config.get("vault_path")
     publisher = publisher_of(args, vault)
     kb = publisher.kb if publisher else None
-    status = WorkerStatus(
-        vault_path=str(publisher.vault) if publisher else None,
-        kb_version=getattr(publisher.kb, "version", lambda: None)() if publisher else None,
-    )
+    status = status_of(publisher)
     reporter = StatusReporter(api)
     announce_preparing(status, reporter)
     model, count = _mlx()
@@ -149,6 +146,17 @@ PREPARING = (
     "preparando o transcritor: carregando os modelos e os componentes de separar vozes "
     "e de perfis de voz (na primeira vez, o uv os instala sozinho)"
 )
+
+
+def status_of(publisher):
+    """What this Mac reports before its models load: its kinds are not known yet, so they go
+    empty, which the API reads as unknown (review r2 N-1); the Worker fills them in."""
+    from .status import WorkerStatus
+
+    return WorkerStatus(
+        vault_path=str(publisher.vault) if publisher else None,
+        kb_version=getattr(publisher.kb, "version", lambda: None)() if publisher else None,
+    )
 
 
 def announce_preparing(status, reporter) -> None:

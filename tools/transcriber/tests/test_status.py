@@ -190,11 +190,14 @@ class RecordingApi:
 def test_while_it_loads_its_models_and_extras_it_says_it_is_getting_ready():
     """The owner never runs a command: while `uv run` has just installed the extras and the
     models load, the app reads "preparando" instead of an off transcriber."""
-    from transcriber.cli import announce_preparing
+    from transcriber.cli import announce_preparing, status_of
 
     api = RecordingApi()
-    status = WorkerStatus(kinds=("transcribe",))
+    # Built exactly as `cli.run` builds it (review r2 N-1): its kinds are not known yet.
+    status = status_of(None)
     announce_preparing(status, StatusReporter(api))
     assert api.reports[-1]["state"] == "waiting"
     assert "preparando" in api.reports[-1]["detail"]
     assert "perfis de voz" in api.reports[-1]["detail"]
+    # Empty means "not known yet": the API restricts nothing by it (it is not "does nothing").
+    assert api.reports[-1]["kinds"] == []
