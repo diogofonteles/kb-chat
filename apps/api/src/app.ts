@@ -348,6 +348,7 @@ const trackShelf = (media: MediaDeps) => () =>
     transcripts: media.transcripts,
     hasTracks: (recordingId) => media.documents.hasTracks(recordingId),
     desiredOf: (mediaId) => media.documents.desiredFingerprint(mediaId),
+    rowsOf: (topic) => media.documents.shelfRows(topic),
   });
 
 /** The tracks a research turn may see (KBC-099), with the media library on. */

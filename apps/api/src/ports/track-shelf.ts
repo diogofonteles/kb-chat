@@ -19,6 +19,18 @@ export interface ShelfTrack {
   readonly stale?: boolean;
 }
 
+/** One media of a collection as the shelf needs it, read with all the others at once. */
+export interface ShelfRow {
+  readonly id: string;
+  readonly title: string;
+  /** Ready and not archived. */
+  readonly live: boolean;
+  /** A track (cut from a recording), not a recording. */
+  readonly isTrack: boolean;
+  /** The current transcript's confidence; null without a transcript. */
+  readonly confidence: TranscriptConfidence | null;
+}
+
 /** One segment of a track's current transcript, on the track's clock. */
 export interface ShelfSegment {
   readonly startMs: number;

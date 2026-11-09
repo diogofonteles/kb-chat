@@ -1,12 +1,19 @@
 import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
 import type {
   ShelfQuery,
+  ShelfRow,
   ShelfSegment,
   ShelfTrack,
   TrackShelf,
 } from '../../ports/track-shelf.js';
 import type { TranscriptStorePort } from '../../ports/transcript-store.js';
 import { isMediaDocument } from './document-source.js';
+
+/**
+ * Lookups in one collection after which the shelf reads the whole collection at once: a
+ * search that matched thousands of track documents asks one query, not thousands (NFR-3).
+ */
+export const SHELF_BULK_AFTER = 32;
 
 export interface MediaTrackShelfDeps {
   readonly store: Pick<MediaStorePort, 'getMedia'>;
@@ -18,6 +25,8 @@ export interface MediaTrackShelfDeps {
   readonly hasTracks?: (recordingId: string) => boolean;
   /** The fingerprint media.db wants now (KBC-100); without it, nothing is "atualizando". */
   readonly desiredOf?: (mediaId: string) => string | null;
+  /** Every media of a collection at once (see SHELF_BULK_AFTER); without it, one by one. */
+  readonly rowsOf?: (topic: string) => ReadonlyMap<string, ShelfRow>;
 }
 
 /**
@@ -28,6 +37,8 @@ export interface MediaTrackShelfDeps {
 export class MediaTrackShelf implements TrackShelf {
   private readonly tracks = new Map<string, ShelfTrack | null>();
   private readonly segments = new Map<string, readonly ShelfSegment[]>();
+  private readonly asked = new Map<string, number>();
+  private readonly rows = new Map<string, ReadonlyMap<string, ShelfRow>>();
 
   constructor(private readonly deps: MediaTrackShelfDeps) {}
 
@@ -37,24 +48,57 @@ export class MediaTrackShelf implements TrackShelf {
     return this.tracks.get(key) ?? null;
   }
 
-  private read(
-    topic: string,
-    { mediaId, fingerprint }: ShelfQuery,
-  ): ShelfTrack | null {
-    const media = this.deps.store.getMedia(mediaId);
-    if (!this.isDocument(media) || media.topic !== topic) return null;
-    const [current] = this.deps.transcripts.transcripts(mediaId);
-    if (!current) return null;
-    const desired = this.deps.desiredOf?.(mediaId) ?? null;
+  private read(topic: string, query: ShelfQuery): ShelfTrack | null {
+    const rows = this.rowsIn(topic);
+    const found = rows
+      ? this.fromRow(rows, query)
+      : this.fromStore(topic, query);
+    if (!found) return null;
+    const desired = this.deps.desiredOf?.(query.mediaId) ?? null;
+    const { fingerprint } = query;
     return {
-      mediaId,
-      title: media.title,
-      confidence: current.confidence,
+      ...found,
       stale:
         fingerprint !== undefined &&
         desired !== null &&
         desired !== fingerprint,
     };
+  }
+
+  /** The collection's rows, read once it has been asked about often enough. */
+  private rowsIn(topic: string): ReadonlyMap<string, ShelfRow> | undefined {
+    const { rowsOf } = this.deps;
+    if (!rowsOf) return undefined;
+    const known = this.rows.get(topic);
+    if (known) return known;
+    const asked = (this.asked.get(topic) ?? 0) + 1;
+    this.asked.set(topic, asked);
+    if (asked <= SHELF_BULK_AFTER) return undefined;
+    const rows = rowsOf(topic);
+    this.rows.set(topic, rows);
+    return rows;
+  }
+
+  private fromRow(
+    rows: ReadonlyMap<string, ShelfRow>,
+    { mediaId }: ShelfQuery,
+  ): Omit<ShelfTrack, 'stale'> | null {
+    const row = rows.get(mediaId);
+    if (!row?.live || row.confidence === null) return null;
+    // A live recording counts only while it never had a track (KBC-100 FR-7).
+    if (!row.isTrack && (this.deps.hasTracks?.(mediaId) ?? true)) return null;
+    return { mediaId, title: row.title, confidence: row.confidence };
+  }
+
+  private fromStore(
+    topic: string,
+    { mediaId }: ShelfQuery,
+  ): Omit<ShelfTrack, 'stale'> | null {
+    const media = this.deps.store.getMedia(mediaId);
+    if (!this.isDocument(media) || media.topic !== topic) return null;
+    const [current] = this.deps.transcripts.transcripts(mediaId);
+    if (!current) return null;
+    return { mediaId, title: media.title, confidence: current.confidence };
   }
 
   /** A published track, or a live recording that never had one (ADR 0035 §1). */

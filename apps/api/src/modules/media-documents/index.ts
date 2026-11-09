@@ -26,7 +26,11 @@ export {
   trackDocumentPath,
   type TrackDocumentInput,
 } from './track-document.js';
-export { MediaTrackShelf, type MediaTrackShelfDeps } from './track-shelf.js';
+export {
+  MediaTrackShelf,
+  SHELF_BULK_AFTER,
+  type MediaTrackShelfDeps,
+} from './track-shelf.js';
 export {
   collectionOf,
   domainOfTopic,
