@@ -199,4 +199,28 @@ describe('TrackAudition (KBC-066 FR-5)', () => {
       expect(media.element.currentTime).toBe(72);
     });
   });
+
+  it('plays on a new element the page renders, and stops the one it let go', async () => {
+    const { audition, media } = setup();
+    audition.play({ fromMs: 0, toMs: 5_000 }, 't1:track');
+    await Promise.resolve();
+    const fresh = fakeMediaElement('audio');
+    audition.attach(fresh.element);
+    expect(media.calls).toContain('pause');
+    expect(audition.playing()).toBe(false);
+
+    audition.play({ fromMs: 0, toMs: 5_000 }, 't2:track');
+    expect(fresh.calls).toContain('play');
+    media.emit('pause');
+    expect(audition.playingKey()).toBe('t2:track');
+  });
+
+  it('says it cannot play once its element left the page', () => {
+    const { audition, media } = setup();
+    audition.detach(media.element);
+    audition.play({ fromMs: 0, toMs: 5_000 });
+    expect(media.calls).not.toContain('play');
+    expect(audition.playing()).toBe(false);
+    expect(audition.failed()).toBe(true);
+  });
 });

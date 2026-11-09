@@ -9,7 +9,7 @@ import { Title } from '@angular/platform-browser';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { screen } from '@testing-library/angular';
-import type { MediaPreparation } from '@kb-chat/contracts';
+import type { MediaItem, MediaPreparation } from '@kb-chat/contracts';
 import { aMediaItem, sessionAs } from '../../../testing/media-fixtures.js';
 import {
   MEDIA_ID,
@@ -121,6 +121,24 @@ async function nextRead(
 ) {
   for (let tick = 0; tick < 40; tick++) {
     const reads = http.match(URL);
+    if (reads.length > 0) {
+      reads.forEach((one) => one.flush(body));
+      await settle(harness);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  throw new Error('no read came');
+}
+
+/** Waits for the next read of the audio itself and answers it. */
+async function nextItem(
+  harness: RouterTestingHarness,
+  http: HttpTestingController,
+  body: MediaItem,
+) {
+  for (let tick = 0; tick < 40; tick++) {
+    const reads = http.match(ITEM);
     if (reads.length > 0) {
       reads.forEach((one) => one.flush(body));
       await settle(harness);
@@ -310,6 +328,32 @@ describe('PreparationPage (T20, step 2)', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'Não consegui tocar este trecho',
     );
+  });
+
+  it('plays a track once an audio that was converting is ready (UP-11)', async () => {
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockResolvedValue(undefined);
+    configure();
+    const harness = await RouterTestingHarness.create(
+      `/midia/${MEDIA_ID}/preparar`,
+    );
+    const http = TestBed.inject(HttpTestingController);
+    await pause();
+    http
+      .expectOne(ITEM)
+      .flush(aMediaItem({ id: MEDIA_ID, status: 'processing' }));
+    answer(http, aPreparation({ stages: [], tracks: [aTrack(1)] }));
+    await settle(harness);
+    expect(document.querySelector('audio')).toBeNull();
+
+    await nextItem(harness, http, aMediaItem({ id: MEDIA_ID }));
+    screen.getByRole('button', { name: 'Ouvir a faixa 1' }).click();
+    await settle(harness);
+    expect(play).toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', { name: 'Parar a faixa 1' }),
+    ).toBeTruthy();
   });
 
   it('offers "Validar faixas" and does not move by itself; the press goes to step 3 (AC-8)', async () => {

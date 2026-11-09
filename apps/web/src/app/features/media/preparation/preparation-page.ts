@@ -19,7 +19,11 @@ import {
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { mediaItemSchema, type RetryStage } from '@kb-chat/contracts';
+import {
+  mediaItemSchema,
+  type MediaStatus,
+  type RetryStage,
+} from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { mediaPagePath, mediaUrl } from '@core/media/media-api.js';
 import { editPagePath } from '@core/media/media-edit-api.js';
@@ -39,7 +43,14 @@ import { PreparationStageList } from './preparation-stages.js';
 import { PreparationSteps, stepTitle } from './preparation-steps.js';
 import { PreparationTracks } from './preparation-tracks.js';
 import { PreparationVoices } from './preparation-voices.js';
-import { PreparationWatch } from './preparation-watch.js';
+import { PREPARATION_POLL_MS, PreparationWatch } from './preparation-watch.js';
+
+/** Sent a moment ago, the audio is still on its way to playable. */
+const CONVERTING: ReadonlySet<MediaStatus> = new Set([
+  'uploading',
+  'queued',
+  'processing',
+]);
 
 /** "Processamento concluído: 12 faixas propostas, 3 vozes." */
 function concludedText({ tracks, voices }: MediaPreparation): string {
@@ -151,10 +162,25 @@ export class PreparationPage {
           `${stepTitle(this.step())} — ${preparation.title}`,
         );
     });
-    this.onceRendered(this.audio, (element) => this.audition.attach(element));
+    this.followConversion();
+    this.audition.followElement(this.audio);
     // Arriving is the one time the focus moves: on to the step's title.
     this.onceRendered(this.heading, (element) => element.focus());
     this.destroyRef.onDestroy(() => this.audition.stop());
+  }
+
+  /**
+   * Arriving right after "Enviar", the audio is still converting and there is nothing to
+   * listen to yet: it is read again until it plays (or fails), so "Ouvir" plays then.
+   */
+  private followConversion(): void {
+    const pollMs = inject(PREPARATION_POLL_MS);
+    effect((onCleanup) => {
+      if (!this.item.hasValue() || !CONVERTING.has(this.item.value().status))
+        return;
+      const timer = setTimeout(() => this.item.reload(), pollMs);
+      onCleanup(() => clearTimeout(timer));
+    });
   }
 
   /** The tracks' text (KBC-092): a transcription that ends reads the transcript again. */

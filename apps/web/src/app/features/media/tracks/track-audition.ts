@@ -1,4 +1,11 @@
-import { Injectable, computed, signal } from '@angular/core';
+import {
+  ElementRef,
+  Injectable,
+  afterRenderEffect,
+  computed,
+  signal,
+  type Signal,
+} from '@angular/core';
 
 /** What was asked to play. */
 export interface AuditionRange {
@@ -41,17 +48,46 @@ export class TrackAudition {
   readonly failed = this.failure.asReadonly();
   readonly cuedMs = this.cue.asReadonly();
 
-  /** The element in the page's template. */
+  /**
+   * Follows the page's element (in an injection context): rendered late, rendered anew or
+   * gone, the audition plays on the one the page shows.
+   */
+  followElement(query: Signal<ElementRef<HTMLMediaElement> | undefined>): void {
+    afterRenderEffect((onCleanup) => {
+      const element = query()?.nativeElement;
+      if (!element) return;
+      this.attach(element);
+      onCleanup(() => this.detach(element));
+    });
+  }
+
+  /**
+   * The element in the page's template, each time it is there: a template that renders it
+   * late, or anew, hands over the new one, and the old one stops and is let go.
+   */
   attach(element: HTMLMediaElement): void {
+    if (this.element === element) return;
+    if (this.element) this.detach(this.element);
     this.element = element;
     element.addEventListener('timeupdate', this.check);
     element.addEventListener('ended', this.stop);
     element.addEventListener('pause', this.finished);
   }
 
+  /** The element left the page: an element out of the page would still play. */
+  detach(element: HTMLMediaElement): void {
+    if (this.element !== element) return;
+    this.stop();
+    element.removeEventListener('timeupdate', this.check);
+    element.removeEventListener('ended', this.stop);
+    element.removeEventListener('pause', this.finished);
+    this.element = null;
+  }
+
   /**
    * `fromCue`: a whole track starts where a word click left the audio, when that is inside
-   * it (KBC-093 AC-41).
+   * it (KBC-093 AC-41). With no element (the audio is not playable yet), it says so
+   * instead of doing nothing.
    */
   play(
     asked: AuditionRange,
@@ -59,6 +95,7 @@ export class TrackAudition {
     options: { readonly fromCue?: boolean } = {},
   ): void {
     const { element } = this;
+    this.failure.set(element === null);
     if (!element) return;
     const cue = this.cue();
     this.cue.set(null);
@@ -66,7 +103,6 @@ export class TrackAudition {
       options.fromCue && cue !== null && cue >= asked.fromMs && cue < asked.toMs
         ? { ...asked, fromMs: cue }
         : asked;
-    this.failure.set(false);
     this.range = range;
     this.key.set(key);
     this.seekTo(element, range);

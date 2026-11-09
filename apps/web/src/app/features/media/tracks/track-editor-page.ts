@@ -10,7 +10,6 @@ import {
   DestroyRef,
   ElementRef,
   afterNextRender,
-  afterRenderEffect,
   computed,
   effect,
   Injector,
@@ -499,11 +498,8 @@ export class TrackEditorPage {
         takeUntilDestroyed(),
       )
       .subscribe((id) => this.draft.open(id));
-    // The audio element arrives with the content, once.
-    afterRenderEffect(() => {
-      const element = this.audio()?.nativeElement;
-      if (element) this.audition.attach(element);
-    });
+    // The audio element arrives with the content, and anew if the content does.
+    this.audition.followElement(this.audio);
     this.destroyRef.onDestroy(() => {
       this.audition.stop();
       if (this.noticeTimer !== null) clearTimeout(this.noticeTimer);
