@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
@@ -26,6 +26,7 @@ const FAKE_KB_FACETS = [
 /** Writes (or removes) one job's documents in the vault, as the Mac does, with fixed facets. */
 async function writeDocuments(vault: string, job: KbPublishJob): Promise<void> {
   const folder = resolve(vault, job.topic);
+  await scaffoldTopic(folder, job);
   for (const item of job.items) {
     const file = resolve(folder, item.path);
     if (!file.startsWith(folder + sep)) throw new Error(`unsafe ${item.path}`);
@@ -40,6 +41,19 @@ async function writeDocuments(vault: string, job: KbPublishJob): Promise<void> {
     );
     await writeFile(file, classified, 'utf8');
   }
+}
+
+/** `kb topic new`, as the Mac runs it for a collection with no vault folder (KBC-114). */
+async function scaffoldTopic(folder: string, job: KbPublishJob): Promise<void> {
+  const yaml = join(folder, 'topic.yaml');
+  const exists = await stat(yaml).then(
+    () => true,
+    () => false,
+  );
+  if (exists || !job.collection) return;
+  await mkdir(folder, { recursive: true });
+  const { title, domain } = job.collection;
+  await writeFile(yaml, `title: ${title}\ndomain: ${domain}\n`, 'utf8');
 }
 
 const resultOf = (job: KbPublishJob): CompleteKbPublishRequest => ({
@@ -88,8 +102,8 @@ export function registerKbPublishMac(
 }
 
 /**
- * A collection created on the screen given its folder in the E2E vault, as the owner does
- * with kb on the Mac (KBC-100 AC-12: without one, nothing of the app is published there).
+ * A collection created on the screen given its folder in the E2E vault, as the owner did
+ * with kb on the Mac before KBC-114 (the Mac now makes it with the first job).
  */
 function registerFolder(
   app: FastifyInstance,
