@@ -33,6 +33,7 @@ export class TurnResearchTools implements ResearchToolsPort {
       book: this.book,
       topicTitle: this.tools.topicTitle(this.topic) ?? this.topic,
       mainAuthor: this.tools.mainAuthor(this.topic),
+      ...(this.tracks && { tracks: this.tracks }),
     };
   }
 

@@ -39,6 +39,7 @@ import {
 } from './sweep-prompts.js';
 import type { SweepBatch, SweepLayout, SweepPlanner } from './sweep-planner.js';
 import { Slots } from './slots.js';
+import { placeTrackFindings } from './track-findings.js';
 
 export { SWEEP_PACE, type SweepClock } from './sweep-pacing.js';
 
@@ -189,7 +190,7 @@ class SweepRun {
   private async batch(batch: SweepBatch): Promise<void> {
     if (!(await this.mayStart())) return;
     const { request } = this;
-    const { text, labels } = await this.deps.sweeps.batchText(
+    const { text, labels, shown } = await this.deps.sweeps.batchText(
       request.topic,
       batch,
     );
@@ -202,6 +203,7 @@ class SweepRun {
     if (output === null || request.signal.aborted) return;
     const found = parseFindings(output, labels);
     this.findings.addFound(found);
+    placeTrackFindings(found, { book: request.book, labels, shown });
     this.done[batch.index] = true;
     this.deps.emit(this.progress(found));
   }
@@ -431,7 +433,11 @@ const linesAsItems = (lines: readonly string[]) =>
       : [];
   });
 
-/** The carried findings of documents in this set; any other id is dropped (never trusted). */
+/**
+ * The carried findings of documents in this set; any other id is dropped (never trusted).
+ * A covered document is not read again, so its findings come once (code review 2 of
+ * KBC-101); one stopped halfway is read again whole, as before (KBC-030 QA F-1).
+ */
 function carriedItems({ layout, carried = [] }: SweepRequest): FoundItem[] {
   const byId = new Map(layout.docs.map((doc) => [doc.entry.id, doc.entry]));
   return carried.flatMap(({ id, text }) => {

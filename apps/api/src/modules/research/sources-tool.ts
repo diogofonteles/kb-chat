@@ -111,10 +111,11 @@ export class SourcesTool {
     args: SourcesArgs,
     labels: AuthorshipLabels,
   ): string {
-    const catalog = this.catalog.get(context.topic);
-    if (!catalog) return 'O acervo deste tópico não está disponível.';
+    // The collection and its sub-collections (KBC-101 FR-5).
+    const view = this.catalog.scopeView(context.topic);
+    if (!view) return 'O acervo deste tópico não está disponível.';
     // A track only counts for whom it may be researched (KBC-099 BR-4).
-    const all = [...catalog.entries.values()].filter((entry) =>
+    const all = [...view.entries.values()].filter((entry) =>
       isVisible(entry, context),
     );
     const entries = args.authorship

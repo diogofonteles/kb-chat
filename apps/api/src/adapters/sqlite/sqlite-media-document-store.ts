@@ -1,4 +1,5 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
+import { transcriptConfidenceSchema } from '@kb-chat/contracts';
 import { z } from 'zod';
 import type {
   DeliveredDocument,
@@ -14,6 +15,7 @@ import type {
   VaultSyncRecord,
 } from '../../ports/media-document-store.js';
 import type { LeaseOwner } from '../../ports/media-store.js';
+import type { ShelfRow } from '../../ports/track-shelf.js';
 import { inTransaction } from './media-database.js';
 
 /** Jobs leased before KBC-100 delivered writes only, with no `op`. */
@@ -66,6 +68,10 @@ const heldArgs = (owner: LeaseOwner) =>
 
 /** `media_documents` and `kb_publish_jobs` (migration 26, ADR 0035 §3-4). */
 export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
+  private anyTrack: StatementSync | undefined;
+  private desired: StatementSync | undefined;
+  private shelf: StatementSync | undefined;
+
   constructor(private readonly db: DatabaseSync) {}
 
   desire(document: DesiredDocument): boolean {
@@ -207,11 +213,11 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
   }
 
   hasTracks(recordingId: string): boolean {
-    return (
-      this.db
-        .prepare('SELECT 1 FROM media WHERE parent_media_id = ? LIMIT 1')
-        .get(recordingId) !== undefined
+    // Asked once per track document a search or a topic list checks: prepared once.
+    this.anyTrack ??= this.db.prepare(
+      'SELECT 1 FROM media WHERE parent_media_id = ? LIMIT 1',
     );
+    return this.anyTrack.get(recordingId) !== undefined;
   }
 
   statusOf(mediaId: string): DocumentStatus | null {
@@ -439,10 +445,35 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
     };
   }
 
+  /**
+   * Every media of a collection as the track shelf needs it, in one query (KBC-101 NFR-3):
+   * live (ready, not archived), a track or a recording, its current transcript's confidence,
+   * the fingerprint its document should have and whether a recording has tracks.
+   */
+  shelfRows(topic: string): ReadonlyMap<string, ShelfRow> {
+    this.shelf ??= this.db.prepare(
+      `SELECT m.id, m.title, m.parent_media_id IS NOT NULL AS is_track,
+         m.status = 'ready' AND m.archived_at IS NULL AS live,
+         (SELECT t.confidence FROM transcripts t WHERE t.media_id = m.id
+            ORDER BY t.version DESC LIMIT 1) AS confidence,
+         d.desired_sha256 AS desired,
+         EXISTS (SELECT 1 FROM media c WHERE c.parent_media_id = m.id) AS has_tracks
+       FROM media m LEFT JOIN media_documents d ON d.media_id = m.id
+       WHERE m.topic = ?`,
+    );
+    const rows = new Map<string, ShelfRow>();
+    for (const row of this.shelf.all(topic)) {
+      const shelfRow = toShelfRow(row);
+      rows.set(shelfRow.id, shelfRow);
+    }
+    return rows;
+  }
+
   desiredFingerprint(mediaId: string): string | null {
-    const row = this.db
-      .prepare('SELECT desired_sha256 FROM media_documents WHERE media_id = ?')
-      .get(mediaId);
+    this.desired ??= this.db.prepare(
+      'SELECT desired_sha256 FROM media_documents WHERE media_id = ?',
+    );
+    const row = this.desired.get(mediaId);
     return row ? String(row['desired_sha256']) : null;
   }
 
@@ -756,4 +787,21 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
         ...heldArgs(owner),
       );
   }
+}
+
+/** One row of `shelfRows` as the track shelf reads it. */
+function toShelfRow(row: Record<string, SQLOutputValue>): ShelfRow {
+  const { confidence, desired } = row;
+  return {
+    id: String(row['id']),
+    title: String(row['title']),
+    live: Number(row['live']) === 1,
+    isTrack: Number(row['is_track']) === 1,
+    confidence:
+      typeof confidence === 'string'
+        ? transcriptConfidenceSchema.parse(confidence)
+        : null,
+    desired: typeof desired === 'string' ? desired : null,
+    hasTracks: Number(row['has_tracks']) === 1,
+  };
 }

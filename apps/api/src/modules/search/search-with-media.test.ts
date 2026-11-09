@@ -25,6 +25,7 @@ const DOC = {
 const texts: SearchResponse = {
   items: [DOC],
   total: 1,
+  trackTotal: 0,
   capped: false,
   nextOffset: null,
   hiddenOffTopic: 0,
@@ -68,7 +69,17 @@ function mediaIndex(broken = false): MediaSearchPort {
 
 function searcher(media: MediaSearchPort | undefined) {
   return new SearchWithMedia({
-    documents: { search: async () => texts, topicFacets: () => texts.facets },
+    documents: {
+      // Texts only, and only when "Textos" is among the kinds searched.
+      searchDocuments: async (_topic, _request, scope = {}) => ({
+        response: (scope.kinds ?? ['text']).includes('text')
+          ? texts
+          : { ...texts, items: [], total: 0 },
+        cardTracks: [],
+        totals: { texts: 1, tracks: 0 },
+      }),
+      topicFacets: () => texts.facets,
+    },
     scopeOf: () => ['udv'],
     media,
     authors: { mainOf: () => null, authorOf: () => null },

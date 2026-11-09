@@ -6,7 +6,6 @@ import type {
   MediaItem,
   MediaTranscript,
   ResearchEvent,
-  SearchResponse,
 } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -280,55 +279,5 @@ describe('research over tracks (KBC-099)', () => {
       `/api/v1/media/${track.id}/subtitles.vtt`,
     ])
       expect((await member('GET', url)).statusCode, url).toBe(404);
-  });
-
-  it('AC-13: "Buscar documentos" lists and counts the same texts with the track documents in the vault', async () => {
-    const searchOf = async (world: World) => {
-      const found = await world.media.owner(
-        'POST',
-        '/api/v1/topics/hermetismo/searches',
-        {
-          q: 'pêndulo ritmo',
-          mode: 'all',
-        },
-      );
-      expect(found.statusCode, found.body).toBe(200);
-      return { ...found.json<SearchResponse>(), tookMs: 0 };
-    };
-    const suggestionsOf = async (world: World) =>
-      (
-        await world.media.owner('GET', '/api/v1/topics/hermetismo/suggestions')
-      ).json<{ items: { concept: string; count: number }[] }>().items;
-    let before: Awaited<ReturnType<typeof searchOf>> | undefined;
-    let suggestionsBefore: Awaited<ReturnType<typeof suggestionsOf>> = [];
-    let countBefore = 0;
-    const countOf = async (world: World) =>
-      (await world.media.owner('GET', '/api/v1/topics'))
-        .json<{ items: { slug: string; documentCount: number }[] }>()
-        .items.find((one) => one.slug === 'hermetismo')?.documentCount ?? -1;
-    const { world, path } = await trackWorld(
-      [{ text: 'nada' }],
-      async (one) => {
-        before = await searchOf(one);
-        suggestionsBefore = await suggestionsOf(one);
-        countBefore = await countOf(one);
-      },
-    );
-    expect(
-      world.media.started.catalog.get('hermetismo')?.entries.get(path)?.media,
-    ).not.toBeNull();
-    const after = await searchOf(world);
-    expect(after.items.map((hit) => hit.id)).toEqual(
-      before?.items.map((hit) => hit.id),
-    );
-    expect(after).toEqual(before);
-    expect(await countOf(world)).toBe(countBefore);
-    // BR-7: the start screen's subjects count texts only, never the tracks' concepts.
-    expect(await suggestionsOf(world)).toEqual(suggestionsBefore);
-    const opened = await world.media.owner(
-      'GET',
-      `/api/v1/topics/hermetismo/documents/${encodeURIComponent(path)}`,
-    );
-    expect(opened.statusCode).toBe(404);
   });
 });

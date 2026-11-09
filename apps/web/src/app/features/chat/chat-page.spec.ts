@@ -104,6 +104,31 @@ describe('ChatPage', () => {
     expect(screen.getByText('O que você quer estudar hoje?')).toBeTruthy();
   });
 
+  it('counts the tracks the person sees among the documents, as the search summary does (KBC-101, C17)', async () => {
+    await renderPage([], {
+      items: [
+        aTopic({
+          slug: 'hermetismo',
+          title: 'Hermetismo',
+          documentCount: 1,
+          trackCount: 1,
+        }),
+      ],
+      defaultSlug: 'hermetismo',
+    });
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading.textContent?.replace(/\s+/g, ' ')).toContain(
+      '1 documento (1 faixa)',
+    );
+    expect(screen.queryByText(/ainda não tem textos/)).toBeNull();
+  });
+
+  it('says only the documents when the person sees no track', async () => {
+    await renderPage();
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading.textContent).not.toMatch(/faixa/);
+  });
+
   it('shows the product name as the title while no collection is open (KBC-016 AC-3)', async () => {
     await renderPage([], { items: [], defaultSlug: null });
     expect(

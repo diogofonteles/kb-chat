@@ -174,5 +174,6 @@
     [seeAlso]="doc.seeAlso"
     [concept]="doc.concept"
     (opened)="navigated.emit($event)"
+    (trackOpened)="trackOpened.emit($event)"
   />
 }

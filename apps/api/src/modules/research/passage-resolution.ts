@@ -1,6 +1,7 @@
 import {
   SOURCE_CITATION,
   clockSeconds,
+  snapToSegment,
   type AnswerSource,
   type TrackPassage,
 } from '@kb-chat/contracts';
@@ -17,35 +18,6 @@ const citationsOf = (answer: string): Citation[] =>
   [...answer.matchAll(new RegExp(SOURCE_CITATION.source, 'g'))].map(
     (match) => ({ n: Number(match[1]), at: match[2] ?? '' }),
   );
-
-type Span = Pick<TrackPassage, 'startMs' | 'endMs'>;
-
-const spanOf = ({ startMs, endMs }: ShelfSegment): Span => ({
-  startMs,
-  endMs,
-});
-
-/**
- * The media.db segment a second of the track names: the one that starts in that second (an
- * anchor is its paragraph's start, rounded down), else the one that holds it, else the next
- * one; past the end, the last. Without a second, the first segment (the track's start).
- */
-export function snapToSegment(
-  segments: readonly ShelfSegment[],
-  seconds: number | null,
-): Span {
-  const ms = (seconds ?? 0) * 1000;
-  const first = segments[0];
-  if (!first) return { startMs: ms, endMs: ms };
-  if (seconds === null) return spanOf(first);
-  const found =
-    segments.find((one) => Math.floor(one.startMs / 1000) === seconds) ??
-    segments.find((one) => one.startMs <= ms && ms < one.endMs) ??
-    segments.find((one) => one.startMs >= ms) ??
-    segments.at(-1) ??
-    first;
-  return spanOf(found);
-}
 
 /**
  * Which second a citation stands for (BR-5): the written time only when that anchor was

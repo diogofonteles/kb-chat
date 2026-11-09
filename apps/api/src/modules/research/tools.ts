@@ -17,7 +17,7 @@ import {
   type BodyWindow,
   type WindowRequest,
 } from './body-window.js';
-import { anchorAt, anchorsIn } from './track-anchors.js';
+import { anchorAt, anchorsIn } from '@kb-chat/contracts';
 import {
   acceptsEntry,
   describeFilter,
@@ -124,6 +124,14 @@ const RELATION_LABELS = {
   extendedBy: 'Estendido por',
   relatedFrom: 'Citado como relacionado por',
 } as const;
+
+/** A hit without its catalog entry: a text as the source book numbers it. */
+const textRef = ({ id, title, authorship, author }: SearchHit) => ({
+  id,
+  title,
+  authorship,
+  author,
+});
 
 const readStep = (entry: CatalogEntry): ResearchStep => ({
   kind: 'read',
@@ -267,8 +275,8 @@ export class ResearchTools {
 
   /** One hit, numbered with its catalog entry so a track keeps its media (KBC-099). */
   private hitOf(hit: SearchHit, { topic, book, labels }: ToolContext): string {
-    const entry = this.entry(topic, hit.id);
-    const n = book.number(entry ?? hit);
+    const entry = this.hitEntry(topic, hit);
+    const n = book.number(entry ?? textRef(hit));
     if (entry?.media) {
       const anchors = anchorsIn(hit.snippet ?? '');
       book.showTrack(n, { anchors, focus: anchors[0] ?? null });
@@ -337,12 +345,12 @@ export class ResearchTools {
         },
       },
       // The tracks this person may research, among the texts (KBC-099 BR-4).
-      { admit: (entry) => isVisible(entry, scope.context) },
+      { tracks: scope.context.tracks },
     );
   }
 
   private accepts(topic: string, hit: SearchHit, filter: DocFilter): boolean {
-    const entry = this.entry(topic, hit.id);
+    const entry = this.hitEntry(topic, hit);
     return entry !== null && acceptsEntry(filter, entry);
   }
 
@@ -459,26 +467,39 @@ export class ResearchTools {
 
   private related(entry: CatalogEntry, context: ToolContext): string {
     const { topic, book, labels } = context;
-    const catalog = this.deps.catalog.get(topic);
     const n = book.number(entry);
-    if (!catalog) return `O documento [${n}] não tem ligações.`;
-    const seen = (ref: { id: string }) => {
-      const one = catalog.entries.get(ref.id);
-      return !one || isVisible(one, context);
-    };
-    const groups = Object.entries(catalog.relations.groupsOf(entry))
-      .map(([group, refs]) => [group, refs.filter(seen)] as const)
-      .filter(([, refs]) => refs.length > 0)
-      .map(([group, refs]) => {
-        const label = RELATION_LABELS[group as keyof typeof RELATION_LABELS];
-        const lines = refs
-          .slice(0, MAX_REFS_PER_GROUP)
-          .map((ref) => this.relatedLine(topic, ref, { book, labels }));
-        return [`${label} (${refs.length}):`, ...lines].join('\n');
-      });
+    const groups = this.relatedGroups(entry, context).map(([group, refs]) => {
+      const label = RELATION_LABELS[group as keyof typeof RELATION_LABELS];
+      const lines = refs
+        .slice(0, MAX_REFS_PER_GROUP)
+        .map((ref) => this.relatedLine(topic, ref, { book, labels }));
+      return [`${label} (${refs.length}):`, ...lines].join('\n');
+    });
     if (groups.length === 0)
       return `[${n}] ${entry.title} não tem ligações no kb.`;
     return [`Ligações de [${n}] ${entry.title}:`, ...groups].join('\n');
+  }
+
+  /**
+   * The document's kb relations in its own collection, by their ids in the scope, without
+   * the tracks this turn may not see; empty groups left out.
+   */
+  private relatedGroups(entry: CatalogEntry, context: ToolContext) {
+    const view = this.deps.catalog.scopeView(context.topic);
+    if (!view) return [];
+    const catalog = view.catalogOf(entry);
+    const own = { ...entry, id: entry.home?.id ?? entry.id };
+    const inScope = (ref: { id: string; title: string }) => ({
+      ...ref,
+      id: view.idOf(catalog.topic.slug, ref.id),
+    });
+    const seen = (ref: { id: string }) => {
+      const one = view.entries.get(ref.id);
+      return !one || isVisible(one, context);
+    };
+    return Object.entries(catalog.relations.groupsOf(own))
+      .map(([group, refs]) => [group, refs.map(inScope).filter(seen)] as const)
+      .filter(([, refs]) => refs.length > 0);
   }
 
   private relatedLine(
@@ -499,7 +520,14 @@ export class ResearchTools {
     return resolveEntry(this.deps.catalog, ref, context);
   }
 
+  /** A document of the collection or of one of its sub-collections (KBC-101 FR-5). */
   private entry(topic: string, id: string): CatalogEntry | null {
-    return this.deps.catalog.get(topic)?.entries.get(id) ?? null;
+    return this.deps.catalog.scopeView(topic)?.entries.get(id) ?? null;
+  }
+
+  /** A hit's entry in the scope: a sub-collection's hit by its id from the parent. */
+  private hitEntry(topic: string, hit: SearchHit): CatalogEntry | null {
+    const view = this.deps.catalog.scopeView(topic);
+    return view?.entries.get(view.idOf(hit.topic, hit.id)) ?? null;
   }
 }

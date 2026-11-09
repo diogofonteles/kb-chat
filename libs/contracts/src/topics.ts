@@ -14,7 +14,13 @@ export const TOPIC_DESCRIPTION_MAX = 280;
 export const topicSchema = z.object({
   slug: topicSlugSchema,
   title: z.string(),
+  /** Its documents the person sees: the texts and, among them, `trackCount` tracks. */
   documentCount: z.number().int().nonnegative(),
+  /**
+   * The transcribed tracks among `documentCount`, for who sees tracks as documents (KBC-101,
+   * owner decision C17); 0 for everyone else.
+   */
+  trackCount: z.number().int().nonnegative().default(0),
   /** The collection this one sits in (one level only, ADR 0028), or null. */
   parent: topicSlugSchema.nullable().default(null),
   description: z.string().default(''),

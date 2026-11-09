@@ -341,17 +341,19 @@ async function registerResearch(
   );
 }
 
-/** The tracks of media.db a research turn may see (KBC-099), with the media library on. */
+/** The tracks of media.db one request may see as documents (ADR 0035 §5). */
+const trackShelf = (media: MediaDeps) => () =>
+  new MediaTrackShelf({
+    store: media.store,
+    transcripts: media.transcripts,
+    hasTracks: (recordingId) => media.documents.hasTracks(recordingId),
+    desiredOf: (mediaId) => media.documents.desiredFingerprint(mediaId),
+    rowsOf: (topic) => media.documents.shelfRows(topic),
+  });
+
+/** The tracks a research turn may see (KBC-099), with the media library on. */
 const shelfOf = (media: MediaDeps | undefined) =>
-  media
-    ? {
-        shelf: () =>
-          new MediaTrackShelf({
-            store: media.store,
-            transcripts: media.transcripts,
-          }),
-      }
-    : {};
+  media ? { shelf: trackShelf(media) } : {};
 
 /** The research routes that run the person's AI. */
 const RESEARCH_TURNS = new Set(['/api/v1/topics/:topic/research']);
@@ -420,6 +422,7 @@ async function registerCollections(
       preferredTopic: (principal) =>
         deps.ai.settings.snapshot(principal)?.preferences.defaultTopic ??
         config.KB_TOPIC,
+      ...(deps.media && { tracks: trackShelf(deps.media) }),
     }),
   );
 }
@@ -435,6 +438,7 @@ function combinedSearch(deps: FullDeps): SearchWithMedia {
     documents: deps.agent.search,
     scopeOf: (topic) => catalog.scope(topic).map((one) => one.topic.slug),
     media: media?.search,
+    passages: media?.trackLinks,
     subjects:
       media &&
       new SubjectSearch({
@@ -460,15 +464,31 @@ async function registerSearch(
       service: deps.agent.search,
       combined,
       ratePerMinute: config.SEARCH_RATE_LIMIT,
+      ...(deps.media && { tracks: trackShelf(deps.media) }),
     }),
   );
+}
+
+/** Documents with their "Veja também" and the start screen's suggestions (KBC-101 FR-6, FR-7). */
+async function registerReading(
+  app: FastifyInstance,
+  deps: FullDeps,
+): Promise<void> {
+  const { config, vault, catalog, media } = deps;
+  const tracks = media && { tracks: trackShelf(media) };
+  const documents = new DocumentsService({
+    catalog,
+    vault,
+    vaultName: config.OBSIDIAN_VAULT ?? basename(config.KB_VAULT),
+  });
+  await app.register(documentRoutes(documents, tracks ?? {}));
+  await app.register(usageRoutes({ catalog, log: deps.usage, ...tracks }));
 }
 
 async function registerRoutes(
   app: FastifyInstance,
   deps: FullDeps,
 ): Promise<void> {
-  const { config, vault, catalog } = deps;
   await registerSearch(app, deps);
   // Recorded research turns run apart from their request (KBC-029) and land in the history.
   const turns = new LiveTurns();
@@ -479,13 +499,7 @@ async function registerRoutes(
   });
   app.addHook('onClose', () => turns.close(TURN_SAVE_GRACE_MS));
   await registerResearch(app, deps, { turns, journal: conversations });
-  const documents = new DocumentsService({
-    catalog,
-    vault,
-    vaultName: config.OBSIDIAN_VAULT ?? basename(config.KB_VAULT),
-  });
-  await app.register(documentRoutes(documents));
-  await app.register(usageRoutes({ catalog, log: deps.usage }));
+  await registerReading(app, deps);
   await app.register(conversationRoutes(conversations));
   await registerSettings(app, deps.ai, deps.config.KB_CHAT_MCP_PEERS);
   await registerAuth(app, deps);

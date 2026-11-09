@@ -56,13 +56,29 @@
         <ul>
           @for (ref of group.items; track ref.id) {
             <li>
-              <button
-                type="button"
-                class="ref"
-                (click)="opened.emit({ id: ref.id, title: ref.title })"
-              >
-                {{ ref.title }}
-              </button>
+              @if (ref.media; as media) {
+                <button
+                  type="button"
+                  class="ref track"
+                  [attr.data-media-id]="media.mediaId"
+                  (click)="openTrack(ref, $event)"
+                >
+                  <span class="note" aria-hidden="true">♪</span>
+                  <span class="visually-hidden" i18n="@@seeAlso.trackKind"
+                    >Faixa de áudio:</span
+                  >
+                  {{ ref.title }}
+                  <span class="recording">· {{ media.recordingTitle }}</span>
+                </button>
+              } @else {
+                <button
+                  type="button"
+                  class="ref"
+                  (click)="opened.emit({ id: ref.id, title: ref.title })"
+                >
+                  {{ ref.title }}
+                </button>
+              }
               @if (ref.facets) {
                 <span class="ref-facets">{{ ref.facets }}</span>
               }

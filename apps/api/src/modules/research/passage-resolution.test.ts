@@ -1,7 +1,8 @@
 import type { AnswerSource } from '@kb-chat/contracts';
 import { describe, expect, it } from 'vitest';
 import type { ShownPassages } from './source-book.js';
-import { resolvePassages, snapToSegment } from './passage-resolution.js';
+import { snapToSegment } from '@kb-chat/contracts';
+import { resolvePassages } from './passage-resolution.js';
 
 const TRACK = '0b9c1f7e-1111-4a2b-8c3d-000000000001';
 

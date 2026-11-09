@@ -111,6 +111,10 @@ export const hasFeature = (person: StoredPerson, feature: Feature): boolean =>
   (person.features.includes(feature) &&
     !MASTER_ONLY_FEATURES.includes(feature));
 
+/** Who sees a track as a document of its collection: `media` and `media-tracks` (KBC-101 BR-7). */
+export const seesTrackDocuments = (person: StoredPerson): boolean =>
+  hasFeature(person, 'media') && hasFeature(person, 'media-tracks');
+
 export const effectiveFeatures = (person: StoredPerson): Feature[] =>
   FEATURES.filter((feature) => hasFeature(person, feature));
 

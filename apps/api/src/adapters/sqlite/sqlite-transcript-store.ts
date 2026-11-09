@@ -1,4 +1,4 @@
-import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
+import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
 import {
   mediaJobKindSchema,
   transcriptConfidenceSchema,
@@ -70,6 +70,9 @@ export const toWord = (row: Row): StoredWord => ({
 
 /** Transcripts and the term list in the media database (ADR 0022 §1, ADR 0023). */
 export class SqliteTranscriptStore implements TranscriptStorePort {
+  /** Prepared once: a search checks every track it meets (KBC-101 NFR-3). */
+  private versions: StatementSync | null = null;
+
   constructor(private readonly db: DatabaseSync) {}
 
   currentTerms(): TranscriptionTerms {
@@ -199,15 +202,13 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
   }
 
   transcripts(mediaId: string): TranscriptSummary[] {
-    return this.db
-      .prepare(
-        `SELECT id, media_id, version, revision, model, confidence, vad, terms_version, raw_path,
-            filter_version,
-           confidence_version, word_count, removed_words, created_at
-         FROM transcripts WHERE media_id = ? ORDER BY version DESC`,
-      )
-      .all(mediaId)
-      .map(toSummary);
+    this.versions ??= this.db.prepare(
+      `SELECT id, media_id, version, revision, model, confidence, vad, terms_version, raw_path,
+          filter_version,
+         confidence_version, word_count, removed_words, created_at
+       FROM transcripts WHERE media_id = ? ORDER BY version DESC`,
+    );
+    return this.versions.all(mediaId).map(toSummary);
   }
 
   segments(transcriptId: string): DerivedSegment[] {

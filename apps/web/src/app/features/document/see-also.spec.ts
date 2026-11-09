@@ -150,3 +150,60 @@ describe('SeeAlsoSection, tracks of a concept (KBC-070 AC-5)', () => {
     );
   });
 });
+
+describe('SeeAlsoSection, tracks kb linked (KBC-101 AC-7)', () => {
+  const MEDIA_ID = '6f1c2b9b-8a11-4d0a-9d55-0b6f1f0e6a3e';
+  const linked = {
+    ...NOTHING,
+    examples: {
+      items: [
+        {
+          id: 'raw/media/r/t.md',
+          title: 'O que é o ritmo?',
+          genre: 'talk_or_interview' as const,
+          depth: 2 as const,
+          relevance: 'core' as const,
+          media: {
+            mediaId: MEDIA_ID,
+            kind: 'track' as const,
+            recordingTitle: 'Palestra de 12/03/2017',
+            ordinal: 3,
+            total: 12,
+            durationMs: 228_000,
+            confidence: 'normal' as const,
+          },
+        },
+      ],
+      total: 1,
+    },
+  };
+
+  it('shows "♪ <título> · <gravação>" and opens the track at its start, never the document', async () => {
+    const { http, fixture } = await renderSection({
+      allowed: false,
+      seeAlso: linked,
+    });
+    const trackOpened = vi.fn();
+    const opened = vi.fn();
+    fixture.componentInstance.trackOpened.subscribe(trackOpened);
+    fixture.componentInstance.opened.subscribe(opened);
+    const button = screen.getByRole('button', {
+      name: /Faixa de áudio: O que é o ritmo\? · Palestra de 12\/03\/2017/,
+    });
+    expect(button.textContent).toContain('♪');
+    fireEvent.click(button);
+    expect(opened).not.toHaveBeenCalled();
+    expect(trackOpened).toHaveBeenCalledWith(
+      expect.objectContaining({
+        at: '',
+        trigger: button,
+        source: expect.objectContaining({
+          title: 'O que é o ritmo?',
+          media: expect.objectContaining({ mediaId: MEDIA_ID }),
+        }),
+      }),
+    );
+    expect(trackOpened.mock.calls[0]?.[0].source.passages).toBeUndefined();
+    http.verify();
+  });
+});

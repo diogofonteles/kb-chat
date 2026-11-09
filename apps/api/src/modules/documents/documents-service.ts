@@ -11,7 +11,9 @@ import {
   isTrackEntry,
   splitFrontmatter,
   type CatalogEntry,
+  type CatalogMedia,
   type CatalogRegistry,
+  type ScopeView,
   type TopicCatalog,
 } from '../catalog/index.js';
 
@@ -34,27 +36,48 @@ export interface RelationPageQuery {
   readonly limit: number;
 }
 
-/** "Veja também" lists texts only until KBC-101 shows tracks there (ADR 0035 §8). */
-function textsOf<T extends { id: string }>(
-  catalog: TopicCatalog,
-  refs: readonly T[],
+/**
+ * Who reads, as "Veja também" needs it (KBC-101 BR-5): a track linked by kb is listed only
+ * to who would see it in the research, while media.db confirms it. Without it, texts only.
+ */
+export interface DocumentReader {
+  readonly seesTrack?: (topic: string, media: CatalogMedia) => boolean;
+}
+
+/** The refs this reader may see: texts, and the tracks they would research. */
+function seenBy<T extends { id: string }>(
+  { catalog, view }: Located,
+  { refs, reader }: { refs: readonly T[]; reader: DocumentReader },
 ): T[] {
-  return refs.filter((ref) => {
-    const entry = catalog.entries.get(ref.id);
-    return !entry || !isTrackEntry(entry);
-  });
+  return refs
+    .filter((ref) => {
+      const entry = catalog.entries.get(ref.id);
+      if (!entry?.media) return true;
+      return reader.seesTrack?.(catalog.topic.slug, entry.media) ?? false;
+    })
+    .map((ref) => ({ ...ref, id: view.idOf(catalog.topic.slug, ref.id) }));
+}
+
+/** A document, its collection and the scope it was named from (FR-5). */
+interface Located {
+  readonly view: ScopeView;
+  readonly catalog: TopicCatalog;
+  readonly entry: CatalogEntry;
 }
 
 export class DocumentsService {
   constructor(private readonly deps: DocumentsServiceDeps) {}
 
-  async getDocument(topic: string, id: string): Promise<KbDocument> {
-    const { catalog, entry } = this.requireEntry(topic, id);
-    const text = await this.deps.vault.readDocument(topic, id);
-    if (text === null)
-      throw new AppError('DOCUMENT_NOT_FOUND', 'Document not found');
+  async getDocument(
+    topic: string,
+    id: string,
+    reader: DocumentReader = {},
+  ): Promise<KbDocument> {
+    const located = this.requireEntry(topic, id);
+    const { catalog, entry } = located;
+    const text = await this.readText(located);
     return {
-      id: entry.id,
+      id,
       title: entry.title,
       summary: entry.summary,
       criterion: entry.criterion,
@@ -66,8 +89,8 @@ export class DocumentsService {
       concepts: [...entry.concepts],
       authorship: entry.authorship,
       author: entry.author,
-      obsidianUrl: this.obsidianUrl(topic, id),
-      seeAlso: this.seeAlso(catalog, entry),
+      obsidianUrl: this.obsidianUrl(catalog.topic.slug, entry.id),
+      seeAlso: this.seeAlso(located, reader),
       body: splitFrontmatter(text).body.trim(),
     };
   }
@@ -75,13 +98,17 @@ export class DocumentsService {
   relationPage(
     topic: string,
     id: string,
-    query: RelationPageQuery,
+    {
+      query,
+      reader = {},
+    }: { query: RelationPageQuery; reader?: DocumentReader },
   ): RelationPage {
-    const { catalog, entry } = this.requireEntry(topic, id);
-    const all = textsOf(
-      catalog,
-      catalog.relations.groupsOf(entry)[query.group],
-    );
+    const located = this.requireEntry(topic, id);
+    const { catalog, entry } = located;
+    const all = seenBy(located, {
+      refs: catalog.relations.groupsOf(entry)[query.group],
+      reader,
+    });
     const end = Math.min(query.offset + query.limit, all.length);
     return {
       items: all.slice(query.offset, end),
@@ -90,27 +117,37 @@ export class DocumentsService {
     };
   }
 
-  private requireEntry(
-    topic: string,
-    id: string,
-  ): { catalog: TopicCatalog; entry: CatalogEntry } {
+  /** A sub-collection's document named from its parent is read in its own folder (FR-5). */
+  private async readText({ catalog, entry }: Located): Promise<string> {
+    const text = await this.deps.vault.readDocument(
+      catalog.topic.slug,
+      entry.id,
+    );
+    if (text === null)
+      throw new AppError('DOCUMENT_NOT_FOUND', 'Document not found');
+    return text;
+  }
+
+  private requireEntry(topic: string, id: string): Located {
     if (!isSafeDocumentId(id))
       throw new AppError('VALIDATION_FAILED', 'Invalid document id');
-    const catalog = this.deps.catalog.get(topic);
-    if (!catalog)
-      throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
-    const entry = catalog.entries.get(id);
+    const view = this.deps.catalog.scopeView(topic);
+    if (!view) throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
+    // A research source in a sub-collection is named by its id from the parent (FR-5).
+    const found = view.entries.get(id);
+    const catalog = found ? view.catalogOf(found) : view.root;
+    const entry = found && catalog.entries.get(found.home?.id ?? id);
     // A track's Markdown is for kb and the agent, never shown to people (ADR 0035 §7).
     if (!entry || isTrackEntry(entry))
       throw new AppError('DOCUMENT_NOT_FOUND', 'Document not found');
-    return { catalog, entry };
+    return { view, catalog, entry };
   }
 
-  private seeAlso(catalog: TopicCatalog, entry: CatalogEntry): SeeAlso {
-    const groups = catalog.relations.groupsOf(entry);
+  private seeAlso(located: Located, reader: DocumentReader): SeeAlso {
+    const groups = located.catalog.relations.groupsOf(located.entry);
     const preview = (group: SeeAlsoGroupName) => {
-      const texts = textsOf(catalog, groups[group]);
-      return { items: texts.slice(0, SEE_ALSO_PREVIEW), total: texts.length };
+      const refs = seenBy(located, { refs: groups[group], reader });
+      return { items: refs.slice(0, SEE_ALSO_PREVIEW), total: refs.length };
     };
     return {
       exampleOf: preview('exampleOf'),

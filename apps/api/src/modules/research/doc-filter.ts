@@ -35,6 +35,14 @@ export interface DocFilter {
 
 const textsOnly = (entry: CatalogEntry): boolean => entry.media === null;
 
+/** The origin of every track document (KBC-101 BR-3, FR-4), as list_sources names it. */
+export const TRACKS_SOURCE = 'faixas-de-audio';
+export const TRACKS_SOURCE_LABEL = 'Faixas de áudio';
+
+/** "faixas-de-audio", "Faixas de áudio" or "faixas de audio": the tracks' origin. */
+export const isTracksSource = (text: string): boolean =>
+  foldName(text).replace(/[\s_-]+/g, '-') === TRACKS_SOURCE;
+
 const PIPELINE_PREFIXES = /^(?:_convert\/)?(?:ready\/)?/;
 
 /**
@@ -43,6 +51,7 @@ const PIPELINE_PREFIXES = /^(?:_convert\/)?(?:ready\/)?/;
  * without one (a wiki concept) shows the folder of its id.
  */
 export function originFolder(entry: CatalogEntry): string {
+  if (entry.media) return TRACKS_SOURCE_LABEL;
   const path = entry.sourcePath ?? entry.id;
   const folder = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
   return folder.replace(PIPELINE_PREFIXES, '') || folder || '.';
@@ -58,6 +67,7 @@ const hasFragment = (values: readonly string[], fragment: string): boolean => {
  * one of its entities exactly: a document that merely mentions a name among many stays.
  */
 const matchesText = (entry: CatalogEntry, text: string): boolean =>
+  (isTracksSource(text) ? entry.media !== null : false) ||
   hasFragment([entry.sourcePath ?? ''], text) ||
   entry.entities.some((name) => foldName(name) === foldName(text));
 
@@ -72,14 +82,19 @@ function hasSubject(entry: CatalogEntry, subjects: readonly string[]): boolean {
   return entry.concepts.some((concept) => wanted.has(foldName(concept)));
 }
 
+/** "Faixas de áudio" is every track; any other text, a fragment of the origin folder. */
+const matchesSource = (entry: CatalogEntry, source: string): boolean =>
+  isTracksSource(source)
+    ? entry.media !== null
+    : entry.media === null && hasFragment([entry.sourcePath ?? ''], source);
+
 /** Whether a document passes the filter. */
 export function acceptsEntry(filter: DocFilter, entry: CatalogEntry): boolean {
   if (!(filter.visible ?? textsOnly)(entry)) return false;
   if (filter.authorship && entry.authorship !== filter.authorship) return false;
   if (filter.entity && !hasFragment(entry.entities, filter.entity))
     return false;
-  if (filter.source && !hasFragment([entry.sourcePath ?? ''], filter.source))
-    return false;
+  if (filter.source && !matchesSource(entry, filter.source)) return false;
   return hasSubject(entry, filter.subjects ?? []) && !isExcluded(entry, filter);
 }
 

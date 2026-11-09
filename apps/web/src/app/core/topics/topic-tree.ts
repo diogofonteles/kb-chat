@@ -45,13 +45,23 @@ const byTitle = (a: Topic, b: Topic): number =>
 
 /**
  * The list with `topic` added or replaced, in the server's tree order: top level by name, each
- * followed by its sub-collections by name (KBC-048 FR-4).
+ * followed by its sub-collections by name (KBC-048 FR-4). A renamed one keeps the counts the
+ * list had for this person: renaming changes no document, and the rename's answer counts the
+ * texts alone (KBC-101, C17).
  */
 export function withTopic(
   topics: readonly Topic[],
   topic: Topic,
 ): readonly Topic[] {
-  const all = [...topics.filter((one) => one.slug !== topic.slug), topic];
+  const before = topics.find((one) => one.slug === topic.slug);
+  const kept: Topic = before
+    ? {
+        ...topic,
+        documentCount: before.documentCount,
+        trackCount: before.trackCount,
+      }
+    : topic;
+  const all = [...topics.filter((one) => one.slug !== topic.slug), kept];
   const known = new Set(all.map((one) => one.slug));
   const roots = all
     .filter((one) => one.parent === null || !known.has(one.parent))

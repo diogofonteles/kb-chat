@@ -5,6 +5,8 @@
   border-radius: var(--radius-md);
   background: var(--color-surface);
   overflow: hidden;
+  /* The track line breaks by the card's own width, not the window's (the panel narrows it). */
+  container-type: inline-size;
   transition:
     border-color 150ms var(--ease),
     box-shadow 150ms var(--ease);
@@ -105,4 +107,82 @@
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   overflow-wrap: anywhere;
+}
+
+/* KBC-101: a track's first line, as "Na fala" draws it (media-hit-card.css). */
+.kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent-strong);
+}
+
+.kind-head,
+.recording {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* One line on a wide card: "♪ Faixa · 8:15 · <gravação> · faixa 3 de 12" (screens.md T2). */
+.kind-head::after {
+  content: '·' / '';
+}
+
+/* On a narrow card (390 px, or the document panel open) the line breaks in two, kind and
+   minute, then the recording: no "·" left hanging. */
+@container (max-width: 35rem) {
+  .kind-head::after {
+    content: none;
+  }
+
+  .recording {
+    flex-basis: 100%;
+  }
+}
+
+.clock {
+  font-variant-numeric: tabular-nums;
+}
+
+.spoken::before {
+  content: '“';
+}
+
+.spoken::after {
+  content: '”';
+}
+
+mark {
+  background: var(--color-mark);
+  color: inherit;
+}
+
+.states {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+
+/* A warning tone, never red (UP-19), with a sign besides the colour (UP-20). */
+.low {
+  padding: 0 var(--space-2);
+  border: 1px dashed var(--color-text-muted);
+  border-radius: 999px;
+  color: var(--color-text);
+}
+
+.low::before {
+  content: '⚠ ' / '';
+}
+
+.stale {
+  color: var(--color-text-muted);
 }

@@ -9,6 +9,7 @@ import type {
 import { AppError } from '../../../app-error.js';
 import type { AgentMessage } from '../../../ports/llm.js';
 import type { ResearchInput } from '../../../ports/research-runner.js';
+import type { TrackShelf } from '../../../ports/track-shelf.js';
 import type { ProfileBudget } from '../limits.js';
 import { EventPipe } from '../event-pipe.js';
 import type { SourceBook } from '../source-book.js';
@@ -50,6 +51,8 @@ export interface SweepTurnHost {
   readonly topicTitle: string;
   /** The collection's main author (KBC-049), or null. */
   readonly mainAuthor: MainAuthorIdentity | null;
+  /** The tracks the turn may research: documents of the set like texts (KBC-101 BR-1). */
+  readonly tracks?: TrackShelf;
   readonly question: string;
   readonly history: readonly ResearchTurn[];
   readonly book: SourceBook;
@@ -133,7 +136,11 @@ export async function* runSweepTurn(
   const layout = await host.sweeps.layout(host.topic, {
     plan,
     batchChars,
-    ...(host.cursor?.after ? { after: host.cursor.after } : {}),
+    ...(host.cursor?.after && { after: host.cursor.after }),
+    ...(host.cursor?.covered !== undefined && {
+      covered: host.cursor.covered,
+    }),
+    ...(host.tracks && { tracks: host.tracks }),
   });
   if (!layout) return null;
   const outcome = yield* sweepAll(host, { layout, batchChars });

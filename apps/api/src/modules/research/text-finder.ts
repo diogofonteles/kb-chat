@@ -3,9 +3,9 @@ import {
   splitFrontmatter,
   type CatalogEntry,
   type CatalogRegistry,
-  type TopicCatalog,
+  type ScopeView,
 } from '../catalog/index.js';
-import { anchorAt } from './track-anchors.js';
+import { anchorBefore, placedAnchors } from '@kb-chat/contracts';
 import { flatWithMap } from './flat-map.js';
 import { countOccurrences, flatText, foldText } from './folded-text.js';
 
@@ -156,7 +156,7 @@ function snippetOf(flat: string, phrase: string): string {
  */
 export class TextFinder {
   private readonly corpora = new WeakMap<
-    TopicCatalog,
+    ScopeView,
     Promise<readonly FoldedDocument[]>
   >();
 
@@ -164,8 +164,8 @@ export class TextFinder {
 
   /** Builds the topic's folded text ahead of the first search. */
   async warm(topic: string): Promise<void> {
-    const catalog = this.deps.catalog.get(topic);
-    if (catalog) await this.corpus(catalog);
+    const view = this.deps.catalog.scopeView(topic);
+    if (view) await this.corpus(view);
   }
 
   /**
@@ -173,10 +173,11 @@ export class TextFinder {
    * (KBC-017): no cap, the caller pages. Without phrases, every accepted document by title.
    */
   async count(query: CountQuery): Promise<TextCount | null> {
-    const catalog = this.deps.catalog.get(query.topic);
-    if (!catalog) return null;
-    if (query.phrases.length === 0) return this.listAccepted(catalog, query);
-    const docs = (await this.corpus(catalog)).filter((doc) =>
+    // The collection and its sub-collections (KBC-101 FR-5).
+    const view = this.deps.catalog.scopeView(query.topic);
+    if (!view) return null;
+    if (query.phrases.length === 0) return this.listAccepted(view, query);
+    const docs = (await this.corpus(view)).filter((doc) =>
       query.accept(doc.entry),
     );
     const needles = toNeedles(query.phrases);
@@ -195,8 +196,8 @@ export class TextFinder {
     };
   }
 
-  private listAccepted(catalog: TopicCatalog, query: CountQuery): TextCount {
-    const entries = [...catalog.entries.values()]
+  private listAccepted(view: ScopeView, query: CountQuery): TextCount {
+    const entries = [...view.entries.values()]
       .filter((entry) => query.accept(entry))
       .sort(byTitle);
     return {
@@ -234,6 +235,7 @@ export class TextFinder {
     const { flat, map } = flatWithMap(prefix + body);
     // Where the body starts in the flat text: a body occurrence never shows summary text.
     const bodyStart = map.findIndex((source) => source >= prefix.length);
+    const anchors = entry.media ? placedAnchors(body) : [];
     const items = positionsOf(foldText(flat), toNeedles(scan.phrases)).map(
       ({ at, phrase }) => {
         const inBody = bodyStart >= 0 && at >= bodyStart;
@@ -244,7 +246,7 @@ export class TextFinder {
           offset,
           context: contextAround(flat, { at, chars: scan.chars, floor }),
           ...(entry.media && offset !== null
-            ? { anchor: anchorAt(body, offset) }
+            ? { anchor: anchorBefore(anchors, offset) }
             : {}),
         };
       },
@@ -252,22 +254,22 @@ export class TextFinder {
     return { length: body.length, items };
   }
 
-  private corpus(catalog: TopicCatalog): Promise<readonly FoldedDocument[]> {
-    const cached = this.corpora.get(catalog);
+  private corpus(view: ScopeView): Promise<readonly FoldedDocument[]> {
+    const cached = this.corpora.get(view);
     if (cached) return cached;
-    const built = this.build(catalog);
-    this.corpora.set(catalog, built);
-    built.catch(() => this.corpora.delete(catalog));
+    const built = this.build(view);
+    this.corpora.set(view, built);
+    built.catch(() => this.corpora.delete(view));
     return built;
   }
 
-  private async build(catalog: TopicCatalog): Promise<FoldedDocument[]> {
-    const entries = [...catalog.entries.values()];
+  private async build(view: ScopeView): Promise<FoldedDocument[]> {
+    const entries = [...view.entries.values()];
     const docs: FoldedDocument[] = [];
     for (let start = 0; start < entries.length; start += READ_CONCURRENCY) {
       const chunk = entries.slice(start, start + READ_CONCURRENCY);
       const read = await Promise.all(
-        chunk.map((entry) => this.fold(catalog.topic.slug, entry)),
+        chunk.map((entry) => this.fold(view.topic, entry)),
       );
       docs.push(...read.filter((doc) => doc !== null));
     }

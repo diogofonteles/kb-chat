@@ -6,6 +6,11 @@ import {
   clockSeconds,
   formatTrackClock,
   trackPassageSchema,
+  anchorAt,
+  anchorBefore,
+  anchorsIn,
+  placedAnchors,
+  snapToSegment,
 } from './track-citations.js';
 
 describe('track citations (KBC-099, ADR 0035 §6)', () => {
@@ -66,5 +71,43 @@ describe('track citations (KBC-099, ADR 0035 §6)', () => {
         confidence: 'low',
       }).success,
     ).toBe(true);
+  });
+});
+
+describe('anchors of a track document (KBC-101)', () => {
+  const BODY =
+    '# T\n\nGravação: R\n\n[0:03] um\n\n[0:41] dois\n\n[1:02:03] três';
+
+  it('reads the anchors in order, as seconds', () => {
+    expect(anchorsIn(BODY)).toEqual([3, 41, 3723]);
+    expect(anchorsIn('[7:77] nada')).toEqual([]);
+  });
+
+  it('gives the anchor of the paragraph an offset falls in, by scan and by binary search', () => {
+    const placed = placedAnchors(BODY);
+    expect(placed.map((one) => one.seconds)).toEqual([3, 41, 3723]);
+    for (const [offset, seconds] of [
+      [0, null],
+      [BODY.indexOf('um'), 3],
+      [BODY.indexOf('dois'), 41],
+      [BODY.length, 3723],
+    ] as const) {
+      expect(anchorAt(BODY, offset)).toBe(seconds);
+      expect(anchorBefore(placed, offset)).toBe(seconds);
+    }
+    expect(anchorBefore([], 10)).toBeNull();
+  });
+
+  it('snaps a second to its media.db segment', () => {
+    const segments = [
+      { startMs: 3_200, endMs: 9_000 },
+      { startMs: 41_500, endMs: 45_000 },
+    ];
+    expect(snapToSegment(segments, 41)).toEqual(segments[1]);
+    expect(snapToSegment(segments, 5)).toEqual(segments[0]);
+    expect(snapToSegment(segments, 20)).toEqual(segments[1]);
+    expect(snapToSegment(segments, 900)).toEqual(segments[1]);
+    expect(snapToSegment(segments, null)).toEqual(segments[0]);
+    expect(snapToSegment([], 41)).toEqual({ startMs: 41_000, endMs: 41_000 });
   });
 });

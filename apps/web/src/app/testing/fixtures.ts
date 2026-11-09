@@ -29,6 +29,7 @@ export const aResponse = (
 ): SearchResponse => ({
   items,
   total: items.length,
+  trackTotal: items.filter((hit) => hit.media).length,
   capped: false,
   nextOffset: null,
   hiddenOffTopic: 0,
@@ -115,6 +116,7 @@ export const aTopic = (
   topic: Pick<Topic, 'slug' | 'title'> & Partial<Topic>,
 ): Topic => ({
   documentCount: 0,
+  trackCount: 0,
   parent: null,
   description: '',
   canOpen: true,

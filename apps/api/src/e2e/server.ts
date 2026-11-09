@@ -89,11 +89,18 @@ function vaultCopy(): string {
   return copy;
 }
 
+/**
+ * A latency bench (KBC-101 NFR-3) runs this server on a seeded vault indexed by QMD and a
+ * seeded media.db (src/scripts/seed-track-world.ts); the specs never set these.
+ */
+const BENCH_VAULT = process.env['KBC_BENCH_VAULT'];
+const BENCH_MEDIA_DIR = process.env['KBC_BENCH_MEDIA_DIR'];
+
 // E2E server: the fixture vault and the in-process index, no QMD or models.
 const config = loadConfig({
   ...process.env,
-  KB_VAULT: vaultCopy(),
-  KB_CHAT_SEARCH: 'fixture',
+  KB_VAULT: BENCH_VAULT ?? vaultCopy(),
+  KB_CHAT_SEARCH: BENCH_VAULT ? 'qmd' : 'fixture',
   KB_CHAT_LLM: 'stub',
   KB_CHAT_STATE_DIR: mkdtempSync(join(tmpdir(), 'kbchat-e2e-')),
   LOG_LEVEL: 'warn',
@@ -107,7 +114,8 @@ const config = loadConfig({
   KB_CHAT_CODEX_RUNNER_URL: codexRunner.url,
   // The media library (KBC-034) with the real worker below and real ffmpeg.
   KB_CHAT_MEDIA: 'on',
-  KB_CHAT_MEDIA_DIR: mkdtempSync(join(tmpdir(), 'kbchat-e2e-media-')),
+  KB_CHAT_MEDIA_DIR:
+    BENCH_MEDIA_DIR ?? mkdtempSync(join(tmpdir(), 'kbchat-e2e-media-')),
   KB_CHAT_MEDIA_WORKER_TOKEN: E2E_MEDIA_WORKER_TOKEN,
   // "Ligar transcritor" (KBC-114), with the fake launchctl below: never the real one.
   KB_CHAT_LOCAL_TRANSCRIBER: '1',

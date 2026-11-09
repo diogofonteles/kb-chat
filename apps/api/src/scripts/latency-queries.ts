@@ -1,0 +1,23 @@
+/** The questions the latency fitness function asks (Q1/Q2); KBC-101 seeds tracks with their words. */
+export const LATENCY_QUERIES: readonly string[] = [
+  'natureza sétupla',
+  'lei do ritmo',
+  'como se proteger de energias negativas',
+  'o que é carma',
+  'reencarnação',
+  'árvore da vida cabala',
+  'elementais',
+  'meditação',
+  'corpo astral',
+  'alquimia interior',
+  'princípio de correspondência',
+  'gnosticismo',
+  'numerologia do número sete',
+  'mente e consciência',
+  'iniciação hermética',
+  'tempo e eterno agora',
+  'magia ritual',
+  'sugadores de energia',
+  'Hermes Trismegisto',
+  'evolução da mônada',
+];

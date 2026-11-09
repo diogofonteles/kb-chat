@@ -23,6 +23,8 @@ export interface MediaSearchQuery {
   readonly tracks?: boolean;
   /** Count the matches too (default); off when the caller has the tally already. */
   readonly count?: boolean;
+  /** Media left out: tracks whose document already answers as a card (KBC-101 BR-8). */
+  readonly exceptIds?: readonly string[];
 }
 
 /** Matching segments per "Autoria" group, each up to MEDIA_COUNT_CAP. */
@@ -117,6 +119,8 @@ export interface MediaSearchPort {
     readonly mainOf: ReadonlyMap<string, string | null>;
     /** As in `search`: both must count the same passages. */
     readonly tracks?: boolean;
+    /** As in `search`. */
+    readonly exceptIds?: readonly string[];
   }): AuthorshipTally;
   /** Whether any of these collections has a searchable (transcribed) media. */
   hasTranscripts(topics: readonly string[]): boolean;

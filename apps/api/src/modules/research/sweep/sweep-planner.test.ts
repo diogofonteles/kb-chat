@@ -5,6 +5,7 @@ import {
   memoryDoc,
   memoryTools,
 } from '../../../../test/memory-research.js';
+import { coveredMark } from './sweep-cursor.js';
 
 const MESTRE = 'José Laércio do Egito';
 
@@ -105,6 +106,43 @@ describe('SweepPlanner (KBC-030)', () => {
     expect(
       layout?.batches.flatMap((b) => b.units.map((u) => u.entry.id)),
     ).not.toContain('raw/t1.md');
+  });
+
+  it('resumes a cursor over a set that changed since: only documents it never covered are read (code review 2 of KBC-101)', async () => {
+    // t1 and t2 swept; since then t4 left and t15 joined (its id sorts before the cursor's).
+    const docs = Object.fromEntries(
+      Object.entries(corpus()).filter(([id]) => id !== 'raw/t4.md'),
+    );
+    docs['raw/t15.md'] = docs['raw/t2.md'] ?? '';
+    const sweeps = (await memoryTools(new MemoryVault(docs))).sweeps;
+    const layout = await sweeps.layout('hermetismo', {
+      plan: plan(),
+      batchChars: 30_000,
+      after: 'raw/t2.md',
+      covered: coveredMark(['raw/t1.md', 'raw/t2.md']),
+    });
+    expect(layout?.skipped).toBe(2);
+    expect(layout?.docs.slice(0, 2).map((d) => d.entry.id)).toEqual([
+      'raw/t1.md',
+      'raw/t2.md',
+    ]);
+    expect([
+      ...new Set(
+        layout?.batches.flatMap((b) => b.units.map((u) => u.entry.id)),
+      ),
+    ]).toEqual(['raw/t15.md', 'raw/t3.md']);
+  });
+
+  it('resumes a cursor from before the covered mark after its id, over the same set', async () => {
+    const layout = await (
+      await planner()
+    ).layout('hermetismo', {
+      plan: plan(),
+      batchChars: 30_000,
+      after: 'raw/t2.md',
+    });
+    expect(layout?.skipped).toBe(2);
+    expect(layout?.batches.length).toBeGreaterThan(0);
   });
 
   it('reads a batch as labelled, fenced document text', async () => {

@@ -1,4 +1,5 @@
 import type { KbFacets } from '@kb-chat/contracts';
+import type { ShelfRow } from './track-shelf.js';
 import type { LeaseOwner } from './media-store.js';
 
 /** A track's document as the app wants it now (ADR 0035 §4). */
@@ -164,6 +165,8 @@ export interface MediaDocumentStorePort {
   countsOf(topic: string): DocumentCounts;
   /** The fingerprint the app last wanted for a track; null without a document. */
   desiredFingerprint(mediaId: string): string | null;
+  /** Every media of a collection as the track shelf reads it, in one query (KBC-101). */
+  shelfRows(topic: string): ReadonlyMap<string, ShelfRow>;
   /** What the Mac last published of a track; null before the first publication. */
   publishedFingerprint(mediaId: string): string | null;
   /** One queued job per collection: a second call while one waits does nothing. */

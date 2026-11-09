@@ -55,6 +55,7 @@ export {
   hasFeature,
   isMaster,
   mediaQuotaOf,
+  seesTrackDocuments,
   toPerson,
   type ParentOf,
   type StoredPerson,

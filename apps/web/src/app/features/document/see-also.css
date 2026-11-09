@@ -73,3 +73,12 @@ a.ref {
   font-size: var(--text-sm);
   color: var(--color-danger);
 }
+
+/* KBC-101: a linked track, "♪ <título> · <gravação>" (the note is never the only sign). */
+.track {
+  overflow-wrap: anywhere;
+}
+
+.recording {
+  color: var(--color-text-muted);
+}

@@ -16,12 +16,14 @@ import type {
 } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import type { TrackShelf } from '../../ports/track-shelf.js';
 import {
   SIGNED_IN,
   canSee,
   hasFeature,
   isMaster,
   principalOf,
+  seesTrackDocuments,
   viewerOf,
   type RouteAccess,
 } from '../auth/index.js';
@@ -40,6 +42,8 @@ export interface TopicsDeps {
   readonly preferredTopic?: (principal: string) => string | undefined;
   /** Each collection's main author (KBC-049). */
   readonly mainAuthorOf?: MainAuthorOf;
+  /** media.db's word on track documents (KBC-101, C17); absent with media off. */
+  readonly tracks?: () => TrackShelf;
 }
 
 /** "Criar acervos" creates and renames (KBC-048 BR-1); renaming also needs the collection. */
@@ -57,6 +61,14 @@ const actorOf = (request: FastifyRequest): CollectionActor => {
     canSee: (slug) => canSee(request, slug),
   };
 };
+
+/** The tracks counted as documents: for who has `media` and `media-tracks` (KBC-101 BR-7). */
+function tracksSeenBy(
+  request: FastifyRequest,
+  tracks: TopicsDeps['tracks'],
+): TrackShelf | undefined {
+  return seesTrackDocuments(viewerOf(request).person) ? tracks?.() : undefined;
+}
 
 type Typed = FastifyInstance<
   RawServerDefault,
@@ -82,6 +94,7 @@ function registerList(typed: Typed, deps: TopicsDeps): void {
           ? await deps.service.renamableBy(actorOf(request))
           : undefined,
         mainAuthorOf: deps.mainAuthorOf,
+        tracks: tracksSeenBy(request, deps.tracks),
       }),
   );
 }

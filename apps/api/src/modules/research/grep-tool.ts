@@ -1,7 +1,7 @@
 import type { ResearchStep } from '@kb-chat/contracts';
 import type { z } from 'zod';
 import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
-import { anchorsIn } from './track-anchors.js';
+import { anchorsIn } from '@kb-chat/contracts';
 import {
   acceptsEntry,
   describeFilter,
