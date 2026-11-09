@@ -303,6 +303,10 @@ describe('Corrigir todas (KBC-093)', () => {
       key,
     });
     expect([once.statusCode, again.statusCode]).toEqual([201, 200]);
+    // The lost answer, sent again, says what the first one did (AC-34).
+    const answered = once.json<TranscriptCorrectionBatchResult>();
+    expect(answered.count).toBe(11);
+    expect(again.json<TranscriptCorrectionBatchResult>()).toEqual(answered);
     const history = await historyOf(media.owner, recording.id);
     expect(
       history.entries.filter((entry) => entry.groupId === key),
@@ -442,6 +446,45 @@ describe('Corrigir todas (KBC-093)', () => {
     const text = (await textOf(owner, recording.id)).join(' ');
     expect(text.match(/Tiuaco/g)).toHaveLength(10);
     expect(text.match(/Tiuacô/g)).toHaveLength(2);
+    // Each version's group is its own line: 12 on the first, the 10 carried on the new one.
+    const groups = history.entries.filter((entry) => entry.groupId !== null);
+    expect(
+      groups.map((entry) => ({
+        version: [...new Set(entry.items.map((item) => item.version))],
+        items: entry.items.length,
+      })),
+    ).toEqual([
+      { version: [2], items: 10 },
+      { version: [1], items: 12 },
+    ]);
+    const [carried] = groups;
+    expect(carried?.items.every((item) => item.kind === 'carried')).toBe(true);
+    expect(carried?.canUndoGroup).toBe(true);
+    const undone = await owner(
+      'POST',
+      `${correctionsUrl(recording.id)}/groups/${carried?.groupId}/undo`,
+    );
+    expect(undone.json<CorrectionGroupUndoResult>()).toMatchObject({
+      undone: 10,
+      changed: 0,
+    });
+  });
+
+  it('F-4: an empty text is refused, as the screen does, and writes nothing', async () => {
+    const world = await startWorld();
+    const { owner } = world.media;
+    const { recording } = await twelve(world);
+    const preview = await previewOf(owner, recording.id, { text: 'tiuako' });
+    const before = snapshot(world.media, recording.id);
+
+    for (const text of ['', '   ']) {
+      const refused = await batch(owner, recording.id, {
+        items: itemsOf(preview),
+        text,
+      });
+      expect(refused.statusCode, text).toBe(422);
+    }
+    expect(snapshot(world.media, recording.id)).toEqual(before);
   });
 
   it('AC-39, BR-16: a correction never changes the term list, and the log keeps what a suggestion needs', async () => {

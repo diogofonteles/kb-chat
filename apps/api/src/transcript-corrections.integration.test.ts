@@ -448,6 +448,49 @@ describe('Transcript word corrections (KBC-093)', () => {
     });
   });
 
+  it('NFR-3, ADR 0034 §6: a correction that no longer fits its segment is kept not carried, and the new version is saved', async () => {
+    const world = await startWorld();
+    const { owner } = world.media;
+    const speech = [
+      { at: 10, text: 'O mestre Tiuako disse' },
+      { at: 100, text: 'o vegetal Mariri falou' },
+    ];
+    const recording = await transcribed(world, speech);
+    expect(
+      (await fix(owner, recording.id, { from: 'Tiuako', to: 'Tiuaco' }))
+        .statusCode,
+    ).toBe(201);
+    expect(
+      (await fix(owner, recording.id, { from: 'Mariri', to: 'Mariri,' }))
+        .statusCode,
+    ).toBe(201);
+    // The new version's first segment says something its words do not: it cannot be rewritten.
+    dbExec(
+      world.media,
+      `CREATE TRIGGER misalign AFTER INSERT ON segments
+       WHEN NEW.text LIKE '%Tiuako%'
+       BEGIN UPDATE segments SET text = 'outra coisa' WHERE rowid = NEW.rowid; END`,
+    );
+
+    await owner('POST', `/api/v1/media/${recording.id}/transcription`, {});
+    await say(world, speech);
+
+    const transcript = await transcriptOf(owner, recording.id);
+    expect(transcript).toMatchObject({ version: 2, revision: 1 });
+    expect(transcript.segments.map((one) => one.text)).toEqual([
+      'outra coisa',
+      'o vegetal Mariri, falou',
+    ]);
+    const history = await historyOf(owner, recording.id);
+    expect(history.carry).toEqual({ version: 2, carried: 1, notCarried: 1 });
+    const items = history.entries.flatMap((entry) => entry.items);
+    expect(items.find((row) => row.state === 'not-carried')).toMatchObject({
+      before: ['Tiuako'],
+      after: 'Tiuaco',
+      found: 'Tiuako',
+    });
+  });
+
   it('AC-16, AC-17, AC-18, BR-5, PD-06, PD-07: who may correct, read the log and undo', async () => {
     const world = await startWorld();
     const { media } = world;

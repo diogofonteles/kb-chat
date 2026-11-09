@@ -50,6 +50,13 @@ interface Target {
   readonly words: readonly StoredWord[];
 }
 
+/** One carry-over (BR-9): the new version, its words as written so far, the new groups. */
+interface CarryRun {
+  readonly current: CurrentTranscript;
+  readonly words: Map<number, PlacedWord>;
+  readonly groups: Map<string, string>;
+}
+
 /** Changes written together: one revision, rows with one group (amendment 8). */
 interface Together {
   readonly current: CurrentTranscript;
@@ -127,12 +134,13 @@ export class TranscriptCorrectionService extends CorrectionService {
     request: TranscriptCorrectionBatchRequest,
   ): Written<TranscriptCorrectionBatchResult> {
     this.recording(actor, mediaId);
-    const text = this.tidy(request.text);
+    const text = this.batchText(request.text);
     this.checkItems(request.items);
     return this.deps.store.inTransaction(() => {
       const current = this.currentAt(mediaId, request.version);
-      if (this.deps.store.groupRows(mediaId, request.key).length > 0)
-        return { status: 200, body: this.batchResult(current, request.key) };
+      const sent = this.deps.store.groupRows(mediaId, request.key);
+      if (sent.length > 0)
+        return { status: 200, body: this.replayed(current, request.key, sent) };
       const written = this.writeTogether({
         current,
         changes: this.targetsOf(current, request.items).map(({ item, words }) =>
@@ -148,6 +156,14 @@ export class TranscriptCorrectionService extends CorrectionService {
         body: this.batchResult(written.current, request.key, written),
       };
     });
+  }
+
+  /** Deleting every occurrence is not "Corrigir todas": the screen refuses it too (BR-11). */
+  private batchText(raw: string): string {
+    const text = this.tidy(raw);
+    if (text === '')
+      throw new AppError('CORRECTION_INVALID', 'Type the right text');
+    return text;
   }
 
   /** 1 to 200 items that do not overlap (422 otherwise, BR-12, AC-30, AC-32). */
@@ -187,18 +203,40 @@ export class TranscriptCorrectionService extends CorrectionService {
   private batchResult(
     current: CurrentTranscript,
     groupId: string,
-    written?: {
+    written: {
       readonly rows: readonly CorrectionRow[];
       readonly segments: readonly RewrittenSegment[];
     },
   ): TranscriptCorrectionBatchResult {
     return {
       groupId,
-      count: written?.rows.length ?? 0,
+      count: written.rows.length,
       version: current.version,
       revision: current.revision,
-      segments: [...(written?.segments ?? [])],
+      segments: [...written.segments],
     };
+  }
+
+  /**
+   * A key sent again (a lost answer, AC-34): what that group wrote on this version, with its
+   * segments as they read now, and nothing written again.
+   */
+  private replayed(
+    current: CurrentTranscript,
+    groupId: string,
+    sent: readonly CorrectionRow[],
+  ): TranscriptCorrectionBatchResult {
+    const rows = sent.filter(
+      (row) => row.kind === 'correct' && row.transcriptId === current.id,
+    );
+    const { store } = this.deps;
+    const segments = segmentsOf(
+      rows.map((row) => ({
+        index: row.segment,
+        text: store.segmentText(current.id, row.segment) ?? '',
+      })),
+    );
+    return this.batchResult(current, groupId, { rows, segments });
   }
 
   /** Several changes in one revision, each with its row; the tracks follow once (BR-15). */
@@ -370,39 +408,83 @@ export class TranscriptCorrectionService extends CorrectionService {
       : null;
     if (!current || !previous) return;
     const rows = store.activeOn(previous.id);
-    const carried = rows.flatMap((row) => this.carryOne(current, row));
+    const run: CarryRun = {
+      current,
+      // Read once (thousands of words, inside the worker's transaction) and kept as written.
+      words: new Map(
+        store.allWords(current.id).map((word) => [word.position, word]),
+      ),
+      // A group carried is a group of its own on the new version (BR-14): its history line
+      // counts what landed there, apart from the version before.
+      groups: new Map(),
+    };
+    const carried = rows.flatMap((row) => this.carryOne(run, row));
     if (carried.length === 0) return;
     store.setRevision(current.id, current.revision + 1);
     this.notify(mediaId, 'carry', carried);
   }
 
-  private carryOne(
-    current: CurrentTranscript,
-    row: CorrectionRow,
-  ): CorrectionRow[] {
+  private carryOne(run: CarryRun, row: CorrectionRow): CorrectionRow[] {
     const { store } = this.deps;
-    const outcome = carryOver(row, store.allWords(current.id));
-    const { version } = current;
-    if (!outcome.carried) {
-      store.markNotCarried(row.id, { found: outcome.found, version });
+    const { current } = run;
+    const change = this.landing(run, row);
+    if (typeof change === 'string') {
+      store.markNotCarried(row.id, { found: change, version: current.version });
       return [];
     }
-    const change = {
-      words: outcome.words,
-      texts: replacedTexts(row.count, row.after),
-    };
-    writeChange(store, current.id, change);
     const carried = rowOf(current, change, {
       id: this.newId(),
       kind: 'carried',
       revision: current.revision + 1,
       author: { principal: row.authorPrincipal, name: row.authorName },
       at: this.now().toISOString(),
-      groupId: row.groupId,
+      groupId: this.carriedGroup(run, row.groupId),
     });
     store.insert(carried);
     const to = { carriedTo: carried.id, version: current.version };
     store.markCarried(row.id, to);
     return [carried];
+  }
+
+  /**
+   * The change written on the new version, or what that version says there when it does not
+   * land: other words, or words whose segment cannot be rewritten (409 `not-aligned`), which
+   * stay not carried and never fail the new version (NFR-3, ADR 0034 §6).
+   */
+  private landing(run: CarryRun, row: CorrectionRow): WordChange | string {
+    const outcome = carryOver(row, [...run.words.values()]);
+    if (!outcome.carried) return outcome.found;
+    const change = {
+      words: outcome.words,
+      texts: replacedTexts(row.count, row.after),
+    };
+    return this.landed(run, change) ? change : spoken(textsOf(outcome.words));
+  }
+
+  /** Writes a carried change and keeps the words read in step; false when it cannot land. */
+  private landed(run: CarryRun, change: WordChange): boolean {
+    try {
+      writeChange(this.deps.store, run.current.id, change);
+    } catch (err) {
+      if (err instanceof AppError && err.code === 'CORRECTION_CONFLICT')
+        return false;
+      throw err;
+    }
+    change.words.forEach((word, index) =>
+      run.words.set(word.position, {
+        ...word,
+        text: change.texts[index] ?? '',
+      }),
+    );
+    return true;
+  }
+
+  private carriedGroup(run: CarryRun, groupId: string | null): string | null {
+    if (groupId === null) return null;
+    const known = run.groups.get(groupId);
+    if (known) return known;
+    const fresh = this.newId();
+    run.groups.set(groupId, fresh);
+    return fresh;
   }
 }
