@@ -19,6 +19,7 @@ import type { MediaActor } from '../media/index.js';
 import {
   CorrectionService,
   authorOf,
+  mayUndoAuthor,
   type Written,
 } from './correction-service.js';
 import {
@@ -299,8 +300,7 @@ export class TranscriptCorrectionService extends CorrectionService {
       .filter((row) => row.kind !== 'undo');
     if (rows.length === 0)
       throw new AppError('NOT_FOUND', 'Unknown group of corrections');
-    const own = rows.every((row) => row.authorPrincipal === actor.principal);
-    if (!actor.isMaster && !own)
+    if (!rows.every((row) => mayUndoAuthor(row, actor)))
       throw new AppError('FORBIDDEN', 'Only a master undoes another person');
     return rows;
   }
@@ -439,6 +439,7 @@ export class TranscriptCorrectionService extends CorrectionService {
       author: { principal: row.authorPrincipal, name: row.authorName },
       at: this.now().toISOString(),
       groupId: this.carriedGroup(run, row.groupId),
+      ruleId: row.ruleId,
     });
     store.insert(carried);
     const to = { carriedTo: carried.id, version: current.version };

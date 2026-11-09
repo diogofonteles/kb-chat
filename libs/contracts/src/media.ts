@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { transcriptTermListSchema } from './media-terms.js';
+import { learnedSpanSchema } from './transcript-learning.js';
 import { authorSchema, authorSlugSchema } from './authors.js';
 import { TOPIC_TITLE_MAX, topicSlugSchema } from './topics.js';
 import { MAX_VOICES, voiceIndexSchema } from './voice-index.js';
@@ -1530,6 +1531,8 @@ export const mediaTranscriptWordsSchema = z.object({
   /** Goes up with each word correction or undo of this version (KBC-093 BR-4, ADR 0034 §2). */
   revision: z.number().int().min(0).default(0),
   words: z.array(transcriptWordSchema),
+  /** The words of these segments the learning replaced (KBC-113 FR-5). */
+  learned: z.array(learnedSpanSchema).default([]),
 });
 export type MediaTranscriptWords = z.infer<typeof mediaTranscriptWordsSchema>;
 

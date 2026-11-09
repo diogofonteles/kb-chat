@@ -24,6 +24,7 @@ import {
   type CorrectionAuthor,
   type WordChange,
 } from './correction-writer.js';
+import { LEARNING_PRINCIPAL } from './learning-rules.js';
 import { isContiguous, replacedTexts, tidyText } from './word-rewrite.js';
 
 /** Entries of the history per page (FR-6). */
@@ -69,11 +70,21 @@ export const authorOf = (actor: MediaActor): CorrectionAuthor => ({
   name: actor.displayName ?? null,
 });
 
-/** A correction in force, by its author or a master (BR-5). */
+/**
+ * Who undoes a row (BR-5): its author or a master; the learning's, anyone who corrects
+ * (KBC-113 BR-7: it is no person's).
+ */
+export const mayUndoAuthor = (
+  row: Pick<CorrectionRow, 'authorPrincipal'>,
+  actor: MediaActor,
+): boolean =>
+  row.authorPrincipal === actor.principal ||
+  row.authorPrincipal === LEARNING_PRINCIPAL ||
+  actor.isMaster;
+
+/** A correction in force that this person may undo (BR-5). */
 const mayUndo = (row: CorrectionRow, actor: MediaActor): boolean =>
-  row.state === 'active' &&
-  row.kind !== 'undo' &&
-  (row.authorPrincipal === actor.principal || actor.isMaster);
+  row.state === 'active' && row.kind !== 'undo' && mayUndoAuthor(row, actor);
 
 const invalid = (message: string) =>
   new AppError('CORRECTION_INVALID', message);
@@ -176,9 +187,7 @@ export class CorrectionService {
   private entryOf(rows: readonly CorrectionRow[], actor: MediaActor) {
     const items = rows.map((row) => this.toContract(row, actor));
     const groupId = rows[0]?.groupId ?? null;
-    const own =
-      actor.isMaster ||
-      rows.every((row) => row.authorPrincipal === actor.principal);
+    const own = rows.every((row) => mayUndoAuthor(row, actor));
     return {
       groupId,
       items,
@@ -212,6 +221,7 @@ export class CorrectionService {
       authorName: row.authorName,
       mine,
       canUndo: mayUndo(row, actor),
+      learned: row.ruleId !== null,
       createdAt: row.createdAt,
     };
   }
@@ -325,7 +335,7 @@ export class CorrectionService {
   ): CorrectionRow {
     const row = this.deps.store.row(mediaId, correctionId);
     if (!row) throw new AppError('NOT_FOUND', 'Unknown correction');
-    if (!actor.isMaster && row.authorPrincipal !== actor.principal)
+    if (!mayUndoAuthor(row, actor))
       throw new AppError('FORBIDDEN', 'Only a master undoes another person');
     return row;
   }

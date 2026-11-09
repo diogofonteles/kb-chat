@@ -92,7 +92,9 @@ export class CorrectionHistory {
   }
 
   protected kindOf(row: TranscriptCorrection): string {
-    return KIND_LABELS[row.kind]();
+    return row.learned
+      ? $localize`:@@history.kindLearned:Corrigida pelo aprendizado`
+      : KIND_LABELS[row.kind]();
   }
 
   protected first(entry: CorrectionEntry): TranscriptCorrection | null {

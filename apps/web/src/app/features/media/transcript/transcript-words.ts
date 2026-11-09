@@ -1,5 +1,6 @@
 import { computed, linkedSignal, type Signal } from '@angular/core';
 import type {
+  LearnedSpan,
   MediaTranscript,
   MediaTranscriptWords,
   TranscriptWord,
@@ -66,6 +67,15 @@ export class TranscriptWords {
       computation: () => new Map(),
     },
   );
+  /** The learning's replacements on the pages read, by their first word (KBC-113 FR-6). */
+  private readonly learnedSpans = linkedSignal<
+    string,
+    ReadonlyMap<number, LearnedSpan>
+  >({
+    source: this.key,
+    computation: () => new Map(),
+  });
+  readonly learned = computed(() => this.learnedSpans());
   private readonly asking = new Map<string, Observable<unknown>>();
 
   constructor(
@@ -101,8 +111,14 @@ export class TranscriptWords {
         const aligned = new Map<number, readonly PlacedWord[]>();
         for (const [segment, group] of groupBySegment(fits ? answer.words : []))
           aligned.set(segment, placed(segments[segment]?.text ?? '', group));
-        if (this.key() === keyOf(transcript))
-          this.pages.update((pages) => new Map(pages).set(page, aligned));
+        if (this.key() !== keyOf(transcript)) return;
+        this.pages.update((pages) => new Map(pages).set(page, aligned));
+        if (fits && answer.learned.length > 0)
+          this.learnedSpans.update((spans) => {
+            const next = new Map(spans);
+            for (const span of answer.learned) next.set(span.position, span);
+            return next;
+          });
       }),
       // The caller reads `of`: what matters is that the wait is over.
       catchError(() => EMPTY),

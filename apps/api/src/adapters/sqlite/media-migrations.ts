@@ -1436,4 +1436,30 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         ON transcript_corrections (group_id) WHERE group_id IS NOT NULL;
     `,
   },
+  {
+    // KBC-113 (ADR 0037 §2, §4-§5, §7): a correction the learning wrote names its rule; a
+    // term-list version holds the masters' terms and the learned ones; masters switch a rule
+    // or a learned term. Expand only: the previous image reads learned rows as corrections
+    // and learned terms as part of the list.
+    version: 30,
+    name: 'learning-from-corrections',
+    sql: `
+      ALTER TABLE transcript_corrections ADD COLUMN rule_id TEXT;
+      CREATE INDEX transcript_corrections_by_rule
+        ON transcript_corrections (rule_id) WHERE rule_id IS NOT NULL;
+
+      ALTER TABLE terms ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'
+        CHECK (source IN ('manual', 'learned'));
+
+      CREATE TABLE learning_switches (
+        kind TEXT NOT NULL CHECK (kind IN ('rule', 'term')),
+        key TEXT NOT NULL,
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        author_principal TEXT NOT NULL,
+        author_name TEXT,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (kind, key)
+      ) STRICT, WITHOUT ROWID;
+    `,
+  },
 ];

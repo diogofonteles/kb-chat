@@ -58,7 +58,7 @@ function transcriptOf(
         text,
       })),
     },
-    words: { mediaId: MEDIA, version, revision: 0, words },
+    words: { mediaId: MEDIA, version, revision: 0, words, learned: [] },
   };
 }
 

@@ -29,6 +29,9 @@
             @if (entry.groupId && entry.items.length > 1) {
               <details>
                 <summary>
+                  @if (row.learned) {
+                    <span i18n="@@history.learnedPrefix">Aprendizado:</span>
+                  }
                   <span class="swap"
                     ><del>{{ before(row) }}</del> →
                     <ins>{{ after(row) }}</ins></span

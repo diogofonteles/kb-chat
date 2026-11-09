@@ -24,6 +24,8 @@ export interface TranscriptionServiceDeps {
   readonly files: MediaFilesPort;
   /** The recording's new transcript is in: its tracks follow in that transaction (KBC-068). */
   readonly onTranscript?: (mediaId: string) => void;
+  /** The list to prompt with, learned terms included (KBC-113 FR-4); the newest otherwise. */
+  readonly terms?: () => TranscriptionTerms;
   readonly now?: () => Date;
 }
 
@@ -85,7 +87,7 @@ export class TranscriptionService {
   }
 
   terms(): TranscriptionTerms {
-    return this.deps.transcripts.currentTerms();
+    return this.deps.terms?.() ?? this.deps.transcripts.currentTerms();
   }
 
   /**

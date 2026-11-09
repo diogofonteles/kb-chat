@@ -1,4 +1,5 @@
 import type {
+  LearnedSpan,
   MediaTranscript,
   MediaTranscriptWords,
   TranscriptSpeakers,
@@ -43,6 +44,11 @@ export interface TranscriptServiceDeps {
     readonly speakerId: string;
     readonly name: string;
   }[];
+  /** The learning's replacements in force in these segments (KBC-113 FR-5). */
+  readonly learnedOn?: (
+    transcriptId: string,
+    segments: { readonly from: number; readonly count: number },
+  ) => LearnedSpan[];
   /** WebVTT files kept in memory (the most recently used). */
   readonly cacheSize?: number;
 }
@@ -151,6 +157,7 @@ export class TranscriptService {
           endMs,
           text,
         })),
+      learned: this.deps.learnedOn?.(summary.id, range) ?? [],
     };
   }
 

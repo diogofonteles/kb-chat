@@ -192,6 +192,7 @@ export class TrackText {
     this.source.open();
     this.loadNeededWords();
     this.paintWord();
+    this.paintLearned();
     this.followWord();
     this.showTrackInWhole();
     this.focusAfterRetry();
@@ -216,6 +217,35 @@ export class TrackText {
     });
     this.destroyRef.onDestroy(() => this.highlights.clear('correcting-word'));
     this.refocusWhenClosed();
+  }
+
+  /**
+   * The words the learning replaced get a subtle mark (KBC-113 FR-6), for everyone who
+   * reads the text: one highlight, no element per word (KBC-093 NFR-5).
+   */
+  private paintLearned(): void {
+    afterRenderEffect({
+      write: () => {
+        const learned = this.source.words.learned();
+        const ranges: Range[] = [];
+        if (learned.size > 0)
+          this.lines().forEach((line, index) => {
+            for (const word of line.words ?? []) {
+              const position = positionOf(word);
+              if (position === null || !learned.has(position)) continue;
+              const range = this.rangeOf({
+                line: index,
+                start: word.charStart,
+                end: word.charEnd,
+                whole: false,
+              });
+              if (range) ranges.push(range);
+            }
+          });
+        this.highlights.show('learned-word', ranges);
+      },
+    });
+    this.destroyRef.onDestroy(() => this.highlights.clear('learned-word'));
   }
 
   /** A word clicked (BR-17): the audio goes to it and the panel opens on it, once. */

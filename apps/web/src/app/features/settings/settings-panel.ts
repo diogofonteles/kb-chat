@@ -22,6 +22,7 @@ import { SessionStore } from '@core/auth/session-store.js';
 import { PeoplePanel } from '@features/people/people-panel.js';
 import { HouseAiPanel } from '@features/house-ai/house-ai-panel.js';
 import { TermsPanel } from '@features/transcribers/terms-panel.js';
+import { LearningPanel } from '@features/transcribers/learning-panel.js';
 import { GroqPanel } from '@features/transcribers/groq-panel.js';
 import { ExistingTracks } from '@features/transcribers/existing-tracks.js';
 import { TranscribersPanel } from '@features/transcribers/transcribers-panel.js';
@@ -88,6 +89,7 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'failed' | 'invalid';
     TranscribersPanel,
     ExistingTracks,
     TermsPanel,
+    LearningPanel,
     GroqPanel,
     VoiceProfilesPanel,
     AiStatusCard,

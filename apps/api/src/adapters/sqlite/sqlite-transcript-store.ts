@@ -11,6 +11,7 @@ import type {
   JobLease,
   NewTranscript,
   StoredWord,
+  TermParts,
   TranscriptStorePort,
   TranscriptSummary,
 } from '../../ports/transcript-store.js';
@@ -90,6 +91,20 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
     return { version, terms: rows.map((row) => text(row, 'term')) };
   }
 
+  termPartsAt(version: number): TermParts | null {
+    const rows = this.db
+      .prepare(
+        'SELECT term, source FROM terms WHERE version = ? ORDER BY position',
+      )
+      .all(version);
+    if (rows.length === 0) return null;
+    const of = (source: string) =>
+      rows
+        .filter((row) => row['source'] === source)
+        .map((row) => text(row, 'term'));
+    return { version, manual: of('manual'), learned: of('learned') };
+  }
+
   termVersions(): TermVersion[] {
     return this.db
       .prepare(`${TERM_VERSIONS} ORDER BY v.version DESC`)
@@ -107,6 +122,7 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
   saveTerms(input: {
     baseVersion: number;
     terms: readonly string[];
+    learned?: readonly string[];
     author: { principal: string; name: string | null };
     now: Date;
   }): boolean {
@@ -124,14 +140,27 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
           input.author.principal,
           input.author.name,
         );
-      const insert = this.db.prepare(
-        'INSERT INTO terms (version, position, term) VALUES (?, ?, ?)',
-      );
-      input.terms.forEach((term, index) =>
-        insert.run(version, index + 1, term),
-      );
+      this.insertTerms(version, input.terms, input.learned ?? []);
       return true;
     });
+  }
+
+  /** The masters' terms first, then the learned ones (ADR 0037 §5). */
+  private insertTerms(
+    version: number,
+    manual: readonly string[],
+    learned: readonly string[],
+  ): void {
+    const insert = this.db.prepare(
+      'INSERT INTO terms (version, position, term, source) VALUES (?, ?, ?, ?)',
+    );
+    const rows = [
+      ...manual.map((term) => [term, 'manual'] as const),
+      ...learned.map((term) => [term, 'learned'] as const),
+    ];
+    rows.forEach(([term, source], index) =>
+      insert.run(version, index + 1, term, source),
+    );
   }
 
   heldJob(owner: LeaseOwner): JobLease | null {

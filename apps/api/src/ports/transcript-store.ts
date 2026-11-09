@@ -83,6 +83,13 @@ export interface JobLease {
   readonly kind: MediaJobKind;
 }
 
+/** A term-list version, the masters' terms apart from the learned ones (ADR 0037 §5). */
+export interface TermParts {
+  readonly version: number;
+  readonly manual: readonly string[];
+  readonly learned: readonly string[];
+}
+
 /**
  * Transcripts, their derived segments and words, and the term list (ADR 0023), in the
  * media database. Completing a transcribe job and storing its transcript is one transaction.
@@ -92,6 +99,8 @@ export interface TranscriptStorePort {
   currentTerms(): TranscriptionTerms;
   /** The list as a version had it; null when there is no such version. */
   termsAt(version: number): TranscriptionTerms | null;
+  /** A version's masters' terms and learned ones, apart (KBC-113 BR-10); null when unknown. */
+  termPartsAt(version: number): TermParts | null;
   /** Every version of the list, newest first (KBC-040 BR-1). */
   termVersions(): TermVersion[];
   /** One version of the list, null when unknown. */
@@ -103,6 +112,8 @@ export interface TranscriptStorePort {
   saveTerms(input: {
     readonly baseVersion: number;
     readonly terms: readonly string[];
+    /** Learned terms after the masters' (KBC-113 BR-9); none when absent. */
+    readonly learned?: readonly string[];
     readonly author: {
       readonly principal: string;
       readonly name: string | null;

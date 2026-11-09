@@ -20,6 +20,7 @@ import {
   CORRECTION_MAX_WORDS,
   correctionConflictSchema,
   type CorrectionHistory,
+  type LearnedSpan,
   type TranscriptCorrectionResult,
 } from '@kb-chat/contracts';
 import { formatClock, type TimedSpan } from '@kb-chat/player-core';
@@ -170,6 +171,17 @@ export class CorrectionDesk {
   readonly hasNext = computed(() => {
     const selection = this.chosen();
     return selection !== null && selection.last < selection.words.length - 1;
+  });
+  /** The learning replaced the chosen words (KBC-113 FR-6): what they said, and its row. */
+  readonly learnedSpan = computed<LearnedSpan | null>(() => {
+    const learned = this.source.words.learned();
+    if (learned.size === 0) return null;
+    for (const word of this.words()) {
+      const span =
+        word.position === null ? undefined : learned.get(word.position);
+      if (span) return span;
+    }
+    return null;
   });
   readonly timed = computed(() => {
     const [first] = this.words();
@@ -381,7 +393,7 @@ export class CorrectionDesk {
   }
 
   /** Desfazer, in the notice or the history (BR-7). */
-  undo(correctionId: string): void {
+  undo(correctionId: string, done?: string): void {
     const transcript = this.source.transcript();
     if (!transcript || this.undoPending()) return;
     this.clearNotice();
@@ -389,12 +401,23 @@ export class CorrectionDesk {
       next: () => {
         this.source.reload();
         this.loadHistory();
-        const text = $localize`:@@correct.undone:Correção desfeita.`;
+        const text = done ?? $localize`:@@correct.undone:Correção desfeita.`;
         this.say(text);
         this.tell({ text, undo: null });
       },
       error: (err: unknown) => this.undoRefused(err),
     });
+  }
+
+  /** "Desfazer" on a word the learning replaced (KBC-113 BR-7): the panel closes. */
+  undoLearned(): void {
+    const span = this.learnedSpan();
+    if (!span || this.undoPending()) return;
+    this.close();
+    this.undo(
+      span.correctionId,
+      $localize`:@@correct.learnedUndone:Palavra voltou a «${span.before}:before:».`,
+    );
   }
 
   /** Desfazer o grupo (BR-14): what still says the new text goes back, the rest is told. */
