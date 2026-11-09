@@ -3,6 +3,7 @@ import type {
   SearchHitMedia,
   SearchKind,
   SearchRequest,
+  SearchFilters,
   SearchResponse,
   TopicFacets,
 } from '@kb-chat/contracts';
@@ -30,6 +31,7 @@ import {
   type TopicCatalog,
 } from '../catalog/index.js';
 import {
+  cardTracks,
   countFacets,
   groupCopies,
   kindTotals,
@@ -77,8 +79,12 @@ export interface SearchScope {
 /** The documents search with what the spoken passages need to merge into it (KBC-101). */
 export interface DocumentSearch {
   readonly response: SearchResponse;
-  /** Tracks whose document matched the question, whatever the filters (BR-8). */
-  readonly matchedTracks: readonly string[];
+  /**
+   * Tracks shown as cards under the filters, up to the result cap (BR-8): their passages
+   * leave "Na fala". With texts alone chosen, the cards "Ambos" would show, so the counts
+   * ignore the choice (BR-9).
+   */
+  readonly cardTracks: readonly string[];
   /** Result cards per kind under the filters, whatever kinds were chosen (BR-9). */
   readonly totals: { readonly texts: number; readonly tracks: number };
 }
@@ -92,14 +98,18 @@ const admitted = (
   (entry.media !== null &&
     (tracks?.trackOf(topic, entry.media) ?? null) !== null);
 
-/** Every track whose document is among the candidates (BR-8). */
-const matchedTracksOf = (groups: readonly CopyGroup[]): string[] =>
-  groups.flatMap(({ lead }) =>
-    lead.entry.media ? [lead.entry.media.mediaId] : [],
-  );
-
 const ofKind = (kinds: readonly SearchKind[]) => (group: CopyGroup) =>
   kinds.includes(group.lead.entry.media ? 'audio' : 'text');
+
+/** The tracks shown as cards; with texts alone chosen, the ones "Ambos" shows (BR-8, BR-9). */
+const cardsOf = (
+  groups: readonly CopyGroup[],
+  { kinds, filters }: { kinds: readonly SearchKind[]; filters: SearchFilters },
+): string[] =>
+  cardTracks(kinds.includes('audio') ? groups.filter(ofKind(kinds)) : groups, {
+    filters,
+    maxResults: MAX_RESULTS,
+  });
 
 interface FoundGroups {
   readonly groups: readonly CopyGroup[];
@@ -150,11 +160,10 @@ export class SearchService {
       limit,
       maxResults: MAX_RESULTS,
     });
-    const items = await this.hitsOf(page, tracks);
     const totals = kindTotals(groups, filters);
     const response: SearchResponse = {
       ...refined,
-      items,
+      items: await this.hitsOf(page, tracks),
       trackTotal: kinds.includes('audio') ? totals.tracks : 0,
       capped: found.some((one) => one.capped),
       // Documents only: SearchWithMedia adds the spoken passages (KBC-039).
@@ -163,7 +172,8 @@ export class SearchService {
       mode,
       tookMs: Math.round(performance.now() - startedAt),
     };
-    return { response, matchedTracks: matchedTracksOf(groups), totals };
+    const cards = cardsOf(groups, { kinds, filters });
+    return { response, cardTracks: cards, totals };
   }
 
   /** Each collection of the scope searched at once (a parent and its sub-collections). */

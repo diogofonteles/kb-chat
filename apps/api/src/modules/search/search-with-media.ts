@@ -201,7 +201,7 @@ export class SearchWithMedia {
       audio: audible ? 0 : null,
     });
     let found = await this.documentsOf(topic, { parsed, context, reach });
-    const merged = new Set(found.matchedTracks);
+    const merged = new Set(found.cardTracks);
     const spoken = audible
       ? this.spoken(topic, { request: parsed, context, merged })
       : NO_AUDIO;

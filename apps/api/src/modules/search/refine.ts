@@ -175,6 +175,23 @@ export function kindTotals(
   return { texts, tracks };
 }
 
+/**
+ * The tracks a search shows as cards under the filters, on any page up to the result cap
+ * (KBC-101 BR-8): only these leave "Na fala"; a track hidden by a filter, "Fora do tema" or
+ * the cap keeps its spoken passage.
+ */
+export function cardTracks(
+  groups: readonly CopyGroup[],
+  { filters, maxResults }: Pick<RefineOptions, 'filters' | 'maxResults'>,
+): string[] {
+  return groups
+    .filter((group) => matchesExcept(group.lead.entry, filters))
+    .slice(0, maxResults)
+    .flatMap(({ lead }) =>
+      lead.entry.media ? [lead.entry.media.mediaId] : [],
+    );
+}
+
 /** Filters, counts and pages the copy groups of one search (ADR 0003). */
 export function refine(
   groups: readonly CopyGroup[],

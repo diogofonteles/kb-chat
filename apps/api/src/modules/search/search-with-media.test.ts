@@ -75,7 +75,7 @@ function searcher(media: MediaSearchPort | undefined) {
         response: (scope.kinds ?? ['text']).includes('text')
           ? texts
           : { ...texts, items: [], total: 0 },
-        matchedTracks: [],
+        cardTracks: [],
         totals: { texts: 1, tracks: 0 },
       }),
       topicFacets: () => texts.facets,

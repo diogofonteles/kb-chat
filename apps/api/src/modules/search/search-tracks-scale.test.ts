@@ -1,10 +1,16 @@
-import type { SearchResponse } from '@kb-chat/contracts';
+import type {
+  SearchKind,
+  SearchRequest,
+  SearchResponse,
+} from '@kb-chat/contracts';
+import { MAX_RESULTS } from '@kb-chat/contracts';
 import { describe, expect, it } from 'vitest';
 import type {
   IndexHit,
   IndexQuery,
   SearchIndexPort,
 } from '../../ports/search-index.js';
+import type { TrackShelf } from '../../ports/track-shelf.js';
 import type { TopicFolder, VaultReaderPort } from '../../ports/vault-reader.js';
 import { CatalogRegistry } from '../catalog/index.js';
 import { SearchService } from './search-service.js';
@@ -96,4 +102,61 @@ describe('AC-13 at scale (QA F-4): track documents never change the texts search
       expect(withTracks).toEqual(without);
     },
   );
+});
+
+/** A shelf that confirms every track of the vault (who has `media` and `media-tracks`). */
+const everyTrack: TrackShelf = {
+  trackOf: (_topic, { mediaId }) => ({
+    mediaId,
+    title: mediaId,
+    confidence: 'normal',
+  }),
+  segmentsOf: () => [],
+};
+
+async function documentsWith(
+  [texts, tracks]: readonly [number, number],
+  request: SearchRequest = { q: 'ritmo' },
+  kinds: readonly SearchKind[] = ['text', 'audio'],
+) {
+  const vault = vaultOf(texts, tracks);
+  const catalog = new CatalogRegistry(vault);
+  await catalog.load();
+  const service = new SearchService({
+    catalog,
+    index: indexOf(texts, tracks),
+    vault,
+  });
+  return service.searchDocuments(
+    'hermetismo',
+    { mode: 'all', limit: 50, ...request },
+    { tracks: everyTrack, kinds },
+  );
+}
+
+describe('BR-8: only a track that is a card loses its "Na fala" passage', () => {
+  it('a track past the result cap keeps its spoken passage', async () => {
+    const found = await documentsWith([5, MAX_RESULTS + 10]);
+    const cards = found.response.items.flatMap((hit) =>
+      hit.media ? [hit.media.mediaId] : [],
+    );
+    expect(found.response.total).toBe(MAX_RESULTS + 15);
+    expect(cards).toHaveLength(MAX_RESULTS);
+    expect([...found.cardTracks].sort()).toEqual([...cards].sort());
+  });
+
+  it('a card on a later page is still a card: its passage stays merged', async () => {
+    const found = await documentsWith([5, 30], { q: 'ritmo', limit: 10 });
+    expect(found.response.items).toHaveLength(10);
+    expect(found.cardTracks).toHaveLength(30);
+  });
+
+  it('with texts alone chosen, the tracks merged are the ones "Ambos" shows (counts ignore the choice)', async () => {
+    const both = await documentsWith([5, MAX_RESULTS + 10]);
+    const texts = await documentsWith([5, MAX_RESULTS + 10], { q: 'ritmo' }, [
+      'text',
+    ]);
+    expect(texts.response.items.every((hit) => !hit.media)).toBe(true);
+    expect([...texts.cardTracks].sort()).toEqual([...both.cardTracks].sort());
+  });
 });

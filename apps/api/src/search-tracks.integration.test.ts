@@ -327,6 +327,26 @@ describe('tracks in the documents search (KBC-101)', () => {
     expect(audioOnly.total).toBe(2);
   });
 
+  it('BR-8: a track hidden as "Fora do tema" keeps its "Na fala" passage until its card is shown', async () => {
+    const tracks = await trackWorld();
+    const listener = await memberWith(tracks.world, LISTENER);
+    await setKey(tracks, 'relevance', 'off_topic');
+    const spokenOf = (found: SearchResponse) =>
+      found.media.filter((hit) => hit.mediaId === tracks.track.id);
+
+    const hidden = await search(listener, { q: 'pêndulo' });
+    expect(tracksOf(hidden)).toEqual([]);
+    expect(spokenOf(hidden)).not.toEqual([]);
+    const shown = await search(listener, {
+      q: 'pêndulo',
+      filters: { relevances: ['off_topic'] },
+    });
+    expect(tracksOf(shown).map((hit) => hit.media?.mediaId)).toEqual([
+      tracks.track.id,
+    ]);
+    expect(spokenOf(shown)).toEqual([]);
+  });
+
   it('AC-16: a recording without tracks and its document are one card; a track still without a document keeps its "Na fala" card', async () => {
     let alone: { id: string } | undefined;
     const tracks = await trackWorld({
