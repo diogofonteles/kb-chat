@@ -126,6 +126,44 @@ describe('TrackAudition (KBC-066 FR-5)', () => {
       expect(audition.playing()).toBe(false);
     });
 
+    it('AC-25: playing, a word after the track (whole transcript) goes on to the recording end', async () => {
+      const { audition, media } = setup();
+      loaded(media.element);
+      audition.play({ fromMs: 0, toMs: 30_000 }, 't1:track');
+      await Promise.resolve();
+
+      audition.seek(40_000, 30_000);
+
+      expect(media.element.currentTime).toBe(40);
+      expect(audition.playing()).toBe(true);
+      media.setCurrentTime(40.3);
+      media.emit('timeupdate');
+      expect(media.calls).not.toContain('pause');
+      expect(audition.playing()).toBe(true);
+      expect(audition.positionMs()).toBe(40_300);
+      media.setCurrentTime(3_600);
+      media.emit('timeupdate');
+      expect(audition.playing()).toBe(true);
+      media.emit('ended');
+      expect(audition.playing()).toBe(false);
+    });
+
+    it('AC-25: playing, a word before the track goes on from it to the track end', async () => {
+      const { audition, media } = setup();
+      loaded(media.element);
+      audition.play({ fromMs: 60_000, toMs: 90_000 }, 't1:track');
+      await Promise.resolve();
+
+      audition.seek(20_000, 90_000);
+
+      media.setCurrentTime(20.5);
+      media.emit('timeupdate');
+      expect(audition.playing()).toBe(true);
+      media.setCurrentTime(90.1);
+      media.emit('timeupdate');
+      expect(audition.playing()).toBe(false);
+    });
+
     it('AC-41: paused, it waits at the word, and the whole track then starts there', () => {
       const { audition, media } = setup();
       loaded(media.element);

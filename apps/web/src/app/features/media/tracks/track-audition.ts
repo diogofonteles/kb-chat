@@ -79,14 +79,19 @@ export class TrackAudition {
 
   /**
    * A word chosen in the text (KBC-093 BR-17, FR-14): the audio goes to its start and keeps
-   * its state. Playing, it goes on from there (up to `untilMs` at least); paused, it waits
+   * its state. Playing, it goes on from there (up to `untilMs` at least); a word at or after
+   * that end (the whole transcript, AC-25) plays on to the recording's end. Paused, it waits
    * there for the next play.
    */
   seek(ms: number, untilMs: number): void {
     const { element, range } = this;
     if (!element) return;
     if (range && this.playing()) {
-      this.range = { fromMs: ms, toMs: Math.max(range.toMs, untilMs) };
+      const end = Math.max(range.toMs, untilMs);
+      this.range = {
+        fromMs: ms,
+        toMs: ms < end ? end : Number.POSITIVE_INFINITY,
+      };
       element.currentTime = ms / 1000;
       this.position.set(ms);
       return;

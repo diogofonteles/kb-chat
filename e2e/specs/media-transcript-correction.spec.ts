@@ -230,6 +230,33 @@ test('AC-40, AC-25: with the audio playing, a click keeps it playing from the wo
   expect(time).toBeLessThan(23);
 });
 
+test('AC-25: in the whole transcript, a click on a word after the track keeps the audio playing from it', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const owner = await ownerApi();
+  const media = await lecture(owner);
+  await owner.dispose();
+  await openStep3(page, media);
+  await page.getByRole('button', { name: 'Ver transcrição completa' }).click();
+  await expect(textOf(page, 1)).toContainText('Tiuako falou na segunda faixa');
+  await page.getByRole('button', { name: '▶ Ouvir' }).click();
+  await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
+
+  // The third "Tiuako" is at 0:40, in the second track (0:30–1:00).
+  await clickWord(textOf(page, 1), 'Tiuako', 2);
+
+  await expect(panel(page)).toHaveAccessibleName('Corrigir palavra, Tiuako');
+  await expect
+    .poll(async () => (await auditionState(page)).time)
+    .toBeGreaterThanOrEqual(40);
+  // Still playing well after the click: it does not stop at the track's end (0:30).
+  await expect
+    .poll(async () => (await auditionState(page)).time, { timeout: 10_000 })
+    .toBeGreaterThan(41);
+  expect((await auditionState(page)).paused).toBe(false);
+});
+
 test('AC-22, AC-45: by keyboard, Procurar palavra leads to the word and the focus comes back to the occurrence', async ({
   page,
 }) => {
