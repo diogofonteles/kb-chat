@@ -226,6 +226,11 @@ export interface MediaStorePort {
   leaseJob(request: LeaseRequest): LeasedJob | null;
   /** Whether this worker holds a lease of the queue now (one job at a time, ADR 0023). */
   holdsLease(worker: string): boolean;
+  /**
+   * Jobs only the Mac's transcriber takes (transcribe, diarize, voice-profile; not routed to
+   * Groq) that wait for one: queued, or leased and expired (KBC-114: start it by itself).
+   */
+  waitingForTranscriber(now: Date): number;
   /** What a job is; null when it does not exist (anymore). */
   kindOfJob(jobId: string): MediaJobKind | null;
   /** The media item a job converts; null when the job does not exist (anymore). */

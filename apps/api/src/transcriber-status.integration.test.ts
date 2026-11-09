@@ -13,7 +13,12 @@ import {
   start,
 } from '../test/ai-app-harness.js';
 import { member, startMedia, type Media } from '../test/media-harness.js';
-import { asTranscriber, pair } from '../test/transcription-harness.js';
+import {
+  asTranscriber,
+  pair,
+  readyForTranscription,
+} from '../test/transcription-harness.js';
+import { join } from 'node:path';
 import type { LaunchctlRunner } from './adapters/media/launchctl-local-transcriber.js';
 
 afterEach(async () => {
@@ -95,11 +100,11 @@ describe("The transcriber's status (KBC-114 AC-11, AC-12)", () => {
     });
     expect(overview.kbQueue).toEqual({ waiting: 0 });
     expect(overview.start).toEqual({
-      label: 'com.nova-alexandria.transcriber',
+      label: 'br.com.nova-alexandria.transcriber',
       installCommand:
         'uv run --project tools/transcriber transcriber service install --vault /Users/owner/dev/personal/hermetismo',
       startCommand:
-        'launchctl kickstart -k gui/$(id -u)/com.nova-alexandria.transcriber',
+        'launchctl kickstart -k gui/$(id -u)/br.com.nova-alexandria.transcriber',
       canStartHere: false,
     });
   });
@@ -214,7 +219,7 @@ describe('"Ligar transcritor" on the same Mac (KBC-114 AC-13)', () => {
     expect(launchctl.calls).toHaveLength(1);
     expect(launchctl.calls[0]?.slice(0, 2)).toEqual(['kickstart', '-k']);
     expect(launchctl.calls[0]?.[2]).toMatch(
-      /^gui\/\d+\/com\.nova-alexandria\.transcriber$/,
+      /^gui\/\d+\/br\.com\.nova-alexandria\.transcriber$/,
     );
 
     const anonymous = await started.app.inject({
@@ -243,5 +248,67 @@ describe('"Ligar transcritor" on the same Mac (KBC-114 AC-13)', () => {
       ok: false,
       detail: 'Could not find service',
     });
+  });
+});
+
+describe('The transcriber starts by itself on the same Mac (KBC-114 AC-15)', () => {
+  /** The media library on a Mac whose launchctl only records what it is asked. */
+  async function onTheMac() {
+    const calls: (readonly string[])[] = [];
+    const run: LaunchctlRunner = (args) => {
+      calls.push(args);
+      return Promise.resolve({ code: 0, output: '' });
+    };
+    const started = await start({
+      media: true,
+      env: { KB_CHAT_LOCAL_TRANSCRIBER: '1' },
+      launchctl: run,
+    });
+    const ownerHeaders = await signIn(started, 'owner@example.com');
+    const media: Media = {
+      started,
+      owner: caller(started.app, ownerHeaders),
+      ownerHeaders,
+      mediaDir: join(started.state, 'media'),
+    };
+    return { media, calls };
+  }
+
+  it('an upload converted and waiting for its transcription starts it, without -k, once', async () => {
+    const { media, calls } = await onTheMac();
+    await readyForTranscription(media);
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual([
+      'kickstart',
+      expect.stringMatching(
+        /^gui\/\d+\/br\.com\.nova-alexandria\.transcriber$/,
+      ),
+    ]);
+    // Another upload within the minute: launchd is not asked again.
+    await readyForTranscription(media);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(calls).toHaveLength(1);
+  });
+
+  it('a transcriber that is on is left alone', async () => {
+    const { media, calls } = await onTheMac();
+    const { token } = await pair(media);
+    expect(
+      (await send(media, token, report({ state: 'idle', currentJob: null })))
+        .statusCode,
+    ).toBe(204);
+    await readyForTranscription(media);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(calls).toEqual([]);
+  });
+
+  it('without KB_CHAT_LOCAL_TRANSCRIBER (production) nothing is ever started', async () => {
+    const media = await startMedia();
+    await readyForTranscription(media);
+    // The real launchctl of the harness refuses: had it been asked, the log would say so.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(
+      media.started.logs.some((line) => line.includes('could not start')),
+    ).toBe(false);
   });
 });

@@ -1124,7 +1124,7 @@ export type TranscriberStatusReport = z.infer<
 >;
 
 /** The launchd service's label on the Mac (KBC-114 FR-7). */
-export const TRANSCRIBER_SERVICE_LABEL = 'com.nova-alexandria.transcriber';
+export const TRANSCRIBER_SERVICE_LABEL = 'br.com.nova-alexandria.transcriber';
 
 /** One paired transcriber as masters see its status (KBC-114 FR-8, FR-10). */
 export const transcriberStatusItemSchema = z.object({

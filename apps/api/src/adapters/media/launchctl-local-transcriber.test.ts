@@ -30,15 +30,27 @@ describe('LaunchctlLocalTranscriber (KBC-114 BR-10)', () => {
       detail: 'transcriber started',
     });
     expect(launchctl.calls).toEqual([
-      ['kickstart', '-k', 'gui/501/com.nova-alexandria.transcriber'],
+      ['kickstart', '-k', 'gui/501/br.com.nova-alexandria.transcriber'],
     ]);
     expect(kickstartArgs(0)).toHaveLength(3);
+  });
+
+  it('wakes it without -k, so a job in hand is never killed (KBC-114 AC-15)', async () => {
+    const launchctl = fake(0);
+    const local = new LaunchctlLocalTranscriber({
+      run: launchctl.run,
+      uid: 501,
+    });
+    expect((await local.wake()).ok).toBe(true);
+    expect(launchctl.calls).toEqual([
+      ['kickstart', 'gui/501/br.com.nova-alexandria.transcriber'],
+    ]);
   });
 
   it('says what launchctl answered when the service is not installed', async () => {
     const launchctl = fake(
       113,
-      'Could not find service "com.nova-alexandria.transcriber" in domain for user gui: 501',
+      'Could not find service "br.com.nova-alexandria.transcriber" in domain for user gui: 501',
     );
     const local = new LaunchctlLocalTranscriber({
       run: launchctl.run,

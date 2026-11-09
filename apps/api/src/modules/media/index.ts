@@ -70,6 +70,10 @@ export { TermListService } from './term-list-service.js';
 export { termRoutes } from './term-routes.js';
 export { transcriberRoutes } from './transcriber-routes.js';
 export {
+  TranscriberWaker,
+  watchForTranscriberWork,
+} from './transcriber-waker.js';
+export {
   TranscriberStatusBoard,
   type TranscriberStatusDeps,
 } from './transcriber-status.js';

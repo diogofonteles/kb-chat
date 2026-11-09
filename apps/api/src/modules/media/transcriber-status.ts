@@ -55,6 +55,19 @@ export class TranscriberStatusBoard {
     };
   }
 
+  /** A transcriber is on: it sent its status lately, or was just seen (an older worker). */
+  anyOnline(): boolean {
+    const at = this.now().getTime();
+    const fresh = (iso: string | null | undefined) =>
+      iso != null && at - Date.parse(iso) <= TRANSCRIBER_STATUS_STALE_MS;
+    return this.deps.transcribers
+      .list()
+      .some(
+        (one) =>
+          fresh(one.lastSeenAt) || fresh(this.reports.get(one.id)?.receivedAt),
+      );
+  }
+
   private itemOf(transcriber: Transcriber): TranscriberStatusItem {
     const report = withTitle(this.reports.get(transcriber.id), transcriber);
     return {

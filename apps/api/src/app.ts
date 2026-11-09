@@ -125,6 +125,8 @@ import {
   transcriberRoutes,
   TranscriberStatusBoard,
   transcriberStatusRoutes,
+  TranscriberWaker,
+  watchForTranscriberWork,
   TranscriberService,
   TranscriptionService,
   TranscriptService,
@@ -961,6 +963,17 @@ async function registerTranscriberStatus(
     canStartHere: local !== null,
   });
   await app.register(transcriberStatusRoutes({ board, local }));
+  // KBC-114 AC-15: the owner never starts the transcriber by hand.
+  const waker = new TranscriberWaker({
+    local,
+    waiting: () =>
+      wiring.media.store.waitingForTranscriber(new Date()) +
+      documents.status.queue().waiting,
+    isOnline: () => board.anyOnline(),
+    onWoken: (detail) => app.log.info({ detail }, 'transcriber: started'),
+    onError: (err) => app.log.warn({ err }, 'transcriber: could not start'),
+  });
+  watchForTranscriberWork(app, waker);
   return board;
 }
 

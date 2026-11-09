@@ -388,6 +388,17 @@ export class SqliteMediaStore implements MediaStorePort {
     );
   }
 
+  waitingForTranscriber(now: Date): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS waiting FROM jobs
+         WHERE kind IN ('transcribe', 'diarize', 'voice-profile') AND route IS NULL
+           AND (status = 'queued' OR (status = 'leased' AND lease_until < ?))`,
+      )
+      .get(now.getTime());
+    return Number(row?.['waiting'] ?? 0);
+  }
+
   /** A cut count of this job replaces the last one of the recording (KBC-072 FR-3). */
   private saveCuts(beat: Heartbeat, mediaId: string): void {
     const { cuts } = beat;

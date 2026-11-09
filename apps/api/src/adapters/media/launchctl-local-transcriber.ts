@@ -48,6 +48,12 @@ export const kickstartArgs = (uid: number): readonly string[] => [
   `gui/${uid}/${TRANSCRIBER_SERVICE_LABEL}`,
 ];
 
+/** `launchctl kickstart gui/<uid>/<label>`: starts it only when it does not run. */
+export const wakeArgs = (uid: number): readonly string[] => [
+  'kickstart',
+  `gui/${uid}/${TRANSCRIBER_SERVICE_LABEL}`,
+];
+
 /**
  * "Ligar transcritor" when this API runs on the transcriber's Mac (KBC-114 BR-10): the
  * LaunchAgent the transcriber installed is started by its fixed label, for this user.
@@ -60,8 +66,18 @@ export class LaunchctlLocalTranscriber implements LocalTranscriberPort {
     },
   ) {}
 
-  async start(): Promise<LocalTranscriberStart> {
-    const done = await this.deps.run(kickstartArgs(this.deps.uid));
+  start(): Promise<LocalTranscriberStart> {
+    return this.kickstart(kickstartArgs(this.deps.uid));
+  }
+
+  wake(): Promise<LocalTranscriberStart> {
+    return this.kickstart(wakeArgs(this.deps.uid));
+  }
+
+  private async kickstart(
+    args: readonly string[],
+  ): Promise<LocalTranscriberStart> {
+    const done = await this.deps.run(args);
     if (done.code === 0) return { ok: true, detail: 'transcriber started' };
     return {
       ok: false,
