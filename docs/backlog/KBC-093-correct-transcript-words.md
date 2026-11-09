@@ -1,7 +1,7 @@
 ---
 id: KBC-093
 title: "Corrigir palavras da transcrição"
-status: ready
+status: in-review
 slice: phase-2-editing
 outcome: quem prepara um áudio corrige na hora uma palavra que a transcrição errou (uma vez ou em todas as ocorrências), e a palavra certa passa a valer na busca, nas legendas, no destaque e nas faixas, com histórico e desfazer
 depends_on: [KBC-092, KBC-045, KBC-068, KBC-073]
