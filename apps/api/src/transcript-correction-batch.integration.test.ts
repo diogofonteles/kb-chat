@@ -65,9 +65,10 @@ async function previewOf(
   query: Record<string, string | number>,
 ): Promise<Occurrences> {
   const params = new URLSearchParams(
-    Object.entries(query).map(
-      ([key, value]): [string, string] => [key, String(value)],
-    ),
+    Object.entries(query).map(([key, value]): [string, string] => [
+      key,
+      String(value),
+    ]),
   );
   const read = await call('GET', `${transcriptUrl(id)}/occurrences?${params}`);
   expect(read.statusCode, read.body).toBe(200);

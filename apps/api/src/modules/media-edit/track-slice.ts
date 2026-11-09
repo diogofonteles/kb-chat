@@ -21,8 +21,7 @@ const midpointOf = (item: { startMs: number; endMs: number }): number =>
 export const holds = (
   window: TrackWindow,
   item: { startMs: number; endMs: number },
-) =>
-  midpointOf(item) >= window.startMs && midpointOf(item) < window.endMs;
+) => midpointOf(item) >= window.startMs && midpointOf(item) < window.endMs;
 
 /** Times from the start of the track, never outside it. */
 const shifted = <T extends { startMs: number; endMs: number }>(
