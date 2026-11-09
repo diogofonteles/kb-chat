@@ -9,8 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { SearchMode } from '@kb-chat/contracts';
-import { openMediaDatabase } from '../adapters/sqlite/media-database.js';
-import { MEDIA_MIGRATIONS } from '../adapters/sqlite/media-migrations.js';
+import { privateTemp } from '../../../../tools/test-temp.mjs';
 import { SqliteMediaSearch } from '../adapters/sqlite/sqlite-media-search.js';
 import { SqliteMediaStore } from '../adapters/sqlite/sqlite-media-store.js';
 import { SqliteTranscriptStore } from '../adapters/sqlite/sqlite-transcript-store.js';
@@ -20,6 +19,13 @@ import { ResearchTools } from '../modules/research/index.js';
 import { SearchService, SearchWithMedia } from '../modules/search/index.js';
 import type { IndexHit, IndexQuery } from '../ports/search-index.js';
 import type { TopicFolder } from '../ports/vault-reader.js';
+import {
+  asText,
+  trackDatabase,
+  trackDocument,
+  trackPath,
+  type TrackWorld,
+} from './track-world.js';
 
 const arg = (name: string, fallback: number): number => {
   const at = process.argv.indexOf(name);
@@ -28,10 +34,8 @@ const arg = (name: string, fallback: number): number => {
 };
 const TEXTS = arg('--texts', 3_000);
 const TRACKS = arg('--tracks', 2_000);
-const SEGMENTS = 40;
 const RUNS = 5;
 const TOPIC = 'udv';
-const NOW = new Date().toISOString();
 const WORDS = Array.from({ length: 600 }, (_, i) => `palavra${i}`);
 const QUERIES = [
   'palavra1',
@@ -51,22 +55,8 @@ const wordsOf = (seed: number, count: number): string =>
     (_, i) => WORDS[(seed * 31 + i * 17) % WORDS.length],
   ).join(' ');
 
-const trackId = (n: number) =>
-  `10000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const recordingId = (n: number) =>
-  `00000000-0000-4000-8000-${String(Math.floor(n / 6)).padStart(12, '0')}`;
-
 function textDocument(n: number): string {
   return `---\ntitle: Texto ${n}\ngenre: article_or_essay\ndepth: 2\nrelevance: core\nauthor_group: outros-autores\n---\n\n${wordsOf(n, 200)}\n`;
-}
-
-function trackDocument(n: number): string {
-  const anchors = Array.from(
-    { length: SEGMENTS },
-    (_, i) =>
-      `[${Math.floor((i * 5) / 60)}:${String((i * 5) % 60).padStart(2, '0')}] ${wordsOf(n + i, 12)}`,
-  ).join('\n\n');
-  return `---\ntitle: Faixa ${n}\ngenre: talk_or_interview\ndepth: 2\nrelevance: core\nauthor_group: outros-autores\nkb_chat_media_id: ${trackId(n)}\nkb_chat_media_kind: track\nkb_chat_recording_id: ${recordingId(n)}\nkb_chat_recording_title: Palestra ${Math.floor(n / 6)}\nkb_chat_track_ordinal: ${(n % 6) + 1}\nkb_chat_tracks_total: 6\nkb_chat_fingerprint: f${n}\n---\n\n# Faixa ${n}\n\nGravação: Palestra · faixa 1 de 6\n\n${anchors}\n`;
 }
 
 /**
@@ -78,11 +68,8 @@ function vaultOf(tracks: number, asTexts = false) {
   for (let n = 0; n < TEXTS; n++)
     docs.set(`raw/articles/texto-${n}.md`, textDocument(n));
   for (let n = 0; n < tracks; n++) {
-    const text = trackDocument(n);
-    docs.set(
-      `raw/media/${recordingId(n)}/${trackId(n)}.md`,
-      asTexts ? text.replace(/^kb_chat_.*\n/gm, '') : text,
-    );
+    const text = trackDocument(n, wordsOf);
+    docs.set(trackPath(n), asTexts ? asText(text) : text);
   }
   const topic: TopicFolder = { slug: TOPIC, title: 'UDV' };
   return {
@@ -121,54 +108,7 @@ function indexOf(docs: ReadonlyMap<string, string>) {
   };
 }
 
-function insertTrack(db: DatabaseSync, n: number): void {
-  const id = trackId(n);
-  const insert = db.prepare(
-    `INSERT INTO media (id, topic, title, authorship, owner_principal, file_name,
-       upload_bytes, status, duration_ms, created_at, updated_at, parent_media_id,
-       parent_start_ms, parent_end_ms, track_ordinal)
-     VALUES (?, ?, ?, 'outros-autores', 'owner', 'a.m4a', 1, 'ready', 200000, ?, ?, ?, 0, 200000, ?)`,
-  );
-  insert.run(id, TOPIC, `Faixa ${n}`, NOW, NOW, recordingId(n), (n % 6) + 1);
-  db.prepare(
-    `INSERT INTO transcripts (id, media_id, version, provider, model, parameters,
-       parameters_version, terms_version, vad, speech_ratio, elapsed_ms, raw_path,
-       filter_version, confidence_version, confidence, word_count, removed_words,
-       low_words, created_at)
-     VALUES (?, ?, 1, 'mlx-whisper', 'synthetic', '{}', '1', 1, 'applied', 1, 0, 'r.json',
-       1, 1, 'normal', 0, 0, 0, ?)`,
-  ).run(`t-${id}`, id, NOW);
-  const segment = db.prepare(
-    `INSERT INTO segments (transcript_id, position, start_ms, end_ms, text) VALUES (?, ?, ?, ?, ?)`,
-  );
-  for (let i = 0; i < SEGMENTS; i++)
-    segment.run(`t-${id}`, i, i * 5000, (i + 1) * 5000, wordsOf(n + i, 12));
-}
-
-function insertRecordings(db: DatabaseSync): void {
-  const insert = db.prepare(
-    `INSERT OR IGNORE INTO media (id, topic, title, authorship, owner_principal, file_name,
-       upload_bytes, status, duration_ms, created_at, updated_at)
-     VALUES (?, ?, ?, 'outros-autores', 'owner', 'a.mp3', 1, 'ready', 1200000, ?, ?)`,
-  );
-  for (let n = 0; n < TRACKS; n++)
-    insert.run(
-      recordingId(n),
-      TOPIC,
-      `Palestra ${Math.floor(n / 6)}`,
-      NOW,
-      NOW,
-    );
-}
-
-function mediaDatabase(dir: string): DatabaseSync {
-  const db = openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS);
-  db.exec('BEGIN');
-  insertRecordings(db);
-  for (let n = 0; n < TRACKS; n++) insertTrack(db, n);
-  db.exec('COMMIT');
-  return db;
-}
+const WORLD: TrackWorld = { topic: TOPIC, tracks: TRACKS, words: wordsOf };
 
 const p95 = (samples: number[]): number => {
   const sorted = [...samples].sort((a, b) => a - b);
@@ -287,9 +227,11 @@ async function planningTimes(
   return median(times);
 }
 
+// Out of the system temp (CLAUDE.md, Quality): the repository's private temp root.
+privateTemp();
 const dir = mkdtempSync(join(tmpdir(), 'kbchat-search-tracks-'));
 try {
-  const db = mediaDatabase(dir);
+  const db = trackDatabase(dir, WORLD);
   const without = await measure(db, 0);
   const withTracks = await measure(db, TRACKS);
   for (const mode of ['exact', 'semantic', 'all'] as const)
