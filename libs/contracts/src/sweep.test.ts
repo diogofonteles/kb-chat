@@ -96,7 +96,14 @@ describe('sweep contracts (KBC-030)', () => {
       sweepCursorSchema.safeParse({ ...cursor, covered: 'não é base64' })
         .success,
     ).toBe(false);
-    const tooMany = 'A'.repeat(Math.ceil((MAX_COVERED_DOCUMENTS * 4) / 3) + 8);
+    // A full mark: MAX_COVERED_DOCUMENTS hashes of 4 bytes, as the server builds it.
+    const full = Buffer.alloc(MAX_COVERED_DOCUMENTS * 4, 7).toString('base64');
+    expect(
+      sweepCursorSchema.safeParse({ ...cursor, covered: full }).success,
+    ).toBe(true);
+    const tooMany = Buffer.alloc((MAX_COVERED_DOCUMENTS + 3) * 4, 7).toString(
+      'base64',
+    );
     expect(
       sweepCursorSchema.safeParse({ ...cursor, covered: tooMany }).success,
     ).toBe(false);

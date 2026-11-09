@@ -70,7 +70,8 @@ export type SweepFinding = z.infer<typeof sweepFindingSchema>;
  * of base64 and a continuation's request well under 1 MB with its findings.
  */
 export const MAX_COVERED_DOCUMENTS = 20_000;
-const MAX_COVERED_CHARS = Math.ceil((MAX_COVERED_DOCUMENTS * 4) / 3) + 4;
+/** Base64 of MAX_COVERED_DOCUMENTS hashes of 4 bytes: 4 characters per 3 bytes, padded. */
+const MAX_COVERED_CHARS = 4 * Math.ceil((MAX_COVERED_DOCUMENTS * 4) / 3);
 
 /** Findings a cursor carries at most (keeps a continuation's request well under 1 MB). */
 export const MAX_CARRIED_FINDINGS = 600;

@@ -115,7 +115,6 @@ export async function historyOf(
   return read.json<CorrectionHistory>();
 }
 
-/** The spoken hits of a search in `hermetismo`: media, start and text. */
 /**
  * The passages said with the words: "Na fala", and those a track's card took over when its
  * document matched too (KBC-101 BR-8: one card per track).
