@@ -812,7 +812,7 @@ const kbTopicTitleSchema = z
   .min(1)
   .max(TOPIC_TITLE_MAX)
   // One line: kb would write a line break as a block in topic.yaml (review suggestion).
-  .regex(/^[^\p{Cc}]+$/u);
+  .regex(/^[^\p{Cc}\p{Zl}\p{Zp}]+$/u);
 
 /**
  * What the Mac needs to create a collection's vault topic with `kb topic new` (KBC-114
@@ -1134,6 +1134,19 @@ export type TranscriberStatusReport = z.infer<
 /** The launchd service's label on the Mac (KBC-114 FR-7). */
 export const TRANSCRIBER_SERVICE_LABEL = 'br.com.nova-alexandria.transcriber';
 
+/**
+ * Why jobs of a kind wait with no transcriber taking them (review r2 S-2, N-2): none is
+ * paired, none is marked for it, the marked one could not load what it needs, or the media
+ * monthly ceiling stops publications.
+ */
+export const BLOCKED_REASONS = [
+  'none-paired',
+  'not-marked',
+  'not-installed',
+  'monthly-cap',
+] as const;
+export type BlockedReason = (typeof BLOCKED_REASONS)[number];
+
 /** One paired transcriber as masters see its status (KBC-114 FR-8, FR-10). */
 export const transcriberStatusItemSchema = z.object({
   id: transcriberIdSchema,
@@ -1168,9 +1181,20 @@ export const transcriberStatusOverviewSchema = z.object({
    */
   attention: z.object({
     blocked: z.array(
-      z.object({ kind: mediaJobKindSchema, ready: z.number().int().min(1) }),
+      z.object({
+        kind: mediaJobKindSchema,
+        ready: z.number().int().min(1),
+        reason: z.enum(BLOCKED_REASONS),
+      }),
     ),
-    stuck: z.object({ ready: z.number().int().min(1) }).nullable(),
+    stuck: z
+      .object({
+        ready: z.number().int().min(1),
+        /** Started and took nothing, or launchctl could not start it (`detail` says why). */
+        reason: z.enum(['took-nothing', 'start-failed']),
+        detail: z.string().max(500).nullable(),
+      })
+      .nullable(),
   }),
 });
 export type TranscriberStatusOverview = z.infer<

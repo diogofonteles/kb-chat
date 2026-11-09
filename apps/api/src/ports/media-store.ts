@@ -13,13 +13,13 @@ import type {
 /** Where a job is in the queue (ADR 0022 §2). */
 export type JobStatus = 'queued' | 'leased' | 'done' | 'failed' | 'dead';
 
-/** An item's transcription as stored: its newest transcribe job and current transcript. */
 /** How many jobs of a kind a transcriber could lease now. */
 export interface TranscriberBacklog {
   readonly kind: MediaJobKind;
   readonly ready: number;
 }
 
+/** An item's transcription as stored: its newest transcribe job and current transcript. */
 export interface TranscriptionRecord {
   /** The newest transcribe job's status; null when none was ever made. */
   readonly jobStatus: JobStatus | null;

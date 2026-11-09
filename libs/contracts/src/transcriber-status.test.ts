@@ -36,6 +36,8 @@ describe('kb-publish job collection (KBC-114 FR-2)', () => {
     { title: '', domain: 'geral', parent: null },
     { title: 'linha 1\nlinha 2', domain: 'geral', parent: null },
     { title: 'tab\there', domain: 'geral', parent: null },
+    { title: 'linha\u2028separada', domain: 'geral', parent: null },
+    { title: 'parágrafo\u2029novo', domain: 'geral', parent: null },
     { title: 'X', domain: 'Esoterismo Geral', parent: null },
     { title: 'X', domain: '../geral', parent: null },
     {

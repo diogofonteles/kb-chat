@@ -21,6 +21,8 @@ const STATUS_BODY_BYTES = 16 * 1024;
 
 export interface TranscriberStatusRouteDeps {
   readonly board: TranscriberStatusBoard;
+  /** A start the API made is still under way (no word from the transcriber since). */
+  readonly startingNow?: () => boolean;
   /** Only when this API runs on the transcriber's Mac (KB_CHAT_LOCAL_TRANSCRIBER=1). */
   readonly local: LocalTranscriberPort | null;
 }
@@ -39,7 +41,13 @@ export const transcriberStatusRoutes =
       async () => deps.board.overview(),
     );
     if (deps.local)
-      registerLocalStart(app, new LocalStarter(deps.local, deps.board));
+      registerLocalStart(
+        app,
+        new LocalStarter(deps.local, {
+          anyOnline: () => deps.board.anyOnline(),
+          startingNow: deps.startingNow ?? (() => false),
+        }),
+      );
   };
 
 /** Two presses this close start it once (QA F-2: a second `-k` would kill the first). */
@@ -55,7 +63,11 @@ export class LocalStarter {
 
   constructor(
     private readonly local: LocalTranscriberPort,
-    private readonly board: Pick<TranscriberStatusBoard, 'anyOnline'>,
+    private readonly board: {
+      anyOnline(): boolean;
+      /** A start the API made is still under way (uv installing, models loading). */
+      startingNow(): boolean;
+    },
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -64,7 +76,9 @@ export class LocalStarter {
     if (at - this.lastAt < LOCAL_START_COOLDOWN_MS)
       return { ok: true, detail: 'already asked a moment ago' };
     this.lastAt = at;
-    return this.board.anyOnline() ? this.local.wake() : this.local.start();
+    // `-k` would kill the job in hand, or a start still installing its extras (r2 S-1).
+    const busy = this.board.anyOnline() || this.board.startingNow();
+    return busy ? this.local.wake() : this.local.start();
   }
 }
 

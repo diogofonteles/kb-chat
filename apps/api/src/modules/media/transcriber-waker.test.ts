@@ -18,6 +18,7 @@ const world = (over: WorldOptions = {}) => {
     takers: new Set<MediaJobKind>(over.takers ?? ['transcribe']),
     online: over.online ?? false,
     stoppedAt: null as Date | null,
+    capped: [] as { kind: MediaJobKind; ready: number }[],
   };
   const local = {
     start: (): Promise<LocalTranscriberStart> =>
@@ -30,7 +31,8 @@ const world = (over: WorldOptions = {}) => {
   const waker = new TranscriberWaker({
     local: over.local === false ? null : local,
     backlog: () => state.backlog,
-    takers: () => state.takers,
+    whyNot: (kind) => (state.takers.has(kind) ? null : 'not-marked'),
+    capped: () => state.capped,
     isOnline: () => state.online,
     stoppedSince: (at) =>
       state.stoppedAt !== null && state.stoppedAt.getTime() >= at.getTime(),
@@ -87,13 +89,20 @@ describe('TranscriberWaker (KBC-114 AC-15: the owner never starts the transcribe
         wake: () => Promise.reject(new Error('launchctl gone')),
       },
       backlog: () => [{ kind: 'transcribe', ready: 1 }],
-      takers: () => new Set(['transcribe']),
+      whyNot: () => null,
+      capped: () => [],
       isOnline: () => false,
       stoppedSince: () => false,
       onError: (err) => errors.push(err),
     });
     expect(await waker.check()).toBe('failed');
     expect(errors).toHaveLength(1);
+    // QA r2: the app says it could not start, never that it started and took nothing.
+    expect(waker.attention().stuck).toEqual({
+      ready: 1,
+      reason: 'start-failed',
+      detail: 'launchctl gone',
+    });
   });
 });
 
@@ -107,7 +116,7 @@ describe('TranscriberWaker never relaunches for work nobody can take (review BR-
     expect(await waker.check()).toBe('nothing-waiting');
     expect(woken).toEqual([]);
     expect(waker.attention()).toEqual({
-      blocked: [{ kind: 'transcribe', ready: 1 }],
+      blocked: [{ kind: 'transcribe', ready: 1, reason: 'not-marked' }],
       stuck: null,
     });
   });
@@ -119,7 +128,11 @@ describe('TranscriberWaker never relaunches for work nobody can take (review BR-
     expect(await waker.check()).toBe('stuck');
     expect(await waker.check()).toBe('stuck');
     expect(woken).toHaveLength(1);
-    expect(waker.attention().stuck).toEqual({ ready: 1 });
+    expect(waker.attention().stuck).toEqual({
+      ready: 1,
+      reason: 'took-nothing',
+      detail: null,
+    });
   });
 
   it('new work after a fruitless launch starts it again', async () => {
@@ -141,5 +154,25 @@ describe('TranscriberWaker never relaunches for work nobody can take (review BR-
     }
     expect(woken).toHaveLength(3);
     expect(await waker.check()).toBe('stuck');
+  });
+
+  it('review r2 N-2: track documents held by the media ceiling start nothing, and say so', async () => {
+    const { woken, waker, state } = world({
+      backlog: [{ kind: 'kb-publish', ready: 0 }],
+      takers: ['kb-publish'],
+    });
+    state.capped = [{ kind: 'kb-publish', ready: 4 }];
+    expect(await waker.check()).toBe('nothing-waiting');
+    expect(woken).toEqual([]);
+    expect(waker.attention().blocked).toEqual([
+      { kind: 'kb-publish', ready: 4, reason: 'monthly-cap' },
+    ]);
+  });
+
+  it('review r2 S-1: says when it started the transcriber last', async () => {
+    const { waker } = world();
+    expect(waker.lastStartedAt()).toBeNull();
+    await waker.check();
+    expect(waker.lastStartedAt()).toEqual(new Date('2026-11-09T12:00:00.000Z'));
   });
 });

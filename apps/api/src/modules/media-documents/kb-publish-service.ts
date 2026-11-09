@@ -73,6 +73,18 @@ export class KbPublishService {
     return Math.min(KB_PUBLISH_MAX_BUDGET_USD, this.remainingUsd());
   }
 
+  /**
+   * Jobs a Mac could lease now (KBC-114 review r2 N-2): none with the media ceiling spent,
+   * since the lease then gives out nothing.
+   */
+  leasableJobs(): number {
+    if (this.budgetUsd() <= 0) return 0;
+    return this.deps.documents.leasableJobs({
+      now: this.now(),
+      maxAttempts: this.deps.maxAttempts,
+    });
+  }
+
   /** The next waiting job, rendered now; `topic` keeps to one collection (E2E's fake Mac). */
   lease(worker: string, topic?: string): KbPublishJob | null {
     const budgetUsd = this.budgetUsd();

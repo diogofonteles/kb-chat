@@ -1,4 +1,5 @@
-import type { MediaJobKind } from '@kb-chat/contracts';
+import type { BlockedReason, MediaJobKind } from '@kb-chat/contracts';
+import type { TranscriberBacklog } from '../../ports/media-store.js';
 import type { FastifyInstance } from 'fastify';
 import type { LocalTranscriberPort } from '../../ports/local-transcriber.js';
 
@@ -19,17 +20,22 @@ export type WakeOutcome =
   | 'failed';
 
 /** How many jobs of a kind the Mac could lease now (the lease's own predicate). */
-export interface ReadyJobs {
-  readonly kind: MediaJobKind;
-  readonly ready: number;
+export type ReadyJobs = TranscriberBacklog;
+
+/** Jobs that wait and why no transcriber takes them (review r2 S-2, N-2). */
+export interface BlockedJobs extends ReadyJobs {
+  readonly reason: BlockedReason;
 }
 
 /** Why work waits with the transcriber off, for the app to say (review BR-15, QA F-1). */
 export interface WakeAttention {
-  /** Jobs of kinds no paired transcriber takes (not marked in Transcritores, or not installed). */
-  readonly blocked: readonly ReadyJobs[];
-  /** The transcriber was started for these and took none of them. */
-  readonly stuck: { readonly ready: number } | null;
+  readonly blocked: readonly BlockedJobs[];
+  /** Started for these and took none, or launchctl could not start it (QA r2). */
+  readonly stuck: {
+    readonly ready: number;
+    readonly reason: 'took-nothing' | 'start-failed';
+    readonly detail: string | null;
+  } | null;
 }
 
 export interface TranscriberWakerDeps {
@@ -37,8 +43,10 @@ export interface TranscriberWakerDeps {
   readonly local: LocalTranscriberPort | null;
   /** Jobs only the Mac takes, leasable now, by kind (kb-publish included). */
   readonly backlog: () => readonly ReadyJobs[];
-  /** The kinds some paired transcriber takes (marked, and on its Mac when it said so). */
-  readonly takers: () => ReadonlySet<MediaJobKind>;
+  /** Why no paired transcriber takes this kind now; null when one does. */
+  readonly whyNot: (kind: MediaJobKind) => BlockedReason | null;
+  /** Work held back by the media monthly ceiling (no lease would give it out). */
+  readonly capped: () => readonly ReadyJobs[];
   /** Whether a transcriber is on (it said so lately, or was just seen). */
   readonly isOnline: () => boolean;
   /** Whether a transcriber said it stopped at or after this moment. */
@@ -65,6 +73,8 @@ export class TranscriberWaker {
   private wokeAt: Date | null = null;
   private fruitless = 0;
   private stuckWith: number | null = null;
+  /** Why the last launch failed (launchctl's words); null after one that worked. */
+  private failure: string | null = null;
   private readonly now: () => Date;
 
   constructor(private readonly deps: TranscriberWakerDeps) {
@@ -73,13 +83,27 @@ export class TranscriberWaker {
 
   /** What waits that the transcriber will not do by itself, for the app to say. */
   attention(): WakeAttention {
-    const takers = this.deps.takers();
-    return {
-      blocked: this.deps
-        .backlog()
-        .filter((one) => one.ready > 0 && !takers.has(one.kind)),
-      stuck: this.stuckWith === null ? null : { ready: this.stuckWith },
-    };
+    const blocked: BlockedJobs[] = [];
+    for (const one of this.deps.backlog()) {
+      const reason = one.ready > 0 ? this.deps.whyNot(one.kind) : null;
+      if (reason) blocked.push({ ...one, reason });
+    }
+    for (const one of this.deps.capped())
+      if (one.ready > 0) blocked.push({ ...one, reason: 'monthly-cap' });
+    return { blocked, stuck: this.stuck() };
+  }
+
+  /** When it last started the transcriber (S-1: a restart must not cut that start short). */
+  lastStartedAt(): Date | null {
+    return this.wokeAt;
+  }
+
+  private stuck(): WakeAttention['stuck'] {
+    const ready = this.wokeWith ?? 0;
+    if (this.failure !== null && ready > 0)
+      return { ready, reason: 'start-failed', detail: this.failure };
+    if (this.stuckWith === null) return null;
+    return { ready: this.stuckWith, reason: 'took-nothing', detail: null };
   }
 
   async check(): Promise<WakeOutcome> {
@@ -98,10 +122,9 @@ export class TranscriberWaker {
   }
 
   private leasable(): number {
-    const takers = this.deps.takers();
     return this.deps
       .backlog()
-      .filter((one) => takers.has(one.kind))
+      .filter((one) => this.deps.whyNot(one.kind) === null)
       .reduce((sum, one) => sum + one.ready, 0);
   }
 
@@ -122,9 +145,9 @@ export class TranscriberWaker {
 
   private forget(): void {
     this.wokeWith = null;
-    this.wokeAt = null;
     this.fruitless = 0;
     this.stuckWith = null;
+    this.failure = null;
   }
 
   private async wake(
@@ -138,9 +161,12 @@ export class TranscriberWaker {
     try {
       const done = await local.wake();
       if (!done.ok) throw new Error(done.detail);
+      this.failure = null;
       this.deps.onWoken?.(done.detail);
       return 'woken';
     } catch (err) {
+      this.failure =
+        err instanceof Error ? err.message.slice(0, 500) : String(err);
       this.deps.onError?.(err);
       return 'failed';
     }

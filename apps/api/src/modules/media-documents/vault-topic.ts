@@ -50,10 +50,9 @@ export function domainOfTopic(
 }
 
 const titleOf = (topic: TopicFolder): string =>
-  (topic.title.replace(/\p{Cc}+/gu, ' ').trim() || topic.slug).slice(
-    0,
-    TOPIC_TITLE_MAX,
-  );
+  (
+    topic.title.replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, ' ').trim() || topic.slug
+  ).slice(0, TOPIC_TITLE_MAX);
 
 /**
  * What the Mac needs to create a collection's vault topic (KBC-114 FR-2): its title and

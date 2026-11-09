@@ -1,12 +1,14 @@
 import {
   TRANSCRIBER_SERVICE_LABEL,
   TRANSCRIBER_STATUS_STALE_MS,
+  type BlockedReason,
   type MediaJobKind,
   type Transcriber,
   type TranscriberStatusItem,
   type TranscriberStatusOverview,
   type TranscriberStatusReport,
 } from '@kb-chat/contracts';
+import type { WakeAttention } from './transcriber-waker.js';
 
 export interface TranscriberStatusDeps {
   /** The paired transcribers, not revoked. */
@@ -15,15 +17,18 @@ export interface TranscriberStatusDeps {
   readonly kbWaiting: () => number;
   /** Whether this API runs on the transcriber's Mac (KB_CHAT_LOCAL_TRANSCRIBER=1). */
   readonly canStartHere: boolean;
-  /** Why work waits with it off (the waker's view, QA F-1). */
-  readonly attention?: () => TranscriberStatusOverview['attention'];
+  /** Why work waits with it off (the waker's view, QA F-1); null before the waker runs. */
+  readonly attention?: () => WakeAttention | null;
   readonly now?: () => Date;
 }
 
-const NO_ATTENTION: TranscriberStatusOverview['attention'] = {
-  blocked: [],
-  stuck: null,
-};
+/** The waker's view as the contract carries it. */
+const attentionOf = (
+  seen: WakeAttention | null,
+): TranscriberStatusOverview['attention'] => ({
+  blocked: [...(seen?.blocked ?? [])],
+  stuck: seen?.stuck ?? null,
+});
 
 type Received = TranscriberStatusReport & { readonly receivedAt: string };
 
@@ -57,7 +62,7 @@ export class TranscriberStatusBoard {
       items: paired.map((one) => this.itemOf(one)),
       kbQueue: { waiting: this.deps.kbWaiting() },
       start: this.startOf(),
-      attention: this.deps.attention?.() ?? NO_ATTENTION,
+      attention: attentionOf(this.deps.attention?.() ?? null),
     };
   }
 
@@ -104,15 +109,27 @@ export class TranscriberStatusBoard {
   }
 
   /**
-   * The kinds some paired transcriber takes: marked in Transcritores and, once it said what
-   * it runs with (an extra that did not install, a Mac without a vault), only those.
+   * Why no paired transcriber takes this kind now, or null when one does: none is paired,
+   * none is marked for it, or the marked one said it runs without it (an extra that did not
+   * load, a Mac without a vault). A report with no kinds is one still preparing: unknown, so
+   * it restricts nothing (review r2 N-1).
    */
-  takers(): ReadonlySet<MediaJobKind> {
-    return new Set(
-      this.deps.transcribers.list().flatMap((one) => {
-        const runs = this.reports.get(one.id)?.kinds;
-        return one.kinds.filter((kind) => !runs || runs.includes(kind));
-      }),
+  whyNot(kind: MediaJobKind): BlockedReason | null {
+    const paired = this.deps.transcribers.list();
+    if (paired.length === 0) return 'none-paired';
+    const marked = paired.filter((one) => one.kinds.includes(kind));
+    if (marked.length === 0) return 'not-marked';
+    const runs = (one: Transcriber) => {
+      const kinds = this.reports.get(one.id)?.kinds;
+      return !kinds?.length || kinds.includes(kind);
+    };
+    return marked.some(runs) ? null : 'not-installed';
+  }
+
+  /** Whether a transcriber said anything at or after this moment. */
+  saidSince(at: Date): boolean {
+    return [...this.reports.values()].some(
+      (one) => Date.parse(one.receivedAt) >= at.getTime(),
     );
   }
 

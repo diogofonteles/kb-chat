@@ -54,6 +54,9 @@ const HAS_TRANSCRIPT = `EXISTS (SELECT 1 FROM transcripts t WHERE t.media_id = m
 const PUBLISHABLE = `((m.parent_media_id IS NOT NULL AND m.status = 'ready'
   AND m.archived_at IS NULL) OR (${UNTRACKED_RECORDING})) AND ${HAS_TRANSCRIPT}`;
 
+/** A kb-publish job a Mac may lease: waiting, or leased and expired (taken back). */
+const KB_LEASABLE = `(status = 'queued' OR (status = 'leased' AND lease_until < ?))`;
+
 /** A document kb failed on this often waits for a new render (ADR 0035 §10: 4 attempts). */
 const MAX_DOCUMENT_ATTEMPTS = 4;
 
@@ -463,6 +466,17 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       .run(input.id, input.topic, at, at);
   }
 
+  leasableJobs(input: { now: Date; maxAttempts: number }): number {
+    // The lease's own predicate, without the expired leases it would bury first.
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS ready FROM kb_publish_jobs
+         WHERE ${KB_LEASABLE} AND NOT (status = 'leased' AND attempts >= ?)`,
+      )
+      .get(input.now.getTime(), input.maxAttempts);
+    return Number(row?.['ready'] ?? 0);
+  }
+
   lease(input: {
     worker: string;
     leaseId: string;
@@ -476,8 +490,7 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       const row = this.db
         .prepare(
           `SELECT id, topic, attempts FROM kb_publish_jobs
-           WHERE (status = 'queued' OR (status = 'leased' AND lease_until < ?))
-             AND (? IS NULL OR topic = ?)
+           WHERE ${KB_LEASABLE} AND (? IS NULL OR topic = ?)
            ORDER BY created_at, id LIMIT 1`,
         )
         .get(input.now.getTime(), input.topic ?? null, input.topic ?? null);

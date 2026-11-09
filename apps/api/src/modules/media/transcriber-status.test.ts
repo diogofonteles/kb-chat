@@ -88,3 +88,39 @@ describe('A transcriber that exits when idle (KBC-114 AC-18)', () => {
     expect(board.anyOnline()).toBe(true);
   });
 });
+
+describe('Why a kind waits (review r2 N-1, S-2)', () => {
+  it('N-1: a report still preparing, with no kinds yet, is unknown, never "does nothing"', () => {
+    const board = boardOf({ ...MAC, currentJob: null });
+    // What `cli.run` sends before the models load: kinds are not known yet.
+    board.record(MAC.id, {
+      ...working,
+      state: 'waiting',
+      kinds: [],
+      currentJob: null,
+    });
+    expect(board.whyNot('transcribe')).toBeNull();
+    expect(board.whyNot('kb-publish')).toBeNull();
+  });
+
+  it('S-2: marked but not loaded on the Mac is "not installed", not "not marked"', () => {
+    const board = boardOf({
+      ...MAC,
+      kinds: ['transcribe', 'diarize'],
+      currentJob: null,
+    });
+    board.record(MAC.id, { ...working, kinds: ['transcribe'] });
+    expect(board.whyNot('diarize')).toBe('not-installed');
+    expect(board.whyNot('voice-profile')).toBe('not-marked');
+    expect(board.whyNot('transcribe')).toBeNull();
+  });
+
+  it('S-2: with no transcriber paired, the reason is that one', () => {
+    const board = new TranscriberStatusBoard({
+      transcribers: { list: () => [] },
+      kbWaiting: () => 0,
+      canStartHere: true,
+    });
+    expect(board.whyNot('transcribe')).toBe('none-paired');
+  });
+});

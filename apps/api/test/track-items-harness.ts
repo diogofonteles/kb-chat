@@ -95,6 +95,7 @@ export async function startWorld(
     readonly vault?: string;
     readonly env?: StartOptions['env'];
     readonly llm?: StartOptions['llm'];
+    readonly launchctl?: StartOptions['launchctl'];
   } = {},
 ): Promise<World> {
   const started = await start({
@@ -102,6 +103,7 @@ export async function startWorld(
     vault: options.vault ?? (await vaultWithTwoCollections()),
     ...(options.env ? { env: options.env } : {}),
     ...(options.llm ? { llm: options.llm } : {}),
+    ...(options.launchctl ? { launchctl: options.launchctl } : {}),
   });
   const ownerHeaders = await signIn(started, 'owner@example.com');
   const media: Media = {

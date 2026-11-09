@@ -946,6 +946,22 @@ async function registerTranscribers(
   return registerTranscriberStatus(app, input);
 }
 
+/** How long a start may take before a word from the transcriber (uv, models). */
+const STARTING_GRACE_MS = 10 * 60 * 1000;
+
+/** A start the waker made in the last minutes, with no word since: still preparing (S-1). */
+function isStarting(
+  waker: TranscriberWaker | null,
+  board: TranscriberStatusBoard,
+): boolean {
+  const at = waker?.lastStartedAt();
+  return (
+    at != null &&
+    Date.now() - at.getTime() < STARTING_GRACE_MS &&
+    !board.saidSince(at)
+  );
+}
+
 /** The transcribers' own status for masters, and "Ligar transcritor" on the Mac (KBC-114). */
 async function registerTranscriberStatus(
   app: FastifyInstance,
@@ -964,16 +980,13 @@ async function registerTranscriberStatus(
     transcribers,
     kbWaiting,
     canStartHere: local !== null,
-    attention: () => {
-      const seen = waker?.attention();
-      return {
-        blocked: [...(seen?.blocked ?? [])],
-        stuck: seen?.stuck ?? null,
-      };
-    },
+    attention: () => waker?.attention() ?? null,
   });
-  await app.register(transcriberStatusRoutes({ board, local }));
-  waker = transcriberWaker(app, { local, board, kbWaiting, wiring });
+  const startingNow = () => isStarting(waker, board);
+  await app.register(transcriberStatusRoutes({ board, local, startingNow }));
+  waker = transcriberWaker(app, {
+    ...{ local, board, kbWaiting, wiring, documents },
+  });
   watchForTranscriberWork(app, waker);
   return board;
 }
@@ -986,16 +999,22 @@ function transcriberWaker(
     board: TranscriberStatusBoard;
     kbWaiting: () => number;
     wiring: MediaWiring;
+    documents: MediaDocuments;
   },
 ): TranscriberWaker {
-  const { local, board, kbWaiting, wiring } = input;
+  const { local, board, kbWaiting, wiring, documents } = input;
   return new TranscriberWaker({
     local,
     backlog: () => [
       ...wiring.media.store.transcriberBacklog(),
-      { kind: 'kb-publish', ready: kbWaiting() },
+      { kind: 'kb-publish', ready: documents.kb.leasableJobs() },
     ],
-    takers: () => board.takers(),
+    whyNot: (kind) => board.whyNot(kind),
+    // Documents the ceiling holds back: no lease gives them out, so they start nothing.
+    capped: () =>
+      documents.kb.budgetUsd() <= 0
+        ? [{ kind: 'kb-publish', ready: kbWaiting() }]
+        : [],
     isOnline: () => board.anyOnline(),
     stoppedSince: (at) => board.stoppedSince(at),
     onWoken: (detail) => app.log.info({ detail }, 'transcriber: started'),

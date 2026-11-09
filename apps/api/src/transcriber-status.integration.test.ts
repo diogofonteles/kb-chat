@@ -14,6 +14,12 @@ import {
 } from '../test/ai-app-harness.js';
 import { member, startMedia, type Media } from '../test/media-harness.js';
 import {
+  publishedTracks,
+  publisherMac,
+  spendTheCap,
+} from '../test/kb-publish-harness.js';
+import { startWorld } from '../test/track-items-harness.js';
+import {
   asTranscriber,
   pair,
   readyForTranscription,
@@ -327,7 +333,7 @@ describe('The transcriber starts by itself on the same Mac (KBC-114 AC-15)', () 
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(calls).toEqual([]);
     expect((await overviewOf(media)).attention).toEqual({
-      blocked: [{ kind: 'transcribe', ready: 1 }],
+      blocked: [{ kind: 'transcribe', ready: 1, reason: 'not-marked' }],
       stuck: null,
     });
   });
@@ -348,7 +354,11 @@ describe('The transcriber starts by itself on the same Mac (KBC-114 AC-15)', () 
     await media.owner('POST', '/api/v1/media/transcribers', { name: 'Outro' });
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(calls).toHaveLength(1);
-    expect((await overviewOf(media)).attention.stuck).toEqual({ ready: 1 });
+    expect((await overviewOf(media)).attention.stuck).toEqual({
+      ready: 1,
+      reason: 'took-nothing',
+      detail: null,
+    });
   });
 
   it('QA F-2: "Ligar transcritor" never kills a transcriber that is on, and counts once per 30 s', async () => {
@@ -366,6 +376,54 @@ describe('The transcriber starts by itself on the same Mac (KBC-114 AC-15)', () 
     expect(asked[0]).not.toContain('-k');
   });
 
+  it('review r2 N-1: a transcriber still preparing (no kinds yet) blocks nothing and is started for work', async () => {
+    const { media, calls } = await onTheMac();
+    const { token } = await pair(media);
+    // What `cli.run` sends while the models load: no kinds yet, waiting.
+    await send(
+      media,
+      token,
+      report({ state: 'waiting', kinds: [], currentJob: null }),
+    );
+    await readyForTranscription(media);
+    expect((await overviewOf(media)).attention.blocked).toEqual([]);
+    // It never got past preparing: once it is off, the waiting work starts it again.
+    await send(
+      media,
+      token,
+      report({ state: 'stopped', kinds: [], currentJob: null }),
+    );
+    await readyForTranscription(media);
+    await vi.waitFor(() => expect(calls.length).toBeGreaterThan(0));
+  });
+
+  it('QA r2: a launchctl that cannot start the service says so, not "it took nothing"', async () => {
+    const calls: (readonly string[])[] = [];
+    const started = await start({
+      media: true,
+      env: { KB_CHAT_LOCAL_TRANSCRIBER: '1' },
+      launchctl: (args) => {
+        calls.push(args);
+        return Promise.resolve({ code: 113, output: 'Could not find service' });
+      },
+    });
+    const ownerHeaders = await signIn(started, 'owner@example.com');
+    const media: Media = {
+      started,
+      owner: caller(started.app, ownerHeaders),
+      ownerHeaders,
+      mediaDir: join(started.state, 'media'),
+    };
+    await pair(media);
+    await readyForTranscription(media);
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    expect((await overviewOf(media)).attention.stuck).toEqual({
+      ready: 1,
+      reason: 'start-failed',
+      detail: 'Could not find service',
+    });
+  });
+
   it('without KB_CHAT_LOCAL_TRANSCRIBER (production) nothing is ever started', async () => {
     const media = await startMedia();
     await readyForTranscription(media);
@@ -374,5 +432,34 @@ describe('The transcriber starts by itself on the same Mac (KBC-114 AC-15)', () 
     expect(
       media.started.logs.some((line) => line.includes('could not start')),
     ).toBe(false);
+  });
+});
+
+describe('Track documents held by the media ceiling (review r2 N-2)', () => {
+  it('starts nothing for them, and says the ceiling is why', async () => {
+    const calls: (readonly string[])[] = [];
+    const world = await startWorld({
+      env: { KB_CHAT_LOCAL_TRANSCRIBER: '1' },
+      launchctl: (args) => {
+        calls.push(args);
+        return Promise.resolve({ code: 0, output: '' });
+      },
+    });
+    await publisherMac(world.media);
+    spendTheCap(world.media, 10);
+    await publishedTracks(world);
+    calls.length = 0;
+    // Anything in the media library: the waker looks again.
+    await world.media.owner('POST', '/api/v1/media/transcribers', {
+      name: 'Outro Mac',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(calls).toEqual([]);
+    const overview = await overviewOf(world.media);
+    expect(overview.attention.blocked).toContainEqual({
+      kind: 'kb-publish',
+      ready: expect.any(Number),
+      reason: 'monthly-cap',
+    });
   });
 });

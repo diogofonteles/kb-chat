@@ -96,6 +96,13 @@ describe('what a kb-publish job tells the Mac about its collection (KBC-114 FR-2
     expect(collectionOf(odd, 'x')?.title).toBe('Aula 2 "citada"');
   });
 
+  it('review r2 S-3: a line or paragraph separator is a line break too', () => {
+    const odd = [
+      { slug: 'x', title: 'Aula\u2028dois\u2029três', domain: 'geral' },
+    ];
+    expect(collectionOf(odd, 'x')?.title).toBe('Aula dois três');
+  });
+
   it('cuts a vault title longer than a screen title may be', () => {
     const long = [{ slug: 'x', title: 'a'.repeat(200), domain: 'geral' }];
     expect(collectionOf(long, 'x')?.title).toHaveLength(80);

@@ -172,6 +172,11 @@ export interface MediaDocumentStorePort {
     readonly id: string;
     readonly now: Date;
   }): void;
+  /** How many jobs a Mac could lease now, under the lease's own predicate (KBC-114). */
+  leasableJobs(input: {
+    readonly now: Date;
+    readonly maxAttempts: number;
+  }): number;
   /** The oldest waiting job (queued, or leased and expired) for this worker. */
   lease(input: {
     readonly worker: string;
