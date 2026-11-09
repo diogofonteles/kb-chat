@@ -235,7 +235,9 @@ export const splitPointNear = (track: TrackSpan, ms: number): number =>
 
 /**
  * Divides a track at the point nearest `atMs` (BR-4); null when it is too short. The first
- * part keeps the track, the second is what `second` makes of it from that point on.
+ * part keeps the track, the second is what `second` makes of it from that point on. Null
+ * too when the second part's id is taken: every rule finds a track by its id, so two tracks
+ * with one id would move together and overlap (BR-3).
  */
 export function splitTrack<T extends TrackSpan>(
   tracks: readonly T[],
@@ -248,9 +250,11 @@ export function splitTrack<T extends TrackSpan>(
   const track = tracks.find((one) => one.id === input.trackId);
   if (!track || !canSplit(track)) return null;
   const ms = splitPointNear(track, input.atMs);
+  const second = input.second(track, ms);
+  if (tracks.some((one) => one.id === second.id)) return null;
   return [
     ...tracks.map((one) => (one === track ? { ...one, endMs: ms } : one)),
-    input.second(track, ms),
+    second,
   ];
 }
 
