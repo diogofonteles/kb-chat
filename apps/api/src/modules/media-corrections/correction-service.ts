@@ -86,6 +86,8 @@ export const mayUndoAuthor = (
 const mayUndo = (row: CorrectionRow, actor: MediaActor): boolean =>
   row.state === 'active' && row.kind !== 'undo' && mayUndoAuthor(row, actor);
 
+const NONE: ReadonlySet<string> = new Set();
+
 const invalid = (message: string) =>
   new AppError('CORRECTION_INVALID', message);
 
@@ -165,10 +167,11 @@ export class CorrectionService {
       limit: HISTORY_PAGE,
     });
     const next = cursor + page.entries.length;
+    const stale = this.staleLearned(page.entries.flat());
     return {
       mediaId,
       total: page.total,
-      entries: page.entries.map((rows) => this.entryOf(rows, actor)),
+      entries: page.entries.map((rows) => this.entryOf(rows, actor, stale)),
       next: next < page.total ? next : null,
       carry: this.carryNow(mediaId),
     };
@@ -184,8 +187,12 @@ export class CorrectionService {
       : { version: current.version, ...counts };
   }
 
-  private entryOf(rows: readonly CorrectionRow[], actor: MediaActor) {
-    const items = rows.map((row) => this.toContract(row, actor));
+  private entryOf(
+    rows: readonly CorrectionRow[],
+    actor: MediaActor,
+    stale: ReadonlySet<string>,
+  ) {
+    const items = rows.map((row) => this.toContract(row, actor, stale));
     const groupId = rows[0]?.groupId ?? null;
     const own = rows.every((row) => mayUndoAuthor(row, actor));
     return {
@@ -197,22 +204,53 @@ export class CorrectionService {
   }
 
   /**
-   * A learned replacement a person corrected over no longer holds its text: no Desfazer
-   * offered there (KBC-113, review round 1); the undo would answer 409 anyway.
+   * The learned replacements of a page a person corrected over: they no longer hold their
+   * text, so no Desfazer there (KBC-113, review round 1). One read of words per transcript
+   * of the page, however many rows a group holds (ND-19, review round 2).
    */
-  private stillHolds(row: CorrectionRow): boolean {
-    if (row.ruleId === null) return true;
-    const words = this.deps.store.wordsAt(
-      row.transcriptId,
-      row.position,
-      row.count,
+  private staleLearned(rows: readonly CorrectionRow[]): ReadonlySet<string> {
+    const learned = rows.filter(
+      (row) => row.ruleId !== null && row.state === 'active',
     );
-    return sameTexts(textsOf(words), replacedTexts(row.count, row.after));
+    const stale = new Set<string>();
+    const byTranscript = new Map<string, CorrectionRow[]>();
+    for (const row of learned)
+      byTranscript.set(row.transcriptId, [
+        ...(byTranscript.get(row.transcriptId) ?? []),
+        row,
+      ]);
+    for (const [transcriptId, group] of byTranscript)
+      for (const id of this.notHolding(transcriptId, group)) stale.add(id);
+    return stale;
+  }
+
+  /** The rows of one transcript whose words no longer say their text: one read. */
+  private notHolding(
+    transcriptId: string,
+    rows: readonly CorrectionRow[],
+  ): string[] {
+    const from = Math.min(...rows.map((row) => row.position));
+    const to = Math.max(...rows.map((row) => row.position + row.count));
+    const texts = new Map(
+      this.deps.store
+        .wordsAt(transcriptId, from, to - from)
+        .map((word) => [word.position, word.text]),
+    );
+    return rows
+      .filter((row) => {
+        const now = Array.from(
+          { length: row.count },
+          (_, index) => texts.get(row.position + index) ?? '',
+        );
+        return !sameTexts(now, replacedTexts(row.count, row.after));
+      })
+      .map((row) => row.id);
   }
 
   protected toContract(
     row: CorrectionRow,
     actor: MediaActor,
+    stale: ReadonlySet<string> = NONE,
   ): TranscriptCorrection {
     const mine = row.authorPrincipal === actor.principal;
     return {
@@ -234,7 +272,7 @@ export class CorrectionService {
       groupId: row.groupId,
       authorName: row.authorName,
       mine,
-      canUndo: mayUndo(row, actor) && this.stillHolds(row),
+      canUndo: mayUndo(row, actor) && !stale.has(row.id),
       learned: row.ruleId !== null,
       createdAt: row.createdAt,
     };

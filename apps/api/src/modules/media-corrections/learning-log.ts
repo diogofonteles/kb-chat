@@ -10,8 +10,6 @@ export interface LogReading {
   readonly sources: readonly LearningSource[];
   /** Per rule: its replacements written, and undone (by Desfazer or a correction over it). */
   readonly tallies: ReadonlyMap<string, RuleTally>;
-  /** The learning's rows a person corrected over: their words no longer hold their text. */
-  readonly overwritten: ReadonlySet<string>;
 }
 
 const isPersons = (row: LearningLogRow): boolean =>
@@ -156,10 +154,7 @@ function talliesOf(
 export function readLog(rows: readonly LearningLogRow[]): LogReading {
   const byId = new Map(rows.map((row) => [row.id, row]));
   const live = liveByTranscript(rows);
-  const { superseded, overwritten, undoneBy } = overridesOf(
-    live,
-    originsOf(rows),
-  );
+  const { superseded, undoneBy } = overridesOf(live, originsOf(rows));
   const sources = rows
     .filter(
       (row) => isPersons(row) && !superseded.has(row.id) && inForce(row, byId),
@@ -176,5 +171,5 @@ export function readLog(rows: readonly LearningLogRow[]): LogReading {
       createdAt: row.createdAt,
       authorName: row.authorName,
     }));
-  return { sources, tallies: talliesOf(rows, undoneBy), overwritten };
+  return { sources, tallies: talliesOf(rows, undoneBy) };
 }

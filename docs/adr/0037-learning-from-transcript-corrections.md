@@ -26,6 +26,11 @@ KBC-093 keeps an append-only log of word corrections (ADR 0034): who, when, the 
 10. **Context needs a word.** A segment's edge is kept in the rule but never matches alone: a side matches only when it is a word. A rule turned off (by a master or by undos) no longer competes for its place. Rules of the same `before` and different `after` with as many corrections that can meet on one occurrence are reported as a tie (`tiesWith`): there neither applies.
 11. **Rollback and the term list.** The previous image reads the terms of a version without `source` and would save the learned ones as the masters' if a master saved "Termos da transcrição" while it runs. Decision: do not save that list during a rollback (runbook); the new image keeps reading what it finds (a learned term saved as a master's stays one, which a master can remove). No guard in code: reclassifying a master's term by name could take away a term a master did type.
 
+## Amendment 2026-11-09 (review round 2)
+
+12. **The more specific context wins a tie.** Among contextual rules that match one occurrence, the one with more corrections applies; on as many corrections, the one whose context matches on both sides beats one matching a single side; only an equal tie of both (other text) applies none.
+13. **What masters read is what is sent.** The masters' view marks as "no room" a learned term the real token count leaves out of the transcriber's list, and the history reads the words of a page once per transcript to tell which learned replacements still hold their text.
+
 ## Options considered
 
 1. **Derived rules applied on the API at the new version (chosen).** One place for both transcription paths, auditable and undoable through the existing log, no transcriber change.

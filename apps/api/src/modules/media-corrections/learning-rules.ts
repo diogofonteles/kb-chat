@@ -342,15 +342,21 @@ function replacementFor(said: string, after: string): string {
   return `${lead}${core.charAt(0).toLocaleUpperCase('pt-BR')}${core.slice(1)}${trail}`;
 }
 
-/** The candidate a place keeps: the most corrections, none on a tie with another text. */
-function bestOf(candidates: readonly Rule[]): Rule | null {
-  const [top, second] = [...candidates].sort(
-    (a, b) => b.corrections - a.corrections,
-  );
+/**
+ * The candidate a place keeps: the most corrections, then the most sides of context that
+ * match (QA F7: both sides beat one); none on a tie of both with another text (BR-4).
+ */
+function bestOf(
+  candidates: readonly Rule[],
+  sidesOf: (rule: Rule) => number = () => 0,
+): Rule | null {
+  const rank = (a: Rule, b: Rule) =>
+    b.corrections - a.corrections || sidesOf(b) - sidesOf(a);
+  const [top, second] = [...candidates].sort(rank);
   if (!top) return null;
   const tie =
     second !== undefined &&
-    second.corrections === top.corrections &&
+    rank(top, second) === 0 &&
     second.after !== top.after;
   return tie ? null : top;
 }
@@ -360,16 +366,18 @@ interface Neighbours {
   readonly after: string;
 }
 
+/** How many sides of a rule's context match, each a real word (review round 1). */
+const sidesMatching = (rule: Rule, around: Neighbours): number =>
+  Number(rule.contextBefore !== '' && rule.contextBefore === around.before) +
+  Number(rule.contextAfter !== '' && rule.contextAfter === around.after);
+
 /** The rule for a span: a contextual one that matches a side, else one in any context. */
 function ruleFor(rules: readonly Rule[], around: Neighbours): Rule | null {
-  // A real word must match: a segment's edge alone is no context (review round 1).
   const contextual = rules.filter(
-    (rule) =>
-      rule.contextBefore !== null &&
-      ((rule.contextBefore !== '' && rule.contextBefore === around.before) ||
-        (rule.contextAfter !== '' && rule.contextAfter === around.after)),
+    (rule) => rule.contextBefore !== null && sidesMatching(rule, around) > 0,
   );
-  if (contextual.length > 0) return bestOf(contextual);
+  if (contextual.length > 0)
+    return bestOf(contextual, (rule) => sidesMatching(rule, around));
   return bestOf(rules.filter((rule) => rule.contextBefore === null));
 }
 

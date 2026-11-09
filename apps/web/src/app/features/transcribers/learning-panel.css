@@ -60,6 +60,7 @@
 }
 
 .controls {
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -95,7 +96,7 @@
 }
 
 .examples {
-  flex: 1 1 12rem;
+  flex: 1 1 6rem;
   min-width: 0;
 }
 

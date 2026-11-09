@@ -63,7 +63,6 @@ describe('readLog (KBC-113 BR-1, BR-8; review round 1)', () => {
     expect(sourcesOf([learned, over])).toEqual([
       [over.id, 'a Manta', 'Amanta'],
     ]);
-    expect(read.overwritten.has(learned.id)).toBe(true);
   });
 
   it('only punctuation or case over a learned replacement is no undo', () => {

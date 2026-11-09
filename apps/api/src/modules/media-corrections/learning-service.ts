@@ -3,6 +3,7 @@ import {
   TERMS_TOKEN_LIMIT,
   type LearnedExample,
   type LearnedRule,
+  type LearnedTerm,
   type TranscriptLearning,
   type TranscriptionTerms,
 } from '@kb-chat/contracts';
@@ -78,6 +79,22 @@ function exampleOf(source: LearningSource): LearnedExample {
     createdAt: source.createdAt,
   };
 }
+
+const termOf = ({
+  id,
+  term,
+  corrections,
+  recordings,
+  state,
+  switchedBy,
+}: LearnedTermRow): LearnedTerm => ({
+  id,
+  term,
+  corrections,
+  recordings,
+  state,
+  switchedBy,
+});
 
 function toContract(rule: Rule): LearnedRule {
   return {
@@ -180,29 +197,23 @@ export class LearningService {
   overview(): TranscriptLearning {
     const snapshot = this.read();
     const manual = this.manualTerms();
-    const terms = this.terms(manual, snapshot);
-    const inList = terms
-      .filter((term) => term.state === 'in-list')
-      .map((term) => term.term);
+    const sent = new Set(this.sentOf(manual, this.terms(manual, snapshot)));
+    // What masters read is what the transcriber gets (review round 2, S1).
+    const terms = this.terms(manual, snapshot).map((term) =>
+      term.state === 'in-list' && !sent.has(term.term)
+        ? { ...term, state: 'no-room' as const }
+        : term,
+    );
     const manualTokens = this.deps.countTokens(manual);
     return {
       rules: this.rules(snapshot).map(toContract),
-      terms: terms.map(
-        ({ id, term, corrections, recordings, state, switchedBy }) => ({
-          id,
-          term,
-          corrections,
-          recordings,
-          state,
-          switchedBy,
-        }),
-      ),
+      terms: terms.map(termOf),
       tokens: {
         manual: manualTokens,
         learned:
-          inList.length === 0
+          sent.size === 0
             ? 0
-            : this.deps.countTokens([...manual, ...inList]) - manualTokens,
+            : this.deps.countTokens([...manual, ...sent]) - manualTokens,
         limit: TERMS_TOKEN_LIMIT,
       },
     };
@@ -255,16 +266,23 @@ export class LearningService {
 
   /** The learned terms that fit after `manual` (BR-9), as the list will carry them. */
   learnedFor(manual: readonly string[]): string[] {
-    const learned = this.terms(manual)
+    return this.sentOf(manual, this.terms(manual));
+  }
+
+  /** The learned terms in the list, checked by the real count (KBC-040 BR-2). */
+  private sentOf(
+    manual: readonly string[],
+    terms: readonly LearnedTermRow[],
+  ): string[] {
+    const sent = terms
       .filter((term) => term.state === 'in-list')
       .map((term) => term.term);
-    // The real count has the last word (KBC-040 BR-2): never past the limit.
     while (
-      learned.length > 0 &&
-      this.deps.countTokens([...manual, ...learned]) > TERMS_TOKEN_LIMIT
+      sent.length > 0 &&
+      this.deps.countTokens([...manual, ...sent]) > TERMS_TOKEN_LIMIT
     )
-      learned.pop();
-    return learned;
+      sent.pop();
+    return sent;
   }
 
   private manualTerms(): readonly string[] {
@@ -305,10 +323,5 @@ export class LearningService {
       list
         .slice(manual.length)
         .reduce((sum, term) => sum + costOf(term), base) <= TERMS_TOKEN_LIMIT;
-  }
-
-  /** The learning's rows a person corrected over: no Desfazer for them (review round 1). */
-  overwritten(): ReadonlySet<string> {
-    return readLog(this.deps.corrections.learningLog()).overwritten;
   }
 }

@@ -218,6 +218,15 @@ describe('ties between contexts (BR-4, QA F1)', () => {
     ]);
   });
 
+  it('QA F7: on as many corrections, the rule matching both sides beats one matching a side', () => {
+    expect(applied(wordsOf('e com a Manta foi'), rivals())).toEqual([
+      'e com Atlântida foi',
+    ]);
+    expect(applied(wordsOf('e com a Manta veio'), rivals())).toEqual([
+      'e com Amanta veio',
+    ]);
+  });
+
   it('no tie when one has more corrections, or the rival is off', () => {
     const more = rulesOf([
       source({ ...MANTA, context: ['com', 'foi'] }),
