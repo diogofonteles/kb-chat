@@ -50,7 +50,7 @@ export function trackSourceOf(hit: SearchHit): AnswerSource | null {
 
 /**
  * One search hit: title, snippet, facets in text and its near-identical copies (screens.md
- * T2). A track's document (KBC-101) says "♪ Faixa · <gravação> · faixa 3 de 12 · 8:15", shows
+ * T2). A track's document (KBC-101) says "♪ Faixa · 8:15 · <gravação> · faixa 3 de 12", shows
  * the spoken sentence with the words found, and opens the T22 panel on that passage.
  */
 @Component({
