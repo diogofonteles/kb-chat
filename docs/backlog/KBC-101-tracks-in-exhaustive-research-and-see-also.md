@@ -48,9 +48,9 @@ Como quem busca no acervo sem a IA, quero ver as faixas transcritas na lista de 
 - FR-11: a web deve mostrar o cartão da faixa (T2): "♪ Faixa · 8:15 · <gravação> · faixa 3 de 12" (o minuto antes da gravação, para a linha quebrar limpa a 390 px; ajuste de 2026-11-09), título, trecho, facetas em texto, selo de autoria, "⚠ baixa confiança" e "· atualizando" quando for o caso; o clique ou Enter abre o T22 no trecho. (BR-6, BR-11)
 
 ## Non-functional requirements
-- NFR-1: com 2.000 faixas a mais, o planejamento e o corte por expressões do Exaustivo levam no máximo +15 % (vault de teste, sem modelo).
+- NFR-1: com 2.000 faixas a mais, o planejamento e o corte por expressões do Exaustivo levam no máximo +25 % sobre o mesmo volume de texto comum (as mesmas 2.000 faixas lidas como textos; vault de teste, sem modelo). Decisão do dono de 2026-11-09 (opção 1), substitui "+15 %": o salto sobre o acervo sem faixas vem do tamanho do acervo, não das faixas.
 - NFR-2: a estimativa do Exaustivo continua exata: pedidos previstos = pedidos feitos ± 1 no teste com faixas.
-- NFR-3: a busca de documentos (T2) com 2.000 faixas a mais no acervo de teste fica no máximo +10 % no p95 por modo (`pnpm --filter @kb-chat/api latency`), contando a conferência no `media.db`.
+- NFR-3: a busca de documentos (T2) com 2.000 faixas a mais no acervo de teste fica no máximo +25 % no p95 por modo sobre o mesmo volume de texto comum (`pnpm --filter @kb-chat/api latency`), contando a conferência no `media.db`; no modo exact, onde a base é ~27 ms, vale também o teto absoluto de +11 ms. Decisão do dono de 2026-11-09 (opção 1), substitui "+10 %".
 - NFR-4: o cartão da faixa na T2: 390 px sem rolagem lateral; WCAG 2.2 AA, axe sem violações sérias nos três temas; o ♪ sempre com texto ("Faixa de áudio" ao leitor de tela).
 
 ## Acceptance criteria
