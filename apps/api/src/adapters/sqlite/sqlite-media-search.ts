@@ -93,10 +93,7 @@ const passagesFor = (tracks: boolean | undefined): string =>
 /** Media whose passages answer elsewhere (KBC-101 BR-8); none: an always-true clause. */
 const exceptClause = (ids: readonly string[] | undefined): Clause =>
   ids && ids.length > 0
-    ? {
-        sql: `m.id NOT IN (SELECT value FROM json_each(?))`,
-        values: [JSON.stringify(ids)],
-      }
+    ? { sql: `m.id NOT IN (${placeholders(ids.length)})`, values: ids }
     : { sql: '1', values: [] };
 
 /** A track someone may be told about: published, not archived (KBC-068 FR-1, BR-5). */

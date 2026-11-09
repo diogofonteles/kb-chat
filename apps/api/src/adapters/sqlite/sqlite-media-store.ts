@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
+import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
 import {
   SILENCE_DETECTOR,
   WAVEFORM,
@@ -156,6 +156,9 @@ const TRANSCRIBER_ROUTE = 'transcriber';
 
 /** The media catalog and its queue in SQLite (ADR 0022); the API is the only writer. */
 export class SqliteMediaStore implements MediaStorePort {
+  /** Prepared once: a search checks every track it meets (KBC-101 NFR-3). */
+  private byId: StatementSync | null = null;
+
   constructor(private readonly db: DatabaseSync) {}
 
   createMedia(media: NewMedia): MediaRecord {
@@ -224,9 +227,10 @@ export class SqliteMediaStore implements MediaStorePort {
   }
 
   getMedia(id: string): MediaRecord | null {
-    const row = this.db
-      .prepare(`SELECT ${MEDIA_COLUMNS} FROM media WHERE id = ?`)
-      .get(id);
+    this.byId ??= this.db.prepare(
+      `SELECT ${MEDIA_COLUMNS} FROM media WHERE id = ?`,
+    );
+    const row = this.byId.get(id);
     return row ? toMediaRecord(row) : null;
   }
 

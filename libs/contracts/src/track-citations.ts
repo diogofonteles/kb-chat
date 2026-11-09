@@ -64,6 +64,37 @@ export function anchorAt(body: string, offset: number): number | null {
   return found;
 }
 
+/** Where each anchor of a body is: its character offset and its second, in order. */
+export interface PlacedAnchor {
+  readonly offset: number;
+  readonly seconds: number;
+}
+
+/** Every anchor of a body with its offset, read once for many lookups (KBC-101 NFR-1). */
+export function placedAnchors(body: string): PlacedAnchor[] {
+  return [...body.matchAll(new RegExp(TRACK_ANCHOR.source, 'g'))].flatMap(
+    (match) => {
+      const seconds = clockSeconds(match[1] ?? '');
+      return seconds === null ? [] : [{ offset: match.index, seconds }];
+    },
+  );
+}
+
+/** `anchorAt` over anchors already placed: a binary search. */
+export function anchorBefore(
+  anchors: readonly PlacedAnchor[],
+  offset: number,
+): number | null {
+  let low = 0;
+  let high = anchors.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if ((anchors[mid]?.offset ?? 0) <= offset) low = mid + 1;
+    else high = mid;
+  }
+  return anchors[low - 1]?.seconds ?? null;
+}
+
 /** A segment's span on the track's clock, in milliseconds. */
 export interface SegmentSpan {
   readonly startMs: number;

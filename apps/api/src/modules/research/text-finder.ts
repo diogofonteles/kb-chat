@@ -5,7 +5,7 @@ import {
   type CatalogRegistry,
   type ScopeView,
 } from '../catalog/index.js';
-import { anchorAt } from '@kb-chat/contracts';
+import { anchorBefore, placedAnchors } from '@kb-chat/contracts';
 import { flatWithMap } from './flat-map.js';
 import { countOccurrences, flatText, foldText } from './folded-text.js';
 
@@ -235,6 +235,7 @@ export class TextFinder {
     const { flat, map } = flatWithMap(prefix + body);
     // Where the body starts in the flat text: a body occurrence never shows summary text.
     const bodyStart = map.findIndex((source) => source >= prefix.length);
+    const anchors = entry.media ? placedAnchors(body) : [];
     const items = positionsOf(foldText(flat), toNeedles(scan.phrases)).map(
       ({ at, phrase }) => {
         const inBody = bodyStart >= 0 && at >= bodyStart;
@@ -245,7 +246,7 @@ export class TextFinder {
           offset,
           context: contextAround(flat, { at, chars: scan.chars, floor }),
           ...(entry.media && offset !== null
-            ? { anchor: anchorAt(body, offset) }
+            ? { anchor: anchorBefore(anchors, offset) }
             : {}),
         };
       },
