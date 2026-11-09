@@ -136,9 +136,10 @@ export async function* runSweepTurn(
   const layout = await host.sweeps.layout(host.topic, {
     plan,
     batchChars,
-    ...(host.cursor?.after
-      ? { after: host.cursor.after, cursorSet: host.cursor.totals.documents }
-      : {}),
+    ...(host.cursor?.after && { after: host.cursor.after }),
+    ...(host.cursor?.covered !== undefined && {
+      covered: host.cursor.covered,
+    }),
     ...(host.tracks && { tracks: host.tracks }),
   });
   if (!layout) return null;

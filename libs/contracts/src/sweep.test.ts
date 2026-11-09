@@ -6,6 +6,7 @@ import {
 } from './research.js';
 import { savedResearchTurnSchema } from './conversations.js';
 import {
+  MAX_COVERED_DOCUMENTS,
   mergeFindings,
   sweepCoverageSchema,
   sweepCursorSchema,
@@ -83,6 +84,21 @@ describe('sweep contracts (KBC-030)', () => {
     }));
     expect(
       sweepCursorSchema.safeParse({ ...cursor, findings: many }).success,
+    ).toBe(false);
+  });
+
+  it('takes the covered mark as bounded base64, and cursors without it (KBC-101)', () => {
+    expect(sweepCursorSchema.parse(cursor).covered).toBeUndefined();
+    expect(
+      sweepCursorSchema.parse({ ...cursor, covered: 'AAAAAQ==' }).covered,
+    ).toBe('AAAAAQ==');
+    expect(
+      sweepCursorSchema.safeParse({ ...cursor, covered: 'não é base64' })
+        .success,
+    ).toBe(false);
+    const tooMany = 'A'.repeat(Math.ceil((MAX_COVERED_DOCUMENTS * 4) / 3) + 8);
+    expect(
+      sweepCursorSchema.safeParse({ ...cursor, covered: tooMany }).success,
     ).toBe(false);
   });
 

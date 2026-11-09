@@ -5,41 +5,49 @@ import type {
   SweepStopReason,
   SweepTotals,
 } from '@kb-chat/contracts';
+import { coveredMark } from './sweep-cursor.js';
 import type { SweepLayout } from './sweep-planner.js';
 
 /** What a sweep has really finished, measured from its batches (never the model's word). */
 export interface SweepMeasure {
   readonly totals: SweepTotals;
-  /** Documents covered from the start of the set, in id order (the cursor's prefix). */
-  readonly swept: number;
+  /**
+   * The documents covered: by earlier turns, or with every batch of theirs done (any
+   * order, KBC-101): what the cursor marks and a continuation does not read again.
+   */
+  readonly covered: readonly string[];
   /** Documents the AI has to analyze, and of those, not analyzed yet. */
   readonly needed: number;
   readonly missing: number;
+  /** The last id of the covered start of the set (the cursor before its mark, KBC-030). */
   readonly after?: string;
   /** The tracks of the set and of those analyzed (KBC-101 BR-2). */
   readonly tracks: { readonly documents: number; readonly read: number };
 }
 
-/** The documents covered from the start of the set: each one's batches all done. */
-function prefixOf(layout: SweepLayout, done: readonly boolean[]): number {
+type Doc = SweepLayout['docs'][number];
+
+/** Whether each document is covered: an earlier turn's, or each one of its batches done. */
+function coveredFlags(
+  layout: SweepLayout,
+  done: readonly boolean[],
+): boolean[] {
   const batchesOf = new Map<string, number[]>();
   for (const batch of layout.batches)
     for (const unit of batch.units) {
       const id = unit.entry.id;
       batchesOf.set(id, [...(batchesOf.get(id) ?? []), batch.index]);
     }
-  let count = layout.skipped;
-  while (count < layout.docs.length) {
-    const id = layout.docs[count]?.entry.id ?? '';
-    if (!(batchesOf.get(id) ?? []).every((i) => done[i])) break;
-    count += 1;
-  }
-  return count;
+  return layout.docs.map(
+    (doc, i) =>
+      i < layout.skipped ||
+      (batchesOf.get(doc.entry.id) ?? []).every((b) => done[b]),
+  );
 }
 
 /**
  * The sweep's counts (KBC-030 design review): a document needs the AI when it has text to
- * read (with phrases: occurrences); it is analyzed once it lies in the covered prefix.
+ * read (with phrases: occurrences); it is analyzed once all of it is covered.
  */
 export function measureSweep(
   layout: SweepLayout,
@@ -48,9 +56,10 @@ export function measureSweep(
     previousBatches,
   }: { done: readonly boolean[]; previousBatches: number },
 ): SweepMeasure {
-  const swept = prefixOf(layout, done);
-  const withText = (doc: SweepLayout['docs'][number]) => doc.units.length > 0;
-  const analyzed = layout.docs.slice(0, swept).filter(withText);
+  const flags = coveredFlags(layout, done);
+  const covered = layout.docs.filter((_, i) => flags[i]);
+  const withText = (doc: Doc) => doc.units.length > 0;
+  const analyzed = covered.filter(withText);
   const { length: read } = analyzed;
   const { length: needed } = layout.docs.filter(withText);
   const totals: SweepTotals = {
@@ -60,9 +69,23 @@ export function measureSweep(
     read,
     batches: previousBatches + done.filter(Boolean).length,
   };
-  const after = layout.docs[swept - 1]?.entry.id;
-  const tracks = tracksAmong(layout.docs, analyzed);
-  return { totals, swept, needed, missing: needed - read, after, tracks };
+  return {
+    totals,
+    covered: covered.map((doc) => doc.entry.id),
+    needed,
+    missing: needed - read,
+    after: afterOf(layout, flags),
+    tracks: tracksAmong(layout.docs, analyzed),
+  };
+}
+
+/** The last id of the covered start of the set: what a cursor before `covered` resumed after. */
+function afterOf(
+  layout: SweepLayout,
+  flags: readonly boolean[],
+): string | undefined {
+  const start = flags.indexOf(false);
+  return layout.docs[(start < 0 ? flags.length : start) - 1]?.entry.id;
 }
 
 /** The tracks of the set, and of those analyzed (KBC-101 BR-2). */
@@ -107,10 +130,11 @@ export function cursorOf(
   layout: SweepLayout,
   { measure, findings }: Pick<Ending, 'measure' | 'findings'>,
 ): SweepCursor {
-  const { after, totals } = measure;
+  const { after, totals, covered } = measure;
   return {
     plan: layout.plan,
     ...(after && { after }),
+    covered: coveredMark(covered),
     totals,
     findings: [...findings],
   };

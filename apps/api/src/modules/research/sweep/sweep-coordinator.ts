@@ -433,7 +433,11 @@ const linesAsItems = (lines: readonly string[]) =>
       : [];
   });
 
-/** The carried findings of documents in this set; any other id is dropped (never trusted). */
+/**
+ * The carried findings of documents in this set; any other id is dropped (never trusted).
+ * A covered document is not read again, so its findings come once (code review 2 of
+ * KBC-101); one stopped halfway is read again whole, as before (KBC-030 QA F-1).
+ */
 function carriedItems({ layout, carried = [] }: SweepRequest): FoundItem[] {
   const byId = new Map(layout.docs.map((doc) => [doc.entry.id, doc.entry]));
   return carried.flatMap(({ id, text }) => {

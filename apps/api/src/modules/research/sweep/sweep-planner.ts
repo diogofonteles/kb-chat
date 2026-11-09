@@ -11,6 +11,7 @@ import { acceptsEntry, type DocFilter } from '../doc-filter.js';
 import type { TextFinder } from '../text-finder.js';
 import { isVisible } from '../tool-context.js';
 import { defaultPlan } from './plan-tool.js';
+import { coveredBy } from './sweep-cursor.js';
 import { authorshipLabels, oneLine } from '../tool-output.js';
 
 /**
@@ -45,9 +46,12 @@ export interface SweepBatch {
 /** The resolved sweep: the whole set, what a cursor skips and the batches left to run. */
 export interface SweepLayout {
   readonly plan: SweepPlan;
-  /** Every document of the target set, in id order (the cursor's order). */
+  /**
+   * Every document of the target set: those an earlier turn covered first, then the rest,
+   * each part in id order. Swept documents always form a prefix (what a cursor marks).
+   */
   readonly docs: readonly SweepDoc[];
-  /** Documents at or before the cursor: covered by an earlier turn. */
+  /** The first documents, covered by an earlier turn. */
   readonly skipped: number;
   readonly batches: readonly SweepBatch[];
   /** Documents whose whole body was examined (scanned for the phrases, or read whole). */
@@ -62,12 +66,8 @@ export interface LayoutRequest {
   readonly batchChars: number;
   /** The cursor: the last document id already swept. */
   readonly after?: string;
-  /**
-   * How many documents the cursor's set had. A set that changed since (a cursor from before
-   * sub-collections or tracks joined it, KBC-101) starts over: an id order that moved would
-   * count unread documents as read.
-   */
-  readonly cursorSet?: number;
+  /** The cursor's mark of the documents already swept (see `coveredBy`). */
+  readonly covered?: string;
   /** The tracks the turn may research; without it, texts only (KBC-101 BR-1, AC-5). */
   readonly tracks?: TrackShelf;
 }
@@ -168,13 +168,15 @@ function packed(units: readonly SweepUnit[], size: number): SweepBatch[] {
   return batches;
 }
 
-/** The documents a cursor covered; none when its set changed since (see `cursorSet`). */
-function skippedOf(
+/** The documents a cursor covered first, then the rest: the swept part stays a prefix. */
+function resumed(
   docs: readonly SweepDoc[],
-  { after, cursorSet = docs.length }: LayoutRequest,
-): number {
-  if (after === undefined || cursorSet !== docs.length) return 0;
-  return docs.filter((d) => d.entry.id <= after).length;
+  request: LayoutRequest,
+): { docs: SweepDoc[]; skipped: number } {
+  const covered = coveredBy(request);
+  const done = docs.filter((d) => covered(d.entry));
+  const rest = docs.filter((d) => !covered(d.entry));
+  return { docs: [...done, ...rest], skipped: done.length };
 }
 
 async function mapLimited<T, R>(
@@ -205,13 +207,13 @@ export class SweepPlanner {
     const entries = this.targetSet(topic, request);
     if (!entries) return null;
     const phrases = request.plan.phrases;
-    const docs =
+    const found =
       phrases.length > 0
         ? await this.hitDocs(topic, { entries, phrases, request })
         : await mapLimited(entries, (entry) =>
             this.wholeDoc(topic, entry, request.batchChars),
           );
-    const skipped = skippedOf(docs, request);
+    const { docs, skipped } = resumed(found, request);
     const pending = docs.slice(skipped).flatMap((d) => d.units);
     return {
       plan: request.plan,

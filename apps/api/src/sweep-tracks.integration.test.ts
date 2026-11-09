@@ -263,6 +263,47 @@ describe('tracks in the exhaustive sweep (KBC-101)', () => {
     ).toEqual({ topic: SUB, id: tracks.path });
   });
 
+  it('AC-8: a cursor from before the covered mark reads the tracks that joined its set, wherever their ids sort', async () => {
+    const { tracks, batches } = await sweepWorld([
+      { text: 'Continuação [1].' },
+    ]);
+    const view = tracks.world.media.started.catalog.scopeView('hermetismo');
+    const entries = [...(view?.entries.values() ?? [])];
+    const texts = entries
+      .filter((e) => e.media === null && !e.home)
+      .map((e) => e.id)
+      .sort();
+    const lastText = texts.at(-1) ?? '';
+    expect(entries.some((e) => e.media && e.id < lastText)).toBe(true);
+    const cursor: SweepCursor = {
+      plan: { target: {}, phrases: [], extract: 'tudo' },
+      after: lastText,
+      totals: {
+        documents: entries.length,
+        scanned: texts.length,
+        withHits: null,
+        read: texts.length,
+        batches: 3,
+      },
+      findings: [],
+    };
+    const coverage = coverageOf(
+      await exhaustive(await memberWith(tracks.world, RESEARCHER), {
+        sweep: cursor,
+      }),
+    );
+    expect(coverage).toMatchObject({
+      continued: true,
+      documents: entries.length,
+      read: entries.length,
+      missing: 0,
+      tracks: { documents: 2, read: 2 },
+    });
+    const swept = batches.join('\n');
+    expect(swept).toContain('O que é o ritmo?');
+    expect(swept).not.toContain('A LEI DO RITMO');
+  });
+
   it('AC-8: "Continuar varredura" resumes after the last document swept and the coverage adds the tracks', async () => {
     const { tracks, batches } = await sweepWorld([
       { text: 'Continuação [1].' },
