@@ -7,6 +7,15 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
+  EMPTY,
+  Subject,
+  catchError,
+  finalize,
+  map,
+  switchMap,
+  type Observable,
+} from 'rxjs';
+import {
   CORRECTION_MAX_CHARS,
   CORRECTION_MAX_WORDS,
   correctionConflictSchema,
@@ -49,7 +58,9 @@ export type DeskPhase =
       readonly author: string | null;
     }
   | { readonly kind: 'stale' }
-  | { readonly kind: 'failed' };
+  | { readonly kind: 'failed' }
+  /** Refused for a reason a retry does not change (409 not-aligned, not-contiguous…). */
+  | { readonly kind: 'refused' };
 
 /** A message under the text, with an action for a while (FR-3, FR-11). */
 export interface DeskNotice {
@@ -108,6 +119,9 @@ export class CorrectionDesk {
   private readonly said = signal('');
   private readonly log = signal<CorrectionHistory | null>(null);
   private readonly everywhere = signal<string | null>(null);
+  private readonly undoPending = signal(false);
+  /** Pages of the history asked: a newer ask drops the answer to an older one (PD-03). */
+  private readonly historyAsked = new Subject<number>();
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly selection = this.chosen.asReadonly();
@@ -119,6 +133,8 @@ export class CorrectionDesk {
   readonly history = this.log.asReadonly();
   /** The text "Corrigir todas" is open for (FR-11); null when closed. */
   readonly correctingAll = this.everywhere.asReadonly();
+  /** An undo on its way: Desfazer waits for its answer, one request per click (PD-02). */
+  readonly undoing = this.undoPending.asReadonly();
   /** The audio plays up to here when a word is chosen while it plays. */
   private untilMs = Number.POSITIVE_INFINITY;
 
@@ -162,6 +178,7 @@ export class CorrectionDesk {
 
   constructor() {
     this.destroyRef.onDestroy(() => this.clearNotice());
+    this.followHistory();
   }
 
   /** The block's track ends here: a word chosen while playing plays at least that far. */
@@ -272,7 +289,8 @@ export class CorrectionDesk {
       return;
     }
     const request = this.requestOf(clean, expected);
-    if (!request || this.state().kind === 'saving') return;
+    const phase = this.state().kind;
+    if (!request || phase === 'saving' || phase === 'refused') return;
     this.state.set({ kind: 'saving' });
     this.api
       .correct(request.mediaId, request.body)
@@ -346,10 +364,12 @@ export class CorrectionDesk {
       return;
     }
     const details = correctionConflictSchema.safeParse(errorDetailsOf(err));
-    if (
-      code === 'CORRECTION_CONFLICT' &&
-      details.data?.reason === 'word-changed'
-    ) {
+    const reason = code === 'CORRECTION_CONFLICT' ? details.data?.reason : null;
+    if (reason && reason !== 'word-changed' && reason !== 'changed-since') {
+      this.state.set({ kind: 'refused' });
+      return;
+    }
+    if (reason === 'word-changed' && details.data) {
       this.state.set({
         kind: 'conflict',
         current: details.data.current ?? [],
@@ -363,44 +383,46 @@ export class CorrectionDesk {
   /** Desfazer, in the notice or the history (BR-7). */
   undo(correctionId: string): void {
     const transcript = this.source.transcript();
-    if (!transcript) return;
+    if (!transcript || this.undoPending()) return;
     this.clearNotice();
-    this.api
-      .undo(transcript.mediaId, correctionId)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: () => {
-          this.source.reload();
-          this.loadHistory();
-          const text = $localize`:@@correct.undone:Correção desfeita.`;
-          this.say(text);
-          this.tell({ text, undo: null });
-        },
-        error: (err: unknown) => this.undoRefused(err),
-      });
+    this.undoOnce(this.api.undo(transcript.mediaId, correctionId)).subscribe({
+      next: () => {
+        this.source.reload();
+        this.loadHistory();
+        const text = $localize`:@@correct.undone:Correção desfeita.`;
+        this.say(text);
+        this.tell({ text, undo: null });
+      },
+      error: (err: unknown) => this.undoRefused(err),
+    });
   }
 
   /** Desfazer o grupo (BR-14): what still says the new text goes back, the rest is told. */
   undoGroup(groupId: string): void {
     const transcript = this.source.transcript();
-    if (!transcript) return;
+    if (!transcript || this.undoPending()) return;
     this.clearNotice();
-    this.api
-      .undoGroup(transcript.mediaId, groupId)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: ({ undone, changed }) => {
-          this.source.reload();
-          this.loadHistory();
-          const text =
-            changed === 0
-              ? $localize`:@@correct.groupUndone:${undone}:undone: desfeitas.`
-              : $localize`:@@correct.groupPartly:${undone}:undone: desfeitas; ${changed}:changed: mudaram depois e ficaram como estão.`;
-          this.say(text);
-          this.tell({ text, undo: null });
-        },
-        error: (err: unknown) => this.undoRefused(err),
-      });
+    this.undoOnce(this.api.undoGroup(transcript.mediaId, groupId)).subscribe({
+      next: ({ undone, changed }) => {
+        this.source.reload();
+        this.loadHistory();
+        const text =
+          changed === 0
+            ? $localize`:@@correct.groupUndone:${undone}:undone: desfeitas.`
+            : $localize`:@@correct.groupPartly:${undone}:undone: desfeitas; ${changed}:changed: mudaram depois e ficaram como estão.`;
+        this.say(text);
+        this.tell({ text, undo: null });
+      },
+      error: (err: unknown) => this.undoRefused(err),
+    });
+  }
+
+  private undoOnce<T>(request: Observable<T>): Observable<T> {
+    this.undoPending.set(true);
+    return request.pipe(
+      finalize(() => this.undoPending.set(false)),
+      takeUntilDestroyed(this.destroyRef),
+    );
   }
 
   private undoRefused(err: unknown): void {
@@ -440,20 +462,29 @@ export class CorrectionDesk {
 
   /** The recording's history, for "Correções (N)" and the carry-over notice (FR-8, FR-9). */
   loadHistory(cursor = 0): void {
-    const transcript = this.source.transcript();
-    if (!transcript) return;
-    this.api
-      .history(transcript.mediaId, cursor)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (page) =>
-          this.log.update((known) =>
-            cursor === 0 || !known
-              ? page
-              : { ...page, entries: [...known.entries, ...page.entries] },
-          ),
-        // The count and the notice wait for the next change; the text works without them.
-        error: () => undefined,
-      });
+    this.historyAsked.next(cursor);
+  }
+
+  private followHistory(): void {
+    this.historyAsked
+      .pipe(
+        switchMap((cursor) => {
+          const transcript = this.source.transcript();
+          if (!transcript) return EMPTY;
+          return this.api.history(transcript.mediaId, cursor).pipe(
+            map((page) => ({ cursor, page })),
+            // The count and the notice wait for the next change; the text works without them.
+            catchError(() => EMPTY),
+          );
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(({ cursor, page }) =>
+        this.log.update((known) =>
+          cursor === 0 || !known
+            ? page
+            : { ...page, entries: [...known.entries, ...page.entries] },
+        ),
+      );
   }
 }

@@ -457,6 +457,68 @@ describe('TrackText: correcting a word (KBC-093)', () => {
     expect(rendered.server.served.transcript).toBe(2);
   });
 
+  it('AC-12: with no name, Usar a outra; Enter on a conflict is Salvar a minha', async () => {
+    const rendered = await renderText();
+    await clickWord(rendered, 'Tiuako');
+    await type(rendered, 'Tiuacô');
+    fireEvent.keyDown(field(), { key: 'Enter' });
+    await rendered.settle();
+    posted(rendered).flush(
+      {
+        error: {
+          code: 'CORRECTION_CONFLICT',
+          message: 'changed',
+          details: { reason: 'word-changed', current: ['Tiuaco'] },
+        },
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+    await rendered.settle();
+    expect(screen.getByRole('button', { name: 'Usar a outra' })).toBeTruthy();
+
+    fireEvent.keyDown(field(), { key: 'Enter' });
+    await rendered.settle();
+    const mine = posted(rendered);
+    expect(mine.request.body).toMatchObject({
+      expected: ['Tiuaco'],
+      text: 'Tiuacô',
+    });
+    mine.flush(saved, { status: 201, statusText: 'Created' });
+    await rendered.settle();
+  });
+
+  it('a refusal a retry cannot change says so, with no Tentar de novo', async () => {
+    const rendered = await renderText();
+    await clickWord(rendered, 'Tiuako');
+    await type(rendered, 'Tiuaco');
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    await rendered.settle();
+    posted(rendered).flush(
+      {
+        error: {
+          code: 'CORRECTION_CONFLICT',
+          message: 'no',
+          details: { reason: 'not-aligned' },
+        },
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+    await rendered.settle();
+
+    expect(
+      screen.getByText(
+        'Este trecho não pode ser corrigido aqui. Avise quem cuida do acervo.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Salvar' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    fireEvent.keyDown(field(), { key: 'Enter' });
+    await rendered.settle();
+  });
+
   it('AC-7, AC-8: the same text cannot be saved, and a long or broken one is said next to the field', async () => {
     const rendered = await renderText();
     await clickWord(rendered, 'Tiuako');

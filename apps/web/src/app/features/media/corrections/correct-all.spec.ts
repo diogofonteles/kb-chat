@@ -215,6 +215,51 @@ describe('Corrigir todas (KBC-093 FR-11)', () => {
     );
   });
 
+  it('AC-34, BR-13: a retry after a failure sends the same key; another text or choice sends a new one', async () => {
+    const { answer, view, http } = await renderAll(null);
+    await answer(preview(3));
+    const field = screen.getByRole('textbox', { name: 'Texto certo' });
+    fireEvent.input(field, { target: { value: 'Tiuaco' } });
+    const send = async () => {
+      fireEvent.click(confirmButton());
+      await view.fixture.whenStable();
+      return http.expectOne(`${BASE}/corrections/batch`);
+    };
+    const lost = () => ({ status: 0, statusText: 'Unknown Error' });
+    const first = await send();
+    first.error(new ProgressEvent('error'), lost());
+    await view.fixture.whenStable();
+    const retry = await send();
+    expect(retry.request.body.key).toBe(first.request.body.key);
+    retry.error(new ProgressEvent('error'), lost());
+    await view.fixture.whenStable();
+
+    fireEvent.input(field, { target: { value: 'Tiuacu' } });
+    const otherText = await send();
+    expect(otherText.request.body.key).not.toBe(first.request.body.key);
+    otherText.error(new ProgressEvent('error'), lost());
+    await view.fixture.whenStable();
+
+    fireEvent.click(screen.getAllByRole('checkbox')[0] as HTMLElement);
+    const otherChoice = await send();
+    expect(otherChoice.request.body.key).not.toBe(otherText.request.body.key);
+    expect(otherChoice.request.body.items).toHaveLength(2);
+    otherChoice.flush(
+      { groupId: GROUP, count: 1, version: 1, revision: 1, segments: [] },
+      { status: 200, statusText: 'OK' },
+    );
+    await view.fixture.whenStable();
+    http.expectOne(`${BASE}/corrections?cursor=0`).flush({
+      mediaId: MEDIA,
+      total: 1,
+      entries: [],
+      next: null,
+      carry: null,
+    });
+    const desk = view.fixture.debugElement.injector.get(CorrectionDesk);
+    expect(desk.notice()?.text).toBe('1 ocorrência corrigida.');
+  });
+
   it('AC-34: a new version says so and nothing is written', async () => {
     const { answer, view, http, source } = await renderAll(null);
     await answer(preview(2));

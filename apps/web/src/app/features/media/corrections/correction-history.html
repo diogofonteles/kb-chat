@@ -54,6 +54,7 @@
                 <button
                   type="button"
                   class="secondary"
+                  [disabled]="desk.undoing()"
                   (click)="undoGroup(entry)"
                   i18n="@@history.undoGroup"
                 >
@@ -118,6 +119,7 @@
       <button
         type="button"
         class="secondary"
+        [disabled]="desk.undoing()"
         (click)="undo(row)"
         i18n="@@history.undo"
       >

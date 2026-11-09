@@ -58,6 +58,8 @@ export class WordCorrection {
   );
   protected readonly phase = this.desk.phase;
   protected readonly saving = computed(() => this.phase().kind === 'saving');
+  /** A retry would be refused the same way: no Salvar nor Tentar de novo. */
+  protected readonly refused = computed(() => this.phase().kind === 'refused');
   /** Said next to the field as soon as it is so (AC-8, MA-23). */
   protected readonly invalid = computed(
     () => !this.desk.valid() || this.phase().kind === 'invalid',
@@ -108,12 +110,17 @@ export class WordCorrection {
   }
 
   protected save(): void {
-    if (this.desk.unchanged() || this.saving()) return;
+    // On a conflict the field still holds the person's text: Enter keeps it (AC-12).
+    if (this.phase().kind === 'conflict') {
+      this.desk.saveMine();
+      return;
+    }
+    if (this.desk.unchanged() || this.saving() || this.refused()) return;
     this.desk.save();
   }
 
   protected remove(): void {
-    if (this.saving()) return;
+    if (this.saving() || this.refused()) return;
     this.desk.save('');
   }
 

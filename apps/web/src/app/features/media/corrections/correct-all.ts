@@ -77,8 +77,11 @@ export class CorrectAll {
   protected readonly outcome = signal<Outcome>('idle');
   /** Occurrences whose words changed since the preview, with what they say now (AC-33). */
   protected readonly changed = signal<ReadonlyMap<number, string>>(new Map());
-  /** The key of the confirmation being sent: a retry sends it again (BR-13). */
-  private key: string | null = null;
+  /**
+   * The key of the confirmation being sent, with what it sends: a retry of the same text and
+   * choice sends it again (BR-13); another text or choice is another group, with a new key.
+   */
+  private key: { readonly value: string; readonly of: string } | null = null;
 
   private readonly preview = rxResource({
     params: () => {
@@ -195,15 +198,16 @@ export class CorrectAll {
     const transcript = this.source.transcript();
     const text = this.clean();
     if (!transcript || text === null || !this.canConfirm()) return;
-    this.key ??= crypto.randomUUID();
-    this.outcome.set('saving');
     const items = this.occurrences()
       .filter((one) => this.checked().has(one.position))
       .map(({ position, count, expected }) => ({ position, count, expected }));
+    const of = JSON.stringify({ version: transcript.version, text, items });
+    if (this.key?.of !== of) this.key = { value: crypto.randomUUID(), of };
+    this.outcome.set('saving');
     this.api
       .batch(transcript.mediaId, {
         version: transcript.version,
-        key: this.key,
+        key: this.key.value,
         text,
         items,
       })
@@ -215,7 +219,10 @@ export class CorrectAll {
   }
 
   private saved(result: TranscriptCorrectionBatchResult): void {
-    const text = $localize`:@@correctAll.saved:${result.count}:count: ocorrências corrigidas.`;
+    const text =
+      result.count === 1
+        ? $localize`:@@correctAll.savedOne:1 ocorrência corrigida.`
+        : $localize`:@@correctAll.saved:${result.count}:count: ocorrências corrigidas.`;
     this.source.reload();
     this.desk.loadHistory();
     this.desk.say(text);

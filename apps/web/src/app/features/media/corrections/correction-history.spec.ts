@@ -164,6 +164,58 @@ describe('Correções (KBC-093 FR-9, FR-13)', () => {
     );
   });
 
+  it('PD-02: a double click on Desfazer o grupo or Desfazer sends one request', async () => {
+    const items = Array.from({ length: 12 }, () => row({ groupId: GROUP }));
+    const single = row();
+    const { view, http, desk } = await renderHistory(
+      historyOf([
+        { groupId: GROUP, items, canUndoGroup: true },
+        { groupId: null, items: [single], canUndoGroup: false },
+      ]),
+    );
+    const group = screen.getByRole('button', { name: 'Desfazer o grupo' });
+    fireEvent.click(group);
+    fireEvent.click(group);
+    await view.fixture.whenStable();
+    expect(group).toHaveProperty('disabled', true);
+    http
+      .expectOne(`${BASE}/groups/${GROUP}/undo`)
+      .flush({ undone: 12, changed: 0, version: 2, revision: 2, segments: [] });
+    http.expectOne(`${BASE}?cursor=0`).flush(historyOf([]));
+    await view.fixture.whenStable();
+    expect(desk.notice()?.text).toBe('12 desfeitas.');
+
+    desk.undo(single.id);
+    desk.undo(single.id);
+    http.expectOne(`${BASE}/${single.id}/undo`).flush({
+      correction: null,
+      version: 2,
+      revision: 3,
+      segments: [],
+    });
+    http.expectOne(`${BASE}?cursor=0`).flush(historyOf([]));
+  });
+
+  it('PD-03: an older answer to the history never overwrites a newer one', async () => {
+    const { view, http, desk } = await renderHistory(historyOf([]));
+    desk.loadHistory();
+    desk.loadHistory();
+    const [older, newer] = http.match(`${BASE}?cursor=0`);
+    expect(older?.cancelled).toBe(true);
+    newer?.flush({
+      ...historyOf([]),
+      total: 3,
+      carry: { version: 2, carried: 1, notCarried: 0 },
+    });
+    await view.fixture.whenStable();
+    expect(desk.history()?.total).toBe(3);
+    expect(desk.history()?.carry).toEqual({
+      version: 2,
+      carried: 1,
+      notCarried: 0,
+    });
+  });
+
   it('AC-19, FR-8: a correction not carried says what the new version has, with Corrigir aqui', async () => {
     const lost = row({
       state: 'not-carried',

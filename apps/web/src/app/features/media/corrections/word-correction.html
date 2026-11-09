@@ -123,6 +123,11 @@
           Não consegui salvar. Sua correção continua aqui.
         </p>
       }
+      @case ('refused') {
+        <p class="error" i18n="@@correct.refused">
+          Este trecho não pode ser corrigido aqui. Avise quem cuida do acervo.
+        </p>
+      }
       @case ('conflict') {
         @if (conflictAuthor(); as author) {
           <p class="error" i18n="@@correct.conflictBy">
@@ -157,13 +162,14 @@
 
   <div class="actions">
     @if (phase().kind === 'conflict') {
-      <button
-        type="button"
-        class="secondary"
-        (click)="desk.useTheirs()"
-        i18n="@@correct.useTheirs"
-      >
-        Usar a de {{ conflictAuthor() ?? 'outra pessoa' }}
+      <button type="button" class="secondary" (click)="desk.useTheirs()">
+        @if (conflictAuthor(); as author) {
+          <ng-container i18n="@@correct.useTheirs"
+            >Usar a de {{ author }}</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@correct.useOther">Usar a outra</ng-container>
+        }
       </button>
       <button
         type="button"
@@ -177,7 +183,7 @@
       <button
         type="button"
         class="secondary"
-        [disabled]="saving()"
+        [disabled]="saving() || refused()"
         (click)="remove()"
         i18n="@@correct.remove"
       >
@@ -194,7 +200,7 @@
       <button
         type="button"
         class="primary"
-        [disabled]="desk.unchanged() || saving() || invalid()"
+        [disabled]="desk.unchanged() || saving() || invalid() || refused()"
         (click)="save()"
       >
         @switch (phase().kind) {
