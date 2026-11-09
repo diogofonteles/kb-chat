@@ -56,7 +56,7 @@ export class TranscriberStatusBoard {
   }
 
   private itemOf(transcriber: Transcriber): TranscriberStatusItem {
-    const report = this.reports.get(transcriber.id) ?? null;
+    const report = withTitle(this.reports.get(transcriber.id), transcriber);
     return {
       id: transcriber.id,
       name: transcriber.name,
@@ -86,6 +86,21 @@ export class TranscriberStatusBoard {
       canStartHere: this.deps.canStartHere,
     };
   }
+}
+
+/**
+ * The lease of a transcription carries no title, so the worker names the job by its media;
+ * the API knows which item the transcriber holds and names it by its title.
+ */
+function withTitle(
+  report: Received | undefined,
+  transcriber: Transcriber,
+): Received | null {
+  if (!report) return null;
+  const job = report.currentJob;
+  const held = transcriber.currentJob;
+  if (!job || !held || held.kind !== job.kind) return report;
+  return { ...report, currentJob: { ...job, label: held.title } };
 }
 
 /** A path as a shell argument: single quotes when it has anything but plain characters. */

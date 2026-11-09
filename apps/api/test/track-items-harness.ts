@@ -110,7 +110,15 @@ export async function startWorld(
     ownerHeaders,
     mediaDir: join(started.state, 'media'),
   };
-  const { token } = await pair(media);
+  const { token, transcriber } = await pair(media);
+  // The world's Mac only transcribes: a master unmarked "Publica no acervo", which comes
+  // on at pairing (KBC-114 BR-7); the tests that publish pair a Mac of their own.
+  const unmarked = await media.owner(
+    'PATCH',
+    `/api/v1/media/transcribers/${transcriber.id}`,
+    { kinds: ['transcribe'] },
+  );
+  expect(unmarked.statusCode, unmarked.body).toBe(200);
   return { media, token };
 }
 
