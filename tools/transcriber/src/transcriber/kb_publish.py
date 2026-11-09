@@ -14,6 +14,7 @@ budget reached leaves documents "undecided" with exit 0, which is reported as in
 """
 
 import fcntl
+import logging
 import os
 import re
 import shutil
@@ -53,6 +54,7 @@ APP_KEYS = frozenset(
 )
 # A collection's vault folder, as the contract's topic slug (`hermetismo`, `a/b`).
 TOPIC = re.compile(r"^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*\Z")
+log = logging.getLogger("transcriber")
 UNDECIDED_ERROR = "kb left it undecided (budget reached): re-run"
 
 
@@ -352,7 +354,9 @@ class KbPublisher:
 
         with self.locked():
             # A collection created on the screen gets its folder first (KBC-114).
-            ensure_topic(self.vault, topic, job.get("collection"), self.kb)
+            made = ensure_topic(self.vault, topic, job.get("collection"), self.kb)
+            if made:
+                log.info("kb topic new: %s", ", ".join(made))
             written = self.write(topic, writes)
             files = dict(zip((item["path"] for item in writes), written, strict=True))
             self.remove(topic, items)

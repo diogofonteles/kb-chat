@@ -65,6 +65,13 @@ def test_ac1_a_new_collection_is_scaffolded_once_before_kb_classifies(tmp_path):
     assert len(kb.topics) == 1
 
 
+def test_the_log_says_which_collection_was_made_in_the_vault(tmp_path, caplog):
+    kb = FakeTopicKb(tmp_path)
+    with caplog.at_level("INFO", logger="transcriber"):
+        KbPublisher(tmp_path, kb).publish({**JOB, "topic": "novo", "collection": NEW})
+    assert "kb topic new: novo" in caplog.text
+
+
 def test_ac2_a_sub_collection_without_its_parent_creates_the_parent_first(tmp_path):
     kb = FakeTopicKb(tmp_path)
     ensure_topic(tmp_path, "udv/palavra-do-mestre", CHILD, kb)
