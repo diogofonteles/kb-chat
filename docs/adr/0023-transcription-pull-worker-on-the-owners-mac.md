@@ -1,6 +1,6 @@
 # 0023 — Transcription: a pull worker on the owner's Mac (mlx-whisper turbo with VAD and terms), Groq as a capped fallback, raw JSON as the source of truth
 
-- Status: accepted (2026-10-28)
+- Status: accepted (2026-10-28; amended 2026-11-09 by KBC-114: publishing on by default, a LaunchAgent, status in the app)
 - Drivers: phase 2 plan v3; the owner's decision of 2026-10-28 (transcribe on the Mac, Groq as backup, noisy recordings searchable with a notice, monthly cap US$ 10); transcription pilot `docs/research/2026-10-28-transcription-pilot.md`; ADR 0022
 
 ## Context
@@ -57,3 +57,10 @@ The Mac is behind NAT and not always on; the VM must not run speech recognition 
 - Noisy recordings remain poor; they are flagged, not fixed. Later tests: whisper large-v3 (not turbo) and noise reduction before recognition.
 - Threats: a leaked worker token can read the audio of jobs it leases and post a false transcript for them; mitigated by revoke, last-seen time, scope to worker routes and one job at a time. The worker never receives the vault, sessions or AI keys.
 - Compliance: contract tests of the worker protocol (lease, heartbeat, upload, lease expiry) with a fake worker; post-filter and confidence unit tests with the pilot's loops and the noisy excerpt as fixtures; the WER script of the pilot kept as a manual check when parameters change.
+
+## Amendment 2026-11-09 (KBC-114: in the background, with its status in the app)
+
+- **Publishing on by default.** A transcriber paired from now on leases `transcribe` and `kb-publish` ("Publica no acervo" comes marked; a master can still unmark it). The Mac asks for `kb-publish` only with a vault configured (`--vault`/`KB_CHAT_VAULT`) and `kb` on PATH; `transcriber run --no-kb-publish` keeps it out. Transcribers paired before keep their marks (no data change).
+- **A LaunchAgent, installed by the worker.** `transcriber service install [--vault V] [--extra E]… [--no-load]` writes `~/Library/LaunchAgents/com.nova-alexandria.transcriber.plist` (RunAtLoad, KeepAlive, ThrottleInterval 60, ExitTimeOut 300, logs in `~/Library/Logs/nova-alexandria-transcriber/`, `KB_CHAT_VAULT` and a PATH with the folders of uv, kb and ffmpeg) and loads it with `launchctl bootstrap gui/<uid>`; `uninstall` boots it out and removes the file; `status` reads `launchctl print`. The token stays in the Keychain: nothing secret is in the plist. The template file is gone; the plist is generated.
+- **Status.** The worker sends `POST /api/v1/media-worker/status` (its token; the VM's is refused) at each change and every 30 s: state (`idle`, `working`, `waiting` — e.g. the vault's lock —, `error`), version, kinds, current job with progress, the last 10 jobs, last error, counts since it started, the vault path and kb's version. The API keeps the last one per transcriber in memory (a restart refills it in 30 s) and shows it to masters (`GET /api/v1/media/transcribers/status`), `offline` after 2 minutes without one. The worker identity, the token scope and Q7 do not change.
+- **Turning it on.** Production's API runs on the VM and cannot reach the Mac: launchd keeps the worker on, and the app shows the exact commands. Only an API on the same Mac (`KB_CHAT_LOCAL_TRANSCRIBER=1`, refused hosted) offers "Ligar transcritor": `execFile('/bin/launchctl', ['kickstart', '-k', 'gui/<uid>/com.nova-alexandria.transcriber'])`, a fixed program with fixed arguments, nothing from the request.
