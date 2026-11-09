@@ -196,6 +196,20 @@ export class CorrectionService {
     };
   }
 
+  /**
+   * A learned replacement a person corrected over no longer holds its text: no Desfazer
+   * offered there (KBC-113, review round 1); the undo would answer 409 anyway.
+   */
+  private stillHolds(row: CorrectionRow): boolean {
+    if (row.ruleId === null) return true;
+    const words = this.deps.store.wordsAt(
+      row.transcriptId,
+      row.position,
+      row.count,
+    );
+    return sameTexts(textsOf(words), replacedTexts(row.count, row.after));
+  }
+
   protected toContract(
     row: CorrectionRow,
     actor: MediaActor,
@@ -220,7 +234,7 @@ export class CorrectionService {
       groupId: row.groupId,
       authorName: row.authorName,
       mine,
-      canUndo: mayUndo(row, actor),
+      canUndo: mayUndo(row, actor) && this.stillHolds(row),
       learned: row.ruleId !== null,
       createdAt: row.createdAt,
     };

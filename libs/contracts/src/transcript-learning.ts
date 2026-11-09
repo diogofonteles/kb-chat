@@ -49,6 +49,11 @@ export const learnedRuleSchema = z.object({
   /** The master who switched it, when one did. */
   switchedBy: z.string().nullable(),
   conflictWith: z.string().nullable(),
+  /**
+   * Another rule in force for the same words, with as many corrections, that may match the
+   * same occurrence: there neither applies (BR-4).
+   */
+  tiesWith: z.string().nullable().default(null),
   /** At most 3, newest first. */
   examples: z.array(learnedExampleSchema).max(3),
 });

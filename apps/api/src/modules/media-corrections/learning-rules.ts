@@ -48,6 +48,11 @@ export interface Rule {
   readonly enabled: boolean;
   readonly switchedBy: string | null;
   readonly conflictWith: string | null;
+  /**
+   * Another rule in force for the same words, with as many corrections, that may match the
+   * same occurrence by another side of its context: there, neither applies (BR-4, QA F1).
+   */
+  readonly tiesWith: string | null;
 }
 
 /** A replacement a rule makes on a new version (BR-5). */
@@ -221,12 +226,20 @@ interface RuleOptions {
   readonly switches?: ReadonlyMap<string, LearningSwitch>;
 }
 
+/** Whether a draft still competes for its place: on by a master, or not undone away (BR-8). */
+function isEligible(draft: Draft, options: RuleOptions): boolean {
+  const switched = options.switches?.get(`rule:${draft.key}`);
+  if (switched) return switched.enabled;
+  const undone = options.tallies?.get(draft.key)?.undone ?? 0;
+  return undone < draft.sources.length;
+}
+
 function ruleOf(
   draft: Draft,
   options: RuleOptions & {
     readonly losers: ReadonlyMap<string, string | null>;
   },
-): Rule {
+): Omit<Rule, 'tiesWith'> {
   const tally = options.tallies?.get(draft.key) ?? { applied: 0, undone: 0 };
   const switched = options.switches?.get(`rule:${draft.key}`);
   const ordered = [...draft.sources].sort(newestFirst);
@@ -252,6 +265,38 @@ function ruleOf(
   };
 }
 
+type Sided = Pick<Rule, 'contextBefore' | 'contextAfter'>;
+
+/** Whether one occurrence can match both rules, each by a real word of its context. */
+function canMeet(a: Sided, b: Sided): boolean {
+  const word = (side: string | null): side is string =>
+    side !== null && side !== '';
+  const byBefore =
+    word(a.contextBefore) &&
+    (word(b.contextAfter) || b.contextBefore === a.contextBefore);
+  const byAfter =
+    word(a.contextAfter) &&
+    (word(b.contextBefore) || b.contextAfter === a.contextAfter);
+  return byBefore || byAfter;
+}
+
+/** The first rival a rule ties with on some occurrence (BR-4, QA F1). */
+function tieOf(
+  rule: Omit<Rule, 'tiesWith'>,
+  sameWords: readonly Omit<Rule, 'tiesWith'>[],
+): string | null {
+  if (!rule.enabled || rule.contextBefore === null) return null;
+  const rival = sameWords.find(
+    (other) =>
+      other.enabled &&
+      other.contextBefore !== null &&
+      other.after !== rule.after &&
+      other.corrections === rule.corrections &&
+      canMeet(rule, other),
+  );
+  return rival?.after ?? null;
+}
+
 const newestOf = (sources: readonly LearningSource[]): string =>
   sources.reduce(
     (newest, one) => (one.createdAt > newest ? one.createdAt : newest),
@@ -268,9 +313,17 @@ export function deriveRules(
 ): Rule[] {
   const contextual = contextualDrafts(sources.filter(learnable));
   const drafts = [...contextual, ...generalDrafts(contextual)];
-  const losers = conflictsOf(drafts);
-  return drafts
-    .map((draft) => ruleOf(draft, { ...options, losers }))
+  // A rule turned off, by a master or by undos, is out of its place (review round 1).
+  const losers = conflictsOf(
+    drafts.filter((draft) => isEligible(draft, options)),
+  );
+  const rules = drafts.map((draft) => ruleOf(draft, { ...options, losers }));
+  const byWords = grouped(rules, (rule) => rule.beforeKey);
+  return rules
+    .map((rule): Rule => ({
+      ...rule,
+      tiesWith: tieOf(rule, byWords.get(rule.beforeKey) ?? []),
+    }))
     .sort(
       (a, b) =>
         b.corrections - a.corrections ||
@@ -309,11 +362,12 @@ interface Neighbours {
 
 /** The rule for a span: a contextual one that matches a side, else one in any context. */
 function ruleFor(rules: readonly Rule[], around: Neighbours): Rule | null {
+  // A real word must match: a segment's edge alone is no context (review round 1).
   const contextual = rules.filter(
     (rule) =>
       rule.contextBefore !== null &&
-      (rule.contextBefore === around.before ||
-        rule.contextAfter === around.after),
+      ((rule.contextBefore !== '' && rule.contextBefore === around.before) ||
+        (rule.contextAfter !== '' && rule.contextAfter === around.after)),
   );
   if (contextual.length > 0) return bestOf(contextual);
   return bestOf(rules.filter((rule) => rule.contextBefore === null));
@@ -330,7 +384,12 @@ interface Scan {
   readonly byKey: ReadonlyMap<string, readonly Rule[]>;
   readonly byPosition: ReadonlyMap<number, PlacedWord>;
   readonly skip: ReadonlySet<number>;
+  /** The first word of every rule, punctuation aside: a quick no (NFR-1). */
+  readonly firsts: ReadonlySet<string>;
+  readonly longest: number;
 }
+
+const wordsOfKey = (key: string): string[] => key.split(' ');
 
 /** Every word from the first to the last position, empty ones too (BR-5). */
 function wordsBetween(
@@ -378,7 +437,9 @@ function changeAt(
   spoken: readonly PlacedWord[],
   index: number,
 ): { change: RuleChange | null; size: number } | null {
-  const longest = Math.min(CORRECTION_MAX_WORDS, spoken.length - index);
+  const first = spoken[index];
+  if (!first || !scan.firsts.has(occurrenceKey(first.text))) return null;
+  const longest = Math.min(scan.longest, spoken.length - index);
   for (let size = longest; size >= 1; size--) {
     const found = changeOf(scan, spoken, { index, size });
     if (found) return { ...found, size };
@@ -414,6 +475,13 @@ export function applyRules(
     byKey: grouped(enabled, (rule) => rule.beforeKey),
     byPosition: new Map(words.map((word) => [word.position, word])),
     skip,
+    firsts: new Set(
+      enabled.map((rule) => occurrenceKey(wordsOfKey(rule.beforeKey)[0] ?? '')),
+    ),
+    longest: Math.min(
+      CORRECTION_MAX_WORDS,
+      Math.max(...enabled.map((rule) => wordsOfKey(rule.beforeKey).length)),
+    ),
   };
   return segmentsOf(words).flatMap((spoken) => changesIn(scan, spoken));
 }

@@ -10,6 +10,7 @@ import { AppError } from '../../app-error.js';
 import type { TranscriptCorrectionStorePort } from '../../ports/transcript-correction-store.js';
 import type { TranscriptStorePort } from '../../ports/transcript-store.js';
 import { rowOf, writeChange } from './correction-writer.js';
+import { readLog, type LogReading } from './learning-log.js';
 import {
   LEARNING_NAME,
   LEARNING_PRINCIPAL,
@@ -18,9 +19,18 @@ import {
   learnedTerms,
   type LearnedTermRow,
   type LearningSource,
+  type LearningSwitch,
   type Rule,
   type RuleChange,
 } from './learning-rules.js';
+
+interface Snapshot {
+  readonly log: LogReading;
+  readonly switches: ReadonlyMap<string, LearningSwitch>;
+}
+
+/** A term ahead of the one measured: the cost then has its ", " (NFR-2). */
+const PROBE = 'x';
 
 /** Examples a rule shows (FR-2). */
 const EXAMPLES = 3;
@@ -83,6 +93,7 @@ function toContract(rule: Rule): LearnedRule {
     state: rule.state,
     switchedBy: rule.switchedBy,
     conflictWith: rule.conflictWith,
+    tiesWith: rule.tiesWith,
     examples: rule.sources.slice(0, EXAMPLES).map(exampleOf),
   };
 }
@@ -101,11 +112,19 @@ export class LearningService {
     this.newId = deps.newId ?? randomUUID;
   }
 
-  private rules(): Rule[] {
+  /** The log and the switches, read once per operation (review round 1). */
+  private read(): Snapshot {
     const { corrections } = this.deps;
-    return deriveRules(corrections.learningSources(), {
-      tallies: corrections.ruleTallies(),
+    return {
+      log: readLog(corrections.learningLog()),
       switches: corrections.switches(),
+    };
+  }
+
+  private rules(snapshot: Snapshot = this.read()): Rule[] {
+    return deriveRules(snapshot.log.sources, {
+      tallies: snapshot.log.tallies,
+      switches: snapshot.switches,
     });
   }
 
@@ -159,14 +178,15 @@ export class LearningService {
 
   /** What masters see (FR-2). */
   overview(): TranscriptLearning {
+    const snapshot = this.read();
     const manual = this.manualTerms();
-    const terms = this.terms(manual);
+    const terms = this.terms(manual, snapshot);
     const inList = terms
       .filter((term) => term.state === 'in-list')
       .map((term) => term.term);
     const manualTokens = this.deps.countTokens(manual);
     return {
-      rules: this.rules().map(toContract),
+      rules: this.rules(snapshot).map(toContract),
       terms: terms.map(
         ({ id, term, corrections, recordings, state, switchedBy }) => ({
           id,
@@ -235,9 +255,16 @@ export class LearningService {
 
   /** The learned terms that fit after `manual` (BR-9), as the list will carry them. */
   learnedFor(manual: readonly string[]): string[] {
-    return this.terms(manual)
+    const learned = this.terms(manual)
       .filter((term) => term.state === 'in-list')
       .map((term) => term.term);
+    // The real count has the last word (KBC-040 BR-2): never past the limit.
+    while (
+      learned.length > 0 &&
+      this.deps.countTokens([...manual, ...learned]) > TERMS_TOKEN_LIMIT
+    )
+      learned.pop();
+    return learned;
   }
 
   private manualTerms(): readonly string[] {
@@ -246,12 +273,42 @@ export class LearningService {
     return transcripts.termPartsAt(current.version)?.manual ?? current.terms;
   }
 
-  private terms(manual: readonly string[]): LearnedTermRow[] {
-    const { corrections, countTokens } = this.deps;
-    return learnedTerms(corrections.learningSources(), {
+  private terms(
+    manual: readonly string[],
+    snapshot: Snapshot = this.read(),
+  ): LearnedTermRow[] {
+    return learnedTerms(snapshot.log.sources, {
       manual,
-      fits: (list) => countTokens(list) <= TERMS_TOKEN_LIMIT,
-      switches: corrections.switches(),
+      fits: this.fitting(manual),
+      switches: snapshot.switches,
     });
+  }
+
+  /**
+   * Whether a list fits the prompt, counted term by term (NFR-2): each term after the first
+   * adds its own pieces (", " and its words), so its cost is measured once, not the whole
+   * list again for every candidate. `learnedFor` checks the real count at the end.
+   */
+  private fitting(manual: readonly string[]) {
+    const { countTokens } = this.deps;
+    const base = countTokens(manual);
+    const probe = countTokens([PROBE]);
+    const costs = new Map<string, number>();
+    const costOf = (term: string): number => {
+      const known = costs.get(term);
+      if (known !== undefined) return known;
+      const cost = countTokens([PROBE, term]) - probe;
+      costs.set(term, cost);
+      return cost;
+    };
+    return (list: readonly string[]): boolean =>
+      list
+        .slice(manual.length)
+        .reduce((sum, term) => sum + costOf(term), base) <= TERMS_TOKEN_LIMIT;
+  }
+
+  /** The learning's rows a person corrected over: no Desfazer for them (review round 1). */
+  overwritten(): ReadonlySet<string> {
+    return readLog(this.deps.corrections.learningLog()).overwritten;
   }
 }

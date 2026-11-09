@@ -21,6 +21,30 @@ export interface LearningSource {
   readonly authorName: string | null;
 }
 
+/**
+ * A row of the log as the learning reads it (KBC-113): corrections and carried rows, oldest
+ * first; the context words only for a person's correction.
+ */
+export interface LearningLogRow {
+  readonly id: string;
+  readonly mediaId: string;
+  readonly mediaTitle: string;
+  readonly transcriptId: string;
+  readonly kind: CorrectionKind;
+  readonly position: number;
+  readonly count: number;
+  readonly startMs: number;
+  readonly before: readonly string[];
+  readonly after: string;
+  readonly state: CorrectionState;
+  readonly carriedTo: string | null;
+  readonly ruleId: string | null;
+  readonly contextBefore: string;
+  readonly contextAfter: string;
+  readonly createdAt: string;
+  readonly authorName: string | null;
+}
+
 /** How often a rule's replacements were written and undone (BR-8). */
 export interface RuleTally {
   readonly applied: number;
@@ -127,13 +151,8 @@ export interface TranscriptCorrectionStorePort {
     mediaId: string,
     page: { readonly offset: number; readonly limit: number },
   ): CorrectionPage;
-  /**
-   * The people's corrections in force (KBC-113 BR-1): not undone, through their carried rows;
-   * a word corrected twice counts once, from the first text to the last.
-   */
-  learningSources(): LearningSource[];
-  /** Per rule: replacements written and undone (BR-8). */
-  ruleTallies(): ReadonlyMap<string, RuleTally>;
+  /** The log as the learning reads it: corrections and carried rows, oldest first. */
+  learningLog(): LearningLogRow[];
   /** The learning's replacements in force on a transcript, in these segments (FR-5). */
   learnedOn(
     transcriptId: string,

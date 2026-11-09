@@ -64,75 +64,48 @@ const row = (overrides: Partial<CorrectionRow> = {}): CorrectionRow => ({
 });
 
 describe('SqliteTranscriptCorrectionStore: learning (KBC-113)', () => {
-  it('a source carries its neighbours; a span corrected twice counts once, from the first text', () => {
-    const { store } = world(['o', 'mestre', 'Tiuacu', 'disse']);
-    store.insert(row({ id: 'first', before: ['Tiuako'], after: 'Tiuacu' }));
+  it('reads the log oldest first; the context words only for a person correction', () => {
+    const { store } = world(['o', 'mestre', 'Tiuaco', 'disse']);
+    store.insert(row({ id: 'person', before: ['Tiuako'], after: 'Tiuaco' }));
     store.insert(
       row({
-        id: 'second',
-        before: ['Tiuacu'],
-        after: 'Tiuaco',
+        id: 'learned',
+        ruleId: 'r1',
         createdAt: '2026-11-09T11:00:00.000Z',
+        state: 'carried',
+        carriedTo: 'x',
       }),
     );
+    store.insert(
+      row({ id: 'undo', kind: 'undo', createdAt: '2026-11-09T12:00:00.000Z' }),
+    );
 
-    expect(store.learningSources()).toEqual([
+    expect(store.learningLog()).toEqual([
       expect.objectContaining({
-        id: 'second',
+        id: 'person',
         before: ['Tiuako'],
-        after: 'Tiuaco',
         contextBefore: 'mestre',
         contextAfter: 'disse',
         mediaTitle: 'Palestra',
+        ruleId: null,
+      }),
+      expect.objectContaining({
+        id: 'learned',
+        ruleId: 'r1',
+        state: 'carried',
+        carriedTo: 'x',
+        contextBefore: '',
+        contextAfter: '',
       }),
     ]);
   });
 
-  it('follows a carried correction: in force while its chain is, out once undone', () => {
-    const { store } = world(['Tiuako']);
-    store.insert(row({ id: 'kept', state: 'carried', carriedTo: 'k2' }));
-    store.insert(
-      row({ id: 'k2', kind: 'carried', state: 'active', position: 9 }),
-    );
-    store.insert(
-      row({ id: 'gone', state: 'carried', carriedTo: 'g2', position: 5 }),
-    );
-    store.insert(
-      row({ id: 'g2', kind: 'carried', state: 'undone', position: 6 }),
-    );
-    store.insert(
-      row({ id: 'lost', state: 'carried', carriedTo: 'nowhere', position: 7 }),
-    );
-    store.insert(
-      row({ id: 'loop', state: 'carried', carriedTo: 'l2', position: 10 }),
-    );
-    store.insert(
-      row({
-        id: 'l2',
-        kind: 'carried',
-        state: 'carried',
-        carriedTo: 'l2',
-        position: 11,
-      }),
-    );
-    store.insert(row({ id: 'deleted', after: '', position: 8 }));
-    store.insert(row({ id: 'undone', state: 'undone', position: 3 }));
-
-    expect(
-      store
-        .learningSources()
-        .map((one) => one.id)
-        .sort(),
-    ).toEqual(['kept', 'loop', 'lost']);
-  });
-
-  it('tallies the learning rows of each rule, and the carried positions', () => {
+  it('the carried positions and the learned spans of a transcript', () => {
     const { store } = world(['a']);
     store.insert(row({ ruleId: 'r1', authorName: null }));
     store.insert(row({ ruleId: 'r1', state: 'undone', position: 4 }));
     store.insert(row({ kind: 'carried', position: 6, count: 2 }));
 
-    expect(store.ruleTallies().get('r1')).toEqual({ applied: 2, undone: 1 });
     expect([...store.carriedPositions('t1')].sort()).toEqual([6, 7]);
     expect(store.learnedOn('t1', { from: 0, count: 1 })).toEqual([
       expect.objectContaining({ position: 2, count: 1, before: 'Tiuako' }),

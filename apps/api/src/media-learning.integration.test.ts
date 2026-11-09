@@ -5,6 +5,7 @@
  */
 import type {
   CorrectionHistory,
+  GroqTranscribeJob,
   TermList,
   TranscriptCorrectionResult,
   TranscriptLearning,
@@ -21,10 +22,11 @@ import {
   wordOf,
   wordsOf,
 } from '../test/correction-harness.js';
-import { member } from '../test/media-harness.js';
+import { member, worker } from '../test/media-harness.js';
 import {
   asTranscriber,
   leaseTranscription,
+  readyForTranscription,
   sendTranscript,
 } from '../test/transcription-harness.js';
 import {
@@ -73,6 +75,41 @@ async function transcribeAgain(world: World, id: string, speech: Spoken[]) {
 
 const learnedEntries = (history: CorrectionHistory) =>
   history.entries.filter((entry) => entry.items.some((item) => item.learned));
+
+/** The masters' list grown to exactly `tokens` of the prompt (AC-11: "180 de 224"). */
+async function listAt(call: Call, tokens: number): Promise<TermList> {
+  const start = (await call('GET', '/api/v1/media/terms')).json<TermList>();
+  const terms = [...start.terms];
+  const measure = async (list: readonly string[]) =>
+    (await call('POST', '/api/v1/media/terms/measure', { terms: list })).json<{
+      tokens: number;
+    }>().tokens;
+  // Short words cost 2 or 3 tokens each: enough to land on any target.
+  const fillers = [
+    'sol',
+    'mar',
+    'luz',
+    'paz',
+    'rio',
+    'mel',
+    'lua',
+    'dia',
+    'voz',
+  ]
+    .flatMap((word) => [word, `${word}es`, `${word}inho`])
+    .filter((word) => !terms.includes(word));
+  for (const filler of fillers) {
+    const now = await measure(terms);
+    if (now >= tokens) break;
+    if ((await measure([...terms, filler])) <= tokens) terms.push(filler);
+  }
+  const saved = await call('PUT', '/api/v1/media/terms', {
+    baseVersion: start.version,
+    terms,
+  });
+  expect(saved.statusCode, saved.body).toBe(200);
+  return saved.json<TermList>();
+}
 
 const workerTerms = async (world: World) =>
   (
@@ -151,7 +188,7 @@ describe('Learning from corrections (KBC-113)', () => {
 
   it('AC-8, AC-9: a member who corrects undoes a learned word; the rule then stops until a master turns it on', async () => {
     const world = await startWorld();
-    const { owner, started } = world.media;
+    const { owner } = world.media;
     const source = await transcribed(world, [
       { at: 10, text: 'disse com a Manta foi' },
     ]);
@@ -188,7 +225,47 @@ describe('Learning from corrections (KBC-113)', () => {
     });
     const after = await transcribed(world, [{ at: 10, text: 'com a Manta' }]);
     expect(await textOf(owner, after.id)).toEqual(['com Atlântida']);
-    expect(started).toBeDefined();
+  });
+
+  it('review round 1: correcting over a learned word counts against its rule, teaches from what the transcriber said, and leaves no Desfazer on the learned row', async () => {
+    const world = await startWorld();
+    const { owner } = world.media;
+    const source = await transcribed(world, [
+      { at: 10, text: 'disse com a Manta foi' },
+    ]);
+    await fixManta(owner, source.id);
+    const fresh = await transcribed(world, [
+      { at: 10, text: 'e com a Manta foi' },
+    ]);
+    const maria = await member(world.media, {
+      email: 'maria@example.com',
+      topics: ['hermetismo'],
+      features: CORRECTOR,
+    });
+
+    const over = await maria.call('POST', correctionsUrl(fresh.id), {
+      version: 1,
+      position: (await wordOf(owner, fresh.id, 'Atlântida')).position,
+      count: 1,
+      expected: ['Atlântida'],
+      text: 'Amanta',
+    });
+
+    expect(over.statusCode, over.body).toBe(201);
+    const { rules } = await learningOf(owner);
+    expect(rules.find((rule) => rule.after === 'Atlântida')).toMatchObject({
+      state: 'auto-off',
+      applied: 1,
+      undone: 1,
+    });
+    expect(rules.map((rule) => rule.before)).not.toContain('Atlântida');
+    expect(rules.find((rule) => rule.after === 'Amanta')).toMatchObject({
+      before: 'a Manta',
+      state: 'on',
+    });
+    const [entry] = learnedEntries(await historyOf(owner, fresh.id));
+    expect(entry?.items[0]).toMatchObject({ learned: true, canUndo: false });
+    expect(entry?.canUndoGroup).toBe(false);
   });
 
   it('AC-10: undoing the person correction takes the rule and the term away', async () => {
@@ -201,6 +278,8 @@ describe('Learning from corrections (KBC-113)', () => {
     expect((await learningOf(owner)).terms.map((term) => term.term)).toEqual([
       'Atlântida',
     ]);
+    const other = await transcribed(world, [{ at: 10, text: 'com a Manta' }]);
+    expect(await textOf(owner, other.id)).toEqual(['com Atlântida']);
 
     const undone = await owner(
       'POST',
@@ -211,6 +290,16 @@ describe('Learning from corrections (KBC-113)', () => {
     expect(await learningOf(owner)).toMatchObject({ rules: [], terms: [] });
     const next = await transcribed(world, [{ at: 10, text: 'com a Manta' }]);
     expect(await textOf(owner, next.id)).toEqual(['com a Manta']);
+    // BR-6: the replacement already made in another recording stays, and can be undone.
+    expect(await textOf(owner, other.id)).toEqual(['com Atlântida']);
+    const [entry] = learnedEntries(await historyOf(owner, other.id));
+    expect(entry?.items[0]?.canUndo).toBe(true);
+    const back = await owner(
+      'POST',
+      `${correctionsUrl(other.id)}/${entry?.items[0]?.id ?? ''}/undo`,
+    );
+    expect(back.statusCode, back.body).toBe(201);
+    expect(await textOf(owner, other.id)).toEqual(['com a Manta']);
   });
 
   it('AC-7: deletions and punctuation do not teach', async () => {
@@ -243,7 +332,8 @@ describe('Learning from corrections (KBC-113)', () => {
     const source = await transcribed(world, [
       { at: 10, text: 'o mestre Tiuako disse concerteza de Atlantida' },
     ]);
-    const manual = (await owner('GET', '/api/v1/media/terms')).json<TermList>();
+    const manual = await listAt(owner, 180);
+    expect(manual.tokens).toBe(180);
     for (const [from, to] of [
       ['Tiuako', 'Tiuaco'],
       ['concerteza', 'com certeza'],
@@ -352,9 +442,73 @@ describe('Learning from corrections (KBC-113)', () => {
     ).toBe(403);
   });
 
+  it('ADR 0037, FR-1, FR-4: on the Groq path the job is prompted with the learned terms and the new version gets the rules', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const source = await transcribed(world, [
+      { at: 10, text: 'disse com a Manta foi' },
+    ]);
+    await fixManta(media.owner, source.id);
+    const item = await readyForTranscription(media);
+    const tested = await media.owner('POST', '/api/v1/media/groq/test', {
+      key: 'gsk_live_secret_key_123_valid',
+    });
+    expect(tested.json()).toMatchObject({ ok: true });
+    await media.owner('PUT', '/api/v1/media/groq/mode', {
+      mode: 'manual',
+      idleHours: 12,
+    });
+    const routed = await media.owner(
+      'POST',
+      `/api/v1/media/${item.id}/transcription/groq`,
+    );
+    expect(routed.statusCode, routed.body).toBe(200);
+
+    const leased = await worker(media, '/api/v1/media-worker/jobs/lease', {
+      worker: 'vm',
+      kinds: ['transcribe'],
+    });
+    expect(leased.statusCode, leased.body).toBe(200);
+    const job = leased.json<GroqTranscribeJob>();
+
+    const list = (
+      await media.owner('GET', '/api/v1/media/terms')
+    ).json<TermList>();
+    expect(list.versions[0]).toMatchObject({
+      version: job.termsVersion,
+      authorName: 'Aprendizado das correções',
+    });
+    expect((await workerTerms(world)).terms).toContain('Atlântida');
+    const done = await worker(
+      media,
+      `/api/v1/media-worker/jobs/${job.id}/groq/transcript`,
+      {
+        worker: 'vm',
+        leaseId: job.leaseId,
+        termsVersion: job.termsVersion,
+        vad: 'applied',
+        speechRatio: 0.9,
+        elapsedMs: 1_200,
+        // One 20 s chunk: the audio Groq got is 3 minutes long.
+        raw: {
+          chunks: rawOf([{ at: 1, text: 'e com a Manta foi' }]).chunks.map(
+            (chunk) => ({ ...chunk, end: 20 }),
+          ),
+        },
+      },
+    );
+    expect(done.statusCode, done.body).toBe(204);
+    expect(await textOf(media.owner, item.id)).toEqual(['e com Atlântida foi']);
+    const [entry] = learnedEntries(await historyOf(media.owner, item.id));
+    expect(entry?.items[0]).toMatchObject({
+      learned: true,
+      after: 'Atlântida',
+    });
+  });
+
   it('AC-18, NFR-3: a failure writing a learned replacement keeps the new version out, nothing changed', async () => {
     const world = await startWorld();
-    const { owner, started } = world.media;
+    const { owner } = world.media;
     const source = await transcribed(world, [
       { at: 10, text: 'disse com a Manta foi' },
     ]);
@@ -392,6 +546,5 @@ describe('Learning from corrections (KBC-113)', () => {
         'SELECT count(*) AS n FROM transcript_corrections WHERE rule_id IS NOT NULL',
       ),
     ).toEqual([{ n: 0 }]);
-    expect(started).toBeDefined();
   });
 });

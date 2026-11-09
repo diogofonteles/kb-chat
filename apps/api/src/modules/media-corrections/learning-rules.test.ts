@@ -195,6 +195,72 @@ describe('deriveRules (BR-2 to BR-4, BR-8)', () => {
   });
 });
 
+describe('ties between contexts (BR-4, QA F1)', () => {
+  const rivals = () =>
+    rulesOf([
+      source({ ...MANTA, context: ['com', 'foi'] }),
+      source({ before: 'a Manta', after: 'Amanta', context: ['com', 'veio'] }),
+    ]);
+
+  it('two rules that may meet on one occurrence with as many corrections are told to the master', () => {
+    const rules = rivals();
+    expect(
+      rules.map((rule) => [rule.after, rule.state, rule.tiesWith]).sort(),
+    ).toEqual([
+      ['Amanta', 'on', 'Atlântida'],
+      ['Atlântida', 'on', 'Amanta'],
+    ]);
+    expect(applied(wordsOf('com a Manta disse'), rules)).toEqual([
+      'com a Manta disse',
+    ]);
+    expect(applied(wordsOf('um a Manta foi'), rules)).toEqual([
+      'um Atlântida foi',
+    ]);
+  });
+
+  it('no tie when one has more corrections, or the rival is off', () => {
+    const more = rulesOf([
+      source({ ...MANTA, context: ['com', 'foi'] }),
+      source({ ...MANTA, context: ['com', 'foi'] }),
+      source({ before: 'a Manta', after: 'Amanta', context: ['com', 'veio'] }),
+    ]);
+    expect(more.map((rule) => rule.tiesWith)).toEqual([null, null]);
+    const [first] = rivals();
+    const switches = new Map([
+      [`rule:${first?.id ?? ''}`, { enabled: false, authorName: 'D', at: 'x' }],
+    ]);
+    const off = rulesOf(
+      [
+        source({ ...MANTA, context: ['com', 'foi'] }),
+        source({
+          before: 'a Manta',
+          after: 'Amanta',
+          context: ['com', 'veio'],
+        }),
+      ],
+      { switches },
+    );
+    expect(off.map((rule) => rule.tiesWith)).toEqual([null, null]);
+  });
+
+  it('a rule turned off by undos is out of its place: the rival is no longer in conflict', () => {
+    const at: [string, string] = ['com', 'foi'];
+    const [atlantida] = rulesOf([source({ ...MANTA, context: at })]);
+    const tallies = new Map([[atlantida?.id ?? '', { applied: 1, undone: 1 }]]);
+    const rules = rulesOf(
+      [
+        source({ ...MANTA, context: at }),
+        source({ before: 'a Manta', after: 'Amanta', context: at }),
+      ],
+      { tallies },
+    );
+    expect(rules.find((rule) => rule.after === 'Amanta')?.state).toBe('on');
+    expect(rules.find((rule) => rule.after === 'Atlântida')?.state).toBe(
+      'auto-off',
+    );
+  });
+});
+
 describe('applyRules (BR-3 to BR-6)', () => {
   const rules = rulesOf([source({ ...MANTA, context: ['com', 'foi'] })]);
 
@@ -231,13 +297,12 @@ describe('applyRules (BR-3 to BR-6)', () => {
     ]);
   });
 
-  it('a segment edge is a context of its own', () => {
+  it('a segment edge alone is no context: a real word must match (review round 1)', () => {
     const edge = rulesOf([source({ ...MANTA, context: ['', 'veio'] })]);
-    expect(applied(wordsOf('a Manta disse'), edge)).toEqual([
-      'Atlântida disse',
-    ]);
-    expect(applied(wordsOf('e a Manta disse'), edge)).toEqual([
-      'e a Manta disse',
+    expect(applied(wordsOf('a Manta disse'), edge)).toEqual(['a Manta disse']);
+    expect(applied(wordsOf('a Manta veio'), edge)).toEqual(['Atlântida veio']);
+    expect(applied(wordsOf('e a Manta veio'), edge)).toEqual([
+      'e Atlântida veio',
     ]);
   });
 
