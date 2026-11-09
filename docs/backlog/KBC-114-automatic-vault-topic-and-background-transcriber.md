@@ -14,6 +14,8 @@ parent: KBC-098
 
 *Correção do diagnóstico (coordenador, 2026-11-09):* o acervo UDV já tinha pasta (`udv`, com o sub-acervo `udv/palavra-do-mestre` dentro). O bloqueio real era nenhum transcritor com `kb-publish` e nenhum rodando. A pasta automática continua no escopo para os acervos novos, e precisa reconhecer uma pasta que já existe (inclusive a do sub-acervo dentro da do pai) e nunca recriá-la.
 
+*Exigência do dono, 2026-11-09 (literal):* "eu ja tinha dito que o transcritor tem que ser ligado automaticamente quando eu envio um audio!", "isso nao pode depender de eu ligar manualmente", "ele pode ate desligar o transcritor quando termina, mas ao enviar um audio ele deve ligar", sobre os extras: "isso tambem deve ser feito em segundo plano sempre que necessario", e sobre a fila de Vozes: "nao deve ficar parado em nenhuma fila como está agora … isso deve ser automatico no proprio app". Entram BR-12 a BR-14, FR-11 a FR-13 e AC-15 a AC-17.
+
 ## Story
 Como master, quero que um acervo criado no app vire documentos pesquisáveis assim que recebe uma transcrição, sem abrir o terminal do Mac, e ver de onde estou se o transcritor está ligado e o que ele está fazendo, para nunca mais descobrir que "0 documentos" era um passo manual esquecido.
 
@@ -26,7 +28,7 @@ Como master, quero que um acervo criado no app vire documentos pesquisáveis ass
 - Transcrições pendentes: faixas **e** gravações sem faixas que ainda não são documento, por acervo (inclusive os sem pasta no vault), com contagem e custo estimado; ação de master em Transcritores (a do KBC-099, que passa a contar as duas) e um aviso no acervo, onde aparece "0 documentos": "N transcrições ainda não são documentos — Publicar".
 - Transcritor em background: `transcriber service install|uninstall|status` (LaunchAgent do macOS, RunAtLoad, KeepAlive, logs em `~/Library/Logs/nova-alexandria-transcriber/`, ambiente com `KB_CHAT_VAULT` e `PATH` com uv, kb e ffmpeg; nenhum token no plist).
 - Status do transcritor: o worker manda um sinal de vida com estado (ocioso, trabalhando em X, aguardando Y, erro), versão, job atual com progresso, últimos jobs, contagens, último erro, pasta do vault e versão do kb; o app mostra um selo de status para masters em Transcritores e no aviso do acervo, e o clique abre os detalhes.
-- Desligado: o app mostra o comando exato para ligar; só com a API no mesmo Mac em desenvolvimento (`KB_CHAT_LOCAL_TRANSCRIBER=1`, recusado em produção), o botão **Ligar transcritor** roda `launchctl kickstart -k gui/<uid>/com.nova-alexandria.transcriber` sem shell.
+- Desligado: o app mostra o comando exato para ligar; só com a API no mesmo Mac em desenvolvimento (`KB_CHAT_LOCAL_TRANSCRIBER=1`, recusado em produção), o botão **Ligar transcritor** roda `launchctl kickstart -k gui/<uid>/br.com.nova-alexandria.transcriber` sem shell.
 
 **Out:**
 - Envio de texto pelo app (KBC-009 não existe ainda): quando existir, o primeiro documento de texto de um acervo novo cria a pasta pelo mesmo caminho (o job `kb-publish` com `collection`). Aqui só a transcrição de áudio gera documento.
@@ -46,6 +48,9 @@ Como master, quero que um acervo criado no app vire documentos pesquisáveis ass
 - BR-9: o status do transcritor é o último sinal de vida dele; sem sinal há mais de 2 min, "Desligado" (com "visto por último"). Estados: **Ocioso**, **Trabalhando** (no quê, com %), **Aguardando** (o quê), **Erro** (a mensagem). Só o token pareado manda o próprio status; o da VM não.
 - BR-10: **Ligar transcritor** só existe com `KB_CHAT_LOCAL_TRANSCRIBER=1` e fora de produção (a API não sobe com ele em produção); roda um programa fixo com argumentos fixos (rótulo fixo, uid do processo), nunca um shell nem texto vindo da requisição.
 - BR-11: o plist nunca leva token; o token continua no Keychain.
+- BR-12: o dono nunca liga o transcritor à mão. O serviço (rótulo `br.com.nova-alexandria.transcriber`, o que o Mac do dono já roda) é instalado junto com o pareamento e fica ligado (RunAtLoad, KeepAlive). Sempre que um job do Mac espera (transcrever, separar vozes, perfil de voz, publicar no acervo — criado pelo envio, por uma etapa que terminou, por um "tentar de novo", por uma publicação, ou já na fila quando a API sobe) e nenhum transcritor está ligado, a API no mesmo Mac o liga sozinha (`launchctl kickstart`, sem `-k`, no máximo uma vez por minuto). Na produção a API não alcança o Mac: o app mostra o transcritor desligado e o que fazer.
+- BR-13: os componentes opcionais (separar vozes, perfis de voz) se instalam sozinhos: o serviço roda `uv run --extra diarize --extra voiceprint`, e o uv instala o que faltar antes de o worker subir. Enquanto carrega, o status diz "preparando o transcritor…". O app nunca pede um comando do uv.
+- BR-14: a tela de preparo do áudio mostra o status do transcritor (ligado, trabalhando ou desligado, e desde quando), com os detalhes no clique.
 
 ## Functional requirements
 - FR-1: O transcritor deve, antes de escrever, garantir a pasta do acervo do job (`ensure_topic`): nada com `topic.yaml`; `kb topic new` do pai e depois do acervo quando faltarem; recusar pasta sem `topic.yaml`, slug inseguro ou pai divergente. (BR-1 a BR-3, BR-5)
@@ -58,6 +63,10 @@ Como master, quero que um acervo criado no app vire documentos pesquisáveis ass
 - FR-8: O worker deve mandar `POST /api/v1/media-worker/status` a cada mudança de estado e a cada 30 s; a API deve guardar o último por transcritor (em memória) e servir `GET /api/v1/media/transcribers/status` a masters com os transcritores, o estado derivado, a fila do kb e o que dá para fazer para ligar. (BR-9)
 - FR-9: `POST /api/v1/media/transcribers/local/start` (masters) deve existir só com `KB_CHAT_LOCAL_TRANSCRIBER=1` e rodar `launchctl kickstart -k gui/<uid>/<rótulo>` por `execFile`. (BR-10)
 - FR-10: Transcritores deve mostrar o selo de cada transcritor, abrindo os detalhes (estado, job atual com %, últimos jobs, últimos erros, visto por último, pasta do vault, versão do kb, versão do transcritor) e, desligado, os comandos para ligar. (BR-9, BR-10)
+
+- FR-11: a API deve conferir na subida, a cada 15 s e depois de cada pedido de mídia que muda algo se há job do Mac esperando sem transcritor ligado, e então rodar `launchctl kickstart gui/<uid>/br.com.nova-alexandria.transcriber` por `execFile` (só com `KB_CHAT_LOCAL_TRANSCRIBER=1`). (BR-12)
+- FR-12: `transcriber pair` deve instalar o serviço no macOS (`--no-service` evita), e `service install` deve gravar o rótulo do dono, `--extra diarize --extra voiceprint` e o log `service.log`, atualizando o agente que existir e tirando um deixado sob o rótulo antigo. (BR-12, BR-13)
+- FR-13: a página de preparo deve mostrar o selo do transcritor a masters; o selo deve dizer "desde" quando ligado e quando desligado. (BR-14)
 
 ## Non-functional requirements
 - NFR-1: o sinal de vida custa ≤ 1 requisição a cada 30 s por transcritor ocioso; o corpo ≤ 16 KB.
@@ -74,11 +83,15 @@ Como master, quero que um acervo criado no app vire documentos pesquisáveis ass
 - **AC-7** (FR-4, BR-7): Given um master que pareia um transcritor, Then ele vem com `kb-publish`; Given o Mac com vault e kb, Then pede `kb-publish`; Given `--no-kb-publish` ou sem vault, Then não pede.
 - **AC-8** (FR-5, BR-8): Given um acervo da tela com 2 faixas e 1 gravação sem faixas transcritas e sem documento, When um master abre a visão geral, Then vê 3 a publicar e custo ≈ US$ 0,003; When publica, Then 3 entram na fila; de novo, 0 e 3 puladas; membro, 403; sem sessão, 401.
 - **AC-9** (FR-6): Given um master no acervo com 3 pendentes, Then o aviso diz "3 transcrições ainda não são documentos", o custo e **Publicar**, com o selo do transcritor; When publica, Then o aviso diz que estão na fila; Given um membro, Then nenhum aviso.
-- **AC-10** (FR-7, BR-11): Given `transcriber service install --vault V`, Then o plist em `~/Library/LaunchAgents/com.nova-alexandria.transcriber.plist` tem o rótulo, `RunAtLoad`, `KeepAlive`, logs em `~/Library/Logs/nova-alexandria-transcriber/`, `KB_CHAT_VAULT=V` e `PATH` com as pastas de uv, kb e ffmpeg, nenhum token, e `launchctl bootstrap gui/<uid> <plist>` roda (o falso); `uninstall` roda `bootout` e apaga o plist; `status` diz carregado/rodando/parado.
+- **AC-10** (FR-7, BR-11): Given `transcriber service install --vault V`, Then o plist em `~/Library/LaunchAgents/br.com.nova-alexandria.transcriber.plist` tem o rótulo, `RunAtLoad`, `KeepAlive`, logs em `~/Library/Logs/nova-alexandria-transcriber/`, `KB_CHAT_VAULT=V` e `PATH` com as pastas de uv, kb e ffmpeg, nenhum token, e `launchctl bootstrap gui/<uid> <plist>` roda (o falso); `uninstall` roda `bootout` e apaga o plist; `status` diz carregado/rodando/parado.
 - **AC-11** (FR-8, BR-9): Given o worker, When ocioso, trabalhando, aguardando a trava do vault ou com erro, Then manda o estado com versão, job atual e contagens; Given o token da VM, 403; sem token, 401; corpo inválido, 400.
 - **AC-12** (FR-8, FR-10): Given um transcritor que mandou "Trabalhando: transcrevendo 'Aula 3' 40 %", Then Transcritores mostra o selo "Trabalhando" e, no clique, os detalhes com job, %, últimos jobs e erros, visto por último, vault e kb; Given sem sinal há 3 min, Then "Desligado".
-- **AC-13** (FR-9, BR-10): Given `KB_CHAT_LOCAL_TRANSCRIBER=1` e o transcritor desligado, Then o botão **Ligar transcritor** aparece e roda `launchctl kickstart -k gui/<uid>/com.nova-alexandria.transcriber` (o falso) sem shell; Given sem a variável, Then a rota responde 404 e o botão não existe, só os comandos; Given `NODE_ENV=production` com a variável, Then a API não sobe.
+- **AC-13** (FR-9, BR-10): Given `KB_CHAT_LOCAL_TRANSCRIBER=1` e o transcritor desligado, Then o botão **Ligar transcritor** aparece e roda `launchctl kickstart -k gui/<uid>/br.com.nova-alexandria.transcriber` (o falso) sem shell; Given sem a variável, Then a rota responde 404 e o botão não existe, só os comandos; Given `NODE_ENV=production` com a variável, Then a API não sobe.
 - **AC-14** (NFR-3, acessibilidade): Given só o teclado, Then o selo abre os detalhes com Enter, Esc fecha e o foco volta ao selo; o estado é texto; em 390 px cabe sem rolagem lateral; axe sem violações sérias.
+
+- **AC-15** (BR-12, FR-11, FR-12): Given a API no Mac (`KB_CHAT_LOCAL_TRANSCRIBER=1`) e nenhum transcritor ligado, When um áudio enviado termina de converter e sua transcrição entra na fila (ou qualquer job do Mac espera), Then a API roda `launchctl kickstart gui/<uid>/br.com.nova-alexandria.transcriber` (o falso), sem `-k`, uma vez por minuto no máximo; Given um transcritor ligado, Then nada roda; Given a produção (sem a variável), Then nada roda; Given `transcriber pair` no Mac, Then o serviço é instalado; Given um agente feito à mão com o mesmo rótulo, Then `service install` o atualiza, nunca duplica.
+- **AC-16** (BR-14, FR-13): Given um master na página de preparo de um áudio, Then o selo do transcritor aparece ao lado das etapas, diz desde quando está ligado ou desligado, e o clique abre os detalhes; Esc devolve o foco ao selo.
+- **AC-17** (BR-13): Given `service install`, Then o plist roda `uv run --project <repo>/tools/transcriber --extra diarize --extra voiceprint transcriber run`; While os modelos carregam, Then o status diz "preparando o transcritor…"; os detalhes nunca mostram um comando do uv.
 
 ## Test strategy
 | AC | Nível | Notas |
@@ -91,6 +104,9 @@ Como master, quero que um acervo criado no app vire documentos pesquisáveis ass
 | AC-10 | unidade (worker) | `test_service.py` com launchctl falso e HOME temporário |
 | AC-11 | unidade (worker) + integração | `test_status.py`; `transcriber-status.integration.test.ts` |
 | AC-13 | integração + unidade | `transcriber-status.integration.test.ts` com runner falso; `config.test.ts` |
+| AC-15 | unidade + integração + worker | `transcriber-waker.test.ts`; `transcriber-status.integration.test.ts` ("starts by itself"); `launchctl-local-transcriber.test.ts`; `test_cli.py` (pair instala), `test_service.py` (rótulo, idempotente, rótulo antigo) |
+| AC-16 | componente + E2E | `transcriber-status.spec.ts` ("desde"); E2E `media-transcriber-status` AC-16 |
+| AC-17 | worker + componente | `test_service.py` (extras), `test_status.py` (preparando); `transcriber-status.spec.ts` (sem uv) |
 
 ## References
 ADR [0035](../adr/0035-tracks-as-kb-documents.md) (emenda 2026-11-09) · ADR [0023](../adr/0023-transcription-pull-worker-on-the-owners-mac.md) (emenda 2026-11-09) · ADR [0028](../adr/0028-app-owned-collections-and-sub-collections.md) · KBC-099 FR-11 · KBC-100 AC-12 (substituído) · Spec `work/KBC-114/spec.md`.
