@@ -417,6 +417,52 @@ test('AC-6, AC-7: the cuts go up, tracks appear and can be heard while the rest 
   await owner.dispose();
 });
 
+test('UP-11: a page opened while the audio converted plays a track once it is ready', async ({
+  browser,
+  viewport,
+}) => {
+  const { page, owner } = await person(browser, viewport);
+  const media = await transcribedAudio(owner);
+  await script(page, media.id, [
+    { tracks: [track(1, 5_000, 15_000)] as MediaPreparation['tracks'] },
+  ]);
+  // As after "Enviar": the audio is read while it still converts.
+  let converting = true;
+  await page.route(`**/api/v1/media/${media.id}`, async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as Record<string, unknown>;
+    await route.fulfill({
+      response,
+      json: converting ? { ...body, status: 'processing' } : body,
+    });
+  });
+  await page.goto(`/midia/${media.id}/preparar`);
+
+  const listen = page.getByRole('button', { name: 'Ouvir a faixa 1' });
+  await listen.click();
+  await expect(page.getByRole('alert')).toContainText(
+    'Não consegui tocar este trecho',
+  );
+
+  converting = false;
+  await expect(page.locator('audio')).toHaveCount(1, { timeout: 10_000 });
+  await listen.click();
+  await expect(
+    page.getByRole('button', { name: 'Parar a faixa 1' }),
+  ).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect
+    .poll(
+      () =>
+        page
+          .locator('audio')
+          .evaluate((element: HTMLAudioElement) => element.currentTime),
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(5);
+  await owner.dispose();
+});
+
 test('AC-11: a failure keeps the work and offers both ways out', async ({
   browser,
   viewport,

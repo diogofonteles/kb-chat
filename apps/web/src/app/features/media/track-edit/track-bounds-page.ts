@@ -4,7 +4,6 @@ import {
   Component,
   DestroyRef,
   ElementRef,
-  afterRenderEffect,
   computed,
   inject,
   linkedSignal,
@@ -238,11 +237,7 @@ export class TrackBoundsPage {
   });
 
   constructor() {
-    afterRenderEffect((onCleanup) => {
-      const element = this.auditionElement()?.nativeElement;
-      if (element) this.audition.attach(element);
-      onCleanup(() => this.audition.stop());
-    });
+    this.audition.followElement(this.auditionElement);
     toObservable(
       computed(
         () => this.current()?.cut === 'running' || this.theirCutRunning(),
