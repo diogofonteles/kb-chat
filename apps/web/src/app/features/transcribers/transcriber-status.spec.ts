@@ -133,7 +133,10 @@ describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
     const { http, fixture } = await renderIt(
       anOverview({
         items: [anItem({ state: 'offline', report: null })],
-        attention: { blocked: [{ kind: 'diarize', ready: 2 }], stuck: null },
+        attention: {
+          blocked: [{ kind: 'diarize', ready: 2, reason: 'not-marked' }],
+          stuck: null,
+        },
       }),
     );
     expect(
@@ -143,19 +146,25 @@ describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
     http.expectOne(STATUS).flush(
       anOverview({
         items: [anItem({ state: 'offline', report: null })],
-        attention: { blocked: [{ kind: 'diarize', ready: 2 }], stuck: null },
+        attention: {
+          blocked: [{ kind: 'diarize', ready: 2, reason: 'not-marked' }],
+          stuck: null,
+        },
       }),
     );
     await fixture.whenStable();
     expect(screen.getByRole('dialog').textContent).toContain(
-      '2 trabalhos de Vozes esperam: nenhum transcritor separa vozes. Marque "Separa vozes" em Transcritores.',
+      '2 trabalhos de Vozes esperam: nenhum transcritor está marcado para isso. Marque "Separa vozes" em Transcritores.',
     );
   });
 
   it('QA F-1: says when it was started and took nothing, and that it waits for the queue to change', async () => {
     const stuck = anOverview({
       items: [anItem({ state: 'offline', report: null })],
-      attention: { blocked: [], stuck: { ready: 1 } },
+      attention: {
+        blocked: [],
+        stuck: { ready: 1, reason: 'took-nothing', detail: null },
+      },
     });
     const { http, fixture } = await renderIt(stuck);
     fireEvent.click(screen.getByRole('button', { name: /trabalho parado/ }));
@@ -164,6 +173,102 @@ describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
     expect(screen.getByRole('dialog').textContent).toContain(
       'O transcritor ligou e não pegou o trabalho da fila (1)',
     );
+  });
+
+  /** Opens the details of the summary chip over this overview. */
+  async function detailsOf(overview: TranscriberStatusOverview) {
+    const { http, fixture } = await renderIt(overview);
+    fireEvent.click(
+      screen.getByRole('button', { name: /^Transcritor|^Nenhum/ }),
+    );
+    http.expectOne(STATUS).flush(overview);
+    await fixture.whenStable();
+    return screen.getByRole('dialog');
+  }
+
+  it('review r2 S-2: marked but not installed never says to mark it again', async () => {
+    const dialog = await detailsOf(
+      anOverview({
+        items: [anItem({ state: 'offline', report: null })],
+        attention: {
+          blocked: [{ kind: 'diarize', ready: 2, reason: 'not-installed' }],
+          stuck: null,
+        },
+      }),
+    );
+    expect(dialog.textContent).toContain(
+      'o Mac não conseguiu carregar o componente de separar vozes',
+    );
+    expect(dialog.textContent).not.toContain('Marque "Separa vozes"');
+  });
+
+  it('QA r2 (1): with no transcriber paired it says to pair, and offers nothing to turn on', async () => {
+    const dialog = await detailsOf(
+      anOverview({
+        items: [],
+        start: { ...anOverview().start, canStartHere: true },
+        attention: {
+          blocked: [{ kind: 'transcribe', ready: 1, reason: 'none-paired' }],
+          stuck: null,
+        },
+      }),
+    );
+    expect(dialog.textContent).toContain('nenhum transcritor pareado');
+    expect(dialog.textContent).not.toContain('comando abaixo');
+    expect(dialog.textContent).not.toContain('liga sozinho assim');
+    expect(
+      within(dialog).queryByRole('button', { name: 'Ligar transcritor' }),
+    ).toBeNull();
+  });
+
+  it('QA r2 (1): with work blocked it does not promise it turns on by itself', async () => {
+    const dialog = await detailsOf(
+      anOverview({
+        items: [anItem({ state: 'offline', report: null })],
+        start: { ...anOverview().start, canStartHere: true },
+        attention: {
+          blocked: [{ kind: 'transcribe', ready: 1, reason: 'not-marked' }],
+          stuck: null,
+        },
+      }),
+    );
+    expect(dialog.textContent).not.toContain('liga sozinho assim');
+    expect(
+      within(dialog).getByRole('button', { name: 'Ligar transcritor' }),
+    ).toBeTruthy();
+  });
+
+  it('QA r2 (2): a start that failed says what macOS answered', async () => {
+    const dialog = await detailsOf(
+      anOverview({
+        items: [anItem({ state: 'offline', report: null })],
+        attention: {
+          blocked: [],
+          stuck: {
+            ready: 1,
+            reason: 'start-failed',
+            detail: 'Could not find service',
+          },
+        },
+      }),
+    );
+    expect(dialog.textContent).toContain(
+      'O macOS não conseguiu ligar o transcritor: Could not find service',
+    );
+    expect(dialog.textContent).not.toContain('não pegou');
+  });
+
+  it('review r2 N-2: documents held by the media ceiling say so', async () => {
+    const dialog = await detailsOf(
+      anOverview({
+        items: [anItem({ state: 'offline', report: null })],
+        attention: {
+          blocked: [{ kind: 'kb-publish', ready: 4, reason: 'monthly-cap' }],
+          stuck: null,
+        },
+      }),
+    );
+    expect(dialog.textContent).toContain('teto mensal da mídia');
   });
 
   it('says since when it is on, or off (AC-16)', async () => {

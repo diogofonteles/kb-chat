@@ -14,6 +14,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
   MediaJobKind,
   TranscriberStatusItem,
+  TranscriberStatusOverview,
   TranscriberStatusReport,
 } from '@kb-chat/contracts';
 import { TranscribersApi } from '@core/media/transcribers-api.js';
@@ -79,21 +80,53 @@ const sinceOf = (item: TranscriberStatusItem): string | null => {
     : null;
 };
 
-/** What waits and who should take it, per kind (QA F-1): words and the mark to set. */
-const BLOCKED_WORDS: Partial<Record<MediaJobKind, (ready: number) => string>> =
-  {
-    transcribe: (ready) =>
-      $localize`:@@transcriberStatus.blockedTranscribe:${ready}:ready: transcrições esperam: nenhum transcritor está marcado para transcrever.`,
-    diarize: (ready) =>
-      $localize`:@@transcriberStatus.blockedDiarize:${ready}:ready: trabalhos de Vozes esperam: nenhum transcritor separa vozes. Marque "Separa vozes" em Transcritores.`,
-    'voice-profile': (ready) =>
-      $localize`:@@transcriberStatus.blockedVoice:${ready}:ready: perfis de voz esperam: nenhum transcritor calcula perfis de voz. Marque "Perfis de voz" em Transcritores.`,
-    'kb-publish': (ready) =>
-      $localize`:@@transcriberStatus.blockedPublish:${ready}:ready: documentos esperam publicação: nenhum transcritor publica no acervo. Marque "Publica no acervo" em Transcritores.`,
-  };
+type Blocked = TranscriberStatusOverview['attention']['blocked'][number];
+type Stuck = NonNullable<TranscriberStatusOverview['attention']['stuck']>;
 
-const stuckText = (ready: number): string =>
-  $localize`:@@transcriberStatus.stuck:O transcritor ligou e não pegou o trabalho da fila (${ready}:ready:). Ele liga de novo quando a fila mudar.`;
+/** What waits, per kind, in words (QA F-1). */
+const WAITING: Partial<Record<MediaJobKind, (ready: number) => string>> = {
+  transcribe: (ready) =>
+    $localize`:@@transcriberStatus.waitTranscribe:${ready}:ready: transcrições esperam`,
+  diarize: (ready) =>
+    $localize`:@@transcriberStatus.waitDiarize:${ready}:ready: trabalhos de Vozes esperam`,
+  'voice-profile': (ready) =>
+    $localize`:@@transcriberStatus.waitVoice:${ready}:ready: perfis de voz esperam`,
+  'kb-publish': (ready) =>
+    $localize`:@@transcriberStatus.waitPublish:${ready}:ready: documentos esperam publicação`,
+};
+
+/** The mark in Transcritores and the part the Mac loads, per kind (review r2 S-2). */
+const MARK: Partial<Record<MediaJobKind, { mark: string; part: string }>> = {
+  transcribe: { mark: '', part: 'transcrever' },
+  diarize: { mark: 'Separa vozes', part: 'separar vozes' },
+  'voice-profile': { mark: 'Perfis de voz', part: 'perfis de voz' },
+  'kb-publish': {
+    mark: 'Publica no acervo',
+    part: 'publicar no acervo (o vault e o kb)',
+  },
+};
+
+/** Why it waits, and what to do, per reason (review r2 S-2, N-2; QA r2). */
+const WHY: Record<Blocked['reason'], (kind: MediaJobKind) => string> = {
+  'none-paired': () =>
+    $localize`:@@transcriberStatus.whyNonePaired:nenhum transcritor pareado. Pareie o Mac em Configurações → Transcritores.`,
+  'not-marked': (kind) =>
+    kind === 'transcribe'
+      ? $localize`:@@transcriberStatus.whyNotMarkedTranscribe:nenhum transcritor pareado transcreve. Pareie o Mac de novo em Configurações → Transcritores.`
+      : $localize`:@@transcriberStatus.whyNotMarked:nenhum transcritor está marcado para isso. Marque "${MARK[kind]?.mark ?? kind}:mark:" em Transcritores.`,
+  'not-installed': (kind) =>
+    $localize`:@@transcriberStatus.whyNotInstalled:o Mac não conseguiu carregar o componente de ${MARK[kind]?.part ?? kind}:part:; ele tenta de novo na próxima vez que ligar.`,
+  'monthly-cap': () =>
+    $localize`:@@transcriberStatus.whyCap:o teto mensal da mídia foi atingido; a publicação volta no mês que vem.`,
+};
+
+const blockedText = (one: Blocked): string =>
+  `${WAITING[one.kind]?.(one.ready) ?? `${one.kind}: ${one.ready}`}: ${WHY[one.reason](one.kind)}`;
+
+const stuckText = (stuck: Stuck): string =>
+  stuck.reason === 'start-failed'
+    ? $localize`:@@transcriberStatus.startFailedWhy:O macOS não conseguiu ligar o transcritor: ${stuck.detail ?? ''}:detail:`
+    : $localize`:@@transcriberStatus.stuck:O transcritor ligou e não pegou o trabalho da fila (${stuck.ready}:ready:). Ele liga de novo quando a fila mudar.`;
 
 /** The chip's words for a transcriber (BR-9). */
 export function chipText(item: TranscriberStatusItem | null): string {
@@ -150,11 +183,8 @@ export class TranscriberStatus {
     const seen = this.store.overview()?.attention;
     if (!seen) return [];
     return [
-      ...seen.blocked.map(
-        (one) =>
-          BLOCKED_WORDS[one.kind]?.(one.ready) ?? `${one.kind}: ${one.ready}`,
-      ),
-      ...(seen.stuck ? [stuckText(seen.stuck.ready)] : []),
+      ...seen.blocked.map(blockedText),
+      ...(seen.stuck ? [stuckText(seen.stuck)] : []),
     ];
   });
   protected readonly start = computed(
@@ -202,6 +232,10 @@ export class TranscriberStatus {
   });
   protected readonly offline = computed(
     () => this.state() === 'offline' || this.state() === 'none',
+  );
+  /** Nothing to turn on before a pairing (QA r2): "Como ligar" is not offered then. */
+  protected readonly paired = computed(
+    () => (this.store.overview()?.items.length ?? 0) > 0,
   );
   protected readonly titleId = `transcriber-status-${Math.random().toString(36).slice(2, 9)}`;
   protected readonly starting = signal(false);
