@@ -37,6 +37,8 @@ function queue(extra = {}) {
   delete env['KBC_HEAVY_HELD'];
   delete env['KBC_HEAVY_SKIP'];
   delete env['KBC_TEST_TEMP'];
+  delete env['KBC_HEAVY_WORKERS'];
+  delete env['VITEST_MAX_WORKERS'];
   return { dir, env, lock: env.KBC_HEAVY_LOCK, temp };
 }
 
@@ -239,6 +241,37 @@ test('waits for the load, and only so long', () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /stayed above 0 for 0 s; going ahead/);
   assert.match(result.stdout, /went/);
+});
+
+test('gives each vitest half the CPUs, a quarter when the load never fell', () => {
+  const cpus = Number(
+    spawnSync('getconf', ['_NPROCESSORS_ONLN'], { encoding: 'utf8' }).stdout,
+  );
+  const workers = (env) =>
+    run(env, 'sh', '-c', 'echo "workers=$VITEST_MAX_WORKERS"').stdout;
+  const calm = workers(queue().env);
+  assert.match(
+    calm,
+    new RegExp(`workers=${Math.max(2, Math.floor(cpus / 2))}\n`),
+  );
+  assert.match(calm, /heavy: \d+ vitest workers per suite/);
+  const busy = queue({ KBC_HEAVY_MAX_LOAD: '0', KBC_HEAVY_LOAD_WAIT: '0' });
+  assert.match(
+    workers(busy.env),
+    new RegExp(`workers=${Math.max(2, Math.floor(cpus / 4))}\n`),
+  );
+});
+
+test('a count of workers given is kept, VITEST_MAX_WORKERS first', () => {
+  const { env } = queue();
+  const workers = (extra) =>
+    run({ ...env, ...extra }, 'sh', '-c', 'echo "workers=$VITEST_MAX_WORKERS"')
+      .stdout;
+  assert.match(workers({ KBC_HEAVY_WORKERS: '3' }), /workers=3\n/);
+  assert.match(
+    workers({ KBC_HEAVY_WORKERS: '3', VITEST_MAX_WORKERS: '5' }),
+    /workers=5\n/,
+  );
 });
 
 test('a run works in a temp root of its own, gone after success and failure', () => {

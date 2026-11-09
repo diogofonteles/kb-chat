@@ -10,8 +10,6 @@
 // gets one line per run. A sweep's batch or answer prompt gets its reply (fake-sweep.mjs).
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { SWEEP_PLAN, logRun, sweepReply } from './fake-sweep.mjs';
 
 // The CLI gets only allowlisted variables, so the test settings come from $HOME.
@@ -110,6 +108,12 @@ if (mode === 'sleep' || mode === 'stubborn') {
   stop('tool_use');
   const configPath = args[args.indexOf('--mcp-config') + 1];
   const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  // Loaded only here: the other runs (login, sleep, a sweep) never need it, and it is most of
+  // a run's start-up, many times over on a busy machine.
+  const [{ Client }, { StreamableHTTPClientTransport }] = await Promise.all([
+    import('@modelcontextprotocol/sdk/client/index.js'),
+    import('@modelcontextprotocol/sdk/client/streamableHttp.js'),
+  ]);
   const client = new Client({ name: 'fake-claude', version: '0.0.0' });
   await client.connect(
     new StreamableHTTPClientTransport(new URL(config.mcpServers.kb.url)),

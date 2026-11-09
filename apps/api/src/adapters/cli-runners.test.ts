@@ -28,6 +28,10 @@ import {
 import { subscriptionEnv } from './cli-process.js';
 import { stopOnAbort } from './cli-research-turn.js';
 
+// Each test runs the fake Claude or Codex CLI as real node processes, a sweep one per batch:
+// about a second alone, several on a busy machine.
+vi.setConfig({ testTimeout: 15_000 });
+
 const turns = new McpTurnRegistry();
 let server: FastifyInstance;
 let apiBaseUrl: string;

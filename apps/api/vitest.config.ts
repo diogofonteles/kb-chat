@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import { privateTemp } from '../../tools/test-temp.mjs';
 
 privateTemp();
@@ -14,8 +14,28 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['src/**/*.test.ts'],
     restoreMocks: true,
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'unit',
+          include: ['src/**/*.test.ts'],
+          exclude: [...configDefaults.exclude, 'src/**/*.integration.test.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'integration',
+          include: ['src/**/*.integration.test.ts'],
+          // Each test builds the whole app (SQLite, the vault, often a listening server): a few
+          // hundred ms alone, many times that beside the web suite and other work on the same
+          // machine. 5 s was the runner's default, no product budget (the NFR tests keep theirs).
+          testTimeout: 15_000,
+        },
+      },
+    ],
     coverage: {
       provider: 'v8',
       // The 80% floor applies to business modules and adapters; entrypoints,

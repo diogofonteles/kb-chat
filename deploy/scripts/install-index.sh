@@ -9,7 +9,7 @@
 # `index.sqlite` becomes a link to it by one rename, and the trigger `reload-index` names it:
 # the API starts a new `qmd mcp` on it, reads the vault's catalog again and answers in
 # `reload-index.ack`. Searches in flight finish on the old process. Without the ack in
-# KB_CHAT_RELOAD_WAIT_S seconds (60), or with a failed smoke, the link goes back to the
+# KB_CHAT_RELOAD_WAIT_S seconds (60; looked for every KB_CHAT_RELOAD_POLL_S, 1), or with a failed smoke, the link goes back to the
 # previous index. Older index files are pruned, the previous one kept.
 set -euo pipefail
 
@@ -47,6 +47,7 @@ fi
 # ---- --hot (KBC-100) ----
 TRIGGER="$CACHE/reload-index"
 RELOAD_WAIT_S="${KB_CHAT_RELOAD_WAIT_S:-60}"
+RELOAD_POLL_S="${KB_CHAT_RELOAD_POLL_S:-1}"
 
 # One rename: a reader opens either the old index or the new one, never none. A link left by
 # an interrupted run is replaced (review 4); anything else there makes the swap fail.
@@ -62,12 +63,12 @@ ask_reload() {
   mv -f "$TRIGGER.next" "$TRIGGER"
 }
 
+# At least RELOAD_WAIT_S seconds, not a count of polls: the poll can be under a second (tests).
 acked() {
-  local waited=0
-  while [ "$waited" -lt "$RELOAD_WAIT_S" ]; do
+  local began=$SECONDS
+  while [ $((SECONDS - began)) -le "$RELOAD_WAIT_S" ]; do
     if [ "$(cat "$TRIGGER.ack" 2>/dev/null || true)" = "$1" ]; then return 0; fi
-    sleep 1
-    waited=$((waited + 1))
+    sleep "$RELOAD_POLL_S"
   done
   return 1
 }

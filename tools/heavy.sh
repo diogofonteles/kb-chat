@@ -13,6 +13,8 @@
 #                           it has a machine per job)
 #   KBC_HEAVY_MAX_LOAD=<n>  the whole 1-minute load to stay under (default: the number of CPUs)
 #   KBC_HEAVY_LOAD_WAIT=<s> the longest wait for the load, then it runs anyway (default 300)
+#   KBC_HEAVY_WORKERS=<n>   the workers of each vitest in the run (VITEST_MAX_WORKERS, which wins
+#                           when set): half the CPUs, a quarter when the load never fell, at least 2
 #   KBC_HEAVY_LOCK=<dir>    the lock (default ~/.cache/kb-chat/heavy.lock)
 #   KBC_HEAVY_TEMP=<dir>    where the runs' roots live (default ~/.cache/kb-chat/tmp, a short
 #                           path: Chrome and Nx put sockets under TMPDIR)
@@ -196,10 +198,12 @@ trap stop INT TERM HUP
 locked=$(date +%s)
 max_load=${KBC_HEAVY_MAX_LOAD:-$(cpus)}
 load_wait=${KBC_HEAVY_LOAD_WAIT:-300}
+loaded=0
 while [ "${KBC_HEAVY_SKIP:-}" != 1 ] && [ "$(load_whole)" -ge "$max_load" ]; do
   now=$(date +%s)
   if [ $((now - locked)) -ge "$load_wait" ]; then
     echo "heavy: the load stayed above $max_load for $load_wait s; going ahead"
+    loaded=1
     break
   fi
   echo "heavy: load $(load_now) above $max_load, waiting"
@@ -216,10 +220,19 @@ if ! [ "$free" -ge "$min_free" ] 2>/dev/null; then
 fi
 root=$(mktemp -d "$temp/$$.XXXXXX") || exit 73
 
+# Vitest's own default is a worker per CPU but one, in each suite: nx runs the API's and the
+# web's at once, so a run alone asked for twice the machine, and a test's 5 s ran out on a
+# machine already busy with other work. Half the CPUs per suite fills it once; a quarter when
+# the load never fell. VITEST_MAX_WORKERS is the setting every vitest of the run reads.
+workers=${KBC_HEAVY_WORKERS:-$(($(cpus) / (loaded ? 4 : 2)))}
+[ "$workers" -ge 2 ] 2>/dev/null || workers=2
+workers=${VITEST_MAX_WORKERS:-$workers}
+
 if [ "${KBC_HEAVY_SKIP:-}" != 1 ]; then
   echo "heavy: waited $(($(date +%s) - started)) s; running: $*"
   # The log then names what it proves: the commit, and whether the tree carried more than it.
   echo "heavy: at $(revision)"
+  echo "heavy: $workers vitest workers per suite"
 fi
 # A process group of its own, so that everything the command spawns can be stopped with it.
 # Not under a terminal: a background group is stopped the moment it touches the terminal, as
@@ -231,7 +244,7 @@ node_options=${NODE_OPTIONS:-}
 [ "${KBC_HEAVY_ASYNC_STDIO:-}" = 1 ] ||
   node_options="--require \"$here/blocking-stdio.cjs\"${node_options:+ $node_options}"
 KBC_HEAVY_HELD=1 KBC_TEST_TEMP=$root TMPDIR=$root MAC_CHROMIUM_TMPDIR=$root NX_DAEMON=false \
-  NODE_OPTIONS="$node_options" \
+  NODE_OPTIONS="$node_options" VITEST_MAX_WORKERS=$workers \
   "$@" </dev/null &
 child=$!
 set +m

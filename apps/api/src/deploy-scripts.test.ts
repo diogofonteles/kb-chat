@@ -19,7 +19,11 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Each test runs the real bash scripts, a few dozen forks each (cp, mv, grep, the fakes): under
+// a second alone, several on a busy machine.
+vi.setConfig({ testTimeout: 15_000 });
 
 const SCRIPTS = fileURLToPath(
   new URL('../../../deploy/scripts', import.meta.url),
@@ -101,15 +105,19 @@ async function aVm(options: { previous: 'file' | 'link' | 'none' }) {
   const env = {
     KB_CHAT_ROOT: root,
     PATH: `${bin}:${process.env['PATH'] ?? ''}`,
-    KB_CHAT_RELOAD_WAIT_S: '3',
+    // The answer ends the wait at once, so a long budget costs nothing and a busy machine never
+    // runs out of it; the tests without an answer set their own. Polled often: a poll of a
+    // second made every swap wait one.
+    KB_CHAT_RELOAD_WAIT_S: '30',
+    KB_CHAT_RELOAD_POLL_S: '0.05',
   };
   return { root, cache, log, env };
 }
 
-/** The API's side of the swap: reads the trigger, answers with the ack. */
-const answerTrigger = (cache: string) => async () => {
+/** The API's side of the swap: reads the trigger, answers with the ack, while the script runs. */
+const answerTrigger = (cache: string) => async (child: ChildProcess) => {
   const trigger = join(cache, 'reload-index');
-  for (let tries = 0; tries < 100; tries += 1) {
+  while (child.exitCode === null && child.signalCode === null) {
     const asked = await readFile(trigger, 'utf8').catch(() => null);
     if (asked) {
       await writeFile(`${trigger}.ack`, asked);
