@@ -2,7 +2,7 @@ import { mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ResearchEvent } from '@kb-chat/contracts';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { FakeResearchTools } from '../../test/fake-research-tools.js';
 import { FAKES_DIR } from '../../test/fixture-paths.js';
 import { CodexCliRunner } from '../adapters/codex-cli-runner.js';
@@ -13,6 +13,10 @@ import {
 } from '../mcp/mcp-turn-server.js';
 import { MCP_BEARER_PATH } from '../mcp/mcp-routes.js';
 import { startCodexRunner, type CodexRunner } from './runner-server.js';
+
+// Every test here runs real Codex processes (node) and waits for them to go: about a second
+// alone, several on a busy machine. Its polls give 8 s, which the default 5 s cut short.
+vi.setConfig({ testTimeout: 20_000 });
 
 const turns = new McpTurnRegistry();
 let mcp: McpTurnServer;
