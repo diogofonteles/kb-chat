@@ -158,6 +158,12 @@ class ApiClient:
         """What kb did to a kb-publish job's documents (KBC-099 FR-2)."""
         return self._on_job(job, "kb-result", result)
 
+    def report_sync(self, report: dict) -> None:
+        """What the last automatic sync with production did (KBC-100 FR-4)."""
+        status, _ = self._post("/api/v1/media-worker/vault-sync", report)
+        if status != 204:
+            raise ApiError(f"vault-sync answered {status}")
+
     def fail(self, job: dict, failure: str, detail: str, spend_usd: float = 0.0) -> bool:
         """Gives the job back; a kb-publish job also says what kb spent before it failed."""
         body: dict = {"failure": failure, "detail": detail[:2000]}

@@ -395,3 +395,55 @@ def test_a_mac_whose_vault_is_busy_does_not_ask_for_kb_publish(fake_api, vault):
     busy, free = fake_api.bodies("lease")
     assert "kb-publish" not in busy["kinds"]
     assert free["kinds"][-1] == "kb-publish"
+
+
+REMOVE_JOB = {
+    **JOB,
+    "items": [
+        JOB["items"][0],
+        {"op": "remove", "path": "raw/media/rec/track-2.md"},
+        {"op": "remove", "path": "raw/media/rec/never-written.md"},
+    ],
+}
+
+
+def test_kbc100_a_remove_deletes_the_file_and_kb_runs_so_the_index_drops_it(vault):
+    publisher = KbPublisher(vault, FakeKb(vault))
+    publisher.publish(JOB)
+    kb = FakeKb(vault)
+    result = KbPublisher(vault, kb).publish(REMOVE_JOB)
+    media = vault / "hermetismo" / "raw" / "media" / "rec"
+    assert (media / "track-1.md").exists()
+    assert not (media / "track-2.md").exists()
+    assert [step for step, _, _ in kb.calls] == ["classify", "index", "link", "index"]
+    by_path = {one["path"]: one for one in result["documents"]}
+    # A file already gone is not an error: the removal is what was asked.
+    assert by_path["raw/media/rec/never-written.md"] == {
+        "path": "raw/media/rec/never-written.md",
+        "ok": True,
+        "spendUsd": 0.0,
+    }
+    assert by_path["raw/media/rec/track-2.md"]["ok"] is True
+    # kb's spend goes to what it judged: the written document.
+    assert by_path["raw/media/rec/track-1.md"]["spendUsd"] == pytest.approx(0.0008)
+
+
+def test_kbc100_removing_the_last_document_of_a_recording_removes_its_folder(vault):
+    KbPublisher(vault, FakeKb(vault)).publish(JOB)
+    gone = {
+        **JOB,
+        "items": [{"op": "remove", "path": item["path"]} for item in JOB["items"]],
+    }
+    result = KbPublisher(vault, FakeKb(vault)).publish(gone)
+    assert not (vault / "hermetismo" / "raw" / "media" / "rec").exists()
+    assert [one["ok"] for one in result["documents"]] == [True, True]
+
+
+def test_kbc100_a_remove_outside_the_media_folder_is_refused(vault):
+    (vault / "hermetismo" / "raw" / "articles").mkdir(parents=True)
+    keep = vault / "hermetismo" / "raw" / "articles" / "a.md"
+    keep.write_text("texto", encoding="utf-8")
+    job = {**JOB, "items": [{"op": "remove", "path": "raw/media/../articles/a.md"}]}
+    with pytest.raises(UnsafePath):
+        KbPublisher(vault, FakeKb(vault)).publish(job)
+    assert keep.exists()

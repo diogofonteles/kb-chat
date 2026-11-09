@@ -69,6 +69,8 @@ export interface UploadPlans {
 }
 
 export interface MediaServiceDeps {
+  /** A recording was deleted: its documents leave the vault (KBC-100 BR-2). */
+  readonly onRemoved?: (mediaId: string) => void;
   readonly store: MediaStorePort;
   readonly files: MediaFilesPort;
   /** The collection exists in the vault (a master "sees" any slug, even a wrong one). */
@@ -581,6 +583,8 @@ export class MediaService {
     const trackFiles = this.deps.tracks?.filesOf(mediaId) ?? [];
     const rendition = this.deps.store.getRendition(mediaId);
     this.deps.store.deleteMedia(mediaId);
+    // Its documents and its tracks' leave the vault (KBC-100 BR-2).
+    this.deps.onRemoved?.(mediaId);
     const { files } = this.deps;
     await files.discardUpload(mediaId);
     await files.remove([

@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
@@ -23,12 +23,16 @@ const FAKE_KB_FACETS = [
   'summary: Faixa publicada pelo Mac de teste.',
 ].join('\n');
 
-/** Writes one job's documents into the vault, as the Mac does, with the fake kb's facets. */
+/** Writes (or removes) one job's documents in the vault, as the Mac does, with fixed facets. */
 async function writeDocuments(vault: string, job: KbPublishJob): Promise<void> {
   const folder = resolve(vault, job.topic);
   for (const item of job.items) {
     const file = resolve(folder, item.path);
     if (!file.startsWith(folder + sep)) throw new Error(`unsafe ${item.path}`);
+    if (item.op === 'remove') {
+      await rm(file, { force: true });
+      continue;
+    }
     await mkdir(dirname(file), { recursive: true });
     const classified = item.markdown.replace(
       /^---\n/,
@@ -80,6 +84,31 @@ export function registerKbPublishMac(
     },
   );
   registerForget(app, input.mediaDir);
+  registerFolder(app, input);
+}
+
+/**
+ * A collection created on the screen given its folder in the E2E vault, as the owner does
+ * with kb on the Mac (KBC-100 AC-12: without one, nothing of the app is published there).
+ */
+function registerFolder(
+  app: FastifyInstance,
+  input: { vault: string; catalog: CatalogRegistry },
+): void {
+  app.post(
+    '/api/e2e/kb-publish/folder',
+    { config: { access: PUBLIC } },
+    async (request, reply) => {
+      const { topic } = topicBody.parse(request.body);
+      const folder = resolve(input.vault, topic);
+      if (!folder.startsWith(resolve(input.vault) + sep))
+        throw new Error(`unsafe ${topic}`);
+      await mkdir(join(folder, 'raw'), { recursive: true });
+      await writeFile(join(folder, 'topic.yaml'), `title: ${topic}\n`, 'utf8');
+      await input.catalog.refresh(topic);
+      return reply.code(204).send();
+    },
+  );
 }
 
 const topicBody = z.object({ topic: z.string().min(1) });

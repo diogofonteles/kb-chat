@@ -1,6 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
+  mediaPublicationSchema,
+  type MediaPublication,
   pairedTranscriberSchema,
   publishExistingTracksResultSchema,
   type PublishExistingTracksResult,
@@ -58,4 +60,25 @@ export class TrackDocumentsApi {
       .post(`${trackDocumentsUrl()}/publish`, { topics })
       .pipe(map((body) => publishExistingTracksResultSchema.parse(body)));
   }
+
+  /** "Tentar de novo" on a document kb gave up on (KBC-100 AC-10): queued again. */
+  retry(mediaId: string): Observable<MediaPublication> {
+    return this.http
+      .post(`${publicationUrl(mediaId)}/retry`, {})
+      .pipe(map((body) => mediaPublicationSchema.parse(body)));
+  }
+
+  /**
+   * "Tentar de novo" from the queue's failed list (masters): a document or a removal, even
+   * of a media deleted since (KBC-100 review 5).
+   */
+  retryFailed(mediaId: string): Observable<MediaPublication> {
+    return this.http
+      .post(`${trackDocumentsUrl()}/failed/${mediaId}/retry`, {})
+      .pipe(map((body) => mediaPublicationSchema.parse(body)));
+  }
 }
+
+/** Where a media stands in the AI research (KBC-100 FR-3), for who edits it. */
+export const publicationUrl = (mediaId: string): string =>
+  `/api/v1/media/${mediaId}/publication`;

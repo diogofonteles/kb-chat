@@ -6,6 +6,11 @@ export interface TopicFolder {
   readonly description?: string;
   /** topic.yaml's `domain` (e.g. `esoterismo`): what kb files the collection under. */
   readonly domain?: string;
+  /**
+   * Created on the screen with no folder in the vault yet (ADR 0028): nothing of the app
+   * is published there (KBC-100 AC-12).
+   */
+  readonly screenOnly?: true;
 }
 
 /** Read-only access to a kb vault; every path is confined to its topic folder. */

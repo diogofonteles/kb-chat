@@ -32,6 +32,8 @@ interface TrackRow {
 }
 
 export interface TrackSubjectServiceDeps {
+  /** The track's accepted subjects or summary changed: its document follows (KBC-100). */
+  readonly onChanged?: (mediaId: string) => void;
   readonly store: TrackSubjectStorePort;
   readonly media: {
     getMedia(
@@ -228,6 +230,7 @@ export class TrackSubjectService {
       name: call.actor.displayName ?? call.actor.principal,
       now: this.now(),
     });
+    if (changes.length > 0) this.deps.onChanged?.(call.mediaId);
     return after;
   }
 

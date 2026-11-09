@@ -8,7 +8,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { aCollection, uniqueTag, uploadReady } from './media-helpers.js';
+import { aCollectionInVault, uniqueTag, uploadReady } from './media-helpers.js';
 import { approve, seedDraft } from './tracks-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
 
@@ -28,7 +28,7 @@ const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 /** A collection of its own with two tracks published "before KBC-099": no document. */
 async function oldTracks(owner: APIRequestContext): Promise<string> {
-  const topic = await aCollection(owner);
+  const topic = await aCollectionInVault(owner);
   const media = await uploadReady(owner, {
     title: `Palestra ${uniqueTag()}`,
     seconds: 90,

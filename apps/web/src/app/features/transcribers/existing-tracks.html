@@ -30,6 +30,43 @@
   } @else if (!overview.hasValue()) {
     <p class="hint" i18n="@@existingTracks.loading">Carregando…</p>
   } @else {
+    @if (queue(); as current) {
+      <div class="queue">
+        <p class="hint">{{ queueLine() }}</p>
+        @if (syncLine()) {
+          <p [class.field-error]="syncFailed()" [class.hint]="!syncFailed()">
+            @if (syncFailed()) {
+              <span aria-hidden="true">⚠</span>
+            }
+            {{ syncLine() }}
+          </p>
+        }
+        @if (current.failed.length > 0) {
+          <ul
+            class="failed"
+            aria-label="Faixas que falharam ao publicar"
+            i18n-aria-label="@@publicationQueue.failedLabel"
+          >
+            @for (failed of current.failed; track failed.mediaId) {
+              <li>
+                <span aria-hidden="true">⚠</span>
+                <span class="what">{{ failedLabelOf(failed) }}</span>
+                <button
+                  type="button"
+                  class="secondary"
+                  [attr.aria-label]="retryLabelOf(failed)"
+                  [disabled]="retrying().has(failed.mediaId)"
+                  (click)="retry(failed)"
+                  i18n="@@publicationQueue.retry"
+                >
+                  Tentar de novo
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    }
     @if (offered().length === 0 && anyQueued()) {
       <p class="hint" i18n="@@existingTracks.allQueued">
         As faixas que faltavam estão na fila para o Mac.

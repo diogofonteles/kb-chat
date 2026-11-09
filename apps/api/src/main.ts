@@ -40,6 +40,7 @@ import {
   budgetsFromConfig,
   createResearchAgent,
 } from './research-agent-factory.js';
+import { IndexReloadWatcher, defaultIndexTrigger } from './index-reload.js';
 import { createSearchIndex } from './search-index-factory.js';
 
 const config = loadConfig();
@@ -168,7 +169,17 @@ const app = await buildApp({
   authorDirectory,
 });
 
+// The QMD index swapped in by install-index.sh --hot (KBC-100 FR-5): no restart of the API.
+const indexReload = new IndexReloadWatcher({
+  trigger: config.KB_CHAT_INDEX_TRIGGER ?? defaultIndexTrigger(),
+  reloadIndex: async () => index.reload?.(),
+  reloadCatalog: () => catalog.load(),
+  log: app.log,
+});
+await indexReload.start();
+
 const shutdown = async (): Promise<void> => {
+  await indexReload.stop();
   await app.close();
   process.exit(0);
 };

@@ -5,17 +5,44 @@ import type {
   DesiredDocument,
   DocumentCounts,
   DocumentOutcome,
+  DocumentStatus,
   LeasedKbJob,
   MediaDocumentStorePort,
   PendingDocument,
   PublishableTrack,
+  QueueSummary,
+  VaultSyncRecord,
 } from '../../ports/media-document-store.js';
 import type { LeaseOwner } from '../../ports/media-store.js';
 import { inTransaction } from './media-database.js';
 
+/** Jobs leased before KBC-100 delivered writes only, with no `op`. */
 const deliveredSchema = z.array(
-  z.object({ mediaId: z.string(), path: z.string(), fingerprint: z.string() }),
+  z.union([
+    z.object({
+      op: z.literal('remove'),
+      mediaId: z.string(),
+      path: z.string(),
+    }),
+    z
+      .object({
+        op: z.literal('write').default('write'),
+        mediaId: z.string(),
+        path: z.string(),
+        fingerprint: z.string(),
+      })
+      .transform((one) => ({ ...one, op: 'write' as const })),
+  ]),
 );
+
+/** Not yet what production sees: never published, or published with another text. */
+const NOT_PUBLISHED = `(published_sha256 IS NULL OR published_sha256 <> desired_sha256)`;
+
+/** A transcribed recording that never had a track: its whole text is one document (FR-7). */
+const UNTRACKED_RECORDING = `m.parent_media_id IS NULL AND m.status = 'ready'
+  AND m.archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM media c WHERE c.parent_media_id = m.id)`;
+
+const FAILED_SHOWN = 20;
 
 /** A track the renderer can make a document of: it has a transcript of its own. */
 const HAS_TRANSCRIPT = `EXISTS (SELECT 1 FROM transcripts t WHERE t.media_id = m.id)`;
@@ -34,6 +61,12 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
   desire(document: DesiredDocument): boolean {
     return inTransaction(this.db, () => {
       if (this.wantsAlready(document)) return false;
+      this.leaveOldPlace(document);
+      this.db
+        .prepare(
+          'DELETE FROM media_document_removals WHERE topic = ? AND path = ?',
+        )
+        .run(document.topic, document.path);
       this.db
         .prepare(
           `INSERT INTO media_documents (media_id, topic, path, desired_sha256, state,
@@ -54,6 +87,286 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
     });
   }
 
+  /**
+   * A document wanted elsewhere now (a move): the old file goes (BR-2, AC-6). One never
+   * published there has no file; one a running job is writing there is removed when its
+   * result comes (`complete`).
+   */
+  private leaveOldPlace(document: DesiredDocument): void {
+    const row = this.db
+      .prepare(
+        'SELECT topic, path, published_sha256 FROM media_documents WHERE media_id = ?',
+      )
+      .get(document.mediaId);
+    if (!row || row['published_sha256'] === null) return;
+    const topic = String(row['topic']);
+    const path = String(row['path']);
+    if (topic === document.topic && path === document.path) return;
+    this.queueRemoval({ topic, path, mediaId: document.mediaId }, document.now);
+  }
+
+  private queueRemoval(
+    place: { topic: string; path: string; mediaId: string },
+    now: Date,
+  ): void {
+    const at = now.toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO media_document_removals (topic, path, media_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (topic, path) DO UPDATE SET media_id = excluded.media_id,
+           attempts = 0, last_error = NULL, updated_at = excluded.updated_at`,
+      )
+      .run(place.topic, place.path, place.mediaId, at, at);
+  }
+
+  retire(mediaId: string, now: Date): string | null {
+    return inTransaction(this.db, () => {
+      const row = this.db
+        .prepare(
+          'SELECT topic, path, published_sha256 FROM media_documents WHERE media_id = ?',
+        )
+        .get(mediaId);
+      if (!row) return null;
+      const topic = String(row['topic']);
+      // Never published: no file to remove (a running job's is handled by `complete`).
+      if (row['published_sha256'] !== null)
+        this.queueRemoval({ topic, path: String(row['path']), mediaId }, now);
+      this.db
+        .prepare('DELETE FROM media_documents WHERE media_id = ?')
+        .run(mediaId);
+      return topic;
+    });
+  }
+
+  removalsOf(topic: string, limit: number): readonly PendingDocument[] {
+    return this.db
+      .prepare(
+        `SELECT media_id, path FROM media_document_removals
+         WHERE topic = ? AND attempts < ? ORDER BY updated_at, path LIMIT ?`,
+      )
+      .all(topic, MAX_DOCUMENT_ATTEMPTS, limit)
+      .map((row) => ({
+        mediaId: String(row['media_id']),
+        path: String(row['path']),
+      }));
+  }
+
+  hasPending(topic: string): boolean {
+    return (
+      this.pendingOf(topic, 1).length > 0 ||
+      this.removalsOf(topic, 1).length > 0
+    );
+  }
+
+  documented(): readonly string[] {
+    return this.db
+      .prepare('SELECT media_id FROM media_documents ORDER BY topic, path')
+      .all()
+      .map((row) => String(row['media_id']));
+  }
+
+  documentedUnder(recordingId: string): readonly string[] {
+    return this.db
+      .prepare(
+        `SELECT media_id FROM media_documents WHERE substr(path, 1, ?) = ?
+         ORDER BY path`,
+      )
+      .all(`raw/media/${recordingId}/`.length, `raw/media/${recordingId}/`)
+      .map((row) => String(row['media_id']));
+  }
+
+  undocumentedRecordings(
+    perTopic: number,
+  ): readonly { mediaId: string; topic: string }[] {
+    return this.db
+      .prepare(
+        `SELECT id, topic FROM (
+           SELECT m.id, m.topic, ROW_NUMBER() OVER (PARTITION BY m.topic
+             ORDER BY m.created_at, m.id) AS place
+           FROM media m
+           WHERE ${UNTRACKED_RECORDING} AND ${HAS_TRANSCRIPT}
+             AND NOT EXISTS (SELECT 1 FROM media_documents d WHERE d.media_id = m.id))
+         WHERE place <= ? ORDER BY id`,
+      )
+      .all(perTopic)
+      .map((row) => ({
+        mediaId: String(row['id']),
+        topic: String(row['topic']),
+      }));
+  }
+
+  hasTracks(recordingId: string): boolean {
+    return (
+      this.db
+        .prepare('SELECT 1 FROM media WHERE parent_media_id = ? LIMIT 1')
+        .get(recordingId) !== undefined
+    );
+  }
+
+  statusOf(mediaId: string): DocumentStatus | null {
+    const row = this.db
+      .prepare(
+        `SELECT topic, desired_sha256, live_sha256, live_at, attempts, last_error,
+           updated_at FROM media_documents WHERE media_id = ?`,
+      )
+      .get(mediaId);
+    if (!row) return null;
+    const text = (value: unknown) => (typeof value === 'string' ? value : null);
+    return {
+      topic: String(row['topic']),
+      desiredFingerprint: String(row['desired_sha256']),
+      liveFingerprint: text(row['live_sha256']),
+      liveAt: text(row['live_at']),
+      attempts: Number(row['attempts']),
+      lastError: text(row['last_error']),
+      updatedAt: String(row['updated_at']),
+    };
+  }
+
+  retry(mediaId: string, now: Date): readonly string[] {
+    const at = now.toISOString();
+    return inTransaction(this.db, () => {
+      const documents = this.db
+        .prepare(
+          `UPDATE media_documents SET attempts = 0, state = 'pending', last_error = NULL,
+             updated_at = ? WHERE media_id = ? RETURNING topic`,
+        )
+        .all(at, mediaId);
+      // Only removals given up on: one still being tried keeps its place in the queue.
+      const removals = this.db
+        .prepare(
+          `UPDATE media_document_removals SET attempts = 0, last_error = NULL, updated_at = ?
+           WHERE media_id = ? AND attempts >= ? RETURNING topic`,
+        )
+        .all(at, mediaId, MAX_DOCUMENT_ATTEMPTS);
+      return [
+        ...new Set(
+          [...documents, ...removals].map((row) => String(row['topic'])),
+        ),
+      ];
+    });
+  }
+
+  markLive(
+    seen: readonly { mediaId: string; fingerprint: string }[],
+    now: Date,
+  ): number {
+    return inTransaction(this.db, () => {
+      const update = this.db.prepare(
+        `UPDATE media_documents SET live_sha256 = ?, live_at = ?
+         WHERE media_id = ? AND desired_sha256 = ? AND live_sha256 IS NOT ?`,
+      );
+      let changed = 0;
+      for (const one of seen)
+        changed += Number(
+          update.run(
+            one.fingerprint,
+            now.toISOString(),
+            one.mediaId,
+            one.fingerprint,
+            one.fingerprint,
+          ).changes,
+        );
+      return changed;
+    });
+  }
+
+  queueSummary(): QueueSummary {
+    const counts = this.db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM media_documents
+              WHERE (live_sha256 IS NULL OR live_sha256 <> desired_sha256)
+                AND NOT (attempts >= ? AND ${NOT_PUBLISHED}))
+           + (SELECT COUNT(*) FROM media_document_removals WHERE attempts < ?) AS waiting,
+           (SELECT MAX(published_at) FROM media_documents) AS last_published`,
+      )
+      // What failed is under "Falhou", never counted as waiting (review 5).
+      .get(MAX_DOCUMENT_ATTEMPTS, MAX_DOCUMENT_ATTEMPTS);
+    const last = counts?.['last_published'];
+    return {
+      waiting: Number(counts?.['waiting'] ?? 0),
+      lastPublishedAt: typeof last === 'string' ? last : null,
+      failed: this.failed(),
+    };
+  }
+
+  /**
+   * The documents and the removals given up on, newest first: what masters may retry. A
+   * media with both (a move) shows once, by its newest row (SQLite takes the other columns
+   * from the row MAX picks); one deleted since is named by its file. Read up to the shown
+   * count only, however long kb has been failing (review suggestion).
+   */
+  private failed(): QueueSummary['failed'] {
+    const rows = this.db
+      .prepare(
+        `SELECT media_id, topic, title, last_error, MAX(updated_at) AS updated_at FROM (
+           SELECT d.media_id, d.topic, COALESCE(m.title, '') AS title, d.last_error,
+             d.updated_at FROM media_documents d LEFT JOIN media m ON m.id = d.media_id
+           WHERE d.attempts >= ? AND ${NOT_PUBLISHED}
+           UNION ALL
+           SELECT r.media_id, r.topic, COALESCE(m.title, r.path), r.last_error, r.updated_at
+           FROM media_document_removals r LEFT JOIN media m ON m.id = r.media_id
+           WHERE r.attempts >= ?)
+         GROUP BY media_id
+         ORDER BY updated_at DESC, media_id
+         LIMIT ?`,
+      )
+      .all(MAX_DOCUMENT_ATTEMPTS, MAX_DOCUMENT_ATTEMPTS, FAILED_SHOWN);
+    return rows.map((row) => ({
+      mediaId: String(row['media_id']),
+      topic: String(row['topic']),
+      title: String(row['title']),
+      error: String(row['last_error'] ?? 'kb failed'),
+      since: String(row['updated_at']),
+    }));
+  }
+
+  recordSync(sync: VaultSyncRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO vault_syncs (id, worker, ok, detail, started_at, finished_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        sync.id,
+        sync.worker,
+        sync.ok ? 1 : 0,
+        sync.detail.slice(-2_000),
+        sync.startedAt,
+        sync.finishedAt,
+      );
+  }
+
+  lastSync(): VaultSyncRecord | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, worker, ok, detail, started_at, finished_at FROM vault_syncs
+         ORDER BY finished_at DESC, id DESC LIMIT 1`,
+      )
+      .get();
+    if (!row) return null;
+    return {
+      id: String(row['id']),
+      worker: String(row['worker']),
+      ok: Number(row['ok']) === 1,
+      detail: String(row['detail']),
+      startedAt: String(row['started_at']),
+      finishedAt: String(row['finished_at']),
+    };
+  }
+
+  private stillWantedAt(
+    topic: string,
+    item: { mediaId: string; path: string },
+  ) {
+    const row = this.db
+      .prepare('SELECT topic, path FROM media_documents WHERE media_id = ?')
+      .get(item.mediaId);
+    return row?.['topic'] === topic && row['path'] === item.path;
+  }
+
   private wantsAlready(document: DesiredDocument): boolean {
     const row = this.db
       .prepare(
@@ -71,8 +384,7 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
     return this.db
       .prepare(
         `SELECT media_id, path FROM media_documents
-         WHERE topic = ? AND attempts < ? AND (published_sha256 IS NULL
-           OR published_sha256 <> desired_sha256)
+         WHERE topic = ? AND attempts < ? AND ${NOT_PUBLISHED}
          ORDER BY updated_at, media_id LIMIT ?`,
       )
       .all(topic, MAX_DOCUMENT_ATTEMPTS, limit)
@@ -124,17 +436,6 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       .prepare('SELECT desired_sha256 FROM media_documents WHERE media_id = ?')
       .get(mediaId);
     return row ? String(row['desired_sha256']) : null;
-  }
-
-  liveTracks(): readonly string[] {
-    return this.db
-      .prepare(
-        `SELECT d.media_id FROM media_documents d JOIN media m ON m.id = d.media_id
-         WHERE m.status = 'ready' AND m.archived_at IS NULL
-         ORDER BY m.parent_media_id, m.track_ordinal, d.media_id`,
-      )
-      .all()
-      .map((row) => String(row['media_id']));
   }
 
   publishedFingerprint(mediaId: string): string | null {
@@ -284,24 +585,43 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       if (!row) return null;
       const topic = String(row['topic']);
       const error = input.error.slice(0, 2_000);
-      this.markFailed(topic, error, input.now);
+      const delivered = deliveredSchema.parse(
+        JSON.parse(String(row['items'] ?? '[]')),
+      );
+      this.markFailed(topic, { delivered, error, now: input.now });
       const givenUp = Number(row['attempts']) >= input.maxAttempts;
       // A newer job of the collection already waits: it publishes the same documents.
       const status = givenUp ? 'dead' : this.waits(topic) ? 'failed' : 'queued';
       this.close(owner, { status, error, now: input.now });
-      return deliveredSchema.parse(JSON.parse(String(row['items'] ?? '[]')));
+      return delivered;
     });
   }
 
-  /** The pending documents of a failed run keep its error, for the state (KBC-100). */
-  private markFailed(topic: string, error: string, now: Date): void {
-    this.db
-      .prepare(
-        `UPDATE media_documents SET last_error = ?, attempts = attempts + 1, updated_at = ?
-         WHERE topic = ? AND (published_sha256 IS NULL
-           OR published_sha256 <> desired_sha256)`,
-      )
-      .run(error, now.toISOString(), topic);
+  /**
+   * What a failed run delivered keeps its error and spends an attempt (BR-5: four, then
+   * **Falhou**). Only what it delivered: a document changed meanwhile starts over.
+   */
+  private markFailed(
+    topic: string,
+    input: {
+      delivered: readonly DeliveredDocument[];
+      error: string;
+      now: Date;
+    },
+  ): void {
+    const at = input.now.toISOString();
+    const write = this.db.prepare(
+      `UPDATE media_documents SET last_error = ?, attempts = attempts + 1, updated_at = ?
+       WHERE media_id = ? AND desired_sha256 = ?`,
+    );
+    const remove = this.db.prepare(
+      `UPDATE media_document_removals SET last_error = ?, attempts = attempts + 1,
+         updated_at = ? WHERE topic = ? AND path = ?`,
+    );
+    for (const item of input.delivered)
+      if (item.op === 'write')
+        write.run(input.error, at, item.mediaId, item.fingerprint);
+      else remove.run(input.error, at, topic, item.path);
   }
 
   private waits(topic: string): boolean {
@@ -326,22 +646,65 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       const delivered = deliveredSchema.parse(
         JSON.parse(String(row['items'] ?? '[]')),
       );
+      const topic = String(row['topic']);
       for (const outcome of input.outcomes) {
         const item = delivered.find((one) => one.path === outcome.path);
-        if (item) this.record(item, outcome, input.now);
+        if (item?.op === 'write')
+          this.record({ topic, item, outcome }, input.now);
+        else if (item) this.recordRemoval({ topic, item, outcome }, input.now);
       }
       this.close(owner, { status: 'done', error: null, now: input.now });
-      return { topic: String(row['topic']), delivered };
+      return { topic, delivered };
     });
+  }
+
+  /** A removal done is forgotten; one kb or the Mac failed on spends an attempt. */
+  private recordRemoval(
+    input: {
+      topic: string;
+      item: DeliveredDocument;
+      outcome: DocumentOutcome;
+    },
+    now: Date,
+  ): void {
+    const { topic, item, outcome } = input;
+    if (outcome.ok)
+      this.db
+        .prepare(
+          `DELETE FROM media_document_removals WHERE topic = ? AND path = ?
+             AND media_id = ?`,
+        )
+        .run(topic, item.path, item.mediaId);
+    else
+      this.db
+        .prepare(
+          `UPDATE media_document_removals SET last_error = ?, attempts = attempts + 1,
+             updated_at = ? WHERE topic = ? AND path = ?`,
+        )
+        .run(
+          (outcome.error ?? 'kb failed').slice(0, 2_000),
+          now.toISOString(),
+          topic,
+          item.path,
+        );
   }
 
   /** The document as published, with the fingerprint it was rendered with (BR-2). */
   private record(
-    item: DeliveredDocument,
-    outcome: DocumentOutcome,
+    input: {
+      topic: string;
+      item: Extract<DeliveredDocument, { op: 'write' }>;
+      outcome: DocumentOutcome;
+    },
     now: Date,
   ): void {
+    const { topic, item, outcome } = input;
     const at = now.toISOString();
+    if (outcome.ok && !this.stillWantedAt(topic, item)) {
+      // Retired or moved while the Mac wrote it: the file it just wrote goes again.
+      this.queueRemoval({ topic, path: item.path, mediaId: item.mediaId }, now);
+      return;
+    }
     if (outcome.ok)
       this.db
         .prepare(

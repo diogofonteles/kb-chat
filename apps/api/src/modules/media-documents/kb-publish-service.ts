@@ -3,6 +3,7 @@ import {
   KB_PUBLISH_MAX_BUDGET_USD,
   KB_PUBLISH_MAX_ITEMS,
   type CompleteKbPublishRequest,
+  type KbPublishItem,
   type KbPublishJob,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
@@ -83,23 +84,48 @@ export class KbPublishService {
         ...(topic && { topic }),
       });
       if (!job) return null;
-      const items = this.renderPending(job.topic);
+      const work = this.workOf(job.topic);
       const owner = ownerOf(job, worker);
-      if (items.length > 0) {
-        this.deps.documents.deliver(owner, {
-          items: items.map(delivered),
-          budgetUsd,
-        });
-        return this.toJob(job, { items, budgetUsd });
+      if (work.items.length > 0) {
+        const items = work.delivered;
+        this.deps.documents.deliver(owner, { items, budgetUsd });
+        return this.toJob(job, { items: work.items, budgetUsd });
       }
       this.deps.documents.finishEmpty(owner, this.now());
     }
     return null;
   }
 
+  /** What a collection's job carries now: its documents to write, then those to remove. */
+  private workOf(topic: string): {
+    items: KbPublishItem[];
+    delivered: DeliveredDocument[];
+  } {
+    const writes = this.renderPending(topic);
+    const removals = this.deps.documents.removalsOf(
+      topic,
+      KB_PUBLISH_MAX_ITEMS - writes.length,
+    );
+    return {
+      items: [
+        ...writes.map(({ path, markdown, fingerprint }) => ({
+          op: 'write' as const,
+          path,
+          markdown,
+          fingerprint,
+        })),
+        ...removals.map(({ path }) => ({ op: 'remove' as const, path })),
+      ],
+      delivered: [
+        ...writes.map(delivered),
+        ...removals.map((one): DeliveredDocument => ({ op: 'remove', ...one })),
+      ],
+    };
+  }
+
   private toJob(
     job: LeasedKbJob,
-    { items, budgetUsd }: { items: readonly TrackRender[]; budgetUsd: number },
+    { items, budgetUsd }: { items: KbPublishItem[]; budgetUsd: number },
   ): KbPublishJob {
     return {
       id: job.id,
@@ -109,20 +135,18 @@ export class KbPublishService {
       attempt: job.attempt,
       leaseMs: this.deps.leaseMs,
       budgetUsd,
-      items: items.map(({ path, markdown, fingerprint }) => ({
-        op: 'write' as const,
-        path,
-        markdown,
-        fingerprint,
-      })),
+      items,
     };
   }
 
-  /** The newest render of each document still to publish (coalesced, ADR 0035 §4). */
+  /**
+   * The newest render of each document still to publish (coalesced, ADR 0035 §4); one that
+   * stopped having a document since it was wanted becomes a removal here.
+   */
   private renderPending(topic: string): TrackRender[] {
     return this.deps.documents
       .pendingOf(topic, KB_PUBLISH_MAX_ITEMS)
-      .map(({ mediaId }) => this.deps.reconciler.render(mediaId))
+      .map(({ mediaId }) => this.deps.reconciler.refresh(mediaId))
       .filter((one): one is TrackRender => one?.topic === topic);
   }
 
@@ -229,6 +253,7 @@ export class KbPublishService {
 }
 
 const delivered = (render: TrackRender): DeliveredDocument => ({
+  op: 'write',
   mediaId: render.mediaId,
   path: render.path,
   fingerprint: render.fingerprint,

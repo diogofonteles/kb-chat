@@ -39,6 +39,19 @@ export const configSchema = z
       .transform(expandHome),
     KB_BIN: z.string().min(1).default('kb'),
     QMD_BIN: z.string().min(1).default('qmd'),
+    /**
+     * The file install-index.sh --hot writes after swapping the QMD index (KBC-100 FR-5):
+     * the API restarts only its `qmd mcp` and reads the catalog again. Default: in QMD's
+     * cache folder, which the container mounts read-write.
+     */
+    KB_CHAT_INDEX_TRIGGER: z.string().min(1).optional(),
+    /** How often the track documents' backstop runs (ADR 0035 §4: 10 minutes). */
+    KB_CHAT_RECONCILE_MS: z.coerce
+      .number()
+      .int()
+      .min(10)
+      .max(24 * 60 * 60 * 1000)
+      .default(10 * 60 * 1000),
     KB_CHAT_SEARCH: z.enum(['qmd', 'fixture']).default('qmd'),
     /** Topic opened by default; without it the web picks the largest topic. */
     KB_TOPIC: z.string().min(1).optional(),

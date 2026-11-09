@@ -43,7 +43,11 @@ export interface TrackRevisionDeps {
   readonly revisions: TrackRevisionStorePort;
   readonly publisher: Pick<
     TrackPublisher,
-    'afterArchive' | 'afterRecordingEdit' | 'afterRestore' | 'retryCuts'
+    | 'afterArchive'
+    | 'afterRecordingEdit'
+    | 'afterRestore'
+    | 'afterChange'
+    | 'retryCuts'
   >;
   readonly edits: Pick<MediaEditStorePort, 'edit'>;
   readonly store: Pick<MediaStorePort, 'getMedia'>;
@@ -148,6 +152,7 @@ export class TrackRevisionService {
         this.applySpeaker({ call, track, role, patch, scope, author });
       if (ROLES.some((role) => askedOf(patch, role) !== undefined))
         publisher.afterRecordingEdit(track.parentId);
+      else publisher.afterChange(track.parentId);
     });
   }
 

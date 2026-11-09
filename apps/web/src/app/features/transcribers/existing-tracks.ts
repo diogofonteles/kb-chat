@@ -15,9 +15,12 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   trackDocumentsOverviewSchema,
+  type FailedDocument,
+  type PublicationQueue,
   type PublishExistingTracksResult,
   type TrackDocumentsCollection,
 } from '@kb-chat/contracts';
+import { publicationTime } from '../media/track-publication/publication-time.js';
 import {
   TrackDocumentsApi,
   trackDocumentsUrl,
@@ -36,6 +39,23 @@ const tracksWord = (count: number): string =>
   count === 1
     ? $localize`:@@existingTracks.oneTrack:1 faixa`
     : $localize`:@@existingTracks.tracks:${count}:count: faixas`;
+
+/** "12 faixas aguardando publicação · última publicação 14:32" (T22, Transcritores). */
+const queueText = (queue: PublicationQueue): string => {
+  const waiting =
+    queue.waiting === 1
+      ? $localize`:@@publicationQueue.oneWaiting:1 faixa aguardando publicação`
+      : $localize`:@@publicationQueue.waiting:${queue.waiting}:count: faixas aguardando publicação`;
+  return queue.lastPublishedAt
+    ? $localize`:@@publicationQueue.withLast:${waiting}:waiting: · última publicação ${publicationTime(queue.lastPublishedAt)}:time:`
+    : waiting;
+};
+
+/** The Mac's last sync with production (KBC-100 FR-4): when, and why when it failed. */
+const syncText = (sync: NonNullable<PublicationQueue['lastSync']>): string =>
+  sync.ok
+    ? $localize`:@@publicationQueue.synced:Última sincronização com a produção: ${publicationTime(sync.finishedAt)}:time:`
+    : $localize`:@@publicationQueue.syncFailed:A sincronização com a produção falhou às ${publicationTime(sync.finishedAt)}:time:: ${sync.detail}:detail:`;
 
 const capReached = (): string =>
   $localize`:@@existingTracks.capReached:Teto mensal da mídia atingido: nada é publicado até o mês que vem.`;
@@ -88,6 +108,23 @@ export class ExistingTracks {
   protected readonly anyQueued = computed(() =>
     this.collections().some((one) => one.queued > 0),
   );
+  /** The publishing queue (KBC-100): absent from an older API. */
+  protected readonly queue = computed<PublicationQueue | null>(() =>
+    this.overview.hasValue() ? (this.overview.value().queue ?? null) : null,
+  );
+  protected readonly queueLine = computed(() => {
+    const queue = this.queue();
+    return queue ? queueText(queue) : '';
+  });
+  protected readonly syncLine = computed(() => {
+    const sync = this.queue()?.lastSync;
+    return sync ? syncText(sync) : '';
+  });
+  protected readonly syncFailed = computed(
+    () => this.queue()?.lastSync?.ok === false,
+  );
+  /** A retry on its way, by media (PD-02). */
+  protected readonly retrying = signal<ReadonlySet<string>>(new Set());
   protected readonly choosing = signal(false);
   /** Topics left out of the choice (all are in by default). */
   protected readonly leftOut = signal<ReadonlySet<string>>(new Set());
@@ -133,7 +170,9 @@ export class ExistingTracks {
   constructor() {
     // While something waits for the Mac, the counts follow it (FR-11's progress).
     effect((onCleanup) => {
-      const waiting = this.collections().some((one) => one.queued > 0);
+      const waiting =
+        this.collections().some((one) => one.queued > 0) ||
+        (this.queue()?.waiting ?? 0) > 0;
       if (!waiting) return;
       const timer = setInterval(() => this.overview.reload(), REFRESH_MS);
       onCleanup(() => clearInterval(timer));
@@ -161,6 +200,49 @@ export class ExistingTracks {
 
   protected progressOf(collection: TrackDocumentsCollection): string {
     return $localize`:@@existingTracks.progress:${collection.title}:title:: ${collection.queued}:queued: na fila · ${collection.published}:published: publicadas · ${collection.failed}:failed: falharam`;
+  }
+
+  protected failedLabelOf(failed: FailedDocument): string {
+    const collection =
+      this.collections().find((one) => one.topic === failed.topic)?.title ??
+      failed.topic;
+    return $localize`:@@publicationQueue.failedItem:${failed.title}:title: (${collection}:collection:) — Falhou: ${failed.error}:error:`;
+  }
+
+  protected retryLabelOf(failed: FailedDocument): string {
+    return $localize`:@@publicationQueue.retryItem:Tentar de novo: ${failed.title}:title:`;
+  }
+
+  /** **Tentar de novo** on a document kb gave up on (AC-10): queued again for the Mac. */
+  protected retry(failed: FailedDocument): void {
+    if (this.retrying().has(failed.mediaId)) return;
+    this.retrying.set(new Set([...this.retrying(), failed.mediaId]));
+    this.notice.set('');
+    const done = () => {
+      const next = new Set(this.retrying());
+      next.delete(failed.mediaId);
+      this.retrying.set(next);
+    };
+    this.api
+      .retryFailed(failed.mediaId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          done();
+          this.notice.set(
+            $localize`:@@publicationQueue.retried:${failed.title}:title: está na fila de novo.`,
+          );
+          this.overview.reload();
+          // Its row goes with the reload: the section's title keeps the focus (WCAG 2.4.3).
+          this.focusAfterRender(() => this.title().nativeElement);
+        },
+        error: () => {
+          done();
+          this.notice.set(
+            $localize`:@@publicationQueue.retryFailed:Não foi possível tentar de novo.`,
+          );
+        },
+      });
   }
 
   protected isChosen(topic: string): boolean {
