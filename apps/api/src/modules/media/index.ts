@@ -78,6 +78,7 @@ export {
   type TranscriberStatusDeps,
 } from './transcriber-status.js';
 export {
+  STARTING_GRACE_MS,
   transcriberStatusRoutes,
   type TranscriberStatusRouteDeps,
 } from './transcriber-status-routes.js';

@@ -125,6 +125,7 @@ import {
   transcriberRoutes,
   TranscriberStatusBoard,
   transcriberStatusRoutes,
+  STARTING_GRACE_MS,
   TranscriberWaker,
   watchForTranscriberWork,
   TranscriberService,
@@ -945,9 +946,6 @@ async function registerTranscribers(
   );
   return registerTranscriberStatus(app, input);
 }
-
-/** How long a start may take before a word from the transcriber (uv, models). */
-const STARTING_GRACE_MS = 10 * 60 * 1000;
 
 /** A start the waker made in the last minutes, with no word since: still preparing (S-1). */
 function isStarting(

@@ -221,6 +221,22 @@ describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
     ).toBeNull();
   });
 
+  it('review r3 N-3: on the same Mac, off and nothing blocked, it says it starts by itself and offers to start it now', async () => {
+    const dialog = await detailsOf(
+      anOverview({
+        items: [anItem({ state: 'offline', report: null })],
+        start: { ...anOverview().start, canStartHere: true },
+        attention: { blocked: [], stuck: null },
+      }),
+    );
+    expect(dialog.textContent).toContain(
+      'Ele liga sozinho assim que um áudio espera por ele. Para ligar agora:',
+    );
+    expect(
+      within(dialog).getByRole('button', { name: 'Ligar transcritor' }),
+    ).toBeTruthy();
+  });
+
   it('QA r2 (1): with work blocked it does not promise it turns on by itself', async () => {
     const dialog = await detailsOf(
       anOverview({

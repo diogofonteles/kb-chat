@@ -46,9 +46,13 @@ export const transcriberStatusRoutes =
         new LocalStarter(deps.local, {
           anyOnline: () => deps.board.anyOnline(),
           startingNow: deps.startingNow ?? (() => false),
+          saidSince: (at) => deps.board.saidSince(at),
         }),
       );
   };
+
+/** How long a start may take before a word from the transcriber (uv, extras, models). */
+export const STARTING_GRACE_MS = 10 * 60 * 1000;
 
 /** Two presses this close start it once (QA F-2: a second `-k` would kill the first). */
 export const LOCAL_START_COOLDOWN_MS = 30_000;
@@ -60,6 +64,8 @@ export const LOCAL_START_COOLDOWN_MS = 30_000;
  */
 export class LocalStarter {
   private lastAt = Number.NEGATIVE_INFINITY;
+  /** Its own last start (review r3 S-5): while that one still prepares, never `-k`. */
+  private startedAt: Date | null = null;
 
   constructor(
     private readonly local: LocalTranscriberPort,
@@ -67,6 +73,8 @@ export class LocalStarter {
       anyOnline(): boolean;
       /** A start the API made is still under way (uv installing, models loading). */
       startingNow(): boolean;
+      /** Whether the transcriber said anything at or after this moment. */
+      saidSince(at: Date): boolean;
     },
     private readonly now: () => Date = () => new Date(),
   ) {}
@@ -76,9 +84,23 @@ export class LocalStarter {
     if (at - this.lastAt < LOCAL_START_COOLDOWN_MS)
       return { ok: true, detail: 'already asked a moment ago' };
     this.lastAt = at;
-    // `-k` would kill the job in hand, or a start still installing its extras (r2 S-1).
-    const busy = this.board.anyOnline() || this.board.startingNow();
+    // `-k` would kill the job in hand, or a start still installing its extras: the API's
+    // (r2 S-1) or a press of its own a moment ago (r3 S-5).
+    const busy =
+      this.board.anyOnline() ||
+      this.board.startingNow() ||
+      this.ownStartPreparing(at);
+    this.startedAt = this.now();
     return busy ? this.local.wake() : this.local.start();
+  }
+
+  private ownStartPreparing(at: number): boolean {
+    const started = this.startedAt;
+    return (
+      started !== null &&
+      at - started.getTime() < STARTING_GRACE_MS &&
+      !this.board.saidSince(started)
+    );
   }
 }
 
