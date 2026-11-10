@@ -51,10 +51,6 @@ function trackLabel(source: AnswerSource, at: string): string {
 }
 
 /**
- * "[2]" → a link to source 2 named after it; the panel opens on click. A track's "[2@8:15]"
- * shows as "[2]" too (T22), and its link keeps the time it cites.
- */
-/**
  * "[3]" of a source today's reader may not see (KBC-110 FR-5): text, not a link, read as
  * "Fonte 3, restrita".
  */
@@ -65,6 +61,10 @@ function restrictedCitation(n: string): string {
   return `<span class="cite-restricted"><span aria-hidden="true">[${n}]</span><span class="visually-hidden">${label}</span></span>`;
 }
 
+/**
+ * "[2]" → a link to source 2 named after it; the panel opens on click. A track's "[2@8:15]"
+ * shows as "[2]" too (T22), and its link keeps the time it cites.
+ */
 export function renderAnswer(
   text: string,
   sources: readonly AnswerSource[] = [],

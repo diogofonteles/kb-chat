@@ -427,4 +427,24 @@ describe('HistoryStore and the level of today (KBC-110)', () => {
       .expectOne({ method: 'PUT', url: one(whole.id) })
       .flush(summarizeConversation(local));
   });
+
+  it('QA F-4: with the API out the local copy opens as it is; once the API is back it opens masked', async () => {
+    localStorage.setItem(PENDING_SAVES_KEY, JSON.stringify([whole]));
+    const { store, http } = createStore();
+    const loaded: Conversation[] = [];
+
+    store.load(whole.id).subscribe((c) => loaded.push(c));
+    http
+      .expectOne({ method: 'GET', url: one(whole.id) })
+      .error(new ProgressEvent('error'), NETWORK_DOWN);
+    store.load(whole.id).subscribe((c) => loaded.push(c));
+    http.expectOne({ method: 'GET', url: one(whole.id) }).flush(masked);
+
+    expect(loaded).toEqual([whole, masked]);
+    http.expectOne(LIST).flush({ items: [] });
+    await settle();
+    http
+      .expectOne({ method: 'PUT', url: one(whole.id) })
+      .flush(summarizeConversation(masked));
+  });
 });

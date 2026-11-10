@@ -53,15 +53,76 @@ describe('withServerSources (KBC-110 BR-5)', () => {
     expect(withServerSources(local, server)).toEqual(server);
   });
 
-  it('drops a local count and cursor the server no longer has', () => {
-    const local = research([turn({ restrictedSources: 1, sweep: CURSOR })]);
-    const server = research([turn()]);
+  it("keeps the local sources and cursor when the server's turn is still pending (review 2)", () => {
+    const local = research([
+      turn({
+        id: '0b9d7c1e-3f2a-4c5b-8d6e-7f8091a2b3c4',
+        sources: [
+          { n: 1, id: 'raw/a.md', title: 'A' },
+          { n: 2, id: 'raw/b.md', title: 'B' },
+        ],
+        sweep: CURSOR,
+      }),
+    ]);
+    const server = research([
+      turn({
+        id: '0b9d7c1e-3f2a-4c5b-8d6e-7f8091a2b3c4',
+        answer: '',
+        sources: [],
+        status: 'pending',
+      }),
+    ]);
+
+    expect(withServerSources(local, server)).toEqual(local);
+  });
+
+  it('restricts only the numbers the server restricted, and recounts them', () => {
+    const local = research([
+      turn({
+        sources: [
+          { n: 1, id: 'raw/a.md', title: 'A' },
+          { n: 2, id: 'raw/velado.md', title: 'Velado' },
+        ],
+        restrictedSources: 5,
+      }),
+    ]);
+    const server = research([
+      turn({
+        sources: [
+          { n: 1, id: 'raw/a.md', title: 'A' },
+          { n: 2, restricted: true },
+        ],
+        restrictedSources: 1,
+      }),
+    ]);
 
     const [only] = (withServerSources(local, server) as ResearchConversation)
       .turns;
 
-    expect(only).not.toHaveProperty('restrictedSources');
-    expect(only).not.toHaveProperty('sweep');
+    expect(only?.sources).toEqual([
+      { n: 1, id: 'raw/a.md', title: 'A' },
+      { n: 2, restricted: true },
+    ]);
+    expect(only?.restrictedSources).toBe(1);
+  });
+
+  it("drops from the local cursor what the server's cursor hides: findings and the last id", () => {
+    const local = research([
+      turn({ sweep: { ...CURSOR, after: 'raw/velado.md' } }),
+    ]);
+    const server = research([
+      turn({
+        sources: [{ n: 1, restricted: true }],
+        sweep: { ...CURSOR, findings: [] },
+      }),
+    ]);
+
+    const [only] = (withServerSources(local, server) as ResearchConversation)
+      .turns;
+
+    expect(only?.sweep?.findings).toEqual([]);
+    expect(only?.sweep).not.toHaveProperty('after');
+    expect(JSON.stringify(only)).not.toContain('velado');
   });
 
   it('leaves a copy alone when the server has none of its turns, or for a search', () => {
