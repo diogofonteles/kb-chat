@@ -98,7 +98,7 @@
       [(name)]="authorName"
     />
 
-    @if (showsLevel()) {
+    @if (levels.shown()) {
       <app-level-field
         [choices]="levels.levels()"
         [label]="levelLabel"
@@ -107,6 +107,7 @@
         [invalid]="levelInvalid()"
         [disabled]="stage() === 'sending'"
         [(level)]="level"
+        (retried)="levels.reload()"
       />
     }
 
@@ -137,8 +138,17 @@
         >
           Cancelar
         </button>
-        <button type="submit" class="primary" [disabled]="uploads.checking()">
-          @if (uploads.checking()) {
+        <button
+          type="submit"
+          class="primary"
+          [disabled]="uploads.checking() || waitingForLevels()"
+          [attr.aria-busy]="waitingForLevels() ? 'true' : null"
+        >
+          @if (waitingForLevels()) {
+            <ng-container i18n="@@media.level.waiting"
+              >Carregando níveis…</ng-container
+            >
+          } @else if (uploads.checking()) {
             <ng-container i18n="@@media.upload.checking"
               >Conferindo arquivos…</ng-container
             >

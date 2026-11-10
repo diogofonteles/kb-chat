@@ -679,9 +679,9 @@ describe('MediaListPage: "Editar informações" (KBC-050)', () => {
     fireEvent.change(screen.getByLabelText('Acervo'), {
       target: { value: 'alquimia' },
     });
-    // KBC-105: the new collection's levels are asked first (none here).
-    await fixture.whenStable();
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    // KBC-105: the click waits for the new collection's levels, then goes by itself.
+    await fixture.whenStable();
     http.expectOne(itemUrl(item.id)).flush({ ...item, topic: 'alquimia' });
     await nextRequest();
     http.expectOne(LIST_URL).flush({ items: [] });

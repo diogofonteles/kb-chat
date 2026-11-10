@@ -4,6 +4,7 @@ import {
   computed,
   input,
   model,
+  output,
 } from '@angular/core';
 import type { LevelChoice } from '@kb-chat/contracts';
 
@@ -34,6 +35,8 @@ export class LevelField {
   readonly disabled = input(false);
   /** The level id chosen; null: none yet. */
   readonly level = model<string | null>(null);
+  /** "Tentar de novo" after the levels could not be had (MA-26). */
+  readonly retried = output();
 
   private readonly id = `level-${nextId++}`;
   protected readonly name = this.id;

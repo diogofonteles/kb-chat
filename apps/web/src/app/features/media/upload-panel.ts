@@ -154,25 +154,27 @@ export class UploadPanel implements OnInit {
   protected readonly chosenTopic = signal('');
   /** The "Nível" of the chosen collection (KBC-105): asked again when its scale changes. */
   protected readonly levels = levelChoicesOf(() => this.chosenTopic());
-  /** No level is chosen beforehand (SL-28); another scale empties the choice (T14). */
+  private readonly chosenRoot = computed(() =>
+    rootIn(this.topics(), this.chosenTopic()),
+  );
+  /**
+   * No level is chosen beforehand (SL-28); only another scale empties the choice (T14): a
+   * sub-collection uses its parent's, so moving between them keeps it.
+   */
   protected readonly level = linkedSignal<string, string | null>({
-    source: () => this.levels.collection(),
+    // A computed source: an equal top-level collection does not run the computation.
+    source: this.chosenRoot,
     computation: () => null,
   });
   protected readonly levelLabel = $localize`:@@media.level.label:Nível`;
-  /** The field shows while the collection's scale is asked for, and when it has one. */
-  protected readonly showsLevel = computed(
-    () =>
-      this.levels.loading() ||
-      this.levels.failed() ||
-      this.levels.levels().length > 0,
-  );
-  /** Nothing goes until the level is known and, with a scale, chosen (BR-1). */
-  private readonly levelUnsettled = computed(
-    () =>
-      this.levels.loading() ||
-      this.levels.failed() ||
-      (this.levels.levels().length > 0 && this.level() === null),
+  /**
+   * "Enviar" pressed while the levels were on their way: it goes when they come (no click is
+   * lost), and the button says what it waits for.
+   */
+  protected readonly waitingForLevels = signal(false);
+  /** With a scale, nothing goes without a level (BR-1); unknown, the API decides. */
+  private readonly levelMissing = computed(
+    () => this.levels.levels().length > 0 && this.level() === null,
   );
   protected readonly levelInvalid = computed(
     () =>
@@ -206,6 +208,13 @@ export class UploadPanel implements OnInit {
     afterNextRender(() => this.dialog().nativeElement.showModal());
     // Leaving the page or the route mid-upload: stop. The same file continues later (FR-2).
     inject(DestroyRef).onDestroy(() => this.halt());
+    // An "Enviar" held for the levels goes once they are known (or could not be had).
+    toObservable(this.levels.loading)
+      .pipe(
+        filter((loading) => !loading && this.waitingForLevels()),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.send());
     // The estimates go by the files' length, read before anything is sent (KBC-072 BR-4).
     toObservable(this.uploads.plannedLength)
       .pipe(takeUntilDestroyed())
@@ -274,7 +283,8 @@ export class UploadPanel implements OnInit {
       targets.some(({ title }) => !validTitle(title)) ||
       this.form.invalid ||
       badAuthor ||
-      this.levelUnsettled()
+      this.holdForLevels() ||
+      this.levelMissing()
     )
       return;
     this.enter('sending');
@@ -287,6 +297,12 @@ export class UploadPanel implements OnInit {
     this.sending = from(targets)
       .pipe(mergeMap((entry) => this.sendOne(entry, batch), FILES_AT_ONCE))
       .subscribe({ complete: () => this.settle() });
+  }
+
+  /** True while the levels are asked for: the send waits for them, then goes on its own. */
+  private holdForLevels(): boolean {
+    this.waitingForLevels.set(this.levels.loading());
+    return this.waitingForLevels();
   }
 
   /** "Cancelar envio": stops sending and removes what was half sent. */
@@ -572,6 +588,10 @@ export class UploadPanel implements OnInit {
     );
   }
 }
+
+/** The top-level collection whose scale a collection uses (ADR 0036 §1). */
+const rootIn = (topics: readonly Topic[], slug: string): string =>
+  topics.find((one) => one.slug === slug)?.parent ?? slug;
 
 /** None for a file that goes on: its item keeps the plan it was created with. */
 function planOfEntry(

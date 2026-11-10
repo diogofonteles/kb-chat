@@ -14,7 +14,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import {
   FormControl,
   FormGroup,
@@ -34,6 +34,7 @@ import { openable, treeTitle } from '@core/topics/topic-tree.js';
 import {
   catchError,
   concatMap,
+  filter,
   map,
   of,
   throwError,
@@ -122,8 +123,10 @@ export class EditMediaDialog implements OnInit {
     () => this.rootOf(this.chosenTopic()) !== this.rootOf(this.item().topic),
   );
   /** The audio's level while it stays under its scale; empty, to be chosen, when it leaves. */
+  private readonly chosenRoot = computed(() => this.rootOf(this.chosenTopic()));
   protected readonly level = linkedSignal<string, string | null>({
-    source: () => this.rootOf(this.chosenTopic()),
+    // A computed source: a move within the same scale keeps what was chosen.
+    source: this.chosenRoot,
     computation: () =>
       this.movesScale() ? null : (this.item().level?.id ?? null),
   });
@@ -133,12 +136,8 @@ export class EditMediaDialog implements OnInit {
     const title = this.topics().find((one) => one.slug === root)?.title ?? root;
     return $localize`:@@media.level.labelIn:Nível em ${title}:collection:`;
   });
-  protected readonly showsLevel = computed(
-    () =>
-      this.levels.loading() ||
-      this.levels.failed() ||
-      this.levels.levels().length > 0,
-  );
+  /** "Salvar" pressed while the levels were on their way: it goes when they come. */
+  protected readonly waitingForLevels = signal(false);
   private readonly levelMissing = computed(
     () => this.levels.levels().length > 0 && this.level() === null,
   );
@@ -150,6 +149,13 @@ export class EditMediaDialog implements OnInit {
   protected readonly failure = signal('');
 
   constructor() {
+    // A "Salvar" held for the levels goes once they are known (or could not be had).
+    toObservable(this.levels.loading)
+      .pipe(
+        filter((loading) => !loading && this.waitingForLevels()),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.save());
     afterNextRender(() => {
       this.dialog().nativeElement.showModal();
       this.titleInput().nativeElement.focus();
@@ -171,10 +177,10 @@ export class EditMediaDialog implements OnInit {
     this.submitted.set(true);
     // A name the API would refuse is said under the "Autor" field and never sent.
     const badAuthor = isInvalidAuthorName(this.authorName());
-    const levelUnsettled =
-      this.levels.loading() || this.levels.failed() || this.levelMissing();
-    if (this.form.invalid || badAuthor || levelUnsettled || this.saving())
-      return;
+    if (this.form.invalid || badAuthor || this.saving()) return;
+    this.waitingForLevels.set(this.levels.loading());
+    // With a scale, nothing goes without a level (BR-1); unknown, the API decides.
+    if (this.waitingForLevels() || this.levelMissing()) return;
     this.saving.set(true);
     this.failure.set('');
     const draft = this.draft();

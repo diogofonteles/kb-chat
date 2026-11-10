@@ -1,7 +1,6 @@
 <fieldset
   class="field"
   [attr.aria-describedby]="describedBy()"
-  [attr.aria-invalid]="invalid() ? 'true' : null"
   [disabled]="disabled()"
 >
   <legend class="label">{{ label() }}</legend>
@@ -11,12 +10,22 @@
   @if (loading()) {
     <p class="status" i18n="@@media.level.loading">Carregando níveis…</p>
   } @else if (failed()) {
-    <p class="error" role="alert">
-      <span aria-hidden="true">⚠</span>&ngsp;
-      <ng-container i18n="@@media.level.failed"
-        >Não consegui carregar os níveis. Feche e abra de novo.</ng-container
+    <div class="failed">
+      <p class="error" role="alert">
+        <span aria-hidden="true">⚠</span>&ngsp;
+        <ng-container i18n="@@media.level.failedRetry"
+          >Não consegui carregar os níveis.</ng-container
+        >
+      </p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="retried.emit()"
+        i18n="@@media.level.retry"
       >
-    </p>
+        Tentar de novo
+      </button>
+    </div>
   } @else if (asRadios()) {
     <div class="radios">
       @for (choice of choices(); track choice.id) {
@@ -26,6 +35,7 @@
             [name]="name"
             [value]="choice.id"
             [checked]="level() === choice.id"
+            [attr.aria-invalid]="invalid() ? 'true' : null"
             (change)="choose(choice.id)"
           />
           {{ choice.code }}
@@ -34,7 +44,11 @@
     </div>
   } @else {
     <label class="visually-hidden" [for]="selectId">{{ label() }}</label>
-    <select [id]="selectId" (change)="selected($event)">
+    <select
+      [id]="selectId"
+      [attr.aria-invalid]="invalid() ? 'true' : null"
+      (change)="selected($event)"
+    >
       <option value="" [selected]="level() === null" i18n="@@media.level.none">
         Escolha um nível
       </option>

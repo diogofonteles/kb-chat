@@ -49,7 +49,13 @@ describe('LevelField (KBC-105, T14)', () => {
       'Escolha o nível deste áudio.',
     );
     const group = screen.getByRole('group', { name: 'Nível' });
-    expect(group.getAttribute('aria-invalid')).toBe('true');
+    // QA 2 (ARIA 1.2): a group takes no aria-invalid; its radios do.
+    expect(group.hasAttribute('aria-invalid')).toBe(false);
+    expect(
+      screen
+        .getAllByRole('radio')
+        .map((one) => one.getAttribute('aria-invalid')),
+    ).toEqual(['true', 'true']);
     expect(describedBy(group)).toContain('Escolha o nível deste áudio.');
   });
 
@@ -72,7 +78,7 @@ describe('LevelField (KBC-105, T14)', () => {
   });
 
   it('says while the levels load, and when they could not be had', async () => {
-    const { rerender } = await show({ loading: true });
+    const { rerender, fixture } = await show({ loading: true });
     expect(screen.getByText('Carregando níveis…')).toBeTruthy();
     expect(screen.queryAllByRole('radio')).toEqual([]);
 
@@ -83,5 +89,9 @@ describe('LevelField (KBC-105, T14)', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'Não consegui carregar os níveis.',
     );
+    const retried = vi.fn();
+    fixture.componentInstance.retried.subscribe(retried);
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    expect(retried).toHaveBeenCalledOnce();
   });
 });

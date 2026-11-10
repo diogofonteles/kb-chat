@@ -1,6 +1,6 @@
 import { HttpResponse, type HttpInterceptorFn } from '@angular/common/http';
 import type { LevelChoice, MediaLevelChoices } from '@kb-chat/contracts';
-import { of } from 'rxjs';
+import { Subject, map, of, take } from 'rxjs';
 
 const LEVELS_URL = /^\/api\/v1\/topics\/([^/]+)\/media\/levels$/;
 
@@ -30,3 +30,31 @@ export const answeringLevels =
     };
     return of(new HttpResponse({ status: 200, body }));
   };
+
+/**
+ * Holds the answer about `topic`'s levels until `release` (KBC-105 review: a click while they
+ * load); other collections go on to the next interceptor.
+ */
+export function holdingLevels(topic: string): {
+  readonly interceptor: HttpInterceptorFn;
+  release(levels?: readonly LevelChoice[]): void;
+} {
+  const answer = new Subject<readonly LevelChoice[]>();
+  return {
+    interceptor: (request, next) => {
+      const match = LEVELS_URL.exec(request.url);
+      if (decodeURIComponent(match?.[1] ?? '') !== topic) return next(request);
+      return answer.pipe(
+        take(1),
+        map(
+          (levels) =>
+            new HttpResponse<MediaLevelChoices>({
+              status: 200,
+              body: { collection: topic, levels: [...levels] },
+            }),
+        ),
+      );
+    },
+    release: (levels = []) => answer.next(levels),
+  };
+}

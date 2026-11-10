@@ -53,11 +53,29 @@ select {
   font: inherit;
 }
 
-.field[aria-invalid='true'] select {
+select[aria-invalid='true'] {
   border-color: var(--color-danger);
 }
 
 .error {
   margin: 0;
   color: var(--color-danger);
+}
+
+.failed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+}
+
+.secondary {
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
 }

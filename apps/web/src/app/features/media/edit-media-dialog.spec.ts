@@ -1,4 +1,8 @@
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import {
+  provideHttpClient,
+  withInterceptors,
+  type HttpInterceptorFn,
+} from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -9,7 +13,11 @@ import { fireEvent, render, screen } from '@testing-library/angular';
 import type { MediaItem } from '@kb-chat/contracts';
 import { aMediaItem } from '../../testing/media-fixtures.js';
 import { aTopic } from '../../testing/fixtures.js';
-import { QS_CI, answeringLevels } from '../../testing/level-fixtures.js';
+import {
+  QS_CI,
+  answeringLevels,
+  holdingLevels,
+} from '../../testing/level-fixtures.js';
 import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
 
 const ITEM = aMediaItem();
@@ -19,6 +27,7 @@ const AUTHORS = '/api/v1/topics/udv/authors';
 async function open(
   item: MediaItem = ITEM,
   scales: Parameters<typeof answeringLevels>[0] = {},
+  before: HttpInterceptorFn[] = [],
 ) {
   HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
     this.open = true;
@@ -32,7 +41,7 @@ async function open(
   const view = await render(EditMediaDialog, {
     providers: [
       provideZonelessChangeDetection(),
-      provideHttpClient(withInterceptors([answeringLevels(scales)])),
+      provideHttpClient(withInterceptors([...before, answeringLevels(scales)])),
       provideHttpClientTesting(),
     ],
     inputs: {
@@ -144,9 +153,9 @@ describe('EditMediaDialog (KBC-050)', () => {
   it('a move without an author says so, registering nothing', async () => {
     const { http, fixture } = await open(aMediaItem({ author: null }));
     chooseTopic('udv');
-    // KBC-105: the new collection's levels are asked first (none here).
-    await fixture.whenStable();
     save();
+    // KBC-105: the click waits for the new collection's levels, then goes by itself.
+    await fixture.whenStable();
     const request = http.expectOne(URL);
     expect(request.request.body).toEqual({ topic: 'udv', author: null });
     request.flush(aMediaItem({ topic: 'udv', author: null }));
@@ -197,8 +206,9 @@ describe('EditMediaDialog (KBC-050)', () => {
   it('a refused author is told as the author, a refused field as the fields', async () => {
     const { http, fixture } = await open();
     chooseTopic('udv');
-    await fixture.whenStable();
     save();
+    // KBC-105: the click waits for the new collection's levels, then goes by itself.
+    await fixture.whenStable();
     http
       .expectOne(AUTHORS)
       .flush(
@@ -208,8 +218,9 @@ describe('EditMediaDialog (KBC-050)', () => {
     await fixture.whenStable();
     expect(screen.getByRole('alert').textContent).toContain('nome do autor');
     chooseTopic('hermetismo');
-    await fixture.whenStable();
     save();
+    // KBC-105: the click waits for the new collection's levels, then goes by itself.
+    await fixture.whenStable();
     http
       .expectOne(URL)
       .flush(
@@ -345,5 +356,28 @@ describe('EditMediaDialog (KBC-050)', () => {
         author: 'mestre-laercio',
       });
     });
+  });
+
+  it('review round 1: a "Salvar" pressed while the levels load goes once they come', async () => {
+    const held = holdingLevels('udv');
+    const { http } = await open(aMediaItem({ author: null }), {}, [
+      held.interceptor,
+    ]);
+    chooseTopic('udv');
+    save();
+
+    const button = await vi.waitFor(() =>
+      screen.getByRole('button', { name: 'Carregando níveis…' }),
+    );
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    http.expectNone(URL);
+
+    held.release([]);
+    await vi.waitFor(() =>
+      expect(http.expectOne(URL).request.body).toEqual({
+        topic: 'udv',
+        author: null,
+      }),
+    );
   });
 });
