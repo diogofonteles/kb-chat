@@ -110,10 +110,15 @@ const LEVEL_DOCS = [
  * one, and no other spec's collection gets levels.
  */
 function levelCollections(root: string): void {
-  for (const project of ['desktop', 'mobile']) {
-    const dir = join(root, `zz-niveis-${project}`);
+  // `zz-historico-*`: the stored answers re-checked at today's level (KBC-110).
+  const collections = ['niveis', 'historico'].flatMap((kind) =>
+    ['desktop', 'mobile'].map((project) => ({ kind, project })),
+  );
+  for (const { kind, project } of collections) {
+    const dir = join(root, `zz-${kind}-${project}`);
+    const name = kind === 'niveis' ? 'Zz Níveis' : 'Zz Histórico';
     mkdirSync(join(dir, 'raw'), { recursive: true });
-    writeFileSync(join(dir, 'topic.yaml'), `title: Zz Níveis ${project}\n`);
+    writeFileSync(join(dir, 'topic.yaml'), `title: ${name} ${project}\n`);
     for (const [file, title, body] of LEVEL_DOCS)
       writeFileSync(
         join(dir, 'raw', `${file}.md`),

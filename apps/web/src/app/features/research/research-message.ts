@@ -37,6 +37,7 @@ import {
 } from './research-sweep.js';
 import {
   canContinueSweep,
+  citedRestricted,
   citedSources,
   groupByAuthorship,
   type ResearchTurn,
@@ -95,9 +96,14 @@ export class ResearchMessage {
     groupedSteps(this.turn().steps),
   );
   protected readonly html = computed(() =>
-    renderAnswer(this.turn().text, this.turn().sources),
+    renderAnswer(this.turn().text, this.turn().sources, this.turn().restricted),
   );
   protected readonly cited = computed(() => citedSources(this.turn()));
+  /** Cited sources above today's level (KBC-110): a chip without a link, and a note. */
+  protected readonly restricted = computed(() => citedRestricted(this.turn()));
+  protected readonly hasSources = computed(
+    () => this.cited().length > 0 || this.restricted().length > 0,
+  );
   /** What each cited track's chip says after its title (T22): recording, minute, more. */
   protected readonly trackChips = computed(
     () =>

@@ -141,7 +141,7 @@
           O custo do que já foi processado entra no gasto do dia.
         </p>
       }
-      @if (cited().length > 0) {
+      @if (hasSources()) {
         <div class="sources">
           <h3 class="sources-title" i18n="@@ai.sources">Fontes</h3>
           @if (sourceGroups(); as groups) {
@@ -162,6 +162,37 @@
               [ngTemplateOutlet]="chips"
               [ngTemplateOutletContext]="{ $implicit: cited(), label: null }"
             />
+          }
+          @if (restricted().length > 0) {
+            <ol class="restricted">
+              @for (n of restricted(); track n) {
+                <li>
+                  <span class="source restricted">
+                    <span class="source-n" aria-hidden="true">{{ n }}</span>
+                    <span
+                      class="source-title"
+                      aria-hidden="true"
+                      i18n="@@ai.restrictedSource"
+                      >Fonte restrita</span
+                    >
+                    <span
+                      class="visually-hidden"
+                      i18n="@@ai.restrictedSourceSpoken"
+                      >Fonte {{ n }}, restrita</span
+                    >
+                  </span>
+                </li>
+              }
+            </ol>
+            <p class="note restricted-note" i18n="@@ai.restrictedNote">
+              {restricted().length, plural,
+                =1 {1 fonte desta resposta não está disponível para você.}
+                other {
+                  {{ restricted().length }} fontes desta resposta não estão
+                  disponíveis para você.
+                }
+              }
+            </p>
           }
           <ng-template #chips let-sources let-label="label">
             <ol [attr.aria-label]="label">

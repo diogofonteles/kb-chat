@@ -6,8 +6,11 @@ import {
 } from '@kb-chat/contracts';
 import { describe, expect, it } from 'vitest';
 import { MemoryConversationStore } from '../../adapters/memory-conversation-store.js';
+import { OPEN_VIEW } from '../access-levels/index.js';
 import { ConversationsService } from './conversations-service.js';
 
+/** A collection without levels: the reads below are about turns, not levels (KBC-110). */
+const openView = () => OPEN_VIEW;
 const BOOT = Date.parse('2026-10-27T12:00:00.000Z');
 const CONVERSATION = '6f1c2b9b-8a11-4d0a-9d55-0b6f1f0e6a3e';
 const T1 = '0b9d7c1e-3f2a-4c5b-8d6e-7f8091a2b3c4';
@@ -71,7 +74,7 @@ describe('ConversationsService.beginTurn (KBC-029)', () => {
       topic: 'hermetismo',
       turn: pending({ question: 'quais são os 5 princípios' }),
     });
-    const saved = await service.get('ana', CONVERSATION);
+    const saved = await service.get('ana', CONVERSATION, openView);
     expect(saved).toMatchObject({
       kind: 'research',
       title: 'quais são os 5 princípios',
@@ -99,7 +102,7 @@ describe('ConversationsService.beginTurn (KBC-029)', () => {
       turn({ id: T2, status: 'failed', error: 'INTERNAL', answer: '' }),
     );
     await begin(pending({ id: T2, question: 'e a polaridade?' }));
-    const saved = await service.get('ana', CONVERSATION);
+    const saved = await service.get('ana', CONVERSATION, openView);
     expect(saved?.title).toBe('lei do ritmo');
     expect(turnsOf(saved).map((t) => [t.id, t.status])).toEqual([
       [T1, undefined],
@@ -141,7 +144,7 @@ describe('ConversationsService.finishTurn (KBC-029)', () => {
     await store.put('ana', conversation([pending()]));
     clock.now = BOOT + 60_000;
     await service.finishTurn('ana', CONVERSATION, turn());
-    const saved = await service.get('ana', CONVERSATION);
+    const saved = await service.get('ana', CONVERSATION, openView);
     expect(turnsOf(saved)).toEqual([turn()]);
     expect(saved?.updatedAt).toBe(iso(BOOT + 60_000));
   });
@@ -163,7 +166,7 @@ describe('ConversationsService.finishTurn (KBC-029)', () => {
       CONVERSATION,
       turn({ at: iso(BOOT + 1000) }),
     );
-    expect(turnsOf(await service.get('ana', CONVERSATION))).toEqual([
+    expect(turnsOf(await service.get('ana', CONVERSATION, openView))).toEqual([
       turn({ at: iso(BOOT + 1000) }),
     ]);
   });
@@ -171,7 +174,7 @@ describe('ConversationsService.finishTurn (KBC-029)', () => {
   it('does not bring back a conversation the person removed meanwhile', async () => {
     const { service } = setup();
     await service.finishTurn('ana', CONVERSATION, turn());
-    expect(await service.get('ana', CONVERSATION)).toBeNull();
+    expect(await service.get('ana', CONVERSATION, openView)).toBeNull();
   });
 });
 
@@ -186,7 +189,7 @@ describe('reading pending turns (KBC-029)', () => {
       ]),
     );
     const [restarted, running] = turnsOf(
-      await service.get('ana', CONVERSATION),
+      await service.get('ana', CONVERSATION, openView),
     );
     expect(restarted).toMatchObject({ interrupted: true });
     expect(restarted).not.toHaveProperty('status');
@@ -213,7 +216,7 @@ describe('reading pending turns (KBC-029)', () => {
   it('never writes on read', async () => {
     const { service, store } = setup();
     await store.put('ana', conversation([pending({ at: iso(BOOT - 1) })]));
-    await service.get('ana', CONVERSATION);
+    await service.get('ana', CONVERSATION, openView);
     expect(turnsOf(await store.get('ana', CONVERSATION))[0]?.status).toBe(
       'pending',
     );
@@ -271,5 +274,31 @@ describe('ConversationsService.save merges research turns by id (KBC-029)', () =
     await store.put('ana', conversation([legacy]));
     await service.save('ana', conversation([legacy, turn({ id: T2 })]));
     expect(turnsOf(await store.get('ana', CONVERSATION))).toHaveLength(2);
+  });
+});
+
+describe('ConversationsService.save keeps the place (KBC-110 QA F-1)', () => {
+  it('refuses a snapshot that moves a saved conversation to another collection or kind', async () => {
+    const { service } = setup();
+    await service.save('ana', conversation([turn()]));
+
+    const moved = service.save(
+      'ana',
+      conversation([turn()], { topic: 'alquimia' }),
+    );
+    const search = service.save('ana', {
+      kind: 'search',
+      id: CONVERSATION,
+      topic: 'hermetismo',
+      title: 'x',
+      createdAt: iso(BOOT),
+      updatedAt: iso(BOOT),
+      asks: [{ question: 'x', mode: 'all', filters: EMPTY_FILTERS, total: 1 }],
+    });
+
+    await expect(moved).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(search).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    const kept = await service.get('ana', CONVERSATION, openView);
+    expect(kept).toMatchObject({ kind: 'research', topic: 'hermetismo' });
   });
 });

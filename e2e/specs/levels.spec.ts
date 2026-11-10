@@ -226,3 +226,158 @@ test('AC-2, AC-14, AC-17, FR-11, KBC-104 AC-8: the scale on T24, the member at C
   await member.context().close();
   await owner.dispose();
 });
+
+/** QS < CI < CDC on the history collection, by the API: T24 is covered above. */
+async function historyScale(owner: APIRequestContext, slug: string) {
+  for (const code of ['QS', 'CI', 'CDC']) {
+    const created = await owner.post(`/api/v1/topics/${slug}/levels`, {
+      data: { code },
+      headers: CSRF,
+    });
+    expect(created.status(), await created.text()).toBe(201);
+  }
+  for (const [file, level] of [
+    ['medio', 'ci'],
+    ['velado', 'cdc'],
+  ] as const) {
+    const placed = await owner.put(
+      `/api/v1/topics/${slug}/documents/raw%2F${file}.md/level`,
+      { data: { level }, headers: CSRF },
+    );
+    expect(placed.status(), await placed.text()).toBe(200);
+  }
+}
+
+const setLevel = async (
+  owner: APIRequestContext,
+  slug: string,
+  memberId: string,
+  level: string,
+) => {
+  const person = await owner.patch(`/api/v1/people/${memberId}`, {
+    data: { levels: { [slug]: level } },
+    headers: CSRF,
+  });
+  expect(person.status(), await person.text()).toBe(200);
+};
+
+/** An answer she got at CDC, citing one document of each level (KBC-029's stored turn). */
+function storedAnswer(slug: string, question: string) {
+  const at = new Date().toISOString();
+  return {
+    kind: 'research',
+    id: crypto.randomUUID(),
+    topic: slug,
+    title: question,
+    createdAt: at,
+    updatedAt: at,
+    turns: [
+      {
+        id: crypto.randomUUID(),
+        question,
+        answer:
+          'O orvalho aparece no grau aberto [1], no do meio [2] e num texto velado [3].',
+        sources: [
+          { n: 1, id: 'raw/aberto.md', title: 'Orvalho Aberto' },
+          { n: 2, id: 'raw/medio.md', title: 'Orvalho do Meio' },
+          { n: 3, id: 'raw/velado.md', title: 'Orvalho Velado' },
+        ],
+        steps: 3,
+        usd: 0,
+        billing: 'subscription',
+        model: 'stub/model',
+        interrupted: false,
+        at,
+      },
+    ],
+  };
+}
+
+async function openFromHistory(page: Page, question: string): Promise<void> {
+  const side = await sidebar(page);
+  await side
+    .getByRole('navigation', { name: 'Histórico' })
+    .getByRole('button', { name: new RegExp(question) })
+    .click();
+}
+
+test('KBC-110 AC-1, AC-5, AC-7: a stored answer reopened after a demotion shows the CDC source as restricted', async ({
+  browser,
+}, testInfo) => {
+  const slug = `zz-historico-${testInfo.project.name}`;
+  const owner = await ownerApi();
+  const scale = await owner.get(`/api/v1/topics/${slug}/levels`);
+  const kept = ((await scale.json()) as { levels: unknown[] }).levels.length;
+  test.skip(kept > 0, 'A reused server kept this scale: start a fresh one.');
+  const email = uniqueEmail('historico');
+  const memberId = await invite(owner, email, {
+    topics: [slug],
+    features: ['search', 'research'],
+  });
+  await historyScale(owner, slug);
+  await setLevel(owner, slug, memberId, 'cdc');
+  const question = `orvalho em cada grau ${testInfo.project.name}`;
+  const answer = storedAnswer(slug, question);
+  const member = await pageAs(
+    browser,
+    email,
+    testInfo.project.use.viewport ?? null,
+  );
+  const saved = await member.request.put(`/api/v1/conversations/${answer.id}`, {
+    data: answer,
+    headers: CSRF,
+  });
+  expect(saved.status(), await saved.text()).toBe(200);
+  await setLevel(owner, slug, memberId, 'ci');
+
+  // AC-5: this browser still holds the whole copy, as a save it never sent.
+  await member.goto('/');
+  await member.evaluate(
+    (copy) =>
+      localStorage.setItem('kb-chat.pending-saves', JSON.stringify([copy])),
+    answer,
+  );
+  await member.reload();
+  await openFromHistory(member, question);
+
+  const message = member.locator('app-research-message').last();
+  await expect(message.getByText(/num texto velado/)).toBeVisible();
+  await expect(
+    message.getByRole('button', { name: 'Orvalho Aberto' }),
+  ).toBeVisible();
+  await expect(
+    message.getByRole('button', { name: 'Orvalho do Meio' }),
+  ).toBeVisible();
+  await expect(
+    message.getByText('Fonte restrita', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    message.getByText('1 fonte desta resposta não está disponível para você.'),
+  ).toBeVisible();
+  await expect(member.getByText(/Orvalho Velado/)).toHaveCount(0);
+  expect(await member.content()).not.toContain('velado.md');
+  const local = await member.evaluate(() =>
+    localStorage.getItem('kb-chat.pending-saves'),
+  );
+  expect(local ?? '').not.toContain('Orvalho Velado');
+
+  // AC-7: "[3]" is text read as "Fonte 3, restrita"; pressing it opens nothing.
+  await expect(message.getByRole('link', { name: /Fonte 3/ })).toHaveCount(0);
+  await expect(message.getByText('Fonte 3, restrita')).toHaveCount(2);
+  await message.locator('.cite-restricted').click();
+  await expect(member.getByRole('dialog')).toHaveCount(0);
+  // WCAG A/AA (NG-30): the message's "Fontes" h3 sits under no h2 here (best practice only).
+  const axe = await new AxeBuilder({ page: member })
+    .include('app-research-message')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze();
+  expect(axe.violations).toEqual([]);
+  expect(
+    await member.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await shoot(member, 'levels-history-restricted');
+  await member.context().close();
+  await owner.dispose();
+});

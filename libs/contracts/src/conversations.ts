@@ -6,7 +6,11 @@ import {
   researchProfileSchema,
 } from './research.js';
 import { searchFiltersSchema, searchModeSchema } from './search.js';
-import { sweepCoverageSchema, sweepCursorSchema } from './sweep.js';
+import {
+  sweepCoverageSchema,
+  sweepCursorSchema,
+  type SweepCursor,
+} from './sweep.js';
 
 /**
  * Conversations kept by the local API, all of them, without a cap (owner, 2026-10-24:
@@ -26,11 +30,34 @@ export type SavedSearchAsk = z.infer<typeof savedSearchAskSchema>;
 
 export const savedTurnStatusSchema = z.enum(['pending', 'failed']);
 
+/**
+ * A stored source the reader may no longer see (KBC-110, ADR 0036 §8): only its number, so
+ * "[n]" in the kept prose still points somewhere; no id, title, authorship or passage.
+ */
+export const restrictedSourceSchema = z.strictObject({
+  n: z.number().int().positive(),
+  restricted: z.literal(true),
+});
+export type RestrictedSource = z.infer<typeof restrictedSourceSchema>;
+
+/** A source of a saved answer: as the answer cited it, or restricted for today's reader. */
+export const savedAnswerSourceSchema = z.union([
+  answerSourceSchema,
+  restrictedSourceSchema,
+]);
+export type SavedAnswerSource = z.infer<typeof savedAnswerSourceSchema>;
+
+export const isRestrictedSource = (
+  source: SavedAnswerSource,
+): source is RestrictedSource => 'restricted' in source;
+
 /** One turn of a "Pesquisa com IA" conversation: restored as saved, never re-run (it costs). */
 export const savedResearchTurnSchema = z.object({
   question: z.string().min(1),
   answer: z.string(),
-  sources: z.array(answerSourceSchema),
+  sources: z.array(savedAnswerSourceSchema),
+  /** KBC-110: how many of `sources` today's reader may not see; absent when none. */
+  restrictedSources: z.number().int().positive().optional(),
   steps: z.number().int().nonnegative(),
   usd: z.number().nonnegative(),
   /** Turns saved before KBC-007 were all per token. */
@@ -59,6 +86,49 @@ export const savedResearchTurnSchema = z.object({
   error: z.string().min(1).max(64).optional(),
 });
 export type SavedResearchTurn = z.infer<typeof savedResearchTurnSchema>;
+
+type TurnIdentity = Pick<SavedResearchTurn, 'id' | 'at' | 'question'>;
+
+/** When and what a turn asked: how a turn saved before KBC-029 (no id) is recognized. */
+export const turnStartOf = (turn: TurnIdentity): string =>
+  `${turn.at} ${turn.question}`;
+
+/**
+ * Which turn of `known` each turn of `turns` is (KBC-029, KBC-110): first by the same id,
+ * then, for those left, by the same start and question (an older page sends no id; two
+ * pages may give an old turn two ids). Each known turn pairs at most once, in order. The
+ * API's merge and restore and the web's overlay share this one rule.
+ */
+export function pairTurns<K extends TurnIdentity>(
+  turns: readonly TurnIdentity[],
+  known: readonly K[],
+): (K | undefined)[] {
+  const free = new Set(known.keys());
+  const take = (at: number) => {
+    free.delete(at);
+    return known[at];
+  };
+  const find = (test: (one: K) => boolean) =>
+    [...free].find((at) => {
+      const one = known[at];
+      return one !== undefined && test(one);
+    });
+  const paired = turns.map((turn) => {
+    if (turn.id === undefined) return undefined;
+    const at = find((one) => one.id === turn.id);
+    return at === undefined ? undefined : take(at);
+  });
+  return paired.map((found, index) => {
+    const turn = turns[index];
+    if (found || !turn) return found;
+    const at = find((one) => turnStartOf(one) === turnStartOf(turn));
+    return at === undefined ? undefined : take(at);
+  });
+}
+
+/** Everything of a sweep cursor a read may not hide: two copies of one cursor share it. */
+export const sweepCursorKey = (cursor: SweepCursor): string =>
+  JSON.stringify({ ...cursor, after: undefined, findings: [] });
 
 const base = {
   id: conversationIdSchema,

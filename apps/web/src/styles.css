@@ -171,6 +171,14 @@ app-research-message .answer a.cite {
   vertical-align: super;
 }
 
+/* A citation of a restricted source (KBC-110): the number as plain text, no link. */
+app-research-message .answer .cite-restricted {
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: 0.8em;
+  vertical-align: super;
+}
+
 app-research-message .answer > :first-child {
   margin-top: 0;
 }

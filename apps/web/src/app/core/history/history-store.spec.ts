@@ -8,6 +8,8 @@ import { TestBed } from '@angular/core/testing';
 import {
   summarizeConversation,
   type Conversation,
+  type ResearchConversation,
+  type SavedResearchTurn,
   type SearchConversation,
 } from '@kb-chat/contracts';
 import { aSearchConversation } from '../../testing/fake-conversations.js';
@@ -179,12 +181,16 @@ describe('HistoryStore (the complete history on the local API)', () => {
     expect(store.conversations().map((c) => c.title)).toEqual(['não salva']);
     const loaded: Conversation[] = [];
     store.load(conversation.id).subscribe((c) => loaded.push(c));
+    // The server is asked first (KBC-110); it does not have it yet.
+    http
+      .expectOne({ method: 'GET', url: one(conversation.id) })
+      .flush(null, { status: 404, statusText: 'Not Found' });
     expect(loaded).toEqual([conversation]);
     expect(store.available()).toBe(false);
     http.expectOne(LIST).flush({ items: [] });
     await settle();
     http
-      .expectOne(one(conversation.id))
+      .expectOne({ method: 'PUT', url: one(conversation.id) })
       .flush(summarizeConversation(conversation));
     expect(store.available()).toBe(true);
     expect(localStorage.getItem(PENDING_SAVES_KEY)).toBeNull();
@@ -341,5 +347,104 @@ describe('HistoryStore migration of the old browser history', () => {
       vi.advanceTimersByTime(POLL_PENDING_MS * 2);
       http.expectNone(() => true);
     });
+  });
+});
+
+describe('HistoryStore and the level of today (KBC-110)', () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  const turn: SavedResearchTurn = {
+    id: crypto.randomUUID(),
+    question: 'o que diz o Caibalion?',
+    answer: 'Tudo é mente [1].',
+    sources: [{ n: 1, id: 'raw/caibalion.md', title: 'O Caibalion' }],
+    steps: 1,
+    usd: 0,
+    billing: 'per-token',
+    model: 'stub/model',
+    interrupted: false,
+    at: '2026-11-10T12:00:00.000Z',
+  };
+  const whole: ResearchConversation = {
+    kind: 'research',
+    id: crypto.randomUUID(),
+    topic: 'hermetismo',
+    title: turn.question,
+    createdAt: turn.at,
+    updatedAt: turn.at,
+    turns: [turn],
+  };
+  const masked: ResearchConversation = {
+    ...whole,
+    turns: [
+      { ...turn, sources: [{ n: 1, restricted: true }], restrictedSources: 1 },
+    ],
+  };
+
+  it('AC-5: a whole copy left in localStorage opens as the server masks it, and is kept so', async () => {
+    localStorage.setItem(PENDING_SAVES_KEY, JSON.stringify([whole]));
+    const { store, http } = createStore();
+    const loaded: Conversation[] = [];
+
+    store.load(whole.id).subscribe((c) => loaded.push(c));
+    http.expectOne({ method: 'GET', url: one(whole.id) }).flush(masked);
+
+    expect(loaded).toEqual([masked]);
+    const kept = JSON.parse(localStorage.getItem(PENDING_SAVES_KEY) ?? '[]');
+    expect(JSON.stringify(kept)).not.toContain('raw/caibalion.md');
+    expect(kept).toEqual([masked]);
+    http.expectOne(LIST).flush({ items: [] });
+    await settle();
+    // The copy sent again is the masked one: the server keeps what its file had (BR-4).
+    const put = http.expectOne({ method: 'PUT', url: one(whole.id) });
+    expect(put.request.body).toEqual(masked);
+    put.flush(summarizeConversation(masked));
+  });
+
+  it('keeps the turns only this browser has, and its copy when the server is out', async () => {
+    const extra = { ...turn, id: crypto.randomUUID(), question: 'outra' };
+    const local: ResearchConversation = { ...whole, turns: [turn, extra] };
+    localStorage.setItem(PENDING_SAVES_KEY, JSON.stringify([local]));
+    const { store, http } = createStore();
+    const loaded: Conversation[] = [];
+
+    store.load(whole.id).subscribe((c) => loaded.push(c));
+    http.expectOne({ method: 'GET', url: one(whole.id) }).flush(masked);
+    store.load(whole.id).subscribe((c) => loaded.push(c));
+    http
+      .expectOne({ method: 'GET', url: one(whole.id) })
+      .error(new ProgressEvent('error'), NETWORK_DOWN);
+
+    const first = loaded[0];
+    expect(
+      first?.kind === 'research' && first.turns.map((t) => t.sources),
+    ).toEqual([[{ n: 1, restricted: true }], extra.sources]);
+    expect(loaded[1]).toEqual(first);
+    http.expectOne(LIST).flush({ items: [] });
+    await settle();
+    http
+      .expectOne({ method: 'PUT', url: one(whole.id) })
+      .flush(summarizeConversation(local));
+  });
+
+  it('QA F-4: with the API out the local copy opens as it is; once the API is back it opens masked', async () => {
+    localStorage.setItem(PENDING_SAVES_KEY, JSON.stringify([whole]));
+    const { store, http } = createStore();
+    const loaded: Conversation[] = [];
+
+    store.load(whole.id).subscribe((c) => loaded.push(c));
+    http
+      .expectOne({ method: 'GET', url: one(whole.id) })
+      .error(new ProgressEvent('error'), NETWORK_DOWN);
+    store.load(whole.id).subscribe((c) => loaded.push(c));
+    http.expectOne({ method: 'GET', url: one(whole.id) }).flush(masked);
+
+    expect(loaded).toEqual([whole, masked]);
+    http.expectOne(LIST).flush({ items: [] });
+    await settle();
+    http
+      .expectOne({ method: 'PUT', url: one(whole.id) })
+      .flush(summarizeConversation(masked));
   });
 });

@@ -518,6 +518,7 @@ async function registerRoutes(
   const turns = new LiveTurns();
   const conversations = new ConversationsService({
     store: deps.conversations,
+    scopeOf: (topic) => deps.catalog.scopeView(topic),
     isLive: (principal, turnId) => turns.isLive(principal, turnId),
     ceilingMs: TURN_CEILING_MS,
   });
