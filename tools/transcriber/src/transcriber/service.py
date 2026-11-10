@@ -15,6 +15,7 @@ import plistlib
 import re
 import shutil
 import subprocess
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,6 +32,12 @@ BASE_PATH = ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
 # The tools the worker runs: uv runs it, kb publishes (KBC-099), ffmpeg decodes.
 TOOLS = ("uv", "kb", "ffmpeg")
 LAUNCHCTL = "/bin/launchctl"
+# After a bootout, launchd is asked every POLL_S, for at most SETTLE_S, until the label goes.
+POLL_S = 0.25
+SETTLE_S = 10.0
+# A bootstrap refused (error 5 while launchd settles) is tried this many times in all.
+BOOTSTRAP_TRIES = 3
+RETRY_S = 1.0
 # This checkout: tools/transcriber/src/transcriber → the repository's root.
 REPO = Path(__file__).resolve().parents[4]
 
@@ -60,6 +67,7 @@ class Service:
     launchctl: Launchctl
     repo: Path = REPO
     which: Callable[[str], str | None] = field(default=shutil.which)
+    sleep: Callable[[float], None] = field(default=time.sleep)
 
     @property
     def plist_path(self) -> Path:
@@ -128,13 +136,48 @@ class Service:
         if load and self.loaded()[0]:
             # The old one goes first: bootstrap refuses a label already loaded.
             self.launchctl.run(["bootout", self.target])
+            self._wait_gone()
         self.plist_path.write_bytes(content)
         self.plist_path.chmod(0o644)
         if load:
-            code, output = self.launchctl.run(["bootstrap", self.domain, str(self.plist_path)])
-            if code != 0:
-                raise ServiceError(f"launchctl bootstrap falhou ({code}): {output}")
+            self._bootstrap()
         return self.plist_path
+
+    def _wait_gone(self) -> None:
+        """`bootout` returns before launchd lets the label go (KBC-117 (2)): a bootstrap
+        meanwhile fails with error 5. Polls `print` until the old agent is gone, bounded."""
+        waited = 0.0
+        while self.loaded()[0]:
+            if waited >= SETTLE_S:
+                raise ServiceError(
+                    f"o agente antigo não saiu do launchd em {SETTLE_S:.0f} s (talvez ainda "
+                    "termine um trabalho); espere ele terminar e instale de novo."
+                )
+            self.sleep(POLL_S)
+            waited += POLL_S
+
+    def _bootstrap(self) -> None:
+        """Bootstraps, again after a refusal (launchd may still be settling), and only calls
+        it done when `print` sees the agent: the status says what launchd really has."""
+        code, output = 0, ""
+        for attempt in range(1, BOOTSTRAP_TRIES + 1):
+            code, output = self.launchctl.run(["bootstrap", self.domain, str(self.plist_path)])
+            if code == 0 or self.loaded()[0]:
+                break
+            if attempt < BOOTSTRAP_TRIES:
+                self.sleep(attempt * RETRY_S)
+        if code != 0 and not self.loaded()[0]:
+            raise ServiceError(f"launchctl bootstrap falhou ({code}): {output}")
+        if not self.loaded()[0]:
+            raise ServiceError("launchctl bootstrap respondeu 0, mas o launchd não tem o agente")
+
+    def kickstart(self) -> bool:
+        """Starts the loaded agent now (never `-k`: a job in hand is not killed); False when
+        it is not loaded (`keys set` on a Mac without the service)."""
+        if not self.loaded()[0]:
+            return False
+        code, _ = self.launchctl.run(["kickstart", self.target])
+        return code == 0
 
     def uninstall(self) -> None:
         """Stops and unloads it (one not loaded is fine) and removes the file."""

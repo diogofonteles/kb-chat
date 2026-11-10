@@ -17,6 +17,11 @@ export interface TranscriberStatusDeps {
   readonly kbWaiting: () => number;
   /** Whether this API runs on the transcriber's Mac (KB_CHAT_LOCAL_TRANSCRIBER=1). */
   readonly canStartHere: boolean;
+  /**
+   * A transcriber said it can publish now, after not saying so (KBC-117): what died of its
+   * missing setup goes back to the queue.
+   */
+  readonly onKbReady?: () => void;
   /** Why work waits with it off (the waker's view, QA F-1); null before the waker runs. */
   readonly attention?: () => WakeAttention | null;
   readonly now?: () => Date;
@@ -39,6 +44,8 @@ type Received = TranscriberStatusReport & { readonly receivedAt: string };
  */
 export class TranscriberStatusBoard {
   private readonly reports = new Map<string, Received>();
+  /** Whether each transcriber last said it publishes; a report with no kinds says nothing. */
+  private readonly publishing = new Map<string, boolean>();
   private readonly now: () => Date;
 
   constructor(private readonly deps: TranscriberStatusDeps) {
@@ -50,6 +57,12 @@ export class TranscriberStatusBoard {
       ...report,
       receivedAt: this.now().toISOString(),
     });
+    // Preparing (no kinds yet) is unknown: a restart is not a new start (QA F-2).
+    if (report.kinds.length === 0) return;
+    const now = publishes(report);
+    const before = this.publishing.get(transcriberId) ?? false;
+    this.publishing.set(transcriberId, now);
+    if (now && !before) this.deps.onKbReady?.();
   }
 
   overview(): TranscriberStatusOverview {
@@ -57,7 +70,10 @@ export class TranscriberStatusBoard {
     const known = new Set(paired.map((one) => one.id));
     // A revoked transcriber's last word goes with it.
     for (const id of this.reports.keys())
-      if (!known.has(id)) this.reports.delete(id);
+      if (!known.has(id)) {
+        this.reports.delete(id);
+        this.publishing.delete(id);
+      }
     return {
       items: paired.map((one) => this.itemOf(one)),
       kbQueue: { waiting: this.deps.kbWaiting() },
@@ -123,7 +139,13 @@ export class TranscriberStatusBoard {
       const kinds = this.reports.get(one.id)?.kinds;
       return !kinds?.length || kinds.includes(kind);
     };
-    return marked.some(runs) ? null : 'not-installed';
+    if (marked.some(runs)) return null;
+    // What the Mac said it lacks (KBC-117), before the generic "did not load". Its last word
+    // counts even once it stopped: `keys set` starts it, and it says so again (review r2).
+    const said = marked
+      .flatMap((one) => this.reports.get(one.id)?.unavailable ?? [])
+      .find((one) => one.kind === kind);
+    return said?.reason ?? 'not-installed';
   }
 
   /** Whether a transcriber said anything at or after this moment. */
@@ -141,6 +163,11 @@ export class TranscriberStatusBoard {
     );
   }
 }
+
+/** It says it publishes now: kb-publish among its kinds, and nothing missing for it. */
+const publishes = (report: TranscriberStatusReport): boolean =>
+  report.kinds.includes('kb-publish') &&
+  !(report.unavailable ?? []).some((one) => one.kind === 'kb-publish');
 
 /**
  * The lease of a transcription carries no title, so the worker names the job by its media;

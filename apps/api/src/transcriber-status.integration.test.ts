@@ -14,6 +14,9 @@ import {
 } from '../test/ai-app-harness.js';
 import { member, startMedia, type Media } from '../test/media-harness.js';
 import {
+  leaseAs,
+  leaseKb,
+  mediaDb,
   publishedTracks,
   publisherMac,
   spendTheCap,
@@ -461,5 +464,178 @@ describe('Track documents held by the media ceiling (review r2 N-2)', () => {
       ready: expect.any(Number),
       reason: 'monthly-cap',
     });
+  });
+});
+
+describe('A Mac without the kb AI key (KBC-117)', () => {
+  const NO_KEY =
+    'kb classify: decisions: OPENROUTER_API_KEY is not set; the decision model is required ([decisions] + [openrouter])';
+  const KEY_MISSING = 'chave da IA do kb ausente (OPENROUTER_API_KEY)';
+  const missing = {
+    kind: 'kb-publish',
+    reason: 'kb-ai-key-missing',
+    detail: KEY_MISSING,
+  } as const;
+
+  const failAs = (
+    world: Awaited<ReturnType<typeof startWorld>>,
+    token: string,
+    fail: {
+      job: { id: string; leaseId: string };
+      failure: string;
+      detail: string;
+    },
+  ) =>
+    asTranscriber(world.media, token, {
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${fail.job.id}/fail`,
+      payload: {
+        worker: 'mac',
+        leaseId: fail.job.leaseId,
+        failure: fail.failure,
+        detail: fail.detail,
+      },
+    });
+
+  const rowsOf = (
+    world: Awaited<ReturnType<typeof startWorld>>,
+    sql: string,
+  ) => {
+    const db = mediaDb(world.media);
+    try {
+      return db.prepare(sql).all();
+    } finally {
+      db.close();
+    }
+  };
+
+  it('a not-configured failure never kills the job nor sends documents to "Falhou"', async () => {
+    const world = await startWorld();
+    await publishedTracks(world);
+    const mac = await publisherMac(world.media);
+    for (let round = 1; round <= 6; round += 1) {
+      const job = await leaseKb(world.media, mac.token);
+      expect(job.attempt).toBe(1);
+      const failed = await failAs(world, mac.token, {
+        job,
+        failure: 'not-configured',
+        detail: NO_KEY,
+      });
+      expect(failed.statusCode, failed.body).toBe(204);
+    }
+    expect(
+      rowsOf(world, 'SELECT status, attempts FROM kb_publish_jobs'),
+    ).toEqual([{ status: 'queued', attempts: 0 }]);
+    const queue = await world.media.owner(
+      'GET',
+      '/api/v1/media/track-documents',
+    );
+    expect(queue.statusCode, queue.body).toBe(200);
+    expect(JSON.stringify(queue.json())).not.toContain('is not set');
+  });
+
+  it('says why its documents wait, and starts nothing for them', async () => {
+    const calls: (readonly string[])[] = [];
+    const world = await startWorld({
+      env: { KB_CHAT_LOCAL_TRANSCRIBER: '1' },
+      launchctl: (args) => {
+        calls.push(args);
+        return Promise.resolve({ code: 0, output: '' });
+      },
+    });
+    const mac = await publisherMac(world.media);
+    const said = await send(
+      world.media,
+      mac.token,
+      report({
+        state: 'stopped',
+        currentJob: null,
+        kinds: ['transcribe'],
+        unavailable: [missing],
+      }),
+    );
+    expect(said.statusCode, said.body).toBe(204);
+    await publishedTracks(world);
+    calls.length = 0;
+    // Publishing again is a media request: the waker looks, and leaves the Mac off for it.
+    const again = await world.media.owner(
+      'POST',
+      '/api/v1/media/track-documents/publish',
+      { topics: ['hermetismo'] },
+    );
+    expect(again.statusCode, again.body).toBeLessThan(300);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(calls).toEqual([]);
+    const overview = await overviewOf(world.media);
+    expect(overview.attention.blocked).toContainEqual({
+      kind: 'kb-publish',
+      ready: expect.any(Number),
+      reason: 'kb-ai-key-missing',
+    });
+    expect(
+      overview.items.find((one) => one.id === mac.transcriber.id)?.report
+        ?.unavailable,
+    ).toEqual([missing]);
+  });
+
+  it('documents that died of the missing key go back to the queue once the Mac says it is set', async () => {
+    const world = await startWorld();
+    await publishedTracks(world);
+    const mac = await publisherMac(world.media);
+    // What the owner's Mac did on 2026-11-09, before KBC-117: four plain failures.
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const job = await leaseKb(world.media, mac.token);
+      await failAs(world, mac.token, {
+        job,
+        failure: 'conversion-failed',
+        detail: NO_KEY,
+      });
+    }
+    expect((await leaseAs(world.media, mac.token)).statusCode).toBe(204);
+    // Still without the key: nothing moves.
+    await send(
+      world.media,
+      mac.token,
+      report({
+        kinds: ['transcribe'],
+        unavailable: [missing],
+        currentJob: null,
+      }),
+    );
+    expect((await leaseAs(world.media, mac.token)).statusCode).toBe(204);
+    // `transcriber keys set` started it: it says kb-publish is ready.
+    await send(
+      world.media,
+      mac.token,
+      report({ state: 'idle', currentJob: null }),
+    );
+    const job = await leaseKb(world.media, mac.token);
+    expect(job.items.length).toBeGreaterThan(0);
+  });
+
+  it('"Tentar de novo" in Falhou takes a document that died of the key back, for masters only', async () => {
+    const world = await startWorld();
+    const { tracks } = await publishedTracks(world);
+    const mac = await publisherMac(world.media);
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const job = await leaseKb(world.media, mac.token);
+      await failAs(world, mac.token, {
+        job,
+        failure: 'conversion-failed',
+        detail: NO_KEY,
+      });
+    }
+    const id = tracks[0]?.id ?? '';
+    const url = `/api/v1/media/track-documents/failed/${id}/retry`;
+    const { call: listener } = await member(world.media, {
+      email: 'ouvinte@example.com',
+      topics: ['hermetismo'],
+      features: ['media-edit'],
+    });
+    expect((await listener('POST', url)).statusCode).toBe(403);
+    const retried = await world.media.owner('POST', url);
+    expect(retried.statusCode, retried.body).toBe(202);
+    const job = await leaseKb(world.media, mac.token);
+    expect(job.items.some((item) => item.path.endsWith(`${id}.md`))).toBe(true);
   });
 });

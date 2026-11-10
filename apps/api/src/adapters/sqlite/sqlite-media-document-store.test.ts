@@ -307,3 +307,103 @@ describe('SqliteMediaDocumentStore (KBC-100)', () => {
     expect(store.hasTracks('r')).toBe(false);
   });
 });
+
+describe('KBC-117: a Mac without the kb key', () => {
+  const NO_KEY =
+    'kb classify: decisions: OPENROUTER_API_KEY is not set; the decision model is required';
+
+  /** A lease of the collection's job delivering m1, as the Mac takes it. */
+  function leased(store: SqliteMediaDocumentStore, id: string) {
+    store.enqueue({ topic: 'hermetismo', id, now: AT });
+    const job = store.lease({
+      worker: 'mac',
+      leaseId: `lease-${id}`,
+      now: AT,
+      leaseMs: 60_000,
+      maxAttempts: 4,
+    });
+    if (!job) throw new Error('no job');
+    const owner = { jobId: job.id, leaseId: job.leaseId, worker: 'mac' };
+    store.deliver(owner, {
+      items: [{ op: 'write', mediaId: 'm1', path: PATH, fingerprint: A }],
+      budgetUsd: 0.5,
+    });
+    return owner;
+  }
+
+  it('a not-configured failure spends no attempt of the job nor of its documents', () => {
+    const { db, store } = aStore();
+    want(store);
+    for (let round = 0; round < 6; round += 1) {
+      const owner = leased(store, 'job-k');
+      expect(
+        store.fail(owner, {
+          error: NO_KEY,
+          now: AT,
+          maxAttempts: 4,
+          configuration: true,
+        }),
+      ).toHaveLength(1);
+    }
+    const job = db
+      .prepare(
+        "SELECT status, attempts FROM kb_publish_jobs WHERE id = 'job-k'",
+      )
+      .get();
+    // Six failures of the Mac's setup: it still waits, as on the first day.
+    expect(job).toEqual({ status: 'queued', attempts: 0 });
+    expect(store.statusOf('m1')).toMatchObject({ attempts: 0 });
+    expect(store.queueSummary().failed).toEqual([]);
+  });
+
+  it('QA F-3: a not-configured failure that spent counts as a real one', () => {
+    const { db, store } = aStore();
+    want(store);
+    for (let round = 0; round < 4; round += 1) {
+      const owner = leased(store, 'job-s');
+      store.fail(owner, {
+        error: NO_KEY,
+        now: AT,
+        maxAttempts: 4,
+        configuration: true,
+        spent: true,
+      });
+    }
+    const job = db
+      .prepare("SELECT status FROM kb_publish_jobs WHERE id = 'job-s'")
+      .get();
+    expect(job).toEqual({ status: 'dead' });
+  });
+
+  it('documents given up on for the missing key go back to the queue; others stay', () => {
+    const { db, store } = aStore();
+    want(store);
+    store.desire({
+      mediaId: 'm2',
+      topic: 'udv',
+      path: 'raw/media/r/m2.md',
+      fingerprint: B,
+      now: AT,
+    });
+    db.prepare(
+      `UPDATE media_documents SET attempts = 4, state = 'failed', last_error = ?
+       WHERE media_id = 'm1'`,
+    ).run(NO_KEY);
+    db.prepare(
+      `UPDATE media_documents SET attempts = 4, state = 'failed',
+         last_error = 'kb link: Error: OpenRouter 502 Bad Gateway' WHERE media_id = 'm2'`,
+    ).run();
+    const isConfiguration = (error: string) => error.includes('is not set');
+    expect(store.retryConfigurationFailures(isConfiguration, LATER)).toEqual([
+      'hermetismo',
+    ]);
+    expect(store.statusOf('m1')).toMatchObject({
+      attempts: 0,
+      lastError: null,
+    });
+    expect(store.statusOf('m2')).toMatchObject({ attempts: 4 });
+    expect(store.retryConfigurationFailures(isConfiguration, LATER)).toEqual(
+      [],
+    );
+  });
+});

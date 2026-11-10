@@ -35,6 +35,8 @@ export interface KbPublishServiceDeps {
 export interface KbFailure {
   readonly detail: string;
   readonly spendUsd?: number;
+  /** The Mac is not set up (KBC-117): the job waits, spending no attempt. */
+  readonly configuration?: boolean;
 }
 
 /** A job rendered nothing (every document already out): tried again this many times. */
@@ -194,6 +196,8 @@ export class KbPublishService {
       error: failure.detail,
       now,
       maxAttempts: this.deps.maxAttempts,
+      configuration: failure.configuration === true,
+      spent: (failure.spendUsd ?? 0) > 0,
     });
     if (!delivered) throw leaseLost();
     const spent = failure.spendUsd ?? 0;

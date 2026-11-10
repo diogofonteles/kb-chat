@@ -23,6 +23,7 @@ from .config import (
     ERROR_BACKOFF_S,
     HEARTBEAT_S,
     IDLE_GRACE_S,
+    KEY_RECHECK_S,
     MAX_IDLE_ERRORS,
     PARAMETERS,
     PARAMETERS_VERSION,
@@ -31,6 +32,7 @@ from .config import (
     UNAUTHORIZED_BACKOFF_S,
 )
 from .diarize import Diarizer, separate
+from .kb_keys import KEY_MISSING, REQUIRED_KEY, is_configuration_error
 from .kb_publish import KbPublisher, KbStepFailed, UnsafePath, VaultBusy
 from .secret import TokenError
 from .status import StatusReporter, WorkerStatus
@@ -96,9 +98,17 @@ class Worker:
     # and this many lease errors in a row end it too (the owner: never on for nothing).
     idle_grace_s: float = IDLE_GRACE_S
     max_idle_errors: int = MAX_IDLE_ERRORS
+    # Kinds this Mac cannot do now, and why (KBC-117): never asked for, told to the app.
+    unavailable: list[dict] = field(default_factory=list)
+    # Reads the kb's keys again (the Keychain): a `keys set` while this run goes on is seen
+    # within key_recheck_s, without a restart (review r1).
+    reload_kb_env: Callable[[], dict[str, str]] | None = None
+    key_recheck_s: float = KEY_RECHECK_S
+    _keys_checked_at: float = field(default=float("-inf"), init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.status.kinds = self.kinds
+        self.status.unavailable = list(self.unavailable)
 
     def _say(self, state: str, detail: str | None = None) -> None:
         """A new state goes to the app at once; the same one again waits for the beat."""
@@ -118,14 +128,18 @@ class Worker:
     def kinds(self) -> tuple[str, ...]:
         kinds = ("transcribe", "diarize") if self.diarizer else ("transcribe",)
         kinds = (*kinds, "voice-profile") if self.embedder else kinds
-        return (*kinds, "kb-publish") if self.publisher else kinds
+        return (*kinds, "kb-publish") if self._publishes() else kinds
+
+    def _publishes(self) -> bool:
+        blocked = any(one["kind"] == "kb-publish" for one in self.unavailable)
+        return self.publisher is not None and not blocked
 
     def _kinds_now(self) -> tuple[str, ...]:
         """The kinds to ask for now: none of kb-publish while the vault's lock is held, so a
         busy vault does not cost a job an attempt (QA F-8). Not atomic with the job's own
         lock: a publication that takes the lock between this check and the job still fails
         it with VaultBusy (and costs an attempt); the window is a lease round trip."""
-        if self.publisher is not None and self.publisher.busy():
+        if self._publishes() and self.publisher is not None and self.publisher.busy():
             return tuple(kind for kind in self.kinds if kind != "kb-publish")
         return self.kinds
 
@@ -183,6 +197,7 @@ class Worker:
     def step(self) -> str:
         """One lease attempt: 'job', 'idle', 'revoked', 'lease-error' (the API out of reach)
         or 'job-error' (a job that broke: given back, never a reason to stop)."""
+        self._recheck_keys()
         kinds = self._kinds_now()
         try:
             job = self.api.lease(kinds)
@@ -326,13 +341,14 @@ class Worker:
             raise RuntimeError("leased a kb-publish job without a vault and kb")
         try:
             result = self.publisher.publish(job)
-        except (KbStepFailed, VaultBusy, UnsafePath, TopicConflict) as err:
-            log.error("job %s: publishing failed: %s", job["id"], err)
-            # What kb spent before it failed is booked on the media ledger (ADR 0035 §11).
-            spent = err.spent if isinstance(err, KbStepFailed) else 0.0
-            # kb may pass --budget by one call; the API takes at most the job's budget.
-            spent = min(spent, float(job["budgetUsd"]))
-            self._fail(job, "conversion-failed", str(err)[-2_000:], spend_usd=spent)
+        except KbStepFailed as err:
+            if is_configuration_error(err.output):
+                self._not_configured(job, err)
+                return
+            self._publish_failed(job, err)
+            return
+        except (VaultBusy, UnsafePath, TopicConflict) as err:
+            self._publish_failed(job, err)
             return
         progress["percent"] = 100
         # The vault changed on this Mac whatever happens to the lease: production follows.
@@ -344,6 +360,50 @@ class Worker:
             self._sync_if_due()
         else:
             log.warning("job %s: the lease was lost before the result: dropped", job["id"])
+
+    def _recheck_keys(self) -> None:
+        """While the kb's key is missing, the Keychain is asked again (at most every
+        key_recheck_s); once the key is there, kb-publish is back and the app is told."""
+        missing = [one for one in self.unavailable if one["reason"] == "kb-ai-key-missing"]
+        if not missing or self.reload_kb_env is None or self.publisher is None:
+            return
+        now = time.monotonic()
+        if now - self._keys_checked_at < self.key_recheck_s:
+            return
+        self._keys_checked_at = now
+        env = self.reload_kb_env()
+        # Only keys that changed open it again: kb may call a setup error "model is required"
+        # with the key there, and the same keys would fail the same way (review r2).
+        if not env.get(REQUIRED_KEY) or env == getattr(self.publisher.kb, "env", None):
+            return
+        if hasattr(self.publisher.kb, "env"):
+            self.publisher.kb.env = env
+        self.unavailable = [one for one in self.unavailable if one not in missing]
+        self.status.kinds = self.kinds
+        self.status.unavailable = list(self.unavailable)
+        log.info("the kb's AI key is set: publishing again")
+        self._report()
+
+    def _publish_failed(self, job: dict, err: Exception) -> None:
+        log.error("job %s: publishing failed: %s", job["id"], err)
+        # What kb spent before it failed is booked on the media ledger (ADR 0035 §11).
+        spent = err.spent if isinstance(err, KbStepFailed) else 0.0
+        # kb may pass --budget by one call; the API takes at most the job's budget.
+        spent = min(spent, float(job["budgetUsd"]))
+        self._fail(job, "conversion-failed", str(err)[-2_000:], spend_usd=spent)
+
+    def _not_configured(self, job: dict, err: KbStepFailed) -> None:
+        """kb has no AI key on this Mac (KBC-117): the job goes back without spending an
+        attempt, this run stops asking for kb-publish, and the app is told why."""
+        log.error("job %s: kb is not configured on this Mac: %s", job["id"], KEY_MISSING)
+        if not any(one["kind"] == "kb-publish" for one in self.unavailable):
+            problem = {"kind": "kb-publish", "reason": "kb-ai-key-missing", "detail": KEY_MISSING}
+            self.unavailable.append(problem)
+        self.status.kinds = self.kinds
+        self.status.unavailable = list(self.unavailable)
+        spent = min(err.spent, float(job["budgetUsd"]))
+        detail = f"{KEY_MISSING} — {err.output}"[:2_000]
+        self._fail(job, "not-configured", detail, spend_usd=spent)
 
     def _diarize(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
         """Separates the voices of the job's audio and uploads only the turns (BR-1)."""

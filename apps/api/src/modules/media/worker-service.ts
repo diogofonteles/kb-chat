@@ -47,10 +47,17 @@ export interface KbPublishQueue {
   lease(worker: string): LeasedWorkerJob | null;
   isJob(jobId: string): boolean;
   heartbeat(owner: LeaseOwner): void;
-  /** kb's output, and what kb spent before failing (ADR 0035 §11). */
+  /**
+   * kb's output, and what kb spent before failing (ADR 0035 §11); `configuration` when the
+   * Mac is not set up (KBC-117): the job waits, spending no attempt.
+   */
   fail(
     owner: LeaseOwner,
-    failure: { readonly detail: string; readonly spendUsd?: number },
+    failure: {
+      readonly detail: string;
+      readonly spendUsd?: number;
+      readonly configuration?: boolean;
+    },
   ): void;
   /** Whether this worker holds a kb-publish lease now. */
   isHeldBy?(worker: string): boolean;
@@ -371,6 +378,7 @@ export class WorkerService {
       const owner = { jobId, worker: failure.worker, leaseId: failure.leaseId };
       this.deps.kb.fail(owner, {
         detail: failure.detail,
+        configuration: failure.failure === 'not-configured',
         ...(failure.spendUsd !== undefined && { spendUsd: failure.spendUsd }),
       });
       return;
@@ -380,6 +388,11 @@ export class WorkerService {
     const recorded = this.deps.store.failJob({
       jobId,
       ...failure,
+      // Only a kb-publish job waits for the Mac's setup (KBC-117); any other is a crash.
+      failure:
+        failure.failure === 'not-configured'
+          ? 'conversion-failed'
+          : failure.failure,
       now: this.now(),
       maxAttempts: MAX_JOB_ATTEMPTS,
     });

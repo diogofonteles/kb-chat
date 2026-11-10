@@ -264,6 +264,34 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
     });
   }
 
+  retryConfigurationFailures(
+    isConfiguration: (error: string) => boolean,
+    now: Date,
+  ): readonly string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT media_id, last_error FROM media_documents
+         WHERE attempts >= ? AND ${NOT_PUBLISHED} AND last_error IS NOT NULL
+         UNION
+         SELECT media_id, last_error FROM media_document_removals
+         WHERE attempts >= ? AND last_error IS NOT NULL`,
+      )
+      .all(MAX_DOCUMENT_ATTEMPTS, MAX_DOCUMENT_ATTEMPTS);
+    const mediaIds = new Set(
+      rows
+        .filter((row) => isConfiguration(String(row['last_error'])))
+        .map((row) => String(row['media_id'])),
+    );
+    // One transaction; few rows: only what kb gave up on, read once above. `retry` starts the
+    // whole media over, as "Tentar de novo" does (KBC-100): a sibling document with it.
+    return inTransaction(this.db, () => {
+      const topics = new Set<string>();
+      for (const mediaId of mediaIds)
+        for (const topic of this.retry(mediaId, now)) topics.add(topic);
+      return [...topics];
+    });
+  }
+
   markLive(
     seen: readonly { mediaId: string; fingerprint: string }[],
     now: Date,
@@ -623,7 +651,7 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
 
   fail(
     owner: LeaseOwner,
-    input: { error: string; now: Date; maxAttempts: number },
+    input: Parameters<MediaDocumentStorePort['fail']>[1],
   ): readonly DeliveredDocument[] | null {
     return inTransaction(this.db, () => {
       const row = this.db
@@ -637,13 +665,53 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       const delivered = deliveredSchema.parse(
         JSON.parse(String(row['items'] ?? '[]')),
       );
-      this.markFailed(topic, { delivered, error, now: input.now });
-      const givenUp = Number(row['attempts']) >= input.maxAttempts;
-      // A newer job of the collection already waits: it publishes the same documents.
-      const status = givenUp ? 'dead' : this.waits(topic) ? 'failed' : 'queued';
-      this.close(owner, { status, error, now: input.now });
+      if (input.configuration && !input.spent)
+        this.waitForSetup(owner, { topic, error, now: input.now });
+      else
+        this.giveBack(owner, {
+          topic,
+          delivered,
+          error,
+          now: input.now,
+          givenUp: Number(row['attempts']) >= input.maxAttempts,
+        });
       return delivered;
     });
+  }
+
+  /** A failed run: its documents spend an attempt; the job waits again or, past them, dies. */
+  private giveBack(
+    owner: LeaseOwner,
+    input: {
+      topic: string;
+      delivered: readonly DeliveredDocument[];
+      error: string;
+      now: Date;
+      givenUp: boolean;
+    },
+  ): void {
+    const { topic, delivered, error, now } = input;
+    this.markFailed(topic, { delivered, error, now });
+    // A newer job of the collection already waits: it publishes the same documents.
+    const waiting = this.waits(topic) ? 'failed' : 'queued';
+    this.close(owner, { status: input.givenUp ? 'dead' : waiting, error, now });
+  }
+
+  /**
+   * The Mac is not set up to publish (KBC-117): the lease is given back as if never taken,
+   * so the job waits for a Mac that can, and no document is charged for it.
+   */
+  private waitForSetup(
+    owner: LeaseOwner,
+    input: { topic: string; error: string; now: Date },
+  ): void {
+    const status = this.waits(input.topic) ? 'failed' : 'queued';
+    this.db
+      .prepare(
+        `UPDATE kb_publish_jobs SET attempts = MAX(attempts - 1, 0) WHERE ${HELD}`,
+      )
+      .run(...heldArgs(owner));
+    this.close(owner, { status, error: input.error, now: input.now });
   }
 
   /**

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { kbPublishJobSchema, transcriberStatusReportSchema } from './media.js';
+import {
+  failJobRequestSchema,
+  kbPublishJobSchema,
+  transcriberStatusReportSchema,
+} from './media.js';
 
 const RECORDING = '7d2f4a10-5c3e-4b8a-9f01-3a6e2b9c0d01';
 const TRACK = '7d2f4a10-5c3e-4b8a-9f01-3a6e2b9c0d11';
@@ -89,5 +93,48 @@ describe('transcriber status report (KBC-114 FR-8)', () => {
     { ...report, currentJob: { ...report.currentJob, progress: 101 } },
   ])('refuses a body outside the contract %#', (body) => {
     expect(transcriberStatusReportSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe('what a transcriber cannot do now (KBC-117)', () => {
+  const missingKey = {
+    kind: 'kb-publish',
+    reason: 'kb-ai-key-missing',
+    detail: 'chave da IA do kb ausente (OPENROUTER_API_KEY)',
+  };
+
+  it('takes the kb key missing, and a report without it (an older worker)', () => {
+    const parsed = transcriberStatusReportSchema.parse({
+      ...report,
+      unavailable: [missingKey],
+    });
+    expect(parsed.unavailable).toEqual([missingKey]);
+    expect(
+      transcriberStatusReportSchema.parse(report).unavailable,
+    ).toBeUndefined();
+  });
+
+  it.each([
+    [{ ...missingKey, reason: 'broken' }],
+    [{ ...missingKey, value: 'sk-or-v1-x' }],
+    [{ ...missingKey, detail: 'x'.repeat(301) }],
+  ])('refuses one outside the contract %#', (unavailable) => {
+    expect(
+      transcriberStatusReportSchema.safeParse({ ...report, unavailable })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe('failing a job (KBC-117)', () => {
+  it('takes not-configured, the Mac’s own setup', () => {
+    expect(
+      failJobRequestSchema.parse({
+        worker: 'transcriber:mac',
+        leaseId: '22222222-2222-4222-8222-222222222222',
+        failure: 'not-configured',
+        detail: 'chave da IA do kb ausente',
+      }).failure,
+    ).toBe('not-configured');
   });
 });

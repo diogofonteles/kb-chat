@@ -6,6 +6,7 @@ import type {
 } from '@kb-chat/contracts';
 import type { MediaDocumentStorePort } from '../../ports/media-document-store.js';
 import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
+import { isKbConfigurationError } from './kb-configuration.js';
 import type { MediaDocumentReconciler } from './reconciler.js';
 
 /** kb's or the Mac's failure, said in one line under the title (T22). */
@@ -31,6 +32,7 @@ export interface PublicationStatusDeps {
     MediaDocumentStorePort,
     | 'statusOf'
     | 'retry'
+    | 'retryConfigurationFailures'
     | 'queueSummary'
     | 'markLive'
     | 'recordSync'
@@ -117,6 +119,19 @@ export class PublicationStatus {
     if (topics.length === 0 && !this.deps.store.getMedia(mediaId))
       return undefined;
     return this.sendAgain(mediaId, topics);
+  }
+
+  /**
+   * A Mac said it can publish (KBC-117): what was given up on for its missing setup (the
+   * kb's AI key) goes back to the queue by itself; the collections queued again.
+   */
+  retryConfigurationFailures(): readonly string[] {
+    const topics = this.deps.documents.retryConfigurationFailures(
+      isKbConfigurationError,
+      this.now(),
+    );
+    for (const topic of topics) this.deps.reconciler.enqueueIfPending(topic);
+    return topics;
   }
 
   private sendAgain(

@@ -47,6 +47,8 @@ IDLE_GRACE_S: Final = 30.0
 MAX_IDLE_ERRORS: Final = 3
 # The sign of life to the app while nothing changes (KBC-114 FR-8); a change goes at once.
 STATUS_EVERY_S: Final = 30.0
+# While the kb's AI key is missing, the Keychain is read again this often (KBC-117).
+KEY_RECHECK_S: Final = 30.0
 UNAUTHORIZED_BACKOFF_S: Final = 600.0
 ERROR_BACKOFF_S: Final = 60.0
 

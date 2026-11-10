@@ -80,6 +80,12 @@
             >
           }
         </dd>
+        @for (missing of last.unavailable ?? []; track missing.kind) {
+          <dt i18n="@@transcriberStatus.cannotNow">Não consegue agora</dt>
+          <dd class="error-line">
+            <span aria-hidden="true">⚠</span> {{ lacksText(missing) }}
+          </dd>
+        }
         <dt i18n="@@transcriberStatus.kb">Versão do kb</dt>
         <dd>
           @if (last.kbVersion; as kb) {

@@ -63,6 +63,8 @@ class WorkerStatus:
         self._state = ""
         self._detail: str | None = None
         self.kinds: tuple[str, ...] = kinds
+        # Kinds this Mac cannot do now and why (KBC-117: the kb's AI key missing).
+        self.unavailable: list[dict] = []
         self._vault_path = vault_path
         self._kb_version = kb_version
         self._started_at = now_iso()
@@ -141,6 +143,7 @@ class WorkerStatus:
                     **self._job,
                     "progress": int(percent) if isinstance(percent, int | float) else None,
                 }
+            unavailable = [dict(one) for one in self.unavailable]
             return {
                 "state": self._state or "idle",
                 "detail": self._detail,
@@ -153,6 +156,8 @@ class WorkerStatus:
                 "counts": dict(self._counts),
                 "vaultPath": self._vault_path,
                 "kbVersion": self._kb_version,
+                # Only when there is something: an API before KBC-117 refuses the field.
+                **({"unavailable": unavailable} if unavailable else {}),
             }
 
 
