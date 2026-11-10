@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { topicSlugSchema } from './topics.js';
+import { contentLevelSchema } from './access-levels.js';
 import {
   mediaAuthorSchema,
   mediaIdSchema,
@@ -146,6 +147,8 @@ export const searchHitSchema = documentFacetsSchema.extend({
   copies: z.array(documentRefSchema),
   /** Present when the document is a track of the collection (KBC-101). */
   media: searchHitMediaSchema.optional(),
+  /** Its level, for whoever manages levels in a collection with a scale (KBC-103 AC-9). */
+  level: contentLevelSchema.optional(),
 });
 export type SearchHit = z.infer<typeof searchHitSchema>;
 

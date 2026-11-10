@@ -25,7 +25,7 @@ import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import {
   assertFeature,
-  canSee,
+  canSeeMedia,
   hasFeature,
   isMaster,
   mediaQuotaOf,
@@ -87,7 +87,8 @@ export function actorOf(request: FastifyRequest): MediaActor {
     seesSubjects: hasFeature(viewer.person, 'media-subjects'),
     searchesSpeech: hasFeature(viewer.person, 'search'),
     displayName: viewer.person.name,
-    canSee: (topic) => canSee(request, topic),
+    // A collection with levels keeps its media for masters until KBC-105 (KBC-103 BR-10).
+    canSee: (topic) => canSeeMedia(request, topic),
   };
 }
 

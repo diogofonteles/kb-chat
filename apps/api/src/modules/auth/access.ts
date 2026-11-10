@@ -35,6 +35,8 @@ declare module 'fastify' {
   interface FastifyInstance {
     /** The collection tree (ADR 0028): access to a parent reaches its sub-collections. */
     topicParentOf?: ParentOf;
+    /** What access levels decide around a person (KBC-103, ADR 0036); none: no levels. */
+    levelHooks?: LevelHooks;
   }
   interface FastifyRequest {
     /** The signed-in person, set by the auth guard; null on public routes. */
@@ -42,6 +44,14 @@ declare module 'fastify' {
     /** The session the request came with (KBC-060: acting lives on it). */
     session: StoredSession | null;
   }
+}
+
+/** What the access-levels module answers to the routes that are not its own (KBC-103). */
+export interface LevelHooks {
+  /** FR-8: the person's level code per top-level collection with a scale they see. */
+  codesOf(person: Viewer['person'], parentOf: ParentOf): Record<string, string>;
+  /** BR-10: research and media of a scaled collection stay with masters until KBC-104/105. */
+  closedUntilLevelsReachIt(person: Viewer['person'], topic: string): boolean;
 }
 
 /** Health, login and the token-authenticated MCP turns. */
@@ -130,3 +140,48 @@ export const canSee = (request: FastifyRequest, topic: string): boolean =>
 /** The tree the app registered, or none (exact grants only). */
 export const parentOfRequest = (request: FastifyRequest): ParentOf =>
   request.server.topicParentOf ?? NO_PARENT;
+
+/** The person's level codes for `/me` (KBC-103 FR-8). */
+export const levelCodesOf = (request: FastifyRequest): Record<string, string> =>
+  request.server.levelHooks?.codesOf(
+    viewerOf(request).person,
+    parentOfRequest(request),
+  ) ?? {};
+
+/**
+ * The media of a collection the person may reach: one they see, and, in a collection with
+ * levels, only for masters until media carries a level (KBC-103 BR-10, KBC-105).
+ */
+export function canSeeMedia(request: FastifyRequest, topic: string): boolean {
+  const hooks = request.server.levelHooks;
+  // Without the levels' answer nothing is known to be open (fail-closed).
+  if (!hooks) throw new Error('The level hooks are not registered');
+  return (
+    canSee(request, topic) &&
+    !hooks.closedUntilLevelsReachIt(viewerOf(request).person, topic)
+  );
+}
+
+/**
+ * BR-10: AI research in a collection with levels waits for KBC-104; without the levels'
+ * answer it fails rather than open (fail-closed).
+ */
+export function assertResearchOpen(
+  request: FastifyRequest,
+  topic: string,
+): void {
+  const hooks = request.server.levelHooks;
+  if (!hooks) throw new Error('The level hooks are not registered');
+  if (hooks.closedUntilLevelsReachIt(viewerOf(request).person, topic))
+    throw new AppError('LEVELS_PENDING', 'Research waits for levels here');
+}
+
+/**
+ * BR-10: in a collection the person sees whose media waits for levels (KBC-105), whatever
+ * reaches its media (adding, listing its subjects or speakers) answers LEVELS_PENDING, the
+ * same for every name, so nothing in it is confirmed.
+ */
+export function assertMediaOpen(request: FastifyRequest, topic: string): void {
+  if (canSee(request, topic) && !canSeeMedia(request, topic))
+    throw new AppError('LEVELS_PENDING', 'Media waits for levels here');
+}

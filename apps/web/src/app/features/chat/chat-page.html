@@ -261,15 +261,21 @@
         </p>
 
         <div class="composer-dock">
-          <app-composer
-            [mode]="store.mode()"
-            (modeChange)="changeMode($event)"
-            [research]="researching()"
-            [profile]="research.profile()"
-            (profileChange)="research.chooseProfile($event)"
-            [disabled]="!topic()"
-            (submitted)="ask($event)"
-          />
+          @if (researchPending()) {
+            <p class="levels-pending" role="status" i18n="@@chat.levelsPending">
+              A pesquisa com IA ainda não está disponível neste acervo.
+            </p>
+          } @else {
+            <app-composer
+              [mode]="store.mode()"
+              (modeChange)="changeMode($event)"
+              [research]="researching()"
+              [profile]="research.profile()"
+              (profileChange)="research.chooseProfile($event)"
+              [disabled]="!topic()"
+              (submitted)="ask($event)"
+            />
+          }
         </div>
       }
       <app-mini-player

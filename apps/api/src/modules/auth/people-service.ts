@@ -177,6 +177,15 @@ export class PeopleService {
     });
   }
 
+  /** The first scale's lowest level for everyone with access (KBC-103 BR-4). */
+  placeLevels(placement: {
+    readonly ids: readonly string[];
+    readonly root: string;
+    readonly level: string;
+  }): Promise<number> {
+    return this.change((people) => rules.placePeople(people, placement));
+  }
+
   /** One app AI for several people or for everyone (KBC-022); answers how many changed. */
   assignAi(
     request: {

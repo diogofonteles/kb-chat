@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
 import { OWNER, buildApp } from './app.js';
+import { levelsOnDisk } from './levels-factory.js';
 import { createMedia } from './media-factory.js';
 import { applyUsageRetention } from './modules/usage/index.js';
 import {
@@ -169,6 +170,7 @@ const app = await buildApp({
   media,
   collections,
   authorDirectory,
+  levels: levelsOnDisk(config.KB_CHAT_STATE_DIR),
 });
 
 // The QMD index swapped in by install-index.sh --hot (KBC-100 FR-5): no restart of the API.

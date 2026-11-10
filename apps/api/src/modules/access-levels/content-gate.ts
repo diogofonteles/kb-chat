@@ -1,0 +1,129 @@
+import { canSeeTopic, isMaster, type StoredPerson } from '../auth/index.js';
+import type { CatalogRegistry, TopicCatalog } from '../catalog/index.js';
+import type { LevelDirectory, StoredLevel } from './level-directory.js';
+import {
+  CLOSED_VIEW,
+  OPEN_VIEW,
+  scaledView,
+  type LevelView,
+} from './level-view.js';
+
+export interface ContentGateDeps {
+  readonly directory: LevelDirectory;
+  readonly catalog: CatalogRegistry;
+}
+
+/**
+ * The single place a person's view of content is made (ADR 0036 §6, §7): which levels of a
+ * collection they see, from the scale of its top-level collection (a sub-collection uses its
+ * parent's, by the catalog's tree, BR-1).
+ */
+/** The shares of one catalog load, for one state of the levels (NFR-1). */
+interface Shares {
+  readonly version: number;
+  readonly byView: Map<string, number>;
+}
+
+export class ContentGate {
+  private readonly shares = new WeakMap<TopicCatalog, Shares>();
+
+  constructor(private readonly deps: ContentGateDeps) {}
+
+  /** The top-level collection whose scale this one uses. */
+  rootOf(topic: string): string {
+    const parent = this.deps.catalog.get(topic)?.topic.parent;
+    return parent && this.deps.catalog.get(parent) ? parent : topic;
+  }
+
+  scaleOf(topic: string): readonly StoredLevel[] {
+    return this.deps.directory.scaleOf(this.rootOf(topic));
+  }
+
+  /** A sub-collection whose parent the catalog does not have: its scale is unknown. */
+  private orphaned(topic: string): boolean {
+    const parent = this.deps.catalog.get(topic)?.topic.parent;
+    return !!parent && !this.deps.catalog.get(parent);
+  }
+
+  /** The person's view of `topic` and its sub-collections (masters see everything). */
+  viewFor(person: StoredPerson, topic: string): LevelView {
+    if (!isMaster(person) && this.orphaned(topic)) return CLOSED_VIEW;
+    const root = this.rootOf(topic);
+    const scale = this.deps.directory.scaleOf(root);
+    if (scale.length === 0) return OPEN_VIEW;
+    const rank = isMaster(person) ? 'all' : rankOfPerson(person, root, scale);
+    const { directory } = this.deps;
+    const key = `${root}:${rank}`;
+    return scaledView({
+      scale,
+      rank,
+      placementsOf: (collection) => directory.placementsOf(collection),
+      memo: (catalog, compute) => this.memo(catalog, key, compute),
+    });
+  }
+
+  /** The person's level, as an index in the scale (BR-5: absent or unknown is the lowest). */
+  personRank(person: StoredPerson, topic: string): number {
+    const root = this.rootOf(topic);
+    return rankOfPerson(person, root, this.deps.directory.scaleOf(root));
+  }
+
+  /**
+   * FR-8: the person's level code per top-level collection with a scale they see; none for
+   * masters, who hold every level.
+   */
+  codesOf(
+    person: StoredPerson,
+    parentOf: (slug: string) => string | null,
+  ): Record<string, string> {
+    if (isMaster(person)) return {};
+    const codes: Record<string, string> = {};
+    for (const catalog of this.deps.catalog.topics()) {
+      const slug = catalog.topic.slug;
+      const scale = this.deps.directory.scaleOf(slug);
+      if (scale.length === 0 || this.rootOf(slug) !== slug) continue;
+      const seen = this.deps.catalog
+        .scope(slug)
+        .some((one) => canSeeTopic(person, one.topic.slug, parentOf));
+      const level = scale[rankOfPerson(person, slug, scale)];
+      if (seen && level) codes[slug] = level.code;
+    }
+    return codes;
+  }
+
+  /** BR-10: until KBC-104/105, research and media of a scaled collection are masters' only. */
+  closedUntilLevelsReachIt(person: StoredPerson, topic: string): boolean {
+    if (isMaster(person)) return false;
+    return this.orphaned(topic) || this.scaleOf(topic).length > 0;
+  }
+
+  /** How many shares are kept for a catalog (the memo holds the current state only). */
+  memoSize(catalog: TopicCatalog): number {
+    return this.shares.get(catalog)?.byView.size ?? 0;
+  }
+
+  private memo(catalog: TopicCatalog, key: string, compute: () => number) {
+    const { version } = this.deps.directory;
+    const kept = this.shares.get(catalog);
+    const current =
+      kept?.version === version
+        ? kept
+        : { version, byView: new Map<string, number>() };
+    this.shares.set(catalog, current);
+    const cached = current.byView.get(key);
+    if (cached !== undefined) return cached;
+    const share = compute();
+    current.byView.set(key, share);
+    return share;
+  }
+}
+
+function rankOfPerson(
+  person: StoredPerson,
+  root: string,
+  scale: readonly StoredLevel[],
+): number {
+  const held = person.levels?.[root];
+  const found = scale.findIndex((one) => one.id === held);
+  return Math.max(0, found);
+}

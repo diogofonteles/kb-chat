@@ -31,6 +31,7 @@ import {
 } from '@core/markdown/highlight.js';
 import { headingId, renderMarkdown } from '@core/markdown/render-markdown.js';
 import type { TrackOpening } from '@features/research/track-opening.js';
+import { DocumentLevel } from './document-level.js';
 import { SeeAlsoSection } from './see-also.js';
 
 const FEEDBACK_MS = 2000;
@@ -58,7 +59,7 @@ type CopyState = 'idle' | 'copied' | 'failed';
 /** Reads one document beside the conversation (desktop) or full screen (mobile) — screens.md T3. */
 @Component({
   selector: 'app-document-panel',
-  imports: [SeeAlsoSection, AuthorshipBadge],
+  imports: [SeeAlsoSection, AuthorshipBadge, DocumentLevel],
   templateUrl: './document-panel.html',
   styleUrl: './document-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

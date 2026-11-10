@@ -10,6 +10,7 @@ import {
   type CatalogEntry,
   type CatalogRegistry,
 } from '../catalog/index.js';
+import { OPEN_VIEW } from '../access-levels/index.js';
 import type { SearchService } from '../search/index.js';
 import {
   firstMatchIn,
@@ -61,6 +62,12 @@ import {
 
 export type { PreparedCall, ToolContext } from './tool-context.js';
 
+/**
+ * The research tools see every level until KBC-104 gives them the person's view. Exact for
+ * now: in a collection with levels research is closed to members (LEVELS_PENDING), and masters
+ * see every level.
+ */
+const RESEARCH_VIEW = OPEN_VIEW;
 const MAX_SUBJECTS = 60;
 const MAX_REFS_PER_GROUP = 10;
 
@@ -344,8 +351,9 @@ export class ResearchTools {
           authorships: authorship ? [authorship] : [],
         },
       },
-      // The tracks this person may research, among the texts (KBC-099 BR-4).
-      { tracks: scope.context.tracks },
+      // The tracks this person may research, among the texts (KBC-099 BR-4); every level
+      // until KBC-104 (RESEARCH_VIEW).
+      { tracks: scope.context.tracks, view: RESEARCH_VIEW },
     );
   }
 
@@ -359,7 +367,7 @@ export class ResearchTools {
     if (subjects.length === 0) return [];
     const known = new Map(
       this.deps.search
-        .topicFacets(topic)
+        .topicFacets(topic, { view: RESEARCH_VIEW })
         .concepts.map(({ value }) => [foldName(value), value]),
     );
     return subjects.map((name) => known.get(foldName(name)) ?? name);
@@ -380,7 +388,7 @@ export class ResearchTools {
   private listSubjects(topic: string, query: string | undefined): string {
     const needle = query ? foldName(query) : '';
     const subjects = this.deps.search
-      .topicFacets(topic)
+      .topicFacets(topic, { view: RESEARCH_VIEW })
       .concepts.filter(({ value }) => foldName(value).includes(needle))
       .sort((a, b) => b.count - a.count);
     if (subjects.length === 0)

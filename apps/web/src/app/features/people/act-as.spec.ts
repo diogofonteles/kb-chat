@@ -29,6 +29,7 @@ const aPerson = (overrides: Partial<Person> = {}): Person => ({
   invitedBy: 'owner@example.com',
   createdAt: '2026-10-24T10:00:00.000Z',
   lastLoginAt: '2026-11-01T10:00:00.000Z',
+  levels: {},
   ai: DEFAULT_PERSON_AI,
   ...overrides,
 });
@@ -72,6 +73,8 @@ async function renderPanel(
     .expectOne('/api/v1/house-ai/default')
     .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
   http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
+  // The collections with access levels (KBC-103): none here.
+  http.expectOne('/api/v1/levels').flush({ items: [] });
   http.match('/api/v1/spend/people').forEach((r) => r.flush({ items: [] }));
   await result.fixture.whenStable();
   return { ...result, http, restart };

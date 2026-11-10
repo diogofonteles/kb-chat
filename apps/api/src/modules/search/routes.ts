@@ -13,8 +13,9 @@ import type {
 } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { levelViewOf } from '../access-levels/index.js';
 import {
-  canSee,
+  canSeeMedia,
   hasFeature,
   viewerOf,
   type RouteAccess,
@@ -60,7 +61,8 @@ function searchViewerOf(
     mayHear,
     seesTracks,
     seesSubjects: hasFeature(person, 'media-subjects'),
-    canSee: (topic) => canSee(request, topic),
+    // Spoken passages of a collection with levels wait for KBC-105 (KBC-103 BR-10).
+    canSee: (topic) => canSeeMedia(request, topic),
     ...(mayHear && seesTracks && tracks && { tracks: tracks() }),
   };
 }
@@ -99,6 +101,7 @@ function registerSearch(
     async (request) =>
       combined.search(request.params.topic, request.body, {
         viewer: searchViewerOf(request, tracks),
+        view: levelViewOf(request, request.params.topic),
         report: (entry) => logMedia(request, entry),
       }),
   );
@@ -146,6 +149,7 @@ export const searchRoutes =
       async (request) =>
         options.combined.topicFacets(request.params.topic, {
           viewer: searchViewerOf(request, options.tracks),
+          view: levelViewOf(request, request.params.topic),
           report: (entry) => logMedia(request, entry),
         }),
     );

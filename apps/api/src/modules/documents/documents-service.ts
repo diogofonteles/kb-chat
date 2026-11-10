@@ -16,6 +16,7 @@ import {
   type ScopeView,
   type TopicCatalog,
 } from '../catalog/index.js';
+import type { LevelView } from '../access-levels/index.js';
 
 const SAFE_ID = /^(?!\/)(?!.*(^|\/)\.\.(\/|$))[^\0]+\.md$/;
 /** References shown per "Veja também" group before "ver todos" (KBC-003 BR-3). */
@@ -42,6 +43,8 @@ export interface RelationPageQuery {
  */
 export interface DocumentReader {
   readonly seesTrack?: (topic: string, media: CatalogMedia) => boolean;
+  /** What the reader's level reaches (KBC-103): required, never open by default. */
+  readonly level: LevelView;
 }
 
 /** The refs this reader may see: texts, and the tracks they would research. */
@@ -52,7 +55,10 @@ function seenBy<T extends { id: string }>(
   return refs
     .filter((ref) => {
       const entry = catalog.entries.get(ref.id);
-      if (!entry?.media) return true;
+      if (!entry) return true;
+      // Above the reader's level, a related document is not there (KBC-103 BR-8).
+      if (!reader.level.allows(catalog.topic.slug, entry)) return false;
+      if (!entry.media) return true;
       return reader.seesTrack?.(catalog.topic.slug, entry.media) ?? false;
     })
     .map((ref) => ({ ...ref, id: view.idOf(catalog.topic.slug, ref.id) }));
@@ -65,15 +71,21 @@ interface Located {
   readonly entry: CatalogEntry;
 }
 
+/** The level badge, for whoever manages levels in a scaled collection (T3). */
+const levelBadge = (level: LevelView, collection: string, id: string) => {
+  const found = level.levelOf(collection, id);
+  return found === undefined ? {} : { level: found };
+};
+
 export class DocumentsService {
   constructor(private readonly deps: DocumentsServiceDeps) {}
 
   async getDocument(
     topic: string,
     id: string,
-    reader: DocumentReader = {},
+    reader: DocumentReader,
   ): Promise<KbDocument> {
-    const located = this.requireEntry(topic, id);
+    const located = this.requireEntry(topic, id, reader.level);
     const { catalog, entry } = located;
     const text = await this.readText(located);
     return {
@@ -92,18 +104,16 @@ export class DocumentsService {
       obsidianUrl: this.obsidianUrl(catalog.topic.slug, entry.id),
       seeAlso: this.seeAlso(located, reader),
       body: splitFrontmatter(text).body.trim(),
+      ...levelBadge(reader.level, catalog.topic.slug, entry.id),
     };
   }
 
   relationPage(
     topic: string,
     id: string,
-    {
-      query,
-      reader = {},
-    }: { query: RelationPageQuery; reader?: DocumentReader },
+    { query, reader }: { query: RelationPageQuery; reader: DocumentReader },
   ): RelationPage {
-    const located = this.requireEntry(topic, id);
+    const located = this.requireEntry(topic, id, reader.level);
     const { catalog, entry } = located;
     const all = seenBy(located, {
       refs: catalog.relations.groupsOf(entry)[query.group],
@@ -128,7 +138,7 @@ export class DocumentsService {
     return text;
   }
 
-  private requireEntry(topic: string, id: string): Located {
+  private requireEntry(topic: string, id: string, level: LevelView): Located {
     if (!isSafeDocumentId(id))
       throw new AppError('VALIDATION_FAILED', 'Invalid document id');
     const view = this.deps.catalog.scopeView(topic);
@@ -137,8 +147,13 @@ export class DocumentsService {
     const found = view.entries.get(id);
     const catalog = found ? view.catalogOf(found) : view.root;
     const entry = found && catalog.entries.get(found.home?.id ?? id);
-    // A track's Markdown is for kb and the agent, never shown to people (ADR 0035 §7).
-    if (!entry || isTrackEntry(entry))
+    // A track's Markdown is for kb and the agent, never shown to people (ADR 0035 §7); a
+    // document above the reader's level answers like one that does not exist (KBC-103 BR-7).
+    if (
+      !entry ||
+      isTrackEntry(entry) ||
+      !level.allows(catalog.topic.slug, entry)
+    )
       throw new AppError('DOCUMENT_NOT_FOUND', 'Document not found');
     return { view, catalog, entry };
   }

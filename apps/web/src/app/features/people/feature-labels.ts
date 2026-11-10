@@ -25,6 +25,8 @@ export const FEATURE_LABELS: Record<Feature, () => string> = {
     $localize`:@@feature.mediaResearch:Pesquisar faixas com IA`,
   'media-correct': () =>
     $localize`:@@feature.mediaCorrect:Corrigir transcrição`,
+  'collection-levels': () =>
+    $localize`:@@feature.collectionLevels:Gerenciar níveis de acesso`,
   'media-voice-profiles': () =>
     $localize`:@@feature.mediaVoiceProfiles:Cadastrar perfis de voz`,
 };

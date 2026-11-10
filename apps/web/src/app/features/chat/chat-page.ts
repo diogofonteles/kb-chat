@@ -57,8 +57,9 @@ import { PendingTranscriptions } from '@features/transcribers/pending-transcript
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
 /** The media pages: the list and player (T14, T15) and the library (T16, KBC-051). */
+/** A page that renders in place of the conversation: media pages and T24 (KBC-103). */
 const isMediaUrl = (url: string): boolean =>
-  /^\/(midia|biblioteca|fila)(\/|\?|#|$)/.test(url);
+  /^\/(midia|biblioteca|fila|acervos)(\/|\?|#|$)/.test(url);
 
 /**
  * Chat page (screens.md): two views over one question box and document panel, the free
@@ -139,6 +140,16 @@ export class ChatPage {
   protected readonly researching = computed(
     () => this.currentView() === 'research',
   );
+  /**
+   * KBC-103 BR-10: in a collection with levels (the person has a level in it), AI research
+   * waits for KBC-104; masters have no level and research as before.
+   */
+  protected readonly researchPending = computed(() => {
+    const topic = this.topic();
+    if (!this.researching() || !topic) return false;
+    const levels = this.session.me()?.levels ?? {};
+    return (topic.parent ?? topic.slug) in levels;
+  });
   protected readonly isEmpty = computed(() =>
     this.researching()
       ? this.research.turns().length === 0

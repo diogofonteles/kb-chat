@@ -13,6 +13,7 @@ import type {
 import type { TrackShelf } from '../../ports/track-shelf.js';
 import type { TopicFolder, VaultReaderPort } from '../../ports/vault-reader.js';
 import { CatalogRegistry } from '../catalog/index.js';
+import { OPEN_VIEW } from '../access-levels/index.js';
 import { SearchService } from './search-service.js';
 
 const uuid = (n: number) =>
@@ -74,12 +75,16 @@ async function searchWith(
     index: indexOf(texts, tracks),
     vault,
   });
-  const found = await service.search('hermetismo', {
-    q: 'ritmo',
-    mode: 'all',
-    limit: 50,
-    ...request,
-  });
+  const found = await service.search(
+    'hermetismo',
+    {
+      q: 'ritmo',
+      mode: 'all',
+      limit: 50,
+      ...request,
+    },
+    { view: OPEN_VIEW },
+  );
   return { ...found, tookMs: 0 };
 }
 
@@ -130,7 +135,7 @@ async function documentsWith(
   return service.searchDocuments(
     'hermetismo',
     { mode: 'all', limit: 50, ...request },
-    { tracks: everyTrack, kinds },
+    { tracks: everyTrack, kinds, view: OPEN_VIEW },
   );
 }
 

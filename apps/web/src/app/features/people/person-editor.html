@@ -30,6 +30,37 @@
   }
 </fieldset>
 
+@if (scales().length > 0) {
+  @if (isMaster()) {
+    <p class="note" i18n="@@people.mastersAllLevels">
+      Masters veem todos os níveis.
+    </p>
+  } @else {
+    @for (scale of levelChoices(); track scale.collection) {
+      <div class="field">
+        <label
+          [for]="'level-' + who.id + '-' + scale.collection"
+          i18n="@@people.levelIn"
+          >Nível em {{ scale.title }}</label
+        >
+        <select
+          #levelSelect
+          class="select"
+          [id]="'level-' + who.id + '-' + scale.collection"
+          [disabled]="busy()"
+          (change)="chooseLevel(scale.collection, levelSelect.value)"
+        >
+          @for (level of scale.choices; track level.id) {
+            <option [value]="level.id" [selected]="level.id === scale.current">
+              {{ level.code }}
+            </option>
+          }
+        </select>
+      </div>
+    }
+  }
+}
+
 <fieldset class="group" [disabled]="isMaster()" [attr.aria-busy]="saving()">
   <legend class="legend" i18n="@@people.features">Funcionalidades</legend>
   @for (feature of features(); track feature.id) {

@@ -33,6 +33,7 @@ const aPerson = (overrides: Partial<Person> = {}): Person => ({
   invitedBy: 'owner@example.com',
   createdAt: '2026-10-24T10:00:00.000Z',
   lastLoginAt: null,
+  levels: {},
   ai: DEFAULT_PERSON_AI,
   ...overrides,
 });
@@ -45,6 +46,7 @@ const owner = aPerson({
   isOwner: true,
   canActAs: false,
   lastLoginAt: '2026-10-24T12:30:00.000Z',
+  levels: {},
 });
 
 async function renderPanel(
@@ -66,11 +68,54 @@ async function renderPanel(
     .expectOne('/api/v1/house-ai/default')
     .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
   http.expectOne('/api/v1/invite-profiles').flush({ items: profiles });
+  // The collections with access levels (KBC-103): none here.
+  http.expectOne('/api/v1/levels').flush({ items: [] });
   await result.fixture.whenStable();
   return { ...result, http };
 }
 
 const row = (name: RegExp) => screen.getByRole('button', { name });
+
+describe('PeoplePanel: levels in the list (T9, KBC-103)', () => {
+  it('shows each member level next to a collection with levels', async () => {
+    const result = await render(PeoplePanel, {
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([authInterceptor])),
+        provideHttpClientTesting(),
+        { provide: RELOAD_PAGE, useValue: () => undefined },
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/people').flush({
+      items: [
+        owner,
+        aPerson({
+          topics: ['hermetismo', 'alquimia'],
+          levels: { hermetismo: 'ci' },
+        }),
+      ],
+    });
+    http.expectOne('/api/v1/topics').flush(TOPICS);
+    http
+      .expectOne('/api/v1/house-ai/default')
+      .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
+    http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
+    http.expectOne('/api/v1/levels').flush({
+      items: [
+        {
+          collection: 'hermetismo',
+          levels: [
+            { id: 'qs', code: 'QS' },
+            { id: 'ci', code: 'CI' },
+          ],
+        },
+      ],
+    });
+    await result.fixture.whenStable();
+    expect(row(/Guest/).textContent).toContain('Hermetismo · CI, Alquimia');
+  });
+});
 
 describe('PeoplePanel (KBC-010 FR-3)', () => {
   it('lists people with role, collections and last sign-in', async () => {
@@ -770,6 +815,8 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
       .expectOne('/api/v1/house-ai/default')
       .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
     http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
+    // The collections with access levels (KBC-103): none here.
+    http.expectOne('/api/v1/levels').flush({ items: [] });
     await result.fixture.whenStable();
 
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
@@ -854,6 +901,8 @@ describe('PeoplePanel for the owner (BR-6)', () => {
       .expectOne('/api/v1/house-ai/default')
       .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
     http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
+    // The collections with access levels (KBC-103): none here.
+    http.expectOne('/api/v1/levels').flush({ items: [] });
     http.expectOne('/api/v1/spend/people').flush({
       items: [
         { email: 'owner@example.com', usd: 0 },

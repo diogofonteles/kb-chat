@@ -165,6 +165,7 @@ export class MediaService {
     request: Omit<CreateMediaRequest, 'plan'>,
   ): MediaItem {
     this.assertTopic(topic);
+    this.assertMediaOpen(actor, topic);
     if (!hasAcceptedAudioExtension(request.fileName))
       throw new AppError('VALIDATION_FAILED', 'Not an accepted audio file', {
         details: { field: 'fileName' },
@@ -196,6 +197,7 @@ export class MediaService {
     request: UploadCheckRequest,
   ): Promise<UploadCheck> {
     this.assertTopic(topic);
+    this.assertMediaOpen(actor, topic);
     const sent = this.deps.store.findBySource(topic, request.sha256);
     const live = sent.find((media) => media.status !== 'failed');
     if (live?.status === 'uploading' && live.ownerPrincipal === actor.principal)
@@ -240,6 +242,16 @@ export class MediaService {
             media.ownerPrincipal === actor.principal),
       )
       .map(({ id, title, topic: where }) => ({ id, title, topic: where }));
+  }
+
+  /**
+   * The route let the person into the collection; its media may still be closed to them
+   * (KBC-103 BR-10: a collection with levels, until KBC-105). Then nothing is added or checked
+   * there, and the answer names no item (QA-1, QA-4).
+   */
+  private assertMediaOpen(actor: MediaActor, topic: string): void {
+    if (!actor.canSee(topic))
+      throw new AppError('LEVELS_PENDING', 'Media waits for levels here');
   }
 
   private assertNotRepeated(topic: string, sha256: string): void {
@@ -439,6 +451,8 @@ export class MediaService {
     this.assertTopic(topic);
     const scope = this.deps.scopeOf?.(topic) ?? [topic];
     const records = scope
+      // A collection with levels keeps its media from members until KBC-105 (KBC-103 BR-10).
+      .filter((slug) => actor.canSee(slug))
       .flatMap((slug) => this.deps.store.listMedia(slug))
       .sort(
         (a, b) =>

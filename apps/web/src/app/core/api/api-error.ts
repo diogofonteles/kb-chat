@@ -160,6 +160,10 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.groqUnavailable:O Groq não está ligado ou está sem chave. Veja "Groq de reserva" nas Configurações.`,
   TERMS_OVER_LIMIT: () =>
     $localize`:@@error.termsOverLimit:A lista passou do limite do transcritor. Remova alguns termos.`,
+  LEVEL_CODE_TAKEN: () =>
+    $localize`:@@error.levelCodeTaken:Já existe um nível com esse código.`,
+  LEVELS_PENDING: () =>
+    $localize`:@@error.levelsPending:Este acervo tem níveis de acesso: isto ainda não está disponível para você nele.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

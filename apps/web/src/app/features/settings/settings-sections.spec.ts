@@ -94,6 +94,8 @@ describe('Configurações per permission (KBC-010)', () => {
     http.expectOne('/api/v1/spend/people').flush({ items: [] });
     http.expectOne('/api/v1/access-requests').flush({ items: [] });
     http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
+    // The collections with access levels (KBC-103): none here.
+    http.expectOne('/api/v1/levels').flush({ items: [] });
     await fixture.whenStable();
   });
 

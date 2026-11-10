@@ -19,6 +19,7 @@ import { AppError } from '../../app-error.js';
 import type { ResearchRunnerPort } from '../../ports/research-runner.js';
 import type { TrackShelf } from '../../ports/track-shelf.js';
 import {
+  assertResearchOpen,
   hasFeature,
   principalOf,
   viewerOf,
@@ -357,11 +358,14 @@ export const researchRoutes =
       .post(
         '/api/v1/topics/:topic/research',
         researchOptions(options.ratePerMinute),
-        (request, reply) =>
-          handleResearch(
+        (request, reply) => {
+          // KBC-103 BR-10: research in a collection with levels waits for KBC-104.
+          assertResearchOpen(request, request.params.topic);
+          return handleResearch(
             options,
             { topic: request.params.topic, body: request.body },
             { request, reply },
-          ),
+          );
+        },
       );
   };

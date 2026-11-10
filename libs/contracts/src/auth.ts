@@ -8,6 +8,7 @@ import {
 import { codeChannelSchema } from './access.js';
 import { initialPreferencesSchema } from './settings.js';
 import { topicSlugSchema } from './topics.js';
+import { personLevelsSchema } from './access-levels.js';
 
 /**
  * What a person may use (KBC-010): search the documents, research with AI, build or extend
@@ -47,6 +48,8 @@ export const FEATURES = [
   'media-research',
   /** "Corrigir transcrição" (KBC-093, ADR 0034 §7): fix words of a recording's transcript. */
   'media-correct',
+  /** "Gerenciar níveis de acesso" (KBC-103, ADR 0036 §9): scales and levels, masters only. */
+  'collection-levels',
 ] as const;
 export const featureSchema = z.enum(FEATURES);
 export type Feature = z.infer<typeof featureSchema>;
@@ -57,6 +60,7 @@ export type Feature = z.infer<typeof featureSchema>;
  */
 export const MASTER_ONLY_FEATURES: readonly Feature[] = [
   'media-voice-profiles',
+  'collection-levels',
 ];
 
 /** What being a master gives by itself (KBC-010 BR-3). */
@@ -194,6 +198,13 @@ export const meSchema = z.object({
   canActAs: z.boolean().default(false),
   /** Set while a master acts as this person: everything above is the person's. */
   actingAs: actingSchema.nullable().default(null),
+  /**
+   * The person's level code per top-level collection with a scale they see (KBC-103 FR-8);
+   * empty for masters, who see every level.
+   */
+  levels: z.record(topicSlugSchema, z.string()).default({}),
+  /** May manage the scales and the levels of people and documents (masters, BR-9). */
+  levelsManager: z.boolean().default(false),
 });
 export type Me = z.infer<typeof meSchema>;
 
@@ -233,6 +244,8 @@ export const personSchema = z.object({
   canActAs: z.boolean().default(false),
   /** Their converted space in bytes (KBC-035 BR-1); null: the default. Unused for the owner. */
   mediaQuotaBytes: mediaQuotaSchema.nullable().optional(),
+  /** Their level per top-level collection with a scale (KBC-103); absent: the lowest. */
+  levels: personLevelsSchema.default({}),
   /** Which app AI serves the person and their limits (KBC-022); an older API sends none. */
   ai: personAiSchema.default(() => ({
     ...DEFAULT_PERSON_AI,
@@ -267,6 +280,8 @@ export const personUpdateSchema = z
     canActAs: z.boolean(),
     /** null goes back to the default (KBC-035 BR-1). */
     mediaQuotaBytes: mediaQuotaSchema.nullable(),
+    /** A level per top-level collection with a scale (KBC-103 FR-3); merged, not replaced. */
+    levels: personLevelsSchema,
   })
   .partial();
 export type PersonUpdate = z.infer<typeof personUpdateSchema>;

@@ -34,7 +34,10 @@ async function catalogOf(folders: readonly TopicFolder[]) {
 }
 
 const rows = (catalog: CatalogRegistry, visible?: (slug: string) => boolean) =>
-  listTopics({ catalog }, { visible }).items.map((t) => [t.slug, t.canOpen]);
+  listTopics({ catalog }, { visible, allows: () => true }).items.map((t) => [
+    t.slug,
+    t.canOpen,
+  ]);
 
 describe('listTopics as a tree (KBC-048 FR-4)', () => {
   it('orders by name, each parent followed by its sub-collections', async () => {
@@ -76,7 +79,7 @@ describe('listTopics as a tree (KBC-048 FR-4)', () => {
       { title: 'União do Vegetal', description: 'Palestras' },
     );
     await catalog.refresh('udv');
-    expect(listTopics({ catalog }).items).toEqual([
+    expect(listTopics({ catalog }, { allows: () => true }).items).toEqual([
       expect.objectContaining({
         slug: 'udv',
         title: 'União do Vegetal',
@@ -100,6 +103,7 @@ describe('TopicsService.create (KBC-048 NFR-2)', () => {
       email: 'ana@example.com',
       isMaster: false,
       canSee: () => true,
+      allows: () => true,
     };
     await expect(service.create(actor, { title: 'Novo' })).rejects.toThrow(
       'people.json is busy',

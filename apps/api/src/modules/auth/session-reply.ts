@@ -26,9 +26,11 @@ export async function openSession(
     'set-cookie',
     sessionCookie(token, isSecureHost(http.request.headers.host)),
   );
+  const parentOf = parentOfRequest(http.request);
   return toMe(deps.people.viewerOf(person), {
     topics: deps.topics(),
     media: deps.mediaEnabled ?? false,
-    parentOf: parentOfRequest(http.request),
+    parentOf,
+    levels: http.request.server.levelHooks?.codesOf(person, parentOf) ?? {},
   });
 }

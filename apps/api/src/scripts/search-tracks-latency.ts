@@ -5,6 +5,7 @@
 // without them, and is added on top). Prints p95 per mode without and with the tracks.
 // Usage: tsx src/scripts/search-tracks-latency.ts [--texts 3000] [--tracks 2000]
 import { mkdtempSync, rmSync } from 'node:fs';
+import { OPEN_VIEW } from '../modules/access-levels/index.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -154,7 +155,12 @@ async function timedSearch(
     tracks: shelf(),
   };
   const started = performance.now();
-  const found = await combined.search(TOPIC, { q, mode }, { viewer });
+  // The bench measures a collection without levels (KBC-103: the open view).
+  const found = await combined.search(
+    TOPIC,
+    { q, mode },
+    { viewer, view: OPEN_VIEW },
+  );
   return { ms: performance.now() - started, tracks: found.trackTotal };
 }
 

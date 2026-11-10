@@ -16,6 +16,7 @@ import {
   viewerOf,
 } from '../auth/index.js';
 import { isSeenDocument, type CatalogRegistry } from '../catalog/index.js';
+import { levelViewOf } from '../access-levels/index.js';
 import { topSuggestions } from './suggestions.js';
 
 export interface UsageDeps {
@@ -48,16 +49,17 @@ function registerSuggestions(
       const scope = catalog.scope(topic);
       if (scope.length === 0)
         throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
-      // A track's concepts count for who sees tracks as documents (KBC-101 BR-7).
+      // A track's concepts count for who sees tracks as documents (KBC-101 BR-7), and only
+      // the documents the person's level reaches (KBC-103 BR-8).
       const sees = seesTrackDocuments(viewerOf(request).person);
       const shelf = sees ? tracks?.() : undefined;
+      const view = levelViewOf(request, topic);
       return topSuggestions(
         scope.flatMap((one) =>
-          [...one.entries.values()].filter((entry) =>
-            isSeenDocument(entry, {
-              topic: one.topic.slug,
-              tracks: shelf,
-            }),
+          [...one.entries.values()].filter(
+            (entry) =>
+              isSeenDocument(entry, { topic: one.topic.slug, tracks: shelf }) &&
+              view.allows(one.topic.slug, entry),
           ),
         ),
       );

@@ -1,5 +1,6 @@
 import type { Routes } from '@angular/router';
 import { PRIVACY_PATH, TUTORIAL_PATH } from '@core/routing/public-pages.js';
+import { LEVELS_ROUTES } from './features/collections/levels-routes.js';
 import { MEDIA_ROUTES } from './features/media/media-routes.js';
 
 export const routes: Routes = [
@@ -11,7 +12,7 @@ export const routes: Routes = [
       import('./features/chat/chat-page.js').then((m) => m.ChatPage),
     // The conversation is the chat page itself; the media pages render inside its layout
     // (the sidebar stays), so the media engine and the conversation survive switching.
-    children: [{ path: '', children: [] }, ...MEDIA_ROUTES],
+    children: [{ path: '', children: [] }, ...MEDIA_ROUTES, ...LEVELS_ROUTES],
   },
   {
     // Public (KBC-016): the shell renders the policy itself, with or without a session;

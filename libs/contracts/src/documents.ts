@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { documentFacetsSchema } from './facets.js';
 import { documentRefSchema } from './search.js';
 import { answerMediaSchema } from './track-citations.js';
+import { contentLevelSchema } from './access-levels.js';
 
 /**
  * "Veja também" groups (KBC-003). Sources point to concept articles through kb's
@@ -64,6 +65,8 @@ export const documentSchema = documentFacetsSchema.extend({
   obsidianUrl: z.string(),
   seeAlso: seeAlsoSchema,
   body: z.string(),
+  /** Its level, for whoever manages levels in a collection with a scale (KBC-103, T3). */
+  level: contentLevelSchema.optional(),
 });
 export type KbDocument = z.infer<typeof documentSchema>;
 

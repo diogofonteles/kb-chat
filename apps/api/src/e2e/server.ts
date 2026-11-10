@@ -6,12 +6,13 @@ import { registerProposalSeed } from './proposal-seed-routes.js';
 import { registerKbPublishMac } from './kb-publish-routes.js';
 import { startMediaWorkers } from './media-worker-runner.js';
 import { privateTemp } from '../../../../tools/test-temp.mjs';
-import { cpSync, mkdtempSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FsVaultAdapter } from '../adapters/fs-vault-adapter.js';
 import { OWNER, buildApp } from '../app.js';
+import { levelsOnDisk } from '../levels-factory.js';
 import { loadConfig } from '../config.js';
 import { createLogger } from '../logger.js';
 import { JsonlSpendLedger } from '../adapters/jsonl-spend-ledger.js';
@@ -86,6 +87,7 @@ function vaultCopy(): string {
     copy,
     { recursive: true },
   );
+  levelCollections(copy);
   return copy;
 }
 
@@ -95,6 +97,30 @@ function vaultCopy(): string {
  */
 const BENCH_VAULT = process.env['KBC_BENCH_VAULT'];
 const BENCH_MEDIA_DIR = process.env['KBC_BENCH_MEDIA_DIR'];
+
+const LEVEL_DOCS = [
+  ['aberto', 'Orvalho Aberto', 'O orvalho da manhã, para todos.'],
+  ['medio', 'Orvalho do Meio', 'O orvalho do grau do meio.'],
+  ['velado', 'Orvalho Velado', 'O orvalho do grau velado.'],
+] as const;
+
+/**
+ * One collection with three documents per Playwright project (KBC-103, e2e/specs/levels.spec):
+ * a scale changes what everyone sees in a collection, so the parallel projects never share
+ * one, and no other spec's collection gets levels.
+ */
+function levelCollections(root: string): void {
+  for (const project of ['desktop', 'mobile']) {
+    const dir = join(root, `zz-niveis-${project}`);
+    mkdirSync(join(dir, 'raw'), { recursive: true });
+    writeFileSync(join(dir, 'topic.yaml'), `title: Zz Níveis ${project}\n`);
+    for (const [file, title, body] of LEVEL_DOCS)
+      writeFileSync(
+        join(dir, 'raw', `${file}.md`),
+        `---\ntitle: ${title}\ngenre: reference_docs\ndepth: 1\nrelevance: collected_on_purpose\n---\n\n${body}\n`,
+      );
+  }
+}
 
 // E2E server: the fixture vault and the in-process index, no QMD or models.
 const config = loadConfig({
@@ -286,6 +312,7 @@ const app = await buildApp({
   house,
   collections,
   authorDirectory,
+  levels: levelsOnDisk(config.KB_CHAT_STATE_DIR),
 });
 identity.register(app);
 registerOutbox(app, outbox);
