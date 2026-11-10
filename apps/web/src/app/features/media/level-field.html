@@ -12,7 +12,7 @@
     <p class="status" i18n="@@media.level.loading">Carregando níveis…</p>
   } @else if (failed()) {
     <p class="error" role="alert">
-      <span aria-hidden="true">⚠</span>
+      <span aria-hidden="true">⚠</span>&ngsp;
       <ng-container i18n="@@media.level.failed"
         >Não consegui carregar os níveis. Feche e abra de novo.</ng-container
       >
@@ -47,7 +47,7 @@
   }
   @if (invalid()) {
     <p class="error" role="alert" [id]="errorId">
-      <span aria-hidden="true">⚠</span>
+      <span aria-hidden="true">⚠</span>&ngsp;
       <ng-container i18n="@@media.level.missing"
         >Escolha o nível deste áudio.</ng-container
       >
