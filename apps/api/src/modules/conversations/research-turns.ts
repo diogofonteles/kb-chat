@@ -1,7 +1,10 @@
-import type {
-  Conversation,
-  ResearchConversation,
-  SavedResearchTurn,
+import {
+  isRestrictedSource,
+  type Conversation,
+  type ResearchConversation,
+  type SavedAnswerSource,
+  type SavedResearchTurn,
+  type SweepCursor,
 } from '@kb-chat/contracts';
 
 /**
@@ -95,4 +98,80 @@ export function withTurn(
   const index = conversation.turns.findIndex((t) => t.id === turn.id);
   if (index < 0) return [...conversation.turns, turn];
   return conversation.turns.map((t, i) => (i === index ? turn : t));
+}
+
+const sameStart = (turn: SavedResearchTurn) => `${turn.at} ${turn.question}`;
+
+/** The stored turn a snapshot's turn is: same id, or (older pages) same start and question. */
+function storedTurnOf(
+  turn: SavedResearchTurn,
+  stored: ResearchConversation,
+): SavedResearchTurn | undefined {
+  return stored.turns.find((one) =>
+    turn.id !== undefined && one.id !== undefined
+      ? one.id === turn.id
+      : sameStart(one) === sameStart(turn),
+  );
+}
+
+/** A restricted source of the snapshot becomes the stored one with its number again. */
+function unmaskSources(
+  sources: readonly SavedAnswerSource[],
+  stored: readonly SavedAnswerSource[] | undefined,
+): SavedAnswerSource[] {
+  return sources.map((source) => {
+    if (!isRestrictedSource(source)) return source;
+    return stored?.find((one) => one.n === source.n) ?? source;
+  });
+}
+
+/** Everything of a cursor but its findings: the snapshot's cursor is the stored one, read masked. */
+const cursorKey = (cursor: SweepCursor) =>
+  JSON.stringify({ ...cursor, findings: [] });
+
+/** The stored cursor when the snapshot's is it with some findings filtered out. */
+function unmaskCursor(
+  sweep: SweepCursor | undefined,
+  stored: SweepCursor | undefined,
+): SweepCursor | undefined {
+  if (!sweep || !stored || cursorKey(sweep) !== cursorKey(stored)) return sweep;
+  const storedFindings = new Set(
+    stored.findings.map((one) => JSON.stringify(one)),
+  );
+  const filtered = sweep.findings.every((one) =>
+    storedFindings.has(JSON.stringify(one)),
+  );
+  return filtered ? stored : sweep;
+}
+
+function unmaskTurn(
+  turn: SavedResearchTurn,
+  stored: ResearchConversation | null,
+): SavedResearchTurn {
+  const known = stored ? storedTurnOf(turn, stored) : undefined;
+  const restored: SavedResearchTurn = {
+    ...turn,
+    sources: unmaskSources(turn.sources, known?.sources),
+  };
+  // A count of what the reader may see is the server's, worked out at each read.
+  delete restored.restrictedSources;
+  const sweep = unmaskCursor(turn.sweep, known?.sweep);
+  if (sweep) restored.sweep = sweep;
+  return restored;
+}
+
+/**
+ * A page's snapshot read masked (KBC-110, ADR 0036 §8) back over what is stored: a restricted
+ * source and a cursor whose findings were filtered take the stored ones again, so saving what
+ * the reader sees never makes the file lose anything; returning to the level shows it all.
+ */
+export function unmaskResearchTurns(
+  incoming: ResearchConversation,
+  stored: Conversation | null,
+): ResearchConversation {
+  const known = stored?.kind === 'research' ? stored : null;
+  return {
+    ...incoming,
+    turns: incoming.turns.map((turn) => unmaskTurn(turn, known)),
+  };
 }

@@ -26,11 +26,34 @@ export type SavedSearchAsk = z.infer<typeof savedSearchAskSchema>;
 
 export const savedTurnStatusSchema = z.enum(['pending', 'failed']);
 
+/**
+ * A stored source the reader may no longer see (KBC-110, ADR 0036 §8): only its number, so
+ * "[n]" in the kept prose still points somewhere; no id, title, authorship or passage.
+ */
+export const restrictedSourceSchema = z.strictObject({
+  n: z.number().int().positive(),
+  restricted: z.literal(true),
+});
+export type RestrictedSource = z.infer<typeof restrictedSourceSchema>;
+
+/** A source of a saved answer: as the answer cited it, or restricted for today's reader. */
+export const savedAnswerSourceSchema = z.union([
+  answerSourceSchema,
+  restrictedSourceSchema,
+]);
+export type SavedAnswerSource = z.infer<typeof savedAnswerSourceSchema>;
+
+export const isRestrictedSource = (
+  source: SavedAnswerSource,
+): source is RestrictedSource => 'restricted' in source;
+
 /** One turn of a "Pesquisa com IA" conversation: restored as saved, never re-run (it costs). */
 export const savedResearchTurnSchema = z.object({
   question: z.string().min(1),
   answer: z.string(),
-  sources: z.array(answerSourceSchema),
+  sources: z.array(savedAnswerSourceSchema),
+  /** KBC-110: how many of `sources` today's reader may not see; absent when none. */
+  restrictedSources: z.number().int().positive().optional(),
   steps: z.number().int().nonnegative(),
   usd: z.number().nonnegative(),
   /** Turns saved before KBC-007 were all per token. */

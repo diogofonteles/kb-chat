@@ -17,5 +17,9 @@ export {
   scaledView,
   type LevelView,
 } from './level-view.js';
-export { levelViewOf, levelViewsOf } from './request-view.js';
+export {
+  levelViewOf,
+  levelViewsOf,
+  storedLevelViewOf,
+} from './request-view.js';
 export { accessLevelRoutes } from './routes.js';

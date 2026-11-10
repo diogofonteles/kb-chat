@@ -63,6 +63,19 @@ export class ContentGate {
     });
   }
 
+  /**
+   * The view a stored answer is re-checked with (KBC-110, ADR 0036 §8): nothing at all once
+   * the person lost the collection (AC-6), else today's view of it.
+   */
+  storedViewFor(
+    person: StoredPerson,
+    topic: string,
+    parentOf: (slug: string) => string | null,
+  ): LevelView {
+    if (!canSeeTopic(person, topic, parentOf)) return CLOSED_VIEW;
+    return this.viewFor(person, topic);
+  }
+
   /** The person's level, as an index in the scale (BR-5: absent or unknown is the lowest). */
   personRank(person: StoredPerson, topic: string): number {
     const root = this.rootOf(topic);

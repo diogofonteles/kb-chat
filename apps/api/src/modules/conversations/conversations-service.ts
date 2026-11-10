@@ -9,8 +9,11 @@ import {
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { ConversationStorePort } from '../../ports/conversation-store.js';
+import type { LevelView } from '../../ports/level-view.js';
+import { maskConversation, type ScopeOf } from './conversation-mask.js';
 import {
   mergeResearchTurns,
+  unmaskResearchTurns,
   settleDeadTurns,
   withTurn,
   type Liveness,
@@ -21,8 +24,13 @@ export interface ConversationFilter {
   readonly topic?: string;
 }
 
+/** Today's view of a collection for the reader (KBC-110): how a stored answer is re-checked. */
+export type ViewOf = (topic: string) => LevelView;
+
 export interface ConversationsServiceDeps {
   readonly store: ConversationStorePort;
+  /** The catalog's collection and sub-collections, to judge a stored source (KBC-110). */
+  readonly scopeOf?: ScopeOf;
   /** Whether the person's research turn runs in this process (KBC-029); none by default. */
   readonly isLive?: (principal: string, turnId: string) => boolean;
   /** When this process started (ms); default: when the service was built. */
@@ -72,10 +80,22 @@ export class ConversationsService {
       .sort(byNewest);
   }
 
-  async get(principal: string, id: string): Promise<Conversation | null> {
+  /**
+   * The conversation as the reader may see it today (KBC-110, ADR 0036 §8): sources above
+   * their level, or of a collection they lost, come back restricted; the file is untouched.
+   */
+  async get(
+    principal: string,
+    id: string,
+    viewOf: ViewOf,
+  ): Promise<Conversation | null> {
     const conversation = await this.deps.store.get(principal, id);
-    return (
-      conversation && settleDeadTurns(conversation, this.liveness(principal))
+    if (!conversation) return null;
+    const settled = settleDeadTurns(conversation, this.liveness(principal));
+    return maskConversation(
+      settled,
+      viewOf(settled.topic),
+      this.deps.scopeOf ?? (() => undefined),
     );
   }
 
@@ -85,11 +105,16 @@ export class ConversationsService {
     conversation: Conversation,
   ): Promise<ConversationSummary> {
     return this.serial(conversation.id, async () => {
+      const stored =
+        conversation.kind === 'research'
+          ? await this.deps.store.get(principal, conversation.id)
+          : null;
+      // A snapshot read masked keeps what the file had (KBC-110 BR-4).
       const merged =
         conversation.kind === 'research'
           ? mergeResearchTurns(
-              conversation,
-              await this.deps.store.get(principal, conversation.id),
+              unmaskResearchTurns(conversation, stored),
+              stored,
             )
           : conversation;
       await this.put(principal, merged);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   conversationSchema,
+  isRestrictedSource,
   savedResearchTurnSchema,
   summarizeConversation,
   type Conversation,
@@ -141,16 +142,46 @@ describe('conversations contract', () => {
         { n: 2, id: 'raw/b.md', title: 'B', authorship: 'outros-autores' },
       ],
     });
-    expect(saved.sources.map((source) => source.authorship)).toEqual([
-      'mestre-laercio',
-      'outros-autores',
+    expect(saved.sources).toMatchObject([
+      { authorship: 'mestre-laercio', author: 'José Laércio do Egito' },
+      { authorship: 'outros-autores' },
     ]);
-    expect(saved.sources[0]?.author).toBe('José Laércio do Egito');
     const old = savedResearchTurnSchema.parse({
       ...turn,
       sources: [{ n: 1, id: 'raw/a.md', title: 'A' }],
     });
-    expect(old.sources[0]?.authorship).toBeUndefined();
+    expect(old.sources[0]).not.toHaveProperty('authorship');
+  });
+
+  it('KBC-110: reads a restricted source as its number only, and older turns without a count', () => {
+    const turn = {
+      question: 'q',
+      answer: 'a [1][2]',
+      steps: 2,
+      usd: 0,
+      model: 'stub',
+      interrupted: false,
+      at: '2026-11-10T12:00:00.000Z',
+    };
+    const saved = savedResearchTurnSchema.parse({
+      ...turn,
+      sources: [
+        { n: 1, id: 'raw/a.md', title: 'A' },
+        { n: 2, restricted: true },
+      ],
+      restrictedSources: 1,
+    });
+    expect(saved.sources.map(isRestrictedSource)).toEqual([false, true]);
+    expect(saved.restrictedSources).toBe(1);
+    expect(
+      savedResearchTurnSchema.safeParse({
+        ...turn,
+        sources: [{ n: 2, restricted: true, title: 'Velado' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      savedResearchTurnSchema.parse({ ...turn, sources: [] }).restrictedSources,
+    ).toBeUndefined();
   });
 
   it('reads a search saved before the authorship filter existed (KBC-020 AC-8)', () => {
