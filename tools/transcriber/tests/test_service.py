@@ -57,8 +57,8 @@ TOOLS = {
 }
 
 
-def service(home: Path, launchctl: FakeLaunchctl, tools=TOOLS) -> Service:
-    return Service(home=home, uid=501, launchctl=launchctl, repo=REPO, which=tools.get)
+def service(home: Path, launchctl: FakeLaunchctl, tools=TOOLS, sleep=lambda _: None) -> Service:
+    return Service(home=home, uid=501, launchctl=launchctl, repo=REPO, which=tools.get, sleep=sleep)
 
 
 def read_plist(home: Path) -> dict:
@@ -102,6 +102,8 @@ def test_ac10_install_writes_the_agent_and_bootstraps_it(tmp_path):
     assert launchctl.calls == [
         ["print", f"gui/501/{LABEL}"],
         ["bootstrap", "gui/501", str(tmp_path / "Library" / "LaunchAgents" / f"{LABEL}.plist")],
+        # KBC-117: done only when launchd shows it.
+        ["print", f"gui/501/{LABEL}"],
     ]
 
 
@@ -116,7 +118,13 @@ def test_ac10_the_plist_never_holds_a_token(tmp_path, monkeypatch):
 def test_ac10_installing_again_boots_the_old_one_out_first(tmp_path):
     launchctl = FakeLaunchctl(loaded=RUNNING)
     service(tmp_path, launchctl).install(vault=None, extras=[])
-    assert [call[0] for call in launchctl.calls] == ["print", "bootout", "bootstrap"]
+    assert [call[0] for call in launchctl.calls] == [
+        "print",
+        "bootout",
+        "print",
+        "bootstrap",
+        "print",
+    ]
     assert "KB_CHAT_VAULT" not in read_plist(tmp_path)["EnvironmentVariables"]
 
 
@@ -242,3 +250,87 @@ def test_an_agent_left_under_the_old_label_is_taken_out_never_doubled(tmp_path):
     assert not (agents / f"{old}.plist").exists()
     assert ["bootout", f"gui/501/{old}"] in launchctl.calls
     assert (agents / f"{LABEL}.plist").is_file()
+
+
+class RacingLaunchctl(FakeLaunchctl):
+    """launchd as the owner's Mac showed it (KBC-117 (2)): a bootout returns at once, the old
+    agent stays in `print` for a few polls, and a bootstrap meanwhile fails with error 5."""
+
+    def __init__(self, loaded: str | None = RUNNING, lingers: int = 3, refusals: int = 0):
+        super().__init__(loaded=loaded)
+        self.lingers = lingers
+        self.dying = 0
+        self.refusals = refusals
+
+    def run(self, args: list[str]) -> tuple[int, str]:
+        if args[0] == "bootout" and self.loaded is not None:
+            self.calls.append(args)
+            self.dying = self.lingers
+            return 0, ""
+        if args[0] == "print" and self.dying > 0:
+            self.calls.append(args)
+            self.dying -= 1
+            answer = self.loaded or ""
+            if self.dying == 0:
+                self.loaded = None
+            return 0, answer
+        if args[0] == "bootstrap" and (self.dying > 0 or self.refusals > 0):
+            self.calls.append(args)
+            self.refusals = max(0, self.refusals - 1)
+            return 5, "Bootstrap failed: 5: Input/output error"
+        return super().run(args)
+
+
+def test_kbc117_install_waits_for_the_bootout_before_it_bootstraps(tmp_path):
+    launchctl = RacingLaunchctl(lingers=3)
+    slept: list[float] = []
+    agent = service(tmp_path, launchctl, sleep=slept.append)
+    agent.install(vault=None, extras=[])
+    ops = [call[0] for call in launchctl.calls]
+    assert ops[:2] == ["print", "bootout"]
+    # print until the old one is gone (3 lingering answers, then "not found"), one bootstrap,
+    # and a print that sees the new one.
+    assert ops[2:] == ["print", "print", "print", "print", "bootstrap", "print"]
+    assert slept and sum(slept) <= 10
+    assert agent.status()["loaded"] is True
+
+
+def test_kbc117_a_bootstrap_refused_once_is_tried_again(tmp_path):
+    launchctl = RacingLaunchctl(loaded=None, refusals=1)
+    service(tmp_path, launchctl, sleep=lambda _: None).install(vault=None, extras=[])
+    assert [call[0] for call in launchctl.calls].count("bootstrap") == 2
+    assert launchctl.loaded == RUNNING
+
+
+def test_kbc117_an_old_agent_that_never_goes_fails_the_install_bounded(tmp_path):
+    launchctl = RacingLaunchctl(lingers=10_000)
+    slept: list[float] = []
+    with pytest.raises(ServiceError, match="não saiu do launchd"):
+        service(tmp_path, launchctl, sleep=slept.append).install(vault=None, extras=[])
+    assert sum(slept) <= 10.5
+    assert "bootstrap" not in [call[0] for call in launchctl.calls]
+
+
+def test_kbc117_a_bootstrap_that_keeps_failing_says_not_loaded(tmp_path, monkeypatch, capsys):
+    """The CLI never says "Carregado: sim" after a failed bootstrap (KBC-117 (2))."""
+    launchctl = RacingLaunchctl(loaded=None, refusals=99)
+    monkeypatch.setattr(
+        "transcriber.cli.service_of",
+        lambda **kwargs: service(tmp_path, launchctl, sleep=lambda _: None),
+    )
+    assert main(["service", "install"]) == 1
+    captured = capsys.readouterr()
+    assert "Input/output error" in captured.err
+    assert "Carregado no launchd: não" in captured.out
+    assert "Carregado no launchd: sim" not in captured.out
+    assert [call[0] for call in launchctl.calls].count("bootstrap") == 3
+
+
+def test_kbc117_install_reports_what_launchd_has_after_it(tmp_path, monkeypatch, capsys):
+    launchctl = RacingLaunchctl(lingers=2)
+    monkeypatch.setattr(
+        "transcriber.cli.service_of",
+        lambda **kwargs: service(tmp_path, launchctl, sleep=lambda _: None),
+    )
+    assert main(["service", "install"]) == 0
+    assert "Carregado no launchd: sim" in capsys.readouterr().out

@@ -120,6 +120,8 @@ class KbCli:
 
     vault: Path
     binary: str = "kb"
+    # The kb's AI keys (KBC-117): only in kb's own environment, never in the worker's.
+    env: dict[str, str] = field(default_factory=dict, repr=False)
     _version: str | None = field(default=None, init=False, repr=False, compare=False)
 
     def command(self, step: str, topic: str, budget_usd: float) -> list[str]:
@@ -145,6 +147,7 @@ class KbCli:
             try:
                 done = subprocess.run(
                     [self.binary, "version"],
+                    env=self._env(),
                     capture_output=True,
                     text=True,
                     timeout=10,
@@ -158,10 +161,14 @@ class KbCli:
             self._version = lines[0][:100]
         return self._version
 
+    def _env(self) -> dict[str, str]:
+        return {**os.environ, **self.env}
+
     def _run(self, command: list[str]) -> KbRun:
         done = subprocess.run(
             command,
             cwd=self.vault,
+            env=self._env(),
             capture_output=True,
             text=True,
             timeout=STEP_TIMEOUT_S,
@@ -172,12 +179,13 @@ class KbCli:
         return KbRun(ok=done.returncode == 0, output=output, spend_usd=spend)
 
 
-def kb_or_none(vault: str | None) -> KbCli | None:
-    """kb on this Mac when a vault is configured and the binary is on PATH; else None."""
+def kb_or_none(vault: str | None, env: dict[str, str] | None = None) -> KbCli | None:
+    """kb on this Mac when a vault is configured and the binary is on PATH; else None. `env`
+    is the kb's AI keys (KBC-117), for kb's environment only."""
     if not vault or not Path(vault).is_dir():
         return None
     binary = shutil.which("kb")
-    return KbCli(Path(vault), binary) if binary else None
+    return KbCli(Path(vault), binary, env=dict(env or {})) if binary else None
 
 
 def _scalar(value: str) -> str | int | float:

@@ -78,6 +78,33 @@ reason and writes nothing.
 
 **Pending:** the commands follow ADR 0035 §3; the flags, the receipts' spend format and whether kb 0.0.12 classifies a file it did not ingest are checked by the owner's spike on a vault copy (it spends money). If it does not, the fallback is `kb ingest file --force` (ADR 0035 option 5).
 
+## The kb's AI keys (KBC-117)
+
+`kb classify` and `kb link` need `OPENROUTER_API_KEY` (and read `ANTHROPIC_API_KEY` and
+`OPENAI_API_KEY` when present). Under launchd no shell runs, so a key your `~/.zshrc` exports
+never reaches kb. The transcriber gets them itself: `transcriber keys set` stores each one in
+the macOS Keychain (service `nova-alexandria-transcriber-kb`, the variable's name as the
+account), written through `security -i`, so the value is never in a process's arguments,
+never echoed, logged or written to a file. The worker reads them when it starts and passes
+them only in the environment of the `kb` it runs. A key the process already has wins.
+
+```bash
+uv run --project tools/transcriber transcriber keys set            # asks each one, no echo (Enter skips)
+uv run --project tools/transcriber transcriber keys set --from-env # once: what this shell exports (~/.zshrc)
+uv run --project tools/transcriber transcriber keys status         # where each one is; never its value
+uv run --project tools/transcriber transcriber keys delete
+```
+
+`keys set` starts the service (`launchctl kickstart`, never `-k`) so it tells the app it can
+publish again. Without `OPENROUTER_API_KEY` the worker does not ask for `kb-publish` and its
+status says why (`unavailable`: "chave da IA do kb ausente"); masters see it in Transcritores.
+If kb still fails for a missing key, the job goes back as `not-configured`: it spends no
+attempt, and this run stops asking for `kb-publish`. Documents that died of it before (four
+failed runs, under **Falhou**) go back to the queue by themselves when a transcriber reports
+it can publish; **Tentar de novo** in Transcritores → Falhou also takes one back. `service
+install` still works with the keys only in the shell, and then says to run `keys set
+--from-env` once.
+
 ## In the background (KBC-114)
 
 The worker runs as a LaunchAgent, only when needed (the owner's rule: never on for nothing): launchd runs `transcriber run --exit-when-idle` once at login, with no `KeepAlive`; it drains the queue, waits 30 s for the next stage and exits (also after 3 lease errors in a row, or at once with a revoked token), telling the app it `stopped`. An API on the same Mac (`KB_CHAT_LOCAL_TRANSCRIBER=1`) starts it again with `launchctl kickstart` whenever a job waits. `transcriber pair` installs it.
@@ -91,7 +118,10 @@ uv run --project tools/transcriber transcriber service uninstall
 
 `install` writes `~/Library/LaunchAgents/br.com.nova-alexandria.transcriber.plist` (label
 `br.com.nova-alexandria.transcriber`, `RunAtLoad`, no `KeepAlive`, `ExitTimeOut` 300 s) and loads it
-with `launchctl bootstrap gui/$UID`; installing again replaces it. The plist runs this
+with `launchctl bootstrap gui/$UID`; installing again replaces it: it boots the old agent out,
+waits until `launchctl print` no longer shows it (at most 10 s), bootstraps again after a
+refusal (error 5 while launchd settles, 3 tries) and prints what `launchctl print` then says
+(KBC-117), so "Carregado no launchd: sim" is only ever what launchd has. The plist runs this
 checkout with `uv run --extra diarize --extra voiceprint` (`--extra` is repeatable and
 replaces the default): `uv run` installs a missing extra by itself before the worker starts,
 and the worker tells the app it is getting ready while the models load. The label is the one

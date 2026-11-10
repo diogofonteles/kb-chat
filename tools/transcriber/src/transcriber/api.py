@@ -20,7 +20,11 @@ class Unauthorized(Exception):
 
 
 class ApiError(Exception):
-    """Any other unexpected answer (or the API unreachable)."""
+    """Any other unexpected answer (or the API unreachable); `status` when it answered."""
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
@@ -175,7 +179,13 @@ class ApiClient:
         body: dict = {"failure": failure, "detail": detail[:2000]}
         if spend_usd > 0:
             body["spendUsd"] = round(spend_usd, 6)
-        return self._on_job(job, "fail", body)
+        try:
+            return self._on_job(job, "fail", body)
+        except ApiError as err:
+            # An API before KBC-117 does not know `not-configured` (400): the plain failure.
+            if failure != "not-configured" or err.status != 400:
+                raise
+            return self._on_job(job, "fail", {**body, "failure": "conversion-failed"})
 
     def _on_job(self, job: dict, action: str, body: dict) -> bool:
         """True on 204; False when the lease is no longer ours (409)."""
@@ -185,7 +195,7 @@ class ApiClient:
             return True
         if status == 409:
             return False
-        raise ApiError(f"{action} answered {status}")
+        raise ApiError(f"{action} answered {status}", status)
 
     def _post(self, path: str, body: dict) -> tuple[int, bytes]:
         # NaN is not JSON: the API would refuse the whole result (json_safe turns it to None).

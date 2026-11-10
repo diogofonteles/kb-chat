@@ -40,6 +40,19 @@ def real_config_untouched():
     assert changed == [], f"a test changed {changed}"
 
 
+class EmptyKeys:
+    """No kb key stored: what a test that does not care about the keys sees."""
+
+    def read(self, name: str) -> None:
+        return None
+
+    def save(self, name: str, value: str) -> None:
+        raise AssertionError("a test stored a key without its own fake Keychain")
+
+    def delete(self, name: str) -> None:
+        pass
+
+
 @pytest.fixture(autouse=True)
 def isolated_mac(tmp_path_factory, monkeypatch):
     """Every test: a HOME of its own, the config under it, and no real Keychain or launchctl."""
@@ -50,10 +63,15 @@ def isolated_mac(tmp_path_factory, monkeypatch):
     config = home / "Library" / "Application Support" / "nova-alexandria-transcriber"
     monkeypatch.setattr(cli, "CONFIG_FILE", config / "config.json")
     monkeypatch.setattr(cli, "SYNC_STATE_FILE", config / "vault-sync.json")
+    # The kb's AI keys (KBC-117): an empty Keychain of its own, never this Mac's.
+    monkeypatch.setattr(cli, "keys_of", EmptyKeys)
 
     # The shell of whoever runs the tests (the owner's vault, host, token file) stays out.
     for name in [one for one in os.environ if one.startswith("KB_CHAT_")]:
         monkeypatch.delenv(name)
+    # ...and so do its AI keys (KBC-117): a test never sees nor stores the owner's.
+    for name in ("OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
 
     class GuardedPopen(_REAL_POPEN):
         """Every child process goes through Popen (run, check_output, call): checked here."""

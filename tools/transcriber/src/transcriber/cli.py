@@ -80,6 +80,8 @@ def keep_on(vault: str | None) -> None:
         print(f"O serviço em background não foi instalado: {err}", file=sys.stderr)
         return
     print(f"Serviço instalado (liga quando há trabalho e desliga ao terminar): {path}")
+    if vault:
+        print_key_hint()
 
 
 def run(args: argparse.Namespace) -> int:
@@ -107,7 +109,14 @@ def run(args: argparse.Namespace) -> int:
         print(str(err), file=sys.stderr)
         return 2
     vault = os.environ.get("KB_CHAT_VAULT") or config.get("vault_path")
-    publisher = publisher_of(args, vault)
+    from .kb_keys import kb_env, kb_problems
+
+    # KBC-117: the kb's AI keys from the Keychain, for kb's own environment only.
+    env = {} if args.no_kb_publish else kb_env(keys_of())
+    publisher = publisher_of(args, vault, env)
+    unavailable = [] if args.no_kb_publish else kb_problems(vault, publisher, env)
+    for problem in unavailable:
+        logging.getLogger("transcriber").error("kb-publish off: %s", problem["detail"])
     kb = publisher.kb if publisher else None
     status = status_of(publisher)
     reporter = StatusReporter(api)
@@ -135,6 +144,8 @@ def run(args: argparse.Namespace) -> int:
         # KBC-114: what this Mac is doing, shown to masters in the app.
         status=status,
         reporter=reporter,
+        # KBC-117: what it cannot do now (the kb's AI key missing), never leased, told why.
+        unavailable=unavailable,
     )
     if args.poll:
         worker.poll_s = args.poll
@@ -165,13 +176,13 @@ def announce_preparing(status, reporter) -> None:
     reporter.send(status)
 
 
-def publisher_of(args: argparse.Namespace, vault: str | None):
+def publisher_of(args: argparse.Namespace, vault: str | None, env: dict | None = None):
     """Publishing is on by default (KBC-114 BR-7): a vault and kb on PATH are enough, with no
     mark on this Mac; `--no-kb-publish` keeps it out. The API still gives kb-publish jobs only
     to a transcriber marked "Publica no acervo", which a new pairing is by default."""
     from .kb_publish import KbPublisher, kb_or_none
 
-    kb = None if args.no_kb_publish else kb_or_none(vault)
+    kb = None if args.no_kb_publish else kb_or_none(vault, env)
     return KbPublisher(kb.vault, kb) if kb else None
 
 
@@ -215,6 +226,11 @@ def service(args: argparse.Namespace) -> int:
             print(f"Serviço instalado: {path}")
             if not vault:
                 print("Sem vault: este Mac não publica no acervo (use --vault).")
+            else:
+                print_key_hint()
+            if not args.no_load:
+                # What launchd has now, never what was hoped for (KBC-117 (2)).
+                print("\n".join(describe(agent.status())))
         elif args.action == "uninstall":
             agent.uninstall()
             print("Serviço removido.")
@@ -222,8 +238,99 @@ def service(args: argparse.Namespace) -> int:
             print("\n".join(describe(agent.status())))
     except ServiceError as err:
         print(str(err), file=sys.stderr)
+        print("\n".join(describe(agent.status())))
         return 1
     return 0
+
+
+def keys_of():
+    """This Mac's Keychain for the kb's AI keys (KBC-117); tests put a fake here."""
+    from .kb_keys import KeychainKeys
+
+    return KeychainKeys()
+
+
+def print_key_hint() -> None:
+    """The service never sees a key that lives only in the shell (KBC-117): say how to move it
+    once. Names only, never a value."""
+    from .kb_keys import REQUIRED_KEY
+
+    if keys_of().read(REQUIRED_KEY):
+        return
+    if os.environ.get(REQUIRED_KEY):
+        print(
+            f"Atenção: {REQUIRED_KEY} está só no shell; o serviço não a vê e o kb não publica. "
+            "Uma vez, neste Terminal: "
+            "uv run --project tools/transcriber transcriber keys set --from-env"
+        )
+    else:
+        print(
+            f"Atenção: o kb não tem {REQUIRED_KEY} (chave da IA do kb ausente). Guarde-a com: "
+            "uv run --project tools/transcriber transcriber keys set"
+        )
+
+
+def keys(args: argparse.Namespace) -> int:
+    """`transcriber keys set|status|delete`: the kb's AI keys in the Keychain (KBC-117)."""
+    from .kb_keys import KB_KEY_NAMES, KbKeyError
+
+    store = keys_of()
+    names = args.name or list(KB_KEY_NAMES)
+    if args.action == "status":
+        for name in names:
+            where = (
+                "no Keychain"
+                if store.read(name)
+                else "só no shell (o serviço não a vê)"
+                if os.environ.get(name)
+                else "ausente"
+            )
+            print(f"{name}: {where}")
+        return 0
+    if args.action == "delete":
+        for name in names:
+            store.delete(name)
+            print(f"{name}: removida do Keychain")
+        return 0
+    found = _keys_to_store(names, args.from_env)
+    if not found:
+        source = "neste shell" if args.from_env else "digitada"
+        print(f"Nenhuma chave {source}: nada foi guardado.", file=sys.stderr)
+        return 1
+    try:
+        for name, value in found.items():
+            store.save(name, value)
+            print(f"{name}: guardada no Keychain")
+    except KbKeyError as err:
+        print(str(err), file=sys.stderr)
+        return 1
+    _wake_service()
+    return 0
+
+
+def _keys_to_store(names: list[str], from_env: bool) -> dict[str, str]:
+    """From this shell's environment, or typed with no echo (Enter skips one)."""
+    found: dict[str, str] = {}
+    for name in names:
+        value = os.environ.get(name, "") if from_env else getpass.getpass(f"{name} (Enter pula): ")
+        if value.strip():
+            found[name] = value.strip()
+    return found
+
+
+def _wake_service() -> None:
+    """The service starts now and tells the app kb-publish is ready: the queue moves."""
+    from .service import ServiceError
+
+    try:
+        woken = service_of().kickstart()
+    except (ServiceError, OSError):
+        # Not a Mac, or no launchctl: the keys are stored all the same.
+        woken = False
+    if woken:
+        print("Transcritor avisado: ele liga e volta a publicar no acervo.")
+    else:
+        print("O serviço não está carregado: rode `transcriber service install`.")
 
 
 def _mlx():
@@ -297,6 +404,19 @@ def main(argv: list[str] | None = None) -> int:
         "--no-load", action="store_true", help="only write the plist, do not load it"
     )
     background.set_defaults(handler=service)
+    secrets = commands.add_parser(
+        "keys", help="the kb's AI keys in the Keychain, for the service (KBC-117)"
+    )
+    secrets.add_argument("action", choices=("set", "status", "delete"))
+    secrets.add_argument(
+        "--from-env",
+        action="store_true",
+        help="store the keys this shell exports (the one-time move off ~/.zshrc)",
+    )
+    secrets.add_argument(
+        "--name", action="append", help="only this key (repeatable; default: all of kb's)"
+    )
+    secrets.set_defaults(handler=keys)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     return args.handler(args)
