@@ -11,7 +11,9 @@ export {
 } from './level-directory.js';
 export {
   MIN_VISIBLE_SHARE,
+  NO_CONTENT_VIEW,
   OPEN_VIEW,
+  allowsInScope,
   scaledView,
   type LevelView,
 } from './level-view.js';

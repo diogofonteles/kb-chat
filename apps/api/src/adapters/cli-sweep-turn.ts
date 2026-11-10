@@ -92,7 +92,7 @@ async function* planWithCli(
     if (tools.plan) return tools.plan;
     if (!input.signal.aborted && ended.result && !ended.result.ok)
       throw cliFailure(ended.result.code);
-    return kit.sweeps.defaultPlan(input.topic, input.question);
+    return kit.sweeps.defaultPlan(input.topic, input.question, kit.view);
   } finally {
     unwatch();
   }

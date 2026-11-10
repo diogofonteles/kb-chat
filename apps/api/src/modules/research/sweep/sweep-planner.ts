@@ -1,5 +1,6 @@
 import type { MainAuthorIdentity } from '../prompt.js';
 import type { SweepPlan } from '@kb-chat/contracts';
+import type { LevelView } from '../../../ports/level-view.js';
 import type { TrackShelf } from '../../../ports/track-shelf.js';
 import type { VaultReaderPort } from '../../../ports/vault-reader.js';
 import {
@@ -70,6 +71,11 @@ export interface LayoutRequest {
   readonly covered?: string;
   /** The tracks the turn may research; without it, texts only (KBC-101 BR-1, AC-5). */
   readonly tracks?: TrackShelf;
+  /**
+   * What the person may see (KBC-104 BR-3): the set is the view's, so the batches, the
+   * coverage and a cursor's carried findings only ever hold visible documents.
+   */
+  readonly view: LevelView;
 }
 
 /** What of a track's body a batch showed (KBC-101 BR-4): to place its findings. */
@@ -230,33 +236,36 @@ export class SweepPlanner {
 
   /**
    * The plan's documents in id order (the cursor's order), the collection's and its
-   * sub-collections', texts and the tracks the turn may see (KBC-101 BR-1, FR-5); null for
-   * an unknown topic.
+   * sub-collections', texts and the tracks the turn may see (KBC-101 BR-1, FR-5), at or
+   * below the person's level (KBC-104 FR-3); null for an unknown topic.
    */
   private targetSet(
     topic: string,
-    { plan, tracks }: LayoutRequest,
+    { plan, tracks, view }: LayoutRequest,
   ): CatalogEntry[] | null {
-    const view = this.deps.catalog.scopeView(topic);
-    if (!view) return null;
+    const scope = this.deps.catalog.scopeView(topic);
+    if (!scope) return null;
     const filter = filterOf(plan, (entry) =>
-      isVisible(entry, { topic, tracks }),
+      isVisible(entry, { topic, tracks, view }),
     );
-    return [...view.entries.values()]
+    return view
+      .entries(scope)
       .filter((entry) => acceptsEntry(filter, entry))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 
   /**
    * The default plan for a topic (ADR 0021): the Mestre's documents when the question names
-   * him and the topic has any, otherwise the whole topic (architecture review of KBC-030).
+   * him and the person sees any (KBC-104), otherwise the whole topic (architecture review of
+   * KBC-030).
    */
-  defaultPlan(topic: string, question: string): SweepPlan {
+  defaultPlan(topic: string, question: string, view: LevelView): SweepPlan {
     const plan = defaultPlan(question);
     const wanted = plan.target.authorship;
     if (!wanted) return plan;
-    const entries = this.deps.catalog.scopeView(topic)?.entries.values() ?? [];
-    const has = [...entries].some((entry) => entry.authorship === wanted);
+    const scope = this.deps.catalog.scopeView(topic);
+    const entries = scope ? view.entries(scope) : [];
+    const has = entries.some((entry) => entry.authorship === wanted);
     return has ? plan : { ...plan, target: {} };
   }
 

@@ -1,35 +1,30 @@
-import type { ContentLevel } from '@kb-chat/contracts';
-import {
-  isTrackEntry,
-  type CatalogEntry,
-  type TopicCatalog,
-} from '../catalog/index.js';
+import type {
+  LevelView,
+  ScopedDocument,
+  ViewedCollection,
+} from '../../ports/level-view.js';
 import type { CollectionPlacements, StoredLevel } from './level-directory.js';
 
-/**
- * What one person may see of one collection and its sub-collections (ADR 0036 §6, §7): the
- * only way services reach content. Every set-based surface filters with `allows` before it
- * counts or groups.
- */
-export interface LevelView {
-  /** Every item is visible: a master, or a collection without levels. */
-  readonly seesAll: boolean;
-  /** The collection's top level has a scale. */
-  readonly scaled: boolean;
-  /** May see the levels of items (badges, "Mudar nível"): masters (BR-9). */
-  readonly manages: boolean;
-  /** Whether the viewer may see this document of `collection`. */
-  allows(
-    collection: string,
-    entry: Pick<CatalogEntry, 'id' | 'media'>,
-  ): boolean;
-  /** Visible texts / texts of the collection, at least 0.05 (the candidate budget). */
-  visibleShare(catalog: TopicCatalog): number;
-  /** A document's level for whoever manages levels in a scaled collection; else undefined. */
-  levelOf(collection: string, id: string): ContentLevel | undefined;
-  /** The level ids the viewer sees, for SQL filters (KBC-105); null: every item. */
-  allowedLevelIds(): readonly string[] | null;
-}
+export type { LevelView } from '../../ports/level-view.js';
+
+/** Whether a document of `scope` (a sub-collection's, by its home) is in the view. */
+export const allowsInScope = (
+  view: Pick<LevelView, 'allows'>,
+  scope: string,
+  entry: ScopedDocument,
+): boolean =>
+  view.allows(entry.home?.topic ?? scope, {
+    id: entry.home?.id ?? entry.id,
+    media: entry.media,
+  });
+
+/** The documents of a scope `allows` admits, in the scope's order. */
+const visibleIn =
+  (allows: LevelView['allows']): LevelView['entries'] =>
+  (scope) =>
+    [...scope.entries.values()].filter((entry) =>
+      allowsInScope({ allows }, scope.topic, entry),
+    );
 
 /** The smallest share the budget assumes (ADR 0036 §7). */
 export const MIN_VISIBLE_SHARE = 0.05;
@@ -40,6 +35,7 @@ export const OPEN_VIEW: LevelView = {
   scaled: false,
   manages: false,
   allows: () => true,
+  entries: (scope) => [...scope.entries.values()],
   visibleShare: () => 1,
   levelOf: () => undefined,
   allowedLevelIds: () => null,
@@ -54,10 +50,14 @@ export const CLOSED_VIEW: LevelView = {
   scaled: true,
   manages: false,
   allows: () => false,
+  entries: () => [],
   visibleShare: () => MIN_VISIBLE_SHARE,
   levelOf: () => undefined,
   allowedLevelIds: () => [],
 };
+
+/** A turn with no collection at all (the AI connection test): nothing to see. */
+export const NO_CONTENT_VIEW: LevelView = CLOSED_VIEW;
 
 export interface ScaledViewInput {
   readonly scale: readonly StoredLevel[];
@@ -65,7 +65,7 @@ export interface ScaledViewInput {
   readonly rank: number | 'all';
   readonly placementsOf: (collection: string) => CollectionPlacements;
   /** Memoizes the share per catalog load and state (NFR-1). */
-  readonly memo: (catalog: TopicCatalog, compute: () => number) => number;
+  readonly memo: (catalog: ViewedCollection, compute: () => number) => number;
 }
 
 /** The rank of a document's level, or -1 for "Sem nível" (none, or one deleted since). */
@@ -78,11 +78,14 @@ function rankOf(
   return level === undefined ? -1 : scale.findIndex((one) => one.id === level);
 }
 
-function shareOf(catalog: TopicCatalog, allows: LevelView['allows']): number {
+function shareOf(
+  catalog: ViewedCollection,
+  allows: LevelView['allows'],
+): number {
   let texts = 0;
   let visible = 0;
   for (const entry of catalog.entries.values()) {
-    if (isTrackEntry(entry)) continue;
+    if (entry.media !== null) continue;
     texts += 1;
     if (allows(catalog.topic.slug, entry)) visible += 1;
   }
@@ -96,7 +99,7 @@ export function scaledView(input: ScaledViewInput): LevelView {
   const allows: LevelView['allows'] = (collection, entry) => {
     if (seesAll) return true;
     // A track's level lives in media.db (KBC-106); until then tracks stay closed.
-    if (isTrackEntry(entry)) return false;
+    if (entry.media !== null) return false;
     const found = rankOf(scale, placementsOf(collection), entry.id);
     return found >= 0 && found <= rank;
   };
@@ -105,6 +108,7 @@ export function scaledView(input: ScaledViewInput): LevelView {
     scaled: true,
     manages: seesAll,
     allows,
+    entries: visibleIn(allows),
     visibleShare: (catalog) =>
       seesAll ? 1 : memo(catalog, () => shareOf(catalog, allows)),
     levelOf: (collection, id) => {

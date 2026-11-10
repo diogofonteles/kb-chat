@@ -6,6 +6,7 @@ import {
 } from '../../../test/memory-research.js';
 import type { ToolCall } from '../../ports/llm.js';
 import { SourceBook } from './source-book.js';
+import { OPEN_VIEW } from '../access-levels/index.js';
 
 const AUTHOR = 'José Laércio do Egito';
 
@@ -53,6 +54,7 @@ async function run(args: object) {
   const prepared = tools.prepare(call(args), {
     topic: 'hermetismo',
     book: new SourceBook(),
+    view: OPEN_VIEW,
   });
   return { steps: prepared.steps, output: await prepared.run() };
 }
@@ -102,6 +104,7 @@ describe('list_sources (KBC-017 AC-6)', () => {
       .prepare(call({ head_limit: 200 }), {
         topic: 'hermetismo',
         book: new SourceBook(),
+        view: OPEN_VIEW,
       })
       .run();
     expect(output.length).toBeLessThan(60_000);

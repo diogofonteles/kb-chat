@@ -10,7 +10,6 @@ import {
   type CatalogEntry,
   type CatalogRegistry,
 } from '../catalog/index.js';
-import { OPEN_VIEW } from '../access-levels/index.js';
 import type { SearchService } from '../search/index.js';
 import {
   firstMatchIn,
@@ -62,12 +61,6 @@ import {
 
 export type { PreparedCall, ToolContext } from './tool-context.js';
 
-/**
- * The research tools see every level until KBC-104 gives them the person's view. Exact for
- * now: in a collection with levels research is closed to members (LEVELS_PENDING), and masters
- * see every level.
- */
-const RESEARCH_VIEW = OPEN_VIEW;
 const MAX_SUBJECTS = 60;
 const MAX_REFS_PER_GROUP = 10;
 
@@ -255,7 +248,7 @@ export class ResearchTools {
     context: ToolContext,
   ): Promise<string> {
     const { topic } = context;
-    const concepts = this.knownSubjects(topic, args.subjects ?? []);
+    const concepts = this.knownSubjects(context, args.subjects ?? []);
     const filter = toFilter(
       this.deps.catalog,
       { ...args, subjects: [] },
@@ -351,9 +344,9 @@ export class ResearchTools {
           authorships: authorship ? [authorship] : [],
         },
       },
-      // The tracks this person may research, among the texts (KBC-099 BR-4); every level
-      // until KBC-104 (RESEARCH_VIEW).
-      { tracks: scope.context.tracks, view: RESEARCH_VIEW },
+      // The tracks this person may research, among the texts (KBC-099 BR-4), at or below
+      // their level (KBC-104 BR-1).
+      { tracks: scope.context.tracks, view: scope.context.view },
     );
   }
 
@@ -363,17 +356,20 @@ export class ResearchTools {
   }
 
   /** Subject names as the catalog spells them (the model may change accents or case). */
-  private knownSubjects(topic: string, subjects: readonly string[]): string[] {
+  private knownSubjects(
+    { topic, view }: ToolContext,
+    subjects: readonly string[],
+  ): string[] {
     if (subjects.length === 0) return [];
     const known = new Map(
       this.deps.search
-        .topicFacets(topic, { view: RESEARCH_VIEW })
+        .topicFacets(topic, { view })
         .concepts.map(({ value }) => [foldName(value), value]),
     );
     return subjects.map((name) => known.get(foldName(name)) ?? name);
   }
 
-  private subjectsCall(args: unknown, { topic }: ToolContext): PreparedCall {
+  private subjectsCall(args: unknown, context: ToolContext): PreparedCall {
     const parsed = parsedArgs(subjectsArgsSchema, args);
     if (typeof parsed === 'string') return failed(parsed);
     const text = parsed.query
@@ -381,14 +377,18 @@ export class ResearchTools {
       : 'Listando os assuntos';
     return {
       steps: [{ kind: 'subjects', text }],
-      run: async () => this.listSubjects(topic, parsed.query),
+      run: async () => this.listSubjects(context, parsed.query),
     };
   }
 
-  private listSubjects(topic: string, query: string | undefined): string {
+  /** The subjects of the documents the person may see, counted over those only (BR-1). */
+  private listSubjects(
+    { topic, view }: ToolContext,
+    query: string | undefined,
+  ): string {
     const needle = query ? foldName(query) : '';
     const subjects = this.deps.search
-      .topicFacets(topic, { view: RESEARCH_VIEW })
+      .topicFacets(topic, { view })
       .concepts.filter(({ value }) => foldName(value).includes(needle))
       .sort((a, b) => b.count - a.count);
     if (subjects.length === 0)

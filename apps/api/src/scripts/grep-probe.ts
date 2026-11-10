@@ -9,6 +9,7 @@ import { CatalogRegistry } from '../modules/catalog/index.js';
 import { ResearchTools, SourceBook } from '../modules/research/index.js';
 import { SearchService } from '../modules/search/index.js';
 import type { SearchIndexPort } from '../ports/search-index.js';
+import { OPEN_VIEW } from '../modules/access-levels/index.js';
 
 const arg = (name: string, fallback: string): string => {
   const at = process.argv.indexOf(`--${name}`);
@@ -42,7 +43,8 @@ const catalog = new CatalogRegistry(vault);
 await catalog.load();
 const search = new SearchService({ catalog, index: NO_INDEX, vault });
 const tools = new ResearchTools({ search, catalog, vault });
-const context = { topic: TOPIC, book: new SourceBook() };
+// The operator's probe over the whole vault, never a route: every level.
+const context = { topic: TOPIC, book: new SourceBook(), view: OPEN_VIEW };
 const call = (args: object) =>
   tools
     .prepare(

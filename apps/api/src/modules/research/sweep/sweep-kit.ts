@@ -1,3 +1,4 @@
+import type { LevelView } from '../../../ports/level-view.js';
 import type { TrackShelf } from '../../../ports/track-shelf.js';
 import type { MainAuthorIdentity } from '../prompt.js';
 import type { SourceBook } from '../source-book.js';
@@ -12,4 +13,6 @@ export interface SweepKit {
   readonly mainAuthor: MainAuthorIdentity | null;
   /** The tracks this turn may research (KBC-099 BR-4): the sweep reads them too (KBC-101). */
   readonly tracks?: TrackShelf;
+  /** What the person may see (KBC-104 BR-3): the set, its batches and its coverage. */
+  readonly view: LevelView;
 }

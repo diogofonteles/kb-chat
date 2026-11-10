@@ -19,6 +19,7 @@ import { researchBudgets, type ResearchBudgets } from '../limits.js';
 import { ToolLoopRunner } from '../tool-loop-runner.js';
 import { PLAN_STEPS, PLAN_SWEEP_TOOL } from './plan-tool.js';
 import { SweepPacer } from './sweep-pacing.js';
+import { OPEN_VIEW } from '../../access-levels/index.js';
 
 /** The fixture vault's documents marked as the Mestre's (author_group: mestre-laercio). */
 const MESTRE_DOCS = 14;
@@ -70,6 +71,7 @@ const exhaustive = (
   } = {},
 ) => ({
   topic: 'hermetismo',
+  view: OPEN_VIEW,
   question: extra.question ?? QUESTION,
   history: [],
   profile: extra.profile ?? ('exhaustive' as const),

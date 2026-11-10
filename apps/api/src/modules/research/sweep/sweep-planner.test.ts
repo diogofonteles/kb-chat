@@ -6,6 +6,7 @@ import {
   memoryTools,
 } from '../../../../test/memory-research.js';
 import { coveredMark } from './sweep-cursor.js';
+import { OPEN_VIEW } from '../../access-levels/index.js';
 
 const MESTRE = 'José Laércio do Egito';
 
@@ -52,7 +53,11 @@ describe('SweepPlanner (KBC-030)', () => {
   it('resolves the whole target set in id order and reads every body without phrases', async () => {
     const layout = await (
       await planner()
-    ).layout('hermetismo', { plan: plan(), batchChars: 30_000 });
+    ).layout('hermetismo', {
+      plan: plan(),
+      batchChars: 30_000,
+      view: OPEN_VIEW,
+    });
     expect(layout?.docs.map((d) => d.entry.id)).toEqual([
       'raw/t1.md',
       'raw/t2.md',
@@ -69,7 +74,11 @@ describe('SweepPlanner (KBC-030)', () => {
   it('splits a document longer than a batch into windows and packs batches up to the size', async () => {
     const layout = await (
       await planner()
-    ).layout('hermetismo', { plan: plan(), batchChars: 4_000 });
+    ).layout('hermetismo', {
+      plan: plan(),
+      batchChars: 4_000,
+      view: OPEN_VIEW,
+    });
     const t3 = layout?.docs.find((d) => d.entry.id === 'raw/t3.md');
     expect(t3?.units.length).toBeGreaterThan(5);
     for (const batch of layout?.batches ?? [])
@@ -82,6 +91,7 @@ describe('SweepPlanner (KBC-030)', () => {
     ).layout('hermetismo', {
       plan: plan({ phrases: ['livro', 'obra'] }),
       batchChars: 30_000,
+      view: OPEN_VIEW,
     });
     expect(layout?.scanned).toBe(4);
     expect(layout?.withHits).toBe(2);
@@ -100,6 +110,7 @@ describe('SweepPlanner (KBC-030)', () => {
     ).layout('hermetismo', {
       plan: plan(),
       batchChars: 30_000,
+      view: OPEN_VIEW,
       after: 'raw/t2.md',
     });
     expect(layout?.skipped).toBe(2);
@@ -118,6 +129,7 @@ describe('SweepPlanner (KBC-030)', () => {
     const layout = await sweeps.layout('hermetismo', {
       plan: plan(),
       batchChars: 30_000,
+      view: OPEN_VIEW,
       after: 'raw/t2.md',
       covered: coveredMark(['raw/t1.md', 'raw/t2.md']),
     });
@@ -139,6 +151,7 @@ describe('SweepPlanner (KBC-030)', () => {
     ).layout('hermetismo', {
       plan: plan(),
       batchChars: 30_000,
+      view: OPEN_VIEW,
       after: 'raw/t2.md',
     });
     expect(layout?.skipped).toBe(2);
@@ -150,6 +163,7 @@ describe('SweepPlanner (KBC-030)', () => {
     const layout = await sweeps.layout('hermetismo', {
       plan: plan({ phrases: ['livro'] }),
       batchChars: 30_000,
+      view: OPEN_VIEW,
     });
     const batch = layout?.batches[0];
     if (!batch) throw new Error('no batch');
@@ -163,7 +177,9 @@ describe('SweepPlanner (KBC-030)', () => {
 
   it('answers null for an unknown topic', async () => {
     expect(
-      await (await planner()).layout('nope', { plan: plan(), batchChars: 1 }),
+      await (
+        await planner()
+      ).layout('nope', { plan: plan(), batchChars: 1, view: OPEN_VIEW }),
     ).toBeNull();
   });
 
@@ -171,6 +187,7 @@ describe('SweepPlanner (KBC-030)', () => {
     const plan = (await planner()).defaultPlan(
       'hermetismo',
       'O que o Mestre Laércio diz?',
+      OPEN_VIEW,
     );
     expect(plan.target).toEqual({ authorship: 'mestre-laercio' });
     expect(plan.extract).toBe('O que o Mestre Laércio diz?');
@@ -181,7 +198,8 @@ describe('SweepPlanner (KBC-030)', () => {
       new MemoryVault({ 'raw/x.md': memoryDoc({ title: 'X', body: 'texto' }) }),
     );
     expect(
-      tools.sweeps.defaultPlan('hermetismo', 'o que o Mestre diz?').target,
+      tools.sweeps.defaultPlan('hermetismo', 'o que o Mestre diz?', OPEN_VIEW)
+        .target,
     ).toEqual({});
   });
 });
