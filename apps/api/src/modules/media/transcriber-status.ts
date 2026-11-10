@@ -140,7 +140,8 @@ export class TranscriberStatusBoard {
       return !kinds?.length || kinds.includes(kind);
     };
     if (marked.some(runs)) return null;
-    // What the Mac said it lacks (KBC-117), before the generic "did not load".
+    // What the Mac said it lacks (KBC-117), before the generic "did not load". Its last word
+    // counts even once it stopped: `keys set` starts it, and it says so again (review r2).
     const said = marked
       .flatMap((one) => this.reports.get(one.id)?.unavailable ?? [])
       .find((one) => one.kind === kind);

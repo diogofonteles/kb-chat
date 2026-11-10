@@ -450,3 +450,40 @@ def test_review_r1_delete_says_when_there_was_nothing(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "OPENROUTER_API_KEY: removida do Keychain" in out
     assert "OPENAI_API_KEY: não estava no Keychain" in out
+
+
+# ---------- review r2 ----------
+
+
+def test_review_r2_a_setup_error_with_the_key_present_does_not_loop(fake_api, vault):
+    """kb says "model is required" with OPENROUTER_API_KEY there: the run stops asking for
+    kb-publish, and only a key that changes in the Keychain opens it again."""
+    stored = {"OPENROUTER_API_KEY": KEY}
+    kb = NoKeyKb(vault)
+    kb.env = dict(stored)
+    fake_api.jobs[:] = [dict(KB_JOB)]
+    mac = worker(fake_api, KbPublisher(vault, kb))
+    mac.reload_kb_env = lambda: kb_env(FakeKeys(stored), environ={})
+    mac.key_recheck_s = 0.0
+    assert mac.step() == "job"
+    assert fake_api.bodies("fail")[-1]["failure"] == "not-configured"
+    mac.step()
+    mac.step()
+    assert "kb-publish" not in fake_api.bodies("lease")[-1]["kinds"]
+    stored["OPENROUTER_API_KEY"] = OTHER + "-new"
+    mac.step()
+    assert "kb-publish" in fake_api.bodies("lease")[-1]["kinds"]
+
+
+def test_review_r2_keys_set_with_one_bad_value_stores_none(monkeypatch, capsys):
+    keys = FakeKeys()
+    wakes: list = []
+    keys_cli(monkeypatch, keys, wakes)
+    monkeypatch.setenv("OPENROUTER_API_KEY", KEY)
+    monkeypatch.setenv("OPENAI_API_KEY", "short")
+    assert cli.main(["keys", "set", "--from-env"]) == 1
+    assert keys.stored == {}
+    assert wakes == []
+    out = capsys.readouterr()
+    assert KEY not in out.out + out.err
+    assert "short" not in out.out + out.err

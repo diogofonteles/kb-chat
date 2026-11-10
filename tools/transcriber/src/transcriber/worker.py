@@ -372,7 +372,9 @@ class Worker:
             return
         self._keys_checked_at = now
         env = self.reload_kb_env()
-        if not env.get(REQUIRED_KEY):
+        # Only keys that changed open it again: kb may call a setup error "model is required"
+        # with the key there, and the same keys would fail the same way (review r2).
+        if not env.get(REQUIRED_KEY) or env == getattr(self.publisher.kb, "env", None):
             return
         if hasattr(self.publisher.kb, "env"):
             self.publisher.kb.env = env
