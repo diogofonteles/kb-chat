@@ -232,3 +232,45 @@ test('AC-9: moving her audio to another collection with levels asks for a level 
   await ana.context().close();
   await owner.dispose();
 });
+
+test('review round 2: with the levels failed nothing is sent, and "Carregar níveis de novo" brings them back', async ({
+  browser,
+}) => {
+  const owner = await ownerApi();
+  const { slug, title } = await scaled(owner, ['QS', 'CI']);
+  const email = await member(owner, [slug], { [slug]: 'ci' });
+  const ana = await pageAs(browser, email, viewport());
+  await ana.route('**/media/levels', (route) =>
+    route.fulfill({ status: 503, body: '' }),
+  );
+  await openMedia(ana, title);
+  await ana.getByRole('button', { name: 'Enviar áudio' }).first().click();
+  const dialog = ana.getByRole('dialog', { name: 'Enviar áudio' });
+  await dialog
+    .locator('input[type="file"]')
+    .setInputFiles(makeMp3(`falha-${uniqueTag()}`, 1));
+  const created: string[] = [];
+  ana.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      request.url().endsWith(`/topics/${slug}/media`)
+    )
+      created.push(request.url());
+  });
+  await dialog.getByRole('button', { name: 'Enviar', exact: true }).click();
+  const retry = dialog.getByRole('button', { name: 'Carregar níveis de novo' });
+  await expect(retry).toBeFocused();
+  await expect(dialog.getByRole('alert')).toHaveText(
+    /Não consegui carregar os níveis deste acervo\. Carregue de novo para escolher o nível\./,
+  );
+  expect(created).toEqual([]);
+  expect(await seriousViolations(ana)).toEqual([]);
+  await shoot(ana, 'upload-levels-failed');
+
+  await ana.unroute('**/media/levels');
+  await retry.click();
+  const level = dialog.getByRole('group', { name: 'Nível' });
+  await expect(level.getByRole('radio', { name: 'QS' })).toBeFocused();
+  await ana.context().close();
+  await owner.dispose();
+});
