@@ -1343,8 +1343,10 @@ function planActors(app: FastifyInstance, wiring: MediaWiring) {
       canUpload: hasFeature(person, 'media-upload'),
       canSee: (topic) => canSeeTopic(person, topic, parentOf),
       // KBC-105: the person's levels as they stand now; without the gate, nothing (fail-closed).
-      levelsIn: (topic) =>
-        app.contentGate?.viewFor(person, topic).allowedLevelIds() ?? [],
+      levelsIn: (topic) => {
+        const gate = app.contentGate;
+        return gate ? gate.viewFor(person, topic).allowedLevelIds() : [];
+      },
       canEdit: hasFeature(person, 'media-edit'),
       canPropose: hasFeature(person, 'media-edit-ai'),
     };
