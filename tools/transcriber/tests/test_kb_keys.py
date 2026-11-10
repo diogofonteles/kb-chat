@@ -48,8 +48,8 @@ class FakeKeys:
     def save(self, name: str, value: str) -> None:
         self.stored[name] = value
 
-    def delete(self, name: str) -> None:
-        self.stored.pop(name, None)
+    def delete(self, name: str) -> bool:
+        return self.stored.pop(name, None) is not None
 
 
 # ---------- the store ----------
@@ -390,3 +390,63 @@ def test_run_hands_the_keychain_keys_to_kb_and_reports_a_missing_one(monkeypatch
     assert kb_problems(str(vault), publisher, kb_env(FakeKeys()))[0]["reason"] == (
         "kb-ai-key-missing"
     )
+
+
+# ---------- review r1 ----------
+
+
+def test_review_r1_a_key_stored_while_the_worker_runs_is_picked_up_without_a_restart(
+    fake_api, vault
+):
+    """`keys set` while a long job runs: kickstart does nothing, so the worker looks again."""
+    fake_api.jobs.clear()
+    stored: dict[str, str] = {}
+    problem = {"kind": "kb-publish", "reason": "kb-ai-key-missing", "detail": KEY_MISSING}
+    kb = KbCli(vault, "/bin/kb")
+    mac = worker(fake_api, KbPublisher(vault, kb), [problem])
+    mac.reload_kb_env = lambda: kb_env(FakeKeys(stored), environ={})
+    mac.key_recheck_s = 0.0
+    mac.step()
+    assert "kb-publish" not in fake_api.bodies("lease")[-1]["kinds"]
+    stored["OPENROUTER_API_KEY"] = KEY
+    mac.step()
+    assert "kb-publish" in fake_api.bodies("lease")[-1]["kinds"]
+    assert kb.env == {"OPENROUTER_API_KEY": KEY}
+    assert "unavailable" not in mac.status.snapshot()
+
+
+def test_review_r1_the_keychain_is_not_asked_on_every_lease(fake_api, vault):
+    fake_api.jobs.clear()
+    asked: list[bool] = []
+    problem = {"kind": "kb-publish", "reason": "kb-ai-key-missing", "detail": KEY_MISSING}
+    mac = worker(fake_api, KbPublisher(vault, FakeKb(vault)), [problem])
+    mac.reload_kb_env = lambda: asked.append(True) or {}
+    mac.step()
+    mac.step()
+    assert len(asked) == 1
+
+
+def test_review_r1_a_keychain_error_never_echoes_the_key(monkeypatch):
+    class Refused:
+        returncode = 1
+        stdout = ""
+        stderr = f"security: parse error near {KEY}"
+
+    monkeypatch.setattr(kb_keys.subprocess, "run", lambda *a, **k: Refused())
+    with pytest.raises(KbKeyError) as refused:
+        KeychainKeys().save("OPENROUTER_API_KEY", KEY)
+    assert KEY not in str(refused.value)
+
+
+def test_review_r1_only_kb_key_names_are_accepted_by_the_cli(monkeypatch):
+    keys_cli(monkeypatch, FakeKeys())
+    with pytest.raises(SystemExit):
+        cli.main(["keys", "set", "--from-env", "--name", "PATH"])
+
+
+def test_review_r1_delete_says_when_there_was_nothing(monkeypatch, capsys):
+    keys_cli(monkeypatch, FakeKeys({"OPENROUTER_API_KEY": KEY}))
+    assert cli.main(["keys", "delete"]) == 0
+    out = capsys.readouterr().out
+    assert "OPENROUTER_API_KEY: removida do Keychain" in out
+    assert "OPENAI_API_KEY: não estava no Keychain" in out

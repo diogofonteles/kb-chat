@@ -146,6 +146,7 @@ def run(args: argparse.Namespace) -> int:
         reporter=reporter,
         # KBC-117: what it cannot do now (the kb's AI key missing), never leased, told why.
         unavailable=unavailable,
+        reload_kb_env=lambda: kb_env(keys_of()),
     )
     if args.poll:
         worker.poll_s = args.poll
@@ -272,7 +273,7 @@ def print_key_hint() -> None:
 
 def keys(args: argparse.Namespace) -> int:
     """`transcriber keys set|status|delete`: the kb's AI keys in the Keychain (KBC-117)."""
-    from .kb_keys import KB_KEY_NAMES, KbKeyError
+    from .kb_keys import KB_KEY_NAMES, KbKeyError, check_key
 
     store = keys_of()
     names = args.name or list(KB_KEY_NAMES)
@@ -289,8 +290,8 @@ def keys(args: argparse.Namespace) -> int:
         return 0
     if args.action == "delete":
         for name in names:
-            store.delete(name)
-            print(f"{name}: removida do Keychain")
+            gone = store.delete(name)
+            print(f"{name}: {'removida do Keychain' if gone else 'não estava no Keychain'}")
         return 0
     found = _keys_to_store(names, args.from_env)
     if not found:
@@ -298,6 +299,9 @@ def keys(args: argparse.Namespace) -> int:
         print(f"Nenhuma chave {source}: nada foi guardado.", file=sys.stderr)
         return 1
     try:
+        # All checked first: one bad value stores none (never half of them).
+        for name, value in found.items():
+            check_key(name, value)
         for name, value in found.items():
             store.save(name, value)
             print(f"{name}: guardada no Keychain")
@@ -328,7 +332,10 @@ def _wake_service() -> None:
         # Not a Mac, or no launchctl: the keys are stored all the same.
         woken = False
     if woken:
-        print("Transcritor avisado: ele liga e volta a publicar no acervo.")
+        print(
+            "Transcritor avisado: desligado, ele liga agora; já ligado, ele lê a chave nova "
+            "em até 30 s. Depois volta a publicar no acervo."
+        )
     else:
         print("O serviço não está carregado: rode `transcriber service install`.")
 
@@ -413,8 +420,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="store the keys this shell exports (the one-time move off ~/.zshrc)",
     )
+    from .kb_keys import KB_KEY_NAMES
+
     secrets.add_argument(
-        "--name", action="append", help="only this key (repeatable; default: all of kb's)"
+        "--name",
+        action="append",
+        choices=KB_KEY_NAMES,
+        help="only this key (repeatable; default: all of kb's)",
     )
     secrets.set_defaults(handler=keys)
     args = parser.parse_args(argv)

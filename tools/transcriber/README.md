@@ -96,10 +96,13 @@ uv run --project tools/transcriber transcriber keys delete
 ```
 
 `keys set` starts the service (`launchctl kickstart`, never `-k`) so it tells the app it can
-publish again. Without `OPENROUTER_API_KEY` the worker does not ask for `kb-publish` and its
+publish again; a worker already running reads the Keychain again every 30 s while the key is
+missing, and publishes once it is there. Without `OPENROUTER_API_KEY` the worker does not ask for `kb-publish` and its
 status says why (`unavailable`: "chave da IA do kb ausente"); masters see it in Transcritores.
 If kb still fails for a missing key, the job goes back as `not-configured`: it spends no
-attempt, and this run stops asking for `kb-publish`. Documents that died of it before (four
+attempt (unless kb spent something first: then it counts), and this run stops asking for
+`kb-publish`. An invalid or revoked key (the provider's 401) is a plain failure: those
+documents come back with **Tentar de novo**. Documents that died of it before (four
 failed runs, under **Falhou**) go back to the queue by themselves when a transcriber reports
 it can publish; **Tentar de novo** in Transcritores → Falhou also takes one back. `service
 install` still works with the keys only in the shell, and then says to run `keys set

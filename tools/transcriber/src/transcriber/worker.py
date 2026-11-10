@@ -23,6 +23,7 @@ from .config import (
     ERROR_BACKOFF_S,
     HEARTBEAT_S,
     IDLE_GRACE_S,
+    KEY_RECHECK_S,
     MAX_IDLE_ERRORS,
     PARAMETERS,
     PARAMETERS_VERSION,
@@ -31,7 +32,7 @@ from .config import (
     UNAUTHORIZED_BACKOFF_S,
 )
 from .diarize import Diarizer, separate
-from .kb_keys import KEY_MISSING, is_configuration_error
+from .kb_keys import KEY_MISSING, REQUIRED_KEY, is_configuration_error
 from .kb_publish import KbPublisher, KbStepFailed, UnsafePath, VaultBusy
 from .secret import TokenError
 from .status import StatusReporter, WorkerStatus
@@ -99,6 +100,11 @@ class Worker:
     max_idle_errors: int = MAX_IDLE_ERRORS
     # Kinds this Mac cannot do now, and why (KBC-117): never asked for, told to the app.
     unavailable: list[dict] = field(default_factory=list)
+    # Reads the kb's keys again (the Keychain): a `keys set` while this run goes on is seen
+    # within key_recheck_s, without a restart (review r1).
+    reload_kb_env: Callable[[], dict[str, str]] | None = None
+    key_recheck_s: float = KEY_RECHECK_S
+    _keys_checked_at: float = field(default=float("-inf"), init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.status.kinds = self.kinds
@@ -191,6 +197,7 @@ class Worker:
     def step(self) -> str:
         """One lease attempt: 'job', 'idle', 'revoked', 'lease-error' (the API out of reach)
         or 'job-error' (a job that broke: given back, never a reason to stop)."""
+        self._recheck_keys()
         kinds = self._kinds_now()
         try:
             job = self.api.lease(kinds)
@@ -353,6 +360,27 @@ class Worker:
             self._sync_if_due()
         else:
             log.warning("job %s: the lease was lost before the result: dropped", job["id"])
+
+    def _recheck_keys(self) -> None:
+        """While the kb's key is missing, the Keychain is asked again (at most every
+        key_recheck_s); once the key is there, kb-publish is back and the app is told."""
+        missing = [one for one in self.unavailable if one["reason"] == "kb-ai-key-missing"]
+        if not missing or self.reload_kb_env is None or self.publisher is None:
+            return
+        now = time.monotonic()
+        if now - self._keys_checked_at < self.key_recheck_s:
+            return
+        self._keys_checked_at = now
+        env = self.reload_kb_env()
+        if not env.get(REQUIRED_KEY):
+            return
+        if hasattr(self.publisher.kb, "env"):
+            self.publisher.kb.env = env
+        self.unavailable = [one for one in self.unavailable if one not in missing]
+        self.status.kinds = self.kinds
+        self.status.unavailable = list(self.unavailable)
+        log.info("the kb's AI key is set: publishing again")
+        self._report()
 
     def _publish_failed(self, job: dict, err: Exception) -> None:
         log.error("job %s: publishing failed: %s", job["id"], err)

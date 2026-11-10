@@ -22,7 +22,7 @@ KB_KEY_NAMES = (REQUIRED_KEY, "ANTHROPIC_API_KEY", "OPENAI_API_KEY")
 # A key goes into the line `security -i` reads: no space, quote or newline may end it early.
 KEY_PATTERN = re.compile(r"^[A-Za-z0-9_.:+/=-]{16,512}\Z")
 # What the app shows (the reason `kb-ai-key-missing`), with what to do on the Mac.
-KEY_MISSING = "chave da IA do kb ausente (OPENROUTER_API_KEY): no Mac, rode `transcriber keys set`"
+KEY_MISSING = 'chave da IA do kb ausente (OPENROUTER_API_KEY): no Mac, rode "transcriber keys set"'
 KB_MISSING = "o kb não está no PATH do serviço (ou a pasta do vault não existe)"
 # kb's own words for a key it does not have (decisions, generation, transcribe).
 CONFIGURATION_ERROR = re.compile(
@@ -39,10 +39,10 @@ class KeyStore(Protocol):
 
     def save(self, name: str, value: str) -> None: ...
 
-    def delete(self, name: str) -> None: ...
+    def delete(self, name: str) -> bool: ...
 
 
-def _checked(name: str, value: str) -> None:
+def check_key(name: str, value: str) -> None:
     if name not in KB_KEY_NAMES:
         raise KbKeyError(f"{name} não é uma chave do kb ({', '.join(KB_KEY_NAMES)})")
     if not KEY_PATTERN.match(value):
@@ -64,21 +64,24 @@ class KeychainKeys:
 
     def save(self, name: str, value: str) -> None:
         """`security -i` reads the command from stdin: the value is never in argv (ps)."""
-        _checked(name, value)
+        check_key(name, value)
         command = f"add-generic-password -U -s {KB_KEYS_SERVICE} -a {name} -w {value}\n"
         done = subprocess.run(
             ["security", "-i"], input=command, capture_output=True, text=True, check=False
         )
         if done.returncode != 0 or done.stderr.strip():
-            # security's message names the item, never echoes the password.
-            raise KbKeyError(f"o Keychain recusou {name}: {done.stderr.strip()[:200]}")
+            # Never trust security's message not to repeat the command line it read.
+            said = done.stderr.replace(value, "…").strip()[:200]
+            raise KbKeyError(f"o Keychain recusou {name}: {said}")
 
-    def delete(self, name: str) -> None:
-        subprocess.run(
+    def delete(self, name: str) -> bool:
+        """False when there was nothing to delete (security answers 44)."""
+        done = subprocess.run(
             ["security", "delete-generic-password", "-s", KB_KEYS_SERVICE, "-a", name],
             capture_output=True,
             check=False,
         )
+        return done.returncode == 0
 
 
 def kb_env(store: KeyStore, environ: Mapping[str, str] | None = None) -> dict[str, str]:

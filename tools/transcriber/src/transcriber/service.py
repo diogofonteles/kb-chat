@@ -150,8 +150,8 @@ class Service:
         while self.loaded()[0]:
             if waited >= SETTLE_S:
                 raise ServiceError(
-                    f"o agente antigo não saiu do launchd em {SETTLE_S:.0f} s; "
-                    f"tente `launchctl bootout {self.target}` e instale de novo."
+                    f"o agente antigo não saiu do launchd em {SETTLE_S:.0f} s (talvez ainda "
+                    "termine um trabalho); espere ele terminar e instale de novo."
                 )
             self.sleep(POLL_S)
             waited += POLL_S

@@ -49,8 +49,8 @@ class EmptyKeys:
     def save(self, name: str, value: str) -> None:
         raise AssertionError("a test stored a key without its own fake Keychain")
 
-    def delete(self, name: str) -> None:
-        pass
+    def delete(self, name: str) -> bool:
+        return False
 
 
 @pytest.fixture(autouse=True)
