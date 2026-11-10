@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { fixtureTools } from '../../../test/research-factories.js';
 import { turnToolsFactory } from './turn-tools.js';
+import { OPEN_VIEW } from '../access-levels/index.js';
 
 describe('TurnResearchTools (the MCP side of the research tools)', () => {
   it('runs the module tools with cumulative [n] sources for the turn', async () => {
-    const tools = turnToolsFactory(await fixtureTools())('hermetismo');
+    const tools = turnToolsFactory(await fixtureTools())(
+      'hermetismo',
+      OPEN_VIEW,
+    );
     expect(tools.definitions().map((tool) => tool.name)).toContain('find_text');
     const search = await tools.call('search_collection', {
       query: 'pitagóricos',
@@ -39,8 +43,13 @@ describe('TurnResearchTools (the MCP side of the research tools)', () => {
 
   it('numbers each turn on its own', async () => {
     const factory = turnToolsFactory(await fixtureTools());
-    await factory('hermetismo').call('search_collection', { query: 'ritmo' });
-    const fresh = await factory('hermetismo').call('list_subjects', {});
+    await factory('hermetismo', OPEN_VIEW).call('search_collection', {
+      query: 'ritmo',
+    });
+    const fresh = await factory('hermetismo', OPEN_VIEW).call(
+      'list_subjects',
+      {},
+    );
     expect(fresh.sources).toEqual([]);
     expect(fresh.steps).toEqual([
       { kind: 'subjects', text: 'Listando os assuntos' },
@@ -48,7 +57,10 @@ describe('TurnResearchTools (the MCP side of the research tools)', () => {
   });
 
   it('answers invalid arguments as text with no step, and rejects unknown tools', async () => {
-    const tools = turnToolsFactory(await fixtureTools())('hermetismo');
+    const tools = turnToolsFactory(await fixtureTools())(
+      'hermetismo',
+      OPEN_VIEW,
+    );
     const invalid = await tools.call('search_collection', { query: 42 });
     expect(invalid.steps).toEqual([]);
     expect(invalid.text).toMatch(/^Argumentos inválidos/);

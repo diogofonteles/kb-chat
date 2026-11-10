@@ -216,6 +216,7 @@ async function sweepPlanning(
     plan: { target: {}, phrases: ['palavra7', 'palavra42'], extract: 'tudo' },
     batchChars: 24_000,
     tracks: shelf,
+    view: OPEN_VIEW,
   });
   return performance.now() - started;
 }

@@ -3,6 +3,7 @@ import { MemoryVault, memoryTools } from '../../../../test/memory-research.js';
 import { researchBudgets } from '../limits.js';
 import { SourceBook } from '../source-book.js';
 import { sweepTurnHost } from './sweep-turn.js';
+import { OPEN_VIEW } from '../../access-levels/index.js';
 
 async function host(input: { requestBudget?: number } = {}) {
   const tools = await memoryTools(new MemoryVault({}));
@@ -10,11 +11,13 @@ async function host(input: { requestBudget?: number } = {}) {
     kit: {
       sweeps: tools.sweeps,
       book: new SourceBook(),
+      view: OPEN_VIEW,
       topicTitle: 'T',
       mainAuthor: null,
     },
     input: {
       topic: 'hermetismo',
+      view: OPEN_VIEW,
       question: 'q',
       history: [],
       profile: 'exhaustive',

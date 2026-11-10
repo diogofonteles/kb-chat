@@ -1,5 +1,6 @@
 import type { AnswerSource, ResearchStep } from '@kb-chat/contracts';
 import type { ToolDefinition } from './llm.js';
+import type { LevelView } from './level-view.js';
 import type { TrackShelf } from './track-shelf.js';
 
 /** What one tool call produced: the text the model reads, the step shown and the sources so far. */
@@ -26,8 +27,13 @@ export interface ResearchToolsPort {
   finalSources?(answer: string): readonly AnswerSource[] | null;
 }
 
-/** A fresh tool set per turn: each turn numbers its own sources; `tracks` it may see. */
+/**
+ * A fresh tool set per turn: each turn numbers its own sources. `view` is the person's view
+ * of the collection (ADR 0036 §7, KBC-104): the tools, and an external model over the turn's
+ * MCP token, reach only what it allows; `tracks`, the tracks the person may research.
+ */
 export type ResearchToolsFactory = (
   topic: string,
+  view: LevelView,
   tracks?: TrackShelf,
 ) => ResearchToolsPort;

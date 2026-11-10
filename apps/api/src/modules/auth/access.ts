@@ -50,7 +50,7 @@ declare module 'fastify' {
 export interface LevelHooks {
   /** FR-8: the person's level code per top-level collection with a scale they see. */
   codesOf(person: Viewer['person'], parentOf: ParentOf): Record<string, string>;
-  /** BR-10: research and media of a scaled collection stay with masters until KBC-104/105. */
+  /** BR-10: the media of a scaled collection stays with masters until KBC-105. */
   closedUntilLevelsReachIt(person: Viewer['person'], topic: string): boolean;
 }
 
@@ -160,20 +160,6 @@ export function canSeeMedia(request: FastifyRequest, topic: string): boolean {
     canSee(request, topic) &&
     !hooks.closedUntilLevelsReachIt(viewerOf(request).person, topic)
   );
-}
-
-/**
- * BR-10: AI research in a collection with levels waits for KBC-104; without the levels'
- * answer it fails rather than open (fail-closed).
- */
-export function assertResearchOpen(
-  request: FastifyRequest,
-  topic: string,
-): void {
-  const hooks = request.server.levelHooks;
-  if (!hooks) throw new Error('The level hooks are not registered');
-  if (hooks.closedUntilLevelsReachIt(viewerOf(request).person, topic))
-    throw new AppError('LEVELS_PENDING', 'Research waits for levels here');
 }
 
 /**

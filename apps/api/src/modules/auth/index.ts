@@ -3,7 +3,6 @@ export {
   SIGNED_IN,
   assertFeature,
   assertMediaOpen,
-  assertResearchOpen,
   assertNotActing,
   canSee,
   canSeeMedia,

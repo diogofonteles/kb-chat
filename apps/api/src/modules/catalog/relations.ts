@@ -90,18 +90,25 @@ export class RelationIndex {
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }
 
-  /** The groups shown on one document, each fully listed and without copies (callers page them). */
+  /**
+   * The groups shown on one document, each fully listed and without copies (callers page
+   * them). `seen` keeps what the reader may see, before copies collapse: a hidden copy never
+   * stands in for a visible one of the same title (KBC-104 QA F-1).
+   */
   groupsOf(
     entry: CatalogEntry,
+    seen: (ref: RelatedDocument) => boolean = () => true,
   ): Record<SeeAlsoGroupName, readonly RelatedDocument[]> {
     const reverse = this.reverse.get(entry.id);
+    const unique = (refs: readonly RelatedDocument[]) =>
+      uniqueByCopy(refs.filter(seen));
     return {
-      exampleOf: uniqueByCopy(this.resolve(entry.relations.exampleOf)),
-      extends: uniqueByCopy(this.resolve(entry.relations.extends)),
-      related: uniqueByCopy(this.resolve(entry.relations.related)),
-      examples: uniqueByCopy(reverse?.get('examples') ?? []),
-      extendedBy: uniqueByCopy(reverse?.get('extendedBy') ?? []),
-      relatedFrom: uniqueByCopy(reverse?.get('relatedFrom') ?? []),
+      exampleOf: unique(this.resolve(entry.relations.exampleOf)),
+      extends: unique(this.resolve(entry.relations.extends)),
+      related: unique(this.resolve(entry.relations.related)),
+      examples: unique(reverse?.get('examples') ?? []),
+      extendedBy: unique(reverse?.get('extendedBy') ?? []),
+      relatedFrom: unique(reverse?.get('relatedFrom') ?? []),
     };
   }
 

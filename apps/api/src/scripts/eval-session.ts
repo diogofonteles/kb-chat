@@ -14,6 +14,7 @@ import type { AppConfig } from '../config.js';
 import { createLogger } from '../logger.js';
 import { startMcpTurnServer } from '../mcp/mcp-turn-server.js';
 import { McpTurnRegistry } from '../mcp/mcp-turns.js';
+import { OPEN_VIEW } from '../modules/access-levels/index.js';
 import { CatalogRegistry } from '../modules/catalog/index.js';
 import type { ResearchRunnerPort } from '../ports/research-runner.js';
 import { createAiProviders } from '../providers/create-ai-providers.js';
@@ -197,6 +198,9 @@ export interface EvalQuestion {
   readonly profile: ResearchProfile;
 }
 
+/** A signal no one aborts: an eval turn runs to its end. */
+const abortless = (): AbortSignal => new AbortController().signal;
+
 /** Runs one turn and times its first step, first answer text and end. */
 export async function runEvalTurn(
   runner: ResearchRunnerPort,
@@ -217,7 +221,8 @@ export async function runEvalTurn(
   };
   const startedAt = performance.now();
   const elapsed = () => Math.round(performance.now() - startedAt);
-  const input = { ...question, signal: new AbortController().signal };
+  // As the owner (OWNER), a master: every level (ADR 0036 §2).
+  const input = { ...question, view: OPEN_VIEW, signal: abortless() };
   for await (const event of runner.run(input)) collect(state, event, elapsed);
   const { segments, ...rest } = state;
   return {

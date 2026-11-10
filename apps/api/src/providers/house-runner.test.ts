@@ -6,6 +6,7 @@ import type {
 } from '../ports/research-runner.js';
 import { HouseQuota } from '../modules/house-ai/index.js';
 import { HouseResearchRunner } from './house-runner.js';
+import { OPEN_VIEW } from '../modules/access-levels/index.js';
 
 /** A runner that only records the input it was given. */
 class RecordingRunner implements ResearchRunnerPort {
@@ -47,6 +48,7 @@ function house(inner: RecordingRunner, usage: FreeUsage | null) {
 
 const input = (profile: ResearchInput['profile']): ResearchInput => ({
   topic: 'hermetismo',
+  view: OPEN_VIEW,
   question: 'q',
   history: [],
   profile,

@@ -27,6 +27,7 @@ import {
 } from './codex-cli-runner.js';
 import { subscriptionEnv } from './cli-process.js';
 import { stopOnAbort } from './cli-research-turn.js';
+import { OPEN_VIEW } from '../modules/access-levels/index.js';
 
 // Each test runs the fake Claude or Codex CLI as real node processes, a sweep one per batch:
 // about a second alone, several on a busy machine.
@@ -52,7 +53,7 @@ afterAll(async () => {
 
 /** The real research tools over the fixture vault, for exhaustive turns (KBC-030). */
 async function sweepTools() {
-  return turnToolsFactory(await fixtureTools())('hermetismo');
+  return turnToolsFactory(await fixtureTools())('hermetismo', OPEN_VIEW);
 }
 
 interface LoggedRun {
@@ -94,6 +95,7 @@ async function collect(
   const events: ResearchEvent[] = [];
   for await (const event of runner.run({
     topic: 'hermetismo',
+    view: OPEN_VIEW,
     question: 'O que é o ritmo?',
     history: [{ question: 'Antes', answer: 'Resposta anterior' }],
     profile,
@@ -181,6 +183,7 @@ describe('ClaudeCliRunner auto-escalation (ADR 0009)', () => {
     const runner = escalating(await fakeHome({ mode: 'deepen', report }));
     for await (const event of runner.run({
       topic: 'hermetismo',
+      view: OPEN_VIEW,
       question: 'q',
       history: [],
       profile: 'fast',
@@ -377,6 +380,7 @@ describe('ClaudeCliRunner', () => {
     const events: ResearchEvent[] = [];
     for await (const event of claude(await fakeHome({ mode: 'stubborn' })).run({
       topic: 'hermetismo',
+      view: OPEN_VIEW,
       question: 'q',
       history: [],
       profile: 'deep',
@@ -406,6 +410,7 @@ describe('ClaudeCliRunner', () => {
     const events: ResearchEvent[] = [];
     for await (const event of claude(await fakeHome({ mode: 'sleep' })).run({
       topic: 'hermetismo',
+      view: OPEN_VIEW,
       question: 'q',
       history: [],
       profile: 'deep',

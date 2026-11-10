@@ -1,5 +1,6 @@
 import { canSeeTopic, isMaster, type StoredPerson } from '../auth/index.js';
 import type { CatalogRegistry, TopicCatalog } from '../catalog/index.js';
+import type { ViewedCollection } from '../../ports/level-view.js';
 import type { LevelDirectory, StoredLevel } from './level-directory.js';
 import {
   CLOSED_VIEW,
@@ -25,7 +26,7 @@ interface Shares {
 }
 
 export class ContentGate {
-  private readonly shares = new WeakMap<TopicCatalog, Shares>();
+  private readonly shares = new WeakMap<ViewedCollection, Shares>();
 
   constructor(private readonly deps: ContentGateDeps) {}
 
@@ -91,7 +92,7 @@ export class ContentGate {
     return codes;
   }
 
-  /** BR-10: until KBC-104/105, research and media of a scaled collection are masters' only. */
+  /** BR-10: until KBC-105, the media of a scaled collection is masters' only. */
   closedUntilLevelsReachIt(person: StoredPerson, topic: string): boolean {
     if (isMaster(person)) return false;
     return this.orphaned(topic) || this.scaleOf(topic).length > 0;
@@ -102,7 +103,7 @@ export class ContentGate {
     return this.shares.get(catalog)?.byView.size ?? 0;
   }
 
-  private memo(catalog: TopicCatalog, key: string, compute: () => number) {
+  private memo(catalog: ViewedCollection, key: string, compute: () => number) {
     const { version } = this.deps.directory;
     const kept = this.shares.get(catalog);
     const current =

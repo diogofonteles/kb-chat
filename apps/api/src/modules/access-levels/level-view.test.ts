@@ -14,6 +14,7 @@ import {
   CLOSED_VIEW,
   MIN_VISIBLE_SHARE,
   OPEN_VIEW,
+  allowsInScope,
   scaledView,
 } from './level-view.js';
 
@@ -157,6 +158,61 @@ async function gateOver(count: number) {
   const catalog = await bigCatalog(count);
   return { gate: new ContentGate({ directory, catalog }), catalog, directory };
 }
+
+describe('The visible entries of a scope (ADR 0036 §7, KBC-104 FR-3)', () => {
+  const byCollection: Record<string, Record<string, string>> = {
+    hermetismo: { 'raw/a.md': 'qs', 'raw/b.md': 'cdc' },
+    'hermetismo/aulas': { 'raw/a.md': 'cdc', 'raw/c.md': 'ci' },
+  };
+  const view = scaledView({
+    scale: SCALE,
+    rank: 1,
+    placementsOf: (collection) => placed(byCollection[collection] ?? {}),
+    memo: (_catalog, compute) => compute(),
+  });
+  // A parent's scope: its own ids, and a sub-collection's by its home.
+  const scope = {
+    topic: 'hermetismo',
+    entries: new Map([
+      ['raw/a.md', entry('raw/a.md')],
+      ['raw/b.md', entry('raw/b.md')],
+      [
+        'aulas/raw/a.md',
+        {
+          ...entry('aulas/raw/a.md'),
+          home: { topic: 'hermetismo/aulas', id: 'raw/a.md' },
+        },
+      ],
+      [
+        'aulas/raw/c.md',
+        {
+          ...entry('aulas/raw/c.md'),
+          home: { topic: 'hermetismo/aulas', id: 'raw/c.md' },
+        },
+      ],
+    ]),
+  };
+
+  it('judges each document in its own collection, a sub-collection one by its home', () => {
+    expect(view.entries(scope).map((one) => one.id)).toEqual([
+      'raw/a.md',
+      'aulas/raw/c.md',
+    ]);
+    const hidden = {
+      id: 'aulas/raw/a.md',
+      media: null,
+      home: { topic: 'hermetismo/aulas', id: 'raw/a.md' },
+    };
+    expect(allowsInScope(view, 'hermetismo', hidden)).toBe(false);
+    // The same id in the parent itself is at QS: seen.
+    expect(allowsInScope(view, 'hermetismo', entry('raw/a.md'))).toBe(true);
+  });
+
+  it('gives the whole scope to the open view and nothing to the closed one', () => {
+    expect(OPEN_VIEW.entries(scope)).toHaveLength(4);
+    expect(CLOSED_VIEW.entries(scope)).toEqual([]);
+  });
+});
 
 describe('The content gate (KBC-103 BR-5, NFR-1)', () => {
   it('gives a person without a level, or with an unknown one, the lowest', async () => {

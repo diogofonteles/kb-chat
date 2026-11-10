@@ -2,6 +2,7 @@ import type { ResearchEvent } from '@kb-chat/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { ResearchRunnerPort } from '../ports/research-runner.js';
 import { TurnScopedRunner } from './turn-runner.js';
+import { OPEN_VIEW } from '../modules/access-levels/index.js';
 
 const runner = (model: string): ResearchRunnerPort => ({
   model,
@@ -24,6 +25,7 @@ describe('TurnScopedRunner (KBC-023 review M1)', () => {
     const events = [];
     for await (const event of scoped.run({
       topic: 't',
+      view: OPEN_VIEW,
       question: 'q',
       history: [],
       profile: 'fast',

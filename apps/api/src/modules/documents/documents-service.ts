@@ -1,5 +1,6 @@
 import type {
   KbDocument,
+  RelatedDocument,
   RelationPage,
   SeeAlso,
   SeeAlsoGroupName,
@@ -47,21 +48,28 @@ export interface DocumentReader {
   readonly level: LevelView;
 }
 
-/** The refs this reader may see: texts, and the tracks they would research. */
-function seenBy<T extends { id: string }>(
-  { catalog, view }: Located,
-  { refs, reader }: { refs: readonly T[]; reader: DocumentReader },
-): T[] {
-  return refs
-    .filter((ref) => {
-      const entry = catalog.entries.get(ref.id);
-      if (!entry) return true;
-      // Above the reader's level, a related document is not there (KBC-103 BR-8).
-      if (!reader.level.allows(catalog.topic.slug, entry)) return false;
-      if (!entry.media) return true;
-      return reader.seesTrack?.(catalog.topic.slug, entry.media) ?? false;
-    })
-    .map((ref) => ({ ...ref, id: view.idOf(catalog.topic.slug, ref.id) }));
+/** Whether this reader may see a ref: a text, or a track they would research. */
+const seenBy =
+  ({ catalog }: Located, reader: DocumentReader) =>
+  (ref: { id: string }): boolean => {
+    const entry = catalog.entries.get(ref.id);
+    if (!entry) return true;
+    // Above the reader's level, a related document is not there (KBC-103 BR-8).
+    if (!reader.level.allows(catalog.topic.slug, entry)) return false;
+    if (!entry.media) return true;
+    return reader.seesTrack?.(catalog.topic.slug, entry.media) ?? false;
+  };
+
+/**
+ * The document's groups as this reader sees them, filtered before copies collapse (KBC-104
+ * QA F-1), with ids in the scope they were named from (FR-5).
+ */
+function groupsFor(located: Located, reader: DocumentReader) {
+  const { catalog, view, entry } = located;
+  const groups = catalog.relations.groupsOf(entry, seenBy(located, reader));
+  const inScope = (refs: readonly RelatedDocument[]) =>
+    refs.map((ref) => ({ ...ref, id: view.idOf(catalog.topic.slug, ref.id) }));
+  return (group: SeeAlsoGroupName) => inScope(groups[group]);
 }
 
 /** A document, its collection and the scope it was named from (FR-5). */
@@ -114,11 +122,7 @@ export class DocumentsService {
     { query, reader }: { query: RelationPageQuery; reader: DocumentReader },
   ): RelationPage {
     const located = this.requireEntry(topic, id, reader.level);
-    const { catalog, entry } = located;
-    const all = seenBy(located, {
-      refs: catalog.relations.groupsOf(entry)[query.group],
-      reader,
-    });
+    const all = groupsFor(located, reader)(query.group);
     const end = Math.min(query.offset + query.limit, all.length);
     return {
       items: all.slice(query.offset, end),
@@ -159,9 +163,9 @@ export class DocumentsService {
   }
 
   private seeAlso(located: Located, reader: DocumentReader): SeeAlso {
-    const groups = located.catalog.relations.groupsOf(located.entry);
+    const groupOf = groupsFor(located, reader);
     const preview = (group: SeeAlsoGroupName) => {
-      const refs = seenBy(located, { refs: groups[group], reader });
+      const refs = groupOf(group);
       return { items: refs.slice(0, SEE_ALSO_PREVIEW), total: refs.length };
     };
     return {

@@ -16,10 +16,12 @@ import type {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
+import type { LevelView } from '../../ports/level-view.js';
 import type { ResearchRunnerPort } from '../../ports/research-runner.js';
 import type { TrackShelf } from '../../ports/track-shelf.js';
+import { levelViewOf } from '../access-levels/index.js';
 import {
-  assertResearchOpen,
+  canSeeMedia,
   hasFeature,
   principalOf,
   viewerOf,
@@ -58,13 +60,28 @@ export interface ResearchRouteOptions {
  */
 function shelfFor(
   request: FastifyRequest,
-  shelf: (() => TrackShelf) | undefined,
+  { topic, shelf }: { topic: string; shelf: (() => TrackShelf) | undefined },
 ): TrackShelf | undefined {
   const { person } = viewerOf(request);
   const allowed = (['media', 'media-tracks', 'media-research'] as const).every(
     (feature) => hasFeature(person, feature),
   );
-  return allowed ? shelf?.() : undefined;
+  // A collection whose media waits for levels (KBC-105/106) gives no shelf at all: its tracks
+  // stay closed even before the view's own rule (KBC-104 review #1, defence in depth).
+  return allowed && canSeeMedia(request, topic) ? shelf?.() : undefined;
+}
+
+/**
+ * Who the turn reads for (the one a master acts as): their view of the collection, which
+ * every tool, the sweep and a cursor sent back go through (KBC-104 BR-1), and their tracks.
+ */
+function readerOf(
+  request: FastifyRequest,
+  topic: string,
+  shelf: (() => TrackShelf) | undefined,
+): Pick<ResearchCall, 'view' | 'tracks'> {
+  const tracks = shelfFor(request, { topic, shelf });
+  return { view: levelViewOf(request, topic), ...(tracks && { tracks }) };
 }
 
 /** The history as the research routes write to it (KBC-029); the conversations module. */
@@ -130,6 +147,8 @@ export interface ResearchCall {
   readonly body: ResearchRequestBody;
   /** The tracks this person may research; none without the permissions. */
   readonly tracks?: TrackShelf;
+  /** What the person (the one a master acts as) may see of the collection (KBC-104). */
+  readonly view: LevelView;
 }
 
 type ResearchRequestBody = z.output<typeof researchRequestSchema>;
@@ -154,10 +173,11 @@ async function streamResearch(
 }
 
 const inputOf = (
-  { topic, body, tracks }: ResearchCall,
+  { topic, body, tracks, view }: ResearchCall,
   signal: AbortSignal,
 ) => ({
   topic,
+  view,
   ...(tracks && { tracks }),
   question: body.question,
   history: body.history,
@@ -286,7 +306,7 @@ async function startRecorded(
 /** One research turn: recorded in the history when the page sent its ids (KBC-029). */
 async function handleResearch(
   options: ResearchRouteOptions,
-  { topic, body }: ResearchCall,
+  { topic, body }: Pick<ResearchCall, 'topic' | 'body'>,
   { request, reply }: { request: FastifyRequest; reply: FastifyReply },
 ): Promise<void> {
   const principal = principalOf(request);
@@ -296,21 +316,10 @@ async function handleResearch(
   if (!options.hasTopic(topic))
     throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
   const { conversationId, turnId } = body;
-  const tracks = shelfFor(request, options.shelf);
+  const own = { topic, body, ...readerOf(request, topic, options.shelf) };
   if (!conversationId || !turnId)
-    return streamResearch(
-      current,
-      { topic, body, ...(tracks && { tracks }) },
-      { request, reply },
-    );
-  const call = {
-    topic,
-    body,
-    principal,
-    conversationId,
-    turnId,
-    ...(tracks && { tracks }),
-  };
+    return streamResearch(current, own, { request, reply });
+  const call = { ...own, principal, conversationId, turnId };
   return startRecorded(current, call, { reply, log: request.log, options });
 }
 
@@ -359,8 +368,6 @@ export const researchRoutes =
         '/api/v1/topics/:topic/research',
         researchOptions(options.ratePerMinute),
         (request, reply) => {
-          // KBC-103 BR-10: research in a collection with levels waits for KBC-104.
-          assertResearchOpen(request, request.params.topic);
           return handleResearch(
             options,
             { topic: request.params.topic, body: request.body },

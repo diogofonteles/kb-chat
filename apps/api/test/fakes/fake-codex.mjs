@@ -7,7 +7,7 @@
 // and the process id. `codex login status` answers "Logged in" (exit 0), or exits 1 with mode fail.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SWEEP_PLAN, logRun, sweepReply } from './fake-sweep.mjs';
+import { SWEEP_PLAN, callTools, logRun, sweepReply } from './fake-sweep.mjs';
 
 // The CLI gets only allowlisted variables, so the test settings come from $HOME.
 const fake = (() => {
@@ -104,7 +104,7 @@ if (tools.length > 0) {
       status: 'in_progress',
     },
   });
-  await client.callTool({ name: tools[0].name, arguments: { query: 'ritmo' } });
+  await callTools(client, tools, fake);
 }
 if (fake.mode === 'plan' && tools.some((tool) => tool.name === 'plan_sweep'))
   await client.callTool({ name: 'plan_sweep', arguments: SWEEP_PLAN });

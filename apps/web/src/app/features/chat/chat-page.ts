@@ -140,16 +140,6 @@ export class ChatPage {
   protected readonly researching = computed(
     () => this.currentView() === 'research',
   );
-  /**
-   * KBC-103 BR-10: in a collection with levels (the person has a level in it), AI research
-   * waits for KBC-104; masters have no level and research as before.
-   */
-  protected readonly researchPending = computed(() => {
-    const topic = this.topic();
-    if (!this.researching() || !topic) return false;
-    const levels = this.session.me()?.levels ?? {};
-    return (topic.parent ?? topic.slug) in levels;
-  });
   protected readonly isEmpty = computed(() =>
     this.researching()
       ? this.research.turns().length === 0

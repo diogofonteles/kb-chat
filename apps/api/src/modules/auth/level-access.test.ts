@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { registerErrorHandler } from '../../error-handler.js';
-import { assertResearchOpen, type LevelHooks } from './access.js';
+import { assertMediaOpen, type LevelHooks } from './access.js';
 import type { StoredPerson } from './person.js';
 
 const ana: StoredPerson = {
@@ -24,7 +24,7 @@ afterEach(async () => {
   app = null;
 });
 
-/** A route that asks whether research reaches `hermetismo`, with or without the hooks. */
+/** A route that asks whether the media of `hermetismo` is open, with or without the hooks. */
 async function appWith(hooks?: LevelHooks): Promise<FastifyInstance> {
   const built = Fastify();
   registerErrorHandler(built);
@@ -33,8 +33,8 @@ async function appWith(hooks?: LevelHooks): Promise<FastifyInstance> {
   built.addHook('onRequest', async (request) => {
     request.viewer = { person: ana, principal: 'ana', isOwner: false };
   });
-  built.get('/research', async (request) => {
-    assertResearchOpen(request, 'hermetismo');
+  built.get('/media', async (request) => {
+    assertMediaOpen(request, 'hermetismo');
     return { ok: true };
   });
   await built.ready();
@@ -47,15 +47,15 @@ const closed: LevelHooks = {
   closedUntilLevelsReachIt: () => true,
 };
 
-describe('Research and the levels (KBC-103 BR-10, review round 2)', () => {
+describe('Media and the levels (KBC-103 BR-10, review round 2; research opened by KBC-104)', () => {
   it('answers LEVELS_PENDING while levels hold the collection', async () => {
-    const reply = await (await appWith(closed)).inject('/research');
+    const reply = await (await appWith(closed)).inject('/media');
     expect(reply.statusCode).toBe(409);
     expect(reply.json().error.code).toBe('LEVELS_PENDING');
   });
 
   it('fails closed, never open, when the level hooks are not registered', async () => {
-    const reply = await (await appWith()).inject('/research');
+    const reply = await (await appWith()).inject('/media');
     expect(reply.statusCode).toBe(500);
   });
 });

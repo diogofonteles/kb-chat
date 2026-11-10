@@ -6,17 +6,18 @@ import { describe, expect, it } from 'vitest';
 const SRC = fileURLToPath(new URL('../..', import.meta.url));
 
 /**
- * Where the open view may be named (ADR 0036 §7, §12): the module that defines it, and the
- * research tools, which stay open until KBC-104 because research in a collection with levels
- * is closed to members (LEVELS_PENDING) and masters see every level.
+ * Where the open view may be named (ADR 0036 §7, §12): only the module that defines it. The
+ * research tools take the turn's view since KBC-104.
  */
 const ALLOWED = new Set([
   'modules/access-levels/level-view.ts',
   'modules/access-levels/content-gate.ts',
   'modules/access-levels/index.ts',
-  'modules/research/tools.ts',
   // A latency bench over a collection without levels, never a route.
   'scripts/search-tracks-latency.ts',
+  // The operator's eval (as the owner, a master) and grep probe: local scripts, never a route.
+  'scripts/eval-session.ts',
+  'scripts/grep-probe.ts',
 ]);
 
 async function sources(dir: string): Promise<string[]> {

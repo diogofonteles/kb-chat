@@ -257,7 +257,7 @@ describe('Search and reading within the person level (KBC-103, ADR 0036 §7)', (
     expect(parent.body).not.toContain('Aula Velada');
   });
 
-  it('AC-14, BR-10: AI research and the media of a collection with levels are closed to members, open to masters', async () => {
+  it('AC-14, BR-10: the media of a collection with levels is closed to members, open to masters; AI research is open since KBC-104', async () => {
     const { world, ana } = await anaAtCi({ media: true });
     const item = await queuedItem(
       {
@@ -276,8 +276,8 @@ describe('Search and reading within the person level (KBC-103, ADR 0036 §7)', (
         question: 'o que dizem sobre a lua?',
       },
     );
-    expect(research.statusCode).toBe(409);
-    expect(research.json().error.code).toBe('LEVELS_PENDING');
+    // KBC-104 AC-8: research within the person's level, no longer LEVELS_PENDING.
+    expect(research.json()?.error?.code).not.toBe('LEVELS_PENDING');
     expect((await ana.call('GET', `/api/v1/media/${item.id}`)).statusCode).toBe(
       404,
     );

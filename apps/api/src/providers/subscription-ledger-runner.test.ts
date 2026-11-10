@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ResearchRunnerPort } from '../ports/research-runner.js';
 import type { SpendEntry, SpendLedgerPort } from '../ports/spend-ledger.js';
 import { SubscriptionLedgerRunner } from './subscription-ledger-runner.js';
+import { OPEN_VIEW } from '../modules/access-levels/index.js';
 
 const DONE: ResearchEvent = {
   type: 'done',
@@ -38,6 +39,7 @@ function recordingLedger() {
 
 const input = {
   topic: 'hermetismo',
+  view: OPEN_VIEW,
   question: 'q',
   history: [],
   profile: 'fast' as const,

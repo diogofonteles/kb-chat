@@ -25,6 +25,7 @@ import {
   type SweepDeps,
   type SweepRequest,
 } from './sweep-coordinator.js';
+import { OPEN_VIEW } from '../../access-levels/index.js';
 
 const DOCS = 6;
 
@@ -126,6 +127,7 @@ async function sweep(
   const layout = await tools.sweeps.layout('hermetismo', {
     plan: options.plan ?? PLAN,
     batchChars: 1_000,
+    view: OPEN_VIEW,
     after: options.after,
     covered: options.covered,
   });

@@ -146,7 +146,7 @@ describe('search_collection', () => {
     const tools = await fixtureTools();
     const { output } = await run(
       tools,
-      { topic: 'no-such-topic', book: hermetismoContext().book },
+      { ...hermetismoContext(), topic: 'no-such-topic' },
       call('search_collection', { query: 'ritmo' }),
     );
     expect(output).toBe(

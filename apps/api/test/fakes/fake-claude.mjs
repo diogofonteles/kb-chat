@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fake `claude -p --output-format stream-json`: calls the kb MCP endpoint named in
 // --mcp-config like Claude Code would, then streams an answer citing [1].
-// $HOME/fake-cli.json { mode, report } — mode: answer (default) | aloud (thinks aloud before the
+// $HOME/fake-cli.json { mode, report, calls, toolLog } — mode: answer (default) | aloud (thinks aloud before the
 // tool call) | deepen (asks to go deeper unless started with --model=opus) | deepen-mid
 // (the same after a sentence, the marker split across deltas) | absent (gives
 // up on the collection unless --model=opus) | plan (calls plan_sweep,
@@ -10,7 +10,7 @@
 // gets one line per run. A sweep's batch or answer prompt gets its reply (fake-sweep.mjs).
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SWEEP_PLAN, logRun, sweepReply } from './fake-sweep.mjs';
+import { SWEEP_PLAN, callTools, logRun, sweepReply } from './fake-sweep.mjs';
 
 // The CLI gets only allowlisted variables, so the test settings come from $HOME.
 const fake = (() => {
@@ -119,11 +119,7 @@ if (mode === 'sleep' || mode === 'stubborn') {
     new StreamableHTTPClientTransport(new URL(config.mcpServers.kb.url)),
   );
   const { tools } = await client.listTools();
-  if (tools.length > 0)
-    await client.callTool({
-      name: tools[0].name,
-      arguments: { query: 'ritmo' },
-    });
+  if (tools.length > 0) await callTools(client, tools, fake);
   // An exhaustive turn that plans (KBC-030): the runner ends the pass once the plan is in.
   if (mode === 'plan' && tools.some((tool) => tool.name === 'plan_sweep'))
     await client.callTool({ name: 'plan_sweep', arguments: SWEEP_PLAN });

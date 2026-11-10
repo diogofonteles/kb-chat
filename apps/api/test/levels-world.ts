@@ -16,6 +16,7 @@ import {
   signIn,
   start,
   type Call,
+  type StartOptions,
   type Started,
 } from './ai-app-harness.js';
 
@@ -102,7 +103,7 @@ export interface LevelsWorld {
 
 export async function startLevels(
   docs: readonly VaultDoc[] = SIX,
-  options: { readonly media?: boolean } = {},
+  options: Omit<StartOptions, 'vault'> = {},
 ): Promise<LevelsWorld> {
   const vault = await levelsVault(docs);
   const started = await start({ vault, ...options });

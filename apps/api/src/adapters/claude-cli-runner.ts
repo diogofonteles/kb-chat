@@ -197,7 +197,7 @@ export class ClaudeCliRunner implements ResearchRunnerPort {
   }
 
   async *run(input: ResearchInput): AsyncIterable<ResearchEvent> {
-    const tools = this.options.tools?.(input.topic, input.tracks);
+    const tools = this.options.tools?.(input.topic, input.view, input.tracks);
     if (!tools) {
       yield { type: 'error', code: 'LLM_NOT_CONFIGURED' };
       return;

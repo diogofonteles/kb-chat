@@ -345,7 +345,11 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     turn: Turn,
   ): AsyncGenerator<ResearchEvent, SweepPlan> {
     const fallback = () =>
-      this.deps.tools.sweeps.defaultPlan(turn.input.topic, turn.input.question);
+      this.deps.tools.sweeps.defaultPlan(
+        turn.input.topic,
+        turn.input.question,
+        turn.input.view,
+      );
     for (;;) {
       if (turn.input.signal.aborted || this.mustAnswer(turn)) return fallback();
       this.compact(turn);
@@ -370,6 +374,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
         book: turn.book,
         topicTitle: turn.topicTitle,
         mainAuthor: turn.mainAuthor,
+        view: input.view,
         ...(input.tracks && { tracks: input.tracks }),
       },
       input,
@@ -718,6 +723,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       return this.deps.tools.prepare(call, {
         topic: turn.input.topic,
         book: turn.book,
+        view: turn.input.view,
         ...(turn.input.tracks && { tracks: turn.input.tracks }),
       });
     const plan = parsedArgs(sweepPlanSchema, parseJson(call.arguments));

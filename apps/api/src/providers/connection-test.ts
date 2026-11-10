@@ -12,6 +12,7 @@ import type {
 } from '../ports/research-tools.js';
 import type { ProviderChoice } from './provider-registry.js';
 import { PROVIDERS } from './provider-catalog.js';
+import { NO_CONTENT_VIEW } from '../modules/access-levels/index.js';
 
 /** NFR-1: the test answers within 20 s or reports "sem resposta do provedor". */
 export const TEST_TIMEOUT_MS = 20_000;
@@ -70,6 +71,8 @@ async function askCli(
     question: TEST_QUESTION,
     history: [],
     profile: 'fast',
+    // No collection, no content: the test only proves the CLI and its login.
+    view: NO_CONTENT_VIEW,
     signal,
   });
   for await (const event of events) {

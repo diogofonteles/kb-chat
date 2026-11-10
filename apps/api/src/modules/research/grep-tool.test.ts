@@ -8,6 +8,7 @@ import {
 import type { ToolCall } from '../../ports/llm.js';
 import { SourceBook } from './source-book.js';
 import type { ResearchTools, ToolContext } from './tools.js';
+import { OPEN_VIEW } from '../access-levels/index.js';
 
 const AUTHOR = 'José Laércio do Egito';
 const BIG_ID = 'raw/articles/miasmas.md';
@@ -64,6 +65,7 @@ const call = (name: string, args: object): ToolCall => ({
 const context = (): ToolContext => ({
   topic: 'hermetismo',
   book: new SourceBook(),
+  view: OPEN_VIEW,
 });
 
 async function run(tools: ResearchTools, ctx: ToolContext, toolCall: ToolCall) {

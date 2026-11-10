@@ -13,6 +13,7 @@ import {
 } from '../mcp/mcp-turn-server.js';
 import { MCP_BEARER_PATH } from '../mcp/mcp-routes.js';
 import { startCodexRunner, type CodexRunner } from './runner-server.js';
+import { OPEN_VIEW } from '../modules/access-levels/index.js';
 
 // Every test here runs real Codex processes (node) and waits for them to go: about a second
 // alone, several on a busy machine. Its polls give 8 s, which the default 5 s cut short.
@@ -64,6 +65,7 @@ async function collect(signal = new AbortController().signal) {
   const events: ResearchEvent[] = [];
   for await (const event of apiRunner().run({
     topic: 'hermetismo',
+    view: OPEN_VIEW,
     question: 'O que é o ritmo?',
     history: [],
     profile: 'fast',
@@ -127,6 +129,7 @@ describe('Codex through its sandbox runner (KBC-027 AC-2, ADR 0020)', () => {
     const events: ResearchEvent[] = [];
     const stream = apiRunner().run({
       topic: 'hermetismo',
+      view: OPEN_VIEW,
       question: 'q',
       history: [],
       profile: 'fast',
@@ -168,6 +171,7 @@ describe('Codex through its sandbox runner (KBC-027 AC-2, ADR 0020)', () => {
     const second = new AbortController();
     const firstTurn = apiRunner().run({
       topic: 'hermetismo',
+      view: OPEN_VIEW,
       question: 'q1',
       history: [],
       profile: 'fast',
@@ -187,6 +191,7 @@ describe('Codex through its sandbox runner (KBC-027 AC-2, ADR 0020)', () => {
       const events: ResearchEvent[] = [];
       for await (const event of apiRunner().run({
         topic: 'hermetismo',
+        view: OPEN_VIEW,
         question: 'q2',
         history: [],
         profile: 'fast',
