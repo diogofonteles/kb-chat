@@ -650,12 +650,7 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
 
   fail(
     owner: LeaseOwner,
-    input: {
-      error: string;
-      now: Date;
-      maxAttempts: number;
-      configuration?: boolean;
-    },
+    input: Parameters<MediaDocumentStorePort['fail']>[1],
   ): readonly DeliveredDocument[] | null {
     return inTransaction(this.db, () => {
       const row = this.db
@@ -669,17 +664,36 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       const delivered = deliveredSchema.parse(
         JSON.parse(String(row['items'] ?? '[]')),
       );
-      if (input.configuration) {
+      if (input.configuration)
         this.waitForSetup(owner, { topic, error, now: input.now });
-        return delivered;
-      }
-      this.markFailed(topic, { delivered, error, now: input.now });
-      const givenUp = Number(row['attempts']) >= input.maxAttempts;
-      // A newer job of the collection already waits: it publishes the same documents.
-      const status = givenUp ? 'dead' : this.waits(topic) ? 'failed' : 'queued';
-      this.close(owner, { status, error, now: input.now });
+      else
+        this.giveBack(owner, {
+          topic,
+          delivered,
+          error,
+          now: input.now,
+          givenUp: Number(row['attempts']) >= input.maxAttempts,
+        });
       return delivered;
     });
+  }
+
+  /** A failed run: its documents spend an attempt; the job waits again or, past them, dies. */
+  private giveBack(
+    owner: LeaseOwner,
+    input: {
+      topic: string;
+      delivered: readonly DeliveredDocument[];
+      error: string;
+      now: Date;
+      givenUp: boolean;
+    },
+  ): void {
+    const { topic, delivered, error, now } = input;
+    this.markFailed(topic, { delivered, error, now });
+    // A newer job of the collection already waits: it publishes the same documents.
+    const waiting = this.waits(topic) ? 'failed' : 'queued';
+    this.close(owner, { status: input.givenUp ? 'dead' : waiting, error, now });
   }
 
   /**

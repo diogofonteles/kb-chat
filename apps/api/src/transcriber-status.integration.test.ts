@@ -480,14 +480,21 @@ describe('A Mac without the kb AI key (KBC-117)', () => {
   const failAs = (
     world: Awaited<ReturnType<typeof startWorld>>,
     token: string,
-    job: { id: string; leaseId: string },
-    failure: string,
-    detail: string,
+    fail: {
+      job: { id: string; leaseId: string };
+      failure: string;
+      detail: string;
+    },
   ) =>
     asTranscriber(world.media, token, {
       method: 'POST',
-      url: `/api/v1/media-worker/jobs/${job.id}/fail`,
-      payload: { worker: 'mac', leaseId: job.leaseId, failure, detail },
+      url: `/api/v1/media-worker/jobs/${fail.job.id}/fail`,
+      payload: {
+        worker: 'mac',
+        leaseId: fail.job.leaseId,
+        failure: fail.failure,
+        detail: fail.detail,
+      },
     });
 
   const rowsOf = (
@@ -509,13 +516,11 @@ describe('A Mac without the kb AI key (KBC-117)', () => {
     for (let round = 1; round <= 6; round += 1) {
       const job = await leaseKb(world.media, mac.token);
       expect(job.attempt).toBe(1);
-      const failed = await failAs(
-        world,
-        mac.token,
+      const failed = await failAs(world, mac.token, {
         job,
-        'not-configured',
-        NO_KEY,
-      );
+        failure: 'not-configured',
+        detail: NO_KEY,
+      });
       expect(failed.statusCode, failed.body).toBe(204);
     }
     expect(
@@ -580,7 +585,11 @@ describe('A Mac without the kb AI key (KBC-117)', () => {
     // What the owner's Mac did on 2026-11-09, before KBC-117: four plain failures.
     for (let attempt = 1; attempt <= 4; attempt += 1) {
       const job = await leaseKb(world.media, mac.token);
-      await failAs(world, mac.token, job, 'conversion-failed', NO_KEY);
+      await failAs(world, mac.token, {
+        job,
+        failure: 'conversion-failed',
+        detail: NO_KEY,
+      });
     }
     expect((await leaseAs(world.media, mac.token)).statusCode).toBe(204);
     // Still without the key: nothing moves.
@@ -610,7 +619,11 @@ describe('A Mac without the kb AI key (KBC-117)', () => {
     const mac = await publisherMac(world.media);
     for (let attempt = 1; attempt <= 4; attempt += 1) {
       const job = await leaseKb(world.media, mac.token);
-      await failAs(world, mac.token, job, 'conversion-failed', NO_KEY);
+      await failAs(world, mac.token, {
+        job,
+        failure: 'conversion-failed',
+        detail: NO_KEY,
+      });
     }
     const id = tracks[0]?.id ?? '';
     const url = `/api/v1/media/track-documents/failed/${id}/retry`;
