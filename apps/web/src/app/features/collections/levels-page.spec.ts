@@ -143,7 +143,7 @@ describe('LevelsPage (T24, KBC-103)', () => {
     await fixture.whenStable();
     expect(
       screen.getByText(
-        'Mover CI para a 3ª posição? Quem está em CDC passa a ver o conteúdo de CI na hora, e quem está em CI deixa de ver o de CDC.',
+        'Mover CI para a 3ª posição? Quem está em CDC deixa de ver o conteúdo de CI na hora, e quem está em CI passa a ver o de CDC.',
       ),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
@@ -158,7 +158,7 @@ describe('LevelsPage (T24, KBC-103)', () => {
     expect(screen.getByText('CI agora é o 3º de 3')).toBeTruthy();
   });
 
-  it('UP-07: moving up says who stops seeing what', async () => {
+  it('UP-07, AC-12: moving CDC up opens it to CI, as the API does', async () => {
     const { fixture } = await open('hermetismo', THREE);
     fireEvent.click(
       screen.getByRole('button', { name: 'Mover para cima: CDC' }),
@@ -166,7 +166,7 @@ describe('LevelsPage (T24, KBC-103)', () => {
     await fixture.whenStable();
     expect(
       screen.getByText(
-        'Mover CDC para a 2ª posição? Quem está em CI deixa de ver o conteúdo de CDC na hora, e quem está em CDC passa a ver o de CI.',
+        'Mover CDC para a 2ª posição? Quem está em CI passa a ver o conteúdo de CDC na hora, e quem está em CDC deixa de ver o de CI.',
       ),
     ).toBeTruthy();
   });

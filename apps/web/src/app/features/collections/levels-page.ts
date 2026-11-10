@@ -202,8 +202,9 @@ export class LevelsPage {
   }
 
   /**
-   * What the move changes, by direction (UP-07, MA-27): the level it passes either starts
-   * seeing this one's content (down) or stops seeing it (up).
+   * What the move changes, by direction (UP-07, MA-27), as the API applies it (AC-12): the
+   * list goes from the lowest level up, so moving a level up puts it below the one it passes,
+   * which starts seeing its content; moving it down puts it above, which stops seeing it.
    */
   protected moveText(level: AccessLevel): string {
     const to = this.moving()?.to ?? 0;
@@ -212,8 +213,8 @@ export class LevelsPage {
     const from = this.levels().findIndex((one) => one.id === level.id);
     const { code } = level;
     return to > from
-      ? $localize`:@@levels.confirmMoveDown:Mover ${code}:code: para a ${position}:position: posição? Quem está em ${passed}:passed: passa a ver o conteúdo de ${code}:code: na hora, e quem está em ${code}:code: deixa de ver o de ${passed}:passed:.`
-      : $localize`:@@levels.confirmMoveUp:Mover ${code}:code: para a ${position}:position: posição? Quem está em ${passed}:passed: deixa de ver o conteúdo de ${code}:code: na hora, e quem está em ${code}:code: passa a ver o de ${passed}:passed:.`;
+      ? $localize`:@@levels.confirmMoveDown:Mover ${code}:code: para a ${position}:position: posição? Quem está em ${passed}:passed: deixa de ver o conteúdo de ${code}:code: na hora, e quem está em ${code}:code: passa a ver o de ${passed}:passed:.`
+      : $localize`:@@levels.confirmMoveUp:Mover ${code}:code: para a ${position}:position: posição? Quem está em ${passed}:passed: passa a ver o conteúdo de ${code}:code: na hora, e quem está em ${code}:code: deixa de ver o de ${passed}:passed:.`;
   }
 
   protected cancelMove(): void {
