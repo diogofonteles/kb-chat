@@ -13,7 +13,7 @@ import {
 /**
  * KBC-103 (ADR 0036, screens.md T24, T9, T3, T4): a master builds the scale of a collection,
  * places a member, and changes a document's level on the reading panel; the member finds only
- * what is at her level, and AI research waits for KBC-104 there. Each project has its own
+ * what is at her level, and (KBC-104) AI research answers her from that level only. Each project has its own
  * collection (`zz-niveis-<project>`, apps/api/src/e2e/server.ts), since a scale changes what
  * everyone sees: one test per project, its steps in order.
  */
@@ -118,8 +118,12 @@ async function place(
     { data: { level: 'cdc' }, headers: CSRF },
   );
   expect(placed.status(), await placed.text()).toBe(200);
+  // The owner's Claude subscription, lent to her, answers with the stub model (server.ts).
   const person = await owner.patch(`/api/v1/people/${memberId}`, {
-    data: { levels: { [slug]: 'ci' } },
+    data: {
+      levels: { [slug]: 'ci' },
+      ai: { appAi: 'claude-subscription', subscriptionTermsAccepted: true },
+    },
     headers: CSRF,
   });
   expect(person.status(), await person.text()).toBe(200);
@@ -164,7 +168,30 @@ async function changeOnPanel(page: Page, slug: string): Promise<void> {
   await shoot(page, 'levels-document');
 }
 
-test('AC-2, AC-14, AC-17, FR-11: the scale on T24, the member at CI, research waiting, a level changed on T3', async ({
+/**
+ * KBC-104 AC-8: the member at CI asks the AI; the stub searches, reads the first hit and
+ * answers from it. Nothing of the CDC document reaches the page: no step, source or answer.
+ */
+async function researchAtHerLevel(member: Page): Promise<void> {
+  await member.goto('/');
+  await expect(
+    member.getByRole('radio', { name: /Pesquisa com IA/ }),
+  ).toBeChecked();
+  await expect(
+    member.getByText('A pesquisa com IA ainda não está disponível'),
+  ).toHaveCount(0);
+  await member.getByLabel('Sua pergunta').fill('orvalho');
+  await member.getByRole('button', { name: 'Perguntar' }).click();
+  const answer = member.locator('app-research-message').last();
+  await expect(answer.getByText(/Segundo o acervo/)).toBeVisible();
+  await expect(
+    answer.getByText(/Orvalho (Aberto|do Meio)/).first(),
+  ).toBeVisible();
+  await expect(member.getByText(/Orvalho Velado|velado\.md/)).toHaveCount(0);
+  await shoot(member, 'levels-research');
+}
+
+test('AC-2, AC-14, AC-17, FR-11, KBC-104 AC-8: the scale on T24, the member at CI researching, a level changed on T3', async ({
   page,
   browser,
 }, testInfo) => {
@@ -185,13 +212,7 @@ test('AC-2, AC-14, AC-17, FR-11: the scale on T24, the member at CI, research wa
   await seePersonLevel(page, title, email);
 
   const member = await pageAs(browser, email, page.viewportSize());
-  await member.goto('/');
-  await expect(
-    member.getByText(
-      'A pesquisa com IA ainda não está disponível neste acervo.',
-    ),
-  ).toBeVisible();
-  await shoot(member, 'levels-research-pending');
+  await researchAtHerLevel(member);
   await member.getByRole('radio', { name: 'Buscar documentos' }).check();
   await searchFor(member, 'orvalho');
   await expect(results(member)).toHaveCount(2);
