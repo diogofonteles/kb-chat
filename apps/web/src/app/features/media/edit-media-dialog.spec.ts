@@ -1,4 +1,5 @@
 import {
+  HttpErrorResponse,
   provideHttpClient,
   withInterceptors,
   type HttpInterceptorFn,
@@ -11,6 +12,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import type { MediaItem } from '@kb-chat/contracts';
+import { throwError } from 'rxjs';
 import { aMediaItem } from '../../testing/media-fixtures.js';
 import { aTopic } from '../../testing/fixtures.js';
 import {
@@ -378,6 +380,57 @@ describe('EditMediaDialog (KBC-050)', () => {
         topic: 'udv',
         author: null,
       }),
+    );
+  });
+
+  it('review round 2: a save held for the levels leaves no stuck button when the title is cleared', async () => {
+    const held = holdingLevels('udv');
+    const { http } = await open(aMediaItem({ author: null }), {}, [
+      held.interceptor,
+    ]);
+    chooseTopic('udv');
+    save();
+    await vi.waitFor(() =>
+      screen.getByRole('button', { name: 'Carregando níveis…' }),
+    );
+    typeTitle('');
+
+    held.release([]);
+    // The held save ran into the empty title: the button is back, nothing went.
+    const button = await vi.waitFor(() =>
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Salvar' }),
+    );
+    expect(button.disabled).toBe(false);
+    expect(button.hasAttribute('aria-busy')).toBe(false);
+    expect(screen.getByText(/Dê um título ao áudio/)).toBeTruthy();
+    http.expectNone(URL);
+    typeTitle('Outro título');
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Salvar' })
+        .disabled,
+    ).toBe(false);
+  });
+
+  it('review round 2: with the levels failed for the new collection nothing is saved', async () => {
+    let calls = 0;
+    const failing: HttpInterceptorFn = (request, next) =>
+      request.url.endsWith('/topics/udv/media/levels') && calls++ === 0
+        ? throwError(
+            () => new HttpErrorResponse({ status: 503, url: request.url }),
+          )
+        : next(request);
+    const { http, fixture } = await open(aMediaItem({ author: null }), {}, [
+      failing,
+    ]);
+    chooseTopic('udv');
+    await fixture.whenStable();
+    save();
+    await fixture.whenStable();
+
+    http.expectNone(URL);
+    http.expectNone(AUTHORS);
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Carregar níveis de novo' }),
     );
   });
 });

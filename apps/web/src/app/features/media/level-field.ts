@@ -1,10 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  afterRenderEffect,
   computed,
   input,
   model,
   output,
+  viewChild,
 } from '@angular/core';
 import type { LevelChoice } from '@kb-chat/contracts';
 
@@ -32,23 +35,55 @@ export class LevelField {
   readonly invalid = input(false);
   readonly loading = input(false);
   readonly failed = input(false);
+  /** Asked again after a failure: the button stays, busy, and keeps the focus. */
+  readonly retrying = input(false);
   readonly disabled = input(false);
   /** The level id chosen; null: none yet. */
   readonly level = model<string | null>(null);
-  /** "Tentar de novo" after the levels could not be had (MA-26). */
+  /** "Carregar níveis de novo" after the levels could not be had (MA-26). */
   readonly retried = output();
+
+  private readonly retryButton =
+    viewChild<ElementRef<HTMLButtonElement>>('retryButton');
+  private readonly choicesBox =
+    viewChild<ElementRef<HTMLElement>>('choicesBox');
+  /** A retry was asked from here: once it ends, the focus goes on in the field (MA-29). */
+  private refocus = false;
 
   private readonly id = `level-${nextId++}`;
   protected readonly name = this.id;
   protected readonly helpId = `${this.id}-help`;
   protected readonly errorId = `${this.id}-error`;
   protected readonly selectId = `${this.id}-select`;
+  protected readonly legendId = `${this.id}-legend`;
   protected readonly asRadios = computed(
     () => this.choices().length <= RADIOS_MAX,
   );
   protected readonly describedBy = computed(() =>
     this.invalid() ? `${this.helpId} ${this.errorId}` : this.helpId,
   );
+
+  constructor() {
+    // DOM work only: after a retry that brought the levels, the focus goes to the choices.
+    // A retry that failed again keeps the same button, focus and all.
+    afterRenderEffect(() => {
+      const box = this.choicesBox()?.nativeElement;
+      if (!this.refocus || !box) return;
+      (box.querySelector<HTMLElement>('input, select') ?? box).focus();
+      this.refocus = false;
+    });
+  }
+
+  /** The parent's send found the levels missing here: the way out takes the focus. */
+  focusRetry(): void {
+    this.retryButton()?.nativeElement.focus();
+  }
+
+  protected retry(): void {
+    if (this.retrying()) return;
+    this.refocus = true;
+    this.retried.emit();
+  }
 
   protected choose(id: string): void {
     this.level.set(id === '' ? null : id);

@@ -88,6 +88,7 @@ export class EditMediaDialog implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly levelField = viewChild(LevelField);
   private readonly titleInput =
     viewChild.required<ElementRef<HTMLInputElement>>('titleInput');
 
@@ -174,13 +175,16 @@ export class EditMediaDialog implements OnInit {
   }
 
   protected save(): void {
+    // Every way out of here leaves no wait behind (review round 2: a stuck button).
+    this.waitingForLevels.set(false);
     this.submitted.set(true);
     // A name the API would refuse is said under the "Autor" field and never sent.
     const badAuthor = isInvalidAuthorName(this.authorName());
     if (this.form.invalid || badAuthor || this.saving()) return;
     this.waitingForLevels.set(this.levels.loading());
-    // With a scale, nothing goes without a level (BR-1); unknown, the API decides.
-    if (this.waitingForLevels() || this.levelMissing()) return;
+    if (this.waitingForLevels() || this.levelsUnknown()) return;
+    // With a scale, nothing goes without a level (BR-1).
+    if (this.levelMissing()) return;
     this.saving.set(true);
     this.failure.set('');
     const draft = this.draft();
@@ -220,6 +224,16 @@ export class EditMediaDialog implements OnInit {
       author: this.authorName().trim(),
       level: this.level(),
     };
+  }
+
+  /**
+   * The levels could not be had where a scale may be: nothing goes, and the focus is on the
+   * one way out, "Carregar níveis de novo" (review round 2).
+   */
+  private levelsUnknown(): boolean {
+    if (!this.levels.failedWhereLevelsMayBe(this.chosenRoot())) return false;
+    this.levelField()?.focusRetry();
+    return true;
   }
 
   /** The top-level collection whose scale a collection uses (ADR 0036 §1). */

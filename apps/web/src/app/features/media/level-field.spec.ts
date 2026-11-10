@@ -49,13 +49,15 @@ describe('LevelField (KBC-105, T14)', () => {
       'Escolha o nível deste áudio.',
     );
     const group = screen.getByRole('group', { name: 'Nível' });
-    // QA 2 (ARIA 1.2): a group takes no aria-invalid; its radios do.
+    // ARIA 1.2: aria-invalid belongs to the radiogroup, neither the group nor a radio.
     expect(group.hasAttribute('aria-invalid')).toBe(false);
+    const radios = screen.getByRole('radiogroup', { name: 'Nível' });
+    expect(radios.getAttribute('aria-invalid')).toBe('true');
     expect(
       screen
         .getAllByRole('radio')
-        .map((one) => one.getAttribute('aria-invalid')),
-    ).toEqual(['true', 'true']);
+        .some((one) => one.hasAttribute('aria-invalid')),
+    ).toBe(false);
     expect(describedBy(group)).toContain('Escolha o nível deste áudio.');
   });
 
@@ -87,11 +89,37 @@ describe('LevelField (KBC-105, T14)', () => {
       partialUpdate: true,
     });
     expect(screen.getByRole('alert').textContent).toContain(
-      'Não consegui carregar os níveis.',
+      'Não consegui carregar os níveis deste acervo. Carregue de novo para escolher o nível.',
     );
     const retried = vi.fn();
     fixture.componentInstance.retried.subscribe(retried);
-    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    const button = screen.getByRole('button', {
+      name: 'Carregar níveis de novo',
+    });
+    button.focus();
+    fireEvent.click(button);
     expect(retried).toHaveBeenCalledOnce();
+
+    // Review round 2: while it asks again the same button stays, busy, with the focus.
+    await rerender({
+      componentInputs: { failed: false, retrying: true, loading: true },
+      partialUpdate: true,
+    });
+    const busy = screen.getByRole('button', { name: 'Carregando níveis…' });
+    expect(busy).toBe(button);
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    expect(document.activeElement).toBe(busy);
+    fireEvent.click(busy);
+    expect(retried).toHaveBeenCalledOnce();
+
+    // The levels came: the focus goes on to the choices (MA-29), not to the body.
+    await rerender({
+      componentInputs: { retrying: false, loading: false },
+      partialUpdate: true,
+    });
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(
+      screen.getByRole('radio', { name: 'QS' }),
+    );
   });
 });

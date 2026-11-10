@@ -104,6 +104,7 @@
         [label]="levelLabel"
         [loading]="levels.loading()"
         [failed]="levels.failed()"
+        [retrying]="levels.retrying()"
         [invalid]="levelInvalid()"
         [disabled]="stage() === 'sending'"
         [(level)]="level"

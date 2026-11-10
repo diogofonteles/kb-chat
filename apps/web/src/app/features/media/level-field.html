@@ -3,31 +3,49 @@
   [attr.aria-describedby]="describedBy()"
   [disabled]="disabled()"
 >
-  <legend class="label">{{ label() }}</legend>
+  <legend class="label" [id]="legendId">{{ label() }}</legend>
   <p class="help" [id]="helpId" i18n="@@media.level.help">
     Quem tem este nível ou um acima poderá ouvir.
   </p>
-  @if (loading()) {
-    <p class="status" i18n="@@media.level.loading">Carregando níveis…</p>
-  } @else if (failed()) {
+  @if (failed() || retrying()) {
     <div class="failed">
-      <p class="error" role="alert">
-        <span aria-hidden="true">⚠</span>&ngsp;
-        <ng-container i18n="@@media.level.failedRetry"
-          >Não consegui carregar os níveis.</ng-container
-        >
-      </p>
+      @if (failed()) {
+        <p class="error" role="alert">
+          <span aria-hidden="true">⚠</span>&ngsp;
+          <ng-container i18n="@@media.level.failedHint"
+            >Não consegui carregar os níveis deste acervo. Carregue de novo para
+            escolher o nível.</ng-container
+          >
+        </p>
+      }
       <button
+        #retryButton
         type="button"
         class="secondary"
-        (click)="retried.emit()"
-        i18n="@@media.level.retry"
+        [attr.aria-busy]="retrying() ? 'true' : null"
+        (click)="retry()"
       >
-        Tentar de novo
+        @if (retrying()) {
+          <ng-container i18n="@@media.level.loading"
+            >Carregando níveis…</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@media.level.reload"
+            >Carregar níveis de novo</ng-container
+          >
+        }
       </button>
     </div>
+  } @else if (loading()) {
+    <p class="status" i18n="@@media.level.loading">Carregando níveis…</p>
   } @else if (asRadios()) {
-    <div class="radios">
+    <div
+      #choicesBox
+      class="radios"
+      role="radiogroup"
+      [attr.aria-labelledby]="legendId"
+      [attr.aria-invalid]="invalid() ? 'true' : null"
+    >
       @for (choice of choices(); track choice.id) {
         <label class="radio">
           <input
@@ -35,7 +53,6 @@
             [name]="name"
             [value]="choice.id"
             [checked]="level() === choice.id"
-            [attr.aria-invalid]="invalid() ? 'true' : null"
             (change)="choose(choice.id)"
           />
           {{ choice.code }}
@@ -45,6 +62,7 @@
   } @else {
     <label class="visually-hidden" [for]="selectId">{{ label() }}</label>
     <select
+      #choicesBox
       [id]="selectId"
       [attr.aria-invalid]="invalid() ? 'true' : null"
       (change)="selected($event)"

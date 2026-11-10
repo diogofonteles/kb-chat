@@ -127,6 +127,7 @@ export class UploadPanel implements OnInit {
   protected readonly showSteps = computed(() => this.session.can('media-edit'));
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly levelField = viewChild(LevelField);
   private readonly fileInput =
     viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
 
@@ -273,6 +274,8 @@ export class UploadPanel implements OnInit {
   }
 
   protected send(): void {
+    // Every way out of here leaves no wait behind (review round 2: a stuck button).
+    this.waitingForLevels.set(false);
     this.submitted.set(true);
     const targets = this.uploads.sendable();
     // A name the API would refuse is said under the "Autor" field and never sent.
@@ -284,6 +287,7 @@ export class UploadPanel implements OnInit {
       this.form.invalid ||
       badAuthor ||
       this.holdForLevels() ||
+      this.levelsUnknown() ||
       this.levelMissing()
     )
       return;
@@ -303,6 +307,16 @@ export class UploadPanel implements OnInit {
   private holdForLevels(): boolean {
     this.waitingForLevels.set(this.levels.loading());
     return this.waitingForLevels();
+  }
+
+  /**
+   * The levels could not be had where a scale may be: nothing goes, and the focus is on the
+   * one way out, "Carregar níveis de novo" (review round 2).
+   */
+  private levelsUnknown(): boolean {
+    if (!this.levels.failedWhereLevelsMayBe(this.chosenRoot())) return false;
+    this.levelField()?.focusRetry();
+    return true;
   }
 
   /** "Cancelar envio": stops sending and removes what was half sent. */

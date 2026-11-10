@@ -1699,27 +1699,115 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     ).toBe(true);
   });
 
-  it('offers "Tentar de novo" when the levels fail, and does not hold the send', async () => {
+  /** Levels that fail for `topic` the first `times` they are asked. */
+  const failingLevels = (topic: string, times = 1): HttpInterceptorFn => {
     let calls = 0;
-    const failing: HttpInterceptorFn = (request, next) => {
-      if (!request.url.endsWith('/media/levels') || calls++ > 0)
+    return (request, next) => {
+      if (
+        !request.url.endsWith(`/topics/${topic}/media/levels`) ||
+        calls++ >= times
+      )
         return next(request);
       return throwError(
         () => new HttpErrorResponse({ status: 503, url: request.url }),
       );
     };
-    const panel = await renderPanel({ before: [failing] });
-    expect(screen.getByRole('alert').textContent).toContain(
-      'Não consegui carregar os níveis.',
-    );
+  };
+
+  it('review round 2: with the levels failed nothing is sent, and the focus is on the one way out', async () => {
+    const panel = await renderPanel({
+      before: [failingLevels(encodeURIComponent('hermetismo'))],
+      scales: { hermetismo: QS_CI },
+    });
     await chooseChecked(panel);
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
-    // Unknown, the API decides (BR-1): the file goes.
-    panel.http.expectOne(TOPIC);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
     await panel.fixture.whenStable();
-    expect(screen.queryByText('Não consegui carregar os níveis.')).toBeNull();
+
+    panel.http.expectNone({ method: 'POST', url: TOPIC });
+    const retry = screen.getByRole('button', {
+      name: 'Carregar níveis de novo',
+    });
+    expect(document.activeElement).toBe(retry);
+    // One message, saying what to do; no two buttons share a name.
+    expect(
+      screen.getAllByRole('alert').map((one) => one.textContent?.trim()),
+    ).toEqual([
+      '⚠ Não consegui carregar os níveis deste acervo. Carregue de novo para escolher o nível.',
+    ]);
+    const names = screen
+      .getAllByRole('button')
+      .map((one) => one.textContent?.trim());
+    expect(new Set(names).size).toBe(names.length);
+
+    fireEvent.click(retry);
+    await panel.fixture.whenStable();
+    expect(screen.getByRole('radio', { name: 'QS' })).toBeTruthy();
+    expect(screen.queryByText(/Não consegui carregar os níveis/)).toBeNull();
+  });
+
+  it('review round 2: a failure where the levels were known to be none does not hold the send', async () => {
+    const panel = await renderPanel({
+      before: [failingLevels(encodeURIComponent('hermetismo/aulas'))],
+      topics: [
+        ...TOPICS,
+        aTopic({
+          slug: 'hermetismo/aulas',
+          title: 'Aulas',
+          parent: 'hermetismo',
+        }),
+      ],
+    });
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'hermetismo/aulas' },
+    });
+    await panel.fixture.whenStable();
+    choose(panel.container, audio());
+    await answerCheck(
+      panel,
+      { verdict: 'new' },
+      `/api/v1/topics/${encodeURIComponent('hermetismo/aulas')}/media`,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    panel.http.expectOne(
+      `/api/v1/topics/${encodeURIComponent('hermetismo/aulas')}/media`,
+    );
+  });
+
+  it('review round 2: a send held for the levels leaves no stuck button when the form stops being valid', async () => {
+    const held = holdingLevels('alquimia');
+    const panel = await renderPanel({ before: [held.interceptor] });
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'alquimia' },
+    });
+    choose(panel.container, audio());
+    await vi.waitFor(() =>
+      panel.http
+        .expectOne('/api/v1/topics/alquimia/media/check')
+        .flush({ verdict: 'new' }),
+    );
+    fireEvent.click(
+      await vi.waitFor(() => screen.getByRole('button', { name: 'Enviar' })),
+    );
+    await vi.waitFor(() =>
+      screen.getByRole('button', { name: 'Carregando níveis…' }),
+    );
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Tirar Palestra_de_1998.mp3 da lista',
+      }),
+    );
+
+    held.release([]);
+    const send = await vi.waitFor(() =>
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Enviar' }),
+    );
+    expect(send.disabled).toBe(false);
+    expect(send.hasAttribute('aria-busy')).toBe(false);
+    panel.http.expectNone({
+      method: 'POST',
+      url: '/api/v1/topics/alquimia/media',
+    });
   });
 
   it('AC-3: shows no "Carregando níveis…" for a collection with no scale before it', async () => {
