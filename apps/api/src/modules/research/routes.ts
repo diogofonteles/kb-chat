@@ -19,6 +19,7 @@ import { AppError } from '../../app-error.js';
 import type { ResearchRunnerPort } from '../../ports/research-runner.js';
 import type { TrackShelf } from '../../ports/track-shelf.js';
 import {
+  assertResearchOpen,
   hasFeature,
   principalOf,
   viewerOf,
@@ -47,20 +48,6 @@ export interface ResearchRouteOptions {
   readonly ratePerMinute: number;
   /** A turn's view of media.db (KBC-099), when the media library is on. */
   readonly shelf?: () => TrackShelf;
-}
-
-/**
- * KBC-103 BR-10: in a collection with levels, research waits for KBC-104 to give the AI the
- * person's view; until then only masters research there.
- */
-function assertLevelsReachResearch(request: FastifyRequest, topic: string) {
-  if (
-    request.server.levelHooks?.closedUntilLevelsReachIt(
-      viewerOf(request).person,
-      topic,
-    )
-  )
-    throw new AppError('LEVELS_PENDING', 'Research waits for levels here');
 }
 
 /**
@@ -372,7 +359,8 @@ export const researchRoutes =
         '/api/v1/topics/:topic/research',
         researchOptions(options.ratePerMinute),
         (request, reply) => {
-          assertLevelsReachResearch(request, request.params.topic);
+          // KBC-103 BR-10: research in a collection with levels waits for KBC-104.
+          assertResearchOpen(request, request.params.topic);
           return handleResearch(
             options,
             { topic: request.params.topic, body: request.body },

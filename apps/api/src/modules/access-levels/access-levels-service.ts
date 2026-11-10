@@ -378,9 +378,12 @@ export class AccessLevelsService implements PersonLevelRules {
 
   /** The collection's own scale: a sub-collection has none (BR-1). */
   private requireRoot(topic: string): string {
-    if (!this.deps.catalog.get(topic))
-      throw new AppError('TOPIC_NOT_FOUND', 'Unknown topic');
-    if (this.deps.gate.rootOf(topic) !== topic) throw subCollection();
+    const catalog = this.deps.catalog.get(topic);
+    if (!catalog) throw new AppError('TOPIC_NOT_FOUND', 'Unknown topic');
+    // An orphan sub-collection still declares its parent: a scale on it would be inert
+    // once the parent is back (review round 2).
+    if (catalog.topic.parent || this.deps.gate.rootOf(topic) !== topic)
+      throw subCollection();
     return topic;
   }
 

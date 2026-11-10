@@ -10,7 +10,12 @@ import {
 } from '../catalog/index.js';
 import { ContentGate } from './content-gate.js';
 import { LevelDirectory, type StoredLevel } from './level-directory.js';
-import { MIN_VISIBLE_SHARE, OPEN_VIEW, scaledView } from './level-view.js';
+import {
+  CLOSED_VIEW,
+  MIN_VISIBLE_SHARE,
+  OPEN_VIEW,
+  scaledView,
+} from './level-view.js';
 
 const level = (id: string): StoredLevel => ({
   id,
@@ -192,7 +197,7 @@ describe('The content gate (KBC-103 BR-5, NFR-1)', () => {
     expect(p95).toBeLessThanOrEqual(5);
   });
 
-  it('closes a sub-collection whose parent the catalog does not have, for members only', async () => {
+  it('an orphan sub-collection (its parent not in the catalog) gets the CLOSED_VIEW for members only', async () => {
     const directory = new LevelDirectory({
       scales: new MemoryDocumentStore(),
       documents: new MemoryDocumentStore(),
@@ -211,6 +216,7 @@ describe('The content gate (KBC-103 BR-5, NFR-1)', () => {
       person({ topics: ['udv/palavra'] }),
       'udv/palavra',
     );
+    expect(member).toBe(CLOSED_VIEW);
     expect(member.allows('udv/palavra', entry('raw/a.md'))).toBe(false);
     expect(gate.closedUntilLevelsReachIt(person(), 'udv/palavra')).toBe(true);
     const master = gate.viewFor(person({ role: 'master' }), 'udv/palavra');

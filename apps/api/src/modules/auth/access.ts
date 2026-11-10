@@ -163,6 +163,20 @@ export function canSeeMedia(request: FastifyRequest, topic: string): boolean {
 }
 
 /**
+ * BR-10: AI research in a collection with levels waits for KBC-104; without the levels'
+ * answer it fails rather than open (fail-closed).
+ */
+export function assertResearchOpen(
+  request: FastifyRequest,
+  topic: string,
+): void {
+  const hooks = request.server.levelHooks;
+  if (!hooks) throw new Error('The level hooks are not registered');
+  if (hooks.closedUntilLevelsReachIt(viewerOf(request).person, topic))
+    throw new AppError('LEVELS_PENDING', 'Research waits for levels here');
+}
+
+/**
  * BR-10: in a collection the person sees whose media waits for levels (KBC-105), whatever
  * reaches its media (adding, listing its subjects or speakers) answers LEVELS_PENDING, the
  * same for every name, so nothing in it is confirmed.
