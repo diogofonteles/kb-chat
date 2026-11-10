@@ -288,8 +288,15 @@ async function reopenFromHistory(member: Page) {
     .getByRole('button', { name: /pêndulo/ })
     .first()
     .click();
-  // On a phone the menu closes once the conversation is back.
-  if (!desktop(member)) await expect(side).toBeHidden();
+  // On a phone the menu closes once the conversation is back. Its `close` event comes a task
+  // after it is hidden and gives the focus back to "Menu": wait for it, or a focus the test
+  // puts on the answer meanwhile is taken away and the Enter after it opens nothing.
+  if (!desktop(member)) {
+    await expect(side).toBeHidden();
+    await expect(
+      member.getByRole('button', { name: 'Menu', exact: true }),
+    ).toBeFocused();
+  }
   return member.locator('app-research-message').last();
 }
 
