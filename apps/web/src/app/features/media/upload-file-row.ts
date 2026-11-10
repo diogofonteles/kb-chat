@@ -50,7 +50,9 @@ export class UploadFileRow {
   /** A file that will not go has no title to give. */
   protected readonly hasTitle = computed(
     () =>
-      !['refused', 'duplicate', 'over-quota'].includes(this.entry().state.kind),
+      !['refused', 'duplicate', 'duplicate-hidden', 'over-quota'].includes(
+        this.entry().state.kind,
+      ),
   );
   protected readonly titleLocked = computed(() => {
     const { resumes, state } = this.entry();

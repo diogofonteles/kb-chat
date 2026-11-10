@@ -54,6 +54,7 @@ import {
 import { matchesTitle, newlyReady, summaryOf } from './media-summary.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { detailsSavedText } from './edit-labels.js';
+import { MediaLevelBadge } from './media-level-badge.js';
 import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
 import { MovedNotice, mediaMoveOf, type MediaMove } from './moved-notice.js';
 import { injectOpenPreparations } from './preparation/open-preparations.js';
@@ -74,6 +75,7 @@ export const FILTER_FROM = 11;
     RouterLink,
     DatePipe,
     AuthorshipBadge,
+    MediaLevelBadge,
     EditMediaDialog,
     MovedNotice,
     UploadPanel,

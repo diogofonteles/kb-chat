@@ -1,4 +1,4 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -9,13 +9,17 @@ import { fireEvent, render, screen } from '@testing-library/angular';
 import type { MediaItem } from '@kb-chat/contracts';
 import { aMediaItem } from '../../testing/media-fixtures.js';
 import { aTopic } from '../../testing/fixtures.js';
+import { QS_CI, answeringLevels } from '../../testing/level-fixtures.js';
 import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
 
 const ITEM = aMediaItem();
 const URL = `/api/v1/media/${ITEM.id}`;
 const AUTHORS = '/api/v1/topics/udv/authors';
 
-async function open(item: MediaItem = ITEM) {
+async function open(
+  item: MediaItem = ITEM,
+  scales: Parameters<typeof answeringLevels>[0] = {},
+) {
   HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
     this.open = true;
   };
@@ -28,7 +32,7 @@ async function open(item: MediaItem = ITEM) {
   const view = await render(EditMediaDialog, {
     providers: [
       provideZonelessChangeDetection(),
-      provideHttpClient(),
+      provideHttpClient(withInterceptors([answeringLevels(scales)])),
       provideHttpClientTesting(),
     ],
     inputs: {
@@ -138,8 +142,10 @@ describe('EditMediaDialog (KBC-050)', () => {
   });
 
   it('a move without an author says so, registering nothing', async () => {
-    const { http } = await open(aMediaItem({ author: null }));
+    const { http, fixture } = await open(aMediaItem({ author: null }));
     chooseTopic('udv');
+    // KBC-105: the new collection's levels are asked first (none here).
+    await fixture.whenStable();
     save();
     const request = http.expectOne(URL);
     expect(request.request.body).toEqual({ topic: 'udv', author: null });
@@ -191,6 +197,7 @@ describe('EditMediaDialog (KBC-050)', () => {
   it('a refused author is told as the author, a refused field as the fields', async () => {
     const { http, fixture } = await open();
     chooseTopic('udv');
+    await fixture.whenStable();
     save();
     http
       .expectOne(AUTHORS)
@@ -268,5 +275,74 @@ describe('EditMediaDialog (KBC-050)', () => {
     await fixture.whenStable();
     await vi.waitFor(() => expect(closed).toHaveBeenCalled());
     http.verify();
+  });
+
+  describe('Nível (KBC-105)', () => {
+    const LEVELLED = aMediaItem({ level: { id: 'ci', code: 'CI' } });
+    const SCALES = { hermetismo: QS_CI, udv: [{ id: 'a1', code: 'A1' }] };
+
+    it("BR-3: opens with the audio's level and sends a new one", async () => {
+      const { http, fixture } = await open(LEVELLED, SCALES);
+      const group = screen.getByRole('group', { name: 'Nível' });
+      expect(
+        screen.getByRole<HTMLInputElement>('radio', { name: 'CI' }).checked,
+      ).toBe(true);
+      fireEvent.click(screen.getByRole('radio', { name: 'QS' }));
+      await fixture.whenStable();
+      save();
+      const request = http.expectOne(URL);
+      expect(request.request.body).toEqual({ level: 'qs' });
+      expect(group).toBeTruthy();
+    });
+
+    it('sends no level when only the title changed', async () => {
+      const { http } = await open(LEVELLED, SCALES);
+      typeTitle('Outro título');
+      save();
+      expect(http.expectOne(URL).request.body).toEqual({
+        title: 'Outro título',
+      });
+    });
+
+    it('AC-9: a move to another scale asks "Nível em UDV", empty, before anything is sent', async () => {
+      const { http, fixture } = await open(LEVELLED, SCALES);
+      chooseTopic('udv');
+      await fixture.whenStable();
+      const there = screen.getByRole('group', { name: 'Nível em UDV' });
+      const radio = screen.getByRole<HTMLInputElement>('radio', { name: 'A1' });
+      expect(radio.checked).toBe(false);
+      save();
+      await fixture.whenStable();
+      expect(there.textContent).toContain('Escolha o nível deste áudio.');
+      http.expectNone(URL);
+      http.expectNone(AUTHORS);
+
+      fireEvent.click(radio);
+      await fixture.whenStable();
+      save();
+      http
+        .expectOne(AUTHORS)
+        .flush({ slug: 'mestre-laercio', name: 'Mestre Laércio', main: false });
+      expect(http.expectOne(URL).request.body).toEqual({
+        topic: 'udv',
+        author: 'mestre-laercio',
+        level: 'a1',
+      });
+    });
+
+    it('BR-4: a move to a collection without levels has no field and sends no level', async () => {
+      const { http, fixture } = await open(LEVELLED, { hermetismo: QS_CI });
+      chooseTopic('udv');
+      await fixture.whenStable();
+      expect(screen.queryByRole('group', { name: /Nível/ })).toBeNull();
+      save();
+      http
+        .expectOne(AUTHORS)
+        .flush({ slug: 'mestre-laercio', name: 'Mestre Laércio', main: false });
+      expect(http.expectOne(URL).request.body).toEqual({
+        topic: 'udv',
+        author: 'mestre-laercio',
+      });
+    });
   });
 });

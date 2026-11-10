@@ -16,6 +16,7 @@ import type {
 import { TUS_UPLOAD } from '@core/media/tus-upload.js';
 import { of } from 'rxjs';
 import { aTopic } from '../../testing/fixtures.js';
+import { QS_CI, answeringLevels } from '../../testing/level-fixtures.js';
 import { FakeTus } from '../../testing/fake-tus.js';
 import { aMediaItem, sessionAs } from '../../testing/media-fixtures.js';
 import {
@@ -45,6 +46,7 @@ async function renderPanel(
     readonly offer?: PreparationOptions;
     readonly topic?: string;
     readonly topics?: Topic[];
+    readonly scales?: Parameters<typeof answeringLevels>[0];
   } = {},
 ) {
   const uploaded = vi.fn();
@@ -55,7 +57,10 @@ async function renderPanel(
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(
-        withInterceptors([answeringOptions(options.offer, asked)]),
+        withInterceptors([
+          answeringOptions(options.offer, asked),
+          answeringLevels(options.scales),
+        ]),
       ),
       provideHttpClientTesting(),
       provideRouter([
@@ -1522,6 +1527,88 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       expect(localStorage.getItem('kb-chat.preparation-choices')).toContain(
         '"tracks":"none"',
       );
+    });
+  });
+
+  describe('Nível (KBC-105, T14)', () => {
+    it('AC-3: has no "Nível" in a collection without levels, and sends none', async () => {
+      const panel = await renderPanel();
+      await chooseChecked(panel);
+      expect(screen.queryByRole('group', { name: 'Nível' })).toBeNull();
+      clickSend();
+      const create = panel.http.expectOne(TOPIC);
+      expect(create.request.body).not.toHaveProperty('level');
+    });
+
+    it('AC-1, AC-2: asks for one of the levels offered, none chosen, and sends it', async () => {
+      const panel = await renderPanel({ scales: { hermetismo: QS_CI } });
+      await chooseChecked(panel);
+      const group = screen.getByRole('group', { name: 'Nível' });
+      const radios = within(group).getAllByRole<HTMLInputElement>('radio');
+      expect(radios.map((one) => one.value)).toEqual(['qs', 'ci']);
+      expect(radios.some((one) => one.checked)).toBe(false);
+
+      clickSend();
+      await panel.fixture.whenStable();
+      expect(within(group).getByRole('alert').textContent).toContain(
+        'Escolha o nível deste áudio.',
+      );
+      panel.http.expectNone({ method: 'POST', url: TOPIC });
+
+      fireEvent.click(within(group).getByRole('radio', { name: 'CI' }));
+      await panel.fixture.whenStable();
+      clickSend();
+      const create = panel.http.expectOne(TOPIC);
+      expect(create.request.body).toMatchObject({ level: 'ci' });
+    });
+
+    it('empties the choice when the collection has another scale', async () => {
+      const panel = await renderPanel({
+        scales: { hermetismo: QS_CI, alquimia: [{ id: 'a1', code: 'A1' }] },
+      });
+      fireEvent.click(screen.getByRole('radio', { name: 'CI' }));
+      await panel.fixture.whenStable();
+      fireEvent.change(screen.getByLabelText('Acervo'), {
+        target: { value: 'alquimia' },
+      });
+      await panel.fixture.whenStable();
+      const radio = screen.getByRole<HTMLInputElement>('radio', { name: 'A1' });
+      expect(radio.checked).toBe(false);
+    });
+
+    it('AC-7: a file kept at a level the person does not see is named nowhere', async () => {
+      const panel = await renderPanel({ scales: { hermetismo: QS_CI } });
+      await chooseChecked(panel, audio(), { verdict: 'duplicate-hidden' });
+      expect(
+        screen.getByText(
+          'Este arquivo já está no acervo, num nível que você não vê. Fale com um master.',
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByRole('link')).toBeNull();
+      expect(screen.queryByRole('textbox', { name: 'Título' })).toBeNull();
+    });
+
+    it('AC-7: the same refusal on creating the item says the same, with no link', async () => {
+      const panel = await renderPanel({ scales: { hermetismo: QS_CI } });
+      await chooseChecked(panel);
+      fireEvent.click(screen.getByRole('radio', { name: 'QS' }));
+      await panel.fixture.whenStable();
+      clickSend();
+      panel.http.expectOne(TOPIC).flush(
+        {
+          error: {
+            code: 'MEDIA_DUPLICATE',
+            message: 'This file is already here',
+            details: { hidden: true },
+          },
+        },
+        { status: 409, statusText: 'Conflict' },
+      );
+      await panel.fixture.whenStable();
+      expect(
+        screen.getByText(/num nível que você não vê\. Fale com um master\./),
+      ).toBeTruthy();
+      expect(screen.queryByRole('link')).toBeNull();
     });
   });
 });

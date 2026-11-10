@@ -164,6 +164,10 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.levelCodeTaken:Já existe um nível com esse código.`,
   LEVELS_PENDING: () =>
     $localize`:@@error.levelsPending:Este acervo tem níveis de acesso: isto ainda não está disponível para você nele.`,
+  LEVEL_REQUIRED: () =>
+    $localize`:@@error.levelRequired:Escolha o nível deste áudio.`,
+  LEVEL_ABOVE_YOURS: () =>
+    $localize`:@@error.levelAboveYours:Este nível está acima do seu. Escolha o seu ou um abaixo.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

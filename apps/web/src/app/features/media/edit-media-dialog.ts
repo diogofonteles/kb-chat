@@ -9,6 +9,7 @@ import {
   computed,
   inject,
   input,
+  linkedSignal,
   output,
   signal,
   viewChild,
@@ -39,6 +40,8 @@ import {
   type Observable,
 } from 'rxjs';
 import { AuthorCombobox } from './author-combobox.js';
+import { levelChoicesOf } from './level-choices.js';
+import { LevelField } from './level-field.js';
 import {
   AuthorRefused,
   authorFailureOf,
@@ -59,6 +62,8 @@ interface Draft {
   readonly topic: string;
   /** The author's name; blank is "Outros autores". */
   readonly author: string;
+  /** The level chosen; null where the collection has none. */
+  readonly level: string | null;
 }
 
 /**
@@ -69,7 +74,7 @@ interface Draft {
  */
 @Component({
   selector: 'app-edit-media-dialog',
-  imports: [ReactiveFormsModule, AuthorCombobox],
+  imports: [ReactiveFormsModule, AuthorCombobox, LevelField],
   templateUrl: './edit-media-dialog.html',
   styleUrls: ['./upload-panel.css', './edit-media-dialog.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -110,7 +115,37 @@ export class EditMediaDialog implements OnInit {
   protected readonly moving = computed(
     () => this.chosenTopic() !== this.item().topic,
   );
+  /** The "Nível" of where the audio ends up (KBC-105 BR-3, BR-4). */
+  protected readonly levels = levelChoicesOf(() => this.chosenTopic());
+  /** It goes to another top-level collection: its scale, if any, is another one. */
+  private readonly movesScale = computed(
+    () => this.rootOf(this.chosenTopic()) !== this.rootOf(this.item().topic),
+  );
+  /** The audio's level while it stays under its scale; empty, to be chosen, when it leaves. */
+  protected readonly level = linkedSignal<string, string | null>({
+    source: () => this.rootOf(this.chosenTopic()),
+    computation: () =>
+      this.movesScale() ? null : (this.item().level?.id ?? null),
+  });
+  protected readonly levelLabel = computed(() => {
+    if (!this.movesScale()) return $localize`:@@media.level.label:Nível`;
+    const root = this.rootOf(this.chosenTopic());
+    const title = this.topics().find((one) => one.slug === root)?.title ?? root;
+    return $localize`:@@media.level.labelIn:Nível em ${title}:collection:`;
+  });
+  protected readonly showsLevel = computed(
+    () =>
+      this.levels.loading() ||
+      this.levels.failed() ||
+      this.levels.levels().length > 0,
+  );
+  private readonly levelMissing = computed(
+    () => this.levels.levels().length > 0 && this.level() === null,
+  );
   protected readonly submitted = signal(false);
+  protected readonly levelInvalid = computed(
+    () => this.submitted() && this.levelMissing(),
+  );
   protected readonly saving = signal(false);
   protected readonly failure = signal('');
 
@@ -136,7 +171,10 @@ export class EditMediaDialog implements OnInit {
     this.submitted.set(true);
     // A name the API would refuse is said under the "Autor" field and never sent.
     const badAuthor = isInvalidAuthorName(this.authorName());
-    if (this.form.invalid || badAuthor || this.saving()) return;
+    const levelUnsettled =
+      this.levels.loading() || this.levels.failed() || this.levelMissing();
+    if (this.form.invalid || badAuthor || levelUnsettled || this.saving())
+      return;
     this.saving.set(true);
     this.failure.set('');
     const draft = this.draft();
@@ -170,7 +208,17 @@ export class EditMediaDialog implements OnInit {
 
   private draft(): Draft {
     const { title, topic } = this.form.getRawValue();
-    return { title: title.trim(), topic, author: this.authorName().trim() };
+    return {
+      title: title.trim(),
+      topic,
+      author: this.authorName().trim(),
+      level: this.level(),
+    };
+  }
+
+  /** The top-level collection whose scale a collection uses (ADR 0036 §1). */
+  private rootOf(slug: string): string {
+    return this.topics().find((one) => one.slug === slug)?.parent ?? slug;
   }
 
   /** The author's id, when it has to be said: a new name, or any move (its list may differ). */
@@ -189,11 +237,15 @@ export class EditMediaDialog implements OnInit {
     draft: Draft,
     author: string | null | undefined,
   ): UpdateMediaRequest {
-    const { title, topic } = this.item();
+    const { title, topic, level } = this.item();
+    // A level is said when it changed, and always on the way to another scale (BR-4).
+    const asked =
+      this.movesScale() || draft.level !== level?.id ? draft.level : null;
     return {
       ...(draft.title === title ? {} : { title: draft.title }),
       ...(draft.topic === topic ? {} : { topic: draft.topic }),
       ...(author === undefined ? {} : { author }),
+      ...(asked === null ? {} : { level: asked }),
     };
   }
 

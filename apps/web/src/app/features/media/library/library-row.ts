@@ -14,6 +14,7 @@ import {
 import { formatDuration } from '@kb-chat/player-core';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import { editDetailsLabel } from '../edit-labels.js';
+import { MediaLevelBadge } from '../media-level-badge.js';
 import { statusTextOf } from '../media-labels.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import { PreparationEntry } from '../preparation/preparation-entry.js';
@@ -29,7 +30,13 @@ export type RowAction = 'mark-played' | 'mark-unplayed' | 'edit' | 'remove';
 @Component({
   // The host is the list item (role), so the list holds only items (axe "list").
   selector: 'app-library-row',
-  imports: [RouterLink, AuthorshipBadge, MenuButton, PreparationEntry],
+  imports: [
+    RouterLink,
+    AuthorshipBadge,
+    MediaLevelBadge,
+    MenuButton,
+    PreparationEntry,
+  ],
   templateUrl: './library-row.html',
   styleUrl: './library-row.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -68,6 +68,18 @@
       [(name)]="authorName"
     />
 
+    @if (showsLevel()) {
+      <app-level-field
+        [choices]="levels.levels()"
+        [label]="levelLabel()"
+        [loading]="levels.loading()"
+        [failed]="levels.failed()"
+        [invalid]="levelInvalid()"
+        [disabled]="saving()"
+        [(level)]="level"
+      />
+    }
+
     @if (failure()) {
       <p class="error" role="alert">
         <span aria-hidden="true">⚠</span> {{ failure() }}

@@ -1,0 +1,63 @@
+:host {
+  display: block;
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.label {
+  padding: 0;
+  font-weight: 600;
+}
+
+.help,
+.status {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+}
+
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  cursor: pointer;
+}
+
+.radio input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+}
+
+select {
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.field[aria-invalid='true'] select {
+  border-color: var(--color-danger);
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+}

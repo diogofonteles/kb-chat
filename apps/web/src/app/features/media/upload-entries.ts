@@ -49,6 +49,8 @@ export type EntryState =
       readonly kind: 'duplicate';
       readonly media: { readonly id: string; readonly title: string };
     }
+  /** Already in the collection at a level the person does not see (KBC-105 BR-6). */
+  | { readonly kind: 'duplicate-hidden' }
   | { readonly kind: 'over-quota'; readonly quotaBytes: number }
   | {
       readonly kind: 'resume';
@@ -94,6 +96,7 @@ const SENDABLE: readonly EntryState['kind'][] = [
 const OUTSIDE_THE_PLAN: readonly EntryState['kind'][] = [
   'refused',
   'duplicate',
+  'duplicate-hidden',
   'over-quota',
 ];
 
@@ -108,6 +111,7 @@ const STATE_OF: {
 } = {
   new: ({ elsewhere }) => ({ kind: 'ready', elsewhere }),
   duplicate: ({ media }) => ({ kind: 'duplicate', media }),
+  'duplicate-hidden': () => ({ kind: 'duplicate-hidden' }),
   resume: ({ media, offset }) => ({
     kind: 'resume',
     mediaId: media.id,

@@ -98,6 +98,18 @@
       [(name)]="authorName"
     />
 
+    @if (showsLevel()) {
+      <app-level-field
+        [choices]="levels.levels()"
+        [label]="levelLabel"
+        [loading]="levels.loading()"
+        [failed]="levels.failed()"
+        [invalid]="levelInvalid()"
+        [disabled]="stage() === 'sending'"
+        [(level)]="level"
+      />
+    }
+
     @if (uploads.anyResuming()) {
       <p class="kept">{{ keptNotice() }}</p>
     }

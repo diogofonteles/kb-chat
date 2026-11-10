@@ -12,6 +12,7 @@ import {
   computed,
   inject,
   input,
+  linkedSignal,
   output,
   signal,
   viewChild,
@@ -26,6 +27,7 @@ import { Router } from '@angular/router';
 import {
   PLAN_ESTIMATE_TOLERANCE,
   duplicateDetailsSchema,
+  duplicateHiddenDetailsSchema,
   quotaDetailsSchema,
   type MediaItem,
   type PreparationPlanRequest,
@@ -67,6 +69,8 @@ import {
   isInvalidAuthorName,
 } from './author-suggestions.js';
 import { AuthorCombobox } from './author-combobox.js';
+import { levelChoicesOf } from './level-choices.js';
+import { LevelField } from './level-field.js';
 import { planShare, sameChoices } from './preparation/plan-choices.js';
 import { PlanForm } from './preparation/plan-form.js';
 import { usdUpText } from './preparation/preparation-labels.js';
@@ -99,6 +103,7 @@ const FILES_AT_ONCE = 3;
   imports: [
     ReactiveFormsModule,
     AuthorCombobox,
+    LevelField,
     PreparationOptions,
     PreparationSteps,
     UploadFileRow,
@@ -147,6 +152,34 @@ export class UploadPanel implements OnInit {
   });
   /** The "Acervo" field as a signal: the author suggestions follow it. */
   protected readonly chosenTopic = signal('');
+  /** The "Nível" of the chosen collection (KBC-105): asked again when its scale changes. */
+  protected readonly levels = levelChoicesOf(() => this.chosenTopic());
+  /** No level is chosen beforehand (SL-28); another scale empties the choice (T14). */
+  protected readonly level = linkedSignal<string, string | null>({
+    source: () => this.levels.collection(),
+    computation: () => null,
+  });
+  protected readonly levelLabel = $localize`:@@media.level.label:Nível`;
+  /** The field shows while the collection's scale is asked for, and when it has one. */
+  protected readonly showsLevel = computed(
+    () =>
+      this.levels.loading() ||
+      this.levels.failed() ||
+      this.levels.levels().length > 0,
+  );
+  /** Nothing goes until the level is known and, with a scale, chosen (BR-1). */
+  private readonly levelUnsettled = computed(
+    () =>
+      this.levels.loading() ||
+      this.levels.failed() ||
+      (this.levels.levels().length > 0 && this.level() === null),
+  );
+  protected readonly levelInvalid = computed(
+    () =>
+      this.submitted() &&
+      this.levels.levels().length > 0 &&
+      this.level() === null,
+  );
   /** Said beside the files: none chosen, or none that can go. */
   protected readonly fileProblem = signal<string | null>(null);
   protected readonly stage = signal<Stage>('choosing');
@@ -240,7 +273,8 @@ export class UploadPanel implements OnInit {
       targets.length === 0 ||
       targets.some(({ title }) => !validTitle(title)) ||
       this.form.invalid ||
-      badAuthor
+      badAuthor ||
+      this.levelUnsettled()
     )
       return;
     this.enter('sending');
@@ -314,6 +348,7 @@ export class UploadPanel implements OnInit {
       title: title.trim(),
       topic,
       author: this.authorName().trim(),
+      level: this.level(),
       plan: planOfEntry(entry, batch),
     };
   }
@@ -370,6 +405,7 @@ export class UploadPanel implements OnInit {
           bytes: file.size,
           sha256,
           durationMs,
+          ...(draft.level === null ? {} : { level: draft.level }),
           ...(draft.plan ? { plan: draft.plan } : {}),
         }),
       ),
@@ -514,6 +550,9 @@ export class UploadPanel implements OnInit {
   }
 
   private refuseRepeated(key: number, err: unknown): void {
+    // BR-6: at a level the person does not see, nothing names it.
+    if (duplicateHiddenDetailsSchema.safeParse(errorDetailsOf(err)).success)
+      return this.uploads.set(key, { kind: 'duplicate-hidden' });
     const details = duplicateDetailsSchema.safeParse(errorDetailsOf(err));
     this.uploads.set(
       key,
@@ -589,6 +628,8 @@ interface Draft {
   readonly topic: string;
   /** The author's name; blank is none. */
   readonly author: string;
+  /** Its level, in a collection with levels (KBC-105); null without a scale. */
+  readonly level: string | null;
   /** What the person asked for this audio (KBC-072); none for an item that goes on. */
   readonly plan: PreparationPlanRequest | null;
 }
@@ -601,4 +642,5 @@ const sameDraft = (a: Draft, b: Draft): boolean =>
   a.title === b.title &&
   a.topic === b.topic &&
   a.author === b.author &&
+  a.level === b.level &&
   samePlan(a.plan, b.plan);
