@@ -287,6 +287,56 @@ describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
     expect(dialog.textContent).toContain('teto mensal da mídia');
   });
 
+  it('KBC-117: documents waiting for the kb key say so and how to fix it on the Mac', async () => {
+    const missing = {
+      kind: 'kb-publish' as const,
+      reason: 'kb-ai-key-missing' as const,
+      detail: 'chave da IA do kb ausente (OPENROUTER_API_KEY)',
+    };
+    const dialog = await detailsOf(
+      anOverview({
+        items: [
+          anItem({
+            state: 'idle',
+            report: report({
+              state: 'idle',
+              currentJob: null,
+              kinds: ['transcribe'],
+              unavailable: [missing],
+            }),
+          }),
+        ],
+        attention: {
+          blocked: [
+            { kind: 'kb-publish', ready: 3, reason: 'kb-ai-key-missing' },
+          ],
+          stuck: null,
+        },
+      }),
+    );
+    expect(dialog.textContent).toContain(
+      '3 documentos esperam publicação: chave da IA do kb ausente no Mac',
+    );
+    expect(dialog.textContent).toContain('transcriber keys set');
+    expect(dialog.textContent).toContain('Não faz agora');
+    expect(dialog.textContent).toContain(
+      'no acervo: chave da IA do kb ausente (OPENROUTER_API_KEY)',
+    );
+  });
+
+  it('KBC-117: kb missing on the Mac says to install it', async () => {
+    const dialog = await detailsOf(
+      anOverview({
+        items: [anItem({ state: 'offline', report: null })],
+        attention: {
+          blocked: [{ kind: 'kb-publish', ready: 1, reason: 'kb-missing' }],
+          stuck: null,
+        },
+      }),
+    );
+    expect(dialog.textContent).toContain('o kb não está instalado no Mac');
+  });
+
   it('says since when it is on, or off (AC-16)', async () => {
     await renderIt(
       anOverview({

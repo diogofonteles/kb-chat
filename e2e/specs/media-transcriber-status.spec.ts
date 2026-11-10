@@ -267,6 +267,7 @@ async function longAgo(owner: APIRequestContext, id: string): Promise<void> {
 async function sendStatus(
   owner: APIRequestContext,
   mac: { id: string; token: string },
+  over: Record<string, unknown> = {},
 ): Promise<void> {
   const sent = await owner.post('/api/v1/media-worker/status', {
     headers: { ...CSRF, authorization: `Bearer ${mac.token}` },
@@ -300,6 +301,7 @@ async function sendStatus(
       counts: { done: 2, failed: 1 },
       vaultPath: '/Users/dono/dev/personal/hermetismo',
       kbVersion: '0.0.12 (commit=1297f06)',
+      ...over,
     },
   });
   expect(sent.status(), await sent.text()).toBe(204);
@@ -380,6 +382,55 @@ test('AC-12, AC-13, AC-14: the status chip opens the details, and an off transcr
       await owner.delete(`/api/v1/media/transcribers/${mac.id}`, {
         headers: CSRF,
       });
+    await owner.dispose();
+  }
+});
+
+test('KBC-117: a Mac without the kb AI key says so in its details', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const mac = await aTranscriber(owner, 'Mac sem chave');
+  await longAgo(owner, mac.id);
+  try {
+    await sendStatus(owner, mac, {
+      state: 'idle',
+      kinds: ['transcribe'],
+      currentJob: null,
+      unavailable: [
+        {
+          kind: 'kb-publish',
+          reason: 'kb-ai-key-missing',
+          detail:
+            'chave da IA do kb ausente (OPENROUTER_API_KEY): no Mac, rode `transcriber keys set`',
+        },
+      ],
+    });
+    await page.goto('/');
+    const settings = await openTranscribers(page);
+    await settings
+      .getByRole('listitem')
+      .filter({ hasText: mac.name })
+      .getByRole('button', { name: /^Transcritor:/ })
+      .click();
+    const details = page.getByRole('dialog', {
+      name: `Transcritor "${mac.name}"`,
+    });
+    await expect(details).toContainText('Não faz agora');
+    await expect(details).toContainText(
+      'no acervo: chave da IA do kb ausente (OPENROUTER_API_KEY)',
+    );
+    await expect(details).toContainText('transcriber keys set');
+    expect(await seriousViolations(page)).toEqual([]);
+    await noSideScroll(page);
+    await page.screenshot({
+      path: `../work/KBC-117/evidence/kb-key-missing-${widthOf(page)}-${test.info().project.name}.png`,
+    });
+    await details.getByRole('button', { name: 'Fechar' }).click();
+  } finally {
+    await owner.delete(`/api/v1/media/transcribers/${mac.id}`, {
+      headers: CSRF,
+    });
     await owner.dispose();
   }
 });
