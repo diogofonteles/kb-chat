@@ -2,7 +2,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { closeApp } from '../test/ai-app-harness.js';
+import { closeApp, events } from '../test/ai-app-harness.js';
 import {
   HIDDEN_TITLES,
   SIX,
@@ -59,12 +59,16 @@ async function scriptCli(home: string): Promise<() => Promise<Logged[]>> {
 }
 
 /** Ana at CI, served by the AI `appAi` the owner lends her. */
-async function anaLent(world: LevelsWorld, appAi: string) {
+async function anaLent(
+  world: LevelsWorld,
+  appAi: string,
+  extra: { readonly dailyResearches?: number } = {},
+) {
   const ana = await memberOf(world, 'ana@example.com');
   await sixAtThreeLevels(world);
   await setPersonLevel(world, ana.id, { hermetismo: 'ci' });
   const lent = await world.owner('PATCH', `/api/v1/people/${ana.id}`, {
-    ai: { appAi, subscriptionTermsAccepted: true },
+    ai: { appAi, subscriptionTermsAccepted: true, ...extra },
   });
   expect(lent.statusCode, lent.body).toBe(200);
   return ana;
@@ -114,5 +118,45 @@ describe('External models over the turn MCP within the person level (KBC-104 AC-
     const ana = await anaLent(world, 'chatgpt-subscription');
     const body = await askAsAna(ana);
     expectOnlyVisible(await toolLog(), body);
+  });
+  it('QA F-3: the exhaustive sweep through the lent Claude CLI covers only her 4 documents', async () => {
+    const world = await startLevels(SIX, { claude: true });
+    const home = world.started.state;
+    const runLog = join(home, 'run-log.jsonl');
+    const plan = {
+      target: {},
+      phrases: ['lua'],
+      extract: 'o que se diz da lua',
+    };
+    await writeFile(
+      join(home, 'fake-cli.json'),
+      JSON.stringify({
+        calls: [{ name: 'plan_sweep', arguments: plan }],
+        log: runLog,
+      }),
+    );
+    // An exhaustive turn takes 100 house units; the quota is raised for this test only.
+    const ana = await anaLent(world, 'claude-subscription', {
+      dailyResearches: 200,
+    });
+    const asked = await ana.call('POST', '/api/v1/topics/hermetismo/research', {
+      question: 'Liste tudo sobre a lua',
+      profile: 'exhaustive',
+    });
+    expect(asked.statusCode, asked.body).toBe(200);
+    const stream = events(asked.body);
+    const done = stream.find((event) => event.type === 'done');
+    expect(done, asked.body.slice(-600)).toMatchObject({
+      type: 'done',
+      coverage: { documents: 4, withHits: 4 },
+    });
+    const runs = await readFile(runLog, 'utf8');
+    // The batches the CLI read: the visible titles, never a CDC one.
+    expect(runs).toContain('Lua Primeira Aberta');
+    for (const title of HIDDEN_TITLES) {
+      expect(runs).not.toContain(title);
+      expect(asked.body).not.toContain(title);
+    }
+    expect(asked.body).not.toContain('cdc-');
   });
 });
