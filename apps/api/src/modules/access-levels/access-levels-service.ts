@@ -372,8 +372,10 @@ export class AccessLevelsService implements PersonLevelRules {
         if (!lowest) continue;
         const media = this.seedMedia({ root, level: lowest.id, again: false });
         if (media === null) continue;
-        // The seed is marked in media.db; its record follows. A failed record is logged
-        // with what was placed, and the start fails rather than go on unaudited.
+        // The seed is marked in media.db's transaction and its record follows (the audit
+        // file cannot join it). A failed record is logged with what was placed and fails
+        // this start; the next one finds the mark and goes on, so the log line is then the
+        // only trace (ADR 0036 §11, KBC-105 review round 2).
         await this.record(APP_ACTOR, {
           kind: 'bulk',
           collection: root,
