@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
+  FixedIndex,
   MemoryVault,
   memoryDoc,
   memoryTools,
@@ -61,7 +62,11 @@ async function bigTools(): Promise<ResearchTools> {
       }),
     ]),
   );
-  const tools = await memoryTools(new MemoryVault(docs));
+  // The meaning search answers the first 1,000 ids (the deepest a scaled call asks for).
+  const hits = ids
+    .slice(0, 1_000)
+    .map((id, n) => ({ id, score: 1 - n / 1_000, snippet: 'a lua' }));
+  const tools = await memoryTools(new MemoryVault(docs), new FixedIndex(hits));
   await tools.warm('hermetismo');
   return tools;
 }
@@ -70,6 +75,26 @@ const p95 = (times: number[]): number => {
   const sorted = [...times].sort((a, b) => a - b);
   return sorted[Math.ceil(sorted.length * 0.95) - 1] ?? Infinity;
 };
+
+/**
+ * The added p95 of the best of three measures: the shared machine only ever adds time, so
+ * one quiet measure within the budget is the cost of the filter (review suggestion).
+ */
+async function addedCost(
+  tools: ResearchTools,
+  call: { name: string; arguments: object },
+) {
+  let best: { open: number; scaled: number; added: number } | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const open = await timed(tools, OPEN_VIEW, call);
+    const scaled = await timed(tools, halfHidden, call);
+    const added = scaled.p95 - open.p95;
+    if (!best || added < best.added)
+      best = { open: open.p95, scaled: scaled.p95, added };
+    if (added <= 10) break;
+  }
+  return best ?? { open: Infinity, scaled: Infinity, added: Infinity };
+}
 
 async function timed(
   tools: ResearchTools,
@@ -98,6 +123,9 @@ describe('The person view costs little per tool call (KBC-104 NFR-1)', () => {
   }, 120_000);
 
   it.each([
+    { name: 'search_collection', arguments: { query: 'lua', mode: 'all' } },
+    // A hidden one: read whole for the open view, refused for the scaled one.
+    { name: 'read_document', arguments: { document: 'raw/d-1.md' } },
     { name: 'list_sources', arguments: {} },
     {
       name: 'find_text',
@@ -114,16 +142,14 @@ describe('The person view costs little per tool call (KBC-104 NFR-1)', () => {
       const scaled = await timed(tools, halfHidden, call);
       // The view really filtered: the visible half only.
       expect(scaled.output).not.toEqual(open.output);
-      const added = scaled.p95 - open.p95;
+      const cost = await addedCost(tools, call);
+      const said = `p95 open ${cost.open.toFixed(2)} ms, half hidden ${cost.scaled.toFixed(2)} ms`;
       // Evidence for work/KBC-104 (KBC_NFR_REPORT=1), never in a normal run.
       if (process.env['KBC_NFR_REPORT'])
         process.stdout.write(
-          `NFR-1 ${call.name} ${JSON.stringify(call.arguments)}: p95 open ${open.p95.toFixed(2)} ms, half hidden ${scaled.p95.toFixed(2)} ms\n`,
+          `NFR-1 ${call.name} ${JSON.stringify(call.arguments)}: ${said}\n`,
         );
-      expect(
-        added,
-        `p95 open ${open.p95.toFixed(2)} ms, half hidden ${scaled.p95.toFixed(2)} ms`,
-      ).toBeLessThanOrEqual(10);
+      expect(cost.added, said).toBeLessThanOrEqual(10);
     },
     60_000,
   );
