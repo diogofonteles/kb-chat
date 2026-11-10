@@ -4,6 +4,7 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  Injector,
   type OnInit,
   afterNextRender,
   computed,
@@ -89,6 +90,7 @@ export class EditMediaDialog implements OnInit {
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private readonly levelField = viewChild(LevelField);
+  private readonly injector = inject(Injector);
   private readonly titleInput =
     viewChild.required<ElementRef<HTMLInputElement>>('titleInput');
 
@@ -118,7 +120,10 @@ export class EditMediaDialog implements OnInit {
     () => this.chosenTopic() !== this.item().topic,
   );
   /** The "Nível" of where the audio ends up (KBC-105 BR-3, BR-4). */
-  protected readonly levels = levelChoicesOf(() => this.chosenTopic());
+  protected readonly levels = levelChoicesOf(
+    () => this.chosenTopic(),
+    (slug) => this.rootOf(slug),
+  );
   /** It goes to another top-level collection: its scale, if any, is another one. */
   private readonly movesScale = computed(
     () => this.rootOf(this.chosenTopic()) !== this.rootOf(this.item().topic),
@@ -175,6 +180,8 @@ export class EditMediaDialog implements OnInit {
   }
 
   protected save(): void {
+    // The waiting button keeps its focus (aria-disabled): a press on it does nothing.
+    if (this.waitingForLevels() && this.levels.loading()) return;
     // Every way out of here leaves no wait behind (review round 2: a stuck button).
     this.waitingForLevels.set(false);
     this.submitted.set(true);
@@ -232,7 +239,13 @@ export class EditMediaDialog implements OnInit {
    */
   private levelsUnknown(): boolean {
     if (!this.levels.failedWhereLevelsMayBe(this.chosenRoot())) return false;
-    this.levelField()?.focusRetry();
+    // The field may be drawn only now (a send held for the levels that then failed).
+    const field = this.levelField();
+    if (field) field.focusRetry();
+    else
+      afterNextRender(() => this.levelField()?.focusRetry(), {
+        injector: this.injector,
+      });
     return true;
   }
 

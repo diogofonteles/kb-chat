@@ -433,4 +433,28 @@ describe('EditMediaDialog (KBC-050)', () => {
       screen.getByRole('button', { name: 'Carregar níveis de novo' }),
     );
   });
+
+  it('review round 3: a save held for the levels that then fail leaves the focus on "Carregar níveis de novo"', async () => {
+    const held = holdingLevels('udv');
+    const { http } = await open(aMediaItem({ author: null }), {}, [
+      held.interceptor,
+    ]);
+    chooseTopic('udv');
+    const button = screen.getByRole('button', { name: 'Salvar' });
+    button.focus();
+    save();
+    const waiting = await vi.waitFor(() =>
+      screen.getByRole('button', { name: 'Carregando níveis…' }),
+    );
+    expect(waiting.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(waiting);
+
+    held.fail();
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Carregar níveis de novo' }),
+      ),
+    );
+    http.expectNone(URL);
+  });
 });

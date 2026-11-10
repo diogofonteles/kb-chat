@@ -1,4 +1,8 @@
-import { HttpResponse, type HttpInterceptorFn } from '@angular/common/http';
+import {
+  HttpErrorResponse,
+  HttpResponse,
+  type HttpInterceptorFn,
+} from '@angular/common/http';
 import type { LevelChoice, MediaLevelChoices } from '@kb-chat/contracts';
 import { Subject, map, of, take } from 'rxjs';
 
@@ -38,6 +42,8 @@ export const answeringLevels =
 export function holdingLevels(topic: string): {
   readonly interceptor: HttpInterceptorFn;
   release(levels?: readonly LevelChoice[]): void;
+  /** The held answer fails instead (a 503). */
+  fail(): void;
 } {
   const answer = new Subject<readonly LevelChoice[]>();
   return {
@@ -56,5 +62,7 @@ export function holdingLevels(topic: string): {
       );
     },
     release: (levels = []) => answer.next(levels),
+    fail: () =>
+      answer.error(new HttpErrorResponse({ status: 503, statusText: 'Down' })),
   };
 }

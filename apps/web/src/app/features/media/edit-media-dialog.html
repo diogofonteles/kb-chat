@@ -101,7 +101,8 @@
       <button
         type="submit"
         class="primary"
-        [disabled]="saving() || waitingForLevels()"
+        [disabled]="saving()"
+        [attr.aria-disabled]="waitingForLevels() ? 'true' : null"
         [attr.aria-busy]="waitingForLevels() ? 'true' : null"
       >
         @if (waitingForLevels()) {

@@ -49,6 +49,10 @@ export class LevelField {
     viewChild<ElementRef<HTMLElement>>('choicesBox');
   /** A retry was asked from here: once it ends, the focus goes on in the field (MA-29). */
   private refocus = false;
+  /** The retry asked from here was seen under way (so its failure ends what it owed). */
+  private retryUnderWay = false;
+  /** The way out was asked to take the focus before it was drawn. */
+  private retryFocusAsked = false;
 
   private readonly id = `level-${nextId++}`;
   protected readonly name = this.id;
@@ -68,15 +72,30 @@ export class LevelField {
     // A retry that failed again keeps the same button, focus and all.
     afterRenderEffect(() => {
       const box = this.choicesBox()?.nativeElement;
-      if (!this.refocus || !box) return;
-      (box.querySelector<HTMLElement>('input, select') ?? box).focus();
-      this.refocus = false;
+      const button = this.retryButton()?.nativeElement;
+      // A retry that failed again keeps its button and its focus: nothing is owed after.
+      if (this.retrying()) this.retryUnderWay = true;
+      else if (this.failed() && this.retryUnderWay)
+        this.refocus = this.retryUnderWay = false;
+      if (this.refocus && box) {
+        (box.querySelector<HTMLElement>('input, select') ?? box).focus();
+        this.refocus = this.retryUnderWay = false;
+      }
+      if (this.retryFocusAsked && button) {
+        button.focus();
+        this.retryFocusAsked = false;
+      }
     });
   }
 
-  /** The parent's send found the levels missing here: the way out takes the focus. */
+  /**
+   * The parent's send found the levels missing here: the way out takes the focus, now or as
+   * soon as it is drawn (review round 3: a send held for the levels that then failed).
+   */
   focusRetry(): void {
-    this.retryButton()?.nativeElement.focus();
+    const button = this.retryButton()?.nativeElement;
+    if (button) button.focus();
+    else this.retryFocusAsked = true;
   }
 
   protected retry(): void {

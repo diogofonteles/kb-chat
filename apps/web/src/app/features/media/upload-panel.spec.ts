@@ -1822,4 +1822,72 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     expect(screen.queryByRole('group', { name: 'Nível' })).toBeNull();
     held.release([]);
   });
+
+  it('review round 3: a send held for the levels that then fail leaves the focus on "Carregar níveis de novo"', async () => {
+    const held = holdingLevels('alquimia');
+    const panel = await renderPanel({ before: [held.interceptor] });
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'alquimia' },
+    });
+    choose(panel.container, audio());
+    await vi.waitFor(() =>
+      panel.http
+        .expectOne('/api/v1/topics/alquimia/media/check')
+        .flush({ verdict: 'new' }),
+    );
+    const send = await vi.waitFor(() =>
+      screen.getByRole('button', { name: 'Enviar' }),
+    );
+    send.focus();
+    fireEvent.click(send);
+    const waiting = await vi.waitFor(() =>
+      screen.getByRole('button', { name: 'Carregando níveis…' }),
+    );
+    // aria-disabled, not disabled: the button keeps the focus while it waits.
+    expect(waiting.getAttribute('aria-disabled')).toBe('true');
+    expect((waiting as HTMLButtonElement).disabled).toBe(false);
+    expect(document.activeElement).toBe(waiting);
+    fireEvent.click(waiting);
+
+    held.fail();
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Carregar níveis de novo' }),
+      ),
+    );
+    panel.http.expectNone({
+      method: 'POST',
+      url: '/api/v1/topics/alquimia/media',
+    });
+  });
+
+  it('review round 3: a failure where the collection is known to have no levels shows no warning', async () => {
+    let calls = 0;
+    const failing: HttpInterceptorFn = (request, next) =>
+      request.url.endsWith(
+        `/topics/${encodeURIComponent('hermetismo/aulas')}/media/levels`,
+      ) && calls++ === 0
+        ? throwError(
+            () => new HttpErrorResponse({ status: 503, url: request.url }),
+          )
+        : next(request);
+    const panel = await renderPanel({
+      before: [failing],
+      topics: [
+        ...TOPICS,
+        aTopic({
+          slug: 'hermetismo/aulas',
+          title: 'Aulas',
+          parent: 'hermetismo',
+        }),
+      ],
+    });
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'hermetismo/aulas' },
+    });
+    await panel.fixture.whenStable();
+
+    expect(screen.queryByText(/Carregue de novo/)).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Nível' })).toBeNull();
+  });
 });

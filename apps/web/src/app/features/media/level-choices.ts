@@ -1,5 +1,5 @@
 import { httpResource, type HttpResourceRef } from '@angular/common/http';
-import { computed, linkedSignal, type Signal } from '@angular/core';
+import { computed, effect, linkedSignal, type Signal } from '@angular/core';
 import type { LevelChoice, MediaLevelChoices } from '@kb-chat/contracts';
 import { mediaLevelsUrl, parseLevelChoices } from '@core/media/media-api.js';
 
@@ -21,83 +21,105 @@ export interface LevelChoices {
   readonly shown: Signal<boolean>;
   /**
    * The levels could not be had for `root`, which may have a scale: nothing is to be sent
-   * until they come (review round 2). One last known to have none goes on as before.
+   * until they come (review round 2). One last known to have none goes on as before. It
+   * holds whether or not the field is on the screen (review round 3).
    */
   failedWhereLevelsMayBe(root: string): boolean;
   /** Asks again after a failure; what the person filled in stays. */
   reload(): void;
 }
 
-type Settled = 'none' | 'value' | 'error';
+/** How the last request that ended went, and for which collection. */
+type Settled =
+  | { readonly kind: 'value'; readonly topic: string; readonly scaled: boolean }
+  | { readonly kind: 'error'; readonly topic: string };
+
+/** The resource the field reads: the API's answer about one collection's levels. */
+type LevelsAnswer = HttpResourceRef<MediaLevelChoices | undefined>;
 
 /**
- * The levels an audio of `topic` may take (T14): asked of the API whenever the collection
- * changes. Call it in an injection context.
+ * How many levels each top-level collection had when last asked, kept off the screen: a
+ * plain map an effect fills, read by the send whether or not the field is shown.
  */
-/** What the last request brought and how it ended, kept while the next one is on its way. */
-function remembered(answer: HttpResourceRef<MediaLevelChoices | undefined>) {
-  const failed = computed(() => answer.status() === 'error');
-  const lastAnswer = linkedSignal<
-    MediaLevelChoices | null,
-    MediaLevelChoices | null
-  >({
-    source: () => (answer.hasValue() ? answer.value() : null),
+function knownScales(answer: LevelsAnswer): (root: string) => boolean {
+  const known = new Map<string, number>();
+  effect(() => {
+    if (!answer.hasValue()) return;
+    const { collection, levels } = answer.value();
+    known.set(collection, levels.length);
+  });
+  return (root) => known.get(root) === 0;
+}
+
+/** The last request that ended, kept while the next one is on its way. */
+function lastSettled(answer: LevelsAnswer, topic: () => string) {
+  return linkedSignal<Settled | null, Settled | null>({
+    source: () => {
+      if (answer.hasValue())
+        return {
+          kind: 'value',
+          topic: topic(),
+          scaled: answer.value().levels.length > 0,
+        };
+      return answer.status() === 'error'
+        ? { kind: 'error', topic: topic() }
+        : null;
+    },
     computation: (now, previous) => now ?? previous?.value ?? null,
   });
-  const lastSettled = linkedSignal<Settled, Settled>({
-    source: () => (answer.hasValue() ? 'value' : failed() ? 'error' : 'none'),
-    computation: (now, previous) =>
-      now === 'none' ? (previous?.value ?? 'none') : now,
+}
+
+/** When the field shows, and whether it is asking again after a failure here. */
+function visibilityOf(input: {
+  readonly answer: LevelsAnswer;
+  readonly topic: () => string;
+  readonly rootOf: (slug: string) => string;
+  readonly withoutScale: (root: string) => boolean;
+}) {
+  const { answer, topic, rootOf, withoutScale } = input;
+  const settled = lastSettled(answer, topic);
+  const loading = () => answer.isLoading();
+  // Asked again after a failure of this same collection: the field keeps its place and focus.
+  const retrying = computed(() => {
+    const last = settled();
+    return loading() && last?.kind === 'error' && last.topic === topic();
   });
-  const scaledBefore = computed(
-    () => lastSettled() === 'value' && (lastAnswer()?.levels.length ?? 0) > 0,
-  );
-  return { failed, lastAnswer, lastSettled, scaledBefore };
+  const shown = computed(() => {
+    const last = settled();
+    // A failure where the collection is known to have no levels changes nothing there.
+    const failedHere =
+      answer.status() === 'error' && !withoutScale(rootOf(topic()));
+    const scaledBefore = last?.kind === 'value' && last.scaled;
+    const scale = answer.hasValue() && answer.value().levels.length > 0;
+    return scale || failedHere || retrying() || (loading() && scaledBefore);
+  });
+  return { retrying, shown };
 }
 
 /**
  * The levels an audio of `topic` may take (T14): asked of the API whenever the collection
- * changes. Call it in an injection context.
+ * changes. `rootOf` names the top-level collection whose scale a collection uses. Call it in
+ * an injection context.
  */
-export function levelChoicesOf(topic: () => string): LevelChoices {
+export function levelChoicesOf(
+  topic: () => string,
+  rootOf: (slug: string) => string = (slug) => slug,
+): LevelChoices {
   const answer = httpResource(
     () => (topic() ? mediaLevelsUrl(topic()) : undefined),
     { parse: parseLevelChoices },
   );
-  const levels = computed(() =>
-    answer.hasValue() ? answer.value().levels : [],
-  );
-  const loading = computed(() => answer.isLoading());
-  const { failed, lastAnswer, lastSettled, scaledBefore } = remembered(answer);
-  // Asked again after a failure: the field keeps its place and its focus.
-  const retrying = computed(() => loading() && lastSettled() === 'error');
+  const failed = computed(() => answer.status() === 'error');
+  const withoutScale = knownScales(answer);
   return {
-    collection: computed(() => lastAnswerOf(answer)),
-    levels,
-    loading,
+    collection: computed(() =>
+      answer.hasValue() ? answer.value().collection : '',
+    ),
+    levels: computed(() => (answer.hasValue() ? answer.value().levels : [])),
+    loading: computed(() => answer.isLoading()),
     failed,
-    retrying,
-    shown: computed(() => {
-      // Read on every change (the template reads `shown`): a linkedSignal only remembers
-      // the answers it was asked about while they were there.
-      const before = scaledBefore();
-      lastAnswer();
-      return (
-        levels().length > 0 || failed() || retrying() || (loading() && before)
-      );
-    }),
-    failedWhereLevelsMayBe: (root) =>
-      failed() && !knownWithoutScale(lastAnswer(), root),
+    ...visibilityOf({ answer, topic, rootOf, withoutScale }),
+    failedWhereLevelsMayBe: (root) => failed() && !withoutScale(root),
     reload: () => answer.reload(),
   };
 }
-
-const lastAnswerOf = (
-  answer: HttpResourceRef<MediaLevelChoices | undefined>,
-): string => (answer.hasValue() ? answer.value().collection : '');
-
-/** The last answer said `root` has no scale: a failure since then changes nothing there. */
-const knownWithoutScale = (
-  known: MediaLevelChoices | null,
-  root: string,
-): boolean => known?.collection === root && known.levels.length === 0;

@@ -274,3 +274,40 @@ test('review round 2: with the levels failed nothing is sent, and "Carregar nív
   await ana.context().close();
   await owner.dispose();
 });
+
+test('review round 3: a send held for the levels that then fail leaves the focus on "Carregar níveis de novo"', async ({
+  browser,
+}) => {
+  const owner = await ownerApi();
+  const { slug, title } = await scaled(owner, ['QS', 'CI']);
+  const other = await scaled(owner, ['A1']);
+  const email = await member(owner, [slug, other.slug], { [slug]: 'ci' });
+  const ana = await pageAs(browser, email, viewport());
+  let failNow: () => void = () => undefined;
+  const asked = new Promise<void>((resolve) => (failNow = resolve));
+  await openMedia(ana, title);
+  await ana.getByRole('button', { name: 'Enviar áudio' }).first().click();
+  const dialog = ana.getByRole('dialog', { name: 'Enviar áudio' });
+  await dialog
+    .locator('input[type="file"]')
+    .setInputFiles(makeMp3(`espera-${uniqueTag()}`, 1));
+  await expect(dialog.getByRole('group', { name: 'Nível' })).toBeVisible();
+  // The other collection's levels are held, then fail.
+  await ana.route(`**/topics/${other.slug}/media/levels`, async (route) => {
+    await asked;
+    await route.fulfill({ status: 503, body: '' });
+  });
+  await dialog.getByLabel(/^Acervo/).selectOption(other.slug);
+  const send = dialog.getByRole('button', { name: 'Enviar', exact: true });
+  await expect(send).toBeEnabled();
+  await send.click();
+  const waiting = dialog.getByRole('button', { name: 'Carregando níveis…' });
+  await expect(waiting).toBeFocused();
+  failNow();
+  await expect(
+    dialog.getByRole('button', { name: 'Carregar níveis de novo' }),
+  ).toBeFocused();
+  await shoot(ana, 'upload-levels-failed-after-wait');
+  await ana.context().close();
+  await owner.dispose();
+});

@@ -6,6 +6,7 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  Injector,
   LOCALE_ID,
   type OnInit,
   afterNextRender,
@@ -128,6 +129,7 @@ export class UploadPanel implements OnInit {
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private readonly levelField = viewChild(LevelField);
+  private readonly injector = inject(Injector);
   private readonly fileInput =
     viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
 
@@ -154,7 +156,10 @@ export class UploadPanel implements OnInit {
   /** The "Acervo" field as a signal: the author suggestions follow it. */
   protected readonly chosenTopic = signal('');
   /** The "Nível" of the chosen collection (KBC-105): asked again when its scale changes. */
-  protected readonly levels = levelChoicesOf(() => this.chosenTopic());
+  protected readonly levels = levelChoicesOf(
+    () => this.chosenTopic(),
+    (slug) => rootIn(this.topics(), slug),
+  );
   private readonly chosenRoot = computed(() =>
     rootIn(this.topics(), this.chosenTopic()),
   );
@@ -274,6 +279,8 @@ export class UploadPanel implements OnInit {
   }
 
   protected send(): void {
+    // The waiting button keeps its focus (aria-disabled): a press on it does nothing.
+    if (this.waitingForLevels() && this.levels.loading()) return;
     // Every way out of here leaves no wait behind (review round 2: a stuck button).
     this.waitingForLevels.set(false);
     this.submitted.set(true);
@@ -315,7 +322,13 @@ export class UploadPanel implements OnInit {
    */
   private levelsUnknown(): boolean {
     if (!this.levels.failedWhereLevelsMayBe(this.chosenRoot())) return false;
-    this.levelField()?.focusRetry();
+    // The field may be drawn only now (a send held for the levels that then failed).
+    const field = this.levelField();
+    if (field) field.focusRetry();
+    else
+      afterNextRender(() => this.levelField()?.focusRetry(), {
+        injector: this.injector,
+      });
     return true;
   }
 

@@ -142,7 +142,8 @@
         <button
           type="submit"
           class="primary"
-          [disabled]="uploads.checking() || waitingForLevels()"
+          [disabled]="uploads.checking()"
+          [attr.aria-disabled]="waitingForLevels() ? 'true' : null"
           [attr.aria-busy]="waitingForLevels() ? 'true' : null"
         >
           @if (waitingForLevels()) {

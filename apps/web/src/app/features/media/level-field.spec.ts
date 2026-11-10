@@ -122,4 +122,33 @@ describe('LevelField (KBC-105, T14)', () => {
       screen.getByRole('radio', { name: 'QS' }),
     );
   });
+
+  it('review round 3: after a retry fails twice, a later load does not pull the focus', async () => {
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    const { rerender, fixture } = await show({ failed: true });
+    const retry = async (failed: boolean, retrying: boolean) => {
+      await rerender({
+        componentInputs: { failed, retrying, loading: retrying },
+        partialUpdate: true,
+      });
+      await fixture.whenStable();
+    };
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Carregar níveis de novo' }),
+    );
+    await retry(false, true);
+    await retry(true, false);
+    await fixture.whenStable();
+
+    outside.focus();
+    // Another collection's levels came: the person is elsewhere and stays there.
+    await rerender({
+      componentInputs: { failed: false, retrying: false, loading: false },
+      partialUpdate: true,
+    });
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
+  });
 });
