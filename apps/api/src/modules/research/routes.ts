@@ -21,6 +21,7 @@ import type { ResearchRunnerPort } from '../../ports/research-runner.js';
 import type { TrackShelf } from '../../ports/track-shelf.js';
 import { levelViewOf } from '../access-levels/index.js';
 import {
+  canSeeMedia,
   hasFeature,
   principalOf,
   viewerOf,
@@ -59,13 +60,15 @@ export interface ResearchRouteOptions {
  */
 function shelfFor(
   request: FastifyRequest,
-  shelf: (() => TrackShelf) | undefined,
+  { topic, shelf }: { topic: string; shelf: (() => TrackShelf) | undefined },
 ): TrackShelf | undefined {
   const { person } = viewerOf(request);
   const allowed = (['media', 'media-tracks', 'media-research'] as const).every(
     (feature) => hasFeature(person, feature),
   );
-  return allowed ? shelf?.() : undefined;
+  // A collection whose media waits for levels (KBC-105/106) gives no shelf at all: its tracks
+  // stay closed even before the view's own rule (KBC-104 review #1, defence in depth).
+  return allowed && canSeeMedia(request, topic) ? shelf?.() : undefined;
 }
 
 /**
@@ -77,7 +80,7 @@ function readerOf(
   topic: string,
   shelf: (() => TrackShelf) | undefined,
 ): Pick<ResearchCall, 'view' | 'tracks'> {
-  const tracks = shelfFor(request, shelf);
+  const tracks = shelfFor(request, { topic, shelf });
   return { view: levelViewOf(request, topic), ...(tracks && { tracks }) };
 }
 
