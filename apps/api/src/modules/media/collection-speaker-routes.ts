@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import {
   assertFeature,
-  assertMediaOpen,
+  assertTracksOpen,
   viewerOf,
   type RouteAccess,
 } from '../auth/index.js';
@@ -103,7 +103,7 @@ export const collectionSpeakerRoutes =
     // A collection whose media waits for levels keeps its speakers too (KBC-103 BR-10).
     app.addHook('preHandler', async (request) => {
       const { topic } = request.params as { topic?: unknown };
-      if (typeof topic === 'string') assertMediaOpen(request, topic);
+      if (typeof topic === 'string') assertTracksOpen(request, topic);
     });
     const typed = app.withTypeProvider<ZodTypeProvider>();
     typed.get(

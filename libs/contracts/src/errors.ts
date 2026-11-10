@@ -83,8 +83,12 @@ export const API_ERROR_CODES = [
   'CORRECTION_INVALID',
   /** A level with that code (ignoring case and accents) is already in the scale (KBC-103). */
   'LEVEL_CODE_TAKEN',
-  /** AI research in a collection with levels waits for KBC-104 (non-masters, KBC-103 BR-10). */
+  /** What waits for levels in a collection with a scale (non-masters, KBC-103 BR-10, KBC-106). */
   'LEVELS_PENDING',
+  /** An audio sent to (or moved into) a collection with levels names none (KBC-105 BR-1). */
+  'LEVEL_REQUIRED',
+  /** The level chosen is above the person's own (KBC-105 BR-2). */
+  'LEVEL_ABOVE_YOURS',
   'INTERNAL',
 ] as const;
 

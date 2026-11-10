@@ -4,9 +4,12 @@ import {
   hasAcceptedAudioExtension,
   remapBookmark,
   type Author,
+  type ContentLevel,
   type CreateMediaRequest,
+  type LevelChoice,
   type MediaAuthor,
   type MediaItem,
+  type MediaLevelChoices,
   type TrackParent,
   type PreparationPlan,
   type RemappedBookmark,
@@ -31,6 +34,7 @@ import {
   canEditMedia,
   estimatedBytesOf,
   legacyAuthorshipOf,
+  seesMedia,
 } from './media-policy.js';
 import { mediaAuthorOf, toMediaItem, type ItemView } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
@@ -51,7 +55,13 @@ export interface MediaActor {
   readonly searchesSpeech?: boolean;
   /** The person's name, for the history of a track (KBC-073 BR-8). */
   readonly displayName?: string;
+  /** The collection is one the person sees (ADR 0028 tree). */
   readonly canSee: (topic: string) => boolean;
+  /**
+   * The level ids the person sees in a collection with levels (KBC-105); null: every audio
+   * (a master, or a collection without levels). `seesMedia` is the rule that reads it.
+   */
+  readonly levelsIn: (topic: string) => readonly string[] | null;
 }
 
 /** What a plan's options depend on, on top of the actor (KBC-072 BR-3). */
@@ -67,6 +77,99 @@ export interface UploadPlans {
   assertAllowed(actor: PlanActor, plan: PreparationPlan): void;
   record(actor: PlanActor, mediaId: string, plan: PreparationPlan): void;
 }
+
+/** The scales media is placed in (KBC-105, ADR 0036 §1): a sub-collection uses its parent's. */
+export interface MediaLevels {
+  /** The collection's scale, lowest first; empty: the collection has no levels. */
+  scaleOf(topic: string): readonly LevelChoice[];
+}
+
+/** No collection has levels: the media library as before KBC-105. */
+export const NO_LEVELS: MediaLevels = { scaleOf: () => [] };
+
+const levelRequired = () =>
+  new AppError('LEVEL_REQUIRED', 'Choose the level of this audio', {
+    details: { field: 'level' },
+  });
+const levelAbove = () =>
+  new AppError('LEVEL_ABOVE_YOURS', 'This level is above yours', {
+    details: { field: 'level' },
+  });
+const unknownLevel = () =>
+  new AppError('VALIDATION_FAILED', 'Unknown level', {
+    details: { field: 'level' },
+  });
+
+/**
+ * BR-1, BR-2: the level an audio takes in `topic`, as asked. Without a scale there is none to
+ * name; with one it is required, one of the scale's, and never above the person's own.
+ */
+export function chosenLevel(
+  actor: MediaActor,
+  target: {
+    readonly topic: string;
+    readonly scale: readonly LevelChoice[];
+    readonly asked: string | undefined;
+  },
+): string | null {
+  const { topic, scale, asked } = target;
+  if (scale.length === 0) {
+    if (asked !== undefined) throw unknownLevel();
+    return null;
+  }
+  if (asked === undefined) throw levelRequired();
+  if (!scale.some((one) => one.id === asked)) throw unknownLevel();
+  const allowed = actor.levelsIn(topic);
+  if (allowed !== null && !allowed.includes(asked)) throw levelAbove();
+  return asked;
+}
+
+/** The levels an upload to `topic` may choose: the scale up to the person's own. */
+export function levelChoicesFor(
+  actor: MediaActor,
+  topic: string,
+  scale: readonly LevelChoice[],
+): LevelChoice[] {
+  const allowed = actor.levelsIn(topic);
+  return scale
+    .filter((one) => allowed === null || allowed.includes(one.id))
+    .map(({ id, code }) => ({ id, code }));
+}
+
+/**
+ * An audio's level as masters and its editors see it (KBC-105, ADR 0036 §9); absent for
+ * anyone else and in a collection without levels.
+ */
+export function shownLevel(
+  record: { readonly topic: string; readonly level: string | null },
+  input: {
+    readonly scale: readonly LevelChoice[];
+    readonly shows: boolean;
+  },
+): ContentLevel | undefined {
+  if (!input.shows || input.scale.length === 0) return undefined;
+  const found = input.scale.find((one) => one.id === record.level);
+  return found ? { id: found.id, code: found.code } : null;
+}
+
+/** What a new item is made of, from the request and what the checks decided. */
+const newMediaOf = (
+  request: Omit<CreateMediaRequest, 'plan'>,
+  decided: {
+    readonly topic: string;
+    readonly author: string | null;
+    readonly level: string | null;
+  },
+) => ({
+  id: randomUUID(),
+  ...decided,
+  title: request.title,
+  legacyAuthorship: legacyAuthorshipOf(decided.author),
+  fileName: request.fileName,
+  uploadBytes: request.bytes,
+  sourceSha256: request.sha256 ?? null,
+  estimatedBytes: estimatedBytesOf(request),
+});
 
 export interface MediaServiceDeps {
   /** A recording was deleted: its documents leave the vault (KBC-100 BR-2). */
@@ -93,6 +196,8 @@ export interface MediaServiceDeps {
   readonly tracks?: Pick<TrackItemStorePort, 'filesOf' | 'liveTitles'>;
   /** The cuts replaced, still served to who is on them (KBC-073 BR-3). */
   readonly oldCuts?: Pick<TrackRevisionStorePort, 'oldFile'>;
+  /** The collections' scales (KBC-105); none: no collection has levels. */
+  readonly levels?: MediaLevels;
   readonly now?: () => Date;
 }
 
@@ -165,29 +270,40 @@ export class MediaService {
     request: Omit<CreateMediaRequest, 'plan'>,
   ): MediaItem {
     this.assertTopic(topic);
-    this.assertMediaOpen(actor, topic);
     if (!hasAcceptedAudioExtension(request.fileName))
       throw new AppError('VALIDATION_FAILED', 'Not an accepted audio file', {
         details: { field: 'fileName' },
       });
     const author = this.requireAuthor(topic, request.author);
-    // No await up to the insert: two uploads of one file cannot both pass (one writer).
-    if (request.sha256) this.assertNotRepeated(topic, request.sha256);
-    this.assertWithinQuota(actor, request);
-    const record = this.deps.store.createMedia({
-      id: randomUUID(),
+    const level = chosenLevel(actor, {
       topic,
-      title: request.title,
-      author: author?.slug ?? null,
-      legacyAuthorship: legacyAuthorshipOf(author?.slug ?? null),
+      scale: this.scaleOf(topic),
+      asked: request.level,
+    });
+    // No await up to the insert: two uploads of one file cannot both pass (one writer).
+    if (request.sha256) this.assertNotRepeated(actor, topic, request.sha256);
+    this.assertWithinQuota(actor, request);
+    const slug = author?.slug ?? null;
+    const record = this.deps.store.createMedia({
+      ...newMediaOf(request, { topic, author: slug, level }),
       ownerPrincipal: actor.principal,
-      fileName: request.fileName,
-      uploadBytes: request.bytes,
-      sourceSha256: request.sha256 ?? null,
-      estimatedBytes: estimatedBytesOf(request),
       now: this.now(),
     });
     return this.itemOf(record, actor, this.view());
+  }
+
+  /** GET …/media/levels: what an upload to `topic` may choose (BR-2). */
+  levelChoices(actor: MediaActor, topic: string): MediaLevelChoices {
+    this.assertTopic(topic);
+    const rootOf = this.deps.rootOf ?? ((slug: string) => slug);
+    return {
+      collection: rootOf(topic),
+      levels: levelChoicesFor(actor, topic, this.scaleOf(topic)),
+    };
+  }
+
+  private scaleOf(topic: string): readonly LevelChoice[] {
+    return (this.deps.levels ?? NO_LEVELS).scaleOf(topic);
   }
 
   /** What a chosen file is, before anything is sent (KBC-035 FR-1, FR-3). */
@@ -197,9 +313,10 @@ export class MediaService {
     request: UploadCheckRequest,
   ): Promise<UploadCheck> {
     this.assertTopic(topic);
-    this.assertMediaOpen(actor, topic);
     const sent = this.deps.store.findBySource(topic, request.sha256);
     const live = sent.find((media) => media.status !== 'failed');
+    // BR-6: here at a level the person does not see; nothing names it.
+    if (live && !seesMedia(actor, live)) return { verdict: 'duplicate-hidden' };
     if (live?.status === 'uploading' && live.ownerPrincipal === actor.principal)
       return {
         verdict: 'resume',
@@ -236,7 +353,7 @@ export class MediaService {
           media.topic !== topic &&
           rootOf(media.topic) === root &&
           media.status !== 'failed' &&
-          actor.canSee(media.topic) &&
+          seesMedia(actor, media) &&
           (media.status === 'ready' ||
             actor.isMaster ||
             media.ownerPrincipal === actor.principal),
@@ -244,20 +361,19 @@ export class MediaService {
       .map(({ id, title, topic: where }) => ({ id, title, topic: where }));
   }
 
-  /**
-   * The route let the person into the collection; its media may still be closed to them
-   * (KBC-103 BR-10: a collection with levels, until KBC-105). Then nothing is added or checked
-   * there, and the answer names no item (QA-1, QA-4).
-   */
-  private assertMediaOpen(actor: MediaActor, topic: string): void {
-    if (!actor.canSee(topic))
-      throw new AppError('LEVELS_PENDING', 'Media waits for levels here');
-  }
-
-  private assertNotRepeated(topic: string, sha256: string): void {
+  private assertNotRepeated(
+    actor: MediaActor,
+    topic: string,
+    sha256: string,
+  ): void {
     const live = this.deps.store
       .findBySource(topic, sha256)
       .find((media) => media.status !== 'failed');
+    // BR-6: at a level the person does not see, the refusal names nothing.
+    if (live && !seesMedia(actor, live))
+      throw new AppError('MEDIA_DUPLICATE', 'This file is already here', {
+        details: { hidden: true },
+      });
     if (live)
       throw new AppError('MEDIA_DUPLICATE', 'This file is already here', {
         details: { media: { id: live.id, title: live.title } },
@@ -451,9 +567,9 @@ export class MediaService {
     this.assertTopic(topic);
     const scope = this.deps.scopeOf?.(topic) ?? [topic];
     const records = scope
-      // A collection with levels keeps its media from members until KBC-105 (KBC-103 BR-10).
       .filter((slug) => actor.canSee(slug))
       .flatMap((slug) => this.deps.store.listMedia(slug))
+      .filter((record) => seesMedia(actor, record))
       .sort(
         (a, b) =>
           b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id),
@@ -485,8 +601,7 @@ export class MediaService {
    */
   followable(actor: MediaActor, mediaId: string): MediaItem | null {
     const media = this.deps.store.getMedia(mediaId);
-    if (!media || media.track !== null || !actor.canSee(media.topic))
-      return null;
+    if (!media || media.track !== null || !seesMedia(actor, media)) return null;
     const mine = actor.isMaster || media.ownerPrincipal === actor.principal;
     return media.status === 'ready' || mine ? this.get(actor, mediaId) : null;
   }
@@ -680,6 +795,10 @@ export class MediaService {
       canEdit: canEditMedia(actor, record),
       parent: this.parentOf(record),
       groqReady: actor.isMaster && (this.deps.groqReady?.() ?? false),
+      level: shownLevel(record, {
+        scale: this.scaleOf(record.topic),
+        shows: actor.isMaster || canEditMedia(actor, record),
+      }),
     });
   }
 
@@ -714,7 +833,8 @@ export class MediaService {
 
   private visible(actor: MediaActor, mediaId: string): MediaRecord {
     const media = this.deps.store.getMedia(mediaId);
-    if (!media || !actor.canSee(media.topic)) throw notFound();
+    // BR-5: one the person may not see answers as one that does not exist.
+    if (!media || !seesMedia(actor, media)) throw notFound();
     // A track exists for who has `media-tracks`, once published (FR-1, FR-5).
     if (media.track && (!actor.seesTracks || media.status !== 'ready'))
       throw notFound();

@@ -12,6 +12,7 @@ import type {
   LeftTrack,
 } from '../../ports/bookmark-store.js';
 import type { MediaActor, MediaService } from './media-service.js';
+import { seesMedia } from './media-policy.js';
 
 export interface BookmarkServiceDeps {
   readonly bookmarks: BookmarkStorePort;
@@ -181,7 +182,13 @@ export class BookmarkService {
   mine(actor: MediaActor): MyMediaBookmark[] {
     return this.deps.bookmarks
       .allOf(actor.principal)
-      .filter((bookmark) => actor.canSee(bookmark.mediaTopic))
+      .filter((bookmark) =>
+        seesMedia(actor, {
+          topic: bookmark.mediaTopic,
+          level: bookmark.mediaLevel,
+          track: bookmark.mediaIsTrack ? {} : null,
+        }),
+      )
       .map(asMine);
   }
 

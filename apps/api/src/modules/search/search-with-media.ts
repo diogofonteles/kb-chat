@@ -47,6 +47,11 @@ export interface SearchViewer {
   /** The collection is one the person sees (ADR 0028 tree). */
   readonly canSee: (topic: string) => boolean;
   /**
+   * The levels the person sees in the searched collection (KBC-105); null: every audio. With
+   * levels, only recordings: the route then gives no tracks, subjects or track shelf.
+   */
+  readonly levels?: readonly string[] | null;
+  /**
    * The track documents this person may see (KBC-101 BR-7): built for who has `media` and
    * `media-tracks`; absent, the documents search lists texts only.
    */
@@ -261,7 +266,7 @@ export class SearchWithMedia {
       const visible = this.visibleScope(topic, viewer);
       const subjects = this.subjectsFor(viewer);
       return (
-        media.hasTranscripts(visible) ||
+        media.hasTranscripts(visible, viewer.levels ?? null) ||
         (subjects?.countsIn(topic, visible).length ?? 0) > 0
       );
     } catch {
@@ -326,6 +331,7 @@ export class SearchWithMedia {
             filters,
             tracks: viewer.seesTracks ?? false,
             exceptIds: [...merged],
+            levels: viewer.levels ?? null,
           });
     return subjects ? this.withSubjectFacets(subjects, query, part) : part;
   }
@@ -399,6 +405,7 @@ export class SearchWithMedia {
       readonly filters: ParsedRequest['filters'];
       readonly tracks: boolean;
       readonly exceptIds: readonly string[];
+      readonly levels: readonly string[] | null;
     },
   ): SpokenPart {
     const { authors } = this.deps;

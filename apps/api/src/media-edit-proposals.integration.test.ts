@@ -17,6 +17,7 @@ const OWNER: MediaActor = {
   isMaster: true,
   canUpload: true,
   canSee: () => true,
+  levelsIn: () => null,
 };
 
 const manual = (startMs: number, endMs: number): EditTrack => ({

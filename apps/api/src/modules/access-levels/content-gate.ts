@@ -105,8 +105,8 @@ export class ContentGate {
     return codes;
   }
 
-  /** BR-10: until KBC-105, the media of a scaled collection is masters' only. */
-  closedUntilLevelsReachIt(person: StoredPerson, topic: string): boolean {
+  /** Until KBC-106, the tracks of a scaled collection are masters' only (KBC-105). */
+  tracksClosedByLevels(person: StoredPerson, topic: string): boolean {
     if (isMaster(person)) return false;
     return this.orphaned(topic) || this.scaleOf(topic).length > 0;
   }

@@ -1,5 +1,6 @@
 import type {
   Author,
+  ContentLevel,
   MediaAuthor,
   MediaFailure,
   MediaItem,
@@ -38,6 +39,8 @@ export interface ItemView {
   readonly parent?: TrackParent | null;
   /** Groq is on and has a key: a master may send a waiting transcription to it (KBC-037). */
   readonly groqReady?: boolean;
+  /** Its level, for masters and its editors in a collection with levels (KBC-105). */
+  readonly level?: ContentLevel;
 }
 
 /** The stored author as the list now names it (still shown if no longer listed, KBC-049). */
@@ -124,6 +127,14 @@ const transcriptionActions = (
     isMaster && (view.groqReady ?? false) && waitsForTranscriber(record),
 });
 
+/** Where it sits: its recording, whether it left the edit, and its level for who may see it. */
+const placeOf = (record: MediaRecord, { parent, level }: ItemView) => ({
+  parent: parent ?? null,
+  archived: record.archivedAt !== null,
+  // KBC-105, ADR 0036 §9: absent for whoever does not manage or edit it.
+  ...(level === undefined ? {} : { level }),
+});
+
 const progressOf = (progress: ItemView['progress']) => ({
   positionMs: progress?.positionMs ?? 0,
   completedAt: progress?.completedAt ?? null,
@@ -160,7 +171,6 @@ export function toMediaItem(
       view.presence ?? NO_TRANSCRIBER,
       isMaster,
     ),
-    parent: view.parent ?? null,
-    archived: record.archivedAt !== null,
+    ...placeOf(record, view),
   };
 }

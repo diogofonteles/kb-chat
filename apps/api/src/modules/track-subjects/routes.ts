@@ -28,7 +28,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import {
-  assertMediaOpen,
+  assertTracksOpen,
   assertFeature,
   hasFeature,
   viewerOf,
@@ -117,12 +117,12 @@ function registerCollection(typed: Typed, deps: SubjectRoutesDeps): void {
   const { subjects } = deps;
   const url = '/api/v1/topics/:topic/subjects';
   typed.get(url, READ_SUBJECTS, async (request) => {
-    assertMediaOpen(request, request.params.topic);
+    assertTracksOpen(request, request.params.topic);
     return subjects.collection(knownTopic(deps, request.params.topic));
   });
   typed.post(url, CREATE_SUBJECT, async (request, reply) => {
     // Before the name is looked at: a 409 must not confirm a hidden concept (QA-2).
-    assertMediaOpen(request, request.params.topic);
+    assertTracksOpen(request, request.params.topic);
     const topic = knownTopic(deps, request.params.topic);
     const { name } = request.body;
     return reply

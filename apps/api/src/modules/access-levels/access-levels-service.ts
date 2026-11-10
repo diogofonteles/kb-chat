@@ -13,6 +13,7 @@ import {
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { LevelAuditPort } from '../../ports/level-audit.js';
+import type { MediaStorePort } from '../../ports/media-store.js';
 import {
   canSeeTopic,
   isMaster,
@@ -52,8 +53,13 @@ export interface AccessLevelsServiceDeps {
   };
   readonly audit: LevelAuditPort;
   readonly parentOf: ParentOf;
+  /** The media library's audios, placed with the documents (KBC-105); absent with media off. */
+  readonly media?: Pick<MediaStorePort, 'seedLevel'>;
   readonly now?: () => Date;
 }
+
+/** Who the app's own writes are recorded as (the start's seed). */
+const APP_ACTOR: LevelActor = { by: 'kb-chat' };
 
 /** A document of a collection, as a level is set on it. */
 export interface DocumentTarget {
@@ -341,12 +347,51 @@ export class AccessLevelsService implements PersonLevelRules {
     await this.deps.directory.place(byCollection);
     const ids = (await this.withAccess(root)).map((person) => person.id);
     await this.deps.people.placeLevels({ ids, root, level });
+    const media = this.seedMedia({ root, level, again: true }) ?? 0;
     await this.record(actor, {
       kind: 'bulk',
       collection: root,
       after: level,
-      count: { documents, people: ids.length },
+      count: { documents, people: ids.length, media },
     });
+  }
+
+  /**
+   * KBC-105 AC-10: at start, the audios of each collection whose scale came before audios
+   * held a level go to its lowest one, once (a row written later by an older image stays
+   * "Sem nível", masters only, BR-8). Audited as one bulk event per collection.
+   */
+  seedMediaAtStart(): Promise<void> {
+    return this.serial(async () => {
+      for (const catalog of this.deps.catalog.topics()) {
+        const root = catalog.topic.slug;
+        if (this.deps.gate.rootOf(root) !== root) continue;
+        const [lowest] = this.deps.directory.scaleOf(root);
+        if (!lowest) continue;
+        const media = this.seedMedia({ root, level: lowest.id, again: false });
+        if (media === null) continue;
+        await this.record(APP_ACTOR, {
+          kind: 'bulk',
+          collection: root,
+          after: lowest.id,
+          count: { media },
+        });
+      }
+    });
+  }
+
+  /** The audios of the scope with no level, at `level`; null: seeded before (at start). */
+  private seedMedia(seed: {
+    readonly root: string;
+    readonly level: string;
+    readonly again: boolean;
+  }): number | null {
+    const { media } = this.deps;
+    if (!media) return null;
+    const topics = this.deps.catalog
+      .scope(seed.root)
+      .map((one) => one.topic.slug);
+    return media.seedLevel({ ...seed, topics, now: new Date(this.now()) });
   }
 
   /** People (not masters) who see the collection or one of its sub-collections. */

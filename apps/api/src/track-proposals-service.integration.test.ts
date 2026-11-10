@@ -29,6 +29,7 @@ const OWNER: MediaActor = {
   isMaster: true,
   canUpload: true,
   canSee: () => true,
+  levelsIn: () => null,
 };
 const EDITOR: MediaActor = { ...OWNER, principal: 'ana', isMaster: false };
 const NOW = new Date('2026-11-03T15:00:00Z');

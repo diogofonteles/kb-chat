@@ -33,6 +33,7 @@ const aRecord = (
   },
   track: null,
   archivedAt: null,
+  level: null,
 });
 
 const statusOf = (jobStatus: JobStatus | null, version: number | null) =>

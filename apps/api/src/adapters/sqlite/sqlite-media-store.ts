@@ -21,7 +21,9 @@ import type {
   LeaseOwner,
   LeaseRequest,
   LeasedJob,
+  EditedMedia,
   MediaEdit,
+  MediaLevelSeed,
   MediaRecord,
   MediaRendition,
   MediaStorePort,
@@ -76,6 +78,7 @@ function toMediaRecord(row: Row): MediaRecord {
     track: trackLinkOf(row),
     archivedAt: row['archived_at'] === null ? null : text(row, 'archived_at'),
     transcription: transcriptionOf(row),
+    level: nullableText(row, 'level'),
   };
 }
 
@@ -127,7 +130,7 @@ const AUTHOR_COLUMN = `COALESCE(author,
 const MEDIA_COLUMNS = `id, topic, title, ${AUTHOR_COLUMN} AS author, owner_principal, file_name, upload_bytes, source_sha256,
   status, progress, failure, duration_ms, bytes, created_at, updated_at,
   parent_media_id, parent_start_ms, parent_end_ms, track_ordinal, archived_at,
-  track_version, file_version,
+  track_version, file_version, level,
   (SELECT j.status FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
      ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS transcribe_job,
   (SELECT j.route FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
@@ -166,9 +169,9 @@ export class SqliteMediaStore implements MediaStorePort {
     this.db
       .prepare(
         `INSERT INTO media (id, topic, title, author, authorship, owner_principal,
-           file_name, upload_bytes, source_sha256, estimated_bytes, status, created_at,
-           updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?)`,
+           file_name, upload_bytes, source_sha256, estimated_bytes, level, status,
+           created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?)`,
       )
       .run(
         media.id,
@@ -181,6 +184,7 @@ export class SqliteMediaStore implements MediaStorePort {
         media.uploadBytes,
         media.sourceSha256 ?? null,
         media.estimatedBytes ?? null,
+        media.level ?? null,
         at,
         at,
       );
@@ -316,13 +320,19 @@ export class SqliteMediaStore implements MediaStorePort {
     };
   }
 
-  /** A recording's tracks go where it goes: they have no collection of their own (BR-2). */
-  editMedia(edit: MediaEdit): MediaRecord | null {
+  /**
+   * A recording's tracks go where it goes: they have no collection of their own (BR-2). Those
+   * still at its old level follow its new one (KBC-105 BR-7), in the same transaction.
+   */
+  editMedia(edit: MediaEdit): EditedMedia | null {
     const at = edit.now.toISOString();
     return inTransaction(this.db, () => {
+      const before = this.getMedia(edit.mediaId);
+      if (!before) return null;
       this.db
         .prepare(
-          `UPDATE media SET title = ?, topic = ?, author = ?, authorship = ?, updated_at = ?
+          `UPDATE media SET title = ?, topic = ?, author = ?, authorship = ?, level = ?,
+             updated_at = ?
            WHERE id = ?`,
         )
         .run(
@@ -330,15 +340,70 @@ export class SqliteMediaStore implements MediaStorePort {
           edit.topic,
           edit.author,
           edit.legacyAuthorship,
+          edit.level,
           at,
           edit.mediaId,
         );
+      this.moveTracks(edit.mediaId, edit.topic, at);
+      const tracksRelevelled = this.relevelTracks(edit.mediaId, {
+        from: before.level,
+        to: edit.level,
+      });
+      return { record: this.requireMedia(edit.mediaId), tracksRelevelled };
+    });
+  }
+
+  /** A recording's tracks have no collection of their own (KBC-068 BR-2). */
+  private moveTracks(parentId: string, topic: string, at: string): void {
+    this.db
+      .prepare(
+        'UPDATE media SET topic = ?, updated_at = ? WHERE parent_media_id = ?',
+      )
+      .run(topic, at, parentId);
+  }
+
+  /** The tracks still at the recording's old level take its new one; how many did. */
+  private relevelTracks(
+    parentId: string,
+    { from, to }: { readonly from: string | null; readonly to: string | null },
+  ): number {
+    if (from === to) return 0;
+    return Number(
       this.db
         .prepare(
-          'UPDATE media SET topic = ?, updated_at = ? WHERE parent_media_id = ?',
+          `UPDATE media SET level = ? WHERE parent_media_id = ? AND level IS ?`,
         )
-        .run(edit.topic, at, edit.mediaId);
-      return this.getMedia(edit.mediaId);
+        .run(to, parentId, from).changes,
+    );
+  }
+
+  seedLevel(seed: MediaLevelSeed): number | null {
+    const at = seed.now.toISOString();
+    return inTransaction(this.db, () => {
+      const seeded =
+        this.db
+          .prepare('SELECT 1 FROM media_level_seeds WHERE root = ?')
+          .get(seed.root) !== undefined;
+      if (seeded && !seed.again) return null;
+      const rows =
+        seed.topics.length === 0
+          ? 0
+          : Number(
+              this.db
+                .prepare(
+                  `UPDATE media SET level = ?
+                   WHERE level IS NULL AND topic IN (SELECT value FROM json_each(?))`,
+                )
+                .run(seed.level, JSON.stringify(seed.topics)).changes,
+            );
+      this.db
+        .prepare(
+          `INSERT INTO media_level_seeds (root, level, rows, seeded_at) VALUES (?, ?, ?, ?)
+           ON CONFLICT (root) DO UPDATE SET level = excluded.level, rows = excluded.rows,
+             seeded_at = excluded.seeded_at`,
+        )
+        .run(seed.root, seed.level, rows, at);
+      return rows;
     });
   }
 

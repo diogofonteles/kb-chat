@@ -61,7 +61,7 @@ export class SqliteBookmarkStore implements BookmarkStorePort {
   allOf(principal: string): BookmarkWithMedia[] {
     return this.db
       .prepare(
-        `SELECT ${COLUMNS}, m.title, m.topic, m.duration_ms
+        `SELECT ${COLUMNS}, m.title, m.topic, m.duration_ms, m.level, m.parent_media_id
          FROM media_bookmarks b JOIN media m ON m.id = b.media_id
          WHERE b.principal = ?
          ORDER BY b.created_at DESC, b.rowid DESC`,
@@ -71,6 +71,8 @@ export class SqliteBookmarkStore implements BookmarkStorePort {
         ...toBookmark(row),
         mediaTitle: String(row['title']),
         mediaTopic: String(row['topic']),
+        mediaLevel: row['level'] === null ? null : String(row['level']),
+        mediaIsTrack: row['parent_media_id'] !== null,
         mediaDurationMs:
           row['duration_ms'] === null ? null : Number(row['duration_ms']),
       }));

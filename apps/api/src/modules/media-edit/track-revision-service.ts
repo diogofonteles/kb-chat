@@ -31,10 +31,11 @@ import type {
   TrackRole,
 } from '../../ports/track-revision-store.js';
 import type { TrackSubjectStorePort } from '../../ports/track-subject-store.js';
-import type {
-  MediaActor,
-  TrackCall,
-  VoiceNamesService,
+import {
+  seesTracksIn,
+  type MediaActor,
+  type TrackCall,
+  type VoiceNamesService,
 } from '../media/index.js';
 import type { TrackPublisher } from './track-publisher.js';
 import type { VoiceNameFixer } from './voice-name-fixer.js';
@@ -503,7 +504,8 @@ export class TrackRevisionService {
     return {
       moved: this.deps.revisions
         .movedBookmarks(actor.principal)
-        .filter((entry) => actor.canSee(entry.topic))
+        // Tracks of a collection with levels wait for KBC-106.
+        .filter((entry) => seesTracksIn(actor, entry.topic))
         .map(({ mediaId, recordingId, title, count }) => ({
           mediaId,
           recordingId,

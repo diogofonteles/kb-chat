@@ -3,6 +3,11 @@ import { transcriptTermListSchema } from './media-terms.js';
 import { learnedSpanSchema } from './transcript-learning.js';
 import { authorSchema, authorSlugSchema } from './authors.js';
 import { TOPIC_TITLE_MAX, topicSlugSchema } from './topics.js';
+import {
+  contentLevelSchema,
+  levelChoiceSchema,
+  levelRefSchema,
+} from './access-levels.js';
 import { MAX_VOICES, voiceIndexSchema } from './voice-index.js';
 import {
   voiceMatchSchema,
@@ -206,6 +211,11 @@ export const mediaItemSchema = z.object({
   parent: trackParentSchema.nullable().default(null),
   /** A track that left the edit: it stays to say so, and cannot be played (BR-5). */
   archived: z.boolean().default(false),
+  /**
+   * Its access level (KBC-105), or null for "Sem nível": only for masters and for whoever
+   * may edit it, in a collection with levels. Absent for everyone else (ADR 0036 §9).
+   */
+  level: contentLevelSchema.optional(),
 });
 export type MediaItem = z.infer<typeof mediaItemSchema>;
 
@@ -270,6 +280,8 @@ export const uploadCheckSchema = z.discriminatedUnion('verdict', [
     elsewhere: z.array(uploadElsewhereSchema).optional(),
   }),
   z.object({ verdict: z.literal('duplicate'), media: uploadCheckMediaSchema }),
+  /** The file is here at a level the person does not see: nothing names it (KBC-105 BR-6). */
+  z.object({ verdict: z.literal('duplicate-hidden') }),
   z.object({
     verdict: z.literal('resume'),
     media: uploadCheckMediaSchema,
@@ -288,6 +300,20 @@ export const duplicateDetailsSchema = z.object({
   media: uploadCheckMediaSchema,
 });
 
+/** The `details` of a `MEDIA_DUPLICATE` at a level the person does not see (KBC-105 BR-6). */
+export const duplicateHiddenDetailsSchema = z.object({
+  hidden: z.literal(true),
+});
+
+/** GET /api/v1/topics/:topic/media/levels: what an upload there may choose (KBC-105 BR-2). */
+export const mediaLevelChoicesSchema = z.object({
+  /** The top-level collection whose scale this is (a sub-collection uses its parent's). */
+  collection: topicSlugSchema,
+  /** Lowest first, up to the person's own (masters: all); empty without a scale. */
+  levels: z.array(levelChoiceSchema),
+});
+export type MediaLevelChoices = z.infer<typeof mediaLevelChoicesSchema>;
+
 /** The `details` of a `MEDIA_QUOTA_EXCEEDED`. */
 export const quotaDetailsSchema = z.object({
   quotaBytes: z.number().int().positive(),
@@ -305,6 +331,8 @@ export const createMediaRequestSchema = z.strictObject({
   /** Left out by what sends with PUT …/file: the file is then never called repeated. */
   sha256: mediaSha256Schema.nullable().optional(),
   durationMs: measuredLengthSchema.optional(),
+  /** Required in a collection with levels (KBC-105 BR-1): at or below the sender's own. */
+  level: levelRefSchema.optional(),
 });
 export type CreateMediaRequest = z.input<typeof createMediaRequestSchema>;
 
@@ -315,6 +343,11 @@ export const updateMediaRequestSchema = z.strictObject({
   author: authorSlugSchema.nullable().optional(),
   /** The collection to move it to. */
   topic: topicSlugSchema.optional(),
+  /**
+   * Its new level (KBC-105 BR-3); required when moving to another top-level collection with
+   * levels (BR-4).
+   */
+  level: levelRefSchema.optional(),
 });
 export type UpdateMediaRequest = z.infer<typeof updateMediaRequestSchema>;
 

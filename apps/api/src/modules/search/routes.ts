@@ -15,7 +15,8 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { levelViewOf } from '../access-levels/index.js';
 import {
-  canSeeMedia,
+  canSee,
+  canSeeTracks,
   hasFeature,
   viewerOf,
   type RouteAccess,
@@ -52,17 +53,21 @@ export interface SearchRouteOptions {
  */
 function searchViewerOf(
   request: FastifyRequest,
-  tracks: SearchRouteOptions['tracks'],
+  { topic, tracks }: { topic: string; tracks: SearchRouteOptions['tracks'] },
 ): SearchViewer {
   const { person } = viewerOf(request);
   const mayHear = hasFeature(person, 'media');
-  const seesTracks = hasFeature(person, 'media-tracks');
+  // KBC-105: in a collection with levels a member hears the recordings at their level; its
+  // tracks, and the subjects that lead to them, wait for their own level (KBC-106).
+  const levels = levelViewOf(request, topic).allowedLevelIds();
+  const tracksOpen = levels === null && canSeeTracks(request, topic);
+  const seesTracks = tracksOpen && hasFeature(person, 'media-tracks');
   return {
     mayHear,
     seesTracks,
-    seesSubjects: hasFeature(person, 'media-subjects'),
-    // Spoken passages of a collection with levels wait for KBC-105 (KBC-103 BR-10).
-    canSee: (topic) => canSeeMedia(request, topic),
+    seesSubjects: tracksOpen && hasFeature(person, 'media-subjects'),
+    canSee: (slug) => canSee(request, slug),
+    levels,
     ...(mayHear && seesTracks && tracks && { tracks: tracks() }),
   };
 }
@@ -100,7 +105,10 @@ function registerSearch(
     },
     async (request) =>
       combined.search(request.params.topic, request.body, {
-        viewer: searchViewerOf(request, tracks),
+        viewer: searchViewerOf(request, {
+          topic: request.params.topic,
+          tracks,
+        }),
         view: levelViewOf(request, request.params.topic),
         report: (entry) => logMedia(request, entry),
       }),
@@ -127,7 +135,10 @@ function registerSubjectTracks(
       combined.subjectTracks(
         request.params,
         request.query,
-        searchViewerOf(request, options.tracks),
+        searchViewerOf(request, {
+          topic: request.params.topic,
+          tracks: options.tracks,
+        }),
       ),
   );
 }
@@ -148,7 +159,10 @@ export const searchRoutes =
       },
       async (request) =>
         options.combined.topicFacets(request.params.topic, {
-          viewer: searchViewerOf(request, options.tracks),
+          viewer: searchViewerOf(request, {
+            topic: request.params.topic,
+            tracks: options.tracks,
+          }),
           view: levelViewOf(request, request.params.topic),
           report: (entry) => logMedia(request, entry),
         }),

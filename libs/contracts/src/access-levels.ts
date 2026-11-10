@@ -164,11 +164,17 @@ export const levelAuditEntrySchema = z.object({
   target: z.string().optional(),
   before: z.unknown().optional(),
   after: z.unknown().optional(),
-  /** For `bulk`: how many items and people the first scale placed. */
+  /**
+   * For `bulk`: how many documents, people and audios the first scale placed; for a media
+   * `item.level`, the recording and the tracks that followed it (KBC-105 BR-7).
+   */
   count: z
     .object({
-      documents: z.number().int().nonnegative(),
-      people: z.number().int().nonnegative(),
+      documents: z.number().int().nonnegative().optional(),
+      people: z.number().int().nonnegative().optional(),
+      media: z.number().int().nonnegative().optional(),
+      recordings: z.number().int().nonnegative().optional(),
+      tracks: z.number().int().nonnegative().optional(),
     })
     .optional(),
 });

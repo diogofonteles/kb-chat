@@ -21,7 +21,7 @@ import type { ResearchRunnerPort } from '../../ports/research-runner.js';
 import type { TrackShelf } from '../../ports/track-shelf.js';
 import { levelViewOf } from '../access-levels/index.js';
 import {
-  canSeeMedia,
+  canSeeTracks,
   hasFeature,
   principalOf,
   viewerOf,
@@ -68,7 +68,7 @@ function shelfFor(
   );
   // A collection whose media waits for levels (KBC-105/106) gives no shelf at all: its tracks
   // stay closed even before the view's own rule (KBC-104 review #1, defence in depth).
-  return allowed && canSeeMedia(request, topic) ? shelf?.() : undefined;
+  return allowed && canSeeTracks(request, topic) ? shelf?.() : undefined;
 }
 
 /**

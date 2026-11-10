@@ -10,7 +10,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
   assertFeature,
-  canSeeMedia,
+  canSeeTracks,
   hasFeature,
   isMaster,
   viewerOf,
@@ -36,8 +36,9 @@ function actorOf(request: FastifyRequest): MediaActor {
     principal: viewer.principal,
     isMaster: isMaster(viewer.person),
     canUpload: hasFeature(viewer.person, 'media-upload'),
-    // A collection with levels keeps its media for masters until KBC-105 (KBC-103 BR-10).
-    canSee: (topic) => canSeeMedia(request, topic),
+    // Proposals make tracks: a collection with levels keeps them for masters (KBC-106).
+    canSee: (topic) => canSeeTracks(request, topic),
+    levelsIn: () => null,
   };
 }
 

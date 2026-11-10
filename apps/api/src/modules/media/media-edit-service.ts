@@ -5,14 +5,24 @@ import {
   type UpdateMediaRequest,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
-import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
+import type {
+  MediaEdit,
+  MediaRecord,
+  MediaStorePort,
+} from '../../ports/media-store.js';
 import type {
   SpeakerMove,
   SpeakerStorePort,
   StoredSpeaker,
 } from '../../ports/speaker-store.js';
-import type { MediaActor } from './media-service.js';
-import { canEditMedia, legacyAuthorshipOf } from './media-policy.js';
+import type { LevelAuditPort } from '../../ports/level-audit.js';
+import {
+  NO_LEVELS,
+  chosenLevel,
+  type MediaActor,
+  type MediaLevels,
+} from './media-service.js';
+import { canEditMedia, legacyAuthorshipOf, seesMedia } from './media-policy.js';
 import { toCollectionSpeaker } from './voice-labels.js';
 
 export interface MediaEditServiceDeps {
@@ -25,7 +35,17 @@ export interface MediaEditServiceDeps {
   readonly authorOf: (topic: string, slug: string) => Author | null;
   /** The recording changed: its tracks follow, in the same transaction on a move (KBC-068 BR-2). */
   readonly onEdited?: (mediaId: string) => void;
+  /** The collections' scales (KBC-105); none: no collection has levels. */
+  readonly levels?: MediaLevels;
+  /** Where a level change is recorded (ADR 0036 §11); required once levels exist. */
+  readonly audit?: LevelAuditPort;
   readonly now?: () => Date;
+}
+
+/** Who edits, as the levels audit names them: the master, and the person they act as. */
+export interface EditAuthor {
+  readonly by: string;
+  readonly actingAs?: string;
 }
 
 const unknownAuthor = () =>
@@ -45,32 +65,119 @@ export class MediaEditService {
     this.now = deps.now ?? (() => new Date());
   }
 
-  edit(actor: MediaActor, mediaId: string, request: UpdateMediaRequest): void {
+  /** One edit of a recording: who asks, which, and who the audit names (ADR 0027). */
+  async edit(
+    call: {
+      readonly actor: MediaActor;
+      readonly mediaId: string;
+      readonly by?: EditAuthor;
+    },
+    request: UpdateMediaRequest,
+  ): Promise<void> {
+    const { actor, mediaId } = call;
+    const media = this.editable(actor, mediaId);
+    const topic = this.destinationOf(actor, media, request.topic);
+    const edit: MediaEdit = {
+      mediaId,
+      title: request.title ?? media.title,
+      topic,
+      ...this.authorship(media, topic, request.author),
+      level: this.levelAfter(actor, { media, topic, asked: request.level }),
+      now: this.now(),
+    };
+    const tracks = this.save(actor, media, edit);
+    if (edit.level !== media.level)
+      await this.recordLevel(call.by ?? { by: actor.principal }, {
+        topic,
+        mediaId,
+        before: media.level,
+        after: edit.level,
+        tracks,
+      });
+  }
+
+  /** The recording, when this person may see and edit it. */
+  private editable(actor: MediaActor, mediaId: string): MediaRecord {
     const media = this.deps.store.getMedia(mediaId);
-    if (!media || !actor.canSee(media.topic))
+    if (!media || !seesMedia(actor, media))
       throw new AppError('MEDIA_NOT_FOUND', 'Unknown media');
     if (!canEditMedia(actor, media))
       throw new AppError('FORBIDDEN', 'Only who sent it or a master may edit');
-    const topic = this.destinationOf(actor, media, request.topic);
-    const author = this.authorAfter(media, topic, request.author);
-    const save = () => {
-      this.deps.store.editMedia({
-        mediaId,
-        title: request.title ?? media.title,
-        topic,
-        author,
-        legacyAuthorship: legacyAuthorshipOf(author),
-        now: this.now(),
-      });
-      this.deps.onEdited?.(mediaId);
+    return media;
+  }
+
+  private authorship(
+    media: MediaRecord,
+    topic: string,
+    asked: string | null | undefined,
+  ) {
+    const author = this.authorAfter(media, topic, asked);
+    return { author, legacyAuthorship: legacyAuthorshipOf(author) };
+  }
+
+  /** Writes the edit, the speakers following a move; how many tracks changed level. */
+  private save(actor: MediaActor, media: MediaRecord, edit: MediaEdit): number {
+    let tracks = 0;
+    const write = () => {
+      tracks = this.deps.store.editMedia(edit)?.tracksRelevelled ?? 0;
+      this.deps.onEdited?.(edit.mediaId);
     };
-    if (this.sameLists(media.topic, topic)) save();
+    const { mediaId, topic } = edit;
+    if (this.sameLists(media.topic, topic)) write();
     else
       this.deps.speakers.rehome({
         mediaId,
         moves: this.movesOf({ mediaId, from: media.topic, to: topic, actor }),
-        alongside: save,
+        alongside: write,
       });
+    return tracks;
+  }
+
+  /**
+   * BR-3, BR-4: the level the audio holds after the edit. A collection without levels holds
+   * none; another top-level collection with levels needs one of its own; otherwise the asked
+   * one (never above the person's), or the one it had.
+   */
+  private levelAfter(
+    actor: MediaActor,
+    edit: {
+      readonly media: MediaRecord;
+      readonly topic: string;
+      readonly asked: string | undefined;
+    },
+  ): string | null {
+    const { media, topic, asked } = edit;
+    const scale = (this.deps.levels ?? NO_LEVELS).scaleOf(topic);
+    const moved = !this.sameLists(media.topic, topic);
+    if (scale.length === 0 || asked !== undefined || moved)
+      return chosenLevel(actor, { topic, scale, asked });
+    return media.level;
+  }
+
+  /** ADR 0036 §11: before → after, with the recording and the tracks that followed it. */
+  private async recordLevel(
+    by: EditAuthor,
+    change: {
+      readonly topic: string;
+      readonly mediaId: string;
+      readonly before: string | null;
+      readonly after: string | null;
+      readonly tracks: number;
+    },
+  ): Promise<void> {
+    const { audit } = this.deps;
+    if (!audit) throw new Error('A level changed with no audit to record it');
+    await audit.append({
+      at: this.now().toISOString(),
+      by: by.by,
+      ...(by.actingAs && { actingAs: by.actingAs }),
+      kind: 'item.level',
+      collection: change.topic,
+      target: change.mediaId,
+      before: change.before,
+      after: change.after,
+      count: { recordings: 1, tracks: change.tracks },
+    });
   }
 
   /** BR-2: seeing the collection; sending there is the same right as editing (AC-4). */

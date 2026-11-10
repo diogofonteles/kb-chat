@@ -4,6 +4,9 @@ import type { MediaBookmark } from '@kb-chat/contracts';
 export interface BookmarkWithMedia extends MediaBookmark {
   readonly mediaTitle: string;
   readonly mediaTopic: string;
+  /** The media's level and whether it is a track: who still sees it (KBC-105). */
+  readonly mediaLevel: string | null;
+  readonly mediaIsTrack: boolean;
   readonly mediaDurationMs: number | null;
 }
 

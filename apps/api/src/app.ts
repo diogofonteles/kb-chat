@@ -150,7 +150,9 @@ import {
   VoiceSuggestionService,
   voiceProfileRoutes,
   type MediaActor,
+  type MediaLevels,
 } from './modules/media/index.js';
+import type { MediaStorePort } from './ports/media-store.js';
 import type { MediaDeps } from './media-factory.js';
 import { createGroq } from './groq-factory.js';
 import type { TranscriptSummary } from './ports/transcript-store.js';
@@ -542,7 +544,15 @@ interface MediaWiring {
   readonly house: HouseAi;
   /** Track documents (KBC-099/100): every change reconciles them. */
   readonly documents?: MediaDocuments;
+  /** The scales and their audit (KBC-105): an audio's level is one of its collection's. */
+  readonly levels: FullDeps['levels'];
 }
+
+/** The collections' scales as media reads them (KBC-105, ADR 0036 §1). */
+const mediaLevelsOf = ({ levels }: MediaWiring): MediaLevels => ({
+  scaleOf: (topic) =>
+    levels.gate.scaleOf(topic).map(({ id, code }) => ({ id, code })),
+});
 
 /** A new transcription job for an item, queued now. */
 const transcriptionRequester =
@@ -555,19 +565,16 @@ const transcriptionRequester =
     });
 
 /** A collection's media, with its sub-collections' (ADR 0028). */
-function mediaService({
-  media,
-  catalog,
-  authors,
-  transcribers,
-  groq,
-  documents,
-}: MediaWiring & {
-  transcribers: TranscriberService;
-  groq: GroqService;
-}): MediaService {
+function mediaService(
+  wiring: MediaWiring & {
+    transcribers: TranscriberService;
+    groq: GroqService;
+  },
+): MediaService {
+  const { media, catalog, authors, transcribers, groq, documents } = wiring;
   const { store, files, listening } = media;
   return new MediaService({
+    levels: mediaLevelsOf(wiring),
     ...removalsOf(documents),
     store,
     files,
@@ -594,13 +601,13 @@ const removalsOf = (documents?: MediaDocuments) =>
     : {};
 
 /** Changing an item's details (KBC-050): the author and speaker lists follow a move. */
-function mediaEditor({
-  media,
-  catalog,
-  authors,
-  publisher,
-}: MediaWiring & { publisher: TrackPublisher }): MediaEditService {
+function mediaEditor(
+  wiring: MediaWiring & { publisher: TrackPublisher },
+): MediaEditService {
+  const { media, catalog, authors, publisher } = wiring;
   return new MediaEditService({
+    levels: mediaLevelsOf(wiring),
+    audit: wiring.levels.audit,
     store: media.store,
     speakers: media.speakers,
     hasTopic: (topic) => catalog.get(topic) !== undefined,
@@ -972,6 +979,7 @@ async function registerLibrary(
   const { store, listening, trackLinks } = wiring.media;
   const directory = createSubjectDirectory(wiring);
   const service = new LibraryService({
+    levels: mediaLevelsOf(wiring),
     store,
     listening,
     authorOf: (topic, slug) => wiring.authors.authorOf(topic, slug),
@@ -1206,6 +1214,7 @@ const SYSTEM_READER: MediaActor = {
   isMaster: true,
   canUpload: false,
   canSee: () => true,
+  levelsIn: () => null,
 };
 
 /** The transcripts with who speaks, as listeners get them, for any media. */
@@ -1332,10 +1341,10 @@ function planActors(app: FastifyInstance, wiring: MediaWiring) {
       principal,
       isMaster: isMaster(person),
       canUpload: hasFeature(person, 'media-upload'),
-      // A collection with levels keeps its media for masters until KBC-105 (BR-10).
-      canSee: (topic) =>
-        canSeeTopic(person, topic, parentOf) &&
-        !app.contentGate?.closedUntilLevelsReachIt(person, topic),
+      canSee: (topic) => canSeeTopic(person, topic, parentOf),
+      // KBC-105: the person's levels as they stand now; without the gate, nothing (fail-closed).
+      levelsIn: (topic) =>
+        app.contentGate?.viewFor(person, topic).allowedLevelIds() ?? [],
       canEdit: hasFeature(person, 'media-edit'),
       canPropose: hasFeature(person, 'media-edit-ai'),
     };
@@ -1880,7 +1889,11 @@ async function completeDeps(given: AppDeps): Promise<FullDeps> {
     agent,
     catalog,
     authors,
-    levels: await loadedLevels(deps, { catalog, people: auth.people }),
+    levels: await loadedLevels(deps, {
+      catalog,
+      people: auth.people,
+      media: deps.media?.store,
+    }),
     legacySeeded: seeded,
     ledger,
     usage: deps.usage ?? new MemoryUsageLog(),
@@ -1891,7 +1904,11 @@ async function completeDeps(given: AppDeps): Promise<FullDeps> {
 /** The scales and levels (KBC-103), loaded, with the gate every content route asks. */
 async function loadedLevels(
   given: AppDeps,
-  built: { catalog: CatalogRegistry; people: PeopleService },
+  built: {
+    catalog: CatalogRegistry;
+    people: PeopleService;
+    media: Pick<MediaStorePort, 'seedLevel'> | undefined;
+  },
 ): Promise<FullDeps['levels']> {
   const levels = given.levels ?? {
     directory: new LevelDirectory({
@@ -1901,15 +1918,18 @@ async function loadedLevels(
     audit: new MemoryLevelAudit(),
   };
   await levels.directory.load();
-  const { catalog, people } = built;
+  const { catalog, people, media } = built;
   const gate = new ContentGate({ directory: levels.directory, catalog });
   const service = new AccessLevelsService({
     ...levels,
     catalog,
     gate,
     people,
+    ...(media && { media }),
     parentOf: (slug) => catalog.get(slug)?.topic.parent ?? null,
   });
+  // KBC-105 AC-10: the audios of a collection that had a scale before media held a level.
+  await service.seedMediaAtStart();
   return { ...levels, gate, service };
 }
 

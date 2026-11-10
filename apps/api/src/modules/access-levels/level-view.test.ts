@@ -228,9 +228,9 @@ describe('The content gate (KBC-103 BR-5, NFR-1)', () => {
       true,
     );
     expect(gate.viewFor(person(), 'alquimia')).toBe(OPEN_VIEW);
-    expect(gate.closedUntilLevelsReachIt(person(), 'hermetismo')).toBe(true);
+    expect(gate.tracksClosedByLevels(person(), 'hermetismo')).toBe(true);
     expect(
-      gate.closedUntilLevelsReachIt(person({ role: 'master' }), 'hermetismo'),
+      gate.tracksClosedByLevels(person({ role: 'master' }), 'hermetismo'),
     ).toBe(false);
   });
 
@@ -274,7 +274,7 @@ describe('The content gate (KBC-103 BR-5, NFR-1)', () => {
     );
     expect(member).toBe(CLOSED_VIEW);
     expect(member.allows('udv/palavra', entry('raw/a.md'))).toBe(false);
-    expect(gate.closedUntilLevelsReachIt(person(), 'udv/palavra')).toBe(true);
+    expect(gate.tracksClosedByLevels(person(), 'udv/palavra')).toBe(true);
     const master = gate.viewFor(person({ role: 'master' }), 'udv/palavra');
     expect(master.allows('udv/palavra', entry('raw/a.md'))).toBe(true);
   });

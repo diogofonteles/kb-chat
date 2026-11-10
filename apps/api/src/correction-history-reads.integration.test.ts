@@ -90,6 +90,7 @@ const member: MediaActor = {
   isMaster: false,
   canUpload: false,
   canSee: () => true,
+  levelsIn: () => null,
 };
 
 describe('Correções: a learned group (KBC-113, review round 2, ND-19)', () => {
