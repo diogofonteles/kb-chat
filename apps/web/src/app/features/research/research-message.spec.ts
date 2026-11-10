@@ -217,6 +217,68 @@ describe('ResearchMessage', () => {
     expect(screen.queryByRole('button', { name: 'Não citado' })).toBeNull();
   });
 
+  describe("KBC-110: sources above today's level", () => {
+    const demoted = (overrides: Partial<ResearchTurn> = {}) =>
+      aTurn({
+        text: 'São sete [1], no Caibalion [2] e num texto velado [3].',
+        sources: SOURCES.slice(0, 2),
+        restricted: [3],
+        restored: true,
+        ...overrides,
+      });
+
+    it('AC-1: keeps the prose and the visible sources, shows "Fonte restrita" and says how many', async () => {
+      await renderMessage(demoted());
+
+      expect(screen.getByText(/num texto velado/)).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'Os Princípios' }),
+      ).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'O Caibalion' })).toBeTruthy();
+      expect(screen.getByText('Fonte restrita')).toBeTruthy();
+      expect(
+        screen.getByText(
+          '1 fonte desta resposta não está disponível para você.',
+        ),
+      ).toBeTruthy();
+    });
+
+    it('AC-7: "[3]" of a restricted source is no link or button, read as "Fonte 3, restrita"', async () => {
+      const view = await renderMessage(demoted());
+
+      expect(screen.queryByRole('link', { name: /Fonte 3/ })).toBeNull();
+      expect(
+        screen.getAllByRole('button').map((b) => b.textContent),
+      ).not.toContain(expect.stringContaining('restrita'));
+      const spoken = screen.getAllByText('Fonte 3, restrita');
+      expect(spoken).toHaveLength(2);
+      const [inAnswer] = spoken;
+      if (inAnswer) fireEvent.click(inAnswer);
+      expect(view.opened).not.toHaveBeenCalled();
+      expect(view.trackOpened).not.toHaveBeenCalled();
+    });
+
+    it('AC-6: with every source restricted, the list and the plural note still show', async () => {
+      await renderMessage(demoted({ sources: [], restricted: [1, 2, 3, 9] }));
+
+      expect(screen.getAllByText('Fonte restrita')).toHaveLength(3);
+      expect(
+        screen.getByText(
+          '3 fontes desta resposta não estão disponíveis para você.',
+        ),
+      ).toBeTruthy();
+    });
+
+    it('AC-8: an answer with no restricted source shows no note', async () => {
+      await renderMessage(aTurn());
+
+      expect(screen.queryByText('Fonte restrita')).toBeNull();
+      expect(
+        screen.queryByText(/não está disponível|não estão disponíveis/),
+      ).toBeNull();
+    });
+  });
+
   it('KBC-099 AC-8: a cited track has its chip "♪ title · recording · minute" and opens its passage, never the document panel', async () => {
     const { opened, trackOpened } = await renderMessage(
       aTurn({

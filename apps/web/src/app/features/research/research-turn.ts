@@ -3,6 +3,7 @@ import {
   mergeFindings,
   MAX_HISTORY_TURNS,
   SOURCE_CITATION,
+  isRestrictedSource,
   type AnswerSource,
   type Authorship,
   type ResearchBilling,
@@ -11,6 +12,7 @@ import {
   type ResearchProfile,
   type ResearchStep,
   type ResearchTurn as HistoryTurn,
+  type SavedAnswerSource,
   type SavedResearchTurn,
   type SweepCoverage,
   type SweepCursor,
@@ -48,6 +50,11 @@ export interface ResearchTurn {
   readonly segments: readonly AnswerSegment[];
   /** Every document the agent read, numbered; [n] in the text points to one of them. */
   readonly sources: readonly AnswerSource[];
+  /**
+   * Numbers of the saved sources today's reader may not see (KBC-110, ADR 0036 §8): their
+   * "[n]" stays text and they show as "Fonte restrita"; empty for a live turn.
+   */
+  readonly restricted: readonly number[];
   /** What the agent did, live; a restored turn only keeps the count. */
   readonly steps: readonly TurnStep[];
   readonly stepCount: number;
@@ -148,6 +155,7 @@ export function startTurn(
     text: '',
     segments: [],
     sources: [],
+    restricted: [],
     steps: [],
     stepCount: 0,
     ...NOT_ANSWERED,
@@ -270,15 +278,24 @@ export function toHistory(turns: readonly ResearchTurn[]): HistoryTurn[] {
     }));
 }
 
-/** Only the sources the answer cites with [n], in their numbering order. */
-export function citedSources(turn: ResearchTurn): AnswerSource[] {
-  // "[3]" and a track's "[3@8:15]" (KBC-099) cite the same source 3.
-  const cited = new Set(
+/** The source numbers the answer cites: "[3]" and a track's "[3@8:15]" (KBC-099) cite 3. */
+const citedNumbers = (turn: ResearchTurn): ReadonlySet<number> =>
+  new Set(
     [...turn.text.matchAll(new RegExp(SOURCE_CITATION.source, 'g'))].map(
       (match) => Number(match[1]),
     ),
   );
+
+/** Only the sources the answer cites with [n], in their numbering order. */
+export function citedSources(turn: ResearchTurn): AnswerSource[] {
+  const cited = citedNumbers(turn);
   return turn.sources.filter((source) => cited.has(source.n));
+}
+
+/** The restricted sources the answer cites (KBC-110), in number order. */
+export function citedRestricted(turn: ResearchTurn): number[] {
+  const cited = citedNumbers(turn);
+  return turn.restricted.filter((n) => cited.has(n)).sort((a, b) => a - b);
 }
 
 /** How the history keeps a turn's phase (KBC-029): pending, failed with its code, or ended. */
@@ -289,12 +306,19 @@ function savedStatusOf(turn: ResearchTurn): Partial<SavedResearchTurn> {
   return {};
 }
 
+/** The visible and the restricted sources in number order, as the history keeps them. */
+const savedSourcesOf = (turn: ResearchTurn): SavedAnswerSource[] =>
+  [
+    ...turn.sources,
+    ...turn.restricted.map((n) => ({ n, restricted: true as const })),
+  ].sort((a, b) => a.n - b.n);
+
 export function toSavedTurn(turn: ResearchTurn): SavedResearchTurn {
   return {
     id: turn.turnId,
     question: turn.question,
     answer: turn.text,
-    sources: [...turn.sources],
+    sources: savedSourcesOf(turn),
     steps: turn.stepCount,
     usd: turn.usd ?? 0,
     billing: turn.billing,
@@ -331,7 +355,7 @@ export function fromSavedTurn(
     phase,
     text: saved.answer,
     segments: [{ segment: 0, text: saved.answer }],
-    sources: saved.sources,
+    ...savedSources(saved),
     steps: [],
     stepCount: saved.steps,
     usd: saved.usd,
@@ -351,6 +375,14 @@ export function fromSavedTurn(
   };
 }
 
+/** A saved turn's sources: those the reader sees, and the numbers restricted (KBC-110). */
+const savedSources = (saved: SavedResearchTurn) => ({
+  sources: saved.sources.filter(
+    (source): source is AnswerSource => !isRestrictedSource(source),
+  ),
+  restricted: saved.sources.filter(isRestrictedSource).map(({ n }) => n),
+});
+
 /** A saved turn's sweep: its coverage and cursor; no live progress (KBC-030). */
 const savedSweep = (saved: SavedResearchTurn) => ({
   sweep: null,
@@ -368,6 +400,7 @@ export const replayFrom = (turn: ResearchTurn): ResearchTurn => ({
   text: '',
   segments: [],
   sources: [],
+  restricted: [],
   steps: [],
   stepCount: 0,
   sweep: null,

@@ -213,6 +213,26 @@ p.steps {
   border-color: var(--color-accent);
 }
 
+/* A source above today's level (KBC-110): text, not a control; dashed, and it says so. */
+.source.restricted {
+  border-style: dashed;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+.source.restricted:hover {
+  border-color: var(--color-border);
+}
+
+.sources ol.restricted {
+  margin-top: var(--space-2);
+}
+
+.restricted-note {
+  margin-top: var(--space-2);
+}
+
 .source-n {
   display: inline-grid;
   place-items: center;

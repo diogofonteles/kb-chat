@@ -24,6 +24,20 @@ const TRACK: AnswerSource = {
 };
 
 describe('answer formatting', () => {
+  it('KBC-110 FR-5: "[n]" of a restricted source is text read as "Fonte n, restrita", no link', () => {
+    const html = renderAnswer(
+      'Aberta [1] e velada [2].',
+      [{ n: 1, id: 'a.md', title: 'A' }],
+      [2],
+    );
+
+    expect(html).toContain('href="#fonte-1"');
+    expect(html).not.toContain('#fonte-2');
+    expect(html).toContain(
+      '<span class="cite-restricted"><span aria-hidden="true">[2]</span><span class="visually-hidden">Fonte 2, restrita</span></span>',
+    );
+  });
+
   it('drops raw HTML, links and images from model output, keeping citations', () => {
     const html = renderAnswer(
       'Veja <img src="https://evil/x?q=1"> e [site](https://evil) e ![x](https://evil/i.png) [1].',
