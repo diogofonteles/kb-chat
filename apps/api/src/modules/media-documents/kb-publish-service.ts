@@ -197,6 +197,7 @@ export class KbPublishService {
       now,
       maxAttempts: this.deps.maxAttempts,
       configuration: failure.configuration === true,
+      spent: (failure.spendUsd ?? 0) > 0,
     });
     if (!delivered) throw leaseLost();
     const spent = failure.spendUsd ?? 0;

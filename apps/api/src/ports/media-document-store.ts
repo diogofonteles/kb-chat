@@ -230,6 +230,11 @@ export interface MediaDocumentStorePort {
        * neither it nor its documents spend an attempt.
        */
       readonly configuration?: boolean;
+      /**
+       * kb spent before failing (QA F-3): then it ran a model, so the failure counts as a real
+       * one whatever it said, and a setup error that is not one cannot wait for ever.
+       */
+      readonly spent?: boolean;
     },
   ): readonly DeliveredDocument[] | null;
   /**

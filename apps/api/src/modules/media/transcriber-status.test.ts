@@ -124,3 +124,57 @@ describe('Why a kind waits (review r2 N-1, S-2)', () => {
     expect(board.whyNot('transcribe')).toBe('none-paired');
   });
 });
+
+describe('TranscriberStatusBoard: the Mac publishes again (KBC-117)', () => {
+  const ready = {
+    ...working,
+    kinds: ['transcribe' as const, 'kb-publish' as const],
+  };
+  const preparing = { ...working, state: 'waiting' as const, kinds: [] };
+  const missing = {
+    ...working,
+    kinds: ['transcribe' as const],
+    unavailable: [
+      {
+        kind: 'kb-publish' as const,
+        reason: 'kb-ai-key-missing' as const,
+        detail: 'chave da IA do kb ausente',
+      },
+    ],
+  };
+
+  const counted = () => {
+    const calls: string[] = [];
+    const board = new TranscriberStatusBoard({
+      transcribers: { list: () => [MAC] },
+      kbWaiting: () => 0,
+      canStartHere: false,
+      onKbReady: () => calls.push('ready'),
+    });
+    return { board, calls };
+  };
+
+  it('fires once when it starts publishing, not at each report', () => {
+    const { board, calls } = counted();
+    board.record(MAC.id, missing);
+    board.record(MAC.id, missing);
+    expect(calls).toEqual([]);
+    board.record(MAC.id, ready);
+    board.record(MAC.id, ready);
+    expect(calls).toEqual(['ready']);
+  });
+
+  it('QA F-2: a restart of the Mac (preparing, no kinds yet) is not a new start of publishing', () => {
+    const { board, calls } = counted();
+    board.record(MAC.id, ready);
+    board.record(MAC.id, preparing);
+    board.record(MAC.id, ready);
+    expect(calls).toEqual(['ready']);
+  });
+
+  it('names what the Mac said it lacks', () => {
+    const { board } = counted();
+    board.record(MAC.id, missing);
+    expect(board.whyNot('kb-publish')).toBe('kb-ai-key-missing');
+  });
+});

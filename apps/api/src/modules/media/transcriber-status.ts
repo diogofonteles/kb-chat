@@ -44,6 +44,8 @@ type Received = TranscriberStatusReport & { readonly receivedAt: string };
  */
 export class TranscriberStatusBoard {
   private readonly reports = new Map<string, Received>();
+  /** Whether each transcriber last said it publishes; a report with no kinds says nothing. */
+  private readonly publishing = new Map<string, boolean>();
   private readonly now: () => Date;
 
   constructor(private readonly deps: TranscriberStatusDeps) {
@@ -51,13 +53,16 @@ export class TranscriberStatusBoard {
   }
 
   record(transcriberId: string, report: TranscriberStatusReport): void {
-    const before = this.reports.get(transcriberId);
     this.reports.set(transcriberId, {
       ...report,
       receivedAt: this.now().toISOString(),
     });
-    if (publishes(report) && !(before && publishes(before)))
-      this.deps.onKbReady?.();
+    // Preparing (no kinds yet) is unknown: a restart is not a new start (QA F-2).
+    if (report.kinds.length === 0) return;
+    const now = publishes(report);
+    const before = this.publishing.get(transcriberId) ?? false;
+    this.publishing.set(transcriberId, now);
+    if (now && !before) this.deps.onKbReady?.();
   }
 
   overview(): TranscriberStatusOverview {
@@ -65,7 +70,10 @@ export class TranscriberStatusBoard {
     const known = new Set(paired.map((one) => one.id));
     // A revoked transcriber's last word goes with it.
     for (const id of this.reports.keys())
-      if (!known.has(id)) this.reports.delete(id);
+      if (!known.has(id)) {
+        this.reports.delete(id);
+        this.publishing.delete(id);
+      }
     return {
       items: paired.map((one) => this.itemOf(one)),
       kbQueue: { waiting: this.deps.kbWaiting() },

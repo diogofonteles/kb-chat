@@ -16,6 +16,7 @@ import type {
   TranscriberStatusItem,
   TranscriberStatusOverview,
   TranscriberStatusReport,
+  UnavailableReason,
 } from '@kb-chat/contracts';
 import { TranscribersApi } from '@core/media/transcribers-api.js';
 import { publicationTime } from '../media/track-publication/publication-time.js';
@@ -106,6 +107,17 @@ const MARK: Partial<Record<MediaJobKind, { mark: string; part: string }>> = {
   },
 };
 
+/**
+ * What the Mac said it lacks (KBC-117), and what to do there. The command is the
+ * transcriber's own (its README); the app never shows a uv command (KBC-114 AC-17).
+ */
+const LACKS: Record<UnavailableReason, () => string> = {
+  'kb-ai-key-missing': () =>
+    $localize`:@@transcriberStatus.whyKbKey:falta a chave da IA do kb neste Mac. No Terminal do Mac, rode uma vez o comando do transcritor "transcriber keys set" (como no README dele); a publicação volta sozinha.`,
+  'kb-missing': () =>
+    $localize`:@@transcriberStatus.whyKbMissing:o Mac não encontra o kb ou a pasta do vault. Confira se o kb está instalado e se a pasta do vault existe; depois ligue o transcritor de novo.`,
+};
+
 /** Why it waits, and what to do, per reason (review r2 S-2, N-2; QA r2). */
 const WHY: Record<Blocked['reason'], (kind: MediaJobKind) => string> = {
   'none-paired': () =>
@@ -118,10 +130,8 @@ const WHY: Record<Blocked['reason'], (kind: MediaJobKind) => string> = {
     $localize`:@@transcriberStatus.whyNotInstalled:o Mac não conseguiu carregar o componente de ${MARK[kind]?.part ?? kind}:part:; ele tenta de novo na próxima vez que ligar.`,
   'monthly-cap': () =>
     $localize`:@@transcriberStatus.whyCap:o teto mensal da mídia foi atingido; a publicação volta no mês que vem.`,
-  'kb-ai-key-missing': () =>
-    $localize`:@@transcriberStatus.whyKbKey:chave da IA do kb ausente no Mac. No Terminal do Mac, rode "transcriber keys set" (uma vez); a publicação volta sozinha.`,
-  'kb-missing': () =>
-    $localize`:@@transcriberStatus.whyKbMissing:o kb não está instalado no Mac (ou a pasta do vault não existe). Instale o kb e ligue o transcritor de novo.`,
+  'kb-ai-key-missing': () => LACKS['kb-ai-key-missing'](),
+  'kb-missing': () => LACKS['kb-missing'](),
 };
 
 const blockedText = (one: Blocked): string =>
@@ -251,6 +261,10 @@ export class TranscriberStatus {
   }
   protected kindOf(kind: MediaJobKind): string {
     return KIND_WORD[kind]?.() ?? kind;
+  }
+  /** "no acervo: falta a chave da IA do kb neste Mac…", in the app's words (i18n). */
+  protected lacksText(missing: NonNullable<Report['unavailable']>[number]) {
+    return `${this.kindOf(missing.kind)} ${LACKS[missing.reason]()}`;
   }
   protected recentLabel(job: TranscriberStatusReport['recentJobs'][number]) {
     return `${this.kindOf(job.kind)} ${job.label}`;

@@ -315,13 +315,16 @@ describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
       }),
     );
     expect(dialog.textContent).toContain(
-      '3 documentos esperam publicação: chave da IA do kb ausente no Mac',
+      '3 documentos esperam publicação: falta a chave da IA do kb neste Mac',
     );
     expect(dialog.textContent).toContain('transcriber keys set');
-    expect(dialog.textContent).toContain('Não faz agora');
+    expect(dialog.textContent).toContain('Não consegue agora');
+    // The app's own words (i18n), never the Mac's free text.
     expect(dialog.textContent).toContain(
-      'no acervo: chave da IA do kb ausente (OPENROUTER_API_KEY)',
+      'no acervo: falta a chave da IA do kb neste Mac',
     );
+    expect(dialog.textContent).not.toContain('(OPENROUTER_API_KEY)');
+    expect(dialog.textContent).not.toContain('uv run');
   });
 
   it('KBC-117: kb missing on the Mac says to install it', async () => {
@@ -334,7 +337,9 @@ describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
         },
       }),
     );
-    expect(dialog.textContent).toContain('o kb não está instalado no Mac');
+    expect(dialog.textContent).toContain(
+      'o Mac não encontra o kb ou a pasta do vault',
+    );
   });
 
   it('says since when it is on, or off (AC-16)', async () => {

@@ -416,9 +416,9 @@ test('KBC-117: a Mac without the kb AI key says so in its details', async ({
     const details = page.getByRole('dialog', {
       name: `Transcritor "${mac.name}"`,
     });
-    await expect(details).toContainText('Não faz agora');
+    await expect(details).toContainText('Não consegue agora');
     await expect(details).toContainText(
-      'no acervo: chave da IA do kb ausente (OPENROUTER_API_KEY)',
+      'no acervo: falta a chave da IA do kb neste Mac',
     );
     await expect(details).toContainText('transcriber keys set');
     expect(await seriousViolations(page)).toEqual([]);

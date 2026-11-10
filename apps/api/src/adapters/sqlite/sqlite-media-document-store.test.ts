@@ -356,6 +356,25 @@ describe('KBC-117: a Mac without the kb key', () => {
     expect(store.queueSummary().failed).toEqual([]);
   });
 
+  it('QA F-3: a not-configured failure that spent counts as a real one', () => {
+    const { db, store } = aStore();
+    want(store);
+    for (let round = 0; round < 4; round += 1) {
+      const owner = leased(store, 'job-s');
+      store.fail(owner, {
+        error: NO_KEY,
+        now: AT,
+        maxAttempts: 4,
+        configuration: true,
+        spent: true,
+      });
+    }
+    const job = db
+      .prepare("SELECT status FROM kb_publish_jobs WHERE id = 'job-s'")
+      .get();
+    expect(job).toEqual({ status: 'dead' });
+  });
+
   it('documents given up on for the missing key go back to the queue; others stay', () => {
     const { db, store } = aStore();
     want(store);

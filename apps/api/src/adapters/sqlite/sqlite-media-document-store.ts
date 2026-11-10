@@ -282,7 +282,8 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
         .filter((row) => isConfiguration(String(row['last_error'])))
         .map((row) => String(row['media_id'])),
     );
-    // One transaction; few rows: only what kb gave up on, read once above.
+    // One transaction; few rows: only what kb gave up on, read once above. `retry` starts the
+    // whole media over, as "Tentar de novo" does (KBC-100): a sibling document with it.
     return inTransaction(this.db, () => {
       const topics = new Set<string>();
       for (const mediaId of mediaIds)
@@ -664,7 +665,7 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       const delivered = deliveredSchema.parse(
         JSON.parse(String(row['items'] ?? '[]')),
       );
-      if (input.configuration)
+      if (input.configuration && !input.spent)
         this.waitForSetup(owner, { topic, error, now: input.now });
       else
         this.giveBack(owner, {
