@@ -4,12 +4,14 @@ import { closeApp, events, type Call } from '../test/ai-app-harness.js';
 import {
   HIDDEN_TITLES,
   SIX,
+  doc,
   memberOf,
   placeDocuments,
   setPersonLevel,
   sixAtThreeLevels,
   startLevels,
   type LevelsWorld,
+  type VaultDoc,
 } from '../test/levels-world.js';
 import { StubLlmAdapter, type StubReply } from './adapters/stub-llm-adapter.js';
 
@@ -47,13 +49,16 @@ interface ResearchWorld {
   readonly llm: StubLlmAdapter;
 }
 
-/** Ana at CI over the six documents, the stub model following `script`. */
+/** Ana at CI over the six documents (and `extra` ones), the stub model following `script`. */
 async function anaResearching(
   script: readonly StubReply[],
-  options: { readonly level?: string } = {},
+  options: {
+    readonly level?: string;
+    readonly extra?: readonly VaultDoc[];
+  } = {},
 ): Promise<ResearchWorld> {
   const llm = new StubLlmAdapter({ script });
-  const world = await startLevels(SIX, { llm });
+  const world = await startLevels([...SIX, ...(options.extra ?? [])], { llm });
   const ana = await memberOf(world, 'ana@example.com');
   await sixAtThreeLevels(world);
   await setPersonLevel(world, ana.id, { hermetismo: options.level ?? 'ci' });
@@ -65,7 +70,7 @@ interface Turn {
   /** The raw SSE body: every event, as the browser gets it. */
   readonly body: string;
   readonly stream: ResearchEvent[];
-  /** Everything the tools told the model this turn. */
+  /** The model's whole input on its last call this turn: system, user, assistant and tools. */
   readonly told: string;
   /** Each tool output of the turn, in order. */
   readonly outputs: string[];
@@ -91,7 +96,7 @@ async function ask(
     status: asked.statusCode,
     body: asked.body,
     stream: asked.statusCode === 200 ? events(asked.body) : [],
-    told: outputs.join('\n'),
+    told: turn.map((message) => message.content).join('\n'),
   };
 }
 
@@ -222,5 +227,89 @@ describe('AI research within the person level (KBC-104)', () => {
     expect(fromSub.status, fromSub.body).toBe(200);
     expect(fromSub.told).not.toContain('Lua Media Duo');
     expect(fromSub.body).not.toContain('Lua Media Duo');
+  });
+  it('Review #2: a visible document linked to a CDC one lists only the visible link, counted (1); the master sees both', async () => {
+    const extra = [
+      doc('hermetismo/raw/ligado.md', 'Texto Ligado', {
+        body: 'Um texto do meio sobre a lua.',
+        extra: 'related: ["[[Segredo]]", "[[Aberto]]"]',
+      }),
+      doc('hermetismo/wiki/concepts/Segredo.md', 'Segredo', 'Conceito velado.'),
+      doc('hermetismo/wiki/concepts/Aberto.md', 'Aberto', 'Conceito aberto.'),
+    ];
+    const { world, ana, llm } = await anaResearching(
+      [
+        call('related_documents', { document: 'raw/ligado.md' }),
+        { text: 'Ligações vistas.' },
+      ],
+      { extra },
+    );
+    await placeDocuments(world, {
+      'hermetismo:raw/ligado.md': 'ci',
+      'hermetismo:wiki/concepts/Segredo.md': 'cdc',
+    });
+    const asAna = await ask(ana.call, llm);
+    expect(asAna.status, asAna.body).toBe(200);
+    const links = asAna.outputs[0] ?? '';
+    expect(links).toContain('Relacionado a (1):');
+    expect(links).toContain('Aberto');
+    expect(asAna.told).not.toContain('Segredo');
+    expect(asAna.body).not.toContain('Segredo');
+    const asMaster = await ask(world.owner, llm);
+    expect(asMaster.outputs[0]).toContain('Relacionado a (2):');
+    expect(asMaster.outputs[0]).toContain('Segredo');
+  });
+
+  it('QA F-1: a hidden copy that sorts first does not hide the visible copy of the same title', async () => {
+    const extra = [
+      doc(
+        'hermetismo/wiki/concepts/Lua Conceito.md',
+        'Lua Conceito',
+        'Conceito aberto da lua.',
+      ),
+      doc('hermetismo/raw/copia-aberta.md', 'Copia Gemea', {
+        body: 'Copia que vai para CDC.',
+        extra: 'related: ["[[Lua Conceito]]"]',
+      }),
+      doc('hermetismo/raw/copia-velada.md', 'Copia Gemea', {
+        body: 'Copia que fica em QS.',
+        extra: 'related: ["[[Lua Conceito]]"]',
+      }),
+    ];
+    const { world, ana, llm } = await anaResearching(
+      [
+        call('related_documents', {
+          document: 'wiki/concepts/Lua Conceito.md',
+        }),
+        { text: 'ok' },
+      ],
+      { extra },
+    );
+    // The copy that sorts first goes up to CDC; the other one stays visible.
+    await placeDocuments(world, { 'hermetismo:raw/copia-aberta.md': 'cdc' });
+    const turn = await ask(ana.call, llm);
+    expect(turn.outputs[0]).toContain('Citado como relacionado por (1):');
+    expect(turn.outputs[0]).toContain('Copia Gemea');
+    // "Veja também" of the concept, the same rule (KBC-103's surface).
+    const opened = await ana.call(
+      'GET',
+      `/api/v1/topics/hermetismo/documents/${encodeURIComponent('wiki/concepts/Lua Conceito.md')}`,
+    );
+    expect(opened.statusCode, opened.body).toBe(200);
+    expect(opened.json().seeAlso.relatedFrom).toEqual({
+      items: [
+        expect.objectContaining({
+          id: 'raw/copia-velada.md',
+          title: 'Copia Gemea',
+        }),
+      ],
+      total: 1,
+    });
+    const page = await ana.call(
+      'GET',
+      `/api/v1/topics/hermetismo/documents/${encodeURIComponent('wiki/concepts/Lua Conceito.md')}/relations/relatedFrom`,
+    );
+    expect(page.json()).toMatchObject({ total: 1 });
+    expect(page.body).toContain('copia-velada');
   });
 });

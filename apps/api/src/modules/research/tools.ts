@@ -501,12 +501,13 @@ export class ResearchTools {
       ...ref,
       id: view.idOf(catalog.topic.slug, ref.id),
     });
-    const seen = (ref: { id: string }) => {
-      const one = view.entries.get(ref.id);
+    // Seen before copies collapse: a hidden copy never hides a visible one (QA F-1).
+    const seen = (ref: { id: string; title: string }) => {
+      const one = view.entries.get(inScope(ref).id);
       return !one || isVisible(one, context);
     };
-    return Object.entries(catalog.relations.groupsOf(own))
-      .map(([group, refs]) => [group, refs.map(inScope).filter(seen)] as const)
+    return Object.entries(catalog.relations.groupsOf(own, seen))
+      .map(([group, refs]) => [group, refs.map(inScope)] as const)
       .filter(([, refs]) => refs.length > 0);
   }
 
