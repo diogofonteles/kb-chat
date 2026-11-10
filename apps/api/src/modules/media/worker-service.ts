@@ -371,6 +371,7 @@ export class WorkerService {
       const owner = { jobId, worker: failure.worker, leaseId: failure.leaseId };
       this.deps.kb.fail(owner, {
         detail: failure.detail,
+        configuration: failure.failure === 'not-configured',
         ...(failure.spendUsd !== undefined && { spendUsd: failure.spendUsd }),
       });
       return;
@@ -380,6 +381,11 @@ export class WorkerService {
     const recorded = this.deps.store.failJob({
       jobId,
       ...failure,
+      // Only a kb-publish job waits for the Mac's setup (KBC-117); any other is a crash.
+      failure:
+        failure.failure === 'not-configured'
+          ? 'conversion-failed'
+          : failure.failure,
       now: this.now(),
       maxAttempts: MAX_JOB_ATTEMPTS,
     });

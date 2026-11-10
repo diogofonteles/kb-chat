@@ -17,6 +17,11 @@ export interface TranscriberStatusDeps {
   readonly kbWaiting: () => number;
   /** Whether this API runs on the transcriber's Mac (KB_CHAT_LOCAL_TRANSCRIBER=1). */
   readonly canStartHere: boolean;
+  /**
+   * A transcriber said it can publish now, after not saying so (KBC-117): what died of its
+   * missing setup goes back to the queue.
+   */
+  readonly onKbReady?: () => void;
   /** Why work waits with it off (the waker's view, QA F-1); null before the waker runs. */
   readonly attention?: () => WakeAttention | null;
   readonly now?: () => Date;
@@ -46,10 +51,13 @@ export class TranscriberStatusBoard {
   }
 
   record(transcriberId: string, report: TranscriberStatusReport): void {
+    const before = this.reports.get(transcriberId);
     this.reports.set(transcriberId, {
       ...report,
       receivedAt: this.now().toISOString(),
     });
+    if (publishes(report) && !(before && publishes(before)))
+      this.deps.onKbReady?.();
   }
 
   overview(): TranscriberStatusOverview {
@@ -123,7 +131,12 @@ export class TranscriberStatusBoard {
       const kinds = this.reports.get(one.id)?.kinds;
       return !kinds?.length || kinds.includes(kind);
     };
-    return marked.some(runs) ? null : 'not-installed';
+    if (marked.some(runs)) return null;
+    // What the Mac said it lacks (KBC-117), before the generic "did not load".
+    const said = marked
+      .flatMap((one) => this.reports.get(one.id)?.unavailable ?? [])
+      .find((one) => one.kind === kind);
+    return said?.reason ?? 'not-installed';
   }
 
   /** Whether a transcriber said anything at or after this moment. */
@@ -141,6 +154,11 @@ export class TranscriberStatusBoard {
     );
   }
 }
+
+/** It says it publishes now: kb-publish among its kinds, and nothing missing for it. */
+const publishes = (report: TranscriberStatusReport): boolean =>
+  report.kinds.includes('kb-publish') &&
+  !(report.unavailable ?? []).some((one) => one.kind === 'kb-publish');
 
 /**
  * The lease of a transcription carries no title, so the worker names the job by its media;

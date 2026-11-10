@@ -145,6 +145,14 @@ export interface MediaDocumentStorePort {
    */
   retry(mediaId: string, now: Date): readonly string[];
   /**
+   * Documents and removals given up on because of the Mac's setup (KBC-117: the kb's AI key
+   * missing), told by their error, start over; the collections touched.
+   */
+  retryConfigurationFailures(
+    isConfiguration: (error: string) => boolean,
+    now: Date,
+  ): readonly string[];
+  /**
    * What production's catalog sees (FR-6): a document whose desired fingerprint is the one
    * seen becomes live. How many changed.
    */
@@ -217,6 +225,11 @@ export interface MediaDocumentStorePort {
       readonly error: string;
       readonly now: Date;
       readonly maxAttempts: number;
+      /**
+       * The Mac's setup failed, not kb on a document (KBC-117): the job waits again and
+       * neither it nor its documents spend an attempt.
+       */
+      readonly configuration?: boolean;
     },
   ): readonly DeliveredDocument[] | null;
   /**

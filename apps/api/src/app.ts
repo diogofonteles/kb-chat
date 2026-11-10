@@ -1022,6 +1022,26 @@ function isStarting(
   );
 }
 
+/**
+ * A Mac said it can publish again (KBC-117): what died of its missing kb key is queued
+ * again. Its status is taken whatever happens here.
+ */
+function requeueAfterSetup(
+  app: FastifyInstance,
+  documents: MediaDocuments,
+): void {
+  try {
+    const topics = documents.status.retryConfigurationFailures();
+    if (topics.length > 0)
+      app.log.info(
+        { topics },
+        'track documents: back in the queue, the Mac can publish again',
+      );
+  } catch (err) {
+    app.log.error({ err }, 'track documents: could not queue them again');
+  }
+}
+
 /** The transcribers' own status for masters, and "Ligar transcritor" on the Mac (KBC-114). */
 async function registerTranscriberStatus(
   app: FastifyInstance,
@@ -1041,6 +1061,7 @@ async function registerTranscriberStatus(
     kbWaiting,
     canStartHere: local !== null,
     attention: () => waker?.attention() ?? null,
+    onKbReady: () => requeueAfterSetup(app, documents),
   });
   const startingNow = () => isStarting(waker, board);
   await app.register(transcriberStatusRoutes({ board, local, startingNow }));

@@ -556,8 +556,11 @@ export const KB_PUBLISH_MAX_ITEMS = 50;
 export const KB_PUBLISH_MAX_BUDGET_USD = 0.5;
 
 export const failJobRequestSchema = leaseOwnerSchema.extend({
-  /** `invalid-audio` is permanent and never retried (KBC-034 BR-5). */
-  failure: z.enum(['invalid-audio', 'conversion-failed']),
+  /**
+   * `invalid-audio` is permanent and never retried (KBC-034 BR-5). `not-configured` is the
+   * Mac's own setup (KBC-117: the kb's AI key missing): the job waits and spends no attempt.
+   */
+  failure: z.enum(['invalid-audio', 'conversion-failed', 'not-configured']),
   /** For the log; never shown to people. */
   detail: z.string().max(2_000),
   /**
@@ -1080,6 +1083,13 @@ export const TRANSCRIBER_STATES = [
 export const transcriberStateSchema = z.enum(TRANSCRIBER_STATES);
 export type TranscriberState = z.infer<typeof transcriberStateSchema>;
 
+/**
+ * Why a transcriber cannot do a kind it was marked for, as it says (KBC-117): the kb's AI
+ * key is not on the Mac, or kb itself is not.
+ */
+export const UNAVAILABLE_REASONS = ['kb-ai-key-missing', 'kb-missing'] as const;
+export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number];
+
 /** A transcriber that sent no status for this long is shown as off (BR-9). */
 export const TRANSCRIBER_STATUS_STALE_MS = 2 * 60 * 1000;
 
@@ -1127,6 +1137,17 @@ export const transcriberStatusReportSchema = z.strictObject({
   /** The kb vault on the Mac, when it publishes (KBC-099). */
   vaultPath: z.string().max(500).nullable(),
   kbVersion: z.string().max(100).nullable(),
+  /** Kinds it cannot do now, and why (KBC-117); absent from a worker before it. */
+  unavailable: z
+    .array(
+      z.strictObject({
+        kind: mediaJobKindSchema,
+        reason: z.enum(UNAVAILABLE_REASONS),
+        detail: z.string().max(300),
+      }),
+    )
+    .max(MEDIA_JOB_KINDS.length)
+    .optional(),
 });
 export type TranscriberStatusReport = z.infer<
   typeof transcriberStatusReportSchema
@@ -1145,6 +1166,7 @@ export const BLOCKED_REASONS = [
   'not-marked',
   'not-installed',
   'monthly-cap',
+  ...UNAVAILABLE_REASONS,
 ] as const;
 export type BlockedReason = (typeof BLOCKED_REASONS)[number];
 
