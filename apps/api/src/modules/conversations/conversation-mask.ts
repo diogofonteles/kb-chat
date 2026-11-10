@@ -46,11 +46,18 @@ const maskSource = (
     ? source
     : { n: source.n, restricted: true };
 
+/**
+ * A cursor without the findings of hidden documents, nor the last swept id when that one is
+ * hidden (QA E2): a continuation resumes by `covered` (KBC-101) either way.
+ */
 function maskCursor(cursor: SweepCursor, visible: Visible): SweepCursor {
   const findings = cursor.findings.filter((one) => visible(one.id, null));
-  return findings.length === cursor.findings.length
-    ? cursor
-    : { ...cursor, findings };
+  const hiddenAfter =
+    cursor.after !== undefined && !visible(cursor.after, null);
+  if (findings.length === cursor.findings.length && !hiddenAfter) return cursor;
+  const masked: SweepCursor = { ...cursor, findings };
+  if (hiddenAfter) delete masked.after;
+  return masked;
 }
 
 function maskTurn(

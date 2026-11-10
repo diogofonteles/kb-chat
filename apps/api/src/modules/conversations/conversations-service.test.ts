@@ -276,3 +276,29 @@ describe('ConversationsService.save merges research turns by id (KBC-029)', () =
     expect(turnsOf(await store.get('ana', CONVERSATION))).toHaveLength(2);
   });
 });
+
+describe('ConversationsService.save keeps the place (KBC-110 QA F-1)', () => {
+  it('refuses a snapshot that moves a saved conversation to another collection or kind', async () => {
+    const { service } = setup();
+    await service.save('ana', conversation([turn()]));
+
+    const moved = service.save(
+      'ana',
+      conversation([turn()], { topic: 'alquimia' }),
+    );
+    const search = service.save('ana', {
+      kind: 'search',
+      id: CONVERSATION,
+      topic: 'hermetismo',
+      title: 'x',
+      createdAt: iso(BOOT),
+      updatedAt: iso(BOOT),
+      asks: [{ question: 'x', mode: 'all', filters: EMPTY_FILTERS, total: 1 }],
+    });
+
+    await expect(moved).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(search).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    const kept = await service.get('ana', CONVERSATION, openView);
+    expect(kept).toMatchObject({ kind: 'research', topic: 'hermetismo' });
+  });
+});

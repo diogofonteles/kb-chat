@@ -83,6 +83,22 @@ export const savedResearchTurnSchema = z.object({
 });
 export type SavedResearchTurn = z.infer<typeof savedResearchTurnSchema>;
 
+type TurnIdentity = Pick<SavedResearchTurn, 'id' | 'at' | 'question'>;
+
+/** When and what a turn asked: how a turn saved before KBC-029 (no id) is recognized. */
+export const turnStartOf = (turn: TurnIdentity): string =>
+  `${turn.at} ${turn.question}`;
+
+/**
+ * Whether two copies are one research turn (KBC-029, KBC-110): the same id, or, when either
+ * has none (an older page), the same start and question. The API's merge and restore and the
+ * web's overlay all use this one rule.
+ */
+export const isSameTurn = (a: TurnIdentity, b: TurnIdentity): boolean =>
+  a.id !== undefined && b.id !== undefined
+    ? a.id === b.id
+    : turnStartOf(a) === turnStartOf(b);
+
 const base = {
   id: conversationIdSchema,
   topic: z.string().min(1),

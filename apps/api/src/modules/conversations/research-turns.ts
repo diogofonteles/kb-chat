@@ -1,5 +1,7 @@
 import {
   isRestrictedSource,
+  isSameTurn,
+  turnStartOf,
   type Conversation,
   type ResearchConversation,
   type SavedAnswerSource,
@@ -75,15 +77,12 @@ export function mergeResearchTurns(
   );
   const sent = new Set(incoming.turns.map((turn) => turn.id));
   // An older page sends a turn without its id, or under another one: same question, same start.
-  const sameTurn = new Set(
-    incoming.turns.map((turn) => `${turn.at} ${turn.question}`),
-  );
+  const sameTurn = new Set(incoming.turns.map(turnStartOf));
   const merged = incoming.turns.map((turn) =>
     turn.id ? pick(turn, byId.get(turn.id)) : turn,
   );
   const kept = [...byId.values()].filter(
-    (turn) =>
-      !sent.has(turn.id) && !sameTurn.has(`${turn.at} ${turn.question}`),
+    (turn) => !sent.has(turn.id) && !sameTurn.has(turnStartOf(turn)),
   );
   if (kept.length === 0) return { ...incoming, turns: merged };
   const turns = [...merged, ...kept].sort((a, b) => a.at.localeCompare(b.at));
@@ -100,18 +99,12 @@ export function withTurn(
   return conversation.turns.map((t, i) => (i === index ? turn : t));
 }
 
-const sameStart = (turn: SavedResearchTurn) => `${turn.at} ${turn.question}`;
-
-/** The stored turn a snapshot's turn is: same id, or (older pages) same start and question. */
+/** The stored turn a snapshot's turn is (one rule with the merge and the web). */
 function storedTurnOf(
   turn: SavedResearchTurn,
   stored: ResearchConversation,
 ): SavedResearchTurn | undefined {
-  return stored.turns.find((one) =>
-    turn.id !== undefined && one.id !== undefined
-      ? one.id === turn.id
-      : sameStart(one) === sameStart(turn),
-  );
+  return stored.turns.find((one) => isSameTurn(one, turn));
 }
 
 /** A restricted source of the snapshot becomes the stored one with its number again. */
@@ -125,23 +118,27 @@ function unmaskSources(
   });
 }
 
-/** Everything of a cursor but its findings: the snapshot's cursor is the stored one, read masked. */
+/**
+ * A cursor without what a read may hide (its findings and the last swept id): the snapshot's
+ * cursor is the stored one, read masked, when this matches.
+ */
 const cursorKey = (cursor: SweepCursor) =>
-  JSON.stringify({ ...cursor, findings: [] });
+  JSON.stringify({ ...cursor, after: undefined, findings: [] });
 
-/** The stored cursor when the snapshot's is it with some findings filtered out. */
+/** The stored cursor when the snapshot's is it with hidden parts left out (KBC-110). */
 function unmaskCursor(
   sweep: SweepCursor | undefined,
   stored: SweepCursor | undefined,
 ): SweepCursor | undefined {
   if (!sweep || !stored || cursorKey(sweep) !== cursorKey(stored)) return sweep;
+  const sameAfter = sweep.after === undefined || sweep.after === stored.after;
   const storedFindings = new Set(
     stored.findings.map((one) => JSON.stringify(one)),
   );
   const filtered = sweep.findings.every((one) =>
     storedFindings.has(JSON.stringify(one)),
   );
-  return filtered ? stored : sweep;
+  return sameAfter && filtered ? stored : sweep;
 }
 
 function unmaskTurn(

@@ -66,7 +66,8 @@ function aTurn(overrides: Partial<SavedResearchTurn> = {}): SavedResearchTurn {
 /** A sweep cursor carrying a finding of each of an open and the hidden document. */
 const CURSOR = {
   plan: { target: {}, phrases: [], extract: 'o que diz da lua' },
-  after: 'raw/ci-1.md',
+  // The last document swept, in id order: here the hidden one (QA E2).
+  after: CDC_ID,
   totals: { documents: 6, scanned: 3, withHits: null, read: 3, batches: 1 },
   findings: [
     { id: 'raw/qs-1.md', text: 'a lua no primeiro grau' },
@@ -98,7 +99,10 @@ async function anaSavedThenAt(
   saved: ResearchConversation = aConversation(),
 ): Promise<Case> {
   const world = await startLevels();
-  const ana = await memberOf(world, 'ana@example.com');
+  // She also sees `alquimia`, a collection without levels (QA E1).
+  const ana = await memberOf(world, 'ana@example.com', {
+    topics: ['hermetismo', 'alquimia'],
+  });
   await sixAtThreeLevels(world);
   await setPersonLevel(world, ana.id, { hermetismo: 'cdc' });
   const put = await ana.call('PUT', `${URL}/${saved.id}`, saved);
@@ -147,9 +151,9 @@ describe('GET /api/v1/conversations/:id after a demotion (KBC-110)', () => {
 
     expect(one.statusCode).toBe(200);
     expectNothingHidden(one.body);
-    expect(one.json<ResearchConversation>().turns[0]?.sweep?.findings).toEqual([
-      CURSOR.findings[0],
-    ]);
+    const sweep = one.json<ResearchConversation>().turns[0]?.sweep;
+    expect(sweep?.findings).toEqual([CURSOR.findings[0]]);
+    expect(sweep).not.toHaveProperty('after');
     expect(list.statusCode).toBe(200);
     expectNothingHidden(list.body);
   });
@@ -236,5 +240,41 @@ describe('GET /api/v1/conversations/:id after a demotion (KBC-110)', () => {
     expect(owner.json<ResearchConversation>().turns[0]?.sources).toEqual(
       own.turns[0]?.sources,
     );
+  });
+
+  it('QA E1: a PUT of the masked copy under another collection is refused and reveals nothing', async () => {
+    const { ana, saved } = await anaSavedThenAt('ci');
+    const masked = (
+      await read(ana.call, saved.id)
+    ).json<ResearchConversation>();
+
+    const put = await ana.call('PUT', `${URL}/${saved.id}`, {
+      ...masked,
+      topic: 'alquimia',
+    });
+    const after = await read(ana.call, saved.id);
+
+    expect(put.statusCode, put.body).toBe(400);
+    expect(put.json()).toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
+    expect(after.json<ResearchConversation>().topic).toBe('hermetismo');
+    expectNothingHidden(after.body);
+  });
+
+  it('QA E1b: a forged restricted-only snapshot under another collection reveals nothing', async () => {
+    const { ana, saved } = await anaSavedThenAt('ci');
+    const forged = {
+      ...saved,
+      topic: 'alquimia',
+      turns: saved.turns.map((one) => ({
+        ...one,
+        sources: [{ n: 3, restricted: true }],
+      })),
+    };
+
+    const put = await ana.call('PUT', `${URL}/${saved.id}`, forged);
+    const after = await read(ana.call, saved.id);
+
+    expect(put.statusCode, put.body).toBe(400);
+    expectNothingHidden(after.body);
   });
 });

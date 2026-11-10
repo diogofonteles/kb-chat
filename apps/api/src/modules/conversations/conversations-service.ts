@@ -52,6 +52,24 @@ const matches = (summary: ConversationSummary, filter: ConversationFilter) =>
   (filter.kind === undefined || summary.kind === filter.kind) &&
   (filter.topic === undefined || summary.topic === filter.topic);
 
+/**
+ * A conversation keeps its kind and collection (KBC-110 QA F-1, like `beginTurn`): its stored
+ * sources are only ever re-checked with the view of the collection they came from.
+ */
+function assertSamePlace(
+  incoming: Conversation,
+  stored: Conversation | null,
+): void {
+  if (
+    stored &&
+    (stored.kind !== incoming.kind || stored.topic !== incoming.topic)
+  )
+    throw new AppError(
+      'VALIDATION_FAILED',
+      'A saved conversation keeps its kind and collection',
+    );
+}
+
 /** Newest first; equal timestamps keep a stable order by id. */
 const byNewest = (a: ConversationSummary, b: ConversationSummary) =>
   b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id);
@@ -105,10 +123,8 @@ export class ConversationsService {
     conversation: Conversation,
   ): Promise<ConversationSummary> {
     return this.serial(conversation.id, async () => {
-      const stored =
-        conversation.kind === 'research'
-          ? await this.deps.store.get(principal, conversation.id)
-          : null;
+      const stored = await this.deps.store.get(principal, conversation.id);
+      assertSamePlace(conversation, stored);
       // A snapshot read masked keeps what the file had (KBC-110 BR-4).
       const merged =
         conversation.kind === 'research'

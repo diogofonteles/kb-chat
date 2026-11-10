@@ -200,6 +200,29 @@ describe('maskConversation (KBC-110)', () => {
     expect(masked?.sweep?.totals).toEqual(CURSOR.totals);
   });
 
+  it("drops the cursor's last swept id when that document is hidden (QA E2)", () => {
+    const hiddenAfter = { ...CURSOR, after: 'raw/cdc-1.md' };
+    const openAfter = { ...CURSOR, after: 'raw/qs-1.md' };
+
+    const [hidden] = turnsOf(
+      maskConversation(
+        conversation([turn({ sweep: hiddenAfter })]),
+        viewAt(1),
+        scopeOf,
+      ),
+    );
+    const [open] = turnsOf(
+      maskConversation(
+        conversation([turn({ sweep: openAfter })]),
+        viewAt(1),
+        scopeOf,
+      ),
+    );
+
+    expect(hidden?.sweep).not.toHaveProperty('after');
+    expect(open?.sweep?.after).toBe('raw/qs-1.md');
+  });
+
   it('returns the conversation itself when the view sees everything (AC-8)', () => {
     const stored = conversation([turn({ sweep: CURSOR })]);
 
@@ -218,6 +241,32 @@ describe('unmaskResearchTurns (KBC-110 BR-4)', () => {
 
   it('gives a restricted source and a filtered cursor their stored values back', () => {
     expect(unmaskResearchTurns(masked, stored)).toEqual(stored);
+  });
+
+  it('gives a hidden "after" back with the findings (BR-4)', () => {
+    const hiddenAfter = conversation([
+      turn({ sweep: { ...CURSOR, after: 'raw/cdc-1.md' } }),
+    ]);
+    const read = maskConversation(
+      hiddenAfter,
+      viewAt(0),
+      scopeOf,
+    ) as ResearchConversation;
+
+    expect(unmaskResearchTurns(read, hiddenAfter)).toEqual(hiddenAfter);
+  });
+
+  it('keeps a cursor whose "after" is not the stored one', () => {
+    const stale = conversation([
+      turn({ sweep: { ...CURSOR, after: 'raw/zz.md', findings: [] } }),
+    ]);
+    const withAfter = conversation([
+      turn({ sweep: { ...CURSOR, after: 'raw/cdc-1.md' } }),
+    ]);
+
+    expect(unmaskResearchTurns(stale, withAfter).turns[0]?.sweep?.after).toBe(
+      'raw/zz.md',
+    );
   });
 
   it('matches an older turn without an id by its start and question', () => {

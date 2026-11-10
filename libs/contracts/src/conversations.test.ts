@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   conversationSchema,
   isRestrictedSource,
+  isSameTurn,
   savedResearchTurnSchema,
   summarizeConversation,
   type Conversation,
@@ -216,5 +217,18 @@ describe('conversations contract', () => {
     expect(
       savedResearchTurnSchema.safeParse({ ...turn, status: 'running' }).success,
     ).toBe(false);
+  });
+
+  it('KBC-110: one turn is the same id, or without one the same start and question', () => {
+    const at = '2026-11-10T12:00:00.000Z';
+    const a = { id: '0b9d7c1e-3f2a-4c5b-8d6e-7f8091a2b3c4', at, question: 'q' };
+    const b = { id: '1c8e6d2f-4a3b-4d6c-9e7f-8091a2b3c4d5', at, question: 'q' };
+
+    expect(isSameTurn(a, { ...a, question: 'outra' })).toBe(true);
+    expect(isSameTurn(a, b)).toBe(false);
+    expect(isSameTurn({ at, question: 'q' }, b)).toBe(true);
+    expect(isSameTurn({ at, question: 'q' }, { at, question: 'r' })).toBe(
+      false,
+    );
   });
 });
