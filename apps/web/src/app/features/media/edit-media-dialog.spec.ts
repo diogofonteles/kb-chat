@@ -208,6 +208,7 @@ describe('EditMediaDialog (KBC-050)', () => {
     await fixture.whenStable();
     expect(screen.getByRole('alert').textContent).toContain('nome do autor');
     chooseTopic('hermetismo');
+    await fixture.whenStable();
     save();
     http
       .expectOne(URL)

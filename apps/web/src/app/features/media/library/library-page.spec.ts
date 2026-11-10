@@ -1,4 +1,4 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { Location } from '@angular/common';
 import {
   HttpTestingController,
@@ -38,6 +38,7 @@ import { UsageLog } from '@core/usage/usage-log.js';
 import { By } from '@angular/platform-browser';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { CollectionHeading } from '@features/chat/collection-heading.js';
+import { answeringLevels } from '../../../testing/level-fixtures.js';
 import { UploadPanel } from '../upload-panel.js';
 import {
   fakeMediaElement,
@@ -135,7 +136,7 @@ async function renderLibrary(
   const view = await render(LibraryPage, {
     providers: [
       provideZonelessChangeDetection(),
-      provideHttpClient(),
+      provideHttpClient(withInterceptors([answeringLevels()])),
       provideHttpClientTesting(),
       provideRouter(options.routes ?? []),
       { ...chatStore, useValue: { ...chatStore.useValue, ...chat } },
@@ -1876,6 +1877,8 @@ describe('LibraryPage: "Editar informações" (KBC-050)', () => {
     fireEvent.change(screen.getByLabelText('Acervo'), {
       target: { value: 'alquimia' },
     });
+    // KBC-105: the new collection's levels are asked first (none here).
+    await settle();
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
     http
       .expectOne(`/api/v1/media/${mediaId(1)}`)
