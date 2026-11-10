@@ -1,6 +1,7 @@
 import {
   isRestrictedSource,
-  isSameTurn,
+  pairTurns,
+  sweepCursorKey,
   type Conversation,
   type SavedAnswerSource,
   type SavedResearchTurn,
@@ -22,13 +23,15 @@ function maskSources(
 
 /**
  * The local cursor without what the server's cursor hides: findings of documents it does not
- * return, and the last swept id when it left that out. Kept whole when the server has none.
+ * return, and the last swept id when it left that out. Kept whole when the server has none,
+ * or another state of the sweep (review R2-3: an older cursor must not drop newer findings).
  */
 function maskCursor(
   local: SweepCursor | undefined,
   server: SweepCursor | undefined,
 ): SweepCursor | undefined {
-  if (!local || !server) return local;
+  if (!local || !server || sweepCursorKey(local) !== sweepCursorKey(server))
+    return local;
   const seen = new Set(server.findings.map(({ id }) => id));
   const masked: SweepCursor = {
     ...local,
@@ -67,9 +70,7 @@ export function withServerSources(
   server: Conversation,
 ): Conversation {
   if (local.kind !== 'research' || server.kind !== 'research') return local;
-  const known = local.turns.map((turn) =>
-    server.turns.find((one) => isSameTurn(one, turn)),
-  );
+  const known = pairTurns(local.turns, server.turns);
   if (known.every((one) => one === undefined)) return local;
   return {
     ...local,

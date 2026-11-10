@@ -125,6 +125,39 @@ describe('withServerSources (KBC-110 BR-5)', () => {
     expect(JSON.stringify(only)).not.toContain('velado');
   });
 
+  it('keeps the newer local findings when the server holds an older cursor (review R2-3)', () => {
+    const newer = {
+      ...CURSOR,
+      totals: { ...CURSOR.totals, scanned: 2, read: 2, batches: 2 },
+      findings: [...CURSOR.findings, { id: 'raw/novo.md', text: 'novo' }],
+    };
+    const local = research([turn({ sweep: newer })]);
+    const server = research([turn({ sweep: CURSOR })]);
+
+    const [only] = (withServerSources(local, server) as ResearchConversation)
+      .turns;
+
+    expect(only?.sweep).toEqual(newer);
+  });
+
+  it('pairs two local turns of one start with two server turns, once each (QA F-8)', () => {
+    const local = research([
+      turn({ sources: [{ n: 1, id: 'raw/a.md', title: 'A' }] }),
+      turn({ sources: [{ n: 1, id: 'raw/b.md', title: 'B' }] }),
+    ]);
+    const server = research([
+      turn({ sources: [{ n: 1, id: 'raw/a.md', title: 'A' }] }),
+      turn({ sources: [{ n: 1, restricted: true }] }),
+    ]);
+
+    const masked = withServerSources(local, server) as ResearchConversation;
+
+    expect(masked.turns.map((one) => one.sources)).toEqual([
+      [{ n: 1, id: 'raw/a.md', title: 'A' }],
+      [{ n: 1, restricted: true }],
+    ]);
+  });
+
   it('leaves a copy alone when the server has none of its turns, or for a search', () => {
     const local = research([turn()]);
     const other = research([turn({ question: 'outra' })]);

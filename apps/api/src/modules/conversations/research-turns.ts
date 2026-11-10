@@ -1,7 +1,7 @@
 import {
   isRestrictedSource,
-  isSameTurn,
-  turnStartOf,
+  pairTurns,
+  sweepCursorKey,
   type Conversation,
   type ResearchConversation,
   type SavedAnswerSource,
@@ -62,28 +62,23 @@ function pick(
 }
 
 /**
- * A page's snapshot merged over what is stored (KBC-029): turns match by id; a pending
- * snapshot never overwrites a turn that already ended; turns the server recorded that the
- * snapshot lacks stay, in time order (unless the snapshot has the same turn under no id or
- * another one). Turns without an id (older ones) come from the snapshot.
+ * A page's snapshot merged over what is stored (KBC-029): turns pair by `pairTurns` (id,
+ * then start and question, each stored turn once); a pending snapshot never overwrites a
+ * turn that already ended; stored turns the snapshot does not pair with stay, in time order.
  */
 export function mergeResearchTurns(
   incoming: ResearchConversation,
   stored: Conversation | null,
 ): ResearchConversation {
   if (stored?.kind !== 'research') return incoming;
-  const byId = new Map(
-    stored.turns.flatMap((turn) => (turn.id ? [[turn.id, turn] as const] : [])),
-  );
-  const sent = new Set(incoming.turns.map((turn) => turn.id));
-  // An older page sends a turn without its id, or under another one: same question, same start.
-  const sameTurn = new Set(incoming.turns.map(turnStartOf));
-  const merged = incoming.turns.map((turn) =>
-    turn.id ? pick(turn, byId.get(turn.id)) : turn,
-  );
-  const kept = [...byId.values()].filter(
-    (turn) => !sent.has(turn.id) && !sameTurn.has(turnStartOf(turn)),
-  );
+  // One pairing with the restore (KBC-110 QA F-7, F-8): by id, then by start and question.
+  const paired = pairTurns(incoming.turns, stored.turns);
+  const merged = incoming.turns.map((turn, at) => {
+    const known = paired[at];
+    return turn.id && known?.id === turn.id ? pick(turn, known) : turn;
+  });
+  const sent = new Set(paired);
+  const kept = stored.turns.filter((turn) => !sent.has(turn));
   if (kept.length === 0) return { ...incoming, turns: merged };
   const turns = [...merged, ...kept].sort((a, b) => a.at.localeCompare(b.at));
   return { ...incoming, turns };
@@ -99,14 +94,6 @@ export function withTurn(
   return conversation.turns.map((t, i) => (i === index ? turn : t));
 }
 
-/** The stored turn a snapshot's turn is (one rule with the merge and the web). */
-function storedTurnOf(
-  turn: SavedResearchTurn,
-  stored: ResearchConversation,
-): SavedResearchTurn | undefined {
-  return stored.turns.find((one) => isSameTurn(one, turn));
-}
-
 /** A restricted source of the snapshot becomes the stored one with its number again. */
 function unmaskSources(
   sources: readonly SavedAnswerSource[],
@@ -118,19 +105,13 @@ function unmaskSources(
   });
 }
 
-/**
- * A cursor without what a read may hide (its findings and the last swept id): the snapshot's
- * cursor is the stored one, read masked, when this matches.
- */
-const cursorKey = (cursor: SweepCursor) =>
-  JSON.stringify({ ...cursor, after: undefined, findings: [] });
-
 /** The stored cursor when the snapshot's is it with hidden parts left out (KBC-110). */
 function unmaskCursor(
   sweep: SweepCursor | undefined,
   stored: SweepCursor | undefined,
 ): SweepCursor | undefined {
-  if (!sweep || !stored || cursorKey(sweep) !== cursorKey(stored)) return sweep;
+  if (!sweep || !stored || sweepCursorKey(sweep) !== sweepCursorKey(stored))
+    return sweep;
   const sameAfter = sweep.after === undefined || sweep.after === stored.after;
   const storedFindings = new Set(
     stored.findings.map((one) => JSON.stringify(one)),
@@ -143,9 +124,8 @@ function unmaskCursor(
 
 function unmaskTurn(
   turn: SavedResearchTurn,
-  stored: ResearchConversation | null,
+  known: SavedResearchTurn | undefined,
 ): SavedResearchTurn {
-  const known = stored ? storedTurnOf(turn, stored) : undefined;
   const restored: SavedResearchTurn = {
     ...turn,
     sources: unmaskSources(turn.sources, known?.sources),
@@ -166,9 +146,10 @@ export function unmaskResearchTurns(
   incoming: ResearchConversation,
   stored: Conversation | null,
 ): ResearchConversation {
-  const known = stored?.kind === 'research' ? stored : null;
+  const known =
+    stored?.kind === 'research' ? pairTurns(incoming.turns, stored.turns) : [];
   return {
     ...incoming,
-    turns: incoming.turns.map((turn) => unmaskTurn(turn, known)),
+    turns: incoming.turns.map((turn, at) => unmaskTurn(turn, known[at])),
   };
 }

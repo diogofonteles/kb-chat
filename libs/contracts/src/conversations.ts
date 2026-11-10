@@ -6,7 +6,11 @@ import {
   researchProfileSchema,
 } from './research.js';
 import { searchFiltersSchema, searchModeSchema } from './search.js';
-import { sweepCoverageSchema, sweepCursorSchema } from './sweep.js';
+import {
+  sweepCoverageSchema,
+  sweepCursorSchema,
+  type SweepCursor,
+} from './sweep.js';
 
 /**
  * Conversations kept by the local API, all of them, without a cap (owner, 2026-10-24:
@@ -90,14 +94,41 @@ export const turnStartOf = (turn: TurnIdentity): string =>
   `${turn.at} ${turn.question}`;
 
 /**
- * Whether two copies are one research turn (KBC-029, KBC-110): the same id, or, when either
- * has none (an older page), the same start and question. The API's merge and restore and the
- * web's overlay all use this one rule.
+ * Which turn of `known` each turn of `turns` is (KBC-029, KBC-110): first by the same id,
+ * then, for those left, by the same start and question (an older page sends no id; two
+ * pages may give an old turn two ids). Each known turn pairs at most once, in order. The
+ * API's merge and restore and the web's overlay share this one rule.
  */
-export const isSameTurn = (a: TurnIdentity, b: TurnIdentity): boolean =>
-  a.id !== undefined && b.id !== undefined
-    ? a.id === b.id
-    : turnStartOf(a) === turnStartOf(b);
+export function pairTurns<K extends TurnIdentity>(
+  turns: readonly TurnIdentity[],
+  known: readonly K[],
+): (K | undefined)[] {
+  const free = new Set(known.keys());
+  const take = (at: number) => {
+    free.delete(at);
+    return known[at];
+  };
+  const find = (test: (one: K) => boolean) =>
+    [...free].find((at) => {
+      const one = known[at];
+      return one !== undefined && test(one);
+    });
+  const paired = turns.map((turn) => {
+    if (turn.id === undefined) return undefined;
+    const at = find((one) => one.id === turn.id);
+    return at === undefined ? undefined : take(at);
+  });
+  return paired.map((found, index) => {
+    const turn = turns[index];
+    if (found || !turn) return found;
+    const at = find((one) => turnStartOf(one) === turnStartOf(turn));
+    return at === undefined ? undefined : take(at);
+  });
+}
+
+/** Everything of a sweep cursor a read may not hide: two copies of one cursor share it. */
+export const sweepCursorKey = (cursor: SweepCursor): string =>
+  JSON.stringify({ ...cursor, after: undefined, findings: [] });
 
 const base = {
   id: conversationIdSchema,

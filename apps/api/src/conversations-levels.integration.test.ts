@@ -277,4 +277,88 @@ describe('GET /api/v1/conversations/:id after a demotion (KBC-110)', () => {
     expect(put.statusCode, put.body).toBe(400);
     expectNothingHidden(after.body);
   });
+
+  /** Saves `snapshot`, then back at CDC reads the file whole. */
+  async function savedThenWhole(
+    { world, ana, saved }: Case,
+    snapshots: readonly object[],
+  ): Promise<ResearchConversation> {
+    const { id } = saved;
+    for (const snapshot of snapshots) {
+      const put = await ana.call('PUT', `${URL}/${id}`, snapshot);
+      expect(put.statusCode, put.body).toBe(200);
+    }
+    expectNothingHidden((await read(ana.call, id)).body);
+    await setPersonLevel(world, ana.id, { hermetismo: 'cdc' });
+    return (await read(ana.call, id)).json<ResearchConversation>();
+  }
+
+  it('QA R2-17: the masked copy under another turn id keeps the hidden source in the file', async () => {
+    const done = await anaSavedThenAt('ci');
+    const { ana, saved } = done;
+    const masked = (
+      await read(ana.call, saved.id)
+    ).json<ResearchConversation>();
+    const renamed = {
+      ...masked,
+      turns: masked.turns.map((one) => ({ ...one, id: randomUUID() })),
+    };
+
+    const whole = await savedThenWhole(done, [renamed]);
+
+    expect(whole.turns.map((one) => one.sources)).toEqual([
+      saved.turns[0]?.sources,
+    ]);
+  });
+
+  it('QA R2-20: a turn saved without an id, given two ids by two pages, keeps the hidden source', async () => {
+    const legacy: SavedResearchTurn = aTurn();
+    delete legacy.id;
+    const saved = aConversation([legacy]);
+    const done = await anaSavedThenAt('ci', saved);
+    const { ana } = done;
+    const masked = (
+      await read(ana.call, saved.id)
+    ).json<ResearchConversation>();
+    const tab = () => ({
+      ...masked,
+      turns: masked.turns.map((one) => ({ ...one, id: randomUUID() })),
+    });
+
+    const whole = await savedThenWhole(done, [tab(), tab()]);
+
+    expect(whole.turns.map((one) => one.sources)).toEqual([legacy.sources]);
+  });
+
+  it('QA R2-16: two turns with one start and question, sent without ids, keep each its own sources', async () => {
+    const first = aTurn();
+    const second = aTurn({
+      answer: 'Outra lua [1] [2].',
+      sources: [
+        { n: 1, id: 'raw/qs-2.md', title: 'Lua Segunda Aberta' },
+        { n: 2, id: 'raw/cdc-2.md', title: 'Obsidiana Velada' },
+      ],
+    });
+    const saved = aConversation([first, second]);
+    const done = await anaSavedThenAt('ci', saved);
+    const masked = (
+      await read(done.ana.call, saved.id)
+    ).json<ResearchConversation>();
+    // An older page: no turn ids at all.
+    const withoutIds = {
+      ...masked,
+      turns: masked.turns.map((one) => {
+        const rest = { ...one };
+        delete rest.id;
+        return rest;
+      }),
+    };
+
+    const whole = await savedThenWhole(done, [withoutIds]);
+
+    expect(whole.turns.map((one) => one.sources)).toEqual([
+      first.sources,
+      second.sources,
+    ]);
+  });
 });

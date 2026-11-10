@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   conversationSchema,
   isRestrictedSource,
-  isSameTurn,
+  pairTurns,
   savedResearchTurnSchema,
   summarizeConversation,
   type Conversation,
@@ -219,16 +219,32 @@ describe('conversations contract', () => {
     ).toBe(false);
   });
 
-  it('KBC-110: one turn is the same id, or without one the same start and question', () => {
+  it('KBC-110: pairs turns by id first, then by start and question, each known turn once', () => {
     const at = '2026-11-10T12:00:00.000Z';
     const a = { id: '0b9d7c1e-3f2a-4c5b-8d6e-7f8091a2b3c4', at, question: 'q' };
     const b = { id: '1c8e6d2f-4a3b-4d6c-9e7f-8091a2b3c4d5', at, question: 'q' };
+    const later = { at: '2026-11-10T12:01:00.000Z', question: 'r' };
 
-    expect(isSameTurn(a, { ...a, question: 'outra' })).toBe(true);
-    expect(isSameTurn(a, b)).toBe(false);
-    expect(isSameTurn({ at, question: 'q' }, b)).toBe(true);
-    expect(isSameTurn({ at, question: 'q' }, { at, question: 'r' })).toBe(
-      false,
-    );
+    // Same id wins over an earlier turn with the same start.
+    expect(pairTurns([b], [a, b])).toEqual([b]);
+    // Another id, or none, falls back to the start (QA R2-17, R2-20).
+    expect(pairTurns([{ ...a, id: undefined }], [a])).toEqual([a]);
+    expect(
+      pairTurns([{ ...a, id: '2d9f7e3a-5b4c-4e7d-8f9a-a1b2c3d4e5f6' }], [a]),
+    ).toEqual([a]);
+    // Two of one start pair in order, once each (QA R2-16).
+    expect(
+      pairTurns(
+        [
+          { at, question: 'q' },
+          { at, question: 'q' },
+        ],
+        [a, b],
+      ),
+    ).toEqual([a, b]);
+    expect(pairTurns([later, { at, question: 'q' }], [a])).toEqual([
+      undefined,
+      a,
+    ]);
   });
 });
