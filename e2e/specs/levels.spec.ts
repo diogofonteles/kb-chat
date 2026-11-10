@@ -184,8 +184,9 @@ async function researchAtHerLevel(member: Page): Promise<void> {
   await member.getByRole('button', { name: 'Perguntar' }).click();
   const answer = member.locator('app-research-message').last();
   await expect(answer.getByText(/Segundo o acervo/)).toBeVisible();
+  // The answer cites a document at her level (the hidden step list repeats the title).
   await expect(
-    answer.getByText(/Orvalho (Aberto|do Meio)/).first(),
+    answer.getByText(/“Orvalho (Aberto|do Meio)” trata do assunto/),
   ).toBeVisible();
   await expect(member.getByText(/Orvalho Velado|velado\.md/)).toHaveCount(0);
   await shoot(member, 'levels-research');
