@@ -46,7 +46,7 @@ export const canEditMedia = (
 export interface LevelledMedia {
   readonly topic: string;
   readonly level: string | null;
-  readonly track: object | null;
+  readonly isTrack: boolean;
 }
 
 /**
@@ -55,13 +55,24 @@ export interface LevelledMedia {
  * the person sees; one with none ("Sem nível") is for masters only. A track's own level is
  * KBC-106: until then, tracks stay closed to members in a collection with levels.
  */
-export function seesMedia(actor: MediaActor, media: LevelledMedia): boolean {
+export function seesLevelled(actor: MediaActor, media: LevelledMedia): boolean {
   if (!actor.canSee(media.topic)) return false;
   const allowed = actor.levelsIn(media.topic);
   if (allowed === null) return true;
-  if (media.track !== null) return false;
+  if (media.isTrack) return false;
   return media.level !== null && allowed.includes(media.level);
 }
+
+/** `seesLevelled` for a stored item. */
+export const seesMedia = (
+  actor: MediaActor,
+  media: Pick<MediaRecord, 'topic' | 'level' | 'track'>,
+): boolean =>
+  seesLevelled(actor, {
+    topic: media.topic,
+    level: media.level,
+    isTrack: media.track !== null,
+  });
 
 /** The tracks of a collection reach this person: no levels hold them there (KBC-106). */
 export const seesTracksIn = (actor: MediaActor, topic: string): boolean =>

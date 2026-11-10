@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   speakerKeyOf,
   type Author,
+  type LevelAuditEntry,
   type UpdateMediaRequest,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
@@ -39,6 +40,8 @@ export interface MediaEditServiceDeps {
   readonly levels?: MediaLevels;
   /** Where a level change is recorded (ADR 0036 §11); required once levels exist. */
   readonly audit?: LevelAuditPort;
+  /** Where a change applied but not recorded is said (the request's log). */
+  readonly log?: { error(fields: object, message: string): void };
   readonly now?: () => Date;
 }
 
@@ -85,15 +88,25 @@ export class MediaEditService {
       level: this.levelAfter(actor, { media, topic, asked: request.level }),
       now: this.now(),
     };
+    const audit = this.auditFor(edit.level !== media.level);
     const tracks = this.save(actor, media, edit);
-    if (edit.level !== media.level)
-      await this.recordLevel(call.by ?? { by: actor.principal }, {
+    if (audit)
+      await this.recordLevel(audit, call.by ?? { by: actor.principal }, {
         topic,
         mediaId,
         before: media.level,
         after: edit.level,
         tracks,
       });
+  }
+
+  /** The audit a level change needs, before anything is written; none: no change. */
+  private auditFor(relevels: boolean): LevelAuditPort | null {
+    if (!relevels) return null;
+    const { audit } = this.deps;
+    if (!audit)
+      throw new Error('A level would change with no audit to record it');
+    return audit;
   }
 
   /** The recording, when this person may see and edit it. */
@@ -155,7 +168,13 @@ export class MediaEditService {
   }
 
   /** ADR 0036 §11: before → after, with the recording and the tracks that followed it. */
+  /**
+   * The audit file cannot join media.db's transaction: the change is written first and
+   * recorded right after. Should the record fail, the log keeps what changed (id, before →
+   * after) and the request fails, so nobody is told it went fine unrecorded.
+   */
   private async recordLevel(
+    audit: LevelAuditPort,
     by: EditAuthor,
     change: {
       readonly topic: string;
@@ -165,9 +184,28 @@ export class MediaEditService {
       readonly tracks: number;
     },
   ): Promise<void> {
-    const { audit } = this.deps;
-    if (!audit) throw new Error('A level changed with no audit to record it');
-    await audit.append({
+    try {
+      await audit.append(this.levelEntry(by, change));
+    } catch (err) {
+      this.deps.log?.error(
+        { err, by: by.by, ...change },
+        'media level changed but not audited',
+      );
+      throw err;
+    }
+  }
+
+  private levelEntry(
+    by: EditAuthor,
+    change: {
+      readonly topic: string;
+      readonly mediaId: string;
+      readonly before: string | null;
+      readonly after: string | null;
+      readonly tracks: number;
+    },
+  ): LevelAuditEntry {
+    return {
       at: this.now().toISOString(),
       by: by.by,
       ...(by.actingAs && { actingAs: by.actingAs }),
@@ -177,7 +215,7 @@ export class MediaEditService {
       before: change.before,
       after: change.after,
       count: { recordings: 1, tracks: change.tracks },
-    });
+    };
   }
 
   /** BR-2: seeing the collection; sending there is the same right as editing (AC-4). */

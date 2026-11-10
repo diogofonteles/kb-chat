@@ -92,23 +92,30 @@ describe('the media-level migration (KBC-105 FR-1, AC-10, NFR-2)', () => {
     expect(store.getMedia('m0')?.level).toBe('qs');
   });
 
-  it('rollback: the previous image still reads and writes the database', () => {
+  it('rollback: the previous image starts over a v31 database and writes it as it did', () => {
     const db = databaseOfToday(1);
     applyMigrations(db, MEDIA_MIGRATIONS);
 
-    const older = db
-      .prepare(
-        `SELECT id, topic, title, authorship, owner_principal, status FROM media WHERE id = 'm0'`,
-      )
-      .get();
-    expect(older).toMatchObject({ id: 'm0', status: 'ready' });
-    expect(() =>
-      db
-        .prepare(
-          `UPDATE media SET title = 'Novo título', updated_at = ? WHERE id = 'm0'`,
-        )
-        .run(AT),
-    ).not.toThrow();
+    // The previous image knows the migrations up to the one before: none to apply, no throw.
+    expect(applyMigrations(db, BEFORE)).toEqual([]);
+    // Its own insert names its columns: level is left out and stays null (BR-8).
+    db.prepare(
+      `INSERT INTO media (id, topic, title, authorship, owner_principal, file_name,
+         upload_bytes, status, created_at, updated_at)
+       VALUES ('old', 'hermetismo', 'Da imagem anterior', 'outros-autores', 'owner',
+         'b.mp3', 10, 'ready', ?, ?)`,
+    ).run(AT, AT);
+    db.prepare(
+      `UPDATE media SET title = 'Novo título', updated_at = ? WHERE id = 'm0'`,
+    ).run(AT);
+    const rows = db
+      .prepare(`SELECT id, title, level FROM media ORDER BY id`)
+      .all()
+      .map((row) => ({ ...row }));
+    expect(rows).toEqual([
+      { id: 'm0', title: 'Novo título', level: null },
+      { id: 'old', title: 'Da imagem anterior', level: null },
+    ]);
   });
 
   it('is applied once: a second start changes nothing', () => {

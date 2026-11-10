@@ -361,7 +361,9 @@ export class AccessLevelsService implements PersonLevelRules {
    * held a level go to its lowest one, once (a row written later by an older image stays
    * "Sem nível", masters only, BR-8). Audited as one bulk event per collection.
    */
-  seedMediaAtStart(): Promise<void> {
+  seedMediaAtStart(log?: {
+    error(fields: object, message: string): void;
+  }): Promise<void> {
     return this.serial(async () => {
       for (const catalog of this.deps.catalog.topics()) {
         const root = catalog.topic.slug;
@@ -370,11 +372,19 @@ export class AccessLevelsService implements PersonLevelRules {
         if (!lowest) continue;
         const media = this.seedMedia({ root, level: lowest.id, again: false });
         if (media === null) continue;
+        // The seed is marked in media.db; its record follows. A failed record is logged
+        // with what was placed, and the start fails rather than go on unaudited.
         await this.record(APP_ACTOR, {
           kind: 'bulk',
           collection: root,
           after: lowest.id,
           count: { media },
+        }).catch((err: unknown) => {
+          log?.error(
+            { err, collection: root, level: lowest.id, media },
+            'media levels seeded but not audited',
+          );
+          throw err;
         });
       }
     });

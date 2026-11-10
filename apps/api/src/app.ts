@@ -602,12 +602,13 @@ const removalsOf = (documents?: MediaDocuments) =>
 
 /** Changing an item's details (KBC-050): the author and speaker lists follow a move. */
 function mediaEditor(
-  wiring: MediaWiring & { publisher: TrackPublisher },
+  wiring: MediaWiring & { publisher: TrackPublisher; log: FastifyBaseLogger },
 ): MediaEditService {
   const { media, catalog, authors, publisher } = wiring;
   return new MediaEditService({
     levels: mediaLevelsOf(wiring),
     audit: wiring.levels.audit,
+    log: wiring.log,
     store: media.store,
     speakers: media.speakers,
     hasTopic: (topic) => catalog.get(topic) !== undefined,
@@ -1291,7 +1292,7 @@ async function registerMediaRoutes(
 ): Promise<void> {
   const { wiring, media, publisher, edited } = input;
   await app.register(
-    mediaRoutes(media, mediaEditor({ ...wiring, publisher }), {
+    mediaRoutes(media, mediaEditor({ ...wiring, publisher, log: app.log }), {
       createPerMinute: wiring.media.createPerMinute,
       plans: edited.preparation,
       tracks: edited.revisions,
@@ -1930,8 +1931,6 @@ async function loadedLevels(
     ...(media && { media }),
     parentOf: (slug) => catalog.get(slug)?.topic.parent ?? null,
   });
-  // KBC-105 AC-10: the audios of a collection that had a scale before media held a level.
-  await service.seedMediaAtStart();
   return { ...levels, gate, service };
 }
 
@@ -1977,6 +1976,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandler(app);
   decorateTrees(app, full);
+  // KBC-105 AC-10: the audios of a collection that had a scale before media held a level.
+  await full.levels.service.seedMediaAtStart(app.log);
 
   // The Codex sandbox reaches only the MCP routes (KBC-027, ADR 0020).
   app.addHook('onRequest', peerOnlyMcp(deps.config.KB_CHAT_MCP_PEERS));

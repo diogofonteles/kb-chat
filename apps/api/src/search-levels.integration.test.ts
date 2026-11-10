@@ -387,7 +387,16 @@ describe('Search and reading within the person level (KBC-103, ADR 0036 §7)', (
       bytes: 10,
     });
     // KBC-105 BR-1: a new file there needs her level, and then goes.
+    expect(fresh.statusCode).toBe(400);
     expect(fresh.json().error.code).toBe('LEVEL_REQUIRED');
+    const atHers = await ana.call('POST', '/api/v1/topics/hermetismo/media', {
+      title: 'Nova',
+      author: null,
+      fileName: 'nova.mp3',
+      bytes: 10,
+      level: 'ci',
+    });
+    expect(atHers.statusCode, atHers.body).toBe(201);
     for (const body of [check.body, sent.body, fresh.body]) {
       expect(body).not.toContain(item.id);
       expect(body).not.toContain('Gravação Secreta');
