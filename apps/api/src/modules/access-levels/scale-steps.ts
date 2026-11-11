@@ -277,40 +277,44 @@ async function undoPeople(
  * The audit last, in one append. When it fails after lines may have reached the file, a
  * `scale.undone` line says so and the history leaves the operation out (R1-5).
  */
-export function auditStep(
-  ctx: StepContext,
-  lines: {
-    readonly all: () => LevelAuditEntry[];
-    readonly undone: () => LevelAuditEntry;
-    /** The operation's own kind, for the log when its mark fails too (R2-4). */
-    readonly kind: 'scale.delete' | 'scale.clear';
-  },
-): UndoableStep {
-  const { audit } = ctx.deps;
+export function auditStep(ctx: StepContext, lines: AuditLines): UndoableStep {
   return {
     name: 'audit',
     apply: async () => {
       try {
-        await audit.appendMany(lines.all());
+        await ctx.deps.audit.appendMany(lines.all());
       } catch (err) {
-        const mark = lines.undone();
-        await audit
-          .append(mark, { freshLine: true })
-          .catch((cause: unknown) => {
-            ctx.log.error(
-              {
-                err: cause,
-                collection: ctx.root,
-                at: mark.at,
-                by: mark.by,
-                kind: lines.kind,
-              },
-              'level change undone but not marked in the audit',
-            );
-          });
+        await markUndone(ctx, lines);
         throw err;
       }
       return NOTHING;
     },
   };
+}
+
+/** What the audit step writes, and the mark of the operation undone. */
+interface AuditLines {
+  readonly all: () => LevelAuditEntry[];
+  readonly undone: () => LevelAuditEntry;
+  /** The operation's own kind, for the log when its mark fails too (R2-4). */
+  readonly kind: 'scale.delete' | 'scale.clear';
+}
+
+/** The `scale.undone` mark on a line of its own; failing, the log names the operation. */
+async function markUndone(ctx: StepContext, lines: AuditLines): Promise<void> {
+  const mark = lines.undone();
+  await ctx.deps.audit
+    .append(mark, { freshLine: true })
+    .catch((cause: unknown) => {
+      ctx.log.error(
+        {
+          err: cause,
+          collection: ctx.root,
+          at: mark.at,
+          by: mark.by,
+          kind: lines.kind,
+        },
+        'level change undone but not marked in the audit',
+      );
+    });
 }
