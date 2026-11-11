@@ -14,18 +14,17 @@ import { AppError } from '../../app-error.js';
 import { LevelWriteQueue } from './write-queue.js';
 import type { LevelAuditPort } from '../../ports/level-audit.js';
 import type { MediaStorePort } from '../../ports/media-store.js';
-import {
-  canSeeTopic,
-  isMaster,
-  type ParentOf,
-  type StoredPerson,
-} from '../auth/index.js';
-import {
-  isTrackEntry,
-  type CatalogEntry,
-  type CatalogRegistry,
-} from '../catalog/index.js';
+import type { ParentOf, StoredPerson } from '../auth/index.js';
+import type { CatalogRegistry } from '../catalog/index.js';
 import type { ContentGate } from './content-gate.js';
+import {
+  holdingsOf,
+  assertWholeScale,
+  ownScaleRoot,
+  peopleWithAccess,
+  textsOf,
+} from './scale-holdings.js';
+import { scaleVersion } from './scale-version.js';
 import type {
   CollectionPlacements,
   LevelDirectory,
@@ -55,24 +54,27 @@ export interface AccessLevelsServiceDeps {
   readonly audit: LevelAuditPort;
   readonly parentOf: ParentOf;
   /** The media library's audios, placed with the documents (KBC-105); absent with media off. */
-  readonly media?: Pick<MediaStorePort, 'seedLevel'>;
+  readonly media?: Pick<MediaStorePort, 'seedLevel' | 'countLevels'>;
   readonly now?: () => Date;
 }
 
 /** Who the app's own writes are recorded as (the start's seed). */
 const APP_ACTOR: LevelActor = { by: 'kb-chat' };
 
-const subCollection = () =>
-  new AppError('VALIDATION_FAILED', 'A sub-collection uses its parent levels');
 const unknownLevel = () => new AppError('NOT_FOUND', 'Unknown level');
 const codeTaken = (code: string) =>
   new AppError('LEVEL_CODE_TAKEN', 'A level with that code exists', {
     details: { code },
   });
 
-/** Texts of a collection: track documents take their level from media.db (KBC-106). */
-const textsOf = (entries: Iterable<CatalogEntry>): CatalogEntry[] =>
-  [...entries].filter((entry) => !isTrackEntry(entry));
+/** BR-3 of KBC-108: a change confirmed on a preview of another scale is refused. */
+export function assertVersion(
+  scale: readonly StoredLevel[],
+  version: string,
+): void {
+  if (scaleVersion(scale) !== version)
+    throw new AppError('LEVELS_CHANGED', 'The scale changed since the preview');
+}
 
 /** An id no other level has: the code's, with -2, -3… when a renamed level kept it. */
 function freeId(code: string, scale: readonly StoredLevel[]): string {
@@ -111,27 +113,28 @@ export class AccessLevelsService {
     this.queue = deps.queue ?? new LevelWriteQueue();
   }
 
-  /** GET …/levels: the scale with its counts (T24). */
+  /** GET …/levels: the scale with its counts and version (T24, KBC-108 FR-5). */
   async levelsOf(topic: string): Promise<TopicLevels> {
     if (!this.deps.catalog.get(topic))
       throw new AppError('TOPIC_NOT_FOUND', 'Unknown topic');
     const root = this.deps.gate.rootOf(topic);
     const scale = this.deps.directory.scaleOf(root);
-    const docs = this.documentRanks(root, scale);
-    const people = await this.peopleRanks(root);
+    const held = await holdingsOf(this.deps, root);
     return {
       collection: root,
       inherited: root !== topic,
-      levels: scale.map((level, rank) => ({
+      levels: scale.map((level) => ({
         id: level.id,
         code: level.code,
         description: level.description,
-        documents: docs.filter((one) => one === rank).length,
-        people: people.filter((one) => one === rank).length,
+        documents: held.documents[level.id] ?? 0,
+        people: held.people[level.id] ?? 0,
+        media: held.media[level.id] ?? 0,
       })),
-      documents: docs.length,
-      people: people.length,
-      unassigned: scale.length === 0 ? 0 : docs.filter((one) => one < 0).length,
+      documents: held.texts,
+      people: held.withAccess.length,
+      unassigned: scale.length === 0 ? 0 : held.unassigned,
+      version: scaleVersion(scale),
     };
   }
 
@@ -228,22 +231,22 @@ export class AccessLevelsService {
     });
   }
 
-  /** The scale in a new order, lowest first; it applies at once to everyone (AC-12). */
+  /**
+   * The scale in a new order, lowest first; it applies at once to everyone (AC-12), while the
+   * scale is the one its preview was made on (KBC-108 BR-3).
+   */
   reorder(
     actor: LevelActor,
     topic: string,
-    order: readonly string[],
+    change: { readonly order: readonly string[]; readonly version: string },
   ): Promise<TopicLevels> {
+    const { order } = change;
     return this.serial(async () => {
       const root = this.requireRoot(topic);
       const scale = this.deps.directory.scaleOf(root);
+      assertVersion(scale, change.version);
       const ids = scale.map((one) => one.id);
-      const same =
-        order.length === ids.length &&
-        new Set(order).size === ids.length &&
-        order.every((id) => ids.includes(id));
-      if (!same)
-        throw new AppError('VALIDATION_FAILED', 'Name every level once');
+      assertWholeScale(ids, order);
       await this.deps.directory.changeScale(root, (levels) => ({
         next: order.flatMap((id) => levels.filter((one) => one.id === id)),
         result: undefined,
@@ -274,7 +277,9 @@ export class AccessLevelsService {
       documents += texts.length;
     }
     await this.deps.directory.place(byCollection);
-    const ids = (await this.withAccess(root)).map((person) => person.id);
+    const ids = (await peopleWithAccess(this.deps, root)).map(
+      (person) => person.id,
+    );
     await this.deps.people.placeLevels({ ids, root, level });
     const media = this.seedMedia({ root, level, again: true }) ?? 0;
     await this.record(actor, {
@@ -335,42 +340,9 @@ export class AccessLevelsService {
     return media.seedLevel({ ...seed, topics, now: new Date(this.now()) });
   }
 
-  /** People (not masters) who see the collection or one of its sub-collections. */
-  private async withAccess(root: string): Promise<StoredPerson[]> {
-    const scope = this.deps.catalog.scope(root).map((one) => one.topic.slug);
-    return (await this.deps.people.list()).filter(
-      (person) =>
-        !isMaster(person) &&
-        scope.some((slug) => canSeeTopic(person, slug, this.deps.parentOf)),
-    );
-  }
-
-  /** Each text's level rank in the scope (-1: "Sem nível"). */
-  private documentRanks(root: string, scale: readonly StoredLevel[]): number[] {
-    return this.deps.catalog.scope(root).flatMap((catalog) => {
-      const placed = this.deps.directory.placementsOf(catalog.topic.slug);
-      return textsOf(catalog.entries.values()).map((entry) => {
-        const level = placed[entry.id]?.level;
-        return scale.findIndex((one) => one.id === level);
-      });
-    });
-  }
-
-  private async peopleRanks(root: string): Promise<number[]> {
-    return (await this.withAccess(root)).map((person) =>
-      this.deps.gate.personRank(person, root),
-    );
-  }
-
   /** The collection's own scale: a sub-collection has none (BR-1). */
   private requireRoot(topic: string): string {
-    const catalog = this.deps.catalog.get(topic);
-    if (!catalog) throw new AppError('TOPIC_NOT_FOUND', 'Unknown topic');
-    // An orphan sub-collection still declares its parent: a scale on it would be inert
-    // once the parent is back (review round 2).
-    if (catalog.topic.parent || this.deps.gate.rootOf(topic) !== topic)
-      throw subCollection();
-    return topic;
+    return ownScaleRoot(this.deps, topic);
   }
 
   private record(

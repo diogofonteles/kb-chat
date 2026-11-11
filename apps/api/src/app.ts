@@ -89,7 +89,9 @@ import {
   LevelDirectory,
   DocumentLevelsService,
   PeopleLevelsService,
+  LevelHistoryService,
   LevelWriteQueue,
+  ScaleChangesService,
   accessLevelRoutes,
 } from './modules/access-levels/index.js';
 import { createGoogleVerifier } from './adapters/google-id-token-verifier.js';
@@ -317,6 +319,8 @@ type FullDeps = AppDeps & {
     service: AccessLevelsService;
     documents: DocumentLevelsService;
     people: PeopleLevelsService;
+    changes: ScaleChangesService;
+    history: LevelHistoryService;
   };
   /** The collections the legacy seed wrote at this start (KBC-049 BR-4). */
   legacySeeded: readonly string[];
@@ -1920,7 +1924,7 @@ async function loadedLevels(
   built: {
     catalog: CatalogRegistry;
     people: PeopleService;
-    media: Pick<MediaStorePort, 'seedLevel'> | undefined;
+    media: MediaStorePort | undefined;
   },
 ): Promise<FullDeps['levels']> {
   const levels = given.levels ?? inMemoryLevels();
@@ -1938,7 +1942,18 @@ async function loadedLevels(
   });
   const documents = new DocumentLevelsService(shared);
   const peopleLevels = new PeopleLevelsService({ ...shared, people });
-  return { ...levels, gate, service, documents, people: peopleLevels };
+  const withMedia = { ...shared, people, ...(media && { media }) };
+  const changes = new ScaleChangesService(withMedia);
+  const history = new LevelHistoryService(withMedia);
+  return {
+    ...levels,
+    gate,
+    service,
+    documents,
+    people: peopleLevels,
+    changes,
+    history,
+  };
 }
 
 /** The levels' state in memory (tests, and an app built without a state folder). */

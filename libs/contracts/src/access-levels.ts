@@ -61,6 +61,8 @@ export const accessLevelSchema = z.object({
   documents: z.number().int().nonnegative(),
   /** People with access who hold this level (an unknown or missing one counts as the lowest). */
   people: z.number().int().nonnegative(),
+  /** Audios of media.db at this level, recordings and tracks (KBC-108). */
+  media: z.number().int().nonnegative(),
 });
 export type AccessLevel = z.infer<typeof accessLevelSchema>;
 
@@ -78,6 +80,8 @@ export const topicLevelsSchema = z.object({
   people: z.number().int().nonnegative(),
   /** Documents with no level ("Sem nível"): visible to masters only (BR-6). */
   unassigned: z.number().int().nonnegative(),
+  /** The scale's version: a reorder or a delete applies only while it holds (KBC-108 BR-3). */
+  version: z.lazy(() => levelsVersionSchema),
 });
 export type TopicLevels = z.infer<typeof topicLevelsSchema>;
 
@@ -116,9 +120,16 @@ export const levelRenameSchema = z
   .refine((body) => body.code !== undefined || body.description !== undefined);
 export type LevelRename = z.infer<typeof levelRenameSchema>;
 
-/** PATCH …/levels: the whole scale in its new order, lowest first (AC-12). */
+/** A scale's version, as `GET …/levels` and a preview give it (KBC-108 FR-5). */
+export const levelsVersionSchema = z.string().min(1).max(64);
+
+/**
+ * PATCH …/levels: the whole scale in its new order, lowest first (AC-12), applied only while
+ * the scale is still at the version its preview was made on (KBC-108 BR-3).
+ */
 export const levelOrderSchema = z.strictObject({
   order: z.array(levelRefSchema).min(1).max(LEVELS_PER_SCALE_MAX),
+  version: levelsVersionSchema,
 });
 export type LevelOrder = z.infer<typeof levelOrderSchema>;
 
@@ -151,14 +162,7 @@ export const levelAuditEntrySchema = z.object({
   by: z.string(),
   /** The person a master was acting as, if any. */
   actingAs: z.string().optional(),
-  kind: z.enum([
-    'scale.create',
-    'scale.rename',
-    'scale.reorder',
-    'person.level',
-    'item.level',
-    'bulk',
-  ]),
+  kind: z.lazy(() => levelAuditKindSchema),
   /** The top-level collection (or the document's own collection for `item.level`). */
   collection: topicSlugSchema,
   /** What changed: a level id, a document id, a person id. */
@@ -332,6 +336,8 @@ export const PERSON_LEVEL_VIAS = [
   'invite',
   'profile',
   'bulk',
+  /** KBC-108: a level deleted, or every level taken away. */
+  'scale',
 ] as const;
 export const personLevelViaSchema = z.enum(PERSON_LEVEL_VIAS);
 export type PersonLevelVia = z.infer<typeof personLevelViaSchema>;
@@ -370,3 +376,132 @@ export const peopleLevelResultSchema = z.object({
   unknown: z.number().int().nonnegative(),
 });
 export type PeopleLevelResult = z.infer<typeof peopleLevelResultSchema>;
+
+/* ---------- Managing the scale and its history (KBC-108, ADR 0036 §10, §11) ---------- */
+
+/** What the levels audit records; `scale.delete` and `scale.clear` since KBC-108. */
+export const LEVEL_AUDIT_KINDS = [
+  'scale.create',
+  'scale.rename',
+  'scale.reorder',
+  'scale.delete',
+  'scale.clear',
+  'person.level',
+  'item.level',
+  'bulk',
+] as const;
+export const levelAuditKindSchema = z.enum(LEVEL_AUDIT_KINDS);
+export type LevelAuditKind = z.infer<typeof levelAuditKindSchema>;
+
+/** POST …/levels/preview (FR-2): a new order, or the removal of one level. */
+export const levelPreviewRequestSchema = z.union([
+  z.strictObject({
+    order: z.array(levelRefSchema).min(1).max(LEVELS_PER_SCALE_MAX),
+    version: levelsVersionSchema,
+  }),
+  z.strictObject({ remove: levelRefSchema, version: levelsVersionSchema }),
+]);
+export type LevelPreviewRequest = z.infer<typeof levelPreviewRequestSchema>;
+
+/** How many people gain (or lose) sight of how many items: counts, never names or titles. */
+export const levelImpactSchema = z.object({
+  people: z.number().int().nonnegative(),
+  documents: z.number().int().nonnegative(),
+  media: z.number().int().nonnegative(),
+});
+export type LevelImpact = z.infer<typeof levelImpactSchema>;
+
+/** What a removal holds and where it goes by default (BR-2). */
+export const levelRemovalSchema = z.object({
+  level: levelChoiceSchema,
+  documents: z.number().int().nonnegative(),
+  media: z.number().int().nonnegative(),
+  people: z.number().int().nonnegative(),
+  /** The next higher level (the next lower, for the highest); null when it is the only one. */
+  moveContentTo: levelRefSchema.nullable(),
+  /** The next lower level (the next higher, for the lowest); null when it is the only one. */
+  movePeopleTo: levelRefSchema.nullable(),
+  /** The only level: removing it is "Tirar todos os níveis" (AC-6). */
+  last: z.boolean(),
+});
+export type LevelRemoval = z.infer<typeof levelRemovalSchema>;
+
+/** The answer of a preview, computed on the server (BR-3). */
+export const levelPreviewSchema = z.object({
+  version: levelsVersionSchema,
+  gaining: levelImpactSchema,
+  losing: levelImpactSchema,
+  removal: levelRemovalSchema.nullable(),
+});
+export type LevelPreview = z.infer<typeof levelPreviewSchema>;
+
+/** DELETE …/levels/:level (FR-1): where its content and its people go, in one operation. */
+export const levelDeleteSchema = z.strictObject({
+  moveContentTo: levelRefSchema,
+  movePeopleTo: levelRefSchema,
+  version: levelsVersionSchema,
+});
+export type LevelDelete = z.infer<typeof levelDeleteSchema>;
+
+/** DELETE …/levels (FR-3): every level goes, confirmed by the collection's slug. */
+export const levelsClearSchema = z.strictObject({
+  confirm: topicSlugSchema,
+  version: levelsVersionSchema,
+});
+export type LevelsClear = z.infer<typeof levelsClearSchema>;
+
+export const LEVEL_AUDIT_PAGE_DEFAULT = 20;
+export const LEVEL_AUDIT_PAGE_MAX = 50;
+
+/** GET /api/v1/levels/audit (FR-4): the filters of "Histórico de níveis". */
+export const levelAuditQuerySchema = z.strictObject({
+  /** A top-level collection: its lines and those of its sub-collections. */
+  topic: topicSlugSchema.optional(),
+  /** Who did it, or whom they acted as (part of an e-mail, any case). */
+  actor: z.string().trim().min(1).max(320).optional(),
+  kind: levelAuditKindSchema.optional(),
+  /** One item or person: a document's, an audio's or a person's id. */
+  target: z.string().min(1).max(1024).optional(),
+  /** From and to this day (`YYYY-MM-DD`, UTC, inclusive). */
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(LEVEL_AUDIT_PAGE_MAX)
+    .default(LEVEL_AUDIT_PAGE_DEFAULT),
+});
+export type LevelAuditQuery = z.input<typeof levelAuditQuerySchema>;
+
+/** One line of the history as masters read it: names and codes in place of ids. */
+export const levelAuditItemSchema = z.object({
+  at: z.iso.datetime(),
+  by: z.string(),
+  /** The person's name, or the e-mail when there is none (`kb-chat` for the app). */
+  byName: z.string(),
+  actingAs: z.string().nullable(),
+  actingAsName: z.string().nullable(),
+  kind: levelAuditKindSchema,
+  collection: topicSlugSchema,
+  /** The id the line is about (item, person or level), for "Só este item". */
+  target: z.string().nullable(),
+  /** The item's title, the person's name or the level's code; null when it is gone. */
+  targetLabel: z.string().nullable(),
+  /** Before → after in codes ("CI", "QS, CI, CDC"); null when there was none. */
+  before: z.string().nullable(),
+  after: z.string().nullable(),
+  /** For `scale.delete`: the codes its content and its people went to. */
+  moves: z.object({ content: z.string(), people: z.string() }).nullable(),
+  /** Whether the target is a document, an audio, a person or a level. */
+  subject: z.enum(['document', 'media', 'person', 'level']).nullable(),
+  count: levelAuditEntrySchema.shape.count,
+});
+export type LevelAuditItem = z.infer<typeof levelAuditItemSchema>;
+
+export const levelAuditPageSchema = z.object({
+  items: z.array(levelAuditItemSchema),
+  nextCursor: z.string().nullable(),
+});
+export type LevelAuditPage = z.infer<typeof levelAuditPageSchema>;

@@ -9,7 +9,13 @@ import {
   documentLevelUpdateSchema,
   levelCreateSchema,
   levelRefSchema,
+  levelAuditPageSchema,
+  levelAuditQuerySchema,
+  levelDeleteSchema,
   levelOrderSchema,
+  levelPreviewRequestSchema,
+  levelPreviewSchema,
+  levelsClearSchema,
   levelRenameSchema,
   levelScalesSchema,
   peopleLevelRequestSchema,
@@ -38,6 +44,8 @@ import type {
   DocumentLevelsService,
 } from './document-levels-service.js';
 import type { PeopleLevelsService } from './people-levels-service.js';
+import type { LevelHistoryService } from './level-history-service.js';
+import type { ScaleChangesService } from './scale-changes-service.js';
 
 /** Masters only (BR-9: `collection-levels`), in a collection they see (404 otherwise). */
 const MANAGE: RouteAccess = {
@@ -135,11 +143,7 @@ function registerChanges(typed: Typed, service: AccessLevelsService): void {
       schema: { params: topicParams, body: levelOrderSchema, response: ok },
     },
     async (request) =>
-      service.reorder(
-        actorOf(request),
-        request.params.topic,
-        request.body.order,
-      ),
+      service.reorder(actorOf(request), request.params.topic, request.body),
   );
   typed.patch(
     `${LEVELS_URL}/:level`,
@@ -149,6 +153,73 @@ function registerChanges(typed: Typed, service: AccessLevelsService): void {
     },
     async (request) =>
       service.rename(actorOf(request), request.params, request.body),
+  );
+}
+
+/** The services of KBC-108: changes after the fact and their history. */
+interface ManageServices {
+  readonly service: AccessLevelsService;
+  readonly changes: ScaleChangesService;
+  readonly history: LevelHistoryService;
+}
+
+/** The preview of a reorder or a removal (KBC-108 FR-2). */
+function registerPreview(typed: Typed, { changes }: ManageServices): void {
+  typed.post(
+    `${LEVELS_URL}/preview`,
+    {
+      config,
+      schema: {
+        params: topicParams,
+        body: levelPreviewRequestSchema,
+        response: { 200: levelPreviewSchema },
+      },
+    },
+    async (request) => changes.preview(request.params.topic, request.body),
+  );
+}
+
+/** Delete one level, or every level (KBC-108 FR-1, FR-3). */
+function registerDeletes(typed: Typed, services: ManageServices): void {
+  const { service, changes } = services;
+  typed.delete(
+    `${LEVELS_URL}/:level`,
+    {
+      config,
+      schema: { params: levelParams, body: levelDeleteSchema, response: ok },
+    },
+    async (request) => {
+      const caller = { actor: actorOf(request), log: request.log };
+      await changes.remove(caller, request.params, request.body);
+      return service.levelsOf(request.params.topic);
+    },
+  );
+  typed.delete(
+    LEVELS_URL,
+    {
+      config,
+      schema: { params: topicParams, body: levelsClearSchema, response: ok },
+    },
+    async (request) => {
+      const caller = { actor: actorOf(request), log: request.log };
+      await changes.clear(caller, request.params.topic, request.body);
+      return service.levelsOf(request.params.topic);
+    },
+  );
+}
+
+/** "Histórico de níveis": masters only (KBC-108 FR-4, BR-5). */
+function registerHistory(typed: Typed, { history }: ManageServices): void {
+  typed.get(
+    '/api/v1/levels/audit',
+    {
+      config: { access: { feature: 'collection-levels' } },
+      schema: {
+        querystring: levelAuditQuerySchema,
+        response: { 200: levelAuditPageSchema },
+      },
+    },
+    async (request) => history.page(request.query),
   );
 }
 
@@ -253,12 +324,14 @@ function registerPeopleBulk(typed: Typed, people: PeopleLevelsService): void {
   );
 }
 
-/** T24's routes (KBC-103 FR-1, FR-4; KBC-107 FR-1, FR-2) and the people bulk (KBC-109). */
+/** T24's routes (KBC-103 FR-1, FR-4; KBC-107 FR-1, FR-2; KBC-108 FR-1 to FR-4) and the people bulk (KBC-109). */
 export const accessLevelRoutes =
   (services: {
     readonly service: AccessLevelsService;
     readonly documents: DocumentLevelsService;
     readonly people: PeopleLevelsService;
+    readonly changes: ScaleChangesService;
+    readonly history: LevelHistoryService;
   }): FastifyPluginAsync =>
   async (app) => {
     const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -267,6 +340,9 @@ export const accessLevelRoutes =
     registerScales(typed, service);
     registerScale(typed, service);
     registerChanges(typed, service);
+    registerPreview(typed, services);
+    registerDeletes(typed, services);
+    registerHistory(typed, services);
     registerDocumentLevel(typed, documents);
     registerQueue(typed, documents);
     registerCounts(typed, documents);
