@@ -1482,4 +1482,21 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       ) STRICT, WITHOUT ROWID;
     `,
   },
+  {
+    // KBC-116 (ADR 0038 §2): what the import from the owner's Mac wrote, per recording (with
+    // its tracks): the fingerprint of the rows it came from and of the rows it wrote, so a
+    // run takes only what changed and holds what production changed since. Expand only:
+    // the previous image ignores the table.
+    version: 32,
+    name: 'media-imports',
+    sql: `
+      CREATE TABLE media_imports (
+        root_id TEXT PRIMARY KEY,
+        source_fingerprint TEXT NOT NULL CHECK (length(source_fingerprint) = 64),
+        target_fingerprint TEXT NOT NULL CHECK (length(target_fingerprint) = 64),
+        package_id TEXT NOT NULL,
+        imported_at TEXT NOT NULL
+      ) STRICT, WITHOUT ROWID;
+    `,
+  },
 ];
