@@ -87,6 +87,7 @@ import {
   AccessLevelsService,
   ContentGate,
   LevelDirectory,
+  DocumentLevelsService,
   accessLevelRoutes,
 } from './modules/access-levels/index.js';
 import { createGoogleVerifier } from './adapters/google-id-token-verifier.js';
@@ -309,7 +310,11 @@ type FullDeps = AppDeps & {
   conversations: ConversationStorePort;
   collections: CollectionRegistry;
   authors: AuthorsService;
-  levels: LevelDeps & { gate: ContentGate; service: AccessLevelsService };
+  levels: LevelDeps & {
+    gate: ContentGate;
+    service: AccessLevelsService;
+    documents: DocumentLevelsService;
+  };
   /** The collections the legacy seed wrote at this start (KBC-049 BR-4). */
   legacySeeded: readonly string[];
 };
@@ -515,7 +520,7 @@ async function registerRoutes(
   deps: FullDeps,
 ): Promise<void> {
   await registerSearch(app, deps);
-  await app.register(accessLevelRoutes(deps.levels.service));
+  await app.register(accessLevelRoutes(deps.levels));
   // Recorded research turns run apart from their request (KBC-029) and land in the history.
   const turns = new LiveTurns();
   const conversations = new ConversationsService({
@@ -1913,27 +1918,30 @@ async function loadedLevels(
     media: Pick<MediaStorePort, 'seedLevel'> | undefined;
   },
 ): Promise<FullDeps['levels']> {
-  const levels = given.levels ?? {
-    directory: new LevelDirectory({
-      scales: new MemoryDocumentStore(),
-      documents: new MemoryDocumentStore(),
-      presence: new MemoryDocumentStore(),
-    }),
-    audit: new MemoryLevelAudit(),
-  };
+  const levels = given.levels ?? inMemoryLevels();
   await levels.directory.load();
   const { catalog, people, media } = built;
   const gate = new ContentGate({ directory: levels.directory, catalog });
+  const parentOf = (slug: string) => catalog.get(slug)?.topic.parent ?? null;
+  const shared = { ...levels, catalog, gate, parentOf };
   const service = new AccessLevelsService({
-    ...levels,
-    catalog,
-    gate,
+    ...shared,
     people,
     ...(media && { media }),
-    parentOf: (slug) => catalog.get(slug)?.topic.parent ?? null,
   });
-  return { ...levels, gate, service };
+  const documents = new DocumentLevelsService(shared);
+  return { ...levels, gate, service, documents };
 }
+
+/** The levels' state in memory (tests, and an app built without a state folder). */
+const inMemoryLevels = (): LevelDeps => ({
+  directory: new LevelDirectory({
+    scales: new MemoryDocumentStore(),
+    documents: new MemoryDocumentStore(),
+    presence: new MemoryDocumentStore(),
+  }),
+  audit: new MemoryLevelAudit(),
+});
 
 /** Acting as a person (KBC-060): its audit in memory unless main gave one on disk. */
 function withActAs(auth: AuthDeps): AuthDeps & { actAs: ActAsService } {
@@ -1979,6 +1987,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   decorateTrees(app, full);
   // KBC-105 AC-10: the audios of a collection that had a scale before media held a level.
   await full.levels.service.seedMediaAtStart(app.log);
+  // KBC-107 FR-5: what each catalog load brought or took, for the "Sem nível" queue.
+  await full.levels.documents.reconcile(app.log);
+  full.catalog.onReload(() => void full.levels.documents.reconcile(app.log));
 
   // The Codex sandbox reaches only the MCP routes (KBC-027, ADR 0020).
   app.addHook('onRequest', peerOnlyMcp(deps.config.KB_CHAT_MCP_PEERS));

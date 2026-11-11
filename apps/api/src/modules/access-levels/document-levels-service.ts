@@ -50,8 +50,11 @@ export interface DocumentLevelsDeps {
   readonly gate: ContentGate;
   readonly audit: LevelAuditPort;
   readonly parentOf: ParentOf;
-  /** Told when a reconcile after a catalog load fails (it is retried on the next load). */
-  readonly onError?: (err: unknown) => void;
+}
+
+/** Where a failed reconcile is told (it is tried again on the next catalog load). */
+export interface ReconcileLog {
+  error(fields: object, message: string): void;
 }
 
 /** Who asks: the audit's names and the person whose level and view apply. */
@@ -66,8 +69,7 @@ interface Target {
   readonly entry: CatalogEntry;
 }
 
-const notFound = () =>
-  new AppError('DOCUMENT_NOT_FOUND', 'Document not found');
+const notFound = () => new AppError('DOCUMENT_NOT_FOUND', 'Document not found');
 const unknownLevel = () =>
   new AppError('VALIDATION_FAILED', 'Unknown level', {
     details: { field: 'level' },
@@ -177,17 +179,19 @@ export class DocumentLevelsService {
    * FR-5, BR-5, after each catalog load: a document without a level gets its first sighting;
    * a placed one gone from the vault starts its 30 days and, past them, loses its level.
    */
-  reconcile(): Promise<void> {
+  reconcile(log?: ReconcileLog): Promise<void> {
     return this.serial(async () => {
       const now = Date.now();
       const presence = clonePresence(this.deps.directory.presenceMap());
       const gone = this.expire(presence, now);
       if (Object.keys(gone).length > 0) await this.deps.directory.forget(gone);
-      this.markArrivals(presence, new Date(now).toISOString());
+      const next = this.markArrivals(presence, new Date(now).toISOString());
       const before = JSON.stringify(this.deps.directory.presenceMap());
-      if (JSON.stringify(presence) !== before)
-        await this.deps.directory.setPresence(presence);
-    }).catch((err: unknown) => this.deps.onError?.(err));
+      if (JSON.stringify(next) !== before)
+        await this.deps.directory.setPresence(next);
+    }).catch((err: unknown) => {
+      log?.error({ err }, 'document levels: could not reconcile the catalog');
+    });
   }
 
   private bulkTargets(
@@ -253,7 +257,9 @@ export class DocumentLevelsService {
     if (!entry || isTrackEntry(entry)) return undefined;
     if (!canSeeTopic(person, key.topic, this.deps.parentOf)) return undefined;
     const view = this.deps.gate.viewFor(person, key.topic);
-    return view.allows(key.topic, entry) ? { topic: key.topic, entry } : undefined;
+    return view.allows(key.topic, entry)
+      ? { topic: key.topic, entry }
+      : undefined;
   }
 
   private inScope(root: string, topic: string): boolean {
@@ -288,7 +294,11 @@ export class DocumentLevelsService {
       const placed = this.deps.directory.placementsOf(slug);
       return unplacedTexts(catalog.entries.values(), { placed, scale }).map(
         (entry) =>
-          toRow(slug, entry, firstSeen(presence[slug]?.[entry.id], placed[entry.id]?.setAt)),
+          toRow(
+            slug,
+            entry,
+            firstSeen(presence[slug]?.[entry.id], placed[entry.id]?.setAt),
+          ),
       );
     });
   }
@@ -326,21 +336,27 @@ export class DocumentLevelsService {
     return gone;
   }
 
-  /** Each text without a level in a scaled collection gets the moment it was first seen. */
+  /**
+   * Each text without a level in a scaled collection gets the moment it was first seen; the
+   * marks of documents neither placed nor in the vault are dropped.
+   */
   private markArrivals(
     presence: Record<string, Record<string, DocumentPresence>>,
     now: string,
-  ): void {
+  ): Record<string, Record<string, DocumentPresence>> {
     for (const root of this.scaledRoots()) {
       const scale = this.deps.directory.scaleOf(root);
       for (const catalog of this.deps.catalog.scope(root)) {
         const slug = catalog.topic.slug;
         const placed = this.deps.directory.placementsOf(slug);
-        const texts = unplacedTexts(catalog.entries.values(), { placed, scale });
+        const texts = unplacedTexts(catalog.entries.values(), {
+          placed,
+          scale,
+        });
         presence[slug] = arrivals(presence[slug] ?? {}, { texts, now });
       }
     }
-    prune(presence, (collection, id) => {
+    return pruned(presence, (collection, id) => {
       const entries = this.deps.catalog.get(collection)?.entries;
       const placed = this.deps.directory.placementsOf(collection)[id];
       return placed !== undefined || entries?.has(id) === true;
@@ -378,16 +394,14 @@ function auditLines(
   levelBefore: (topic: string, id: string) => string | null,
 ): LevelAuditEntry[] {
   const { level, targets, bulk } = change;
-  const items = targets.map(
-    ({ topic, entry }): LevelAuditEntry => ({
-      ...base,
-      kind: 'item.level',
-      collection: topic,
-      target: entry.id,
-      before: levelBefore(topic, entry.id),
-      after: level.id,
-    }),
-  );
+  const items = targets.map(({ topic, entry }): LevelAuditEntry => ({
+    ...base,
+    kind: 'item.level',
+    collection: topic,
+    target: entry.id,
+    before: levelBefore(topic, entry.id),
+    after: level.id,
+  }));
   if (!bulk) return items;
   const count = { documents: targets.length, people: 0, skipped: bulk.skipped };
   return [
@@ -406,7 +420,10 @@ function auditLines(
 /** The texts with no level of the scale (none, or one deleted since). */
 function unplacedTexts(
   entries: Iterable<CatalogEntry>,
-  { placed, scale }: { placed: CollectionPlacements; scale: readonly StoredLevel[] },
+  {
+    placed,
+    scale,
+  }: { placed: CollectionPlacements; scale: readonly StoredLevel[] },
 ): CatalogEntry[] {
   return [...entries].filter((entry) => {
     if (isTrackEntry(entry)) return false;
@@ -447,19 +464,24 @@ const clonePresence = (
   map: PresenceMap,
 ): Record<string, Record<string, DocumentPresence>> =>
   Object.fromEntries(
-    Object.entries(map).map(([collection, marks]) => [collection, { ...marks }]),
+    Object.entries(map).map(([collection, marks]) => [
+      collection,
+      { ...marks },
+    ]),
   );
 
-/** Drops empty marks and those `keep` refuses; then empty collections. */
-function prune(
+/** The marks `keep` takes and that say something, without the collections left empty. */
+function pruned(
   presence: Record<string, Record<string, DocumentPresence>>,
   keep: (collection: string, id: string) => boolean,
-): void {
-  for (const [collection, marks] of Object.entries(presence)) {
+): Record<string, Record<string, DocumentPresence>> {
+  const collections = Object.entries(presence).map(([collection, marks]) => {
     const kept = Object.entries(marks).filter(
       ([id, mark]) => Object.keys(mark).length > 0 && keep(collection, id),
     );
-    if (kept.length === 0) delete presence[collection];
-    else presence[collection] = Object.fromEntries(kept);
-  }
+    return [collection, Object.fromEntries(kept)] as const;
+  });
+  return Object.fromEntries(
+    collections.filter(([, marks]) => Object.keys(marks).length > 0),
+  );
 }

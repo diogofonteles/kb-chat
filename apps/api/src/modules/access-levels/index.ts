@@ -5,6 +5,10 @@ export {
 } from './access-levels-service.js';
 export { ContentGate, type ContentGateDeps } from './content-gate.js';
 export {
+  DocumentLevelsService,
+  type DocumentLevelsDeps,
+} from './document-levels-service.js';
+export {
   LevelDirectory,
   type LevelStores,
   type StoredLevel,

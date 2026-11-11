@@ -4,7 +4,6 @@ import {
   levelCreateSchema,
   levelIdOf,
   levelIdSchema,
-  type ContentLevel,
   type LevelAuditEntry,
   type LevelCreate,
   type LevelRename,
@@ -60,13 +59,6 @@ export interface AccessLevelsServiceDeps {
 
 /** Who the app's own writes are recorded as (the start's seed). */
 const APP_ACTOR: LevelActor = { by: 'kb-chat' };
-
-/** A document of a collection, as a level is set on it. */
-export interface DocumentTarget {
-  readonly topic: string;
-  readonly id: string;
-  readonly level: string;
-}
 
 const subCollection = () =>
   new AppError('VALIDATION_FAILED', 'A sub-collection uses its parent levels');
@@ -259,36 +251,6 @@ export class AccessLevelsService implements PersonLevelRules {
         after: [...order],
       });
       return this.levelsOf(root);
-    });
-  }
-
-  /** FR-4: one document's level, audited before → after. */
-  setDocumentLevel(
-    actor: LevelActor,
-    target: DocumentTarget,
-  ): Promise<{ level: ContentLevel }> {
-    return this.serial(async () => {
-      const { topic, id, level } = target;
-      const entry = this.deps.catalog.get(topic)?.entries.get(id);
-      if (!entry || isTrackEntry(entry))
-        throw new AppError('DOCUMENT_NOT_FOUND', 'Document not found');
-      const scale = this.deps.gate.scaleOf(topic);
-      const chosen = scale.find((one) => one.id === level);
-      if (!chosen)
-        throw new AppError('VALIDATION_FAILED', 'Unknown level', {
-          details: { field: 'level' },
-        });
-      const before = this.deps.directory.placementsOf(topic)[id]?.level ?? null;
-      const placed = { level, setBy: actor.by, setAt: this.now() };
-      await this.deps.directory.place({ [topic]: { [id]: placed } });
-      await this.record(actor, {
-        kind: 'item.level',
-        collection: topic,
-        target: id,
-        before,
-        after: level,
-      });
-      return { level: { id: chosen.id, code: chosen.code } };
     });
   }
 

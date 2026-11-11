@@ -11,16 +11,29 @@ import type { LevelAuditPort } from '../ports/level-audit.js';
 export class FsLevelAudit implements LevelAuditPort {
   constructor(private readonly dir: string) {}
 
-  async append(entry: LevelAuditEntry): Promise<void> {
+  append(entry: LevelAuditEntry): Promise<void> {
+    return this.appendMany([entry]);
+  }
+
+  async appendMany(entries: readonly LevelAuditEntry[]): Promise<void> {
+    if (entries.length === 0) return;
     await mkdir(this.dir, { recursive: true, mode: 0o700 });
-    const month = entry.at.slice(0, 7);
-    const file = await open(
-      join(this.dir, `levels-${month}.jsonl`),
-      'a',
-      0o600,
-    );
+    const byMonth = new Map<string, string[]>();
+    for (const entry of entries) {
+      const month = entry.at.slice(0, 7);
+      byMonth.set(month, [
+        ...(byMonth.get(month) ?? []),
+        JSON.stringify(entry),
+      ]);
+    }
+    for (const [month, lines] of byMonth)
+      await this.write(`levels-${month}.jsonl`, `${lines.join('\n')}\n`);
+  }
+
+  private async write(name: string, text: string): Promise<void> {
+    const file = await open(join(this.dir, name), 'a', 0o600);
     try {
-      await file.appendFile(`${JSON.stringify(entry)}\n`);
+      await file.appendFile(text);
       await file.sync();
     } finally {
       await file.close();

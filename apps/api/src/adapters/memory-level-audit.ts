@@ -8,4 +8,8 @@ export class MemoryLevelAudit implements LevelAuditPort {
   async append(entry: LevelAuditEntry): Promise<void> {
     this.entries.push(entry);
   }
+
+  async appendMany(entries: readonly LevelAuditEntry[]): Promise<void> {
+    this.entries.push(...entries);
+  }
 }

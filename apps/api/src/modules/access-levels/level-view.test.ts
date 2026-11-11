@@ -300,3 +300,47 @@ describe('The content gate (KBC-103 BR-5, NFR-1)', () => {
     expect(gate.memoSize(hermetismo)).toBe(1);
   });
 });
+
+describe('Whoever classifies content (KBC-107 BR-1)', () => {
+  const scale = ['qs', 'ci', 'cdc'].map((id) => ({
+    id,
+    code: id.toUpperCase(),
+    description: '',
+    createdBy: 'owner@example.com',
+    createdAt: '2026-11-01T00:00:00.000Z',
+  }));
+  const placed = {
+    'raw/ci.md': { level: 'ci', setBy: 'o', setAt: '2026-11-01T00:00:00.000Z' },
+    'raw/cdc.md': {
+      level: 'cdc',
+      setBy: 'o',
+      setAt: '2026-11-01T00:00:00.000Z',
+    },
+  };
+  const viewOf = (classifier: boolean) =>
+    scaledView({
+      scale,
+      rank: 1,
+      classifier,
+      placementsOf: () => placed,
+      memo: (_catalog, compute) => compute(),
+    });
+  const doc = (id: string) => ({ id, media: null });
+
+  it('sees the documents without a level and the badges of what they see, never above their level', () => {
+    const classifier = viewOf(true);
+    expect(classifier.manages).toBe(true);
+    expect(classifier.allows('hermetismo', doc('raw/new.md'))).toBe(true);
+    expect(classifier.allows('hermetismo', doc('raw/ci.md'))).toBe(true);
+    expect(classifier.allows('hermetismo', doc('raw/cdc.md'))).toBe(false);
+    expect(classifier.levelOf('hermetismo', 'raw/new.md')).toBeNull();
+    expect(classifier.levelOf('hermetismo', 'raw/ci.md')).toEqual({
+      id: 'ci',
+      code: 'CI',
+    });
+    const member = viewOf(false);
+    expect(member.manages).toBe(false);
+    expect(member.allows('hermetismo', doc('raw/new.md'))).toBe(false);
+    expect(member.levelOf('hermetismo', 'raw/ci.md')).toBeUndefined();
+  });
+});

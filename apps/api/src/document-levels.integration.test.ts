@@ -100,9 +100,11 @@ describe('Documents without a level and bulk levels (KBC-107, ADR 0036 §5)', ()
       cursor = next.nextCursor;
     }
     expect(seen.size).toBe(40);
-    expect((await world.owner('GET', `${UNASSIGNED}?limit=51`)).statusCode).toBe(
-      400,
-    );
+    expect(
+      (await world.owner('GET', `${UNASSIGNED}?limit=51`)).statusCode,
+    ).toBe(400);
+    const badCursor = await world.owner('GET', `${UNASSIGNED}?cursor=nope`);
+    expect(badCursor.statusCode).toBe(400);
     const scale = await world.owner('GET', '/api/v1/topics/hermetismo/levels');
     expect(scale.json().unassigned).toBe(40);
     const counts = await world.owner('GET', '/api/v1/levels/unassigned');
@@ -111,9 +113,9 @@ describe('Documents without a level and bulk levels (KBC-107, ADR 0036 §5)', ()
     });
 
     expect((await ana.call('GET', UNASSIGNED)).statusCode).toBe(403);
-    expect((await ana.call('GET', '/api/v1/levels/unassigned')).statusCode).toBe(
-      403,
-    );
+    expect(
+      (await ana.call('GET', '/api/v1/levels/unassigned')).statusCode,
+    ).toBe(403);
     expect(
       (await ana.call('GET', documentUrl('raw/novo-texto-20.md'))).statusCode,
     ).toBe(404);
@@ -228,9 +230,9 @@ describe('Documents without a level and bulk levels (KBC-107, ADR 0036 §5)', ()
       level: 'cdc',
     });
     expect(one.statusCode).toBe(403);
-    expect((await caio.call('GET', '/api/v1/topics/hermetismo/levels')).statusCode).toBe(
-      403,
-    );
+    expect(
+      (await caio.call('GET', '/api/v1/topics/hermetismo/levels')).statusCode,
+    ).toBe(403);
 
     const moved = await caio.call('POST', BULK, {
       level: 'ci',
@@ -252,9 +254,9 @@ describe('Documents without a level and bulk levels (KBC-107, ADR 0036 §5)', ()
     expect(
       (await world.owner('GET', documentUrl('raw/cdc-1.md'))).json().level,
     ).toEqual({ id: 'cdc', code: 'CDC' });
-    expect((await caio.call('GET', documentUrl('raw/cdc-1.md'))).statusCode).toBe(
-      404,
-    );
+    expect(
+      (await caio.call('GET', documentUrl('raw/cdc-1.md'))).statusCode,
+    ).toBe(404);
     const unassigned = await caio.call(
       'GET',
       documentUrl('raw/novo-texto-20.md'),

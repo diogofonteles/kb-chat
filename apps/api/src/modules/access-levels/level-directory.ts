@@ -185,13 +185,15 @@ export class LevelDirectory {
   ): Promise<void> {
     const written: { doc?: Placements } = {};
     await this.placementDoc.change((doc) => {
-      const collections = { ...doc.collections };
-      for (const [collection, ids] of Object.entries(byCollection)) {
-        const kept = { ...collections[collection] };
-        for (const id of ids) delete kept[id];
-        if (Object.keys(kept).length === 0) delete collections[collection];
-        else collections[collection] = kept;
-      }
+      const collections = Object.fromEntries(
+        Object.entries(doc.collections)
+          .map(([collection, placed]) => {
+            const drop = new Set(byCollection[collection] ?? []);
+            const kept = Object.entries(placed).filter(([id]) => !drop.has(id));
+            return [collection, Object.fromEntries(kept)] as const;
+          })
+          .filter(([, placed]) => Object.keys(placed).length > 0),
+      );
       written.doc = { ...doc, collections };
       return { doc: written.doc, result: undefined };
     });

@@ -51,6 +51,7 @@ describe("AccessLevelsService: the start's media seed (KBC-105 AC-10, review rou
     const directory = new LevelDirectory({
       scales: new MemoryDocumentStore(),
       documents: new MemoryDocumentStore(),
+      presence: new MemoryDocumentStore(),
     });
     await directory.load();
     const catalog = new CatalogRegistry({
@@ -76,7 +77,10 @@ describe("AccessLevelsService: the start's media seed (KBC-105 AC-10, review rou
       catalog,
       gate: new ContentGate({ directory, catalog }),
       people: { list: async () => [], placeLevels: async () => 0 },
-      audit: { append: () => Promise.reject(new Error('disk full')) },
+      audit: {
+        append: () => Promise.reject(new Error('disk full')),
+        appendMany: () => Promise.reject(new Error('disk full')),
+      },
       media: { seedLevel: seeded },
       parentOf: () => null,
     });

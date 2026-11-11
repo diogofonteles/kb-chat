@@ -56,6 +56,7 @@ describe('MediaEditService: a level change and its audit (KBC-105, ADR 0036 §11
   it('says in the log what changed when the audit cannot record it, and fails the request', async () => {
     const failing: LevelAuditPort = {
       append: () => Promise.reject(new Error('disk full')),
+      appendMany: () => Promise.reject(new Error('disk full')),
     };
     const { service, log, id } = world(failing);
 
