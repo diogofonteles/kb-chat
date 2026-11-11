@@ -25,6 +25,7 @@ Pedido do dono, prioridade: cada faixa transcrita vira um documento do acervo, c
 | [KBC-100](KBC-100-track-documents-always-up-to-date.md) | **Prioridade.** Documentos das faixas sempre em dia: regerar e remover a cada mudança (KBC-093 incluído), fila visível com o Mac desligado, faixas antigas, publicação automática na produção | phase-2-research-media | ready | KBC-099, KBC-073 |
 | [KBC-101](KBC-101-tracks-in-exhaustive-research-and-see-also.md) | **Prioridade.** Faixas como documentos na busca e no Exaustivo: lista de documentos, facetas e contagens da busca (T2) com ♪ e sem repetir "Na fala", "Veja também", varredura e cobertura, filtros de autoria e origem, sub-acervos | phase-2-research-media | ready | KBC-099, KBC-030 |
 | [KBC-114](KBC-114-automatic-vault-topic-and-background-transcriber.md) | **Urgente.** Pasta do acervo no vault criada sozinha pelo transcritor (`kb topic new`, sub-acervos), transcrições pendentes publicadas por um clique onde aparece "0 documentos", transcritor em background (LaunchAgent) com status no app | phase-2-research-media | ready | KBC-099, KBC-100, KBC-036, KBC-048 |
+| [KBC-116](KBC-116-move-media-to-production.md) | Levar as mídias do Mac para a produção: pacote verificado por hash, importação repetível e incremental (só o que mudou, nada apagado), pessoas pelo e-mail, níveis sem abrir nada, conferência e rollback (ADR 0038) | release | in-progress | KBC-034, KBC-041, KBC-099, KBC-105, KBC-113 |
 
 ### Níveis de acesso por acervo (pedido de 2026-11-06)
 
