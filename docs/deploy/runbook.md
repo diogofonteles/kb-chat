@@ -292,8 +292,10 @@ A mídia fica desligada até o player completo (KBC-041) estar em produção, po
 
 ```bash
 ssh -t ubuntu@<IP>
-# a pasta da mídia (o deploy também a cria): banco SQLite e áudio convertido, do usuário do app
+# a pasta da mídia (o deploy também a cria): banco SQLite e áudio convertido, do usuário do app;
+# o chown/chmod corrige uma pasta que o Docker criou como root (KBC-116)
 sudo install -d -o 10001 -g 10001 -m 0700 /srv/kb-chat/media
+sudo chown 10001:10001 /srv/kb-chat/media && sudo chmod 0700 /srv/kb-chat/media
 # o token do processador de mídia, gerado na VM direto no .env, nunca exibido (ADR 0022)
 sudo sh -c 'printf "KB_CHAT_MEDIA_WORKER_TOKEN=%s\n" "$(openssl rand -base64 32)" >> /srv/kb-chat/deploy/.env'
 # liga a mídia na API e o contêiner do processador (some ",codex" se o Codex já estiver ligado)
@@ -309,6 +311,113 @@ sudo docker compose --env-file .env --env-file release.env ps media-worker   # h
 - Quem pode enviar: masters sempre; outras pessoas, com a permissão **Enviar áudios** em Pessoas e permissões.
 - O backup diário leva uma cópia consistente de `media.db` (nunca os áudios, que vêm de quem enviou). A pasta `media/voice-prints/` fica **fora** do backup de propósito (ADR 0032): impressão de voz revogada não pode sobreviver em cópia. `media/voice-revocations.list` também fica fora, para um backup antigo não desfazer uma revogação (seção 11). Perdido o disco, cada perfil pede "Calcular de novo".
 - Para desligar: `KB_CHAT_MEDIA=off` e tire `media` de `COMPOSE_PROFILES`; os arquivos ficam em `/srv/kb-chat/media`.
+
+## 9f. 👤 DONO — levar as mídias do Mac para a produção (KBC-116, ADR 0038)
+
+A produção só recebe mídia por esta migração: nunca transcreve de novo, e o transcritor continua no Mac. O comando é o mesmo na primeira vez e nas seguintes: leva só o que mudou, nunca apaga nada na produção e nunca sobrescreve o que mudou lá. A unidade é a gravação com as suas faixas.
+
+**Vai:** as mídias `ready`, os arquivos de áudio, as transcrições (com o índice de "Na fala"), as correções, o aprendizado (termos e chaves), a separação de vozes e os nomes, as faixas, os assuntos, a forma de onda, os silêncios, o estado dos documentos de faixa, o histórico da fila (só o que terminou), o nível de cada mídia, a autoria, os autores que faltam no acervo, e o progresso, os marcadores e as preferências de quem existe na produção (pelo e-mail).
+**Não vai:** impressões de voz, a lista de revogações, consentimentos e perfis de voz (ADR 0032); uploads incompletos e gravações com trabalho em andamento no Mac (vão na próxima vez); transcritores pareados, gastos, ajustes de mídia.
+
+**Antes:** a release com o KBC-116 em produção (`ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/deploy.sh --status`: o `running=` é o SHA do merge ou mais novo). A importação é sempre feita pela imagem que está no ar, e as migrações do Mac e da produção têm de ser iguais: rode do checkout do Mac na mesma release (`git switch main && git pull`); senão ela recusa e diz qual lado atualizar.
+
+### Passo a passo (primeira vez)
+
+1. **Backup** (o serviço roda `deploy/scripts/backup-state.sh`, com o snapshot do `media.db` quando ele existe; confira que deu certo):
+
+   ```bash
+   ssh ubuntu@<IP> 'sudo systemctl start kb-chat-backup && sudo /srv/kb-chat/deploy/scripts/deploy.sh --status'   # backup=ok <hora de agora>
+   ```
+
+2. **Ligar a mídia na VM**, uma vez (seção 9d; o token é gerado na VM, direto no `.env`, e nunca aparece):
+
+   ```bash
+   ssh -t ubuntu@<IP>
+   sudo install -d -o 10001 -g 10001 -m 0700 /srv/kb-chat/media
+   sudo chown 10001:10001 /srv/kb-chat/media && sudo chmod 0700 /srv/kb-chat/media   # hoje ela está como root
+   sudo grep -q '^KB_CHAT_MEDIA_WORKER_TOKEN=.' /srv/kb-chat/deploy/.env ||
+     sudo sh -c 'printf "KB_CHAT_MEDIA_WORKER_TOKEN=%s\n" "$(openssl rand -base64 32)" >> /srv/kb-chat/deploy/.env'
+   sudo sed -i '/^KB_CHAT_MEDIA=/d' /srv/kb-chat/deploy/.env && echo 'KB_CHAT_MEDIA=on' | sudo tee -a /srv/kb-chat/deploy/.env
+   sudo grep '^COMPOSE_PROFILES=' /srv/kb-chat/deploy/.env   # sem linha: a de baixo; com "codex": troque por COMPOSE_PROFILES=codex,media
+   echo 'COMPOSE_PROFILES=media' | sudo tee -a /srv/kb-chat/deploy/.env
+   cd /srv/kb-chat/deploy
+   sudo docker compose --env-file .env --env-file release.env up -d --wait api media-worker
+   sudo docker compose --env-file .env --env-file release.env ps api media-worker   # os dois healthy
+   ```
+
+3. **Sync do vault** (seção 7): os documentos das faixas e as pastas dos acervos vão antes da mídia.
+
+   ```bash
+   deploy/scripts/sync-vault.sh --host ubuntu@<IP> --dry-run
+   deploy/scripts/sync-vault.sh --host ubuntu@<IP>
+   ssh ubuntu@<IP> 'ls /srv/kb-chat/vault/{hermetismo,udv,udv/palavra-do-mestre}/topic.yaml'   # os três acervos
+   ```
+
+4. **Ensaio** (a API fica no ar; importa numa cópia do banco e não muda nada):
+
+   ```bash
+   deploy/scripts/push-media.sh --host ubuntu@<IP> --dry-run
+   ```
+
+   Monta o pacote em `~/.cache/kb-chat/media-package` (só lê `~/.kb-chat-media` e `~/.kb-chat`), manda por `rsync` para `/srv/kb-chat/media-inbox/package` e roda `import-media.sh --dry-run`, que confere o sha256 de cada arquivo antes de tudo. Esperado hoje: `inserted 11, updated 0, unchanged 0, held 0`, `people mapped 1` (o dono), código 0. Qualquer `held` aparece com o motivo; veja a tabela abaixo antes de seguir.
+
+5. **Migração** (a API e o processador param enquanto a importação roda, cerca de um minuto):
+
+   ```bash
+   deploy/scripts/push-media.sh --host ubuntu@<IP>
+   ```
+
+   Antes de importar, o script guarda `media/backup/media.db.before-import-<UTC>` e `state/authors.json.before-import-<UTC>`; depois sobe a pilha e roda o smoke. O relatório fica em `/srv/kb-chat/deploy/media-import-<UTC>.log`. Esperado hoje: `inserted 11`, `files copied 90`, `check ok`, código 0.
+
+6. **Conferência:**
+
+   ```bash
+   ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/import-media.sh --verify   # check ok: integrity ok, broken keys 0, index 3101/3101
+   deploy/scripts/push-media.sh --host ubuntu@<IP> --dry-run                    # inserted 0, updated 0, unchanged 11, held 0
+   deploy/scripts/smoke.sh https://kb.<seu-domínio>
+   ```
+
+   Na tela, como dono: a Biblioteca tem as 73 mídias (hermetismo 11, udv 33, udv/palavra-do-mestre 29); um áudio toca e pula para um minuto; "Na fala" acha uma palavra da transcrição; uma faixa abre com as correções. Como uma pessoa sem o acervo: nada aparece.
+
+### As próximas vezes
+
+Depois de transcrever ou editar no Mac: passos 3 a 6 (sync do vault, ensaio, migração, conferência). Só as gravações novas ou mudadas no Mac vão; uma gravação que alguém mudou na produção depois da última importação fica retida.
+
+| Código | Significa |
+|---|---|
+| 0 | tudo levado e conferido, nada retido |
+| 3 | algo ficou retido (listado com o motivo); o resto foi levado |
+| 1 | falha: a unidade que falhou não mudou nada; leia o relatório |
+
+| Retido por | O que fazer |
+|---|---|
+| `acervo ausente na produção` | rode o sync do vault (passo 3) e repita |
+| `escala ausente na produção` | a mídia tem nível no Mac e o acervo não tem escala na produção: crie a escala lá (Níveis) e repita; sem escala, o nível não restringiria ninguém |
+| `mudou na produção desde a última importação` | alguém editou na produção: decida qual vale; a migração nunca mescla |
+| `faixa removida no Mac` | a produção tem uma faixa que o Mac não tem mais: a migração nunca apaga |
+| `arquivo diferente na produção` / `já existe na produção sem registro` | um arquivo ou mídia com o mesmo id e outro conteúdo: investigue antes |
+| `em andamento no Mac` | termine o preparo no Mac (fila, corte); vai na próxima |
+
+**Níveis:** o nível vai na primeira importação e depois é da produção (uma atualização nunca o muda). Um nível que a escala da produção não tem (os ids são fixos; um nível recriado ganha sufixo, como `ci-2`) chega como "Sem nível", só para masters, e o relatório diz o código do Mac. Hoje nenhuma mídia tem nível e nenhuma escala existe: quando um master criar a escala na produção, as mídias vão para o nível mais baixo (ADR 0036 §4).
+**Pessoas:** pelo e-mail. Quem não existe na produção não leva progresso nem marcadores (o relatório conta); a autoria registrada vai como está.
+
+### Rollback
+
+1. Pare a API e o processador; ponha o banco de antes no lugar; devolva os autores; suba:
+
+   ```bash
+   ssh -t ubuntu@<IP>
+   cd /srv/kb-chat/deploy && S=<UTC do relatório>
+   sudo docker compose --env-file .env --env-file release.env stop api media-worker
+   sudo sh -c "cd /srv/kb-chat/media && mkdir -p ../media.after-import-$S && mv media.db media.db-wal media.db-shm ../media.after-import-$S/ 2>/dev/null; cp -p backup/media.db.before-import-$S media.db && chown 10001:10001 media.db"
+   sudo cp -p /srv/kb-chat/state/authors.json.before-import-$S /srv/kb-chat/state/authors.json
+   sudo docker compose --env-file .env --env-file release.env up -d --wait
+   ```
+
+2. Na primeira importação não há `before-import` do banco (a produção não tinha `media.db`): mova `media.db*` para `media.after-import-$S/` e suba; a API cria um banco vazio. Ou desligue a mídia (seção 9d).
+3. Os arquivos copiados ficam em `media/audio` e `media/transcripts`, sem linha que os cite (não aparecem); a lista está no relatório (`--json` no ensaio).
+4. Nunca toque em `media/voice-prints/` nem em `media/voice-revocations.list` (seção 11).
+5. Voltar a imagem para antes do KBC-116 (`rollback.sh`) é seguro: a migração 32 só criou a tabela `media_imports`, que a versão anterior ignora.
 
 ## 9b. 👤 DONO — IA da aplicação (na tela, depois do primeiro deploy)
 
@@ -351,6 +460,7 @@ Atualizar o hub é repetir o passo 3: as páginas abertas pegam a versão nova s
 | Voltar uma versão | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/rollback.sh` (ou `rollback.sh <sha>`; `--list` mostra o histórico). Um segundo rollback continua voltando (C → B → A), nunca volta para a versão da qual saiu **Atenção (ADR 0017):** a primeira versão com o KBC-022 cifra as chaves de IA salvas; voltar para uma versão anterior a ela deixa essas chaves ilegíveis (as pessoas e o master conectam de novo, ou restaure o backup do estado de antes do deploy, passo 11) |
 | O que está no ar | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/deploy.sh --status` (tag das imagens em execução e saúde do backup: `ok`, `failed`, `stale` ou `never`) |
 | Atualizar o acervo | `deploy/scripts/sync-vault.sh --host ubuntu@<IP>` |
+| Levar as mídias novas do Mac | depois do sync: `deploy/scripts/push-media.sh --host ubuntu@<IP> --dry-run`, depois sem `--dry-run` (seção 9f) |
 | Logs | `ssh ubuntu@<IP> 'cd /srv/kb-chat/deploy && sudo docker compose --env-file .env --env-file release.env logs -f --tail 200'` |
 | Saúde | `curl -s https://kb.<seu-domínio>/health` (`degraded` = QMD parado, busca pelo `kb`) |
 | Uso de recursos | `ssh ubuntu@<IP> 'sudo docker stats --no-stream; free -h; df -h /srv/kb-chat'` |
