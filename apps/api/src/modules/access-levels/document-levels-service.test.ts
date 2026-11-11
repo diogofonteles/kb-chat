@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryDocumentStore } from '../../adapters/memory-document-store.js';
 import { MemoryLevelAudit } from '../../adapters/memory-level-audit.js';
 import type { DocumentStorePort } from '../../ports/document-store.js';
@@ -90,6 +90,32 @@ async function world(
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
+const T0 = Date.parse('2026-11-11T12:00:00.000Z');
+
+/** Fixes the clock (only `Date`: timers and promises run as usual). */
+const at = (time: number) => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(time);
+};
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+/** A presence store whose writes fail while `failing` is on (a disk error). */
+function switchable() {
+  const inner = new MemoryDocumentStore();
+  const store = {
+    failing: false,
+    read: () => inner.read(),
+    write: (value: object) =>
+      store.failing
+        ? Promise.reject(new Error('disk full'))
+        : inner.write(value),
+  };
+  return store;
+}
+
 describe('DocumentLevelsService (KBC-107 review round 1)', () => {
   it('QA-1 (X-11), BR-3: a document that arrives after the list, still without its presence mark, stays out of a bulk by filter', async () => {
     const { store, gate } = heldStore();
@@ -120,24 +146,69 @@ describe('DocumentLevelsService (KBC-107 review round 1)', () => {
   });
 
   it('QA-1, R1-6: with no presence mark at all (a failed reconcile), a document is shown as arrived now, never in 1970', async () => {
+    at(T0);
     const failing: DocumentStorePort = {
       read: async () => null,
       write: () => Promise.reject(new Error('disk full')),
     };
     const { vault, catalog, service } = await world({ presence: failing });
     vault.ids = [...vault.ids, 'raw/c.md'];
-    const before = new Date().toISOString();
     await catalog.load();
+    at(T0 + 1000);
     const page = await service.unassigned(master, 'hermetismo', {});
     for (const item of page.items)
-      expect(item.firstSeenAt >= before.slice(0, 10)).toBe(true);
+      expect(item.firstSeenAt).toBe(new Date(T0 + 1000).toISOString());
+    at(T0 + 5000);
     const result = await service.bulk(who, 'hermetismo', {
       level: 'qs',
-      filter: { asOf: before },
+      filter: { asOf: page.asOf },
     });
     expect(result.updated).toBe(0);
-    // R2-1: the confirmed rows the filter left out are said, not silently dropped.
+    // R2-1, R3-1: the confirmed rows the filter left out are said, not silently dropped.
     expect(result.skipped).toBe(3);
+  });
+
+  it.each([
+    [1, ['raw/c.md']],
+    [2, ['raw/c.md', 'raw/d.md']],
+  ])(
+    'R3-1: %i row(s) the list counted with no mark come back as skipped, the clock running between list and bulk',
+    async (count, unmarked) => {
+      at(T0);
+      const presence = switchable();
+      const { vault, catalog, service } = await world({ presence });
+      presence.failing = true;
+      vault.ids = [...vault.ids, ...unmarked];
+      await catalog.load();
+      at(T0 + 1000);
+      const listed = await service.unassigned(master, 'hermetismo', {});
+      expect(listed.matched).toBe(2 + count);
+      at(T0 + 60_000);
+      const result = await service.bulk(who, 'hermetismo', {
+        level: 'qs',
+        filter: { asOf: listed.asOf },
+      });
+      expect(result).toMatchObject({ updated: 2, skipped: count });
+    },
+  );
+
+  it('R3-1: a marked arrival after the asOf is neither placed nor skipped', async () => {
+    at(T0);
+    const { vault, catalog, service } = await world();
+    at(T0 + 1000);
+    const listed = await service.unassigned(master, 'hermetismo', {});
+    at(T0 + 2000);
+    vault.ids = [...vault.ids, 'raw/c.md'];
+    await catalog.load();
+    await service.unassigned(master, 'hermetismo', {});
+    at(T0 + 3000);
+    const result = await service.bulk(who, 'hermetismo', {
+      level: 'qs',
+      filter: { asOf: listed.asOf },
+    });
+    expect(result).toMatchObject({ updated: 2, skipped: 0 });
+    const left = await service.unassigned(master, 'hermetismo', {});
+    expect(left.items.map((one) => one.id)).toEqual(['raw/c.md']);
   });
 
   it('QA-3: a bulk that finds nothing writes no audit line and answers updated 0', async () => {
@@ -183,17 +254,27 @@ describe('DocumentLevelsService (KBC-107 review round 1)', () => {
     const listed = await service.unassigned(master, 'hermetismo', {});
     const error = vi.fn();
     await expect(
-      service.bulk({ ...who, log: { error } }, 'hermetismo', {
-        level: 'qs',
-        filter: { asOf: listed.asOf },
-      }),
+      service.bulk(
+        {
+          ...who,
+          actor: { by: master.email, actingAs: 'ana@example.com' },
+          log: { error },
+        },
+        'hermetismo',
+        {
+          level: 'qs',
+          filter: { asOf: listed.asOf },
+        },
+      ),
     ).rejects.toThrow('disk full');
     expect(directory.placementsOf('hermetismo')['raw/a.md']?.level).toBe('qs');
     expect(error).toHaveBeenCalledWith(
       expect.objectContaining({
+        at: expect.any(String),
         collection: 'hermetismo',
         level: 'qs',
         by: master.email,
+        actingAs: 'ana@example.com',
         documents: 2,
         filter: { asOf: listed.asOf },
         ids: [
@@ -203,5 +284,29 @@ describe('DocumentLevelsService (KBC-107 review round 1)', () => {
       }),
       'document levels placed but not audited',
     );
+  });
+
+  it('R3-2: the log names the first 50 ids of a large bulk, with the total', async () => {
+    const failing: LevelAuditPort = {
+      append: () => Promise.reject(new Error('disk full')),
+      appendMany: () => Promise.reject(new Error('disk full')),
+    };
+    const { vault, catalog, service } = await world({ audit: failing });
+    vault.ids = Array.from({ length: 60 }, (_, n) => `raw/doc-${n}.md`);
+    await catalog.load();
+    const listed = await service.unassigned(master, 'hermetismo', {});
+    const error = vi.fn();
+    await expect(
+      service.bulk({ ...who, log: { error } }, 'hermetismo', {
+        level: 'qs',
+        ids:
+          listed.items.length > 0
+            ? vault.ids.map((id) => ({ topic: 'hermetismo', id }))
+            : [],
+      }),
+    ).rejects.toThrow('disk full');
+    const [fields] = error.mock.calls[0] ?? [];
+    expect(fields).toMatchObject({ documents: 60 });
+    expect(fields.ids).toHaveLength(50);
   });
 });

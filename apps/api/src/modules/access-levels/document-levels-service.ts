@@ -210,11 +210,16 @@ export class DocumentLevelsService {
     request: BulkLevelRequest,
   ): { targets: Target[]; skipped: number; filter: BulkAuditFilter } {
     if ('filter' in request) {
-      // QA-1: a row with no sighting recorded yet has no known arrival: never in a filter.
-      const kept = this.queue(person, root).filter(matches(request.filter));
+      const { asOf, ...shown } = request.filter;
+      // QA-1: a row with no sighting recorded has no known arrival, so it is never placed by
+      // a filter; R3-1: the list counted it (its "now" was before its own `asOf`), so it is
+      // judged without the `asOf` and comes back as skipped. A recorded arrival after the
+      // `asOf` stays out of both.
+      const kept = this.queue(person, root)
+        .filter(matches(shown))
+        .filter((row) => !this.sighted(row) || row.firstSeenAt <= asOf);
       const rows = kept.filter((row) => this.sighted(row));
       const targets = rows.flatMap((row) => this.targetOf(person, row) ?? []);
-      // R2-1: what the list counted and the bulk left out is said as skipped.
       const skipped = kept.length - targets.length;
       return { targets, skipped, filter: request.filter };
     }
@@ -249,7 +254,13 @@ export class DocumentLevelsService {
       // The levels file cannot join the audit's write: the log is then the only trace of
       // what was applied (R2-2, as the media seed does, ADR 0036 §11).
       who.log?.error(
-        { err, by: actor.by, ...appliedOf(change) },
+        {
+          err,
+          at,
+          by: actor.by,
+          ...(actor.actingAs && { actingAs: actor.actingAs }),
+          ...appliedOf(change),
+        },
         'document levels placed but not audited',
       );
       throw err;
@@ -406,13 +417,21 @@ export class DocumentLevelsService {
   }
 }
 
-/** What a write applied, for the log when its audit fails (no titles, ids only). */
+/** The ids a log line names: the first ones; `setAt` equal to `at` finds the rest (R3-2). */
+const LOGGED_IDS_MAX = 50;
+
+/**
+ * What a write applied, for the log when its audit fails: ids (vault paths), no titles or
+ * bodies; the first 50, with `documents` the total.
+ */
 const appliedOf = (change: LevelChange) => ({
   collection: change.bulk?.root ?? change.targets[0]?.topic,
   level: change.level.id,
   documents: change.targets.length,
   filter: change.bulk?.filter,
-  ids: change.targets.map(({ topic, entry }) => ({ topic, id: entry.id })),
+  ids: change.targets
+    .slice(0, LOGGED_IDS_MAX)
+    .map(({ topic, entry }) => ({ topic, id: entry.id })),
 });
 
 /** What one write sets: a level on documents, and for a bulk its line (BR-4). */
