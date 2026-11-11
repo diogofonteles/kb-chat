@@ -16,6 +16,8 @@ import type {
   AppAi,
   InvitePreset,
   InviteProfile,
+  InviteProfileView,
+  LevelScales,
   Topic,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
@@ -23,6 +25,7 @@ import type { Observable } from 'rxjs';
 import { InvitePresetEditor } from './invite-preset-editor.js';
 import { InviteProfilesStore } from './invite-profiles-store.js';
 import { plainPreset } from './preset-defaults.js';
+import { withPresetLevels } from './level-rows.js';
 
 /** The profile being written: a new one has no id yet. */
 interface Draft {
@@ -30,6 +33,8 @@ interface Draft {
   readonly name: string;
   readonly isDefault: boolean;
   readonly preset: InvitePreset;
+  /** The profile's levels that no longer exist (KBC-109 FR-4). */
+  readonly staleLevels: Readonly<Record<string, string>>;
 }
 
 type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
@@ -52,6 +57,8 @@ export class InviteProfilesPanel {
   protected readonly store = inject(InviteProfilesStore);
   readonly topics = input.required<readonly Topic[]>();
   readonly defaultAppAi = input<AppAi | null>(null);
+  /** The collections with access levels (KBC-109 FR-5). */
+  readonly scales = input<LevelScales['items']>([]);
 
   private readonly nameInput =
     viewChild<ElementRef<HTMLInputElement>>('nameInput');
@@ -76,11 +83,24 @@ export class InviteProfilesPanel {
   protected readonly notice = signal<Notice>(null);
 
   protected startNew(): void {
-    this.open({ id: null, name: '', isDefault: false, preset: plainPreset() });
+    this.open({
+      id: null,
+      name: '',
+      isDefault: false,
+      preset: plainPreset(),
+      staleLevels: {},
+    });
   }
 
-  protected edit(profile: InviteProfile): void {
-    this.open({ ...profile });
+  /** A level that no longer exists opens at the lowest one, with its warning (BR-3). */
+  protected edit(profile: InviteProfileView): void {
+    const { id, name, isDefault, staleLevels } = profile;
+    const preset = withPresetLevels(
+      profile.preset,
+      this.topics(),
+      this.scales(),
+    );
+    this.open({ id, name, isDefault, preset, staleLevels });
   }
 
   protected rename(name: string): void {

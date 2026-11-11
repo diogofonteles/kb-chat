@@ -485,3 +485,98 @@ describe('InvitePresetEditor explains the default collection (KBC-033)', () => {
     expect(screen.getByText(HINT)).toBeTruthy();
   });
 });
+
+describe('InvitePresetEditor: levels (KBC-109 FR-5, BR-1, BR-5, AC-7)', () => {
+  const SCALES = [
+    {
+      collection: 'hermetismo',
+      levels: [
+        { id: 'qs', code: 'QS' },
+        { id: 'ci', code: 'CI' },
+      ],
+    },
+  ];
+
+  async function renderLevels(
+    preset: InvitationPreset,
+    staleLevels: Record<string, string> = {},
+  ) {
+    const changed = vi.fn();
+    const view = await render(InvitePresetEditor, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        preset,
+        topics: TOPICS.items,
+        scales: SCALES,
+        staleLevels,
+      },
+      on: { changed },
+    });
+    return { ...view, changed };
+  }
+
+  it('shows "Nível em Hermetismo" under a marked Hermetismo, the lowest by default, and sends the choice', async () => {
+    const { changed } = await renderLevels({
+      ...plainPreset(),
+      topics: ['hermetismo'],
+    });
+    const select = screen.getByRole<HTMLSelectElement>('combobox', {
+      name: 'Nível em Hermetismo',
+    });
+    expect(select.value).toBe('qs');
+    expect(
+      screen.getByRole('group', { name: 'Acervos' }).contains(select),
+    ).toBe(true);
+    fireEvent.change(select, { target: { value: 'ci' } });
+    expect(last(changed).levels).toEqual({ hermetismo: 'ci' });
+  });
+
+  it('BR-1: unmarking the collection drops its level; marking it gives the lowest', async () => {
+    const { changed } = await renderLevels({
+      ...plainPreset(),
+      topics: ['hermetismo'],
+      levels: { hermetismo: 'ci' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Hermetismo' }));
+    expect(last(changed).levels).toBeUndefined();
+    expect(last(changed).topics).toEqual([]);
+  });
+
+  it('BR-1: a collection without a scale gets no select and no level', async () => {
+    const { changed } = await renderLevels(plainPreset());
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Alquimia' }));
+    expect(screen.queryByRole('combobox', { name: /Nível em/ })).toBeNull();
+    expect(last(changed).levels).toBeUndefined();
+  });
+
+  it('BR-5: a master preset has no select, says why and keeps no level', async () => {
+    const { changed } = await renderLevels({
+      ...plainPreset(),
+      topics: ['hermetismo'],
+      levels: { hermetismo: 'ci' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: /^Master/ }));
+    expect(last(changed)).toMatchObject({ role: 'master' });
+    expect(last(changed).levels).toBeUndefined();
+  });
+
+  it('BR-3: warns about a level that no longer exists until another is chosen', async () => {
+    await renderLevels(
+      {
+        ...plainPreset(),
+        topics: ['hermetismo'],
+        levels: { hermetismo: 'qs' },
+      },
+      { hermetismo: 'cdc' },
+    );
+    const select = screen.getByRole<HTMLSelectElement>('combobox', {
+      name: 'Nível em Hermetismo',
+    });
+    const warning = screen.getByText(
+      /O nível cdc não existe mais; escolha outro\./,
+    );
+    expect(select.getAttribute('aria-describedby')).toBe(warning.id);
+    fireEvent.change(select, { target: { value: 'ci' } });
+    expect(screen.queryByText(/não existe mais/)).toBeNull();
+  });
+});

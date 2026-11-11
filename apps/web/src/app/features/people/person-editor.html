@@ -25,19 +25,8 @@
         }
       </span>
     </label>
-  } @empty {
-    <p class="note" i18n="@@people.noCollections">Nenhum acervo no vault.</p>
-  }
-</fieldset>
-
-@if (scales().length > 0) {
-  @if (isMaster()) {
-    <p class="note" i18n="@@people.mastersAllLevels">
-      Masters veem todos os níveis.
-    </p>
-  } @else {
-    @for (scale of levelChoices(); track scale.collection) {
-      <div class="field">
+    @if (levelRows().get(topic.slug); as scale) {
+      <div class="field level-field">
         <label
           [for]="'level-' + who.id + '-' + scale.collection"
           i18n="@@people.levelIn"
@@ -58,7 +47,15 @@
         </select>
       </div>
     }
+  } @empty {
+    <p class="note" i18n="@@people.noCollections">Nenhum acervo no vault.</p>
   }
+</fieldset>
+
+@if (scales().length > 0 && isMaster()) {
+  <p class="note" i18n="@@people.mastersAllLevels">
+    Masters veem todos os níveis.
+  </p>
 }
 
 <fieldset class="group" [disabled]="isMaster()" [attr.aria-busy]="saving()">

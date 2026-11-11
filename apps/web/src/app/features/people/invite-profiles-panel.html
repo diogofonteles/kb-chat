@@ -188,6 +188,8 @@
               [preset]="current.preset"
               [topics]="topics()"
               [defaultAppAi]="defaultAppAi()"
+              [scales]="scales()"
+              [staleLevels]="current.staleLevels"
               [busy]="busy()"
               (changed)="changePreset($event)"
               (invalidChange)="presetInvalid.set($event)"

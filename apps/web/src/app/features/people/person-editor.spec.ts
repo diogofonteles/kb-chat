@@ -42,14 +42,19 @@ async function renderEditor(person: Person) {
     providers: [provideZonelessChangeDetection()],
     inputs: {
       person,
-      topics: [
-        ...TOPICS.items,
-        aTopic({
-          slug: 'hermetismo/aulas',
-          title: 'Aulas',
-          parent: 'hermetismo',
-        }),
-      ],
+      // In the server's tree order: a sub-collection right after its parent.
+      topics: TOPICS.items.flatMap((topic) =>
+        topic.slug === 'hermetismo'
+          ? [
+              topic,
+              aTopic({
+                slug: 'hermetismo/aulas',
+                title: 'Aulas',
+                parent: 'hermetismo',
+              }),
+            ]
+          : [topic],
+      ),
       scales: SCALES,
     },
     on: { changed },
@@ -95,5 +100,21 @@ describe('PersonEditor: "Classificar nível de conteúdo" (T9, KBC-107 FR-3)', (
       name: 'Classificar nível de conteúdo',
     });
     expect(box).toHaveProperty('checked', false);
+  });
+});
+
+describe('PersonEditor: the level right under its collection (T9, KBC-109 AC-7)', () => {
+  it('places "Nível em Hermetismo" after Hermetismo and its sub-collection, before Alquimia', async () => {
+    await renderEditor(ana());
+    const group = screen.getByRole('group', { name: 'Acervos' });
+    const select = screen.getByRole('combobox', {
+      name: 'Nível em Hermetismo',
+    });
+    expect(group.contains(select)).toBe(true);
+    const aulas = screen.getByRole('checkbox', { name: /Aulas/ });
+    const alquimia = screen.getByRole('checkbox', { name: 'Alquimia' });
+    const follows = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(aulas.compareDocumentPosition(select) & follows).toBeTruthy();
+    expect(select.compareDocumentPosition(alquimia) & follows).toBeTruthy();
   });
 });

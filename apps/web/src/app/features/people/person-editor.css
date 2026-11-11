@@ -141,6 +141,12 @@ button:disabled {
   cursor: pointer;
 }
 
+/* "Nível em <acervo>" right under the collection it belongs to (T9, KBC-109). */
+.level-field {
+  padding-left: var(--space-6);
+  margin-bottom: var(--space-2);
+}
+
 .field-error {
   margin: 0;
   font-size: var(--text-sm);

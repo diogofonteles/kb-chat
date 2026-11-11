@@ -1120,3 +1120,116 @@ describe('PeoplePanel invitation profiles (KBC-028)', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
+
+describe('PeoplePanel: a level for the selection (T9, KBC-109 AC-6)', () => {
+  const SCALES = {
+    items: [
+      {
+        collection: 'hermetismo',
+        levels: [
+          { id: 'qs', code: 'QS' },
+          { id: 'ci', code: 'CI' },
+        ],
+      },
+    ],
+  };
+
+  async function renderWithScales(people: Person[]) {
+    const result = await render(PeoplePanel, {
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([authInterceptor])),
+        provideHttpClientTesting(),
+        { provide: RELOAD_PAGE, useValue: () => undefined },
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/people').flush({ items: people });
+    http.expectOne('/api/v1/topics').flush(TOPICS);
+    http
+      .expectOne('/api/v1/house-ai/default')
+      .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
+    http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
+    http.expectOne('/api/v1/levels').flush(SCALES);
+    await result.fixture.whenStable();
+    return { ...result, http };
+  }
+
+  it('sends the selected people and says who was left as they were', async () => {
+    const guest = aPerson({ topics: ['hermetismo'] });
+    const { http, fixture } = await renderWithScales([owner, guest]);
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar guest@example.com' }),
+    );
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar owner@example.com' }),
+    );
+    const bar = screen.getByRole('group', {
+      name: 'Nível para várias pessoas',
+    });
+    fireEvent.change(within(bar).getByRole('combobox', { name: 'Nível' }), {
+      target: { value: 'ci' },
+    });
+    await fixture.whenStable();
+    fireEvent.click(
+      within(bar).getByRole('button', {
+        name: 'Aplicar nível às selecionadas (2)',
+      }),
+    );
+
+    const sent = http.expectOne('/api/v1/people/levels');
+    expect(sent.request.method).toBe('POST');
+    expect(sent.request.body).toEqual({
+      ids: [guest.id, owner.id],
+      topic: 'hermetismo',
+      level: 'ci',
+    });
+    sent.flush({
+      collection: 'hermetismo',
+      level: { id: 'ci', code: 'CI' },
+      updated: 1,
+      unchanged: 0,
+      masters: 1,
+      withoutAccess: 0,
+      unknown: 0,
+    });
+    TestBed.tick();
+    http
+      .expectOne('/api/v1/people')
+      .flush({ items: [owner, { ...guest, levels: { hermetismo: 'ci' } }] });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Nível CI em Hermetismo aplicado a 1 pessoa. Masters veem todos os níveis.',
+    );
+  });
+
+  it('counts the people without access to the collection', async () => {
+    const guest = aPerson();
+    const { http, fixture } = await renderWithScales([owner, guest]);
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar guest@example.com' }),
+    );
+    fireEvent.change(screen.getByRole('combobox', { name: 'Nível' }), {
+      target: { value: 'qs' },
+    });
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Aplicar nível às selecionadas (1)' }),
+    );
+    http.expectOne('/api/v1/people/levels').flush({
+      collection: 'hermetismo',
+      level: { id: 'qs', code: 'QS' },
+      updated: 0,
+      unchanged: 0,
+      masters: 0,
+      withoutAccess: 2,
+      unknown: 0,
+    });
+    TestBed.tick();
+    http.expectOne('/api/v1/people').flush({ items: [owner, guest] });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      '2 pessoas sem acesso a Hermetismo ficaram como estavam.',
+    );
+  });
+});

@@ -1,7 +1,7 @@
 import { Injectable, computed, inject } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import type {
-  InviteProfile,
+  InviteProfileView,
   InviteProfileCreate,
   InviteProfileUpdate,
 } from '@kb-chat/contracts';
@@ -16,7 +16,7 @@ import { tap, type Observable } from 'rxjs';
 export class InviteProfilesStore {
   private readonly api = inject(InviteProfilesApi);
   private readonly resource = rxResource({ stream: () => this.api.list() });
-  readonly list = computed<readonly InviteProfile[]>(() =>
+  readonly list = computed<readonly InviteProfileView[]>(() =>
     this.resource.hasValue() ? this.resource.value() : [],
   );
   readonly failed = computed(() => this.resource.error() !== undefined);
@@ -24,7 +24,7 @@ export class InviteProfilesStore {
     () => this.list().find((profile) => profile.isDefault) ?? null,
   );
 
-  find(id: string): InviteProfile | null {
+  find(id: string): InviteProfileView | null {
     return this.list().find((profile) => profile.id === id) ?? null;
   }
 
@@ -32,11 +32,14 @@ export class InviteProfilesStore {
     this.resource.reload();
   }
 
-  create(profile: InviteProfileCreate): Observable<InviteProfile> {
+  create(profile: InviteProfileCreate): Observable<InviteProfileView> {
     return this.api.create(profile).pipe(tap(() => this.reload()));
   }
 
-  update(id: string, patch: InviteProfileUpdate): Observable<InviteProfile> {
+  update(
+    id: string,
+    patch: InviteProfileUpdate,
+  ): Observable<InviteProfileView> {
     return this.api.update(id, patch).pipe(tap(() => this.reload()));
   }
 

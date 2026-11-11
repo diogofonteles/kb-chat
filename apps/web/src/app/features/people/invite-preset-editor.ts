@@ -26,6 +26,7 @@ import {
   type Feature,
   type InvitationPreset,
   type LentSubscription,
+  type LevelScales,
   type Topic,
 } from '@kb-chat/contracts';
 import { assignmentLabel } from '@features/house-ai/app-ai-labels.js';
@@ -34,6 +35,11 @@ import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { THEME_COPY, VIEW_COPY } from '@features/settings/provider-copy.js';
 import { collectionChoices, treeTitle } from '@core/topics/topic-tree.js';
 import { FEATURE_LABELS } from './feature-labels.js';
+import {
+  NO_LEVEL_ROWS,
+  levelRowsAfter,
+  withPresetLevels,
+} from './level-rows.js';
 import {
   LEND_COPY,
   LEND_NOT_OFFERED,
@@ -78,6 +84,10 @@ export class InvitePresetEditor {
    * so its editor keeps the default (none).
    */
   readonly lending = input<Lending>(NO_LENDING);
+  /** The collections with access levels and their levels (KBC-109 FR-5). */
+  readonly scales = input<LevelScales['items']>([]);
+  /** A profile's levels that no longer exist (KBC-109 FR-4): each warns until replaced. */
+  readonly staleLevels = input<Readonly<Record<string, string>>>({});
   readonly changed = output<InvitationPreset>();
   /** True while a typed number is not kept: the invitation or profile waits (design D4). */
   readonly invalidChange = output<boolean>();
@@ -96,6 +106,28 @@ export class InvitePresetEditor {
   protected readonly collections = computed(() =>
     collectionChoices(this.topics(), this.preset().topics, this.isMaster()),
   );
+  /**
+   * "Nível em <acervo>" right under each collection with levels that the preset reaches; a
+   * master has none (KBC-109 BR-5). Keyed by the row it follows.
+   */
+  protected readonly levelRows = computed(() =>
+    this.isMaster()
+      ? NO_LEVEL_ROWS
+      : levelRowsAfter(this.topics(), this.scales(), {
+          granted: this.preset().topics,
+          levels: this.preset().levels ?? {},
+        }),
+  );
+  /** The stale levels the master has already replaced here. */
+  private readonly replaced = signal<ReadonlySet<string>>(new Set());
+  protected readonly staleNotes = computed(() => {
+    const replaced = this.replaced();
+    return new Map(
+      Object.entries(this.staleLevels()).filter(
+        ([root]) => !replaced.has(root),
+      ),
+    );
+  });
   /** A master's own features (ADR 0032) are not offered to a member. */
   protected readonly features = computed(() =>
     (this.isMaster() ? MASTER_FEATURES : GRANTABLE_FEATURES).map((id) => ({
@@ -218,6 +250,11 @@ export class InvitePresetEditor {
       return { defaultTopic: only };
     }
     return {};
+  }
+
+  protected chooseLevel(collection: string, level: string): void {
+    this.replaced.update((done) => new Set([...done, collection]));
+    this.emit({ levels: { ...this.preset().levels, [collection]: level } });
   }
 
   protected toggleFeature(feature: Feature, on: boolean): void {
@@ -352,6 +389,8 @@ export class InvitePresetEditor {
     const kept = Object.fromEntries(
       Object.entries(merged).filter(([, value]) => value !== undefined),
     ) as InitialPreferences;
-    this.changed.emit({ ...this.preset(), ...patch, preferences: kept });
+    // Only the collections with levels it reaches keep one (KBC-109 BR-1).
+    const next = { ...this.preset(), ...patch, preferences: kept };
+    this.changed.emit(withPresetLevels(next, this.topics(), this.scales()));
   }
 }

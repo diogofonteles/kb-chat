@@ -34,8 +34,45 @@
         }
       </span>
     </label>
+    @if (levelRows().get(topic.slug); as row) {
+      @let stale = staleNotes().get(row.collection);
+      <div class="field level-field">
+        <label [for]="uid + '-level-' + row.collection" i18n="@@people.levelIn"
+          >Nível em {{ row.title }}</label
+        >
+        <select
+          #levelSelect
+          class="select"
+          [id]="uid + '-level-' + row.collection"
+          [attr.aria-describedby]="
+            stale ? uid + '-stale-' + row.collection : null
+          "
+          (change)="chooseLevel(row.collection, levelSelect.value)"
+        >
+          @for (level of row.choices; track level.id) {
+            <option [value]="level.id" [selected]="level.id === row.current">
+              {{ level.code }}
+            </option>
+          }
+        </select>
+        @if (stale) {
+          <span
+            class="field-error"
+            [id]="uid + '-stale-' + row.collection"
+            i18n="@@preset.staleLevel"
+            ><span aria-hidden="true">⚠</span> O nível {{ stale }} não existe
+            mais; escolha outro.</span
+          >
+        }
+      </div>
+    }
   } @empty {
     <p class="note" i18n="@@people.noCollections">Nenhum acervo no vault.</p>
+  }
+  @if (isMaster() && scales().length > 0) {
+    <p class="note" i18n="@@people.mastersAllLevels">
+      Masters veem todos os níveis.
+    </p>
   }
 </fieldset>
 

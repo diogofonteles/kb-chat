@@ -94,6 +94,8 @@
         [topics]="topics()"
         [defaultAppAi]="defaultAppAi()"
         [lending]="lending()"
+        [scales]="scales()"
+        [staleLevels]="draftStaleLevels()"
         [busy]="busy()"
         (changed)="draftPreset.set($event)"
         (invalidChange)="presetInvalid.set($event)"
@@ -152,6 +154,7 @@
 <app-invite-profiles-panel
   [topics]="topics()"
   [defaultAppAi]="defaultAppAi()"
+  [scales]="scales()"
 />
 
 <app-access-requests-list (approved)="welcome($event)" />
@@ -183,6 +186,15 @@
     [busy]="busy()"
     (apply)="assign($event)"
   />
+  @if (scales().length > 0) {
+    <app-people-level-bar
+      [scales]="scales()"
+      [topics]="topics()"
+      [selectedCount]="selected().size"
+      [busy]="busy()"
+      (apply)="assignLevel($event)"
+    />
+  }
   <label class="select-all">
     <input
       #allBox

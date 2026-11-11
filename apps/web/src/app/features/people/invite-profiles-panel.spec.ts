@@ -291,3 +291,49 @@ describe('InviteProfilesPanel (KBC-028 FR-2)', () => {
     ).toBe(true);
   });
 });
+
+describe('InviteProfilesPanel: a level that no longer exists (KBC-109 AC-4, BR-3)', () => {
+  it('opens the profile at the lowest level with the warning, and saves the lowest', async () => {
+    const stale = {
+      ...aluno,
+      preset: { ...aluno.preset, levels: { hermetismo: 'ci' } },
+      staleLevels: { hermetismo: 'ci' },
+    };
+    const result = await render(InviteProfilesPanel, {
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        InviteProfilesStore,
+      ],
+      inputs: {
+        topics: TOPICS.items,
+        defaultAppAi: 'house',
+        scales: [
+          { collection: 'hermetismo', levels: [{ id: 'qs', code: 'QS' }] },
+        ],
+      },
+    });
+    const http = TestBed.inject(HttpTestingController);
+    TestBed.tick();
+    http.expectOne(URL).flush({ items: [stale] });
+    await result.fixture.whenStable();
+    host = result.fixture.nativeElement as HTMLElement;
+    openSection();
+    await result.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: /Editar\s+Aluno/ }));
+    await result.fixture.whenStable();
+
+    expect(
+      screen.getByRole<HTMLSelectElement>('combobox', {
+        name: 'Nível em Hermetismo',
+      }).value,
+    ).toBe('qs');
+    expect(
+      screen.getByText(/O nível ci não existe mais; escolha outro\./),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar perfil' }));
+    const saved = http.expectOne(`${URL}/${aluno.id}`);
+    expect(saved.request.body.preset.levels).toEqual({ hermetismo: 'qs' });
+  });
+});
