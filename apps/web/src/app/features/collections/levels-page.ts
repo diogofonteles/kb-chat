@@ -342,6 +342,14 @@ export class LevelsPage {
     this.focusAfterRender(() => this.heading());
   }
 
+  /** The level was deleted by someone else while its dialog was open (R2-3). */
+  protected levelGone(code: string): void {
+    this.announcement.set(
+      $localize`:@@levels.goneMeanwhile:${code}:code: já foi apagado por outra pessoa. A escala foi atualizada.`,
+    );
+    this.focusAfterRender(() => this.heading());
+  }
+
   /** Someone changed the scale meanwhile: what is on screen is read again (BR-3). */
   protected refresh(): void {
     this.written.set(null);

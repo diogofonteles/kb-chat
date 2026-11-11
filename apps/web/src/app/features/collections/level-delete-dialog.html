@@ -4,7 +4,7 @@
   aria-labelledby="level-delete-title"
   aria-describedby="level-delete-what"
 >
-  <p class="recounted" role="status">{{ recounted() }}</p>
+  <p #status class="recounted" role="status" tabindex="-1">{{ recounted() }}</p>
   @if (all()) {
     <h2 id="level-delete-title" i18n="@@levels.clearTitle">
       Tirar todos os níveis

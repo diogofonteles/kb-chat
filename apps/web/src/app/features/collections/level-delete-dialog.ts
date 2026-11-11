@@ -20,7 +20,7 @@ import type {
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { LevelsApi } from '@core/levels/levels-api.js';
-import { finalize, type Observable } from 'rxjs';
+import { finalize, type Observable, type Subscription } from 'rxjs';
 
 /** One level, or every level of the scale. */
 type Removing =
@@ -65,6 +65,10 @@ export class LevelDeleteDialog {
     viewChild<ElementRef<HTMLButtonElement>>('confirmButton');
   private readonly nameInput =
     viewChild<ElementRef<HTMLInputElement>>('nameInput');
+  private readonly status =
+    viewChild<ElementRef<HTMLParagraphElement>>('status');
+  /** The preview or the re-read on its way: cancelled when the dialog opens again (R2-2). */
+  private pending: Subscription | null = null;
 
   /** The collection (a top-level one), its title and its scale as shown. */
   readonly topic = input.required<string>();
@@ -74,6 +78,8 @@ export class LevelDeleteDialog {
   readonly done = output<TopicLevels>();
   /** Told when the scale changed under the dialog: the page reloads it. */
   readonly stale = output();
+  /** Told, with its code, when the level was deleted by someone else meanwhile (R2-3). */
+  readonly gone = output<string>();
 
   protected readonly removing = signal<Removing>({ kind: 'all' });
   protected readonly loaded = signal<Loaded>({ state: 'loading' });
@@ -169,7 +175,20 @@ export class LevelDeleteDialog {
   }
 
   protected close(): void {
+    this.cancelPending();
     this.dialog().nativeElement.close();
+  }
+
+  private cancelPending(): void {
+    this.pending?.unsubscribe();
+    this.pending = null;
+  }
+
+  /** Where the focus waits while the dialog counts: the name, or the status line (QA-r2-2). */
+  private holdFocus(): void {
+    this.focusAfterRender(() =>
+      this.all() ? this.nameInput() : this.status(),
+    );
   }
 
   protected confirm(): void {
@@ -190,6 +209,7 @@ export class LevelDeleteDialog {
   }
 
   private reset(removing: Removing): void {
+    this.cancelPending();
     this.removing.set(removing);
     this.typedName.set('');
     this.failure.set('');
@@ -215,7 +235,8 @@ export class LevelDeleteDialog {
         ? { remove: removing.level.id, version }
         : { all: true as const, version };
     this.loaded.set({ state: 'loading' });
-    this.api
+    this.cancelPending();
+    this.pending = this.api
       .preview(this.topic(), body)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -228,8 +249,11 @@ export class LevelDeleteDialog {
     this.contentTo.set(preview.removal?.moveContentTo ?? '');
     this.peopleTo.set(preview.removal?.movePeopleTo ?? '');
     this.loaded.set({ state: 'ready', preview });
-    // The targets and what moves are on screen: the danger button takes the focus (MA-27).
-    if (!this.all()) this.focusAfterRender(() => this.confirmButton());
+    // The targets and what moves are on screen: the danger button takes the focus (MA-27);
+    // for every level, the name to type keeps it (QA-r2-2).
+    this.focusAfterRender(() =>
+      this.all() ? this.nameInput() : this.confirmButton(),
+    );
   }
 
   /**
@@ -239,7 +263,9 @@ export class LevelDeleteDialog {
   private recount(): void {
     this.stale.emit();
     this.loaded.set({ state: 'loading' });
-    this.api
+    this.holdFocus();
+    this.cancelPending();
+    this.pending = this.api
       .levels(this.topic())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -249,7 +275,11 @@ export class LevelDeleteDialog {
           const gone =
             removing.kind === 'one' &&
             !scale.levels.some((one) => one.id === removing.level.id);
-          if (gone) return this.close();
+          if (gone && removing.kind === 'one') {
+            this.close();
+            return this.gone.emit(removing.level.code);
+          }
+          this.holdFocus();
           this.recounted.set(
             $localize`:@@levels.recounted:A escala mudou. Contei de novo com a escala de agora: confira antes de confirmar.`,
           );

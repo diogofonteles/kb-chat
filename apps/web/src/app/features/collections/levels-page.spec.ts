@@ -261,6 +261,52 @@ describe('LevelsPage (T24, KBC-103)', () => {
     ).toBeTruthy();
   });
 
+  it('R2-3: a level deleted by someone else while its dialog is open is said, with the focus on the heading', async () => {
+    const { fixture, http } = await open('hermetismo', THREE);
+    fireEvent.click(screen.getByRole('button', { name: 'Apagar CI' }));
+    http.expectOne({ method: 'POST', url: `${URL}/preview` }).flush({
+      version: 'v1',
+      gaining: noImpact,
+      losing: noImpact,
+      removal: {
+        level: { id: 'ci', code: 'CI' },
+        documents: 1,
+        media: 0,
+        people: 0,
+        moveContentTo: 'cdc',
+        movePeopleTo: 'qs',
+        last: false,
+      },
+      profiles: 0,
+    });
+    await fixture.whenStable();
+    fireEvent.click(
+      screen
+        .getAllByRole('button', { name: 'Apagar CI' })
+        .at(-1) as HTMLElement,
+    );
+    http
+      .expectOne({ method: 'DELETE', url: `${URL}/ci` })
+      .flush(
+        { error: { code: 'LEVELS_CHANGED', message: 'x' } },
+        { status: 409, statusText: 'Conflict' },
+      );
+    const without = scale({
+      levels: [level('qs', 'QS'), level('cdc', 'CDC')],
+      version: 'v2',
+    });
+    TestBed.tick();
+    for (const read of http.match({ method: 'GET', url: URL }))
+      read.flush(without);
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent?.trim()).toBe(
+      'CI já foi apagado por outra pessoa. A escala foi atualizada.',
+    );
+    expect(document.activeElement).toBe(
+      screen.getByRole('heading', { name: /Níveis de acesso/ }),
+    );
+  });
+
   it('shows the audios of a level next to its documents and people', async () => {
     await open(
       'hermetismo',

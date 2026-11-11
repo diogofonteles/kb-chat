@@ -218,6 +218,7 @@
           [scale]="current"
           (done)="deleted($event)"
           (stale)="refresh()"
+          (gone)="levelGone($event)"
         />
       }
     }
@@ -302,5 +303,5 @@
     <app-levels-history [topic]="slug()" [revision]="revision()" />
   }
 
-  <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
+  <p class="visually-hidden" role="status">{{ announcement() }}</p>
 </section>
