@@ -21,6 +21,7 @@ export interface VerifyReport {
   readonly foreignKeys: number;
   readonly indexRows: number;
   readonly indexExpected: number;
+  /** Units edited in production since their import: not a failure, held if the Mac edits them too. */
   readonly ledgerMismatches: readonly string[];
   readonly missingFiles: readonly string[];
   readonly ok: boolean;

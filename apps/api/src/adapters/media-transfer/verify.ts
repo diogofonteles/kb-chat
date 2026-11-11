@@ -87,7 +87,6 @@ export function verifyMedia(
       integrity === 'ok' &&
       foreignKeys === 0 &&
       indexRows === indexExpected &&
-      mismatches.length === 0 &&
       missing.length === 0,
   };
 }

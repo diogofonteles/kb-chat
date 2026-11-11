@@ -537,6 +537,9 @@ describe('moving the media library from the Mac to production (KBC-116)', () => 
         db.prepare(`SELECT title FROM media WHERE id = 'r1'`).get()?.['title'],
       ).toBe('Título da produção'),
     );
+    const verify = verifyProduction(world.prod.media);
+    expect(verify.ledgerMismatches).toEqual(['r1']);
+    expect(verify.ok).toBe(true);
   });
 
   it('AC-6: a media with a level and no scale in production is held', async () => {
@@ -970,5 +973,31 @@ describe('moving the media library from the Mac to production (KBC-116)', () => 
         ),
       ).toBe(1);
     });
+  });
+
+  it("BR-6: a level production set after the import stays, and does not hold the Mac's next change", async () => {
+    const world = newWorld();
+    seedRecording(world, { id: 'r1' });
+    await moveOnce(world);
+    onProd(world, (db) =>
+      db
+        .prepare(
+          `UPDATE media SET level = 'alto', updated_at = '2026-11-11T21:00:00.000Z' WHERE id = 'r1'`,
+        )
+        .run(),
+    );
+    onMac(
+      world,
+      `UPDATE words SET text = 'vegetal' WHERE transcript_id = 't-r1' AND position = 0`,
+    );
+
+    const report = await moveOnce(world);
+
+    expect(report.updated).toEqual(['r1']);
+    onProd(world, (db) =>
+      expect(
+        db.prepare(`SELECT level FROM media WHERE id = 'r1'`).get()?.['level'],
+      ).toBe('alto'),
+    );
   });
 });

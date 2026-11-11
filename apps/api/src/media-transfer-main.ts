@@ -64,7 +64,10 @@ function lines(report: ImportReport): string[] {
 function verifyLines(verify: VerifyReport): string[] {
   return [
     `check ${verify.ok ? 'ok' : 'FAILED'}: integrity ${verify.integrity}, broken keys ${verify.foreignKeys}, index ${verify.indexRows}/${verify.indexExpected}`,
-    ...verify.ledgerMismatches.map((id) => `  changed since its import: ${id}`),
+    ...verify.ledgerMismatches.map(
+      (id) =>
+        `  edited in production since its import (held if the Mac edits it too): ${id}`,
+    ),
     ...verify.missingFiles.map((path) => `  missing file: ${path}`),
   ];
 }

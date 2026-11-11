@@ -3,9 +3,13 @@ import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import { columnsOf } from './copy-rows.js';
 import { UNIT_TABLES, unitFilter } from './unit-tables.js';
 
-/** Columns a unit's fingerprint leaves out: production owns them after the first import. */
+/**
+ * Columns a unit's fingerprint leaves out: the level belongs to production after the first
+ * import, and a level change there touches `updated_at` alone (found in the local
+ * validation): neither makes the unit look edited in production.
+ */
 const OWNED_BY_PRODUCTION: Readonly<Record<string, readonly string[]>> = {
-  media: ['level'],
+  media: ['level', 'updated_at'],
 };
 
 const valueOf = (value: SQLOutputValue): unknown =>
