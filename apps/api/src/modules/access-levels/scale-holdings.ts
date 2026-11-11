@@ -30,8 +30,6 @@ export interface HoldingsDeps {
 export interface CountedHoldings extends ScaleHoldings {
   /** Texts of the scope (track documents take their level from media.db, KBC-106). */
   readonly texts: number;
-  /** Texts with no level of the scale ("Sem nível"). */
-  readonly unassigned: number;
   readonly withAccess: readonly StoredPerson[];
 }
 
@@ -88,13 +86,22 @@ export async function holdingsOf(
 ): Promise<CountedHoldings> {
   const scale = deps.directory.scaleOf(root);
   const withAccess = await peopleWithAccess(deps, root);
+  const ids = new Set(scale.map((one) => one.id));
   const people: Record<string, number> = {};
+  let implicit = 0;
   for (const person of withAccess) {
-    const level = scale[deps.gate.personRank(person, root)];
-    if (level) bump(people, level.id);
+    const held = person.levels?.[root];
+    if (held !== undefined && ids.has(held)) bump(people, held);
+    else implicit += 1;
   }
   const media = deps.media?.countLevels(scopeOf(deps.catalog, root)) ?? {};
-  return { ...documentCounts(deps, root), media, people, withAccess };
+  return {
+    ...documentCounts(deps, root),
+    media,
+    people,
+    implicit,
+    withAccess,
+  };
 }
 
 /** The collection's own scale: a sub-collection has none (KBC-103 BR-1). */

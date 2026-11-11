@@ -1,27 +1,37 @@
+/** What a written step can put back, and what the log needs to repair it by hand. */
+export interface Undo {
+  readonly run: () => Promise<void>;
+  /** What the step found before it wrote (ids and levels, capped): logged when `run` fails. */
+  readonly before?: () => object;
+}
+
 /** One write of a multi-store change, and how to put it back. */
 export interface UndoableStep {
   /** What the log names when its undo fails. */
   readonly name: string;
   /** Writes; resolves with the undo of what it wrote. */
-  readonly apply: () => Promise<() => Promise<void>>;
+  readonly apply: () => Promise<Undo>;
 }
 
-interface UndoLog {
+export interface UndoLog {
   error(fields: object, message: string): void;
+  warn(fields: object, message: string): void;
 }
 
-/** Undoes the steps already written, newest first; an undo that fails is logged, the rest still run. */
-async function rollBack(
-  done: readonly {
-    readonly name: string;
-    readonly undo: () => Promise<void>;
-  }[],
-  log: UndoLog,
-): Promise<void> {
+interface Done {
+  readonly name: string;
+  readonly undo: Undo;
+}
+
+/**
+ * Undoes the steps already written, newest first; an undo that fails is logged with what the
+ * step had found (R1-5), and the others still run.
+ */
+async function rollBack(done: readonly Done[], log: UndoLog): Promise<void> {
   for (const step of [...done].reverse())
-    await step.undo().catch((err: unknown) => {
+    await step.undo.run().catch((err: unknown) => {
       log.error(
-        { err, step: step.name },
+        { err, step: step.name, ...step.undo.before?.() },
         'level change rolled back incompletely',
       );
     });
@@ -36,8 +46,7 @@ export async function applyAll(
   steps: readonly UndoableStep[],
   log: UndoLog,
 ): Promise<void> {
-  const done: { readonly name: string; readonly undo: () => Promise<void> }[] =
-    [];
+  const done: Done[] = [];
   try {
     for (const step of steps)
       done.push({ name: step.name, undo: await step.apply() });

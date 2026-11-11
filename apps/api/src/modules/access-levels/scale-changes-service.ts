@@ -1,83 +1,63 @@
 import type {
-  LevelAuditEntry,
   LevelDelete,
   LevelPreview,
   LevelPreviewRequest,
   LevelsClear,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
-import type { LevelAuditPort } from '../../ports/level-audit.js';
-import type { MediaStorePort, MovedMedia } from '../../ports/media-store.js';
-import {
-  canSeeTopic,
-  isMaster,
-  type HeldLevel,
-  type StoredPerson,
-} from '../auth/index.js';
+import type { MediaStorePort } from '../../ports/media-store.js';
+import { canSeeTopic, isMaster, type StoredPerson } from '../auth/index.js';
 import { assertVersion, type LevelActor } from './access-levels-service.js';
 import type { CollectionPlacements, StoredLevel } from './level-directory.js';
+import { InvitePresetLevels } from './preset-levels.js';
 import {
-  impactOf,
-  removalTargets,
-  type ScaleChange,
-  type ScaleImpact,
-} from './level-impact.js';
+  auditBaseOf,
+  clearLines,
+  removalLines,
+  undoneLine,
+} from './scale-audit-lines.js';
 import {
-  assertWholeScale,
   holdingsOf,
   ownScaleRoot,
   scopeOf,
-  type CountedHoldings,
   type HoldingsDeps,
 } from './scale-holdings.js';
-import { scaleVersion } from './scale-version.js';
-import { applyAll, type UndoableStep } from './undo-steps.js';
+import { levelIn, previewOf } from './scale-preview.js';
+import {
+  auditStep,
+  mediaStep,
+  noneMoved,
+  peopleStep,
+  placementsStep,
+  presenceStep,
+  scaleStep,
+  type StepContext,
+  type StepDeps,
+} from './scale-steps.js';
+import { applyAll, type UndoLog, type UndoableStep } from './undo-steps.js';
 import type { LevelWriteQueue } from './write-queue.js';
 
-export interface ScaleChangesDeps extends Omit<
-  HoldingsDeps,
-  'people' | 'media'
-> {
+export interface ScaleChangesDeps
+  extends Omit<HoldingsDeps, 'people' | 'media'>, Omit<StepDeps, 'media'> {
   /** The levels write queue shared with the other levels services. */
   readonly queue: LevelWriteQueue;
-  readonly audit: LevelAuditPort;
-  readonly people: HoldingsDeps['people'] & {
-    rewriteLevels(change: {
-      readonly root: string;
-      readonly pick: (person: StoredPerson) => string | null | undefined;
-    }): Promise<HeldLevel[]>;
-  };
+  readonly people: HoldingsDeps['people'] & StepDeps['people'];
   readonly media?: Pick<
     MediaStorePort,
     'countLevels' | 'relevel' | 'restoreLevels'
   >;
+  /** The invite profiles' levels (KBC-109); none bound: no profiles. */
+  readonly presets?: InvitePresetLevels;
   readonly now?: () => Date;
 }
 
-/** Who changes the scale, and the request's log (an undo that fails is told there). */
+/** Who changes the scale, and the request's log (an undo is told there). */
 export interface ScaleCaller {
   readonly actor: LevelActor;
-  readonly log: { error(fields: object, message: string): void };
+  readonly log: UndoLog;
 }
 
-/** What a removal or a clear moved, for its audit lines. */
-interface Moved {
-  media: MovedMedia[];
-  documents: { collection: string; id: string; level: string }[];
-  people: HeldLevel[];
-}
-
-/** What a removal reads of an invite profile's preset: the levels it names. */
-export interface PresetLevels {
-  readonly levels?: Readonly<Record<string, string>>;
-}
-
-/** Who and when, shared by every line of one operation. */
-type AuditBase = Pick<LevelAuditEntry, 'at' | 'by' | 'actingAs'>;
-
-const noneMoved = (): Moved => ({ media: [], documents: [], people: [] });
-
-const NO_IMPACT = { people: 0, documents: 0, media: 0 };
+const NO_PRESETS = new InvitePresetLevels();
 
 const invalid = (message: string, field: string) =>
   new AppError('VALIDATION_FAILED', message, { details: { field } });
@@ -99,21 +79,22 @@ function assertRemoval(
       throw invalid('Choose another level of the scale', field);
 }
 
+/** What one removal needs, for its steps and its lines. */
+interface Removal {
+  readonly ctx: StepContext;
+  readonly scale: readonly StoredLevel[];
+  readonly level: StoredLevel;
+  readonly body: LevelDelete;
+  readonly base: ReturnType<typeof auditBaseOf>;
+}
+
 /**
- * Changes after the fact (KBC-108, ADR 0036 §10): the preview of a reorder or a removal, a
- * level deleted with targets for its content and its people, and every level taken away.
- * Writes run in the levels queue; each change is all or nothing over its stores (NFR-2).
+ * Changes after the fact (KBC-108, ADR 0036 §10): the preview of a reorder, a removal or of
+ * every level taken away, a level deleted with targets for its content and its people, and
+ * every level taken away. Writes run in the levels queue; each is all or nothing (NFR-2).
  */
 export class ScaleChangesService {
-  /** The invite profiles' presets, bound once they are loaded (KBC-109). */
-  private presets: () => readonly PresetLevels[] = () => [];
-
   constructor(private readonly deps: ScaleChangesDeps) {}
-
-  /** The invite profiles, read when a removal is previewed (they load after this service). */
-  useProfiles(presets: () => readonly PresetLevels[]): void {
-    this.presets = presets;
-  }
 
   /** FR-2: counts only, never a title or a name, on the scale the caller saw (BR-3). */
   async preview(
@@ -124,47 +105,7 @@ export class ScaleChangesService {
     const scale = this.deps.directory.scaleOf(root);
     assertVersion(scale, request.version);
     const held = await holdingsOf(this.deps, root);
-    const ids = scale.map((one) => one.id);
-    const version = scaleVersion(scale);
-    if ('order' in request) {
-      assertWholeScale(ids, request.order);
-      const change = { before: ids, after: request.order };
-      return { version, ...impactOf(change, held), removal: null };
-    }
-    return this.removalPreview({
-      root,
-      scale,
-      id: request.remove,
-      held,
-      version,
-    });
-  }
-
-  /** What the level holds, where it goes by default (BR-2) and who loses what. */
-  private removalPreview(input: {
-    readonly root: string;
-    readonly scale: readonly StoredLevel[];
-    readonly id: string;
-    readonly held: CountedHoldings;
-    readonly version: string;
-  }): LevelPreview {
-    const { scale, held, version } = input;
-    const level = this.levelIn(scale, input.id);
-    const ids = scale.map((one) => one.id);
-    const last = scale.length === 1;
-    return {
-      version,
-      ...this.removalImpact({ ids, level: level.id, held, last }),
-      removal: {
-        level: { id: level.id, code: level.code },
-        documents: held.documents[level.id] ?? 0,
-        media: held.media[level.id] ?? 0,
-        people: held.people[level.id] ?? 0,
-        ...removalTargets(ids, level.id),
-        last,
-        profiles: this.profilesNaming(input.root, level.id),
-      },
-    };
+    return previewOf({ root, scale, held, presets: this.presets() }, request);
   }
 
   /** FR-1, BR-1: the level goes, its content and its people to the targets, in one operation. */
@@ -177,35 +118,38 @@ export class ScaleChangesService {
       const root = ownScaleRoot(this.deps, target.topic);
       const scale = this.deps.directory.scaleOf(root);
       assertVersion(scale, body.version);
-      const level = this.levelIn(scale, target.level);
+      const level = levelIn(scale, target.level);
       assertRemoval(scale, level, body);
-      const change = { root, scale, level, body, moved: noneMoved() };
-      await applyAll(this.removalSteps(caller.actor, change), caller.log);
+      const ctx = this.contextOf(root, caller.log);
+      const base = auditBaseOf(caller.actor, this.now());
+      const removal = { ctx, scale, level, body, base };
+      await applyAll(this.removalSteps(removal), caller.log);
     });
   }
 
-  /** media.db, the documents, the people, the scale, then the audit (NFR-2). */
-  private removalSteps(
-    actor: LevelActor,
-    change: {
-      readonly root: string;
-      readonly scale: readonly StoredLevel[];
-      readonly level: StoredLevel;
-      readonly body: LevelDelete;
-      readonly moved: Moved;
-    },
-  ): UndoableStep[] {
-    const { root, scale, level, body, moved } = change;
-    const from = level.id;
+  /**
+   * The scale first, so no other path can write the leaving level any more (upload, edit,
+   * and the people and document writes queued behind this one, R1-4); then its audios, its
+   * documents and its people; a second pass over media.db; the audit last. Undone in reverse:
+   * the scale comes back last.
+   */
+  private removalSteps(removal: Removal): UndoableStep[] {
+    const { ctx, scale, level, body, base } = removal;
+    const moved = { from: level.id, to: body.moveContentTo };
     return [
-      this.mediaStep({ root, from, to: body.moveContentTo }, moved),
-      this.documentsStep(actor, change),
-      this.peopleStep(change),
-      this.scaleStep(
-        root,
-        scale.filter((one) => one.id !== from),
+      scaleStep(
+        ctx,
+        scale.filter((one) => one.id !== level.id),
       ),
-      this.auditStep(() => this.removalLines(actor, change)),
+      mediaStep(ctx, moved),
+      this.documentsStep(removal),
+      peopleStep(ctx, this.holderOf(removal)),
+      mediaStep(ctx, moved),
+      auditStep(ctx, {
+        all: () =>
+          removalLines(base, { ...removal, root: ctx.root, moved: ctx.moved }),
+        undone: () => undoneLine(base, { root: ctx.root, target: level.id }),
+      }),
     ];
   }
 
@@ -218,356 +162,94 @@ export class ScaleChangesService {
       const scale = this.deps.directory.scaleOf(root);
       assertVersion(scale, body.version);
       if (scale.length === 0) return;
-      const moved = noneMoved();
-      await applyAll(
-        [
-          this.mediaStep({ root, to: null }, moved),
-          this.clearDocumentsStep(root, moved),
-          this.clearPresenceStep(root),
-          this.clearPeopleStep(root, moved),
-          this.scaleStep(root, []),
-          this.auditStep(() =>
-            this.clearLines(caller.actor, { root, scale, moved }),
-          ),
-        ],
-        caller.log,
-      );
+      const ctx = this.contextOf(root, caller.log);
+      const base = auditBaseOf(caller.actor, this.now());
+      await applyAll(this.clearSteps({ ctx, scale, base }), caller.log);
     });
   }
 
-  /** The removal's impact; the only level's is everyone seeing "Sem nível" too (BR-4). */
-  private removalImpact(input: {
-    readonly ids: readonly string[];
-    readonly level: string;
-    readonly held: CountedHoldings;
-    readonly last: boolean;
-  }): ScaleImpact {
-    const { ids, level, held, last } = input;
-    if (last) {
-      const people = held.unassigned > 0 ? held.withAccess.length : 0;
-      const gaining = { people, documents: held.unassigned, media: 0 };
-      return { gaining, losing: NO_IMPACT };
-    }
-    const targets = removalTargets(ids, level);
-    const change: ScaleChange = {
-      before: ids,
-      after: ids.filter((id) => id !== level),
-      removal: {
-        level,
-        moveContentTo: targets.moveContentTo ?? level,
-        movePeopleTo: targets.movePeopleTo ?? level,
-      },
-    };
-    return impactOf(change, held);
-  }
-
-  /** How many invite profiles name this level of the collection. */
-  private profilesNaming(root: string, level: string): number {
-    return this.presets().filter((one) => one.levels?.[root] === level).length;
-  }
-
-  private levelIn(scale: readonly StoredLevel[], id: string): StoredLevel {
-    const level = scale.find((one) => one.id === id);
-    if (!level) throw new AppError('NOT_FOUND', 'Unknown level');
-    return level;
-  }
-
-  /** media.db in one transaction; its undo puts each row back at its level. */
-  private mediaStep(
-    change: {
-      readonly root: string;
-      readonly from?: string;
-      readonly to: string | null;
-    },
-    moved: Moved,
-  ): UndoableStep {
-    const { media } = this.deps;
-    const topics = scopeOf(this.deps.catalog, change.root);
-    return {
-      name: 'media',
-      apply: async () => {
-        moved.media = media?.relevel({ ...change, topics }) ?? [];
-        return async () => media?.restoreLevels(moved.media);
-      },
-    };
+  /**
+   * The items and people first and the scale after (removed first, it would open everything
+   * while an undo puts levels back); a second pass over media.db catches an audio given a
+   * level meanwhile; the audit last.
+   */
+  private clearSteps(clear: Omit<Removal, 'level' | 'body'>): UndoableStep[] {
+    const { ctx, scale, base } = clear;
+    const { root } = ctx;
+    return [
+      mediaStep(ctx, { to: null }),
+      placementsStep(ctx, (collection, placements) => {
+        for (const [id, one] of Object.entries(placements))
+          ctx.moved.documents.push({ collection, id, level: one.level });
+        return null;
+      }),
+      presenceStep(ctx),
+      peopleStep(ctx, (person) =>
+        person.levels?.[root] === undefined ? undefined : null,
+      ),
+      scaleStep(ctx, []),
+      mediaStep(ctx, { to: null }),
+      auditStep(ctx, {
+        all: () => clearLines(base, { root, scale, moved: ctx.moved }),
+        undone: () => undoneLine(base, { root }),
+      }),
+    ];
   }
 
   /** document-levels.json: the level's documents to the content target. */
-  private documentsStep(
-    actor: LevelActor,
-    change: {
-      readonly root: string;
-      readonly level: StoredLevel;
-      readonly body: LevelDelete;
-      readonly moved: Moved;
-    },
-  ): UndoableStep {
-    const { root, level, body, moved } = change;
+  private documentsStep(removal: Removal): UndoableStep {
+    const { ctx, level, body, base } = removal;
     const placed = {
       level: body.moveContentTo,
-      setBy: actor.by,
-      setAt: this.now(),
+      setBy: base.by,
+      setAt: base.at,
     };
-    return this.placementsStep(root, (collection, placements) => {
+    return placementsStep(ctx, (collection, placements) => {
       const next: Record<string, CollectionPlacements[string]> = {};
       for (const [id, one] of Object.entries(placements)) {
         const moves = one.level === level.id;
         next[id] = moves ? placed : one;
-        if (moves) moved.documents.push({ collection, id, level: level.id });
+        if (moves)
+          ctx.moved.documents.push({ collection, id, level: level.id });
       }
       return next;
     });
   }
 
-  /** BR-4: no document of the scope keeps a level. */
-  private clearDocumentsStep(root: string, moved: Moved): UndoableStep {
-    return this.placementsStep(root, (collection, placements) => {
-      for (const [id, one] of Object.entries(placements))
-        moved.documents.push({ collection, id, level: one.level });
-      return null;
-    });
-  }
-
-  /** The scope's placements rewritten collection by collection; the undo writes them back. */
-  private placementsStep(
-    root: string,
-    rewrite: (
-      collection: string,
-      placements: CollectionPlacements,
-    ) => CollectionPlacements | null,
-  ): UndoableStep {
-    const { directory } = this.deps;
-    return {
-      name: 'documents',
-      apply: async () => {
-        const before: Record<string, CollectionPlacements> = {};
-        const next: Record<string, CollectionPlacements | null> = {};
-        for (const collection of scopeOf(this.deps.catalog, root)) {
-          before[collection] = directory.placementsOf(collection);
-          next[collection] = rewrite(collection, before[collection]);
-        }
-        await directory.replacePlacements(next);
-        return () => directory.replacePlacements(before);
-      },
+  /**
+   * Who holds the leaving level, on the scale as it was (the step runs after the scale is
+   * written): its holders, and, for the lowest, whoever reaches the collection with no level
+   * of that scale (ADR 0036 §2).
+   */
+  private holderOf(removal: Removal) {
+    const { ctx, scale, level, body } = removal;
+    const { root } = ctx;
+    const ids = new Set(scale.map((one) => one.id));
+    const lowest = scale[0]?.id === level.id;
+    return (person: StoredPerson): string | undefined => {
+      if (isMaster(person)) return undefined;
+      const held = person.levels?.[root];
+      const holds =
+        held === level.id ||
+        (lowest &&
+          (held === undefined || !ids.has(held)) &&
+          this.reaches(person, root));
+      return holds ? body.movePeopleTo : undefined;
     };
   }
 
-  /** "Chegou em" of the scope's documents goes with the scale (BR-4). */
-  private clearPresenceStep(root: string): UndoableStep {
-    const { directory } = this.deps;
-    return {
-      name: 'presence',
-      apply: async () => {
-        const before = directory.presenceMap();
-        const scope = new Set(scopeOf(this.deps.catalog, root));
-        const next = Object.fromEntries(
-          Object.entries(before).filter(([slug]) => !scope.has(slug)),
-        );
-        await directory.setPresence(next);
-        return () => directory.setPresence(before);
-      },
-    };
-  }
-
-  /** people.json: whoever holds the level (an unknown or no entry at the lowest) to the people target. */
-  private peopleStep(change: {
-    readonly root: string;
-    readonly scale: readonly StoredLevel[];
-    readonly level: StoredLevel;
-    readonly body: LevelDelete;
-    readonly moved: Moved;
-  }): UndoableStep {
-    const { root, scale, level, body, moved } = change;
-    const at = scale.indexOf(level);
-    // Who counts in the level: its holders, and whoever reaches the collection with no
-    // valid level (they hold the lowest, ADR 0036 §2).
-    const holds = (person: StoredPerson) =>
-      !isMaster(person) &&
-      (person.levels?.[root] === level.id ||
-        (this.reaches(person, root) &&
-          this.deps.gate.personRank(person, root) === at));
-    return this.rewriteStep(root, moved, (person) =>
-      holds(person) ? body.movePeopleTo : undefined,
-    );
-  }
-
-  /** BR-4: nobody keeps a level in the collection. */
-  private clearPeopleStep(root: string, moved: Moved): UndoableStep {
-    return this.rewriteStep(root, moved, (person) =>
-      person.levels?.[root] === undefined ? undefined : null,
-    );
-  }
-
-  private rewriteStep(
-    root: string,
-    moved: Moved,
-    pick: (person: StoredPerson) => string | null | undefined,
-  ): UndoableStep {
-    const { people } = this.deps;
-    return {
-      name: 'people',
-      apply: async () => {
-        moved.people = await people.rewriteLevels({ root, pick });
-        const held = new Map(moved.people.map((one) => [one.id, one.level]));
-        return async () => {
-          await people.rewriteLevels({
-            root,
-            pick: (person) =>
-              held.has(person.id) ? (held.get(person.id) ?? null) : undefined,
-          });
-        };
-      },
-    };
-  }
-
-  private scaleStep(root: string, next: readonly StoredLevel[]): UndoableStep {
-    const { directory } = this.deps;
-    return {
-      name: 'scale',
-      apply: async () => {
-        const before = directory.scaleOf(root);
-        await directory.changeScale(root, () => ({ next, result: undefined }));
-        return () =>
-          directory.changeScale(root, () => ({
-            next: before,
-            result: undefined,
-          }));
-      },
-    };
-  }
-
-  /** The audit last: a record that fails undoes the change (NFR-2), nothing is left unaudited. */
-  private auditStep(lines: () => LevelAuditEntry[]): UndoableStep {
-    return {
-      name: 'audit',
-      apply: async () => {
-        await this.deps.audit.appendMany(lines());
-        return async () => undefined;
-      },
-    };
-  }
-
-  private removalLines(
-    actor: LevelActor,
-    change: {
-      readonly root: string;
-      readonly level: StoredLevel;
-      readonly body: LevelDelete;
-      readonly moved: Moved;
-    },
-  ): LevelAuditEntry[] {
-    const { root, level, body, moved } = change;
-    // One moment for the whole operation: its lines read as one (AC-1).
-    const base = this.base(actor);
-    const head: LevelAuditEntry = {
-      ...base,
-      kind: 'scale.delete',
-      collection: root,
-      target: level.id,
-      before: { code: level.code, description: level.description },
-      after: {
-        moveContentTo: body.moveContentTo,
-        movePeopleTo: body.movePeopleTo,
-      },
-      count: this.countOf(moved),
-    };
-    return [
-      head,
-      ...this.itemLines(base, moved, body.moveContentTo),
-      ...this.personLines(base, { root, moved, after: body.movePeopleTo }),
-    ];
-  }
-
-  private clearLines(
-    actor: LevelActor,
-    change: {
-      readonly root: string;
-      readonly scale: readonly StoredLevel[];
-      readonly moved: Moved;
-    },
-  ): LevelAuditEntry[] {
-    const { root, scale, moved } = change;
-    const base = this.base(actor);
-    const head: LevelAuditEntry = {
-      ...base,
-      kind: 'scale.clear',
-      collection: root,
-      before: scale.map((one) => one.id),
-      after: [],
-      count: this.countOf(moved),
-    };
-    return [
-      head,
-      ...this.itemLines(base, moved, null),
-      ...this.personLines(base, { root, moved, after: null }),
-    ];
-  }
-
-  /** One `item.level` line per document and audio, to redo by hand (no automatic undo). */
-  private itemLines(
-    base: AuditBase,
-    moved: Moved,
-    after: string | null,
-  ): LevelAuditEntry[] {
-    const documents = moved.documents.map((one): LevelAuditEntry => ({
-      ...base,
-      kind: 'item.level',
-      collection: one.collection,
-      target: one.id,
-      before: one.level,
-      after,
-    }));
-    const media = moved.media.map((one): LevelAuditEntry => ({
-      ...base,
-      kind: 'item.level',
-      collection: one.topic,
-      target: one.id,
-      before: one.level,
-      after,
-      count: { media: 1 },
-    }));
-    return [...documents, ...media];
-  }
-
-  private personLines(
-    base: AuditBase,
-    change: {
-      readonly root: string;
-      readonly moved: Moved;
-      readonly after: string | null;
-    },
-  ): LevelAuditEntry[] {
-    return change.moved.people.map((one): LevelAuditEntry => ({
-      ...base,
-      kind: 'person.level',
-      collection: change.root,
-      target: one.id,
-      before: one.level,
-      after: change.after,
-      via: 'scale',
-    }));
-  }
-
-  private countOf(moved: Moved) {
-    return {
-      documents: moved.documents.length,
-      media: moved.media.length,
-      people: moved.people.length,
-    };
-  }
-
-  private base(actor: LevelActor): AuditBase {
-    return {
-      at: this.now(),
-      by: actor.by,
-      ...(actor.actingAs && { actingAs: actor.actingAs }),
-    };
+  private contextOf(root: string, log: UndoLog): StepContext {
+    return { deps: this.deps, root, moved: noneMoved(), log };
   }
 
   private reaches(person: StoredPerson, root: string): boolean {
     return scopeOf(this.deps.catalog, root).some((slug) =>
       canSeeTopic(person, slug, this.deps.parentOf),
     );
+  }
+
+  private presets(): InvitePresetLevels {
+    return this.deps.presets ?? NO_PRESETS;
   }
 
   private now(): string {

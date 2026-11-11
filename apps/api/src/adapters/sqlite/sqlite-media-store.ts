@@ -23,6 +23,7 @@ import type {
   LeasedJob,
   EditedMedia,
   MediaEdit,
+  MediaLevelRestore,
   MediaLevelRow,
   MediaLevelSeed,
   MediaRelevel,
@@ -431,8 +432,17 @@ export class SqliteMediaStore implements MediaStorePort {
     });
   }
 
-  restoreLevels(rows: readonly MediaLevelRow[]): void {
-    inTransaction(this.db, () => this.writeLevels(rows));
+  restoreLevels(rows: readonly MediaLevelRestore[]): string[] {
+    return inTransaction(this.db, () => {
+      const write = this.db.prepare(
+        'UPDATE media SET level = ? WHERE id = ? AND level IS ?',
+      );
+      return rows
+        .filter(
+          (row) => write.run(row.level, row.id, row.written).changes === 0,
+        )
+        .map((row) => row.id);
+    });
   }
 
   countLevels(topics: readonly string[]): Readonly<Record<string, number>> {

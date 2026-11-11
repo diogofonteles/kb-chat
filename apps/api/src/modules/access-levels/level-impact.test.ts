@@ -6,6 +6,8 @@ const held = {
   documents: { qs: 5, ci: 14, cdc: 6 },
   media: { qs: 1, ci: 2, cdc: 3 },
   people: { qs: 3, ci: 2, cdc: 1 },
+  implicit: 0,
+  unassigned: 0,
 };
 const QS_CI_CDC = ['qs', 'ci', 'cdc'];
 

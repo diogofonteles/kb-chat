@@ -6,8 +6,10 @@ const step = (name: string, trace: string[], fails = false): UndoableStep => ({
   apply: async () => {
     if (fails) throw new Error(`${name} failed`);
     trace.push(`apply ${name}`);
-    return async () => {
-      trace.push(`undo ${name}`);
+    return {
+      run: async () => {
+        trace.push(`undo ${name}`);
+      },
     };
   },
 });
@@ -15,7 +17,7 @@ const step = (name: string, trace: string[], fails = false): UndoableStep => ({
 describe('applyAll (KBC-108 NFR-2)', () => {
   it('undoes the steps written, newest first, when a later one fails', async () => {
     const trace: string[] = [];
-    const log = { error: vi.fn() };
+    const log = { error: vi.fn(), warn: vi.fn() };
     await expect(
       applyAll(
         [step('a', trace), step('b', trace), step('c', trace, true)],
@@ -28,19 +30,22 @@ describe('applyAll (KBC-108 NFR-2)', () => {
 
   it('logs an undo that fails and still runs the others', async () => {
     const trace: string[] = [];
-    const log = { error: vi.fn() };
+    const log = { error: vi.fn(), warn: vi.fn() };
     const broken: UndoableStep = {
       name: 'b',
-      apply: async () => async () => {
-        throw new Error('disk gone');
-      },
+      apply: async () => ({
+        run: async () => {
+          throw new Error('disk gone');
+        },
+        before: () => ({ total: 1 }),
+      }),
     };
     await expect(
       applyAll([step('a', trace), broken, step('c', trace, true)], log),
     ).rejects.toThrow('c failed');
     expect(trace).toEqual(['apply a', 'undo a']);
     expect(log.error).toHaveBeenCalledWith(
-      expect.objectContaining({ step: 'b' }),
+      expect.objectContaining({ step: 'b', total: 1 }),
       'level change rolled back incompletely',
     );
   });

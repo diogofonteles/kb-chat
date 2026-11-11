@@ -25,6 +25,7 @@ import {
   ContentGate,
   LevelDirectory,
   LevelWriteQueue,
+  LevelHistoryService,
   ScaleChangesService,
 } from './modules/access-levels/index.js';
 import type { ScaleChangesDeps } from './modules/access-levels/scale-changes-service.js';
@@ -93,6 +94,20 @@ function audioLevels(world: LevelsWorld): (string | null)[] {
   return rows;
 }
 
+/** "Aluno": Hermetismo at CI (KBC-109). */
+async function aluno(world: LevelsWorld): Promise<string> {
+  const created = await world.owner('POST', '/api/v1/invite-profiles', {
+    name: 'Aluno',
+    preset: {
+      topics: ['hermetismo'],
+      features: ['search'],
+      levels: { hermetismo: 'ci' },
+    },
+  });
+  expect(created.statusCode, created.body).toBe(201);
+  return created.json<{ id: string }>().id;
+}
+
 const scaleOf = async (world: LevelsWorld) => {
   const read = await world.owner('GET', LEVELS);
   expect(read.statusCode, read.body).toBe(200);
@@ -152,7 +167,6 @@ describe('Deleting a level (KBC-108 FR-1, BR-1, BR-2)', () => {
       moveContentTo: 'cdc',
       movePeopleTo: 'qs',
       last: false,
-      profiles: 0,
     });
     expect(losing).toEqual({ people: 4, documents: 12, media: 3 });
     expect(preview.body).not.toContain('Lua Media');
@@ -258,7 +272,7 @@ describe('Deleting a level (KBC-108 FR-1, BR-1, BR-2)', () => {
       remove: 'ci',
       version,
     });
-    expect(preview.json<LevelPreview>().removal?.profiles).toBe(1);
+    expect(preview.json<LevelPreview>().profiles).toBe(1);
     const deleted = await world.owner('DELETE', `${LEVELS}/ci`, {
       moveContentTo: 'cdc',
       movePeopleTo: 'qs',
@@ -274,6 +288,70 @@ describe('Deleting a level (KBC-108 FR-1, BR-1, BR-2)', () => {
     });
     expect(invited.statusCode, invited.body).toBe(201);
     expect(invited.json().levels).toEqual({ hermetismo: 'qs' });
+  });
+
+  it('QA-2: a level created again with a deleted code gets a new id, and the profile still asks for a choice', async () => {
+    const world = await startLevels();
+    await sixAtThreeLevels(world);
+    const profileId = await aluno(world);
+    const { version } = await scaleOf(world);
+    await world.owner('DELETE', `${LEVELS}/ci`, {
+      moveContentTo: 'cdc',
+      movePeopleTo: 'qs',
+      version,
+    });
+    const again = await world.owner('POST', LEVELS, { code: 'CI' });
+    expect(again.statusCode, again.body).toBe(201);
+    const ci = again
+      .json<TopicLevels>()
+      .levels.find((one) => one.code === 'CI');
+    expect(ci?.id).not.toBe('ci');
+    const listed = await world.owner('GET', '/api/v1/invite-profiles');
+    expect(listed.json().items[0].staleLevels).toEqual({ hermetismo: 'ci' });
+    const invited = await world.owner('POST', '/api/v1/people', {
+      email: 'nova@example.com',
+      sendEmail: false,
+      profileId,
+    });
+    expect(invited.json().levels).toEqual({ hermetismo: 'qs' });
+  });
+
+  it('QA-2: after every level is taken away, a new scale with CI does not revive the profile', async () => {
+    const world = await startLevels();
+    await sixAtThreeLevels(world);
+    await aluno(world);
+    const { version } = await scaleOf(world);
+    const preview = await world.owner('POST', `${LEVELS}/preview`, {
+      all: true,
+      version,
+    });
+    expect(preview.json<LevelPreview>().profiles).toBe(1);
+    await world.owner('DELETE', LEVELS, { confirm: 'hermetismo', version });
+    await createScale(world, ['QS', 'CI']);
+    const ids = (await scaleOf(world)).levels.map((one) => one.id);
+    expect(ids).not.toContain('ci');
+    const listed = await world.owner('GET', '/api/v1/invite-profiles');
+    expect(listed.json().items[0].staleLevels).toEqual({ hermetismo: 'ci' });
+  });
+
+  it('R1-8: the history names a deleted level by its code on any page', async () => {
+    const world = await startLevels();
+    await sixAtThreeLevels(world);
+    const { version } = await scaleOf(world);
+    await world.owner('DELETE', `${LEVELS}/ci`, {
+      moveContentTo: 'cdc',
+      movePeopleTo: 'qs',
+      version,
+    });
+    const read = await world.owner(
+      'GET',
+      `${AUDIT}?topic=hermetismo&kind=item.level&target=${encodeURIComponent('raw/ci-1.md')}`,
+    );
+    const items = read.json<LevelAuditPage>().items;
+    expect(items.map(({ before, after }) => `${before} → ${after}`)).toEqual([
+      'CI → CDC',
+      'QS → CI',
+    ]);
   });
 
   it('AC-6: the only level is not deleted alone: it asks for every level to go', async () => {
@@ -527,6 +605,7 @@ describe('"Histórico de níveis" (KBC-108 FR-4, BR-5)', () => {
 /* ---------- NFR-2, AC-7: all or nothing over every store, with a failure injected ---------- */
 
 const MASTER_EMAIL = 'owner@example.com';
+const NOW = '2026-11-11T12:00:00.000Z';
 const ITEMS = { documents: 4000, media: 1000 };
 
 const member = (n: number, level?: string): StoredPerson => ({
@@ -544,17 +623,28 @@ const member = (n: number, level?: string): StoredPerson => ({
   ...(level && { levels: { hermetismo: level } }),
 });
 
-type Step = 'media' | 'documents' | 'people' | 'scale' | 'audit';
+type Step = 'media' | 'documents' | 'presence' | 'people' | 'scale' | 'audit';
+
+interface Armed {
+  failing: Step | null;
+  /** Runs once, just before the audit fails: a write from another path, mid-operation. */
+  meanwhile: (() => Promise<void>) | null;
+  /** Runs once, just before a store of that step writes. */
+  during: Partial<Record<Step, () => void>>;
+}
 
 /** A file store whose next write fails once `failing` names it (a full disk). */
 function failingStore(
   inner: DocumentStorePort,
   name: Step,
-  armed: { failing: Step | null },
+  armed: Armed,
 ): DocumentStorePort {
   return {
     read: () => inner.read(),
     write: async (value) => {
+      const during = armed.during[name];
+      armed.during = { ...armed.during, [name]: undefined };
+      during?.();
       if (armed.failing === name) {
         armed.failing = null;
         throw new Error(`disk full (${name})`);
@@ -564,9 +654,24 @@ function failingStore(
   };
 }
 
+function failingAudit(dir: string, armed: Armed): LevelAuditPort {
+  const fsAudit = new FsLevelAudit(join(dir, 'audit'));
+  return {
+    append: (entry) => fsAudit.append(entry),
+    read: (query) => fsAudit.read(query),
+    appendMany: async (entries) => {
+      if (armed.failing !== 'audit') return fsAudit.appendMany(entries);
+      const meanwhile = armed.meanwhile;
+      armed.meanwhile = null;
+      await meanwhile?.();
+      throw new Error('disk full (audit)');
+    },
+  };
+}
+
 async function atomicWorld() {
   const dir = await mkdtemp(join(tmpdir(), 'kbchat-levels-atomic-'));
-  const armed: { failing: Step | null } = { failing: null };
+  const armed: Armed = { failing: null, meanwhile: null, during: {} };
   const ids = Array.from(
     { length: ITEMS.documents },
     (_, n) => `raw/d-${n}.md`,
@@ -582,7 +687,7 @@ async function atomicWorld() {
   const directory = new LevelDirectory({
     scales: json('access-levels.json', 'scale'),
     documents: json('document-levels.json', 'documents'),
-    presence: json('document-presence.json', 'documents'),
+    presence: json('document-presence.json', 'presence'),
   });
   await directory.load();
   const people = new PeopleService({
@@ -599,21 +704,16 @@ async function atomicWorld() {
     countLevels: (topics) => store.countLevels(topics),
     restoreLevels: (rows) => store.restoreLevels(rows),
     relevel: (change) => {
-      if (armed.failing === 'media') throw new Error('disk full (media)');
+      if (armed.failing === 'media') {
+        armed.failing = null;
+        throw new Error('disk full (media)');
+      }
       return store.relevel(change);
     },
   };
-  const fsAudit = new FsLevelAudit(join(dir, 'audit'));
-  const audit: LevelAuditPort = {
-    append: (entry) => fsAudit.append(entry),
-    read: (query) => fsAudit.read(query),
-    appendMany: (entries) =>
-      armed.failing === 'audit'
-        ? Promise.reject(new Error('disk full (audit)'))
-        : fsAudit.appendMany(entries),
-  };
   const gate = new ContentGate({ directory, catalog });
-  const log = { error: vi.fn() };
+  const log = { error: vi.fn(), warn: vi.fn() };
+  const audit = failingAudit(dir, armed);
   const changes = new ScaleChangesService({
     queue: new LevelWriteQueue(),
     directory,
@@ -623,11 +723,32 @@ async function atomicWorld() {
     people,
     media,
     audit,
+    now: () => new Date(NOW),
   });
-  return { dir, armed, db, directory, people, changes, log, ids };
+  const history = new LevelHistoryService({
+    audit,
+    catalog,
+    gate,
+    directory,
+    people,
+  });
+  return {
+    dir,
+    armed,
+    db,
+    directory,
+    people,
+    changes,
+    log,
+    ids,
+    audit,
+    history,
+  };
 }
 
-async function seedAtomic(world: Awaited<ReturnType<typeof atomicWorld>>) {
+type AtomicWorld = Awaited<ReturnType<typeof atomicWorld>>;
+
+async function seedAtomic(world: AtomicWorld) {
   const at = '2026-11-01T00:00:00.000Z';
   const level = (id: string, code: string) => ({
     id,
@@ -668,14 +789,17 @@ async function seedAtomic(world: Awaited<ReturnType<typeof atomicWorld>>) {
   world.db.exec('COMMIT');
 }
 
-/** Every store as it is on disk: the three files, people.json, media.db's levels, the audit. */
-async function onDisk(world: Awaited<ReturnType<typeof atomicWorld>>) {
+/** Every store as it is on disk: the files (absent: null), media.db's levels, the audit. */
+async function onDisk(world: AtomicWorld) {
   const file = async (name: string) =>
-    JSON.parse(await readFile(join(world.dir, name), 'utf8')) as unknown;
+    JSON.parse(
+      await readFile(join(world.dir, name), 'utf8').catch(() => 'null'),
+    ) as unknown;
   const audit = await readdir(join(world.dir, 'audit')).catch(() => []);
   return {
     scales: await file('access-levels.json'),
     documents: await file('document-levels.json'),
+    presence: await file('document-presence.json'),
     people: await file('people.json'),
     media: world.db
       .prepare('SELECT id, level FROM media ORDER BY id')
@@ -684,6 +808,49 @@ async function onDisk(world: Awaited<ReturnType<typeof atomicWorld>>) {
     audit,
   };
 }
+
+/**
+ * Every store as before; when the audit is what failed, it holds only the `scale.undone`
+ * mark the history reads to leave the operation out (R1-5).
+ */
+async function expectAsBefore(
+  world: AtomicWorld,
+  run: {
+    readonly before: Awaited<ReturnType<typeof onDisk>>;
+    readonly step: Step;
+  },
+): Promise<void> {
+  const { audit, ...after } = await onDisk(world);
+  const { audit: auditBefore, ...stores } = run.before;
+  expect(after).toEqual(stores);
+  if (run.step !== 'audit') return expect(audit).toEqual(auditBefore);
+  const lines = await world.audit.read({ accepts: () => true, limit: 10 });
+  expect(lines.entries.map((one) => one.kind)).toEqual(['scale.undone']);
+}
+
+const removeCi = (world: AtomicWorld) =>
+  world.changes.remove(
+    { actor: { by: MASTER_EMAIL }, log: world.log },
+    { topic: 'hermetismo', level: 'ci' },
+    {
+      moveContentTo: 'cdc',
+      movePeopleTo: 'qs',
+      version: scaleVersion(world.directory.scaleOf('hermetismo')),
+    },
+  );
+
+const clearAll = (world: AtomicWorld) =>
+  world.changes.clear(
+    { actor: { by: MASTER_EMAIL }, log: world.log },
+    'hermetismo',
+    {
+      confirm: 'hermetismo',
+      version: scaleVersion(world.directory.scaleOf('hermetismo')),
+    },
+  );
+
+const levelOf = (world: AtomicWorld, id: string) =>
+  world.db.prepare('SELECT level FROM media WHERE id = ?').get(id)?.['level'];
 
 describe('Deleting a level is all or nothing (KBC-108 NFR-2, AC-7)', () => {
   it.each<Step>(['media', 'documents', 'people', 'scale', 'audit'])(
@@ -695,19 +862,9 @@ describe('Deleting a level is all or nothing (KBC-108 NFR-2, AC-7)', () => {
       const scaleBefore = world.directory.scaleOf('hermetismo');
       world.armed.failing = step;
 
-      await expect(
-        world.changes.remove(
-          { actor: { by: MASTER_EMAIL }, log: world.log },
-          { topic: 'hermetismo', level: 'ci' },
-          {
-            moveContentTo: 'cdc',
-            movePeopleTo: 'qs',
-            version: scaleVersion(scaleBefore),
-          },
-        ),
-      ).rejects.toThrow(`disk full (${step})`);
+      await expect(removeCi(world)).rejects.toThrow(`disk full (${step})`);
 
-      expect(await onDisk(world)).toEqual(before);
+      await expectAsBefore(world, { before, step });
       expect(world.directory.scaleOf('hermetismo')).toEqual(scaleBefore);
       expect(
         world.directory.placementsOf('hermetismo')['raw/d-0.md']?.level,
@@ -720,15 +877,7 @@ describe('Deleting a level is all or nothing (KBC-108 NFR-2, AC-7)', () => {
   it('without a failure, the 5,000 items and the people move in one go', async () => {
     const world = await atomicWorld();
     await seedAtomic(world);
-    await world.changes.remove(
-      { actor: { by: MASTER_EMAIL }, log: world.log },
-      { topic: 'hermetismo', level: 'ci' },
-      {
-        moveContentTo: 'cdc',
-        movePeopleTo: 'qs',
-        version: scaleVersion(world.directory.scaleOf('hermetismo')),
-      },
-    );
+    await removeCi(world);
     const placed = Object.values(world.directory.placementsOf('hermetismo'));
     expect(placed.every((one) => one.level === 'cdc')).toBe(true);
     expect(placed).toHaveLength(ITEMS.documents);
@@ -750,6 +899,158 @@ describe('Deleting a level is all or nothing (KBC-108 NFR-2, AC-7)', () => {
       ['cdc', 500],
       ['qs', 500],
     ]);
+    world.db.close();
+  });
+});
+
+describe('Taking every level away is all or nothing (KBC-108 R1-6, QA-3)', () => {
+  it.each<Step>(['media', 'documents', 'presence', 'people', 'scale', 'audit'])(
+    'a failure writing %s leaves the files and media.db as they were',
+    async (step) => {
+      const world = await atomicWorld();
+      await seedAtomic(world);
+      await world.directory.setPresence({
+        hermetismo: {
+          'raw/d-0.md': { firstSeenAt: '2026-11-02T00:00:00.000Z' },
+        },
+      });
+      const before = await onDisk(world);
+      world.armed.failing = step;
+
+      await expect(clearAll(world)).rejects.toThrow(`disk full (${step})`);
+
+      await expectAsBefore(world, { before, step });
+      expect(world.directory.scaleOf('hermetismo')).toHaveLength(3);
+      expect(world.log.error).not.toHaveBeenCalled();
+      world.db.close();
+    },
+  );
+
+  it('QA-3: an undo never writes a document-presence.json that was not there', async () => {
+    const world = await atomicWorld();
+    await seedAtomic(world);
+    world.armed.failing = 'audit';
+    await expect(clearAll(world)).rejects.toThrow('disk full (audit)');
+    expect((await onDisk(world)).presence).toBeNull();
+    world.db.close();
+  });
+});
+
+describe('An undo leaves writes made meanwhile alone (KBC-108 R1-3, R1-5)', () => {
+  it('a person, an audio and a document changed by another path during a delete keep their new level', async () => {
+    const world = await atomicWorld();
+    await seedAtomic(world);
+    const ana = member(1).id;
+    world.armed.failing = 'audit';
+    world.armed.meanwhile = async () => {
+      await world.people.rewriteLevels({
+        root: 'hermetismo',
+        pick: (person) => (person.id === ana ? 'cdc' : undefined),
+      });
+      world.db
+        .prepare("UPDATE media SET level = 'qs' WHERE id = 'm-0001'")
+        .run();
+      await world.directory.place({
+        hermetismo: {
+          'raw/d-0.md': {
+            level: 'qs',
+            setBy: 'other',
+            setAt: '2026-11-11T00:00:00.000Z',
+          },
+        },
+      });
+    };
+
+    await expect(removeCi(world)).rejects.toThrow('disk full (audit)');
+
+    const people = await world.people.list();
+    expect(people.find((one) => one.id === ana)?.levels).toEqual({
+      hermetismo: 'cdc',
+    });
+    expect(people.find((one) => one.id === member(2).id)?.levels).toEqual({
+      hermetismo: 'ci',
+    });
+    expect(levelOf(world, 'm-0001')).toBe('qs');
+    expect(levelOf(world, 'm-0003')).toBe('ci');
+    const placed = world.directory.placementsOf('hermetismo');
+    expect(placed['raw/d-0.md']?.level).toBe('qs');
+    expect(placed['raw/d-1.md']?.level).toBe('ci');
+    expect(world.log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ step: 'people', skipped: [ana] }),
+      'level change undo left a write made meanwhile',
+    );
+    world.db.close();
+  });
+
+  it('R1-5: an undo that fails is logged with what it could not put back, ids first and the total', async () => {
+    const world = await atomicWorld();
+    await seedAtomic(world);
+    world.armed.failing = 'audit';
+    world.armed.meanwhile = async () => {
+      world.armed.failing = 'people';
+    };
+    await expect(removeCi(world)).rejects.toThrow('disk full (audit)');
+    expect(world.log.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        step: 'people',
+        collection: 'hermetismo',
+        total: 2,
+        before: [
+          { id: member(1).id, level: 'ci' },
+          { id: member(2).id, level: 'ci' },
+        ],
+      }),
+      'level change rolled back incompletely',
+    );
+    world.db.close();
+  });
+
+  it('R1-5: lines written by an audit that then failed are marked undone and left out of the history', async () => {
+    const world = await atomicWorld();
+    await seedAtomic(world);
+    world.armed.failing = 'audit';
+    // The lines reach the file, then the sync fails.
+    world.armed.meanwhile = async () => {
+      world.armed.failing = null;
+      await world.audit.appendMany([
+        {
+          at: NOW,
+          by: MASTER_EMAIL,
+          kind: 'scale.delete',
+          collection: 'hermetismo',
+          target: 'ci',
+        },
+      ]);
+      world.armed.failing = 'audit';
+    };
+    await expect(removeCi(world)).rejects.toThrow('disk full (audit)');
+    const written = await world.audit.read({ accepts: () => true, limit: 50 });
+    expect(written.entries.map((one) => one.kind)).toContain('scale.undone');
+    const page = await world.history.page({ topic: 'hermetismo' });
+    expect(page.items.map((one) => one.kind)).not.toContain('scale.delete');
+    expect(page.items.map((one) => one.kind)).not.toContain('scale.undone');
+    world.db.close();
+  });
+
+  it('R1-4: an audio written at the leaving level while the delete runs still moves with it', async () => {
+    const world = await atomicWorld();
+    await seedAtomic(world);
+    world.armed.during.people = () => {
+      world.db
+        .prepare(
+          `INSERT INTO media (id, topic, title, authorship, owner_principal, file_name,
+             upload_bytes, status, duration_ms, bytes, level, created_at, updated_at)
+           VALUES ('late', 'hermetismo', 'Tarde', 'outros-autores', 'seed', 'a.mp3', 1,
+             'ready', 1, 1, 'ci', ?, ?)`,
+        )
+        .run(NOW, NOW);
+    };
+    await removeCi(world);
+    expect(levelOf(world, 'late')).toBe('cdc');
+    const left = world.db
+      .prepare("SELECT COUNT(*) AS n FROM media WHERE level = 'ci'")
+      .get();
+    expect(Number(left?.['n'])).toBe(0);
     world.db.close();
   });
 });

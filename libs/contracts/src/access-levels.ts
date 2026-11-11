@@ -386,6 +386,8 @@ export const LEVEL_AUDIT_KINDS = [
   'scale.reorder',
   'scale.delete',
   'scale.clear',
+  /** A delete or a clear undone after its lines were written: the history leaves them out. */
+  'scale.undone',
   'person.level',
   'item.level',
   'bulk',
@@ -400,6 +402,8 @@ export const levelPreviewRequestSchema = z.union([
     version: levelsVersionSchema,
   }),
   z.strictObject({ remove: levelRefSchema, version: levelsVersionSchema }),
+  /** "Tirar todos os níveis" (KBC-108 R1-11): who gains what, and the profiles it leaves stale. */
+  z.strictObject({ all: z.literal(true), version: levelsVersionSchema }),
 ]);
 export type LevelPreviewRequest = z.infer<typeof levelPreviewRequestSchema>;
 
@@ -423,11 +427,6 @@ export const levelRemovalSchema = z.object({
   movePeopleTo: levelRefSchema.nullable(),
   /** The only level: removing it is "Tirar todos os níveis" (AC-6). */
   last: z.boolean(),
-  /**
-   * Invite profiles that name the level (KBC-109): they are not rewritten and read as
-   * `staleLevels` afterwards, asking for a choice.
-   */
-  profiles: z.number().int().nonnegative(),
 });
 export type LevelRemoval = z.infer<typeof levelRemovalSchema>;
 
@@ -437,6 +436,11 @@ export const levelPreviewSchema = z.object({
   gaining: levelImpactSchema,
   losing: levelImpactSchema,
   removal: levelRemovalSchema.nullable(),
+  /**
+   * Invite profiles that name the level removed (or, for every level, any level of the
+   * collection): they are not rewritten and read as `staleLevels` afterwards (KBC-109).
+   */
+  profiles: z.number().int().nonnegative(),
 });
 export type LevelPreview = z.infer<typeof levelPreviewSchema>;
 
@@ -467,9 +471,12 @@ export const levelAuditQuerySchema = z.strictObject({
   kind: levelAuditKindSchema.optional(),
   /** One item or person: a document's, an audio's or a person's id. */
   target: z.string().min(1).max(1024).optional(),
-  /** From and to this day (`YYYY-MM-DD`, UTC, inclusive). */
-  from: z.iso.date().optional(),
-  to: z.iso.date().optional(),
+  /**
+   * From and to, inclusive: an instant (the client's local day as ISO instants, R1-9) or a
+   * day (`YYYY-MM-DD`, UTC).
+   */
+  from: z.union([z.iso.datetime(), z.iso.date()]).optional(),
+  to: z.union([z.iso.datetime(), z.iso.date()]).optional(),
   cursor: z.string().max(200).optional(),
   limit: z.coerce
     .number()

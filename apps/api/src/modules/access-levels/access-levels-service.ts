@@ -25,6 +25,7 @@ import {
   textsOf,
 } from './scale-holdings.js';
 import { scaleVersion } from './scale-version.js';
+import type { InvitePresetLevels } from './preset-levels.js';
 import type {
   CollectionPlacements,
   LevelDirectory,
@@ -52,6 +53,8 @@ export interface AccessLevelsServiceDeps {
     }): Promise<number>;
   };
   readonly audit: LevelAuditPort;
+  /** The invite profiles' levels: an id they still name is not given again (QA-2). */
+  readonly presets?: InvitePresetLevels;
   readonly parentOf: ParentOf;
   /** The media library's audios, placed with the documents (KBC-105); absent with media off. */
   readonly media?: Pick<MediaStorePort, 'seedLevel' | 'countLevels'>;
@@ -76,10 +79,13 @@ export function assertVersion(
     throw new AppError('LEVELS_CHANGED', 'The scale changed since the preview');
 }
 
-/** An id no other level has: the code's, with -2, -3… when a renamed level kept it. */
-function freeId(code: string, scale: readonly StoredLevel[]): string {
+/**
+ * An id no level has, nor any reference still names: the code's, with -2, -3… when a renamed
+ * level kept it, or when a deleted level's id is still named by a profile or a person (QA-2:
+ * a new "CI" never silently becomes the level an old profile asked for).
+ */
+function freeId(code: string, taken: ReadonlySet<string>): string {
   const base = levelIdOf(code);
-  const taken = new Set(scale.map((one) => one.id));
   let id = base;
   for (let n = 2; taken.has(id); n += 1) id = `${base}-${n}`;
   // QA-3: never an id the file could not hold (a code of symbols, "++++++++++++").
@@ -123,12 +129,13 @@ export class AccessLevelsService {
     return {
       collection: root,
       inherited: root !== topic,
-      levels: scale.map((level) => ({
+      levels: scale.map((level, rank) => ({
         id: level.id,
         code: level.code,
         description: level.description,
         documents: held.documents[level.id] ?? 0,
-        people: held.people[level.id] ?? 0,
+        // Whoever holds no level of the scale sits at the lowest (ADR 0036 §2).
+        people: (held.people[level.id] ?? 0) + (rank === 0 ? held.implicit : 0),
         media: held.media[level.id] ?? 0,
       })),
       documents: held.texts,
@@ -165,7 +172,8 @@ export class AccessLevelsService {
     return this.serial(async () => {
       const root = this.requireRoot(topic);
       const scale = this.deps.directory.scaleOf(root);
-      const level = this.newLevel(actor, { scale, code, description });
+      const taken = await this.takenIds(root, scale);
+      const level = this.newLevel(actor, { scale, code, description, taken });
       if (scale.length === 0) await this.seed(actor, { root, level: level.id });
       await this.deps.directory.changeScale(root, (current) => ({
         next: [...current, level],
@@ -187,19 +195,36 @@ export class AccessLevelsService {
       readonly scale: readonly StoredLevel[];
       readonly code: string;
       readonly description: string;
+      readonly taken: ReadonlySet<string>;
     },
   ): StoredLevel {
-    const { scale, code, description } = input;
+    const { scale, code, description, taken } = input;
     if (scale.length >= LEVELS_PER_SCALE_MAX)
       throw new AppError('VALIDATION_FAILED', 'Too many levels');
     assertFreeCode(scale, code);
     return {
-      id: freeId(code, scale),
+      id: freeId(code, taken),
       code,
       description,
       createdBy: actor.by,
       createdAt: this.now(),
     };
+  }
+
+  /** The ids of the scale and those a profile or a person still names in the collection. */
+  private async takenIds(
+    root: string,
+    scale: readonly StoredLevel[],
+  ): Promise<Set<string>> {
+    const people = await this.deps.people.list();
+    return new Set([
+      ...scale.map((one) => one.id),
+      ...(this.deps.presets?.idsIn(root) ?? []),
+      ...people.flatMap((one) => {
+        const level = one.levels?.[root];
+        return level === undefined ? [] : [level];
+      }),
+    ]);
   }
 
   /** A new code or description; the id and the items stay (AC-11). */
