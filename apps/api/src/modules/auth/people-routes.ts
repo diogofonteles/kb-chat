@@ -10,8 +10,6 @@ import {
   type DefaultableAppAi,
   type PersonAiUpdate,
   type PersonAi,
-  type PersonLevelVia,
-  type Role,
   personIdSchema,
   personListSchema,
   personSchema,
@@ -30,6 +28,15 @@ import { AppError } from '../../app-error.js';
 import { viewerOf, type RouteAccess } from './access.js';
 import type { Invitations } from './invitations.js';
 import type { PeopleService } from './people-service.js';
+import {
+  assertPersonLevels,
+  assertPresetLevels,
+  recordLevels,
+  serialLevels,
+  withGrantedLevels,
+  withLevels,
+  type PersonLevelRules,
+} from './people-level-writes.js';
 import { aiOf } from './person-ai.js';
 import { toPerson, type StoredPerson } from './person.js';
 import type { SessionService } from './session-service.js';
@@ -47,39 +54,6 @@ export interface PeopleRouteDeps {
   readonly presets?: PresetSource;
   /** A person's level per scaled collection (KBC-103 FR-3); absent: none can be set. */
   readonly levels?: PersonLevelRules;
-}
-
-/** A person's role and collections, and the levels a preset or a change names (KBC-109). */
-export interface LevelGrant {
-  readonly role: Role;
-  readonly topics: readonly string[];
-  readonly levels?: Readonly<Record<string, string>>;
-}
-
-/** What the access-levels module checks and records around a person's levels. */
-export interface PersonLevelRules {
-  /** Throws VALIDATION_FAILED unless every entry names a level of that collection's scale. */
-  assertLevels(levels: Readonly<Record<string, string>>): void;
-  /**
-   * KBC-109 BR-1, BR-5: every level of a preset names a collection with a scale that its
-   * collections reach, and one of its levels; a master preset holds none.
-   */
-  assertPresetLevels(preset: LevelGrant): void;
-  /**
-   * The levels a grant writes (KBC-109 BR-2, BR-3): for each collection with a scale it
-   * reaches, the level named when it exists, else the one `held` when valid and not named,
-   * else the lowest. A master gets none.
-   */
-  resolve(
-    grant: LevelGrant & { readonly held?: Readonly<Record<string, string>> },
-  ): Record<string, string>;
-  /** Audits each level that changed (FR-10), and where it was set (KBC-109 BR-4). */
-  recordChange(change: {
-    readonly before: StoredPerson;
-    readonly after: StoredPerson;
-    readonly by: string;
-    readonly via: PersonLevelVia;
-  }): Promise<void>;
 }
 
 /** Where the people routes find a preset (KBC-028), and whether a person saved Settings. */
@@ -181,20 +155,24 @@ async function invite(
   const chosen = deps.presets?.presetFor({ preset, profileId });
   if (chosen) assertKnownTopics(deps, chosen.topics);
   // A preset sent is checked; a profile's level that no longer exists is the lowest (BR-3).
-  if (preset) assertPresetLevels(deps, preset);
+  if (preset) assertPresetLevels(deps.levels, preset);
   // Lending in the invitation is the owner's alone, as in the editor (KBC-031 BR-1).
   assertMayLend(deps, request, chosen?.ai.appAi);
-  const leveled = chosen && withLevels(deps, chosen);
-  const invited = await deps.people.invite(email, inviter.email, leveled);
-  if (chosen) await followInvitedAi(deps, invited, request.log);
-  if (leveled?.levels)
-    await recordLevels(deps, {
-      before: { ...invited, levels: {} },
-      after: invited,
-      by: inviter.email,
-      via: 'invite',
-      log: request.log,
-    });
+  // Resolved and written in the levels queue, so a first scale never slips between (R1-6).
+  const { invited, leveled } = await serialLevels(deps.levels, async () => {
+    const leveled = chosen && withLevels(deps.levels, chosen);
+    const invited = await deps.people.invite(email, inviter.email, leveled);
+    if (leveled?.levels)
+      await recordLevels(deps.levels, {
+        before: { ...invited, levels: {} },
+        after: invited,
+        by: inviter.email,
+        via: 'invite',
+        log: request.log,
+      });
+    return { invited, leveled };
+  });
+  if (leveled) await followInvitedAi(deps, invited, request.log);
   return sendEmail
     ? deps.invitations.afterInvite(invited, inviter, request.log)
     : invited;
@@ -217,44 +195,6 @@ async function followInvitedAi(
   });
 }
 
-function assertPresetLevels(deps: PeopleRouteDeps, preset: InvitationPreset) {
-  if (!preset.levels || Object.keys(preset.levels).length === 0) return;
-  if (!deps.levels)
-    throw new AppError('VALIDATION_FAILED', 'Levels are not available');
-  deps.levels.assertPresetLevels(preset);
-}
-
-/** The preset with the levels it writes (KBC-109 FR-2); none without the levels module. */
-function withLevels(
-  deps: PeopleRouteDeps,
-  preset: InvitationPreset,
-  held?: Readonly<Record<string, string>>,
-): InvitationPreset {
-  const { levels: named, ...rest } = preset;
-  const levels = deps.levels?.resolve({ ...preset, levels: named, held }) ?? {};
-  return Object.keys(levels).length > 0 ? { ...rest, levels } : rest;
-}
-
-/**
- * A change of collections writes the lowest level of each collection with a scale it now
- * reaches without a valid one, so the grant is recorded (KBC-109 AC-5, BR-4).
- */
-function withGrantedLevels(
-  deps: PeopleRouteDeps,
-  before: StoredPerson | null,
-  body: PersonUpdate,
-): PersonUpdate {
-  if (!body.topics || !before || !deps.levels) return body;
-  const granted = deps.levels.resolve({
-    role: body.role ?? before.role,
-    topics: body.topics,
-    levels: body.levels ?? {},
-    held: before.levels,
-  });
-  const levels = { ...body.levels, ...granted };
-  return Object.keys(levels).length > 0 ? { ...body, levels } : body;
-}
-
 /** Everything a master's change must pass before anything is written. */
 function assertPatch(
   deps: PeopleRouteDeps,
@@ -266,10 +206,6 @@ function assertPatch(
     throw new AppError('FORBIDDEN', 'Only the owner grants acting as a person');
   assertKnownTopics(deps, body.topics);
   assertMayLend(deps, request, body.ai?.appAi);
-  if (body.levels === undefined) return;
-  if (!deps.levels)
-    throw new AppError('VALIDATION_FAILED', 'Levels are not available');
-  deps.levels.assertLevels(body.levels);
 }
 
 function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
@@ -302,20 +238,25 @@ async function patchPerson(
   const { id, body } = change;
   assertPatch(deps, request, body);
   const by = viewerOf(request).person.email;
-  const before = await deps.people.find(id);
-  assertMayChangeLent(deps, request, { before, ai: body.ai });
-  const patch = withGrantedLevels(deps, before, body);
-  const updated = await deps.people.update(id, patch, by);
+  // The person before, the levels and their audit, in the levels queue (R1-6, QA-2).
+  const { before, updated } = await serialLevels(deps.levels, async () => {
+    const before = await deps.people.find(id);
+    assertPersonLevels(deps.levels, {
+      role: body.role ?? before?.role,
+      levels: body.levels,
+    });
+    assertMayChangeLent(deps, request, { before, ai: body.ai });
+    const patch = withGrantedLevels(deps.levels, before, body);
+    const updated = await deps.people.update(id, patch, by);
+    if (patch.levels && before)
+      await recordLevels(deps.levels, {
+        ...{ before, after: updated, by, via: 'editor' as const },
+        log: request.log,
+      });
+    return { before, updated };
+  });
   if (body.ai && before)
     await syncAi(deps, { before, updated, by, log: request.log });
-  if (patch.levels && before)
-    await recordLevels(deps, {
-      before,
-      after: updated,
-      by,
-      via: 'editor',
-      log: request.log,
-    });
   return updated;
 }
 
@@ -347,65 +288,45 @@ async function applyProfile(
   request: FastifyRequest,
   target: { readonly id: string; readonly profileId: string },
 ): Promise<StoredPerson> {
-  const { profileId } = target;
   const { presets } = deps;
   if (!presets) throw new AppError('NOT_FOUND', 'Unknown invite profile');
-  const profile = presets.presetFor({ profileId });
-  const before = await deps.people.find(target.id);
-  if (!profile || !before) throw new AppError('NOT_FOUND', 'Not found');
+  const profile = presets.presetFor({ profileId: target.profileId });
+  if (!profile) throw new AppError('NOT_FOUND', 'Not found');
   assertKnownTopics(deps, profile.topics);
-  // Only the collections the profile reaches change level (KBC-109 BR-2).
-  const preset = withLevels(deps, profile, before.levels);
   const by = viewerOf(request).person.email;
-  assertMayChangeLent(deps, request, { before, ai: preset.ai });
-  const updated = await deps.people.applyPreset(before.id, preset, {
-    by,
-    withPreferences: !(await presets.hasSavedSettings(before)),
-  });
-  await followProfileAi(deps, { before, updated, by, log: request.log });
-  if (preset.levels)
-    await recordLevels(deps, {
-      before,
-      after: updated,
+  const log = request.log;
+  const { before, updated } = await serialLevels(deps.levels, async () => {
+    const before = await deps.people.find(target.id);
+    if (!before) throw new AppError('NOT_FOUND', 'Not found');
+    // Only the collections the profile reaches change level (KBC-109 BR-2).
+    const preset = withLevels(deps.levels, profile, before.levels);
+    assertMayChangeLent(deps, request, { before, ai: preset.ai });
+    const updated = await deps.people.applyPreset(before.id, preset, {
       by,
-      via: 'profile',
-      log: request.log,
+      withPreferences: !(await presets.hasSavedSettings(before)),
     });
+    const record = { before, after: updated, by, via: 'profile' as const };
+    if (preset.levels) await recordLevels(deps.levels, { ...record, log });
+    return { before, updated };
+  });
+  await followProfileAi(deps, { before, updated, by, log });
   return updated;
 }
 
-/** The whole profile goes back when the house cannot follow its AI. */
+/** The whole profile goes back when the house cannot follow its AI, its levels audited. */
 async function followProfileAi(deps: PeopleRouteDeps, change: AiSyncChange) {
+  const { before, updated, by, log } = change;
   await syncAi(deps, change).catch(async (err: unknown) => {
-    await deps.people
-      .restore(change.before)
-      .catch(() => change.log.error('could not undo a profile'));
-    throw err;
-  });
-}
-
-/**
- * A person's levels changed: one audit line per collection (KBC-109 BR-4). people.json is
- * written first (the audit file cannot join it): a failed record is logged with what changed
- * and fails the request (ADR 0036 §11).
- */
-async function recordLevels(
-  deps: PeopleRouteDeps,
-  change: Parameters<PersonLevelRules['recordChange']>[0] & {
-    readonly log: FastifyBaseLogger;
-  },
-): Promise<void> {
-  const { log, ...record } = change;
-  await deps.levels?.recordChange(record).catch((err: unknown) => {
-    log.error(
-      {
-        err,
-        person: record.after.id,
-        before: record.before.levels ?? {},
-        after: record.after.levels ?? {},
-      },
-      'person levels changed but not audited',
-    );
+    await serialLevels(deps.levels, async () => {
+      const restored = await deps.people.restore(before);
+      const record = {
+        before: updated,
+        after: restored,
+        by,
+        via: 'profile' as const,
+      };
+      await recordLevels(deps.levels, { ...record, log });
+    }).catch(() => log.error('could not undo a profile'));
     throw err;
   });
 }

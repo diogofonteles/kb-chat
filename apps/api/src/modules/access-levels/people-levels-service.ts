@@ -2,13 +2,13 @@ import type {
   LevelAuditEntry,
   PeopleLevelRequest,
   PeopleLevelResult,
-  PersonLevelVia,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { LevelAuditPort } from '../../ports/level-audit.js';
 import {
   canSeeTopic,
   isMaster,
+  type LevelChangeRecord,
   type LevelChanged,
   type LevelGrant,
   type ParentOf,
@@ -124,28 +124,37 @@ export class PeopleLevelsService implements PersonLevelRules {
     );
   }
 
-  /** One line per collection whose level changed, in one write (BR-4). */
-  async recordChange(change: {
-    readonly before: StoredPerson;
-    readonly after: StoredPerson;
-    readonly by: string;
-    readonly via: PersonLevelVia;
-  }): Promise<void> {
+  /** One line per collection whose level changed (set or taken away), in one write (BR-4). */
+  async recordChange(change: LevelChangeRecord): Promise<void> {
     const { before, after, by, via } = change;
     const at = this.now();
-    const lines = Object.entries(after.levels ?? {})
-      .filter(([root, level]) => (before.levels?.[root] ?? null) !== level)
-      .map(([root, level]): LevelAuditEntry => ({
+    const roots = new Set([
+      ...Object.keys(before.levels ?? {}),
+      ...Object.keys(after.levels ?? {}),
+    ]);
+    const lines = [...roots]
+      .map((root) => ({
+        root,
+        was: before.levels?.[root] ?? null,
+        now: after.levels?.[root] ?? null,
+      }))
+      .filter(({ was, now }) => was !== now)
+      .map(({ root, was, now }): LevelAuditEntry => ({
         at,
         by,
         kind: 'person.level',
         collection: root,
         target: after.id,
-        before: before.levels?.[root] ?? null,
-        after: level,
+        before: was,
+        after: now,
         via,
       }));
     if (lines.length > 0) await this.deps.audit.appendMany(lines);
+  }
+
+  /** A person's level write, one after the other with scale changes and bulks (R1-6). */
+  serial<T>(work: () => Promise<T>): Promise<T> {
+    return this.queue.run(work);
   }
 
   /** FR-3: one level for the people named (or everyone), one write of people.json (NFR-1). */

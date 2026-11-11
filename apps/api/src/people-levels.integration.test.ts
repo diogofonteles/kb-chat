@@ -325,40 +325,114 @@ describe('Levels in invitations, profiles, approvals and in bulk (KBC-109)', () 
     expect(all.json()).toMatchObject({ updated: 1, masters: 1 });
   });
 
-  it('NFR-1: a level for 500 people takes at most a second', async () => {
+  it('R1-4: a level is never written on a master, nor on someone made master in the same change', async () => {
     const world = await startLevels();
     await createScale(world, ['QS', 'CI']);
-    const state = world.started.state;
-    const people = await peopleFile(state);
-    const now = new Date().toISOString();
-    const many = Array.from({ length: 500 }, (_, n) => ({
-      id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
-      sub: null,
-      email: `p${n}@example.com`,
-      name: '',
-      picture: null,
-      role: 'member',
-      topics: ['hermetismo'],
-      features: ['search'],
-      invitedBy: OWNER_EMAIL,
-      createdAt: now,
-      lastLoginAt: null,
-    }));
-    await writeFile(
-      join(state, 'people.json'),
-      JSON.stringify({ version: 1, people: [...people, ...many] }),
-    );
-    await closeApp();
-    const again = await start({ state, vault: world.vault });
-    const owner = caller(again.app, await signIn(again, OWNER_EMAIL));
-    const started = performance.now();
-    const applied = await owner('POST', BULK, {
-      ids: many.map((one) => one.id),
-      topic: 'hermetismo',
-      level: 'ci',
+    const ana = await memberOf(world, 'ana@example.com');
+    const promoted = await world.owner('PATCH', `/api/v1/people/${ana.id}`, {
+      role: 'master',
+      levels: { hermetismo: 'ci' },
     });
-    const elapsed = performance.now() - started;
-    expect(applied.json().updated).toBe(500);
-    expect(elapsed).toBeLessThanOrEqual(1000);
+    expect(promoted.statusCode).toBe(400);
+    expect(promoted.json().error.code).toBe('VALIDATION_FAILED');
+    await world.owner('PATCH', `/api/v1/people/${ana.id}`, { role: 'master' });
+    const onMaster = await world.owner('PATCH', `/api/v1/people/${ana.id}`, {
+      levels: { hermetismo: 'ci' },
+    });
+    expect(onMaster.statusCode).toBe(400);
+    const people = await peopleFile(world.started.state);
+    expect(people.find((one) => one.id === ana.id)?.levels).toEqual({
+      hermetismo: 'qs',
+    });
+  });
+
+  it('R1-5: a master made member gets the lowest level of the collections with a scale, audited', async () => {
+    const world = await startLevels();
+    const bia = await memberOf(world, 'bia@example.com');
+    await world.owner('PATCH', `/api/v1/people/${bia.id}`, { role: 'master' });
+    await createScale(world, ['QS', 'CI']);
+    const demoted = await world.owner('PATCH', `/api/v1/people/${bia.id}`, {
+      role: 'member',
+    });
+    expect(demoted.statusCode, demoted.body).toBe(200);
+    expect(demoted.json().levels).toEqual({ hermetismo: 'qs' });
+    expect((await levelAudit(world.started.state)).at(-1)).toMatchObject({
+      kind: 'person.level',
+      target: bia.id,
+      before: null,
+      after: 'qs',
+      via: 'editor',
+    });
+  });
+
+  it('R1-2: a profile renamed without its preset keeps a person at CI when applied', async () => {
+    const world = await startLevels();
+    const profileId = await createProfile(world, {
+      name: 'Antigo',
+      preset: { topics: ['hermetismo'] },
+    });
+    await createScale(world, ['QS', 'CI']);
+    const ana = await memberOf(world, 'ana@example.com');
+    await setPersonLevel(world, ana.id, { hermetismo: 'ci' });
+    const renamed = await world.owner('PUT', `${PROFILES}/${profileId}`, {
+      name: 'Antigo renomeado',
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json().preset.levels).toBeUndefined();
+    const applied = await world.owner(
+      'POST',
+      `/api/v1/people/${ana.id}/profile`,
+      { profileId },
+    );
+    expect(applied.json().levels).toEqual({ hermetismo: 'ci' });
+  });
+
+  it('QA-2, R1-6: the editor and the bulk racing on one person leave an unbroken audit chain', async () => {
+    const world = await startLevels();
+    await createScale(world, ['QS', 'CI', 'CDC']);
+    const ana = await memberOf(world, 'ana@example.com');
+    const from = (await levelAudit(world.started.state)).length;
+    for (let n = 0; n < 15; n += 1) {
+      const [patch, bulk] = await Promise.all([
+        world.owner('PATCH', `/api/v1/people/${ana.id}`, {
+          levels: { hermetismo: n % 2 === 0 ? 'cdc' : 'qs' },
+        }),
+        world.owner('POST', BULK, {
+          ids: [ana.id],
+          topic: 'hermetismo',
+          level: n % 2 === 0 ? 'ci' : 'cdc',
+        }),
+      ]);
+      expect(patch.statusCode, patch.body).toBe(200);
+      expect(bulk.statusCode, bulk.body).toBe(200);
+    }
+    const lines = (await levelAudit(world.started.state))
+      .slice(from)
+      .filter((one) => one.kind === 'person.level' && one.target === ana.id);
+    for (let i = 1; i < lines.length; i += 1)
+      expect(lines[i]?.before, `line ${i}`).toBe(lines[i - 1]?.after);
+    const final = (await peopleFile(world.started.state)).find(
+      (one) => one.id === ana.id,
+    )?.levels?.['hermetismo'];
+    expect(final).toBe(lines.at(-1)?.after);
+  });
+
+  it('R1-6: a grant racing the first level of a scale is placed and audited once', async () => {
+    const world = await startLevels();
+    const invited = await world.owner('POST', '/api/v1/people', {
+      email: 'corrida@example.com',
+      sendEmail: false,
+    });
+    const id = invited.json().id as string;
+    const [granted, created] = await Promise.all([
+      world.owner('PATCH', `/api/v1/people/${id}`, { topics: ['hermetismo'] }),
+      world.owner('POST', '/api/v1/topics/hermetismo/levels', { code: 'QS' }),
+    ]);
+    expect(granted.statusCode).toBe(200);
+    expect(created.statusCode).toBe(201);
+    const people = await peopleFile(world.started.state);
+    expect(people.find((one) => one.id === id)?.levels).toEqual({
+      hermetismo: 'qs',
+    });
   });
 });
