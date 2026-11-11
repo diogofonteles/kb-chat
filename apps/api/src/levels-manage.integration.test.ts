@@ -269,6 +269,20 @@ describe('Deleting a level (KBC-108 FR-1, BR-1, BR-2)', () => {
     expect((await ana.call('DELETE', `${LEVELS}/ci`, body)).statusCode).toBe(
       403,
     );
+    const asked = { remove: 'ci', version };
+    expect(
+      (await ana.call('POST', `${LEVELS}/preview`, asked)).statusCode,
+    ).toBe(403);
+    const clear = { confirm: 'hermetismo', version };
+    expect((await ana.call('DELETE', LEVELS, clear)).statusCode).toBe(403);
+    const anonymous = await world.started.app.inject({
+      method: 'GET',
+      url: AUDIT,
+    });
+    expect(anonymous.statusCode).toBe(401);
+    expect(
+      (await world.owner('DELETE', `${LEVELS}/nope`, body)).statusCode,
+    ).toBe(404);
     expect(
       (
         await world.owner(
