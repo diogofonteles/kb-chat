@@ -116,7 +116,11 @@ async function seeStaleProfile(page: Page, name: string): Promise<void> {
 }
 
 /** AC-1, AC-8: the dialog counts what CI holds, its targets before the focused danger button. */
-async function deleteCi(page: Page): Promise<void> {
+async function deleteCi(
+  page: Page,
+  owner: APIRequestContext,
+  slug: string,
+): Promise<void> {
   await press(page, page.getByRole('button', { name: 'Apagar CI' }));
   const dialog = page.getByRole('dialog', { name: 'Apagar o nível CI' });
   await expect(
@@ -132,6 +136,21 @@ async function deleteCi(page: Page): Promise<void> {
   await expect(content).toHaveValue('cdc');
   await expect(people).toHaveValue('qs');
   const confirm = dialog.getByRole('button', { name: 'Apagar CI' });
+  await expect(confirm).toBeFocused();
+  // R1-2: another master changes the scale while the dialog is open; the dialog counts again.
+  const renamed = await owner.patch(`/api/v1/topics/${slug}/levels/cdc`, {
+    data: { description: 'Outra aba' },
+    headers: CSRF,
+  });
+  expect(renamed.status(), await renamed.text()).toBe(200);
+  await press(page, confirm);
+  await expect(
+    dialog.getByRole('status').filter({
+      hasText:
+        'A escala mudou. Contei de novo com a escala de agora: confira antes de confirmar.',
+    }),
+  ).toBeVisible();
+  await expect(confirm).toBeEnabled();
   await expect(confirm).toBeFocused();
   const [peopleBox, confirmBox] = await Promise.all([
     people.boundingBox(),
@@ -249,7 +268,7 @@ test('KBC-108 AC-1, AC-3, AC-4, AC-5, AC-8: delete a level, move with its previe
 
   await page.goto(`/acervos/${slug}/niveis`);
   await expect(page.locator('.pill')).toHaveText(['QS', 'CI', 'CDC']);
-  await deleteCi(page);
+  await deleteCi(page, owner, slug);
   await seeStaleProfile(page, profile);
   await page.goto(`/acervos/${slug}/niveis`);
   await moveCdcUp(page);
