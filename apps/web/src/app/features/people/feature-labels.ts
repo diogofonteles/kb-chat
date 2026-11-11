@@ -27,6 +27,8 @@ export const FEATURE_LABELS: Record<Feature, () => string> = {
     $localize`:@@feature.mediaCorrect:Corrigir transcrição`,
   'collection-levels': () =>
     $localize`:@@feature.collectionLevels:Gerenciar níveis de acesso`,
+  'content-levels': () =>
+    $localize`:@@feature.contentLevels:Classificar nível de conteúdo`,
   'media-voice-profiles': () =>
     $localize`:@@feature.mediaVoiceProfiles:Cadastrar perfis de voz`,
 };

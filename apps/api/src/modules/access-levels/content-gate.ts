@@ -1,4 +1,9 @@
-import { canSeeTopic, isMaster, type StoredPerson } from '../auth/index.js';
+import {
+  canSeeTopic,
+  hasFeature,
+  isMaster,
+  type StoredPerson,
+} from '../auth/index.js';
 import type { CatalogRegistry, TopicCatalog } from '../catalog/index.js';
 import type { ViewedCollection } from '../../ports/level-view.js';
 import type { LevelDirectory, StoredLevel } from './level-directory.js';
@@ -53,11 +58,13 @@ export class ContentGate {
     const scale = this.deps.directory.scaleOf(root);
     if (scale.length === 0) return OPEN_VIEW;
     const rank = isMaster(person) ? 'all' : rankOfPerson(person, root, scale);
+    const classifier = rank !== 'all' && classifies(person);
     const { directory } = this.deps;
-    const key = `${root}:${rank}`;
+    const key = `${root}:${rank}:${classifier ? 'classifier' : 'member'}`;
     return scaledView({
       scale,
       rank,
+      classifier,
       placementsOf: (collection) => directory.placementsOf(collection),
       memo: (catalog, compute) => this.memo(catalog, key, compute),
     });
@@ -131,6 +138,10 @@ export class ContentGate {
     return share;
   }
 }
+
+/** Holds "Classificar nível de conteúdo" (KBC-107); masters hold it by their role. */
+export const classifies = (person: StoredPerson): boolean =>
+  hasFeature(person, 'content-levels');
 
 function rankOfPerson(
   person: StoredPerson,

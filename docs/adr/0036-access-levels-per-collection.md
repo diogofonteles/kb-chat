@@ -48,6 +48,12 @@ QMD 2.8.3's `query` tool filters only by `collections` (OR) and `minScore`; it c
 
 12. **Executable rules.** A boundary test fails CI when a module other than `catalog`, `access-levels` and the composition root imports `CatalogRegistry.get/scope` or the media store's list methods directly; a leakage suite (KBC-111) runs every content route with two people at different levels and asserts that no title, id, snippet, count or citation of a hidden item appears in any response or SSE event.
 
+## Amendment (KBC-107, 2026-11-11)
+
+- **Presence of vault documents:** `document-presence.json` in the state directory, apart from `document-levels.json` (so an API rolled back to the previous image still reads that file's strict schema): per collection and document id, `firstSeenAt` (when a document without a level was first seen in a collection with a scale: "chegou em") and `missingSince` (when a document with a level stopped being in the vault). It is reconciled after every catalog load; a level whose document has been missing for more than 30 days is dropped (§5: the document comes back as "Sem nível").
+- **`content-levels`** ("Classificar nível de conteúdo", granted per person): its holder's view also admits the documents without a level of the collections they see and shows the badges (§9); they give documents a level at or below their own, singly or in bulk (`POST …/document-levels`, by ids or by the "Sem nível" filter as of the list's `asOf`). Unassigned media stays with masters.
+- **Audit:** a bulk is one `bulk` line with the filter (or `{ ids: n }`) and the counts, plus one `item.level` line per document, written in one append and one sync.
+
 ## Options considered
 
 1. **Scales, person levels and item levels in the app's state; one viewer-scoped view (chosen).** Works on the read-only vault (Q7), survives every sync, changes take effect at once and are audited in one place. Cost: the app holds a second fact about each vault document, and new documents start closed until classified.

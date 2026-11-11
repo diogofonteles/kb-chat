@@ -6,4 +6,6 @@ import type { LevelAuditEntry } from '@kb-chat/contracts';
  */
 export interface LevelAuditPort {
   append(entry: LevelAuditEntry): Promise<void>;
+  /** Several lines in one write and one sync (a bulk and its documents, KBC-107 NFR-1). */
+  appendMany(entries: readonly LevelAuditEntry[]): Promise<void>;
 }

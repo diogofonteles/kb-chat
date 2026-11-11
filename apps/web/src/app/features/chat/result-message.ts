@@ -29,6 +29,7 @@ import { MediaHitCard } from './media-hit-card.js';
 import { mixReferences, passageKey } from './references.js';
 import { ResultCard, type OpenedHit } from './result-card.js';
 import { describeMediaCount, describeResultCount } from './result-count.js';
+import { SearchLevelChange } from './search-level-change.js';
 
 /** A spoken passage opened, with its place among the results (KBC-039 FR-4). */
 export interface OpenedPassage {
@@ -39,7 +40,14 @@ export interface OpenedPassage {
 /** The system's answer to one question: summary, filters, cards and every state (screens.md T2). */
 @Component({
   selector: 'app-result-message',
-  imports: [ResultCard, MediaHitCard, KindsChoice, FilterBar, DecimalPipe],
+  imports: [
+    ResultCard,
+    MediaHitCard,
+    KindsChoice,
+    FilterBar,
+    DecimalPipe,
+    SearchLevelChange,
+  ],
   templateUrl: './result-message.html',
   styleUrl: './result-message.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

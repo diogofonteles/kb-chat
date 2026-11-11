@@ -18,6 +18,7 @@ import type {
 } from '@kb-chat/contracts';
 import { treeTitle } from '@core/topics/topic-tree.js';
 import { CollectionDialog } from '@features/collections/collection-dialog.js';
+import { UnassignedNotice } from '@features/collections/unassigned-notice.js';
 import { HistoryStore } from '@core/history/history-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import { EMPTY, Subject, catchError, switchMap } from 'rxjs';
@@ -34,7 +35,7 @@ import { SessionStore } from '@core/auth/session-store.js';
 import { hasLibrary } from '@features/media/library/library-access.js';
 import { ProcessingQueueStore } from '@features/media/queue/processing-queue-store.js';
 
-export type SidebarAction = 'new' | 'restore' | 'topic' | 'media';
+export type SidebarAction = 'new' | 'restore' | 'topic' | 'media' | 'levels';
 
 const THEME_LABELS: Record<Theme, () => string> = {
   auto: () => $localize`:@@theme.auto:Automático (claro/escuro)`,
@@ -62,7 +63,13 @@ const KIND_LABELS: Record<ConversationKind, () => string> = {
  */
 @Component({
   selector: 'app-sidebar',
-  imports: [SettingsButton, RouterLink, RouterLinkActive, CollectionDialog],
+  imports: [
+    SettingsButton,
+    RouterLink,
+    RouterLinkActive,
+    CollectionDialog,
+    UnassignedNotice,
+  ],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -200,6 +207,11 @@ export class Sidebar {
 
   protected openMedia(): void {
     this.acted.emit('media');
+  }
+
+  /** "N documentos sem nível" (KBC-107) leads to T24: the drawer closes. */
+  protected openLevels(): void {
+    this.acted.emit('levels');
   }
 
   /** "Novo acervo" and "Editar acervo" (KBC-048 FR-6): only with "Criar acervos". */

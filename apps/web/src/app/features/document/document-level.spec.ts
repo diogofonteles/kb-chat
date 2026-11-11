@@ -9,16 +9,13 @@ import type { ContentLevel } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { DocumentLevel } from './document-level.js';
 
+/** The levels the person may give (KBC-107: up to their own). */
 const SCALE = {
   collection: 'hermetismo',
-  inherited: false,
   levels: [
-    { id: 'qs', code: 'QS', description: '', documents: 4, people: 1 },
-    { id: 'ci', code: 'CI', description: '', documents: 2, people: 1 },
+    { id: 'qs', code: 'QS' },
+    { id: 'ci', code: 'CI' },
   ],
-  documents: 7,
-  people: 2,
-  unassigned: 1,
 };
 
 async function renderLevel(level: ContentLevel) {
@@ -39,7 +36,7 @@ describe('DocumentLevel (T3, KBC-103 FR-4, AC-9)', () => {
     expect(screen.getByText('Sem nível')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Mudar nível' }));
     TestBed.tick();
-    http.expectOne('/api/v1/topics/hermetismo/levels').flush(SCALE);
+    http.expectOne('/api/v1/topics/hermetismo/levels/choices').flush(SCALE);
     await fixture.whenStable();
     fireEvent.change(screen.getByRole('combobox', { name: 'Nível' }), {
       target: { value: 'ci' },
@@ -60,7 +57,7 @@ describe('DocumentLevel (T3, KBC-103 FR-4, AC-9)', () => {
     const { fixture, http } = await renderLevel({ id: 'qs', code: 'QS' });
     fireEvent.click(screen.getByRole('button', { name: 'Mudar nível' }));
     TestBed.tick();
-    http.expectOne('/api/v1/topics/hermetismo/levels').flush(SCALE);
+    http.expectOne('/api/v1/topics/hermetismo/levels/choices').flush(SCALE);
     await fixture.whenStable();
     fireEvent.change(screen.getByRole('combobox', { name: 'Nível' }), {
       target: { value: 'ci' },

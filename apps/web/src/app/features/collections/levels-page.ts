@@ -30,8 +30,10 @@ import {
   levelsPagePath,
   topicLevelsUrl,
 } from '@core/levels/levels-api.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { CollectionHeading } from '@features/chat/collection-heading.js';
+import { UnassignedSection } from './unassigned-section.js';
 import { finalize, map, type Observable } from 'rxjs';
 
 /** A move waiting for its confirmation: which level, and where it goes. */
@@ -52,11 +54,12 @@ const ordinal = (n: number): string => `${n}º`;
 /**
  * "Níveis de acesso" (T24, KBC-103, ADR 0036): the scale of a top-level collection, lowest
  * first. Masters create, rename and move levels; the first level places every document and
- * person of the collection at it. A sub-collection points to its parent's scale.
+ * person of the collection at it. A sub-collection points to its parent's scale. Below it,
+ * "Sem nível" (KBC-107); a holder of "Classificar nível de conteúdo" sees only that section.
  */
 @Component({
   selector: 'app-levels-page',
-  imports: [RouterLink],
+  imports: [RouterLink, UnassignedSection],
   templateUrl: './levels-page.html',
   styleUrl: './levels-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -64,6 +67,7 @@ const ordinal = (n: number): string => `${n}º`;
 export class LevelsPage {
   private readonly api = inject(LevelsApi);
   private readonly chat = inject(ChatStore);
+  private readonly session = inject(SessionStore);
   private readonly injector = inject(Injector);
   private readonly destroyRef = inject(DestroyRef);
   private readonly codeInput =
@@ -85,9 +89,14 @@ export class LevelsPage {
 
   protected readonly codeMax = LEVEL_CODE_MAX;
   protected readonly descriptionMax = LEVEL_DESCRIPTION_MAX;
-  protected readonly loaded = httpResource(() => topicLevelsUrl(this.slug()), {
-    parse: (body) => topicLevelsSchema.parse(body),
-  });
+  /** Masters manage the scale; whoever classifies sees only "Sem nível" (KBC-107). */
+  protected readonly manager = computed(
+    () => this.session.me()?.levelsManager === true,
+  );
+  protected readonly loaded = httpResource(
+    () => (this.manager() ? topicLevelsUrl(this.slug()) : undefined),
+    { parse: (body) => topicLevelsSchema.parse(body) },
+  );
   /** The latest answer of a write, over what was loaded. */
   private readonly written = signal<TopicLevels | null>(null);
   protected readonly scale = computed<TopicLevels | null>(() => {

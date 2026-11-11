@@ -1,4 +1,4 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -10,11 +10,14 @@ import {
   convertToParamMap,
   provideRouter,
 } from '@angular/router';
-import type { TopicLevels } from '@kb-chat/contracts';
+import type { Me, TopicLevels, UnassignedPage } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { of } from 'rxjs';
+import { SessionStore } from '@core/auth/session-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
+import { aMe, anOwner } from '../../testing/session-fixtures.js';
 import { LevelsPage } from './levels-page.js';
+import { answeringUnassigned, unassignedPage } from './unassigned-fixtures.js';
 
 const URL = '/api/v1/topics/hermetismo/levels';
 
@@ -45,11 +48,16 @@ const THREE = scale({
 async function open(
   slug = 'hermetismo',
   answer: TopicLevels | 'fails' = scale(),
+  {
+    me = { ...anOwner(), features: [...anOwner().features, 'content-levels'] },
+    queue = unassignedPage({ count: 0 }),
+  }: { me?: Me; queue?: UnassignedPage } = {},
 ) {
   const rendered = await render(LevelsPage, {
     providers: [
+      { provide: SessionStore, useValue: { me: signal(me) } },
       provideZonelessChangeDetection(),
-      provideHttpClient(),
+      provideHttpClient(withInterceptors([answeringUnassigned(queue)])),
       provideHttpClientTesting(),
       provideRouter([]),
       {
@@ -63,12 +71,17 @@ async function open(
             { slug: 'hermetismo', title: 'Hermetismo' },
             { slug: 'hermetismo/aulas', title: 'Aulas' },
           ]),
+          topic: signal(null),
         },
       },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
   TestBed.tick();
+  if (!me.levelsManager) {
+    await rendered.fixture.whenStable();
+    return { ...rendered, http };
+  }
   const url = `/api/v1/topics/${encodeURIComponent(slug)}/levels`;
   const request = http.expectOne(url);
   if (answer === 'fails') request.flush('', { status: 500, statusText: 'x' });
@@ -191,9 +204,24 @@ describe('LevelsPage (T24, KBC-103)', () => {
     expect(screen.getByText('C.I.')).toBeTruthy();
   });
 
-  it('AC-9: counts the documents without a level', async () => {
-    await open('hermetismo', scale({ ...THREE, unassigned: 1 }));
+  it('KBC-107: lists the documents without a level below the scale', async () => {
+    const { fixture } = await open(
+      'hermetismo',
+      scale({ ...THREE, unassigned: 1 }),
+      { queue: unassignedPage({ count: 1 }) },
+    );
+    await fixture.whenStable();
     expect(screen.getByRole('heading', { name: 'Sem nível (1)' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Novo 0' })).toBeTruthy();
+  });
+
+  it('KBC-107 D3: whoever classifies (not a master) sees only "Sem nível", never the scale', async () => {
+    const { http } = await open('hermetismo', scale(), {
+      me: aMe({ features: ['search', 'content-levels'] }),
+    });
+    http.expectNone(URL);
+    expect(screen.getByText('Todos os documentos têm nível.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Adicionar' })).toBeNull();
   });
 
   it('BR-1: a sub-collection points to its parent levels', async () => {

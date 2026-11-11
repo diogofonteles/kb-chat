@@ -4,6 +4,7 @@ import { registerTranscriptSeed } from './transcript-seed-routes.js';
 import { registerDiarizationSeed } from './diarization-seed-routes.js';
 import { registerProposalSeed } from './proposal-seed-routes.js';
 import { registerKbPublishMac } from './kb-publish-routes.js';
+import { registerLevelArrivals } from './level-arrival-routes.js';
 import { startMediaWorkers } from './media-worker-runner.js';
 import { privateTemp } from '../../../../tools/test-temp.mjs';
 import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
@@ -104,6 +105,12 @@ const LEVEL_DOCS = [
   ['velado', 'Orvalho Velado', 'O orvalho do grau velado.'],
 ] as const;
 
+const LEVEL_COLLECTION_NAMES: Record<string, string> = {
+  niveis: 'Zz Níveis',
+  historico: 'Zz Histórico',
+  semnivel: 'Zz Sem Nível',
+};
+
 /**
  * One collection with three documents per Playwright project (KBC-103, e2e/specs/levels.spec):
  * a scale changes what everyone sees in a collection, so the parallel projects never share
@@ -111,12 +118,13 @@ const LEVEL_DOCS = [
  */
 function levelCollections(root: string): void {
   // `zz-historico-*`: the stored answers re-checked at today's level (KBC-110).
-  const collections = ['niveis', 'historico'].flatMap((kind) =>
+  // `zz-semnivel-*`: documents arriving without a level (KBC-107).
+  const collections = ['niveis', 'historico', 'semnivel'].flatMap((kind) =>
     ['desktop', 'mobile'].map((project) => ({ kind, project })),
   );
   for (const { kind, project } of collections) {
     const dir = join(root, `zz-${kind}-${project}`);
-    const name = kind === 'niveis' ? 'Zz Níveis' : 'Zz Histórico';
+    const name = LEVEL_COLLECTION_NAMES[kind] ?? kind;
     mkdirSync(join(dir, 'raw'), { recursive: true });
     writeFileSync(join(dir, 'topic.yaml'), `title: ${name} ${project}\n`);
     for (const [file, title, body] of LEVEL_DOCS)
@@ -321,6 +329,7 @@ const app = await buildApp({
 });
 identity.register(app);
 registerOutbox(app, outbox);
+registerLevelArrivals(app, { vault: config.KB_VAULT, catalog });
 if (media) {
   registerTranscriberClock(app, media.transcribers);
   registerTranscriptSeed(app, { media, mediaDir: config.KB_CHAT_MEDIA_DIR });

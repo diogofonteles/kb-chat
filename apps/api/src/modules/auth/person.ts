@@ -25,6 +25,34 @@ import { z } from 'zod';
  */
 export const OWNER_PRINCIPAL = 'owner';
 
+/**
+ * A stored list of features, tolerant of names this image does not know (KBC-107 QA-2): a file
+ * written by a newer image (a feature added since) still loads here, without that feature.
+ * The next write of the person drops it (see the runbook's rollback note).
+ */
+const storedFeaturesSchema = z
+  .array(z.string())
+  .transform((names) =>
+    names.filter(
+      (name): name is Feature => featureSchema.safeParse(name).success,
+    ),
+  );
+
+/** The feature names of a raw people.json this image does not know (to warn about them). */
+export function unknownFeaturesIn(raw: unknown): string[] {
+  const people = z
+    .object({
+      people: z.array(z.object({ features: z.array(z.string()) }).loose()),
+    })
+    .loose()
+    .safeParse(raw);
+  if (!people.success) return [];
+  const names = people.data.people.flatMap((one) => one.features);
+  return [
+    ...new Set(names.filter((name) => !featureSchema.safeParse(name).success)),
+  ];
+}
+
 export const storedPersonSchema = z.object({
   id: z.uuid(),
   /** Bound on the first sign-in. */
@@ -34,7 +62,7 @@ export const storedPersonSchema = z.object({
   picture: z.url().nullable(),
   role: roleSchema,
   topics: z.array(topicSlugSchema),
-  features: z.array(featureSchema),
+  features: storedFeaturesSchema,
   invitedBy: z.string(),
   createdAt: z.iso.datetime(),
   lastLoginAt: z.iso.datetime().nullable(),

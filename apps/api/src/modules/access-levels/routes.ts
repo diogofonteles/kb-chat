@@ -1,5 +1,11 @@
 import {
+  bulkLevelRequestSchema,
+  bulkLevelResultSchema,
   documentLevelSchema,
+  levelChoicesSchema,
+  unassignedCountsSchema,
+  unassignedPageSchema,
+  unassignedQuerySchema,
   documentLevelUpdateSchema,
   levelCreateSchema,
   levelRefSchema,
@@ -25,11 +31,24 @@ import type {
   AccessLevelsService,
   LevelActor,
 } from './access-levels-service.js';
+import type {
+  Classifier,
+  DocumentLevelsService,
+} from './document-levels-service.js';
 
 /** Masters only (BR-9: `collection-levels`), in a collection they see (404 otherwise). */
 const MANAGE: RouteAccess = {
   topicParam: 'topic',
   feature: 'collection-levels',
+};
+
+/**
+ * Masters and holders of "Classificar nível de conteúdo" (KBC-107 BR-1, BR-2), in a
+ * collection they see (404 otherwise).
+ */
+const CLASSIFY: RouteAccess = {
+  topicParam: 'topic',
+  feature: 'content-levels',
 };
 
 const topicParams = z.object({ topic: topicSlugSchema });
@@ -47,6 +66,13 @@ const actorOf = (request: FastifyRequest): LevelActor => {
     ...(viewer.actor && { actingAs: viewer.person.email }),
   };
 };
+
+/** The person whose level applies (the one a master acts as) and the audit's names. */
+const classifierOf = (request: FastifyRequest): Classifier => ({
+  actor: actorOf(request),
+  person: viewerOf(request).person,
+  log: request.log,
+});
 
 type Typed = FastifyInstance<
   RawServerDefault,
@@ -123,15 +149,15 @@ function registerChanges(typed: Typed, service: AccessLevelsService): void {
   );
 }
 
-/** One document's level (FR-4). */
+/** One document's level, up to the caller's own (KBC-103 FR-4, KBC-107 BR-2). */
 function registerDocumentLevel(
   typed: Typed,
-  service: AccessLevelsService,
+  documents: DocumentLevelsService,
 ): void {
   typed.put(
     '/api/v1/topics/:topic/documents/:id/level',
     {
-      config,
+      config: { access: CLASSIFY },
       schema: {
         params: documentParams,
         body: documentLevelUpdateSchema,
@@ -139,20 +165,86 @@ function registerDocumentLevel(
       },
     },
     async (request) =>
-      service.setDocumentLevel(actorOf(request), {
+      documents.setOne(classifierOf(request), {
         ...request.params,
         level: request.body.level,
       }),
   );
 }
 
-/** T24's routes (KBC-103 FR-1, FR-4). */
+/** "Sem nível": the queue, the choices and the sidebar's counts (KBC-107 FR-1). */
+function registerQueue(typed: Typed, documents: DocumentLevelsService): void {
+  typed.get(
+    `${LEVELS_URL}/unassigned`,
+    {
+      config: { access: CLASSIFY },
+      schema: {
+        params: topicParams,
+        querystring: unassignedQuerySchema,
+        response: { 200: unassignedPageSchema },
+      },
+    },
+    async (request) =>
+      documents.unassigned(
+        viewerOf(request).person,
+        request.params.topic,
+        request.query,
+      ),
+  );
+  typed.get(
+    `${LEVELS_URL}/choices`,
+    {
+      config: { access: CLASSIFY },
+      schema: { params: topicParams, response: { 200: levelChoicesSchema } },
+    },
+    async (request) =>
+      documents.choices(viewerOf(request).person, request.params.topic),
+  );
+}
+
+/** The sidebar's "N documentos sem nível", per collection (KBC-107 FR-6). */
+function registerCounts(typed: Typed, documents: DocumentLevelsService): void {
+  typed.get(
+    '/api/v1/levels/unassigned',
+    {
+      config: { access: { feature: 'content-levels' } },
+      schema: { response: { 200: unassignedCountsSchema } },
+    },
+    async (request) => documents.counts(viewerOf(request).person),
+  );
+}
+
+/** A level for many documents at once (KBC-107 FR-2). */
+function registerBulk(typed: Typed, documents: DocumentLevelsService): void {
+  typed.post(
+    '/api/v1/topics/:topic/document-levels',
+    {
+      config: { access: CLASSIFY },
+      schema: {
+        params: topicParams,
+        body: bulkLevelRequestSchema,
+        response: { 200: bulkLevelResultSchema },
+      },
+    },
+    async (request) =>
+      documents.bulk(classifierOf(request), request.params.topic, request.body),
+  );
+}
+
+/** T24's routes (KBC-103 FR-1, FR-4; KBC-107 FR-1, FR-2). */
 export const accessLevelRoutes =
-  (service: AccessLevelsService): FastifyPluginAsync =>
+  (services: {
+    readonly service: AccessLevelsService;
+    readonly documents: DocumentLevelsService;
+  }): FastifyPluginAsync =>
   async (app) => {
     const typed = app.withTypeProvider<ZodTypeProvider>();
+    const { service, documents } = services;
     registerScales(typed, service);
     registerScale(typed, service);
     registerChanges(typed, service);
-    registerDocumentLevel(typed, service);
+    registerDocumentLevel(typed, documents);
+    registerQueue(typed, documents);
+    registerCounts(typed, documents);
+    registerBulk(typed, documents);
   };

@@ -10,9 +10,9 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { topicLevelsSchema, type ContentLevel } from '@kb-chat/contracts';
+import { levelChoicesSchema, type ContentLevel } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
-import { LevelsApi, topicLevelsUrl } from '@core/levels/levels-api.js';
+import { LevelsApi, levelChoicesUrl } from '@core/levels/levels-api.js';
 import { finalize } from 'rxjs';
 
 /**
@@ -175,10 +175,13 @@ export class DocumentLevel {
   protected readonly busy = signal(false);
   protected readonly failure = signal('');
   protected readonly announcement = signal('');
-  /** The scale, asked for only once "Mudar nível" is open. */
+  /**
+   * The levels the person may give, asked for only once "Mudar nível" is open: up to their
+   * own for whoever classifies content (KBC-107 AC-4), every one for masters.
+   */
   protected readonly scale = httpResource(
-    () => (this.changing() ? topicLevelsUrl(this.topic()) : undefined),
-    { parse: (body) => topicLevelsSchema.parse(body) },
+    () => (this.changing() ? levelChoicesUrl(this.topic()) : undefined),
+    { parse: (body) => levelChoicesSchema.parse(body) },
   );
   protected readonly choices = computed(() =>
     this.scale.hasValue() ? this.scale.value().levels : [],

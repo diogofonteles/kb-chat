@@ -102,6 +102,7 @@
       }
     </select>
   </label>
+  <app-unassigned-notice [topic]="chat.topic()" (opened)="openLevels()" />
 
   @if (canCreateCollections()) {
     <div class="collection-actions">

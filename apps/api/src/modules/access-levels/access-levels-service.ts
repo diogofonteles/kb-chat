@@ -4,7 +4,6 @@ import {
   levelCreateSchema,
   levelIdOf,
   levelIdSchema,
-  type ContentLevel,
   type LevelAuditEntry,
   type LevelCreate,
   type LevelRename,
@@ -12,6 +11,7 @@ import {
   type TopicLevels,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
+import { LevelWriteQueue } from './write-queue.js';
 import type { LevelAuditPort } from '../../ports/level-audit.js';
 import type { MediaStorePort } from '../../ports/media-store.js';
 import {
@@ -40,6 +40,8 @@ export interface LevelActor {
 }
 
 export interface AccessLevelsServiceDeps {
+  /** Shared with the other levels service (R1-7); its own when absent. */
+  readonly queue?: LevelWriteQueue;
   readonly directory: LevelDirectory;
   readonly catalog: CatalogRegistry;
   readonly gate: ContentGate;
@@ -60,13 +62,6 @@ export interface AccessLevelsServiceDeps {
 
 /** Who the app's own writes are recorded as (the start's seed). */
 const APP_ACTOR: LevelActor = { by: 'kb-chat' };
-
-/** A document of a collection, as a level is set on it. */
-export interface DocumentTarget {
-  readonly topic: string;
-  readonly id: string;
-  readonly level: string;
-}
 
 const subCollection = () =>
   new AppError('VALIDATION_FAILED', 'A sub-collection uses its parent levels');
@@ -111,9 +106,11 @@ function assertFreeCode(
  * run one after the other, and each is audited before it answers.
  */
 export class AccessLevelsService implements PersonLevelRules {
-  private writing: Promise<unknown> = Promise.resolve();
+  private readonly queue: LevelWriteQueue;
 
-  constructor(private readonly deps: AccessLevelsServiceDeps) {}
+  constructor(private readonly deps: AccessLevelsServiceDeps) {
+    this.queue = deps.queue ?? new LevelWriteQueue();
+  }
 
   /** GET …/levels: the scale with its counts (T24). */
   async levelsOf(topic: string): Promise<TopicLevels> {
@@ -259,36 +256,6 @@ export class AccessLevelsService implements PersonLevelRules {
         after: [...order],
       });
       return this.levelsOf(root);
-    });
-  }
-
-  /** FR-4: one document's level, audited before → after. */
-  setDocumentLevel(
-    actor: LevelActor,
-    target: DocumentTarget,
-  ): Promise<{ level: ContentLevel }> {
-    return this.serial(async () => {
-      const { topic, id, level } = target;
-      const entry = this.deps.catalog.get(topic)?.entries.get(id);
-      if (!entry || isTrackEntry(entry))
-        throw new AppError('DOCUMENT_NOT_FOUND', 'Document not found');
-      const scale = this.deps.gate.scaleOf(topic);
-      const chosen = scale.find((one) => one.id === level);
-      if (!chosen)
-        throw new AppError('VALIDATION_FAILED', 'Unknown level', {
-          details: { field: 'level' },
-        });
-      const before = this.deps.directory.placementsOf(topic)[id]?.level ?? null;
-      const placed = { level, setBy: actor.by, setAt: this.now() };
-      await this.deps.directory.place({ [topic]: { [id]: placed } });
-      await this.record(actor, {
-        kind: 'item.level',
-        collection: topic,
-        target: id,
-        before,
-        after: level,
-      });
-      return { level: { id: chosen.id, code: chosen.code } };
     });
   }
 
@@ -457,9 +424,7 @@ export class AccessLevelsService implements PersonLevelRules {
   }
 
   private serial<T>(run: () => Promise<T>): Promise<T> {
-    const next = this.writing.then(run);
-    this.writing = next.catch(() => undefined);
-    return next;
+    return this.queue.run(run);
   }
 
   private now(): string {

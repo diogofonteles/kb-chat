@@ -63,6 +63,11 @@ export interface ScaledViewInput {
   readonly scale: readonly StoredLevel[];
   /** The viewer's rank in the scale, or 'all' for a master. */
   readonly rank: number | 'all';
+  /**
+   * Holds `content-levels` (KBC-107 BR-1): also sees the documents without a level, and the
+   * badges of what they see.
+   */
+  readonly classifier?: boolean;
   readonly placementsOf: (collection: string) => CollectionPlacements;
   /** Memoizes the share per catalog load and state (NFR-1). */
   readonly memo: (catalog: ViewedCollection, compute: () => number) => number;
@@ -96,23 +101,25 @@ function shareOf(
 export function scaledView(input: ScaledViewInput): LevelView {
   const { scale, rank, placementsOf, memo } = input;
   const seesAll = rank === 'all';
+  const manages = seesAll || input.classifier === true;
   const allows: LevelView['allows'] = (collection, entry) => {
     if (seesAll) return true;
     // A track's level lives in media.db (KBC-106); until then tracks stay closed.
     if (entry.media !== null) return false;
     const found = rankOf(scale, placementsOf(collection), entry.id);
-    return found >= 0 && found <= rank;
+    if (found < 0) return manages;
+    return found <= rank;
   };
   return {
     seesAll,
     scaled: true,
-    manages: seesAll,
+    manages,
     allows,
     entries: visibleIn(allows),
     visibleShare: (catalog) =>
       seesAll ? 1 : memo(catalog, () => shareOf(catalog, allows)),
     levelOf: (collection, id) => {
-      if (!seesAll) return undefined;
+      if (!manages) return undefined;
       const found = scale[rankOf(scale, placementsOf(collection), id)];
       return found ? { id: found.id, code: found.code } : null;
     },

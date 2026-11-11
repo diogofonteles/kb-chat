@@ -91,6 +91,7 @@ const agent = createResearchAgent({
 const people = new PeopleService({
   store: new JsonPeopleStore(join(config.KB_CHAT_STATE_DIR, 'people.json')),
   ownerEmail: config.KB_CHAT_OWNER_EMAIL,
+  log: logger,
 });
 const sessions = new SessionService({
   store: new FsSessionStore(join(config.KB_CHAT_STATE_DIR, 'sessions')),
