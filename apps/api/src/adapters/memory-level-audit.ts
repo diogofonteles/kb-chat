@@ -11,6 +11,7 @@ export class MemoryLevelAudit implements LevelAuditPort {
   readonly entries: LevelAuditEntry[] = [];
 
   async append(entry: LevelAuditEntry): Promise<void> {
+    // In memory a line is never torn: `freshLine` changes nothing.
     this.entries.push(entry);
   }
 

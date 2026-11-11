@@ -623,7 +623,8 @@ const member = (n: number, level?: string): StoredPerson => ({
   ...(level && { levels: { hermetismo: level } }),
 });
 
-type Step = 'media' | 'documents' | 'presence' | 'people' | 'scale' | 'audit';
+type Step =
+  'media' | 'media#2' | 'documents' | 'presence' | 'people' | 'scale' | 'audit';
 
 interface Armed {
   failing: Step | null;
@@ -631,6 +632,8 @@ interface Armed {
   meanwhile: (() => Promise<void>) | null;
   /** Runs once, just before a store of that step writes. */
   during: Partial<Record<Step, () => void>>;
+  /** The `scale.undone` mark fails too (R2-4). */
+  markFails: boolean;
 }
 
 /** A file store whose next write fails once `failing` names it (a full disk). */
@@ -657,7 +660,10 @@ function failingStore(
 function failingAudit(dir: string, armed: Armed): LevelAuditPort {
   const fsAudit = new FsLevelAudit(join(dir, 'audit'));
   return {
-    append: (entry) => fsAudit.append(entry),
+    append: (entry, options) =>
+      armed.markFails
+        ? Promise.reject(new Error('disk full (mark)'))
+        : fsAudit.append(entry, options),
     read: (query) => fsAudit.read(query),
     appendMany: async (entries) => {
       if (armed.failing !== 'audit') return fsAudit.appendMany(entries);
@@ -671,7 +677,12 @@ function failingAudit(dir: string, armed: Armed): LevelAuditPort {
 
 async function atomicWorld() {
   const dir = await mkdtemp(join(tmpdir(), 'kbchat-levels-atomic-'));
-  const armed: Armed = { failing: null, meanwhile: null, during: {} };
+  const armed: Armed = {
+    failing: null,
+    meanwhile: null,
+    during: {},
+    markFails: false,
+  };
   const ids = Array.from(
     { length: ITEMS.documents },
     (_, n) => `raw/d-${n}.md`,
@@ -700,13 +711,20 @@ async function atomicWorld() {
   });
   const db = openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS);
   const store = new SqliteMediaStore(db);
+  let relevels = 0;
   const media: ScaleChangesDeps['media'] = {
     countLevels: (topics) => store.countLevels(topics),
     restoreLevels: (rows) => store.restoreLevels(rows),
     relevel: (change) => {
-      if (armed.failing === 'media') {
+      relevels += 1;
+      // R2-6: the first pass, or the second one over media.db.
+      const failing =
+        (armed.failing === 'media' && relevels % 2 === 1) ||
+        (armed.failing === 'media#2' && relevels % 2 === 0);
+      if (failing) {
+        const step = armed.failing;
         armed.failing = null;
-        throw new Error('disk full (media)');
+        throw new Error(`disk full (${step})`);
       }
       return store.relevel(change);
     },
@@ -853,7 +871,7 @@ const levelOf = (world: AtomicWorld, id: string) =>
   world.db.prepare('SELECT level FROM media WHERE id = ?').get(id)?.['level'];
 
 describe('Deleting a level is all or nothing (KBC-108 NFR-2, AC-7)', () => {
-  it.each<Step>(['media', 'documents', 'people', 'scale', 'audit'])(
+  it.each<Step>(['scale', 'media', 'documents', 'people', 'media#2', 'audit'])(
     'a failure writing %s leaves the files and media.db as they were',
     async (step) => {
       const world = await atomicWorld();
@@ -904,7 +922,15 @@ describe('Deleting a level is all or nothing (KBC-108 NFR-2, AC-7)', () => {
 });
 
 describe('Taking every level away is all or nothing (KBC-108 R1-6, QA-3)', () => {
-  it.each<Step>(['media', 'documents', 'presence', 'people', 'scale', 'audit'])(
+  it.each<Step>([
+    'media',
+    'documents',
+    'presence',
+    'people',
+    'scale',
+    'media#2',
+    'audit',
+  ])(
     'a failure writing %s leaves the files and media.db as they were',
     async (step) => {
       const world = await atomicWorld();
@@ -1029,6 +1055,24 @@ describe('An undo leaves writes made meanwhile alone (KBC-108 R1-3, R1-5)', () =
     const page = await world.history.page({ topic: 'hermetismo' });
     expect(page.items.map((one) => one.kind)).not.toContain('scale.delete');
     expect(page.items.map((one) => one.kind)).not.toContain('scale.undone');
+    world.db.close();
+  });
+
+  it('R2-4: a mark that fails too is logged with the operation it was for', async () => {
+    const world = await atomicWorld();
+    await seedAtomic(world);
+    world.armed.failing = 'audit';
+    world.armed.markFails = true;
+    await expect(removeCi(world)).rejects.toThrow('disk full (audit)');
+    expect(world.log.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collection: 'hermetismo',
+        at: NOW,
+        by: MASTER_EMAIL,
+        kind: 'scale.delete',
+      }),
+      'level change undone but not marked in the audit',
+    );
     world.db.close();
   });
 

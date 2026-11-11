@@ -282,6 +282,8 @@ export function auditStep(
   lines: {
     readonly all: () => LevelAuditEntry[];
     readonly undone: () => LevelAuditEntry;
+    /** The operation's own kind, for the log when its mark fails too (R2-4). */
+    readonly kind: 'scale.delete' | 'scale.clear';
   },
 ): UndoableStep {
   const { audit } = ctx.deps;
@@ -291,12 +293,21 @@ export function auditStep(
       try {
         await audit.appendMany(lines.all());
       } catch (err) {
-        await audit.append(lines.undone()).catch((cause: unknown) => {
-          ctx.log.error(
-            { err: cause, collection: ctx.root },
-            'level change undone but not marked in the audit',
-          );
-        });
+        const mark = lines.undone();
+        await audit
+          .append(mark, { freshLine: true })
+          .catch((cause: unknown) => {
+            ctx.log.error(
+              {
+                err: cause,
+                collection: ctx.root,
+                at: mark.at,
+                by: mark.by,
+                kind: lines.kind,
+              },
+              'level change undone but not marked in the audit',
+            );
+          });
         throw err;
       }
       return NOTHING;

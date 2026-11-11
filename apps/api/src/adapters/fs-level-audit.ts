@@ -1,4 +1,4 @@
-import { mkdir, open, readdir, readFile } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   levelAuditEntrySchema,
@@ -32,11 +32,39 @@ const isMissing = (err: unknown): boolean =>
  * appended and synced before `append` resolves, so a change the API answered is never
  * missing from the audit.
  */
-export class FsLevelAudit implements LevelAuditPort {
-  constructor(private readonly dir: string) {}
+/** A month's lines as parsed, and the file state they were parsed from. */
+interface ParsedMonth {
+  readonly size: number;
+  readonly mtimeMs: number;
+  readonly lines: readonly LevelAuditEntry[];
+}
 
-  append(entry: LevelAuditEntry): Promise<void> {
-    return this.appendMany([entry]);
+export interface FsLevelAuditOptions {
+  /** How a month file is read (tests count the reads). */
+  readonly readText?: (file: string) => Promise<string>;
+}
+
+export class FsLevelAudit implements LevelAuditPort {
+  /** Each month parsed once until its file changes (R2-5: the history reads every page). */
+  private readonly parsed = new Map<string, ParsedMonth>();
+  private readonly readText: (file: string) => Promise<string>;
+
+  constructor(
+    private readonly dir: string,
+    options: FsLevelAuditOptions = {},
+  ) {
+    this.readText = options.readText ?? ((file) => readFile(file, 'utf8'));
+  }
+
+  /** One line; `freshLine` puts a newline first, so a torn last line cannot swallow it. */
+  async append(
+    entry: LevelAuditEntry,
+    options: { readonly freshLine?: boolean } = {},
+  ): Promise<void> {
+    if (!options.freshLine) return this.appendMany([entry]);
+    await mkdir(this.dir, { recursive: true, mode: 0o700 });
+    const name = `levels-${entry.at.slice(0, 7)}.jsonl`;
+    await this.write(name, `\n${JSON.stringify(entry)}\n`);
   }
 
   async appendMany(entries: readonly LevelAuditEntry[]): Promise<void> {
@@ -72,12 +100,16 @@ export class FsLevelAudit implements LevelAuditPort {
     }
   }
 
-  private async load(month: string): Promise<LevelAuditEntry[]> {
-    const text = await readFile(
-      join(this.dir, `levels-${month}.jsonl`),
-      'utf8',
-    );
-    return text.split('\n').flatMap((line) => parseLine(line) ?? []);
+  private async load(month: string): Promise<readonly LevelAuditEntry[]> {
+    const file = join(this.dir, `levels-${month}.jsonl`);
+    const { size, mtimeMs } = await stat(file);
+    const kept = this.parsed.get(month);
+    if (kept && kept.size === size && kept.mtimeMs === mtimeMs)
+      return kept.lines;
+    const text = await this.readText(file);
+    const lines = text.split('\n').flatMap((line) => parseLine(line) ?? []);
+    this.parsed.set(month, { size, mtimeMs, lines });
+    return lines;
   }
 
   private async write(name: string, text: string): Promise<void> {

@@ -149,6 +149,7 @@ export class ScaleChangesService {
         all: () =>
           removalLines(base, { ...removal, root: ctx.root, moved: ctx.moved }),
         undone: () => undoneLine(base, { root: ctx.root, target: level.id }),
+        kind: 'scale.delete',
       }),
     ];
   }
@@ -192,6 +193,7 @@ export class ScaleChangesService {
       auditStep(ctx, {
         all: () => clearLines(base, { root, scale, moved: ctx.moved }),
         undone: () => undoneLine(base, { root }),
+        kind: 'scale.clear',
       }),
     ];
   }

@@ -111,3 +111,40 @@ describe('FsLevelAudit read (KBC-108)', () => {
     );
   });
 });
+
+describe('FsLevelAudit after a torn append and across pages (R2-4, R2-5)', () => {
+  it('a mark written on a fresh line is read even after a torn last line', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kbchat-level-audit-'));
+    const audit = new FsLevelAudit(dir);
+    await audit.append(line('2026-09-01T00:00:00.000Z', 'a'));
+    await appendFile(
+      join(dir, 'levels-2026-09.jsonl'),
+      '{"at":"2026-09-01T00:',
+    );
+    await audit.append(
+      { ...line('2026-09-01T00:00:01.000Z', 'mark'), kind: 'scale.undone' },
+      { freshLine: true },
+    );
+    const read = await audit.read({ accepts: all, limit: 5 });
+    expect(read.entries.map((one) => one.target)).toEqual(['mark', 'a']);
+  });
+
+  it('reads a month file again only once it changed', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kbchat-level-audit-'));
+    const reads: string[] = [];
+    const audit = new FsLevelAudit(dir, {
+      readText: async (file) => {
+        reads.push(file);
+        return readFile(file, 'utf8');
+      },
+    });
+    await audit.appendMany(LINES);
+    await audit.read({ accepts: all, limit: 50 });
+    await audit.read({ accepts: all, limit: 50 });
+    expect(reads).toHaveLength(3);
+    await audit.append(line('2026-11-03T10:00:00.000Z', 'f'));
+    const again = await audit.read({ accepts: all, limit: 50 });
+    expect(reads).toHaveLength(4);
+    expect(again.entries[0]?.target).toBe('f');
+  });
+});

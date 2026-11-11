@@ -28,7 +28,14 @@ export interface LevelAuditPage {
  * the answer leaves, kept 12 months like the act-as audit. Nothing rewrites a line.
  */
 export interface LevelAuditPort {
-  append(entry: LevelAuditEntry): Promise<void>;
+  /**
+   * One line. `freshLine` starts it on a line of its own, so it never joins a fragment a
+   * failed append left (the `scale.undone` mark, KBC-108 R2-4).
+   */
+  append(
+    entry: LevelAuditEntry,
+    options?: { readonly freshLine?: boolean },
+  ): Promise<void>;
   /** Several lines in one write and one sync (a bulk and its documents, KBC-107 NFR-1). */
   appendMany(entries: readonly LevelAuditEntry[]): Promise<void>;
   /** "Histórico de níveis" (KBC-108): the lines a filter keeps, newest first. */
