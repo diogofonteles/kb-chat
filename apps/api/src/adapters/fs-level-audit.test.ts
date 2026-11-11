@@ -64,6 +64,23 @@ describe.each([
     expect(third.next).toBeNull();
   });
 
+  it('a second page holds every line the first left, in one month', async () => {
+    const audit = await make();
+    const many = Array.from({ length: 23 }, (_, n) =>
+      line(`2026-12-01T10:00:${String(n).padStart(2, '0')}.000Z`, `m${n}`),
+    );
+    await audit.appendMany(many);
+    const december = { accepts: all, fromMonth: '2026-12', limit: 20 };
+    const first = await audit.read(december);
+    expect(first.entries).toHaveLength(20);
+    const second = await audit.read({
+      ...december,
+      ...(first.next && { after: first.next }),
+    });
+    expect(second.entries.map((one) => one.target)).toEqual(['m2', 'm1', 'm0']);
+    expect(second.next).toBeNull();
+  });
+
   it('reads only the months asked and the lines the filter keeps', async () => {
     const audit = await make();
     const october = await audit.read({

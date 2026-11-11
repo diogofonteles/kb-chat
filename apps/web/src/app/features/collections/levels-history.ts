@@ -52,21 +52,25 @@ const KIND_LABELS: Record<LevelAuditKind, () => string> = {
 };
 
 const NONE = () => $localize`:@@history.noLevel:Sem nível`;
+const UNRECORDED = () => $localize`:@@history.unrecorded:nenhum registrado`;
 
 /** What one line says, by its kind ("CI → CDC: 'Aula 12'"). */
 const WHAT: Record<LevelAuditKind, (item: LevelAuditItem) => string> = {
   'scale.create': (item) =>
     $localize`:@@history.whatCreate:Criou o nível ${item.after ?? ''}:code:`,
   'scale.rename': (item) =>
-    $localize`:@@history.whatRename:Renomeou ${item.before ?? ''}:before: → ${item.after ?? ''}:after:`,
+    item.before === item.after
+      ? $localize`:@@history.whatDescribe:Mudou a descrição de ${item.after ?? ''}:code:`
+      : $localize`:@@history.whatRename:Renomeou ${item.before ?? ''}:before: → ${item.after ?? ''}:after:`,
   'scale.reorder': (item) =>
     $localize`:@@history.whatReorder:Ordem: ${item.before ?? ''}:before: → ${item.after ?? ''}:after:`,
   'scale.delete': (item) =>
     $localize`:@@history.whatDelete:Apagou ${item.before ?? ''}:code:: conteúdo → ${item.moves?.content ?? ''}:content:, pessoas → ${item.moves?.people ?? ''}:people:`,
   'scale.clear': (item) =>
     $localize`:@@history.whatClear:Tirou todos os níveis (${item.before ?? ''}:codes:)`,
+  // A person with no level recorded holds the lowest (ADR 0036 §2): "nenhum registrado".
   'person.level': (item) =>
-    $localize`:@@history.whatPerson:${item.before ?? NONE()}:before: → ${item.after ?? NONE()}:after:: ${item.targetLabel ?? item.target ?? ''}:person:`,
+    $localize`:@@history.whatPerson:${item.before ?? UNRECORDED()}:before: → ${item.after ?? UNRECORDED()}:after:: ${item.targetLabel ?? item.target ?? ''}:person:`,
   'item.level': (item) =>
     $localize`:@@history.whatItem:${item.before ?? NONE()}:before: → ${item.after ?? NONE()}:after:: “${item.targetLabel ?? item.target ?? ''}:title:”`,
   bulk: (item) => {

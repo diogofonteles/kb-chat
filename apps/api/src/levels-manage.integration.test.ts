@@ -431,6 +431,18 @@ describe('"Histórico de níveis" (KBC-108 FR-4, BR-5)', () => {
   it('pages newest first with a cursor and filters by kind and day', async () => {
     const world = await startLevels();
     await sixAtThreeLevels(world);
+    for (let n = 0; n < 15; n += 1)
+      await world.owner('PATCH', `${LEVELS}/qs`, { description: `Q${n}` });
+    const twenty = await world.owner('GET', `${AUDIT}?topic=hermetismo`);
+    const page20 = twenty.json<LevelAuditPage>();
+    const after20 = await world.owner(
+      'GET',
+      `${AUDIT}?topic=hermetismo&cursor=${page20.nextCursor}`,
+    );
+    expect([
+      ...page20.items,
+      ...after20.json<LevelAuditPage>().items,
+    ]).toHaveLength((await levelAudit(world.started.state)).length);
     const first = await world.owner('GET', `${AUDIT}?topic=hermetismo&limit=2`);
     const one = first.json<LevelAuditPage>();
     expect(one.items).toHaveLength(2);
@@ -441,6 +453,7 @@ describe('"Histórico de níveis" (KBC-108 FR-4, BR-5)', () => {
     );
     const rest = second.json<LevelAuditPage>();
     const all = [...one.items, ...rest.items];
+    expect(all).toHaveLength((await levelAudit(world.started.state)).length);
     expect(all.map((line) => line.at)).toEqual(
       [...all.map((line) => line.at)].sort().reverse(),
     );

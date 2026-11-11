@@ -105,7 +105,8 @@ async function deleteCi(page: Page): Promise<void> {
   await press(page, confirm);
   await expect(dialog).toBeHidden();
   await expect(page.locator('.pill')).toHaveText(['QS', 'CDC']);
-  await expect(page.getByText('2 documentos · 2 pessoas')).toBeVisible();
+  await expect(page.getByText('1 documento · 2 pessoas')).toBeVisible();
+  await expect(page.getByText('2 documentos · 0 pessoas')).toBeVisible();
 }
 
 /** AC-3: moving CDC to the bottom, after the server says who gains what. */
@@ -137,7 +138,8 @@ async function readHistory(page: Page): Promise<void> {
   const more = page.getByRole('button', { name: 'Carregar mais' });
   await more.scrollIntoViewIfNeeded();
   await press(page, more);
-  await expect(lines).not.toHaveCount(20);
+  await expect(page.getByText('Criou o nível QS')).toBeVisible();
+  await expect(page.getByText('Mudou a descrição de QS').first()).toBeVisible();
   await noViolations(page, 'app-levels-history');
   await shoot(page, 'levels-history');
   await press(
@@ -213,7 +215,7 @@ test('KBC-108 AC-1, AC-3, AC-4, AC-5, AC-8: delete a level, move with its previe
 
   const member = await pageAs(browser, ana, page.viewportSize());
   await member.goto('/');
-  await member.getByRole('radio', { name: 'Buscar documentos' }).check();
+  // Without research, the box searches documents (her only mode).
   const box = member.getByLabel('Sua pergunta');
   await box.fill('orvalho');
   await box.press('Enter');
