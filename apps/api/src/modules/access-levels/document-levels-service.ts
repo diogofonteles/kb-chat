@@ -65,6 +65,8 @@ export interface ReconcileLog {
 export interface Classifier {
   readonly actor: LevelActor;
   readonly person: StoredPerson;
+  /** The request's log: a write whose audit failed leaves its trace there (R2-2). */
+  readonly log?: ReconcileLog;
 }
 
 /** One document of the scope, in its own collection. */
@@ -153,7 +155,7 @@ export class DocumentLevelsService {
       const found = this.targetOf(who.person, target);
       if (!found) throw notFound();
       const chosen = this.levelFor(who.person, target.topic, target.level);
-      await this.write(who.actor, { level: chosen, targets: [found] });
+      await this.write(who, { level: chosen, targets: [found] });
       return { level: choiceOf(chosen) };
     });
   }
@@ -174,7 +176,7 @@ export class DocumentLevelsService {
       );
       // QA-3: nothing to place, nothing to record.
       if (targets.length > 0)
-        await this.write(who.actor, {
+        await this.write(who, {
           level: chosen,
           targets,
           bulk: { root, filter, skipped },
@@ -209,11 +211,12 @@ export class DocumentLevelsService {
   ): { targets: Target[]; skipped: number; filter: BulkAuditFilter } {
     if ('filter' in request) {
       // QA-1: a row with no sighting recorded yet has no known arrival: never in a filter.
-      const rows = this.queue(person, root)
-        .filter((row) => this.sighted(row))
-        .filter(matches(request.filter));
+      const kept = this.queue(person, root).filter(matches(request.filter));
+      const rows = kept.filter((row) => this.sighted(row));
       const targets = rows.flatMap((row) => this.targetOf(person, row) ?? []);
-      return { targets, skipped: 0, filter: request.filter };
+      // R2-1: what the list counted and the bulk left out is said as skipped.
+      const skipped = kept.length - targets.length;
+      return { targets, skipped, filter: request.filter };
     }
     const named = new Map(request.ids.map((key) => [keyOf(key), key]));
     const targets = [...named.values()].flatMap(
@@ -228,7 +231,8 @@ export class DocumentLevelsService {
   }
 
   /** One write of `document-levels.json` and one of the audit (NFR-1, BR-4). */
-  private async write(actor: LevelActor, change: LevelChange): Promise<void> {
+  private async write(who: Classifier, change: LevelChange): Promise<void> {
+    const { actor } = who;
     const at = new Date().toISOString();
     const placed = { level: change.level.id, setBy: actor.by, setAt: at };
     const byCollection: Record<string, Record<string, typeof placed>> = {};
@@ -241,7 +245,15 @@ export class DocumentLevelsService {
     );
     if (change.targets.length > 0)
       await this.deps.directory.place(byCollection);
-    await this.deps.audit.appendMany(lines);
+    await this.deps.audit.appendMany(lines).catch((err: unknown) => {
+      // The levels file cannot join the audit's write: the log is then the only trace of
+      // what was applied (R2-2, as the media seed does, ADR 0036 §11).
+      who.log?.error(
+        { err, by: actor.by, ...appliedOf(change) },
+        'document levels placed but not audited',
+      );
+      throw err;
+    });
   }
 
   /** The level asked for, if it exists and is at or below the caller's (403 above). */
@@ -393,6 +405,15 @@ export class DocumentLevelsService {
     return this.writes.run(run);
   }
 }
+
+/** What a write applied, for the log when its audit fails (no titles, ids only). */
+const appliedOf = (change: LevelChange) => ({
+  collection: change.bulk?.root ?? change.targets[0]?.topic,
+  level: change.level.id,
+  documents: change.targets.length,
+  filter: change.bulk?.filter,
+  ids: change.targets.map(({ topic, entry }) => ({ topic, id: entry.id })),
+});
 
 /** What one write sets: a level on documents, and for a bulk its line (BR-4). */
 interface LevelChange {

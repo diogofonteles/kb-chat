@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MemoryDocumentStore } from '../../adapters/memory-document-store.js';
 import { MemoryLevelAudit } from '../../adapters/memory-level-audit.js';
 import type { DocumentStorePort } from '../../ports/document-store.js';
+import type { LevelAuditPort } from '../../ports/level-audit.js';
 import type { StoredPerson } from '../auth/index.js';
 import { CatalogRegistry } from '../catalog/index.js';
 import { ContentGate } from './content-gate.js';
@@ -45,7 +46,9 @@ function heldStore() {
   return { store, gate };
 }
 
-async function world(options: { presence?: DocumentStorePort } = {}) {
+async function world(
+  options: { presence?: DocumentStorePort; audit?: LevelAuditPort } = {},
+) {
   const vault = { ids: ['raw/a.md', 'raw/b.md'] };
   const catalog = new CatalogRegistry({
     listTopics: async () => [{ slug: 'hermetismo', title: 'Hermetismo' }],
@@ -72,7 +75,7 @@ async function world(options: { presence?: DocumentStorePort } = {}) {
     ],
     result: undefined,
   }));
-  const audit = new MemoryLevelAudit();
+  const audit = options.audit ?? new MemoryLevelAudit();
   const service = new DocumentLevelsService({
     directory,
     catalog,
@@ -133,10 +136,13 @@ describe('DocumentLevelsService (KBC-107 review round 1)', () => {
       filter: { asOf: before },
     });
     expect(result.updated).toBe(0);
+    // R2-1: the confirmed rows the filter left out are said, not silently dropped.
+    expect(result.skipped).toBe(3);
   });
 
   it('QA-3: a bulk that finds nothing writes no audit line and answers updated 0', async () => {
-    const { service, audit } = await world();
+    const audit = new MemoryLevelAudit();
+    const { service } = await world({ audit });
     const listed = await service.unassigned(master, 'hermetismo', {});
     const result = await service.bulk(who, 'hermetismo', {
       level: 'qs',
@@ -166,5 +172,36 @@ describe('DocumentLevelsService (KBC-107 review round 1)', () => {
     const mark = directory.presenceMap()['hermetismo']?.['raw/a.md'];
     expect(mark).toHaveProperty('firstSeenAt');
     expect(mark).not.toHaveProperty('missingSince');
+  });
+
+  it('R2-2: when the audit fails after the levels were placed, the log keeps what was applied and the request fails', async () => {
+    const failing: LevelAuditPort = {
+      append: () => Promise.reject(new Error('disk full')),
+      appendMany: () => Promise.reject(new Error('disk full')),
+    };
+    const { service, directory } = await world({ audit: failing });
+    const listed = await service.unassigned(master, 'hermetismo', {});
+    const error = vi.fn();
+    await expect(
+      service.bulk({ ...who, log: { error } }, 'hermetismo', {
+        level: 'qs',
+        filter: { asOf: listed.asOf },
+      }),
+    ).rejects.toThrow('disk full');
+    expect(directory.placementsOf('hermetismo')['raw/a.md']?.level).toBe('qs');
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collection: 'hermetismo',
+        level: 'qs',
+        by: master.email,
+        documents: 2,
+        filter: { asOf: listed.asOf },
+        ids: [
+          { topic: 'hermetismo', id: 'raw/a.md' },
+          { topic: 'hermetismo', id: 'raw/b.md' },
+        ],
+      }),
+      'document levels placed but not audited',
+    );
   });
 });

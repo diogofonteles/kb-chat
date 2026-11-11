@@ -71,6 +71,7 @@ const actorOf = (request: FastifyRequest): LevelActor => {
 const classifierOf = (request: FastifyRequest): Classifier => ({
   actor: actorOf(request),
   person: viewerOf(request).person,
+  log: request.log,
 });
 
 type Typed = FastifyInstance<
