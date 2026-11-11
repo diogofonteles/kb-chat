@@ -1662,10 +1662,6 @@ async function registerPeople(
   await app.register(
     inviteProfilesRoutes({ profiles, topics, levels: deps.levels.people }),
   );
-  // KBC-108: a removal's preview counts the profiles that name the level.
-  deps.levels.changes.useProfiles(() =>
-    profiles.list().map((profile) => profile.preset),
-  );
 }
 
 /** What an invitation and "Aplicar perfil" need from the profiles and Settings (KBC-028). */
@@ -1688,6 +1684,10 @@ async function loadInviteProfiles(
     ),
   });
   await profiles.load();
+  // KBC-108: a removal's preview counts the profiles that name the level.
+  deps.levels.changes.useProfiles(() =>
+    profiles.list().map((profile) => profile.preset),
+  );
   return profiles;
 }
 
@@ -1939,24 +1939,15 @@ async function loadedLevels(
   // One queue for both services: a scale change never slips into a document write (R1-7).
   const queue = new LevelWriteQueue();
   const shared = { ...levels, catalog, gate, parentOf, queue };
-  const service = new AccessLevelsService({
-    ...shared,
-    people,
-    ...(media && { media }),
-  });
-  const documents = new DocumentLevelsService(shared);
-  const peopleLevels = new PeopleLevelsService({ ...shared, people });
   const withMedia = { ...shared, people, ...(media && { media }) };
-  const changes = new ScaleChangesService(withMedia);
-  const history = new LevelHistoryService(withMedia);
   return {
     ...levels,
     gate,
-    service,
-    documents,
-    people: peopleLevels,
-    changes,
-    history,
+    service: new AccessLevelsService(withMedia),
+    documents: new DocumentLevelsService(shared),
+    people: new PeopleLevelsService({ ...shared, people }),
+    changes: new ScaleChangesService(withMedia),
+    history: new LevelHistoryService(withMedia),
   };
 }
 
