@@ -543,8 +543,9 @@ describe('Media with an access level (KBC-105)', () => {
     const master = await restarted.owner('GET', `/api/v1/media/${late.id}`);
     expect(master.statusCode).toBe(200);
     expect(master.json().level).toBeNull();
+    // The grant of ana2 records her lowest level after it (KBC-109 BR-4): the last bulk is the seed.
     const audit = await levelAudit(world.started.state);
-    expect(audit.at(-1)).toMatchObject({
+    expect(audit.filter((one) => one.kind === 'bulk').at(-1)).toMatchObject({
       kind: 'bulk',
       by: 'kb-chat',
       collection: 'hermetismo',
