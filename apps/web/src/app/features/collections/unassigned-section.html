@@ -1,4 +1,8 @@
-<section class="unassigned" aria-labelledby="unassigned-title">
+<section
+  class="unassigned"
+  [class.clear]="total() === 0 && !first.isLoading()"
+  aria-labelledby="unassigned-title"
+>
   <h3 id="unassigned-title" i18n="@@levels.unassignedTitle">
     Sem nível ({{ total() }})
   </h3>
@@ -31,7 +35,7 @@
   } @else {
     <p class="help" i18n="@@levels.unassignedHelp">
       Documentos novos do kb chegam sem nível e ficam visíveis só para masters
-      até alguém escolher.
+      e para quem classifica conteúdo, até alguém escolher um nível.
     </p>
 
     @if (facets(); as facets) {

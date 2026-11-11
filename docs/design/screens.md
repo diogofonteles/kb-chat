@@ -920,7 +920,8 @@ A Biblioteca segue o acervo selecionado, com "Todos os acervos" como escolha; o 
 
 ### Sem nível (KBC-103 contagem; KBC-107 lista)
 - Seção **Sem nível (N)**, só quando N > 0, para masters e quem tem "Classificar nível de conteúdo": no KBC-103 só a contagem e a frase "Documentos novos do kb chegam sem nível e ficam visíveis só para masters até alguém escolher."; no KBC-107, a lista (título, sub-acervo, origem, autoria, "chegou em dd/mm"), filtros com rótulo visível, caixa por linha, "Selecionar os N filtrados", e a barra "N selecionados · Nível: [ ] · **Dar nível**" fixa no rodapé no celular (UP-13), com confirmação na linha "Dar o nível CI a 37 documentos?".
-- Vazio: "Todos os documentos têm nível.".
+- Vazio: "Todos os documentos têm nível." (borda neutra).
+- KBC-107 (entregue): filtros Sub-acervo, Origem (Texto/Áudio/OCR), Autoria, Pasta do vault e "Chegou desde"; "Carregar mais" de 10 em 10; o lote por "Selecionar os N filtrados" vale para o que tinha chegado quando a lista foi feita. Quem tem "Classificar nível de conteúdo" e não é master abre `/acervos/{slug}/niveis` e vê só esta seção, com os níveis até o seu. Na lateral, abaixo de **Acervo**, o aviso "N documentos sem nível" (link para a seção) para masters e quem classifica; some em 0. Na busca de documentos, para os mesmos, **Mudar nível** abre a lista dos documentos achados com caixas e a mesma barra.
 
 ### Histórico de níveis (KBC-108)
 - Seção recolhível **Histórico de níveis** (aria-expanded): lista com data, quem ("Diogo agindo como Ana" quando for o caso), o quê ("CI → CDC: 'Aula 12'", "Lote: 37 documentos → CI", "Ordem: QS, CI, CDC → QS, CDC, CI") e filtros por tipo, pessoa e período; paginação por "Carregar mais".
