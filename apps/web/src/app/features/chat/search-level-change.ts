@@ -13,6 +13,8 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   levelChoicesSchema,
+  type BulkLevelResult,
+  type DocumentKey,
   type LevelChoice,
   type SearchHit,
 } from '@kb-chat/contracts';
@@ -235,25 +237,27 @@ export class SearchLevelChange {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (result) => {
-          // Only when none was skipped is every chosen one known to have moved.
-          if (result.skipped === 0) {
-            const given = new Map(this.given());
-            for (const id of ids) given.set(keyOf(id), result.level);
-            this.given.set(given);
-          }
-          this.chosen.set(new Set());
-          this.injector.get(UnassignedCountsStore).refresh();
-          const { updated } = result;
-          const code = result.level.code;
-          this.announcement.set(
-            updated === 1
-              ? $localize`:@@searchLevel.doneOne:1 documento foi para ${code}:code:.`
-              : $localize`:@@searchLevel.done:${updated}:count: documentos foram para ${code}:code:.`,
-          );
-        },
+        next: (result) => this.moved(ids, result),
         error: (err: unknown) =>
           this.failure.set(errorMessage(toUiErrorCode(err))),
       });
+  }
+
+  /** What the screen says after a change; only with nothing skipped is every chosen one known to have moved. */
+  private moved(ids: readonly DocumentKey[], result: BulkLevelResult): void {
+    if (result.skipped === 0) {
+      const given = new Map(this.given());
+      for (const id of ids) given.set(keyOf(id), result.level);
+      this.given.set(given);
+    }
+    this.chosen.set(new Set());
+    this.injector.get(UnassignedCountsStore).refresh();
+    const { updated } = result;
+    const code = result.level.code;
+    this.announcement.set(
+      updated === 1
+        ? $localize`:@@searchLevel.doneOne:1 documento foi para ${code}:code:.`
+        : $localize`:@@searchLevel.done:${updated}:count: documentos foram para ${code}:code:.`,
+    );
   }
 }
