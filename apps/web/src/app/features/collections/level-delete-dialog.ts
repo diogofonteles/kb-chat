@@ -124,6 +124,15 @@ export class LevelDeleteDialog {
       ? $localize`:@@levels.deleteHoldingsOne:${and(parts)}:parts: está em ${code}:code:.`
       : $localize`:@@levels.deleteHoldings:${and(parts)}:parts: estão em ${code}:code:.`;
   });
+  /** KBC-109: profiles that name the level ask for another one afterwards. */
+  protected readonly profilesNote = computed(() => {
+    const removal = this.preview()?.removal;
+    if (!removal || removal.profiles === 0) return '';
+    const code = removal.level.code;
+    return removal.profiles === 1
+      ? $localize`:@@levels.deleteProfilesOne:1 perfil de convite usa ${code}:code:. Ele não muda: ao aplicá-lo, a pessoa fica no nível mais baixo até alguém escolher outro no perfil.`
+      : $localize`:@@levels.deleteProfiles:${removal.profiles}:count: perfis de convite usam ${code}:code:. Eles não mudam: ao aplicá-los, a pessoa fica no nível mais baixo até alguém escolher outro no perfil.`;
+  });
   protected readonly canConfirm = computed(() =>
     this.all()
       ? this.nameMatches() && !this.busy()

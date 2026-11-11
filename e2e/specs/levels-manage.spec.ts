@@ -76,6 +76,45 @@ async function manyChanges(owner: APIRequestContext, slug: string) {
   }
 }
 
+/** "Aluno" at CI (KBC-109): deleting CI leaves it naming a level that no longer exists. */
+async function profileAtCi(owner: APIRequestContext, slug: string) {
+  const name = `Aluno ${slug} ${Date.now().toString(36)}`;
+  const created = await owner.post('/api/v1/invite-profiles', {
+    data: {
+      name,
+      preset: {
+        topics: [slug],
+        features: ['search'],
+        levels: { [slug]: 'ci' },
+      },
+    },
+    headers: CSRF,
+  });
+  expect(created.status(), await created.text()).toBe(201);
+  return name;
+}
+
+/** KBC-109 on T9: the profile asks for another level, named in the field's note. */
+async function seeStaleProfile(page: Page, name: string): Promise<void> {
+  await page.goto('/');
+  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
+  const side = desktop(page)
+    ? page.getByRole('complementary', { name: 'Lateral' })
+    : page.getByRole('dialog', { name: 'Menu' });
+  await side.getByRole('button', { name: /Pessoas e permissões/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Configurações' });
+  const section = dialog.getByRole('region', { name: /Perfis de convite/ });
+  await section.getByRole('button', { name: /Perfis de convite/ }).click();
+  await section
+    .getByRole('button', { name: new RegExp(`Editar.*${name}`) })
+    .click();
+  await expect(
+    section.getByText('O nível CI não existe mais; escolha outro.'),
+  ).toBeVisible();
+  await shoot(page, 'levels-stale-profile');
+  await page.keyboard.press('Escape');
+}
+
 /** AC-1, AC-8: the dialog counts what CI holds, its targets before the focused danger button. */
 async function deleteCi(page: Page): Promise<void> {
   await press(page, page.getByRole('button', { name: 'Apagar CI' }));
@@ -83,6 +122,7 @@ async function deleteCi(page: Page): Promise<void> {
   await expect(
     dialog.getByText('1 documento e 1 pessoa estão em CI.'),
   ).toBeVisible();
+  await expect(dialog.getByText(/^1 perfil de convite usa CI\./)).toBeVisible();
   const content = dialog.getByRole('combobox', {
     name: 'Conteúdo de CI vai para:',
   });
@@ -205,10 +245,13 @@ test('KBC-108 AC-1, AC-3, AC-4, AC-5, AC-8: delete a level, move with its previe
     features: ['search'],
   });
   await manyChanges(owner, slug);
+  const profile = await profileAtCi(owner, slug);
 
   await page.goto(`/acervos/${slug}/niveis`);
   await expect(page.locator('.pill')).toHaveText(['QS', 'CI', 'CDC']);
   await deleteCi(page);
+  await seeStaleProfile(page, profile);
+  await page.goto(`/acervos/${slug}/niveis`);
   await moveCdcUp(page);
   await readHistory(page);
   await clearAll(page, title);

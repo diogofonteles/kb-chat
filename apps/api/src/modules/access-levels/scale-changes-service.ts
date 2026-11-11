@@ -67,6 +67,11 @@ interface Moved {
   people: HeldLevel[];
 }
 
+/** What a removal reads of an invite profile's preset: the levels it names. */
+export interface PresetLevels {
+  readonly levels?: Readonly<Record<string, string>>;
+}
+
 /** Who and when, shared by every line of one operation. */
 type AuditBase = Pick<LevelAuditEntry, 'at' | 'by' | 'actingAs'>;
 
@@ -100,7 +105,15 @@ function assertRemoval(
  * Writes run in the levels queue; each change is all or nothing over its stores (NFR-2).
  */
 export class ScaleChangesService {
+  /** The invite profiles' presets, bound once they are loaded (KBC-109). */
+  private presets: () => readonly PresetLevels[] = () => [];
+
   constructor(private readonly deps: ScaleChangesDeps) {}
+
+  /** The invite profiles, read when a removal is previewed (they load after this service). */
+  useProfiles(presets: () => readonly PresetLevels[]): void {
+    this.presets = presets;
+  }
 
   /** FR-2: counts only, never a title or a name, on the scale the caller saw (BR-3). */
   async preview(
@@ -118,11 +131,18 @@ export class ScaleChangesService {
       const change = { before: ids, after: request.order };
       return { version, ...impactOf(change, held), removal: null };
     }
-    return this.removalPreview({ scale, id: request.remove, held, version });
+    return this.removalPreview({
+      root,
+      scale,
+      id: request.remove,
+      held,
+      version,
+    });
   }
 
   /** What the level holds, where it goes by default (BR-2) and who loses what. */
   private removalPreview(input: {
+    readonly root: string;
     readonly scale: readonly StoredLevel[];
     readonly id: string;
     readonly held: CountedHoldings;
@@ -142,6 +162,7 @@ export class ScaleChangesService {
         people: held.people[level.id] ?? 0,
         ...removalTargets(ids, level.id),
         last,
+        profiles: this.profilesNaming(input.root, level.id),
       },
     };
   }
@@ -238,6 +259,11 @@ export class ScaleChangesService {
       },
     };
     return impactOf(change, held);
+  }
+
+  /** How many invite profiles name this level of the collection. */
+  private profilesNaming(root: string, level: string): number {
+    return this.presets().filter((one) => one.levels?.[root] === level).length;
   }
 
   private levelIn(scale: readonly StoredLevel[], id: string): StoredLevel {
@@ -518,6 +544,7 @@ export class ScaleChangesService {
       target: one.id,
       before: one.level,
       after: change.after,
+      via: 'scale',
     }));
   }
 

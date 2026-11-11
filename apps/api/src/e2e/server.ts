@@ -124,8 +124,8 @@ function levelCollections(root: string): void {
   // `zz-pessoas-*`: people's levels in profiles, invitations and in bulk (KBC-109).
   // `zz-gestao-*`: a level deleted, a move previewed, every level taken away (KBC-108).
   const kinds = ['niveis', 'historico', 'semnivel', 'pessoas', 'gestao'];
-  const collections = kinds.flatMap(
-    (kind) => ['desktop', 'mobile'].map((project) => ({ kind, project })),
+  const collections = kinds.flatMap((kind) =>
+    ['desktop', 'mobile'].map((project) => ({ kind, project })),
   );
   for (const { kind, project } of collections) {
     const dir = join(root, `zz-${kind}-${project}`);

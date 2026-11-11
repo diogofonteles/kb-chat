@@ -48,6 +48,7 @@ const CI_PREVIEW: LevelPreview = {
     moveContentTo: 'cdc',
     movePeopleTo: 'qs',
     last: false,
+    profiles: 0,
   },
 };
 
@@ -109,6 +110,24 @@ describe('LevelDeleteDialog (T24, KBC-108)', () => {
     await fixture.whenStable();
     expect(done).toHaveBeenCalledWith(after);
     http.verify();
+  });
+
+  it('KBC-109: says that the invite profiles using the level will ask for another one', async () => {
+    const { fixture, http, dialog } = await dialogFor(THREE);
+    const ci = THREE.levels[1];
+    if (!ci) throw new Error('no CI');
+    dialog.openFor(ci);
+    const removal = CI_PREVIEW.removal;
+    if (!removal) throw new Error('no removal');
+    http
+      .expectOne(`${URL}/preview`)
+      .flush({ ...CI_PREVIEW, removal: { ...removal, profiles: 2 } });
+    await fixture.whenStable();
+    expect(
+      screen.getByText(
+        '2 perfis de convite usam CI. Eles não mudam: ao aplicá-los, a pessoa fica no nível mais baixo até alguém escolher outro no perfil.',
+      ),
+    ).toBeTruthy();
   });
 
   it('BR-3: a scale changed since the preview says so, keeps the choices and asks for a reload', async () => {

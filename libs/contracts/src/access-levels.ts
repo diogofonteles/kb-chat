@@ -423,6 +423,11 @@ export const levelRemovalSchema = z.object({
   movePeopleTo: levelRefSchema.nullable(),
   /** The only level: removing it is "Tirar todos os níveis" (AC-6). */
   last: z.boolean(),
+  /**
+   * Invite profiles that name the level (KBC-109): they are not rewritten and read as
+   * `staleLevels` afterwards, asking for a choice.
+   */
+  profiles: z.number().int().nonnegative(),
 });
 export type LevelRemoval = z.infer<typeof levelRemovalSchema>;
 

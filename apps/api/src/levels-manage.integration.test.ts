@@ -152,6 +152,7 @@ describe('Deleting a level (KBC-108 FR-1, BR-1, BR-2)', () => {
       moveContentTo: 'cdc',
       movePeopleTo: 'qs',
       last: false,
+      profiles: 0,
     });
     expect(losing).toEqual({ people: 4, documents: 12, media: 3 });
     expect(preview.body).not.toContain('Lua Media');
@@ -193,7 +194,9 @@ describe('Deleting a level (KBC-108 FR-1, BR-1, BR-2)', () => {
     const at = head?.at;
     const lines = audit.filter((one) => one.at === at);
     expect(lines.filter((one) => one.kind === 'item.level')).toHaveLength(15);
-    expect(lines.filter((one) => one.kind === 'person.level')).toHaveLength(4);
+    const people = lines.filter((one) => one.kind === 'person.level');
+    expect(people).toHaveLength(4);
+    expect(people.every((one) => one.via === 'scale')).toBe(true);
   });
 
   it('AC-2: without moveContentTo it answers 400 and nothing changes', async () => {
@@ -236,6 +239,41 @@ describe('Deleting a level (KBC-108 FR-1, BR-1, BR-2)', () => {
       moveContentTo: 'ci',
       movePeopleTo: 'ci',
     });
+  });
+
+  it('KBC-109: a profile naming the deleted level is counted in the preview, then reads as stale and invites at the lowest', async () => {
+    const world = await startLevels();
+    await sixAtThreeLevels(world);
+    const profile = await world.owner('POST', '/api/v1/invite-profiles', {
+      name: 'Aluno',
+      preset: {
+        topics: ['hermetismo'],
+        features: ['search'],
+        levels: { hermetismo: 'ci' },
+      },
+    });
+    expect(profile.statusCode, profile.body).toBe(201);
+    const { version } = await scaleOf(world);
+    const preview = await world.owner('POST', `${LEVELS}/preview`, {
+      remove: 'ci',
+      version,
+    });
+    expect(preview.json<LevelPreview>().removal?.profiles).toBe(1);
+    const deleted = await world.owner('DELETE', `${LEVELS}/ci`, {
+      moveContentTo: 'cdc',
+      movePeopleTo: 'qs',
+      version,
+    });
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    const listed = await world.owner('GET', '/api/v1/invite-profiles');
+    expect(listed.json().items[0].staleLevels).toEqual({ hermetismo: 'ci' });
+    const invited = await world.owner('POST', '/api/v1/people', {
+      email: 'nova@example.com',
+      sendEmail: false,
+      profileId: profile.json<{ id: string }>().id,
+    });
+    expect(invited.statusCode, invited.body).toBe(201);
+    expect(invited.json().levels).toEqual({ hermetismo: 'qs' });
   });
 
   it('AC-6: the only level is not deleted alone: it asks for every level to go', async () => {

@@ -1662,6 +1662,10 @@ async function registerPeople(
   await app.register(
     inviteProfilesRoutes({ profiles, topics, levels: deps.levels.people }),
   );
+  // KBC-108: a removal's preview counts the profiles that name the level.
+  deps.levels.changes.useProfiles(() =>
+    profiles.list().map((profile) => profile.preset),
+  );
 }
 
 /** What an invitation and "Aplicar perfil" need from the profiles and Settings (KBC-028). */

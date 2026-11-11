@@ -67,6 +67,9 @@
       }
       @default {
         <p id="level-delete-what">{{ holdings() }}</p>
+        @if (profilesNote(); as note) {
+          <p class="warning">{{ note }}</p>
+        }
       }
     }
     <form (submit)="$event.preventDefault(); confirm()">
