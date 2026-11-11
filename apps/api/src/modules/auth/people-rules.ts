@@ -262,6 +262,45 @@ export function setLevels(
   return { people: next, result: changed };
 }
 
+/** One person's level in a collection before a rewrite (null: none held). */
+export interface HeldLevel {
+  readonly id: string;
+  readonly level: string | null;
+}
+
+/**
+ * KBC-108: each person's level in `root` as `pick` says (a level, null to drop it, undefined
+ * to leave it); answers who changed and what they held, for the audit and an undo.
+ */
+export function rewriteLevels(
+  people: readonly StoredPerson[],
+  change: {
+    readonly root: string;
+    readonly pick: (person: StoredPerson) => string | null | undefined;
+  },
+): PeopleChange<HeldLevel[]> {
+  const { root, pick } = change;
+  const changed: HeldLevel[] = [];
+  const next = people.map((person) => {
+    const level = pick(person);
+    const held = person.levels?.[root] ?? null;
+    if (level === undefined || level === held) return person;
+    changed.push({ id: person.id, level: held });
+    const others = Object.entries(person.levels ?? {}).filter(
+      ([slug]) => slug !== root,
+    );
+    const levels = Object.fromEntries(
+      level === null ? others : [...others, [root, level]],
+    );
+    // No levels left: the key goes, so an undo writes the person back as they were.
+    return {
+      ...person,
+      levels: Object.keys(levels).length > 0 ? levels : undefined,
+    };
+  });
+  return { people: next, result: changed };
+}
+
 /** The quota only when it changes: null goes back to the default (KBC-035 BR-1). */
 const quotaChangeOf = ({ mediaQuotaBytes }: PersonUpdate) =>
   mediaQuotaBytes === undefined ? {} : { mediaQuotaBytes };

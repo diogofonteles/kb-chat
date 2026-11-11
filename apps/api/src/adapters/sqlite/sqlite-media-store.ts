@@ -23,7 +23,11 @@ import type {
   LeasedJob,
   EditedMedia,
   MediaEdit,
+  MediaLevelRestore,
+  MediaLevelRow,
   MediaLevelSeed,
+  MediaRelevel,
+  MovedMedia,
   MediaRecord,
   MediaRendition,
   MediaStorePort,
@@ -405,6 +409,60 @@ export class SqliteMediaStore implements MediaStorePort {
         .run(seed.root, seed.level, rows, at);
       return rows;
     });
+  }
+
+  relevel(change: MediaRelevel): MovedMedia[] {
+    if (change.topics.length === 0) return [];
+    const topics = JSON.stringify(change.topics);
+    return inTransaction(this.db, () => {
+      const rows = this.db
+        .prepare(
+          `SELECT id, level, topic FROM media
+           WHERE level IS NOT NULL AND (? IS NULL OR level = ?)
+             AND topic IN (SELECT value FROM json_each(?))`,
+        )
+        .all(change.from ?? null, change.from ?? null, topics)
+        .map((row) => ({
+          id: String(row['id']),
+          level: nullableText(row, 'level'),
+          topic: String(row['topic']),
+        }));
+      this.writeLevels(rows.map(({ id }) => ({ id, level: change.to })));
+      return rows;
+    });
+  }
+
+  restoreLevels(rows: readonly MediaLevelRestore[]): string[] {
+    return inTransaction(this.db, () => {
+      const write = this.db.prepare(
+        'UPDATE media SET level = ? WHERE id = ? AND level IS ?',
+      );
+      return rows
+        .filter(
+          (row) => write.run(row.level, row.id, row.written).changes === 0,
+        )
+        .map((row) => row.id);
+    });
+  }
+
+  countLevels(topics: readonly string[]): Readonly<Record<string, number>> {
+    if (topics.length === 0) return {};
+    const rows = this.db
+      .prepare(
+        `SELECT level, COUNT(*) AS n FROM media
+         WHERE level IS NOT NULL AND topic IN (SELECT value FROM json_each(?))
+         GROUP BY level`,
+      )
+      .all(JSON.stringify(topics));
+    return Object.fromEntries(
+      rows.map((row) => [String(row['level']), Number(row['n'])]),
+    );
+  }
+
+  /** One statement per row, inside the caller's transaction. */
+  private writeLevels(rows: readonly MediaLevelRow[]): void {
+    const write = this.db.prepare('UPDATE media SET level = ? WHERE id = ?');
+    for (const row of rows) write.run(row.level, row.id);
   }
 
   deleteMedia(id: string): boolean {

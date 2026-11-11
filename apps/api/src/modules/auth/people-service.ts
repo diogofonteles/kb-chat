@@ -200,6 +200,17 @@ export class PeopleService {
     return this.change((people) => rules.setLevels(people, change));
   }
 
+  /**
+   * KBC-108: rewrites people's level in one collection, in one write of people.json (a
+   * deleted level's people, every level taken away, or the undo of either).
+   */
+  rewriteLevels(change: {
+    readonly root: string;
+    readonly pick: (person: StoredPerson) => string | null | undefined;
+  }): Promise<rules.HeldLevel[]> {
+    return this.change((people) => rules.rewriteLevels(people, change));
+  }
+
   /** One app AI for several people or for everyone (KBC-022); answers how many changed. */
   assignAi(
     request: {

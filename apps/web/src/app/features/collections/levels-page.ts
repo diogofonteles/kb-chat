@@ -18,6 +18,8 @@ import {
   LEVEL_DESCRIPTION_MAX,
   topicLevelsSchema,
   type AccessLevel,
+  type LevelImpact,
+  type LevelPreview,
   type TopicLevels,
 } from '@kb-chat/contracts';
 import {
@@ -33,13 +35,18 @@ import {
 import { SessionStore } from '@core/auth/session-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { CollectionHeading } from '@features/chat/collection-heading.js';
+import { LevelDeleteDialog } from './level-delete-dialog.js';
+import { LevelsHistory } from './levels-history.js';
 import { UnassignedSection } from './unassigned-section.js';
 import { finalize, map, type Observable } from 'rxjs';
 
-/** A move waiting for its confirmation: which level, and where it goes. */
+/** A move waiting for its confirmation: which level, where it goes, and its preview. */
 interface Move {
   readonly id: string;
   readonly to: number;
+  readonly order: readonly string[];
+  /** The server's count of who gains and loses what (KBC-108 FR-2); null while it comes. */
+  readonly preview: LevelPreview | null;
 }
 
 /** What the rename form holds while it is open. */
@@ -59,7 +66,7 @@ const ordinal = (n: number): string => `${n}º`;
  */
 @Component({
   selector: 'app-levels-page',
-  imports: [RouterLink, UnassignedSection],
+  imports: [RouterLink, UnassignedSection, LevelDeleteDialog, LevelsHistory],
   templateUrl: './levels-page.html',
   styleUrl: './levels-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -78,6 +85,9 @@ export class LevelsPage {
     viewChild<ElementRef<HTMLButtonElement>>('confirmMove');
   private readonly renameInput =
     viewChild<ElementRef<HTMLInputElement>>('renameInput');
+  private readonly deleteDialog = viewChild(LevelDeleteDialog);
+  private readonly heading =
+    viewChild<ElementRef<HTMLHeadingElement>>('heading');
 
   /** The collection, from the route (`/acervos/:slug/niveis`). */
   protected readonly slug = toSignal(
@@ -99,6 +109,8 @@ export class LevelsPage {
   );
   /** The latest answer of a write, over what was loaded. */
   private readonly written = signal<TopicLevels | null>(null);
+  /** Grows with each write: an open history reads itself again (R1-12). */
+  protected readonly revision = signal(0);
   protected readonly scale = computed<TopicLevels | null>(() => {
     const written = this.written();
     if (written && written.collection === this.slug()) return written;
@@ -133,19 +145,38 @@ export class LevelsPage {
   }
 
   /** Each row's buttons name their level (WCAG 2.4.6), the visible words first (2.5.3). */
-  protected labelFor(action: 'rename' | 'up' | 'down', level: AccessLevel) {
+  protected labelFor(
+    action: 'rename' | 'up' | 'down' | 'delete',
+    level: AccessLevel,
+  ) {
     const { code } = level;
     const labels: Record<typeof action, () => string> = {
       rename: () => $localize`:@@levels.renameLabel:Renomear ${code}:code:`,
       up: () => $localize`:@@levels.moveUpLabel:Mover para cima: ${code}:code:`,
       down: () =>
         $localize`:@@levels.moveDownLabel:Mover para baixo: ${code}:code:`,
+      delete: () => $localize`:@@levels.deleteLabel:Apagar ${code}:code:`,
     };
     return labels[action]();
   }
 
   protected levelCounts(level: AccessLevel): string {
-    return $localize`:@@levels.counts:${this.documents(level.documents)}:documents: · ${this.people(level.people)}:people:`;
+    // Audios only where there are some: a library without media says nothing of them.
+    return level.media > 0
+      ? $localize`:@@levels.countsWithAudios:${this.documents(level.documents)}:documents: · ${this.audios(level.media)}:audios: · ${this.people(level.people)}:people:`
+      : $localize`:@@levels.counts:${this.documents(level.documents)}:documents: · ${this.people(level.people)}:people:`;
+  }
+
+  protected audios(count: number): string {
+    return count === 1
+      ? $localize`:@@levels.oneAudio:1 áudio`
+      : $localize`:@@levels.audios:${count}:count: áudios`;
+  }
+
+  protected items(count: number): string {
+    return count === 1
+      ? $localize`:@@levels.oneItem:1 item`
+      : $localize`:@@levels.items:${count}:count: itens`;
   }
 
   protected documents(count: number): string {
@@ -204,26 +235,65 @@ export class LevelsPage {
     );
   }
 
+  /** "Mover": the server counts who gains and loses what before anything moves (KBC-108 BR-3). */
   protected askMove(level: AccessLevel, by: -1 | 1): void {
-    const from = this.levels().findIndex((one) => one.id === level.id);
-    this.moving.set({ id: level.id, to: from + by });
-    this.focusAfterRender(() => this.confirmMove());
+    const scale = this.scale();
+    if (!scale || this.busy()) return;
+    const order = this.levels().map((one) => one.id);
+    const from = order.indexOf(level.id);
+    order.splice(from, 1);
+    order.splice(from + by, 0, level.id);
+    this.failure.set('');
+    this.moving.set({ id: level.id, to: from + by, order, preview: null });
+    this.api
+      .preview(this.slug(), { order, version: scale.version })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (preview) => {
+          const move = this.moving();
+          // An answer for a move cancelled or replaced meanwhile is dropped (PD-03).
+          if (move?.id !== level.id || move.to !== from + by) return;
+          this.moving.set({ ...move, preview });
+          this.focusAfterRender(() => this.confirmMove());
+        },
+        error: (err: unknown) => {
+          const move = this.moving();
+          // A failure for a move cancelled or replaced meanwhile says nothing (R1-13).
+          if (move?.id === level.id && move.to === from + by)
+            this.writeFailed(err);
+        },
+      });
   }
 
-  /**
-   * What the move changes, by direction (UP-07, MA-27), as the API applies it (AC-12): the
-   * list goes from the lowest level up, so moving a level up puts it below the one it passes,
-   * which starts seeing its content; moving it down puts it above, which stops seeing it.
-   */
+  /** "Mover CI para a 2ª posição? 2 pessoas passam a ver 14 itens; 1 pessoa deixa de ver 6." */
   protected moveText(level: AccessLevel): string {
-    const to = this.moving()?.to ?? 0;
-    const passed = this.levels()[to]?.code ?? '';
-    const position = `${to + 1}ª`;
-    const from = this.levels().findIndex((one) => one.id === level.id);
+    const move = this.moving();
+    const position = `${(move?.to ?? 0) + 1}ª`;
     const { code } = level;
-    return to > from
-      ? $localize`:@@levels.confirmMoveDown:Mover ${code}:code: para a ${position}:position: posição? Quem está em ${passed}:passed: deixa de ver o conteúdo de ${code}:code: na hora, e quem está em ${code}:code: passa a ver o de ${passed}:passed:.`
-      : $localize`:@@levels.confirmMoveUp:Mover ${code}:code: para a ${position}:position: posição? Quem está em ${passed}:passed: passa a ver o conteúdo de ${code}:code: na hora, e quem está em ${code}:code: deixa de ver o de ${passed}:passed:.`;
+    const question = $localize`:@@levels.confirmMove:Mover ${code}:code: para a ${position}:position: posição?`;
+    if (!move?.preview)
+      return `${question} ${$localize`:@@levels.previewing:Contando quem ganha e quem perde acesso…`}`;
+    return `${question} ${this.impactText(move.preview)}`;
+  }
+
+  private impactText({ gaining, losing }: LevelPreview): string {
+    const items = (impact: LevelImpact) =>
+      this.items(impact.documents + impact.media);
+    const gains = (impact: LevelImpact) =>
+      impact.people === 1
+        ? $localize`:@@levels.gainsOne:1 pessoa passa a ver ${items(impact)}:items:`
+        : $localize`:@@levels.gains:${impact.people}:people: pessoas passam a ver ${items(impact)}:items:`;
+    const loses = (impact: LevelImpact) =>
+      impact.people === 1
+        ? $localize`:@@levels.losesOne:1 pessoa deixa de ver ${items(impact)}:items:`
+        : $localize`:@@levels.loses:${impact.people}:people: pessoas deixam de ver ${items(impact)}:items:`;
+    const parts = [
+      ...(gaining.people > 0 ? [gains(gaining)] : []),
+      ...(losing.people > 0 ? [loses(losing)] : []),
+    ];
+    return parts.length === 0
+      ? $localize`:@@levels.noImpact:Ninguém ganha nem perde acesso.`
+      : `${parts.join('; ')}.`;
   }
 
   protected cancelMove(): void {
@@ -232,21 +302,58 @@ export class LevelsPage {
 
   protected applyMove(): void {
     const move = this.moving();
-    if (!move || this.busy()) return;
-    const order = this.levels().map((one) => one.id);
-    const from = order.indexOf(move.id);
-    order.splice(from, 1);
-    order.splice(move.to, 0, move.id);
+    if (!move?.preview || this.busy()) return;
+    const { order, preview } = move;
     this.moving.set(null);
-    this.write(this.api.reorder(this.slug(), order), {
-      done: (scale) => {
-        const level = scale.levels[move.to];
-        if (level)
-          this.announcement.set(
-            $localize`:@@levels.moved:${level.code}:code: agora é o ${ordinal(move.to + 1)}:position: de ${scale.levels.length}:total:`,
-          );
+    this.write(
+      this.api.reorder(this.slug(), { order, version: preview.version }),
+      {
+        done: (scale) => {
+          const level = scale.levels[move.to];
+          if (level)
+            this.announcement.set(
+              $localize`:@@levels.moved:${level.code}:code: agora é o ${ordinal(move.to + 1)}:position: de ${scale.levels.length}:total:`,
+            );
+        },
       },
-    });
+    );
+  }
+
+  /** "Apagar" (KBC-108): the dialog counts what the level holds and asks where it goes. */
+  protected askDelete(level: AccessLevel): void {
+    this.failure.set('');
+    this.deleteDialog()?.openFor(level);
+  }
+
+  protected askClear(): void {
+    this.failure.set('');
+    this.deleteDialog()?.openForAll();
+  }
+
+  /** The dialog changed the scale: it replaces the one on screen. */
+  protected deleted(scale: TopicLevels): void {
+    this.written.set(scale);
+    this.revision.update((n) => n + 1);
+    this.announcement.set(
+      scale.levels.length === 0
+        ? $localize`:@@levels.cleared:Os níveis foram tirados. Todos com acesso veem todo o conteúdo.`
+        : $localize`:@@levels.deleted:Nível apagado.`,
+    );
+    this.focusAfterRender(() => this.heading());
+  }
+
+  /** The level was deleted by someone else while its dialog was open (R2-3). */
+  protected levelGone(code: string): void {
+    this.announcement.set(
+      $localize`:@@levels.goneMeanwhile:${code}:code: já foi apagado por outra pessoa. A escala foi atualizada.`,
+    );
+    this.focusAfterRender(() => this.heading());
+  }
+
+  /** Someone changed the scale meanwhile: what is on screen is read again (BR-3). */
+  protected refresh(): void {
+    this.written.set(null);
+    this.loaded.reload();
   }
 
   protected askRename(level: AccessLevel): void {
@@ -303,15 +410,21 @@ export class LevelsPage {
       .subscribe({
         next: (scale) => {
           this.written.set(scale);
+          this.revision.update((n) => n + 1);
           outcome.done(scale);
         },
-        error: (err: unknown) => {
-          const message = this.messageOf(err);
-          (outcome.failed ?? ((text: string) => this.failure.set(text)))(
-            message,
-          );
-        },
+        error: (err: unknown) => this.writeFailed(err, outcome.failed),
       });
+  }
+
+  /** Tells what failed; a scale changed meanwhile is read again (KBC-108 BR-3). */
+  private writeFailed(
+    err: unknown,
+    failed: (message: string) => void = (text) => this.failure.set(text),
+  ): void {
+    this.moving.set(null);
+    failed(this.messageOf(err));
+    if (toUiErrorCode(err) === 'LEVELS_CHANGED') this.refresh();
   }
 
   private messageOf(err: unknown): string {
