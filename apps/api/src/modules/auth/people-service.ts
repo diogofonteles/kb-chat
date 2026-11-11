@@ -12,6 +12,7 @@ import {
   OWNER_PRINCIPAL,
   isMaster,
   peopleDocumentSchema,
+  unknownFeaturesIn,
   type StoredPerson,
   type Viewer,
 } from './person.js';
@@ -28,6 +29,8 @@ export interface PeopleServiceDeps {
   readonly ownerEmail?: string;
   readonly now?: () => Date;
   readonly newId?: () => string;
+  /** Told when people.json names features this image does not know (they are ignored). */
+  readonly log?: { warn(fields: object, message: string): void };
 }
 
 interface Loaded {
@@ -43,6 +46,8 @@ export class PeopleService {
   private loaded: Loaded | null = null;
   private writing: Promise<unknown> = Promise.resolve();
   private readonly ownerEmail: string | undefined;
+
+  private warned = '';
 
   constructor(private readonly deps: PeopleServiceDeps) {
     this.ownerEmail = deps.ownerEmail?.toLowerCase();
@@ -160,6 +165,41 @@ export class PeopleService {
     );
   }
 
+  /** Whoever creates a collection gets access to it (KBC-048 BR-5); a no-op for masters. */
+  grantTopic(id: string, topic: string, by: string): Promise<StoredPerson> {
+    const context = { by, now: this.now() };
+    return this.change((people) => {
+      const person = people.find((one) => one.id === id);
+      if (!person) throw new AppError('FORBIDDEN', 'Unknown person');
+      if (isMaster(person) || person.topics.includes(topic))
+        return { people, result: person };
+      const topics = [...person.topics, topic];
+      return rules.update(
+        people,
+        { id, patch: { topics }, context },
+        this.ownerEmail,
+      );
+    });
+  }
+
+  /** The first scale's lowest level for everyone with access (KBC-103 BR-4). */
+  placeLevels(placement: {
+    readonly ids: readonly string[];
+    readonly root: string;
+    readonly level: string;
+  }): Promise<number> {
+    return this.change((people) => rules.placePeople(people, placement));
+  }
+
+  /** One level for the people `keeps` accepts, in one write of people.json (KBC-109 NFR-1). */
+  setLevels(change: {
+    readonly root: string;
+    readonly level: string;
+    readonly keeps: (person: StoredPerson) => boolean;
+  }): Promise<rules.LevelChanged[]> {
+    return this.change((people) => rules.setLevels(people, change));
+  }
+
   /** One app AI for several people or for everyone (KBC-022); answers how many changed. */
   assignAi(
     request: {
@@ -218,6 +258,7 @@ export class PeopleService {
     const parsed = peopleDocumentSchema.safeParse(raw ?? undefined);
     if (raw !== null && !parsed.success)
       throw new AppError('INTERNAL', 'people.json is invalid');
+    this.warnUnknownFeatures(raw);
     const stored = parsed.success ? parsed.data.people : [];
     const people = rules.ensureOwner(stored, {
       ownerEmail: this.ownerEmail,
@@ -226,6 +267,18 @@ export class PeopleService {
     if (people !== stored) await this.persist(people);
     this.loaded = { people, at: Date.now() };
     return this.loaded;
+  }
+
+  /** Once per set of names: a rollback to an older image would otherwise warn on every read. */
+  private warnUnknownFeatures(raw: unknown): void {
+    const unknown = unknownFeaturesIn(raw);
+    const key = unknown.join(',');
+    if (unknown.length === 0 || key === this.warned) return;
+    this.warned = key;
+    this.deps.log?.warn(
+      { features: unknown },
+      'people.json names features this version does not know; they are ignored',
+    );
   }
 
   private change<T>(

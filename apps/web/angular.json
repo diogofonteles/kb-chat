@@ -13,6 +13,7 @@
         "build": {
           "builder": "@angular/build:application",
           "options": {
+            "allowedCommonJsDependencies": ["url-parse"],
             "outputPath": "dist",
             "index": "src/index.html",
             "browser": "src/main.ts",

@@ -8,10 +8,13 @@
 #   kb     fallback search when qmd is down (`kb search`)
 #   claude Claude Code, only for the owner's subscription (KBC-007, KBC-010 BR-5)
 #   codex  Codex, run only by the `codex` service, the sandbox container (KBC-027, ADR 0020)
+# and ffmpeg/ffprobe for the `media-worker` service (KBC-034, ADR 0022), the same image with
+# another command.
 # Everything, the workspace and these global CLIs, is installed with pnpm (project rule);
 # versions are pinned.
 
-ARG NODE_IMAGE=node:22-bookworm-slim
+# The Node of .nvmrc: its SQLite has the FTS5 the media library's search needs.
+ARG NODE_IMAGE=node:22.23.2-bookworm-slim
 
 # --- Build: the whole workspace, then a self-contained bundle of the API ---
 FROM ${NODE_IMAGE} AS build
@@ -23,6 +26,8 @@ WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm fetch
 COPY . .
+# The runtime stage runs this same image: a Node whose SQLite lacks FTS5 stops the build here.
+RUN node --no-warnings tools/check-node.mjs
 RUN pnpm install --frozen-lockfile --offline
 RUN pnpm --filter @kb-chat/contracts build && pnpm --filter @kb-chat/api build
 # dist + production dependencies (including the built @kb-chat/contracts).
@@ -58,7 +63,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate \
 # --- Runtime: non-root, tini as PID 1 (the CLIs run in their own process groups) ---
 FROM ${NODE_IMAGE} AS runtime
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends tini ca-certificates \
+  && apt-get install -y --no-install-recommends tini ca-certificates ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=clis /opt/clis /opt/clis
 
@@ -68,7 +73,7 @@ RUN groupadd --gid 10001 app \
   && useradd --uid 10001 --gid app --create-home --home-dir /home/app --shell /usr/sbin/nologin app \
   && groupadd --gid 10002 codex \
   && useradd --uid 10002 --gid codex --no-create-home --home-dir /codex-home --shell /usr/sbin/nologin codex \
-  && mkdir -p /vault /data/state /home/app/.cache/qmd /home/app/.config/qmd /home/app/.claude \
+  && mkdir -p /vault /data/state /data/media /home/app/.cache/qmd /home/app/.config/qmd /home/app/.claude \
   && chown -R app:app /data /home/app
 
 ENV NODE_ENV=production \

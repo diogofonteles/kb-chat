@@ -1,8 +1,11 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import type { ResultFacets } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
+import { aTopic } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
+import { ChatStore } from './chat-store.js';
 import { FilterBar } from './filter-bar.js';
+import { toFacetGroups } from './filter-model.js';
 
 const FACETS: ResultFacets = {
   concepts: Array.from({ length: 14 }, (_, i) => ({
@@ -23,6 +26,7 @@ const FACETS: ResultFacets = {
     { value: 'outros-autores', count: 3 },
     { value: 'sintese', count: 1 },
   ],
+  topics: [{ value: 'hermetismo', count: 10 }],
 };
 
 async function renderBar(filters = NO_FILTERS, hiddenOffTopic = 0) {
@@ -219,6 +223,51 @@ describe('FilterBar authorship control (KBC-020 AC-2)', () => {
     expect((radio(/^Todos/) as HTMLInputElement).checked).toBe(true);
   });
 
+  it("names the main group by the open collection's main author (KBC-049 FR-4)", async () => {
+    const udv = aTopic({
+      slug: 'udv',
+      title: 'UDV',
+      mainAuthor: { slug: 'mestre-gabriel', name: 'Mestre Gabriel' },
+    });
+    await render(FilterBar, {
+      providers: [
+        provideZonelessChangeDetection(),
+        // Only the open collection is read from the page's store.
+        { provide: ChatStore, useValue: { topic: signal(udv) } },
+      ],
+      inputs: { facets: FACETS, filters: NO_FILTERS },
+    });
+    const main = radio(/Mestre Gabriel/).closest('label');
+    expect(main?.textContent).toContain('✦');
+    expect(main?.textContent).toContain('6');
+    expect(screen.queryByRole('radio', { name: /Laércio/ })).toBeNull();
+  });
+
+  it('names the removable "Autoria" chips by the main author too (KBC-049)', async () => {
+    const udv = aTopic({
+      slug: 'udv',
+      title: 'UDV',
+      mainAuthor: { slug: 'mestre-gabriel', name: 'Mestre Gabriel' },
+    });
+    await render(FilterBar, {
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ChatStore, useValue: { topic: signal(udv) } },
+      ],
+      inputs: {
+        facets: FACETS,
+        filters: {
+          ...NO_FILTERS,
+          authorships: ['mestre-laercio', 'outros-autores'],
+        },
+      },
+    });
+    expect(
+      screen.getByRole('button', { name: 'Remover Autoria: Mestre Gabriel' }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Laércio/)).toBeNull();
+  });
+
   it('filters by one group at once and goes back to every group with Todos', async () => {
     const view = await renderBar();
     fireEvent.click(radio(/Mestre Laércio/));
@@ -275,5 +324,61 @@ describe('FilterBar authorship control (KBC-020 AC-2)', () => {
       ...NO_FILTERS,
       authorships: ['nao-classificado'],
     });
+  });
+});
+
+describe('FilterBar "Sub-acervo" (KBC-048 FR-4)', () => {
+  const PARENT: ResultFacets = {
+    ...FACETS,
+    topics: [
+      { value: 'udv', count: 2 },
+      { value: 'udv/palavra-do-mestre', count: 5 },
+    ],
+  };
+  const names = new Map([
+    ['udv', 'UDV'],
+    ['udv/palavra-do-mestre', 'Palavra do Mestre'],
+  ]);
+
+  it('offers the parent and its sub-collections by name and restricts to one', async () => {
+    const filtersChange = vi.fn();
+    const view = await render(FilterBar, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { facets: PARENT, filters: NO_FILTERS, topicNames: names },
+      on: { filtersChange },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Sub-acervo/ }));
+    await view.fixture.whenStable();
+    const option = screen.getByRole('checkbox', { name: /Palavra do Mestre/ });
+    expect(option.closest('label')?.textContent).toContain('5');
+    fireEvent.click(option);
+    expect(filtersChange).toHaveBeenCalledWith({
+      ...NO_FILTERS,
+      topics: ['udv/palavra-do-mestre'],
+    });
+  });
+
+  it('is not offered when the search spans one collection only', async () => {
+    await renderBar();
+    expect(screen.queryByRole('button', { name: /^Sub-acervo/ })).toBeNull();
+  });
+});
+
+describe('FilterBar tracks per subject (KBC-070 BR-4)', () => {
+  const withTracks = (tracks: number | undefined, count = 12) =>
+    toFacetGroups(
+      {
+        ...FACETS,
+        concepts: [{ value: 'Cabala', count, tracks }],
+      },
+      NO_FILTERS,
+    ).find((group) => group.key === 'concepts')?.options[0]?.countText;
+
+  it('says documents and tracks apart, and only what there is', () => {
+    expect(withTracks(3)).toBe('12 · 3 faixas');
+    expect(withTracks(1)).toBe('12 · 1 faixa');
+    expect(withTracks(2, 0)).toBe('2 faixas');
+    expect(withTracks(0)).toBe('12');
+    expect(withTracks(undefined)).toBe('12');
   });
 });

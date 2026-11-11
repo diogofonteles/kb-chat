@@ -1,4 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
+import { requireFittingNode } from '../tools/check-node.mjs';
+import { privateTemp } from '../tools/test-temp.mjs';
+
+// A Node whose SQLite lacks FTS5 stops here, naming the Node to use, before the servers
+// start (the workers load this file too: the runner has checked already).
+if (!process.env['TEST_WORKER_INDEX']) requireFittingNode();
+privateTemp();
 
 // The tutorial's screenshots (KBC-032): `pnpm tutorial:screenshots`. Its own ports, so it runs
 // beside `pnpm e2e` and the dev servers; a fresh E2E server (fixture vault, fake AI) each run.
@@ -21,6 +28,8 @@ export default defineConfig({
     locale: 'pt-BR',
     timezoneId: 'America/Sao_Paulo',
     colorScheme: 'light',
+    // Off the machine's speakers (see MUTE_AUDIO in playwright.config.ts).
+    launchOptions: { args: ['--mute-audio'] },
   },
   webServer: [
     {

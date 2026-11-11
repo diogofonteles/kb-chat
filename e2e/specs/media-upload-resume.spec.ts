@@ -1,0 +1,341 @@
+import AxeBuilder from '@axe-core/playwright';
+import type { Browser, Locator, Page, Route } from '@playwright/test';
+import type { Feature } from '@kb-chat/contracts';
+import { statSync } from 'node:fs';
+import {
+  CSRF,
+  expect,
+  invite,
+  ownerApi,
+  pageAs,
+  test,
+  uniqueEmail,
+} from './fixtures.js';
+import {
+  makeHeavyWav,
+  makeLongMp3,
+  makeMp3,
+  uniqueTag,
+  useTheme,
+} from './media-helpers.js';
+
+/** KBC-035: resumable upload, quota and repeated files, in the real panel. */
+
+const EDITOR: Feature[] = ['search', 'media', 'media-upload', 'media-edit'];
+const PART_BYTES = 8 * 1024 ** 2;
+const UPLOAD_URL = '**/api/v1/media/*/upload';
+
+const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
+
+async function openPanel(page: Page): Promise<Locator> {
+  await page.goto('/');
+  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('link', { name: 'Mídia' }).click();
+  await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
+  return page.getByRole('dialog', { name: 'Enviar áudio' });
+}
+
+async function uploaderPage(
+  browser: Browser,
+  grant: { mediaQuotaBytes?: number; features?: Feature[] } = {},
+): Promise<Page> {
+  const owner = await ownerApi();
+  const email = uniqueEmail('envia');
+  const id = await invite(owner, email, {
+    topics: ['hermetismo'],
+    features: grant.features ?? ['search', 'media', 'media-upload'],
+  });
+  if (grant.mediaQuotaBytes) {
+    const quota = await owner.patch(`/api/v1/people/${id}`, {
+      data: grant,
+      headers: CSRF,
+    });
+    expect(quota.status()).toBe(200);
+  }
+  await owner.dispose();
+  return pageAs(browser, email, test.info().project.use.viewport ?? null);
+}
+
+/** A real audio over `parts` parts of 8 MB. */
+const largeAudio = (parts: number): string =>
+  makeHeavyWav(`grande-${uniqueTag()}`, parts * PART_BYTES);
+
+const sendButton = (dialog: Locator) =>
+  dialog.getByRole('button', { name: 'Enviar', exact: true });
+
+test('AC-1, NFR-1: a part that fails continues where it stopped and creates one item', async ({
+  browser,
+}) => {
+  const page = await uploaderPage(browser);
+  const file = largeAudio(3);
+  const size = statSync(file).size;
+  let parts = 0;
+  await page.route(UPLOAD_URL, async (route: Route) => {
+    if (route.request().method() !== 'PATCH') return route.continue();
+    parts += 1;
+    return parts === 2 ? route.abort('connectionfailed') : route.continue();
+  });
+  const dialog = await openPanel(page);
+  await dialog.locator('input[type="file"]').setInputFiles(file);
+  await sendButton(dialog).click();
+  await expect(dialog).toBeHidden({ timeout: 60_000 });
+  const title = rowTitleOf(file);
+  await expect(
+    page.getByRole('listitem').filter({ hasText: title }),
+  ).toHaveCount(1);
+  // The aborted part went again, and nothing else did.
+  expect(parts).toBe(Math.ceil(size / PART_BYTES) + 1);
+});
+
+test('AC-1: the network goes down and comes back: it continues alone, one item', async ({
+  browser,
+}) => {
+  const page = await uploaderPage(browser);
+  const file = largeAudio(3);
+  const held = deferred();
+  const offline = deferred();
+  const context = page.context();
+  let patches = 0;
+  await page.route(UPLOAD_URL, async (route: Route) => {
+    if (route.request().method() !== 'PATCH') return route.continue();
+    patches += 1;
+    if (patches !== 2) return route.continue();
+    held.finish();
+    await offline.done;
+    return route.abort('internetdisconnected');
+  });
+  const dialog = await openPanel(page);
+  await dialog.locator('input[type="file"]').setInputFiles(file);
+  await sendButton(dialog).click();
+  await held.done;
+  await context.setOffline(true);
+  offline.finish();
+  await expect(
+    dialog
+      .getByText('Sem conexão. O envio continua sozinho quando a rede voltar.')
+      .first(),
+  ).toBeVisible();
+  await expect(dialog.getByRole('progressbar')).toBeVisible();
+  await context.setOffline(false);
+  await expect(dialog).toBeHidden({ timeout: 60_000 });
+  await expect(
+    page.getByRole('listitem').filter({ hasText: rowTitleOf(file) }),
+  ).toHaveCount(1);
+});
+
+test('FR-2: a reload loses nothing: choosing the file again continues it', async ({
+  browser,
+}) => {
+  const page = await uploaderPage(browser);
+  const file = largeAudio(2);
+  const dialog = await openPanel(page);
+  let held = false;
+  await page.route(UPLOAD_URL, async (route: Route) => {
+    if (route.request().method() !== 'PATCH' || !held) return route.continue();
+    return route.abort('connectionfailed');
+  });
+  const firstPart = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/upload') &&
+      response.request().method() === 'PATCH' &&
+      response.status() === 204,
+  );
+  await dialog.locator('input[type="file"]').setInputFiles(file);
+  await sendButton(dialog).click();
+  await firstPart;
+  held = true;
+  await page.reload();
+  await page.unroute(UPLOAD_URL);
+  const again = await openPanel(page);
+  await again.locator('input[type="file"]').setInputFiles(file);
+  await expect(again.getByText(/Envio interrompido em/)).toBeVisible({
+    timeout: 30_000,
+  });
+  await sendButton(again).click();
+  await expect(again).toBeHidden({ timeout: 60_000 });
+  const title = rowTitleOf(file);
+  await expect(
+    page.getByRole('listitem').filter({ hasText: title }),
+  ).toHaveCount(1);
+});
+
+test('AC-2: a file already in the collection is named, linked and not sent', async ({
+  browser,
+}) => {
+  const page = await uploaderPage(browser);
+  const file = makeMp3(`Repetido ${uniqueTag()}`, 2);
+  const title = rowTitleOf(file);
+  const dialog = await openPanel(page);
+  await dialog.locator('input[type="file"]').setInputFiles(file);
+  await sendButton(dialog).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
+  const creates: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/media'))
+      creates.push(request.url());
+  });
+  await dialog.locator('input[type="file"]').setInputFiles(file);
+  await expect(dialog.getByText('Já está no acervo:')).toBeVisible();
+  await expect(dialog.getByRole('link', { name: title })).toBeVisible();
+  await sendButton(dialog).click();
+  await expect(
+    dialog.getByText('Nada a enviar: estes arquivos não podem ser enviados.'),
+  ).toBeVisible();
+  expect(creates).toEqual([]);
+});
+
+test('AC-3: a send over the quota says so and sends nothing', async ({
+  browser,
+}) => {
+  const page = await uploaderPage(browser, {
+    mediaQuotaBytes: Math.round(0.1 * 1024 ** 3),
+  });
+  // Four hours at 8 kbit/s: a small file that converts to about 120 MB.
+  const file = makeLongMp3(`Longo ${uniqueTag()}`, 240, { bitrate: '8k' });
+  const dialog = await openPanel(page);
+  await dialog.locator('input[type="file"]').setInputFiles(file);
+  await expect(dialog.getByRole('alert')).toContainText(
+    'Este envio passa da sua cota de 0,1 GB. Fale com um master para aumentar.',
+  );
+});
+
+test('AC-8: three files at once, each with its bar, pass axe at this width', async ({
+  browser,
+}) => {
+  const page = await uploaderPage(browser);
+  await useTheme(page, 'light');
+  let release: (value: void) => void = () => undefined;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route(UPLOAD_URL, async (route: Route) => {
+    if (route.request().method() === 'PATCH') await released;
+    return route.continue();
+  });
+  const dialog = await openPanel(page);
+  const files = ['a', 'b', 'c'].map((name) =>
+    makeMp3(`Tres ${name} ${uniqueTag()}`, 2),
+  );
+  await dialog.locator('input[type="file"]').setInputFiles(files);
+  await sendButton(dialog).click();
+  await expect(dialog.getByRole('progressbar')).toHaveCount(3);
+  await expect(dialog.getByRole('combobox', { name: 'Acervo' })).toBeDisabled();
+  await expect(
+    dialog.locator('[aria-live="polite"]', { hasText: '0% enviado.' }),
+  ).toHaveCount(3);
+  const { violations } = await new AxeBuilder({ page }).analyze();
+  expect(
+    violations.filter(({ impact }) =>
+      ['serious', 'critical'].includes(impact ?? ''),
+    ),
+  ).toEqual([]);
+  const overflow = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(false);
+  release();
+  await expect(dialog).toBeHidden({ timeout: 30_000 });
+});
+
+test('KBC-072, KBC-090: one file with a plan goes to step 2; several go to the queue', async ({
+  browser,
+}) => {
+  const page = await uploaderPage(browser, { features: EDITOR });
+  const dialog = await openPanel(page);
+  await expect(
+    dialog.getByRole('group', { name: 'O que fazer com este áudio' }),
+  ).toBeVisible();
+  await dialog
+    .locator('input[type="file"]')
+    .setInputFiles(makeMp3(`Plano um ${uniqueTag()}`, 2));
+  await sendButton(dialog).click();
+  await expect(page).toHaveURL(/\/midia\/[^/]+\/preparar$/, {
+    timeout: 30_000,
+  });
+
+  const again = await openPanel(page);
+  const files = ['a', 'b'].map((name) =>
+    makeMp3(`Plano ${name} ${uniqueTag()}`, 2),
+  );
+  await again.locator('input[type="file"]').setInputFiles(files);
+  await expect(
+    again.getByRole('group', { name: 'O que fazer com estes áudios' }),
+  ).toBeVisible();
+  await sendButton(again).click();
+  await expect(again).toBeHidden({ timeout: 30_000 });
+  await expect(page).toHaveURL(/\/fila$/);
+  for (const file of files)
+    await expect(
+      page.locator('app-queue-row').filter({ hasText: rowTitleOf(file) }),
+    ).toBeVisible({ timeout: 30_000 });
+});
+
+test('KBC-072: a repeated file sends nothing, and the choices stay for the next', async ({
+  browser,
+}) => {
+  const page = await uploaderPage(browser, { features: EDITOR });
+  const file = makeMp3(`Repetido ${uniqueTag()}`, 2);
+  const dialog = await openPanel(page);
+  await dialog.locator('input[type="file"]').setInputFiles(file);
+  await sendButton(dialog).click();
+  await expect(page).toHaveURL(/\/preparar$/, { timeout: 30_000 });
+  const again = await openPanel(page);
+  await again.locator('input[type="file"]').setInputFiles(file);
+  await expect(again.getByText(/Já está no acervo/)).toBeVisible({
+    timeout: 30_000,
+  });
+  await sendButton(again).click();
+  await expect(again.getByText(/Nada a enviar/)).toBeVisible();
+  await expect(page).toHaveURL(/\/midia$/);
+});
+
+test('KBC-072: a cut upload keeps its plan and goes on to step 2', async ({
+  browser,
+}) => {
+  const page = await uploaderPage(browser, { features: EDITOR });
+  const file = largeAudio(2);
+  const dialog = await openPanel(page);
+  let held = false;
+  await page.route(UPLOAD_URL, async (route: Route) => {
+    if (route.request().method() !== 'PATCH' || !held) return route.continue();
+    return route.abort('connectionfailed');
+  });
+  const firstPart = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/upload') &&
+      response.request().method() === 'PATCH' &&
+      response.status() === 204,
+  );
+  await dialog.locator('input[type="file"]').setInputFiles(file);
+  await sendButton(dialog).click();
+  await firstPart;
+  held = true;
+  await page.reload();
+  await page.unroute(UPLOAD_URL);
+  const again = await openPanel(page);
+  await again.locator('input[type="file"]').setInputFiles(file);
+  await expect(again.getByText(/mantém as escolhas daquele envio/)).toBeVisible(
+    { timeout: 30_000 },
+  );
+  await expect(
+    again.getByRole('group', { name: 'O que fazer com este áudio' }),
+  ).toBeHidden();
+  await sendButton(again).click();
+  await expect(page).toHaveURL(/\/midia\/[^/]+\/preparar$/, {
+    timeout: 60_000,
+  });
+});
+
+/** A promise the test ends by hand, to hold a request where it wants it. */
+function deferred(): { done: Promise<void>; finish: () => void } {
+  let finish: () => void = () => undefined;
+  const done = new Promise<void>((resolve) => (finish = resolve));
+  return { done, finish };
+}
+
+/** The title the panel suggests for a file. */
+function rowTitleOf(path: string): string {
+  const name = path.split('/').at(-1) ?? '';
+  return name.replace(/\.(mp3|wav)$/, '').replace(/_+/g, ' ');
+}

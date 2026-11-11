@@ -1,0 +1,83 @@
+.usage {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.use {
+  margin: 0;
+  font-weight: 600;
+}
+
+meter {
+  width: 100%;
+  height: 0.5rem;
+}
+
+.add {
+  min-height: 5.5rem;
+  padding: var(--space-2) var(--space-3);
+  resize: vertical;
+}
+
+.field .secondary {
+  justify-self: start;
+  margin-top: var(--space-1);
+}
+
+.terms {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.term {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--target);
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.remove {
+  width: var(--target);
+  min-height: var(--target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.remove:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.versions {
+  margin-top: var(--space-4);
+}
+
+.versions summary {
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.versions li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.25em;
+}
+
+.versions ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}

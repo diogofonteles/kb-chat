@@ -1,7 +1,8 @@
-import type { InvitationPreset } from '@kb-chat/contracts';
+import type { Feature, InvitationPreset } from '@kb-chat/contracts';
 import {
   DEFAULT_INVITE_FEATURES,
-  FEATURES,
+  GRANTABLE_FEATURES,
+  MASTER_ONLY_FEATURES,
   type Invitation,
   type PersonUpdate,
 } from '@kb-chat/contracts';
@@ -50,7 +51,7 @@ export function ensureOwner(
     picture: null,
     role: 'master',
     topics: [],
-    features: [...FEATURES],
+    features: [...GRANTABLE_FEATURES],
     invitedBy: 'KB_CHAT_OWNER_EMAIL',
     createdAt: now,
     lastLoginAt: null,
@@ -196,17 +197,78 @@ export function update(
   const { id, patch } = change;
   const target = find(people, id);
   if (patch.role === 'member') guardMasterLoss(people, target, ownerEmail);
+  const role = patch.role ?? target.role;
   const next: StoredPerson = {
     ...target,
-    role: patch.role ?? target.role,
+    role,
     topics: patch.topics ? unique(patch.topics) : target.topics,
-    features: patch.features ? unique(patch.features) : target.features,
+    features: heldFeatures(
+      patch.features ? unique(patch.features) : target.features,
+    ),
     ...(patch.ai && {
       ai: applyAiUpdate(aiOf(target), patch.ai, change.context),
     }),
+    // Only a master may hold it; losing the role takes it away (KBC-060 BR-1).
+    canActAs: role === 'master' && (patch.canActAs ?? target.canActAs ?? false),
+    ...quotaChangeOf(patch),
+    ...(patch.levels && { levels: { ...target.levels, ...patch.levels } }),
+    // A master holds no levels (R2-2): becoming one drops them, so none comes back later.
+    ...(role === 'master' && { levels: undefined }),
   };
   return { people: replace(people, next), result: next };
 }
+
+/** One level of a top-level collection for several people at once (KBC-103 BR-4). */
+export function placePeople(
+  people: readonly StoredPerson[],
+  placement: {
+    readonly ids: readonly string[];
+    readonly root: string;
+    readonly level: string;
+  },
+): PeopleChange<number> {
+  const { ids, root, level } = placement;
+  const next = people.map((person) =>
+    ids.includes(person.id)
+      ? { ...person, levels: { ...person.levels, [root]: level } }
+      : person,
+  );
+  return { people: next, result: ids.length };
+}
+
+/** What one person's level was before a bulk changed it (KBC-109 FR-3). */
+export interface LevelChanged {
+  readonly person: StoredPerson;
+  readonly before: string | null;
+}
+
+/** One level of a top-level collection for the people `decide` keeps, in one write. */
+export function setLevels(
+  people: readonly StoredPerson[],
+  change: {
+    readonly root: string;
+    readonly level: string;
+    readonly keeps: (person: StoredPerson) => boolean;
+  },
+): PeopleChange<LevelChanged[]> {
+  const { root, level, keeps } = change;
+  const changed: LevelChanged[] = [];
+  const next = people.map((person) => {
+    if (!keeps(person) || person.levels?.[root] === level) return person;
+    const after = { ...person, levels: { ...person.levels, [root]: level } };
+    changed.push({ person: after, before: person.levels?.[root] ?? null });
+    return after;
+  });
+  return { people: next, result: changed };
+}
+
+/** The quota only when it changes: null goes back to the default (KBC-035 BR-1). */
+const quotaChangeOf = ({ mediaQuotaBytes }: PersonUpdate) =>
+  mediaQuotaBytes === undefined ? {} : { mediaQuotaBytes };
+
+/** A master's own features come with the role, so no list keeps them (ADR 0032). */
+const heldFeatures = (features: readonly Feature[]): Feature[] =>
+  features.filter((feature) => !MASTER_ONLY_FEATURES.includes(feature));
 
 /** What applying a preset changes (KBC-028): access and AI, and maybe the first preferences. */
 export interface PresetChange {
@@ -233,6 +295,8 @@ export function applyPreset(
         topics: preset.topics,
         features: preset.features,
         ai: preset.ai,
+        // Merged: the collections the preset does not name keep theirs (KBC-109 BR-2).
+        ...(preset.levels && { levels: preset.levels }),
       },
       context: change.context,
     },

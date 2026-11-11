@@ -1,0 +1,17 @@
+{
+  "name": "ci-tools",
+  "root": "tools/ci",
+  "targets": {
+    "test": {
+      "command": "node --test tools/ci/*.test.mjs",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/tools/heavy.sh",
+        "{workspaceRoot}/tools/test-temp.mjs",
+        "{workspaceRoot}/tools/check-node.mjs",
+        "{workspaceRoot}/.nvmrc"
+      ]
+    }
+  }
+}

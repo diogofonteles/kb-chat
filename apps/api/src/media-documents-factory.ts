@@ -1,0 +1,198 @@
+import type { FastifyInstance } from 'fastify';
+import type { MediaDeps } from './media-factory.js';
+import { createSubjectDirectory } from './track-subjects-factory.js';
+import type { AuthorsService } from './modules/authors/index.js';
+import type { CatalogRegistry } from './modules/catalog/index.js';
+import {
+  ExistingTracks,
+  KbPublishService,
+  MediaDocumentReconciler,
+  PublicationStatus,
+  TrackDocumentSource,
+  type PublisherPresence,
+  type SeenDocument,
+  collectionOf,
+  domainOfTopic,
+} from './modules/media-documents/index.js';
+import { JOB_LEASE_MS, MAX_JOB_ATTEMPTS } from './modules/media/index.js';
+
+export interface MediaDocuments {
+  readonly reconciler: MediaDocumentReconciler;
+  readonly kb: KbPublishService;
+  readonly existing: ExistingTracks;
+  readonly status: PublicationStatus;
+}
+
+/** Track documents (KBC-099, ADR 0035): rendered from media.db, published through the Mac. */
+interface DocumentsWiring {
+  readonly media: MediaDeps;
+  readonly catalog: CatalogRegistry;
+  readonly authors: AuthorsService;
+  /** Where a track that could not be rendered is told (the app's log). */
+  readonly onRenderError?: (mediaId: string, err: unknown) => void;
+  /** A collection's background render that stopped short (logged; the sweep catches up). */
+  readonly onTopicError?: (topic: string, err: unknown) => void;
+  /** Who speaks in each segment, by the names listeners see (KBC-065). */
+  readonly speakersOf?: (mediaId: string) => readonly (string | null)[];
+  /** Whether a Mac marked "Publica no acervo" is seen (ADR 0035 §10). */
+  readonly presence?: () => PublisherPresence;
+}
+
+/** No Mac known: the queue waits (a test world without transcribers). */
+const NO_PUBLISHER: PublisherPresence = { transcriber: 'none', offSince: null };
+
+/** Every track document the catalog holds now, with the fingerprint written in it. */
+export const seenIn = (catalog: CatalogRegistry): SeenDocument[] =>
+  catalog.topics().flatMap((one) =>
+    [...one.entries.values()].flatMap((entry) =>
+      entry.media
+        ? [
+            {
+              mediaId: entry.media.mediaId,
+              fingerprint: entry.media.fingerprint,
+            },
+          ]
+        : [],
+    ),
+  );
+
+/**
+ * A collection the app knows, with a vault folder or made on the screen: every one gets
+ * documents, and the Mac creates a missing folder with `kb topic new` (KBC-114 BR-6).
+ */
+export const isCollection =
+  (catalog: CatalogRegistry) =>
+  (topic: string): boolean =>
+    catalog.get(topic) !== undefined;
+
+const foldersOf = (catalog: CatalogRegistry) =>
+  catalog.topics().map((one) => one.topic);
+
+/**
+ * The domain a document is filed under: the vault topic's; for a collection made on the
+ * screen, the one the Mac will create its topic with (KBC-114 BR-4); null otherwise.
+ */
+const domainIn =
+  (catalog: CatalogRegistry) =>
+  (topic: string): string | null => {
+    const found = catalog.get(topic)?.topic;
+    if (!found) return null;
+    if (found.screenOnly) return domainOfTopic(foldersOf(catalog), topic);
+    return found.domain ?? null;
+  };
+
+/** What a track's document is read from: media.db, the authors and the subjects. */
+export function documentSource(wiring: DocumentsWiring): TrackDocumentSource {
+  const { media, authors } = wiring;
+  const subjects = createSubjectDirectory(wiring);
+  return new TrackDocumentSource({
+    store: media.store,
+    items: media.trackItems,
+    transcripts: media.transcripts,
+    hasTracks: (recordingId) => media.documents.hasTracks(recordingId),
+    ...(wiring.speakersOf && { speakersOf: wiring.speakersOf }),
+    mainOf: (topic) => authors.mainOf(topic)?.slug ?? null,
+    authorOf: (topic, slug) => authors.authorOf(topic, slug),
+    domainOf: domainIn(wiring.catalog),
+    subjectsOf: (track) =>
+      (subjects.shownOn([track]).get(track.mediaId) ?? []).map(
+        (subject) => subject.name,
+      ),
+  });
+}
+
+/** The reconciler over media.db and the vault's folders. */
+function reconcilerOf(
+  wiring: DocumentsWiring,
+  source: TrackDocumentSource,
+): MediaDocumentReconciler {
+  const { media } = wiring;
+  return new MediaDocumentReconciler({
+    source,
+    documents: media.documents,
+    isCollection: isCollection(wiring.catalog),
+    // A sub-collection uses its parent's authors and speakers (ADR 0028); each recording
+    // brings its tracks along (MediaDocumentReconciler.reconcileTopic).
+    mediaOf: (topic) =>
+      wiring.catalog
+        .scope(topic)
+        .flatMap((one) => media.store.listMedia(one.topic.slug))
+        .map((one) => one.id),
+    ...(wiring.onRenderError && { onError: wiring.onRenderError }),
+    ...(wiring.onTopicError && { onTopicError: wiring.onTopicError }),
+  });
+}
+
+export function createMediaDocuments(wiring: DocumentsWiring): MediaDocuments {
+  const { media } = wiring;
+  const source = documentSource(wiring);
+  const reconciler = reconcilerOf(wiring, source);
+  const kb = new KbPublishService({
+    documents: media.documents,
+    reconciler,
+    spend: media.spend,
+    monthlyCapUsd: media.ai.monthlyCapUsd,
+    leaseMs: JOB_LEASE_MS,
+    maxAttempts: MAX_JOB_ATTEMPTS,
+    collectionOf: (topic) => collectionOf(foldersOf(wiring.catalog), topic),
+  });
+  const status = publicationStatus(wiring, { source, reconciler, kb });
+  const existing = new ExistingTracks({
+    documents: media.documents,
+    reconciler,
+    budget: kb,
+    // Every collection the app knows, with a vault folder or not (KBC-114 BR-6).
+    titleOf: (topic) => wiring.catalog.get(topic)?.topic.title ?? null,
+    queue: () => status.queue(),
+  });
+  return { reconciler, kb, existing, status };
+}
+
+/** Where each document stands (KBC-100 BR-4), from the same parts. */
+function publicationStatus(
+  wiring: DocumentsWiring,
+  parts: {
+    source: TrackDocumentSource;
+    reconciler: MediaDocumentReconciler;
+    kb: KbPublishService;
+  },
+): PublicationStatus {
+  const { media } = wiring;
+  const { source, reconciler, kb } = parts;
+  return new PublicationStatus({
+    documents: media.documents,
+    reconciler,
+    store: media.store,
+    isDocumentable: (one) => source.isDocumentable(one),
+    isCollection: isCollection(wiring.catalog),
+    budgetUsd: () => kb.budgetUsd(),
+    presence: wiring.presence ?? (() => NO_PUBLISHER),
+  });
+}
+
+/** Every 10 minutes, whatever a missed callback left behind is published (ADR 0035 §4). */
+export function startDocumentBackstop(
+  app: FastifyInstance,
+  reconciler: MediaDocumentReconciler,
+  intervalMs: number,
+): void {
+  const timer = setInterval(() => {
+    const started = performance.now();
+    reconciler.reconcileAll().then(
+      (report) =>
+        app.log.debug(
+          { ...report, ms: Math.round(performance.now() - started) },
+          'track documents: backstop swept',
+        ),
+      (err: unknown) =>
+        app.log.error({ err }, 'track documents: the backstop failed'),
+    );
+  }, intervalMs);
+  timer.unref();
+  // preClose: before any onClose hook closes media.db, a sweep or a collection's drain
+  // running stops at its next slice (review suggestion, a candidate for PD-19).
+  app.addHook('preClose', async () => {
+    clearInterval(timer);
+    await reconciler.stop();
+  });
+}

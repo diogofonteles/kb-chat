@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertAiConfigured,
   assertDeliveryConfigured,
+  assertLocalTranscriber,
   loadConfig,
 } from './config.js';
 
@@ -15,6 +16,14 @@ describe('loadConfig', () => {
       ALLOWED_HOSTS: ['localhost', '127.0.0.1'],
     });
     expect(config.KB_VAULT.startsWith(homedir())).toBe(true);
+  });
+
+  it('bounds media creation at 30 per minute unless MEDIA_CREATE_RATE_LIMIT says otherwise', () => {
+    expect(loadConfig({}).MEDIA_CREATE_RATE_LIMIT).toBe(30);
+    expect(
+      loadConfig({ MEDIA_CREATE_RATE_LIMIT: '5' }).MEDIA_CREATE_RATE_LIMIT,
+    ).toBe(5);
+    expect(() => loadConfig({ MEDIA_CREATE_RATE_LIMIT: '0' })).toThrow();
   });
 
   it('parses a host list and fails on an invalid value', () => {
@@ -191,5 +200,37 @@ describe('AI in production (KBC-022 AC-10)', () => {
         loadConfig({ KB_CHAT_AI_DEFAULTS: 'local', KB_CHAT_LLM: 'stub' }),
       ),
     ).not.toThrow();
+  });
+});
+
+describe('KB_CHAT_LOCAL_TRANSCRIBER (KBC-114 AC-13)', () => {
+  it('is off by default and on with 1', () => {
+    expect(loadConfig({}).KB_CHAT_LOCAL_TRANSCRIBER).toBe(false);
+    expect(
+      loadConfig({ KB_CHAT_LOCAL_TRANSCRIBER: '1' }).KB_CHAT_LOCAL_TRANSCRIBER,
+    ).toBe(true);
+  });
+
+  it('is refused in production and beyond loopback, where the API is not on the Mac', () => {
+    expect(() =>
+      assertLocalTranscriber(
+        loadConfig({ NODE_ENV: 'production', KB_CHAT_LOCAL_TRANSCRIBER: '1' }),
+      ),
+    ).toThrow(/KB_CHAT_LOCAL_TRANSCRIBER/);
+    expect(() =>
+      assertLocalTranscriber(
+        loadConfig({ HOST: '0.0.0.0', KB_CHAT_LOCAL_TRANSCRIBER: '1' }),
+      ),
+    ).toThrow(/KB_CHAT_LOCAL_TRANSCRIBER/);
+    expect(() =>
+      assertLocalTranscriber(loadConfig({ KB_CHAT_LOCAL_TRANSCRIBER: '1' })),
+    ).not.toThrow();
+    expect(() =>
+      assertLocalTranscriber(loadConfig({ NODE_ENV: 'production' })),
+    ).not.toThrow();
+  });
+
+  it('takes nothing but 0 or 1', () => {
+    expect(() => loadConfig({ KB_CHAT_LOCAL_TRANSCRIBER: 'yes' })).toThrow();
   });
 });

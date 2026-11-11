@@ -1,53 +1,146 @@
-import { topicListSchema, type TopicList } from '@kb-chat/contracts';
-import type { FastifyPluginAsync } from 'fastify';
+import {
+  topicCreateSchema,
+  topicListSchema,
+  topicSchema,
+  topicSlugSchema,
+  topicUpdateSchema,
+} from '@kb-chat/contracts';
+import type {
+  FastifyBaseLogger,
+  FastifyInstance,
+  FastifyPluginAsync,
+  FastifyRequest,
+  RawReplyDefaultExpression,
+  RawRequestDefaultExpression,
+  RawServerDefault,
+} from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { SIGNED_IN, canSee, principalOf } from '../auth/index.js';
-import type { CatalogRegistry } from '../catalog/index.js';
+import { z } from 'zod';
+import type { TrackShelf } from '../../ports/track-shelf.js';
+import {
+  SIGNED_IN,
+  canSee,
+  hasFeature,
+  isMaster,
+  principalOf,
+  seesTrackDocuments,
+  viewerOf,
+  type RouteAccess,
+} from '../auth/index.js';
+import { levelViewsOf, type LevelView } from '../access-levels/index.js';
+import {
+  listTopics,
+  type CollectionActor,
+  type MainAuthorOf,
+  type TopicsService,
+  type TopicsServiceDeps,
+} from './topics-service.js';
 
 export interface TopicsDeps {
-  readonly catalog: CatalogRegistry;
+  readonly catalog: TopicsServiceDeps['catalog'];
+  readonly service: TopicsService;
   /** Settings' default collection or KB_TOPIC; ignored when it names no topic in the vault. */
   readonly preferredTopic?: (principal: string) => string | undefined;
+  /** Each collection's main author (KBC-049). */
+  readonly mainAuthorOf?: MainAuthorOf;
+  /** media.db's word on track documents (KBC-101, C17); absent with media off. */
+  readonly tracks?: () => TrackShelf;
 }
 
-export interface TopicsView {
-  readonly preferredTopic?: string;
-  /** Which collections the person sees (KBC-010); default: all. */
-  readonly visible?: (slug: string) => boolean;
+/** "Criar acervos" creates and renames (KBC-048 BR-1); renaming also needs the collection. */
+const CREATE: RouteAccess = { feature: 'collection-create' };
+const RENAME: RouteAccess = { ...CREATE, topicParam: 'topic' };
+
+/** Whether the person may see a document of a collection (KBC-103), one view per tree. */
+const documentsVisibleTo = (request: FastifyRequest) => {
+  const viewOf = levelViewsOf(request);
+  return (collection: string, entry: Parameters<LevelView['allows']>[1]) =>
+    viewOf(collection).allows(collection, entry);
+};
+
+const actorOf = (request: FastifyRequest): CollectionActor => {
+  const viewer = viewerOf(request);
+  return {
+    allows: documentsVisibleTo(request),
+    personId: viewer.person.id,
+    personEmail: viewer.person.email,
+    isMaster: isMaster(viewer.person),
+    // While acting, the records name the master who did it (ADR 0027).
+    email: (viewer.actor?.viewer ?? viewer).person.email,
+    canSee: (slug) => canSee(request, slug),
+  };
+};
+
+/** The tracks counted as documents: for who has `media` and `media-tracks` (KBC-101 BR-7). */
+function tracksSeenBy(
+  request: FastifyRequest,
+  tracks: TopicsDeps['tracks'],
+): TrackShelf | undefined {
+  return seesTrackDocuments(viewerOf(request).person) ? tracks?.() : undefined;
 }
 
-export function listTopics(
-  { catalog }: Pick<TopicsDeps, 'catalog'>,
-  { preferredTopic, visible = () => true }: TopicsView = {},
-): TopicList {
-  const items = catalog
-    .topics()
-    .filter(({ topic }) => visible(topic.slug))
-    .map(({ topic, entries }) => ({
-      slug: topic.slug,
-      title: topic.title,
-      documentCount: entries.size,
-    }));
-  const defaultSlug = items.some((item) => item.slug === preferredTopic)
-    ? (preferredTopic ?? null)
-    : null;
-  return { items, defaultSlug };
-}
+type Typed = FastifyInstance<
+  RawServerDefault,
+  RawRequestDefaultExpression,
+  RawReplyDefaultExpression,
+  FastifyBaseLogger,
+  ZodTypeProvider
+>;
 
 /** The collections the signed-in person may see: the others are not even listed (FR-4). */
+function registerList(typed: Typed, deps: TopicsDeps): void {
+  typed.get(
+    '/api/v1/topics',
+    {
+      config: { access: SIGNED_IN },
+      schema: { response: { 200: topicListSchema } },
+    },
+    async (request) =>
+      listTopics(deps, {
+        preferredTopic: deps.preferredTopic?.(principalOf(request)),
+        visible: (slug) => canSee(request, slug),
+        renamable: hasFeature(viewerOf(request).person, 'collection-create')
+          ? await deps.service.renamableBy(actorOf(request))
+          : undefined,
+        mainAuthorOf: deps.mainAuthorOf,
+        tracks: tracksSeenBy(request, deps.tracks),
+        allows: documentsVisibleTo(request),
+      }),
+  );
+}
+
+/** Creating and renaming on the screen (KBC-048 FR-1, FR-2). */
+function registerChanges(typed: Typed, { service }: TopicsDeps): void {
+  typed.post(
+    '/api/v1/topics',
+    {
+      config: { access: CREATE },
+      schema: { body: topicCreateSchema, response: { 201: topicSchema } },
+    },
+    async (request, reply) =>
+      reply
+        .code(201)
+        .send(await service.create(actorOf(request), request.body)),
+  );
+  typed.patch(
+    '/api/v1/topics/:topic',
+    {
+      config: { access: RENAME },
+      schema: {
+        params: z.object({ topic: topicSlugSchema }),
+        body: topicUpdateSchema,
+        response: { 200: topicSchema },
+      },
+    },
+    async (request) =>
+      service.rename(actorOf(request), request.params.topic, request.body),
+  );
+}
+
 export const topicRoutes =
   (deps: TopicsDeps): FastifyPluginAsync =>
   async (app) => {
-    app.withTypeProvider<ZodTypeProvider>().get(
-      '/api/v1/topics',
-      {
-        config: { access: SIGNED_IN },
-        schema: { response: { 200: topicListSchema } },
-      },
-      async (request) =>
-        listTopics(deps, {
-          preferredTopic: deps.preferredTopic?.(principalOf(request)),
-          visible: (slug) => canSee(request, slug),
-        }),
-    );
+    const typed = app.withTypeProvider<ZodTypeProvider>();
+    registerList(typed, deps);
+    registerChanges(typed, deps);
   };

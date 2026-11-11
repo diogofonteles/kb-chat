@@ -1,9 +1,13 @@
-import { DatePipe, NgTemplateOutlet, formatDate } from '@angular/common';
+import {
+  DOCUMENT,
+  DatePipe,
+  NgTemplateOutlet,
+  formatDate,
+} from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
   ElementRef,
   Injector,
   LOCALE_ID,
@@ -12,21 +16,25 @@ import {
   inject,
   linkedSignal,
   signal,
+  viewChild,
   viewChildren,
 } from '@angular/core';
-import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { rxResource } from '@angular/core/rxjs-interop';
 import {
+  levelScalesSchema,
   topicListSchema,
   type InvitationPreset,
+  type PeopleLevelResult,
   type Person,
   type PersonUpdate,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { topicsUrl } from '@core/api/kb-api.js';
+import { levelScalesUrl } from '@core/levels/levels-api.js';
 import { PeopleApi, type InviteSetup } from '@core/auth/auth-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { formatSpend } from '@core/spend/spend-store.js';
-import type { Observable } from 'rxjs';
+import { finalize, type Observable } from 'rxjs';
 import { AccessRequestsList } from './access-requests-list.js';
 import {
   invitationLimitOf,
@@ -40,11 +48,24 @@ import {
 import { HouseAiApi } from '@core/api/house-ai-api.js';
 import { servingLabel } from '@features/house-ai/app-ai-labels.js';
 import { NO_LENDING, type Lending } from './lending.js';
+import {
+  NO_PENDING,
+  addChange,
+  isEmpty,
+  settle,
+  withPending,
+  type PendingChanges,
+  type Toggle,
+} from './pending-changes.js';
 import { PersonEditor } from './person-editor.js';
+import { WriteQueue } from './write-queue.js';
+import { ActAsDialog } from './act-as-dialog.js';
 import { InvitePresetEditor } from './invite-preset-editor.js';
 import { InviteProfilesPanel } from './invite-profiles-panel.js';
 import { InviteProfilesStore } from './invite-profiles-store.js';
 import { plainPreset } from './preset-defaults.js';
+import { withPresetLevels } from './level-rows.js';
+import { PeopleLevelBar, type PeopleLevelRequest } from './people-level-bar.js';
 
 /** "Nenhum" in the invitation's "Perfil": today's plain invitation. */
 const NO_PROFILE = 'none';
@@ -66,8 +87,10 @@ interface Outcome<T> {
   selector: 'app-people-panel',
   imports: [
     PersonEditor,
+    ActAsDialog,
     AccessRequestsList,
     AiAssignmentBar,
+    PeopleLevelBar,
     InvitePresetEditor,
     InviteProfilesPanel,
     DatePipe,
@@ -81,10 +104,10 @@ interface Outcome<T> {
 export class PeoplePanel {
   private readonly api = inject(PeopleApi);
   private readonly houseApi = inject(HouseAiApi);
-  private readonly destroyRef = inject(DestroyRef);
   private readonly session = inject(SessionStore);
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
+  private readonly document = inject(DOCUMENT);
   /** The invitation profiles (KBC-028), shared with the profiles section. */
   protected readonly profiles = inject(InviteProfilesStore);
   private readonly rows = viewChildren<ElementRef<HTMLButtonElement>>('row');
@@ -92,6 +115,21 @@ export class PeoplePanel {
     viewChildren<ElementRef<HTMLButtonElement>>('resendButton');
 
   protected readonly people = rxResource({ stream: () => this.api.list() });
+  /** The collections with access levels (KBC-103), for "Nível em <acervo>". */
+  private readonly levelScales = httpResource(() => levelScalesUrl(), {
+    parse: (body) => levelScalesSchema.parse(body),
+  });
+  /** Null while they load or when they failed: a preset's levels then stay as they are. */
+  protected readonly scaleState = computed(() =>
+    this.levelScales.hasValue() ? this.levelScales.value().items : null,
+  );
+  protected readonly scales = computed(() => this.scaleState() ?? []);
+  protected readonly scalesFailed = computed(
+    () => this.levelScales.error() !== undefined,
+  );
+  private readonly levelBar = viewChild(PeopleLevelBar);
+  private readonly statusLines =
+    viewChildren<ElementRef<HTMLElement>>('statusLine');
   /** The house default, to name each person's "Padrão" (KBC-022). */
   private readonly house = rxResource({
     stream: () => this.houseApi.houseDefault(),
@@ -165,8 +203,16 @@ export class PeoplePanel {
   protected readonly waitsForLend = computed(
     () => this.configuring() && this.lendPending(),
   );
-  protected readonly draftPreset = linkedSignal<InvitationPreset>(
-    () => this.profiles.find(this.setupChoice())?.preset ?? plainPreset(),
+  /** The chosen profile's levels go to the collections it reaches, stale ones at the lowest. */
+  protected readonly draftPreset = linkedSignal<InvitationPreset>(() =>
+    withPresetLevels(
+      this.profiles.find(this.setupChoice())?.preset ?? plainPreset(),
+      { topics: this.topics(), scales: this.scaleState(), mode: 'invite' },
+    ),
+  );
+  /** The chosen profile's levels that no longer exist (KBC-109 BR-3). */
+  protected readonly draftStaleLevels = computed(
+    () => this.profiles.find(this.setupChoice())?.staleLevels ?? {},
   );
   /** What the invitation starts the person with, for the hint; '' is the plain invite. */
   protected readonly setupLabel = computed(() => {
@@ -180,7 +226,16 @@ export class PeoplePanel {
   /** Why the last invite failed, shown under the e-mail field (MA-23). */
   protected readonly inviteError = signal('');
   protected readonly openId = signal<string | null>(null);
-  protected readonly busy = signal(false);
+  /** The panel's writes, one at a time, in the order they were made (KBC-062 FR-1). */
+  protected readonly writes = new WriteQueue();
+  protected readonly busy = this.writes.busy;
+  /** Each person's boxes changed but not yet kept by the server (KBC-062 BR-1). */
+  protected readonly pending = signal<ReadonlyMap<string, PendingChanges>>(
+    new Map(),
+  );
+  protected readonly noPending = NO_PENDING;
+  /** A failure stays said while the writes queued with it go on. */
+  private failedInRun = false;
   protected readonly notice = signal<Notice>(null);
 
   protected toggle(person: Person): void {
@@ -219,6 +274,31 @@ export class PeoplePanel {
         if (request.setDefault) this.house.reload();
         this.selected.set(new Set());
         return $localize`:@@people.assigned:IA da aplicação atualizada para ${updated}:count: pessoa(s).`;
+      },
+    });
+  }
+
+  /** "Nível em [acervo]: [nível] · Aplicar" (KBC-109 FR-3): the selected people. */
+  protected assignLevel(request: PeopleLevelRequest): void {
+    // A second press in the same frame finds the first write on its way (PD-02).
+    if (this.busy()) return;
+    const { collection, level } = request;
+    const call = this.api.assignLevels({
+      ids: [...this.selected()],
+      topic: collection,
+      level,
+    });
+    this.run(call, {
+      done: (result) => {
+        this.people.reload();
+        this.selected.set(new Set());
+        // The bar's button goes disabled: focus goes to what happened (WCAG 2.4.3, QA-1).
+        this.focusAfterRender(() => this.statusLines()[0]);
+        return levelNotice(result, this.titles().get(collection) ?? collection);
+      },
+      failed: (text) => {
+        this.notice.set({ kind: 'error', text });
+        this.focusAfterRender(() => this.levelBar()?.applyButton());
       },
     });
   }
@@ -285,12 +365,16 @@ export class PeoplePanel {
   /** "Aplicar perfil" (KBC-028 FR-4): role, collections, features and AI change. */
   protected applyProfile(person: Person, profileId: string): void {
     const name = this.profiles.find(profileId)?.name ?? '';
-    this.run(this.api.applyProfile(person.id, profileId), {
-      done: (updated) => {
-        this.replace(updated);
-        return $localize`:@@people.profileApplied:Perfil "${name}:name:" aplicado a ${updated.email}:email:.`;
+    this.run(
+      this.api.applyProfile(person.id, profileId),
+      {
+        done: (updated) => {
+          this.replace(updated);
+          return $localize`:@@people.profileApplied:Perfil "${name}:name:" aplicado a ${updated.email}:email:.`;
+        },
       },
-    });
+      person.id,
+    );
   }
 
   /** "Reenviar convite" / "Enviar convite" (KBC-026 FR-6); the outcome shows next to the person. */
@@ -340,6 +424,19 @@ export class PeoplePanel {
     );
   }
 
+  /** The levels of the collections, once more (KBC-109 R1-1). */
+  protected reloadScales(): void {
+    this.levelScales.reload();
+  }
+
+  private focusAfterRender(
+    target: () => ElementRef<HTMLElement> | undefined,
+  ): void {
+    afterNextRender(() => target()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
+  }
+
   /** The button was disabled while sending: keyboard focus goes back to it (WCAG 2.4.3). */
   private refocusResend(): void {
     afterNextRender(() => this.resendButtons()[0]?.nativeElement.focus(), {
@@ -347,34 +444,152 @@ export class PeoplePanel {
     });
   }
 
+  /** "Ver como" (KBC-060): the owner, or a master it granted; never the owner or a master. */
+  protected mayActAs(person: Person): boolean {
+    return (
+      this.session.me()?.canActAs === true &&
+      !person.isOwner &&
+      person.role !== 'master' &&
+      // Before the first sign-in their data has no lasting owner yet.
+      person.lastLoginAt !== null
+    );
+  }
+
+  protected readonly ownerView = computed(
+    () => this.session.me()?.isOwner === true,
+  );
+  protected readonly actingTarget = signal<Person | null>(null);
+  private readonly actAsDialog = viewChild(ActAsDialog);
+  private actAsOpener: HTMLElement | null = null;
+
+  protected askActAs(person: Person): void {
+    const active = this.document.activeElement;
+    this.actAsOpener = active instanceof HTMLElement ? active : null;
+    this.actingTarget.set(person);
+    afterNextRender(() => this.actAsDialog()?.open(), {
+      injector: this.injector,
+    });
+  }
+
+  /** Esc or "Cancelar": the focus goes back to "Ver como" (NG-30). */
+  protected actAsClosed(): void {
+    this.actingTarget.set(null);
+    this.actAsOpener?.focus();
+  }
+
   protected change(person: Person, patch: PersonUpdate): void {
-    this.run(this.api.update(person.id, patch), {
-      done: (updated) => {
-        this.replace(updated);
-        return $localize`:@@people.saved:Salvo.`;
+    this.run(
+      this.api.update(person.id, patch),
+      {
+        done: (updated) => {
+          this.replace(updated);
+          return $localize`:@@people.saved:Salvo.`;
+        },
       },
+      person.id,
+    );
+  }
+
+  /**
+   * A box of "Acervos" or "Funcionalidades" (KBC-062): kept as pending at once, and its write
+   * is built when it leaves the queue, from what the server holds then with every pending box
+   * on top. A person revoked meanwhile gets nothing.
+   */
+  protected toggleBox(person: Person, change: Toggle): void {
+    const { id } = person;
+    this.updatePending(id, (current) => addChange(current, change));
+    this.write(
+      () => this.boxWrite(id, change.field),
+      {
+        done: (updated) => {
+          this.replace(updated);
+          return $localize`:@@people.saved:Salvo.`;
+        },
+      },
+      id,
+    );
+  }
+
+  /** The write of a box as it leaves the queue; null when nothing is left to send. */
+  private boxWrite(
+    id: string,
+    field: Toggle['field'],
+  ): Observable<Person> | null {
+    const latest = this.list().find((one) => one.id === id);
+    if (!latest) {
+      this.updatePending(id, () => NO_PENDING);
+      return null;
+    }
+    const pending = this.pendingOf(id);
+    const sent = new Map<string, boolean>(pending[field]);
+    if (sent.size === 0) return null;
+    const patch: PersonUpdate =
+      field === 'topics'
+        ? { topics: withPending(latest.topics, pending.topics) }
+        : { features: withPending(latest.features, pending.features) };
+    // Kept or failed, what this write took is no longer pending.
+    return this.api
+      .update(id, patch)
+      .pipe(
+        finalize(() =>
+          this.updatePending(id, (current) => settle(current, field, sent)),
+        ),
+      );
+  }
+
+  private pendingOf(id: string): PendingChanges {
+    return this.pending().get(id) ?? NO_PENDING;
+  }
+
+  private updatePending(
+    id: string,
+    change: (current: PendingChanges) => PendingChanges,
+  ): void {
+    this.pending.update((all) => {
+      const next = new Map(all);
+      const changed = change(all.get(id) ?? NO_PENDING);
+      if (isEmpty(changed)) next.delete(id);
+      else next.set(id, changed);
+      return next;
     });
   }
 
   protected revoke(person: Person): void {
-    this.run(this.api.revoke(person.id), {
-      done: () => {
-        this.people.update((all) =>
-          (all ?? []).filter((p) => p.id !== person.id),
-        );
-        this.openId.set(null);
-        return $localize`:@@people.revokedNotice:Acesso de ${person.email}:email: revogado.`;
+    this.run(
+      this.api.revoke(person.id),
+      {
+        done: () => {
+          this.people.update((all) =>
+            (all ?? []).filter((p) => p.id !== person.id),
+          );
+          this.openId.set(null);
+          return $localize`:@@people.revokedNotice:Acesso de ${person.email}:email: revogado.`;
+        },
       },
-    });
+      person.id,
+    );
   }
 
   protected topicNames(person: Person): string {
     if (person.role === 'master')
       return $localize`:@@people.allCollections:Todos os acervos`;
-    const names = person.topics.map((slug) => this.titles().get(slug) ?? slug);
+    // "Hermetismo · CI": the level in a collection with levels (T9, KBC-103).
+    const names = person.topics.map((slug) => {
+      const name = this.titles().get(slug) ?? slug;
+      const level = this.levelCodeOf(person, slug);
+      return level ? `${name} · ${level}` : name;
+    });
     return names.length > 0
       ? names.join(', ')
       : $localize`:@@people.noCollection:Nenhum acervo`;
+  }
+
+  /** Her level's code in a top-level collection with levels; the lowest when none is held. */
+  private levelCodeOf(person: Person, slug: string): string | null {
+    const scale = this.scales().find((one) => one.collection === slug);
+    if (!scale) return null;
+    const held = scale.levels.find((one) => one.id === person.levels[slug]);
+    return (held ?? scale.levels[0])?.code ?? null;
   }
 
   /** "IA: Plano da casa (sempre)": which app AI the master gave the person (KBC-022). */
@@ -400,26 +615,74 @@ export class PeoplePanel {
   }
 
   /** One change at a time; its outcome is announced next to what it changed. */
-  private run<T>(call: Observable<T>, outcome: Outcome<T>): void {
-    this.busy.set(true);
-    this.notice.set(null);
+  private run<T>(call: Observable<T>, outcome: Outcome<T>, key?: string): void {
+    this.write(() => call, outcome, key);
+  }
+
+  /**
+   * `call` is built when the write leaves the queue (KBC-062): null when nothing is left to
+   * send. A failure stays in the notice until the writes queued with it are over.
+   */
+  private write<T>(
+    call: () => Observable<T> | null,
+    outcome: Outcome<T>,
+    key?: string,
+  ): void {
+    if (!this.busy()) this.failedInRun = false;
     const failed =
       outcome.failed ??
       ((text: string) => this.notice.set({ kind: 'error', text }));
-    call.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (value) => {
-        this.busy.set(false);
-        const done = outcome.done(value);
-        this.notice.set(
-          typeof done === 'string' ? { kind: 'ok', text: done } : done,
-        );
+    this.writes.run(
+      call,
+      {
+        started: () => {
+          if (!this.failedInRun) this.notice.set(null);
+        },
+        done: (value) => {
+          const done = outcome.done(value);
+          const notice: NonNullable<Notice> =
+            typeof done === 'string' ? { kind: 'ok', text: done } : done;
+          if (!this.failedInRun || notice.kind === 'error')
+            this.notice.set(notice);
+        },
+        failed: (err) => {
+          this.failedInRun = true;
+          failed(errorMessage(toUiErrorCode(err)), err);
+        },
       },
-      error: (err: unknown) => {
-        this.busy.set(false);
-        failed(errorMessage(toUiErrorCode(err)), err);
-      },
-    });
+      key,
+    );
   }
+}
+
+/** What a level bulk did, and whom it left as they were (KBC-109 AC-6). */
+function levelNotice(result: PeopleLevelResult, title: string): string {
+  const { code } = result.level;
+  const changed = result.updated + result.unchanged;
+  const parts = [
+    changed === 1
+      ? $localize`:@@people.levelAppliedOne:Nível ${code}:code: em ${title}:collection: aplicado a 1 pessoa.`
+      : $localize`:@@people.levelApplied:Nível ${code}:code: em ${title}:collection: aplicado a ${changed}:count: pessoas.`,
+  ];
+  if (result.masters > 0)
+    parts.push(
+      $localize`:@@people.mastersAllLevels:Masters veem todos os níveis.`,
+    );
+  const { withoutAccess, unknown } = result;
+  if (withoutAccess > 0)
+    parts.push(
+      withoutAccess === 1
+        ? $localize`:@@people.levelLeftOne:1 pessoa sem acesso a ${title}:collection: ficou como estava.`
+        : $localize`:@@people.levelLeft:${withoutAccess}:count: pessoas sem acesso a ${title}:collection: ficaram como estavam.`,
+    );
+  // Revoked while the bulk ran (R1-7): not "without access".
+  if (unknown > 0)
+    parts.push(
+      unknown === 1
+        ? $localize`:@@people.levelGoneOne:1 pessoa não está mais na lista.`
+        : $localize`:@@people.levelGone:${unknown}:count: pessoas não estão mais na lista.`,
+    );
+  return parts.join(' ');
 }
 
 /** The outcome also says which profile set the person up (screens.md T9). */

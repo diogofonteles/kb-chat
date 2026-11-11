@@ -21,8 +21,16 @@ import {
 import { SessionStore } from '@core/auth/session-store.js';
 import { PeoplePanel } from '@features/people/people-panel.js';
 import { HouseAiPanel } from '@features/house-ai/house-ai-panel.js';
+import { TermsPanel } from '@features/transcribers/terms-panel.js';
+import { LearningPanel } from '@features/transcribers/learning-panel.js';
+import { GroqPanel } from '@features/transcribers/groq-panel.js';
+import { ExistingTracks } from '@features/transcribers/existing-tracks.js';
+import { TranscribersPanel } from '@features/transcribers/transcribers-panel.js';
+import { VoiceProfilesPanel } from '@features/voice-profiles/voice-profiles-panel.js';
 import { AiStatusCard } from './ai-status-card.js';
 import { PreferencesForm } from './preferences-form.js';
+import { ActAsAudit } from '@features/acting/act-as-audit.js';
+import { MyAccesses } from '@features/acting/my-accesses.js';
 import { SettingsStore, type SettingsSection } from './settings-store.js';
 
 export type { SettingsSection } from './settings-store.js';
@@ -41,6 +49,30 @@ const SECTIONS: readonly { id: SettingsSection; label: () => string }[] = [
     id: 'people',
     label: () => $localize`:@@settings.people:Pessoas e permissões`,
   },
+  {
+    id: 'transcribers',
+    label: () => $localize`:@@settings.transcribers:Transcritores`,
+  },
+  {
+    id: 'terms',
+    label: () => $localize`:@@settings.terms:Termos da transcrição`,
+  },
+  {
+    id: 'groq',
+    label: () => $localize`:@@settings.groq:Groq de reserva`,
+  },
+  {
+    id: 'voice-profiles',
+    label: () => $localize`:@@settings.voiceProfiles:Perfis de voz`,
+  },
+  {
+    id: 'audit',
+    label: () => $localize`:@@settings.audit:Auditoria do Ver como`,
+  },
+  {
+    id: 'accesses',
+    label: () => $localize`:@@settings.accesses:Acessos à sua conta`,
+  },
   { id: 'about', label: () => $localize`:@@settings.about:Sobre` },
 ];
 
@@ -54,7 +86,15 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'failed' | 'invalid';
     PreferencesForm,
     PeoplePanel,
     HouseAiPanel,
+    TranscribersPanel,
+    ExistingTracks,
+    TermsPanel,
+    LearningPanel,
+    GroqPanel,
+    VoiceProfilesPanel,
     AiStatusCard,
+    ActAsAudit,
+    MyAccesses,
   ],
   templateUrl: './settings-panel.html',
   styleUrl: './settings-panel.css',
@@ -73,7 +113,17 @@ export class SettingsPanel {
       ({ id }) =>
         (id !== 'ai' || this.store.ownAi()) &&
         (id !== 'people' || this.session.isMaster()) &&
-        (id !== 'house' || this.session.isMaster()),
+        (id !== 'house' || this.session.isMaster()) &&
+        // KBC-036 BR-1: masters pair the Macs, only where the media library is on.
+        // KBC-037: so does connecting Groq, the transcription's fallback.
+        ((id !== 'transcribers' && id !== 'terms' && id !== 'groq') ||
+          (this.session.isMaster() && this.session.me()?.media === true)) &&
+        // KBC-071 (ADR 0032): a master's, where the media library is on.
+        (id !== 'voice-profiles' ||
+          (this.session.me()?.features.includes('media-voice-profiles') ===
+            true &&
+            this.session.me()?.media === true)) &&
+        (id !== 'audit' || this.session.me()?.canActAs === true),
     ).map(({ id, label }) => ({ id, label: label() })),
   );
   protected readonly section = linkedSignal<SettingsSection>(() => {

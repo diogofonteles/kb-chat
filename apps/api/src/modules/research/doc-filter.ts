@@ -1,7 +1,17 @@
 import type { Authorship } from '@kb-chat/contracts';
 import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
-import { refNumber, resolveEntry, type ToolContext } from './tool-context.js';
-import { AUTHORSHIP_LABELS, foldName, quote } from './tool-output.js';
+import {
+  isVisible,
+  refNumber,
+  resolveEntry,
+  type ToolContext,
+} from './tool-context.js';
+import {
+  AUTHORSHIP_LABELS,
+  foldName,
+  quote,
+  type AuthorshipLabels,
+} from './tool-output.js';
 
 /** Which documents a find_text or search_collection call looks at (KBC-017, ADR 0013). */
 export interface DocFilter {
@@ -16,7 +26,22 @@ export interface DocFilter {
   readonly excludeTexts?: readonly string[];
   /** Subject names as the catalog spells them. */
   readonly subjects?: readonly string[];
+  /**
+   * Which documents the turn may see at all (KBC-099 BR-4); without it, texts only: a track
+   * never reaches a call that was not given the person's shelf (the exhaustive sweep).
+   */
+  readonly visible?: (entry: CatalogEntry) => boolean;
 }
+
+const textsOnly = (entry: CatalogEntry): boolean => entry.media === null;
+
+/** The origin of every track document (KBC-101 BR-3, FR-4), as list_sources names it. */
+export const TRACKS_SOURCE = 'faixas-de-audio';
+export const TRACKS_SOURCE_LABEL = 'Faixas de áudio';
+
+/** "faixas-de-audio", "Faixas de áudio" or "faixas de audio": the tracks' origin. */
+export const isTracksSource = (text: string): boolean =>
+  foldName(text).replace(/[\s_-]+/g, '-') === TRACKS_SOURCE;
 
 const PIPELINE_PREFIXES = /^(?:_convert\/)?(?:ready\/)?/;
 
@@ -26,6 +51,7 @@ const PIPELINE_PREFIXES = /^(?:_convert\/)?(?:ready\/)?/;
  * without one (a wiki concept) shows the folder of its id.
  */
 export function originFolder(entry: CatalogEntry): string {
+  if (entry.media) return TRACKS_SOURCE_LABEL;
   const path = entry.sourcePath ?? entry.id;
   const folder = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
   return folder.replace(PIPELINE_PREFIXES, '') || folder || '.';
@@ -41,6 +67,7 @@ const hasFragment = (values: readonly string[], fragment: string): boolean => {
  * one of its entities exactly: a document that merely mentions a name among many stays.
  */
 const matchesText = (entry: CatalogEntry, text: string): boolean =>
+  (isTracksSource(text) ? entry.media !== null : false) ||
   hasFragment([entry.sourcePath ?? ''], text) ||
   entry.entities.some((name) => foldName(name) === foldName(text));
 
@@ -55,13 +82,19 @@ function hasSubject(entry: CatalogEntry, subjects: readonly string[]): boolean {
   return entry.concepts.some((concept) => wanted.has(foldName(concept)));
 }
 
+/** "Faixas de áudio" is every track; any other text, a fragment of the origin folder. */
+const matchesSource = (entry: CatalogEntry, source: string): boolean =>
+  isTracksSource(source)
+    ? entry.media !== null
+    : entry.media === null && hasFragment([entry.sourcePath ?? ''], source);
+
 /** Whether a document passes the filter. */
 export function acceptsEntry(filter: DocFilter, entry: CatalogEntry): boolean {
+  if (!(filter.visible ?? textsOnly)(entry)) return false;
   if (filter.authorship && entry.authorship !== filter.authorship) return false;
   if (filter.entity && !hasFragment(entry.entities, filter.entity))
     return false;
-  if (filter.source && !hasFragment([entry.sourcePath ?? ''], filter.source))
-    return false;
+  if (filter.source && !matchesSource(entry, filter.source)) return false;
   return hasSubject(entry, filter.subjects ?? []) && !isExcluded(entry, filter);
 }
 
@@ -73,11 +106,14 @@ export const isFiltering = (filter: DocFilter): boolean =>
   (filter.subjects?.length ?? 0) > 0;
 
 /** The filter in words, for the first line of a tool output; empty without one. */
-export function describeFilter(filter: DocFilter): string {
+export function describeFilter(
+  filter: DocFilter,
+  labels: AuthorshipLabels = AUTHORSHIP_LABELS,
+): string {
   const excluded =
     (filter.excludeIds?.size ?? 0) + (filter.excludeTexts?.length ?? 0);
   return [
-    filter.authorship && `autoria: ${AUTHORSHIP_LABELS[filter.authorship]}`,
+    filter.authorship && `autoria: ${labels[filter.authorship]}`,
     filter.entity && `entidade contém ${quote(filter.entity)}`,
     filter.source && `origem contém ${quote(filter.source)}`,
     filter.subjects?.length && `assuntos: ${filter.subjects.join(', ')}`,
@@ -120,5 +156,6 @@ export function toFilter(
     subjects: args.subjects ?? [],
     excludeIds,
     excludeTexts,
+    visible: (entry) => isVisible(entry, context),
   };
 }

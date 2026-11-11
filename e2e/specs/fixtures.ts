@@ -42,9 +42,18 @@ window.google = { accounts: { id: {
 `;
 
 export async function fakeGoogle(page: Page): Promise<void> {
-  await page.route('https://accounts.google.com/**', (route) =>
+  // On the context, so a tab the page opens (the tutorial) is covered too.
+  const context = page.context();
+  await context.route('https://accounts.google.com/**', (route) =>
     route.fulfill({ contentType: 'text/javascript', body: FAKE_GIS }),
   );
+  // Web fonts come from Google too: a request that never ends holds the page's load event
+  // (a 60 s timeout seen in the media specs) and, as a render-blocking stylesheet, the
+  // first paint of a new tab. The specs use the fallback fonts.
+  await context.route('https://fonts.googleapis.com/**', (route) =>
+    route.fulfill({ contentType: 'text/css', body: '' }),
+  );
+  await context.route('https://fonts.gstatic.com/**', (route) => route.abort());
 }
 
 /** Signs `api` (a page's or a standalone request context) in as `email`. */
@@ -105,10 +114,26 @@ export async function pageAs(
   email: string,
   viewport: { width: number; height: number } | null,
 ): Promise<Page> {
+  return pageWith(browser, email, { viewport });
+}
+
+export interface PageOptions {
+  readonly viewport: { width: number; height: number } | null;
+  /** Runs in every page of the context before the app (registered before any page). */
+  readonly initScript?: () => void;
+}
+
+/** `pageAs`, with a script that runs before the app in every page of the context. */
+export async function pageWith(
+  browser: Browser,
+  email: string,
+  options: PageOptions,
+): Promise<Page> {
   const context = await browser.newContext({
     baseURL: WEB_ORIGIN,
-    viewport: viewport ?? undefined,
+    viewport: options.viewport ?? undefined,
   });
+  if (options.initScript) await context.addInitScript(options.initScript);
   const page = await context.newPage();
   await fakeGoogle(page);
   await signIn(page.request, email);

@@ -6,6 +6,7 @@ import {
   Injector,
   DestroyRef,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   signal,
@@ -14,9 +15,13 @@ import {
 import type {
   DocumentRef,
   SearchFilters,
+  SearchKind,
   SearchMode,
 } from '@kb-chat/contracts';
 import { httpResource } from '@angular/common/http';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import { filter, map } from 'rxjs';
 import { suggestionListSchema } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { suggestionsUrl } from '@core/api/kb-api.js';
@@ -24,18 +29,37 @@ import { SessionStore } from '@core/auth/session-store.js';
 import { DocumentPanel } from '@features/document/document-panel.js';
 import { Sidebar, type SidebarAction } from '@features/sidebar/sidebar.js';
 import { NO_FILTERS, type ChatMessage } from './chat-message.js';
+import { ProcessingQueueStore } from '@features/media/queue/processing-queue-store.js';
 import { ChatStore } from './chat-store.js';
+import { CollectionHeading } from './collection-heading.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import { provideResearchRestorer } from '@features/research/research-restorer.js';
 import { Composer } from './composer.js';
+import type { OpenedHit } from './result-card.js';
 import { describeForAnnouncement } from './result-count.js';
-import { ResultMessage } from './result-message.js';
+import { ResultMessage, type OpenedPassage } from './result-message.js';
+import { passageKey } from './references.js';
+import { PassagePanel } from '@features/media/search-hit/passage-panel.js';
+import { TrackPassagePanel } from '@features/media/track-passage/track-passage-panel.js';
+import type { TrackOpening } from '@features/research/track-opening.js';
+import {
+  controlAt,
+  placeOf,
+  type TriggerPlace,
+} from '@features/research/trigger-place.js';
 import { ResearchStore } from '@features/research/research-store.js';
 import { ResearchThread } from '@features/research/research-thread.js';
 import { ViewStore, type ChatView } from './view-store.js';
 import { ViewSwitch } from './view-switch.js';
+import { MiniPlayer } from '@features/media/player/mini-player.js';
+import { PendingTranscriptions } from '@features/transcribers/pending-transcriptions.js';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
+
+/** The media pages: the list and player (T14, T15) and the library (T16, KBC-051). */
+/** A page that renders in place of the conversation: media pages and T24 (KBC-103). */
+const isMediaUrl = (url: string): boolean =>
+  /^\/(midia|biblioteca|fila|acervos)(\/|\?|#|$)/.test(url);
 
 /**
  * Chat page (screens.md): two views over one question box and document panel, the free
@@ -49,8 +73,13 @@ const DESKTOP_QUERY = '(min-width: 1024px)';
     ResearchThread,
     ViewSwitch,
     DocumentPanel,
+    PassagePanel,
+    TrackPassagePanel,
     Sidebar,
     DecimalPipe,
+    RouterOutlet,
+    MiniPlayer,
+    PendingTranscriptions,
   ],
   providers: [
     ChatStore,
@@ -72,9 +101,12 @@ export class ChatPage {
   protected readonly guest = computed(
     () => this.session.me()?.role === 'member',
   );
+  /** Transcriptions not yet documents, with "Publicar" (KBC-114 FR-6): masters only. */
+  protected readonly master = this.session.isMaster;
   private readonly injector = inject(Injector);
   private readonly view = inject(DOCUMENT).defaultView;
-  private readonly composer = viewChild.required(Composer);
+  /** Absent on the media pages (/midia), which render in place of the conversation. */
+  private readonly composer = viewChild(Composer);
   private readonly host =
     inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly drawer = viewChild<ElementRef<HTMLDialogElement>>('drawer');
@@ -84,7 +116,24 @@ export class ChatPage {
   /** Desktop shows the side panel as a column; phones open it as a drawer (KBC-005 FR-6). */
   protected readonly desktop = signal(this.matchesDesktop());
 
-  protected readonly topic = this.store.topic;
+  private readonly collectionHeading = inject(CollectionHeading);
+  /** Spoken from here: the page and the sidebar come and go, the layout stays. */
+  protected readonly queue = inject(ProcessingQueueStore);
+  /** The collection in the header: on a media page, the one that page shows (KBC-091). */
+  protected readonly topic = computed(() => {
+    if (!this.onMedia()) return this.store.topic();
+    const scope = this.collectionHeading.scope();
+    if (scope?.kind !== 'topic') return null;
+    return this.store.topicList().find((t) => t.slug === scope.slug) ?? null;
+  });
+  protected readonly allCollections = computed(
+    () => this.onMedia() && this.collectionHeading.scope()?.kind === 'all',
+  );
+  protected readonly topicList = this.store.topicList;
+  /** The chosen collection (with its sub-collections) has no text yet (KBC-048, ADR 0028). */
+  protected readonly emptyTopic = computed(
+    () => this.store.topic()?.documentCount === 0,
+  );
   protected readonly messages = this.store.messages;
   protected readonly opened = this.store.openDocument;
   protected readonly currentView = this.views.current;
@@ -97,8 +146,48 @@ export class ChatPage {
       : this.messages().length === 0,
   );
   /** On phones the panel covers the conversation: make it inert so Tab stays in the panel. */
+  private readonly router = inject(Router);
+  /** /midia and /midia/:id render in this layout instead of the conversation (T14, T15). */
+  protected readonly onMedia = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => isMediaUrl(this.router.url)),
+    ),
+    { initialValue: isMediaUrl(this.router.url) },
+  );
+  /** The document panel belongs to the conversation: hidden on the media pages. */
+  protected readonly panel = computed(() =>
+    this.onMedia() ? null : this.opened(),
+  );
+  /** A spoken passage in the reading panel instead of a document (KBC-039 FR-6). */
+  protected readonly passage = computed(() =>
+    this.onMedia() ? null : (this.store.openPassage()?.hit ?? null),
+  );
+  /** A cited track on its passage, with the player beside it (KBC-099, T22). */
+  protected readonly track = computed(() =>
+    this.onMedia() ? null : this.store.openTrack(),
+  );
+  /**
+   * What opened the track panel, and its place in the conversation: the focus goes back
+   * there when it closes (AC-12), also when the answer was drawn anew meanwhile (QA BUG-2).
+   */
+  private trackTrigger: HTMLElement | null = null;
+  private triggerPlace: TriggerPlace | null = null;
+  protected readonly activePassage = computed(() => {
+    const hit = this.passage();
+    return hit ? passageKey(hit) : null;
+  });
+  /** The panel's full player shows this media: no mini-player for it meanwhile. */
+  protected readonly playerInPanel = computed(
+    () =>
+      this.passage()?.mediaId ?? this.track()?.source.media?.mediaId ?? null,
+  );
+  protected readonly panelOpen = computed(
+    () =>
+      this.panel() !== null || this.passage() !== null || this.track() !== null,
+  );
   protected readonly covered = computed(
-    () => this.opened() !== null && !this.desktop(),
+    () => this.panelOpen() && !this.desktop(),
   );
   /** The largest subjects as one-click starting points (KBC-006 FR-1); hidden when unavailable. */
   private readonly suggestionList = httpResource(
@@ -148,7 +237,7 @@ export class ChatPage {
       // Grown to desktop with the drawer open: it goes away with the Menu button, so focus moves on.
       if (event.matches && drawer?.open) {
         drawer.close();
-        afterNextRender(() => this.composer().focus(), {
+        afterNextRender(() => this.composer()?.focus(), {
           injector: this.injector,
         });
       }
@@ -160,7 +249,14 @@ export class ChatPage {
     // The question box starts focused on desktop; on phones it would pop the keyboard.
     afterNextRender(() => {
       if (this.view?.matchMedia?.(DESKTOP_QUERY).matches)
-        this.composer().focus();
+        this.composer()?.focus();
+    });
+    // Back from a media page, what was pressed left with it: the focus stays in the page.
+    let wasOnMedia = this.onMedia();
+    afterRenderEffect(() => {
+      const onMedia = this.onMedia();
+      if (wasOnMedia && !onMedia && this.desktop()) this.composer()?.focus();
+      wasOnMedia = onMedia;
     });
   }
 
@@ -182,7 +278,7 @@ export class ChatPage {
   protected menuClosed(): void {
     const target = this.focusAfterMenu;
     this.focusAfterMenu = 'menu';
-    if (target === 'composer') this.composer().focus();
+    if (target === 'composer') this.composer()?.focus();
     else this.menuButton()?.nativeElement.focus();
   }
 
@@ -192,13 +288,16 @@ export class ChatPage {
   }
 
   protected sidebarActed(action: SidebarAction): void {
+    // A conversation started or restored from the media pages shows the conversation.
+    if ((action === 'new' || action === 'restore') && this.onMedia())
+      void this.router.navigateByUrl('/');
     // A new conversation (or another collection) is ready to type into.
-    const typing = action !== 'restore';
+    const typing = action === 'new' || (action === 'topic' && !this.onMedia());
     if (this.drawer()?.nativeElement.open) {
       this.focusAfterMenu = typing ? 'composer' : 'menu';
       this.closeMenu();
     } else if (typing) {
-      afterNextRender(() => this.composer().focus(), {
+      afterNextRender(() => this.composer()?.focus(), {
         injector: this.injector,
       });
     }
@@ -252,14 +351,37 @@ export class ChatPage {
     if (topic) this.store.open(topic, doc);
   }
 
+  /** A cited track opens on its passage, paused, in the reading panel (KBC-099 FR-8). */
+  protected openTrack({ source, at, trigger }: TrackOpening): void {
+    this.trackTrigger = trigger;
+    this.triggerPlace = placeOf(trigger, this.host);
+    this.store.openTrackPassage({ source, at });
+  }
+
   /** "Parar" disappears with the answer in flight: focus moves to the question box. */
   protected stopResearch(): void {
     this.research.stop();
-    afterNextRender(() => this.composer().focus(), { injector: this.injector });
+    afterNextRender(() => this.composer()?.focus(), {
+      injector: this.injector,
+    });
   }
 
-  protected openHit(doc: DocumentRef, message: ChatMessage): void {
-    this.store.open(message.topic, doc, message);
+  /** A hit opens in its own collection: a sub-collection when searching the parent. */
+  protected openHit(hit: OpenedHit, message: ChatMessage): void {
+    this.store.open(hit.topic, { id: hit.id, title: hit.title }, message);
+  }
+
+  /** A spoken passage opens in the reading panel and plays (KBC-039 FR-6). */
+  protected openPassage(opened: OpenedPassage, message: ChatMessage): void {
+    this.store.openMedia(opened.hit, {
+      messageId: message.id,
+      position: opened.position,
+    });
+  }
+
+  /** "Buscar em" on a message: remembered, and the message runs again (BR-4). */
+  protected chooseKinds(message: ChatMessage, kinds: SearchKind[]): void {
+    this.store.chooseKinds(message, kinds);
   }
 
   /** A subject chip in the panel filters the message that opened it (KBC-003 FR-5). */
@@ -297,7 +419,27 @@ export class ChatPage {
 
   protected closeDocument(): void {
     const closedId = this.opened()?.id;
+    const track = this.track() !== null;
+    const trigger = this.trackTrigger;
+    const place = this.triggerPlace;
+    this.trackTrigger = null;
+    this.triggerPlace = null;
     this.store.close();
+    if (track && (trigger || place)) {
+      // Back to the citation or chip that opened the track (AC-12), once it is visible again:
+      // the same node, or the one now at its place if the answer was drawn anew (QA BUG-2).
+      afterNextRender(
+        () => {
+          const back = trigger?.isConnected
+            ? trigger
+            : controlAt(place, this.host);
+          if (back) back.focus();
+          else this.composer()?.focus();
+        },
+        { injector: this.injector },
+      );
+      return;
+    }
     // Back to the card that opened the document (focusing the question box would pop the
     // phone keyboard); runs after the conversation is visible again so focus never lands on <body>.
     afterNextRender(() => this.focusCard(closedId), {
@@ -309,7 +451,7 @@ export class ChatPage {
     const cards = this.host.querySelectorAll<HTMLElement>('[data-doc-id]');
     const card = [...cards].find((element) => element.dataset['docId'] === id);
     if (card) card.focus();
-    else this.composer().focus();
+    else this.composer()?.focus();
   }
 
   protected reloadTopics(): void {
@@ -323,13 +465,13 @@ export class ChatPage {
    */
   protected focusOnSlash(event: KeyboardEvent): void {
     if (event.key !== '/') return;
-    if (this.composer().isEmptyField(event.target)) {
+    if (this.composer()?.isEmptyField(event.target)) {
       event.preventDefault();
       return;
     }
     const target = event.target as HTMLElement | null;
     if (target?.closest('input, textarea, select, [contenteditable]')) return;
     event.preventDefault();
-    this.composer().focus();
+    this.composer()?.focus();
   }
 }

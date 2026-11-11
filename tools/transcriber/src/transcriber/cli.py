@@ -1,0 +1,438 @@
+"""`transcriber pair` stores the token; `transcriber run` runs the worker loop."""
+
+import argparse
+import getpass
+import json
+import logging
+import os
+import signal
+import socket
+import sys
+import threading
+from pathlib import Path
+
+from .secret import CachedToken, TokenError, load_token, save_keychain
+
+CONFIG_FILE = (
+    Path.home() / "Library" / "Application Support" / "nova-alexandria-transcriber" / "config.json"
+)
+# What the automatic sync left pending, and when it last ran (KBC-100 FR-4).
+# What the service runs with: `uv run` installs a missing extra by itself before the worker
+# starts, so voices and voice prints never wait for a person (the owner, 2026-11-09).
+DEFAULT_EXTRAS = ("diarize", "voiceprint")
+SYNC_STATE_FILE = CONFIG_FILE.parent / "vault-sync.json"
+# This checkout's sync script (tools/transcriber/src/transcriber → the repository's root).
+SYNC_SCRIPT = Path(__file__).resolve().parents[4] / "deploy" / "scripts" / "sync-vault.sh"
+
+
+def load_config(path: Path | None = None) -> dict:
+    """The paired config; `path` defaults to CONFIG_FILE as it is at the call (tests move it)."""
+    path = path or CONFIG_FILE
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+
+
+def save_config(config: dict, path: Path | None = None) -> None:
+    path = path or CONFIG_FILE
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    path.chmod(0o600)
+
+
+def pair(args: argparse.Namespace) -> int:
+    from .api import check_api_url
+
+    try:
+        api_url = check_api_url(args.api_url)
+    except ValueError as err:
+        print(str(err), file=sys.stderr)
+        return 2
+    token = getpass.getpass("Cole o token: ").strip()
+    if len(token) < 32:
+        print("Esse não parece o token mostrado na tela Transcritores.", file=sys.stderr)
+        return 1
+    try:
+        save_keychain(token)
+    except TokenError as err:
+        print(str(err), file=sys.stderr)
+        return 1
+    saved = {"api_url": api_url, "name": args.name or socket.gethostname()}
+    if args.vault:
+        saved["vault_path"] = str(Path(args.vault).expanduser())
+    if args.sync_host:
+        saved["sync_host"] = args.sync_host
+    save_config(saved)
+    print("Pareado.")
+    if sys.platform == "darwin" and not args.no_service:
+        keep_on(saved.get("vault_path"))
+    return 0
+
+
+def keep_on(vault: str | None) -> None:
+    """The service is installed with the pairing: nobody ever starts it by hand (KBC-114)."""
+    from .service import ServiceError
+
+    try:
+        path = service_of().install(vault=vault, extras=list(DEFAULT_EXTRAS))
+    except ServiceError as err:
+        print(f"O serviço em background não foi instalado: {err}", file=sys.stderr)
+        return
+    print(f"Serviço instalado (liga quando há trabalho e desliga ao terminar): {path}")
+    if vault:
+        print_key_hint()
+
+
+def run(args: argparse.Namespace) -> int:
+    from .api import ApiClient
+    from .audio import decode_pcm16k, ffmpeg_bin
+    from .diarize import senko_or_none
+    from .status import StatusReporter
+    from .vad import silero_speech
+    from .voiceprint import ecapa_or_none
+    from .worker import Worker
+
+    config = load_config()
+    api_url = os.environ.get("KB_CHAT_API_URL") or config.get("api_url")
+    name = os.environ.get("KB_CHAT_TRANSCRIBER_NAME") or config.get("name") or socket.gethostname()
+    if not api_url:
+        print(
+            "Sem endereço da API: pareie com `transcriber pair --api-url <url>`.", file=sys.stderr
+        )
+        return 2
+    try:
+        api = ApiClient(api_url, CachedToken(load_token), name[:100])
+        load_token()
+        ffmpeg_bin()
+    except (TokenError, RuntimeError, ValueError) as err:
+        print(str(err), file=sys.stderr)
+        return 2
+    vault = os.environ.get("KB_CHAT_VAULT") or config.get("vault_path")
+    from .kb_keys import kb_env, kb_problems
+
+    # KBC-117: the kb's AI keys from the Keychain, for kb's own environment only.
+    env = {} if args.no_kb_publish else kb_env(keys_of())
+    publisher = publisher_of(args, vault, env)
+    unavailable = [] if args.no_kb_publish else kb_problems(vault, publisher, env)
+    for problem in unavailable:
+        logging.getLogger("transcriber").error("kb-publish off: %s", problem["detail"])
+    kb = publisher.kb if publisher else None
+    status = status_of(publisher)
+    reporter = StatusReporter(api)
+    announce_preparing(status, reporter)
+    model, count = _mlx()
+    stop = threading.Event()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, lambda *_: stop.set())
+    worker = Worker(
+        api=api,
+        model=model,
+        find_speech=silero_speech,
+        decode=decode_pcm16k,
+        stop=stop,
+        count_tokens=count,
+        # KBC-064: separates voices too when the `diarize` extra (Senko) is installed and
+        # not turned off; the API still gives it a separation only if marked in Transcritores.
+        diarizer=None if args.no_diarize else senko_or_none(),
+        # KBC-071: only with the `voiceprint` extra; the API gives prints only to a token
+        # marked for them, and nothing is marked by default (ADR 0032).
+        embedder=None if args.no_voice_profiles else ecapa_or_none(),
+        # KBC-099: with a vault and kb on this Mac; the API gives track documents only to a
+        # transcriber marked "Publica no acervo" in Transcritores, and kb spends on its key.
+        publisher=publisher,
+        # KBC-114: what this Mac is doing, shown to masters in the app.
+        status=status,
+        reporter=reporter,
+        # KBC-117: what it cannot do now (the kb's AI key missing), never leased, told why.
+        unavailable=unavailable,
+        reload_kb_env=lambda: kb_env(keys_of()),
+    )
+    if args.poll:
+        worker.poll_s = args.poll
+    worker.sync = vault_sync_of(args, config, kb)
+    return worker.run(once=args.once, exit_when_idle=args.exit_when_idle)
+
+
+PREPARING = (
+    "preparando o transcritor: carregando os modelos e os componentes de separar vozes "
+    "e de perfis de voz (na primeira vez, o uv os instala sozinho)"
+)
+
+
+def status_of(publisher):
+    """What this Mac reports before its models load: its kinds are not known yet, so they go
+    empty, which the API reads as unknown (review r2 N-1); the Worker fills them in."""
+    from .status import WorkerStatus
+
+    return WorkerStatus(
+        vault_path=str(publisher.vault) if publisher else None,
+        kb_version=getattr(publisher.kb, "version", lambda: None)() if publisher else None,
+    )
+
+
+def announce_preparing(status, reporter) -> None:
+    """Before the models load (minutes on the first run): the app says it is getting ready."""
+    status.set_state("waiting", PREPARING)
+    reporter.send(status)
+
+
+def publisher_of(args: argparse.Namespace, vault: str | None, env: dict | None = None):
+    """Publishing is on by default (KBC-114 BR-7): a vault and kb on PATH are enough, with no
+    mark on this Mac; `--no-kb-publish` keeps it out. The API still gives kb-publish jobs only
+    to a transcriber marked "Publica no acervo", which a new pairing is by default."""
+    from .kb_publish import KbPublisher, kb_or_none
+
+    kb = None if args.no_kb_publish else kb_or_none(vault, env)
+    return KbPublisher(kb.vault, kb) if kb else None
+
+
+def vault_sync_of(args: argparse.Namespace, config: dict, kb, state_file: Path | None = None):
+    """The automatic sync with production (KBC-100 FR-4): only with kb and a host to send to."""
+    state_file = state_file or SYNC_STATE_FILE
+    from .vault_sync import VaultSync
+
+    host = args.sync_host or os.environ.get("KB_CHAT_SYNC_HOST") or config.get("sync_host")
+    if kb is None or not host or args.no_sync:
+        return None
+    script = Path(args.sync_script).expanduser() if args.sync_script else SYNC_SCRIPT
+    sync = VaultSync(script=script, host=host, vault=kb.vault, state_file=state_file)
+    # What a previous run published and did not send is still pending; a restart alone is not.
+    sync.load()
+    return sync
+
+
+def service_of(**kwargs):
+    """This Mac's LaunchAgent, with the real launchctl (KBC-114)."""
+    from .service import LaunchctlCli, Service
+
+    return Service(home=Path.home(), uid=os.getuid(), launchctl=LaunchctlCli(), **kwargs)
+
+
+def service(args: argparse.Namespace) -> int:
+    """`transcriber service install|uninstall|status`: the worker kept on by launchd."""
+    from .service import ServiceError, describe
+
+    agent = service_of()
+    try:
+        if args.action == "install":
+            config = load_config(CONFIG_FILE)
+            vault = args.vault or os.environ.get("KB_CHAT_VAULT") or config.get("vault_path")
+            if vault:
+                vault = str(Path(vault).expanduser())
+            if args.vault:
+                save_config({**config, "vault_path": vault}, CONFIG_FILE)
+            extras = args.extra if args.extra is not None else list(DEFAULT_EXTRAS)
+            path = agent.install(vault=vault, extras=extras, load=not args.no_load)
+            print(f"Serviço instalado: {path}")
+            if not vault:
+                print("Sem vault: este Mac não publica no acervo (use --vault).")
+            else:
+                print_key_hint()
+            if not args.no_load:
+                # What launchd has now, never what was hoped for (KBC-117 (2)).
+                print("\n".join(describe(agent.status())))
+        elif args.action == "uninstall":
+            agent.uninstall()
+            print("Serviço removido.")
+        else:
+            print("\n".join(describe(agent.status())))
+    except ServiceError as err:
+        print(str(err), file=sys.stderr)
+        print("\n".join(describe(agent.status())))
+        return 1
+    return 0
+
+
+def keys_of():
+    """This Mac's Keychain for the kb's AI keys (KBC-117); tests put a fake here."""
+    from .kb_keys import KeychainKeys
+
+    return KeychainKeys()
+
+
+def print_key_hint() -> None:
+    """The service never sees a key that lives only in the shell (KBC-117): say how to move it
+    once. Names only, never a value."""
+    from .kb_keys import REQUIRED_KEY
+
+    if keys_of().read(REQUIRED_KEY):
+        return
+    if os.environ.get(REQUIRED_KEY):
+        print(
+            f"Atenção: {REQUIRED_KEY} está só no shell; o serviço não a vê e o kb não publica. "
+            "Uma vez, neste Terminal: "
+            "uv run --project tools/transcriber transcriber keys set --from-env"
+        )
+    else:
+        print(
+            f"Atenção: o kb não tem {REQUIRED_KEY} (chave da IA do kb ausente). Guarde-a com: "
+            "uv run --project tools/transcriber transcriber keys set"
+        )
+
+
+def keys(args: argparse.Namespace) -> int:
+    """`transcriber keys set|status|delete`: the kb's AI keys in the Keychain (KBC-117)."""
+    from .kb_keys import KB_KEY_NAMES, KbKeyError, check_key
+
+    store = keys_of()
+    names = args.name or list(KB_KEY_NAMES)
+    if args.action == "status":
+        for name in names:
+            where = (
+                "no Keychain"
+                if store.read(name)
+                else "só no shell (o serviço não a vê)"
+                if os.environ.get(name)
+                else "ausente"
+            )
+            print(f"{name}: {where}")
+        return 0
+    if args.action == "delete":
+        for name in names:
+            gone = store.delete(name)
+            print(f"{name}: {'removida do Keychain' if gone else 'não estava no Keychain'}")
+        return 0
+    found = _keys_to_store(names, args.from_env)
+    if not found:
+        source = "neste shell" if args.from_env else "digitada"
+        print(f"Nenhuma chave {source}: nada foi guardado.", file=sys.stderr)
+        return 1
+    try:
+        # All checked first: one bad value stores none (never half of them).
+        for name, value in found.items():
+            check_key(name, value)
+        for name, value in found.items():
+            store.save(name, value)
+            print(f"{name}: guardada no Keychain")
+    except KbKeyError as err:
+        print(str(err), file=sys.stderr)
+        return 1
+    _wake_service()
+    return 0
+
+
+def _keys_to_store(names: list[str], from_env: bool) -> dict[str, str]:
+    """From this shell's environment, or typed with no echo (Enter skips one)."""
+    found: dict[str, str] = {}
+    for name in names:
+        value = os.environ.get(name, "") if from_env else getpass.getpass(f"{name} (Enter pula): ")
+        if value.strip():
+            found[name] = value.strip()
+    return found
+
+
+def _wake_service() -> None:
+    """The service starts now and tells the app kb-publish is ready: the queue moves."""
+    from .service import ServiceError
+
+    try:
+        woken = service_of().kickstart()
+    except (ServiceError, OSError):
+        # Not a Mac, or no launchctl: the keys are stored all the same.
+        woken = False
+    if woken:
+        print(
+            "Transcritor avisado: desligado, ele liga agora; já ligado, ele lê a chave nova "
+            "em até 30 s. Depois volta a publicar no acervo."
+        )
+    else:
+        print("O serviço não está carregado: rode `transcriber service install`.")
+
+
+def _mlx():
+    """mlx-whisper and its tokenizer (Apple silicon only)."""
+    try:
+        import mlx_whisper
+        from mlx_whisper.tokenizer import get_tokenizer
+    except ImportError as err:
+        raise SystemExit("mlx-whisper needs a Mac with Apple silicon") from err
+    tokenizer = get_tokenizer(True, num_languages=100, language="pt", task="transcribe")
+    return mlx_whisper.transcribe, lambda text: len(tokenizer.encode(" " + text.strip()))
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="transcriber", description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    pairing = commands.add_parser("pair", help="store the token shown on the Transcritores screen")
+    pairing.add_argument("--api-url", required=True)
+    pairing.add_argument("--name")
+    pairing.add_argument(
+        "--vault", help="the kb vault on this Mac, for 'Publica no acervo' (KBC-099)"
+    )
+    pairing.add_argument(
+        "--sync-host",
+        help="user@host of production: the vault is synced there by itself (KBC-100)",
+    )
+    pairing.add_argument(
+        "--no-service",
+        action="store_true",
+        help="do not install the background service (KBC-114: it is installed by default)",
+    )
+    pairing.set_defaults(handler=pair)
+    running = commands.add_parser("run", help="lease and transcribe jobs until stopped")
+    running.add_argument("--once", action="store_true", help="at most one job, then exit")
+    running.add_argument(
+        "--exit-when-idle", action="store_true", help="exit when the queue is empty"
+    )
+    running.add_argument("--poll", type=float, help="seconds between leases when idle (30)")
+    running.add_argument(
+        "--no-diarize", action="store_true", help="never lease voice separations (KBC-064)"
+    )
+    running.add_argument(
+        "--no-voice-profiles", action="store_true", help="never handle voice prints (KBC-071)"
+    )
+    running.add_argument(
+        "--no-kb-publish",
+        action="store_true",
+        help="never write track documents into the vault nor run kb (KBC-099)",
+    )
+    running.add_argument(
+        "--sync-host", help="user@host of production, over the paired one (KBC-100)"
+    )
+    running.add_argument("--sync-script", help="sync-vault.sh to run (this checkout's)")
+    running.add_argument(
+        "--no-sync",
+        action="store_true",
+        help="never sync the vault with production by itself (KBC-100)",
+    )
+    running.set_defaults(handler=run)
+    background = commands.add_parser(
+        "service", help="keep the worker on in the background with launchd (KBC-114)"
+    )
+    background.add_argument("action", choices=("install", "uninstall", "status"))
+    background.add_argument("--vault", help="the kb vault on this Mac (KB_CHAT_VAULT)")
+    background.add_argument(
+        "--extra",
+        action="append",
+        help="uv extras to run with (repeatable; default: diarize and voiceprint)",
+    )
+    background.add_argument(
+        "--no-load", action="store_true", help="only write the plist, do not load it"
+    )
+    background.set_defaults(handler=service)
+    secrets = commands.add_parser(
+        "keys", help="the kb's AI keys in the Keychain, for the service (KBC-117)"
+    )
+    secrets.add_argument("action", choices=("set", "status", "delete"))
+    secrets.add_argument(
+        "--from-env",
+        action="store_true",
+        help="store the keys this shell exports (the one-time move off ~/.zshrc)",
+    )
+    from .kb_keys import KB_KEY_NAMES
+
+    secrets.add_argument(
+        "--name",
+        action="append",
+        choices=KB_KEY_NAMES,
+        help="only this key (repeatable; default: all of kb's)",
+    )
+    secrets.set_defaults(handler=keys)
+    args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    return args.handler(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

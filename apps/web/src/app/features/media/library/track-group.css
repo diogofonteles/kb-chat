@@ -1,0 +1,131 @@
+:host {
+  /* Above the card's stretched link (library-card.css), as the card's ▶ is. */
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-1);
+  min-height: 2.75rem;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-accent-strong);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toggle:focus-visible,
+.play:focus-visible,
+.title:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.chevron {
+  display: inline-block;
+}
+
+.chevron.open {
+  transform: rotate(90deg);
+}
+
+.tracks {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.track {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'ordinal play title menu'
+    'ordinal play meta menu';
+  align-items: center;
+  gap: 0 var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-left: 2px solid var(--color-border);
+}
+
+/* The row's end, not its start as on a media row (T14): the menu opens to the left of it. */
+app-menu-button {
+  --menu-phone-left: auto;
+  --menu-phone-right: 0;
+  grid-area: menu;
+}
+
+.ordinal {
+  grid-area: ordinal;
+  min-width: 1.5em;
+  text-align: right;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.play {
+  grid-area: play;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-accent-strong);
+  cursor: pointer;
+}
+
+.title {
+  grid-area: title;
+  min-height: 1.5rem;
+  overflow: hidden;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title:hover {
+  text-decoration: underline;
+}
+
+.meta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.state {
+  font-weight: 600;
+}
+
+/* A card of the grid: beside ▶ the title would keep three letters. */
+@container (max-width: 18rem) {
+  .track {
+    grid-template-areas:
+      'ordinal play meta meta'
+      'title title title menu';
+    padding-inline: var(--space-1) 0;
+  }
+
+  .title {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+}

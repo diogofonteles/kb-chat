@@ -1,6 +1,7 @@
 import type { ResearchStep } from '@kb-chat/contracts';
 import type { z } from 'zod';
 import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
+import { anchorsIn } from '@kb-chat/contracts';
 import {
   acceptsEntry,
   describeFilter,
@@ -25,6 +26,7 @@ import {
 import {
   foldPhrase,
   type DocMatch,
+  type Occurrence,
   type TextCount,
   type TextFinder,
 } from './text-finder.js';
@@ -36,7 +38,11 @@ import {
   type PreparedCall,
   type ToolContext,
 } from './tool-context.js';
-import { AUTHORSHIP_LABELS, quote } from './tool-output.js';
+import {
+  AUTHORSHIP_LABELS,
+  quote,
+  type AuthorshipLabels,
+} from './tool-output.js';
 import {
   GREP_PAGE,
   PHRASE_SEPARATOR,
@@ -103,9 +109,12 @@ const pageOf = (
   return { offset, size, total };
 };
 
-function scopeText(filter: DocFilter): string {
+function scopeText(
+  filter: DocFilter,
+  labels: AuthorshipLabels = AUTHORSHIP_LABELS,
+): string {
   return [
-    filter.authorship && `autoria ${AUTHORSHIP_LABELS[filter.authorship]}`,
+    filter.authorship && `autoria ${labels[filter.authorship]}`,
     filter.entity && `entidade ${quote(filter.entity)}`,
     filter.source && `origem ${quote(filter.source)}`,
   ]
@@ -113,15 +122,20 @@ function scopeText(filter: DocFilter): string {
     .join(' e ');
 }
 
-function stepOf({ args, filter }: Omit<GrepRequest, 'phrases'>): ResearchStep {
+function stepOf({
+  args,
+  filter,
+  context,
+}: Omit<GrepRequest, 'phrases'>): ResearchStep {
+  const { labels } = context;
   const from = args.offset > 0 ? ` (a partir do ${args.offset + 1}º)` : '';
   if (!args.phrase)
     return {
       kind: 'search',
-      text: `Listando os documentos de ${scopeText(filter)}${from}`,
+      text: `Listando os documentos de ${scopeText(filter, labels)}${from}`,
     };
   const where = isFiltering(filter)
-    ? `em documentos de ${scopeText(filter) || 'um filtro'}`
+    ? `em documentos de ${scopeText(filter, labels) || 'um filtro'}`
     : 'em todo o acervo';
   return {
     kind: 'search',
@@ -130,7 +144,8 @@ function stepOf({ args, filter }: Omit<GrepRequest, 'phrases'>): ResearchStep {
 }
 
 function totalsLine(request: GrepRequest, counted: TextCount): string {
-  const filter = describeFilter(request.filter);
+  const { labels } = request.context;
+  const filter = describeFilter(request.filter, labels);
   const scope = filter ? ` (${filter})` : '';
   const documents = `${counted.matches.length} documento(s)`;
   if (request.phrases.length === 0) {
@@ -141,17 +156,37 @@ function totalsLine(request: GrepRequest, counted: TextCount): string {
       source: undefined,
     });
     const extra = rest ? ` (${rest})` : '';
-    return `Documentos com ${scopeText(request.filter)}${extra}: ${documents}.`;
+    return `Documentos com ${scopeText(request.filter, labels)}${extra}: ${documents}.`;
   }
   return `Texto ${phraseList(request.phrases)}${scope}: ${documents}, ${counted.occurrences} ocorrência(s), em ${counted.scanned} documentos varridos.`;
 }
 
 function nothingFound(request: GrepRequest, scanned: number): string {
-  const filter = describeFilter(request.filter);
+  const filter = describeFilter(request.filter, request.context.labels);
   if (request.phrases.length === 0)
     return `Nenhum documento com ${filter}. Use list_sources para ver os nomes de origens e entidades do acervo.`;
   const scope = filter ? ` do filtro (${filter})` : '';
   return `Nenhum dos ${scanned} documentos${scope} contém ${phraseList(request.phrases)}. Antes de concluir que o acervo não trata disso, tente variantes: sinônimos (ocultos, secretos, velados, universais, adicionais), singular e plural, o número por extenso e em algarismos, uma parte menor da frase, outro filtro, e search_collection.`;
+}
+
+/** A track's passage in a files line: its anchors may be cited (KBC-099 BR-5). */
+function showSnippet(context: ToolContext, n: number, passage: string): void {
+  const anchors = anchorsIn(passage);
+  context.book.showTrack(n, { anchors, focus: anchors[0] ?? null });
+}
+
+/** A track's occurrences: each shows the anchor of its paragraph, the last one is the focus. */
+function showOccurrences(
+  context: ToolContext,
+  n: number,
+  items: readonly Occurrence[],
+): void {
+  const anchors = items.flatMap((item) => [
+    ...(item.anchor === undefined || item.anchor === null ? [] : [item.anchor]),
+    ...anchorsIn(item.context),
+  ]);
+  const focus = items.at(-1)?.anchor ?? null;
+  context.book.showTrack(n, { anchors, focus });
 }
 
 /**
@@ -208,7 +243,7 @@ export class GrepTool {
     // Sized before numbering, so no document gets an [n] it was not shown with.
     const estimates = shown.map(
       (match, i) =>
-        `${fileLine(0, match, null)}${i < PASSAGES_PER_PAGE ? ' '.repeat(PASSAGE_ESTIMATE) : ''}`,
+        `${fileLine(0, match, { passage: null, labels: request.context.labels })}${i < PASSAGES_PER_PAGE ? ' '.repeat(PASSAGE_ESTIMATE) : ''}`,
     );
     const lines = await Promise.all(
       shown
@@ -239,21 +274,28 @@ export class GrepTool {
     // Numbered before any await, so [n] follows the page order.
     const n = context.book.number(match.entry);
     const withText = index < PASSAGES_PER_PAGE;
-    if (phrases.length === 0) return listedLine(n, match, withText);
+    if (phrases.length === 0)
+      return listedLine(n, match, {
+        withSummary: withText,
+        labels: context.labels,
+      });
     const passage = withText
       ? await this.deps.finder.snippet(context.topic, match)
       : null;
-    return fileLine(n, match, passage);
+    if (passage) showSnippet(context, n, passage);
+    return fileLine(n, match, { passage, labels: context.labels });
   }
 
   private countPage(request: GrepRequest, counted: TextCount): string {
     const { args, context } = request;
     const full = pageOf(args, { mode: 'count', total: counted.matches.length });
     const shown = counted.matches.slice(full.offset, full.offset + full.size);
-    const titles = shown.map((match) => countLine(0, match));
+    const titles = shown.map((match) => countLine(0, match, context.labels));
     const lines = shown
       .slice(0, fitting(titles))
-      .map((match) => countLine(context.book.number(match.entry), match));
+      .map((match) =>
+        countLine(context.book.number(match.entry), match, context.labels),
+      );
     const page = { ...full, size: lines.length };
     return [
       `${totalsLine(request, counted)} ${pageRange(page)}`,
@@ -303,11 +345,14 @@ export class GrepTool {
     });
     const items = found?.items.slice(at.skip, at.skip + at.room) ?? [];
     if (items.length === 0) return { lines: [], count: 0 };
-    const head = groupLine(context.book.number(entry), entry, {
+    const n = context.book.number(entry);
+    const head = groupLine(n, entry, {
       from: at.skip + 1,
       to: at.skip + items.length,
       of: at.match.occurrences,
+      labels: context.labels,
     });
+    showOccurrences(context, n, items);
     const several = phrases.length > 1;
     return {
       lines: [head, ...items.map((item) => occurrenceLine(item, several))],
@@ -343,9 +388,9 @@ export class GrepTool {
     const head = `Texto ${phraseList(phrases)} em [${n}] ${entry.title} (${found.length} caracteres): ${found.items.length} ocorrência(s).`;
     if (mode === 'count' || found.items.length === 0)
       return `${head}${found.items.length === 0 ? ' Tente variantes (sinônimos, singular e plural, uma parte menor da frase).' : ''}`;
-    const items = found.items
-      .slice(page.offset, page.offset + page.size)
-      .map((item) => occurrenceLine(item, phrases.length > 1));
+    const shown = found.items.slice(page.offset, page.offset + page.size);
+    showOccurrences(context, n, shown);
+    const items = shown.map((item) => occurrenceLine(item, phrases.length > 1));
     return [
       `${head} ${pageRange(page)}`,
       ...items,

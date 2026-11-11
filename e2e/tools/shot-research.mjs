@@ -37,7 +37,7 @@ const ANSWER = sse(
   { type: 'done', usd: 0.0042, model: 'stub', interrupted: false, steps: 3 },
 );
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--mute-audio'] });
 for (const [name, width, height] of [
   ['desktop', 1440, 900],
   ['mobile', 390, 844],

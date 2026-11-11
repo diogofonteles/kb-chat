@@ -45,7 +45,7 @@ async function openPeople(page, desktop) {
   return page.getByRole('dialog', { name: 'Configurações' });
 }
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--mute-audio'] });
 const ownerContext = await browser.newContext();
 await ownerContext.route('https://accounts.google.com/**', (r) => r.abort());
 const owner = await ownerContext.newPage();

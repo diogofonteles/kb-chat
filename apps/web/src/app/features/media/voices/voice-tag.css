@@ -1,0 +1,69 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  color: var(--color-text);
+  min-width: 0;
+}
+
+/* A name of 120 characters wraps, never pushes the column sideways. */
+.name {
+  overflow-wrap: anywhere;
+}
+
+.star {
+  color: var(--color-accent);
+}
+
+.mark {
+  flex: none;
+  width: 0.875rem;
+  height: 0.875rem;
+  background: var(--voice-color);
+}
+
+/* Voices 6 to 10: the same tones, hollow (an inner cut-out keeps the shape's outline). */
+.mark.hollow {
+  background: transparent;
+  box-shadow: inset 0 0 0 0.1875rem var(--voice-color);
+}
+
+.mark[data-shape='circle'] {
+  border-radius: 50%;
+}
+
+.mark[data-shape='square'] {
+  border-radius: 0.125rem;
+}
+
+.mark[data-shape='triangle'] {
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.mark[data-shape='diamond'] {
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+
+.mark[data-shape='hexagon'] {
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+}
+
+/* Clipped shapes lose an inset outline: hollow ones get a centre cut instead. */
+.mark.hollow[data-shape='triangle'],
+.mark.hollow[data-shape='diamond'],
+.mark.hollow[data-shape='hexagon'] {
+  background: radial-gradient(
+    circle at 50% 62%,
+    transparent 0 28%,
+    var(--voice-color) 29%
+  );
+  box-shadow: none;
+}
+
+@media (forced-colors: active) {
+  .mark {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+}

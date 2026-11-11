@@ -11,11 +11,13 @@ const person = (overrides: Partial<Person>): Person => ({
   topics: [],
   features: ['search'],
   isOwner: false,
+  canActAs: false,
   phone: null,
   invitation: null,
   invitedBy: 'owner@example.com',
   createdAt: '2026-10-26T12:00:00.000Z',
   lastLoginAt: null,
+  levels: {},
   ai: DEFAULT_PERSON_AI,
   ...overrides,
 });

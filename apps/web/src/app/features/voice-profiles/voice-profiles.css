@@ -1,0 +1,234 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.panel,
+.block {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.lead,
+.hint {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.hint {
+  font-size: var(--text-sm);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.label {
+  font-weight: 600;
+}
+
+.block-title {
+  margin: 0;
+  font-size: var(--text-md, 1rem);
+}
+
+.block-title:focus {
+  outline: none;
+}
+
+.group {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* A legend's default padding would set it apart from the other labels. */
+.group legend {
+  padding: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.primary,
+.secondary,
+.danger {
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary {
+  border: 0;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.secondary {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+}
+
+.danger {
+  border: 1px solid var(--color-danger);
+  background: transparent;
+  color: var(--color-danger);
+}
+
+.primary:disabled,
+.secondary:disabled,
+.danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Highlighted, apart from the rest of the form (LGPD art. 8º §4; DP: nothing hidden). */
+.consent {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+.consent p {
+  margin: 0;
+}
+
+.consent-title {
+  margin: 0;
+  font-size: var(--text-md, 1rem);
+}
+
+.consent-lead {
+  font-weight: 600;
+}
+
+.consent-note {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.consent .secondary {
+  justify-self: start;
+}
+
+.confirm-box {
+  align-items: flex-start;
+}
+
+.confirm-box input {
+  margin-top: 0.15rem;
+}
+
+.field-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.notice {
+  margin: 0;
+  font-weight: 600;
+}
+
+.notice.error {
+  color: var(--color-danger);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.notice p + p {
+  margin-top: var(--space-2);
+}
+
+.sources,
+.profiles {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.profile-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+}
+
+.name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.state {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.confirm {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.confirm-text {
+  margin: 0;
+}
+
+.report {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.facts dt {
+  color: var(--color-text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (width <= 30rem) {
+  .facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .facts dd {
+    margin-bottom: var(--space-1);
+  }
+}

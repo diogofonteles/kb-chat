@@ -16,8 +16,17 @@ import type {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
+import type { LevelView } from '../../ports/level-view.js';
 import type { ResearchRunnerPort } from '../../ports/research-runner.js';
-import { principalOf, type RouteAccess } from '../auth/index.js';
+import type { TrackShelf } from '../../ports/track-shelf.js';
+import { levelViewOf } from '../access-levels/index.js';
+import {
+  canSeeTracks,
+  hasFeature,
+  principalOf,
+  viewerOf,
+  type RouteAccess,
+} from '../auth/index.js';
 import type { LiveTurn, LiveTurns } from './live-turns.js';
 import { pendingTurn, recordTurn } from './turn-record.js';
 
@@ -39,6 +48,40 @@ export interface ResearchRouteOptions {
   readonly journal: TurnJournal;
   /** Research turns per minute per client (RESEARCH_RATE_LIMIT). */
   readonly ratePerMinute: number;
+  /** A turn's view of media.db (KBC-099), when the media library is on. */
+  readonly shelf?: () => TrackShelf;
+}
+
+/**
+ * The tracks a turn may see (KBC-099 BR-4, FR-10): the route already checked the collection
+ * and `research`; the person (the one a master acts as, in "Ver como") also needs `media`
+ * and `media-research`, and `media-tracks`, without which a track item does not exist for
+ * them (KBC-068 FR-5): a citation they could not open is never given.
+ */
+function shelfFor(
+  request: FastifyRequest,
+  { topic, shelf }: { topic: string; shelf: (() => TrackShelf) | undefined },
+): TrackShelf | undefined {
+  const { person } = viewerOf(request);
+  const allowed = (['media', 'media-tracks', 'media-research'] as const).every(
+    (feature) => hasFeature(person, feature),
+  );
+  // A collection whose media waits for levels (KBC-105/106) gives no shelf at all: its tracks
+  // stay closed even before the view's own rule (KBC-104 review #1, defence in depth).
+  return allowed && canSeeTracks(request, topic) ? shelf?.() : undefined;
+}
+
+/**
+ * Who the turn reads for (the one a master acts as): their view of the collection, which
+ * every tool, the sweep and a cursor sent back go through (KBC-104 BR-1), and their tracks.
+ */
+function readerOf(
+  request: FastifyRequest,
+  topic: string,
+  shelf: (() => TrackShelf) | undefined,
+): Pick<ResearchCall, 'view' | 'tracks'> {
+  const tracks = shelfFor(request, { topic, shelf });
+  return { view: levelViewOf(request, topic), ...(tracks && { tracks }) };
 }
 
 /** The history as the research routes write to it (KBC-029); the conversations module. */
@@ -102,6 +145,10 @@ const researchOptions = (ratePerMinute: number) => ({
 export interface ResearchCall {
   readonly topic: string;
   readonly body: ResearchRequestBody;
+  /** The tracks this person may research; none without the permissions. */
+  readonly tracks?: TrackShelf;
+  /** What the person (the one a master acts as) may see of the collection (KBC-104). */
+  readonly view: LevelView;
 }
 
 type ResearchRequestBody = z.output<typeof researchRequestSchema>;
@@ -109,14 +156,14 @@ type ResearchRequestBody = z.output<typeof researchRequestSchema>;
 /** Streams one research turn as SSE; a failure becomes an `error` event. */
 async function streamResearch(
   runner: ResearchRunnerPort,
-  { topic, body }: ResearchCall,
+  call: ResearchCall,
   { request, reply }: { request: FastifyRequest; reply: FastifyReply },
 ): Promise<void> {
   const signal = abortOnDisconnect(reply);
   const send = openStream(reply);
   send({ type: 'start', model: runner.model, billing: runner.billing });
   try {
-    for await (const event of runner.run(inputOf({ topic, body }, signal)))
+    for await (const event of runner.run(inputOf(call, signal)))
       send(withPlan(event));
   } catch (err) {
     request.log.error({ err }, 'research stream failed');
@@ -125,8 +172,13 @@ async function streamResearch(
   reply.raw.end();
 }
 
-const inputOf = ({ topic, body }: ResearchCall, signal: AbortSignal) => ({
+const inputOf = (
+  { topic, body, tracks, view }: ResearchCall,
+  signal: AbortSignal,
+) => ({
   topic,
+  view,
+  ...(tracks && { tracks }),
   question: body.question,
   history: body.history,
   profile: body.profile,
@@ -254,7 +306,7 @@ async function startRecorded(
 /** One research turn: recorded in the history when the page sent its ids (KBC-029). */
 async function handleResearch(
   options: ResearchRouteOptions,
-  { topic, body }: ResearchCall,
+  { topic, body }: Pick<ResearchCall, 'topic' | 'body'>,
   { request, reply }: { request: FastifyRequest; reply: FastifyReply },
 ): Promise<void> {
   const principal = principalOf(request);
@@ -264,9 +316,10 @@ async function handleResearch(
   if (!options.hasTopic(topic))
     throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
   const { conversationId, turnId } = body;
+  const own = { topic, body, ...readerOf(request, topic, options.shelf) };
   if (!conversationId || !turnId)
-    return streamResearch(current, { topic, body }, { request, reply });
-  const call = { topic, body, principal, conversationId, turnId };
+    return streamResearch(current, own, { request, reply });
+  const call = { ...own, principal, conversationId, turnId };
   return startRecorded(current, call, { reply, log: request.log, options });
 }
 
@@ -314,11 +367,12 @@ export const researchRoutes =
       .post(
         '/api/v1/topics/:topic/research',
         researchOptions(options.ratePerMinute),
-        (request, reply) =>
-          handleResearch(
+        (request, reply) => {
+          return handleResearch(
             options,
             { topic: request.params.topic, body: request.body },
             { request, reply },
-          ),
+          );
+        },
       );
   };

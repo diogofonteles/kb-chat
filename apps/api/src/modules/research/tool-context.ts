@@ -1,12 +1,39 @@
 import type { ResearchStep } from '@kb-chat/contracts';
 import type { z } from 'zod';
-import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
+import type { TrackShelf } from '../../ports/track-shelf.js';
+import { allowsInScope, type LevelView } from '../access-levels/index.js';
+import {
+  isSeenDocument,
+  type CatalogEntry,
+  type CatalogRegistry,
+} from '../catalog/index.js';
 import type { SourceBook } from './source-book.js';
-import { quote } from './tool-output.js';
+import { quote, type AuthorshipLabels } from './tool-output.js';
 
 export interface ToolContext {
   readonly topic: string;
   readonly book: SourceBook;
+  /** How this collection names each authorship (KBC-049: its main author); set by the tools. */
+  readonly labels?: AuthorshipLabels;
+  /** The tracks this person may research (KBC-099 BR-4); without it, no track is seen. */
+  readonly tracks?: TrackShelf;
+  /** What the person may see of the collection (ADR 0036 §7, KBC-104 BR-1). */
+  readonly view: LevelView;
+}
+
+/**
+ * A text, or a track media.db and the person's permissions let this turn see (BR-4), in the
+ * collection it is in (a sub-collection's, seen from its parent: KBC-101 FR-5), at or below
+ * the person's level (KBC-104 BR-1). Every tool asks here before it shows or counts one.
+ */
+export function isVisible(
+  entry: Pick<CatalogEntry, 'id' | 'media' | 'home'>,
+  { topic, tracks, view }: Pick<ToolContext, 'topic' | 'tracks' | 'view'>,
+): boolean {
+  return (
+    isSeenDocument(entry, { topic: entry.home?.topic ?? topic, tracks }) &&
+    allowsInScope(view, topic, entry)
+  );
 }
 
 /** A tool call ready to run: the steps shown to the reader and the text for the model. */
@@ -42,15 +69,21 @@ export function refNumber(ref: string | number): number | null {
   return digits === undefined ? null : Number(digits);
 }
 
-/** A [n] already met this turn ("3", "[3]" or 3) or a document id of the topic. */
+/**
+ * A [n] already met this turn ("3", "[3]" or 3) or a document id of the topic; a document
+ * the person may not see is null, exactly like one that does not exist (KBC-104 BR-2).
+ */
 export function resolveEntry(
   catalog: CatalogRegistry,
   ref: string | number,
-  { topic, book }: ToolContext,
+  context: ToolContext,
 ): CatalogEntry | null {
+  const { topic, book } = context;
   const n = refNumber(ref);
   const id = n === null ? String(ref) : book.find(n)?.id;
-  return id ? (catalog.get(topic)?.entries.get(id) ?? null) : null;
+  // The collection and its sub-collections (KBC-101 FR-5).
+  const entry = id ? (catalog.scopeView(topic)?.entries.get(id) ?? null) : null;
+  return entry && isVisible(entry, context) ? entry : null;
 }
 
 export const notFound = (ref: string | number): string =>

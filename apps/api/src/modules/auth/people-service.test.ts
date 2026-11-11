@@ -173,3 +173,76 @@ describe('PeopleService', () => {
     expect(await people.list()).toEqual([]);
   });
 });
+
+describe('PeopleService and features it does not know (KBC-107 QA-2)', () => {
+  it('loads a people.json written by a newer image, ignores the unknown feature and warns once', async () => {
+    const store = new MemoryPeopleStore();
+    const first = await service(store).list();
+    const owner = first[0];
+    await store.write({
+      version: 1,
+      people: [
+        {
+          ...owner,
+          features: ['search', 'a-feature-from-the-future'],
+        },
+      ],
+    });
+    const warn = vi.fn();
+    const people = new PeopleService({
+      store,
+      ownerEmail: OWNER,
+      log: { warn },
+    });
+
+    const loaded = await people.list();
+    expect(loaded[0]?.features).toEqual(['search']);
+    const signedIn = await people.signIn(identity(OWNER));
+    expect(signedIn.email).toBe(OWNER);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      { features: ['a-feature-from-the-future'] },
+      expect.stringContaining('ignored'),
+    );
+  });
+});
+
+describe('PeopleService.setLevels (KBC-109 NFR-1)', () => {
+  it('changes the level of everyone kept in one write, and says what each held before', async () => {
+    const store = new MemoryPeopleStore();
+    const people = service(store);
+    const ana = await people.invite('ana@example.com', OWNER);
+    const bia = await people.invite('bia@example.com', OWNER);
+    await people.update(bia.id, { levels: { hermetismo: 'qs' } });
+    const write = vi.spyOn(store, 'write');
+
+    const changed = await people.setLevels({
+      root: 'hermetismo',
+      level: 'ci',
+      keeps: (person) => person.role !== 'master',
+    });
+
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(changed.map(({ person, before }) => [person.email, before])).toEqual(
+      [
+        ['ana@example.com', null],
+        ['bia@example.com', 'qs'],
+      ],
+    );
+    expect((await people.find(ana.id))?.levels).toEqual({ hermetismo: 'ci' });
+  });
+
+  it('leaves out who already holds the level', async () => {
+    const people = service();
+    const ana = await people.invite('ana@example.com', OWNER);
+    await people.update(ana.id, { levels: { hermetismo: 'ci' } });
+    const changed = await people.setLevels({
+      root: 'hermetismo',
+      level: 'ci',
+      keeps: () => true,
+    });
+    expect(changed.map(({ person }) => person.email)).not.toContain(
+      'ana@example.com',
+    );
+  });
+});

@@ -35,6 +35,101 @@ textarea {
   outline-offset: 2px;
 }
 
+/* A notice in a warning tone (KBC-036 BR-5, low-confidence transcripts): a sign besides the
+   colour (UP-20), never red (UP-19), and not the brand's accent bar. */
+.warning-notice {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.warning-notice::before {
+  content: '⚠ ' / '';
+  font-weight: 700;
+}
+
+/* Transcript search (KBC-038 FR-8): occurrences painted with the CSS Custom Highlight API,
+   which leaves the text's DOM alone (selection, find and layout stay as they are). */
+::highlight(transcript-match) {
+  background-color: var(--color-mark);
+  color: var(--color-text);
+}
+
+/* The passage opened from a search hit (KBC-039 AC-10): marked and underlined, so it
+   reads apart from the search's occurrences without relying on colour alone. */
+::highlight(transcript-passage) {
+  background-color: var(--color-mark);
+  color: var(--color-text);
+  text-decoration: underline 2px var(--color-accent-strong);
+}
+
+::highlight(transcript-current) {
+  background-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+/* The spoken word (KBC-045 BR-2), also in a track's text (KBC-092 BR-3): a thick underline
+   and more weight, never colour alone.
+   A highlight takes no font-weight, and a real one would push the text aside at every word,
+   so the weight is drawn with text-shadow. WebKit draws no shadow here: it shows the
+   underline alone, which is still no colour-only cue. Longhands, as WebKit drops the
+   underline of the shorthand when there is a colour or thickness in it. */
+::highlight(transcript-word),
+::highlight(track-word) {
+  color: var(--color-text);
+  text-decoration-line: underline;
+  text-decoration-color: var(--color-accent-strong);
+  text-decoration-thickness: 3px;
+  text-shadow:
+    0.022em 0 0 var(--color-text),
+    -0.022em 0 0 var(--color-text);
+}
+
+@media (forced-colors: active) {
+  ::highlight(transcript-word),
+  ::highlight(track-word) {
+    background-color: Highlight;
+    color: HighlightText;
+  }
+}
+
+/* The words being corrected (KBC-093 AC-23, NFR-5): a background and a double underline,
+   never colour alone. Longhands, for WebKit (see above). */
+::highlight(correcting-word) {
+  background-color: var(--color-mark);
+  color: var(--color-text);
+  text-decoration-line: underline;
+  text-decoration-style: double;
+  text-decoration-color: var(--color-accent-strong);
+  text-decoration-thickness: 2px;
+}
+
+@media (forced-colors: active) {
+  ::highlight(correcting-word) {
+    background-color: Highlight;
+    color: HighlightText;
+  }
+}
+
+/* A word the learning from corrections replaced (KBC-113 FR-6): a dotted underline, subtle,
+   never colour alone. */
+::highlight(learned-word) {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--color-text-muted);
+  text-decoration-thickness: 2px;
+}
+
+@media (forced-colors: active) {
+  ::highlight(learned-word) {
+    text-decoration-color: CanvasText;
+  }
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -73,6 +168,14 @@ app-research-message .answer a.cite {
   font-size: 0.8em;
   font-weight: 600;
   text-decoration: none;
+  vertical-align: super;
+}
+
+/* A citation of a restricted source (KBC-110): the number as plain text, no link. */
+app-research-message .answer .cite-restricted {
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: 0.8em;
   vertical-align: super;
 }
 

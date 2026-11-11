@@ -1,5 +1,6 @@
 import type { Me } from '@kb-chat/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { parentOfRequest } from './access.js';
 import { isSecureHost, sessionCookie } from './cookie.js';
 import type { PeopleService } from './people-service.js';
 import { toMe, type StoredPerson } from './person.js';
@@ -9,6 +10,8 @@ export interface SessionOpening {
   readonly people: PeopleService;
   readonly sessions: SessionService;
   readonly topics: () => readonly string[];
+  /** The media library is on (KB_CHAT_MEDIA); off when not given. */
+  readonly mediaEnabled?: boolean;
 }
 
 /** A new session cookie for `person` (ADR 0008), the same for Google and one-time codes. */
@@ -23,5 +26,11 @@ export async function openSession(
     'set-cookie',
     sessionCookie(token, isSecureHost(http.request.headers.host)),
   );
-  return toMe(deps.people.viewerOf(person), deps.topics());
+  const parentOf = parentOfRequest(http.request);
+  return toMe(deps.people.viewerOf(person), {
+    topics: deps.topics(),
+    media: deps.mediaEnabled ?? false,
+    parentOf,
+    levels: http.request.server.levelHooks?.codesOf(person, parentOf) ?? {},
+  });
 }

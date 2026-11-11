@@ -1,4 +1,9 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  hkdfSync,
+  randomBytes,
+} from 'node:crypto';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SecretSealerPort } from '../ports/secret-sealer.js';
@@ -16,6 +21,16 @@ export function parseSecretsKey(base64: string): Buffer {
   if (key.length !== KEY_BYTES)
     throw new Error('KB_CHAT_SECRETS_KEY must be 32 bytes in base64');
   return key;
+}
+
+/**
+ * A 32-byte key for one purpose, derived from the master key (HKDF-SHA256), so the master
+ * key itself only ever seals (ADR 0017).
+ */
+export function deriveKey(master: Buffer, purpose: string): Buffer {
+  return Buffer.from(
+    hkdfSync('sha256', master, '', `kb-chat:${purpose}`, KEY_BYTES),
+  );
 }
 
 /** AES-256-GCM with a random IV per value (ADR 0017). */

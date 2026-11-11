@@ -6,6 +6,21 @@ export interface StoredSession {
   /** Sliding: pushed forward as the session is used. */
   readonly expiresAt: string;
   readonly refreshedAt: string;
+  /** A master acting as a person (KBC-060): whose view every request takes. */
+  readonly actingAs?: StoredActing;
+}
+
+/** What a session keeps while its master acts as a person (ADR 0027). */
+export interface StoredActing {
+  /** This acting session, shared by its audit lines. */
+  readonly id?: string;
+  readonly personId: string;
+  /** Who the person was when it started (kept for the audit if they are removed). */
+  readonly personName?: string;
+  readonly personEmail?: string;
+  readonly reason: string;
+  readonly startedAt: string;
+  readonly endsAt: string;
 }
 
 /** Sessions under `<state>/sessions/` (one 0600 file each) or in memory (tests). */

@@ -14,16 +14,20 @@ export { copyKey };
 
 export interface Candidate {
   readonly hit: IndexHit;
-  readonly entry: CatalogEntry;
+  /** With its collection when the search spans a parent's sub-collections (KBC-048). */
+  readonly entry: CatalogEntry & { readonly topic?: string };
 }
 
 /** One result card: the best-ranked document and its near-identical copies. */
 export interface CopyGroup {
   readonly lead: Candidate;
-  readonly copies: readonly CatalogEntry[];
+  readonly copies: readonly Candidate['entry'][];
 }
 
 type FacetKey = keyof SearchFilters;
+
+/** A document's facets, with the collection it is in when searching a parent (KBC-048). */
+export type Faceted = DocumentFacets & { readonly topic?: string };
 
 export interface RefineOptions {
   readonly filters: SearchFilters;
@@ -40,11 +44,20 @@ export interface RefinedPage {
   readonly facets: ResultFacets;
 }
 
+/** A track is never a copy of a text nor of another track (KBC-101 BR-10). */
+const groupKeyOf = (entry: Candidate['entry']): string =>
+  entry.media
+    ? `\u0000track:${entry.topic ?? ''}:${entry.id}`
+    : copyKey(entry.title);
+
 /** Groups candidates by normalized title, keeping the index order of the best member. */
 export function groupCopies(candidates: readonly Candidate[]): CopyGroup[] {
-  const groups = new Map<string, { lead: Candidate; copies: CatalogEntry[] }>();
+  const groups = new Map<
+    string,
+    { lead: Candidate; copies: Candidate['entry'][] }
+  >();
   for (const candidate of candidates) {
-    const key = copyKey(candidate.entry.title);
+    const key = groupKeyOf(candidate.entry);
     const group = groups.get(key);
     if (group) group.copies.push(candidate.entry);
     else groups.set(key, { lead: candidate, copies: [] });
@@ -54,7 +67,7 @@ export function groupCopies(candidates: readonly Candidate[]): CopyGroup[] {
 
 const FACET_TESTS: Record<
   FacetKey,
-  (facets: DocumentFacets, filters: SearchFilters) => boolean
+  (facets: Faceted, filters: SearchFilters) => boolean
 > = {
   concepts: (f, s) =>
     s.concepts.length === 0 || f.concepts.some((c) => s.concepts.includes(c)),
@@ -73,11 +86,14 @@ const FACET_TESTS: Record<
   },
   authorships: (f, s) =>
     s.authorships.length === 0 || s.authorships.includes(f.authorship),
+  topics: (f, s) =>
+    s.topics.length === 0 ||
+    (f.topic !== undefined && s.topics.includes(f.topic)),
 };
 const FACET_KEYS = Object.keys(FACET_TESTS) as FacetKey[];
 
 function matchesExcept(
-  facets: DocumentFacets,
+  facets: Faceted,
   filters: SearchFilters,
   except?: FacetKey,
 ): boolean {
@@ -108,9 +124,13 @@ function countBy<T>(
 
 const nonNull = <T>(value: T | null): value is T => value !== null;
 
+/** The collection of each document that carries one (a parent's search, KBC-048). */
+const collectionsOf = (facets: readonly Faceted[]): string[] =>
+  facets.map((f) => f.topic ?? null).filter(nonNull);
+
 /** Facet counts over any list of documents (each facet ignores its own selection when filtered). */
 export function countFacets(
-  pick: (key: FacetKey) => readonly DocumentFacets[],
+  pick: (key: FacetKey) => readonly Faceted[],
 ): ResultFacets {
   return {
     concepts: countBy(pick('concepts').flatMap((f) => f.concepts)),
@@ -136,7 +156,40 @@ export function countFacets(
       pick('authorships').map((f) => f.authorship),
       AUTHORSHIPS,
     ),
+    topics: countBy(collectionsOf(pick('topics'))),
   };
+}
+
+/** Result cards under the filters, per kind: texts and tracks (KBC-101 BR-9). */
+export function kindTotals(
+  groups: readonly CopyGroup[],
+  filters: SearchFilters,
+): { readonly texts: number; readonly tracks: number } {
+  let texts = 0;
+  let tracks = 0;
+  for (const { lead } of groups) {
+    if (!matchesExcept(lead.entry, filters)) continue;
+    if (lead.entry.media) tracks += 1;
+    else texts += 1;
+  }
+  return { texts, tracks };
+}
+
+/**
+ * The tracks a search shows as cards under the filters, on any page up to the result cap
+ * (KBC-101 BR-8): only these leave "Na fala"; a track hidden by a filter, "Fora do tema" or
+ * the cap keeps its spoken passage.
+ */
+export function cardTracks(
+  groups: readonly CopyGroup[],
+  { filters, maxResults }: Pick<RefineOptions, 'filters' | 'maxResults'>,
+): string[] {
+  return groups
+    .filter((group) => matchesExcept(group.lead.entry, filters))
+    .slice(0, maxResults)
+    .flatMap(({ lead }) =>
+      lead.entry.media ? [lead.entry.media.mediaId] : [],
+    );
 }
 
 /** Filters, counts and pages the copy groups of one search (ADR 0003). */

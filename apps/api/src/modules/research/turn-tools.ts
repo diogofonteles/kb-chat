@@ -4,6 +4,10 @@ import type {
   ResearchToolsFactory,
   ResearchToolsPort,
 } from '../../ports/research-tools.js';
+import type { AnswerSource } from '@kb-chat/contracts';
+import type { LevelView } from '../../ports/level-view.js';
+import type { TrackShelf } from '../../ports/track-shelf.js';
+import { resolveTurnPassages } from './passage-resolution.js';
 import { SourceBook } from './source-book.js';
 import type { SweepKit } from './sweep/sweep-kit.js';
 import type { ResearchTools } from './tools.js';
@@ -11,16 +15,24 @@ import type { ResearchTools } from './tools.js';
 /**
  * The research tools of one turn behind ResearchToolsPort, for the subscription CLIs'
  * MCP endpoint (ADR 0007): the same tools, outputs and [n] numbering as the in-API loop,
- * with a source book of its own. Invalid arguments come back as text for the model.
+ * with a source book of its own, bound to the person's view (KBC-104 BR-5): an external
+ * model reaches only what they may read. Invalid arguments come back as text for the model.
  */
 export class TurnResearchTools implements ResearchToolsPort {
   private readonly book = new SourceBook();
   private calls = 0;
 
+  private readonly view: LevelView;
+  private readonly tracks: TrackShelf | undefined;
+
   constructor(
     private readonly tools: ResearchTools,
     private readonly topic: string,
-  ) {}
+    reader: { readonly view: LevelView; readonly tracks?: TrackShelf },
+  ) {
+    this.view = reader.view;
+    this.tracks = reader.tracks;
+  }
 
   /** The sweep's planner and this turn's numbering, for an exhaustive CLI turn (KBC-030). */
   get sweepKit(): SweepKit {
@@ -28,6 +40,9 @@ export class TurnResearchTools implements ResearchToolsPort {
       sweeps: this.tools.sweeps,
       book: this.book,
       topicTitle: this.tools.topicTitle(this.topic) ?? this.topic,
+      mainAuthor: this.tools.mainAuthor(this.topic),
+      view: this.view,
+      ...(this.tracks && { tracks: this.tracks }),
     };
   }
 
@@ -41,10 +56,22 @@ export class TurnResearchTools implements ResearchToolsPort {
     this.calls += 1;
     const prepared = this.tools.prepare(
       { id: `mcp-${this.calls}`, name, arguments: JSON.stringify(args ?? {}) },
-      { topic: this.topic, book: this.book },
+      {
+        topic: this.topic,
+        book: this.book,
+        view: this.view,
+        ...(this.tracks && { tracks: this.tracks }),
+      },
     );
     const text = await prepared.run();
     return { text, steps: prepared.steps, sources: this.book.list() };
+  }
+
+  finalSources(answer: string): readonly AnswerSource[] | null {
+    return resolveTurnPassages(answer, {
+      book: this.book,
+      tracks: this.tracks,
+    });
   }
 }
 
@@ -54,7 +81,10 @@ export class TurnResearchTools implements ResearchToolsPort {
  */
 export const turnToolsFactory =
   (tools: ResearchTools): ResearchToolsFactory =>
-  (topic) => {
+  (topic, view, tracks) => {
     void tools.warm(topic).catch(() => undefined);
-    return new TurnResearchTools(tools, topic);
+    return new TurnResearchTools(tools, topic, {
+      view,
+      ...(tracks && { tracks }),
+    });
   };

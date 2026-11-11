@@ -1,6 +1,43 @@
-import { citedSource, formatCost, renderAnswer } from './answer-format.js';
+import type { AnswerSource } from '@kb-chat/contracts';
+import {
+  citedAt,
+  citedSource,
+  formatCost,
+  renderAnswer,
+} from './answer-format.js';
+
+const TRACK: AnswerSource = {
+  n: 1,
+  id: 'raw/media/r/t.md',
+  title: 'O que é o ritmo?',
+  media: {
+    mediaId: '0b9c1f7e-1111-4a2b-8c3d-000000000001',
+    kind: 'track',
+    recordingTitle: 'Palestra de 12/03/2017',
+    durationMs: 508_000,
+    confidence: 'normal',
+  },
+  passages: [
+    { at: '0:41', startMs: 41_300, endMs: 70_000 },
+    { at: '', startMs: 70_000, endMs: 95_000 },
+  ],
+};
 
 describe('answer formatting', () => {
+  it('KBC-110 FR-5: "[n]" of a restricted source is text read as "Fonte n, restrita", no link', () => {
+    const html = renderAnswer(
+      'Aberta [1] e velada [2].',
+      [{ n: 1, id: 'a.md', title: 'A' }],
+      [2],
+    );
+
+    expect(html).toContain('href="#fonte-1"');
+    expect(html).not.toContain('#fonte-2');
+    expect(html).toContain(
+      '<span class="cite-restricted"><span aria-hidden="true">[2]</span><span class="visually-hidden">Fonte 2, restrita</span></span>',
+    );
+  });
+
   it('drops raw HTML, links and images from model output, keeping citations', () => {
     const html = renderAnswer(
       'Veja <img src="https://evil/x?q=1"> e [site](https://evil) e ![x](https://evil/i.png) [1].',
@@ -31,6 +68,34 @@ describe('answer formatting', () => {
     expect(html).toContain('<div class="table-scroll"><table>');
     expect(html.match(/table-scroll/g)).toHaveLength(1);
     expect(html).toContain('&lt;table&gt;');
+  });
+
+  it('KBC-099 FR-7: a track citation shows [n], names the track and the minute, and keeps its time', () => {
+    const host = document.createElement('div');
+    host.innerHTML = renderAnswer('O ritmo [1@0:41] e [1].', [TRACK]);
+    const [timed, plain] = [...host.querySelectorAll('a.cite')];
+    expect(timed?.textContent).toBe('[1]');
+    expect(timed?.getAttribute('aria-label')).toBe(
+      'Fonte 1, faixa O que é o ritmo?, aos 41 segundos',
+    );
+    expect(citedAt(timed ?? null)).toBe('0:41');
+    expect(plain?.getAttribute('aria-label')).toBe(
+      'Fonte 1, faixa O que é o ritmo?, aos 1 minuto e 10 segundos',
+    );
+    expect(citedAt(plain ?? null)).toBe('');
+    expect(citedSource(timed ?? null)).toBe(1);
+  });
+
+  it('a track citation of an answer without passages still opens the track', () => {
+    const old: AnswerSource = {
+      n: TRACK.n,
+      id: TRACK.id,
+      title: TRACK.title,
+      ...(TRACK.media && { media: TRACK.media }),
+    };
+    const html = renderAnswer('O ritmo [1@0:41].', [old]);
+    expect(html).toContain('aria-label="Fonte 1, faixa O que é o ritmo?"');
+    expect(renderAnswer('Sem fonte [3@0:41].')).toContain('[3@0:41]');
   });
 
   it('formats costs in pt-BR', () => {

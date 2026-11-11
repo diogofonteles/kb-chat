@@ -149,6 +149,9 @@ const callbackQuery = z.object({
   state: z.string().min(1).max(256).optional(),
 });
 
+/** Signed in, and never a master acting as the person (KBC-060 BR-4). */
+const NOT_WHILE_ACTING = { notWhileActing: true } as const;
+
 /** Back to the app with the outcome; the target is fixed, never taken from the request. */
 const backTo = (outcome: 'connected' | 'error', purpose?: string): string =>
   `/?${OPENROUTER_RETURN_PARAM}=${outcome}${purpose ? `&for=${purpose}` : ''}`;
@@ -158,7 +161,8 @@ function registerConnect(app: FastifyInstance, deps: HouseAiRouteDeps) {
     '/api/v1/openrouter/connect',
     {
       config: {
-        access: SIGNED_IN,
+        // Connecting an account is the person's own (KBC-060 BR-4).
+        access: NOT_WHILE_ACTING,
         rateLimit: { max: 10, timeWindow: '1 minute' },
       },
       schema: {
@@ -185,7 +189,7 @@ function registerCallback(app: FastifyInstance, deps: HouseAiRouteDeps) {
     '/api/v1/openrouter/callback',
     {
       config: {
-        access: SIGNED_IN,
+        access: NOT_WHILE_ACTING,
         rateLimit: { max: 20, timeWindow: '1 minute' },
       },
       schema: { querystring: callbackQuery, response: { 303: z.undefined() } },

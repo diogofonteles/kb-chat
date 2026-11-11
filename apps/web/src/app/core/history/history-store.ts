@@ -40,6 +40,7 @@ import {
   readLegacyHistory,
 } from './legacy-history.js';
 import { PendingSaves } from './pending-saves.js';
+import { withServerSources } from './server-sources.js';
 
 /** First retry of a failed save; each new failure doubles it, up to the maximum. */
 export const RETRY_FIRST_MS = 2_000;
@@ -207,16 +208,37 @@ export class HistoryStore {
     this.retryPending();
   }
 
-  /** The full conversation (asks or turns); a pending one comes from this browser. */
+  /**
+   * The full conversation (asks or turns). A pending one comes from this browser, laid over
+   * the server's copy when it answers (KBC-110 BR-5): what the server marks restricted is
+   * never shown, nor kept in localStorage, from the local copy.
+   */
   load(id: string): Observable<Conversation> {
     const waiting = this.pending.get(id);
-    if (waiting) return of(waiting);
+    if (waiting)
+      return this.api.get(id).pipe(
+        map((server) => this.overlay(waiting, server)),
+        catchError(() => of(this.pending.get(id) ?? waiting)),
+      );
     return this.api.get(id).pipe(
       tap({
         next: () => this.clear('load'),
         error: () => this.fail('load', id),
       }),
     );
+  }
+
+  /** The pending copy with the server's sources, kept so as the one to send again. */
+  private overlay(waiting: Conversation, server: Conversation): Conversation {
+    const current = this.pending.get(waiting.id);
+    if (!current) return server;
+    const masked = withServerSources(current, server);
+    if (masked !== current) {
+      this.pending.add(masked);
+      if (this.latest.get(masked.id) === current)
+        this.latest.set(masked.id, masked);
+    }
+    return masked;
   }
 
   /** Removes it from the list now; if the server refuses, the list is read again. */

@@ -1,5 +1,6 @@
 import {
   EMPTY_FILTERS,
+  type SearchKind,
   type SearchOrigin,
   type SearchFilters,
   type SearchMode,
@@ -17,6 +18,8 @@ export interface Ask {
   readonly question: string;
   readonly mode: SearchMode;
   readonly filters: SearchFilters;
+  /** "Buscar em" (KBC-039 FR-5): texts, audio or both. */
+  readonly kinds: readonly SearchKind[];
   /** Wait before hitting the API, so rapid chip clicks send one search (QA-7). */
   readonly delayMs?: number;
   /** Why it ran, for the usage log (KBC-006); a restored search is not logged. */
@@ -120,8 +123,14 @@ function appendPage(
   previous: SearchResponse | null,
   page: SearchResponse,
 ): SearchResponse {
+  // Later pages bring documents only: the passages and the counts of the first stay.
   return previous
-    ? { ...page, items: [...previous.items, ...page.items] }
+    ? {
+        ...page,
+        items: [...previous.items, ...page.items],
+        media: previous.media,
+        kinds: previous.kinds,
+      }
     : page;
 }
 

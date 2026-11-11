@@ -1,0 +1,189 @@
+/* A modal side panel on a desktop (FR-11). */
+.dialog {
+  width: min(32rem, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow);
+}
+
+.dialog[open] {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+
+.head,
+.body,
+.actions {
+  padding: var(--space-3) var(--space-4);
+}
+
+.head {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.head h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.body {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  font-weight: 600;
+}
+
+.field input {
+  min-width: 0;
+  min-height: var(--target);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 400;
+}
+
+.scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.scope label,
+.item {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: var(--target);
+}
+
+.marks,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.actions {
+  justify-content: flex-end;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.hint,
+.error {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.hint {
+  color: var(--color-text-muted);
+}
+
+.error {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.status:empty {
+  display: none;
+}
+
+.list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list > li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+
+.list > li.changed {
+  border-color: var(--color-danger);
+}
+
+.list > li > .error {
+  grid-column: 1 / -1;
+}
+
+.item {
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.item input {
+  width: 1.25rem;
+  height: 1.25rem;
+  align-self: center;
+}
+
+.clock {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.badge {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.text {
+  font-family: var(--font-reading);
+}
+
+del {
+  text-decoration: line-through;
+}
+
+ins {
+  background: var(--color-mark);
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+/* A phone: the whole screen, the confirmation always at the bottom (FR-11). */
+@media (max-width: 40rem) {
+  .dialog {
+    width: 100vw;
+    border-left: none;
+  }
+
+  .actions button {
+    flex: 1 1 auto;
+  }
+}

@@ -1,0 +1,130 @@
+:host {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.count {
+  margin: 0;
+  font-size: var(--text-base);
+}
+
+.tracks {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tracks li {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: start;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tracks li.fresh {
+  animation: arrive 2s ease-out;
+}
+
+@keyframes arrive {
+  from {
+    background: var(--color-surface-muted);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tracks li.fresh {
+    animation: none;
+  }
+}
+
+.ordinal {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.body {
+  min-width: 0;
+}
+
+.title {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.untitled {
+  color: var(--color-text-muted);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.meta {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.status {
+  color: var(--color-text);
+}
+
+.actions {
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* The track's text, under its row (KBC-092). */
+.text {
+  grid-column: 2 / -1;
+}
+
+/* On a phone the buttons go under the row, side by side, with full targets (MA-01). */
+@media (max-width: 40rem) {
+  .tracks li {
+    grid-template-columns: 2rem minmax(0, 1fr);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 2 / -1;
+  }
+}
+
+.end {
+  display: block;
+  height: 1px;
+}
+
+.more {
+  position: sticky;
+  bottom: var(--space-3);
+  justify-self: center;
+}
+
+/* Both labels hold the width: the row does not move when one takes over. */
+.swap {
+  display: inline-grid;
+}
+
+.swap > * {
+  grid-area: 1 / 1;
+}
+
+.swap > .off {
+  visibility: hidden;
+}

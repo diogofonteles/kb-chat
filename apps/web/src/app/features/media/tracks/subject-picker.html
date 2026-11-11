@@ -1,0 +1,45 @@
+<div class="picker">
+  <label class="visually-hidden" [for]="inputId">{{ label() }}</label>
+  <input
+    #field
+    type="text"
+    role="combobox"
+    autocomplete="off"
+    placeholder="Adicionar assunto"
+    i18n-placeholder="@@subjects.addPlaceholder"
+    aria-autocomplete="list"
+    [id]="inputId"
+    [attr.maxlength]="nameMax"
+    [value]="text()"
+    [disabled]="disabled()"
+    [attr.aria-expanded]="expanded()"
+    [attr.aria-controls]="listId"
+    [attr.aria-activedescendant]="activeId()"
+    (focus)="focused()"
+    (click)="open.set(true)"
+    (input)="typed($event)"
+    (keydown)="keydown($event)"
+    (blur)="close()"
+  />
+  <ul
+    class="options"
+    role="listbox"
+    aria-label="Assuntos do acervo"
+    i18n-aria-label="@@subjects.listLabel"
+    [id]="listId"
+    [hidden]="!expanded()"
+  >
+    @for (option of options(); track option.key; let index = $index) {
+      <li
+        role="option"
+        [id]="optionId(index)"
+        [class.active]="index === active()"
+        [attr.aria-selected]="index === active()"
+        tabindex="-1"
+        (mousedown)="choose($event, option)"
+      >
+        {{ option.label }}
+      </li>
+    }
+  </ul>
+</div>

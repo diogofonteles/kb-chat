@@ -1,0 +1,148 @@
+:host {
+  display: block;
+}
+
+.bookmarks {
+  display: grid;
+  gap: var(--space-3);
+}
+
+h3 {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-reading);
+  font-size: var(--text-lg);
+}
+
+.count {
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Time, note and actions on one row; the note wraps under on a phone. */
+.item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.time {
+  min-width: 4.5rem;
+  min-height: var(--target);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.note {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.note.none {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.saving {
+  margin-left: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-style: normal;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.actions button,
+.edit button,
+.undo button {
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.actions button:hover,
+.edit button:hover,
+.undo button:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.edit {
+  display: flex;
+  grid-column: 2 / -1;
+  gap: var(--space-2);
+}
+
+.edit input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+}
+
+.undo button {
+  border-color: var(--color-border);
+  font-weight: 600;
+}
+
+@media (max-width: 599px) {
+  .item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}

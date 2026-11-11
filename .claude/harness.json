@@ -70,6 +70,11 @@
       "COST"
     ]
   },
+  "board": {
+    "url": "https://quadro.nova-alexandria.duckdns.org",
+    "title": "Quadro Nova Alexandria",
+    "idPrefix": "KBC"
+  },
   "qa": {
     "_note": "QA stage (qa-engineer skill, gate qa) between local validation and review. true: the qa gate is required; false: it is dropped. Toggle with: devflow-config set qa.enabled on|off",
     "enabled": true

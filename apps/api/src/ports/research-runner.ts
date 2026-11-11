@@ -7,6 +7,8 @@ import type {
 } from '@kb-chat/contracts';
 import type { AgentLlmPort } from './llm.js';
 import type { SpendLedgerPort } from './spend-ledger.js';
+import type { LevelView } from './level-view.js';
+import type { TrackShelf } from './track-shelf.js';
 
 export interface ResearchInput {
   readonly topic: string;
@@ -19,6 +21,13 @@ export interface ResearchInput {
   readonly sweep?: SweepCursor;
   /** Model requests the turn may make (the house's free requests left, KBC-030). */
   readonly requestBudget?: number;
+  /** The tracks this person may research (KBC-099); without it, texts only. */
+  readonly tracks?: TrackShelf;
+  /**
+   * What the person (the one a master acts as) may see of the collection (ADR 0036 §7,
+   * KBC-104): every tool, the sweep and the turn's MCP endpoint go through it.
+   */
+  readonly view: LevelView;
 }
 
 /**

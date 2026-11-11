@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fake `claude -p --output-format stream-json`: calls the kb MCP endpoint named in
 // --mcp-config like Claude Code would, then streams an answer citing [1].
-// $HOME/fake-cli.json { mode, report } — mode: answer (default) | aloud (thinks aloud before the
+// $HOME/fake-cli.json { mode, report, calls, toolLog } — mode: answer (default) | aloud (thinks aloud before the
 // tool call) | deepen (asks to go deeper unless started with --model=opus) | deepen-mid
 // (the same after a sentence, the marker split across deltas) | absent (gives
 // up on the collection unless --model=opus) | plan (calls plan_sweep,
@@ -10,9 +10,7 @@
 // gets one line per run. A sweep's batch or answer prompt gets its reply (fake-sweep.mjs).
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { SWEEP_PLAN, logRun, sweepReply } from './fake-sweep.mjs';
+import { SWEEP_PLAN, callTools, logRun, sweepReply } from './fake-sweep.mjs';
 
 // The CLI gets only allowlisted variables, so the test settings come from $HOME.
 const fake = (() => {
@@ -110,16 +108,18 @@ if (mode === 'sleep' || mode === 'stubborn') {
   stop('tool_use');
   const configPath = args[args.indexOf('--mcp-config') + 1];
   const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  // Loaded only here: the other runs (login, sleep, a sweep) never need it, and it is most of
+  // a run's start-up, many times over on a busy machine.
+  const [{ Client }, { StreamableHTTPClientTransport }] = await Promise.all([
+    import('@modelcontextprotocol/sdk/client/index.js'),
+    import('@modelcontextprotocol/sdk/client/streamableHttp.js'),
+  ]);
   const client = new Client({ name: 'fake-claude', version: '0.0.0' });
   await client.connect(
     new StreamableHTTPClientTransport(new URL(config.mcpServers.kb.url)),
   );
   const { tools } = await client.listTools();
-  if (tools.length > 0)
-    await client.callTool({
-      name: tools[0].name,
-      arguments: { query: 'ritmo' },
-    });
+  if (tools.length > 0) await callTools(client, tools, fake);
   // An exhaustive turn that plans (KBC-030): the runner ends the pass once the plan is in.
   if (mode === 'plan' && tools.some((tool) => tool.name === 'plan_sweep'))
     await client.callTool({ name: 'plan_sweep', arguments: SWEEP_PLAN });

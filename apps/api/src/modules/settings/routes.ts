@@ -21,6 +21,7 @@ import { AppError } from '../../app-error.js';
 import {
   SIGNED_IN,
   assertFeature,
+  assertNotActing,
   canSee,
   principalOf,
   viewerOf,
@@ -72,6 +73,8 @@ function assertMayUpdate(
   if (topic && !canSee(request, topic))
     throw new AppError('VALIDATION_FAILED', 'Unknown collection');
   if (update.ai === undefined) return;
+  // The person's own AI (keys, provider, test) is theirs alone (KBC-060 BR-4).
+  assertNotActing(request);
   assertFeature(request, 'own-ai-settings');
   const provider = update.ai.provider;
   if (provider && SUBSCRIPTIONS.has(provider) && !viewerOf(request).isOwner)

@@ -23,6 +23,7 @@ import { MemorySpendLedger } from '../../adapters/memory-spend-ledger.js';
 import { SpendService } from '../spend/index.js';
 import { ToolLoopRunner } from './tool-loop-runner.js';
 import { PLAN_STEPS } from './sweep/plan-tool.js';
+import { OPEN_VIEW } from '../access-levels/index.js';
 
 const input = (
   question: string,
@@ -30,6 +31,7 @@ const input = (
   profile: ResearchProfile = 'deep',
 ) => ({
   topic: 'hermetismo',
+  view: OPEN_VIEW,
   question,
   history: [],
   profile,

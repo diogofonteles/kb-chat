@@ -8,6 +8,7 @@ import {
 import type { ToolCall } from '../../ports/llm.js';
 import { SourceBook } from './source-book.js';
 import type { ResearchTools, ToolContext } from './tools.js';
+import { OPEN_VIEW } from '../access-levels/index.js';
 
 const MESTRE = 'José Laércio do Egito';
 
@@ -64,6 +65,7 @@ const call = (name: string, args: object): ToolCall => ({
 const context = (): ToolContext => ({
   topic: 'hermetismo',
   book: new SourceBook(),
+  view: OPEN_VIEW,
 });
 
 async function run(
@@ -241,7 +243,7 @@ describe('authorship in the research tools (KBC-020 AC-4, AC-5)', () => {
       'Autoria: Mestre Laércio (autor: José Laércio do Egito)',
     );
     expect(output).toContain(
-      'Autoria: Outros autores (não é do Mestre Laércio; diga o autor ou o livro ao citar)',
+      'Autoria: Outros autores (não é de Mestre Laércio; diga o autor ou o livro ao citar)',
     );
     expect(ctx.book.list()).toEqual([
       {

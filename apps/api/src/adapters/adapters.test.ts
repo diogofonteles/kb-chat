@@ -102,6 +102,37 @@ describe('FsVaultAdapter', () => {
       { slug: 'harness/goclaw', title: 'harness/goclaw' },
     ]);
   });
+
+  it("reads the topic's kb domain from topic.yaml (KBC-099: the track documents carry it)", async () => {
+    const root = await mkdtemp(join(tmpdir(), 'kbchat-'));
+    const fs = await import('node:fs/promises');
+    await fs.mkdir(join(root, 'h'), { recursive: true });
+    await writeFile(
+      join(root, 'h', 'topic.yaml'),
+      'title: H\ndomain: " esoterismo "\n',
+    );
+    expect(await new FsVaultAdapter(root).listTopics()).toEqual([
+      { slug: 'h', title: 'H', domain: 'esoterismo' },
+    ]);
+  });
+
+  it('finds a sub-topic inside a topic, one level down, with its parent', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'kbchat-'));
+    const fs = await import('node:fs/promises');
+    const sub = join(root, 'udv', 'palavra-do-mestre');
+    await fs.mkdir(join(sub, 'raw', 'deeper'), { recursive: true });
+    await writeFile(join(root, 'udv', 'topic.yaml'), 'title: UDV\n');
+    await writeFile(join(sub, 'topic.yaml'), 'title: Palavra do Mestre\n');
+    await writeFile(join(sub, 'raw', 'deeper', 'topic.yaml'), 'title: No\n');
+    expect(await new FsVaultAdapter(root).listTopics()).toEqual([
+      { slug: 'udv', title: 'UDV' },
+      {
+        slug: 'udv/palavra-do-mestre',
+        title: 'Palavra do Mestre',
+        parent: 'udv',
+      },
+    ]);
+  });
 });
 
 describe('FixtureSearchAdapter', () => {

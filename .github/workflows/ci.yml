@@ -4,16 +4,39 @@ on:
   pull_request:
   push:
     branches: [develop, main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  gates:
-    name: Lint, typecheck, test, build, format
+  # What this change needs (tools/ci/select-jobs.mjs): on a pull request only what its paths
+  # touch, anything else in full. `verdict`, at the end, reads the result of all of it.
+  changes:
+    name: Select jobs
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+    outputs:
+      unit: ${{ steps.select.outputs.unit }}
+      run_unit: ${{ steps.select.outputs.run_unit }}
+      transcriber: ${{ steps.select.outputs.transcriber }}
+      codex: ${{ steps.select.outputs.codex }}
+      e2e: ${{ steps.select.outputs.e2e }}
+      run_e2e: ${{ steps.select.outputs.run_e2e }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the pull request's merge commit and its base
+      - id: select
+        run: node tools/ci/select-jobs.mjs
+
+  # Split so the slowest part (the API's unit tests, ~2.5 min) does not add up with lint,
+  # typecheck, build and the other projects' tests: each runs in its own job, in parallel.
+  checks:
+    name: Lint, typecheck, build, format
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -21,18 +44,23 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: tools/ci/retry.sh 3 120 pnpm install --frozen-lockfile
+        timeout-minutes: 7
       - run: pnpm --filter @kb-chat/contracts build
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
       - run: pnpm build
       - run: pnpm format:check
 
-  e2e:
-    name: E2E (Playwright)
+  test:
+    name: Unit tests (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.run_unit == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.unit) }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -40,13 +68,126 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @kb-chat/e2e exec playwright install --with-deps chromium
-      - run: pnpm e2e
+      - run: tools/ci/retry.sh 3 120 pnpm install --frozen-lockfile
+        timeout-minutes: 7
+      # The media worker's tests convert real audio (KBC-034): ffmpeg and ffprobe.
+      - if: matrix.ffmpeg
+        uses: ./.github/actions/setup-ffmpeg
+        timeout-minutes: 5
+      - run: pnpm --filter @kb-chat/contracts build
+      # Stream, not the default: Nx prints a finished task in one write and exits, which drops
+      # all but the first 64 KiB. Past that lie the failures and the coverage verdict.
+      - name: Run the unit tests
+        shell: bash # bash, named, adds pipefail: tee must not hide a failure.
+        run: pnpm exec nx run-many -t test -p ${{ matrix.projects }} --output-style=stream 2>&1 | tee unit-test-output.log
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: unit-test-output-${{ matrix.name }}
+          path: unit-test-output.log
+          retention-days: 7
+
+  transcriber:
+    # The Mac transcriber (KBC-036, ADR 0023): Python, its own lint and tests, in parallel
+    # with the other jobs. Linux takes the CPU-only torch wheel (pyproject) and skips
+    # mlx-whisper (Apple silicon only); the tests use a fake model and the real Silero VAD.
+    name: Transcriber (ruff, pytest)
+    needs: changes
+    if: needs.changes.outputs.transcriber == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: tools/transcriber
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.6'
+          enable-cache: true
+          cache-dependency-glob: tools/transcriber/uv.lock
+      - run: ../ci/retry.sh 3 120 uv sync --locked
+        timeout-minutes: 7
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run pytest
+
+  e2e:
+    # Shards in parallel, split per project: a GitHub runner gives Playwright 2 workers, so
+    # one job took ~18 min; Playwright cuts a run in order, so plain shards put every slow
+    # WebKit media test (real audio) in the last one. Each shard starts its own servers.
+    name: E2E (Playwright) ${{ matrix.name }} ${{ matrix.shard }}
+    needs: changes
+    if: needs.changes.outputs.run_e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.e2e) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: tools/ci/retry.sh 3 120 pnpm install --frozen-lockfile
+        timeout-minutes: 7
+      # Only the browser this group uses (none for Google Chrome, already on the runner),
+      # cached by the lockfile (the Playwright version).
+      - if: matrix.browser != ''
+        uses: actions/cache@v4
+        id: browsers
+        timeout-minutes: 5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ matrix.browser }}-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - if: matrix.browser != '' && steps.browsers.outputs.cache-hit != 'true'
+        run: tools/ci/retry.sh 3 180 pnpm --filter @kb-chat/e2e exec playwright install ${{ matrix.browser }}
+        timeout-minutes: 10
+      # WebKit needs system libraries the runner lacks (Chrome's are there); every group
+      # needs ffmpeg for the E2E server's media worker (KBC-034). apt hung for 20 minutes on
+      # two runs: bounded here, with its packages cached so a retry downloads little.
+      - if: matrix.browser == 'webkit'
+        uses: actions/cache@v4
+        timeout-minutes: 5
+        with:
+          path: ~/.cache/kb-chat-apt
+          key: apt-webkit-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: apt-webkit-${{ runner.os }}-
+      - if: matrix.browser == 'webkit'
+        run: |
+          mkdir -p ~/.cache/kb-chat-apt
+          sudo tee /etc/apt/apt.conf.d/99-kb-chat-ci <<CONF
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          Acquire::Retries "3";
+          DPkg::Lock::Timeout "60";
+          Dir::Cache::archives "$HOME/.cache/kb-chat-apt";
+          CONF
+          # Each try starts by clearing what a killed one left: its apt holds the dpkg lock.
+          clear='sudo pkill -KILL -x "apt-get|dpkg|http|https"; sudo dpkg --configure -a'
+          if ! tools/ci/retry.sh 2 180 sh -c \
+            "$clear && pnpm --filter @kb-chat/e2e exec playwright install-deps webkit"; then
+            # When the mirror cannot be reached (an hour of DNS failures on 2026-11-11 failed
+            # every try), the packages a past run downloaded are in the cache above: dpkg
+            # installs them without apt's lists or network.
+            ls ~/.cache/kb-chat-apt/*.deb > /dev/null 2>&1 || exit 1
+            echo "::warning::apt unreachable: installing WebKit's libraries from the cache"
+            sh -c "$clear" && sudo dpkg -i ~/.cache/kb-chat-apt/*.deb
+          fi
+          sudo chown -R "$USER" ~/.cache/kb-chat-apt
+        timeout-minutes: 10
+      - uses: ./.github/actions/setup-ffmpeg
+        timeout-minutes: 5
+      # Media specs play real AAC: the runner's own Google Chrome (channel "chrome"; the
+      # Chromium of Playwright has no AAC/H.264), no download needed.
+      - run: google-chrome --version
+      - run: pnpm --filter @kb-chat/e2e exec playwright test ${{ matrix.projects }} --shard=${{ matrix.shard }} ${{ matrix.specs }}
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ strategy.job-index }}
           path: e2e/playwright-report
           retention-days: 7
 
@@ -55,6 +196,8 @@ jobs:
     # deploy/compose.yml, cannot read the state, the Claude login, the deploy .env or the
     # secrets key (canary copies planted where production keeps them).
     name: Codex sandbox
+    needs: changes
+    if: needs.changes.outputs.codex == 'true'
     # The production VM is arm64 (OCI Ampere): prove the image built for that architecture.
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 40
@@ -78,9 +221,28 @@ jobs:
   # Open boards update without a refresh only if the edge passes live events on at once.
   board-edge:
     name: Board edge
+    needs: changes
+    if: needs.changes.outputs.codex == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Prove the live events cross the real Caddyfile
         run: deploy/scripts/board-edge-proof.sh
+
+  # The one check that always reports: selected jobs may be skipped, but the selection itself
+  # must have worked and nothing that ran may have failed.
+  verdict:
+    name: CI verdict
+    if: always()
+    needs: [changes, checks, test, transcriber, e2e, codex-sandbox, board-edge]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"'
+          echo "$NEEDS" | jq -e '
+            .changes.result == "success" and .checks.result == "success" and
+            ([.[].result] | all(. == "success" or . == "skipped"))'

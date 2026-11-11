@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  actAsRequestSchema,
   DEFAULT_INVITE_FEATURES,
   inviteRequestSchema,
   meSchema,
@@ -30,8 +31,17 @@ describe('auth contracts', () => {
       features: ['search'],
       topics: ['hermetismo'],
       isOwner: false,
+      media: true,
     };
-    expect(meSchema.parse(me)).toEqual(me);
+    // An older API sends none: nobody acts, the account may not act as anyone, and no
+    // collection has levels for it (KBC-103).
+    expect(meSchema.parse(me)).toEqual({
+      ...me,
+      canActAs: false,
+      actingAs: null,
+      levels: {},
+      levelsManager: false,
+    });
     expect(meSchema.safeParse({ ...me, topics: ['../x'] }).success).toBe(false);
   });
 
@@ -64,5 +74,18 @@ describe('auth contracts', () => {
     expect(personSchema.parse(person).invitation).toBeNull();
     // KBC-022: an API without the AI policy reads as the house default.
     expect(personSchema.parse(person).ai.appAi).toBe('default');
+  });
+
+  it('needs a reason of 3 to 500 characters to act as a person (KBC-060)', () => {
+    expect(actAsRequestSchema.parse({ reason: '  bug  ' })).toEqual({
+      reason: 'bug',
+    });
+    expect(actAsRequestSchema.safeParse({ reason: '  ' }).success).toBe(false);
+    expect(
+      actAsRequestSchema.safeParse({ reason: 'a'.repeat(501) }).success,
+    ).toBe(false);
+    expect(
+      actAsRequestSchema.safeParse({ reason: 'bug', extra: 1 }).success,
+    ).toBe(false);
   });
 });

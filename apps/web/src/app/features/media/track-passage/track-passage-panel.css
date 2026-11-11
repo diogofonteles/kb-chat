@@ -1,0 +1,228 @@
+/* The reading panel's frame, as for a document and a spoken passage (passage-panel.css). */
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+}
+
+.head {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.nav {
+  min-height: var(--target);
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-accent-strong);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.nav:hover {
+  background: var(--color-surface-muted);
+}
+
+.close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: var(--target);
+  min-height: var(--target);
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--color-surface-muted);
+}
+
+.close-label {
+  font-size: var(--text-sm);
+}
+
+.kind {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+h2:focus-visible {
+  outline: none;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.recording {
+  overflow-wrap: anywhere;
+}
+
+/* A warning tone with a sign besides the colour (UP-20), as the spoken passage's. */
+.low-confidence {
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.low-confidence::before {
+  content: '⚠ ' / '';
+}
+
+/* The stored passage no longer falls on the track (T22 "Faixa editada"): said in text. */
+.moved {
+  margin: 0 0 var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-border);
+  background: var(--color-surface-muted);
+  font-size: var(--text-sm);
+}
+
+/* Desktop (T22): the transcript, and the player beside it in a 16rem column, held in view. */
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16rem;
+  grid-template-areas: 'transcript player';
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-4) var(--space-6) var(--space-6);
+}
+
+.body.single {
+  display: block;
+}
+
+.player {
+  grid-area: player;
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.transcript {
+  grid-area: transcript;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.page-link {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  color: var(--color-accent-strong);
+}
+
+.notice {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  margin: 0;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.secondary {
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.player-skeleton,
+.transcript-skeleton {
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+}
+
+.player-skeleton {
+  height: 9.5rem;
+}
+
+.transcript-skeleton {
+  flex: 1;
+  min-height: 12rem;
+}
+
+/* Phones and narrow screens (T22): one column, the player held at the top while only the
+   transcript's list scrolls below it; nothing scrolls sideways (AC-11). */
+@media (max-width: 1023px) {
+  .head {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'player'
+      'transcript';
+    grid-template-rows: auto minmax(0, 1fr);
+    padding: 0 var(--space-4) var(--space-4);
+  }
+
+  .player {
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .transcript {
+    min-height: 16rem;
+  }
+}

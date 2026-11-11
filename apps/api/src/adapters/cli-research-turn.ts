@@ -407,7 +407,7 @@ export async function* runCliTurn(
   });
   const aborted = input.signal.aborted;
   if (!escalation || fast.deepen === null || aborted || !fast.result?.ok) {
-    yield finalEvent(fast, { aborted, escalated: false });
+    yield* endOf(input.tools, { answer, state: fast, aborted });
     return;
   }
   yield { type: 'step', step: DEEPEN_STEP };
@@ -419,5 +419,24 @@ export async function* runCliTurn(
   const pass = deepPass(input, fast, { escalation, budgets });
   const deep = yield* runPass(options, dialect, { ...pass, answer });
   const total = { ...deep, steps: fast.steps + deep.steps };
+  yield* passagesOf(input.tools, answer);
   yield finalEvent(total, { aborted: input.signal.aborted, escalated: true });
+}
+
+/** The last events of a pass that answered: the tracks' passages, then `done`. */
+function* endOf(
+  tools: ResearchToolsPort,
+  end: { answer: AnswerStream; state: TurnState; aborted: boolean },
+): Iterable<ResearchEvent> {
+  yield* passagesOf(tools, end.answer);
+  yield finalEvent(end.state, { aborted: end.aborted, escalated: false });
+}
+
+/** The cited tracks' passages once the answer is written (KBC-099 FR-6), as the loop does. */
+function* passagesOf(
+  tools: ResearchToolsPort,
+  answer: AnswerStream,
+): Iterable<ResearchEvent> {
+  const sources = tools.finalSources?.(answer.shown);
+  if (sources) yield { type: 'sources', sources: [...sources] };
 }

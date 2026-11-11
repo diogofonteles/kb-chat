@@ -1,5 +1,9 @@
 import type { RelatedDocument, SeeAlsoGroupName } from '@kb-chat/contracts';
-import type { CatalogEntry, RelationNames } from './catalog-entry.js';
+import type {
+  CatalogEntry,
+  CatalogMedia,
+  RelationNames,
+} from './catalog-entry.js';
 import { copyKey } from './titles.js';
 
 const CONCEPTS_FOLDER = 'wiki/concepts/';
@@ -18,7 +22,27 @@ const toRef = (entry: CatalogEntry): RelatedDocument => ({
   genre: entry.genre,
   depth: entry.depth,
   relevance: entry.relevance,
+  ...(entry.media && { media: toRefMedia(entry.media) }),
 });
+
+/** A track linked by kb (KBC-101 FR-6): what its "Veja também" line and the T22 need. */
+const toRefMedia = (
+  media: CatalogMedia,
+): NonNullable<RelatedDocument['media']> => ({
+  mediaId: media.mediaId,
+  kind: media.kind,
+  recordingTitle: media.recordingTitle,
+  ...(media.ordinal !== null && { ordinal: media.ordinal }),
+  ...(media.total !== null && { total: media.total }),
+  durationMs: media.durationMs,
+  confidence: media.confidence,
+});
+
+/** The concept a concept article is about, as written in its file name; null for sources. */
+export const conceptOfArticle = (id: string): string | null =>
+  id.startsWith(CONCEPTS_FOLDER)
+    ? id.slice(CONCEPTS_FOLDER.length).replace(/\.md$/, '')
+    : null;
 
 /** Concept article name as kb links it, compared case-insensitively. */
 const conceptKey = (name: string): string => name.trim().toLowerCase();
@@ -29,7 +53,8 @@ const conceptName = (id: string): string =>
 function uniqueByCopy(refs: readonly RelatedDocument[]): RelatedDocument[] {
   const seen = new Set<string>();
   return refs.filter((ref) => {
-    const key = copyKey(ref.title);
+    // A track is never a copy of a text nor of another track (KBC-101 BR-10).
+    const key = ref.media ? `\u0000track:${ref.id}` : copyKey(ref.title);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -56,18 +81,34 @@ export class RelationIndex {
     for (const entry of all) this.indexReverse(entry);
   }
 
-  /** The groups shown on one document, each fully listed and without copies (callers page them). */
+  /** Concept articles by name as written, sorted: what a track can link to (KBC-069). */
+  conceptNames(): string[] {
+    return [...this.conceptByName.values()]
+      .map((entry) =>
+        entry.id.slice(CONCEPTS_FOLDER.length).replace(/\.md$/, ''),
+      )
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }
+
+  /**
+   * The groups shown on one document, each fully listed and without copies (callers page
+   * them). `seen` keeps what the reader may see, before copies collapse: a hidden copy never
+   * stands in for a visible one of the same title (KBC-104 QA F-1).
+   */
   groupsOf(
     entry: CatalogEntry,
+    seen: (ref: RelatedDocument) => boolean = () => true,
   ): Record<SeeAlsoGroupName, readonly RelatedDocument[]> {
     const reverse = this.reverse.get(entry.id);
+    const unique = (refs: readonly RelatedDocument[]) =>
+      uniqueByCopy(refs.filter(seen));
     return {
-      exampleOf: uniqueByCopy(this.resolve(entry.relations.exampleOf)),
-      extends: uniqueByCopy(this.resolve(entry.relations.extends)),
-      related: uniqueByCopy(this.resolve(entry.relations.related)),
-      examples: uniqueByCopy(reverse?.get('examples') ?? []),
-      extendedBy: uniqueByCopy(reverse?.get('extendedBy') ?? []),
-      relatedFrom: uniqueByCopy(reverse?.get('relatedFrom') ?? []),
+      exampleOf: unique(this.resolve(entry.relations.exampleOf)),
+      extends: unique(this.resolve(entry.relations.extends)),
+      related: unique(this.resolve(entry.relations.related)),
+      examples: unique(reverse?.get('examples') ?? []),
+      extendedBy: unique(reverse?.get('extendedBy') ?? []),
+      relatedFrom: unique(reverse?.get('relatedFrom') ?? []),
     };
   }
 

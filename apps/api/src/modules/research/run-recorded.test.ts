@@ -8,6 +8,7 @@ import type {
 import { LiveTurns } from './live-turns.js';
 import { runRecorded, type RecordedCall } from './routes.js';
 import { pendingTurn } from './turn-record.js';
+import { OPEN_VIEW } from '../access-levels/index.js';
 
 /** A runner that, once stopped, takes until `release` to end (a slow provider abort). */
 function slowToStop() {
@@ -39,6 +40,7 @@ function slowToStop() {
 
 const call: RecordedCall = {
   topic: 'hermetismo',
+  view: OPEN_VIEW,
   principal: 'ana',
   conversationId: 'c1',
   turnId: 't1',

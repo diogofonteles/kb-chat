@@ -8,12 +8,26 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import {
+  Component,
+  ErrorHandler,
+  provideZonelessChangeDetection,
+  signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
-import { aDocument, aHit, aResponse, TOPICS } from '../../testing/fixtures.js';
+import {
+  aDocument,
+  aHit,
+  aResponse,
+  aTopic,
+  TOPICS,
+} from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
 import { ChatPage } from './chat-page.js';
+import { CollectionHeading, type HeadingScope } from './collection-heading.js';
 import { ResearchApi } from '@core/api/research-api.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import type { ResearchConversation, TopicList } from '@kb-chat/contracts';
@@ -90,6 +104,31 @@ describe('ChatPage', () => {
     expect(screen.getByText('O que você quer estudar hoje?')).toBeTruthy();
   });
 
+  it('counts the tracks the person sees among the documents, as the search summary does (KBC-101, C17)', async () => {
+    await renderPage([], {
+      items: [
+        aTopic({
+          slug: 'hermetismo',
+          title: 'Hermetismo',
+          documentCount: 1,
+          trackCount: 1,
+        }),
+      ],
+      defaultSlug: 'hermetismo',
+    });
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading.textContent?.replace(/\s+/g, ' ')).toContain(
+      '1 documento (1 faixa)',
+    );
+    expect(screen.queryByText(/ainda não tem textos/)).toBeNull();
+  });
+
+  it('says only the documents when the person sees no track', async () => {
+    await renderPage();
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading.textContent).not.toMatch(/faixa/);
+  });
+
   it('shows the product name as the title while no collection is open (KBC-016 AC-3)', async () => {
     await renderPage([], { items: [], defaultSlug: null });
     expect(
@@ -119,6 +158,7 @@ describe('ChatPage', () => {
       q: 'lei do ritmo',
       mode: 'all',
       filters: NO_FILTERS,
+      kinds: ['text', 'audio'],
     });
     request.flush(aResponse());
     await view.fixture.whenStable();
@@ -213,6 +253,7 @@ describe('ChatPage', () => {
       q: 'xyzzy',
       mode: 'semantic',
       filters: NO_FILTERS,
+      kinds: ['text', 'audio'],
     });
   });
 
@@ -528,9 +569,12 @@ describe('ChatPage side panel (KBC-005)', () => {
       target: { value: 'alquimia' },
     });
     await view.fixture.whenStable();
-    expect(screen.getByRole('status').textContent).toContain(
-      'Nova conversa em Alquimia',
-    );
+    expect(
+      screen
+        .getAllByRole('status')
+        .map((region) => region.textContent)
+        .join(' '),
+    ).toContain('Nova conversa em Alquimia');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
       '1 documento',
     );
@@ -539,6 +583,81 @@ describe('ChatPage side panel (KBC-005)', () => {
       view.http.expectOne('/api/v1/topics/alquimia/searches').request.body.q,
     ).toBe('pedra');
     expect(screen.queryByText('Nova conversa em Alquimia')).toBeNull();
+  });
+
+  it('lists collections as a tree, a closed parent only as its group title (KBC-048 FR-4, AC-5)', async () => {
+    await renderPage([], {
+      items: [
+        aTopic({ slug: 'udv', title: 'UDV', canOpen: false }),
+        aTopic({
+          slug: 'udv/palavra-do-mestre',
+          title: 'Palavra do Mestre',
+          parent: 'udv',
+          documentCount: 7,
+        }),
+      ],
+      defaultSlug: null,
+    });
+    const options = within(screen.getByLabelText('Acervo')).getAllByRole(
+      'option',
+    ) as HTMLOptionElement[];
+    expect(options.map((option) => [option.text, option.disabled])).toEqual([
+      ['UDV — só os sub-acervos abaixo', true],
+      ['\u00a0\u00a0\u00a0\u00a0Palavra do Mestre (7)', false],
+    ]);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
+      'Palavra do Mestre',
+    );
+  });
+
+  it('does not offer "Editar acervo" for a collection the person may not rename (KBC-048)', async () => {
+    await renderPage();
+    expect(screen.queryByRole('button', { name: 'Editar acervo' })).toBeNull();
+  });
+
+  it('offers "Editar acervo" for a collection the person may rename (KBC-048)', async () => {
+    await renderPage([], {
+      items: [aTopic({ slug: 'meu', title: 'Meu', canRename: true })],
+      defaultSlug: null,
+    });
+    expect(screen.getByRole('button', { name: 'Editar acervo' })).toBeTruthy();
+  });
+
+  it('creates a collection from the sidebar and switches to it at once (KBC-048 AC-1)', async () => {
+    const view = await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: '+ Novo acervo' }));
+    await view.fixture.whenStable();
+    fireEvent.input(screen.getByRole('textbox', { name: 'Nome' }), {
+      target: { value: 'UDV' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar acervo' }));
+    const created = aTopic({ slug: 'udv', title: 'UDV' });
+    const post = view.http.expectOne({
+      method: 'POST',
+      url: '/api/v1/topics',
+    });
+    expect(post.request.body).toEqual({
+      title: 'UDV',
+      description: '',
+      parent: null,
+    });
+    post.flush(created);
+    await view.fixture.whenStable();
+    // It joins the list as the API answered: the list is not asked again.
+    view.http.expectNone('/api/v1/topics');
+    const select = screen.getByLabelText('Acervo') as HTMLSelectElement;
+    expect([...select.options].map((option) => option.text)).toEqual([
+      'Alquimia (1)',
+      'Hermetismo (4.235)',
+      'UDV (0)',
+    ]);
+    expect(select.value).toBe('udv');
+    expect(
+      screen.getByText(/Este acervo ainda não tem textos para buscar/),
+    ).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
+      'UDV',
+    );
   });
 
   it('shows today’s AI spend and applies the chosen theme (AC-8, FR-4)', async () => {
@@ -696,6 +815,7 @@ describe('ChatPage start suggestions and usage log (KBC-006)', () => {
       q: 'Cabala',
       mode: 'all',
       filters: { ...NO_FILTERS, concepts: ['Cabala'] },
+      kinds: ['text', 'audio'],
     });
   });
 
@@ -727,5 +847,142 @@ describe('ChatPage start suggestions and usage log (KBC-006)', () => {
       type: 'open_doc',
       position: 2,
     });
+  });
+});
+
+@Component({ template: '' })
+class MediaStub {}
+
+describe('ChatPage on the media pages (no question box)', () => {
+  async function openMediaWith(scope: HeadingScope | null) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([fakeStartRequests])),
+        provideHttpClientTesting(),
+        FAKE_ANSWERS,
+        { provide: UsageLog, useValue: usage },
+        provideRouter([
+          {
+            path: '',
+            component: ChatPage,
+            children: [{ path: 'midia', component: MediaStub }],
+          },
+        ]),
+      ],
+    });
+    const harness = await RouterTestingHarness.create('/midia');
+    TestBed.inject(HttpTestingController)
+      .match('/api/v1/topics')
+      .forEach((request) => request.flush(TOPICS));
+    TestBed.runInInjectionContext(() =>
+      TestBed.inject(CollectionHeading).follow(signal(scope)),
+    );
+    await harness.fixture.whenStable();
+    return screen.getByRole('heading', { level: 1 }).textContent ?? '';
+  }
+
+  it('names the collection the page shows, not the selected one (KBC-091)', async () => {
+    const heading = await openMediaWith({ kind: 'topic', slug: 'alquimia' });
+    expect(heading).toContain('Alquimia');
+    expect(heading).not.toContain('Hermetismo');
+  });
+
+  it('says "Todos os acervos" when the list holds them all (KBC-091)', async () => {
+    expect(await openMediaWith({ kind: 'all' })).toContain('Todos os acervos');
+  });
+
+  it('names no collection on a page that belongs to none (KBC-091)', async () => {
+    expect(await openMediaWith(null)).toContain('Nova Alexandria');
+  });
+
+  it('opens /midia on a desktop and handles "/" without a missing question box (NG0951)', async () => {
+    localStorage.clear();
+    localStorage.setItem('kb-chat.view', 'search');
+    // A desktop width: the page focuses the question box on load there.
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: () => ({
+        matches: true,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }),
+    });
+    const handleError = vi.fn();
+    try {
+      TestBed.configureTestingModule({
+        providers: [
+          provideZonelessChangeDetection(),
+          provideHttpClient(withInterceptors([fakeStartRequests])),
+          provideHttpClientTesting(),
+          FAKE_ANSWERS,
+          { provide: UsageLog, useValue: usage },
+          { provide: ErrorHandler, useValue: { handleError } },
+          provideRouter([
+            {
+              path: '',
+              component: ChatPage,
+              children: [{ path: 'midia', component: MediaStub }],
+            },
+          ]),
+        ],
+      });
+      const harness = await RouterTestingHarness.create('/midia');
+      TestBed.inject(HttpTestingController)
+        .match('/api/v1/topics')
+        .forEach((request) => request.flush(TOPICS));
+      await harness.fixture.whenStable();
+      fireEvent.keyDown(document.body, { key: '/' });
+      await harness.fixture.whenStable();
+      expect(handleError).not.toHaveBeenCalled();
+    } finally {
+      Reflect.deleteProperty(window, 'matchMedia');
+    }
+  });
+
+  it('gives the focus to the question box on a desktop when coming back from them (AC-14 of KBC-051)', async () => {
+    localStorage.clear();
+    localStorage.setItem('kb-chat.view', 'search');
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: () => ({
+        matches: true,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }),
+    });
+    try {
+      TestBed.configureTestingModule({
+        providers: [
+          provideZonelessChangeDetection(),
+          provideHttpClient(withInterceptors([fakeStartRequests])),
+          provideHttpClientTesting(),
+          FAKE_ANSWERS,
+          { provide: UsageLog, useValue: usage },
+          provideRouter([
+            {
+              path: '',
+              component: ChatPage,
+              children: [
+                { path: '', children: [] },
+                { path: 'midia', component: MediaStub },
+              ],
+            },
+          ]),
+        ],
+      });
+      const harness = await RouterTestingHarness.create('/midia');
+      TestBed.inject(HttpTestingController)
+        .match('/api/v1/topics')
+        .forEach((request) => request.flush(TOPICS));
+      await harness.fixture.whenStable();
+
+      await harness.navigateByUrl('/');
+      await harness.fixture.whenStable();
+
+      expect(document.activeElement).toBe(screen.getByRole('textbox'));
+    } finally {
+      Reflect.deleteProperty(window, 'matchMedia');
+    }
   });
 });

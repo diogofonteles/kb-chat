@@ -26,8 +26,29 @@ const aTurn = (overrides: Partial<ResearchTurn> = {}): ResearchTurn => ({
   ...overrides,
 });
 
+const TRACK = {
+  n: 4,
+  id: 'raw/media/r/t.md',
+  title: 'O que é o ritmo?',
+  authorship: 'mestre-laercio' as const,
+  media: {
+    mediaId: '0b9c1f7e-1111-4a2b-8c3d-000000000001',
+    kind: 'track' as const,
+    recordingTitle: 'Palestra de 12/03/2017',
+    ordinal: 3,
+    total: 12,
+    durationMs: 508_000,
+    confidence: 'normal' as const,
+  },
+  passages: [
+    { at: '0:41', startMs: 41_300, endMs: 70_000 },
+    { at: '1:10', startMs: 70_000, endMs: 95_000 },
+  ],
+};
+
 async function renderMessage(turn: ResearchTurn, last = true) {
   const opened = vi.fn();
+  const trackOpened = vi.fn();
   const stopped = vi.fn();
   const retried = vi.fn();
   const settings = { openSettings: vi.fn() };
@@ -37,9 +58,9 @@ async function renderMessage(turn: ResearchTurn, last = true) {
       { provide: SettingsStore, useValue: settings },
     ],
     inputs: { turn, last },
-    on: { opened, stopped, retried },
+    on: { opened, trackOpened, stopped, retried },
   });
-  return { ...view, opened, stopped, retried, settings };
+  return { ...view, opened, trackOpened, stopped, retried, settings };
 }
 
 describe('ResearchMessage', () => {
@@ -194,6 +215,111 @@ describe('ResearchMessage', () => {
     });
     // Only the documents the answer cites are listed as sources.
     expect(screen.queryByRole('button', { name: 'Não citado' })).toBeNull();
+  });
+
+  describe("KBC-110: sources above today's level", () => {
+    const demoted = (overrides: Partial<ResearchTurn> = {}) =>
+      aTurn({
+        text: 'São sete [1], no Caibalion [2] e num texto velado [3].',
+        sources: SOURCES.slice(0, 2),
+        restricted: [3],
+        restored: true,
+        ...overrides,
+      });
+
+    it('AC-1: keeps the prose and the visible sources, shows "Fonte restrita" and says how many', async () => {
+      await renderMessage(demoted());
+
+      expect(screen.getByText(/num texto velado/)).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'Os Princípios' }),
+      ).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'O Caibalion' })).toBeTruthy();
+      expect(screen.getByText('Fonte restrita')).toBeTruthy();
+      expect(
+        screen.getByText(
+          '1 fonte desta resposta não está disponível para você.',
+        ),
+      ).toBeTruthy();
+    });
+
+    it('AC-7: "[3]" of a restricted source is no link or button, read as "Fonte 3, restrita"', async () => {
+      const view = await renderMessage(demoted());
+
+      expect(screen.queryByRole('link', { name: /Fonte 3/ })).toBeNull();
+      expect(
+        screen.getAllByRole('button').map((b) => b.textContent),
+      ).not.toContain(expect.stringContaining('restrita'));
+      const spoken = screen.getAllByText('Fonte 3, restrita');
+      expect(spoken).toHaveLength(2);
+      const [inAnswer] = spoken;
+      if (inAnswer) fireEvent.click(inAnswer);
+      expect(view.opened).not.toHaveBeenCalled();
+      expect(view.trackOpened).not.toHaveBeenCalled();
+    });
+
+    it('AC-6: with every source restricted, the list and the plural note still show', async () => {
+      await renderMessage(demoted({ sources: [], restricted: [1, 2, 3, 9] }));
+
+      expect(screen.getAllByText('Fonte restrita')).toHaveLength(3);
+      expect(
+        screen.getByText(
+          '3 fontes desta resposta não estão disponíveis para você.',
+        ),
+      ).toBeTruthy();
+    });
+
+    it('AC-8: an answer with no restricted source shows no note', async () => {
+      await renderMessage(aTurn());
+
+      expect(screen.queryByText('Fonte restrita')).toBeNull();
+      expect(
+        screen.queryByText(/não está disponível|não estão disponíveis/),
+      ).toBeNull();
+    });
+  });
+
+  it('KBC-099 AC-8: a cited track has its chip "♪ title · recording · minute" and opens its passage, never the document panel', async () => {
+    const { opened, trackOpened } = await renderMessage(
+      aTurn({
+        text: 'O ritmo é a lei do pêndulo [4@0:41], que tudo governa [4@1:10]. São sete [1].',
+        sources: [...SOURCES, TRACK],
+      }),
+    );
+    const chip = screen.getByRole('button', { name: /O que é o ritmo\?/ });
+    const text = chip.textContent?.replace(/\s+/g, ' ') ?? '';
+    expect(text).toContain('♪');
+    expect(text).toContain('Faixa de áudio:');
+    expect(text).toMatch(
+      /O que é o ritmo\?\s*Palestra de 12\/03\/2017\s*·\s*0:41\s*\+1 trecho/,
+    );
+    fireEvent.click(chip);
+    expect(trackOpened).toHaveBeenLastCalledWith({
+      source: TRACK,
+      at: '0:41',
+      trigger: chip,
+    });
+    const second = screen.getByRole('link', {
+      name: 'Fonte 4, faixa O que é o ritmo?, aos 1 minuto e 10 segundos',
+    });
+    fireEvent.click(second);
+    expect(trackOpened).toHaveBeenLastCalledWith({
+      source: TRACK,
+      at: '1:10',
+      trigger: second,
+    });
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it('KBC-099 AC-15: an answer saved before the tracks keeps its sources as they were', async () => {
+    const { opened, trackOpened } = await renderMessage(aTurn());
+    fireEvent.click(screen.getByRole('button', { name: /Os Princípios/ }));
+    expect(opened).toHaveBeenCalledWith({
+      id: 'raw/a.md',
+      title: 'Os Princípios',
+    });
+    expect(trackOpened).not.toHaveBeenCalled();
+    expect(document.querySelector('.track-mark')).toBeNull();
   });
 
   it('groups mixed cited sources by authorship, each with its badge (KBC-020 AC-7)', async () => {
@@ -451,7 +577,7 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
     expect(footer).not.toContain('restantes');
   });
 
-  it('offers one’s own AI when the quota is spent, without "Tentar de novo"', async () => {
+  it('offers one’s own AI when the quota is spent, and "Tentar de novo" for when it is back (KBC-061)', async () => {
     const { settings } = await renderMessage(
       aTurn({
         phase: 'error',
@@ -463,7 +589,7 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'Suas pesquisas com IA de hoje acabaram (5 por dia)',
     );
-    expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', { name: 'Conectar a minha IA' }),
     );

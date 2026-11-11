@@ -14,6 +14,7 @@ import type { ResearchRunnerPort } from '../ports/research-runner.js';
 import { FakeOpenRouter } from '../testing/fake-openrouter.js';
 import { AppAiPlan } from './app-ai-plan.js';
 import { PaidMeters } from './paid-meters.js';
+import { OPEN_VIEW } from '../modules/access-levels/index.js';
 
 async function setup() {
   const fake = new FakeOpenRouter();
@@ -64,6 +65,7 @@ describe('AppAiPlan meters (review round 2)', () => {
     const events = [];
     for await (const event of runner.run({
       topic: 't',
+      view: OPEN_VIEW,
       question: 'q',
       history: [],
       profile: 'fast',

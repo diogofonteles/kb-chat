@@ -1,7 +1,13 @@
 import { EMPTY_FILTERS, type SearchFilters } from '@kb-chat/contracts';
 import { describe, expect, it } from 'vitest';
 import type { CatalogEntry } from '../catalog/index.js';
-import { copyKey, groupCopies, refine, type Candidate } from './refine.js';
+import {
+  copyKey,
+  groupCopies,
+  kindTotals,
+  refine,
+  type Candidate,
+} from './refine.js';
 
 const NO_FILTERS: SearchFilters = EMPTY_FILTERS;
 
@@ -23,6 +29,7 @@ const entry = (
   sourcePath: null,
   authorship: 'mestre-laercio',
   author: null,
+  media: null,
   ...overrides,
 });
 const candidate = (e: CatalogEntry, score = 1): Candidate => ({
@@ -51,6 +58,40 @@ describe('groupCopies', () => {
     expect(groups.map((g) => g.lead.entry.id)).toEqual(['a-2.md', 'b.md']);
     expect(groups[0]?.copies.map((c) => c.id)).toEqual(['a-5.md']);
     expect(copyKey(' A  Natureza  Sétupla ')).toBe('a natureza setupla');
+  });
+
+  it('KBC-101 AC-18: a track is never a copy of a text nor of another track', () => {
+    const track = (id: string) =>
+      entry(id, {
+        title: 'O que é o ritmo?',
+        media: {
+          mediaId: id,
+          kind: 'track',
+          recordingId: 'r',
+          recordingTitle: 'Palestra',
+          startMs: 0,
+          durationMs: 1,
+          ordinal: 1,
+          total: 2,
+          confidence: 'normal',
+          fingerprint: 'f',
+        },
+      });
+    const groups = groupCopies([
+      candidate(entry('texto.md', { title: 'O que é o ritmo?' })),
+      candidate(track('t1.md')),
+      candidate(track('t2.md')),
+      candidate(entry('texto-2.md', { title: 'O que é o ritmo?' })),
+    ]);
+    expect(groups.map((g) => [g.lead.entry.id, g.copies.length])).toEqual([
+      ['texto.md', 1],
+      ['t1.md', 0],
+      ['t2.md', 0],
+    ]);
+    expect(kindTotals(groups, NO_FILTERS)).toEqual({ texts: 1, tracks: 2 });
+    expect(
+      kindTotals(groups, { ...NO_FILTERS, genres: ['talk_or_interview'] }),
+    ).toEqual({ texts: 0, tracks: 0 });
   });
 });
 

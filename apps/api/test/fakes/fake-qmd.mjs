@@ -21,7 +21,18 @@ server.registerTool(
   async (args) => {
     const logFile = process.argv[2];
     if (logFile) appendFileSync(logFile, `${JSON.stringify(args)}\n`);
-    if (args.searches[0]?.query === 'crash') process.exit(1);
+    const query = args.searches[0]?.query;
+    if (query === 'crash') process.exit(1);
+    // A long search (a research turn's), to see an index swap let it finish (KBC-100 NFR-2).
+    if (query === 'slow') await new Promise((done) => setTimeout(done, 1_500));
+    // Which process answered: a swap starts a new one.
+    if (query === 'pid')
+      return {
+        content: [{ type: 'text', text: 'ok' }],
+        structuredContent: {
+          results: [{ file: 'x/pid.md', score: 1, snippet: `${process.pid}` }],
+        },
+      };
     const types = args.searches.map((search) => search.type).join('+');
     const results = [
       {

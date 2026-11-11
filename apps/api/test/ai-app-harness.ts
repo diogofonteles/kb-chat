@@ -1,4 +1,6 @@
 /** The app as main builds it, for the AI integration tests (KBC-022, KBC-023). */
+import type { LaunchctlRunner } from '../src/adapters/media/launchctl-local-transcriber.js';
+import { createMedia } from '../src/media-factory.js';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -29,25 +31,37 @@ import {
 } from './identity-factories.js';
 import { FsSessionStore } from '../src/adapters/fs-session-store.js';
 import { FsVaultAdapter } from '../src/adapters/fs-vault-adapter.js';
+import { JsonDocumentStore } from '../src/adapters/json-document-store.js';
+import {
+  CollectionRegistry,
+  CollectionsVault,
+} from '../src/modules/topics/index.js';
 import { JsonPeopleStore } from '../src/adapters/json-people-store.js';
 import { JsonSettingsStore } from '../src/adapters/json-settings-store.js';
 import { JsonlSpendLedger } from '../src/adapters/jsonl-spend-ledger.js';
 import { SealedSettingsStore } from '../src/adapters/sealed-settings-store.js';
 import { SecretBox } from '../src/adapters/secret-box.js';
 import { buildApp } from '../src/app.js';
+import { levelsOnDisk } from '../src/levels-factory.js';
 import { loadConfig, type AppConfig } from '../src/config.js';
 import { createHouseAi } from '../src/house-ai-factory.js';
 import { PeopleService, SessionService } from '../src/modules/auth/index.js';
+import {
+  AuthorDirectory,
+  AuthorsService,
+} from '../src/modules/authors/index.js';
 import { CatalogRegistry } from '../src/modules/catalog/index.js';
 import { createAiProviders } from '../src/providers/create-ai-providers.js';
 import { createResearchAgent } from '../src/research-agent-factory.js';
 import { createSearchIndex } from '../src/search-index-factory.js';
 import { FakeOpenRouter } from '../src/testing/fake-openrouter.js';
 import { FakeGemini, fakeProvidersFetch } from '../src/testing/fake-gemini.js';
+import { FakeGroq } from '../src/testing/fake-groq.js';
 import {
   startCodexRunner,
   type CodexRunner,
 } from '../src/codex-runner/runner-server.js';
+import type { AgentLlmPort } from '../src/ports/llm.js';
 import type { SpendLedgerPort } from '../src/ports/spend-ledger.js';
 
 export const OWNER_EMAIL = 'owner@example.com';
@@ -63,8 +77,12 @@ export interface Started {
   readonly state: string;
   readonly fake: FakeOpenRouter;
   readonly gemini: FakeGemini;
+  /** Groq for the media library (KBC-037). */
+  readonly groq: FakeGroq;
   readonly ledger: SpendLedgerPort;
   readonly logs: string[];
+  /** The vault's catalog: a test that writes a document refreshes its collection. */
+  readonly catalog: CatalogRegistry;
 }
 
 let current: FastifyInstance | null = null;
@@ -94,7 +112,20 @@ export interface StartOptions {
   readonly codexHome?: string;
   /** An existing state folder (a restart over the same files). */
   readonly state?: string;
+  /** The media library on (KBC-034), under `<state>/media`, with MEDIA_WORKER_TOKEN. */
+  readonly media?: boolean;
+  /** A fake `launchctl` for "Ligar transcritor" (KBC-114; with KB_CHAT_LOCAL_TRANSCRIBER=1). */
+  readonly launchctl?: LaunchctlRunner;
+  /** Another vault than the fixture one (a copy with sub-collections, KBC-048). */
+  readonly vault?: string;
+  /** Settings on top of the test ones. */
+  readonly env?: Readonly<Record<string, string>>;
+  /** One model for every research turn, whoever asks (a scripted stub). */
+  readonly llm?: AgentLlmPort;
 }
+
+/** The media worker token of `start({ media: true })`. */
+export const MEDIA_WORKER_TOKEN = 'test-media-worker-token-0123456789abcdef';
 
 let runner: CodexRunner | null = null;
 
@@ -111,13 +142,19 @@ async function testConfig(state: string, options: StartOptions) {
     ...codex,
     // The Codex sandbox's address in production (ADR 0020): MCP only, by token.
     KB_CHAT_MCP_PEERS: '172.30.0.10',
-    KB_VAULT: FIXTURE_VAULT,
+    KB_VAULT: options.vault ?? FIXTURE_VAULT,
     KB_CHAT_SEARCH: 'fixture',
     KB_CHAT_STATE_DIR: state,
     GOOGLE_CLIENT_ID: TEST_CLIENT_ID,
     KB_CHAT_OWNER_EMAIL: OWNER_EMAIL,
     WEB_ORIGIN: WEB,
     LOG_LEVEL: 'info',
+    ...(options.media && {
+      KB_CHAT_MEDIA: 'on',
+      KB_CHAT_MEDIA_DIR: join(state, 'media'),
+      KB_CHAT_MEDIA_WORKER_TOKEN: MEDIA_WORKER_TOKEN,
+    }),
+    ...options.env,
   });
 }
 
@@ -167,15 +204,33 @@ function testAuth(state: string, keys: TestKeys) {
 
 /** The vault, its index and catalog, the spend ledger and the research agent. */
 async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
-  const vault = new FsVaultAdapter(config.KB_VAULT);
+  const collections = new CollectionRegistry(
+    new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'collections.json')),
+  );
+  const vault = new CollectionsVault(
+    new FsVaultAdapter(config.KB_VAULT),
+    collections,
+  );
   const index = await createSearchIndex({ config, vault, log: logger });
   const catalog = new CatalogRegistry(vault);
   await catalog.load();
   const ledger = new JsonlSpendLedger(
     join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
   );
-  const agent = createResearchAgent({ catalog, index, vault, ledger });
-  return { vault, index, catalog, ledger, agent };
+  // The authors of each collection (KBC-049), as main builds them.
+  const authorDirectory = new AuthorDirectory(
+    new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'authors.json')),
+  );
+  await authorDirectory.load();
+  const authors = new AuthorsService({ directory: authorDirectory, catalog });
+  const agent = createResearchAgent({
+    catalog,
+    index,
+    vault,
+    ledger,
+    mainAuthorOf: (topic) => authors.mainVoiceOf(topic),
+  });
+  return { vault, index, catalog, ledger, agent, collections, authorDirectory };
 }
 
 interface AiWiring {
@@ -216,30 +271,100 @@ async function buildAi({ config, core, auth, fetch, env }: AiWiring) {
   return { house, ai };
 }
 
-/** The app as main builds it, with sealed settings and fake OpenRouter and Gemini. */
-export async function start(options: StartOptions = {}): Promise<Started> {
-  const state =
-    options.state ?? (await mkdtemp(join(tmpdir(), 'kbchat-house-')));
-  const config = await testConfig(state, options);
-  const env = options.claude
-    ? { PATH: process.env['PATH'] ?? '', HOME: state }
-    : { PATH: '' };
-  const { logs, logger } = capturedLogger();
+/** OpenRouter and Gemini without the network, behind one fetch. */
+function fakeProviders() {
   const fake = new FakeOpenRouter();
   const gemini = new FakeGemini();
   const fetch = fakeProvidersFetch({
     openrouter: fake.fetch,
     gemini: gemini.fetch,
   });
+  return { fake, gemini, fetch };
+}
+
+/** The media library when on, with fresh keys and the fake Groq (KBC-037). */
+const testMedia = (
+  config: AppConfig,
+  groq: FakeGroq,
+  launchctl: LaunchctlRunner = refuseLaunchctl,
+) =>
+  createMedia(
+    config,
+    {
+      tokenKey: randomBytes(32),
+      voicePrintKey: randomBytes(32),
+      consentKey: randomBytes(32),
+      groqKey: randomBytes(32),
+    },
+    { fetch: groq.fetch, launchctl },
+  );
+
+/** No test ever reaches the real launchctl (KBC-114). */
+const refuseLaunchctl: LaunchctlRunner = () =>
+  Promise.reject(new Error('the real launchctl is never run by a test'));
+
+/** The app over the built pieces, with the model the test asks for (KBC-099). */
+async function appOf(
+  built: {
+    readonly config: AppConfig;
+    readonly core: Awaited<ReturnType<typeof buildCore>>;
+    readonly ai: Awaited<ReturnType<typeof buildAi>>['ai'];
+    readonly auth: ReturnType<typeof testAuth>;
+    readonly house: Awaited<ReturnType<typeof buildAi>>['house'];
+    readonly logger: FastifyBaseLogger;
+    readonly groq: FakeGroq;
+  },
+  options: StartOptions,
+): Promise<FastifyInstance> {
+  const { config, core, groq, ...rest } = built;
+  return buildApp({
+    config,
+    ...core,
+    ...rest,
+    media: await testMedia(config, groq, options.launchctl),
+    // Access levels on disk (KBC-103), as main builds them.
+    levels: levelsOnDisk(config.KB_CHAT_STATE_DIR),
+    ...(options.llm && { llm: options.llm }),
+  });
+}
+
+/** The CLIs see the machine's PATH only when a test runs the Claude CLI. */
+const cliEnv = (options: StartOptions, state: string) =>
+  options.claude
+    ? { PATH: process.env['PATH'] ?? '', HOME: state }
+    : { PATH: '' };
+
+/** The app as main builds it, with sealed settings and fake OpenRouter and Gemini. */
+export async function start(options: StartOptions = {}): Promise<Started> {
+  const state =
+    options.state ?? (await mkdtemp(join(tmpdir(), 'kbchat-house-')));
+  const config = await testConfig(state, options);
+  const env = cliEnv(options, state);
+  const { logs, logger } = capturedLogger();
+  const { fake, gemini, fetch } = fakeProviders();
   const keys = await createTestKeys();
   const core = await buildCore(config, logger);
   const auth = testAuth(state, keys);
   const { house, ai } = await buildAi({ config, core, auth, fetch, env });
-  current = await buildApp({ config, ...core, ai, auth, house, logger });
+  const groq = new FakeGroq();
+  current = await appOf(
+    { config, core, ai, auth, house, logger, groq },
+    options,
+  );
   // The CLI reaches the turn's MCP endpoint over HTTP, so this app really listens.
   if (options.claude || options.codexHome)
     await current.listen({ host: '127.0.0.1', port: config.PORT });
-  return { app: current, keys, state, fake, gemini, ledger: core.ledger, logs };
+  return {
+    app: current,
+    keys,
+    state,
+    fake,
+    gemini,
+    groq,
+    ledger: core.ledger,
+    logs,
+    catalog: core.catalog,
+  };
 }
 
 const cookieOf = (setCookie: unknown): string =>

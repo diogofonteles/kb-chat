@@ -1,0 +1,224 @@
+:host {
+  display: block;
+}
+
+.voices {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-reading);
+  font-size: var(--text-lg);
+}
+
+.lead,
+.hint,
+.stale {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.hint {
+  font-size: var(--text-sm);
+}
+
+/* An older transcript: said in words, with weight, never only greyed out (UP-20). */
+.stale {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.status {
+  margin: 0;
+  font-weight: 600;
+}
+
+.status:empty {
+  display: none;
+}
+
+.voice-list {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.voice {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.voice-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+
+.sample {
+  margin-inline-start: auto;
+}
+
+.confirm {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-inline-start: 4px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+.confirm-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.saved {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.saved:not(:focus):empty {
+  display: none;
+}
+
+.merged {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+}
+
+.merge {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.merge-title {
+  margin: 0;
+  font-size: inherit;
+}
+
+.select {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.select select {
+  min-width: 7rem;
+  min-height: var(--target);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.spoken {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.request {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-2) var(--space-3);
+}
+
+.label {
+  font-weight: 600;
+}
+
+.input {
+  width: 6rem;
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.field-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.notice {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.primary,
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary {
+  border: none;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.secondary {
+  justify-self: start;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Said in words and always with both answers: a suggestion is never a name (KBC-071). */
+.suggestion {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-accent);
+}
+
+.suggestion-text {
+  margin: 0;
+  font-weight: 600;
+}

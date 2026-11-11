@@ -151,6 +151,74 @@
         </h3>
         <app-people-panel />
       </section>
+    } @else if (section() === 'transcribers') {
+      <section class="section" aria-labelledby="settings-transcribers">
+        <h3
+          id="settings-transcribers"
+          class="section-title"
+          i18n="@@settings.transcribersTitle"
+        >
+          Transcritores
+        </h3>
+        <app-transcribers-panel />
+        <app-existing-tracks />
+      </section>
+    } @else if (section() === 'terms') {
+      <section class="section" aria-labelledby="settings-terms">
+        <h3
+          id="settings-terms"
+          class="section-title"
+          i18n="@@settings.termsTitle"
+        >
+          Termos da transcrição
+        </h3>
+        <app-terms-panel />
+        <app-learning-panel />
+      </section>
+    } @else if (section() === 'groq') {
+      <section class="section" aria-labelledby="settings-groq">
+        <h3
+          id="settings-groq"
+          class="section-title"
+          i18n="@@settings.groqTitle"
+        >
+          Groq de reserva
+        </h3>
+        <app-groq-panel />
+      </section>
+    } @else if (section() === 'voice-profiles') {
+      <section class="section" aria-labelledby="settings-voice-profiles">
+        <h3
+          id="settings-voice-profiles"
+          class="section-title"
+          i18n="@@settings.voiceProfilesTitle"
+        >
+          Perfis de voz
+        </h3>
+        <app-voice-profiles-panel />
+      </section>
+    } @else if (section() === 'audit') {
+      <section class="section" aria-labelledby="settings-audit">
+        <h3
+          id="settings-audit"
+          class="section-title"
+          i18n="@@settings.auditTitle"
+        >
+          Auditoria do Ver como
+        </h3>
+        <app-act-as-audit />
+      </section>
+    } @else if (section() === 'accesses') {
+      <section class="section" aria-labelledby="settings-accesses">
+        <h3
+          id="settings-accesses"
+          class="section-title"
+          i18n="@@settings.accessesTitle"
+        >
+          Acessos à sua conta
+        </h3>
+        <app-my-accesses />
+      </section>
     } @else {
       <section class="section" aria-labelledby="settings-about">
         <h3

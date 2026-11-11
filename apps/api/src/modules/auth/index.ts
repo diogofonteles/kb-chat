@@ -2,10 +2,17 @@ export {
   PUBLIC,
   SIGNED_IN,
   assertFeature,
+  assertTracksOpen,
+  assertNotActing,
   canSee,
+  canSeeTracks,
+  levelCodesOf,
   denialOf,
+  parentOfRequest,
   principalOf,
+  sessionOf,
   viewerOf,
+  type LevelHooks,
   type RouteAccess,
 } from './access.js';
 export { codeRoutes, identifierOf, type CodeRouteDeps } from './code-routes.js';
@@ -39,22 +46,43 @@ export {
   type PeopleRouteDeps,
   type PresetSource,
 } from './people-routes.js';
-export type { ApprovedRequest } from './people-rules.js';
+export type {
+  LevelChangeRecord,
+  LevelGrant,
+  PersonLevelRules,
+} from './people-level-writes.js';
+export type { ApprovedRequest, LevelChanged } from './people-rules.js';
 export {
   PEOPLE_CACHE_MS,
   PeopleService,
   type PeopleServiceDeps,
 } from './people-service.js';
 export {
+  NO_PARENT,
   OWNER_PRINCIPAL,
+  canSeeTopic,
   hasFeature,
   isMaster,
+  mediaQuotaOf,
+  seesTrackDocuments,
   toPerson,
+  type ParentOf,
   type StoredPerson,
   type Viewer,
 } from './person.js';
 export { aiOf, applyAiUpdate } from './person-ai.js';
-export { resolveViewer, type ViewerSources } from './resolve-viewer.js';
+export {
+  ACT_AS_MS,
+  AUDIT_MONTHS,
+  ActAsService,
+  type ActAsServiceDeps,
+} from './act-as-service.js';
+export { actAsRoutes } from './act-as-routes.js';
+export {
+  resolveViewer,
+  type ResolvedViewer,
+  type ViewerSources,
+} from './resolve-viewer.js';
 export { authRoutes, type AuthRouteDeps } from './routes.js';
 export {
   SESSION_TTL_MS,

@@ -1,0 +1,181 @@
+import {
+  defaultChoices,
+  isGuided,
+  planOf,
+  planShare,
+  recalledChoices,
+  rememberChoices,
+  sameChoices,
+  withSpeakers,
+  withTracks,
+  withTranscribe,
+} from './plan-choices.js';
+
+describe('the choices of step 1 (KBC-072)', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('comes with nothing paid ticked, and voices only for who edits (BR-2)', () => {
+    expect(defaultChoices(true)).toEqual({
+      transcribe: true,
+      speakers: true,
+      tracks: 'none',
+      subjects: false,
+    });
+    expect(defaultChoices(false).speakers).toBe(false);
+  });
+
+  it('unticking "Transcrever" unticks what depends on it, and says so (AC-2)', () => {
+    const { choices, dropped } = withTranscribe(
+      { transcribe: true, speakers: true, tracks: 'ai', subjects: true },
+      false,
+    );
+    expect(choices).toEqual({
+      transcribe: false,
+      speakers: false,
+      tracks: 'none',
+      subjects: false,
+    });
+    expect(dropped).toBe('transcribe');
+  });
+
+  it('has nothing to warn about when nothing depended on it', () => {
+    const { dropped } = withTranscribe(
+      { transcribe: true, speakers: false, tracks: 'none', subjects: false },
+      false,
+    );
+    expect(dropped).toBeNull();
+  });
+
+  it('ticking "Transcrever" again ticks nothing else', () => {
+    const { choices } = withTranscribe(
+      { transcribe: false, speakers: false, tracks: 'none', subjects: false },
+      true,
+    );
+    expect(choices.speakers).toBe(false);
+  });
+
+  it('unticking the voices takes the AI, not marking by hand (BR-1)', () => {
+    const base = {
+      transcribe: true,
+      speakers: true,
+      subjects: false,
+    } as const;
+    const ai = withSpeakers({ ...base, tracks: 'ai' }, false);
+    expect(ai.choices.tracks).toBe('none');
+    expect(ai.dropped).toBe('speakers');
+    const manual = withSpeakers({ ...base, tracks: 'manual' }, false);
+    expect(manual.choices.tracks).toBe('manual');
+    expect(manual.dropped).toBeNull();
+  });
+
+  it('"Não dividir agora" takes the subjects with it', () => {
+    expect(
+      withTracks(
+        { transcribe: true, speakers: true, tracks: 'manual', subjects: true },
+        'none',
+      ).subjects,
+    ).toBe(false);
+  });
+
+  it('carries the value seen only on a paid choice (BR-4)', () => {
+    const base = {
+      transcribe: true,
+      speakers: true,
+      subjects: false,
+    } as const;
+    expect(planOf({ ...base, tracks: 'ai' }, 0.02).acceptedUsd).toBe(0.02);
+    expect(planOf({ ...base, tracks: 'none' }, 0.02).acceptedUsd).toBeNull();
+  });
+
+  it('only "Transcrever" is not the guided flow (AC-15)', () => {
+    expect(isGuided(defaultChoices(false))).toBe(false);
+    expect(isGuided(defaultChoices(true))).toBe(true);
+  });
+
+  it('remembers the free choices and never a paid one (AC-4)', () => {
+    rememberChoices({
+      transcribe: false,
+      speakers: true,
+      tracks: 'ai',
+      subjects: true,
+    });
+    expect(recalledChoices(true)).toEqual({
+      transcribe: false,
+      speakers: true,
+      tracks: 'none',
+      subjects: false,
+    });
+  });
+
+  it('remembers marking by hand', () => {
+    rememberChoices({
+      transcribe: true,
+      speakers: false,
+      tracks: 'manual',
+      subjects: false,
+    });
+    expect(recalledChoices(true).tracks).toBe('manual');
+  });
+
+  it('keeps of a memory only what the person may still ask', () => {
+    rememberChoices({
+      transcribe: false,
+      speakers: true,
+      tracks: 'manual',
+      subjects: false,
+    });
+    expect(recalledChoices(false)).toEqual({
+      ...defaultChoices(false),
+      transcribe: false,
+    });
+  });
+
+  it('ignores a memory it cannot read', () => {
+    localStorage.setItem('kb-chat.preparation-choices', '{not json');
+    expect(recalledChoices(true)).toEqual(defaultChoices(true));
+    localStorage.setItem('kb-chat.preparation-choices', '{"transcribe":1}');
+    expect(recalledChoices(true)).toEqual(defaultChoices(true));
+    localStorage.setItem('kb-chat.preparation-choices', 'null');
+    expect(recalledChoices(true)).toEqual(defaultChoices(true));
+  });
+});
+
+describe('a plan sent for several files (KBC-035 × KBC-072)', () => {
+  const paid = {
+    transcribe: true,
+    speakers: true,
+    tracks: 'ai',
+    subjects: false,
+    acceptedUsd: 0.04,
+  } as const;
+
+  it('keeps the whole value on a single file', () => {
+    expect(planShare(paid, { lengthMs: 5, allMs: 5 })).toBe(paid);
+  });
+
+  it('gives a file its share by length, rounded down', () => {
+    const { acceptedUsd } = planShare(paid, { lengthMs: 1, allMs: 3 });
+    expect(acceptedUsd).toBe(0.013333);
+  });
+
+  it('never gives the files together more than the value seen (KBC-112 QA-3)', () => {
+    const lengths = [1, 1, 1, 7, 13];
+    const allMs = lengths.reduce((sum, ms) => sum + ms, 0);
+    const shares = lengths.map(
+      (lengthMs) => planShare(paid, { lengthMs, allMs }).acceptedUsd ?? 0,
+    );
+    expect(shares.reduce((sum, usd) => sum + usd, 0)).toBeLessThanOrEqual(
+      paid.acceptedUsd,
+    );
+  });
+
+  it('leaves a plan with nothing paid as it is', () => {
+    const free = { ...paid, tracks: 'none', acceptedUsd: null } as const;
+    expect(planShare(free, { lengthMs: 1, allMs: 3 })).toBe(free);
+  });
+
+  it('calls two plans the same whatever their value', () => {
+    expect(sameChoices(paid, { ...paid, acceptedUsd: 0.01 })).toBe(true);
+    expect(sameChoices(paid, { ...paid, speakers: false })).toBe(false);
+  });
+});

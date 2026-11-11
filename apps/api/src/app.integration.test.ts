@@ -54,8 +54,29 @@ describe('GET /api/v1/topics', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       items: [
-        { slug: 'alquimia', title: 'Alquimia Prática', documentCount: 1 },
-        { slug: 'hermetismo', title: 'Hermetismo', documentCount: 22 },
+        {
+          slug: 'alquimia',
+          title: 'Alquimia Prática',
+          documentCount: 1,
+          trackCount: 0,
+          parent: null,
+          description: '',
+          canOpen: true,
+          canRename: true,
+          mainAuthor: null,
+        },
+        {
+          slug: 'hermetismo',
+          title: 'Hermetismo',
+          documentCount: 22,
+          trackCount: 0,
+          parent: null,
+          description: '',
+          canOpen: true,
+          canRename: true,
+          // KBC-049 BR-4: the documents marked as the Mestre's make him the main author.
+          mainAuthor: { slug: 'mestre-laercio', name: 'Mestre Laércio' },
+        },
       ],
       defaultSlug: null,
     });

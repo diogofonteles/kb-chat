@@ -1,0 +1,293 @@
+<p class="lead" i18n="@@transcribers.lead">
+  O transcritor é o computador que transcreve os áudios enviados, como o seu
+  Mac. Ele busca os áudios na Nova Alexandria quando está ligado; nada no
+  computador fica aberto para a internet.
+</p>
+
+<form class="block pair" (submit)="pair($event)" novalidate>
+  <label class="field" for="transcriber-name">
+    <span class="label" i18n="@@transcribers.nameLabel"
+      >Nome do transcritor</span
+    >
+    <span class="hint" id="transcriber-name-hint" i18n="@@transcribers.nameHint"
+      >Para reconhecer o computador na lista, como "Mac do escritório".</span
+    >
+  </label>
+  <div class="row">
+    <input
+      #nameInput
+      id="transcriber-name"
+      class="input"
+      type="text"
+      maxlength="60"
+      autocomplete="off"
+      [value]="name()"
+      [attr.aria-invalid]="nameProblem() ? 'true' : null"
+      [attr.aria-describedby]="
+        nameProblem()
+          ? 'transcriber-name-hint transcriber-name-error'
+          : 'transcriber-name-hint'
+      "
+      (input)="editName($event)"
+    />
+    <button
+      #pairButton
+      type="submit"
+      class="primary"
+      [disabled]="busy()"
+      i18n="@@transcribers.pair"
+    >
+      Parear transcritor
+    </button>
+  </div>
+  @if (nameProblem(); as problem) {
+    <p class="field-error" id="transcriber-name-error">
+      <span aria-hidden="true">⚠</span>
+      @if (problem === 'taken') {
+        <ng-container i18n="@@transcribers.nameTaken"
+          >Já existe um transcritor com esse nome. Escolha outro.</ng-container
+        >
+      } @else {
+        <ng-container i18n="@@transcribers.nameRequired"
+          >Dê um nome ao transcritor.</ng-container
+        >
+      }
+    </p>
+  }
+  <p
+    class="status"
+    role="status"
+    [class.error]="notice()?.kind === 'error'"
+    [class.empty]="!notice()"
+  >
+    @if (notice(); as current) {
+      <span aria-hidden="true">{{ current.kind === 'error' ? '⚠' : '✓' }}</span>
+      {{ current.text }}
+    }
+  </p>
+</form>
+
+@if (paired(); as current) {
+  <section
+    #pairedBox
+    class="paired"
+    tabindex="-1"
+    aria-labelledby="paired-title"
+  >
+    <h4 id="paired-title" class="block-title" i18n="@@transcribers.pairedTitle">
+      "{{ current.transcriber.name }}" pareado
+    </h4>
+    <p class="once" i18n="@@transcribers.tokenOnce">
+      Copie o token agora: ele aparece só esta vez. Se perder, revogue e pareie
+      de novo.
+    </p>
+    <ol class="steps">
+      <li>
+        <span i18n="@@transcribers.stepCommand"
+          >No Mac, na pasta do repositório, rode:</span
+        >
+        <div class="copy-row">
+          <code class="code">{{ command() }}</code>
+          <button type="button" class="secondary" (click)="copy('command')">
+            @switch (copyLabelOf('command')) {
+              @case ('copied') {
+                <ng-container i18n="@@transcribers.copied"
+                  >Copiado</ng-container
+                >
+              }
+              @case ('failed') {
+                <ng-container i18n="@@transcribers.copyFailed"
+                  >Não deu para copiar</ng-container
+                >
+              }
+              @default {
+                <ng-container i18n="@@transcribers.copyCommand"
+                  >Copiar comando</ng-container
+                >
+              }
+            }
+          </button>
+        </div>
+      </li>
+      <li>
+        <span i18n="@@transcribers.stepToken"
+          >Quando ele pedir, cole o token:</span
+        >
+        <div class="copy-row">
+          <code class="code token">{{ current.token }}</code>
+          <button type="button" class="secondary" (click)="copy('token')">
+            @switch (copyLabelOf('token')) {
+              @case ('copied') {
+                <ng-container i18n="@@transcribers.copied"
+                  >Copiado</ng-container
+                >
+              }
+              @case ('failed') {
+                <ng-container i18n="@@transcribers.copyFailed"
+                  >Não deu para copiar</ng-container
+                >
+              }
+              @default {
+                <ng-container i18n="@@transcribers.copyToken"
+                  >Copiar token</ng-container
+                >
+              }
+            }
+          </button>
+        </div>
+      </li>
+      <li i18n="@@transcribers.stepAuto">
+        Pronto: daí em diante ele liga sozinho no Mac quando há áudio para
+        transcrever e desliga quando termina; o status aparece aqui.
+      </li>
+    </ol>
+    <button
+      type="button"
+      class="secondary"
+      (click)="closePaired()"
+      i18n="@@transcribers.done"
+    >
+      Pronto, já copiei
+    </button>
+  </section>
+}
+
+<section class="block" aria-labelledby="transcribers-list-title">
+  <h4
+    #listTitle
+    tabindex="-1"
+    id="transcribers-list-title"
+    class="block-title"
+    i18n="@@transcribers.listTitle"
+  >
+    Pareados
+  </h4>
+  @if (list.error()) {
+    <div class="notice" role="alert">
+      <p i18n="@@transcribers.loadFailed">
+        Não consegui carregar os transcritores.
+      </p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="list.reload()"
+        i18n="@@transcribers.retry"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  } @else if (!listLoaded()) {
+    <p class="hint" i18n="@@transcribers.loading">Carregando…</p>
+  } @else if (items().length === 0) {
+    <p class="hint" i18n="@@transcribers.empty">
+      Nenhum transcritor pareado. Sem um, os áudios ficam aguardando a
+      transcrição.
+    </p>
+  } @else {
+    <ul class="list">
+      @for (item of items(); track item.id) {
+        <li class="item">
+          <div class="item-main">
+            <span class="item-name">{{ item.name }}</span>
+            <app-transcriber-status [transcriberId]="item.id" />
+            <span class="item-meta">
+              @if (item.lastSeenAt; as seen) {
+                <span i18n="@@transcribers.lastSeen"
+                  >visto por último em {{ seen | date: seenAtFormat }}</span
+                >
+              } @else {
+                <span i18n="@@transcribers.neverSeen">ainda não foi visto</span>
+              }
+              @if (item.currentJob; as job) {
+                @if (job.kind === 'diarize') {
+                  <span class="job" i18n="@@transcribers.currentDiarize"
+                    >separando as vozes de "{{ job.title }}"</span
+                  >
+                } @else if (job.kind === 'voice-profile') {
+                  <span class="job" i18n="@@transcribers.currentVoicePrint"
+                    >calculando um perfil de voz</span
+                  >
+                } @else {
+                  <span class="job" i18n="@@transcribers.currentJob"
+                    >transcrevendo "{{ job.title }}"</span
+                  >
+                }
+              }
+            </span>
+            <label class="check">
+              <input
+                type="checkbox"
+                [checked]="separatesVoices(item)"
+                [disabled]="busy()"
+                [attr.aria-label]="diarizeLabelOf(item)"
+                (change)="toggleDiarize(item, $event)"
+              />
+              <span i18n="@@transcribers.diarize">Separa vozes</span>
+            </label>
+            <label class="check">
+              <input
+                type="checkbox"
+                [checked]="calculatesPrints(item)"
+                [disabled]="busy()"
+                [attr.aria-label]="voicePrintLabelOf(item)"
+                (change)="toggleVoicePrints(item, $event)"
+              />
+              <span i18n="@@transcribers.voicePrint">Perfis de voz</span>
+            </label>
+            <label class="check">
+              <input
+                type="checkbox"
+                [checked]="publishes(item)"
+                [disabled]="busy()"
+                [attr.aria-label]="publishLabelOf(item)"
+                (change)="togglePublish(item, $event)"
+              />
+              <span i18n="@@transcribers.publish">Publica no acervo</span>
+            </label>
+          </div>
+          @if (confirming() === item.id) {
+            <div class="confirm" role="group" [attr.aria-label]="item.name">
+              <p class="confirm-text" i18n="@@transcribers.revokeQuestion">
+                Revogar "{{ item.name }}"? Ele para de transcrever agora e o
+                áudio em andamento volta para a fila. Para usar de novo, pareie
+                outra vez.
+              </p>
+              <div class="row">
+                <button
+                  type="button"
+                  class="danger"
+                  [attr.data-confirm-revoke]="item.id"
+                  [disabled]="busy()"
+                  (click)="revoke(item)"
+                  i18n="@@transcribers.revokeConfirm"
+                >
+                  Revogar
+                </button>
+                <button
+                  type="button"
+                  class="secondary"
+                  [attr.data-cancel-revoke]="item.id"
+                  (click)="cancelRevoke(item.id)"
+                  i18n="@@transcribers.revokeCancel"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          } @else {
+            <button
+              type="button"
+              class="secondary"
+              [attr.data-revoke]="item.id"
+              [attr.aria-label]="revokeLabelOf(item)"
+              (click)="askRevoke(item.id)"
+              i18n="@@transcribers.revoke"
+            >
+              Revogar
+            </button>
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

@@ -10,6 +10,7 @@ import { AnthropicAdapter } from './anthropic-adapter.js';
 import { OpenAiAdapter } from './openai-adapter.js';
 import { OpenRouterAdapter } from './openrouter-adapter.js';
 import type { StubReply } from './stub-llm-adapter.js';
+import { OPEN_VIEW } from '../modules/access-levels/index.js';
 
 const fixture = (name: string) =>
   readFile(new URL(`../../test/fixtures/llm/${name}`, import.meta.url), 'utf8');
@@ -33,6 +34,7 @@ async function escalationMessages(): Promise<readonly AgentMessage[]> {
   await collectEvents(
     runner.run({
       topic: 'hermetismo',
+      view: OPEN_VIEW,
       question: 'quais são os 5 princípios ocultos',
       history: [],
       profile: 'fast',

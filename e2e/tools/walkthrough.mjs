@@ -3,7 +3,11 @@ import { chromium, expect } from '@playwright/test';
 
 const BASE = process.argv[2] ?? 'http://localhost:4201';
 const step = (text) => console.log(`▶ ${text}`);
-const browser = await chromium.launch({ headless: false, slowMo: 450 });
+const browser = await chromium.launch({
+  args: ['--mute-audio'],
+  headless: false,
+  slowMo: 450,
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
 step('Abrir a Nova Alexandria');

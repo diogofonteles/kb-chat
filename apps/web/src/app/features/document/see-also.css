@@ -37,6 +37,12 @@ ul {
   cursor: pointer;
 }
 
+a.ref {
+  display: flex;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+
 .ref {
   width: 100%;
   border-radius: var(--radius-sm);
@@ -66,4 +72,13 @@ ul {
   margin: 0;
   font-size: var(--text-sm);
   color: var(--color-danger);
+}
+
+/* KBC-101: a linked track, "♪ <título> · <gravação>" (the note is never the only sign). */
+.track {
+  overflow-wrap: anywhere;
+}
+
+.recording {
+  color: var(--color-text-muted);
 }

@@ -1,5 +1,10 @@
-import type { AnswerSource } from '@kb-chat/contracts';
+import {
+  SOURCE_CITATION,
+  type AnswerSource,
+  type TrackPassage,
+} from '@kb-chat/contracts';
 import { Marked } from 'marked';
+import { speak } from '@core/i18n/spoken-time.js';
 
 const escapeHtml = (text: string): string =>
   text
@@ -26,28 +31,86 @@ const answerMarkdown = new Marked({
   },
 });
 
-/** "[2]" → a link to source 2 named after it; the panel opens on click. */
+/**
+ * The passage a citation of a track names (KBC-099): the one resolved for the time it wrote
+ * ("" for a plain [n]), else its first; null for a text or an answer saved before it.
+ */
+export function passageOf(
+  source: AnswerSource,
+  at: string,
+): TrackPassage | null {
+  const passages = source.passages ?? [];
+  return passages.find((one) => one.at === at) ?? passages[0] ?? null;
+}
+
+/** "Fonte 1, faixa O que é o ritmo?, aos 41 segundos" (T22, read by a screen reader). */
+function trackLabel(source: AnswerSource, at: string): string {
+  const passage = passageOf(source, at);
+  const where = passage ? `, aos ${speak(passage.startMs)}` : '';
+  return $localize`:@@answer.trackCitation:Fonte ${source.n}:n:, faixa ${source.title}:title:${where}:where:`;
+}
+
+/**
+ * "[3]" of a source today's reader may not see (KBC-110 FR-5): text, not a link, read as
+ * "Fonte 3, restrita".
+ */
+function restrictedCitation(n: string): string {
+  const label = escapeHtml(
+    $localize`:@@answer.restrictedCitation:Fonte ${n}:n:, restrita`,
+  );
+  return `<span class="cite-restricted"><span aria-hidden="true">[${n}]</span><span class="visually-hidden">${label}</span></span>`;
+}
+
+/**
+ * "[2]" → a link to source 2 named after it; the panel opens on click. A track's "[2@8:15]"
+ * shows as "[2]" too (T22), and its link keeps the time it cites.
+ */
 export function renderAnswer(
   text: string,
   sources: readonly AnswerSource[] = [],
+  restricted: readonly number[] = [],
 ): string {
   // Raw HTML in the text is escaped above, so every <table> here is Markdown's own.
   const html = (answerMarkdown.parse(text) as string)
     .replaceAll('<table>', '<div class="table-scroll"><table>')
     .replaceAll('</table>', '</table></div>');
-  return html.replace(/\[(\d{1,4})\]/g, (match, n: string) => {
-    const source = sources.find((s) => s.n === Number(n));
-    if (!source) return match;
-    const label = escapeHtml(`Fonte ${n}: ${source.title}`);
-    return `<a class="cite" href="#fonte-${n}" aria-label="${label}" title="${label}">[${n}]</a>`;
-  });
+  return html.replace(
+    new RegExp(SOURCE_CITATION.source, 'g'),
+    (match, n: string, at: string | undefined) => {
+      if (restricted.includes(Number(n))) return restrictedCitation(n);
+      const source = sources.find((s) => s.n === Number(n));
+      if (!source) return match;
+      const label = escapeHtml(
+        source.media
+          ? trackLabel(source, at ?? '')
+          : `Fonte ${n}: ${source.title}`,
+      );
+      // The time rides in the href: Angular's sanitizer keeps it, not a data attribute.
+      const time = source.media && at ? `@${at}` : '';
+      return `<a class="cite" href="#fonte-${n}${time}" aria-label="${label}" title="${label}">[${n}]</a>`;
+    },
+  );
 }
+
+const citationLink = (target: EventTarget | null): Element | null =>
+  target instanceof Element ? target.closest('a.cite') : null;
+
+const CITATION_HREF = /#fonte-(\d+)(?:@([\d:]+))?$/;
 
 /** Source number of a citation link, or null when the click was elsewhere. */
 export function citedSource(target: EventTarget | null): number | null {
-  const link = target instanceof Element ? target.closest('a.cite') : null;
-  const match = /#fonte-(\d+)$/.exec(link?.getAttribute('href') ?? '');
+  const match = CITATION_HREF.exec(
+    citationLink(target)?.getAttribute('href') ?? '',
+  );
   return match ? Number(match[1]) : null;
+}
+
+/** The time a clicked citation of a track wrote ("" for a plain [n]). */
+export function citedAt(target: EventTarget | null): string {
+  const match = CITATION_HREF.exec(
+    citationLink(target)?.getAttribute('href') ?? '',
+  );
+  return match?.[2] ?? '';
 }
 
 const usd = new Intl.NumberFormat('pt-BR', {

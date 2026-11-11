@@ -1,10 +1,8 @@
+import { startOfAppDay } from '../app-calendar.js';
 import { z } from 'zod';
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { SpendEntry, SpendLedgerPort } from '../ports/spend-ledger.js';
-
-const startOfLocalDay = (now: Date): number =>
-  new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
 const spendEntrySchema = z.object({
   ts: z.iso.datetime(),
@@ -41,7 +39,7 @@ export class JsonlSpendLedger implements SpendLedgerPort {
   }
 
   async spentToday(principal: string, now = new Date()): Promise<number> {
-    return this.spentSince(principal, new Date(startOfLocalDay(now)));
+    return this.spentSince(principal, startOfAppDay(now));
   }
 
   async spentSince(principal: string, since: Date): Promise<number> {

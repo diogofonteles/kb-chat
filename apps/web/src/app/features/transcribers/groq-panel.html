@@ -1,0 +1,258 @@
+<p class="lead" i18n="@@groq.lead">
+  Quando o Mac fica desligado, o Groq pode transcrever os áudios na nuvem. Cada
+  hora de áudio custa cerca de US$ 0,04 e entra no teto mensal da mídia. Fica
+  desligado até você escolher.
+</p>
+
+@if (loaded.error()) {
+  <div class="notice" role="alert">
+    <p i18n="@@groq.loadFailed">Não consegui carregar o Groq.</p>
+    <button
+      type="button"
+      class="secondary"
+      (click)="loaded.reload()"
+      i18n="@@groq.retry"
+    >
+      Tentar de novo
+    </button>
+  </div>
+} @else if (settings(); as current) {
+  <form class="block" (submit)="testKey($event)" novalidate>
+    <h4 class="block-title" i18n="@@groq.keyTitle">Conexão</h4>
+    @if (current.keyProblem === 'rejected') {
+      <p class="key-problem">
+        <span aria-hidden="true">⚠</span>
+        <ng-container i18n="@@groq.keyRefused"
+          >O Groq recusou a chave guardada. Cole uma chave nova para voltar a
+          usá-lo.</ng-container
+        >
+      </p>
+    } @else if (current.keyProblem === 'unreadable') {
+      <p class="key-problem">
+        <span aria-hidden="true">⚠</span>
+        <ng-container i18n="@@groq.keyUnreadable"
+          >A chave guardada não pode mais ser lida neste servidor. Cole a chave
+          de novo.</ng-container
+        >
+      </p>
+    } @else if (current.connected) {
+      <p class="connected">
+        <span aria-hidden="true">✓</span>
+        <ng-container i18n="@@groq.isConnected"
+          >Chave conectada. Ela fica cifrada e não aparece de
+          novo.</ng-container
+        >
+      </p>
+    }
+    <div class="field">
+      <label class="label" for="groq-key">
+        @if (current.connected) {
+          <ng-container i18n="@@groq.newKeyLabel"
+            >Trocar a chave da API do Groq</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@groq.keyLabel"
+            >Chave da API do Groq</ng-container
+          >
+        }
+      </label>
+      <span class="hint" id="groq-key-hint" i18n="@@groq.keyHint"
+        >Crie em console.groq.com, em "API Keys", e cole aqui.</span
+      >
+    </div>
+    <input
+      #keyInput
+      id="groq-key"
+      class="input"
+      type="password"
+      autocomplete="off"
+      spellcheck="false"
+      maxlength="500"
+      aria-describedby="groq-key-hint"
+      [value]="key()"
+      (input)="editKey($event)"
+    />
+    <div class="row">
+      <button
+        type="submit"
+        class="primary"
+        [attr.aria-disabled]="busy() !== null ? 'true' : null"
+        i18n="@@groq.test"
+      >
+        Testar conexão
+      </button>
+      @if (current.connected) {
+        <button
+          type="button"
+          class="secondary"
+          [attr.aria-disabled]="busy() !== null ? 'true' : null"
+          (click)="removeKey()"
+          i18n="@@groq.remove"
+        >
+          Remover chave
+        </button>
+      }
+    </div>
+    <p
+      class="status"
+      role="status"
+      [class.error]="noticeOf('key')?.kind === 'error'"
+    >
+      @if (busy() === 'key') {
+        <ng-container i18n="@@groq.testing">Testando…</ng-container>
+      } @else if (noticeOf('key'); as notice) {
+        <span aria-hidden="true">{{
+          notice.kind === 'error' ? '⚠' : '✓'
+        }}</span>
+        {{ notice.text }}
+      }
+    </p>
+  </form>
+
+  <form class="block" (submit)="saveMode($event)" novalidate>
+    <fieldset class="providers">
+      <legend class="legend block-title" i18n="@@groq.modeTitle">
+        Quando usar o Groq
+      </legend>
+      @for (option of options; track option.mode) {
+        <label class="card" [class.selected]="mode() === option.mode">
+          <input
+            class="radio"
+            type="radio"
+            name="groq-mode"
+            [value]="option.mode"
+            [checked]="mode() === option.mode"
+            [attr.aria-describedby]="'groq-mode-' + option.mode"
+            (change)="chooseMode(option.mode)"
+          />
+          <span class="card-body">
+            <span class="card-title">{{ option.label() }}</span>
+            <span class="card-hint" [id]="'groq-mode-' + option.mode">{{
+              option.hint()
+            }}</span>
+          </span>
+        </label>
+      }
+    </fieldset>
+    @if (mode() === 'idle') {
+      <label class="field" for="groq-hours">
+        <span class="label" i18n="@@groq.hoursLabel">Horas parado</span>
+        <span class="hint" id="groq-hours-hint" i18n="@@groq.hoursHint"
+          >De {{ hoursLimits.min }} a {{ hoursLimits.max }} horas.</span
+        >
+      </label>
+      <input
+        id="groq-hours"
+        class="input cap"
+        type="number"
+        inputmode="numeric"
+        [min]="hoursLimits.min"
+        [max]="hoursLimits.max"
+        step="1"
+        [value]="idleHours()"
+        [attr.aria-invalid]="hoursValid() ? null : 'true'"
+        [attr.aria-describedby]="
+          hoursValid() ? 'groq-hours-hint' : 'groq-hours-hint groq-hours-error'
+        "
+        (input)="editHours($event)"
+      />
+      @if (!hoursValid()) {
+        <p class="field-error" id="groq-hours-error">
+          <span aria-hidden="true">⚠</span>
+          <ng-container i18n="@@groq.hoursInvalid"
+            >Use um número inteiro de {{ hoursLimits.min }} a
+            {{ hoursLimits.max }}.</ng-container
+          >
+        </p>
+      }
+    }
+    @if (!current.connected && mode() !== 'never') {
+      <p class="hint" i18n="@@groq.needsKey">
+        Sem uma chave conectada, o Groq não é usado em nenhum modo.
+      </p>
+    }
+    <button
+      type="submit"
+      class="primary"
+      [attr.aria-disabled]="busy() !== null ? 'true' : null"
+      i18n="@@groq.saveMode"
+    >
+      Salvar modo
+    </button>
+    <p
+      class="status"
+      role="status"
+      [class.error]="noticeOf('mode')?.kind === 'error'"
+    >
+      @if (noticeOf('mode'); as notice) {
+        <span aria-hidden="true">{{
+          notice.kind === 'error' ? '⚠' : '✓'
+        }}</span>
+        {{ notice.text }}
+      }
+    </p>
+  </form>
+
+  <form class="block" (submit)="saveCap($event)" novalidate>
+    <h4 class="block-title" i18n="@@groq.monthTitle">
+      Gasto com mídia neste mês
+    </h4>
+    <p class="spent">{{ spentText() }}</p>
+    <p class="hint" i18n="@@groq.monthHint">
+      Inclui o Groq e a IA que propõe faixas e assuntos. Nada é enviado se
+      passar do teto.
+    </p>
+    @if (current.canEditCap) {
+      <label class="field" for="groq-cap">
+        <span class="label" i18n="@@groq.capLabel">Teto mensal (US$)</span>
+      </label>
+      <div class="row">
+        <input
+          id="groq-cap"
+          class="input cap"
+          type="number"
+          inputmode="decimal"
+          min="0"
+          max="1000"
+          step="0.01"
+          [value]="cap()"
+          [attr.aria-invalid]="capInvalid() ? 'true' : null"
+          [attr.aria-describedby]="capInvalid() ? 'groq-cap-error' : null"
+          (input)="editCap($event)"
+        />
+        <button
+          type="submit"
+          class="secondary"
+          [attr.aria-disabled]="busy() !== null ? 'true' : null"
+          i18n="@@groq.saveCap"
+        >
+          Salvar teto
+        </button>
+      </div>
+      @if (capInvalid()) {
+        <p class="field-error" id="groq-cap-error">
+          <span aria-hidden="true">⚠</span>
+          <ng-container i18n="@@groq.capInvalid"
+            >Use um valor de 0 a 1000 dólares.</ng-container
+          >
+        </p>
+      }
+    } @else {
+      <p class="hint" i18n="@@groq.capOwnerOnly">Só o dono muda o teto.</p>
+    }
+    <p
+      class="status"
+      role="status"
+      [class.error]="noticeOf('cap')?.kind === 'error'"
+    >
+      @if (noticeOf('cap'); as notice) {
+        <span aria-hidden="true">{{
+          notice.kind === 'error' ? '⚠' : '✓'
+        }}</span>
+        {{ notice.text }}
+      }
+    </p>
+  </form>
+} @else {
+  <p class="hint" i18n="@@groq.loading">Carregando…</p>
+}

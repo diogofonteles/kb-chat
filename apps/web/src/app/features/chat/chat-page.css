@@ -31,12 +31,18 @@
   grid-template-columns: minmax(0, 1fr) minmax(24rem, var(--panel));
 }
 
+/* A track's passage (T22): 48rem, so its player fits beside the transcript. */
+.layout.with-panel.wide-panel {
+  grid-template-columns: minmax(0, 1fr) minmax(24rem, 48rem);
+}
+
 .conversation {
   display: grid;
   /* One column that may shrink: with the document panel open on a narrow desktop, the
      results and the question box wrap instead of spilling under the panel. */
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* The last row is the mini-player's (KBC-041): empty when it is closed. */
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   min-width: 0;
   min-height: 0;
   /* The top bar adapts to this column, not to the window (the document panel narrows it). */
@@ -56,10 +62,19 @@
    after the first question the box docks at the bottom. The greeting's row takes its
    content height first and only the spacers around it shrink, so a short window never
    clips the greeting: it scrolls in its own row instead. */
+/* The media pages (T14, T15) take the conversation's place under the top bar and scroll. */
+.conversation > router-outlet {
+  display: none;
+}
+
+.conversation.media {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
 .conversation.empty {
   grid-template-rows:
     auto minmax(0, 1fr) minmax(0, max-content) auto
-    minmax(0, 1.25fr);
+    minmax(0, 1.25fr) auto;
 }
 
 .conversation.empty > .thread {
@@ -327,7 +342,8 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .layout.with-panel {
+  .layout.with-panel,
+  .layout.with-panel.wide-panel {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -371,7 +387,12 @@
   /* Phones: the start screen fills the space above the docked question box, so a long list
      of suggestions scrolls instead of pushing the greeting off screen. */
   .conversation.empty {
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+  }
+
+  /* With the mini-player open, the question box takes the last row, under it (T15). */
+  .conversation:has(> app-mini-player.open) > .composer-dock {
+    grid-row: -2 / -1;
   }
 
   .conversation.empty > .thread {
@@ -406,4 +427,11 @@
 /* Long chip rows and titles must wrap or scroll inside the column, never widen the page. */
 .thread > * {
   min-width: 0;
+}
+
+/* Transcriptions not yet documents (KBC-114): above the greeting, for masters. */
+.pending {
+  justify-self: center;
+  width: min(36rem, 100%);
+  margin: 0 0 var(--space-3);
 }

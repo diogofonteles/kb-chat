@@ -51,13 +51,12 @@ export const HOUSE_SWEEP_SHARE = 0.25;
 const sweepShare = (usage: FreeUsage): number =>
   Math.min(usage.remaining, Math.ceil(usage.limit * HOUSE_SWEEP_SHARE));
 
-/** Events that show a model already answered: the turn's units are not given back. */
-const ANSWERED = new Set<ResearchEvent['type']>([
-  'token',
-  'step',
-  'sources',
-  'retract',
-]);
+/**
+ * Events that show the person got an answer: then the turn's units are spent. Steps and
+ * sources alone are work, not an answer: a turn that fails after them is given back
+ * (KBC-061, an exhaustive sweep that failed took the whole day).
+ */
+const ANSWERED = new Set<ResearchEvent['type']>(['token']);
 
 /**
  * A research turn on an app AI (KBC-022, KBC-024): the person's daily quota and the house
@@ -130,10 +129,14 @@ export class HouseResearchRunner implements ResearchRunnerPort {
     reservation: Reservation;
     inner: ResearchRunnerPort;
   }): AsyncIterable<ResearchEvent> {
-    let answered = false;
+    // Segments of the answer still on screen: a retracted one was never an answer.
+    const shown = new Set<number>();
     for await (const event of inner.run(input)) {
-      answered ||= ANSWERED.has(event.type);
-      if (event.type === 'error' && !answered) await reservation.refund();
+      if (ANSWERED.has(event.type) && 'segment' in event)
+        shown.add(event.segment);
+      if (event.type === 'retract') shown.delete(event.segment);
+      if (event.type === 'error' && shown.size === 0)
+        await reservation.refund();
       yield event.type === 'done' ? this.labelled(event, reservation) : event;
     }
   }

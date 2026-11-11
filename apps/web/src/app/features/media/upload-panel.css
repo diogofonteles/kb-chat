@@ -1,0 +1,181 @@
+.panel {
+  width: min(32rem, 100vw);
+  /* The browser's own limit on a modal would leave a strip beside it on a phone (T14). */
+  max-width: 100vw;
+  max-height: 100dvh;
+  margin: 0 0 0 auto;
+  height: 100dvh;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow);
+}
+
+.panel::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+
+.body {
+  display: grid;
+  align-content: start;
+  gap: var(--space-6);
+  min-height: 100%;
+  padding: var(--space-6);
+}
+
+.head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+}
+
+.kept {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.where {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+}
+
+.label {
+  display: block;
+  margin: 0 0 var(--space-1);
+  font-weight: 600;
+}
+
+.drop {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.drop.dragging {
+  border-color: var(--color-accent);
+  background: var(--color-surface-muted);
+}
+
+.drop.invalid {
+  border-color: var(--color-danger);
+}
+
+.drop p {
+  margin: 0;
+}
+
+.rule,
+.hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.files {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.field input[type='text'],
+.field select {
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+
+.field input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+}
+
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  cursor: pointer;
+}
+
+.radio input {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--color-accent);
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: auto;
+  /* Stays in view while the author list is open, also on a phone (UP-13). */
+  padding-block: var(--space-3);
+  background: var(--color-surface);
+}
+
+.primary,
+.secondary {
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.primary {
+  border: none;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.secondary {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 1023px) {
+  .panel {
+    width: 100vw;
+    border-left: none;
+  }
+}

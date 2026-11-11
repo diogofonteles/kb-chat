@@ -1,3 +1,4 @@
+import { startOfAppDay } from '../app-calendar.js';
 import type { SpendEntry, SpendLedgerPort } from '../ports/spend-ledger.js';
 
 /** Spend ledger kept in memory (tests and runs without a state folder). */
@@ -9,8 +10,7 @@ export class MemorySpendLedger implements SpendLedgerPort {
   }
 
   async spentToday(principal: string, now = new Date()): Promise<number> {
-    const since = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    return this.spentSince(principal, since);
+    return this.spentSince(principal, startOfAppDay(now));
   }
 
   async spentSince(principal: string, since: Date): Promise<number> {

@@ -27,11 +27,13 @@ const aPerson = (overrides: Partial<Person> = {}): Person => ({
   topics: [],
   features: ['search'],
   isOwner: false,
+  canActAs: false,
   phone: null,
   invitation: null,
   invitedBy: 'owner@example.com',
   createdAt: '2026-10-24T10:00:00.000Z',
   lastLoginAt: null,
+  levels: {},
   ai: DEFAULT_PERSON_AI,
   ...overrides,
 });
@@ -42,7 +44,9 @@ const owner = aPerson({
   name: 'Owner',
   role: 'master',
   isOwner: true,
+  canActAs: false,
   lastLoginAt: '2026-10-24T12:30:00.000Z',
+  levels: {},
 });
 
 async function renderPanel(
@@ -64,11 +68,54 @@ async function renderPanel(
     .expectOne('/api/v1/house-ai/default')
     .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
   http.expectOne('/api/v1/invite-profiles').flush({ items: profiles });
+  // The collections with access levels (KBC-103): none here.
+  http.expectOne('/api/v1/levels').flush({ items: [] });
   await result.fixture.whenStable();
   return { ...result, http };
 }
 
 const row = (name: RegExp) => screen.getByRole('button', { name });
+
+describe('PeoplePanel: levels in the list (T9, KBC-103)', () => {
+  it('shows each member level next to a collection with levels', async () => {
+    const result = await render(PeoplePanel, {
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([authInterceptor])),
+        provideHttpClientTesting(),
+        { provide: RELOAD_PAGE, useValue: () => undefined },
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/people').flush({
+      items: [
+        owner,
+        aPerson({
+          topics: ['hermetismo', 'alquimia'],
+          levels: { hermetismo: 'ci' },
+        }),
+      ],
+    });
+    http.expectOne('/api/v1/topics').flush(TOPICS);
+    http
+      .expectOne('/api/v1/house-ai/default')
+      .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
+    http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
+    http.expectOne('/api/v1/levels').flush({
+      items: [
+        {
+          collection: 'hermetismo',
+          levels: [
+            { id: 'qs', code: 'QS' },
+            { id: 'ci', code: 'CI' },
+          ],
+        },
+      ],
+    });
+    await result.fixture.whenStable();
+    expect(row(/Guest/).textContent).toContain('Hermetismo · CI, Alquimia');
+  });
+});
 
 describe('PeoplePanel (KBC-010 FR-3)', () => {
   it('lists people with role, collections and last sign-in', async () => {
@@ -314,6 +361,67 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     ).toBeNull();
   });
 
+  it('edits the media quota of who sends, in GB, blank for the default (KBC-035 BR-1)', async () => {
+    const { http, fixture } = await renderPanel([
+      owner,
+      aPerson({ features: ['media-upload'] }),
+    ]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    const url = '/api/v1/people/11111111-1111-4111-8111-111111111111';
+    const field = screen.getByRole('textbox', { name: 'Cota de mídia (GB)' });
+    expect(screen.getByText('Em branco, vale o padrão de 5 GB.')).toBeTruthy();
+
+    fireEvent.change(field, { target: { value: 'muito' } });
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Use um número maior que zero.',
+    );
+    http.expectNone(url);
+
+    fireEvent.change(field, { target: { value: '2,5' } });
+    const quota = http.expectOne(url);
+    expect(quota.request.body).toEqual({ mediaQuotaBytes: 2.5 * 1024 ** 3 });
+    quota.flush(
+      aPerson({
+        features: ['media-upload'],
+        mediaQuotaBytes: 2.5 * 1024 ** 3,
+      }),
+    );
+    await fixture.whenStable();
+    expect((field as HTMLInputElement).value).toBe('2,5');
+
+    fireEvent.change(field, { target: { value: '' } });
+    const cleared = http.expectOne(url);
+    expect(cleared.request.body).toEqual({ mediaQuotaBytes: null });
+    cleared.flush(aPerson({ features: ['media-upload'] }));
+  });
+
+  it('shows a typed quota as typed, with no floating point noise (KBC-035 BR-1)', async () => {
+    const { fixture } = await renderPanel([
+      owner,
+      aPerson({
+        features: ['media-upload'],
+        mediaQuotaBytes: Math.round(0.1 * 1024 ** 3),
+      }),
+    ]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    const field = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Cota de mídia (GB)',
+    });
+    expect(field.value).toBe('0,1');
+  });
+
+  it('asks no quota of who does not send', async () => {
+    const { fixture } = await renderPanel();
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    expect(
+      screen.queryByRole('textbox', { name: 'Cota de mídia (GB)' }),
+    ).toBeNull();
+  });
+
   it('saves a collection and a feature as soon as they change', async () => {
     const { http, fixture } = await renderPanel();
     fireEvent.click(row(/Guest/));
@@ -346,6 +454,238 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
         }) as HTMLInputElement
       ).checked,
     ).toBe(true);
+  });
+
+  describe('keyboard focus while a change saves (KBC-062)', () => {
+    const URL = '/api/v1/people/11111111-1111-4111-8111-111111111111';
+    const box = (name: string) =>
+      screen.getByRole('checkbox', { name }) as HTMLInputElement;
+
+    async function openGuest() {
+      const rendered = await renderPanel();
+      fireEvent.click(row(/Guest/));
+      await rendered.fixture.whenStable();
+      return rendered;
+    }
+
+    it('AC-1: the group is busy, not disabled, and focus stays on the box after saving', async () => {
+      const { http, fixture } = await openGuest();
+      const hermetismo = box('Hermetismo');
+      hermetismo.focus();
+
+      fireEvent.click(hermetismo);
+      await fixture.whenStable();
+
+      const group = screen.getByRole('group', { name: 'Acervos' });
+      expect(group.getAttribute('aria-busy')).toBe('true');
+      expect(hermetismo.matches(':disabled')).toBe(false);
+      expect(document.activeElement).toBe(hermetismo);
+
+      http.expectOne(URL).flush(aPerson({ topics: ['hermetismo'] }));
+      await fixture.whenStable();
+
+      expect(group.getAttribute('aria-busy')).toBe('false');
+      expect(document.activeElement).toBe(box('Hermetismo'));
+      expect(box('Hermetismo').checked).toBe(true);
+    });
+
+    it('AC-2: two quick changes are both applied, one after the other', async () => {
+      const { http, fixture } = await openGuest();
+
+      fireEvent.click(box('Hermetismo'));
+      await fixture.whenStable();
+      fireEvent.click(box('Alquimia'));
+      await fixture.whenStable();
+      fireEvent.click(box('Pesquisa com IA'));
+      await fixture.whenStable();
+
+      // The next change waits for the one before it.
+      const first = http.expectOne(URL);
+      expect(first.request.body).toEqual({ topics: ['hermetismo'] });
+      first.flush(aPerson({ topics: ['hermetismo'] }));
+      await fixture.whenStable();
+      expect(box('Alquimia').checked).toBe(true);
+
+      const second = http.expectOne(URL);
+      expect(second.request.body).toEqual({
+        topics: ['hermetismo', 'alquimia'],
+      });
+      second.flush(aPerson({ topics: ['hermetismo', 'alquimia'] }));
+      await fixture.whenStable();
+
+      const third = http.expectOne(URL);
+      expect(third.request.body).toEqual({ features: ['search', 'research'] });
+      third.flush(
+        aPerson({
+          topics: ['hermetismo', 'alquimia'],
+          features: ['search', 'research'],
+        }),
+      );
+      await fixture.whenStable();
+
+      http.verify();
+      expect(box('Hermetismo').checked).toBe(true);
+      expect(box('Alquimia').checked).toBe(true);
+      expect(box('Pesquisa com IA').checked).toBe(true);
+      expect(row(/Guest/).textContent).toContain('Hermetismo, Alquimia');
+      expect(screen.getByRole('status').textContent).toContain('Salvo.');
+    });
+
+    it('a failed change is undone and said; the change queued after it still saves', async () => {
+      const { http, fixture } = await openGuest();
+
+      fireEvent.click(box('Hermetismo'));
+      await fixture.whenStable();
+      fireEvent.click(box('Alquimia'));
+      await fixture.whenStable();
+
+      http
+        .expectOne(URL)
+        .flush(
+          { error: { code: 'internal', message: 'boom' } },
+          { status: 500, statusText: 'Server Error' },
+        );
+      await fixture.whenStable();
+      expect(box('Hermetismo').checked).toBe(false);
+      expect(box('Alquimia').checked).toBe(true);
+
+      // Built from what the server kept, without the change that failed.
+      const next = http.expectOne(URL);
+      expect(next.request.body).toEqual({ topics: ['alquimia'] });
+      next.flush(aPerson({ topics: ['alquimia'] }));
+      await fixture.whenStable();
+
+      // The failure stays said until nothing else is saving.
+      expect(screen.getByRole('status').textContent).toContain('Erro:');
+      expect(box('Hermetismo').checked).toBe(false);
+      expect(box('Alquimia').checked).toBe(true);
+      expect(
+        screen
+          .getByRole('group', { name: 'Acervos' })
+          .getAttribute('aria-busy'),
+      ).toBe('false');
+    });
+
+    it('BUG-1: closing and reopening the person while a change saves keeps it', async () => {
+      const { http, fixture } = await openGuest();
+
+      fireEvent.click(box('Alquimia'));
+      await fixture.whenStable();
+      fireEvent.click(row(/Guest/));
+      await fixture.whenStable();
+      fireEvent.click(row(/Guest/));
+      await fixture.whenStable();
+      // The change still saving shows checked in the new editor.
+      expect(box('Alquimia').checked).toBe(true);
+      fireEvent.click(box('Hermetismo'));
+      await fixture.whenStable();
+
+      http.expectOne(URL).flush(aPerson({ topics: ['alquimia'] }));
+      await fixture.whenStable();
+      const second = http.expectOne(URL);
+      expect(second.request.body).toEqual({
+        topics: ['alquimia', 'hermetismo'],
+      });
+      second.flush(aPerson({ topics: ['alquimia', 'hermetismo'] }));
+      await fixture.whenStable();
+
+      expect(row(/Guest/).textContent).toContain('Alquimia, Hermetismo');
+    });
+
+    it('a box checked while a profile is applied builds on the profile', async () => {
+      const profile: InviteProfile = {
+        id: '44444444-4444-4444-8444-444444444444',
+        name: 'Aluno',
+        isDefault: false,
+        preset: {
+          role: 'member',
+          topics: ['hermetismo'],
+          features: ['search', 'research'],
+          ai: {
+            appAi: 'house',
+            enforced: false,
+            dailyResearches: 3,
+            paidFallback: { enabled: false, monthlyCapUsd: 1 },
+          },
+          preferences: {},
+        },
+      };
+      const { http, fixture } = await renderPanel(
+        [owner, aPerson()],
+        [profile],
+      );
+      fireEvent.click(row(/Guest/));
+      await fixture.whenStable();
+      fireEvent.click(screen.getByRole('button', { name: 'Aplicar perfil' }));
+      await fixture.whenStable();
+      fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+      await fixture.whenStable();
+
+      fireEvent.click(box('Alquimia'));
+      await fixture.whenStable();
+      http
+        .expectOne(`${URL}/profile`)
+        .flush(
+          aPerson({ topics: ['hermetismo'], features: ['search', 'research'] }),
+        );
+      await fixture.whenStable();
+
+      const tick = http.expectOne(URL);
+      expect(tick.request.body).toEqual({
+        topics: ['hermetismo', 'alquimia'],
+      });
+      tick.flush(
+        aPerson({
+          topics: ['hermetismo', 'alquimia'],
+          features: ['search', 'research'],
+        }),
+      );
+      await fixture.whenStable();
+      expect(box('Hermetismo').checked).toBe(true);
+      expect(box('Pesquisa com IA').checked).toBe(true);
+    });
+
+    it('a box checked while the person is revoked sends nothing', async () => {
+      const { http, fixture } = await openGuest();
+      fireEvent.click(screen.getByRole('button', { name: 'Revogar acesso' }));
+      await fixture.whenStable();
+      fireEvent.click(screen.getByRole('button', { name: 'Revogar' }));
+      await fixture.whenStable();
+
+      fireEvent.click(box('Alquimia'));
+      await fixture.whenStable();
+      http.expectOne({ url: URL, method: 'DELETE' }).flush(null, {
+        status: 204,
+        statusText: 'No Content',
+      });
+      await fixture.whenStable();
+
+      http.expectNone(URL);
+      expect(screen.getByRole('status').textContent).toContain('revogado');
+    });
+
+    it('only the person whose change saves is busy', async () => {
+      const other = aPerson({
+        id: '33333333-3333-4333-8333-333333333333',
+        email: 'other@example.com',
+        name: 'Other',
+      });
+      const { http, fixture } = await renderPanel([owner, aPerson(), other]);
+      fireEvent.click(row(/Guest/));
+      await fixture.whenStable();
+      fireEvent.click(box('Alquimia'));
+      await fixture.whenStable();
+      fireEvent.click(row(/Other/));
+      await fixture.whenStable();
+
+      expect(
+        screen
+          .getByRole('group', { name: 'Acervos' })
+          .getAttribute('aria-busy'),
+      ).toBe('false');
+      http.expectOne(URL).flush(aPerson({ topics: ['alquimia'] }));
+      await fixture.whenStable();
+    });
   });
 
   it('AC-7: shows the last-master rule when the only master tries to step down', async () => {
@@ -475,12 +815,68 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
       .expectOne('/api/v1/house-ai/default')
       .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
     http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
+    // The collections with access levels (KBC-103): none here.
+    http.expectOne('/api/v1/levels').flush({ items: [] });
     await result.fixture.whenStable();
 
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
     http.expectOne('/api/v1/people').flush({ items: [owner] });
     await result.fixture.whenStable();
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
+  });
+});
+
+describe('PeoplePanel: voice profiles come with the master role (ADR 0032)', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  const VOICE = 'Cadastrar perfis de voz';
+
+  it('shows a master with it, like the other features, and nothing to grant', async () => {
+    const { fixture } = await renderPanel([
+      aPerson({ role: 'master', features: [] }),
+    ]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    const box = screen.getByRole<HTMLInputElement>('checkbox', { name: VOICE });
+    expect(box.checked).toBe(true);
+    expect(box.matches(':disabled')).toBe(true);
+    expect(screen.queryByText('Só com autorização individual')).toBeNull();
+  });
+
+  it('is not offered to a member', async () => {
+    const { fixture } = await renderPanel([aPerson({ role: 'member' })]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    expect(screen.queryByRole('checkbox', { name: VOICE })).toBeNull();
+  });
+});
+
+describe('PeoplePanel: "Pesquisar faixas com IA" (KBC-099 AC-14, FR-10)', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  const TRACKS = 'Pesquisar faixas com IA';
+
+  it('shows a master with it, as every feature', async () => {
+    const { fixture } = await renderPanel([
+      aPerson({ role: 'master', features: [] }),
+    ]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    const box = screen.getByRole<HTMLInputElement>('checkbox', {
+      name: TRACKS,
+    });
+    expect(box.checked).toBe(true);
+  });
+
+  it('offers it to a member, off until a master grants it', async () => {
+    const { fixture } = await renderPanel([aPerson({ role: 'member' })]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    const box = screen.getByRole<HTMLInputElement>('checkbox', {
+      name: TRACKS,
+    });
+    expect(box.checked).toBe(false);
+    expect(box.matches(':disabled')).toBe(false);
   });
 });
 
@@ -505,6 +901,8 @@ describe('PeoplePanel for the owner (BR-6)', () => {
       .expectOne('/api/v1/house-ai/default')
       .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
     http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
+    // The collections with access levels (KBC-103): none here.
+    http.expectOne('/api/v1/levels').flush({ items: [] });
     http.expectOne('/api/v1/spend/people').flush({
       items: [
         { email: 'owner@example.com', usd: 0 },
@@ -720,5 +1118,166 @@ describe('PeoplePanel invitation profiles (KBC-028)', () => {
     await fixture.whenStable();
     expect(send.disabled).toBe(false);
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('PeoplePanel: a level for the selection (T9, KBC-109 AC-6)', () => {
+  const SCALES = {
+    items: [
+      {
+        collection: 'hermetismo',
+        levels: [
+          { id: 'qs', code: 'QS' },
+          { id: 'ci', code: 'CI' },
+        ],
+      },
+    ],
+  };
+
+  async function renderWithScales(people: Person[]) {
+    const result = await render(PeoplePanel, {
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([authInterceptor])),
+        provideHttpClientTesting(),
+        { provide: RELOAD_PAGE, useValue: () => undefined },
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/people').flush({ items: people });
+    http.expectOne('/api/v1/topics').flush(TOPICS);
+    http
+      .expectOne('/api/v1/house-ai/default')
+      .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
+    http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
+    http.expectOne('/api/v1/levels').flush(SCALES);
+    await result.fixture.whenStable();
+    return { ...result, http };
+  }
+
+  it('sends the selected people and says who was left as they were', async () => {
+    const guest = aPerson({ topics: ['hermetismo'] });
+    const { http, fixture } = await renderWithScales([owner, guest]);
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar guest@example.com' }),
+    );
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar owner@example.com' }),
+    );
+    const bar = screen.getByRole('group', {
+      name: 'Nível para várias pessoas',
+    });
+    fireEvent.change(within(bar).getByRole('combobox', { name: 'Nível' }), {
+      target: { value: 'ci' },
+    });
+    await fixture.whenStable();
+    const apply = within(bar).getByRole('button', {
+      name: 'Aplicar nível às selecionadas (2)',
+    });
+    // A double press in one frame sends once (PD-02).
+    apply.click();
+    apply.click();
+
+    const sent = http.expectOne('/api/v1/people/levels');
+    expect(sent.request.method).toBe('POST');
+    expect(sent.request.body).toEqual({
+      ids: [guest.id, owner.id],
+      topic: 'hermetismo',
+      level: 'ci',
+    });
+    sent.flush({
+      collection: 'hermetismo',
+      level: { id: 'ci', code: 'CI' },
+      updated: 1,
+      unchanged: 0,
+      masters: 1,
+      withoutAccess: 0,
+      unknown: 0,
+    });
+    TestBed.tick();
+    http
+      .expectOne('/api/v1/people')
+      .flush({ items: [owner, { ...guest, levels: { hermetismo: 'ci' } }] });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Nível CI em Hermetismo aplicado a 1 pessoa. Masters veem todos os níveis.',
+    );
+  });
+
+  it('counts the people without access to the collection', async () => {
+    const guest = aPerson();
+    const { http, fixture } = await renderWithScales([owner, guest]);
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar guest@example.com' }),
+    );
+    fireEvent.change(screen.getByRole('combobox', { name: 'Nível' }), {
+      target: { value: 'qs' },
+    });
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Aplicar nível às selecionadas (1)' }),
+    );
+    http.expectOne('/api/v1/people/levels').flush({
+      collection: 'hermetismo',
+      level: { id: 'qs', code: 'QS' },
+      updated: 0,
+      unchanged: 0,
+      masters: 0,
+      withoutAccess: 2,
+      unknown: 0,
+    });
+    TestBed.tick();
+    http.expectOne('/api/v1/people').flush({ items: [owner, guest] });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      '2 pessoas sem acesso a Hermetismo ficaram como estavam.',
+    );
+  });
+
+  it('QA-1: focus goes to the outcome after applying, and back to the button after a failure', async () => {
+    const guest = aPerson({ topics: ['hermetismo'] });
+    const { http, fixture } = await renderWithScales([owner, guest]);
+    const pick = () =>
+      fireEvent.click(
+        screen.getByRole('checkbox', { name: 'Selecionar guest@example.com' }),
+      );
+    pick();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Nível' }), {
+      target: { value: 'ci' },
+    });
+    await fixture.whenStable();
+    const apply = () =>
+      screen.getByRole<HTMLButtonElement>('button', {
+        name: /Aplicar nível às selecionadas/,
+      });
+    apply().focus();
+    apply().click();
+    http
+      .expectOne('/api/v1/people/levels')
+      .flush(
+        { error: { code: 'VALIDATION_FAILED', message: 'Unknown level' } },
+        { status: 400, statusText: 'Bad Request' },
+      );
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(apply());
+
+    apply().click();
+    http.expectOne('/api/v1/people/levels').flush({
+      collection: 'hermetismo',
+      level: { id: 'ci', code: 'CI' },
+      updated: 0,
+      unchanged: 0,
+      masters: 0,
+      withoutAccess: 0,
+      unknown: 1,
+    });
+    TestBed.tick();
+    http.expectOne('/api/v1/people').flush({ items: [owner] });
+    await fixture.whenStable();
+    const status = screen.getByRole('status');
+    expect(status.textContent).toContain('1 pessoa não está mais na lista.');
+    expect(status.textContent).not.toContain('sem acesso');
+    // The selection emptied and the button is disabled: focus is on what happened.
+    expect(document.activeElement).toBe(status);
   });
 });

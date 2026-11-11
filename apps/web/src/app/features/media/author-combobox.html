@@ -1,0 +1,84 @@
+<div class="combo">
+  <label class="label" [for]="inputId" i18n="@@media.upload.author"
+    >Autor</label
+  >
+  <p class="help" [id]="helpId" i18n="@@media.upload.authorHelp">
+    Escolha um autor do acervo ou digite um novo. Em branco, o áudio fica em
+    "Outros autores".
+  </p>
+  <input
+    type="text"
+    role="combobox"
+    autocomplete="off"
+    [attr.maxlength]="nameMax"
+    aria-autocomplete="list"
+    [id]="inputId"
+    [value]="name()"
+    [disabled]="disabled()"
+    [attr.aria-expanded]="expanded()"
+    [attr.aria-controls]="listId"
+    [attr.aria-activedescendant]="activeId()"
+    [attr.aria-describedby]="helpId + ' ' + statusId"
+    [attr.aria-invalid]="invalid() ? 'true' : null"
+    (focus)="load()"
+    (input)="typed($event)"
+    (click)="toggle()"
+    (keydown)="keydown($event)"
+    (blur)="close()"
+  />
+  <ul
+    class="options"
+    role="listbox"
+    aria-label="Autores do acervo"
+    i18n-aria-label="@@media.author.listLabel"
+    [id]="listId"
+    [hidden]="!expanded()"
+  >
+    @for (option of options(); track option.key; let index = $index) {
+      <li
+        role="option"
+        [id]="optionId(index)"
+        [class.active]="index === active()"
+        [class.register]="option.key === '+new'"
+        [attr.aria-selected]="index === active()"
+        tabindex="-1"
+        (mousedown)="choose($event, option)"
+      >
+        @if (option.main) {
+          <span class="mark" aria-hidden="true">✦</span>
+          <span class="visually-hidden" i18n="@@media.author.mainPrefix"
+            >Autor principal:&nbsp;</span
+          >
+        }
+        {{ option.label }}
+      </li>
+    }
+  </ul>
+  <div class="status" aria-live="polite" [id]="statusId">
+    @if (invalid()) {
+      <p class="error" i18n="@@media.author.invalid">
+        <span aria-hidden="true">⚠</span> O nome do autor deve ter uma linha e
+        até 60 caracteres, sem aspas nem « ».
+      </p>
+    } @else if (newName(); as name) {
+      @if (typoOf(); as author) {
+        <p class="typo">
+          <ng-container i18n="@@media.author.typo"
+            >Você quis dizer «{{ author.name }}»?</ng-container
+          >
+          <button
+            type="button"
+            class="link"
+            (click)="takeSuggestion(author.name)"
+            i18n="@@media.author.takeTypo"
+          >
+            Usar «{{ author.name }}»
+          </button>
+        </p>
+      }
+      <p class="new" i18n="@@media.author.new">
+        Novo autor: «{{ name }}» será cadastrado neste acervo.
+      </p>
+    }
+  </div>
+</div>

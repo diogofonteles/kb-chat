@@ -7,9 +7,11 @@ import {
 } from '../../../test/research-factories.js';
 import type { StubReply } from '../../adapters/stub-llm-adapter.js';
 import { DEEPEN_MARKER, deepenReason } from './escalation.js';
+import { OPEN_VIEW } from '../access-levels/index.js';
 
 const input = (profile: 'fast' | 'deep' = 'fast') => ({
   topic: 'hermetismo',
+  view: OPEN_VIEW,
   question: 'quais são os 5 princípios ocultos',
   history: [],
   profile,

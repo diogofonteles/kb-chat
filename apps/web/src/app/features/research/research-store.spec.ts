@@ -414,6 +414,39 @@ describe('ResearchStore', () => {
     });
   });
 
+  it('KBC-099 QA BUG-2: bringing back the conversation already on screen keeps its turns (no answer drawn anew)', () => {
+    const { store } = setup();
+    const saved = {
+      kind: 'research' as const,
+      id: '2b0f4a52-8a8b-4b0e-9a55-0d1b5c2b3c4d',
+      topic: 'outro',
+      title: 'quais são?',
+      createdAt: '2026-10-24T10:00:00.000Z',
+      updatedAt: '2026-10-24T10:01:00.000Z',
+      turns: [
+        {
+          question: 'quais são?',
+          answer: 'São sete [1].',
+          sources: [SOURCE],
+          steps: 3,
+          usd: 0.01,
+          billing: 'per-token' as const,
+          model: 'm',
+          interrupted: false,
+          at: '2026-10-24T10:00:30.000Z',
+        },
+      ],
+    };
+    store.restore(saved);
+    const first = store.turns().map((turn) => turn.id);
+    // The history and the reopening after a reload may both bring it back.
+    store.restore(saved);
+    expect(store.turns().map((turn) => turn.id)).toEqual(first);
+    // Another conversation gets turns of its own.
+    store.restore({ ...saved, id: '3c1f4a52-8a8b-4b0e-9a55-0d1b5c2b3c4d' });
+    expect(store.turns()[0]?.id).not.toBe(first[0]);
+  });
+
   it('starts a new conversation without context, and hides one from another collection', () => {
     const { store, api, streams, chat } = setup();
     store.ask('quais são?');

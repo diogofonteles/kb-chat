@@ -21,6 +21,7 @@ import { LoginPage } from '@features/login/login-page.js';
 import { PrivacyPage } from '@features/privacy/privacy-page.js';
 import { SettingsHost } from '@features/settings/settings-host.js';
 import { TutorialPage } from '@features/tutorial/tutorial-page.js';
+import { ActingBanner } from '@features/acting/acting-banner.js';
 
 /**
  * Who is signed in decides between the login screen and the app (KBC-010 BR-1). A public
@@ -30,7 +31,14 @@ import { TutorialPage } from '@features/tutorial/tutorial-page.js';
  */
 @Component({
   selector: 'app-session-shell',
-  imports: [RouterOutlet, SettingsHost, LoginPage, PrivacyPage, TutorialPage],
+  imports: [
+    RouterOutlet,
+    SettingsHost,
+    LoginPage,
+    PrivacyPage,
+    TutorialPage,
+    ActingBanner,
+  ],
   template: `
     @if (publicPage() === 'privacy') {
       @defer (on immediate) {
@@ -45,6 +53,7 @@ import { TutorialPage } from '@features/tutorial/tutorial-page.js';
         <p class="boot" role="status" i18n="@@app.loading">Carregando…</p>
       }
     } @else if (signedIn()) {
+      <app-acting-banner />
       <router-outlet />
       @defer (on immediate) {
         <app-settings-host />

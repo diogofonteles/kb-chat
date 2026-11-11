@@ -8,17 +8,20 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import type {
+  AnswerSource,
   DocumentRef,
   ResearchPlan,
   SweepCoverage,
 } from '@kb-chat/contracts';
-import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
+import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import {
+  citedAt,
   citedSource,
   formatCost,
   renderAnswer,
 } from '@features/answer/answer-format.js';
+import { trackChipOf, type TrackOpening } from './track-opening.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
 import { OWN_AI_OFFER, aiErrorMessage } from './research-errors.js';
 import { describeSteps, groupedSteps } from './research-steps.js';
@@ -34,6 +37,7 @@ import {
 } from './research-sweep.js';
 import {
   canContinueSweep,
+  citedRestricted,
   citedSources,
   groupByAuthorship,
   type ResearchTurn,
@@ -76,6 +80,8 @@ export class ResearchMessage {
   /** Only the last turn offers "Tentar de novo" (asking again in its place). */
   readonly last = input(false);
   readonly opened = output<DocumentRef>();
+  /** A cited track (KBC-099): the panel opens on its passage with the player (T22). */
+  readonly trackOpened = output<TrackOpening>();
   readonly stopped = output();
   readonly retried = output();
   readonly continued = output();
@@ -90,14 +96,31 @@ export class ResearchMessage {
     groupedSteps(this.turn().steps),
   );
   protected readonly html = computed(() =>
-    renderAnswer(this.turn().text, this.turn().sources),
+    renderAnswer(this.turn().text, this.turn().sources, this.turn().restricted),
   );
   protected readonly cited = computed(() => citedSources(this.turn()));
+  /** Cited sources above today's level (KBC-110): a chip without a link, and a note. */
+  protected readonly restricted = computed(() => citedRestricted(this.turn()));
+  protected readonly hasSources = computed(
+    () => this.cited().length > 0 || this.restricted().length > 0,
+  );
+  /** What each cited track's chip says after its title (T22): recording, minute, more. */
+  protected readonly trackChips = computed(
+    () =>
+      new Map(
+        this.cited().flatMap((source) => {
+          const chip = trackChipOf(source);
+          return chip ? [[source.n, chip] as const] : [];
+        }),
+      ),
+  );
+  /** The open collection's labels: its main author's name (KBC-049). */
+  private readonly labels = injectAuthorshipLabels();
   /** Mixed authorships are listed apart, the Mestre's first (KBC-020 FR-7). */
   protected readonly sourceGroups = computed(() =>
     groupByAuthorship(this.cited())?.map((group) => ({
       ...group,
-      label: AUTHORSHIP_LABELS[group.authorship],
+      label: this.labels()[group.authorship],
     })),
   );
   /** A subscription turn costs nothing per token and stays out of today's spend (KBC-007 BR-2). */
@@ -134,17 +157,17 @@ export class ResearchMessage {
     const usd = this.turn().usd;
     return usd ? formatCost(usd) : '';
   });
-  /** Asking again fits a failure or a stop, never a spent daily cap (that needs Settings). */
+  /**
+   * Asking again fits a failure or a stop, except DAILY_CAP_REACHED (the person's own spend
+   * cap, changed in Settings). HOUSE_QUOTA_EXHAUSTED may be over (a new day, a refund):
+   * asking again finds out (KBC-061).
+   */
   protected readonly canRetry = computed(() => {
     const turn = this.turn();
     // A failed or stopped turn from the history can be asked again too (KBC-029); a sweep
     // that can go on offers that, not starting over (design review, UP-15).
     if (!this.last() || this.canContinue()) return false;
-    if (turn.phase === 'error')
-      return (
-        turn.error !== 'DAILY_CAP_REACHED' &&
-        turn.error !== 'HOUSE_QUOTA_EXHAUSTED'
-      );
+    if (turn.phase === 'error') return turn.error !== 'DAILY_CAP_REACHED';
     return turn.phase === 'done' && turn.interrupted;
   });
   protected readonly capReached = computed(
@@ -185,7 +208,7 @@ export class ResearchMessage {
     if (!coverage || this.turn().phase === 'streaming') return null;
     return {
       line: coverageText(coverage),
-      target: targetText(coverage.target, coverage.phrases),
+      target: targetText(coverage.target, coverage.phrases, this.labels()),
       missing: leftText(coverage),
     };
   });
@@ -219,6 +242,23 @@ export class ResearchMessage {
     const source = this.turn().sources.find((s) => s.n === n);
     if (!source) return;
     event.preventDefault();
-    this.opened.emit({ id: source.id, title: source.title });
+    const link =
+      event.target instanceof Element ? event.target.closest('a') : null;
+    if (source.media)
+      this.trackOpened.emit({ source, at: citedAt(link), trigger: link });
+    else this.opened.emit({ id: source.id, title: source.title });
+  }
+
+  /** A chip: a text opens in the document panel, a track on its first cited passage. */
+  protected openSource(source: AnswerSource, event: Event): void {
+    const trigger =
+      event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    if (source.media)
+      this.trackOpened.emit({
+        source,
+        at: source.passages?.[0]?.at ?? '',
+        trigger,
+      });
+    else this.opened.emit({ id: source.id, title: source.title });
   }
 }

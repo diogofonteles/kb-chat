@@ -2,7 +2,7 @@
 import { chromium } from '@playwright/test';
 
 const [base, out] = process.argv.slice(2);
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--mute-audio'] });
 for (const [name, width, height] of [
   ['desktop', 1440, 900],
   ['mobile', 390, 844],

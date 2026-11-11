@@ -3,10 +3,16 @@ import { Injectable, inject } from '@angular/core';
 import {
   relationPageSchema,
   searchResponseSchema,
+  topicSchema,
   type RelationPage,
   type SearchRequest,
   type SearchResponse,
+  subjectTracksPageSchema,
   type SeeAlsoGroupName,
+  type SubjectTracksPage,
+  type Topic,
+  type TopicCreate,
+  type TopicUpdate,
 } from '@kb-chat/contracts';
 import { map, type Observable } from 'rxjs';
 
@@ -34,6 +40,20 @@ export class KbApi {
       .pipe(map((body) => searchResponseSchema.parse(body)));
   }
 
+  /** A new collection or sub-collection (KBC-048 FR-1). */
+  createTopic(body: TopicCreate): Observable<Topic> {
+    return this.http
+      .post(topicsUrl(), body)
+      .pipe(map((reply) => topicSchema.parse(reply)));
+  }
+
+  /** New name or description; the slug stays (KBC-048 FR-2). */
+  renameTopic(slug: string, body: TopicUpdate): Observable<Topic> {
+    return this.http
+      .patch(topicPath(slug), body)
+      .pipe(map((reply) => topicSchema.parse(reply)));
+  }
+
   relations(
     topic: string,
     id: string,
@@ -45,7 +65,21 @@ export class KbApi {
       })
       .pipe(map((body) => relationPageSchema.parse(body)));
   }
+
+  /** More of the tracks linked to a subject (KBC-070 FR-3). */
+  subjectTracks(
+    topic: string,
+    name: string,
+    page: { offset: number; limit: number },
+  ): Observable<SubjectTracksPage> {
+    return this.http
+      .get(subjectTracksUrl(topic, name), { params: page })
+      .pipe(map((body) => subjectTracksPageSchema.parse(body)));
+  }
 }
+
+export const subjectTracksUrl = (topic: string, name: string): string =>
+  `${topicsUrl()}/${encodeURIComponent(topic)}/concepts/${encodeURIComponent(name)}/media`;
 
 export const relationsUrl = (
   topic: string,

@@ -65,6 +65,14 @@ export const sweepFindingSchema = z.strictObject({
 });
 export type SweepFinding = z.infer<typeof sweepFindingSchema>;
 
+/**
+ * Documents a cursor marks as covered at most: 4 bytes each, so the mark stays near 107 KB
+ * of base64 and a continuation's request well under 1 MB with its findings.
+ */
+export const MAX_COVERED_DOCUMENTS = 20_000;
+/** Base64 of MAX_COVERED_DOCUMENTS hashes of 4 bytes: 4 characters per 3 bytes, padded. */
+const MAX_COVERED_CHARS = 4 * Math.ceil((MAX_COVERED_DOCUMENTS * 4) / 3);
+
 /** Findings a cursor carries at most (keeps a continuation's request well under 1 MB). */
 export const MAX_CARRIED_FINDINGS = 600;
 /** New findings one progress event carries at most. */
@@ -77,6 +85,17 @@ export const MAX_FOUND_PER_PROGRESS = 200;
 export const sweepCursorSchema = z.strictObject({
   plan: sweepPlanSchema,
   after: z.string().min(1).max(1000).optional(),
+  /**
+   * The documents swept so far, by this turn and the ones it continues (KBC-101): hashes of
+   * their ids, base64. A continuation reads every other document of the set, so one that
+   * joined it since is read and none is read twice. Absent on cursors from before it: they
+   * resume after `after`, in id order.
+   */
+  covered: z
+    .string()
+    .max(MAX_COVERED_CHARS)
+    .regex(/^[A-Za-z0-9+/]*={0,2}$/)
+    .optional(),
   totals: sweepTotalsSchema,
   /** What the sweep found so far, merged into the continuation's answer. */
   findings: z.array(sweepFindingSchema).max(MAX_CARRIED_FINDINGS).default([]),
@@ -116,6 +135,11 @@ export const sweepCoverageSchema = z
     /** Of those, not analyzed yet (a continuation analyzes them). */
     missing: count,
     batches: count,
+    /**
+     * The tracks among them (KBC-101 BR-2): of the set, and of those the AI analyzed.
+     * Absent when the set has none (nothing says "faixas" then, AC-5).
+     */
+    tracks: z.strictObject({ documents: count, read: count }).optional(),
     reason: sweepStopReasonSchema.optional(),
     /** The counts include earlier turns of the same sweep ("Continuar varredura"). */
     continued: z.boolean().optional(),

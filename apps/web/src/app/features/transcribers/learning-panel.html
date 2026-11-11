@@ -1,0 +1,203 @@
+<section class="learning" aria-labelledby="learning-title">
+  <h4 id="learning-title" class="block-title" i18n="@@learning.title">
+    Aprendido das correções
+  </h4>
+  <p class="hint" i18n="@@learning.lead">
+    O que as pessoas corrigem na preparação vira regra para as próximas
+    transcrições. Desligue o que estiver errado; o que já foi transcrito não
+    muda.
+  </p>
+
+  @if (learning(); as learned) {
+    @if (learned.rules.length === 0 && learned.terms.length === 0) {
+      <p class="hint" i18n="@@learning.empty">
+        Nada aprendido das correções por enquanto. As palavras corrigidas na
+        preparação aparecem aqui.
+      </p>
+    } @else {
+      <h5 class="sub-title" i18n="@@learning.rulesTitle">
+        Regras ({{ learned.rules.length }})
+      </h5>
+      @if (learned.rules.length === 0) {
+        <p class="hint" i18n="@@learning.noRules">Nenhuma regra.</p>
+      } @else {
+        <ul class="items">
+          @for (rule of rules(); track rule.id) {
+            <li class="item">
+              <p class="change">
+                <del class="before">{{ rule.before }}</del>
+                <span aria-hidden="true"> → </span>
+                <span class="sr-only" i18n="@@learning.becomes">vira</span>
+                <strong>{{ rule.after }}</strong>
+              </p>
+              <p class="hint">{{ contextText(rule) }}</p>
+              <p class="hint">{{ countsText(rule) }}</p>
+              @if (saysMore(rule)) {
+                <p class="state" [class.off]="!isOn(rule)">
+                  <span aria-hidden="true">{{ isOn(rule) ? '✓' : '⊘' }}</span>
+                  {{ stateText(rule) }}
+                </p>
+              }
+              <div class="foot">
+                @if (rule.examples.length > 0) {
+                  <details class="examples">
+                    <summary i18n="@@learning.examples">Exemplos</summary>
+                    <ul>
+                      @for (example of rule.examples; track $index) {
+                        <li>
+                          «{{ example.contextBefore }}
+                          <del>{{ example.before }}</del>
+                          {{ example.contextAfter }}» → {{ example.after }} ·
+                          <a [href]="exampleHref(example)"
+                            >{{ example.title }} ·
+                            {{ clock(example.startMs) }}</a
+                          >
+                        </li>
+                      }
+                    </ul>
+                  </details>
+                }
+                <div class="controls">
+                  @if (rule.switchedBy !== null) {
+                    <button
+                      type="button"
+                      class="automatic"
+                      [disabled]="pending() !== null"
+                      [attr.aria-label]="automaticRuleName(rule)"
+                      (click)="automatic('rules', rule.id)"
+                      i18n="@@learning.automatic"
+                    >
+                      Voltar ao automático
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    class="switch"
+                    role="switch"
+                    [id]="'learning-rules-' + rule.id"
+                    [attr.aria-checked]="isOn(rule)"
+                    [attr.aria-label]="ruleSwitchName(rule)"
+                    [disabled]="pending() !== null"
+                    (click)="toggleRule(rule)"
+                  >
+                    <span class="track" aria-hidden="true"
+                      ><span class="thumb"></span
+                    ></span>
+                    <span class="switch-text">{{
+                      switchWord(isOn(rule))
+                    }}</span>
+                  </button>
+                </div>
+              </div>
+            </li>
+          }
+        </ul>
+        @if (hidden() > 0) {
+          <button
+            type="button"
+            class="secondary more"
+            (click)="showMore()"
+            i18n="@@learning.more"
+          >
+            Mostrar mais ({{ hidden() }})
+          </button>
+        }
+      }
+
+      <h5 class="sub-title" i18n="@@learning.termsTitle">
+        Termos ({{ learned.terms.length }})
+      </h5>
+      <p class="hint" i18n="@@learning.tokens">
+        Termos aprendidos: {{ learned.tokens.learned }} de {{ free() }} tokens
+        livres.
+      </p>
+      @if (learned.terms.length === 0) {
+        <p class="hint" i18n="@@learning.noTerms">Nenhum termo aprendido.</p>
+      } @else {
+        <ul class="items">
+          @for (term of learned.terms; track term.id) {
+            <li class="item">
+              <div class="what">
+                <p class="change">
+                  <strong>{{ term.term }}</strong> ·
+                  @if (term.corrections === 1) {
+                    <span i18n="@@learning.termOne">1 correção</span>
+                  } @else {
+                    <span i18n="@@learning.termMany"
+                      >{{ term.corrections }} correções</span
+                    >
+                  }
+                </p>
+                <p class="state" [class.off]="term.state !== 'in-list'">
+                  <span aria-hidden="true">{{
+                    term.state === 'in-list' ? '✓' : '⊘'
+                  }}</span>
+                  {{ termStateText(term) }}
+                </p>
+              </div>
+              <div class="controls">
+                @if (term.switchedBy !== null) {
+                  <button
+                    type="button"
+                    class="automatic"
+                    [disabled]="pending() !== null"
+                    [attr.aria-label]="automaticTermName(term)"
+                    (click)="automatic('terms', term.id)"
+                    i18n="@@learning.automatic"
+                  >
+                    Voltar ao automático
+                  </button>
+                }
+                <button
+                  type="button"
+                  class="switch"
+                  role="switch"
+                  [id]="'learning-terms-' + term.id"
+                  [attr.aria-checked]="term.state !== 'off'"
+                  [attr.aria-label]="termSwitchName(term)"
+                  [disabled]="pending() !== null"
+                  (click)="toggleTerm(term)"
+                >
+                  <span class="track" aria-hidden="true"
+                    ><span class="thumb"></span
+                  ></span>
+                  <span class="switch-text">{{
+                    termSwitchWord(term.state !== 'off')
+                  }}</span>
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    }
+  } @else if (resource.error()) {
+    <p class="field-error" role="alert" i18n="@@learning.loadFailed">
+      Não foi possível carregar o aprendizado.
+    </p>
+    <button
+      type="button"
+      class="secondary"
+      (click)="reload()"
+      i18n="@@learning.tryAgain"
+    >
+      Tentar de novo
+    </button>
+  } @else {
+    <p class="hint" role="status" i18n="@@learning.loading">
+      Carregando o aprendizado…
+    </p>
+  }
+
+  <p
+    class="status"
+    role="status"
+    [class.error]="notice()?.kind === 'error'"
+    [class.empty]="!notice()"
+  >
+    @if (notice(); as message) {
+      <span aria-hidden="true">{{ message.kind === 'error' ? '⚠' : '✓' }}</span>
+      {{ message.text }}
+    }
+  </p>
+</section>

@@ -188,16 +188,50 @@
               [preset]="current.preset"
               [topics]="topics()"
               [defaultAppAi]="defaultAppAi()"
+              [scales]="scales()"
+              mode="profile"
               [busy]="busy()"
               (changed)="changePreset($event)"
               (invalidChange)="presetInvalid.set($event)"
             />
           }
+          @if (scalesFailed()) {
+            <div class="levels-failed" role="alert">
+              <p class="field-error" i18n="@@profiles.levelsFailed">
+                <span aria-hidden="true">⚠</span> Não consegui carregar os
+                níveis dos acervos. Para salvar o perfil sem perder os níveis
+                dele, carregue os níveis de novo.
+              </p>
+              <button
+                type="button"
+                class="secondary"
+                (click)="reloadScales.emit()"
+                i18n="@@profiles.reloadLevels"
+              >
+                Carregar níveis de novo
+              </button>
+            </div>
+          }
+          @if (levelsPending()) {
+            <p
+              id="profile-levels-pending"
+              class="field-error"
+              i18n="@@profiles.levelsPending"
+            >
+              <span aria-hidden="true">⚠</span> Escolha o nível de cada acervo
+              cujo nível não existe mais para salvar o perfil.
+            </p>
+          }
           <div class="actions">
             <button
               type="submit"
               class="primary"
-              [disabled]="busy() || presetInvalid()"
+              [disabled]="
+                busy() || presetInvalid() || scalesFailed() || levelsPending()
+              "
+              [attr.aria-describedby]="
+                levelsPending() ? 'profile-levels-pending' : null
+              "
               i18n="@@profiles.save"
             >
               Salvar perfil

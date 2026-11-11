@@ -48,6 +48,7 @@ describe('PrivacyPage (KBC-016)', () => {
     for (const section of [
       'Quais dados guardamos',
       'Para que usamos',
+      'Quando um master ajuda você',
       'Quem participa',
       'Por quanto tempo',
       'Seus direitos',
@@ -57,9 +58,15 @@ describe('PrivacyPage (KBC-016)', () => {
       ).toBeTruthy();
     }
     expect(screen.getByText(/só como resumo criptográfico/)).toBeTruthy();
+    // KBC-060 FR-8: acting as a person is said, with where to see it.
+    expect(screen.getByText(/Acessos à\s+sua conta/)).toBeTruthy();
     expect(screen.getByText(/Não vendemos nem compartilhamos/)).toBeTruthy();
     expect(screen.getByText(/região de São Paulo/)).toBeTruthy();
     expect(screen.getByText(/guardadas por 30 dias/)).toBeTruthy();
+    // KBC-064: separating voices is analysis of one recording, never a voice print.
+    expect(
+      screen.getByText(/nenhuma impressão de voz é guardada/),
+    ).toBeTruthy();
     expect(
       screen.getByText(/mesmo depois que um acesso é retirado/),
     ).toBeTruthy();
@@ -67,7 +74,7 @@ describe('PrivacyPage (KBC-016)', () => {
       screen.getByText(/Registros de uso: os que passam de 90 dias/),
     ).toBeTruthy();
     expect(
-      screen.getByText(/Última atualização: 25 de outubro de 2026/),
+      screen.getByText(/Última atualização: 4 de novembro de 2026/),
     ).toBeTruthy();
     expect(
       screen

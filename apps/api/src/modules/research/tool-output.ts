@@ -1,5 +1,9 @@
-import type { Authorship, SearchHit } from '@kb-chat/contracts';
-import type { CatalogEntry } from '../catalog/index.js';
+import {
+  formatTrackClock,
+  type Authorship,
+  type SearchHit,
+} from '@kb-chat/contracts';
+import type { CatalogEntry, CatalogMedia } from '../catalog/index.js';
 import type { BodyWindow } from './body-window.js';
 
 const OPEN = '<<<DOCUMENTO';
@@ -25,44 +29,105 @@ export const foldName = (text: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
-/** KBC-020: what every document line says about whose text it is (ADR 0015). */
-export const AUTHORSHIP_LABELS: Readonly<Record<Authorship, string>> = {
-  'mestre-laercio': 'Mestre Laércio',
+/** The main author's group as documents marked before KBC-049 name it (ADR 0015). */
+export const LEGACY_MAIN_LABEL = 'Mestre Laércio';
+
+/**
+ * KBC-020: what every document line says about whose text it is (ADR 0015). The group
+ * `mestre-laercio` is the collection's main author (KBC-049, ADR 0030): his name, or
+ * "Mestre Laércio" when the collection has none.
+ */
+export type AuthorshipLabels = Readonly<Record<Authorship, string>>;
+
+export const authorshipLabels = (
+  mainAuthor: { readonly name: string } | null,
+): AuthorshipLabels => ({
+  'mestre-laercio': mainAuthor
+    ? oneLine(mainAuthor.name, 80)
+    : LEGACY_MAIN_LABEL,
   'outros-autores': 'Outros autores',
   sintese: 'Síntese do acervo',
   'nao-classificado': 'Não classificado',
-};
+});
+
+/** The labels of a collection whose main author is the legacy one (tests, defaults). */
+export const AUTHORSHIP_LABELS: AuthorshipLabels = authorshipLabels(null);
 
 /** " · autoria: Mestre Laércio", appended to a document's title on every line. */
-export const authorshipPart = (authorship: Authorship): string =>
-  ` · autoria: ${AUTHORSHIP_LABELS[authorship]}`;
+export const authorshipPart = (
+  authorship: Authorship,
+  labels: AuthorshipLabels = AUTHORSHIP_LABELS,
+): string => ` · autoria: ${labels[authorship]}`;
 
 /** What the agent must keep in mind when citing each group (read headers). */
-const AUTHORSHIP_NOTES: Readonly<Record<Authorship, string>> = {
-  'mestre-laercio': '',
-  'outros-autores': 'não é do Mestre Laércio; diga o autor ou o livro ao citar',
-  sintese:
-    'artigo do wiki que resume vários documentos; não é fala do Mestre Laércio',
-  'nao-classificado':
-    'a autoria ainda não foi marcada; não atribua ao Mestre Laércio sem confirmar',
+const authorshipNote = (
+  authorship: Authorship,
+  labels: AuthorshipLabels,
+): string => {
+  const main = labels['mestre-laercio'];
+  const notes: Record<Authorship, string> = {
+    'mestre-laercio': '',
+    'outros-autores': `não é de ${main}; diga o autor ou o livro ao citar`,
+    sintese: `artigo do wiki que resume vários documentos; não é fala de ${main}`,
+    'nao-classificado': `a autoria ainda não foi marcada; não atribua a ${main} sem confirmar`,
+  };
+  return notes[authorship];
 };
 
-function authorshipLine(entry: CatalogEntry): string {
+function authorshipLine(entry: CatalogEntry, labels: AuthorshipLabels): string {
   const notes = [
     entry.author && `autor: ${oneLine(entry.author, 120)}`,
-    AUTHORSHIP_NOTES[entry.authorship],
+    authorshipNote(entry.authorship, labels),
   ].filter(Boolean);
   const detail = notes.length > 0 ? ` (${notes.join('; ')})` : '';
-  return `Autoria: ${AUTHORSHIP_LABELS[entry.authorship]}${detail}`;
+  return `Autoria: ${labels[entry.authorship]}${detail}`;
+}
+
+/** What a track is, beside its title on every line (KBC-099 FR-5). */
+function trackKind(media: CatalogMedia): string {
+  const low = media.confidence === 'low' ? ', confiança baixa' : '';
+  return `faixa de áudio (transcrição automática${low})`;
+}
+
+/** " · faixa de áudio (…) · gravação “X” · faixa 3 de 12"; empty for a text. */
+export function trackPart(media: CatalogMedia | null): string {
+  if (!media) return '';
+  const place =
+    media.ordinal && media.total
+      ? ` · faixa ${media.ordinal} de ${media.total}`
+      : '';
+  return ` · ${trackKind(media)} · gravação ${quote(media.recordingTitle)}${place}`;
+}
+
+/** The read header of a track: what it is and how to cite a passage of it (ADR 0035 §6). */
+function trackLines(n: number, media: CatalogMedia | null): string[] {
+  if (!media) return [];
+  const place =
+    media.ordinal && media.total
+      ? ` · faixa ${media.ordinal} de ${media.total}`
+      : '';
+  return [
+    `Tipo: ${trackKind(media)}`,
+    `Gravação: ${oneLine(media.recordingTitle, 160)}${place} · duração ${formatTrackClock(media.durationMs)}`,
+    `Como citar: cada parágrafo começa com a sua âncora [m:ss]; cite um trecho como [${n}@m:ss], com a âncora do parágrafo citado. Nunca invente um tempo.`,
+  ];
 }
 
 export function hitLine(
   n: number,
   hit: SearchHit,
-  summary: string | null,
+  {
+    summary,
+    media = null,
+    labels = AUTHORSHIP_LABELS,
+  }: {
+    readonly summary: string | null;
+    readonly media?: CatalogMedia | null;
+    readonly labels?: AuthorshipLabels;
+  },
 ): string {
   const parts = [
-    `[${n}] ${oneLine(hit.title, 160)}${authorshipPart(hit.authorship)}`,
+    `[${n}] ${oneLine(hit.title, 160)}${trackPart(media)}${authorshipPart(hit.authorship, labels)}`,
   ];
   if (summary) parts.push(`Resumo: ${oneLine(summary, HIT_TEXT_CHARS)}`);
   if (hit.snippet && hit.snippet !== summary)
@@ -72,9 +137,13 @@ export function hitLine(
   return parts.join(' — ');
 }
 
-export function refLine(n: number, entry: CatalogEntry): string {
+export function refLine(
+  n: number,
+  entry: CatalogEntry,
+  labels: AuthorshipLabels = AUTHORSHIP_LABELS,
+): string {
   const summary = entry.summary ? ` — ${oneLine(entry.summary, 200)}` : '';
-  return `[${n}] ${oneLine(entry.title, 160)}${authorshipPart(entry.authorship)}${summary}`;
+  return `[${n}] ${oneLine(entry.title, 160)}${trackPart(entry.media)}${authorshipPart(entry.authorship, labels)}${summary}`;
 }
 
 function facetsLine(entry: CatalogEntry): string {
@@ -87,11 +156,16 @@ function facetsLine(entry: CatalogEntry): string {
 }
 
 /** The kb's description of a document: summary, criterion, subjects and facets. */
-export function headerLines(n: number, entry: CatalogEntry): string[] {
+export function headerLines(
+  n: number,
+  entry: CatalogEntry,
+  labels: AuthorshipLabels = AUTHORSHIP_LABELS,
+): string[] {
   return [
     `[${n}] ${entry.title}`,
     `Id: ${entry.id}`,
-    authorshipLine(entry),
+    ...trackLines(n, entry.media),
+    authorshipLine(entry, labels),
     entry.summary ? `Resumo do kb: ${entry.summary}` : '',
     entry.criterion ? `Critério do kb: ${entry.criterion}` : '',
     entry.concepts.length > 0 ? `Assuntos: ${entry.concepts.join(', ')}` : '',

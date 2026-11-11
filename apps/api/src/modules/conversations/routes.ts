@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
+import { storedLevelViewOf } from '../access-levels/index.js';
 import { SIGNED_IN, principalOf } from '../auth/index.js';
 import type { ConversationsService } from './conversations-service.js';
 
@@ -20,9 +21,8 @@ const listQuery = z.object({
   topic: z.string().min(1).max(200).optional(),
 });
 
-function registerReads(app: FastifyInstance, service: ConversationsService) {
-  const typed = app.withTypeProvider<ZodTypeProvider>();
-  typed.get(
+function registerList(app: FastifyInstance, service: ConversationsService) {
+  app.withTypeProvider<ZodTypeProvider>().get(
     '/api/v1/conversations',
     {
       config: { access: SIGNED_IN },
@@ -35,7 +35,11 @@ function registerReads(app: FastifyInstance, service: ConversationsService) {
       items: await service.list(principalOf(request), request.query),
     }),
   );
-  typed.get(
+}
+
+/** One conversation, its stored sources re-checked against today's level (KBC-110). */
+function registerRead(app: FastifyInstance, service: ConversationsService) {
+  app.withTypeProvider<ZodTypeProvider>().get(
     '/api/v1/conversations/:id',
     {
       config: { access: SIGNED_IN },
@@ -43,7 +47,11 @@ function registerReads(app: FastifyInstance, service: ConversationsService) {
     },
     async (request) => {
       const { id } = request.params;
-      const conversation = await service.get(principalOf(request), id);
+      const conversation = await service.get(
+        principalOf(request),
+        id,
+        (topic) => storedLevelViewOf(request, topic),
+      );
       if (!conversation)
         throw new AppError('NOT_FOUND', `Unknown conversation ${id}`);
       return conversation;
@@ -95,7 +103,8 @@ function registerRemove(app: FastifyInstance, service: ConversationsService) {
 export const conversationRoutes =
   (service: ConversationsService): FastifyPluginAsync =>
   async (app) => {
-    registerReads(app, service);
+    registerList(app, service);
+    registerRead(app, service);
     registerWrites(app, service);
     registerRemove(app, service);
   };

@@ -1,0 +1,53 @@
+<div
+  #track
+  class="track"
+  [class.disabled]="disabled() || !loaded()"
+  (pointerdown)="onPointerDown($event)"
+  (pointermove)="onPointerMove($event)"
+  (pointerup)="onPointerUp($event)"
+  (pointercancel)="onPointerCancel()"
+  (pointerleave)="onPointerLeave()"
+>
+  <div class="rail" aria-hidden="true">
+    <div class="buffered" [style.width.%]="bufferedPercent()"></div>
+    <div class="played" [style.width.%]="playedPercent()"></div>
+  </div>
+  @if (markPercents().length) {
+    <!-- Bookmarks (KBC-042): seen here, reached by the keyboard in the list. -->
+    <div class="marks" aria-hidden="true">
+      @for (percent of markPercents(); track $index) {
+        <span class="mark" [style.left.%]="percent"></span>
+      }
+    </div>
+  }
+  @if (trackMarkPercents().length) {
+    <!-- Tracks (KBC-066): taller than bookmarks, so no color alone tells them; reached in the list. -->
+    <div class="marks" aria-hidden="true" data-testid="track-marks">
+      @for (percent of trackMarkPercents(); track $index) {
+        <span class="track-mark" [style.left.%]="percent"></span>
+      }
+    </div>
+  }
+  <div
+    #thumb
+    class="thumb"
+    role="slider"
+    tabindex="0"
+    aria-label="Posição"
+    i18n-aria-label="@@player.position"
+    aria-valuemin="0"
+    [attr.aria-valuemax]="valueMax()"
+    [attr.aria-valuenow]="valueNow()"
+    [attr.aria-valuetext]="valueText()"
+    [attr.aria-disabled]="disabled() || !loaded() ? 'true' : null"
+    [style.left.%]="playedPercent()"
+    (keydown)="onKeydown($event)"
+    (focus)="setFocused(true)"
+    (blur)="setFocused(false)"
+  ></div>
+  @if (tip(); as shown) {
+    <span class="tip" aria-hidden="true" [style.left.%]="shown.percent">{{
+      shown.text
+    }}</span>
+  }
+</div>

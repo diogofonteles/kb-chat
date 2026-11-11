@@ -10,6 +10,7 @@ import {
   type Genre,
   type Relevance,
 } from '@kb-chat/contracts';
+import type { TrackShelf } from '../../ports/track-shelf.js';
 import { titleFromId, toDisplayTitle } from './titles.js';
 
 /** Concept names a document points to through kb's relation lists (unresolved). */
@@ -30,6 +31,59 @@ export interface CatalogEntry extends DocumentFacets {
   readonly entities: readonly string[];
   /** kb's `source_path`: where the text came from (its origin folder, KBC-017). */
   readonly sourcePath: string | null;
+  /** A track (or recording) of the collection written by the app (KBC-099, ADR 0035 §5). */
+  readonly media: CatalogMedia | null;
+  /**
+   * Only on a sub-collection's document seen from its parent (`ScopeView`, KBC-101 FR-5):
+   * the collection it is in and its id there.
+   */
+  readonly home?: { readonly topic: string; readonly id: string };
+}
+
+/** The `kb_chat_*` keys of a document the app rendered from a track (ADR 0035 §2). */
+export interface CatalogMedia {
+  readonly mediaId: string;
+  readonly kind: 'track' | 'recording';
+  readonly recordingId: string;
+  readonly recordingTitle: string;
+  readonly startMs: number;
+  readonly durationMs: number;
+  readonly ordinal: number | null;
+  readonly total: number | null;
+  readonly confidence: 'normal' | 'low';
+  readonly fingerprint: string;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const toCount = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : null;
+
+/**
+ * The track behind a document, or null for a text. Only a document with a media id and a
+ * fingerprint is one: a half-written header is read as a text, never as a broken track.
+ */
+function toMedia(data: Readonly<Record<string, unknown>>): CatalogMedia | null {
+  const mediaId = toStringOrNull(data['kb_chat_media_id']);
+  const recordingId = toStringOrNull(data['kb_chat_recording_id']);
+  const fingerprint = toStringOrNull(data['kb_chat_fingerprint']);
+  if (!mediaId || !UUID.test(mediaId) || !fingerprint) return null;
+  const ordinal = toCount(data['kb_chat_track_ordinal']);
+  const total = toCount(data['kb_chat_tracks_total']);
+  return {
+    mediaId,
+    kind: data['kb_chat_media_kind'] === 'recording' ? 'recording' : 'track',
+    recordingId: recordingId ?? mediaId,
+    recordingTitle: toStringOrNull(data['kb_chat_recording_title']) ?? '',
+    startMs: toCount(data['kb_chat_start_ms']) ?? 0,
+    durationMs: toCount(data['kb_chat_duration_ms']) ?? 0,
+    ordinal: ordinal && ordinal > 0 ? ordinal : null,
+    total: total && total > 0 ? total : null,
+    confidence: data['kb_chat_confidence'] === 'low' ? 'low' : 'normal',
+    fingerprint,
+  };
 }
 
 const WIKILINK = /^\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]$/;
@@ -109,6 +163,7 @@ export function toCatalogEntry(
 ): CatalogEntry {
   const rawTitle = toStringOrNull(data['title']);
   const sourcePath = toStringOrNull(data['source_path']);
+  const media = toMedia(data);
   return {
     id,
     title: rawTitle ? toDisplayTitle(rawTitle) : titleFromId(id),
@@ -118,7 +173,7 @@ export function toCatalogEntry(
     relevance: toRelevance(data['relevance']),
     concepts: toConcepts(data['concepts']),
     criterion: toStringOrNull(data['criterion']),
-    origin: toOrigin(sourcePath),
+    origin: media ? 'audio' : toOrigin(sourcePath),
     entities: toNames(data['entities']),
     sourcePath,
     authorship: toAuthorship(id, data['author_group']),
@@ -128,5 +183,25 @@ export function toCatalogEntry(
       extends: toConcepts(data['extends']),
       related: toConcepts(data['related']),
     },
+    media,
   };
 }
+
+/** A document the app rendered from a track: media.db decides who sees it (ADR 0035 §5). */
+export const isTrackEntry = (entry: Pick<CatalogEntry, 'media'>): boolean =>
+  entry.media !== null;
+
+/**
+ * The one gate of a document (ADR 0035 §5): a text, or a track the person's shelf confirms in
+ * the collection `topic` (the one its document is in). Without a shelf, texts only. Search,
+ * facets, suggestions, the topic list and the research tools all ask here.
+ */
+export const isSeenDocument = (
+  entry: Pick<CatalogEntry, 'media'>,
+  {
+    topic,
+    tracks,
+  }: { readonly topic: string; readonly tracks?: TrackShelf | undefined },
+): boolean =>
+  entry.media === null ||
+  (tracks?.trackOf(topic, entry.media) ?? null) !== null;

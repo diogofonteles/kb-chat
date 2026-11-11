@@ -1,0 +1,134 @@
+<div class="title">
+  <span class="ordinal">{{ track().ordinal }}</span>
+  <span>{{ track().title }}</span>
+</div>
+<div class="subjects">
+  @if (empty()) {
+    <p class="hint" i18n="@@subjects.none">Nenhum assunto ainda</p>
+  }
+  <ul class="chips">
+    @for (subject of track().subjects; track subject.name) {
+      <li class="chip" [class.missing]="subject.missing">
+        <span>
+          @if (subject.missing) {
+            <span aria-hidden="true">⚠ </span>
+          }
+          {{ subject.name }}
+          @if (subject.missing) {
+            <span class="note" i18n="@@subjects.missing"
+              >Assunto não encontrado no acervo</span
+            >
+          }
+        </span>
+        <button
+          type="button"
+          class="icon"
+          [attr.aria-label]="removeLabel(subject)"
+          [disabled]="busy()"
+          (click)="removed(subject)"
+        >
+          ×
+        </button>
+      </li>
+    }
+    @for (suggestion of track().suggestions; track suggestion.id) {
+      <li class="chip suggested">
+        <span>
+          <span class="tag" i18n="@@subjects.suggested">Sugerido</span>
+          @if (suggestion.kind === 'new') {
+            <ng-container i18n="@@subjects.newName"
+              >Novo assunto: «{{ suggestion.name }}»</ng-container
+            >
+          } @else {
+            {{ suggestion.name }}
+          }
+        </span>
+        <span class="decide">
+          <button
+            type="button"
+            class="action"
+            [attr.aria-label]="acceptLabel(suggestion)"
+            [disabled]="busy()"
+            (click)="accept(suggestion)"
+            i18n="@@subjects.accept"
+          >
+            Aceitar
+          </button>
+          <button
+            type="button"
+            class="action"
+            [attr.aria-label]="refuseLabel(suggestion)"
+            [disabled]="busy()"
+            (click)="refuse(suggestion)"
+            i18n="@@subjects.refuse"
+          >
+            Recusar
+          </button>
+        </span>
+      </li>
+    }
+  </ul>
+  @if (canAcceptAll()) {
+    <button
+      type="button"
+      class="action"
+      [disabled]="busy()"
+      (click)="acceptAll()"
+      i18n="@@subjects.acceptAll"
+    >
+      Aceitar todas as sugestões desta faixa
+    </button>
+  }
+  @if (full()) {
+    <p class="limit" role="alert" i18n="@@subjects.limit">
+      Até 5 assuntos por faixa
+    </p>
+  }
+  <app-subject-picker
+    [collection]="collection()"
+    [taken]="taken()"
+    [disabled]="busy()"
+    [label]="pickerLabel()"
+    (chosen)="added($event)"
+  />
+  @if (track().suggestedSummary; as suggested) {
+    <div class="suggested-summary">
+      <p>
+        <span class="tag" i18n="@@subjects.suggestedSummary"
+          >Resumo sugerido</span
+        >
+        {{ suggested }}
+      </p>
+      <span class="decide">
+        <button
+          type="button"
+          class="action"
+          [disabled]="busy()"
+          (click)="decideSummary('accept')"
+          i18n="@@subjects.acceptSummary"
+        >
+          Aceitar resumo
+        </button>
+        <button
+          type="button"
+          class="action"
+          [disabled]="busy()"
+          (click)="decideSummary('refuse')"
+          i18n="@@subjects.refuseSummary"
+        >
+          Recusar resumo
+        </button>
+      </span>
+    </div>
+  }
+  <label class="summary">
+    <span i18n="@@subjects.summary">Resumo</span>
+    <textarea
+      rows="2"
+      [attr.maxlength]="summaryMax"
+      [value]="track().summary ?? ''"
+      [disabled]="busy()"
+      (change)="summaryChanged($event)"
+    ></textarea>
+  </label>
+</div>

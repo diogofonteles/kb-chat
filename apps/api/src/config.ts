@@ -39,6 +39,19 @@ export const configSchema = z
       .transform(expandHome),
     KB_BIN: z.string().min(1).default('kb'),
     QMD_BIN: z.string().min(1).default('qmd'),
+    /**
+     * The file install-index.sh --hot writes after swapping the QMD index (KBC-100 FR-5):
+     * the API restarts only its `qmd mcp` and reads the catalog again. Default: in QMD's
+     * cache folder, which the container mounts read-write.
+     */
+    KB_CHAT_INDEX_TRIGGER: z.string().min(1).optional(),
+    /** How often the track documents' backstop runs (ADR 0035 §4: 10 minutes). */
+    KB_CHAT_RECONCILE_MS: z.coerce
+      .number()
+      .int()
+      .min(10)
+      .max(24 * 60 * 60 * 1000)
+      .default(10 * 60 * 1000),
     KB_CHAT_SEARCH: z.enum(['qmd', 'fixture']).default('qmd'),
     /** Topic opened by default; without it the web picks the largest topic. */
     KB_TOPIC: z.string().min(1).optional(),
@@ -64,6 +77,14 @@ export const configSchema = z
      * production, which needs no AI key in .env (ADR 0016).
      */
     KB_CHAT_AI_DEFAULTS: z.enum(['off', 'local']).default('off'),
+    /**
+     * `1` when this API runs on the same Mac as the transcriber (development): masters get
+     * "Ligar transcritor", which runs `launchctl kickstart` (KBC-114 BR-10). Refused hosted.
+     */
+    KB_CHAT_LOCAL_TRANSCRIBER: z
+      .enum(['0', '1'])
+      .default('0')
+      .transform((value) => value === '1'),
     /**
      * Master key of the provider keys kept on disk (AES-256-GCM, ADR 0016): 32 random bytes in
      * base64 (`openssl rand -base64 32`). Required in production.
@@ -159,8 +180,45 @@ export const configSchema = z
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
+    /**
+     * The media library (phase 2, ADR 0022): off by default; with `on`, the API opens the
+     * media database and refuses to start when it cannot (fail fast).
+     */
+    KB_CHAT_MEDIA: z
+      .enum(['on', 'off'])
+      .default('off')
+      .transform((value) => value === 'on'),
+    /** The media database and files: /data/media in production (ADR 0022). */
+    KB_CHAT_MEDIA_DIR: z
+      .string()
+      .min(1)
+      .default('~/.kb-chat-media')
+      .transform(expandHome),
+    /**
+     * The media worker's token (secret, ADR 0022 §3): the API and the worker share it;
+     * at least 32 characters (`openssl rand -base64 32`). Required with KB_CHAT_MEDIA=on.
+     */
+    KB_CHAT_MEDIA_WORKER_TOKEN: blankAsUnset(z.string().min(32).optional()),
+    /** Media items created per minute per client, until the quotas of KBC-035. */
+    MEDIA_CREATE_RATE_LIMIT: z.coerce.number().int().min(1).default(30),
+    /**
+     * The model the app's AI proposes tracks with (KBC-067), on the house OpenRouter account
+     * a master connected (ADR 0016); KBC-063 measured DeepSeek V4 Flash at US$ 0.005/h.
+     */
+    MEDIA_AI_MODEL: z.string().min(1).default('deepseek/deepseek-v4-flash'),
+    /** The media monthly spend cap in US$ (ADR 0022 §7: US$ 10, owner 2026-10-28). */
+    MEDIA_MONTHLY_CAP_USD: z.coerce.number().min(0).max(1000).default(10),
+    /** The cap of one media AI run in US$ (ADR 0029, owner 2026-11-03: US$ 0.25). */
+    MEDIA_AI_RUN_CAP_USD: z.coerce.number().min(0).max(100).default(0.25),
   })
   .superRefine((config, context) => {
+    if (config.KB_CHAT_MEDIA && !config.KB_CHAT_MEDIA_WORKER_TOKEN)
+      context.addIssue({
+        code: 'custom',
+        path: ['KB_CHAT_MEDIA_WORKER_TOKEN'],
+        message:
+          'KB_CHAT_MEDIA=on needs the media worker token: `openssl rand -base64 32`',
+      });
     // Half of the pair is a typo, not a choice: fail at boot in every environment.
     for (const [name, other] of [
       ['SMTP_USER', 'SMTP_PASSWORD'],
@@ -244,6 +302,17 @@ export function assertDeliveryConfigured(config: AppConfig): void {
   if (config.KB_CHAT_SMS === 'log')
     throw new Error(
       'KB_CHAT_SMS=log writes codes to the log: not in production',
+    );
+}
+
+/**
+ * Starting the Mac's transcriber from the API only works on that Mac: production runs on the
+ * VM, so the flag never boots there (KBC-114 BR-10).
+ */
+export function assertLocalTranscriber(config: AppConfig): void {
+  if (config.KB_CHAT_LOCAL_TRANSCRIBER && isHosted(config))
+    throw new Error(
+      'KB_CHAT_LOCAL_TRANSCRIBER=1 is for an API on the same Mac as the transcriber: not hosted',
     );
 }
 

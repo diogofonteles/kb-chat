@@ -1,9 +1,19 @@
-import { mkdtempSync } from 'node:fs';
+import { createMedia } from '../media-factory.js';
+import { registerTranscriberClock } from './transcriber-clock-routes.js';
+import { registerTranscriptSeed } from './transcript-seed-routes.js';
+import { registerDiarizationSeed } from './diarization-seed-routes.js';
+import { registerProposalSeed } from './proposal-seed-routes.js';
+import { registerKbPublishMac } from './kb-publish-routes.js';
+import { registerLevelArrivals } from './level-arrival-routes.js';
+import { startMediaWorkers } from './media-worker-runner.js';
+import { privateTemp } from '../../../../tools/test-temp.mjs';
+import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FsVaultAdapter } from '../adapters/fs-vault-adapter.js';
 import { OWNER, buildApp } from '../app.js';
+import { levelsOnDisk } from '../levels-factory.js';
 import { loadConfig } from '../config.js';
 import { createLogger } from '../logger.js';
 import { JsonlSpendLedger } from '../adapters/jsonl-spend-ledger.js';
@@ -11,7 +21,12 @@ import { JsonlUsageLog } from '../adapters/jsonl-usage-log.js';
 import { FsConversationStore } from '../adapters/fs-conversation-store.js';
 import { JsonSettingsStore } from '../adapters/json-settings-store.js';
 import { createAiProviders } from '../providers/create-ai-providers.js';
+import { AuthorDirectory, AuthorsService } from '../modules/authors/index.js';
 import { CatalogRegistry } from '../modules/catalog/index.js';
+import {
+  CollectionRegistry,
+  CollectionsVault,
+} from '../modules/topics/index.js';
 import {
   budgetsFromConfig,
   createResearchAgent,
@@ -34,10 +49,17 @@ import { DisabledLlm } from '../adapters/disabled-llm.js';
 import { MemorySpendLedger } from '../adapters/memory-spend-ledger.js';
 import { StubLlmAdapter } from '../adapters/stub-llm-adapter.js';
 import { FakeGemini, fakeProvidersFetch } from '../testing/fake-gemini.js';
+import { FakeGroq } from '../testing/fake-groq.js';
 import {
   E2E_AUTHORIZE_PATH,
   registerOpenRouterConsent,
 } from './openrouter-routes.js';
+
+/** Not a secret: the E2E server's media worker token (local, throwaway). */
+const E2E_MEDIA_WORKER_TOKEN = 'e2e-media-worker-token-0123456789abcdef';
+
+// Started by hand (no Playwright around it), it still cleans up after itself.
+privateTemp();
 
 /** The owner of the E2E run: a master with the `owner` data the specs expect. */
 export const E2E_OWNER_EMAIL = 'owner@kb-chat.test';
@@ -55,13 +77,71 @@ const codexRunner = await startCodexRunner({
   env: { PATH: process.env['PATH'] ?? '' },
 });
 
+/**
+ * A copy of the fixture vault: the fake Mac (KBC-099) writes track documents into it, and the
+ * checked-in fixture stays as it is.
+ */
+function vaultCopy(): string {
+  const copy = mkdtempSync(join(tmpdir(), 'kbchat-e2e-vault-'));
+  cpSync(
+    fileURLToPath(new URL('../../test/fixtures/vault', import.meta.url)),
+    copy,
+    { recursive: true },
+  );
+  levelCollections(copy);
+  return copy;
+}
+
+/**
+ * A latency bench (KBC-101 NFR-3) runs this server on a seeded vault indexed by QMD and a
+ * seeded media.db (src/scripts/seed-track-world.ts); the specs never set these.
+ */
+const BENCH_VAULT = process.env['KBC_BENCH_VAULT'];
+const BENCH_MEDIA_DIR = process.env['KBC_BENCH_MEDIA_DIR'];
+
+const LEVEL_DOCS = [
+  ['aberto', 'Orvalho Aberto', 'O orvalho da manhã, para todos.'],
+  ['medio', 'Orvalho do Meio', 'O orvalho do grau do meio.'],
+  ['velado', 'Orvalho Velado', 'O orvalho do grau velado.'],
+] as const;
+
+const LEVEL_COLLECTION_NAMES: Record<string, string> = {
+  niveis: 'Zz Níveis',
+  historico: 'Zz Histórico',
+  semnivel: 'Zz Sem Nível',
+  pessoas: 'Zz Pessoas',
+};
+
+/**
+ * One collection with three documents per Playwright project (KBC-103, e2e/specs/levels.spec):
+ * a scale changes what everyone sees in a collection, so the parallel projects never share
+ * one, and no other spec's collection gets levels.
+ */
+function levelCollections(root: string): void {
+  // `zz-historico-*`: the stored answers re-checked at today's level (KBC-110).
+  // `zz-semnivel-*`: documents arriving without a level (KBC-107).
+  // `zz-pessoas-*`: people's levels in profiles, invitations and in bulk (KBC-109).
+  const collections = ['niveis', 'historico', 'semnivel', 'pessoas'].flatMap(
+    (kind) => ['desktop', 'mobile'].map((project) => ({ kind, project })),
+  );
+  for (const { kind, project } of collections) {
+    const dir = join(root, `zz-${kind}-${project}`);
+    const name = LEVEL_COLLECTION_NAMES[kind] ?? kind;
+    mkdirSync(join(dir, 'raw'), { recursive: true });
+    writeFileSync(join(dir, 'topic.yaml'), `title: ${name} ${project}\n`);
+    for (const [file, title, body] of LEVEL_DOCS)
+      writeFileSync(
+        join(dir, 'raw', `${file}.md`),
+        `---\ntitle: ${title}\ngenre: reference_docs\ndepth: 1\nrelevance: collected_on_purpose\n---\n\n${body}\n`,
+      );
+  }
+}
+
 // E2E server: the fixture vault and the in-process index, no QMD or models.
 const config = loadConfig({
   ...process.env,
-  KB_VAULT: fileURLToPath(
-    new URL('../../test/fixtures/vault', import.meta.url),
-  ),
-  KB_CHAT_SEARCH: 'fixture',
+  KB_VAULT: BENCH_VAULT ?? vaultCopy(),
+  KB_CHAT_SEARCH: BENCH_VAULT ? 'qmd' : 'fixture',
   KB_CHAT_LLM: 'stub',
   KB_CHAT_STATE_DIR: mkdtempSync(join(tmpdir(), 'kbchat-e2e-')),
   LOG_LEVEL: 'warn',
@@ -71,22 +151,43 @@ const config = loadConfig({
   AUTH_RATE_LIMIT: '10000',
   // Every spec researches from the same address, at both widths.
   RESEARCH_RATE_LIMIT: '10000',
+  MEDIA_CREATE_RATE_LIMIT: '10000',
   KB_CHAT_CODEX_RUNNER_URL: codexRunner.url,
+  // The media library (KBC-034) with the real worker below and real ffmpeg.
+  KB_CHAT_MEDIA: 'on',
+  KB_CHAT_MEDIA_DIR:
+    BENCH_MEDIA_DIR ?? mkdtempSync(join(tmpdir(), 'kbchat-e2e-media-')),
+  KB_CHAT_MEDIA_WORKER_TOKEN: E2E_MEDIA_WORKER_TOKEN,
+  // "Ligar transcritor" (KBC-114), with the fake launchctl below: never the real one.
+  KB_CHAT_LOCAL_TRANSCRIBER: '1',
 });
 const logger = createLogger(config.LOG_LEVEL);
-const vault = new FsVaultAdapter(config.KB_VAULT);
+const collections = new CollectionRegistry(
+  new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'collections.json')),
+);
+const vault = new CollectionsVault(
+  new FsVaultAdapter(config.KB_VAULT),
+  collections,
+);
 const index = await createSearchIndex({ config, vault, log: logger });
 const ledger = new JsonlSpendLedger(
   join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
 );
 const catalog = new CatalogRegistry(vault);
 await catalog.load();
+// The authors of each collection (KBC-049, ADR 0030), in the state dir like the registry.
+const authorDirectory = new AuthorDirectory(
+  new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'authors.json')),
+);
+await authorDirectory.load();
+const authors = new AuthorsService({ directory: authorDirectory, catalog });
 const agent = createResearchAgent({
   catalog,
   index,
   vault,
   ledger,
   budgets: budgetsFromConfig(config),
+  mainAuthorOf: (topic) => authors.mainVoiceOf(topic),
 });
 // Providers answer through a fake HTTP layer: a key ending in "valid" is accepted, any other
 // gets 401 (KBC-007 AC-5). Nothing leaves this computer.
@@ -194,10 +295,26 @@ const access = {
   requests: new MemoryDocumentStore(),
   delivery: { email: outbox, sms: null },
 };
+// Groq (KBC-037) answers through a fake: a key ending in "valid" is accepted. Nothing paid.
+const media = await createMedia(
+  config,
+  {
+    tokenKey: Buffer.alloc(32, 9),
+    voicePrintKey: Buffer.alloc(32, 10),
+    consentKey: Buffer.alloc(32, 11),
+    groqKey: Buffer.alloc(32, 12),
+  },
+  {
+    fetch: new FakeGroq().fetch,
+    launchctl: () =>
+      Promise.resolve({ code: 0, output: 'kickstarted (E2E fake)' }),
+  },
+);
 const app = await buildApp({
   config,
   auth,
   access,
+  media,
   vault,
   index,
   logger,
@@ -208,8 +325,38 @@ const app = await buildApp({
   usage,
   conversations,
   house,
+  collections,
+  authorDirectory,
+  levels: levelsOnDisk(config.KB_CHAT_STATE_DIR),
 });
 identity.register(app);
 registerOutbox(app, outbox);
+registerLevelArrivals(app, { vault: config.KB_VAULT, catalog });
+if (media) {
+  registerTranscriberClock(app, media.transcribers);
+  registerTranscriptSeed(app, { media, mediaDir: config.KB_CHAT_MEDIA_DIR });
+  registerDiarizationSeed(app, { media, mediaDir: config.KB_CHAT_MEDIA_DIR });
+  registerProposalSeed(app, { mediaDir: config.KB_CHAT_MEDIA_DIR });
+  registerKbPublishMac(app, {
+    media,
+    catalog,
+    authors,
+    vault: config.KB_VAULT,
+    mediaDir: config.KB_CHAT_MEDIA_DIR,
+  });
+}
 registerOpenRouterConsent(app, openRouter);
 await app.listen({ host: '127.0.0.1', port: config.PORT });
+const stopWorkers = startMediaWorkers({
+  apiUrl: `http://127.0.0.1:${config.PORT}`,
+  token: E2E_MEDIA_WORKER_TOKEN,
+  mediaDir: config.KB_CHAT_MEDIA_DIR,
+  log: logger,
+});
+// A stop signal ends the whole server: never an API left running without its workers
+// (a later run would reuse it and its uploads would wait in the queue forever).
+for (const signal of ['SIGTERM', 'SIGINT'] as const)
+  process.once(signal, () => {
+    stopWorkers();
+    void app.close().finally(() => process.exit(0));
+  });

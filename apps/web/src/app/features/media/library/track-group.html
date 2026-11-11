@@ -1,0 +1,57 @@
+<button
+  type="button"
+  class="toggle"
+  [attr.aria-expanded]="open()"
+  [attr.aria-controls]="open() ? listId() : null"
+  (click)="open.set(!open())"
+>
+  <span class="chevron" [class.open]="open()" aria-hidden="true">▸</span>
+  {{ label() }}
+</button>
+@if (open()) {
+  <ol class="tracks" [id]="listId()" [attr.aria-label]="listName()">
+    @for (track of item().tracks; track track.id) {
+      <li class="track">
+        <span class="ordinal" aria-hidden="true">{{
+          track.parent?.ordinal
+        }}</span>
+        <button
+          type="button"
+          class="play"
+          [attr.aria-label]="playLabel(track)"
+          (click)="played.emit(track)"
+        >
+          <span aria-hidden="true">{{
+            playingId() === track.id ? '❚❚' : '▶'
+          }}</span>
+        </button>
+        <a
+          class="title"
+          [routerLink]="['/midia', track.id]"
+          [title]="track.title"
+          >{{ track.title }}</a
+        >
+        <span class="meta">
+          @if (showsAuthor(track)) {
+            <app-authorship-badge [mediaAuthor]="track.author" />
+          }
+          <span>{{ durationOf(track) }}</span>
+          @if (resumeOf(track)) {
+            <span>{{ resumeOf(track) }}</span>
+          } @else if (stateOf(track)) {
+            <span class="state">{{ stateOf(track) }}</span>
+          }
+        </span>
+        @if (canEdit()) {
+          <app-menu-button
+            [label]="menuLabel(track)"
+            [options]="trackOptions"
+            (chosen)="chooseAction(track, $event)"
+          >
+            <span aria-hidden="true">⋯</span>
+          </app-menu-button>
+        }
+      </li>
+    }
+  </ol>
+}

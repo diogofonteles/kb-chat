@@ -1,0 +1,37 @@
+<div class="cover" [attr.data-tone]="tone()" aria-hidden="true">
+  <span class="initials">{{ initials() }}</span>
+</div>
+@if (ready()) {
+  <button
+    type="button"
+    class="play"
+    [attr.aria-label]="playLabel()"
+    (click)="played.emit()"
+  >
+    <span aria-hidden="true">{{ playing() ? '❚❚' : '▶' }}</span>
+  </button>
+  <a
+    class="title"
+    [routerLink]="['/midia', item().id]"
+    [title]="item().title"
+    >{{ item().title }}</a
+  >
+} @else {
+  <span class="title" [title]="item().title">{{ item().title }}</span>
+}
+<span class="meta">
+  <app-authorship-badge [mediaAuthor]="item().author" />
+  @if (duration()) {
+    <span class="duration">{{ duration() }}</span>
+  }
+  @if (!resume() && state()) {
+    <span class="state">{{ state() }}</span>
+  }
+</span>
+@if (resume()) {
+  <span class="resume">{{ resume() }}</span>
+  <span class="position" aria-hidden="true"
+    ><span [style.width.%]="percent()"></span
+  ></span>
+}
+<ng-content />

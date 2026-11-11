@@ -108,3 +108,14 @@ export function windowOf(body: string, request: WindowRequest): BodyWindow {
     matches: request.around ? countInside(positions, { start, size }) : null,
   };
 }
+
+/** Where `around` first occurs inside the window, or null (a track's cited passage, KBC-099). */
+export function firstMatchIn(
+  body: string,
+  around: string,
+  window: Pick<BodyWindow, 'start' | 'end'>,
+): number | null {
+  const found = occurrences(foldKeepingLength(body), around, window.start);
+  const first = found.find((at) => at < window.end);
+  return first ?? null;
+}

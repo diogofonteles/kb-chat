@@ -1,0 +1,168 @@
+<!-- Escape closes the modal dialog (cancel); the backdrop is not a way out while sending. -->
+<dialog
+  #dialog
+  class="panel"
+  aria-labelledby="upload-title"
+  (close)="dialogClosed()"
+>
+  <form class="body" [formGroup]="form" (ngSubmit)="send()" novalidate>
+    <header class="head">
+      <h2 id="upload-title" i18n="@@media.upload.title">Enviar áudio</h2>
+      @if (showSteps()) {
+        <app-preparation-steps [step]="1" />
+      }
+    </header>
+
+    <section
+      class="drop"
+      [class.dragging]="dragging()"
+      [class.invalid]="!!fileProblem()"
+      aria-labelledby="file-label"
+      (dragover)="dragOver($event)"
+      (dragleave)="dragging.set(false)"
+      (drop)="dropped($event)"
+    >
+      <p id="file-label" class="label" i18n="@@media.upload.file">Arquivo</p>
+      <p class="rule" id="file-rule">{{ rule }}</p>
+      @if (uploads.entries().length === 0) {
+        <p class="hint" i18n="@@media.upload.dropHint">
+          Arraste os arquivos para cá ou
+        </p>
+      }
+      <button
+        type="button"
+        class="secondary"
+        [disabled]="stage() === 'sending'"
+        (click)="chooseFile()"
+      >
+        @if (uploads.entries().length > 0) {
+          <ng-container i18n="@@media.upload.chooseOther"
+            >Adicionar arquivos</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@media.upload.choose"
+            >Escolher arquivos</ng-container
+          >
+        }
+      </button>
+      <input
+        #fileInput
+        class="visually-hidden"
+        type="file"
+        multiple
+        accept=".mp3,.m4a,.wav,.flac,.ogg,.opus,audio/*"
+        tabindex="-1"
+        aria-hidden="true"
+        (change)="fileChosen($event)"
+      />
+      @if (fileProblem(); as problem) {
+        <p class="error" role="alert">
+          <span aria-hidden="true">⚠</span> {{ problem }}
+        </p>
+      }
+    </section>
+
+    @if (uploads.entries().length > 0) {
+      <ul
+        class="files"
+        aria-label="Arquivos"
+        i18n-aria-label="@@media.upload.files"
+      >
+        @for (entry of uploads.entries(); track entry.key) {
+          <li>
+            <app-upload-file-row
+              [entry]="entry"
+              [locked]="stage() === 'sending'"
+              [submitted]="submitted()"
+              [topics]="topics()"
+              (renamed)="uploads.rename(entry.key, $event)"
+              (removed)="uploads.remove(entry.key)"
+            />
+          </li>
+        }
+      </ul>
+    }
+
+    <label class="field">
+      <span class="label" i18n="@@media.upload.topic">Acervo</span>
+      <select formControlName="topic" (change)="topicChosen()">
+        @for (option of choices(); track option.slug) {
+          <option [value]="option.slug">{{ treeTitle(option) }}</option>
+        }
+      </select>
+    </label>
+
+    <app-author-combobox
+      [topic]="chosenTopic()"
+      [disabled]="stage() === 'sending'"
+      [(name)]="authorName"
+    />
+
+    @if (levels.shown()) {
+      <app-level-field
+        [choices]="levels.levels()"
+        [label]="levelLabel"
+        [loading]="levels.loading()"
+        [failed]="levels.failed()"
+        [retrying]="levels.retrying()"
+        [invalid]="levelInvalid()"
+        [disabled]="stage() === 'sending'"
+        [(level)]="level"
+        (retried)="levels.reload()"
+      />
+    }
+
+    @if (uploads.anyResuming()) {
+      <p class="kept">{{ keptNotice() }}</p>
+    }
+    <!-- Out of the way while sending: the progress of each file is what matters then. -->
+    @if (!uploads.onlyResuming() && stage() !== 'sending') {
+      <app-preparation-options [several]="uploads.entries().length > 1" />
+    }
+
+    <footer class="actions">
+      @if (stage() === 'sending') {
+        <button
+          type="button"
+          class="secondary"
+          (click)="cancelUpload()"
+          i18n="@@media.upload.cancelSending"
+        >
+          Cancelar envio
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="secondary"
+          (click)="close()"
+          i18n="@@media.upload.cancel"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          class="primary"
+          [disabled]="uploads.checking()"
+          [attr.aria-disabled]="waitingForLevels() ? 'true' : null"
+          [attr.aria-busy]="waitingForLevels() ? 'true' : null"
+        >
+          @if (waitingForLevels()) {
+            <ng-container i18n="@@media.level.waiting"
+              >Carregando níveis…</ng-container
+            >
+          } @else if (uploads.checking()) {
+            <ng-container i18n="@@media.upload.checking"
+              >Conferindo arquivos…</ng-container
+            >
+          } @else if (stage() === 'stopped') {
+            <ng-container i18n="@@media.upload.retry"
+              >Tentar de novo</ng-container
+            >
+          } @else {
+            <ng-container i18n="@@media.upload.send">Enviar</ng-container>
+          }
+        </button>
+      }
+    </footer>
+  </form>
+</dialog>

@@ -1,3 +1,4 @@
+import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -65,8 +66,11 @@ export class FilterBar {
   readonly hiddenOffTopic = input(0);
   /** Application order of the active filters ("facet:value", newest last). */
   readonly order = input<readonly string[]>([]);
+  /** Names of the collections a parent's search spans (the "Sub-acervo" filter, KBC-048). */
+  readonly topicNames = input<ReadonlyMap<string, string>>(new Map());
   readonly filtersChange = output<SearchFilters>();
 
+  private readonly labels = injectAuthorshipLabels();
   protected readonly openKey = signal<FacetKey | null>(null);
   protected readonly expanded = signal<ReadonlySet<FacetKey>>(new Set());
   protected readonly sheetOpen = signal(false);
@@ -74,10 +78,10 @@ export class FilterBar {
   protected readonly draft = linkedSignal(() => this.filters());
 
   protected readonly groups = computed(() =>
-    toFacetGroups(this.facets(), this.filters()),
+    toFacetGroups(this.facets(), this.filters(), this.topicNames()),
   );
   protected readonly draftGroups = computed(() =>
-    toFacetGroups(this.facets(), this.draft()),
+    toFacetGroups(this.facets(), this.draft(), this.topicNames()),
   );
   /**
    * The authorship control shows a single choice (KBC-020): no removable chip repeats it.
@@ -85,12 +89,13 @@ export class FilterBar {
    */
   protected readonly active = computed(() => {
     const single = selectedAuthorship(this.filters()) !== null;
-    return activeFilters(this.filters(), this.order()).filter(
-      (filter) => !(single && filter.key === 'authorships'),
-    );
+    return activeFilters(this.filters(), this.order(), {
+      topicNames: this.topicNames(),
+      authorships: this.labels(),
+    }).filter((filter) => !(single && filter.key === 'authorships'));
   });
   protected readonly authorships = computed(() =>
-    authorshipOptions(this.facets(), this.filters()),
+    authorshipOptions(this.facets(), this.filters(), this.labels()),
   );
   protected readonly barId = `filters-${nextBarId++}`;
   protected readonly activeCount = computed(() => countActive(this.filters()));

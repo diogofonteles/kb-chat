@@ -107,7 +107,7 @@
           [value]="topic.slug"
           [selected]="topic.slug === preferences().defaultTopic"
         >
-          {{ topic.title }} ({{ topic.documentCount | number }})
+          {{ treeTitle(topic) }} ({{ topic.documentCount | number }})
         </option>
       }
     </select>

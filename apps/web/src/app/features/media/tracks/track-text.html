@@ -1,0 +1,210 @@
+<div class="head">
+  <span class="caption" aria-hidden="true" i18n="@@trackText.caption"
+    >Texto da faixa</span
+  >
+  @if (canCorrect && state() === 'ready') {
+    <span class="tools">
+      <button
+        type="button"
+        class="switch"
+        [attr.aria-expanded]="searching()"
+        (click)="toggleSearch()"
+        i18n="@@trackText.findWord"
+      >
+        Procurar palavra
+      </button>
+      <button
+        type="button"
+        class="switch"
+        (click)="openHistory()"
+        i18n="@@trackText.corrections"
+      >
+        Correções ({{ corrections() }})
+      </button>
+    </span>
+  }
+  @if (canSwitch()) {
+    <button type="button" class="switch" (click)="switchView()">
+      @if (whole()) {
+        <ng-container i18n="@@trackText.onlyTrack">Ver só a faixa</ng-container>
+      } @else {
+        <ng-container i18n="@@trackText.whole"
+          >Ver transcrição completa</ng-container
+        >
+      }
+    </button>
+  }
+</div>
+@if (canCorrect && carry(); as carried) {
+  <p class="carry">
+    @if (carried.carried === 1) {
+      <ng-container i18n="@@trackText.carriedOne"
+        >1 correção reaplicada</ng-container
+      >
+    } @else {
+      <ng-container i18n="@@trackText.carried"
+        >{{ carried.carried }} correções reaplicadas</ng-container
+      >
+    }
+    @if (carried.notCarried === 1) {
+      <ng-container i18n="@@trackText.notCarriedOne"
+        >; 1 não coube na transcrição nova</ng-container
+      >
+    } @else if (carried.notCarried > 1) {
+      <ng-container i18n="@@trackText.notCarried"
+        >; {{ carried.notCarried }} não couberam na transcrição
+        nova</ng-container
+      >
+    }
+    ·
+    <button
+      type="button"
+      class="link"
+      (click)="openHistory()"
+      i18n="@@trackText.seeCarry"
+    >
+      Ver
+    </button>
+  </p>
+}
+@if (learnedWords(); as count) {
+  <!-- The dotted mark is drawn only (KBC-113 FR-6): said here in words too (review). -->
+  <p class="learned-note">
+    <span class="learned-sample" aria-hidden="true">✦</span>
+    @if (count === 1) {
+      <ng-container i18n="@@trackText.learnedOne"
+        >1 palavra corrigida pelo aprendizado (sublinhado
+        pontilhado)</ng-container
+      >
+    } @else {
+      <ng-container i18n="@@trackText.learnedMany"
+        >{{ count }} palavras corrigidas pelo aprendizado (sublinhado
+        pontilhado)</ng-container
+      >
+    }
+  </p>
+}
+@if (canCorrect && searching() && state() === 'ready') {
+  <app-word-search [lines]="lines()" (chosen)="chosenHit($event)" />
+}
+<!-- Outside the region: it is busy while retrying, and a busy region may stay silent. -->
+<p class="visually-hidden" role="status">{{ announcement() }}</p>
+@if (canCorrect) {
+  <p class="visually-hidden" role="status">{{ desk.announcement() }}</p>
+}
+<div
+  #body
+  class="body"
+  role="region"
+  [attr.id]="regionId()"
+  [attr.aria-label]="label()"
+  [attr.aria-busy]="state() === 'loading' || retrying() ? 'true' : null"
+  [attr.tabindex]="state() === 'ready' ? 0 : null"
+  [class.correctable]="canCorrect"
+  (keydown)="scrolledByKey($event)"
+  (pointerdown)="pressed($event)"
+  (click)="clickedText($event)"
+>
+  @switch (state()) {
+    @case ('ready') {
+      @for (line of lines(); track line.segment) {
+        @if ($index === trackBounds().first) {
+          <span class="visually-hidden" i18n="@@trackText.trackStart"
+            >Início da faixa {{ ordinal() }}</span
+          >
+        }
+        <p
+          #line
+          class="line"
+          [class.inside]="whole() && line.inside"
+          [class.speaking]="$index === speakingLine()"
+          [textContent]="line.text"
+        ></p>
+        @if ($index === trackBounds().last) {
+          <span class="visually-hidden" i18n="@@trackText.trackEnd"
+            >Fim da faixa {{ ordinal() }}</span
+          >
+        }
+      } @empty {
+        <p class="note" i18n="@@trackText.noSpeech">
+          Nenhuma fala transcrita neste trecho.
+        </p>
+      }
+    }
+    @case ('waiting') {
+      <p class="note" i18n="@@trackText.waiting">
+        O texto aparece quando a transcrição terminar.
+      </p>
+    }
+    @case ('failed') {
+      <p class="note" i18n="@@trackText.failed">
+        A transcrição falhou: não há texto para mostrar.
+      </p>
+    }
+    @case ('none') {
+      <p class="note" i18n="@@trackText.none">Este áudio não foi transcrito.</p>
+    }
+    @case ('error') {
+      <p class="note" aria-hidden="true">
+        @if (retrying()) {
+          <ng-container i18n="@@trackText.loading"
+            >Carregando o texto…</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@trackText.error"
+            >Não consegui carregar o texto.</ng-container
+          >
+        }
+      </p>
+      <button
+        type="button"
+        class="retry"
+        aria-label="Tentar de novo: carregar o texto"
+        i18n-aria-label="@@trackText.retryName"
+        [attr.aria-disabled]="retrying() ? 'true' : null"
+        (click)="retry()"
+        i18n="@@trackText.retry"
+      >
+        Tentar de novo
+      </button>
+    }
+    @default {
+      <span class="visually-hidden" i18n="@@trackText.loading"
+        >Carregando o texto…</span
+      >
+      <span class="skeleton"></span>
+      <span class="skeleton"></span>
+      <span class="skeleton short"></span>
+    }
+  }
+</div>
+@if (canCorrect) {
+  @if (desk.selection()) {
+    <app-word-correction (closed)="refocus()" />
+  }
+  @if (desk.notice(); as notice) {
+    <p class="notice">
+      {{ notice.text }}
+      @if (notice.undo) {
+        <button
+          type="button"
+          class="link"
+          [disabled]="desk.undoing()"
+          (click)="notice.undo()"
+          i18n="@@trackText.undo"
+        >
+          Desfazer
+        </button>
+      }
+    </p>
+  }
+  @if (desk.correctingAll(); as text) {
+    <app-correct-all [find]="text" [window]="span()" (closed)="refocus()" />
+  }
+  @if (historyOpen()) {
+    <app-correction-history
+      (closed)="historyOpen.set(false)"
+      (fixHere)="fixHere($event)"
+    />
+  }
+}

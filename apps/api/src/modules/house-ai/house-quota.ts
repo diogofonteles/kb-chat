@@ -1,5 +1,6 @@
 import { RESEARCH_WEIGHTS, type ResearchProfile } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
+import { startOfAppDay } from '../../app-calendar.js';
 import type { HouseUsagePort } from '../../ports/house-usage.js';
 
 /**
@@ -16,12 +17,9 @@ export const CAPACITY_NEEDED: Readonly<Record<ResearchProfile, number>> = {
 export interface Reservation {
   /** Researches left today after this one. */
   readonly remaining: number;
-  /** Gives the units back (a turn that failed before any model answered). */
+  /** Gives the units back (a turn that failed with no visible answer). */
   refund(): Promise<void>;
 }
-
-const startOfDay = (now: Date): Date =>
-  new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
 /** The per-person daily quota of house researches (BR-3), counted in house-usage.jsonl. */
 export class HouseQuota {
@@ -38,9 +36,11 @@ export class HouseQuota {
   async remaining(principal: string, dailyLimit: number): Promise<number> {
     const used = await this.deps.ledger.unitsSince(
       principal,
-      startOfDay(this.now()),
+      startOfAppDay(this.now()),
     );
-    return Math.max(0, dailyLimit - used);
+    // A refund never gives more than the day's quota: it is dated at its reservation. Only a
+    // refund written before KBC-061, dated at the failure, could still land on a later day.
+    return Math.min(dailyLimit, Math.max(0, dailyLimit - used));
   }
 
   /** Takes the profile's units, or refuses with HOUSE_QUOTA_EXHAUSTED; one at a time. */
@@ -63,21 +63,35 @@ export class HouseQuota {
       throw new AppError('HOUSE_QUOTA_EXHAUSTED', 'House quota spent today', {
         details: { remaining: left, dailyResearches: dailyLimit },
       });
-    await this.append(principal, profile, units);
+    const reservedAt = this.now();
+    await this.append(principal, { profile, units, at: reservedAt });
     let refunded = false;
     return {
       remaining: left - units,
       refund: async () => {
         if (refunded) return;
         refunded = true;
-        await this.append(principal, profile, -units);
+        // Dated at the reservation: a turn that fails after midnight gives back the day
+        // it was taken from, not the new one (KBC-061).
+        await this.append(principal, {
+          profile,
+          units: -units,
+          at: reservedAt,
+        });
       },
     };
   }
 
-  private append(principal: string, profile: ResearchProfile, units: number) {
-    const ts = this.now().toISOString();
-    return this.deps.ledger.append({ ts, principal, units, profile });
+  private append(
+    principal: string,
+    entry: { profile: ResearchProfile; units: number; at: Date },
+  ) {
+    return this.deps.ledger.append({
+      ts: entry.at.toISOString(),
+      principal,
+      units: entry.units,
+      profile: entry.profile,
+    });
   }
 
   private now(): Date {

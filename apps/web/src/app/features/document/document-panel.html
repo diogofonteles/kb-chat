@@ -71,6 +71,13 @@
 
 <div class="meta">
   @if (loaded(); as doc) {
+    @if (doc.level !== undefined) {
+      <app-document-level
+        [topic]="topic()"
+        [documentId]="documentId()"
+        [level]="doc.level"
+      />
+    }
     <p class="authorship">
       <app-authorship-badge [authorship]="doc.authorship" />
       @if (doc.author) {
@@ -172,6 +179,8 @@
     [topic]="topic()"
     [documentId]="documentId()"
     [seeAlso]="doc.seeAlso"
+    [concept]="doc.concept"
     (opened)="navigated.emit($event)"
+    (trackOpened)="trackOpened.emit($event)"
   />
 }

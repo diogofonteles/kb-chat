@@ -1,9 +1,11 @@
-import { DecimalPipe } from '@angular/common';
+import { RouterLink, RouterLinkActive } from '@angular/router';
+import { formatNumber } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
   computed,
   inject,
+  LOCALE_ID,
   output,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -12,7 +14,11 @@ import type {
   ConversationKind,
   ConversationStatus,
   ConversationSummary,
+  Topic,
 } from '@kb-chat/contracts';
+import { treeTitle } from '@core/topics/topic-tree.js';
+import { CollectionDialog } from '@features/collections/collection-dialog.js';
+import { UnassignedNotice } from '@features/collections/unassigned-notice.js';
 import { HistoryStore } from '@core/history/history-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import { EMPTY, Subject, catchError, switchMap } from 'rxjs';
@@ -26,8 +32,10 @@ import { SettingsButton } from '@features/settings/settings-button.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
 import { GoogleIdentity } from '@core/auth/google-identity.js';
 import { SessionStore } from '@core/auth/session-store.js';
+import { hasLibrary } from '@features/media/library/library-access.js';
+import { ProcessingQueueStore } from '@features/media/queue/processing-queue-store.js';
 
-export type SidebarAction = 'new' | 'restore' | 'topic';
+export type SidebarAction = 'new' | 'restore' | 'topic' | 'media' | 'levels';
 
 const THEME_LABELS: Record<Theme, () => string> = {
   auto: () => $localize`:@@theme.auto:Automático (claro/escuro)`,
@@ -55,7 +63,13 @@ const KIND_LABELS: Record<ConversationKind, () => string> = {
  */
 @Component({
   selector: 'app-sidebar',
-  imports: [DecimalPipe, SettingsButton],
+  imports: [
+    SettingsButton,
+    RouterLink,
+    RouterLinkActive,
+    CollectionDialog,
+    UnassignedNotice,
+  ],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -91,6 +105,8 @@ export class Sidebar {
   protected readonly session = inject(SessionStore);
   /** The count badge on "Pessoas e permissões" (masters, KBC-014). */
   protected readonly requests = inject(AccessRequestsStore);
+  /** "Fila" (KBC-090): always reachable, with a count while anything runs. */
+  protected readonly queue = inject(ProcessingQueueStore);
   private readonly google = inject(GoogleIdentity);
   private readonly settings = inject(SettingsStore);
   /** Research conversations go to the research view (KBC-008 FR-6), shown as saved. */
@@ -101,6 +117,16 @@ export class Sidebar {
   readonly acted = output<SidebarAction>();
 
   protected readonly theme = this.themes.theme;
+  /** "Biblioteca" (T16, KBC-051 BR-1): in the place of "Mídia", for who has it. */
+  protected readonly libraryOn = computed(() => hasLibrary(this.session));
+  /** "Mídia" (T14): when the server has the media library on and a collection is chosen. */
+  protected readonly mediaOn = computed(
+    () =>
+      !this.libraryOn() &&
+      this.session.me()?.media === true &&
+      this.session.can('media') &&
+      this.chat.topicSlug() !== null,
+  );
   /** The signed-in person's initial, when Google gave no picture. */
   protected readonly initial = computed(() => {
     const me = this.session.me();
@@ -177,6 +203,40 @@ export class Sidebar {
       this.chat.restore(conversation);
     } else this.restorer.restore(conversation);
     this.acted.emit('restore');
+  }
+
+  protected openMedia(): void {
+    this.acted.emit('media');
+  }
+
+  /** "N documentos sem nível" (KBC-107) leads to T24: the drawer closes. */
+  protected openLevels(): void {
+    this.acted.emit('levels');
+  }
+
+  /** "Novo acervo" and "Editar acervo" (KBC-048 FR-6): only with "Criar acervos". */
+  protected readonly canCreateCollections = computed(() =>
+    this.session.can('collection-create'),
+  );
+  private readonly locale = inject(LOCALE_ID);
+  /**
+   * The selector as a tree (KBC-048 FR-4): sub-collections indented with their counts; a parent
+   * shown only as the title of its group is disabled and says so in words (BR-3).
+   */
+  protected readonly topicOptions = computed(() =>
+    this.chat.topicList().map((topic) => ({
+      slug: topic.slug,
+      canOpen: topic.canOpen,
+      label: topic.canOpen
+        ? `${treeTitle(topic)} (${formatNumber(topic.documentCount, this.locale)})`
+        : $localize`:@@sidebar.groupOnly:${topic.title}:title: — só os sub-acervos abaixo`,
+    })),
+  );
+
+  /** A new collection opens at once (≤ 2 s, NFR-1); a renamed one keeps its place. */
+  protected collectionSaved(topic: Topic): void {
+    this.chat.putTopic(topic);
+    if (topic.slug !== this.chat.topicSlug()) this.changeTopic(topic.slug);
   }
 
   protected changeTopic(slug: string): void {

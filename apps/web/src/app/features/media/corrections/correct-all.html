@@ -1,0 +1,202 @@
+<dialog
+  #dialog
+  class="dialog"
+  aria-labelledby="correct-all-title"
+  (close)="gone()"
+>
+  <header class="head">
+    <h2 id="correct-all-title" i18n="@@correctAll.title">Corrigir todas</h2>
+    <p class="hint" i18n="@@correctAll.of">Ocorrências de «{{ find() }}»</p>
+  </header>
+
+  <div class="body">
+    <label class="field" for="correct-all-text">
+      <span i18n="@@correctAll.textLabel">Texto certo</span>
+      <input
+        id="correct-all-text"
+        type="text"
+        autocomplete="off"
+        spellcheck="false"
+        [value]="typed()"
+        [attr.aria-invalid]="clean() === null ? 'true' : null"
+        [attr.aria-describedby]="clean() === null ? 'correct-all-error' : null"
+        (input)="typedText($event)"
+      />
+    </label>
+    @if (clean() === null || outcome() === 'invalid') {
+      <p id="correct-all-error" class="error" i18n="@@correctAll.invalid">
+        Use até 80 caracteres, numa linha só.
+      </p>
+    }
+
+    @if (window()) {
+      <fieldset class="scope">
+        <legend class="visually-hidden" i18n="@@correctAll.scope">
+          Onde corrigir
+        </legend>
+        <label>
+          <input
+            type="radio"
+            name="correct-all-scope"
+            [checked]="scope() === 'window'"
+            (change)="choose('window')"
+          />
+          <span i18n="@@correctAll.inTrack"
+            >Nesta faixa ({{ counts()?.inWindow ?? '…' }})</span
+          >
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="correct-all-scope"
+            [checked]="scope() === 'recording'"
+            (change)="choose('recording')"
+          />
+          <span i18n="@@correctAll.inRecording"
+            >Na gravação inteira ({{ counts()?.total ?? '…' }})</span
+          >
+        </label>
+      </fieldset>
+    }
+
+    <div class="marks">
+      <button
+        type="button"
+        class="secondary"
+        (click)="checkAll(true)"
+        i18n="@@correctAll.checkAll"
+      >
+        Marcar todas
+      </button>
+      <button
+        type="button"
+        class="secondary"
+        (click)="checkAll(false)"
+        i18n="@@correctAll.uncheckAll"
+      >
+        Desmarcar todas
+      </button>
+    </div>
+
+    <div class="status" role="status">
+      @if (loading()) {
+        <p class="hint" i18n="@@correctAll.loading">
+          Procurando as ocorrências…
+        </p>
+      } @else if (loadFailed()) {
+        <p class="error" i18n="@@correctAll.loadFailed">
+          Não consegui procurar as ocorrências. Feche e tente de novo.
+        </p>
+      } @else if (inScope() > maxBatch) {
+        <p class="hint" i18n="@@correctAll.capped">
+          Mostrando {{ maxBatch }} de {{ inScope() }}; depois de corrigir,
+          repita para as outras.
+        </p>
+      }
+      @switch (outcome()) {
+        @case ('stale') {
+          <p class="error" i18n="@@correctAll.stale">
+            A transcrição foi refeita. Confira as ocorrências no texto novo.
+          </p>
+        }
+        @case ('failed') {
+          <p class="error" i18n="@@correctAll.failed">
+            Não consegui corrigir. Nada foi gravado; tente de novo.
+          </p>
+        }
+      }
+      @if (changed().size > 0) {
+        <p class="error" i18n="@@correctAll.changedSome">
+          Algumas ocorrências mudaram desde a prévia e foram desmarcadas.
+          Confira e confirme de novo.
+        </p>
+      }
+    </div>
+
+    <ul
+      class="list"
+      aria-label="Ocorrências"
+      i18n-aria-label="@@correctAll.list"
+    >
+      @for (occurrence of occurrences(); track occurrence.position) {
+        <li [class.changed]="changedText(occurrence) !== null">
+          <label class="item">
+            <input
+              type="checkbox"
+              [checked]="checked().has(occurrence.position)"
+              (change)="toggled(occurrence.position, $event)"
+            />
+            <span class="clock">{{ clock(occurrence.startMs) }}</span>
+            @if (occurrence.inWindow && window()) {
+              <span class="badge" i18n="@@correctAll.thisTrack"
+                >nesta faixa</span
+              >
+            }
+            <span class="text">
+              @if (occurrence.contextBefore) {
+                …{{ occurrence.contextBefore }}
+              }
+              <span class="swap"
+                ><del>{{ occurrence.text }}</del> →
+                <ins>{{ after(occurrence) }}</ins></span
+              >
+              @if (occurrence.contextAfter) {
+                {{ occurrence.contextAfter }}…
+              }
+            </span>
+          </label>
+          @if (changedText(occurrence); as now) {
+            <p class="error" i18n="@@correctAll.changedOne">
+              Mudou desde a prévia: agora diz «{{ now }}».
+            </p>
+          }
+          <button
+            type="button"
+            class="secondary hear"
+            [attr.aria-label]="
+              'Ouvir a ocorrência de ' + clock(occurrence.startMs)
+            "
+            i18n-aria-label="@@correctAll.hearAt"
+            (click)="hear(occurrence)"
+            i18n="@@correctAll.hear"
+          >
+            Ouvir
+          </button>
+        </li>
+      } @empty {
+        @if (!loading() && !loadFailed()) {
+          <li class="hint" i18n="@@correctAll.none">Nenhuma ocorrência.</li>
+        }
+      }
+    </ul>
+  </div>
+
+  <footer class="actions">
+    <button
+      type="button"
+      class="secondary"
+      (click)="close()"
+      i18n="@@correctAll.cancel"
+    >
+      Cancelar
+    </button>
+    <button
+      type="button"
+      class="primary"
+      [disabled]="!canConfirm()"
+      (click)="confirm()"
+    >
+      @if (outcome() === 'saving') {
+        <ng-container i18n="@@correctAll.saving">Corrigindo…</ng-container>
+      } @else if (chosenCount() === 1) {
+        <ng-container i18n="@@correctAll.confirmOne"
+          >Corrigir 1 ocorrência</ng-container
+        >
+      } @else {
+        <ng-container i18n="@@correctAll.confirm"
+          >Corrigir {{ chosenCount() }} ocorrências</ng-container
+        >
+      }
+    </button>
+  </footer>
+</dialog>

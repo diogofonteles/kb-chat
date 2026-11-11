@@ -4,15 +4,16 @@
   "private": true,
   "packageManager": "pnpm@9.15.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.21.1"
   },
   "scripts": {
     "dev:api": "pnpm --filter @kb-chat/api dev",
     "dev:web": "pnpm --filter @kb-chat/web start",
-    "typecheck": "nx run-many -t typecheck",
-    "test": "nx run-many -t test",
-    "build": "nx run-many -t build",
-    "lint": "nx run-many -t lint",
+    "typecheck": "tools/heavy.sh nx run-many -t typecheck --output-style=stream",
+    "test": "tools/heavy.sh nx run-many -t test --output-style=stream",
+    "build": "tools/heavy.sh nx run-many -t build --output-style=stream",
+    "lint": "tools/heavy.sh nx run-many -t lint --output-style=stream",
+    "gates": "node --no-warnings tools/check-node.mjs && tools/heavy.sh sh -c 'pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm format:check'",
     "e2e": "pnpm --filter @kb-chat/e2e e2e",
     "tutorial:screenshots": "pnpm --filter @kb-chat/e2e exec playwright test -c tutorial.config.ts && prettier --write apps/web/src/app/features/tutorial/tutorial-images.generated.ts",
     "format": "prettier --write .",

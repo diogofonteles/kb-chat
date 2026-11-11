@@ -1,0 +1,182 @@
+<fieldset class="options">
+  <legend>
+    @if (several()) {
+      <ng-container i18n="@@prep.options.legendSeveral"
+        >O que fazer com estes áudios</ng-container
+      >
+    } @else {
+      <ng-container i18n="@@prep.options.legend"
+        >O que fazer com este áudio</ng-container
+      >
+    }
+  </legend>
+
+  @if (!done('transcribe')) {
+    <div class="option">
+      <label class="choice">
+        <input
+          type="checkbox"
+          [checked]="choices().transcribe"
+          [attr.aria-disabled]="locked() || null"
+          aria-describedby="prep-transcribe-hint"
+          (change)="toggleTranscribe($event)"
+        />
+        <span class="name" i18n="@@prep.option.transcribe">Transcrever</span>
+      </label>
+      <p class="hint" id="prep-transcribe-hint">
+        <ng-container i18n="@@prep.option.transcribeHint"
+          >Gera o texto com o tempo de cada palavra, para ler junto, buscar e
+          criar legendas. Grátis, no computador do transcritor.</ng-container
+        >
+        @if (transcribeMinutes(); as minutes) {
+          &ngsp;<ng-container i18n="@@prep.option.minutes"
+            >Estimativa: cerca de {{ minutes }} min.</ng-container
+          >
+        }
+      </p>
+      @if (transcriberOff()) {
+        <p class="note">
+          <ng-container i18n="@@prep.option.transcriberOff"
+            >O transcritor está desligado desde
+            {{ offer()?.transcriberOffSince | date: 'dd/MM HH:mm' }}; começa
+            quando ele ligar.</ng-container
+          >
+        </p>
+      }
+    </div>
+  }
+
+  @if (!done('speakers')) {
+    <div class="option" [class.off]="isOff('speakers')">
+      <label class="choice">
+        <input
+          type="checkbox"
+          [checked]="choices().speakers"
+          [attr.aria-disabled]="isOff('speakers') || null"
+          aria-describedby="prep-speakers-hint"
+          (change)="toggleSpeakers($event)"
+        />
+        <span class="name" i18n="@@prep.option.speakers"
+          >Indicar quem está falando</span
+        >
+      </label>
+      <p class="hint" id="prep-speakers-hint">
+        @if (refusal('speakers'); as reason) {
+          {{ reason }}
+        } @else {
+          <ng-container i18n="@@prep.option.speakersHint"
+            >Separa as vozes (Voz 1, Voz 2…) e sugere os nomes pelo que já
+            sabemos do acervo, como o autor da gravação. Você confirma os nomes.
+            Grátis.</ng-container
+          >
+          @if (speakersMinutes(); as minutes) {
+            &ngsp;<ng-container i18n="@@prep.option.minutes"
+              >Estimativa: cerca de {{ minutes }} min.</ng-container
+            >
+          }
+        }
+      </p>
+    </div>
+  }
+
+  <fieldset class="tracks">
+    <legend i18n="@@prep.option.tracks">
+      Dividir em faixas de pergunta e resposta
+    </legend>
+    <label class="choice">
+      <input
+        type="radio"
+        name="prep-tracks"
+        [checked]="choices().tracks === 'none'"
+        (click)="chooseTracks($event, 'none')"
+      />
+      <span i18n="@@prep.option.none">Não dividir agora</span>
+    </label>
+
+    <div class="option" [class.off]="isOff('manual')">
+      <label class="choice">
+        <input
+          type="radio"
+          name="prep-tracks"
+          [checked]="choices().tracks === 'manual'"
+          [attr.aria-disabled]="isOff('manual') || null"
+          aria-describedby="prep-manual-hint"
+          (click)="chooseTracks($event, 'manual')"
+        />
+        <span i18n="@@prep.option.manual">Vou marcar as faixas eu mesmo</span>
+      </label>
+      <p class="hint" id="prep-manual-hint">
+        @if (refusal('manual'); as reason) {
+          {{ reason }}
+        } @else {
+          <ng-container i18n="@@prep.option.manualHint"
+            >Cada pergunta com a sua resposta vira uma faixa com título. Você
+            confere e aprova antes de aplicar.</ng-container
+          >
+        }
+      </p>
+    </div>
+
+    <div class="option" [class.off]="isOff('ai')">
+      <label class="choice">
+        <input
+          type="radio"
+          name="prep-tracks"
+          data-testid="option-ai"
+          [checked]="choices().tracks === 'ai'"
+          [attr.aria-disabled]="isOff('ai') || null"
+          aria-describedby="prep-ai-hint"
+          (click)="chooseTracks($event, 'ai')"
+        />
+        <span i18n="@@prep.option.ai">Propor as faixas com IA</span>
+      </label>
+      <p class="hint" id="prep-ai-hint">
+        @if (refusal('ai'); as reason) {
+          {{ reason }}
+        } @else {
+          <ng-container i18n="@@prep.option.aiHint"
+            >A IA propõe as faixas, os títulos e quem pergunta e responde. Você
+            ouve, corrige e aprova antes de aplicar.</ng-container
+          >
+          @if (estimateText(); as estimate) {
+            @if (remainingText(); as remaining) {
+              &ngsp;<ng-container i18n="@@prep.option.aiCostMost"
+                >Estimativa: cerca de {{ estimate }}, no máximo
+                {{ mostText() }}, descontado do limite mensal da mídia (restam
+                {{ remaining }}).</ng-container
+              >
+            } @else {
+              &ngsp;<ng-container i18n="@@prep.option.aiCostMostAlone"
+                >Estimativa: cerca de {{ estimate }}, no máximo
+                {{ mostText() }}, descontado do limite mensal da
+                mídia.</ng-container
+              >
+            }
+          }
+        }
+      </p>
+    </div>
+
+    <div class="option" [class.off]="isOff('subjects')">
+      <label class="choice">
+        <input
+          type="checkbox"
+          [checked]="false"
+          aria-disabled="true"
+          aria-describedby="prep-subjects-hint"
+          (click)="$event.preventDefault()"
+        />
+        <span i18n="@@prep.option.subjects"
+          >Sugerir os assuntos de cada faixa</span
+        >
+      </label>
+      <p class="hint" id="prep-subjects-hint">{{ refusal('subjects') }}</p>
+    </div>
+  </fieldset>
+
+  @if (droppedText(); as text) {
+    <p class="note" role="status">{{ text }}</p>
+  }
+</fieldset>
+
+<p class="summary" data-testid="plan-summary">{{ summary() }}</p>

@@ -55,7 +55,12 @@ describe('Configurações per permission (KBC-010)', () => {
     for (const request of http.match('/api/v1/topics')) request.flush(TOPICS);
     await fixture.whenStable();
 
-    expect(sectionNames()).toEqual(['Preferências', 'Sobre']);
+    // Everyone sees who acted as them (KBC-060 BR-7); the audit only with the grant.
+    expect(sectionNames()).toEqual([
+      'Preferências',
+      'Acessos à sua conta',
+      'Sobre',
+    ]);
     expect(
       screen.getByRole('heading', { name: 'Preferências', level: 3 }),
     ).toBeTruthy();
@@ -74,6 +79,8 @@ describe('Configurações per permission (KBC-010)', () => {
       'IA da aplicação',
       'Preferências',
       'Pessoas e permissões',
+      'Auditoria do Ver como',
+      'Acessos à sua conta',
       'Sobre',
     ]);
     expect(
@@ -87,6 +94,36 @@ describe('Configurações per permission (KBC-010)', () => {
     http.expectOne('/api/v1/spend/people').flush({ items: [] });
     http.expectOne('/api/v1/access-requests').flush({ items: [] });
     http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
+    // The collections with access levels (KBC-103): none here.
+    http.expectOne('/api/v1/levels').flush({ items: [] });
+    await fixture.whenStable();
+  });
+
+  it('shows "Transcritores" to a master only where the media library is on (KBC-036 BR-1)', async () => {
+    const { http, fixture } = await openSettingsAs({
+      ...anOwner(),
+      media: true,
+    });
+    http.expectOne('/api/v1/ai/providers').flush({ items: [], active: 'none' });
+    flushAiStatus(http);
+    TestBed.tick();
+    expect(sectionNames()).toContain('Transcritores');
+    expect(sectionNames()).toContain('Termos da transcrição');
+    expect(sectionNames().indexOf('Transcritores')).toBe(
+      sectionNames().indexOf('Pessoas e permissões') + 1,
+    );
+    for (const request of http.match(() => true)) request.flush({});
+    await fixture.whenStable();
+  });
+
+  it('hides "Transcritores" from a member who listens to media', async () => {
+    const { http, fixture } = await openSettingsAs(
+      aMe({ features: ['search', 'media', 'media-upload'], media: true }),
+    );
+    TestBed.tick();
+    expect(sectionNames()).not.toContain('Transcritores');
+    expect(sectionNames()).not.toContain('Termos da transcrição');
+    for (const request of http.match(() => true)) request.flush({});
     await fixture.whenStable();
   });
 });

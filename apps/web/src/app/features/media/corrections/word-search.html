@@ -1,0 +1,56 @@
+<label class="field" for="word-search-field">
+  <span i18n="@@wordSearch.label">Procurar palavra</span>
+  <input
+    #field
+    id="word-search-field"
+    type="search"
+    autocomplete="off"
+    spellcheck="false"
+    aria-describedby="word-search-count"
+    [value]="query()"
+    (input)="typed($event)"
+  />
+</label>
+<p id="word-search-count" class="count" role="status">
+  @if (query().trim().length >= 2) {
+    @switch (shown().length) {
+      @case (0) {
+        <ng-container i18n="@@wordSearch.none"
+          >Nenhuma ocorrência neste texto.</ng-container
+        >
+      }
+      @case (1) {
+        <ng-container i18n="@@wordSearch.one">1 ocorrência</ng-container>
+      }
+      @default {
+        <ng-container i18n="@@wordSearch.many"
+          >{{ shown().length }} ocorrências</ng-container
+        >
+        @if (more()) {
+          <ng-container i18n="@@wordSearch.more"
+            >; digite mais para ver as outras</ng-container
+          >
+        }
+      }
+    }
+  }
+</p>
+@if (shown().length > 0) {
+  <ul class="hits" aria-label="Ocorrências" i18n-aria-label="@@wordSearch.list">
+    @for (
+      hit of shown();
+      track hit.line + ':' + hit.offset;
+      let index = $index
+    ) {
+      <li>
+        <button #result type="button" class="hit" (click)="choose(hit, index)">
+          <span class="clock">{{ hit.clock }}</span>
+          <span class="text"
+            >…{{ hit.before }}<mark>{{ hit.match }}</mark
+            >{{ hit.after }}…</span
+          >
+        </button>
+      </li>
+    }
+  </ul>
+}

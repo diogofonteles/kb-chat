@@ -19,6 +19,7 @@ import { SpendService } from '../src/modules/spend/index.js';
 import type { ResearchEvent } from '@kb-chat/contracts';
 import { createSearchIndex } from '../src/search-index-factory.js';
 import { FIXTURE_VAULT } from './fixture-paths.js';
+import { OPEN_VIEW } from '../src/modules/access-levels/index.js';
 
 /** The research tools over the fixture vault and the in-process index. */
 export async function fixtureTools(): Promise<ResearchTools> {
@@ -41,6 +42,7 @@ export async function fixtureTools(): Promise<ResearchTools> {
 export const hermetismoContext = (): ToolContext => ({
   topic: 'hermetismo',
   book: new SourceBook(),
+  view: OPEN_VIEW,
 });
 
 export interface RunnerFixture {

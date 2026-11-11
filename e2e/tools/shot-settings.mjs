@@ -41,7 +41,7 @@ async function shootWizard(page, name) {
   await page.screenshot({ path: `${out}/${name}-wizard-2.png` });
 }
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--mute-audio'] });
 for (const [name, width, height, scheme] of [
   ['desktop', 1440, 900, 'light'],
   ['mobile', 390, 844, 'light'],

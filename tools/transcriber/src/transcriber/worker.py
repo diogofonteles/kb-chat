@@ -1,0 +1,588 @@
+"""The loop: lease one job, fetch its audio, transcribe it or separate its voices, upload.
+
+A lost lease (409) or a shutdown stops the job between chunks and uploads nothing; the
+lease then expires and the API puts the job back in the queue (ADR 0022 §2). One job at a
+time: a transcription and a separation never run together on this Mac (KBC-064 BR-5).
+"""
+
+import logging
+import tempfile
+import threading
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import numpy as np
+
+from .api import ApiClient, ApiError, Unauthorized
+from .audio import InvalidAudio
+from .config import (
+    DIARIZE_PARAMETERS,
+    DIARIZE_PARAMETERS_VERSION,
+    ERROR_BACKOFF_S,
+    HEARTBEAT_S,
+    IDLE_GRACE_S,
+    KEY_RECHECK_S,
+    MAX_IDLE_ERRORS,
+    PARAMETERS,
+    PARAMETERS_VERSION,
+    POLL_S,
+    PRINT_ACK_S,
+    UNAUTHORIZED_BACKOFF_S,
+)
+from .diarize import Diarizer, separate
+from .kb_keys import KEY_MISSING, REQUIRED_KEY, is_configuration_error
+from .kb_publish import KbPublisher, KbStepFailed, UnsafePath, VaultBusy
+from .secret import TokenError
+from .status import StatusReporter, WorkerStatus
+from .topic import TopicConflict
+from .transcribe import Stopped, TokenCounter, WhisperModel, build_prompt, estimate_tokens
+from .transcribe import transcribe_track as run_track
+from .vad import SpeechFinder
+from .vault_sync import VaultSync
+from .voiceprint import (
+    Embedder,
+    PrintHold,
+    Profile,
+    match_voices,
+    mean_print,
+    spans_of,
+    window_vectors,
+)
+
+REVOKED = "Token revogado; pareie de novo."
+VAULT_BUSY = "trava do vault ocupada por outra publicação"
+# No message of a numeric library near a print goes to a log or to `jobs.error`.
+NO_PRINT = "A voice print could not be made from these sources."
+log = logging.getLogger("transcriber")
+
+
+class _JobStop:
+    """Set by a shutdown or a lost lease: either one stops the job."""
+
+    def __init__(self, shutdown: threading.Event) -> None:
+        self._shutdown = shutdown
+        self.lease_lost = threading.Event()
+        self.prints = PrintHold(self.is_set)
+
+    def is_set(self) -> bool:
+        return self._shutdown.is_set() or self.lease_lost.is_set()
+
+
+@dataclass
+class Worker:
+    api: ApiClient
+    model: WhisperModel
+    find_speech: SpeechFinder
+    decode: Callable[[Path], np.ndarray]
+    stop: threading.Event = field(default_factory=threading.Event)
+    heartbeat_s: float = HEARTBEAT_S
+    poll_s: float = POLL_S
+    unauthorized_backoff_s: float = UNAUTHORIZED_BACKOFF_S
+    error_backoff_s: float = ERROR_BACKOFF_S
+    count_tokens: TokenCounter = estimate_tokens
+    # Voice separation (KBC-064): without an engine, the worker never asks for it.
+    diarizer: Diarizer | None = None
+    # Voice prints (KBC-071): without a speaker model, none is ever fetched or made.
+    embedder: Embedder | None = None
+    print_ack_s: float = PRINT_ACK_S
+    # Track documents (KBC-099): without a vault and kb, the worker never asks for them.
+    publisher: KbPublisher | None = None
+    # The automatic sync with production (KBC-100): without a host, the owner syncs by hand.
+    sync: VaultSync | None = None
+    # The sign of life the app shows to masters (KBC-114): kept always, sent with a reporter.
+    status: WorkerStatus = field(default_factory=WorkerStatus)
+    reporter: StatusReporter | None = None
+    # `--exit-when-idle`: a second empty lease this long after the first one ends the run,
+    # and this many lease errors in a row end it too (the owner: never on for nothing).
+    idle_grace_s: float = IDLE_GRACE_S
+    max_idle_errors: int = MAX_IDLE_ERRORS
+    # Kinds this Mac cannot do now, and why (KBC-117): never asked for, told to the app.
+    unavailable: list[dict] = field(default_factory=list)
+    # Reads the kb's keys again (the Keychain): a `keys set` while this run goes on is seen
+    # within key_recheck_s, without a restart (review r1).
+    reload_kb_env: Callable[[], dict[str, str]] | None = None
+    key_recheck_s: float = KEY_RECHECK_S
+    _keys_checked_at: float = field(default=float("-inf"), init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self.status.kinds = self.kinds
+        self.status.unavailable = list(self.unavailable)
+
+    def _say(self, state: str, detail: str | None = None) -> None:
+        """A new state goes to the app at once; the same one again waits for the beat."""
+        changed = (
+            self.status.error(detail or state)
+            if state == "error"
+            else self.status.set_state(state, detail)
+        )
+        if changed:
+            self._report()
+
+    def _report(self) -> None:
+        if self.reporter is not None:
+            self.reporter.send(self.status)
+
+    @property
+    def kinds(self) -> tuple[str, ...]:
+        kinds = ("transcribe", "diarize") if self.diarizer else ("transcribe",)
+        kinds = (*kinds, "voice-profile") if self.embedder else kinds
+        return (*kinds, "kb-publish") if self._publishes() else kinds
+
+    def _publishes(self) -> bool:
+        blocked = any(one["kind"] == "kb-publish" for one in self.unavailable)
+        return self.publisher is not None and not blocked
+
+    def _kinds_now(self) -> tuple[str, ...]:
+        """The kinds to ask for now: none of kb-publish while the vault's lock is held, so a
+        busy vault does not cost a job an attempt (QA F-8). Not atomic with the job's own
+        lock: a publication that takes the lock between this check and the job still fails
+        it with VaultBusy (and costs an attempt); the window is a lease round trip."""
+        if self._publishes() and self.publisher is not None and self.publisher.busy():
+            return tuple(kind for kind in self.kinds if kind != "kb-publish")
+        return self.kinds
+
+    def run(self, *, once: bool = False, exit_when_idle: bool = False) -> int:
+        """Runs until stopped; `once` handles at most one job, `exit_when_idle` stops at 204."""
+        log.info(
+            "transcriber started (parameters %s, jobs: %s)",
+            PARAMETERS_VERSION,
+            ", ".join(self.kinds),
+        )
+        if self.reporter is not None:
+            self.reporter.start(self.status)
+        try:
+            return self._loop(once=once, exit_when_idle=exit_when_idle)
+        finally:
+            if self.reporter is not None:
+                self.reporter.stop()
+                # The API knows at once that it is off, and starts it for the next job.
+                self.status.set_state("stopped")
+                self.reporter.send(self.status)
+
+    def _loop(self, *, once: bool, exit_when_idle: bool) -> int:
+        idle_once = False
+        errors = 0
+        while not self.stop.is_set():
+            outcome = self.step()
+            # Only the API out of reach counts: a job that broke is given back (review BR-15).
+            errors = errors + 1 if outcome == "lease-error" else 0
+            if outcome == "job":
+                idle_once = False
+                if once:
+                    break
+            elif outcome == "idle":
+                if once:
+                    break
+                if exit_when_idle:
+                    # On only when needed (the owner): a grace for the next stage, then off.
+                    if idle_once:
+                        break
+                    idle_once = True
+                    self.stop.wait(self.idle_grace_s)
+                else:
+                    self.stop.wait(self.poll_s)
+            elif exit_when_idle and (outcome == "revoked" or errors >= self.max_idle_errors):
+                # Never sits in memory retrying: launchd or the API starts it again later.
+                log.error("transcriber stopped: the API cannot be used now")
+                return 1
+            elif outcome == "revoked":
+                self.stop.wait(self.unauthorized_backoff_s)
+            elif outcome in ("lease-error", "job-error"):
+                self.stop.wait(self.error_backoff_s)
+        log.info("transcriber stopped")
+        return 0
+
+    def step(self) -> str:
+        """One lease attempt: 'job', 'idle', 'revoked', 'lease-error' (the API out of reach)
+        or 'job-error' (a job that broke: given back, never a reason to stop)."""
+        self._recheck_keys()
+        kinds = self._kinds_now()
+        try:
+            job = self.api.lease(kinds)
+        except (Unauthorized, TokenError) as err:
+            message = REVOKED if isinstance(err, Unauthorized) else str(err)
+            log.error(message)
+            self._say("error", message)
+            return "revoked"
+        except ApiError as err:
+            log.warning("could not lease a job: %s", err)
+            self._say("error", f"sem resposta da API: {err}")
+            return "lease-error"
+        if job is None:
+            self._sync_if_due()
+            if len(kinds) < len(self.kinds):
+                self._say("waiting", VAULT_BUSY)
+            else:
+                self._say("idle")
+            return "idle"
+        return self._run_job(job)
+
+    def _sync_if_due(self) -> None:
+        """Between jobs only: a change waiting for production goes there (BR-7)."""
+        if self.sync is None:
+            return
+        report = self.sync.run_if_due()
+        if report is None:
+            return
+        level = logging.INFO if report["ok"] else logging.ERROR
+        log.log(level, "sync with production: %s", report["detail"].splitlines()[-1:])
+        try:
+            self.api.report_sync(report)
+        except ApiError as err:
+            log.warning("could not report the sync: %s", err)
+
+    def _run_job(self, job: dict) -> str:
+        """Processes one job; 'job', or 'revoked'/'error' when it could not finish."""
+        try:
+            self.process(job)
+        except (Unauthorized, TokenError) as err:
+            message = REVOKED if isinstance(err, Unauthorized) else str(err)
+            log.error(message)
+            self.status.finish_job("stopped", message)
+            self._say("error", message)
+            return "revoked"
+        except ApiError as err:
+            log.warning("job %s: the API failed: %s", job["id"], err)
+            self.status.finish_job("failed", f"a API falhou: {err}")
+            self._say("error", f"a API falhou: {err}")
+            return "job-error"
+        # One bad job must not stop the Mac's worker: it is given back, the loop goes on.
+        except Exception as err:
+            self._log_crash(job, err)
+            self._report_crash(job, err)
+            detail = NO_PRINT if job["kind"] == "voice-profile" else f"{type(err).__name__}: {err}"
+            self.status.finish_job("failed", detail)
+            self._say("error", detail)
+            return "job-error"
+        self.status.finish_job("done")
+        self._report()
+        return "job"
+
+    @staticmethod
+    def _log_crash(job: dict, err: Exception) -> None:
+        if job["kind"] == "voice-profile":
+            log.error("job %s: unexpected failure: %s", job["id"], type(err).__name__)
+        else:
+            log.exception("job %s: unexpected failure", job["id"])
+
+    def _fail(self, job: dict, failure: str, detail: str, spend_usd: float = 0.0) -> bool:
+        """Gives the job back with why, and the status counts it as failed."""
+        self.status.job_failed(detail)
+        return self.api.fail(job, failure, detail, spend_usd=spend_usd)
+
+    def _report_crash(self, job: dict, err: Exception) -> None:
+        """Gives the job back as retryable; the lease would expire anyway if this fails."""
+        try:
+            detail = f"{type(err).__name__}: {err}"
+            if job["kind"] == "voice-profile":
+                detail = NO_PRINT
+            self.api.fail(job, "conversion-failed", detail)
+        except Exception:
+            log.warning("job %s: could not report the failure", job["id"])
+
+    def process(self, job: dict) -> None:
+        stop = _JobStop(self.stop)
+        progress = {"percent": 0}
+        self.status.start_job(job, progress)
+        self._report()
+        done = threading.Event()
+        beats = threading.Thread(target=self._beat, args=(job, progress, stop, done), daemon=True)
+        beats.start()
+        watch = threading.Thread(target=self._watch_prints, args=(stop, done), daemon=True)
+        watch.start()
+        try:
+            with tempfile.TemporaryDirectory(prefix="transcriber-") as work:
+                handler = {
+                    "diarize": self._diarize,
+                    "voice-profile": self._voice_profile,
+                    "kb-publish": self._kb_publish,
+                }.get(job["kind"], self._transcribe)
+                handler(job, Path(work), progress, stop)
+        finally:
+            done.set()
+            stop.prints.drop()
+            beats.join(timeout=5)
+            watch.join(timeout=5)
+
+    def _transcribe(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
+        terms = self.api.terms()
+        pcm = self._audio_of(job, work)
+        if pcm is None:
+            return
+        started = time.monotonic()
+        try:
+            result = run_track(
+                pcm,
+                model=self.model,
+                prompt=build_prompt(terms["terms"], count=self.count_tokens),
+                find_speech=self.find_speech,
+                stop=stop,
+                on_progress=lambda percent: progress.__setitem__("percent", percent),
+                on_cuts=lambda done, total: progress.__setitem__(
+                    "cuts", {"done": done, "total": total}
+                ),
+            )
+        except Stopped:
+            reason = "lease lost" if stop.lease_lost.is_set() else "shutdown"
+            log.warning("job %s stopped (%s): nothing uploaded", job["id"], reason)
+            return
+        except Exception as err:
+            log.exception("job %s: transcription failed", job["id"])
+            self._fail(job, "conversion-failed", f"{type(err).__name__}: {err}")
+            return
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        self._upload(job, terms, result, elapsed_ms, stop)
+
+    def _kb_publish(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
+        """Writes the documents, runs kb, reports per document (KBC-099 FR-3)."""
+        if self.publisher is None:
+            raise RuntimeError("leased a kb-publish job without a vault and kb")
+        try:
+            result = self.publisher.publish(job)
+        except KbStepFailed as err:
+            if is_configuration_error(err.output):
+                self._not_configured(job, err)
+                return
+            self._publish_failed(job, err)
+            return
+        except (VaultBusy, UnsafePath, TopicConflict) as err:
+            self._publish_failed(job, err)
+            return
+        progress["percent"] = 100
+        # The vault changed on this Mac whatever happens to the lease: production follows.
+        if self.sync is not None:
+            self.sync.mark_pending()
+        if self.api.upload_kb_result(job, result):
+            count = len(result["documents"])
+            log.info("job %s: %d documents in %s", job["id"], count, job["topic"])
+            self._sync_if_due()
+        else:
+            log.warning("job %s: the lease was lost before the result: dropped", job["id"])
+
+    def _recheck_keys(self) -> None:
+        """While the kb's key is missing, the Keychain is asked again (at most every
+        key_recheck_s); once the key is there, kb-publish is back and the app is told."""
+        missing = [one for one in self.unavailable if one["reason"] == "kb-ai-key-missing"]
+        if not missing or self.reload_kb_env is None or self.publisher is None:
+            return
+        now = time.monotonic()
+        if now - self._keys_checked_at < self.key_recheck_s:
+            return
+        self._keys_checked_at = now
+        env = self.reload_kb_env()
+        # Only keys that changed open it again: kb may call a setup error "model is required"
+        # with the key there, and the same keys would fail the same way (review r2).
+        if not env.get(REQUIRED_KEY) or env == getattr(self.publisher.kb, "env", None):
+            return
+        if hasattr(self.publisher.kb, "env"):
+            self.publisher.kb.env = env
+        self.unavailable = [one for one in self.unavailable if one not in missing]
+        self.status.kinds = self.kinds
+        self.status.unavailable = list(self.unavailable)
+        log.info("the kb's AI key is set: publishing again")
+        self._report()
+
+    def _publish_failed(self, job: dict, err: Exception) -> None:
+        log.error("job %s: publishing failed: %s", job["id"], err)
+        # What kb spent before it failed is booked on the media ledger (ADR 0035 §11).
+        spent = err.spent if isinstance(err, KbStepFailed) else 0.0
+        # kb may pass --budget by one call; the API takes at most the job's budget.
+        spent = min(spent, float(job["budgetUsd"]))
+        self._fail(job, "conversion-failed", str(err)[-2_000:], spend_usd=spent)
+
+    def _not_configured(self, job: dict, err: KbStepFailed) -> None:
+        """kb has no AI key on this Mac (KBC-117): the job goes back without spending an
+        attempt, this run stops asking for kb-publish, and the app is told why."""
+        log.error("job %s: kb is not configured on this Mac: %s", job["id"], KEY_MISSING)
+        if not any(one["kind"] == "kb-publish" for one in self.unavailable):
+            problem = {"kind": "kb-publish", "reason": "kb-ai-key-missing", "detail": KEY_MISSING}
+            self.unavailable.append(problem)
+        self.status.kinds = self.kinds
+        self.status.unavailable = list(self.unavailable)
+        spent = min(err.spent, float(job["budgetUsd"]))
+        detail = f"{KEY_MISSING} — {err.output}"[:2_000]
+        self._fail(job, "not-configured", detail, spend_usd=spent)
+
+    def _diarize(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
+        """Separates the voices of the job's audio and uploads only the turns (BR-1)."""
+        if self.diarizer is None:
+            raise RuntimeError("leased a separation without a diarization engine")
+        pcm = self._audio_of(job, work)
+        if pcm is None:
+            return
+        progress["percent"] = 10
+        started = time.monotonic()
+        try:
+            turns = separate(pcm, diarizer=self.diarizer, voices=job.get("voices"), scratch=work)
+        except Exception as err:
+            log.exception("job %s: voice separation failed", job["id"])
+            self._fail(job, "conversion-failed", f"{type(err).__name__}: {err}")
+            return
+        progress["percent"] = 100
+        if stop.is_set():
+            log.warning("job %s stopped before the upload: nothing uploaded", job["id"])
+            return
+        body = {
+            "engine": self.diarizer.engine,
+            "model": self.diarizer.model,
+            "parametersVersion": DIARIZE_PARAMETERS_VERSION,
+            "parameters": DIARIZE_PARAMETERS,
+            "requestedVoices": job.get("voices"),
+            "elapsedMs": int((time.monotonic() - started) * 1000),
+            "raw": {"turns": turns},
+        }
+        matches = self._matches(job, pcm, turns, stop.prints)
+        if matches:
+            body["voiceMatches"] = matches
+        if stop.is_set():
+            log.warning("job %s stopped before the upload: nothing uploaded", job["id"])
+            return
+        if self.api.upload_diarization(job, body):
+            voices = len({turn["voice"] for turn in turns})
+            log.info("job %s: %d voices, %d turns", job["id"], voices, len(turns))
+        else:
+            log.warning("job %s: the lease was lost before the upload: dropped", job["id"])
+
+    def _matches(
+        self, job: dict, pcm: np.ndarray, turns: list[dict], hold: PrintHold
+    ) -> list[dict]:
+        """The closest profile per voice; a failure here never costs the separation."""
+        if self.embedder is None:
+            return []
+        try:
+            asked_at = time.time()
+            profiles = self._profiles_of(job)
+            if not profiles:
+                return []
+            hold.compare(profiles, asked_at)
+            return match_voices(pcm, turns, profiles, self.embedder, hold)
+        except Stopped:
+            log.warning("job %s: the prints were dropped: no voice comparison", job["id"])
+        except ApiError as err:
+            log.warning("job %s: no voice comparison: %s", job["id"], err)
+        except Exception as err:
+            # The type only: no message of a numeric library near a print goes to a log.
+            log.warning("job %s: no voice comparison: %s", job["id"], type(err).__name__)
+        finally:
+            hold.drop()
+        return []
+
+    def _profiles_of(self, job: dict) -> list[Profile]:
+        """The prints of the job's collection on this model; they live in memory only."""
+        model = self.embedder.model if self.embedder else None
+        return [
+            Profile(one["id"], np.asarray(one["embedding"], dtype=np.float64))
+            for one in self.api.voice_profiles(job)
+            if one["model"] == model
+        ]
+
+    def _voice_profile(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
+        """Calculates the print of a voice a person named, and uploads only that (FR-2)."""
+        if self.embedder is None:
+            raise RuntimeError("leased a voice profile without a speaker model")
+        vectors: list[np.ndarray] = []
+        hold = stop.prints
+        try:
+            for index, source in enumerate(job["sources"]):
+                pcm = self._audio_of(job, work, source["audioPath"])
+                if pcm is None:
+                    return
+                spans = spans_of(source["spans"])
+                vectors.append(window_vectors(pcm, spans, self.embedder, hold))
+                progress["percent"] = int((index + 1) * 90 / len(job["sources"]))
+            hold.check()
+            self._upload_print(job, vectors, hold)
+        except Stopped:
+            log.warning("job %s stopped: nothing uploaded", job["id"])
+        except ValueError:
+            self._fail(job, "conversion-failed", NO_PRINT)
+        finally:
+            hold.drop()
+
+    def _upload_print(self, job: dict, vectors: list[np.ndarray], hold: PrintHold) -> None:
+        if self.embedder is None:
+            raise RuntimeError("leased a voice profile without a speaker model")
+        voice_print = mean_print(vectors)
+        hold.keep(voice_print)
+        body = {
+            "model": self.embedder.model,
+            "embedding": [round(float(value), 7) for value in voice_print],
+        }
+        # A drop while the body was made left zeros in it.
+        hold.check()
+        if self.api.upload_print(job, body):
+            log.info("job %s: voice print stored", job["id"])
+        else:
+            log.warning("job %s: the lease was lost before the upload: dropped", job["id"])
+
+    def _audio_of(self, job: dict, work: Path, path: str | None = None) -> np.ndarray | None:
+        """The job's audio as 16 kHz PCM; None when it is not ours or cannot be decoded."""
+        audio = self.api.download(job, work, path)
+        if audio is None:
+            log.warning("job %s: its audio is not ours (404): dropped", job["id"])
+            return None
+        try:
+            return self.decode(audio)
+        except InvalidAudio as err:
+            log.error("job %s: the audio cannot be decoded", job["id"])
+            self._fail(job, "invalid-audio", str(err))
+            return None
+
+    def _upload(self, job: dict, terms: dict, result, elapsed_ms: int, stop: _JobStop) -> None:
+        if stop.is_set():
+            log.warning("job %s stopped before the upload: nothing uploaded", job["id"])
+            return
+        body = {
+            "provider": "mlx-whisper",
+            "model": PARAMETERS["model"],
+            "parametersVersion": PARAMETERS_VERSION,
+            "parameters": PARAMETERS,
+            "termsVersion": terms["version"],
+            "vad": result.vad,
+            "speechRatio": result.speech_ratio,
+            "elapsedMs": elapsed_ms,
+            "raw": result.raw,
+        }
+        if self.api.upload(job, body):
+            log.info(
+                "job %s transcribed: %d chunks, vad %s, %.1f s",
+                job["id"],
+                len(result.raw["chunks"]),
+                result.vad,
+                elapsed_ms / 1000,
+            )
+        else:
+            log.warning("job %s: the lease was lost before the upload: dropped", job["id"])
+
+    def _beat(self, job: dict, progress: dict, stop: _JobStop, done: threading.Event) -> None:
+        while not done.wait(self.heartbeat_s):
+            sent_at = time.time()
+            try:
+                revoked = self.api.heartbeat(
+                    job, progress["percent"], stop.prints.profile_ids(), progress.get("cuts")
+                )
+            except Unauthorized:
+                log.error(REVOKED)
+                revoked = None
+            except ApiError as err:
+                log.warning("job %s: heartbeat failed: %s", job["id"], err)
+                continue
+            if revoked is None:
+                log.warning("job %s: lease lost, stopping", job["id"])
+                stop.lease_lost.set()
+                stop.prints.drop()
+                return
+            stop.prints.acknowledge(sent_at)
+            if revoked:
+                log.warning("job %s: a voice profile was revoked: prints dropped", job["id"])
+                stop.prints.drop()
+
+    def _watch_prints(self, stop: _JobStop, done: threading.Event) -> None:
+        """Apart from the heartbeat, which a hung call can hold for the whole timeout."""
+        while not done.wait(min(1.0, self.print_ack_s / 4)):
+            if stop.prints.unanswered_s() >= self.print_ack_s:
+                log.warning("no answer from the API: voice prints dropped")
+                stop.prints.drop()
+                return

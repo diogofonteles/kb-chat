@@ -91,16 +91,136 @@
       [disabled]="chat.topicList().length === 0"
       (change)="changeTopic(topicSelect.value)"
     >
-      @for (topic of chat.topicList(); track topic.slug) {
+      @for (option of topicOptions(); track option.slug) {
         <option
-          [value]="topic.slug"
-          [selected]="topic.slug === chat.topicSlug()"
+          [value]="option.slug"
+          [selected]="option.slug === chat.topicSlug()"
+          [disabled]="!option.canOpen"
         >
-          {{ topic.title }} ({{ topic.documentCount | number }})
+          {{ option.label }}
         </option>
       }
     </select>
   </label>
+  <app-unassigned-notice [topic]="chat.topic()" (opened)="openLevels()" />
+
+  @if (canCreateCollections()) {
+    <div class="collection-actions">
+      <button
+        type="button"
+        class="collection-action"
+        (click)="collectionDialog.openNew()"
+        i18n="@@sidebar.newCollection"
+      >
+        + Novo acervo
+      </button>
+      @if (chat.topic(); as current) {
+        @if (current.canRename) {
+          <button
+            type="button"
+            class="collection-action"
+            (click)="collectionDialog.openEdit(current)"
+            i18n="@@sidebar.editCollection"
+          >
+            Editar acervo
+          </button>
+        }
+      }
+    </div>
+  }
+  <app-collection-dialog
+    #collectionDialog
+    [topics]="chat.topicList()"
+    (saved)="collectionSaved($event)"
+  />
+
+  @if (libraryOn()) {
+    <a
+      class="media-link"
+      routerLink="/biblioteca"
+      routerLinkActive="active"
+      ariaCurrentWhenActive="page"
+      (click)="openMedia()"
+    >
+      <svg
+        class="icon"
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        width="18"
+        height="18"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+      >
+        <path d="M9 18V6l11-2v12" />
+        <circle cx="6" cy="18" r="3" />
+        <circle cx="17" cy="16" r="3" />
+      </svg>
+      <span i18n="@@sidebar.library">Biblioteca</span>
+    </a>
+  } @else if (mediaOn()) {
+    <a
+      class="media-link"
+      routerLink="/midia"
+      routerLinkActive="active"
+      ariaCurrentWhenActive="page"
+      (click)="openMedia()"
+    >
+      <svg
+        class="icon"
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        width="18"
+        height="18"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+      >
+        <path d="M9 18V6l11-2v12" />
+        <circle cx="6" cy="18" r="3" />
+        <circle cx="17" cy="16" r="3" />
+      </svg>
+      <span i18n="@@sidebar.media">Mídia</span>
+    </a>
+  }
+
+  @if (queue.allowed()) {
+    <a
+      class="media-link"
+      routerLink="/fila"
+      routerLinkActive="active"
+      ariaCurrentWhenActive="page"
+      (click)="openMedia()"
+    >
+      <svg
+        class="icon"
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        width="18"
+        height="18"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+      >
+        <path d="M4 6h16M4 12h16M4 18h10" />
+      </svg>
+      <span i18n="@@sidebar.queue">Fila</span>
+      @if (queue.active(); as active) {
+        <span class="count" aria-hidden="true">{{ active }}</span>
+        <span
+          class="visually-hidden"
+          i18n="@@sidebar.queueActive"
+          >{active, plural,
+            =1 {1 áudio em processamento}
+            other {{{ active }} áudios em processamento}
+          }</span
+        >
+      }
+    </a>
+  }
 
   <label class="field">
     <span class="label" i18n="@@sidebar.theme">Tema</span>

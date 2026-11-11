@@ -27,3 +27,25 @@ export function sweepReply(prompt) {
 export function logRun(fake, entry) {
   if (fake.log) appendFileSync(fake.log, `${JSON.stringify(entry)}\n`);
 }
+
+/**
+ * The tool calls of a research turn (KBC-104): `fake.calls` ([{ name, arguments }]) when the
+ * test scripts them, each result's text appended to `fake.toolLog` (one JSON line per call);
+ * otherwise the first tool with `{ query: 'ritmo' }`, as before.
+ */
+export async function callTools(client, tools, fake) {
+  const calls = fake.calls ?? [
+    { name: tools[0].name, arguments: { query: 'ritmo' } },
+  ];
+  for (const one of calls) {
+    const result = await client.callTool(one);
+    const text = (result.content ?? [])
+      .map((part) => (part.type === 'text' ? part.text : ''))
+      .join('\n');
+    if (fake.toolLog)
+      appendFileSync(
+        fake.toolLog,
+        `${JSON.stringify({ name: one.name, text, isError: !!result.isError })}\n`,
+      );
+  }
+}

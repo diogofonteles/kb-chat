@@ -1,0 +1,80 @@
+:host {
+  position: relative;
+  display: inline-block;
+}
+
+.trigger {
+  display: grid;
+  place-items: center;
+  min-width: var(--target);
+  height: var(--target);
+  padding: 0 var(--menu-trigger-padding, 0);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--menu-trigger-color, var(--color-text-muted));
+  font-size: var(--menu-trigger-size, 1.25rem);
+  font-weight: var(--menu-trigger-weight, normal);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.trigger:hover,
+.trigger[aria-expanded='true'] {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-1));
+  z-index: 5;
+  display: grid;
+  min-width: 10rem;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow);
+}
+
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  white-space: var(--menu-item-wrap, nowrap);
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.menu button:hover,
+.menu button:focus-visible {
+  background: var(--color-surface-muted);
+}
+
+.check {
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+}
+
+.danger {
+  color: var(--color-danger);
+}
+
+/* On phones the row's actions sit on the left (T14): the menu opens to the right of them. */
+@media (max-width: 1023px) {
+  .menu {
+    right: var(--menu-phone-right, auto);
+    left: var(--menu-phone-left, 0);
+  }
+}

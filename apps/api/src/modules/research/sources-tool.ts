@@ -5,11 +5,18 @@ import { originFolder } from './doc-filter.js';
 import { PAGE_CHARS, fitting, pageFooter, pageRange } from './grep-output.js';
 import {
   failed,
+  isVisible,
   parsedArgs,
   type PreparedCall,
   type ToolContext,
 } from './tool-context.js';
-import { AUTHORSHIP_LABELS, foldName, oneLine, quote } from './tool-output.js';
+import {
+  AUTHORSHIP_LABELS,
+  foldName,
+  oneLine,
+  quote,
+  type AuthorshipLabels,
+} from './tool-output.js';
 import { sourcesArgsSchema } from './tool-schemas.js';
 
 type SourcesArgs = z.output<typeof sourcesArgsSchema>;
@@ -63,10 +70,13 @@ function section(
 }
 
 /** "Autoria: Mestre Laércio 3 · Outros autores 2 · …": the whole collection per group (KBC-020). */
-function authorshipLine(entries: readonly CatalogEntry[]): string {
+function authorshipLine(
+  entries: readonly CatalogEntry[],
+  labels: AuthorshipLabels,
+): string {
   const counts = AUTHORSHIPS.map(
     (group) =>
-      `${AUTHORSHIP_LABELS[group]} ${entries.filter((e) => e.authorship === group).length}`,
+      `${labels[group]} ${entries.filter((e) => e.authorship === group).length}`,
   );
   return `Autoria: ${counts.join(' · ')} documento(s).`;
 }
@@ -78,12 +88,13 @@ function authorshipLine(entries: readonly CatalogEntry[]): string {
 export class SourcesTool {
   constructor(private readonly catalog: CatalogRegistry) {}
 
-  prepare(raw: unknown, { topic }: ToolContext): PreparedCall {
+  prepare(raw: unknown, context: ToolContext): PreparedCall {
+    const { labels = AUTHORSHIP_LABELS } = context;
     const args = parsedArgs(sourcesArgsSchema, raw);
     if (typeof args === 'string') return failed(args);
     const about = [
       args.query && ` sobre ${quote(args.query)}`,
-      args.authorship && ` de autoria ${AUTHORSHIP_LABELS[args.authorship]}`,
+      args.authorship && ` de autoria ${labels[args.authorship]}`,
     ]
       .filter(Boolean)
       .join('');
@@ -91,34 +102,52 @@ export class SourcesTool {
       steps: [
         { kind: 'subjects', text: `Listando as origens e entidades${about}` },
       ],
-      run: async () => this.list(topic, args),
+      run: async () => this.list(context, args, labels),
     };
   }
 
-  private list(topic: string, args: SourcesArgs): string {
-    const catalog = this.catalog.get(topic);
-    if (!catalog) return 'O acervo deste tópico não está disponível.';
-    const all = [...catalog.entries.values()];
+  private list(
+    context: ToolContext,
+    args: SourcesArgs,
+    labels: AuthorshipLabels,
+  ): string {
+    // The collection and its sub-collections (KBC-101 FR-5).
+    const view = this.catalog.scopeView(context.topic);
+    if (!view) return 'O acervo deste tópico não está disponível.';
+    // A track only counts for whom it may be researched (KBC-099 BR-4).
+    const all = [...view.entries.values()].filter((entry) =>
+      isVisible(entry, context),
+    );
     const entries = args.authorship
       ? all.filter((entry) => entry.authorship === args.authorship)
       : all;
-    const lines: string[] = [authorshipLine(all)];
-    if (args.kind !== 'entities')
-      lines.push(
-        ...section(
-          'Origens',
-          countNames(entries, (e) => [originFolder(e)]),
-          args,
-        ),
-      );
-    if (args.kind !== 'sources')
-      lines.push(
-        ...section(
-          'Entidades',
-          countNames(entries, (e) => e.entities),
-          args,
-        ),
-      );
-    return lines.join('\n');
+    return [authorshipLine(all, labels), ...sectionsOf(entries, args)].join(
+      '\n',
+    );
   }
+}
+
+/** The origins and entities sections a call asked for. */
+function sectionsOf(
+  entries: readonly CatalogEntry[],
+  args: SourcesArgs,
+): string[] {
+  const lines: string[] = [];
+  if (args.kind !== 'entities')
+    lines.push(
+      ...section(
+        'Origens',
+        countNames(entries, (e) => [originFolder(e)]),
+        args,
+      ),
+    );
+  if (args.kind !== 'sources')
+    lines.push(
+      ...section(
+        'Entidades',
+        countNames(entries, (e) => e.entities),
+        args,
+      ),
+    );
+  return lines;
 }

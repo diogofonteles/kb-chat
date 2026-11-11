@@ -31,6 +31,26 @@ export function toUiErrorCode(err: unknown): UiErrorCode {
   return parsed.success ? parsed.data.error.code : 'INTERNAL';
 }
 
+/** The field a 400 names (`details.field` of the API's error envelope), if any. */
+export function refusedFieldOf(err: unknown): string | null {
+  if (!(err instanceof HttpErrorResponse) || err.status !== 400) return null;
+  const parsed = apiErrorSchema.safeParse(parseBody(err.error));
+  const details = parsed.success ? parsed.data.error.details : null;
+  return typeof details === 'object' &&
+    details !== null &&
+    'field' in details &&
+    typeof details.field === 'string'
+    ? details.field
+    : null;
+}
+
+/** The `details` of the API's error envelope, null when the error has none. */
+export function errorDetailsOf(err: unknown): unknown {
+  if (!(err instanceof HttpErrorResponse)) return null;
+  const parsed = apiErrorSchema.safeParse(parseBody(err.error));
+  return parsed.success ? (parsed.data.error.details ?? null) : null;
+}
+
 const MESSAGES: Record<UiErrorCode, () => string> = {
   OFFLINE: () =>
     $localize`:@@error.offline:Não consegui falar com o servidor de busca. Verifique se ele está rodando (pnpm dev:api).`,
@@ -88,6 +108,66 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.aiCapacity:A IA gratuita da aplicação está sem capacidade agora. Tente mais tarde ou conecte a sua própria IA.`,
   PROVIDER_UNAVAILABLE: () =>
     $localize`:@@error.providerUnavailable:O OpenRouter não respondeu agora. Tente de novo em instantes.`,
+  MEDIA_NOT_FOUND: () =>
+    $localize`:@@error.mediaNotFound:Esta mídia não está mais no acervo ou você não tem acesso a ela.`,
+  MEDIA_NOT_READY: () =>
+    $localize`:@@error.mediaNotReady:Esta mídia ainda não está pronta para tocar.`,
+  PAYLOAD_TOO_LARGE: () =>
+    $localize`:@@error.payloadTooLarge:O arquivo é maior do que o permitido. Envie um áudio de até 4 GB.`,
+  MEDIA_CONFLICT: () =>
+    $localize`:@@error.mediaConflict:Esta mídia mudou enquanto você agia. Atualize a lista e tente de novo.`,
+  MEDIA_DUPLICATE: () =>
+    $localize`:@@error.mediaDuplicate:Este arquivo já está no acervo.`,
+  MEDIA_QUOTA_EXCEEDED: () =>
+    $localize`:@@error.mediaQuota:Este envio passa da sua cota. Fale com um master para aumentar.`,
+  MEDIA_UPLOAD_EXPIRED: () =>
+    $localize`:@@error.mediaUploadExpired:Este envio expirou. Envie de novo.`,
+  UNSUPPORTED_MEDIA_TYPE: () =>
+    $localize`:@@error.unsupportedMediaType:O envio veio num formato que a API não lê. Recarregue a página e tente de novo.`,
+  BOOKMARK_LIMIT: () =>
+    $localize`:@@error.bookmarkLimit:Você chegou ao limite de 1.000 marcadores nesta mídia. Apague algum para marcar outro.`,
+  VIEW_CHANGED: () =>
+    $localize`:@@error.viewChanged:Esta aba estava em outra visão. Recarregando…`,
+  NOT_WHILE_ACTING: () =>
+    $localize`:@@error.notWhileActing:Isto só a própria pessoa pode fazer.`,
+  TOPIC_EXISTS: () =>
+    $localize`:@@error.topicExists:Já existe um acervo com esse nome.`,
+  CONSENT_REQUIRED: () =>
+    $localize`:@@error.consentRequired:Registre o consentimento antes de cadastrar o perfil de voz.`,
+  VOICE_LIST_LOST: () =>
+    $localize`:@@error.voiceListLost:A lista de revogações se perdeu. Nenhum perfil pode ser calculado até o dono conferir (runbook, seção 11).`,
+  VOICE_LIST_EXPOSED: () =>
+    $localize`:@@error.voiceListExposed:A lista de revogações pode ter sido alterada. Nenhum perfil pode ser calculado até o dono conferir (runbook, seção 11).`,
+  VOICE_LIST_NOT_WRITTEN: () =>
+    $localize`:@@error.voiceListNotWritten:O consentimento foi revogado e o perfil foi apagado, mas a lista de revogações não foi gravada. Veja "Perfis de voz".`,
+  MEDIA_SPEND_CAP: () =>
+    $localize`:@@error.mediaSpendCap:O limite de gasto da mídia foi atingido; a análise não rodou.`,
+  EDIT_STALE: () =>
+    $localize`:@@error.editStale:Outra pessoa mudou esta edição; recarregue para ver.`,
+  EDIT_VERSION_REQUIRED: () =>
+    $localize`:@@error.editVersionRequired:Recarregue a página para continuar esta edição.`,
+  PLAN_REFUSED: () =>
+    $localize`:@@error.planRefused:Uma das opções escolhidas não está disponível. Confira as opções e tente de novo.`,
+  TRACKS_INVALID: () =>
+    $localize`:@@error.tracksInvalid:Há faixas com problema. Corrija e tente de novo.`,
+  CORRECTION_CONFLICT: () =>
+    $localize`:@@error.correctionConflict:Esta palavra mudou enquanto você corrigia. Confira o texto.`,
+  TRANSCRIPT_CHANGED: () =>
+    $localize`:@@error.transcriptChanged:A transcrição foi refeita. Confira a palavra no texto novo.`,
+  CORRECTION_INVALID: () =>
+    $localize`:@@error.correctionInvalid:Use até 80 caracteres, numa linha só.`,
+  GROQ_UNAVAILABLE: () =>
+    $localize`:@@error.groqUnavailable:O Groq não está ligado ou está sem chave. Veja "Groq de reserva" nas Configurações.`,
+  TERMS_OVER_LIMIT: () =>
+    $localize`:@@error.termsOverLimit:A lista passou do limite do transcritor. Remova alguns termos.`,
+  LEVEL_CODE_TAKEN: () =>
+    $localize`:@@error.levelCodeTaken:Já existe um nível com esse código.`,
+  LEVELS_PENDING: () =>
+    $localize`:@@error.levelsPending:Este acervo tem níveis de acesso: isto ainda não está disponível para você nele.`,
+  LEVEL_REQUIRED: () =>
+    $localize`:@@error.levelRequired:Escolha o nível deste áudio.`,
+  LEVEL_ABOVE_YOURS: () =>
+    $localize`:@@error.levelAboveYours:Este nível está acima do seu. Escolha o seu ou um abaixo.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

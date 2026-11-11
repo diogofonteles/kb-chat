@@ -1,3 +1,4 @@
+import type { MainAuthorIdentity } from './prompt.js';
 import {
   sweepPlanSchema,
   type ResearchBilling,
@@ -44,6 +45,7 @@ import {
   type SweepBudget,
 } from './limits.js';
 import { promptText } from './prompt-text.js';
+import { resolveTurnPassages } from './passage-resolution.js';
 import { SourceBook } from './source-book.js';
 import { CoverageLineFilter } from './sweep/coverage-filter.js';
 import {
@@ -99,6 +101,8 @@ export interface ToolLoopRunnerDeps extends LoopEngine {
 interface Turn {
   readonly input: ResearchInput;
   readonly topicTitle: string;
+  /** The collection's main author (KBC-049): the authorship rule names him. */
+  readonly mainAuthor: MainAuthorIdentity | null;
   readonly book: SourceBook;
   readonly messages: AgentMessage[];
   readonly answer: AnswerStream;
@@ -251,7 +255,22 @@ export class ToolLoopRunner implements ResearchRunnerPort {
         return;
       }
     }
+    // The cited tracks' passages, from media.db (KBC-099 FR-6), once the answer is written.
+    const sources = resolveTurnPassages(turn.answer.shown, {
+      book: turn.book,
+      tracks: input.tracks,
+    });
+    if (sources) yield { type: 'sources', sources };
     yield await this.record(turn, input.signal.aborted);
+  }
+
+  /** A fast turn may hand over to the deep model (ADR 0009). */
+  private canDeepen(input: ResearchInput): boolean {
+    return (
+      input.profile === 'fast' &&
+      this.deps.deep !== undefined &&
+      (this.deps.autoDeepen?.() ?? true)
+    );
   }
 
   private get budgets(): ResearchBudgets {
@@ -260,15 +279,19 @@ export class ToolLoopRunner implements ResearchRunnerPort {
 
   private startTurn(input: ResearchInput, topicTitle: string): Turn {
     const budget = this.budgets[input.profile];
-    const canDeepen =
-      input.profile === 'fast' &&
-      this.deps.deep !== undefined &&
-      (this.deps.autoDeepen?.() ?? true);
+    const mainAuthor = this.deps.tools.mainAuthor(input.topic);
+    const canDeepen = this.canDeepen(input);
     return {
       input,
       topicTitle,
+      mainAuthor,
       book: new SourceBook(),
-      messages: buildResearchMessages({ ...input, topicTitle, canDeepen }),
+      messages: buildResearchMessages({
+        ...input,
+        topicTitle,
+        mainAuthor,
+        canDeepen,
+      }),
       answer: new AnswerStream(),
       engine: this.deps,
       deepen: canDeepen ? (this.deps.deep ?? null) : null,
@@ -322,7 +345,11 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     turn: Turn,
   ): AsyncGenerator<ResearchEvent, SweepPlan> {
     const fallback = () =>
-      this.deps.tools.sweeps.defaultPlan(turn.input.topic, turn.input.question);
+      this.deps.tools.sweeps.defaultPlan(
+        turn.input.topic,
+        turn.input.question,
+        turn.input.view,
+      );
     for (;;) {
       if (turn.input.signal.aborted || this.mustAnswer(turn)) return fallback();
       this.compact(turn);
@@ -346,6 +373,9 @@ export class ToolLoopRunner implements ResearchRunnerPort {
         sweeps: this.deps.tools.sweeps,
         book: turn.book,
         topicTitle: turn.topicTitle,
+        mainAuthor: turn.mainAuthor,
+        view: input.view,
+        ...(input.tracks && { tracks: input.tracks }),
       },
       input,
       engine: await this.batchEngine(turn, budget.sweep ?? SWEEP),
@@ -390,9 +420,9 @@ export class ToolLoopRunner implements ResearchRunnerPort {
    */
   private answerReserve(turn: Turn): Promise<number> {
     const { llm, spend } = turn.engine;
-    const { input, topicTitle } = turn;
+    const { input } = turn;
     const rules = promptText(
-      sweepAnswerMessages(topicTitle, {
+      sweepAnswerMessages(turn, {
         ...input,
         findings: [],
         partial: true,
@@ -495,7 +525,10 @@ export class ToolLoopRunner implements ResearchRunnerPort {
    * never ends on an assistant turn (a prefill, refused by current models).
    */
   private handOver(turn: Turn, call: CallResult, reason: string): void {
-    const prompt = researchSystemPrompt(turn.topicTitle, 'deep');
+    const prompt = researchSystemPrompt(
+      { title: turn.topicTitle, mainAuthor: turn.mainAuthor },
+      'deep',
+    );
     const kept = turn.messages.filter(
       (m, i) => i > 0 && !(m.role === 'system' && FINAL_NOTES.has(m.content)),
     );
@@ -690,6 +723,8 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       return this.deps.tools.prepare(call, {
         topic: turn.input.topic,
         book: turn.book,
+        view: turn.input.view,
+        ...(turn.input.tracks && { tracks: turn.input.tracks }),
       });
     const plan = parsedArgs(sweepPlanSchema, parseJson(call.arguments));
     if (typeof plan === 'string') return failed(plan);

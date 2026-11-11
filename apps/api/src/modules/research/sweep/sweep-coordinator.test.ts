@@ -17,6 +17,7 @@ import {
 import type { ResearchTools } from '../tools.js';
 import { SourceBook } from '../source-book.js';
 import { SweepPacer } from './sweep-pacing.js';
+import { coveredMark } from './sweep-cursor.js';
 import {
   SweepCoordinator,
   type BatchEngine,
@@ -24,6 +25,7 @@ import {
   type SweepDeps,
   type SweepRequest,
 } from './sweep-coordinator.js';
+import { OPEN_VIEW } from '../../access-levels/index.js';
 
 const DOCS = 6;
 
@@ -115,6 +117,7 @@ async function sweep(
   engine: BatchEngine,
   options: Partial<SweepRequest> & {
     after?: string;
+    covered?: string;
     clock?: SweepClock;
     plan?: SweepPlan;
     sweeps?: SweepDeps['sweeps'];
@@ -124,7 +127,9 @@ async function sweep(
   const layout = await tools.sweeps.layout('hermetismo', {
     plan: options.plan ?? PLAN,
     batchChars: 1_000,
+    view: OPEN_VIEW,
     after: options.after,
+    covered: options.covered,
   });
   if (!layout) throw new Error('no layout');
   const events: SweepProgress[] = [];
@@ -139,6 +144,7 @@ async function sweep(
   const outcome = await coordinator.run({
     topic: 'hermetismo',
     topicTitle: 'Hermetismo',
+    mainAuthor: { name: 'Mestre Laércio' },
     question: 'Quais livros o Mestre cita?',
     layout,
     book: new SourceBook(),
@@ -319,6 +325,37 @@ describe('SweepCoordinator (KBC-030)', () => {
     expect(lines).toContain('Tema 1');
     expect(lines).toContain('Tema 6');
     expect(rest.outcome.findings.size).toBe(DOCS);
+  });
+
+  it('marks in its cursor every document covered, the earlier turns’ too (code review 2 of KBC-101)', async () => {
+    const first = await sweep(new FakeEngine({ parallel: 1 }), {
+      maxRequests: 2,
+    });
+    expect(first.outcome.cursor?.covered).toBe(
+      coveredMark(['raw/t1.md', 'raw/t2.md']),
+    );
+    const rest = await sweep(new FakeEngine(), {
+      after: first.outcome.cursor?.after,
+      covered: first.outcome.cursor?.covered,
+      previous: first.outcome.cursor?.totals,
+      carried: first.outcome.cursor?.findings,
+    });
+    expect(rest.outcome.resume.covered).toBe(
+      coveredMark(Array.from({ length: DOCS }, (_, i) => `raw/t${i + 1}.md`)),
+    );
+  });
+
+  it('reads no covered document again, so a carried finding is not found twice (code review 2 of KBC-101)', async () => {
+    const engine = new FakeEngine();
+    const { outcome } = await sweep(engine, {
+      covered: coveredMark(['raw/t1.md', 'raw/t2.md', 'raw/t3.md']),
+      carried: [{ id: 'raw/t3.md', text: 'Tema 3, escrito de outro jeito' }],
+    });
+    const lines = outcome.findings.lines().join('\n');
+    expect(lines).toContain('escrito de outro jeito');
+    expect(lines).not.toContain('Livro citado em Tema 3');
+    expect(lines).toContain('Livro citado em Tema 4');
+    expect(engine.calls.join('\n')).not.toContain('Tema 3:');
   });
 
   it('drops carried findings of documents outside the set', async () => {

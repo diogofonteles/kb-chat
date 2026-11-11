@@ -202,6 +202,23 @@ deploy/scripts/sync-vault.sh --host ubuntu@<IP> --with-models   # 1ª vez: tamb�
 - Ele conta as remoções num dry-run antes de tudo. Com mais de `--max-delete` (200), recusa sem enviar nada nem apagar nada. Confira o acervo e, se for isso mesmo, rode de novo com `--max-delete <n>`.
 - Se o índice novo falhar no smoke, o anterior volta sozinho.
 
+### 7b. Sincronização automática pelo transcritor (KBC-100)
+
+Com o Mac marcado **Publica no acervo**, o transcritor publica os documentos das faixas e manda o acervo à produção sozinho, no máximo a cada 30 min e só com mudança pendente:
+
+> **Atenção: só ligue `--sync-host` depois que a release com o KBC-100 estiver em produção.** O transcritor roda o `sync-vault.sh` do checkout do Mac, mas o `install-index.sh` que vale é o da VM. Um `install-index.sh` anterior ao KBC-100 ignora `--hot` e reinicia a API. Por isso o `sync-vault.sh --hot` lê antes o script da VM (`grep -qx KB_CHAT_INSTALL_INDEX_HOT=1`, sem executá-lo). Se a linha não estiver lá, ele recusa sem mandar nada e sem tocar na API, e o transcritor mostra a sincronização como **falhou** até a release chegar à produção.
+
+```bash
+uv run --project tools/transcriber transcriber pair --api-url <url> --vault ~/dev/personal/hermetismo --sync-host ubuntu@<IP>
+# ou, num pareamento já feito: transcriber run --sync-host ubuntu@<IP>   (--no-sync desliga)
+```
+
+- Roda `deploy/scripts/sync-vault.sh --host … --vault … --hot` entre um job e outro; o resultado aparece em Transcritores ("Última sincronização com a produção" ou "falhou às …").
+- O rsync do lado da VM espera a trava do deploy (`flock -w 600 /srv/kb-chat/deploy/.lock`): nunca roda junto com um deploy. O limite de remoções (`--max-delete`, 200) continua valendo.
+- `install-index.sh --hot` não para a API: instala o índice como `index-<hora UTC>.sqlite`, troca o link `index.sqlite` num só `rename`, escreve `qmd/cache/reload-index`; a API sobe um `qmd mcp` novo, relê o catálogo e responde em `reload-index.ack`. Sem resposta em 60 s (ou com o smoke falhando) o link volta ao índice anterior. Sem `--hot`, o script reinicia a API como antes.
+- A trava `deploy/.lock` precisa existir (o primeiro deploy a cria) e ser legível pelo usuário SSH.
+- Uma troca interrompida no meio (SSH caído, timeout) devolve juntos o `index.yml` anterior e o link anterior. Um `.index.sqlite.next` que sobrou de uma execução morta é substituído na próxima troca.
+
 ## 8. Primeiro deploy
 
 O deploy é o merge de `develop` em `main` (**decisão do dono**), ou *Actions → Deploy → Run workflow* em `main`.
@@ -238,7 +255,10 @@ O login fica em `/srv/kb-chat/claude` (no volume e no backup cifrado). Depois, e
 
 **Assinatura cedida (KBC-024):**
 - Se o login cair, cada pesquisa cedida falha com "faça login" e a assinatura fica indisponível por 10 minutos: quem a recebeu passa para a própria IA (ou fica sem IA) e a tela de pessoas avisa "não está disponível agora". Refaça o login com o comando acima e teste a conexão.
+- Voltando para uma versão anterior ao KBC-113 (rollback), **não salve "Termos da transcrição"** enquanto ela estiver no ar: a versão anterior não sabe quais termos são do aprendizado e os salvaria como termos dos masters (ADR 0037, emenda 11). Ler a lista e transcrever continuam seguros.
 - Antes de voltar para uma versão anterior ao KBC-024 (rollback), revogue todas as cessões (Pessoas e permissões → outra IA): a versão anterior não lê `claude-subscription` no `people.json`, e as respostas salvas da assinatura cedida ficam ilegíveis até a volta da versão nova.
+- Antes de voltar para uma versão anterior ao KBC-107 (rollback), tire de todos a permissão **"Classificar nível de conteúdo"** (`content-levels`) em Pessoas e permissões e nos perfis de convite: a versão anterior lê as permissões do `people.json` com uma lista fechada e **não sobe** com uma que não conhece (todo login falha, inclusive o do dono). A partir do KBC-107 a leitura ignora permissões desconhecidas, com um aviso no log (`people.json names features this version does not know`); a primeira gravação do `people.json` nessa versão (qualquer login ou edição de qualquer pessoa) tira a permissão ignorada de **todas** as pessoas, então dê de novo depois de voltar para a versão nova. Os perfis de convite (`invite-profiles.json`) continuam com a lista fechada: um perfil com uma permissão que a versão não conhece desliga os perfis (o arquivo fica como está) até a volta da versão nova. `document-presence.json` (KBC-107) é ignorado pela versão anterior e não precisa de nada.
+- Antes de voltar para uma versão anterior ao KBC-109 (rollback), tire os níveis dos perfis de convite (Pessoas e permissões → Perfis de convite → Editar: desmarque os acervos com níveis, ou apague o perfil; refaça depois da volta da versão nova): a versão anterior lê `invite-profiles.json` com uma lista fechada de campos e, com um perfil que guarda níveis, **desliga todos os perfis** (o arquivo fica como está) até a volta da versão nova. Perfis sem níveis não têm a chave e continuam valendo. Os níveis já dados às pessoas ficam no `people.json` e valem na versão anterior; a chave `via` das linhas da auditoria de níveis é ignorada por ela. A partir do KBC-109, os perfis também ignoram permissões desconhecidas (com aviso no log), como o `people.json`.
 
 ## 9c. 👤 DONO — assinatura do ChatGPT (Codex), no contêiner isolado (opcional)
 
@@ -265,6 +285,30 @@ Antes de ligar, confira o isolamento na própria VM: `sudo /srv/kb-chat/deploy/s
 - O `codex-vm-check.sh` planta um canário no estado e no login do Claude, roda a sonda no contêiner vivo e confere o ambiente do executor; o CI prova o mesmo em todo PR, em arm64.
 - O login fica em `/srv/kb-chat/codex` (no backup cifrado). Para revogar: `exec codex codex logout`.
 - A sub-rede `172.30.0.0/24` é da rede `codex`; se outra rede Docker da VM já a usar, o `up` falha e diz isso.
+
+## 9d. 👤 DONO — acervo de mídia (KBC-034; só depois do KBC-041)
+
+A mídia fica desligada até o player completo (KBC-041) estar em produção, por decisão do dono. Para ligar, uma vez, na VM:
+
+```bash
+ssh -t ubuntu@<IP>
+# a pasta da mídia (o deploy também a cria): banco SQLite e áudio convertido, do usuário do app
+sudo install -d -o 10001 -g 10001 -m 0700 /srv/kb-chat/media
+# o token do processador de mídia, gerado na VM direto no .env, nunca exibido (ADR 0022)
+sudo sh -c 'printf "KB_CHAT_MEDIA_WORKER_TOKEN=%s\n" "$(openssl rand -base64 32)" >> /srv/kb-chat/deploy/.env'
+# liga a mídia na API e o contêiner do processador (some ",codex" se o Codex já estiver ligado)
+echo 'KB_CHAT_MEDIA=on' | sudo tee -a /srv/kb-chat/deploy/.env
+echo 'COMPOSE_PROFILES=media' | sudo tee -a /srv/kb-chat/deploy/.env
+cd /srv/kb-chat/deploy
+sudo docker compose --env-file .env --env-file release.env up -d --wait api media-worker
+sudo docker compose --env-file .env --env-file release.env ps media-worker   # healthy
+```
+
+- Com `KB_CHAT_MEDIA=on`, a API não sobe se `/data/media` não puder ser gravada, se faltar o token ou se uma migração falhar; o log diz o motivo (`docker compose logs api`).
+- O processador roda com 1 CPU e 2 GB: a conversão de 1 h de áudio leva cerca de 1 min, sem derrubar a busca.
+- Quem pode enviar: masters sempre; outras pessoas, com a permissão **Enviar áudios** em Pessoas e permissões.
+- O backup diário leva uma cópia consistente de `media.db` (nunca os áudios, que vêm de quem enviou). A pasta `media/voice-prints/` fica **fora** do backup de propósito (ADR 0032): impressão de voz revogada não pode sobreviver em cópia. `media/voice-revocations.list` também fica fora, para um backup antigo não desfazer uma revogação (seção 11). Perdido o disco, cada perfil pede "Calcular de novo".
+- Para desligar: `KB_CHAT_MEDIA=off` e tire `media` de `COMPOSE_PROFILES`; os arquivos ficam em `/srv/kb-chat/media`.
 
 ## 9b. 👤 DONO — IA da aplicação (na tela, depois do primeiro deploy)
 
@@ -295,13 +339,7 @@ O quadro é uma pilha separada do kb-chat, que só compartilha o Caddy. Se ele c
 
    A primeira execução cria o `hub.env` com segredos novos e para. Preencha `BOARD_HUB_GOOGLE_CLIENT_ID` e `BOARD_HUB_GOOGLE_CLIENT_SECRET` com `sudo nano /srv/kb-chat/board/hub.env` e rode o comando de novo.
 4. **Conferir:** `curl -sS https://<host do quadro>/health` responde `{"ok":true}`. Para provar a atualização ao vivo pelo Caddy, abra o quadro e, com o mesmo projeto, rode `devflow-board log <ID> "teste"`: o passo aparece na tela sem recarregar.
-5. **Ligar um projeto:** ponha `"board": { "url": "https://<host do quadro>" }` no `.claude/harness.json`, copie `DEVFLOW_BOARD_ADMIN_TOKEN` do `hub.env` para o ambiente do Mac (sem colar em comando versionado) e rode:
-
-   ```bash
-   devflow-board hub-project
-   devflow-board import work/board-export
-   devflow-board invite pessoa@gmail.com            # --role view para só leitura
-   ```
+5. **Ligar um projeto:** dentro do projeto, no Claude Code, rode `devflow-board connect`. O navegador abre, você entra com Google, clica em Autorizar e pronto; depois faça commit do `.claude/harness.json`. Funciona em qualquer máquina com o harness instalado, sem SSH nem token para copiar. Quem criou o quadro convida com `devflow-board invite pessoa@gmail.com` (`--role view` para só leitura), e a pessoa roda o mesmo `connect` no computador dela. Detalhes no README do `devflow-harness`, em "Project board".
 
 Atualizar o hub é repetir o passo 3: as páginas abertas pegam a versão nova sozinhas. O `/srv/kb-chat/board/data` pertence ao uid 10003.
 
@@ -334,6 +372,17 @@ age --decrypt --identity ~/.config/kb-chat/backup-age.key backup.age |
 - O arquivo é extraído numa pasta temporária primeiro; links e caminhos inesperados são recusados.
 - O estado atual fica guardado em `/srv/kb-chat/state.before-restore-<stamp>`.
 - O acervo e o índice não estão no backup: a fonte é o Mac, use `sync-vault.sh`.
+- **Perfis de voz (ADR 0032):** `media/backup/media.db` pode ser de antes de uma revogação. Restaure só `media.db` e **nunca** toque em `/srv/kb-chat/media/voice-revocations.list` nem em `media/voice-prints/`: essa lista, só com ids, é o que impede o consentimento revogado de voltar. Ao subir, a API revoga de novo cada perfil da lista; o relatório mostra a data desse arranque e "lista de revogações" como quem revogou.
+- **Disco perdido, com a lista junto, ou linha ilegível na lista:** o log diz `voice revocation list is lost`, a tela "Perfis de voz" avisa, e cadastrar, "Calcular de novo" e receber impressões respondem 409 (revogar continua funcionando). Isso vale em qualquer ordem: uma API que subiu no disco vazio não escreve nada na lista, e a lista começa com o primeiro consentimento. Restaure o backup **mais recente**. Depois, confira com o dono se houve revogação depois da data desse backup e revogue de novo cada uma pela tela. Só então marque a lista como conferida:
+
+  ```bash
+  F=/srv/kb-chat/media/voice-revocations.list
+  sudo sh -c "printf '\nvoice-revocations v1\n' >> $F && chown 10001:10001 $F && chmod 600 $F"
+  ```
+
+- **Lista exposta:** o log diz `voice revocation list is exposed` e a tela avisa: o arquivo não é do usuário da API (10001) ou não está em 0600. Nada da lista é aplicado no arranque e cadastrar, "Calcular de novo" e receber impressões respondem 409 (revogar continua funcionando). A API não aperta o arquivo sozinha, porque alguém pode ter escrito nele. Confira se cada id da lista é de uma revogação de verdade (o relatório mostra as revogações; id de consentimento em vigor na lista é suspeito e deve sair da lista), depois rode o mesmo comando acima e reinicie a API.
+
+- **Revogação fora da lista:** se a lista não pôde ser gravada (disco cheio, permissão), revogar responde 503 e a tela avisa: o perfil e a impressão já foram apagados, falta a linha na lista. Libere o espaço ou corrija a permissão (sem deixar o arquivo aberto) e reinicie a API: todo arranque grava na lista as revogações que o banco tem e ela não. Se o arranque ainda não conseguir, o log diz `voice revocation list could not be written`. Não restaure backup antes disso.
 
 Ensaio sugerido: um a cada trimestre.
 

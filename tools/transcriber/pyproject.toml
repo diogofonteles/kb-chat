@@ -1,0 +1,69 @@
+[project]
+name = "transcriber"
+version = "0.1.0"
+description = "Nova Alexandria transcriber: leases transcribe jobs from the API and runs mlx-whisper on the owner's Mac (ADR 0023)."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "numpy>=2.0",
+  "silero-vad==6.2.3",
+  "torch>=2.4",
+  "mlx-whisper==0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+
+# KBC-064: voice separation with Senko (MIT), Apple silicon only. `uv sync --extra diarize`.
+[project.optional-dependencies]
+diarize = [
+  "senko==0.1.0 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+# KBC-071: voice prints with ECAPA (SpeechBrain, Apache-2.0). Biometric data: leave it out on
+# any machine that should not handle prints. `uv sync --extra voiceprint`.
+voiceprint = [
+  "speechbrain==1.1.2 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+
+[project.scripts]
+transcriber = "transcriber.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.3", "ruff>=0.8"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/transcriber"]
+
+# Linux (CI) takes the CPU-only torch wheel: the CUDA one is ~2 GB and never used here.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+# The Mac (the worker) and Linux (CI) only: Senko pins an old torch for other systems.
+[tool.uv]
+environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+# Senko is not on PyPI: the commit measured in KBC-063.
+senko = { git = "https://github.com/narcotic-sh/senko.git", rev = "1bcb09041bfa170b4a5a4b0af92f66eff76204d5" }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "PL", "S"]
+# PLC0415: torch, silero and mlx load lazily (heavy; mlx exists only on Apple silicon).
+ignore = ["PLR2004", "PLR0913", "S603", "S607", "PLC0415"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "PLR0911", "PLR0915"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore:`torch.jit.load` is deprecated:FutureWarning"]

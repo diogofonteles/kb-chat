@@ -1,0 +1,289 @@
+<section class="media" aria-labelledby="media-title">
+  <header class="head">
+    <div class="titles">
+      <h2 id="media-title" #heading tabindex="-1">
+        <ng-container i18n="@@media.title">Mídia</ng-container>
+        @if (topic(); as current) {
+          &ngsp;<span class="topic">— {{ current.title }}</span>
+        }
+      </h2>
+      @if (list.hasValue() && items().length > 0) {
+        <p class="summary">{{ summary() }}</p>
+      }
+    </div>
+    <div class="head-actions">
+      <a
+        class="secondary"
+        routerLink="/midia/marcadores"
+        i18n="@@bookmarks.mine"
+        >Meus marcadores</a
+      >
+      @if (canUpload() && topic()) {
+        <button
+          type="button"
+          class="primary"
+          aria-haspopup="dialog"
+          (click)="openUpload()"
+          i18n="@@media.upload.open"
+        >
+          Enviar áudio
+        </button>
+      }
+    </div>
+  </header>
+
+  @if (showFilter() || showAuthorFilter()) {
+    <div class="filters">
+      @if (showFilter()) {
+        <label class="filter">
+          <span class="label" i18n="@@media.filter">Filtrar por título</span>
+          <input
+            type="search"
+            autocomplete="off"
+            [value]="query()"
+            (input)="filterBy($event)"
+          />
+        </label>
+      }
+      @if (showAuthorFilter()) {
+        <label class="filter author-filter">
+          <span class="label" i18n="@@media.authorFilter">Autoria</span>
+          <select (change)="filterByAuthor($event)">
+            <option
+              value=""
+              [selected]="author() === ''"
+              i18n="@@authorship.all"
+            >
+              Todos
+            </option>
+            @for (option of authorOptions(); track option.value) {
+              <option
+                [value]="option.value"
+                [selected]="author() === option.value"
+              >
+                {{ option.label }} ({{ option.count }})
+              </option>
+            }
+          </select>
+        </label>
+      }
+    </div>
+  }
+
+  <p class="sent-elsewhere" role="status">{{ sentElsewhere() }}</p>
+  <app-moved-notice
+    [move]="moved()"
+    path="/midia"
+    (opened)="openMovedTopic($event)"
+  />
+
+  @if (actionError()) {
+    <p class="error" role="alert">
+      <span aria-hidden="true">⚠</span> {{ actionError() }}
+    </p>
+  }
+
+  @if (loadError()) {
+    <div class="notice" role="alert">
+      <p i18n="@@media.loadError">
+        Não consegui carregar a mídia deste acervo.
+      </p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="reload()"
+        i18n="@@media.reload"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  } @else if (!list.hasValue()) {
+    <ul
+      class="rows skeleton"
+      aria-busy="true"
+      aria-label="Carregando…"
+      i18n-aria-label="@@app.loading"
+    >
+      @for (n of [1, 2, 3, 4, 5]; track n) {
+        <li class="row"><span class="bar"></span></li>
+      }
+    </ul>
+  } @else if (items().length === 0) {
+    <div class="empty">
+      <p i18n="@@media.empty">Ainda não há áudios neste acervo.</p>
+      @if (canUpload()) {
+        <button
+          type="button"
+          class="secondary"
+          (click)="openUpload()"
+          i18n="@@media.upload.open"
+        >
+          Enviar áudio
+        </button>
+      }
+    </div>
+  } @else if (visible().length === 0) {
+    <div class="empty">
+      @if (query()) {
+        <p i18n="@@media.filterEmpty">
+          Nenhum áudio com "{{ query() }}" no título.
+        </p>
+      } @else {
+        <p i18n="@@media.authorFilterEmpty">Nenhum áudio desta autoria.</p>
+      }
+      <button
+        type="button"
+        class="secondary"
+        (click)="clearFilter()"
+        i18n="@@media.clearFilter"
+      >
+        Limpar filtro
+      </button>
+    </div>
+  } @else {
+    <ul class="rows">
+      @for (item of visible(); track item.id) {
+        <li class="row" [class.failed]="item.status === 'failed'">
+          @if (item.status === 'ready') {
+            <a
+              #row
+              class="main"
+              [attr.data-media-id]="item.id"
+              [routerLink]="['/midia', item.id]"
+            >
+              <span class="title" [title]="item.title">{{ item.title }}</span>
+            </a>
+          } @else {
+            <span
+              #row
+              class="main"
+              tabindex="-1"
+              [attr.data-media-id]="item.id"
+            >
+              <span class="title" [title]="item.title">{{ item.title }}</span>
+            </span>
+          }
+          <span class="meta">
+            <app-authorship-badge [mediaAuthor]="item.author" />
+            <app-media-level-badge [level]="item.level" [shown]="isMaster()" />
+            @if (item.durationMs !== null) {
+              <span class="duration">{{ durationOf(item) }}</span>
+            }
+            <span class="date">{{ item.createdAt | date: 'dd/MM/yyyy' }}</span>
+            <span
+              class="status"
+              [class.ready]="item.status === 'ready'"
+              [class.failed]="item.status === 'failed'"
+              >{{ statusOf(item) }}</span
+            >
+            @if (transcriptionOf(item); as transcription) {
+              <span
+                class="transcription"
+                [class.low]="
+                  item.transcription.status === 'done' && isLow(item)
+                "
+                >{{ transcription }}</span
+              >
+            }
+            @if (lowNoticeOf(item); as notice) {
+              <span class="transcription low">{{ notice }}</span>
+            }
+            @if (resumeTextOf(item); as resume) {
+              <span class="resume">{{ resume }}</span>
+            }
+            @if (preparations.steps().get(item.id); as step) {
+              <app-preparation-entry [mediaId]="item.id" [step]="step" />
+            }
+          </span>
+          @if (resumeTextOf(item)) {
+            <span class="position" aria-hidden="true"
+              ><span [style.width.%]="percentOf(item)"></span
+            ></span>
+          }
+          @if (isMaster() || item.canEdit) {
+            <span class="actions">
+              @if (item.canRetry) {
+                <button
+                  type="button"
+                  class="secondary"
+                  (click)="retry(item)"
+                  i18n="@@media.retry"
+                >
+                  Tentar de novo
+                </button>
+              }
+              <app-row-menu
+                [label]="menuLabelOf(item)"
+                [canEdit]="item.canEdit"
+                [canRemove]="isMaster()"
+                (editChosen)="openEdit(item)"
+                (removeChosen)="askRemove(item)"
+              />
+            </span>
+          }
+        </li>
+      }
+    </ul>
+  }
+
+  <p class="visually-hidden" aria-live="polite">{{ readyNotice() }}</p>
+  <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
+</section>
+
+@if (uploading()) {
+  <app-upload-panel
+    [topic]="topic()?.slug ?? ''"
+    [topics]="topics()"
+    (uploaded)="uploaded($event)"
+    (closed)="uploadClosed()"
+  />
+}
+
+@if (editing(); as item) {
+  <app-edit-media-dialog
+    [item]="item"
+    [topics]="topics()"
+    (saved)="edited($event)"
+    (closed)="editClosed()"
+  />
+}
+
+@if (removing(); as item) {
+  <dialog
+    #removeDialog
+    class="confirm"
+    aria-labelledby="remove-title"
+    aria-describedby="remove-text"
+    (close)="removeClosed()"
+  >
+    <h2 id="remove-title" i18n="@@media.removeTitle">
+      Remover "{{ item.title }}"?
+    </h2>
+    <p id="remove-text" i18n="@@media.removeText">
+      O áudio e a transcrição serão apagados e não podem ser recuperados.
+    </p>
+    @if (removingTracks(); as tracks) {
+      <p class="remove-tracks" role="alert">
+        {{ removingTracksText() }}
+      </p>
+    }
+    <div class="confirm-actions">
+      <button
+        type="button"
+        class="secondary"
+        (click)="cancelRemove()"
+        i18n="@@media.removeCancel"
+      >
+        Cancelar
+      </button>
+      <button
+        type="button"
+        class="danger"
+        (click)="confirmRemove()"
+        i18n="@@media.removeConfirm"
+      >
+        Remover
+      </button>
+    </div>
+  </dialog>
+}

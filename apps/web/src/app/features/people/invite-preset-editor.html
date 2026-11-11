@@ -17,17 +17,91 @@
 <fieldset class="group" [disabled]="busy() || isMaster()">
   <legend class="legend" i18n="@@preset.collections">Acervos</legend>
   @for (topic of collections(); track topic.slug) {
-    <label class="check">
+    <label class="check" [class.child]="topic.parent !== null">
       <input
         #box
         type="checkbox"
         [checked]="topic.checked"
+        [disabled]="topic.inherited"
         (change)="toggleTopic(topic.slug, box.checked)"
       />
-      <span>{{ topic.title }}</span>
+      <span
+        >{{ topic.title }}
+        @if (topic.inherited) {
+          <span class="inherited" i18n="@@people.inheritedCollection"
+            >(incluído em {{ topic.parentTitle }})</span
+          >
+        }
+      </span>
     </label>
+    @if (levelRows().get(topic.slug); as row) {
+      @let inviteStale = staleNotes().get(row.collection);
+      @let noteId = staleId(row.collection);
+      <div class="field level-field">
+        <label [for]="uid + '-level-' + row.collection" i18n="@@people.levelIn"
+          >Nível em {{ row.title }}</label
+        >
+        <select
+          #levelSelect
+          class="select"
+          [id]="uid + '-level-' + row.collection"
+          [attr.aria-describedby]="describedBy(row, !!inviteStale)"
+          (change)="chooseLevel(row.collection, levelSelect.value)"
+        >
+          @if (row.stale) {
+            <option
+              [value]="chooseLevelValue"
+              disabled
+              selected
+              i18n="@@preset.chooseLevel"
+            >
+              Escolha
+            </option>
+          }
+          @if (mode() === 'profile') {
+            <option
+              [value]="keepLevel"
+              [selected]="row.current === keepLevel"
+              i18n="@@preset.keepLevel"
+            >
+              Manter o nível da pessoa
+            </option>
+          }
+          @for (level of row.choices; track level.id) {
+            <option [value]="level.id" [selected]="level.id === row.current">
+              {{ level.code }}
+            </option>
+          }
+        </select>
+        @if (keepsPersonLevel(row)) {
+          <span
+            class="hint"
+            [id]="keepId(row.collection)"
+            i18n="@@preset.keepLevelHint"
+            >Ao convidar com este perfil, a pessoa entra no nível mais
+            baixo.</span
+          >
+        }
+        @if (row.stale) {
+          <span class="field-error" [id]="noteId" i18n="@@preset.staleLevel"
+            ><span aria-hidden="true">⚠</span> O nível {{ row.stale }} não
+            existe mais; escolha outro.</span
+          >
+        } @else if (inviteStale) {
+          <span class="hint" [id]="noteId" i18n="@@preset.staleLevelInvite"
+            ><span aria-hidden="true">⚠</span> O nível {{ inviteStale }} não
+            existe mais; este convite dá o nível mais baixo.</span
+          >
+        }
+      </div>
+    }
   } @empty {
     <p class="note" i18n="@@people.noCollections">Nenhum acervo no vault.</p>
+  }
+  @if (isMaster() && (scales()?.length ?? 0) > 0) {
+    <p class="note" i18n="@@people.mastersAllLevels">
+      Masters veem todos os níveis.
+    </p>
   }
 </fieldset>
 
@@ -226,7 +300,7 @@
             [value]="topic.slug"
             [selected]="topic.slug === current.preferences.defaultTopic"
           >
-            {{ topic.title }}
+            {{ treeTitle(topic) }}
           </option>
         }
       </select>

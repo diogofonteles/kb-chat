@@ -1,19 +1,84 @@
-@if (groups().length > 0) {
+@if (groups().length > 0 || tracks().length > 0 || tracksFailed()) {
   <section class="see-also" aria-labelledby="see-also-title">
     <h3 id="see-also-title" i18n="@@seeAlso.title">Veja também</h3>
+    @if (tracks().length > 0 || tracksFailed()) {
+      <div class="group">
+        <h4 i18n="@@seeAlso.tracks">
+          Perguntas e respostas sobre este assunto
+        </h4>
+        @if (tracksFailed()) {
+          <p class="failed" role="alert" i18n="@@seeAlso.tracksFailed">
+            Não consegui carregar as faixas.
+          </p>
+        }
+        <ul>
+          @for (track of tracks(); track track.id) {
+            <li>
+              <a
+                class="ref"
+                [routerLink]="['/midia', track.id]"
+                [queryParams]="{ t: 0 }"
+                >{{ track.title }}</a
+              >
+              <span class="ref-facets">
+                {{ track.parentTitle }}
+                @if (durationOf(track); as duration) {
+                  · {{ duration }}
+                }
+              </span>
+            </li>
+          }
+        </ul>
+        @if (moreTracksFailed()) {
+          <p class="failed" role="alert" i18n="@@seeAlso.failed">
+            Não consegui carregar mais referências.
+          </p>
+        }
+        @if (tracks().length > 0 && tracks().length < tracksTotal()) {
+          <button
+            type="button"
+            class="more"
+            [disabled]="tracksLoading()"
+            (click)="showAllTracks()"
+            i18n="@@seeAlso.allTracks"
+          >
+            {tracksLoading(), select,
+              true {Carregando…}
+              other {Ver todas ({{ tracksTotal() }})}
+            }
+          </button>
+        }
+      </div>
+    }
     @for (group of groups(); track group.name) {
       <div class="group">
         <h4>{{ group.title }}</h4>
         <ul>
           @for (ref of group.items; track ref.id) {
             <li>
-              <button
-                type="button"
-                class="ref"
-                (click)="opened.emit({ id: ref.id, title: ref.title })"
-              >
-                {{ ref.title }}
-              </button>
+              @if (ref.media; as media) {
+                <button
+                  type="button"
+                  class="ref track"
+                  [attr.data-media-id]="media.mediaId"
+                  (click)="openTrack(ref, $event)"
+                >
+                  <span class="note" aria-hidden="true">♪</span>
+                  <span class="visually-hidden" i18n="@@seeAlso.trackKind"
+                    >Faixa de áudio:</span
+                  >
+                  {{ ref.title }}
+                  <span class="recording">· {{ media.recordingTitle }}</span>
+                </button>
+              } @else {
+                <button
+                  type="button"
+                  class="ref"
+                  (click)="opened.emit({ id: ref.id, title: ref.title })"
+                >
+                  {{ ref.title }}
+                </button>
+              }
               @if (ref.facets) {
                 <span class="ref-facets">{{ ref.facets }}</span>
               }

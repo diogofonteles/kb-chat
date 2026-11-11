@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import type { DocumentRef } from '@kb-chat/contracts';
 import { ResearchMessage } from './research-message.js';
+import type { TrackOpening } from './track-opening.js';
 import type { ResearchTurn } from './research-turn.js';
 
 /** The "Pesquisa com IA" conversation: only the agent's answers, never search cards (BR-6). */
@@ -19,6 +20,7 @@ import type { ResearchTurn } from './research-turn.js';
         [turn]="turn"
         [last]="$last"
         (opened)="opened.emit($event)"
+        (trackOpened)="trackOpened.emit($event)"
         (stopped)="stopped.emit()"
         (retried)="retried.emit()"
         (continued)="continued.emit()"
@@ -39,6 +41,7 @@ import type { ResearchTurn } from './research-turn.js';
 export class ResearchThread {
   readonly turns = input.required<readonly ResearchTurn[]>();
   readonly opened = output<DocumentRef>();
+  readonly trackOpened = output<TrackOpening>();
   readonly stopped = output();
   readonly retried = output();
   /** "Continuar varredura" on the last turn (KBC-030). */

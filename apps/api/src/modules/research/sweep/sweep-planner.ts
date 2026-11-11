@@ -1,4 +1,7 @@
+import type { MainAuthorIdentity } from '../prompt.js';
 import type { SweepPlan } from '@kb-chat/contracts';
+import type { LevelView } from '../../../ports/level-view.js';
+import type { TrackShelf } from '../../../ports/track-shelf.js';
 import type { VaultReaderPort } from '../../../ports/vault-reader.js';
 import {
   splitFrontmatter,
@@ -7,8 +10,10 @@ import {
 } from '../../catalog/index.js';
 import { acceptsEntry, type DocFilter } from '../doc-filter.js';
 import type { TextFinder } from '../text-finder.js';
+import { isVisible } from '../tool-context.js';
 import { defaultPlan } from './plan-tool.js';
-import { AUTHORSHIP_LABELS, oneLine } from '../tool-output.js';
+import { coveredBy } from './sweep-cursor.js';
+import { authorshipLabels, oneLine } from '../tool-output.js';
 
 /**
  * Characters read on each side of an occurrence when a sweep has phrases: enough for the
@@ -42,9 +47,12 @@ export interface SweepBatch {
 /** The resolved sweep: the whole set, what a cursor skips and the batches left to run. */
 export interface SweepLayout {
   readonly plan: SweepPlan;
-  /** Every document of the target set, in id order (the cursor's order). */
+  /**
+   * Every document of the target set: those an earlier turn covered first, then the rest,
+   * each part in id order. Swept documents always form a prefix (what a cursor marks).
+   */
   readonly docs: readonly SweepDoc[];
-  /** Documents at or before the cursor: covered by an earlier turn. */
+  /** The first documents, covered by an earlier turn. */
   readonly skipped: number;
   readonly batches: readonly SweepBatch[];
   /** Documents whose whole body was examined (scanned for the phrases, or read whole). */
@@ -59,6 +67,22 @@ export interface LayoutRequest {
   readonly batchChars: number;
   /** The cursor: the last document id already swept. */
   readonly after?: string;
+  /** The cursor's mark of the documents already swept (see `coveredBy`). */
+  readonly covered?: string;
+  /** The tracks the turn may research; without it, texts only (KBC-101 BR-1, AC-5). */
+  readonly tracks?: TrackShelf;
+  /**
+   * What the person may see (KBC-104 BR-3): the set is the view's, so the batches, the
+   * coverage and a cursor's carried findings only ever hold visible documents.
+   */
+  readonly view: LevelView;
+}
+
+/** What of a track's body a batch showed (KBC-101 BR-4): to place its findings. */
+export interface ShownWindow {
+  readonly body: string;
+  readonly start: number;
+  readonly end: number;
 }
 
 /** A batch as the model reads it: fenced text, each document labelled [Dk]. */
@@ -66,20 +90,42 @@ export interface BatchText {
   readonly text: string;
   /** Label number → the document it names. */
   readonly labels: ReadonlyMap<number, CatalogEntry>;
+  /** Label number → the windows of a track's body the batch showed, in order. */
+  readonly shown: ReadonlyMap<number, readonly ShownWindow[]>;
 }
 
 export interface SweepPlannerDeps {
   readonly catalog: CatalogRegistry;
   readonly vault: VaultReaderPort;
   readonly finder: TextFinder;
+  /** The collection's main author (KBC-049): the label of its documents. */
+  readonly mainAuthorOf?: (topic: string) => MainAuthorIdentity | null;
 }
 
-const filterOf = ({ target }: SweepPlan): DocFilter => ({
+const filterOf = (
+  { target }: SweepPlan,
+  visible: (entry: CatalogEntry) => boolean,
+): DocFilter => ({
   authorship: target.authorship,
   entity: target.entity,
   source: target.source,
   subjects: target.subjects ?? [],
+  visible,
 });
+
+/**
+ * A track's kind and recording, as the tools label it (KBC-101 FR-2): its anchors stay in
+ * the text, so a finding can be placed on its passage.
+ */
+function trackLabel(entry: CatalogEntry): string {
+  const { media } = entry;
+  if (!media) return '';
+  const place =
+    media.ordinal && media.total
+      ? ` · faixa ${media.ordinal} de ${media.total}`
+      : '';
+  return ` · faixa de áudio (transcrição automática) · gravação “${oneLine(media.recordingTitle, 120)}”${place}`;
+}
 
 /** [start, end) ranges merged when they touch or overlap. */
 function merged(
@@ -128,6 +174,17 @@ function packed(units: readonly SweepUnit[], size: number): SweepBatch[] {
   return batches;
 }
 
+/** The documents a cursor covered first, then the rest: the swept part stays a prefix. */
+function resumed(
+  docs: readonly SweepDoc[],
+  request: LayoutRequest,
+): { docs: SweepDoc[]; skipped: number } {
+  const covered = coveredBy(request);
+  const done = docs.filter((d) => covered(d.entry));
+  const rest = docs.filter((d) => !covered(d.entry));
+  return { docs: [...done, ...rest], skipped: done.length };
+}
+
 async function mapLimited<T, R>(
   items: readonly T[],
   map: (item: T) => Promise<R>,
@@ -153,18 +210,16 @@ export class SweepPlanner {
     topic: string,
     request: LayoutRequest,
   ): Promise<SweepLayout | null> {
-    const entries = this.targetSet(topic, request.plan);
+    const entries = this.targetSet(topic, request);
     if (!entries) return null;
     const phrases = request.plan.phrases;
-    const docs =
+    const found =
       phrases.length > 0
         ? await this.hitDocs(topic, { entries, phrases, request })
         : await mapLimited(entries, (entry) =>
             this.wholeDoc(topic, entry, request.batchChars),
           );
-    const after = request.after;
-    const skipped =
-      after === undefined ? 0 : docs.filter((d) => d.entry.id <= after).length;
+    const { docs, skipped } = resumed(found, request);
     const pending = docs.slice(skipped).flatMap((d) => d.units);
     return {
       plan: request.plan,
@@ -179,26 +234,38 @@ export class SweepPlanner {
     };
   }
 
-  /** The plan's documents in id order (the cursor's order); null for an unknown topic. */
-  private targetSet(topic: string, plan: SweepPlan): CatalogEntry[] | null {
-    const catalog = this.deps.catalog.get(topic);
-    if (!catalog) return null;
-    const filter = filterOf(plan);
-    return [...catalog.entries.values()]
+  /**
+   * The plan's documents in id order (the cursor's order), the collection's and its
+   * sub-collections', texts and the tracks the turn may see (KBC-101 BR-1, FR-5), at or
+   * below the person's level (KBC-104 FR-3); null for an unknown topic.
+   */
+  private targetSet(
+    topic: string,
+    { plan, tracks, view }: LayoutRequest,
+  ): CatalogEntry[] | null {
+    const scope = this.deps.catalog.scopeView(topic);
+    if (!scope) return null;
+    const filter = filterOf(plan, (entry) =>
+      isVisible(entry, { topic, tracks, view }),
+    );
+    return view
+      .entries(scope)
       .filter((entry) => acceptsEntry(filter, entry))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 
   /**
    * The default plan for a topic (ADR 0021): the Mestre's documents when the question names
-   * him and the topic has any, otherwise the whole topic (architecture review of KBC-030).
+   * him and the person sees any (KBC-104), otherwise the whole topic (architecture review of
+   * KBC-030).
    */
-  defaultPlan(topic: string, question: string): SweepPlan {
+  defaultPlan(topic: string, question: string, view: LevelView): SweepPlan {
     const plan = defaultPlan(question);
     const wanted = plan.target.authorship;
     if (!wanted) return plan;
-    const entries = this.deps.catalog.get(topic)?.entries.values() ?? [];
-    const has = [...entries].some((entry) => entry.authorship === wanted);
+    const scope = this.deps.catalog.scopeView(topic);
+    const entries = scope ? view.entries(scope) : [];
+    const has = entries.some((entry) => entry.authorship === wanted);
     return has ? plan : { ...plan, target: {} };
   }
 
@@ -206,25 +273,32 @@ export class SweepPlanner {
   async batchText(topic: string, batch: SweepBatch): Promise<BatchText> {
     const labels = new Map<number, CatalogEntry>();
     const numbers = new Map<string, number>();
+    const shown = new Map<number, ShownWindow[]>();
     const parts: string[] = [];
     for (const unit of batch.units) {
       const known = numbers.get(unit.entry.id);
       const label = known ?? numbers.size + 1;
       numbers.set(unit.entry.id, label);
       labels.set(label, unit.entry);
-      parts.push(await this.unitText(topic, unit, label));
+      const body = (await this.body(topic, unit.entry)) ?? '';
+      if (unit.entry.media)
+        shown.set(label, [
+          ...(shown.get(label) ?? []),
+          { body, start: unit.start, end: unit.end },
+        ]);
+      parts.push(this.unitText(topic, { unit, label, body }));
     }
-    return { text: parts.join('\n\n'), labels };
+    return { text: parts.join('\n\n'), labels, shown };
   }
 
-  private async unitText(
+  private unitText(
     topic: string,
-    unit: SweepUnit,
-    label: number,
-  ): Promise<string> {
-    const body = (await this.body(topic, unit.entry)) ?? '';
+    { unit, label, body }: { unit: SweepUnit; label: number; body: string },
+  ): string {
     const { entry } = unit;
-    const head = `[D${label}] ${oneLine(entry.title, 160)} · autoria: ${AUTHORSHIP_LABELS[entry.authorship]}${entry.author ? ` (${oneLine(entry.author, 80)})` : ''} — caracteres ${unit.start}–${unit.end} de ${body.length}`;
+    const labels = authorshipLabels(this.deps.mainAuthorOf?.(topic) ?? null);
+    const author = entry.author ? ` (${oneLine(entry.author, 80)})` : '';
+    const head = `[D${label}] ${oneLine(entry.title, 160)}${trackLabel(entry)} · autoria: ${labels[entry.authorship]}${author} — caracteres ${unit.start}–${unit.end} de ${body.length}`;
     return `${head}\n<<<DOCUMENTO\n${body.slice(unit.start, unit.end)}\nDOCUMENTO>>>`;
   }
 

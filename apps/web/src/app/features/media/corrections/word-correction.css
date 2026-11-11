@@ -1,0 +1,142 @@
+:host {
+  display: block;
+}
+
+/* Desktop: right under the text block, near what it changes (MA-07). */
+.panel {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow);
+  overflow-wrap: anywhere;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.context {
+  margin: 0;
+  font-family: var(--font-reading);
+  line-height: 1.6;
+}
+
+/* The chosen words: a double underline and a background, never colour alone (AC-23). */
+.chosen {
+  background: var(--color-mark);
+  color: var(--color-text);
+  text-decoration: underline double var(--color-accent-strong);
+  text-underline-offset: 0.2em;
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  font-weight: 600;
+}
+
+.field input {
+  min-width: 0;
+  min-height: var(--target);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 400;
+}
+
+.field input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.moves,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.actions {
+  justify-content: flex-end;
+}
+
+.hint,
+.error,
+.all {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.hint {
+  color: var(--color-text-muted);
+}
+
+.error {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.status:empty {
+  display: none;
+}
+
+.link {
+  min-height: var(--target);
+  padding: 0 var(--space-1);
+  border: none;
+  background: none;
+  color: var(--color-accent-strong);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* A phone: a sheet at the bottom, over the page, with the buttons in reach (AC-24). */
+@media (max-width: 40rem) {
+  .panel {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 20;
+    max-height: 70dvh;
+    overflow-y: auto;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
+  }
+
+  .moves button,
+  .actions button {
+    flex: 1 1 auto;
+  }
+}
+
+@media (forced-colors: active) {
+  .chosen {
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
+/* A word the learning replaced (KBC-113 FR-6): said in words, with its undo. */
+.learned {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.learned p {
+  margin: 0;
+  flex: 1 1 12rem;
+  overflow-wrap: anywhere;
+}

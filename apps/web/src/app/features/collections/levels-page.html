@@ -1,0 +1,270 @@
+<section class="levels" aria-labelledby="levels-title">
+  <a class="back" routerLink="/" i18n="@@levels.back">← Voltar</a>
+  <h2 id="levels-title" class="heading" tabindex="-1">
+    <ng-container i18n="@@levels.title">Níveis de acesso</ng-container>
+    <span class="collection">{{ title() }}</span>
+  </h2>
+
+  @if (!manager()) {
+    <app-unassigned-section [topic]="slug()" />
+  } @else if (loaded.error() && !scale()) {
+    <div class="notice" role="alert">
+      <p i18n="@@levels.loadFailed">
+        Não consegui carregar os níveis deste acervo.
+      </p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="loaded.reload()"
+        i18n="@@levels.retry"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  } @else if (!scale()) {
+    <div aria-busy="true" class="skeletons">
+      <span class="visually-hidden" i18n="@@levels.loading">Carregando…</span>
+      @for (row of [1, 2, 3, 4, 5]; track row) {
+        <div class="skeleton"></div>
+      }
+    </div>
+  } @else if (scale()?.inherited) {
+    <p class="notice" i18n="@@levels.inherited">
+      Este sub-acervo usa os níveis de
+      <a [routerLink]="parentPath()">{{ parentTitle() }}</a
+      >.
+    </p>
+  } @else {
+    <p class="help" i18n="@@levels.help">
+      O primeiro nível é o mais aberto. Cada nível vê o seu conteúdo e o de
+      todos os níveis abaixo dele. Masters veem tudo.
+    </p>
+
+    @if (failure(); as message) {
+      <p class="banner" role="alert">{{ message }}</p>
+    }
+
+    @if (levels().length === 0) {
+      <p class="empty" i18n="@@levels.none">
+        Este acervo não tem níveis. Todos com acesso veem todo o conteúdo.
+      </p>
+    } @else {
+      <ol class="scale" aria-labelledby="levels-title">
+        @for (
+          level of levels();
+          track level.id;
+          let first = $first;
+          let last = $last;
+          let i = $index
+        ) {
+          <li class="level">
+            @if (renaming()?.id === level.id) {
+              <form
+                class="rename"
+                (submit)="$event.preventDefault(); saveRename()"
+              >
+                <label class="field">
+                  <span i18n="@@levels.code">Código</span>
+                  <input
+                    #renameInput
+                    type="text"
+                    autocomplete="off"
+                    [attr.maxlength]="codeMax"
+                    [value]="renaming()?.code ?? ''"
+                    [attr.aria-invalid]="renameError() ? 'true' : null"
+                    [attr.aria-describedby]="
+                      renameError() ? 'rename-error' : null
+                    "
+                    (input)="editRename({ code: renameInput.value })"
+                  />
+                </label>
+                <label class="field">
+                  <span i18n="@@levels.description">Descrição (opcional)</span>
+                  <input
+                    #renameDescription
+                    type="text"
+                    autocomplete="off"
+                    [attr.maxlength]="descriptionMax"
+                    [value]="renaming()?.description ?? ''"
+                    (input)="
+                      editRename({ description: renameDescription.value })
+                    "
+                  />
+                </label>
+                @if (renameError(); as message) {
+                  <p id="rename-error" class="error" role="alert">
+                    {{ message }}
+                  </p>
+                }
+                <div class="actions">
+                  <button
+                    type="submit"
+                    class="primary"
+                    [disabled]="busy()"
+                    i18n="@@levels.save"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    type="button"
+                    class="link"
+                    (click)="cancelRename()"
+                    i18n="@@levels.cancel"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            } @else {
+              <div class="summary">
+                <span class="pill">{{ level.code }}</span>
+                <span class="about">
+                  @if (level.description) {
+                    <span class="description">{{ level.description }}</span>
+                  }
+                  <span class="counts">{{ levelCounts(level) }}</span>
+                </span>
+              </div>
+              @if (moving()?.id === level.id) {
+                <div class="confirm-row">
+                  <p class="confirm">{{ moveText(level) }}</p>
+                  <button
+                    #confirmMove
+                    type="button"
+                    class="primary"
+                    [disabled]="busy()"
+                    (click)="applyMove()"
+                    i18n="@@levels.confirm"
+                  >
+                    Confirmar
+                  </button>
+                  <button
+                    type="button"
+                    class="link"
+                    (click)="cancelMove()"
+                    i18n="@@levels.cancel"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              } @else {
+                <div class="actions">
+                  <button
+                    type="button"
+                    class="secondary"
+                    [disabled]="busy()"
+                    (click)="askRename(level)"
+                    [attr.aria-label]="labelFor('rename', level)"
+                    i18n="@@levels.rename"
+                  >
+                    Renomear
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary"
+                    [disabled]="busy() || first"
+                    (click)="askMove(level, -1)"
+                    [attr.aria-label]="labelFor('up', level)"
+                    i18n="@@levels.moveUp"
+                  >
+                    Mover para cima
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary"
+                    [disabled]="busy() || last"
+                    (click)="askMove(level, 1)"
+                    [attr.aria-label]="labelFor('down', level)"
+                    i18n="@@levels.moveDown"
+                  >
+                    Mover para baixo
+                  </button>
+                </div>
+              }
+            }
+          </li>
+        }
+      </ol>
+    }
+
+    <form class="new" (submit)="$event.preventDefault(); add()">
+      <h3 i18n="@@levels.newTitle">Novo nível</h3>
+      <label class="field">
+        <span i18n="@@levels.code">Código</span>
+        <input
+          #codeInput
+          type="text"
+          autocomplete="off"
+          placeholder="QS"
+          [attr.maxlength]="codeMax"
+          [value]="code()"
+          [attr.aria-invalid]="codeError() ? 'true' : null"
+          [attr.aria-describedby]="codeError() ? 'code-error' : 'code-hint'"
+          (input)="code.set(codeInput.value); codeError.set('')"
+        />
+      </label>
+      <p id="code-hint" class="hint" i18n="@@levels.codeHint">
+        Até 12 caracteres. O novo nível entra no topo da escala (o mais alto).
+      </p>
+      @if (codeError(); as message) {
+        <p id="code-error" class="error" role="alert">{{ message }}</p>
+      }
+      <label class="field">
+        <span i18n="@@levels.description">Descrição (opcional)</span>
+        <input
+          #descriptionInput
+          type="text"
+          autocomplete="off"
+          [attr.maxlength]="descriptionMax"
+          [value]="description()"
+          (input)="description.set(descriptionInput.value)"
+        />
+      </label>
+      @if (confirmingFirst()) {
+        <div class="confirm-row" role="group" aria-labelledby="first-confirm">
+          <p id="first-confirm" class="confirm" i18n="@@levels.firstConfirm">
+            Todos os {{ scale()?.documents }} documentos deste acervo e dos
+            sub-acervos, e as {{ scale()?.people }} pessoas com acesso, ficam
+            neste nível. Nada muda para ninguém até você subir algo.
+          </p>
+          <button
+            #confirmCreate
+            type="button"
+            class="primary"
+            [disabled]="busy()"
+            (click)="create()"
+            i18n="@@levels.createFirst"
+          >
+            Criar nível
+          </button>
+          <button
+            type="button"
+            class="link"
+            (click)="cancelFirst()"
+            i18n="@@levels.cancel"
+          >
+            Cancelar
+          </button>
+        </div>
+      } @else {
+        <div class="actions">
+          <button
+            type="submit"
+            class="primary"
+            [disabled]="busy()"
+            [attr.aria-busy]="busy()"
+            i18n="@@levels.add"
+          >
+            Adicionar
+          </button>
+        </div>
+      }
+    </form>
+
+    @if (levels().length > 0) {
+      <app-unassigned-section [topic]="slug()" (changed)="loaded.reload()" />
+    }
+  }
+
+  <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
+</section>

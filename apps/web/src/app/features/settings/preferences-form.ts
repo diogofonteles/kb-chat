@@ -20,6 +20,7 @@ import {
 } from '@kb-chat/contracts';
 import { topicsUrl } from '@core/api/kb-api.js';
 import { MODE_OPTIONS } from '@core/i18n/facet-labels.js';
+import { openable, treeTitle } from '@core/topics/topic-tree.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { THEME_COPY, VIEW_COPY } from './provider-copy.js';
 
@@ -57,9 +58,11 @@ export class PreferencesForm {
       parse: (body) => topicListSchema.parse(body),
     },
   );
+  /** Collections the person opens, as a tree (KBC-048). */
   protected readonly topics = computed(() =>
-    this.topicList.hasValue() ? this.topicList.value().items : [],
+    this.topicList.hasValue() ? openable(this.topicList.value().items) : [],
   );
+  protected readonly treeTitle = treeTitle;
   protected readonly views = DEFAULT_VIEWS.map((value) => ({
     value,
     label: VIEW_COPY[value](),
