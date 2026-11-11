@@ -87,3 +87,13 @@ describe('PersonEditor: "Nível em <acervo>" (T9, KBC-103 FR-3)', () => {
     expect(screen.queryByRole('combobox', { name: /Nível em/ })).toBeNull();
   });
 });
+
+describe('PersonEditor: "Classificar nível de conteúdo" (T9, KBC-107 FR-3)', () => {
+  it('lists the feature by its name, off until granted', async () => {
+    await renderEditor(ana());
+    const box = screen.getByRole('checkbox', {
+      name: 'Classificar nível de conteúdo',
+    });
+    expect(box).toHaveProperty('checked', false);
+  });
+});

@@ -66,4 +66,19 @@ describe('The bulk level bar (KBC-107, MA-27, SL-28)', () => {
       true,
     );
   });
+
+  it('R1-4: a confirmation whose selection emptied under it is gone', async () => {
+    const { fixture, applied } = await open(2);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Nível' }), {
+      target: { value: 'qs' },
+    });
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Dar nível' }));
+    await fixture.whenStable();
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeTruthy();
+    fixture.componentRef.setInput('count', 0);
+    await fixture.whenStable();
+    expect(screen.queryByRole('button', { name: 'Confirmar' })).toBeNull();
+    expect(applied).not.toHaveBeenCalled();
+  });
 });

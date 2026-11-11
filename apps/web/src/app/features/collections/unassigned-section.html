@@ -1,11 +1,22 @@
 <section
   class="unassigned"
-  [class.clear]="total() === 0 && !first.isLoading()"
+  [class.clear]="known() && total() === 0"
   aria-labelledby="unassigned-title"
 >
-  <h3 id="unassigned-title" i18n="@@levels.unassignedTitle">
-    Sem nível ({{ total() }})
+  <h3 id="unassigned-title">
+    @if (known()) {
+      <ng-container i18n="@@levels.unassignedTitle"
+        >Sem nível ({{ total() }})</ng-container
+      >
+    } @else {
+      <ng-container i18n="@@levels.unassignedTitleLoading"
+        >Sem nível</ng-container
+      >
+    }
   </h3>
+  @if (announcement(); as said) {
+    <p #result class="result" tabindex="-1" role="status">{{ said }}</p>
+  }
 
   @if (first.error() && !first.hasValue()) {
     <div class="notice" role="alert">
@@ -21,7 +32,7 @@
         Tentar de novo
       </button>
     </div>
-  } @else if (first.isLoading() && items().length === 0 && total() === 0) {
+  } @else if (!known()) {
     <div aria-busy="true" class="skeletons">
       <span class="visually-hidden" i18n="@@unassigned.loading"
         >Carregando…</span
@@ -163,7 +174,7 @@
       <button
         type="button"
         class="secondary select-all"
-        [attr.aria-pressed]="allFiltered()"
+        [disabled]="stale()"
         (click)="toggleAll()"
       >
         @if (allFiltered()) {
@@ -208,7 +219,7 @@
         <button
           type="button"
           class="secondary"
-          [disabled]="loadingMore()"
+          [disabled]="loadingMore() || stale()"
           (click)="loadMore()"
           i18n="@@unassigned.more"
         >
@@ -218,11 +229,10 @@
       <app-bulk-level-bar
         [count]="selectedCount()"
         [choices]="choices()"
-        [busy]="busy()"
+        [busy]="busy() || stale()"
         [error]="failure()"
         (applied)="give($event)"
       />
     }
   }
-  <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
 </section>

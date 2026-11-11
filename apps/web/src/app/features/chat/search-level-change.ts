@@ -3,12 +3,15 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   Injector,
+  afterNextRender,
   computed,
   inject,
   input,
   linkedSignal,
   signal,
+  viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
@@ -23,6 +26,18 @@ import { LevelsApi, levelChoicesUrl } from '@core/levels/levels-api.js';
 import { UnassignedCountsStore } from '@core/levels/unassigned-counts-store.js';
 import { BulkLevelBar } from '@features/collections/bulk-level-bar.js';
 import { finalize } from 'rxjs';
+
+/** "N documentos foram para CI." and, when some were left as they were, how many (R1-4). */
+function resultText(result: BulkLevelResult): string {
+  const { updated, skipped } = result;
+  const code = result.level.code;
+  const done =
+    updated === 1
+      ? $localize`:@@searchLevel.doneOne:1 documento foi para ${code}:code:.`
+      : $localize`:@@searchLevel.done:${updated}:count: documentos foram para ${code}:code:.`;
+  if (skipped === 0) return done;
+  return `${done} ${$localize`:@@unassigned.skipped:${skipped}:count: não puderam ser classificados.`}`;
+}
 
 const keyOf = (hit: Pick<SearchHit, 'topic' | 'id'>): string =>
   `${hit.topic}\n${hit.id}`;
@@ -87,7 +102,9 @@ const keyOf = (hit: Pick<SearchHit, 'topic' | 'id'>): string =>
             (applied)="apply($event)"
           />
         }
-        <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
+        @if (announcement(); as said) {
+          <p #result class="result" tabindex="-1" role="status">{{ said }}</p>
+        }
       </div>
     }
   `,
@@ -133,6 +150,14 @@ const keyOf = (hit: Pick<SearchHit, 'topic' | 'id'>): string =>
     .title {
       overflow-wrap: anywhere;
     }
+    .result {
+      margin: 0;
+      font-weight: 600;
+    }
+    .result:focus-visible {
+      outline: 2px solid var(--color-accent-strong);
+      outline-offset: 2px;
+    }
     .level {
       color: var(--color-text-muted);
       font-size: var(--text-sm);
@@ -168,6 +193,7 @@ export class SearchLevelChange {
   /** Made on first use: a page that never gives a level never asks for the counts. */
   private readonly injector = inject(Injector);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly result = viewChild<ElementRef<HTMLElement>>('result');
 
   /** The collection searched. */
   readonly topic = input.required<string>();
@@ -252,12 +278,10 @@ export class SearchLevelChange {
     }
     this.chosen.set(new Set());
     this.injector.get(UnassignedCountsStore).refresh();
-    const { updated } = result;
-    const code = result.level.code;
-    this.announcement.set(
-      updated === 1
-        ? $localize`:@@searchLevel.doneOne:1 documento foi para ${code}:code:.`
-        : $localize`:@@searchLevel.done:${updated}:count: documentos foram para ${code}:code:.`,
-    );
+    this.announcement.set(resultText(result));
+    // R1-2: the focus goes to what happened, not to a button the result disabled.
+    afterNextRender(() => this.result()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
   }
 }

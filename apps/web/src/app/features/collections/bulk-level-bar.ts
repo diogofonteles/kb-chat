@@ -4,6 +4,7 @@ import {
   ElementRef,
   Injector,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   input,
@@ -24,7 +25,7 @@ import type { LevelChoice } from '@kb-chat/contracts';
   template: `
     <div class="bar" role="group" [attr.aria-label]="groupLabel()">
       <p class="count" aria-live="polite">{{ countText() }}</p>
-      @if (confirming()) {
+      @if (showConfirm()) {
         <p class="confirm">{{ confirmText() }}</p>
         <div class="actions">
           <button
@@ -196,6 +197,12 @@ export class BulkLevelBar {
     computation: () => '',
   });
   protected readonly confirming = signal(false);
+  /** A confirmation is only for something to confirm: the selection may empty under it (R1-4). */
+  protected readonly showConfirm = computed(
+    () => this.confirming() && this.count() > 0,
+  );
+  /** After a confirmed request fails, the focus comes back to the action (R1-2). */
+  private refocusOnError = false;
   private readonly chosenLevel = computed(() =>
     this.choices().find((one) => one.id === this.chosen()),
   );
@@ -223,17 +230,30 @@ export class BulkLevelBar {
     this.focusAfterRender(() => this.confirmButton());
   }
 
+  /**
+   * On success the page moves the focus to what happened (the bar may be gone by then); on a
+   * failure it comes back here once the bar is usable again (R1-2).
+   */
   protected confirm(): void {
     const level = this.chosenLevel();
-    if (!level || this.busy()) return;
+    if (!level || this.busy() || this.count() === 0) return;
     this.confirming.set(false);
+    this.refocusOnError = true;
     this.applied.emit(level);
-    this.focusAfterRender(() => this.applyButton());
   }
 
   protected cancel(): void {
     this.confirming.set(false);
     this.focusAfterRender(() => this.applyButton());
+  }
+
+  constructor() {
+    afterRenderEffect(() => {
+      const failed = !this.busy() && this.error() !== '';
+      if (this.busy() || !this.refocusOnError) return;
+      this.refocusOnError = false;
+      if (failed) this.applyButton()?.nativeElement.focus();
+    });
   }
 
   private focusAfterRender(

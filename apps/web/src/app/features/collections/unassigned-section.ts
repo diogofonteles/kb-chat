@@ -1,22 +1,23 @@
 import { DatePipe } from '@angular/common';
-import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   Injector,
+  afterNextRender,
   computed,
   inject,
   input,
   linkedSignal,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   authorshipSchema,
   unassignedOriginSchema,
-  unassignedPageSchema,
   type Authorship,
   type BulkLevelRequest,
   type LevelChoice,
@@ -27,10 +28,10 @@ import {
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { authorshipLabelsOf } from '@core/i18n/facet-labels.js';
-import { LevelsApi, unassignedUrl } from '@core/levels/levels-api.js';
+import { LevelsApi } from '@core/levels/levels-api.js';
 import { UnassignedCountsStore } from '@core/levels/unassigned-counts-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
-import { finalize } from 'rxjs';
+import { finalize, map } from 'rxjs';
 import { BulkLevelBar } from './bulk-level-bar.js';
 
 const PAGE = 10;
@@ -61,6 +62,12 @@ const NO_FILTERS: FilterForm = {
   folder: null,
   since: '',
 };
+
+/** A page of the queue and the filter it answers. */
+interface Shown {
+  readonly filter: UnassignedFilter;
+  readonly page: UnassignedPage;
+}
 
 /** What the person picked: some rows, or every row the filters keep. */
 type Selection =
@@ -96,6 +103,7 @@ export class UnassignedSection {
   private readonly injector = inject(Injector);
   private readonly chat = inject(ChatStore);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly result = viewChild<ElementRef<HTMLElement>>('result');
 
   /** The collection whose queue this is (a top-level one). */
   readonly topic = input.required<string>();
@@ -107,25 +115,31 @@ export class UnassignedSection {
   protected readonly filtered = computed(
     () => Object.keys(this.filter()).length > 0,
   );
-  protected readonly first = httpResource(
-    () => unassignedUrl(this.topic(), { ...this.filter(), limit: PAGE }),
-    { parse: (body) => unassignedPageSchema.parse(body) },
-  );
+  /**
+   * The first page with the filter that made it (R1-1): what is on screen, the bulk and
+   * "Carregar mais" always go with the filter of the page they came from.
+   */
+  protected readonly first = rxResource({
+    params: () => ({ topic: this.topic(), filter: this.filter() }),
+    stream: ({ params }) =>
+      this.api
+        .unassigned(params.topic, { ...params.filter, limit: PAGE })
+        .pipe(map((page): Shown => ({ filter: params.filter, page }))),
+  });
   /** The last answer, kept while the next filter loads (no flash of the empty state). */
-  private readonly page = linkedSignal<
-    UnassignedPage | null,
-    UnassignedPage | null
-  >({
+  private readonly shown = linkedSignal<Shown | null, Shown | null>({
     source: () => (this.first.hasValue() ? this.first.value() : null),
     computation: (next, previous) => next ?? previous?.value ?? null,
   });
+  private readonly page = computed(() => this.shown()?.page ?? null);
+  /** A new filter (or a reload) is on its way: nothing acts on the page being replaced. */
+  protected readonly stale = computed(() => this.first.isLoading());
+  protected readonly known = computed(() => this.shown() !== null);
   /** Pages after the first ("Carregar mais"); emptied with each first page. */
-  private readonly more = linkedSignal<UnassignedPage | null, UnassignedPage[]>(
-    {
-      source: () => this.page(),
-      computation: () => [],
-    },
-  );
+  private readonly more = linkedSignal<Shown | null, UnassignedPage[]>({
+    source: () => this.shown(),
+    computation: () => [],
+  });
   protected readonly items = computed(() => [
     ...(this.page()?.items ?? []),
     ...this.more().flatMap((one) => one.items),
@@ -142,12 +156,10 @@ export class UnassignedSection {
     () => this.page()?.levels ?? [],
   );
 
-  protected readonly selection = linkedSignal<UnassignedPage | null, Selection>(
-    {
-      source: () => this.page(),
-      computation: () => NOTHING,
-    },
-  );
+  protected readonly selection = linkedSignal<Shown | null, Selection>({
+    source: () => this.shown(),
+    computation: () => NOTHING,
+  });
   protected readonly selectedCount = computed(() => {
     const selection = this.selection();
     return selection.kind === 'filtered' ? this.matched() : selection.keys.size;
@@ -229,26 +241,31 @@ export class UnassignedSection {
 
   protected loadMore(): void {
     const cursor = this.nextCursor();
-    if (!cursor || this.loadingMore()) return;
+    const base = this.shown();
+    if (!cursor || !base || this.loadingMore() || this.stale()) return;
     this.loadingMore.set(true);
     this.moreFailed.set(false);
     this.api
-      .unassigned(this.topic(), { ...this.filter(), cursor, limit: PAGE })
+      .unassigned(this.topic(), { ...base.filter, cursor, limit: PAGE })
       .pipe(
         finalize(() => this.loadingMore.set(false)),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (page) => this.more.update((pages) => [...pages, page]),
+        // A page of a list that has since been replaced is dropped (R1-1).
+        next: (page) => {
+          if (this.shown() === base)
+            this.more.update((pages) => [...pages, page]);
+        },
         error: () => this.moreFailed.set(true),
       });
   }
 
   /** One request for the whole choice; the selection stays when it fails (MA-26). */
   protected give(level: LevelChoice): void {
-    const page = this.page();
-    if (!page || this.busy()) return;
-    const body = this.requestFor(level, page);
+    const shown = this.shown();
+    if (!shown || this.busy() || this.stale()) return;
+    const body = this.requestFor(level, shown);
     if (!body) return;
     this.busy.set(true);
     this.failure.set('');
@@ -261,6 +278,10 @@ export class UnassignedSection {
       .subscribe({
         next: (result) => {
           this.announcement.set(this.resultText(result));
+          // R1-2: the focus goes to what happened, which stays when the bar goes.
+          afterNextRender(() => this.result()?.nativeElement.focus(), {
+            injector: this.injector,
+          });
           this.first.reload();
           this.injector.get(UnassignedCountsStore).refresh();
           this.changed.emit();
@@ -272,13 +293,13 @@ export class UnassignedSection {
 
   private requestFor(
     level: LevelChoice,
-    page: UnassignedPage,
+    shown: Shown,
   ): BulkLevelRequest | null {
     const selection = this.selection();
     if (selection.kind === 'filtered')
       return {
         level: level.id,
-        filter: { ...this.filter(), asOf: page.asOf },
+        filter: { ...shown.filter, asOf: shown.page.asOf },
       };
     const ids = this.items()
       .filter((doc) => selection.keys.has(keyOf(doc)))
