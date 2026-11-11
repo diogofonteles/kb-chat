@@ -273,6 +273,8 @@ export class PeoplePanel {
 
   /** "Nível em [acervo]: [nível] · Aplicar" (KBC-109 FR-3): the selected people. */
   protected assignLevel(request: PeopleLevelRequest): void {
+    // A second press in the same frame finds the first write on its way (PD-02).
+    if (this.busy()) return;
     const { collection, level } = request;
     const call = this.api.assignLevels({
       ids: [...this.selected()],

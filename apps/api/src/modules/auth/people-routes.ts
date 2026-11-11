@@ -193,6 +193,7 @@ async function invite(
       after: invited,
       by: inviter.email,
       via: 'invite',
+      log: request.log,
     });
   return sendEmail
     ? deps.invitations.afterInvite(invited, inviter, request.log)
@@ -282,21 +283,40 @@ function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
         response: { 200: personSchema },
       },
     },
-    async (request) => {
-      const { params, body } = request;
-      assertPatch(deps, request, body);
-      const by = viewerOf(request).person.email;
-      const before = await deps.people.find(params.id);
-      assertMayChangeLent(deps, request, { before, ai: body.ai });
-      const patch = withGrantedLevels(deps, before, body);
-      const updated = await deps.people.update(params.id, patch, by);
-      if (body.ai && before)
-        await syncAi(deps, { before, updated, by, log: request.log });
-      if (patch.levels && before)
-        await recordLevels(deps, { before, after: updated, by, via: 'editor' });
-      return view(deps, updated);
-    },
+    async (request) =>
+      view(
+        deps,
+        await patchPerson(deps, request, {
+          id: request.params.id,
+          body: request.body,
+        }),
+      ),
   );
+}
+
+async function patchPerson(
+  deps: PeopleRouteDeps,
+  request: FastifyRequest,
+  change: { readonly id: string; readonly body: PersonUpdate },
+): Promise<StoredPerson> {
+  const { id, body } = change;
+  assertPatch(deps, request, body);
+  const by = viewerOf(request).person.email;
+  const before = await deps.people.find(id);
+  assertMayChangeLent(deps, request, { before, ai: body.ai });
+  const patch = withGrantedLevels(deps, before, body);
+  const updated = await deps.people.update(id, patch, by);
+  if (body.ai && before)
+    await syncAi(deps, { before, updated, by, log: request.log });
+  if (patch.levels && before)
+    await recordLevels(deps, {
+      before,
+      after: updated,
+      by,
+      via: 'editor',
+      log: request.log,
+    });
+  return updated;
 }
 
 /** "Aplicar perfil" (KBC-028 FR-4): a profile on someone already invited. */
@@ -344,7 +364,13 @@ async function applyProfile(
   });
   await followProfileAi(deps, { before, updated, by, log: request.log });
   if (preset.levels)
-    await recordLevels(deps, { before, after: updated, by, via: 'profile' });
+    await recordLevels(deps, {
+      before,
+      after: updated,
+      by,
+      via: 'profile',
+      log: request.log,
+    });
   return updated;
 }
 
@@ -358,12 +384,30 @@ async function followProfileAi(deps: PeopleRouteDeps, change: AiSyncChange) {
   });
 }
 
-/** A person's levels changed: one audit line per collection (KBC-109 BR-4). */
+/**
+ * A person's levels changed: one audit line per collection (KBC-109 BR-4). people.json is
+ * written first (the audit file cannot join it): a failed record is logged with what changed
+ * and fails the request (ADR 0036 §11).
+ */
 async function recordLevels(
   deps: PeopleRouteDeps,
-  change: Parameters<PersonLevelRules['recordChange']>[0],
+  change: Parameters<PersonLevelRules['recordChange']>[0] & {
+    readonly log: FastifyBaseLogger;
+  },
 ): Promise<void> {
-  await deps.levels?.recordChange(change);
+  const { log, ...record } = change;
+  await deps.levels?.recordChange(record).catch((err: unknown) => {
+    log.error(
+      {
+        err,
+        person: record.after.id,
+        before: record.before.levels ?? {},
+        after: record.after.levels ?? {},
+      },
+      'person levels changed but not audited',
+    );
+    throw err;
+  });
 }
 
 function registerWrites(app: FastifyInstance, deps: PeopleRouteDeps) {

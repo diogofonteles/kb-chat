@@ -1171,11 +1171,12 @@ describe('PeoplePanel: a level for the selection (T9, KBC-109 AC-6)', () => {
       target: { value: 'ci' },
     });
     await fixture.whenStable();
-    fireEvent.click(
-      within(bar).getByRole('button', {
-        name: 'Aplicar nível às selecionadas (2)',
-      }),
-    );
+    const apply = within(bar).getByRole('button', {
+      name: 'Aplicar nível às selecionadas (2)',
+    });
+    // A double press in one frame sends once (PD-02).
+    apply.click();
+    apply.click();
 
     const sent = http.expectOne('/api/v1/people/levels');
     expect(sent.request.method).toBe('POST');

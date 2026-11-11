@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { chmod, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -74,6 +74,37 @@ describe('Levels in invitations, profiles, approvals and in bulk (KBC-109)', () 
         via: 'invite',
       }),
     ]);
+  });
+
+  it('ADR 0036 §11: a level written but not audited is logged with what changed, and the request fails', async () => {
+    const world = await startLevels();
+    await createScale(world, ['QS', 'CI']);
+    const profileId = await createProfile(world, aluno());
+    const dir = join(world.started.state, 'audit');
+    const [file] = (await readdir(dir)).filter((one) =>
+      one.startsWith('levels-'),
+    );
+    const path = join(dir, file ?? '');
+    await chmod(path, 0o400);
+    try {
+      const invited = await world.owner('POST', '/api/v1/people', {
+        email: 'nova@example.com',
+        sendEmail: false,
+        profileId,
+      });
+      expect(invited.statusCode).toBe(500);
+    } finally {
+      await chmod(path, 0o600);
+    }
+    expect(
+      world.started.logs.some((line) =>
+        line.includes('person levels changed but not audited'),
+      ),
+    ).toBe(true);
+    const people = await peopleFile(world.started.state);
+    expect(
+      people.find((one) => one.email === 'nova@example.com')?.levels,
+    ).toEqual({ hermetismo: 'ci' });
   });
 
   it('AC-2, BR-1, BR-5: a level for a collection left unmarked, without a scale or on a master preset is refused with 400', async () => {
