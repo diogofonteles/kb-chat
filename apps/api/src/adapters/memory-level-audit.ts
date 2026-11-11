@@ -1,8 +1,9 @@
 import type { LevelAuditEntry } from '@kb-chat/contracts';
-import type {
-  LevelAuditPage,
-  LevelAuditPort,
-  LevelAuditRead,
+import {
+  SCALE_AUDIT_KINDS,
+  type LevelAuditPage,
+  type LevelAuditPort,
+  type LevelAuditRead,
 } from '../ports/level-audit.js';
 import { pageOfAudit } from './level-audit-page.js';
 
@@ -11,7 +12,6 @@ export class MemoryLevelAudit implements LevelAuditPort {
   readonly entries: LevelAuditEntry[] = [];
 
   async append(entry: LevelAuditEntry): Promise<void> {
-    // In memory a line is never torn: `freshLine` changes nothing.
     this.entries.push(entry);
   }
 
@@ -25,5 +25,11 @@ export class MemoryLevelAudit implements LevelAuditPort {
     const load = async (month: string) =>
       this.entries.filter((entry) => monthOf(entry) === month);
     return pageOfAudit({ months, load }, query);
+  }
+
+  async scaleLines(): Promise<readonly LevelAuditEntry[]> {
+    return this.entries
+      .filter((entry) => SCALE_AUDIT_KINDS.has(entry.kind))
+      .reverse();
   }
 }

@@ -1,4 +1,10 @@
-import { appendFile, mkdtemp, readFile } from 'node:fs/promises';
+import {
+  appendFile,
+  mkdtemp,
+  readFile,
+  readdir,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { LevelAuditEntry } from '@kb-chat/contracts';
@@ -121,10 +127,10 @@ describe('FsLevelAudit after a torn append and across pages (R2-4, R2-5)', () =>
       join(dir, 'levels-2026-09.jsonl'),
       '{"at":"2026-09-01T00:',
     );
-    await audit.append(
-      { ...line('2026-09-01T00:00:01.000Z', 'mark'), kind: 'scale.undone' },
-      { freshLine: true },
-    );
+    await audit.append({
+      ...line('2026-09-01T00:00:01.000Z', 'mark'),
+      kind: 'scale.undone',
+    });
     const read = await audit.read({ accepts: all, limit: 5 });
     expect(read.entries.map((one) => one.target)).toEqual(['mark', 'a']);
   });
@@ -139,12 +145,70 @@ describe('FsLevelAudit after a torn append and across pages (R2-4, R2-5)', () =>
       },
     });
     await audit.appendMany(LINES);
-    await audit.read({ accepts: all, limit: 50 });
-    await audit.read({ accepts: all, limit: 50 });
+    // The scale lines every page of the history asks for (R2-5, R3-2).
+    await audit.scaleLines();
+    await audit.scaleLines();
     expect(reads).toHaveLength(3);
-    await audit.append(line('2026-11-03T10:00:00.000Z', 'f'));
-    const again = await audit.read({ accepts: all, limit: 50 });
+    await audit.append({
+      ...line('2026-11-03T10:00:00.000Z', 'f'),
+      kind: 'scale.create',
+    });
+    const again = await audit.scaleLines();
     expect(reads).toHaveLength(4);
-    expect(again.entries[0]?.target).toBe('f');
+    expect(again[0]?.target).toBe('f');
+  });
+});
+
+describe('FsLevelAudit memory, torn lines and twelve months (R3-2, R3-3)', () => {
+  it('R3-3: the first line of any append after a torn one is read', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kbchat-level-audit-'));
+    const audit = new FsLevelAudit(dir);
+    await audit.append(line('2026-09-01T00:00:00.000Z', 'a'));
+    await appendFile(
+      join(dir, 'levels-2026-09.jsonl'),
+      '{"at":"2026-09-01T00:',
+    );
+    await audit.appendMany([
+      line('2026-09-01T00:00:01.000Z', 'b'),
+      line('2026-09-01T00:00:02.000Z', 'c'),
+    ]);
+    const read = await audit.read({ accepts: all, limit: 5 });
+    expect(read.entries.map((one) => one.target)).toEqual(['c', 'b', 'a']);
+  });
+
+  it('R3-2: keeps only the scale lines of every month and few months whole', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kbchat-level-audit-'));
+    const audit = new FsLevelAudit(dir);
+    const months = ['2026-06', '2026-07', '2026-08', '2026-09', '2026-10'];
+    await audit.appendMany(
+      months.flatMap((month) => [
+        line(`${month}-01T00:00:00.000Z`, `item-${month}`),
+        {
+          ...line(`${month}-01T00:00:01.000Z`, `level-${month}`),
+          kind: 'scale.create' as const,
+        },
+      ]),
+    );
+    const scale = await audit.scaleLines();
+    expect(scale.map((one) => one.target)).toEqual(
+      [...months].reverse().map((month) => `level-${month}`),
+    );
+    await audit.read({ accepts: all, limit: 50 });
+    expect(audit.monthsKeptWhole()).toBeLessThanOrEqual(2);
+  });
+
+  it('R3-2: a line older than twelve months goes when a new month starts', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kbchat-level-audit-'));
+    for (const month of ['2025-09', '2025-10', '2025-11'])
+      await writeFile(
+        join(dir, `levels-${month}.jsonl`),
+        `${JSON.stringify(line(`${month}-15T00:00:00.000Z`, month))}\n`,
+      );
+    const audit = new FsLevelAudit(dir);
+    await audit.append(line('2026-11-01T00:00:00.000Z', 'now'));
+    expect((await readdir(dir)).sort()).toEqual([
+      'levels-2025-11.jsonl',
+      'levels-2026-11.jsonl',
+    ]);
   });
 });

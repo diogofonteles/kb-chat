@@ -58,7 +58,12 @@ const instantOf = (bound: string, end: boolean): string =>
 const operationOf = (
   entry: LevelAuditEntry,
   rootOf: (slug: string) => string,
-): string => `${rootOf(entry.collection)}|${entry.at}`;
+): string => {
+  const root = rootOf(entry.collection);
+  // A sub-collection gone from the catalog: its parent is the slug's first part (R3-5).
+  const top = root === entry.collection ? root.split('/')[0] : root;
+  return `${top ?? root}|${entry.at}`;
+};
 
 /** The filters of FR-4 as one predicate over a line; undone operations are left out (R1-5). */
 function acceptsOf(
@@ -85,15 +90,6 @@ function acceptsOf(
     (!from || entry.at >= from) &&
     (!to || entry.at <= to);
 }
-
-/** The scale's own lines, read whole for the codes of deleted levels and the undone marks. */
-const SCALE_KINDS: ReadonlySet<LevelAuditEntry['kind']> = new Set([
-  'scale.create',
-  'scale.rename',
-  'scale.delete',
-  'scale.clear',
-  'scale.undone',
-]);
 
 /** Each level id's code as the scale's lines last named it, and the operations undone. */
 function scaleFacts(
@@ -165,16 +161,8 @@ export class LevelHistoryService {
   async page(input: LevelAuditQuery): Promise<LevelAuditPage> {
     const query = levelAuditQuerySchema.parse(input);
     const rootOf = (slug: string) => this.deps.gate.rootOf(slug);
-    // The scale's own lines, every month (the adapter keeps each month parsed, R2-5).
-    const facts = scaleFacts(
-      (
-        await this.deps.audit.read({
-          accepts: (entry) => SCALE_KINDS.has(entry.kind),
-          limit: Number.MAX_SAFE_INTEGER,
-        })
-      ).entries,
-      rootOf,
-    );
+    // The scale's own lines, every month (the adapter keeps only these parsed, R3-2).
+    const facts = scaleFacts(await this.deps.audit.scaleLines(), rootOf);
     const read: LevelAuditRead = {
       accepts: acceptsOf(query, { rootOf, undone: facts.undone }),
       ...(query.from && {

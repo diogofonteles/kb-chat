@@ -49,6 +49,21 @@ async function history(entries: readonly LevelAuditEntry[]) {
 }
 
 describe('LevelHistoryService: undone operations (R2-1)', () => {
+  it('R3-5: a line of a sub-collection gone from the catalog is left out too', async () => {
+    const service = await history([
+      line({
+        collection: 'hermetismo/antigas',
+        target: 'raw/a.md',
+        before: 'ci',
+        after: 'cdc',
+      }),
+      line({ kind: 'scale.delete', target: 'ci' }),
+      line({ kind: 'scale.undone', target: 'ci' }),
+    ]);
+    const page = await service.page({});
+    expect(page.items).toEqual([]);
+  });
+
   it.each([
     ['a delete', 'scale.delete' as const],
     ['every level taken away', 'scale.clear' as const],

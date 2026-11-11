@@ -81,6 +81,7 @@ describe("AccessLevelsService: the start's media seed (KBC-105 AC-10, review rou
         append: () => Promise.reject(new Error('disk full')),
         appendMany: () => Promise.reject(new Error('disk full')),
         read: () => Promise.resolve({ entries: [], next: null }),
+        scaleLines: () => Promise.resolve([]),
       },
       media: { seedLevel: seeded, countLevels: () => ({}) },
       parentOf: () => null,

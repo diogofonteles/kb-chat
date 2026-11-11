@@ -660,11 +660,12 @@ function failingStore(
 function failingAudit(dir: string, armed: Armed): LevelAuditPort {
   const fsAudit = new FsLevelAudit(join(dir, 'audit'));
   return {
-    append: (entry, options) =>
+    append: (entry) =>
       armed.markFails
         ? Promise.reject(new Error('disk full (mark)'))
-        : fsAudit.append(entry, options),
+        : fsAudit.append(entry),
     read: (query) => fsAudit.read(query),
+    scaleLines: () => fsAudit.scaleLines(),
     appendMany: async (entries) => {
       if (armed.failing !== 'audit') return fsAudit.appendMany(entries);
       const meanwhile = armed.meanwhile;

@@ -250,6 +250,7 @@ describe('DocumentLevelsService (KBC-107 review round 1)', () => {
       append: () => Promise.reject(new Error('disk full')),
       appendMany: () => Promise.reject(new Error('disk full')),
       read: () => Promise.resolve({ entries: [], next: null }),
+      scaleLines: () => Promise.resolve([]),
     };
     const { service, directory } = await world({ audit: failing });
     const listed = await service.unassigned(master, 'hermetismo', {});
@@ -292,6 +293,7 @@ describe('DocumentLevelsService (KBC-107 review round 1)', () => {
       append: () => Promise.reject(new Error('disk full')),
       appendMany: () => Promise.reject(new Error('disk full')),
       read: () => Promise.resolve({ entries: [], next: null }),
+      scaleLines: () => Promise.resolve([]),
     };
     const { vault, catalog, service } = await world({ audit: failing });
     vault.ids = Array.from({ length: 60 }, (_, n) => `raw/doc-${n}.md`);

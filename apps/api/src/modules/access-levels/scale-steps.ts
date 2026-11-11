@@ -303,18 +303,16 @@ interface AuditLines {
 /** The `scale.undone` mark on a line of its own; failing, the log names the operation. */
 async function markUndone(ctx: StepContext, lines: AuditLines): Promise<void> {
   const mark = lines.undone();
-  await ctx.deps.audit
-    .append(mark, { freshLine: true })
-    .catch((cause: unknown) => {
-      ctx.log.error(
-        {
-          err: cause,
-          collection: ctx.root,
-          at: mark.at,
-          by: mark.by,
-          kind: lines.kind,
-        },
-        'level change undone but not marked in the audit',
-      );
-    });
+  await ctx.deps.audit.append(mark).catch((cause: unknown) => {
+    ctx.log.error(
+      {
+        err: cause,
+        collection: ctx.root,
+        at: mark.at,
+        by: mark.by,
+        kind: lines.kind,
+      },
+      'level change undone but not marked in the audit',
+    );
+  });
 }
