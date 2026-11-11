@@ -2,8 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
   inviteProfileListSchema,
-  inviteProfileSchema,
-  type InviteProfile,
+  inviteProfileViewSchema,
+  type InviteProfileView,
   type InviteProfileCreate,
   type InviteProfileUpdate,
 } from '@kb-chat/contracts';
@@ -18,22 +18,25 @@ export const inviteProfileUrl = (id: string): string =>
 export class InviteProfilesApi {
   private readonly http = inject(HttpClient);
 
-  list(): Observable<InviteProfile[]> {
+  list(): Observable<InviteProfileView[]> {
     return this.http
       .get(inviteProfilesUrl())
       .pipe(map((body) => inviteProfileListSchema.parse(body).items));
   }
 
-  create(profile: InviteProfileCreate): Observable<InviteProfile> {
+  create(profile: InviteProfileCreate): Observable<InviteProfileView> {
     return this.http
       .post(inviteProfilesUrl(), profile)
-      .pipe(map((body) => inviteProfileSchema.parse(body)));
+      .pipe(map((body) => inviteProfileViewSchema.parse(body)));
   }
 
-  update(id: string, patch: InviteProfileUpdate): Observable<InviteProfile> {
+  update(
+    id: string,
+    patch: InviteProfileUpdate,
+  ): Observable<InviteProfileView> {
     return this.http
       .put(inviteProfileUrl(id), patch)
-      .pipe(map((body) => inviteProfileSchema.parse(body)));
+      .pipe(map((body) => inviteProfileViewSchema.parse(body)));
   }
 
   remove(id: string): Observable<void> {

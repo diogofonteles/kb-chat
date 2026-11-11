@@ -3,6 +3,7 @@ import { DEFAULT_PERSON_AI, type Person } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { TOPICS, aTopic } from '../../testing/fixtures.js';
 import { PersonEditor } from './person-editor.js';
+import { plainPreset } from './preset-defaults.js';
 
 const ana = (overrides: Partial<Person> = {}): Person => ({
   id: '11111111-1111-4111-8111-111111111111',
@@ -42,14 +43,19 @@ async function renderEditor(person: Person) {
     providers: [provideZonelessChangeDetection()],
     inputs: {
       person,
-      topics: [
-        ...TOPICS.items,
-        aTopic({
-          slug: 'hermetismo/aulas',
-          title: 'Aulas',
-          parent: 'hermetismo',
-        }),
-      ],
+      // In the server's tree order: a sub-collection right after its parent.
+      topics: TOPICS.items.flatMap((topic) =>
+        topic.slug === 'hermetismo'
+          ? [
+              topic,
+              aTopic({
+                slug: 'hermetismo/aulas',
+                title: 'Aulas',
+                parent: 'hermetismo',
+              }),
+            ]
+          : [topic],
+      ),
       scales: SCALES,
     },
     on: { changed },
@@ -95,5 +101,80 @@ describe('PersonEditor: "Classificar nível de conteúdo" (T9, KBC-107 FR-3)', (
       name: 'Classificar nível de conteúdo',
     });
     expect(box).toHaveProperty('checked', false);
+  });
+});
+
+describe('PersonEditor: the level right under its collection (T9, KBC-109 AC-7)', () => {
+  it('places "Nível em Hermetismo" after Hermetismo and its sub-collection, before Alquimia', async () => {
+    await renderEditor(ana());
+    const group = screen.getByRole('group', { name: 'Acervos' });
+    const select = screen.getByRole('combobox', {
+      name: 'Nível em Hermetismo',
+    });
+    expect(group.contains(select)).toBe(true);
+    const aulas = screen.getByRole('checkbox', { name: /Aulas/ });
+    const alquimia = screen.getByRole('checkbox', { name: 'Alquimia' });
+    const follows = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(aulas.compareDocumentPosition(select) & follows).toBeTruthy();
+    expect(select.compareDocumentPosition(alquimia) & follows).toBeTruthy();
+  });
+});
+
+describe('PersonEditor: applying a profile whose level no longer exists (KBC-109 BR-3)', () => {
+  it('says the person goes to the lowest level there, before applying', async () => {
+    await render(PersonEditor, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        person: ana(),
+        topics: TOPICS.items,
+        scales: SCALES,
+        profiles: [
+          {
+            id: '44444444-4444-4444-8444-444444444444',
+            name: 'Aluno',
+            isDefault: false,
+            preset: {
+              ...plainPreset(),
+              topics: ['hermetismo'],
+              levels: { hermetismo: 'velho' },
+            },
+            staleLevels: { hermetismo: 'velho' },
+          },
+        ],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar perfil' }));
+    const warning = screen.getByText(
+      /Em Hermetismo, o nível velho não existe mais; quem tiver este perfil aplicado fica no nível mais baixo\./,
+    );
+    // The focus goes to "Aplicar": the warning is read there (R2-7).
+    expect(
+      screen
+        .getByRole('button', { name: 'Aplicar' })
+        .getAttribute('aria-describedby'),
+    ).toBe(warning.id);
+  });
+});
+
+describe('PersonEditor: "Tornar master" erases the levels (KBC-109 R3-5)', () => {
+  const note =
+    'Masters veem todos os níveis; os níveis desta pessoa serão apagados.';
+
+  it('says so next to the button of a member who holds levels', async () => {
+    await renderEditor(ana({ levels: { hermetismo: 'ci' } }));
+    const button = screen.getByRole('button', { name: 'Tornar master' });
+    expect(button.getAttribute('aria-describedby')).toBe(
+      screen.getByText(note).id,
+    );
+  });
+
+  it('says nothing for a member without levels', async () => {
+    await renderEditor(ana());
+    expect(screen.queryByText(note)).toBeNull();
+  });
+
+  it('says nothing for a master', async () => {
+    await renderEditor(ana({ role: 'master', levels: { hermetismo: 'ci' } }));
+    expect(screen.queryByText(note)).toBeNull();
   });
 });

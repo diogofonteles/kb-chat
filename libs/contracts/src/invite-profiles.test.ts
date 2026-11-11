@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   invitationPresetSchema,
   invitePresetSchema,
+  inviteProfileViewSchema,
   presetInviteRequestSchema,
 } from './invite-profiles.js';
 
@@ -68,5 +69,36 @@ describe('invite presets (KBC-028)', () => {
         preferences: { defaultTopic: 'hermetismo' },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('levels in presets (KBC-109)', () => {
+  it('keeps the levels of a member preset and leaves the key out when none is sent', () => {
+    expect(
+      invitePresetSchema.parse({
+        topics: ['hermetismo'],
+        levels: { hermetismo: 'ci' },
+      }).levels,
+    ).toEqual({ hermetismo: 'ci' });
+    expect('levels' in invitePresetSchema.parse({})).toBe(false);
+  });
+
+  it('refuses levels on a master preset (BR-5), in a profile and in an invitation', () => {
+    const master = { role: 'master', levels: { hermetismo: 'ci' } };
+    expect(invitePresetSchema.safeParse(master).success).toBe(false);
+    expect(invitationPresetSchema.safeParse(master).success).toBe(false);
+    expect(
+      invitePresetSchema.safeParse({ role: 'master', levels: {} }).success,
+    ).toBe(true);
+  });
+
+  it('reads a profile with no stale levels as an empty map', () => {
+    const profile = {
+      id: '00000000-0000-4000-8000-000000000001',
+      name: 'Aluno',
+      preset: invitePresetSchema.parse({}),
+      isDefault: false,
+    };
+    expect(inviteProfileViewSchema.parse(profile).staleLevels).toEqual({});
   });
 });

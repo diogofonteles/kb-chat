@@ -212,6 +212,8 @@ export function update(
     canActAs: role === 'master' && (patch.canActAs ?? target.canActAs ?? false),
     ...quotaChangeOf(patch),
     ...(patch.levels && { levels: { ...target.levels, ...patch.levels } }),
+    // A master holds no levels (R2-2): becoming one drops them, so none comes back later.
+    ...(role === 'master' && { levels: undefined }),
   };
   return { people: replace(people, next), result: next };
 }
@@ -232,6 +234,32 @@ export function placePeople(
       : person,
   );
   return { people: next, result: ids.length };
+}
+
+/** What one person's level was before a bulk changed it (KBC-109 FR-3). */
+export interface LevelChanged {
+  readonly person: StoredPerson;
+  readonly before: string | null;
+}
+
+/** One level of a top-level collection for the people `decide` keeps, in one write. */
+export function setLevels(
+  people: readonly StoredPerson[],
+  change: {
+    readonly root: string;
+    readonly level: string;
+    readonly keeps: (person: StoredPerson) => boolean;
+  },
+): PeopleChange<LevelChanged[]> {
+  const { root, level, keeps } = change;
+  const changed: LevelChanged[] = [];
+  const next = people.map((person) => {
+    if (!keeps(person) || person.levels?.[root] === level) return person;
+    const after = { ...person, levels: { ...person.levels, [root]: level } };
+    changed.push({ person: after, before: person.levels?.[root] ?? null });
+    return after;
+  });
+  return { people: next, result: changed };
 }
 
 /** The quota only when it changes: null goes back to the default (KBC-035 BR-1). */
@@ -267,6 +295,8 @@ export function applyPreset(
         topics: preset.topics,
         features: preset.features,
         ai: preset.ai,
+        // Merged: the collections the preset does not name keep theirs (KBC-109 BR-2).
+        ...(preset.levels && { levels: preset.levels }),
       },
       context: change.context,
     },

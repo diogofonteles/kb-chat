@@ -4,11 +4,14 @@ import {
   authConfigSchema,
   meSchema,
   personListSchema,
+  peopleLevelResultSchema,
   personSchema,
   spendByPersonSchema,
   type AuthConfig,
   type InvitationPresetInput,
   type Me,
+  type PeopleLevelRequest,
+  type PeopleLevelResult,
   type Person,
   type PersonUpdate,
   type SpendByPerson,
@@ -109,6 +112,13 @@ export class PeopleApi {
 
   revoke(id: string): Observable<void> {
     return this.http.delete(personUrl(id)).pipe(map(() => undefined));
+  }
+
+  /** One level of one collection for several people (KBC-109 FR-3): masters only. */
+  assignLevels(request: PeopleLevelRequest): Observable<PeopleLevelResult> {
+    return this.http
+      .post(`${peopleUrl()}/levels`, request)
+      .pipe(map((body) => peopleLevelResultSchema.parse(body)));
   }
 
   /** The owner only (BR-6): today's AI spend of each person, never their content. */

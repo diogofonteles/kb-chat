@@ -24,6 +24,7 @@ import {
   levelScalesSchema,
   topicListSchema,
   type InvitationPreset,
+  type PeopleLevelResult,
   type Person,
   type PersonUpdate,
 } from '@kb-chat/contracts';
@@ -63,6 +64,8 @@ import { InvitePresetEditor } from './invite-preset-editor.js';
 import { InviteProfilesPanel } from './invite-profiles-panel.js';
 import { InviteProfilesStore } from './invite-profiles-store.js';
 import { plainPreset } from './preset-defaults.js';
+import { withPresetLevels } from './level-rows.js';
+import { PeopleLevelBar, type PeopleLevelRequest } from './people-level-bar.js';
 
 /** "Nenhum" in the invitation's "Perfil": today's plain invitation. */
 const NO_PROFILE = 'none';
@@ -87,6 +90,7 @@ interface Outcome<T> {
     ActAsDialog,
     AccessRequestsList,
     AiAssignmentBar,
+    PeopleLevelBar,
     InvitePresetEditor,
     InviteProfilesPanel,
     DatePipe,
@@ -115,9 +119,17 @@ export class PeoplePanel {
   private readonly levelScales = httpResource(() => levelScalesUrl(), {
     parse: (body) => levelScalesSchema.parse(body),
   });
-  protected readonly scales = computed(() =>
-    this.levelScales.hasValue() ? this.levelScales.value().items : [],
+  /** Null while they load or when they failed: a preset's levels then stay as they are. */
+  protected readonly scaleState = computed(() =>
+    this.levelScales.hasValue() ? this.levelScales.value().items : null,
   );
+  protected readonly scales = computed(() => this.scaleState() ?? []);
+  protected readonly scalesFailed = computed(
+    () => this.levelScales.error() !== undefined,
+  );
+  private readonly levelBar = viewChild(PeopleLevelBar);
+  private readonly statusLines =
+    viewChildren<ElementRef<HTMLElement>>('statusLine');
   /** The house default, to name each person's "Padrão" (KBC-022). */
   private readonly house = rxResource({
     stream: () => this.houseApi.houseDefault(),
@@ -191,8 +203,16 @@ export class PeoplePanel {
   protected readonly waitsForLend = computed(
     () => this.configuring() && this.lendPending(),
   );
-  protected readonly draftPreset = linkedSignal<InvitationPreset>(
-    () => this.profiles.find(this.setupChoice())?.preset ?? plainPreset(),
+  /** The chosen profile's levels go to the collections it reaches, stale ones at the lowest. */
+  protected readonly draftPreset = linkedSignal<InvitationPreset>(() =>
+    withPresetLevels(
+      this.profiles.find(this.setupChoice())?.preset ?? plainPreset(),
+      { topics: this.topics(), scales: this.scaleState(), mode: 'invite' },
+    ),
+  );
+  /** The chosen profile's levels that no longer exist (KBC-109 BR-3). */
+  protected readonly draftStaleLevels = computed(
+    () => this.profiles.find(this.setupChoice())?.staleLevels ?? {},
   );
   /** What the invitation starts the person with, for the hint; '' is the plain invite. */
   protected readonly setupLabel = computed(() => {
@@ -254,6 +274,31 @@ export class PeoplePanel {
         if (request.setDefault) this.house.reload();
         this.selected.set(new Set());
         return $localize`:@@people.assigned:IA da aplicação atualizada para ${updated}:count: pessoa(s).`;
+      },
+    });
+  }
+
+  /** "Nível em [acervo]: [nível] · Aplicar" (KBC-109 FR-3): the selected people. */
+  protected assignLevel(request: PeopleLevelRequest): void {
+    // A second press in the same frame finds the first write on its way (PD-02).
+    if (this.busy()) return;
+    const { collection, level } = request;
+    const call = this.api.assignLevels({
+      ids: [...this.selected()],
+      topic: collection,
+      level,
+    });
+    this.run(call, {
+      done: (result) => {
+        this.people.reload();
+        this.selected.set(new Set());
+        // The bar's button goes disabled: focus goes to what happened (WCAG 2.4.3, QA-1).
+        this.focusAfterRender(() => this.statusLines()[0]);
+        return levelNotice(result, this.titles().get(collection) ?? collection);
+      },
+      failed: (text) => {
+        this.notice.set({ kind: 'error', text });
+        this.focusAfterRender(() => this.levelBar()?.applyButton());
       },
     });
   }
@@ -377,6 +422,19 @@ export class PeoplePanel {
           ?.nativeElement.focus(),
       { injector: this.injector },
     );
+  }
+
+  /** The levels of the collections, once more (KBC-109 R1-1). */
+  protected reloadScales(): void {
+    this.levelScales.reload();
+  }
+
+  private focusAfterRender(
+    target: () => ElementRef<HTMLElement> | undefined,
+  ): void {
+    afterNextRender(() => target()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
   }
 
   /** The button was disabled while sending: keyboard focus goes back to it (WCAG 2.4.3). */
@@ -595,6 +653,36 @@ export class PeoplePanel {
       key,
     );
   }
+}
+
+/** What a level bulk did, and whom it left as they were (KBC-109 AC-6). */
+function levelNotice(result: PeopleLevelResult, title: string): string {
+  const { code } = result.level;
+  const changed = result.updated + result.unchanged;
+  const parts = [
+    changed === 1
+      ? $localize`:@@people.levelAppliedOne:Nível ${code}:code: em ${title}:collection: aplicado a 1 pessoa.`
+      : $localize`:@@people.levelApplied:Nível ${code}:code: em ${title}:collection: aplicado a ${changed}:count: pessoas.`,
+  ];
+  if (result.masters > 0)
+    parts.push(
+      $localize`:@@people.mastersAllLevels:Masters veem todos os níveis.`,
+    );
+  const { withoutAccess, unknown } = result;
+  if (withoutAccess > 0)
+    parts.push(
+      withoutAccess === 1
+        ? $localize`:@@people.levelLeftOne:1 pessoa sem acesso a ${title}:collection: ficou como estava.`
+        : $localize`:@@people.levelLeft:${withoutAccess}:count: pessoas sem acesso a ${title}:collection: ficaram como estavam.`,
+    );
+  // Revoked while the bulk ran (R1-7): not "without access".
+  if (unknown > 0)
+    parts.push(
+      unknown === 1
+        ? $localize`:@@people.levelGoneOne:1 pessoa não está mais na lista.`
+        : $localize`:@@people.levelGone:${unknown}:count: pessoas não estão mais na lista.`,
+    );
+  return parts.join(' ');
 }
 
 /** The outcome also says which profile set the person up (screens.md T9). */

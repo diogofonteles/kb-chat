@@ -8,6 +8,7 @@ import {
   computed,
   inject,
   input,
+  output,
   signal,
   viewChild,
 } from '@angular/core';
@@ -16,13 +17,25 @@ import type {
   AppAi,
   InvitePreset,
   InviteProfile,
+  InviteProfileView,
   Topic,
 } from '@kb-chat/contracts';
-import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import {
+  errorMessage,
+  toUiErrorCode,
+  type UiErrorCode,
+} from '@core/api/api-error.js';
 import type { Observable } from 'rxjs';
 import { InvitePresetEditor } from './invite-preset-editor.js';
 import { InviteProfilesStore } from './invite-profiles-store.js';
 import { plainPreset } from './preset-defaults.js';
+import { hasStaleLevel, type Scales } from './level-rows.js';
+
+/** The profile's own words for a refusal, never another screen's (QA-r2-1). */
+const refusedProfile = (code: UiErrorCode): string | null =>
+  code === 'VALIDATION_FAILED'
+    ? $localize`:@@profiles.refused:Não consegui salvar o perfil: confira os acervos e os níveis marcados e tente de novo.`
+    : null;
 
 /** The profile being written: a new one has no id yet. */
 interface Draft {
@@ -30,6 +43,11 @@ interface Draft {
   readonly name: string;
   readonly isDefault: boolean;
   readonly preset: InvitePreset;
+  /**
+   * The preset was changed here: only then does it go out, so renaming a profile or marking
+   * it the default never writes levels (KBC-109 R1-2).
+   */
+  readonly presetChanged: boolean;
 }
 
 type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
@@ -52,6 +70,12 @@ export class InviteProfilesPanel {
   protected readonly store = inject(InviteProfilesStore);
   readonly topics = input.required<readonly Topic[]>();
   readonly defaultAppAi = input<AppAi | null>(null);
+  /** The collections with access levels (KBC-109 FR-5); null while loading or failed. */
+  readonly scales = input<Scales | null>([]);
+  /** The collections' levels failed to load: saving waits (R1-1). */
+  readonly scalesFailed = input(false);
+  /** "Carregar de novo": the page loads the levels again. */
+  readonly reloadScales = output();
 
   private readonly nameInput =
     viewChild<ElementRef<HTMLInputElement>>('nameInput');
@@ -76,12 +100,32 @@ export class InviteProfilesPanel {
   protected readonly notice = signal<Notice>(null);
 
   protected startNew(): void {
-    this.open({ id: null, name: '', isDefault: false, preset: plainPreset() });
+    this.open({
+      id: null,
+      name: '',
+      isDefault: false,
+      preset: plainPreset(),
+      presetChanged: true,
+    });
   }
 
-  protected edit(profile: InviteProfile): void {
-    this.open({ ...profile });
+  /**
+   * The profile opens as it is kept (R1-2): a collection it names no level for shows "Manter
+   * o nível da pessoa", and one whose level no longer exists asks for a choice (R1-3).
+   */
+  protected edit(profile: InviteProfileView): void {
+    const { id, name, isDefault, preset } = profile;
+    this.open({ id, name, isDefault, preset, presetChanged: false });
   }
+
+  /** A profile level that no longer exists waits for a choice before the preset is saved. */
+  protected readonly levelsPending = computed(() => {
+    const draft = this.draft();
+    return (
+      !!draft?.presetChanged &&
+      hasStaleLevel(draft.preset.levels, this.scales())
+    );
+  });
 
   protected rename(name: string): void {
     this.nameError.set('');
@@ -93,7 +137,9 @@ export class InviteProfilesPanel {
   }
 
   protected changePreset(preset: InvitePreset): void {
-    this.draft.update((draft) => draft && { ...draft, preset });
+    this.draft.update(
+      (draft) => draft && { ...draft, preset, presetChanged: true },
+    );
   }
 
   protected cancel(): void {
@@ -113,15 +159,28 @@ export class InviteProfilesPanel {
       this.focusAfterRender(() => this.nameInput());
       return;
     }
-    const body = { name, isDefault: draft.isDefault, preset: draft.preset };
-    const call = draft.id
-      ? this.store.update(draft.id, body)
-      : this.store.create(body);
-    this.run(call, (saved) => {
-      this.draft.set(null);
-      this.focusAfterRender(() => this.newButton());
-      return $localize`:@@profiles.saved:Perfil "${saved.name}:name:" salvo.`;
-    });
+    if (this.scalesFailed() || this.levelsPending()) return;
+    this.run(
+      this.saveCall(draft, name),
+      (saved) => {
+        this.draft.set(null);
+        this.focusAfterRender(() => this.newButton());
+        return $localize`:@@profiles.saved:Perfil "${saved.name}:name:" salvo.`;
+      },
+      refusedProfile,
+    );
+  }
+
+  /** Only a preset changed here goes out (R1-2): a rename never writes levels. */
+  private saveCall(draft: Draft, name: string) {
+    const { isDefault, preset, presetChanged } = draft;
+    return draft.id
+      ? this.store.update(draft.id, {
+          name,
+          isDefault,
+          ...(presetChanged && { preset }),
+        })
+      : this.store.create({ name, isDefault, preset });
   }
 
   /** "Tornar padrão" goes away on that line: focus moves to its "Editar" (WCAG 2.4.3). */
@@ -176,7 +235,11 @@ export class InviteProfilesPanel {
   }
 
   /** One change at a time; its outcome is announced under the list. */
-  private run<T>(call: Observable<T>, done: (value: T) => string): void {
+  private run<T>(
+    call: Observable<T>,
+    done: (value: T) => string,
+    refused?: (code: UiErrorCode) => string | null,
+  ): void {
     this.busy.set(true);
     this.notice.set(null);
     call.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
@@ -186,9 +249,10 @@ export class InviteProfilesPanel {
       },
       error: (err: unknown) => {
         this.busy.set(false);
+        const code = toUiErrorCode(err);
         this.notice.set({
           kind: 'error',
-          text: errorMessage(toUiErrorCode(err)),
+          text: refused?.(code) ?? errorMessage(code),
         });
       },
     });

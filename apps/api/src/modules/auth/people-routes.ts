@@ -14,6 +14,7 @@ import {
   personListSchema,
   personSchema,
   personUpdateSchema,
+  type PersonUpdate,
 } from '@kb-chat/contracts';
 import type {
   FastifyBaseLogger,
@@ -27,6 +28,16 @@ import { AppError } from '../../app-error.js';
 import { viewerOf, type RouteAccess } from './access.js';
 import type { Invitations } from './invitations.js';
 import type { PeopleService } from './people-service.js';
+import {
+  assertPersonLevels,
+  assertPresetLevels,
+  recordLevels,
+  serialLevels,
+  undoneProfile,
+  withGrantedLevels,
+  withLevels,
+  type PersonLevelRules,
+} from './people-level-writes.js';
 import { aiOf } from './person-ai.js';
 import { toPerson, type StoredPerson } from './person.js';
 import type { SessionService } from './session-service.js';
@@ -44,18 +55,6 @@ export interface PeopleRouteDeps {
   readonly presets?: PresetSource;
   /** A person's level per scaled collection (KBC-103 FR-3); absent: none can be set. */
   readonly levels?: PersonLevelRules;
-}
-
-/** What the access-levels module checks and records around a person's levels. */
-export interface PersonLevelRules {
-  /** Throws VALIDATION_FAILED unless every entry names a level of that collection's scale. */
-  assertLevels(levels: Readonly<Record<string, string>>): void;
-  /** Audits each level that changed (FR-10). */
-  recordChange(change: {
-    readonly before: StoredPerson;
-    readonly after: StoredPerson;
-    readonly by: string;
-  }): Promise<void>;
 }
 
 /** Where the people routes find a preset (KBC-028), and whether a person saved Settings. */
@@ -156,21 +155,80 @@ async function invite(
   const { email, sendEmail, preset, profileId } = body;
   const chosen = deps.presets?.presetFor({ preset, profileId });
   if (chosen) assertKnownTopics(deps, chosen.topics);
+  // A preset sent is checked; a profile's level that no longer exists is the lowest (BR-3).
+  if (preset) assertPresetLevels(deps.levels, preset);
   // Lending in the invitation is the owner's alone, as in the editor (KBC-031 BR-1).
   assertMayLend(deps, request, chosen?.ai.appAi);
-  const invited = await deps.people.invite(email, inviter.email, chosen);
-  // The house follows the AI it was given (provisioned keys), as after the editor; if it
-  // cannot, the invitation is undone so that inviting again works.
-  if (chosen)
-    await deps.ai?.sync(invited, aiOf(invited)).catch(async (err: unknown) => {
-      await deps.people
-        .revoke(invited.id)
-        .catch(() => request.log.error('could not undo a failed invitation'));
-      throw err;
-    });
+  // Resolved and written in the levels queue, so a first scale never slips between (R1-6).
+  const { invited, leveled } = await serialLevels(deps.levels, async () => {
+    const leveled = chosen && withLevels(deps.levels, chosen);
+    const invited = await deps.people.invite(email, inviter.email, leveled);
+    if (leveled?.levels)
+      await recordLevels(deps.levels, {
+        before: { ...invited, levels: {} },
+        after: invited,
+        by: inviter.email,
+        via: 'invite',
+        log: request.log,
+      });
+    return { invited, leveled };
+  });
+  if (leveled) await followInvitedAi(deps, invited, request.log);
   return sendEmail
     ? deps.invitations.afterInvite(invited, inviter, request.log)
     : invited;
+}
+
+/**
+ * The house follows the AI it was given (provisioned keys), as after the editor; if it
+ * cannot, the invitation is undone so that inviting again works.
+ */
+async function followInvitedAi(
+  deps: PeopleRouteDeps,
+  invited: StoredPerson,
+  log: FastifyBaseLogger,
+): Promise<void> {
+  await deps.ai?.sync(invited, aiOf(invited)).catch(async (err: unknown) => {
+    // Whatever happens to the undo, the client gets the AI's failure (R3-3).
+    await undoInvitation(deps, { invited, log }).catch((undo: unknown) =>
+      log.error(
+        { err: undo, person: invited.id },
+        'could not undo a failed invitation; it stays',
+      ),
+    );
+    throw err;
+  });
+}
+
+/** The invitation is revoked and, when it gave levels, their removal audited (QA-r2-2). */
+async function undoInvitation(
+  deps: PeopleRouteDeps,
+  undo: { readonly invited: StoredPerson; readonly log: FastifyBaseLogger },
+): Promise<void> {
+  const { invited, log } = undo;
+  await serialLevels(deps.levels, async () => {
+    // As it is now (a bulk may have moved it while the AI was called, R3-2).
+    const now = (await deps.people.find(invited.id)) ?? invited;
+    const revoked = await deps.people.revoke(invited.id).then(
+      () => true,
+      (err: unknown) => {
+        log.error(
+          { err, person: invited.id },
+          'could not undo a failed invitation',
+        );
+        return false;
+      },
+    );
+    if (!revoked) return;
+    await recordLevels(deps.levels, {
+      before: now,
+      after: { ...now, levels: {} },
+      by: invited.invitedBy,
+      via: 'invite',
+      log,
+      message: 'invitation undone but its levels not audited',
+    }).catch(() => undefined);
+  });
 }
 
 /** Everything a master's change must pass before anything is written. */
@@ -184,10 +242,6 @@ function assertPatch(
     throw new AppError('FORBIDDEN', 'Only the owner grants acting as a person');
   assertKnownTopics(deps, body.topics);
   assertMayLend(deps, request, body.ai?.appAi);
-  if (body.levels === undefined) return;
-  if (!deps.levels)
-    throw new AppError('VALIDATION_FAILED', 'Levels are not available');
-  deps.levels.assertLevels(body.levels);
 }
 
 function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
@@ -201,20 +255,46 @@ function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
         response: { 200: personSchema },
       },
     },
-    async (request) => {
-      const { params, body } = request;
-      assertPatch(deps, request, body);
-      const by = viewerOf(request).person.email;
-      const before = await deps.people.find(params.id);
-      assertMayChangeLent(deps, request, { before, ai: body.ai });
-      const updated = await deps.people.update(params.id, body, by);
-      if (body.ai && before)
-        await syncAi(deps, { before, updated, by, log: request.log });
-      if (body.levels && before)
-        await deps.levels?.recordChange({ before, after: updated, by });
-      return view(deps, updated);
-    },
+    async (request) =>
+      view(
+        deps,
+        await patchPerson(deps, request, {
+          id: request.params.id,
+          body: request.body,
+        }),
+      ),
   );
+}
+
+async function patchPerson(
+  deps: PeopleRouteDeps,
+  request: FastifyRequest,
+  change: { readonly id: string; readonly body: PersonUpdate },
+): Promise<StoredPerson> {
+  const { id, body } = change;
+  assertPatch(deps, request, body);
+  const by = viewerOf(request).person.email;
+  // The person before, the levels and their audit, in the levels queue (R1-6, QA-2).
+  const { before, updated } = await serialLevels(deps.levels, async () => {
+    const before = await deps.people.find(id);
+    assertPersonLevels(deps.levels, {
+      role: body.role ?? before?.role,
+      levels: body.levels,
+    });
+    assertMayChangeLent(deps, request, { before, ai: body.ai });
+    const patch = withGrantedLevels(deps.levels, before, body);
+    const updated = await deps.people.update(id, patch, by);
+    // A grant, a level, or a master's levels dropped (R2-2): each change is a line.
+    if (before)
+      await recordLevels(deps.levels, {
+        ...{ before, after: updated, by, via: 'editor' as const },
+        log: request.log,
+      });
+    return { before, updated };
+  });
+  if (body.ai && before)
+    await syncAi(deps, { before, updated, by, log: request.log });
+  return updated;
 }
 
 /** "Aplicar perfil" (KBC-028 FR-4): a profile on someone already invited. */
@@ -245,29 +325,70 @@ async function applyProfile(
   request: FastifyRequest,
   target: { readonly id: string; readonly profileId: string },
 ): Promise<StoredPerson> {
-  const { profileId } = target;
   const { presets } = deps;
   if (!presets) throw new AppError('NOT_FOUND', 'Unknown invite profile');
-  const preset = presets.presetFor({ profileId });
-  const before = await deps.people.find(target.id);
-  if (!preset || !before) throw new AppError('NOT_FOUND', 'Not found');
-  assertKnownTopics(deps, preset.topics);
+  const profile = presets.presetFor({ profileId: target.profileId });
+  if (!profile) throw new AppError('NOT_FOUND', 'Not found');
+  assertKnownTopics(deps, profile.topics);
   const by = viewerOf(request).person.email;
-  assertMayChangeLent(deps, request, { before, ai: preset.ai });
-  const updated = await deps.people.applyPreset(before.id, preset, {
-    by,
-    withPreferences: !(await presets.hasSavedSettings(before)),
+  const log = request.log;
+  const { before, updated } = await serialLevels(deps.levels, async () => {
+    const before = await deps.people.find(target.id);
+    if (!before) throw new AppError('NOT_FOUND', 'Not found');
+    // Only the collections the profile reaches change level (KBC-109 BR-2); a master held
+    // none to keep (R2-2).
+    const held = before.role === 'master' ? {} : before.levels;
+    const preset = withLevels(deps.levels, profile, held);
+    assertMayChangeLent(deps, request, { before, ai: preset.ai });
+    const updated = await deps.people.applyPreset(before.id, preset, {
+      by,
+      withPreferences: !(await presets.hasSavedSettings(before)),
+    });
+    const record = { before, after: updated, by, via: 'profile' as const };
+    await recordLevels(deps.levels, { ...record, log });
+    return { before, updated };
   });
-  // The whole profile goes back when the house cannot follow its AI.
-  await syncAi(deps, { before, updated, by, log: request.log }).catch(
-    async (err: unknown) => {
-      await deps.people
-        .restore(before)
-        .catch(() => request.log.error('could not undo a profile'));
-      throw err;
-    },
-  );
+  await followProfileAi(deps, { before, updated, by, log });
   return updated;
+}
+
+/** The whole profile goes back when the house cannot follow its AI, its levels audited. */
+async function followProfileAi(deps: PeopleRouteDeps, change: AiSyncChange) {
+  await syncAi(deps, change).catch(async (err: unknown) => {
+    // The client always gets the AI's failure; a failed undo is told in the log (R3-3).
+    await undoProfile(deps, change).catch((undo: unknown) =>
+      change.log.error(
+        { err: undo, person: change.before.id },
+        'could not undo a profile; it stays applied',
+      ),
+    );
+    throw err;
+  });
+}
+
+/**
+ * Undoes the profile in its own turn of the levels queue (R2-1): the person is read again, a
+ * level written meanwhile (a bulk) stays, and the line starts from what is there now. A
+ * failed undo and an undo whose audit failed are told apart.
+ */
+async function undoProfile(deps: PeopleRouteDeps, change: AiSyncChange) {
+  const { before, updated, by, log } = change;
+  await serialLevels(deps.levels, async () => {
+    const now = await deps.people.find(before.id);
+    if (!now) return;
+    const restored = await deps.people
+      .restore(undoneProfile({ before, applied: updated, now }))
+      .catch((err: unknown) => {
+        log.error({ err, person: before.id }, 'could not undo a profile');
+        return null;
+      });
+    if (!restored) return;
+    await recordLevels(deps.levels, {
+      ...{ before: now, after: restored, by, via: 'profile' as const },
+      log,
+      message: 'profile undone but its levels not audited',
+    }).catch(() => undefined);
+  });
 }
 
 function registerWrites(app: FastifyInstance, deps: PeopleRouteDeps) {

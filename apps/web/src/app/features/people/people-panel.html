@@ -94,6 +94,8 @@
         [topics]="topics()"
         [defaultAppAi]="defaultAppAi()"
         [lending]="lending()"
+        [scales]="scaleState()"
+        [staleLevels]="draftStaleLevels()"
         [busy]="busy()"
         (changed)="draftPreset.set($event)"
         (invalidChange)="presetInvalid.set($event)"
@@ -152,6 +154,9 @@
 <app-invite-profiles-panel
   [topics]="topics()"
   [defaultAppAi]="defaultAppAi()"
+  [scales]="scaleState()"
+  [scalesFailed]="scalesFailed()"
+  (reloadScales)="reloadScales()"
 />
 
 <app-access-requests-list (approved)="welcome($event)" />
@@ -183,6 +188,15 @@
     [busy]="busy()"
     (apply)="assign($event)"
   />
+  @if (scales().length > 0) {
+    <app-people-level-bar
+      [scales]="scales()"
+      [topics]="topics()"
+      [selectedCount]="selected().size"
+      [busy]="busy()"
+      (apply)="assignLevel($event)"
+    />
+  }
   <label class="select-all">
     <input
       #allBox
@@ -318,7 +332,13 @@
 
 <!-- The outcome of the last change, next to the person it changed (MA-23). -->
 <ng-template #status>
-  <p class="notice" [class.error]="notice()?.kind === 'error'" role="status">
+  <p
+    #statusLine
+    class="notice"
+    [class.error]="notice()?.kind === 'error'"
+    role="status"
+    tabindex="-1"
+  >
     @if (notice()?.kind === 'error') {
       <span class="visually-hidden" i18n="@@people.errorPrefix">Erro:</span>
       <span aria-hidden="true">⚠</span>&ngsp;

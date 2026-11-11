@@ -1,8 +1,11 @@
 import {
   inviteProfileCreateSchema,
   inviteProfileListSchema,
-  inviteProfileSchema,
   inviteProfileUpdateSchema,
+  inviteProfileViewSchema,
+  type InvitePreset,
+  type InviteProfile,
+  type InviteProfileView,
 } from '@kb-chat/contracts';
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -16,6 +19,36 @@ const MASTER: RouteAccess = { master: true };
 /** Every collection slug in the vault: a profile only grants those (as the people editor). */
 type Topics = () => readonly string[];
 
+/** What the access-levels module checks on a profile's levels (KBC-109). */
+export interface ProfileLevelRules {
+  /** BR-1, BR-5: 400 unless each level names a scaled collection the preset reaches. */
+  assertPresetLevels(preset: InvitePreset): void;
+  /** FR-4: the levels the profile keeps that no longer exist. */
+  staleLevels(preset: InvitePreset): Record<string, string>;
+}
+
+interface ProfileRouteDeps {
+  readonly profiles: InviteProfilesService;
+  readonly topics: Topics;
+  readonly levels?: ProfileLevelRules;
+}
+
+function assertPreset(deps: ProfileRouteDeps, preset?: InvitePreset) {
+  assertKnownTopics(deps.topics, preset);
+  if (!preset?.levels || Object.keys(preset.levels).length === 0) return;
+  if (!deps.levels)
+    throw new AppError('VALIDATION_FAILED', 'Levels are not available');
+  deps.levels.assertPresetLevels(preset);
+}
+
+const viewOf = (
+  deps: ProfileRouteDeps,
+  profile: InviteProfile,
+): InviteProfileView => ({
+  ...profile,
+  staleLevels: deps.levels?.staleLevels(profile.preset) ?? {},
+});
+
 function assertKnownTopics(topics: Topics, preset?: { topics: string[] }) {
   const known = new Set(topics());
   const unknown = (preset?.topics ?? []).filter((topic) => !known.has(topic));
@@ -26,11 +59,8 @@ function assertKnownTopics(topics: Topics, preset?: { topics: string[] }) {
 }
 const params = z.object({ id: z.uuid() });
 
-function registerReads(
-  app: FastifyInstance,
-  profiles: InviteProfilesService,
-  topics: Topics,
-) {
+function registerReads(app: FastifyInstance, deps: ProfileRouteDeps) {
+  const { profiles } = deps;
   const routes = app.withTypeProvider<ZodTypeProvider>();
   routes.get(
     '/api/v1/invite-profiles',
@@ -38,7 +68,7 @@ function registerReads(
       config: { access: MASTER },
       schema: { response: { 200: inviteProfileListSchema } },
     },
-    async () => ({ items: [...profiles.list()] }),
+    async () => ({ items: profiles.list().map((one) => viewOf(deps, one)) }),
   );
   routes.post(
     '/api/v1/invite-profiles',
@@ -46,21 +76,18 @@ function registerReads(
       config: { access: MASTER },
       schema: {
         body: inviteProfileCreateSchema,
-        response: { 201: inviteProfileSchema },
+        response: { 201: inviteProfileViewSchema },
       },
     },
     async (request, reply) => {
-      assertKnownTopics(topics, request.body.preset);
-      return reply.code(201).send(await profiles.create(request.body));
+      assertPreset(deps, request.body.preset);
+      const created = await profiles.create(request.body);
+      return reply.code(201).send(viewOf(deps, created));
     },
   );
 }
 
-function registerWrites(
-  app: FastifyInstance,
-  profiles: InviteProfilesService,
-  topics: Topics,
-) {
+function registerWrites(app: FastifyInstance, deps: ProfileRouteDeps) {
   const routes = app.withTypeProvider<ZodTypeProvider>();
   routes.put(
     '/api/v1/invite-profiles/:id',
@@ -69,12 +96,15 @@ function registerWrites(
       schema: {
         params,
         body: inviteProfileUpdateSchema,
-        response: { 200: inviteProfileSchema },
+        response: { 200: inviteProfileViewSchema },
       },
     },
     async (request) => {
-      assertKnownTopics(topics, request.body.preset);
-      return profiles.update(request.params.id, request.body);
+      assertPreset(deps, request.body.preset);
+      return viewOf(
+        deps,
+        await deps.profiles.update(request.params.id, request.body),
+      );
     },
   );
 }
@@ -96,9 +126,9 @@ function registerDelete(app: FastifyInstance, profiles: InviteProfilesService) {
 
 /** "Perfis de convite" (KBC-028): masters only. */
 export const inviteProfilesRoutes =
-  (profiles: InviteProfilesService, topics: Topics): FastifyPluginAsync =>
+  (deps: ProfileRouteDeps): FastifyPluginAsync =>
   async (app) => {
-    registerReads(app, profiles, topics);
-    registerWrites(app, profiles, topics);
-    registerDelete(app, profiles);
+    registerReads(app, deps);
+    registerWrites(app, deps);
+    registerDelete(app, deps.profiles);
   };

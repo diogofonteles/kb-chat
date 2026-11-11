@@ -141,6 +141,12 @@ button:disabled {
   cursor: pointer;
 }
 
+/* "Nível em <acervo>" right under the collection it belongs to (T9, KBC-109). */
+.level-field {
+  padding-left: var(--space-6);
+  margin-bottom: var(--space-2);
+}
+
 .field-error {
   margin: 0;
   font-size: var(--text-sm);
@@ -179,4 +185,9 @@ button:disabled {
 /* "Aplicar perfil": the button lines up with the select, not its label (design D9). */
 .apply-row {
   align-items: end;
+}
+
+/* "Tornar master" erases her levels: said right under the actions (KBC-109 R3-5). */
+.master-levels {
+  flex-basis: 100%;
 }

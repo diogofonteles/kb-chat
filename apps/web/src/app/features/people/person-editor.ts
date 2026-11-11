@@ -19,7 +19,7 @@ import {
   mediaQuotaSchema,
   type AppAi,
   type Feature,
-  type InviteProfile,
+  type InviteProfileView,
   type LevelScales,
   type Person,
   type PersonUpdate,
@@ -27,6 +27,7 @@ import {
 } from '@kb-chat/contracts';
 import { collectionChoices } from '@core/topics/topic-tree.js';
 import { FEATURE_LABELS } from './feature-labels.js';
+import { NO_LEVEL_ROWS, levelRowsAfter } from './level-rows.js';
 import { NO_LENDING, type Lending } from './lending.js';
 import {
   NO_PENDING,
@@ -70,7 +71,7 @@ export class PersonEditor {
   /** Whether the owner's subscription is offered (KBC-024). */
   readonly lending = input<Lending>(NO_LENDING);
   /** The invitation profiles a master can apply here (KBC-028 FR-4). */
-  readonly profiles = input<readonly InviteProfile[]>([]);
+  readonly profiles = input<readonly InviteProfileView[]>([]);
   /** The signed-in account may act as this person (KBC-060): shows "Ver como". */
   readonly mayActAs = input(false);
   /** The owner looks: only it grants "Ver como" to a master (BR-1). */
@@ -103,6 +104,26 @@ export class PersonEditor {
       this.profiles()[0] ??
       null,
   );
+  /**
+   * The chosen profile's levels that no longer exist: applying it gives the lowest there, and
+   * the confirmation says so (KBC-109 BR-3, never in silence).
+   */
+  protected readonly staleOfChosen = computed(() =>
+    Object.entries(this.chosenProfile()?.staleLevels ?? {}).map(
+      ([collection, level]) => ({
+        id: `apply-stale-${this.person().id}-${collection}`,
+        level,
+        title:
+          this.topics().find((topic) => topic.slug === collection)?.title ??
+          collection,
+      }),
+    ),
+  );
+  /** "Aplicar" is described by each warning, so a screen reader reads them on it. */
+  protected readonly applyDescribedBy = computed(() => {
+    const ids = this.staleOfChosen().map((one) => one.id);
+    return ids.length > 0 ? ids.join(' ') : null;
+  });
   /** Applying waits for a confirmation on the line (screens.md T9). */
   protected readonly confirmingApply = signal(false);
   /** After applying, focus returns to "Aplicar perfil" once the save is over (WCAG 2.4.3). */
@@ -134,36 +155,24 @@ export class PersonEditor {
   );
 
   /**
-   * "Nível em <acervo>" for each collection with levels the person reaches (directly or
-   * through a sub-collection); absent or unknown is the lowest (KBC-103 BR-5).
+   * "Nível em <acervo>" right under each collection with levels the person reaches (directly
+   * or through a sub-collection); absent or unknown is the lowest (KBC-103 BR-5). Keyed by the
+   * row it follows (T9, KBC-109).
    */
-  protected readonly levelChoices = computed(() => {
-    const reached = this.checkedTopics();
-    const levels = this.person().levels;
-    return (
-      this.scales()
-        // By the tree the topics carry, never by the slug's text (ADR 0028).
-        .filter(({ collection }) =>
-          reached.some(
-            (slug) =>
-              slug === collection ||
-              this.topics().some(
-                (topic) => topic.slug === slug && topic.parent === collection,
-              ),
-          ),
-        )
-        .map(({ collection, levels: choices }) => ({
-          collection,
-          title:
-            this.topics().find((topic) => topic.slug === collection)?.title ??
-            collection,
-          choices,
-          current: choices.some((one) => one.id === levels[collection])
-            ? levels[collection]
-            : choices[0]?.id,
-        }))
-    );
-  });
+  protected readonly levelRows = computed(() =>
+    this.isMaster()
+      ? NO_LEVEL_ROWS
+      : levelRowsAfter(this.topics(), this.scales(), {
+          granted: this.checkedTopics(),
+          levels: this.person().levels,
+          mode: 'person',
+        }),
+  );
+
+  /** "Tornar master" drops the levels she holds (R2-2): said next to it (R3-5). */
+  protected readonly dropsLevels = computed(
+    () => !this.isMaster() && Object.keys(this.person().levels).length > 0,
+  );
 
   protected chooseLevel(collection: string, level: string): void {
     this.changed.emit({ levels: { [collection]: level } });

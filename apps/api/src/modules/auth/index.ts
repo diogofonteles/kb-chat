@@ -44,10 +44,14 @@ export { Invitations, type InvitationsDeps } from './invitations.js';
 export {
   peopleRoutes,
   type PeopleRouteDeps,
-  type PersonLevelRules,
   type PresetSource,
 } from './people-routes.js';
-export type { ApprovedRequest } from './people-rules.js';
+export type {
+  LevelChangeRecord,
+  LevelGrant,
+  PersonLevelRules,
+} from './people-level-writes.js';
+export type { ApprovedRequest, LevelChanged } from './people-rules.js';
 export {
   PEOPLE_CACHE_MS,
   PeopleService,

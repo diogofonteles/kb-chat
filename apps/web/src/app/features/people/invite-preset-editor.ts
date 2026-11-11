@@ -35,6 +35,15 @@ import { THEME_COPY, VIEW_COPY } from '@features/settings/provider-copy.js';
 import { collectionChoices, treeTitle } from '@core/topics/topic-tree.js';
 import { FEATURE_LABELS } from './feature-labels.js';
 import {
+  CHOOSE_LEVEL,
+  KEEP_LEVEL,
+  NO_LEVEL_ROWS,
+  levelRowsAfter,
+  withPresetLevels,
+  type LevelRow,
+  type Scales,
+} from './level-rows.js';
+import {
   LEND_COPY,
   LEND_NOT_OFFERED,
   NO_LENDING,
@@ -78,6 +87,21 @@ export class InvitePresetEditor {
    * so its editor keeps the default (none).
    */
   readonly lending = input<Lending>(NO_LENDING);
+  /**
+   * The collections with access levels and their levels (KBC-109 FR-5); null while they
+   * load or when they failed: no select, and the preset's levels stay as they are (R1-1).
+   */
+  readonly scales = input<Scales | null>([]);
+  /**
+   * An invitation gives a level (the lowest by default); a profile may keep each person's
+   * level ("Manter o nível da pessoa", R1-2).
+   */
+  readonly mode = input<'invite' | 'profile'>('invite');
+  /**
+   * The chosen profile's levels that no longer exist, in an invitation (FR-4): the invitation
+   * gives the lowest and says so until another level is chosen.
+   */
+  readonly staleLevels = input<Readonly<Record<string, string>>>({});
   readonly changed = output<InvitationPreset>();
   /** True while a typed number is not kept: the invitation or profile waits (design D4). */
   readonly invalidChange = output<boolean>();
@@ -96,6 +120,53 @@ export class InvitePresetEditor {
   protected readonly collections = computed(() =>
     collectionChoices(this.topics(), this.preset().topics, this.isMaster()),
   );
+  /**
+   * "Nível em <acervo>" right under each collection with levels that the preset reaches; a
+   * master has none (KBC-109 BR-5). Keyed by the row it follows.
+   */
+  protected readonly levelRows = computed(() =>
+    this.isMaster()
+      ? NO_LEVEL_ROWS
+      : levelRowsAfter(this.topics(), this.scales() ?? [], {
+          granted: this.preset().topics,
+          levels: this.preset().levels ?? {},
+          mode: this.mode(),
+        }),
+  );
+  protected readonly keepLevel = KEEP_LEVEL;
+  /** The ids of a collection's notes, made in one place for the template and the select. */
+  protected staleId(collection: string): string {
+    return `${this.uid}-stale-${collection}`;
+  }
+  protected keepId(collection: string): string {
+    return `${this.uid}-keep-${collection}`;
+  }
+  /**
+   * Only "Manter o nível da pessoa" has a level an invitation decides alone (the lowest): a
+   * level named gives that one, and "Escolha" has its own warning (R3-1).
+   */
+  protected keepsPersonLevel(row: LevelRow): boolean {
+    return this.mode() === 'profile' && row.current === KEEP_LEVEL;
+  }
+  /** The select is described by the "Manter" hint and the stale level's warning. */
+  protected describedBy(row: LevelRow, inviteStale: boolean): string | null {
+    const ids = [
+      this.keepsPersonLevel(row) ? this.keepId(row.collection) : null,
+      row.stale || inviteStale ? this.staleId(row.collection) : null,
+    ].filter((id) => id !== null);
+    return ids.length > 0 ? ids.join(' ') : null;
+  }
+  protected readonly chooseLevelValue = CHOOSE_LEVEL;
+  /** The stale levels of an invitation the master has already replaced here. */
+  private readonly replaced = signal<ReadonlySet<string>>(new Set());
+  protected readonly staleNotes = computed(() => {
+    const replaced = this.replaced();
+    return new Map(
+      Object.entries(this.staleLevels()).filter(
+        ([root]) => !replaced.has(root),
+      ),
+    );
+  });
   /** A master's own features (ADR 0032) are not offered to a member. */
   protected readonly features = computed(() =>
     (this.isMaster() ? MASTER_FEATURES : GRANTABLE_FEATURES).map((id) => ({
@@ -218,6 +289,19 @@ export class InvitePresetEditor {
       return { defaultTopic: only };
     }
     return {};
+  }
+
+  /** Any choice is a decision, the lowest included (R1-3); "Manter" names no level (R1-2). */
+  protected chooseLevel(collection: string, level: string): void {
+    this.replaced.update((done) => new Set([...done, collection]));
+    const others = Object.fromEntries(
+      Object.entries(this.preset().levels ?? {}).filter(
+        ([root]) => root !== collection,
+      ),
+    );
+    const levels =
+      level === KEEP_LEVEL ? others : { ...others, [collection]: level };
+    this.emit({ levels });
   }
 
   protected toggleFeature(feature: Feature, on: boolean): void {
@@ -352,6 +436,14 @@ export class InvitePresetEditor {
     const kept = Object.fromEntries(
       Object.entries(merged).filter(([, value]) => value !== undefined),
     ) as InitialPreferences;
-    this.changed.emit({ ...this.preset(), ...patch, preferences: kept });
+    // Only the collections with levels it reaches keep one (KBC-109 BR-1).
+    const next = { ...this.preset(), ...patch, preferences: kept };
+    this.changed.emit(
+      withPresetLevels(next, {
+        topics: this.topics(),
+        scales: this.scales(),
+        mode: this.mode(),
+      }),
+    );
   }
 }

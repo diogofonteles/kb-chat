@@ -182,6 +182,11 @@ export const levelAuditEntrySchema = z.object({
     .optional(),
   /** For a `bulk` of KBC-107: the filter it applied, or `{ ids: n }` for a selection. */
   filter: z.lazy(() => bulkAuditFilterSchema).optional(),
+  /**
+   * Where a person's level was set (KBC-109 BR-4): the person editor (a grant included), an
+   * invitation, "Aplicar perfil" or the people bulk. Absent on older lines.
+   */
+  via: z.lazy(() => personLevelViaSchema).optional(),
 });
 export type LevelAuditEntry = z.infer<typeof levelAuditEntrySchema>;
 
@@ -319,3 +324,49 @@ export const unassignedCountsSchema = z.object({
   ),
 });
 export type UnassignedCounts = z.infer<typeof unassignedCountsSchema>;
+
+/* ---------- People's levels in invitations, profiles and in bulk (KBC-109) ---------- */
+
+export const PERSON_LEVEL_VIAS = [
+  'editor',
+  'invite',
+  'profile',
+  'bulk',
+] as const;
+export const personLevelViaSchema = z.enum(PERSON_LEVEL_VIAS);
+export type PersonLevelVia = z.infer<typeof personLevelViaSchema>;
+
+/** The most people one bulk names (as the documents' bulk, BR-3 of KBC-107). */
+export const PEOPLE_BULK_MAX = 5000;
+
+const peopleBulkTargetSchema = {
+  /** A top-level collection with a scale. */
+  topic: topicSlugSchema,
+  level: levelRefSchema,
+};
+
+/** POST /api/v1/people/levels (masters, FR-3): a level for the people named, or everyone. */
+export const peopleLevelRequestSchema = z.union([
+  z.strictObject({
+    ...peopleBulkTargetSchema,
+    ids: z.array(z.uuid()).min(1).max(PEOPLE_BULK_MAX),
+  }),
+  z.strictObject({ ...peopleBulkTargetSchema, all: z.literal(true) }),
+]);
+export type PeopleLevelRequest = z.infer<typeof peopleLevelRequestSchema>;
+
+export const peopleLevelResultSchema = z.object({
+  collection: topicSlugSchema,
+  level: levelChoiceSchema,
+  /** People whose level changed. */
+  updated: z.number().int().nonnegative(),
+  /** People already at that level. */
+  unchanged: z.number().int().nonnegative(),
+  /** Masters named: they see every level and are left as they are. */
+  masters: z.number().int().nonnegative(),
+  /** People who do not reach the collection: no level is given ahead of the access. */
+  withoutAccess: z.number().int().nonnegative(),
+  /** Ids of nobody (revoked meanwhile). */
+  unknown: z.number().int().nonnegative(),
+});
+export type PeopleLevelResult = z.infer<typeof peopleLevelResultSchema>;
