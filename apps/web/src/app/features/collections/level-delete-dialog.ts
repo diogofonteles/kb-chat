@@ -107,15 +107,21 @@ export class LevelDeleteDialog {
   protected readonly holdings = computed(() => {
     const removal = this.preview()?.removal;
     if (!removal) return '';
-    const parts = [
-      this.count(removal.documents, 'documents'),
-      this.count(removal.media, 'media'),
-      this.count(removal.people, 'people'),
-    ];
+    const counts = [
+      [removal.documents, 'documents'],
+      [removal.media, 'media'],
+      [removal.people, 'people'],
+    ] as const;
+    // Only what the level holds: "1 documento e 1 pessoa", never "0 áudios".
+    const parts = counts
+      .filter(([n]) => n > 0)
+      .map(([n, what]) => this.count(n, what));
     const code = removal.level.code;
     const total = removal.documents + removal.media + removal.people;
-    return total === 0
-      ? $localize`:@@levels.deleteEmpty:Nada está em ${code}:code:.`
+    if (parts.length === 0)
+      return $localize`:@@levels.deleteEmpty:Nada está em ${code}:code:.`;
+    return total === 1
+      ? $localize`:@@levels.deleteHoldingsOne:${and(parts)}:parts: está em ${code}:code:.`
       : $localize`:@@levels.deleteHoldings:${and(parts)}:parts: estão em ${code}:code:.`;
   });
   protected readonly canConfirm = computed(() =>

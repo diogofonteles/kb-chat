@@ -110,6 +110,7 @@ const LEVEL_COLLECTION_NAMES: Record<string, string> = {
   historico: 'Zz Histórico',
   semnivel: 'Zz Sem Nível',
   pessoas: 'Zz Pessoas',
+  gestao: 'Zz Gestão',
 };
 
 /**
@@ -121,7 +122,9 @@ function levelCollections(root: string): void {
   // `zz-historico-*`: the stored answers re-checked at today's level (KBC-110).
   // `zz-semnivel-*`: documents arriving without a level (KBC-107).
   // `zz-pessoas-*`: people's levels in profiles, invitations and in bulk (KBC-109).
-  const collections = ['niveis', 'historico', 'semnivel', 'pessoas'].flatMap(
+  // `zz-gestao-*`: a level deleted, a move previewed, every level taken away (KBC-108).
+  const kinds = ['niveis', 'historico', 'semnivel', 'pessoas', 'gestao'];
+  const collections = kinds.flatMap(
     (kind) => ['desktop', 'mobile'].map((project) => ({ kind, project })),
   );
   for (const { kind, project } of collections) {

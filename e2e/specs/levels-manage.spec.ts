@@ -1,0 +1,223 @@
+import AxeBuilder from '@axe-core/playwright';
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
+import {
+  CSRF,
+  expect,
+  invite,
+  ownerApi,
+  pageAs,
+  test,
+  uniqueEmail,
+} from './fixtures.js';
+
+/**
+ * KBC-108 (ADR 0036 §10, §11, screens.md T24): the master deletes a level choosing where its
+ * content and its people go, moves a level after the server counts who gains and loses, reads
+ * "Histórico de níveis" a page at a time, and takes every level away by typing the
+ * collection's name; the member then sees everything. Each project has its own collection
+ * (`zz-gestao-<project>`, apps/api/src/e2e/server.ts): one test per project, its steps in order.
+ */
+const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
+
+const shots = process.env['KBC_SHOTS'];
+async function shoot(page: Page, name: string): Promise<void> {
+  if (shots)
+    await page.screenshot({
+      path: `${shots}/${name}-${page.viewportSize()?.width}.png`,
+      fullPage: true,
+    });
+}
+
+/** A press as the device makes it: a tap on the phone, a click on the desktop. */
+async function press(page: Page, target: Locator): Promise<void> {
+  if (desktop(page)) await target.click();
+  else await target.tap();
+}
+
+async function noViolations(page: Page, selector: string): Promise<void> {
+  const axe = await new AxeBuilder({ page }).include(selector).analyze();
+  expect(axe.violations).toEqual([]);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+}
+
+/** QS < CI < CDC by the API, "Orvalho do Meio" at CI, "Orvalho Velado" at CDC. */
+async function scaleOf(owner: APIRequestContext, slug: string) {
+  for (const code of ['QS', 'CI', 'CDC']) {
+    const created = await owner.post(`/api/v1/topics/${slug}/levels`, {
+      data: { code },
+      headers: CSRF,
+    });
+    expect(created.status(), await created.text()).toBe(201);
+  }
+  for (const [file, level] of [
+    ['medio', 'ci'],
+    ['velado', 'cdc'],
+  ] as const) {
+    const placed = await owner.put(
+      `/api/v1/topics/${slug}/documents/raw%2F${file}.md/level`,
+      { data: { level }, headers: CSRF },
+    );
+    expect(placed.status(), await placed.text()).toBe(200);
+  }
+}
+
+/** Renames QS back and forth: enough lines for the history to need a second page. */
+async function manyChanges(owner: APIRequestContext, slug: string) {
+  for (let n = 0; n < 12; n += 1) {
+    const renamed = await owner.patch(`/api/v1/topics/${slug}/levels/qs`, {
+      data: { description: `Quadro ${n}` },
+      headers: CSRF,
+    });
+    expect(renamed.status(), await renamed.text()).toBe(200);
+  }
+}
+
+/** AC-1, AC-8: the dialog counts what CI holds, its targets before the focused danger button. */
+async function deleteCi(page: Page): Promise<void> {
+  await press(page, page.getByRole('button', { name: 'Apagar CI' }));
+  const dialog = page.getByRole('dialog', { name: 'Apagar o nível CI' });
+  await expect(
+    dialog.getByText('1 documento e 1 pessoa estão em CI.'),
+  ).toBeVisible();
+  const content = dialog.getByRole('combobox', {
+    name: 'Conteúdo de CI vai para:',
+  });
+  const people = dialog.getByRole('combobox', {
+    name: 'Pessoas em CI vão para:',
+  });
+  await expect(content).toHaveValue('cdc');
+  await expect(people).toHaveValue('qs');
+  const confirm = dialog.getByRole('button', { name: 'Apagar CI' });
+  await expect(confirm).toBeFocused();
+  const [peopleBox, confirmBox] = await Promise.all([
+    people.boundingBox(),
+    confirm.boundingBox(),
+  ]);
+  expect((peopleBox?.y ?? 0) + (peopleBox?.height ?? 0)).toBeLessThanOrEqual(
+    confirmBox?.y ?? 0,
+  );
+  await noViolations(page, 'app-level-delete-dialog');
+  await shoot(page, 'levels-delete');
+  await press(page, confirm);
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('.pill')).toHaveText(['QS', 'CDC']);
+  await expect(page.getByText('2 documentos · 2 pessoas')).toBeVisible();
+}
+
+/** AC-3: moving CDC to the bottom, after the server says who gains what. */
+async function moveCdcUp(page: Page): Promise<void> {
+  await press(page, page.getByRole('button', { name: 'Mover para cima: CDC' }));
+  await expect(
+    page.getByText(
+      'Mover CDC para a 1ª posição? 2 pessoas passam a ver 2 itens.',
+    ),
+  ).toBeVisible();
+  const confirm = page.getByRole('button', { name: 'Confirmar' });
+  await expect(confirm).toBeFocused();
+  await shoot(page, 'levels-move');
+  await press(page, confirm);
+  await expect(page.locator('.pill')).toHaveText(['CDC', 'QS']);
+}
+
+/** AC-5, AC-8: the history pages by touch and filters by one item. */
+async function readHistory(page: Page): Promise<void> {
+  const toggle = page.getByRole('button', { name: /Histórico de níveis/ });
+  await press(page, toggle);
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  const lines = page.locator('app-levels-history li');
+  await expect(lines).toHaveCount(20);
+  await expect(page.getByText('Ordem: QS, CDC → CDC, QS')).toBeVisible();
+  await expect(
+    page.getByText('Apagou CI: conteúdo → CDC, pessoas → QS'),
+  ).toBeVisible();
+  const more = page.getByRole('button', { name: 'Carregar mais' });
+  await more.scrollIntoViewIfNeeded();
+  await press(page, more);
+  await expect(lines).not.toHaveCount(20);
+  await noViolations(page, 'app-levels-history');
+  await shoot(page, 'levels-history');
+  await press(
+    page,
+    page.getByRole('button', { name: 'Só este item: Orvalho do Meio' }).first(),
+  );
+  await expect(page.getByText('Só: Orvalho do Meio')).toBeVisible();
+  await expect(lines).toHaveCount(2);
+  await expect(page.getByText('CI → CDC: “Orvalho do Meio”')).toBeVisible();
+  await expect(page.getByText('QS → CI: “Orvalho do Meio”')).toBeVisible();
+}
+
+/** AC-4: the button waits for the collection's name; then nothing has a level. */
+async function clearAll(page: Page, title: string): Promise<void> {
+  await press(
+    page,
+    page.getByRole('button', { name: 'Tirar todos os níveis' }),
+  );
+  const dialog = page.getByRole('dialog', { name: 'Tirar todos os níveis' });
+  const name = dialog.getByRole('textbox', {
+    name: /Digite o nome do acervo para confirmar/,
+  });
+  await expect(name).toBeFocused();
+  const confirm = dialog.getByRole('button', { name: 'Tirar todos os níveis' });
+  await expect(confirm).toBeDisabled();
+  await name.fill('outro acervo');
+  await expect(confirm).toBeDisabled();
+  await name.fill(title.toLowerCase());
+  await expect(confirm).toBeEnabled();
+  await noViolations(page, 'app-level-delete-dialog');
+  await shoot(page, 'levels-clear');
+  await press(page, confirm);
+  await expect(
+    page.getByText(
+      'Este acervo não tem níveis. Todos com acesso veem todo o conteúdo.',
+    ),
+  ).toBeVisible();
+}
+
+test('KBC-108 AC-1, AC-3, AC-4, AC-5, AC-8: delete a level, move with its preview, read the history, take every level away', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const slug = `zz-gestao-${testInfo.project.name}`;
+  const title = `Zz Gestão ${testInfo.project.name}`;
+  const owner = await ownerApi();
+  const kept = await owner.get(`/api/v1/topics/${slug}/levels`);
+  const levels = ((await kept.json()) as { levels: unknown[] }).levels.length;
+  test.skip(levels > 0, 'A reused server kept this scale: start a fresh one.');
+  await scaleOf(owner, slug);
+  const ana = uniqueEmail('gestao-ana');
+  const anaId = await invite(owner, ana, {
+    topics: [slug],
+    features: ['search'],
+  });
+  const atCi = await owner.patch(`/api/v1/people/${anaId}`, {
+    data: { levels: { [slug]: 'ci' } },
+    headers: CSRF,
+  });
+  expect(atCi.status(), await atCi.text()).toBe(200);
+  await invite(owner, uniqueEmail('gestao-bia'), {
+    topics: [slug],
+    features: ['search'],
+  });
+  await manyChanges(owner, slug);
+
+  await page.goto(`/acervos/${slug}/niveis`);
+  await expect(page.locator('.pill')).toHaveText(['QS', 'CI', 'CDC']);
+  await deleteCi(page);
+  await moveCdcUp(page);
+  await readHistory(page);
+  await clearAll(page, title);
+
+  const member = await pageAs(browser, ana, page.viewportSize());
+  await member.goto('/');
+  await member.getByRole('radio', { name: 'Buscar documentos' }).check();
+  const box = member.getByLabel('Sua pergunta');
+  await box.fill('orvalho');
+  await box.press('Enter');
+  await expect(member.locator('app-result-card')).toHaveCount(3);
+  await member.context().close();
+  await owner.dispose();
+});
