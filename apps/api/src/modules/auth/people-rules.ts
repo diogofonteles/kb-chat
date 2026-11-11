@@ -212,6 +212,8 @@ export function update(
     canActAs: role === 'master' && (patch.canActAs ?? target.canActAs ?? false),
     ...quotaChangeOf(patch),
     ...(patch.levels && { levels: { ...target.levels, ...patch.levels } }),
+    // A master holds no levels (R2-2): becoming one drops them, so none comes back later.
+    ...(role === 'master' && { levels: undefined }),
   };
   return { people: replace(people, next), result: next };
 }

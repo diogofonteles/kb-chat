@@ -91,6 +91,8 @@ export class FakeOpenRouter {
   readonly createdKeys = new Map<string, { key: string; limit: number }>();
   /** Key management answers 500 (to test what happens when OpenRouter fails). */
   failManagement = false;
+  /** Runs before key management answers (a write slipping in while the house follows an AI). */
+  beforeManagement: (() => Promise<void>) | null = null;
   private readonly validKeys = new Set<string>(['sk-or-v1-house-valid']);
   private readonly codes = new Map<
     string,
@@ -119,7 +121,12 @@ export class FakeOpenRouter {
     if (route === 'GET /key') return this.keyInfo(auth);
     if (route === 'POST /auth/keys') return this.exchange(body);
     if (route === 'POST /chat/completions') return this.chat(auth, body);
-    if (url.pathname.includes('/keys')) return this.manage(route, body);
+    if (url.pathname.includes('/keys')) {
+      const before = this.beforeManagement;
+      this.beforeManagement = null;
+      await before?.();
+      return this.manage(route, body);
+    }
     return json({ error: { message: 'not found' } }, 404);
   };
 

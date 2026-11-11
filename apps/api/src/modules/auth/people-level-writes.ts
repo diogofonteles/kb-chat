@@ -113,7 +113,8 @@ export function withGrantedLevels(
     role: body.role ?? before.role,
     topics: body.topics ?? before.topics,
     levels: body.levels ?? {},
-    held: before.levels,
+    // A master made member never gets back a level from before (R2-2): the lowest.
+    held: demoted ? {} : before.levels,
   });
   const levels = { ...body.levels, ...granted };
   return Object.keys(levels).length > 0 ? { ...body, levels } : body;
@@ -126,9 +127,13 @@ export function withGrantedLevels(
  */
 export async function recordLevels(
   rules: PersonLevelRules | undefined,
-  change: LevelChangeRecord & { readonly log: FastifyBaseLogger },
+  change: LevelChangeRecord & {
+    readonly log: FastifyBaseLogger;
+    /** What the log says when the audit fails (an undo says it was done). */
+    readonly message?: string;
+  },
 ): Promise<void> {
-  const { log, ...record } = change;
+  const { log, message, ...record } = change;
   await rules?.recordChange(record).catch((err: unknown) => {
     log.error(
       {
@@ -137,8 +142,31 @@ export async function recordLevels(
         before: record.before.levels ?? {},
         after: record.after.levels ?? {},
       },
-      'person levels changed but not audited',
+      message ?? 'person levels changed but not audited',
     );
     throw err;
   });
+}
+
+/**
+ * What undoing a profile writes (R2-1): the person as before it, except a level someone else
+ * changed after it was applied, which stays.
+ */
+export function undoneProfile(state: {
+  readonly before: StoredPerson;
+  readonly applied: StoredPerson;
+  readonly now: StoredPerson;
+}): StoredPerson {
+  const { before, applied, now } = state;
+  const roots = new Set(
+    [before, applied, now].flatMap((one) => Object.keys(one.levels ?? {})),
+  );
+  const levels: Record<string, string> = {};
+  for (const root of roots) {
+    const current = now.levels?.[root];
+    const kept =
+      current === applied.levels?.[root] ? before.levels?.[root] : current;
+    if (kept !== undefined) levels[root] = kept;
+  }
+  return { ...before, levels };
 }

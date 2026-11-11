@@ -6,6 +6,7 @@ import {
   OWNER_EMAIL,
   caller,
   closeApp,
+  connectHouse,
   signIn,
   start,
 } from '../test/ai-app-harness.js';
@@ -340,10 +341,9 @@ describe('Levels in invitations, profiles, approvals and in bulk (KBC-109)', () 
       levels: { hermetismo: 'ci' },
     });
     expect(onMaster.statusCode).toBe(400);
+    // Becoming master dropped the level she held (R2-2), and the refusal wrote none.
     const people = await peopleFile(world.started.state);
-    expect(people.find((one) => one.id === ana.id)?.levels).toEqual({
-      hermetismo: 'qs',
-    });
+    expect(people.find((one) => one.id === ana.id)?.levels).toBeUndefined();
   });
 
   it('R1-5: a master made member gets the lowest level of the collections with a scale, audited', async () => {
@@ -434,5 +434,198 @@ describe('Levels in invitations, profiles, approvals and in bulk (KBC-109)', () 
     expect(people.find((one) => one.id === id)?.levels).toEqual({
       hermetismo: 'qs',
     });
+    // Whichever goes first, she is recorded once: by the grant's own line, or counted in
+    // the first scale's seed (ADR 0036 §4) when the grant came before the scale.
+    const audit = await levelAudit(world.started.state);
+    const own = audit.filter(
+      (one) => one.kind === 'person.level' && one.target === id,
+    );
+    const seeded =
+      audit.find(
+        (one) => one.kind === 'bulk' && one.count?.people !== undefined,
+      )?.count?.people ?? 0;
+    expect(own.length + seeded).toBe(1);
+    if (own.length === 1)
+      expect(own[0]).toMatchObject({ before: null, after: 'qs' });
+  });
+
+  it('R2-2: member at CI, made master, made member again ends at the lowest, each change audited', async () => {
+    const world = await startLevels();
+    await createScale(world, ['QS', 'CI']);
+    const ana = await memberOf(world, 'ana@example.com');
+    await setPersonLevel(world, ana.id, { hermetismo: 'ci' });
+    const from = (await levelAudit(world.started.state)).length;
+    const promoted = await world.owner('PATCH', `/api/v1/people/${ana.id}`, {
+      role: 'master',
+    });
+    expect(promoted.json().levels).toEqual({});
+    const demoted = await world.owner('PATCH', `/api/v1/people/${ana.id}`, {
+      role: 'member',
+    });
+    expect(demoted.json().levels).toEqual({ hermetismo: 'qs' });
+    const lines = (await levelAudit(world.started.state))
+      .slice(from)
+      .filter((one) => one.kind === 'person.level' && one.target === ana.id)
+      .map(({ before, after, via }) => [before, after, via]);
+    expect(lines).toEqual([
+      ['ci', null, 'editor'],
+      [null, 'qs', 'editor'],
+    ]);
+  });
+
+  it('R2-2: a master profile applied to a member drops her levels, audited', async () => {
+    const world = await startLevels();
+    await createScale(world, ['QS', 'CI']);
+    const ana = await memberOf(world, 'ana@example.com');
+    await setPersonLevel(world, ana.id, { hermetismo: 'ci' });
+    const profileId = await createProfile(world, {
+      name: 'Master',
+      preset: { role: 'master' },
+    });
+    const applied = await world.owner(
+      'POST',
+      `/api/v1/people/${ana.id}/profile`,
+      { profileId },
+    );
+    expect(applied.json().levels).toEqual({});
+    expect((await levelAudit(world.started.state)).at(-1)).toMatchObject({
+      target: ana.id,
+      before: 'ci',
+      after: null,
+      via: 'profile',
+    });
+  });
+});
+
+describe('Undoing what the house AI cannot follow (KBC-109 R2-1, QA-r2-2)', () => {
+  async function paidWorld() {
+    const world = await startLevels();
+    await createScale(world, ['QS', 'CI', 'CDC']);
+    await connectHouse(world.started, world.owner);
+    await world.owner('PUT', '/api/v1/house-ai', {
+      paidModel: 'fake/paid',
+      managementKey: 'sk-or-v1-mgmt-0001',
+    });
+    const profileId = await createProfile(world, {
+      name: 'Pago',
+      preset: {
+        topics: ['hermetismo'],
+        levels: { hermetismo: 'cdc' },
+        ai: {
+          appAi: 'house',
+          paidFallback: { enabled: true, monthlyCapUsd: 2 },
+        },
+      },
+    });
+    return { world, profileId };
+  }
+
+  it('R2-1: a bulk slipping in while the profile waits for the AI keeps its level, the chain unbroken', async () => {
+    const { world, profileId } = await paidWorld();
+    const ana = await memberOf(world, 'ana@example.com');
+    await setPersonLevel(world, ana.id, { hermetismo: 'ci' });
+    const from = (await levelAudit(world.started.state)).length;
+    world.started.fake.failManagement = true;
+    world.started.fake.beforeManagement = async () => {
+      const bulk = await world.owner('POST', BULK, {
+        ids: [ana.id],
+        topic: 'hermetismo',
+        level: 'qs',
+      });
+      expect(bulk.statusCode, bulk.body).toBe(200);
+    };
+
+    const applied = await world.owner(
+      'POST',
+      `/api/v1/people/${ana.id}/profile`,
+      { profileId },
+    );
+
+    expect(applied.statusCode).toBe(503);
+    const people = await peopleFile(world.started.state);
+    expect(people.find((one) => one.id === ana.id)?.levels).toEqual({
+      hermetismo: 'qs',
+    });
+    const lines = (await levelAudit(world.started.state))
+      .slice(from)
+      .filter((one) => one.kind === 'person.level' && one.target === ana.id);
+    expect(lines.map(({ before, after, via }) => [before, after, via])).toEqual(
+      [
+        ['ci', 'cdc', 'profile'],
+        ['cdc', 'qs', 'bulk'],
+      ],
+    );
+  });
+
+  it('R2-1: without anyone in between, the undo brings the level back and audits it', async () => {
+    const { world, profileId } = await paidWorld();
+    const ana = await memberOf(world, 'ana@example.com');
+    await setPersonLevel(world, ana.id, { hermetismo: 'ci' });
+    const from = (await levelAudit(world.started.state)).length;
+    world.started.fake.failManagement = true;
+    const applied = await world.owner(
+      'POST',
+      `/api/v1/people/${ana.id}/profile`,
+      { profileId },
+    );
+    expect(applied.statusCode).toBe(503);
+    const lines = (await levelAudit(world.started.state))
+      .slice(from)
+      .filter((one) => one.target === ana.id)
+      .map(({ before, after }) => [before, after]);
+    expect(lines).toEqual([
+      ['ci', 'cdc'],
+      ['cdc', 'ci'],
+    ]);
+  });
+
+  it('R2-1: an undo whose audit fails is logged as done but not audited, not as not undone', async () => {
+    const { world, profileId } = await paidWorld();
+    const ana = await memberOf(world, 'ana@example.com');
+    await setPersonLevel(world, ana.id, { hermetismo: 'ci' });
+    const dir = join(world.started.state, 'audit');
+    const [file] = (await readdir(dir)).filter((one) =>
+      one.startsWith('levels-'),
+    );
+    const path = join(dir, file ?? '');
+    world.started.fake.failManagement = true;
+    world.started.fake.beforeManagement = () => chmod(path, 0o400);
+    try {
+      const applied = await world.owner(
+        'POST',
+        `/api/v1/people/${ana.id}/profile`,
+        { profileId },
+      );
+      expect(applied.statusCode).toBe(503);
+    } finally {
+      await chmod(path, 0o600);
+    }
+    const logs = world.started.logs.join('\n');
+    expect(logs).toContain('profile undone but its levels not audited');
+    expect(logs).not.toContain('could not undo a profile');
+    const people = await peopleFile(world.started.state);
+    expect(people.find((one) => one.id === ana.id)?.levels).toEqual({
+      hermetismo: 'ci',
+    });
+  });
+
+  it('QA-r2-2: an invitation undone because the AI failed audits its level going back', async () => {
+    const { world, profileId } = await paidWorld();
+    world.started.fake.failManagement = true;
+    const invited = await world.owner('POST', '/api/v1/people', {
+      email: 'nova@example.com',
+      sendEmail: false,
+      profileId,
+    });
+    expect(invited.statusCode).toBe(503);
+    const lines = (await levelAudit(world.started.state))
+      .filter((one) => one.kind === 'person.level' && one.via === 'invite')
+      .map(({ before, after }) => [before, after]);
+    expect(lines).toEqual([
+      [null, 'cdc'],
+      ['cdc', null],
+    ]);
+    const people = await peopleFile(world.started.state);
+    expect(people.some((one) => one.email === 'nova@example.com')).toBe(false);
   });
 });

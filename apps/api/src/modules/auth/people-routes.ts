@@ -33,6 +33,7 @@ import {
   assertPresetLevels,
   recordLevels,
   serialLevels,
+  undoneProfile,
   withGrantedLevels,
   withLevels,
   type PersonLevelRules,
@@ -188,10 +189,31 @@ async function followInvitedAi(
   log: FastifyBaseLogger,
 ): Promise<void> {
   await deps.ai?.sync(invited, aiOf(invited)).catch(async (err: unknown) => {
-    await deps.people
-      .revoke(invited.id)
-      .catch(() => log.error('could not undo a failed invitation'));
+    await undoInvitation(deps, { invited, log });
     throw err;
+  });
+}
+
+/** The invitation is revoked and, when it gave levels, their removal audited (QA-r2-2). */
+async function undoInvitation(
+  deps: PeopleRouteDeps,
+  undo: { readonly invited: StoredPerson; readonly log: FastifyBaseLogger },
+): Promise<void> {
+  const { invited, log } = undo;
+  await serialLevels(deps.levels, async () => {
+    const revoked = await deps.people.revoke(invited.id).then(
+      () => true,
+      () => false,
+    );
+    if (!revoked) return log.error('could not undo a failed invitation');
+    await recordLevels(deps.levels, {
+      before: invited,
+      after: { ...invited, levels: {} },
+      by: invited.invitedBy,
+      via: 'invite',
+      log,
+      message: 'invitation undone but its levels not audited',
+    }).catch(() => undefined);
   });
 }
 
@@ -248,7 +270,8 @@ async function patchPerson(
     assertMayChangeLent(deps, request, { before, ai: body.ai });
     const patch = withGrantedLevels(deps.levels, before, body);
     const updated = await deps.people.update(id, patch, by);
-    if (patch.levels && before)
+    // A grant, a level, or a master's levels dropped (R2-2): each change is a line.
+    if (before)
       await recordLevels(deps.levels, {
         ...{ before, after: updated, by, via: 'editor' as const },
         log: request.log,
@@ -298,15 +321,17 @@ async function applyProfile(
   const { before, updated } = await serialLevels(deps.levels, async () => {
     const before = await deps.people.find(target.id);
     if (!before) throw new AppError('NOT_FOUND', 'Not found');
-    // Only the collections the profile reaches change level (KBC-109 BR-2).
-    const preset = withLevels(deps.levels, profile, before.levels);
+    // Only the collections the profile reaches change level (KBC-109 BR-2); a master held
+    // none to keep (R2-2).
+    const held = before.role === 'master' ? {} : before.levels;
+    const preset = withLevels(deps.levels, profile, held);
     assertMayChangeLent(deps, request, { before, ai: preset.ai });
     const updated = await deps.people.applyPreset(before.id, preset, {
       by,
       withPreferences: !(await presets.hasSavedSettings(before)),
     });
     const record = { before, after: updated, by, via: 'profile' as const };
-    if (preset.levels) await recordLevels(deps.levels, { ...record, log });
+    await recordLevels(deps.levels, { ...record, log });
     return { before, updated };
   });
   await followProfileAi(deps, { before, updated, by, log });
@@ -315,19 +340,34 @@ async function applyProfile(
 
 /** The whole profile goes back when the house cannot follow its AI, its levels audited. */
 async function followProfileAi(deps: PeopleRouteDeps, change: AiSyncChange) {
-  const { before, updated, by, log } = change;
   await syncAi(deps, change).catch(async (err: unknown) => {
-    await serialLevels(deps.levels, async () => {
-      const restored = await deps.people.restore(before);
-      const record = {
-        before: updated,
-        after: restored,
-        by,
-        via: 'profile' as const,
-      };
-      await recordLevels(deps.levels, { ...record, log });
-    }).catch(() => log.error('could not undo a profile'));
+    await undoProfile(deps, change);
     throw err;
+  });
+}
+
+/**
+ * Undoes the profile in its own turn of the levels queue (R2-1): the person is read again, a
+ * level written meanwhile (a bulk) stays, and the line starts from what is there now. A
+ * failed undo and an undo whose audit failed are told apart.
+ */
+async function undoProfile(deps: PeopleRouteDeps, change: AiSyncChange) {
+  const { before, updated, by, log } = change;
+  await serialLevels(deps.levels, async () => {
+    const now = await deps.people.find(before.id);
+    if (!now) return;
+    const restored = await deps.people
+      .restore(undoneProfile({ before, applied: updated, now }))
+      .catch((err: unknown) => {
+        log.error({ err, person: before.id }, 'could not undo a profile');
+        return null;
+      });
+    if (!restored) return;
+    await recordLevels(deps.levels, {
+      ...{ before: now, after: restored, by, via: 'profile' as const },
+      log,
+      message: 'profile undone but its levels not audited',
+    }).catch(() => undefined);
   });
 }
 
