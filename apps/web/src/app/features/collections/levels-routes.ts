@@ -4,7 +4,10 @@ import { Router, type CanMatchFn, type Routes } from '@angular/router';
 import { SessionStore } from '@core/auth/session-store.js';
 import { filter, map, take } from 'rxjs';
 
-/** T24 is the masters' (KBC-103 BR-9); for anyone else the address is not there. */
+/**
+ * T24 is the masters' (KBC-103 BR-9); a holder of "Classificar nível de conteúdo" reaches its
+ * "Sem nível" section (KBC-107). For anyone else the address is not there.
+ */
 export const levelsManager: CanMatchFn = () => {
   const session = inject(SessionStore);
   const router = inject(Router);
@@ -12,7 +15,10 @@ export const levelsManager: CanMatchFn = () => {
     filter((state) => state.kind !== 'loading'),
     take(1),
     map(() =>
-      session.me()?.levelsManager === true ? true : router.parseUrl('/'),
+      session.me()?.levelsManager === true ||
+      session.me()?.features.includes('content-levels') === true
+        ? true
+        : router.parseUrl('/'),
     ),
   );
 };

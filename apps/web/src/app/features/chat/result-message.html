@@ -43,6 +43,10 @@
         />
       }
       @if (references().length > 0) {
+        <app-search-level-change
+          [topic]="message().topic"
+          [results]="current.items"
+        />
         <ol class="cards">
           @for (
             reference of references();

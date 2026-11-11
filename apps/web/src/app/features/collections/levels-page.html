@@ -5,7 +5,9 @@
     <span class="collection">{{ title() }}</span>
   </h2>
 
-  @if (loaded.error() && !scale()) {
+  @if (!manager()) {
+    <app-unassigned-section [topic]="slug()" />
+  } @else if (loaded.error() && !scale()) {
     <div class="notice" role="alert">
       <p i18n="@@levels.loadFailed">
         Não consegui carregar os níveis deste acervo.
@@ -259,16 +261,8 @@
       }
     </form>
 
-    @if ((scale()?.unassigned ?? 0) > 0) {
-      <section class="unassigned" aria-labelledby="unassigned-title">
-        <h3 id="unassigned-title" i18n="@@levels.unassignedTitle">
-          Sem nível ({{ scale()?.unassigned }})
-        </h3>
-        <p i18n="@@levels.unassignedHelp">
-          Documentos novos do kb chegam sem nível e ficam visíveis só para
-          masters até alguém escolher.
-        </p>
-      </section>
+    @if (levels().length > 0) {
+      <app-unassigned-section [topic]="slug()" (changed)="loaded.reload()" />
     }
   }
 

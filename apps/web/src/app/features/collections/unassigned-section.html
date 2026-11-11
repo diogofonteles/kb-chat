@@ -1,0 +1,224 @@
+<section class="unassigned" aria-labelledby="unassigned-title">
+  <h3 id="unassigned-title" i18n="@@levels.unassignedTitle">
+    Sem nível ({{ total() }})
+  </h3>
+
+  @if (first.error() && !first.hasValue()) {
+    <div class="notice" role="alert">
+      <p i18n="@@unassigned.loadFailed">
+        Não consegui carregar os documentos sem nível.
+      </p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="first.reload()"
+        i18n="@@unassigned.retry"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  } @else if (first.isLoading() && items().length === 0 && total() === 0) {
+    <div aria-busy="true" class="skeletons">
+      <span class="visually-hidden" i18n="@@unassigned.loading"
+        >Carregando…</span
+      >
+      @for (row of [1, 2, 3]; track row) {
+        <div class="skeleton"></div>
+      }
+    </div>
+  } @else if (total() === 0) {
+    <p class="empty" i18n="@@unassigned.none">Todos os documentos têm nível.</p>
+  } @else {
+    <p class="help" i18n="@@levels.unassignedHelp">
+      Documentos novos do kb chegam sem nível e ficam visíveis só para masters
+      até alguém escolher.
+    </p>
+
+    @if (facets(); as facets) {
+      <fieldset class="filters">
+        <legend i18n="@@unassigned.filters">Filtros</legend>
+        @if (facets.collections.length > 1) {
+          <label class="field">
+            <span i18n="@@unassigned.collection">Sub-acervo</span>
+            <select
+              #collectionSelect
+              (change)="setFilter({ collection: collectionSelect.value })"
+            >
+              <option
+                value=""
+                [selected]="form().collection === ''"
+                i18n="@@unassigned.any"
+              >
+                Todos
+              </option>
+              @for (one of facets.collections; track one.value) {
+                <option
+                  [value]="one.value"
+                  [selected]="form().collection === one.value"
+                >
+                  {{ collectionLabel(one.value) }} ({{ one.count }})
+                </option>
+              }
+            </select>
+          </label>
+        }
+        <label class="field">
+          <span i18n="@@unassigned.origin">Origem</span>
+          <select #originSelect (change)="setOrigin(originSelect.value)">
+            <option
+              value=""
+              [selected]="form().origin === ''"
+              i18n="@@unassigned.anyFeminine"
+            >
+              Todas
+            </option>
+            @for (one of facets.origins; track one.value) {
+              <option
+                [value]="one.value"
+                [selected]="form().origin === one.value"
+              >
+                {{ originLabel(one.value) }} ({{ one.count }})
+              </option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span i18n="@@unassigned.authorship">Autoria</span>
+          <select
+            #authorshipSelect
+            (change)="setAuthorship(authorshipSelect.value)"
+          >
+            <option
+              value=""
+              [selected]="form().authorship === ''"
+              i18n="@@unassigned.anyFeminine"
+            >
+              Todas
+            </option>
+            @for (one of facets.authorships; track one.value) {
+              <option
+                [value]="one.value"
+                [selected]="form().authorship === one.value"
+              >
+                {{ authorshipLabel(one.value) }} ({{ one.count }})
+              </option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span i18n="@@unassigned.folder">Pasta do vault</span>
+          <select
+            #folderSelect
+            (change)="
+              setFolder(folderSelect.value, folderSelect.selectedIndex === 0)
+            "
+          >
+            <option
+              [selected]="form().folder === null"
+              i18n="@@unassigned.anyFeminine"
+            >
+              Todas
+            </option>
+            @for (one of facets.folders; track one.value) {
+              <option
+                [value]="one.value"
+                [selected]="form().folder === one.value"
+              >
+                {{ folderLabel(one.value) }} ({{ one.count }})
+              </option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span i18n="@@unassigned.since">Chegou desde</span>
+          <input
+            #sinceInput
+            type="date"
+            [value]="form().since"
+            (change)="setFilter({ since: sinceInput.value })"
+          />
+        </label>
+      </fieldset>
+    }
+
+    @if (items().length === 0) {
+      <div class="notice">
+        <p i18n="@@unassigned.noneFiltered">
+          Nenhum documento sem nível com estes filtros.
+        </p>
+        <button
+          type="button"
+          class="secondary"
+          (click)="clearFilters()"
+          i18n="@@unassigned.clearFilters"
+        >
+          Limpar filtros
+        </button>
+      </div>
+    } @else {
+      <button
+        type="button"
+        class="secondary select-all"
+        [attr.aria-pressed]="allFiltered()"
+        (click)="toggleAll()"
+      >
+        @if (allFiltered()) {
+          <ng-container i18n="@@unassigned.unselectAll"
+            >Desmarcar todos</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@unassigned.selectAll"
+            >Selecionar os {{ matched() }} filtrados</ng-container
+          >
+        }
+      </button>
+      <ul class="rows" [attr.aria-busy]="first.isLoading()">
+        @for (doc of items(); track doc.topic + '\n' + doc.id) {
+          <li class="row">
+            <label class="pick">
+              <input
+                #box
+                type="checkbox"
+                [checked]="selected(doc)"
+                (change)="toggle(doc, box.checked)"
+              />
+              <span class="title">{{ doc.title }}</span>
+            </label>
+            <p class="meta">
+              {{ collectionLabel(doc.topic) }} · {{ originLabel(doc.origin) }} ·
+              {{ authorshipLabel(doc.authorship) }} ·
+              <ng-container i18n="@@unassigned.arrived"
+                >chegou em
+                {{ doc.firstSeenAt | date: 'dd/MM' : 'UTC' }}</ng-container
+              >
+            </p>
+          </li>
+        }
+      </ul>
+      @if (moreFailed()) {
+        <p class="error" role="alert" i18n="@@unassigned.moreFailed">
+          Não consegui carregar mais documentos.
+        </p>
+      }
+      @if (hasMore()) {
+        <button
+          type="button"
+          class="secondary"
+          [disabled]="loadingMore()"
+          (click)="loadMore()"
+          i18n="@@unassigned.more"
+        >
+          {loadingMore(), select, true {Carregando…} other {Carregar mais}}
+        </button>
+      }
+      <app-bulk-level-bar
+        [count]="selectedCount()"
+        [choices]="choices()"
+        [busy]="busy()"
+        [error]="failure()"
+        (applied)="give($event)"
+      />
+    }
+  }
+  <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
+</section>
