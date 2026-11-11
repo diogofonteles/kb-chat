@@ -244,8 +244,12 @@ export class SearchLevelChange {
           }
           this.chosen.set(new Set());
           this.injector.get(UnassignedCountsStore).refresh();
+          const { updated } = result;
+          const code = result.level.code;
           this.announcement.set(
-            $localize`:@@searchLevel.done:${result.updated}:count: documentos foram para ${result.level.code}:code:.`,
+            updated === 1
+              ? $localize`:@@searchLevel.doneOne:1 documento foi para ${code}:code:.`
+              : $localize`:@@searchLevel.done:${updated}:count: documentos foram para ${code}:code:.`,
           );
         },
         error: (err: unknown) =>
