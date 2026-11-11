@@ -17,7 +17,7 @@ function countOf(db: DatabaseSync, sql: string): number {
 function ledgerMismatches(db: DatabaseSync): string[] {
   const rows = db
     .prepare(
-      'SELECT root_id, target_fingerprint FROM main.media_imports ORDER BY root_id',
+      'SELECT root_id, target_digest FROM main.media_imports ORDER BY root_id',
     )
     .all();
   return rows
@@ -30,7 +30,7 @@ function ledgerMismatches(db: DatabaseSync): string[] {
         .map((one) => String(one['id']));
       return (
         unitFingerprint(db, { schema: 'main', ids }) !==
-        row['target_fingerprint']
+        row['target_digest']
       );
     })
     .map((row) => String(row['root_id']));

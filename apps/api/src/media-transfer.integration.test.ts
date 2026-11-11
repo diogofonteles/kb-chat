@@ -930,4 +930,45 @@ describe('moving the media library from the Mac to production (KBC-116)', () => 
       'audio/r1.m4a',
     ]);
   });
+
+  it('PD-08: a unit that fails half way leaves none of its rows and stops the run', async () => {
+    const world = newWorld();
+    seedRecording(world, { id: 'r1' });
+    seedRecording(world, { id: 'r2', track: false });
+    onProd(world, (db) => {
+      db.prepare(
+        `INSERT INTO media (id, topic, title, authorship, owner_principal, file_name, upload_bytes, status, created_at, updated_at)
+         VALUES ('p1', 'udv', 'Da produção', 'outros-autores', 'owner', 'a', 1, 'ready', ?, ?)`,
+      ).run(AT, AT);
+      db.prepare(
+        `INSERT INTO transcripts (id, media_id, version, provider, model, parameters, parameters_version, terms_version,
+           vad, speech_ratio, elapsed_ms, raw_path, filter_version, confidence_version, confidence, word_count,
+           removed_words, low_words, created_at)
+         VALUES ('t-r2', 'p1', 1, 'mac', 'm', '{}', '1', 1, 'applied', 1, 1, '', 1, 1, 'normal', 0, 0, 0, ?)`,
+      ).run(AT);
+    });
+
+    await expect(moveOnce(world)).rejects.toThrow(/constraint/i);
+
+    onProd(world, (db) => {
+      expect(count(db, `SELECT count(*) AS n FROM media WHERE id = 'r2'`)).toBe(
+        0,
+      );
+      expect(
+        count(
+          db,
+          `SELECT count(*) AS n FROM media_imports WHERE root_id = 'r2'`,
+        ),
+      ).toBe(0);
+      expect(
+        count(db, `SELECT count(*) AS n FROM media WHERE id LIKE 'r1%'`),
+      ).toBe(2);
+      expect(
+        count(
+          db,
+          `SELECT count(*) AS n FROM media_imports WHERE root_id = 'r1'`,
+        ),
+      ).toBe(1);
+    });
+  });
 });

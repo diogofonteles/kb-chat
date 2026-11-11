@@ -109,13 +109,13 @@ interface Ledger {
 function ledgerOf(run: ImportRun, rootId: string): Ledger | null {
   const row = run.db
     .prepare(
-      'SELECT source_fingerprint, target_fingerprint FROM main.media_imports WHERE root_id = ?',
+      'SELECT source_digest, target_digest FROM main.media_imports WHERE root_id = ?',
     )
     .get(rootId);
   return row
     ? {
-        source: String(row['source_fingerprint']),
-        target: String(row['target_fingerprint']),
+        source: String(row['source_digest']),
+        target: String(row['target_digest']),
       }
     : null;
 }

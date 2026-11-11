@@ -84,10 +84,10 @@ function recordLedger(
   });
   run.db
     .prepare(
-      `INSERT INTO main.media_imports (root_id, source_fingerprint, target_fingerprint, package_id, imported_at)
+      `INSERT INTO main.media_imports (root_id, source_digest, target_digest, package_id, imported_at)
        VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT (root_id) DO UPDATE SET source_fingerprint = excluded.source_fingerprint,
-         target_fingerprint = excluded.target_fingerprint, package_id = excluded.package_id,
+       ON CONFLICT (root_id) DO UPDATE SET source_digest = excluded.source_digest,
+         target_digest = excluded.target_digest, package_id = excluded.package_id,
          imported_at = excluded.imported_at`,
     )
     .run(
