@@ -98,6 +98,20 @@
       [(name)]="authorName"
     />
 
+    @if (levels.shown()) {
+      <app-level-field
+        [choices]="levels.levels()"
+        [label]="levelLabel"
+        [loading]="levels.loading()"
+        [failed]="levels.failed()"
+        [retrying]="levels.retrying()"
+        [invalid]="levelInvalid()"
+        [disabled]="stage() === 'sending'"
+        [(level)]="level"
+        (retried)="levels.reload()"
+      />
+    }
+
     @if (uploads.anyResuming()) {
       <p class="kept">{{ keptNotice() }}</p>
     }
@@ -125,8 +139,18 @@
         >
           Cancelar
         </button>
-        <button type="submit" class="primary" [disabled]="uploads.checking()">
-          @if (uploads.checking()) {
+        <button
+          type="submit"
+          class="primary"
+          [disabled]="uploads.checking()"
+          [attr.aria-disabled]="waitingForLevels() ? 'true' : null"
+          [attr.aria-busy]="waitingForLevels() ? 'true' : null"
+        >
+          @if (waitingForLevels()) {
+            <ng-container i18n="@@media.level.waiting"
+              >Carregando níveis…</ng-container
+            >
+          } @else if (uploads.checking()) {
             <ng-container i18n="@@media.upload.checking"
               >Conferindo arquivos…</ng-container
             >

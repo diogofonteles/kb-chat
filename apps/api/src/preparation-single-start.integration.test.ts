@@ -20,6 +20,7 @@ const OWNER: PlanActor = {
   isMaster: true,
   canUpload: true,
   canSee: () => true,
+  levelsIn: () => null,
   canEdit: true,
   canPropose: true,
 };

@@ -1,4 +1,9 @@
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import {
+  HttpErrorResponse,
+  provideHttpClient,
+  withInterceptors,
+  type HttpInterceptorFn,
+} from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -14,8 +19,13 @@ import type {
   UploadCheck,
 } from '@kb-chat/contracts';
 import { TUS_UPLOAD } from '@core/media/tus-upload.js';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { aTopic } from '../../testing/fixtures.js';
+import {
+  QS_CI,
+  answeringLevels,
+  holdingLevels,
+} from '../../testing/level-fixtures.js';
 import { FakeTus } from '../../testing/fake-tus.js';
 import { aMediaItem, sessionAs } from '../../testing/media-fixtures.js';
 import {
@@ -45,6 +55,9 @@ async function renderPanel(
     readonly offer?: PreparationOptions;
     readonly topic?: string;
     readonly topics?: Topic[];
+    readonly scales?: Parameters<typeof answeringLevels>[0];
+    /** Interceptors before the answering ones (a held answer). */
+    readonly before?: HttpInterceptorFn[];
   } = {},
 ) {
   const uploaded = vi.fn();
@@ -55,7 +68,11 @@ async function renderPanel(
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(
-        withInterceptors([answeringOptions(options.offer, asked)]),
+        withInterceptors([
+          ...(options.before ?? []),
+          answeringOptions(options.offer, asked),
+          answeringLevels(options.scales),
+        ]),
       ),
       provideHttpClientTesting(),
       provideRouter([
@@ -1523,5 +1540,354 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
         '"tracks":"none"',
       );
     });
+  });
+
+  describe('Nível (KBC-105, T14)', () => {
+    it('AC-3: has no "Nível" in a collection without levels, and sends none', async () => {
+      const panel = await renderPanel();
+      await chooseChecked(panel);
+      expect(screen.queryByRole('group', { name: 'Nível' })).toBeNull();
+      clickSend();
+      const create = panel.http.expectOne(TOPIC);
+      expect(create.request.body).not.toHaveProperty('level');
+    });
+
+    it('AC-1, AC-2: asks for one of the levels offered, none chosen, and sends it', async () => {
+      const panel = await renderPanel({ scales: { hermetismo: QS_CI } });
+      await chooseChecked(panel);
+      const group = screen.getByRole('group', { name: 'Nível' });
+      const radios = within(group).getAllByRole<HTMLInputElement>('radio');
+      expect(radios.map((one) => one.value)).toEqual(['qs', 'ci']);
+      expect(radios.some((one) => one.checked)).toBe(false);
+
+      clickSend();
+      await panel.fixture.whenStable();
+      expect(within(group).getByRole('alert').textContent).toContain(
+        'Escolha o nível deste áudio.',
+      );
+      panel.http.expectNone({ method: 'POST', url: TOPIC });
+
+      fireEvent.click(within(group).getByRole('radio', { name: 'CI' }));
+      await panel.fixture.whenStable();
+      clickSend();
+      const create = panel.http.expectOne(TOPIC);
+      expect(create.request.body).toMatchObject({ level: 'ci' });
+    });
+
+    it('empties the choice when the collection has another scale', async () => {
+      const panel = await renderPanel({
+        scales: { hermetismo: QS_CI, alquimia: [{ id: 'a1', code: 'A1' }] },
+      });
+      fireEvent.click(screen.getByRole('radio', { name: 'CI' }));
+      await panel.fixture.whenStable();
+      fireEvent.change(screen.getByLabelText('Acervo'), {
+        target: { value: 'alquimia' },
+      });
+      await panel.fixture.whenStable();
+      const radio = screen.getByRole<HTMLInputElement>('radio', { name: 'A1' });
+      expect(radio.checked).toBe(false);
+    });
+
+    it('AC-7: a file kept at a level the person does not see is named nowhere', async () => {
+      const panel = await renderPanel({ scales: { hermetismo: QS_CI } });
+      await chooseChecked(panel, audio(), { verdict: 'duplicate-hidden' });
+      expect(
+        screen.getByText(
+          'Este arquivo já está no acervo, num nível que você não vê. Fale com um master.',
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByRole('link')).toBeNull();
+      expect(screen.queryByRole('textbox', { name: 'Título' })).toBeNull();
+    });
+
+    it('AC-7: the same refusal on creating the item says the same, with no link', async () => {
+      const panel = await renderPanel({ scales: { hermetismo: QS_CI } });
+      await chooseChecked(panel);
+      fireEvent.click(screen.getByRole('radio', { name: 'QS' }));
+      await panel.fixture.whenStable();
+      clickSend();
+      panel.http.expectOne(TOPIC).flush(
+        {
+          error: {
+            code: 'MEDIA_DUPLICATE',
+            message: 'This file is already here',
+            details: { hidden: true },
+          },
+        },
+        { status: 409, statusText: 'Conflict' },
+      );
+      await panel.fixture.whenStable();
+      expect(
+        screen.getByText(/num nível que você não vê\. Fale com um master\./),
+      ).toBeTruthy();
+      expect(screen.queryByRole('link')).toBeNull();
+    });
+  });
+
+  describe('a click while the levels load (review round 1)', () => {
+    const ALQUIMIA = '/api/v1/topics/alquimia/media';
+
+    /** The file chosen for "Alquimia", whose levels are still on their way. */
+    async function sendWhileLoading() {
+      const held = holdingLevels('alquimia');
+      const panel = await renderPanel({ before: [held.interceptor] });
+      fireEvent.change(screen.getByLabelText('Acervo'), {
+        target: { value: 'alquimia' },
+      });
+      choose(panel.container, audio());
+      await vi.waitFor(() =>
+        panel.http.expectOne(`${ALQUIMIA}/check`).flush({ verdict: 'new' }),
+      );
+      const send = await vi.waitFor(() =>
+        screen.getByRole('button', { name: 'Enviar' }),
+      );
+      fireEvent.click(send);
+      return { ...panel, held };
+    }
+
+    it('waits for the levels, says so on the button, then sends by itself', async () => {
+      const { http, held } = await sendWhileLoading();
+
+      const button = await vi.waitFor(() =>
+        screen.getByRole('button', { name: 'Carregando níveis…' }),
+      );
+      expect(button.getAttribute('aria-busy')).toBe('true');
+      http.expectNone({ method: 'POST', url: ALQUIMIA });
+
+      held.release([]);
+      await vi.waitFor(() => {
+        const create = http.expectOne({ method: 'POST', url: ALQUIMIA });
+        expect(create.request.body).not.toHaveProperty('level');
+      });
+    });
+
+    it('asks for the level when the levels come with a scale, sending nothing', async () => {
+      const { http, held } = await sendWhileLoading();
+
+      held.release(QS_CI);
+      await vi.waitFor(() =>
+        expect(screen.getByRole('alert').textContent).toContain(
+          'Escolha o nível deste áudio.',
+        ),
+      );
+      http.expectNone({ method: 'POST', url: ALQUIMIA });
+      expect(screen.getByRole('button', { name: 'Enviar' })).toBeTruthy();
+    });
+  });
+
+  it('keeps the level chosen between sub-collections of one scale (T14)', async () => {
+    const panel = await renderPanel({
+      scales: { hermetismo: QS_CI },
+      topics: [
+        ...TOPICS,
+        aTopic({
+          slug: 'hermetismo/aulas',
+          title: 'Aulas',
+          parent: 'hermetismo',
+        }),
+      ],
+    });
+    fireEvent.click(screen.getByRole('radio', { name: 'CI' }));
+    await panel.fixture.whenStable();
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'hermetismo/aulas' },
+    });
+    await panel.fixture.whenStable();
+
+    expect(
+      screen.getByRole<HTMLInputElement>('radio', { name: 'CI' }).checked,
+    ).toBe(true);
+  });
+
+  /** Levels that fail for `topic` the first `times` they are asked. */
+  const failingLevels = (topic: string, times = 1): HttpInterceptorFn => {
+    let calls = 0;
+    return (request, next) => {
+      if (
+        !request.url.endsWith(`/topics/${topic}/media/levels`) ||
+        calls++ >= times
+      )
+        return next(request);
+      return throwError(
+        () => new HttpErrorResponse({ status: 503, url: request.url }),
+      );
+    };
+  };
+
+  it('review round 2: with the levels failed nothing is sent, and the focus is on the one way out', async () => {
+    const panel = await renderPanel({
+      before: [failingLevels(encodeURIComponent('hermetismo'))],
+      scales: { hermetismo: QS_CI },
+    });
+    await chooseChecked(panel);
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    await panel.fixture.whenStable();
+
+    panel.http.expectNone({ method: 'POST', url: TOPIC });
+    const retry = screen.getByRole('button', {
+      name: 'Carregar níveis de novo',
+    });
+    expect(document.activeElement).toBe(retry);
+    // One message, saying what to do; no two buttons share a name.
+    expect(
+      screen.getAllByRole('alert').map((one) => one.textContent?.trim()),
+    ).toEqual([
+      '⚠ Não consegui carregar os níveis deste acervo. Carregue de novo para escolher o nível.',
+    ]);
+    const names = screen
+      .getAllByRole('button')
+      .map((one) => one.textContent?.trim());
+    expect(new Set(names).size).toBe(names.length);
+
+    fireEvent.click(retry);
+    await panel.fixture.whenStable();
+    expect(screen.getByRole('radio', { name: 'QS' })).toBeTruthy();
+    expect(screen.queryByText(/Não consegui carregar os níveis/)).toBeNull();
+  });
+
+  it('review round 2: a failure where the levels were known to be none does not hold the send', async () => {
+    const panel = await renderPanel({
+      before: [failingLevels(encodeURIComponent('hermetismo/aulas'))],
+      topics: [
+        ...TOPICS,
+        aTopic({
+          slug: 'hermetismo/aulas',
+          title: 'Aulas',
+          parent: 'hermetismo',
+        }),
+      ],
+    });
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'hermetismo/aulas' },
+    });
+    await panel.fixture.whenStable();
+    choose(panel.container, audio());
+    await answerCheck(
+      panel,
+      { verdict: 'new' },
+      `/api/v1/topics/${encodeURIComponent('hermetismo/aulas')}/media`,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    panel.http.expectOne(
+      `/api/v1/topics/${encodeURIComponent('hermetismo/aulas')}/media`,
+    );
+  });
+
+  it('review round 2: a send held for the levels leaves no stuck button when the form stops being valid', async () => {
+    const held = holdingLevels('alquimia');
+    const panel = await renderPanel({ before: [held.interceptor] });
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'alquimia' },
+    });
+    choose(panel.container, audio());
+    await vi.waitFor(() =>
+      panel.http
+        .expectOne('/api/v1/topics/alquimia/media/check')
+        .flush({ verdict: 'new' }),
+    );
+    fireEvent.click(
+      await vi.waitFor(() => screen.getByRole('button', { name: 'Enviar' })),
+    );
+    await vi.waitFor(() =>
+      screen.getByRole('button', { name: 'Carregando níveis…' }),
+    );
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Tirar Palestra_de_1998.mp3 da lista',
+      }),
+    );
+
+    held.release([]);
+    const send = await vi.waitFor(() =>
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Enviar' }),
+    );
+    expect(send.disabled).toBe(false);
+    expect(send.hasAttribute('aria-busy')).toBe(false);
+    panel.http.expectNone({
+      method: 'POST',
+      url: '/api/v1/topics/alquimia/media',
+    });
+  });
+
+  it('AC-3: shows no "Carregando níveis…" for a collection with no scale before it', async () => {
+    const held = holdingLevels('alquimia');
+    await renderPanel({ before: [held.interceptor] });
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'alquimia' },
+    });
+    await Promise.resolve();
+
+    expect(screen.queryByText('Carregando níveis…')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Nível' })).toBeNull();
+    held.release([]);
+  });
+
+  it('review round 3: a send held for the levels that then fail leaves the focus on "Carregar níveis de novo"', async () => {
+    const held = holdingLevels('alquimia');
+    const panel = await renderPanel({ before: [held.interceptor] });
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'alquimia' },
+    });
+    choose(panel.container, audio());
+    await vi.waitFor(() =>
+      panel.http
+        .expectOne('/api/v1/topics/alquimia/media/check')
+        .flush({ verdict: 'new' }),
+    );
+    const send = await vi.waitFor(() =>
+      screen.getByRole('button', { name: 'Enviar' }),
+    );
+    send.focus();
+    fireEvent.click(send);
+    const waiting = await vi.waitFor(() =>
+      screen.getByRole('button', { name: 'Carregando níveis…' }),
+    );
+    // aria-disabled, not disabled: the button keeps the focus while it waits.
+    expect(waiting.getAttribute('aria-disabled')).toBe('true');
+    expect((waiting as HTMLButtonElement).disabled).toBe(false);
+    expect(document.activeElement).toBe(waiting);
+    fireEvent.click(waiting);
+
+    held.fail();
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Carregar níveis de novo' }),
+      ),
+    );
+    panel.http.expectNone({
+      method: 'POST',
+      url: '/api/v1/topics/alquimia/media',
+    });
+  });
+
+  it('review round 3: a failure where the collection is known to have no levels shows no warning', async () => {
+    let calls = 0;
+    const failing: HttpInterceptorFn = (request, next) =>
+      request.url.endsWith(
+        `/topics/${encodeURIComponent('hermetismo/aulas')}/media/levels`,
+      ) && calls++ === 0
+        ? throwError(
+            () => new HttpErrorResponse({ status: 503, url: request.url }),
+          )
+        : next(request);
+    const panel = await renderPanel({
+      before: [failing],
+      topics: [
+        ...TOPICS,
+        aTopic({
+          slug: 'hermetismo/aulas',
+          title: 'Aulas',
+          parent: 'hermetismo',
+        }),
+      ],
+    });
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'hermetismo/aulas' },
+    });
+    await panel.fixture.whenStable();
+
+    expect(screen.queryByText(/Carregue de novo/)).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Nível' })).toBeNull();
   });
 });

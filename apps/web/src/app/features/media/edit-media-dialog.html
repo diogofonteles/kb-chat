@@ -68,6 +68,20 @@
       [(name)]="authorName"
     />
 
+    @if (levels.shown()) {
+      <app-level-field
+        [choices]="levels.levels()"
+        [label]="levelLabel()"
+        [loading]="levels.loading()"
+        [failed]="levels.failed()"
+        [retrying]="levels.retrying()"
+        [invalid]="levelInvalid()"
+        [disabled]="saving()"
+        [(level)]="level"
+        (retried)="levels.reload()"
+      />
+    }
+
     @if (failure()) {
       <p class="error" role="alert">
         <span aria-hidden="true">⚠</span> {{ failure() }}
@@ -84,8 +98,18 @@
       >
         Cancelar
       </button>
-      <button type="submit" class="primary" [disabled]="saving()">
-        @if (saving()) {
+      <button
+        type="submit"
+        class="primary"
+        [disabled]="saving()"
+        [attr.aria-disabled]="waitingForLevels() ? 'true' : null"
+        [attr.aria-busy]="waitingForLevels() ? 'true' : null"
+      >
+        @if (waitingForLevels()) {
+          <ng-container i18n="@@media.level.waiting"
+            >Carregando níveis…</ng-container
+          >
+        } @else if (saving()) {
           <ng-container i18n="@@media.edit.saving">Salvando…</ng-container>
         } @else {
           <ng-container i18n="@@media.edit.save">Salvar</ng-container>

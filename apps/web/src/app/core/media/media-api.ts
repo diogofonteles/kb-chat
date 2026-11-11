@@ -4,6 +4,7 @@ import { Injectable, inject } from '@angular/core';
 import {
   MEDIA_UPLOAD_PART_BYTES,
   mediaItemSchema,
+  mediaLevelChoicesSchema,
   mediaTranscriptWordsSchema,
   uploadCheckSchema,
   type CreateMediaRequest,
@@ -31,6 +32,12 @@ import { TUS_UPLOAD, toHttpError } from './tus-upload.js';
 /** API URLs of the media library (ADR 0022); slugs and ids are always encoded. */
 export const mediaListUrl = (topic: string): string =>
   `/api/v1/topics/${encodeURIComponent(topic)}/media`;
+/** What an upload to the collection may choose as its level (KBC-105). */
+export const mediaLevelsUrl = (topic: string): string =>
+  `${mediaListUrl(topic)}/levels`;
+/** The answer of `mediaLevelsUrl`, checked against the contract. */
+export const parseLevelChoices = (body: unknown) =>
+  mediaLevelChoicesSchema.parse(body);
 export const mediaUrl = (id: string): string =>
   `/api/v1/media/${encodeURIComponent(id)}`;
 /** `fileVersion`: a track's cut; who is on it stays on it when a new one lands (KBC-073 BR-3). */

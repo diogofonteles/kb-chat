@@ -13,6 +13,7 @@ const ACTOR: MediaActor = {
   isMaster: false,
   canUpload: false,
   canSee: () => true,
+  levelsIn: () => null,
 };
 
 const summaryOf = (id: string, version: number): TranscriptSummary => ({

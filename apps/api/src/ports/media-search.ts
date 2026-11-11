@@ -25,6 +25,11 @@ export interface MediaSearchQuery {
   readonly count?: boolean;
   /** Media left out: tracks whose document already answers as a card (KBC-101 BR-8). */
   readonly exceptIds?: readonly string[];
+  /**
+   * The levels the person sees in these collections, which share one scale (KBC-105); null or
+   * absent: every audio. Restricted, only recordings answer: tracks wait for KBC-106.
+   */
+  readonly levels?: readonly string[] | null;
 }
 
 /** Matching segments per "Autoria" group, each up to MEDIA_COUNT_CAP. */
@@ -121,9 +126,14 @@ export interface MediaSearchPort {
     readonly tracks?: boolean;
     /** As in `search`. */
     readonly exceptIds?: readonly string[];
+    /** As in `search`. */
+    readonly levels?: readonly string[] | null;
   }): AuthorshipTally;
-  /** Whether any of these collections has a searchable (transcribed) media. */
-  hasTranscripts(topics: readonly string[]): boolean;
+  /** Whether any of these collections has a searchable (transcribed) media at these levels. */
+  hasTranscripts(
+    topics: readonly string[],
+    levels?: readonly string[] | null,
+  ): boolean;
 }
 
 /** What tracks and their subjects need from the same index (KBC-070). */

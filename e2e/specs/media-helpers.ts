@@ -179,6 +179,8 @@ export async function uploadReady(
      * hours here took 14 s of the test for the same bytes the server converts.
      */
     looped?: boolean;
+    /** Its access level, in a collection with levels (KBC-105). */
+    level?: string;
   },
 ): Promise<UploadedMedia> {
   const name = input.title.replace(/\W+/g, '-');
@@ -202,6 +204,7 @@ export async function uploadReady(
         author: null,
         fileName: 'aula.mp3',
         bytes: body.length,
+        ...(input.level && { level: input.level }),
       },
       headers: CSRF,
     },

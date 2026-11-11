@@ -16,6 +16,7 @@ import {
   mediaId,
   sessionAs,
 } from '../../testing/media-fixtures.js';
+import { answeringLevels } from '../../testing/level-fixtures.js';
 import { answeringOptions } from '../../testing/preparation-fixtures.js';
 import { MediaListPage } from './media-list-page.js';
 import { ChatStore } from '@features/chat/chat-store.js';
@@ -42,7 +43,9 @@ async function renderList(
   const view = await render(MediaListPage, {
     providers: [
       provideZonelessChangeDetection(),
-      provideHttpClient(withInterceptors([answeringOptions()])),
+      provideHttpClient(
+        withInterceptors([answeringOptions(), answeringLevels()]),
+      ),
       provideHttpClientTesting(),
       provideRouter([
         { path: 'midia', children: [] },
@@ -677,6 +680,8 @@ describe('MediaListPage: "Editar informações" (KBC-050)', () => {
       target: { value: 'alquimia' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    // KBC-105: the click waits for the new collection's levels, then goes by itself.
+    await fixture.whenStable();
     http.expectOne(itemUrl(item.id)).flush({ ...item, topic: 'alquimia' });
     await nextRequest();
     http.expectOne(LIST_URL).flush({ items: [] });

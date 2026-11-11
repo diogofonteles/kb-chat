@@ -31,6 +31,7 @@
 }
 <span class="meta">
   <app-authorship-badge [mediaAuthor]="item().author" />
+  <app-media-level-badge [level]="item().level" [shown]="master()" />
   @if (topicTitle()) {
     <span class="topic">{{ topicTitle() }}</span>
   }

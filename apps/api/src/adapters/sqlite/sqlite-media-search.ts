@@ -96,6 +96,21 @@ const exceptClause = (ids: readonly string[] | undefined): Clause =>
     ? { sql: `m.id NOT IN (${placeholders(ids.length)})`, values: ids }
     : { sql: '1', values: [] };
 
+/**
+ * The levels a person sees (KBC-105, ADR 0036 §7): the filter is in the query, so counts and
+ * the ranking only ever meet what the person may hear. Restricted, only recordings: a track's
+ * own level is KBC-106.
+ */
+const levelClause = (levels: readonly string[] | null | undefined): Clause =>
+  levels === null || levels === undefined
+    ? { sql: '1', values: [] }
+    : levels.length === 0
+      ? { sql: '0', values: [] }
+      : {
+          sql: `(m.level IN (${placeholders(levels.length)}) AND ${ONLY_RECORDINGS})`,
+          values: levels,
+        };
+
 /** A track someone may be told about: published, not archived (KBC-068 FR-1, BR-5). */
 const LIVE_TRACK_ROW = `m.parent_media_id IS NOT NULL AND m.status = 'ready'
   AND m.archived_at IS NULL AND m.kind = 'audio'`;
@@ -210,15 +225,18 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     tracks,
     count = true,
     exceptIds,
+    levels,
   }: MediaSearchQuery): MediaSearchResult {
     if (terms.length === 0 || topics.length === 0)
       return { matches: [], total: 0 };
     const scope = scopeClause(topics, authors);
     const except = exceptClause(exceptIds);
-    const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql} AND ${except.sql}`;
+    const level = levelClause(levels);
+    const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql} AND ${level.sql} AND ${except.sql}`;
     const values = [
       toMatchExpression(terms),
       ...scope.values,
+      ...level.values,
       ...except.values,
     ];
     const matches = this.top(where, values, limit);
@@ -235,16 +253,19 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     mainOf,
     tracks,
     exceptIds,
+    levels,
   }: Parameters<MediaSearchPort['tally']>[0]): AuthorshipTally {
     if (terms.length === 0 || topics.length === 0)
       return { main: 0, others: 0 };
     const except = exceptClause(exceptIds);
+    const level = levelClause(levels);
     const countFor = (kind: 'main' | 'others'): number => {
       const scope = scopeClause(topics, { kind, mainOf });
-      const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql} AND ${except.sql}`;
+      const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql} AND ${level.sql} AND ${except.sql}`;
       return this.countWhere(where, [
         toMatchExpression(terms),
         ...scope.values,
+        ...level.values,
         ...except.values,
       ]);
     };
@@ -510,15 +531,19 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
       }));
   }
 
-  hasTranscripts(topics: readonly string[]): boolean {
+  hasTranscripts(
+    topics: readonly string[],
+    levels?: readonly string[] | null,
+  ): boolean {
     if (topics.length === 0) return false;
+    const level = levelClause(levels);
     return (
       this.db
         .prepare(
           `SELECT 1 FROM transcripts t JOIN media m ON m.id = t.media_id
-           WHERE m.topic IN (${placeholders(topics.length)}) LIMIT 1`,
+           WHERE m.topic IN (${placeholders(topics.length)}) AND ${level.sql} LIMIT 1`,
         )
-        .get(...topics) !== undefined
+        .get(...topics, ...level.values) !== undefined
     );
   }
 }

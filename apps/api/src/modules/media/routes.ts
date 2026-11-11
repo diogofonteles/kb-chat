@@ -2,6 +2,7 @@ import {
   createMediaRequestSchema,
   mediaIdSchema,
   mediaItemSchema,
+  mediaLevelChoicesSchema,
   mediaListSchema,
   topicSlugSchema,
   trackPatchSchema,
@@ -23,9 +24,10 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { Readable } from 'node:stream';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
+import { levelViewsOf } from '../access-levels/index.js';
 import {
   assertFeature,
-  canSeeMedia,
+  canSee,
   hasFeature,
   isMaster,
   mediaQuotaOf,
@@ -33,7 +35,7 @@ import {
   type RouteAccess,
 } from '../auth/index.js';
 import { registerUploadRoutes } from './upload-routes.js';
-import type { MediaEditService } from './media-edit-service.js';
+import type { EditAuthor, MediaEditService } from './media-edit-service.js';
 import type {
   MediaActor,
   MediaService,
@@ -87,8 +89,27 @@ export function actorOf(request: FastifyRequest): MediaActor {
     seesSubjects: hasFeature(viewer.person, 'media-subjects'),
     searchesSpeech: hasFeature(viewer.person, 'search'),
     displayName: viewer.person.name,
-    // A collection with levels keeps its media for masters until KBC-105 (KBC-103 BR-10).
-    canSee: (topic) => canSeeMedia(request, topic),
+    canSee: (topic) => canSee(request, topic),
+    // KBC-105: in a collection with levels, the audios at the person's level and below.
+    levelsIn: levelsOf(request),
+  };
+}
+
+/** The level ids the person sees per collection, once per collection and request. */
+export function levelsOf(
+  request: FastifyRequest,
+): (topic: string) => readonly string[] | null {
+  const views = levelViewsOf(request);
+  return (topic) => views(topic).allowedLevelIds();
+}
+
+/** Who edits, for the levels audit: the master, and the person they act as (ADR 0027). */
+function editAuthorOf(request: FastifyRequest): EditAuthor {
+  const viewer = viewerOf(request);
+  const real = viewer.actor?.viewer ?? viewer;
+  return {
+    by: real.person.email,
+    ...(viewer.actor && { actingAs: viewer.person.email }),
   };
 }
 
@@ -132,6 +153,10 @@ const OPTIONS = {
   list: {
     config: { access: { ...LISTEN, topicParam: 'topic' } },
     schema: { params: topicParams, response: { 200: mediaListSchema } },
+  },
+  levels: {
+    config: { access: { ...UPLOAD, topicParam: 'topic' } },
+    schema: { params: topicParams, response: { 200: mediaLevelChoicesSchema } },
   },
   create: {
     config: { access: { ...UPLOAD, topicParam: 'topic' } },
@@ -210,6 +235,12 @@ export const mediaRoutes =
     typed.get('/api/v1/topics/:topic/media', OPTIONS.list, async (request) => ({
       items: service.list(actorOf(request), request.params.topic),
     }));
+    typed.get(
+      '/api/v1/topics/:topic/media/levels',
+      OPTIONS.levels,
+      async (request) =>
+        service.levelChoices(actorOf(request), request.params.topic),
+    );
     registerCreate(typed, { service, ...options });
     registerUploadRoutes(app, service, actorOf);
     registerItemRoutes(typed, service, options.tracks);
@@ -298,7 +329,11 @@ function registerEditRoute(
         { actor, mediaId: id, expectedVersion: versionOf(request) },
         trackEdit(request.body),
       );
-    } else editor.edit(actor, id, recordingEdit(request.body));
+    } else
+      await editor.edit(
+        { actor, mediaId: id, by: editAuthorOf(request) },
+        recordingEdit(request.body),
+      );
     return service.get(actor, id);
   });
 }

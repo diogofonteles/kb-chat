@@ -1,0 +1,88 @@
+<fieldset
+  class="field"
+  [attr.aria-describedby]="describedBy()"
+  [disabled]="disabled()"
+>
+  <legend class="label" [id]="legendId">{{ label() }}</legend>
+  <p class="help" [id]="helpId" i18n="@@media.level.help">
+    Quem tem este nível ou um acima poderá ouvir.
+  </p>
+  @if (failed() || retrying()) {
+    <div class="failed">
+      @if (failed()) {
+        <p class="error" role="alert">
+          <span aria-hidden="true">⚠</span>&ngsp;
+          <ng-container i18n="@@media.level.failedHint"
+            >Não consegui carregar os níveis deste acervo. Carregue de novo para
+            escolher o nível.</ng-container
+          >
+        </p>
+      }
+      <button
+        #retryButton
+        type="button"
+        class="secondary"
+        [attr.aria-busy]="retrying() ? 'true' : null"
+        (click)="retry()"
+      >
+        @if (retrying()) {
+          <ng-container i18n="@@media.level.loading"
+            >Carregando níveis…</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@media.level.reload"
+            >Carregar níveis de novo</ng-container
+          >
+        }
+      </button>
+    </div>
+  } @else if (loading()) {
+    <p class="status" i18n="@@media.level.loading">Carregando níveis…</p>
+  } @else if (asRadios()) {
+    <div
+      #choicesBox
+      class="radios"
+      role="radiogroup"
+      [attr.aria-labelledby]="legendId"
+      [attr.aria-invalid]="invalid() ? 'true' : null"
+    >
+      @for (choice of choices(); track choice.id) {
+        <label class="radio">
+          <input
+            type="radio"
+            [name]="name"
+            [value]="choice.id"
+            [checked]="level() === choice.id"
+            (change)="choose(choice.id)"
+          />
+          {{ choice.code }}
+        </label>
+      }
+    </div>
+  } @else {
+    <label class="visually-hidden" [for]="selectId">{{ label() }}</label>
+    <select
+      #choicesBox
+      [id]="selectId"
+      [attr.aria-invalid]="invalid() ? 'true' : null"
+      (change)="selected($event)"
+    >
+      <option value="" [selected]="level() === null" i18n="@@media.level.none">
+        Escolha um nível
+      </option>
+      @for (choice of choices(); track choice.id) {
+        <option [value]="choice.id" [selected]="level() === choice.id">
+          {{ choice.code }}
+        </option>
+      }
+    </select>
+  }
+  @if (invalid()) {
+    <p class="error" role="alert" [id]="errorId">
+      <span aria-hidden="true">⚠</span>&ngsp;
+      <ng-container i18n="@@media.level.missing"
+        >Escolha o nível deste áudio.</ng-container
+      >
+    </p>
+  }
+</fieldset>

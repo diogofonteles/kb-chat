@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { registerErrorHandler } from '../../error-handler.js';
-import { assertMediaOpen, type LevelHooks } from './access.js';
+import { assertTracksOpen, type LevelHooks } from './access.js';
 import type { StoredPerson } from './person.js';
 
 const ana: StoredPerson = {
@@ -34,7 +34,7 @@ async function appWith(hooks?: LevelHooks): Promise<FastifyInstance> {
     request.viewer = { person: ana, principal: 'ana', isOwner: false };
   });
   built.get('/media', async (request) => {
-    assertMediaOpen(request, 'hermetismo');
+    assertTracksOpen(request, 'hermetismo');
     return { ok: true };
   });
   await built.ready();
@@ -44,7 +44,7 @@ async function appWith(hooks?: LevelHooks): Promise<FastifyInstance> {
 
 const closed: LevelHooks = {
   codesOf: () => ({}),
-  closedUntilLevelsReachIt: () => true,
+  tracksClosedByLevels: () => true,
 };
 
 describe('Media and the levels (KBC-103 BR-10, review round 2; research opened by KBC-104)', () => {

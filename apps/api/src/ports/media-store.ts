@@ -77,6 +77,8 @@ export interface MediaRecord {
   readonly track: TrackLink | null;
   /** A track that left the edit (BR-5). */
   readonly archivedAt: string | null;
+  /** Its access level (KBC-105), an id of its top-level collection's scale; null: none. */
+  readonly level: string | null;
 }
 
 /** A media item with its kind, for the library (KBC-051). */
@@ -98,6 +100,8 @@ export interface NewMedia {
   readonly sourceSha256?: string | null;
   /** What it should take once converted, for the quota until then (KBC-035 FR-3). */
   readonly estimatedBytes?: number | null;
+  /** Its access level, in a collection with levels (KBC-105 BR-1); none without a scale. */
+  readonly level?: string | null;
   readonly now: Date;
 }
 
@@ -108,7 +112,27 @@ export interface MediaEdit {
   readonly topic: string;
   readonly author: string | null;
   readonly legacyAuthorship: LegacyAuthorship;
+  /** Its level after the edit; the tracks still at the old one follow it (KBC-105 BR-7). */
+  readonly level: string | null;
   readonly now: Date;
+}
+
+/** What an edit left: the item, and how many of its tracks changed level with it. */
+export interface EditedMedia {
+  readonly record: MediaRecord;
+  readonly tracksRelevelled: number;
+}
+
+/** The first placement of a scaled collection's audios at its lowest level (ADR 0036 §4). */
+export interface MediaLevelSeed {
+  /** The top-level collection, whose scale it is. */
+  readonly root: string;
+  /** The collection and its sub-collections. */
+  readonly topics: readonly string[];
+  readonly level: string;
+  readonly now: Date;
+  /** A new scale seeds again; at start, a collection seeded before is left as it is. */
+  readonly again: boolean;
 }
 
 /** A playable file of a media item (ADR 0022: `media_files`). */
@@ -220,7 +244,12 @@ export interface MediaStorePort {
   }): MediaRecord;
   getRendition(mediaId: string): MediaRendition | null;
   /** Writes the item's details; null when it no longer exists. */
-  editMedia(edit: MediaEdit): MediaRecord | null;
+  editMedia(edit: MediaEdit): EditedMedia | null;
+  /**
+   * Places the audios with no level at the seed's level, once per collection unless `again`
+   * (KBC-105 AC-10); the rows placed, or null when it had been seeded already.
+   */
+  seedLevel(seed: MediaLevelSeed): number | null;
   /** Removes the item, its renditions and jobs; false when it did not exist. */
   deleteMedia(id: string): boolean;
   /** A failed item goes back to the queue with a fresh attempt count. */

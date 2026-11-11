@@ -1462,4 +1462,24 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       ) STRICT, WITHOUT ROWID;
     `,
   },
+  {
+    // KBC-105 (ADR 0036 §3, §5): an audio's access level, an id of its top-level collection's
+    // scale (access-levels.json); null is "Sem nível", masters only in a collection with a
+    // scale (BR-8). The seed of each scaled collection is written once, in its own table, so a
+    // row the previous image writes after the migration (rollback) is never seeded behind a
+    // master's back. Expand only: the previous image ignores both.
+    version: 31,
+    name: 'media-level',
+    sql: `
+      ALTER TABLE media ADD COLUMN level TEXT;
+      CREATE INDEX media_by_topic_level ON media (topic, level);
+
+      CREATE TABLE media_level_seeds (
+        root TEXT PRIMARY KEY,
+        level TEXT NOT NULL,
+        rows INTEGER NOT NULL CHECK (rows >= 0),
+        seeded_at TEXT NOT NULL
+      ) STRICT, WITHOUT ROWID;
+    `,
+  },
 ];

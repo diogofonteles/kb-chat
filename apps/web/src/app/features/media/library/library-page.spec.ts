@@ -1,4 +1,4 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { Location } from '@angular/common';
 import {
   HttpTestingController,
@@ -38,6 +38,7 @@ import { UsageLog } from '@core/usage/usage-log.js';
 import { By } from '@angular/platform-browser';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { CollectionHeading } from '@features/chat/collection-heading.js';
+import { answeringLevels } from '../../../testing/level-fixtures.js';
 import { UploadPanel } from '../upload-panel.js';
 import {
   fakeMediaElement,
@@ -135,7 +136,7 @@ async function renderLibrary(
   const view = await render(LibraryPage, {
     providers: [
       provideZonelessChangeDetection(),
-      provideHttpClient(),
+      provideHttpClient(withInterceptors([answeringLevels()])),
       provideHttpClientTesting(),
       provideRouter(options.routes ?? []),
       { ...chatStore, useValue: { ...chatStore.useValue, ...chat } },
@@ -1877,6 +1878,8 @@ describe('LibraryPage: "Editar informações" (KBC-050)', () => {
       target: { value: 'alquimia' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    // KBC-105: the click waits for the new collection's levels, then goes by itself.
+    await settle();
     http
       .expectOne(`/api/v1/media/${mediaId(1)}`)
       .flush({ ...item, topic: 'alquimia' });

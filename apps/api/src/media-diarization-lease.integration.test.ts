@@ -269,6 +269,7 @@ describe('Edges of a separation (KBC-064)', () => {
     isMaster: true,
     canUpload: true,
     canSee: () => true,
+    levelsIn: () => null,
   };
   const ask = () =>
     diarizations.requestDiarization({

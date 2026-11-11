@@ -17,6 +17,7 @@ import type {
   VoiceLabelStorePort,
 } from '../../ports/speaker-store.js';
 import type { MediaActor } from './media-service.js';
+import { seesMedia } from './media-policy.js';
 import { aliasOf } from './voice-labels.js';
 
 export interface VoiceNamesServiceDeps {
@@ -152,7 +153,7 @@ export class VoiceNamesService {
     version: number,
   ): { media: MediaRecord; current: DiarizationSummary } {
     const media = this.deps.store.getMedia(mediaId);
-    if (!media || !actor.canSee(media.topic))
+    if (!media || !seesMedia(actor, media))
       throw new AppError('MEDIA_NOT_FOUND', 'Unknown media');
     const current = this.deps.diarizations.latest(mediaId);
     if (!current)

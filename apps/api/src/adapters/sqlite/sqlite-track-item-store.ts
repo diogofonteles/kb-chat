@@ -113,9 +113,9 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
     this.db
       .prepare(
         `INSERT INTO media (id, topic, title, author, authorship, owner_principal, kind,
-           file_name, upload_bytes, status, created_at, updated_at, parent_media_id)
+           file_name, upload_bytes, status, created_at, updated_at, parent_media_id, level)
          SELECT ?, p.topic, t.title, p.author, p.authorship, p.owner_principal, p.kind,
-           t.id || '.m4a', 1, 'queued', ?, ?, p.id
+           t.id || '.m4a', 1, 'queued', ?, ?, p.id, p.level
          FROM media p JOIN media_tracks t ON t.media_id = p.id
          WHERE p.id = ? AND t.id = ?`,
       )

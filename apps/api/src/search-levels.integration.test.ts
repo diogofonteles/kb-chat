@@ -257,7 +257,7 @@ describe('Search and reading within the person level (KBC-103, ADR 0036 §7)', (
     expect(parent.body).not.toContain('Aula Velada');
   });
 
-  it('AC-14, BR-10: the media of a collection with levels is closed to members, open to masters; AI research is open since KBC-104', async () => {
+  it('AC-14: media above the member is closed to her, open to masters (KBC-105: per audio); AI research is open since KBC-104', async () => {
     const { world, ana } = await anaAtCi({ media: true });
     const item = await queuedItem(
       {
@@ -267,7 +267,7 @@ describe('Search and reading within the person level (KBC-103, ADR 0036 §7)', (
         mediaDir: '',
       },
       'hermetismo',
-      { author: null },
+      { author: null, level: 'cdc' },
     );
     const research = await ana.call(
       'POST',
@@ -333,7 +333,7 @@ describe('Search and reading within the person level (KBC-103, ADR 0036 §7)', (
     expect(term.json<SearchResponse>().total).toBe(12);
   }, 120_000);
 
-  it('QA-1, QA-4, BR-10: a member can neither check nor send a file to media closed by levels, and nothing names it', async () => {
+  it('QA-1, QA-4: a member can neither check nor send a file kept above her level, and nothing names it (KBC-105 BR-6)', async () => {
     const world = await startLevels(SIX, { media: true });
     const ana = await memberOf(world, 'ana@example.com', {
       features: ['search', 'media', 'media-upload'],
@@ -351,6 +351,7 @@ describe('Search and reading within the person level (KBC-103, ADR 0036 §7)', (
         fileName: 'secreta.mp3',
         bytes: 10,
         sha256,
+        level: 'cdc',
       },
     );
     expect(created.statusCode, created.body).toBe(201);
@@ -364,24 +365,38 @@ describe('Search and reading within the person level (KBC-103, ADR 0036 §7)', (
         durationMs: null,
       },
     );
-    expect(check.statusCode).toBe(409);
-    expect(check.json().error.code).toBe('LEVELS_PENDING');
+    expect(check.statusCode).toBe(200);
+    expect(check.json()).toEqual({ verdict: 'duplicate-hidden' });
     const sent = await ana.call('POST', '/api/v1/topics/hermetismo/media', {
       title: 'Outra',
       author: null,
       fileName: 'outra.mp3',
       bytes: 10,
       sha256,
+      level: 'ci',
     });
     expect(sent.statusCode).toBe(409);
-    expect(sent.json().error.code).toBe('LEVELS_PENDING');
+    expect(sent.json().error).toMatchObject({
+      code: 'MEDIA_DUPLICATE',
+      details: { hidden: true },
+    });
     const fresh = await ana.call('POST', '/api/v1/topics/hermetismo/media', {
       title: 'Nova',
       author: null,
       fileName: 'nova.mp3',
       bytes: 10,
     });
-    expect(fresh.statusCode).toBe(409);
+    // KBC-105 BR-1: a new file there needs her level, and then goes.
+    expect(fresh.statusCode).toBe(400);
+    expect(fresh.json().error.code).toBe('LEVEL_REQUIRED');
+    const atHers = await ana.call('POST', '/api/v1/topics/hermetismo/media', {
+      title: 'Nova',
+      author: null,
+      fileName: 'nova.mp3',
+      bytes: 10,
+      level: 'ci',
+    });
+    expect(atHers.statusCode, atHers.body).toBe(201);
     for (const body of [check.body, sent.body, fresh.body]) {
       expect(body).not.toContain(item.id);
       expect(body).not.toContain('Gravação Secreta');

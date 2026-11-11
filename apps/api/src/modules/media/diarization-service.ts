@@ -32,6 +32,7 @@ import type {
   TranscriptSummary,
 } from '../../ports/transcript-store.js';
 import type { MediaActor } from './media-service.js';
+import { seesMedia } from './media-policy.js';
 import {
   DERIVATION_VERSION,
   deriveTurns,
@@ -429,7 +430,7 @@ export class DiarizationService {
 
   private visible(actor: MediaActor, mediaId: string): MediaRecord {
     const media = this.deps.store.getMedia(mediaId);
-    if (!media || !actor.canSee(media.topic)) throw notFound();
+    if (!media || !seesMedia(actor, media)) throw notFound();
     return media;
   }
 }

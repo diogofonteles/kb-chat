@@ -121,14 +121,16 @@ function insertTalk(db: DatabaseSync, talk: number, text: () => string): void {
   const id = `00000000-0000-4000-8000-${String(talk).padStart(12, '0')}`;
   db.prepare(
     `INSERT INTO media (id, topic, title, authorship, author, owner_principal, file_name,
-       upload_bytes, status, duration_ms, created_at, updated_at)
-     VALUES (?, ?, ?, 'outros-autores', ?, 'owner', 'a.mp3', 1, 'ready', ?, ?, ?)`,
+       upload_bytes, status, duration_ms, level, created_at, updated_at)
+     VALUES (?, ?, ?, 'outros-autores', ?, 'owner', 'a.mp3', 1, 'ready', ?, ?, ?, ?)`,
   ).run(
     id,
     topicOf(talk),
     `Palestra ${talk}`,
     talk % 2 === 0 ? 'mestre-gabriel' : null,
     TALK_HOURS * 3_600_000,
+    // KBC-105 NFR-1: a third of the talks per level of QS < CI < CDC.
+    LEVELS[talk % LEVELS.length] ?? null,
     NOW,
     NOW,
   );
@@ -297,6 +299,8 @@ const p95 = (samples: readonly number[]): number => {
   );
 };
 
+const LEVELS = ['qs', 'ci', 'cdc'] as const;
+
 const MAIN_OF = new Map<string, string | null>([
   ['udv', 'mestre-gabriel'],
   ['udv/palavra-do-mestre', 'mestre-gabriel'],
@@ -308,6 +312,8 @@ const SCENARIOS: readonly {
   readonly name: string;
   readonly topics: readonly string[];
   readonly authors: MediaSearchQuery['authors'];
+  /** A member at CI in a collection with levels (KBC-105 NFR-1); absent: a master. */
+  readonly levels?: readonly string[];
 }[] = [
   {
     name: 'acervo',
@@ -324,6 +330,12 @@ const SCENARIOS: readonly {
     topics: ['udv', 'udv/palavra-do-mestre', 'udv/pequeno'],
     authors: { kind: 'main', mainOf: MAIN_OF },
   },
+  {
+    name: 'nível CI',
+    topics: ['udv', 'udv/palavra-do-mestre', 'udv/pequeno'],
+    authors: { kind: 'any' },
+    levels: ['qs', 'ci'],
+  },
 ];
 
 function timeOne(
@@ -332,13 +344,15 @@ function timeOne(
   scenario: (typeof SCENARIOS)[number],
 ): { readonly ms: number; readonly total: number } {
   const startedAt = performance.now();
-  search.hasTranscripts(scenario.topics);
+  const levels = scenario.levels ?? null;
+  search.hasTranscripts(scenario.topics, levels);
   // As the API does: one tally for the "Autoria" counts, then the passages.
   const terms = termsOf(q);
   const tally = search.tally({
     terms,
     topics: scenario.topics,
     mainOf: MAIN_OF,
+    levels,
   });
   search.search({
     terms,
@@ -346,6 +360,7 @@ function timeOne(
     authors: scenario.authors,
     limit: MAX_MEDIA_HITS,
     count: false,
+    levels,
   });
   const total = tally.main + tally.others;
   return { ms: performance.now() - startedAt, total };
@@ -460,6 +475,7 @@ const seesAll = {
   seesSubjects: false,
   searchesSpeech: true,
   canSee: () => true,
+  levelsIn: () => null,
 };
 
 /** The transcript part alone: every media asked, a page of passages read. */

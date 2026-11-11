@@ -165,6 +165,7 @@
           }
           <span class="meta">
             <app-authorship-badge [mediaAuthor]="item.author" />
+            <app-media-level-badge [level]="item.level" [shown]="isMaster()" />
             @if (item.durationMs !== null) {
               <span class="duration">{{ durationOf(item) }}</span>
             }

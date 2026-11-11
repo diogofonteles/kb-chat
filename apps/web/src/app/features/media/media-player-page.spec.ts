@@ -1,4 +1,4 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -24,6 +24,7 @@ import {
   viewStoreStub,
   sessionAs,
 } from '../../testing/media-fixtures.js';
+import { answeringLevels } from '../../testing/level-fixtures.js';
 import { MediaPlayerPage } from './media-player-page.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
@@ -62,7 +63,7 @@ async function openPage(
       chatStoreOn(),
       viewStoreStub,
       provideZonelessChangeDetection(),
-      provideHttpClient(),
+      provideHttpClient(withInterceptors([answeringLevels()])),
       provideHttpClientTesting(),
       provideRouter([
         { path: 'midia/:id', component: MediaPlayerPage },

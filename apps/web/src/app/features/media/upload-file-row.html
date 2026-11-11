@@ -68,6 +68,12 @@
         }}</a>
       </p>
     }
+    @case ('duplicate-hidden') {
+      <p class="notice" i18n="@@media.upload.duplicateHidden">
+        Este arquivo já está no acervo, num nível que você não vê. Fale com um
+        master.
+      </p>
+    }
     @case ('over-quota') {
       <p class="error" role="alert">
         <span aria-hidden="true">⚠</span> {{ overQuota(state.quotaBytes) }}

@@ -22,6 +22,7 @@ const OWNER: MediaActor = {
   canUpload: true,
   seesTracks: true,
   canSee: () => true,
+  levelsIn: () => null,
 };
 const HELPER: MediaActor = { ...OWNER, isMaster: false, principal: 'helper' };
 

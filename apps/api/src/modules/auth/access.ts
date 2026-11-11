@@ -50,8 +50,8 @@ declare module 'fastify' {
 export interface LevelHooks {
   /** FR-8: the person's level code per top-level collection with a scale they see. */
   codesOf(person: Viewer['person'], parentOf: ParentOf): Record<string, string>;
-  /** BR-10: the media of a scaled collection stays with masters until KBC-105. */
-  closedUntilLevelsReachIt(person: Viewer['person'], topic: string): boolean;
+  /** The tracks of a scaled collection stay with masters until they carry a level (KBC-106). */
+  tracksClosedByLevels(person: Viewer['person'], topic: string): boolean;
 }
 
 /** Health, login and the token-authenticated MCP turns. */
@@ -149,25 +149,26 @@ export const levelCodesOf = (request: FastifyRequest): Record<string, string> =>
   ) ?? {};
 
 /**
- * The media of a collection the person may reach: one they see, and, in a collection with
- * levels, only for masters until media carries a level (KBC-103 BR-10, KBC-105).
+ * The tracks of a collection the person may reach: one they see, and, in a collection with
+ * levels, only for masters until a track carries its own level (KBC-106). Recordings follow
+ * their level (KBC-105, `seesMedia`).
  */
-export function canSeeMedia(request: FastifyRequest, topic: string): boolean {
+export function canSeeTracks(request: FastifyRequest, topic: string): boolean {
   const hooks = request.server.levelHooks;
   // Without the levels' answer nothing is known to be open (fail-closed).
   if (!hooks) throw new Error('The level hooks are not registered');
   return (
     canSee(request, topic) &&
-    !hooks.closedUntilLevelsReachIt(viewerOf(request).person, topic)
+    !hooks.tracksClosedByLevels(viewerOf(request).person, topic)
   );
 }
 
 /**
- * BR-10: in a collection the person sees whose media waits for levels (KBC-105), whatever
- * reaches its media (adding, listing its subjects or speakers) answers LEVELS_PENDING, the
- * same for every name, so nothing in it is confirmed.
+ * BR-10: in a collection the person sees whose tracks wait for levels (KBC-106), what lists
+ * across all of its media (its subjects, its speakers) answers LEVELS_PENDING, the same for
+ * every name, so nothing in it is confirmed.
  */
-export function assertMediaOpen(request: FastifyRequest, topic: string): void {
-  if (canSee(request, topic) && !canSeeMedia(request, topic))
+export function assertTracksOpen(request: FastifyRequest, topic: string): void {
+  if (canSee(request, topic) && !canSeeTracks(request, topic))
     throw new AppError('LEVELS_PENDING', 'Media waits for levels here');
 }

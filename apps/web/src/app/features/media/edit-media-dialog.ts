@@ -4,16 +4,18 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  Injector,
   type OnInit,
   afterNextRender,
   computed,
   inject,
   input,
+  linkedSignal,
   output,
   signal,
   viewChild,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import {
   FormControl,
   FormGroup,
@@ -33,12 +35,15 @@ import { openable, treeTitle } from '@core/topics/topic-tree.js';
 import {
   catchError,
   concatMap,
+  filter,
   map,
   of,
   throwError,
   type Observable,
 } from 'rxjs';
 import { AuthorCombobox } from './author-combobox.js';
+import { levelChoicesOf } from './level-choices.js';
+import { LevelField } from './level-field.js';
 import {
   AuthorRefused,
   authorFailureOf,
@@ -59,6 +64,8 @@ interface Draft {
   readonly topic: string;
   /** The author's name; blank is "Outros autores". */
   readonly author: string;
+  /** The level chosen; null where the collection has none. */
+  readonly level: string | null;
 }
 
 /**
@@ -69,7 +76,7 @@ interface Draft {
  */
 @Component({
   selector: 'app-edit-media-dialog',
-  imports: [ReactiveFormsModule, AuthorCombobox],
+  imports: [ReactiveFormsModule, AuthorCombobox, LevelField],
   templateUrl: './edit-media-dialog.html',
   styleUrls: ['./upload-panel.css', './edit-media-dialog.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -82,6 +89,8 @@ export class EditMediaDialog implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly levelField = viewChild(LevelField);
+  private readonly injector = inject(Injector);
   private readonly titleInput =
     viewChild.required<ElementRef<HTMLInputElement>>('titleInput');
 
@@ -110,11 +119,49 @@ export class EditMediaDialog implements OnInit {
   protected readonly moving = computed(
     () => this.chosenTopic() !== this.item().topic,
   );
+  /** The "Nível" of where the audio ends up (KBC-105 BR-3, BR-4). */
+  protected readonly levels = levelChoicesOf(
+    () => this.chosenTopic(),
+    (slug) => this.rootOf(slug),
+  );
+  /** It goes to another top-level collection: its scale, if any, is another one. */
+  private readonly movesScale = computed(
+    () => this.rootOf(this.chosenTopic()) !== this.rootOf(this.item().topic),
+  );
+  /** The audio's level while it stays under its scale; empty, to be chosen, when it leaves. */
+  private readonly chosenRoot = computed(() => this.rootOf(this.chosenTopic()));
+  protected readonly level = linkedSignal<string, string | null>({
+    // A computed source: a move within the same scale keeps what was chosen.
+    source: this.chosenRoot,
+    computation: () =>
+      this.movesScale() ? null : (this.item().level?.id ?? null),
+  });
+  protected readonly levelLabel = computed(() => {
+    if (!this.movesScale()) return $localize`:@@media.level.label:Nível`;
+    const root = this.rootOf(this.chosenTopic());
+    const title = this.topics().find((one) => one.slug === root)?.title ?? root;
+    return $localize`:@@media.level.labelIn:Nível em ${title}:collection:`;
+  });
+  /** "Salvar" pressed while the levels were on their way: it goes when they come. */
+  protected readonly waitingForLevels = signal(false);
+  private readonly levelMissing = computed(
+    () => this.levels.levels().length > 0 && this.level() === null,
+  );
   protected readonly submitted = signal(false);
+  protected readonly levelInvalid = computed(
+    () => this.submitted() && this.levelMissing(),
+  );
   protected readonly saving = signal(false);
   protected readonly failure = signal('');
 
   constructor() {
+    // A "Salvar" held for the levels goes once they are known (or could not be had).
+    toObservable(this.levels.loading)
+      .pipe(
+        filter((loading) => !loading && this.waitingForLevels()),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.save());
     afterNextRender(() => {
       this.dialog().nativeElement.showModal();
       this.titleInput().nativeElement.focus();
@@ -133,10 +180,18 @@ export class EditMediaDialog implements OnInit {
   }
 
   protected save(): void {
+    // The waiting button keeps its focus (aria-disabled): a press on it does nothing.
+    if (this.waitingForLevels() && this.levels.loading()) return;
+    // Every way out of here leaves no wait behind (review round 2: a stuck button).
+    this.waitingForLevels.set(false);
     this.submitted.set(true);
     // A name the API would refuse is said under the "Autor" field and never sent.
     const badAuthor = isInvalidAuthorName(this.authorName());
     if (this.form.invalid || badAuthor || this.saving()) return;
+    this.waitingForLevels.set(this.levels.loading());
+    if (this.waitingForLevels() || this.levelsUnknown()) return;
+    // With a scale, nothing goes without a level (BR-1).
+    if (this.levelMissing()) return;
     this.saving.set(true);
     this.failure.set('');
     const draft = this.draft();
@@ -170,7 +225,33 @@ export class EditMediaDialog implements OnInit {
 
   private draft(): Draft {
     const { title, topic } = this.form.getRawValue();
-    return { title: title.trim(), topic, author: this.authorName().trim() };
+    return {
+      title: title.trim(),
+      topic,
+      author: this.authorName().trim(),
+      level: this.level(),
+    };
+  }
+
+  /**
+   * The levels could not be had where a scale may be: nothing goes, and the focus is on the
+   * one way out, "Carregar níveis de novo" (review round 2).
+   */
+  private levelsUnknown(): boolean {
+    if (!this.levels.failedWhereLevelsMayBe(this.chosenRoot())) return false;
+    // The field may be drawn only now (a send held for the levels that then failed).
+    const field = this.levelField();
+    if (field) field.focusRetry();
+    else
+      afterNextRender(() => this.levelField()?.focusRetry(), {
+        injector: this.injector,
+      });
+    return true;
+  }
+
+  /** The top-level collection whose scale a collection uses (ADR 0036 §1). */
+  private rootOf(slug: string): string {
+    return this.topics().find((one) => one.slug === slug)?.parent ?? slug;
   }
 
   /** The author's id, when it has to be said: a new name, or any move (its list may differ). */
@@ -189,11 +270,15 @@ export class EditMediaDialog implements OnInit {
     draft: Draft,
     author: string | null | undefined,
   ): UpdateMediaRequest {
-    const { title, topic } = this.item();
+    const { title, topic, level } = this.item();
+    // A level is said when it changed, and always on the way to another scale (BR-4).
+    const asked =
+      this.movesScale() || draft.level !== level?.id ? draft.level : null;
     return {
       ...(draft.title === title ? {} : { title: draft.title }),
       ...(draft.topic === topic ? {} : { topic: draft.topic }),
       ...(author === undefined ? {} : { author }),
+      ...(asked === null ? {} : { level: asked }),
     };
   }
 

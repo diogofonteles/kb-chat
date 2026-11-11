@@ -29,8 +29,13 @@ import {
 } from './library-query.js';
 import { isPublished, searchLibrary } from './library-search.js';
 import { nextSaveTime } from './listening-service.js';
-import type { MediaActor } from './media-service.js';
-import { canEditMedia } from './media-policy.js';
+import {
+  NO_LEVELS,
+  shownLevel,
+  type MediaActor,
+  type MediaLevels,
+} from './media-service.js';
+import { canEditMedia, seesMedia } from './media-policy.js';
 import { mediaAuthorOf, toMediaItem } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
 
@@ -50,6 +55,8 @@ export interface LibraryServiceDeps {
   readonly speech?: Pick<TrackLinksPort, 'spokenAmong' | 'passagesAt'>;
   /** Tracks by title and summary (KBC-070), for who sees subjects. */
   readonly about?: Pick<TrackLinksPort, 'tracksAbout'>;
+  /** The collections' scales: masters see each audio's level (KBC-105 AC-11). */
+  readonly levels?: MediaLevels;
   readonly now?: () => Date;
 }
 
@@ -201,6 +208,7 @@ export class LibraryService {
     const records = this.deps.store.listLibrary();
     const titles = new Map(records.map((one) => [one.id, one.title]));
     const totals = countTracks(records);
+    const levels = this.deps.levels ?? NO_LEVELS;
     return records
       .filter((record) => isVisible(actor, record))
       .map((record) => {
@@ -212,6 +220,10 @@ export class LibraryService {
             author: mediaAuthorOf(record, this.deps.authorOf),
             canEdit: canEditMedia(actor, record),
             parent: parentOf(record, { titles, totals }),
+            level: shownLevel(record, {
+              scale: levels.scaleOf(record.topic),
+              shows: actor.isMaster || canEditMedia(actor, record),
+            }),
           }),
           kind: record.kind,
           lastPlayedAt: saved?.playedAt ?? null,
@@ -308,7 +320,8 @@ function recordingsOf(entries: readonly LibraryTrack[]): LibraryItem[] {
  * published and while it is in the edit (KBC-068 FR-1, FR-5, BR-5).
  */
 function isVisible(actor: MediaActor, record: LibraryRecord): boolean {
-  if (record.kind !== 'audio' || !actor.canSee(record.topic)) return false;
+  // KBC-105 BR-5: an audio above the person's level is not in the library at all.
+  if (record.kind !== 'audio' || !seesMedia(actor, record)) return false;
   if (record.track)
     return (
       actor.seesTracks === true &&

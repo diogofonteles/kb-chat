@@ -10,10 +10,14 @@ export {
   MAX_JOB_ATTEMPTS,
   UPLOAD_ABANDON_MS,
   legacyAuthorshipOf,
+  seesMedia,
+  seesTracksIn,
 } from './media-policy.js';
 export {
   MediaService,
+  NO_LEVELS,
   type MediaActor,
+  type MediaLevels,
   type MediaServiceDeps,
   type PlanActor,
   type UploadPlans,
