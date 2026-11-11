@@ -187,6 +187,70 @@ describe('LevelDeleteDialog (T24, KBC-108)', () => {
     });
   });
 
+  it('R3-1: while a delete is on its way the dialog does not close, by Esc or by Cancelar', async () => {
+    const { fixture, http, dialog, done } = await dialogFor(THREE);
+    const ci = THREE.levels[1];
+    if (!ci) throw new Error('no CI');
+    dialog.openFor(ci);
+    http.expectOne(`${URL}/preview`).flush(CI_PREVIEW);
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Apagar CI' }));
+    await fixture.whenStable();
+    const native = screen.getByRole('dialog') as HTMLDialogElement;
+    const cancel = new Event('cancel', { cancelable: true });
+    native.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+    expect(
+      (screen.getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    http
+      .expectOne({ method: 'DELETE', url: `${URL}/ci` })
+      .flush(scaleOf([level('qs', 'QS'), level('cdc', 'CDC')]));
+    await fixture.whenStable();
+    expect(done).toHaveBeenCalled();
+  });
+
+  it('QA-r3-1: a failure on confirming gives the focus back to the danger button', async () => {
+    const { fixture, http, dialog } = await dialogFor(THREE);
+    const ci = THREE.levels[1];
+    if (!ci) throw new Error('no CI');
+    dialog.openFor(ci);
+    http.expectOne(`${URL}/preview`).flush(CI_PREVIEW);
+    await fixture.whenStable();
+    const confirm = screen.getByRole('button', { name: 'Apagar CI' });
+    fireEvent.click(confirm);
+    // A browser takes the focus off a button that becomes disabled; jsdom does not.
+    confirm.blur();
+    http
+      .expectOne({ method: 'DELETE', url: `${URL}/ci` })
+      .flush('', { status: 500, statusText: 'x' });
+    await fixture.whenStable();
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(document.activeElement).toBe(confirm);
+  });
+
+  it('QA-r3-1: a failure on taking every level away gives the focus back to the name', async () => {
+    const { fixture, http, dialog } = await dialogFor(THREE);
+    dialog.openForAll();
+    http.expectOne(`${URL}/preview`).flush(ALL_PREVIEW);
+    await fixture.whenStable();
+    const name = screen.getByRole('textbox', {
+      name: /Digite o nome do acervo para confirmar/,
+    });
+    fireEvent.input(name, { target: { value: 'Hermetismo' } });
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Tirar todos os níveis' }),
+    );
+    name.blur();
+    http
+      .expectOne({ method: 'DELETE', url: URL })
+      .flush('', { status: 500, statusText: 'x' });
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(name);
+  });
+
   it('BR-3, R2-3: a level deleted by someone else meanwhile closes the dialog and says which', async () => {
     const { fixture, http, dialog, gone } = await dialogFor(THREE);
     const ci = THREE.levels[1];

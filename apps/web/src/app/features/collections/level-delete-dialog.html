@@ -3,6 +3,7 @@
   class="dialog"
   aria-labelledby="level-delete-title"
   aria-describedby="level-delete-what"
+  (cancel)="holdWhileBusy($event)"
 >
   <p #status class="recounted" role="status" tabindex="-1">{{ recounted() }}</p>
   @if (all()) {
@@ -47,6 +48,7 @@
         <button
           type="button"
           class="link"
+          [disabled]="busy()"
           (click)="close()"
           i18n="@@levels.cancel"
         >
@@ -126,6 +128,7 @@
         <button
           type="button"
           class="link"
+          [disabled]="busy()"
           (click)="close()"
           i18n="@@levels.cancel"
         >

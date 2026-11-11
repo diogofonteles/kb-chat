@@ -174,7 +174,17 @@ export class LevelDeleteDialog {
     this.focusAfterRender(() => this.nameInput());
   }
 
+  /** Esc while a change is on its way: the dialog waits for it (R3-1). */
+  protected holdWhileBusy(event: Event): void {
+    if (this.busy()) event.preventDefault();
+  }
+
+  /** "Cancelar": never while a change is on its way (R3-1). */
   protected close(): void {
+    if (!this.busy()) this.shut();
+  }
+
+  private shut(): void {
     this.cancelPending();
     this.dialog().nativeElement.close();
   }
@@ -299,7 +309,7 @@ export class LevelDeleteDialog {
       )
       .subscribe({
         next: (scale) => {
-          this.close();
+          this.shut();
           this.done.emit(scale);
         },
         error: (err: unknown) => this.failed(err),
@@ -314,6 +324,10 @@ export class LevelDeleteDialog {
     this.failure.set(message);
     if (this.loaded().state === 'loading')
       this.loaded.set({ state: 'failed', message });
+    // The button was disabled while it sent: the focus goes back where the master was (QA-r3-1).
+    this.focusAfterRender(() =>
+      this.all() ? this.nameInput() : this.confirmButton(),
+    );
   }
 
   private count(n: number, what: 'documents' | 'media' | 'people'): string {
