@@ -21,6 +21,7 @@ describe('LevelDirectory (KBC-103 QA-3)', () => {
     const directory = new LevelDirectory({
       scales,
       documents: new MemoryDocumentStore(),
+      presence: new MemoryDocumentStore(),
     });
     await directory.load();
     expect(directory.scaleOf('hermetismo').map((one) => one.id)).toEqual([
@@ -39,6 +40,7 @@ describe('LevelDirectory (KBC-103 QA-3)', () => {
     const directory = new LevelDirectory({
       scales,
       documents: new MemoryDocumentStore(),
+      presence: new MemoryDocumentStore(),
     });
     await directory.load();
     await expect(

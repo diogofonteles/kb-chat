@@ -52,11 +52,38 @@ type Placements = z.infer<typeof placementsSchema>;
 /** One collection's documents and their levels. */
 export type CollectionPlacements = Readonly<Record<string, PlacedDocument>>;
 
+/**
+ * When the app first saw a document without a level, and since when a document with one is
+ * missing from the vault (KBC-107 FR-5, BR-5). Loose objects: a newer field never stops an
+ * older API from reading the file.
+ */
+const presenceEntrySchema = z.object({
+  firstSeenAt: z.string().optional(),
+  missingSince: z.string().optional(),
+});
+export type DocumentPresence = z.infer<typeof presenceEntrySchema>;
+
+const presenceSchema = z.object({
+  version: z.literal(1),
+  collections: z.record(z.string(), z.record(z.string(), presenceEntrySchema)),
+});
+type Presence = z.infer<typeof presenceSchema>;
+
+/** Every collection's presence, by collection then document id. */
+export type PresenceMap = Readonly<
+  Record<string, Readonly<Record<string, DocumentPresence>>>
+>;
+
 export interface LevelStores {
   /** `access-levels.json`. */
   readonly scales: DocumentStorePort;
   /** `document-levels.json`. */
   readonly documents: DocumentStorePort;
+  /**
+   * `document-presence.json` (KBC-107): apart from `document-levels.json`, so an API rolled
+   * back to the previous image still reads that file's strict schema.
+   */
+  readonly presence: DocumentStorePort;
 }
 
 const NO_LEVELS: readonly StoredLevel[] = [];
@@ -104,8 +131,10 @@ const serial = <T extends object>(
 export class LevelDirectory {
   private readonly scaleDoc: SerialDocument<Scales>;
   private readonly placementDoc: SerialDocument<Placements>;
+  private readonly presenceDoc: SerialDocument<Presence>;
   private scales: Scales = { version: 1, scales: {} };
   private placements: Placements = { version: 1, collections: {} };
+  private presence: Presence = { version: 1, collections: {} };
   private changes = 0;
 
   constructor(stores: LevelStores) {
@@ -119,11 +148,54 @@ export class LevelDirectory {
       empty: () => ({ version: 1, collections: {} }),
       name: 'document-levels.json',
     });
+    this.presenceDoc = serial(stores.presence, {
+      schema: presenceSchema,
+      empty: () => ({ version: 1, collections: {} }),
+      name: 'document-presence.json',
+    });
   }
 
   async load(): Promise<void> {
     this.scales = await this.scaleDoc.read();
     this.placements = await this.placementDoc.read();
+    this.presence = await this.presenceDoc.read();
+    this.changes += 1;
+  }
+
+  /** Every collection that holds a level for some document. */
+  placedCollections(): readonly string[] {
+    return Object.keys(this.placements.collections);
+  }
+
+  /** Every document's presence (FR-5). */
+  presenceMap(): PresenceMap {
+    return this.presence.collections;
+  }
+
+  /** Replaces every document's presence, in one write. */
+  async setPresence(next: PresenceMap): Promise<void> {
+    const doc: Presence = { version: 1, collections: { ...next } };
+    await this.presenceDoc.change(() => ({ doc, result: undefined }));
+    this.presence = doc;
+  }
+
+  /** Drops the levels of documents gone from the vault for too long (BR-5), in one write. */
+  async forget(
+    byCollection: Readonly<Record<string, readonly string[]>>,
+  ): Promise<void> {
+    const written: { doc?: Placements } = {};
+    await this.placementDoc.change((doc) => {
+      const collections = { ...doc.collections };
+      for (const [collection, ids] of Object.entries(byCollection)) {
+        const kept = { ...collections[collection] };
+        for (const id of ids) delete kept[id];
+        if (Object.keys(kept).length === 0) delete collections[collection];
+        else collections[collection] = kept;
+      }
+      written.doc = { ...doc, collections };
+      return { doc: written.doc, result: undefined };
+    });
+    if (written.doc) this.placements = written.doc;
     this.changes += 1;
   }
 

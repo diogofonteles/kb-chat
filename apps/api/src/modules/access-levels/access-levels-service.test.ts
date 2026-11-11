@@ -11,6 +11,7 @@ async function orphanWorld() {
   const directory = new LevelDirectory({
     scales: new MemoryDocumentStore(),
     documents: new MemoryDocumentStore(),
+    presence: new MemoryDocumentStore(),
   });
   await directory.load();
   const catalog = new CatalogRegistry({

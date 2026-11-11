@@ -50,6 +50,11 @@ export const FEATURES = [
   'media-correct',
   /** "Gerenciar níveis de acesso" (KBC-103, ADR 0036 §9): scales and levels, masters only. */
   'collection-levels',
+  /**
+   * "Classificar nível de conteúdo" (KBC-107, ADR 0036 §5, §9): sees the "Sem nível" queue and
+   * the badges, and gives documents a level up to their own. Granted per person.
+   */
+  'content-levels',
 ] as const;
 export const featureSchema = z.enum(FEATURES);
 export type Feature = z.infer<typeof featureSchema>;

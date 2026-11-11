@@ -145,6 +145,7 @@ async function gateOver(count: number) {
   const directory = new LevelDirectory({
     scales: new MemoryDocumentStore(),
     documents: new MemoryDocumentStore(),
+    presence: new MemoryDocumentStore(),
   });
   await directory.load();
   await directory.changeScale('hermetismo', () => ({
@@ -257,6 +258,7 @@ describe('The content gate (KBC-103 BR-5, NFR-1)', () => {
     const directory = new LevelDirectory({
       scales: new MemoryDocumentStore(),
       documents: new MemoryDocumentStore(),
+      presence: new MemoryDocumentStore(),
     });
     await directory.load();
     const catalog = new CatalogRegistry({

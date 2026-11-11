@@ -1917,6 +1917,7 @@ async function loadedLevels(
     directory: new LevelDirectory({
       scales: new MemoryDocumentStore(),
       documents: new MemoryDocumentStore(),
+      presence: new MemoryDocumentStore(),
     }),
     audit: new MemoryLevelAudit(),
   };

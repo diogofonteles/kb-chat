@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { authorshipSchema } from './facets.js';
 import { topicSlugSchema } from './topics.js';
 
 /**
@@ -165,7 +166,7 @@ export const levelAuditEntrySchema = z.object({
   before: z.unknown().optional(),
   after: z.unknown().optional(),
   /**
-   * For `bulk`: how many documents, people and audios the first scale placed; for a media
+   * For `bulk`: how many documents, people and audios the first scale placed (and, KBC-107, a bulk placed or skipped); for a media
    * `item.level`, the recording and the tracks that followed it (KBC-105 BR-7).
    */
   count: z
@@ -175,7 +176,139 @@ export const levelAuditEntrySchema = z.object({
       media: z.number().int().nonnegative().optional(),
       recordings: z.number().int().nonnegative().optional(),
       tracks: z.number().int().nonnegative().optional(),
+      /** KBC-107: named documents a bulk left as they were. */
+      skipped: z.number().int().nonnegative().optional(),
     })
     .optional(),
+  /** For a `bulk` of KBC-107: the filter it applied, or `{ ids: n }` for a selection. */
+  filter: z.unknown().optional(),
 });
 export type LevelAuditEntry = z.infer<typeof levelAuditEntrySchema>;
+
+/* ---------- "Sem nível" and bulk levels (KBC-107, ADR 0036 §5, §9) ---------- */
+
+/** How a document reached the vault, as a filter: typed text, an audio or an OCR. */
+export const UNASSIGNED_ORIGINS = ['text', 'audio', 'ocr'] as const;
+export const unassignedOriginSchema = z.enum(UNASSIGNED_ORIGINS);
+export type UnassignedOrigin = z.infer<typeof unassignedOriginSchema>;
+
+export const UNASSIGNED_PAGE_DEFAULT = 10;
+export const UNASSIGNED_PAGE_MAX = 50;
+/** The most documents one bulk request names (BR-3). */
+export const BULK_IDS_MAX = 5000;
+
+/** The filters of the "Sem nível" list, as the query and the bulk filter carry them. */
+export const unassignedFilterSchema = z.strictObject({
+  /** One collection of the scope (the collection itself or a sub-collection). */
+  collection: topicSlugSchema.optional(),
+  origin: unassignedOriginSchema.optional(),
+  authorship: authorshipSchema.optional(),
+  /** The folder of the document in its collection (`raw`, `wiki/concepts`); `` for the root. */
+  folder: z.string().max(1024).optional(),
+  /** Arrived on or after this day (`YYYY-MM-DD`, UTC). */
+  since: z.iso.date().optional(),
+});
+export type UnassignedFilter = z.infer<typeof unassignedFilterSchema>;
+
+/** GET …/levels/unassigned: the filters, the opaque cursor and the page size (FR-1). */
+export const unassignedQuerySchema = unassignedFilterSchema.extend({
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(UNASSIGNED_PAGE_MAX)
+    .default(UNASSIGNED_PAGE_DEFAULT),
+});
+export type UnassignedQuery = z.input<typeof unassignedQuerySchema>;
+
+/** One document waiting for a level. */
+export const unassignedDocumentSchema = z.object({
+  /** Its own collection (a sub-collection's slug when it is in one). */
+  topic: topicSlugSchema,
+  id: z.string(),
+  title: z.string(),
+  origin: unassignedOriginSchema,
+  authorship: authorshipSchema,
+  author: z.string().nullable(),
+  folder: z.string(),
+  /** When the app first saw it in a collection with a scale (FR-5). */
+  firstSeenAt: z.iso.datetime(),
+});
+export type UnassignedDocument = z.infer<typeof unassignedDocumentSchema>;
+
+const facetValuesSchema = <T extends z.ZodType>(value: T) =>
+  z.array(z.object({ value, count: z.number().int().nonnegative() }));
+
+/** The answer of GET …/levels/unassigned. */
+export const unassignedPageSchema = z.object({
+  /** The top-level collection whose queue this is. */
+  collection: topicSlugSchema,
+  /** Every document without a level the caller may classify, before the filters. */
+  total: z.number().int().nonnegative(),
+  /** The documents the filters keep, over every page. */
+  matched: z.number().int().nonnegative(),
+  /** The moment the list was made: a bulk by filter takes only what had arrived (BR-3). */
+  asOf: z.iso.datetime(),
+  items: z.array(unassignedDocumentSchema),
+  nextCursor: z.string().nullable(),
+  /** The values each filter can take, over the whole queue. */
+  facets: z.object({
+    collections: facetValuesSchema(topicSlugSchema),
+    origins: facetValuesSchema(unassignedOriginSchema),
+    authorships: facetValuesSchema(authorshipSchema),
+    folders: facetValuesSchema(z.string()),
+  }),
+  /** The levels the caller may give: up to their own (masters: every one). */
+  levels: z.array(levelChoiceSchema),
+});
+export type UnassignedPage = z.infer<typeof unassignedPageSchema>;
+
+/** GET …/levels/choices: the levels the caller may give in this collection (T3, search). */
+export const levelChoicesSchema = z.object({
+  collection: topicSlugSchema,
+  levels: z.array(levelChoiceSchema),
+});
+export type LevelChoices = z.infer<typeof levelChoicesSchema>;
+
+/** A document of the scope, by its own collection. */
+export const documentKeySchema = z.strictObject({
+  topic: topicSlugSchema,
+  id: z.string().min(1).max(1024),
+});
+export type DocumentKey = z.infer<typeof documentKeySchema>;
+
+/**
+ * POST …/document-levels (FR-2): a level for a selection, or for the "Sem nível" documents
+ * the filter keeps among those that had arrived at `asOf` (BR-3).
+ */
+export const bulkLevelRequestSchema = z.union([
+  z.strictObject({
+    level: levelRefSchema,
+    ids: z.array(documentKeySchema).min(1).max(BULK_IDS_MAX),
+  }),
+  z.strictObject({
+    level: levelRefSchema,
+    filter: unassignedFilterSchema.extend({ asOf: z.iso.datetime() }),
+  }),
+]);
+export type BulkLevelRequest = z.infer<typeof bulkLevelRequestSchema>;
+
+export const bulkLevelResultSchema = z.object({
+  level: levelChoiceSchema,
+  updated: z.number().int().nonnegative(),
+  /** Named documents the caller may not see, unknown or tracks: left as they were. */
+  skipped: z.number().int().nonnegative(),
+});
+export type BulkLevelResult = z.infer<typeof bulkLevelResultSchema>;
+
+/** GET /api/v1/levels/unassigned: the sidebar's "N documentos sem nível" per collection. */
+export const unassignedCountsSchema = z.object({
+  items: z.array(
+    z.object({
+      collection: topicSlugSchema,
+      unassigned: z.number().int().nonnegative(),
+    }),
+  ),
+});
+export type UnassignedCounts = z.infer<typeof unassignedCountsSchema>;
