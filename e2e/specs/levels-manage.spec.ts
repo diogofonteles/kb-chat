@@ -261,7 +261,10 @@ test('KBC-108 AC-1, AC-3, AC-4, AC-5, AC-8: delete a level, move with its previe
   // Without research, the box searches documents (her only mode).
   const box = member.getByLabel('Sua pergunta');
   await box.fill('orvalho');
-  await box.press('Enter');
+  // The button, once enabled: an Enter right after the first paint could be lost.
+  const go = member.getByRole('button', { name: 'Buscar' });
+  await expect(go).toBeEnabled();
+  await go.click();
   await expect(member.locator('app-result-card')).toHaveCount(3);
   await member.context().close();
   await owner.dispose();
