@@ -1,0 +1,130 @@
+<dialog
+  #dialog
+  class="dialog"
+  aria-labelledby="level-delete-title"
+  aria-describedby="level-delete-what"
+>
+  @if (all()) {
+    <h2 id="level-delete-title" i18n="@@levels.clearTitle">
+      Tirar todos os níveis
+    </h2>
+    <p id="level-delete-what" class="warning" i18n="@@levels.clearWarning">
+      Todos com acesso ao acervo passam a ver todo o conteúdo.
+    </p>
+    <form (submit)="$event.preventDefault(); confirm()">
+      <label class="field">
+        <span i18n="@@levels.clearTypeName"
+          >Digite o nome do acervo para confirmar</span
+        >
+        <span class="name">{{ title() }}</span>
+        <input
+          #nameInput
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          [value]="typedName()"
+          (input)="typedName.set(nameInput.value)"
+        />
+      </label>
+      @if (failure(); as message) {
+        <p class="error" role="alert">{{ message }}</p>
+      }
+      <div class="actions">
+        <button
+          #confirmButton
+          type="submit"
+          class="danger"
+          [disabled]="!canConfirm()"
+          [attr.aria-busy]="busy()"
+          i18n="@@levels.clearConfirm"
+        >
+          Tirar todos os níveis
+        </button>
+        <button
+          type="button"
+          class="link"
+          (click)="close()"
+          i18n="@@levels.cancel"
+        >
+          Cancelar
+        </button>
+      </div>
+    </form>
+  } @else {
+    <h2 id="level-delete-title" i18n="@@levels.deleteTitle">
+      Apagar o nível {{ level()?.code }}
+    </h2>
+    @switch (loaded().state) {
+      @case ('loading') {
+        <p id="level-delete-what" aria-busy="true" i18n="@@levels.previewing">
+          Contando o que está neste nível…
+        </p>
+      }
+      @case ('failed') {
+        <p id="level-delete-what" class="error" role="alert">
+          {{ failure() }}
+        </p>
+      }
+      @default {
+        <p id="level-delete-what">{{ holdings() }}</p>
+      }
+    }
+    <form (submit)="$event.preventDefault(); confirm()">
+      <label class="field">
+        <span i18n="@@levels.contentTo"
+          >Conteúdo de {{ level()?.code }} vai para:</span
+        >
+        <select
+          #contentSelect
+          [disabled]="!preview()"
+          (change)="contentTo.set(contentSelect.value)"
+        >
+          @for (one of targets(); track one.id) {
+            <option [value]="one.id" [selected]="one.id === contentTo()">
+              {{ one.code }}
+            </option>
+          }
+        </select>
+      </label>
+      <label class="field">
+        <span i18n="@@levels.peopleTo"
+          >Pessoas em {{ level()?.code }} vão para:</span
+        >
+        <select
+          #peopleSelect
+          [disabled]="!preview()"
+          (change)="peopleTo.set(peopleSelect.value)"
+        >
+          @for (one of targets(); track one.id) {
+            <option [value]="one.id" [selected]="one.id === peopleTo()">
+              {{ one.code }}
+            </option>
+          }
+        </select>
+      </label>
+      @if (failure() && preview()) {
+        <p class="error" role="alert">{{ failure() }}</p>
+      }
+      <div class="actions">
+        <button
+          #confirmButton
+          type="submit"
+          class="danger"
+          [disabled]="!canConfirm()"
+          [attr.aria-busy]="busy()"
+          i18n="@@levels.deleteConfirm"
+        >
+          Apagar {{ level()?.code }}
+        </button>
+        <button
+          type="button"
+          class="link"
+          (click)="close()"
+          i18n="@@levels.cancel"
+        >
+          Cancelar
+        </button>
+      </div>
+    </form>
+  }
+</dialog>

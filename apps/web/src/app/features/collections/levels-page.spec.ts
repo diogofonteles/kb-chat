@@ -24,8 +24,11 @@ const URL = '/api/v1/topics/hermetismo/levels';
 const level = (
   id: string,
   code: string,
-  counts: { documents: number; people: number } = { documents: 0, people: 0 },
-) => ({ id, code, description: '', ...counts });
+  counts: { documents: number; people: number; media?: number } = {
+    documents: 0,
+    people: 0,
+  },
+) => ({ id, code, description: '', media: 0, ...counts });
 
 const scale = (over: Partial<TopicLevels> = {}): TopicLevels => ({
   collection: 'hermetismo',
@@ -34,8 +37,11 @@ const scale = (over: Partial<TopicLevels> = {}): TopicLevels => ({
   documents: 6,
   people: 2,
   unassigned: 0,
+  version: 'v1',
   ...over,
 });
+
+const noImpact = { people: 0, documents: 0, media: 0 };
 
 const THREE = scale({
   levels: [
@@ -141,7 +147,7 @@ describe('LevelsPage (T24, KBC-103)', () => {
     expect((codeBox() as HTMLInputElement).value).toBe('ci');
   });
 
-  it('AC-12: moves a level down after a confirmation and announces its new place', async () => {
+  it('AC-12, KBC-108 AC-3: moves a level after the server counts who gains and loses, and announces its new place', async () => {
     const { fixture, http } = await open('hermetismo', THREE);
     expect(
       (
@@ -154,34 +160,83 @@ describe('LevelsPage (T24, KBC-103)', () => {
       screen.getByRole('button', { name: 'Mover para baixo: CI' }),
     );
     await fixture.whenStable();
+    const confirm = screen.getByRole('button', { name: 'Confirmar' });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    const preview = http.expectOne({ method: 'POST', url: `${URL}/preview` });
+    expect(preview.request.body).toEqual({
+      order: ['qs', 'cdc', 'ci'],
+      version: 'v1',
+    });
+    preview.flush({
+      version: 'v1',
+      gaining: { people: 2, documents: 12, media: 2 },
+      losing: { people: 1, documents: 6, media: 0 },
+      removal: null,
+    });
+    await fixture.whenStable();
     expect(
       screen.getByText(
-        'Mover CI para a 3ª posição? Quem está em CDC deixa de ver o conteúdo de CI na hora, e quem está em CI passa a ver o de CDC.',
+        'Mover CI para a 3ª posição? 2 pessoas passam a ver 14 itens; 1 pessoa deixa de ver 6 itens.',
       ),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    expect(document.activeElement).toBe(confirm);
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
     const moved = http.expectOne({ method: 'PATCH', url: URL });
-    expect(moved.request.body).toEqual({ order: ['qs', 'cdc', 'ci'] });
+    expect(moved.request.body).toEqual({
+      order: ['qs', 'cdc', 'ci'],
+      version: 'v1',
+    });
     moved.flush(
       scale({
         levels: [level('qs', 'QS'), level('cdc', 'CDC'), level('ci', 'CI')],
+        version: 'v2',
       }),
     );
     await fixture.whenStable();
     expect(screen.getByText('CI agora é o 3º de 3')).toBeTruthy();
   });
 
-  it('UP-07, AC-12: moving CDC up opens it to CI, as the API does', async () => {
-    const { fixture } = await open('hermetismo', THREE);
+  it('KBC-108 BR-3: a scale changed since the preview says so and is read again', async () => {
+    const { fixture, http } = await open('hermetismo', THREE);
     fireEvent.click(
       screen.getByRole('button', { name: 'Mover para cima: CDC' }),
     );
+    http.expectOne({ method: 'POST', url: `${URL}/preview` }).flush({
+      version: 'v1',
+      gaining: noImpact,
+      losing: noImpact,
+      removal: null,
+    });
     await fixture.whenStable();
     expect(
       screen.getByText(
-        'Mover CDC para a 2ª posição? Quem está em CI passa a ver o conteúdo de CDC na hora, e quem está em CDC deixa de ver o de CI.',
+        'Mover CDC para a 2ª posição? Ninguém ganha nem perde acesso.',
       ),
     ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    http
+      .expectOne({ method: 'PATCH', url: URL })
+      .flush(
+        { error: { code: 'LEVELS_CHANGED', message: 'x' } },
+        { status: 409, statusText: 'Conflict' },
+      );
+    TestBed.tick();
+    http.expectOne({ method: 'GET', url: URL }).flush(THREE);
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent?.trim()).toBe(
+      'A escala mudou. Confira de novo.',
+    );
+  });
+
+  it('shows the audios of a level next to its documents and people', async () => {
+    await open(
+      'hermetismo',
+      scale({
+        levels: [level('qs', 'QS', { documents: 4, people: 2, media: 1 })],
+      }),
+    );
+    expect(screen.getByText('4 documentos · 1 áudio · 2 pessoas')).toBeTruthy();
   });
 
   it('AC-11: renames a level in place', async () => {

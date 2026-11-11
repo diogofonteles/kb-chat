@@ -1,6 +1,6 @@
 <section class="levels" aria-labelledby="levels-title">
   <a class="back" routerLink="/" i18n="@@levels.back">← Voltar</a>
-  <h2 id="levels-title" class="heading" tabindex="-1">
+  <h2 #heading id="levels-title" class="heading" tabindex="-1">
     <ng-container i18n="@@levels.title">Níveis de acesso</ng-container>
     <span class="collection">{{ title() }}</span>
   </h2>
@@ -127,12 +127,17 @@
               </div>
               @if (moving()?.id === level.id) {
                 <div class="confirm-row">
-                  <p class="confirm">{{ moveText(level) }}</p>
+                  <p
+                    class="confirm"
+                    [attr.aria-busy]="moving()?.preview ? null : 'true'"
+                  >
+                    {{ moveText(level) }}
+                  </p>
                   <button
                     #confirmMove
                     type="button"
                     class="primary"
-                    [disabled]="busy()"
+                    [disabled]="busy() || !moving()?.preview"
                     (click)="applyMove()"
                     i18n="@@levels.confirm"
                   >
@@ -179,12 +184,42 @@
                   >
                     Mover para baixo
                   </button>
+                  <button
+                    type="button"
+                    class="danger"
+                    [disabled]="busy()"
+                    (click)="askDelete(level)"
+                    [attr.aria-label]="labelFor('delete', level)"
+                    i18n="@@levels.delete"
+                  >
+                    Apagar
+                  </button>
                 </div>
               }
             }
           </li>
         }
       </ol>
+      <div class="actions">
+        <button
+          type="button"
+          class="danger"
+          [disabled]="busy()"
+          (click)="askClear()"
+          i18n="@@levels.clear"
+        >
+          Tirar todos os níveis
+        </button>
+      </div>
+      @if (scale(); as current) {
+        <app-level-delete-dialog
+          [topic]="slug()"
+          [title]="title()"
+          [scale]="current"
+          (done)="deleted($event)"
+          (stale)="refresh()"
+        />
+      }
     }
 
     <form class="new" (submit)="$event.preventDefault(); add()">
@@ -264,6 +299,7 @@
     @if (levels().length > 0) {
       <app-unassigned-section [topic]="slug()" (changed)="loaded.reload()" />
     }
+    <app-levels-history [topic]="slug()" />
   }
 
   <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>

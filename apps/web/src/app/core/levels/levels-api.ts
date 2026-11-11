@@ -3,7 +3,14 @@ import { Injectable, inject } from '@angular/core';
 import {
   bulkLevelResultSchema,
   documentLevelSchema,
+  levelAuditPageSchema,
+  levelPreviewSchema,
   topicLevelsSchema,
+  type LevelAuditPage,
+  type LevelAuditQuery,
+  type LevelDelete,
+  type LevelPreview,
+  type LevelPreviewRequest,
   type BulkLevelRequest,
   type BulkLevelResult,
   type ContentLevel,
@@ -41,6 +48,14 @@ export const levelChoicesUrl = (topic: string): string =>
   `${topicLevelsUrl(topic)}/choices`;
 /** "N documentos sem nível" per collection (the sidebar, KBC-107 FR-6). */
 export const unassignedCountsUrl = (): string => '/api/v1/levels/unassigned';
+/** "Histórico de níveis" (KBC-108 FR-4): masters only. */
+export const levelAuditUrl = (query: LevelAuditQuery): string => {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query))
+    if (value !== undefined && value !== '') params.set(key, String(value));
+  const search = params.toString();
+  return `/api/v1/levels/audit${search ? `?${search}` : ''}`;
+};
 /** The T24 page of a top-level collection. */
 export const levelsPagePath = (topic: string): string[] => [
   '/acervos',
@@ -69,10 +84,46 @@ export class LevelsApi {
       .pipe(map((reply) => topicLevelsSchema.parse(reply)));
   }
 
-  reorder(topic: string, order: readonly string[]): Observable<TopicLevels> {
+  /** The new order, applied only on the version its preview was made on (KBC-108 BR-3). */
+  reorder(
+    topic: string,
+    change: { readonly order: readonly string[]; readonly version: string },
+  ): Observable<TopicLevels> {
     return this.http
-      .patch(topicLevelsUrl(topic), { order })
+      .patch(topicLevelsUrl(topic), change)
       .pipe(map((reply) => topicLevelsSchema.parse(reply)));
+  }
+
+  /** Who gains and who loses what, before a reorder or a removal (KBC-108 FR-2). */
+  preview(topic: string, body: LevelPreviewRequest): Observable<LevelPreview> {
+    return this.http
+      .post(`${topicLevelsUrl(topic)}/preview`, body)
+      .pipe(map((reply) => levelPreviewSchema.parse(reply)));
+  }
+
+  /** A level goes, its content and its people to the targets (KBC-108 FR-1). */
+  remove(
+    topic: string,
+    level: string,
+    body: LevelDelete,
+  ): Observable<TopicLevels> {
+    return this.http
+      .delete(`${topicLevelsUrl(topic)}/${encodeURIComponent(level)}`, { body })
+      .pipe(map((reply) => topicLevelsSchema.parse(reply)));
+  }
+
+  /** Every level goes, confirmed by the collection (KBC-108 FR-3). */
+  clear(topic: string, version: string): Observable<TopicLevels> {
+    return this.http
+      .delete(topicLevelsUrl(topic), { body: { confirm: topic, version } })
+      .pipe(map((reply) => topicLevelsSchema.parse(reply)));
+  }
+
+  /** "Carregar mais" of the history; the first page is an httpResource. */
+  history(query: LevelAuditQuery): Observable<LevelAuditPage> {
+    return this.http
+      .get(levelAuditUrl(query))
+      .pipe(map((reply) => levelAuditPageSchema.parse(reply)));
   }
 
   /** One more page of the queue ("Carregar mais"); the first is an httpResource. */
