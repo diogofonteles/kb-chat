@@ -88,6 +88,7 @@ import {
   ContentGate,
   LevelDirectory,
   DocumentLevelsService,
+  PeopleLevelsService,
   LevelWriteQueue,
   accessLevelRoutes,
 } from './modules/access-levels/index.js';
@@ -315,6 +316,7 @@ type FullDeps = AppDeps & {
     gate: ContentGate;
     service: AccessLevelsService;
     documents: DocumentLevelsService;
+    people: PeopleLevelsService;
   };
   /** The collections the legacy seed wrote at this start (KBC-049 BR-4). */
   legacySeeded: readonly string[];
@@ -1650,10 +1652,12 @@ async function registerPeople(
         setDefault: (appAi, by) => house.service.setDefault(appAi, by),
       },
       presets: presetsOf(deps, profiles),
-      levels: deps.levels.service,
+      levels: deps.levels.people,
     }),
   );
-  await app.register(inviteProfilesRoutes(profiles, topics));
+  await app.register(
+    inviteProfilesRoutes({ profiles, topics, levels: deps.levels.people }),
+  );
 }
 
 /** What an invitation and "Aplicar perfil" need from the profiles and Settings (KBC-028). */
@@ -1933,7 +1937,8 @@ async function loadedLevels(
     ...(media && { media }),
   });
   const documents = new DocumentLevelsService(shared);
-  return { ...levels, gate, service, documents };
+  const peopleLevels = new PeopleLevelsService({ ...shared, people });
+  return { ...levels, gate, service, documents, people: peopleLevels };
 }
 
 /** The levels' state in memory (tests, and an app built without a state folder). */

@@ -26,5 +26,9 @@ export {
   levelViewsOf,
   storedLevelViewOf,
 } from './request-view.js';
+export {
+  PeopleLevelsService,
+  type PeopleLevelsDeps,
+} from './people-levels-service.js';
 export { accessLevelRoutes } from './routes.js';
 export { LevelWriteQueue } from './write-queue.js';

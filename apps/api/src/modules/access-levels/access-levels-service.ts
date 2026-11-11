@@ -18,7 +18,6 @@ import {
   canSeeTopic,
   isMaster,
   type ParentOf,
-  type PersonLevelRules,
   type StoredPerson,
 } from '../auth/index.js';
 import {
@@ -105,7 +104,7 @@ function assertFreeCode(
  * The scales, people's levels and documents' levels (KBC-103, ADR 0036 §1–§4, §9–§11). Writes
  * run one after the other, and each is audited before it answers.
  */
-export class AccessLevelsService implements PersonLevelRules {
+export class AccessLevelsService {
   private readonly queue: LevelWriteQueue;
 
   constructor(private readonly deps: AccessLevelsServiceDeps) {
@@ -257,43 +256,6 @@ export class AccessLevelsService implements PersonLevelRules {
       });
       return this.levelsOf(root);
     });
-  }
-
-  /** FR-3: each entry names a top-level collection with a scale and one of its levels. */
-  assertLevels(levels: Readonly<Record<string, string>>): void {
-    for (const [slug, level] of Object.entries(levels)) {
-      const known =
-        this.deps.catalog.get(slug) !== undefined &&
-        this.deps.gate.rootOf(slug) === slug &&
-        this.deps.directory.scaleOf(slug).some((one) => one.id === level);
-      if (!known)
-        throw new AppError('VALIDATION_FAILED', 'Unknown level', {
-          details: { levels: slug },
-        });
-    }
-  }
-
-  /** FR-10: a person's level changes, one line each. */
-  async recordChange(change: {
-    readonly before: StoredPerson;
-    readonly after: StoredPerson;
-    readonly by: string;
-  }): Promise<void> {
-    const { before, after, by } = change;
-    for (const [root, level] of Object.entries(after.levels ?? {})) {
-      const was = before.levels?.[root] ?? null;
-      if (was === level) continue;
-      await this.record(
-        { by },
-        {
-          kind: 'person.level',
-          collection: root,
-          target: after.id,
-          before: was,
-          after: level,
-        },
-      );
-    }
   }
 
   /** BR-4: every text of the scope and every person with access, at the first level. */

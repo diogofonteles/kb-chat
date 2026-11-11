@@ -10,10 +10,13 @@ import {
   type DefaultableAppAi,
   type PersonAiUpdate,
   type PersonAi,
+  type PersonLevelVia,
+  type Role,
   personIdSchema,
   personListSchema,
   personSchema,
   personUpdateSchema,
+  type PersonUpdate,
 } from '@kb-chat/contracts';
 import type {
   FastifyBaseLogger,
@@ -46,15 +49,36 @@ export interface PeopleRouteDeps {
   readonly levels?: PersonLevelRules;
 }
 
+/** A person's role and collections, and the levels a preset or a change names (KBC-109). */
+export interface LevelGrant {
+  readonly role: Role;
+  readonly topics: readonly string[];
+  readonly levels?: Readonly<Record<string, string>>;
+}
+
 /** What the access-levels module checks and records around a person's levels. */
 export interface PersonLevelRules {
   /** Throws VALIDATION_FAILED unless every entry names a level of that collection's scale. */
   assertLevels(levels: Readonly<Record<string, string>>): void;
-  /** Audits each level that changed (FR-10). */
+  /**
+   * KBC-109 BR-1, BR-5: every level of a preset names a collection with a scale that its
+   * collections reach, and one of its levels; a master preset holds none.
+   */
+  assertPresetLevels(preset: LevelGrant): void;
+  /**
+   * The levels a grant writes (KBC-109 BR-2, BR-3): for each collection with a scale it
+   * reaches, the level named when it exists, else the one `held` when valid and not named,
+   * else the lowest. A master gets none.
+   */
+  resolve(
+    grant: LevelGrant & { readonly held?: Readonly<Record<string, string>> },
+  ): Record<string, string>;
+  /** Audits each level that changed (FR-10), and where it was set (KBC-109 BR-4). */
   recordChange(change: {
     readonly before: StoredPerson;
     readonly after: StoredPerson;
     readonly by: string;
+    readonly via: PersonLevelVia;
   }): Promise<void>;
 }
 
@@ -156,21 +180,78 @@ async function invite(
   const { email, sendEmail, preset, profileId } = body;
   const chosen = deps.presets?.presetFor({ preset, profileId });
   if (chosen) assertKnownTopics(deps, chosen.topics);
+  // A preset sent is checked; a profile's level that no longer exists is the lowest (BR-3).
+  if (preset) assertPresetLevels(deps, preset);
   // Lending in the invitation is the owner's alone, as in the editor (KBC-031 BR-1).
   assertMayLend(deps, request, chosen?.ai.appAi);
-  const invited = await deps.people.invite(email, inviter.email, chosen);
-  // The house follows the AI it was given (provisioned keys), as after the editor; if it
-  // cannot, the invitation is undone so that inviting again works.
-  if (chosen)
-    await deps.ai?.sync(invited, aiOf(invited)).catch(async (err: unknown) => {
-      await deps.people
-        .revoke(invited.id)
-        .catch(() => request.log.error('could not undo a failed invitation'));
-      throw err;
+  const leveled = chosen && withLevels(deps, chosen);
+  const invited = await deps.people.invite(email, inviter.email, leveled);
+  if (chosen) await followInvitedAi(deps, invited, request.log);
+  if (leveled?.levels)
+    await recordLevels(deps, {
+      before: { ...invited, levels: {} },
+      after: invited,
+      by: inviter.email,
+      via: 'invite',
     });
   return sendEmail
     ? deps.invitations.afterInvite(invited, inviter, request.log)
     : invited;
+}
+
+/**
+ * The house follows the AI it was given (provisioned keys), as after the editor; if it
+ * cannot, the invitation is undone so that inviting again works.
+ */
+async function followInvitedAi(
+  deps: PeopleRouteDeps,
+  invited: StoredPerson,
+  log: FastifyBaseLogger,
+): Promise<void> {
+  await deps.ai?.sync(invited, aiOf(invited)).catch(async (err: unknown) => {
+    await deps.people
+      .revoke(invited.id)
+      .catch(() => log.error('could not undo a failed invitation'));
+    throw err;
+  });
+}
+
+function assertPresetLevels(deps: PeopleRouteDeps, preset: InvitationPreset) {
+  if (!preset.levels || Object.keys(preset.levels).length === 0) return;
+  if (!deps.levels)
+    throw new AppError('VALIDATION_FAILED', 'Levels are not available');
+  deps.levels.assertPresetLevels(preset);
+}
+
+/** The preset with the levels it writes (KBC-109 FR-2); none without the levels module. */
+function withLevels(
+  deps: PeopleRouteDeps,
+  preset: InvitationPreset,
+  held?: Readonly<Record<string, string>>,
+): InvitationPreset {
+  const { levels: named, ...rest } = preset;
+  const levels = deps.levels?.resolve({ ...preset, levels: named, held }) ?? {};
+  return Object.keys(levels).length > 0 ? { ...rest, levels } : rest;
+}
+
+/**
+ * A change of collections writes the lowest level of each collection with a scale it now
+ * reaches without a valid one, so the grant is recorded (KBC-109 AC-5, BR-4).
+ */
+function withGrantedLevels(
+  deps: PeopleRouteDeps,
+  before: StoredPerson | null,
+  body: PersonUpdate,
+): PersonUpdate {
+  if (!body.topics || !before || !deps.levels) return body;
+  const granted = deps.levels.resolve({
+    role: body.role ?? before.role,
+    topics: body.topics,
+    levels: body.levels ?? {},
+    held: before.levels,
+  });
+  const levels = { ...body.levels, ...granted };
+  return Object.keys(levels).length > 0 ? { ...body, levels } : body;
 }
 
 /** Everything a master's change must pass before anything is written. */
@@ -207,11 +288,12 @@ function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
       const by = viewerOf(request).person.email;
       const before = await deps.people.find(params.id);
       assertMayChangeLent(deps, request, { before, ai: body.ai });
-      const updated = await deps.people.update(params.id, body, by);
+      const patch = withGrantedLevels(deps, before, body);
+      const updated = await deps.people.update(params.id, patch, by);
       if (body.ai && before)
         await syncAi(deps, { before, updated, by, log: request.log });
-      if (body.levels && before)
-        await deps.levels?.recordChange({ before, after: updated, by });
+      if (patch.levels && before)
+        await recordLevels(deps, { before, after: updated, by, via: 'editor' });
       return view(deps, updated);
     },
   );
@@ -248,26 +330,40 @@ async function applyProfile(
   const { profileId } = target;
   const { presets } = deps;
   if (!presets) throw new AppError('NOT_FOUND', 'Unknown invite profile');
-  const preset = presets.presetFor({ profileId });
+  const profile = presets.presetFor({ profileId });
   const before = await deps.people.find(target.id);
-  if (!preset || !before) throw new AppError('NOT_FOUND', 'Not found');
-  assertKnownTopics(deps, preset.topics);
+  if (!profile || !before) throw new AppError('NOT_FOUND', 'Not found');
+  assertKnownTopics(deps, profile.topics);
+  // Only the collections the profile reaches change level (KBC-109 BR-2).
+  const preset = withLevels(deps, profile, before.levels);
   const by = viewerOf(request).person.email;
   assertMayChangeLent(deps, request, { before, ai: preset.ai });
   const updated = await deps.people.applyPreset(before.id, preset, {
     by,
     withPreferences: !(await presets.hasSavedSettings(before)),
   });
-  // The whole profile goes back when the house cannot follow its AI.
-  await syncAi(deps, { before, updated, by, log: request.log }).catch(
-    async (err: unknown) => {
-      await deps.people
-        .restore(before)
-        .catch(() => request.log.error('could not undo a profile'));
-      throw err;
-    },
-  );
+  await followProfileAi(deps, { before, updated, by, log: request.log });
+  if (preset.levels)
+    await recordLevels(deps, { before, after: updated, by, via: 'profile' });
   return updated;
+}
+
+/** The whole profile goes back when the house cannot follow its AI. */
+async function followProfileAi(deps: PeopleRouteDeps, change: AiSyncChange) {
+  await syncAi(deps, change).catch(async (err: unknown) => {
+    await deps.people
+      .restore(change.before)
+      .catch(() => change.log.error('could not undo a profile'));
+    throw err;
+  });
+}
+
+/** A person's levels changed: one audit line per collection (KBC-109 BR-4). */
+async function recordLevels(
+  deps: PeopleRouteDeps,
+  change: Parameters<PersonLevelRules['recordChange']>[0],
+): Promise<void> {
+  await deps.levels?.recordChange(change);
 }
 
 function registerWrites(app: FastifyInstance, deps: PeopleRouteDeps) {

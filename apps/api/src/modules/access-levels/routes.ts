@@ -12,6 +12,8 @@ import {
   levelOrderSchema,
   levelRenameSchema,
   levelScalesSchema,
+  peopleLevelRequestSchema,
+  peopleLevelResultSchema,
   topicLevelsSchema,
   topicSlugSchema,
 } from '@kb-chat/contracts';
@@ -35,6 +37,7 @@ import type {
   Classifier,
   DocumentLevelsService,
 } from './document-levels-service.js';
+import type { PeopleLevelsService } from './people-levels-service.js';
 
 /** Masters only (BR-9: `collection-levels`), in a collection they see (404 otherwise). */
 const MANAGE: RouteAccess = {
@@ -231,15 +234,36 @@ function registerBulk(typed: Typed, documents: DocumentLevelsService): void {
   );
 }
 
-/** T24's routes (KBC-103 FR-1, FR-4; KBC-107 FR-1, FR-2). */
+/** "Nível em <acervo>: [nível] · Aplicar" on T9: masters only (KBC-109 FR-3). */
+function registerPeopleBulk(typed: Typed, people: PeopleLevelsService): void {
+  typed.post(
+    '/api/v1/people/levels',
+    {
+      config: { access: { master: true } },
+      schema: {
+        body: peopleLevelRequestSchema,
+        response: { 200: peopleLevelResultSchema },
+      },
+    },
+    async (request) =>
+      people.assign(
+        { actor: actorOf(request), log: request.log },
+        request.body,
+      ),
+  );
+}
+
+/** T24's routes (KBC-103 FR-1, FR-4; KBC-107 FR-1, FR-2) and the people bulk (KBC-109). */
 export const accessLevelRoutes =
   (services: {
     readonly service: AccessLevelsService;
     readonly documents: DocumentLevelsService;
+    readonly people: PeopleLevelsService;
   }): FastifyPluginAsync =>
   async (app) => {
     const typed = app.withTypeProvider<ZodTypeProvider>();
     const { service, documents } = services;
+    registerPeopleBulk(typed, services.people);
     registerScales(typed, service);
     registerScale(typed, service);
     registerChanges(typed, service);

@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import {
+  featureSchema,
   inviteProfileSchema,
   type InvitationPreset,
+  type InvitePreset,
   type InviteProfile,
   type InviteProfileCreate,
   type InviteProfileUpdate,
@@ -17,6 +19,49 @@ const documentSchema = z.object({
   version: z.literal(1).default(1),
   profiles: z.array(inviteProfileSchema).default([]),
 });
+
+const rawProfilesSchema = z
+  .object({
+    profiles: z.array(
+      z
+        .object({
+          preset: z.object({ features: z.array(z.string()) }).loose(),
+        })
+        .loose(),
+    ),
+  })
+  .loose();
+
+const isKnownFeature = (name: string) => featureSchema.safeParse(name).success;
+
+/**
+ * The file without the feature names this image does not know (a newer image wrote them),
+ * and those names, to warn about: as people.json since KBC-107, a profile still loads.
+ */
+function withKnownFeatures(raw: unknown): {
+  readonly raw: unknown;
+  readonly unknown: string[];
+} {
+  const parsed = rawProfilesSchema.safeParse(raw);
+  if (!parsed.success) return { raw, unknown: [] };
+  const names = parsed.data.profiles.flatMap((one) => one.preset.features);
+  const profiles = parsed.data.profiles.map((one) => ({
+    ...one,
+    preset: {
+      ...one.preset,
+      features: one.preset.features.filter(isKnownFeature),
+    },
+  }));
+  const unknown = [...new Set(names.filter((name) => !isKnownFeature(name)))];
+  return { raw: { ...parsed.data, profiles }, unknown };
+}
+
+/** No levels is no key: a profile without levels reads in an older image (KBC-109). */
+function compact(preset: InvitePreset): InvitePreset {
+  if (preset.levels && Object.keys(preset.levels).length > 0) return preset;
+  const { levels, ...rest } = preset;
+  return levels ? rest : preset;
+}
 type ProfilesDocument = z.infer<typeof documentSchema>;
 
 export interface InviteProfilesDeps {
@@ -45,9 +90,14 @@ export class InviteProfilesService {
   constructor(private readonly deps: InviteProfilesDeps) {}
 
   async load(): Promise<void> {
-    const parsed = documentSchema.safeParse(
+    const { raw, unknown } = withKnownFeatures(
       (await this.deps.store.read()) ?? {},
     );
+    if (unknown.length > 0)
+      this.deps.warn?.(
+        `invite-profiles.json names features this version does not know; they are ignored: ${unknown.join(', ')}`,
+      );
+    const parsed = documentSchema.safeParse(raw);
     this.invalid = !parsed.success;
     if (this.invalid)
       this.deps.warn?.(
@@ -81,7 +131,7 @@ export class InviteProfilesService {
     const profile: InviteProfile = {
       id: this.deps.newId?.() ?? randomUUID(),
       name,
-      preset,
+      preset: compact(preset),
       isDefault: false,
     };
     await this.change((profiles) => {
@@ -100,7 +150,9 @@ export class InviteProfilesService {
           ? {
               ...profile,
               ...(patch.name !== undefined && { name: patch.name }),
-              ...(patch.preset !== undefined && { preset: patch.preset }),
+              ...(patch.preset !== undefined && {
+                preset: compact(patch.preset),
+              }),
               ...(patch.isDefault === false && { isDefault: false }),
             }
           : profile,

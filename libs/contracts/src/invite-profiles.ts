@@ -12,6 +12,7 @@ import {
   inviteRequestSchema,
   roleSchema,
 } from './auth.js';
+import { personLevelsSchema } from './access-levels.js';
 import { initialPreferencesSchema } from './settings.js';
 import { topicSlugSchema } from './topics.js';
 
@@ -62,7 +63,25 @@ const presetFieldsSchema = z.strictObject({
     .default([...DEFAULT_INVITE_FEATURES]),
   ai: presetAiSchema.prefault({}),
   preferences: initialPreferencesSchema.prefault({}),
+  /**
+   * The level per top-level collection with a scale (KBC-109 FR-1). Optional, so a profile
+   * without levels is written as before and an older image still reads it. Whether each one
+   * names a collection the preset reaches needs the collection tree: the API checks it (BR-1).
+   */
+  levels: personLevelsSchema.optional(),
 });
+
+/** A master sees every level: a master preset holds none (KBC-109 BR-5). */
+const masterHoldsNoLevels = (preset: {
+  readonly role: string;
+  readonly levels?: Readonly<Record<string, string>>;
+}): boolean =>
+  preset.role !== 'master' || Object.keys(preset.levels ?? {}).length === 0;
+
+const MASTER_LEVELS_ERROR = {
+  path: ['levels'],
+  error: 'A master preset holds no levels',
+};
 
 /** The default collection is one of those granted, unless the person is a master (BR-4). */
 const grantsDefaultTopic = (preset: {
@@ -83,10 +102,9 @@ const DEFAULT_TOPIC_ERROR = {
  * Everything an invitation can set up at once (KBC-028): role, collections, features, the
  * app AI and its limits, and the person's initial preferences. This is what a profile keeps.
  */
-export const invitePresetSchema = presetFieldsSchema.refine(
-  grantsDefaultTopic,
-  DEFAULT_TOPIC_ERROR,
-);
+export const invitePresetSchema = presetFieldsSchema
+  .refine(grantsDefaultTopic, DEFAULT_TOPIC_ERROR)
+  .refine(masterHoldsNoLevels, MASTER_LEVELS_ERROR);
 export type InvitePreset = z.infer<typeof invitePresetSchema>;
 export type InvitePresetInput = z.input<typeof invitePresetSchema>;
 
@@ -96,7 +114,8 @@ export type InvitePresetInput = z.input<typeof invitePresetSchema>;
  */
 export const invitationPresetSchema = presetFieldsSchema
   .extend({ ai: invitationAiSchema.prefault({}) })
-  .refine(grantsDefaultTopic, DEFAULT_TOPIC_ERROR);
+  .refine(grantsDefaultTopic, DEFAULT_TOPIC_ERROR)
+  .refine(masterHoldsNoLevels, MASTER_LEVELS_ERROR);
 export type InvitationPreset = z.infer<typeof invitationPresetSchema>;
 export type InvitationPresetInput = z.input<typeof invitationPresetSchema>;
 
@@ -111,8 +130,17 @@ export const inviteProfileSchema = z.object({
 });
 export type InviteProfile = z.infer<typeof inviteProfileSchema>;
 
+/**
+ * A profile as masters read it (KBC-109 FR-4): `staleLevels` names the levels it keeps that
+ * no longer exist in their scale; an invitation with it gives the lowest level (BR-3).
+ */
+export const inviteProfileViewSchema = inviteProfileSchema.extend({
+  staleLevels: personLevelsSchema.default({}),
+});
+export type InviteProfileView = z.infer<typeof inviteProfileViewSchema>;
+
 export const inviteProfileListSchema = z.object({
-  items: z.array(inviteProfileSchema),
+  items: z.array(inviteProfileViewSchema),
 });
 export type InviteProfileList = z.infer<typeof inviteProfileListSchema>;
 

@@ -191,6 +191,15 @@ export class PeopleService {
     return this.change((people) => rules.placePeople(people, placement));
   }
 
+  /** One level for the people `keeps` accepts, in one write of people.json (KBC-109 NFR-1). */
+  setLevels(change: {
+    readonly root: string;
+    readonly level: string;
+    readonly keeps: (person: StoredPerson) => boolean;
+  }): Promise<rules.LevelChanged[]> {
+    return this.change((people) => rules.setLevels(people, change));
+  }
+
   /** One app AI for several people or for everyone (KBC-022); answers how many changed. */
   assignAi(
     request: {
