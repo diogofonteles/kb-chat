@@ -121,3 +121,14 @@
 .alert p {
   margin: 0 0 var(--space-2);
 }
+
+/* The levels did not load: saving waits, with a way to try again (KBC-109 R1-1). */
+.levels-failed {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.levels-failed p {
+  margin: 0;
+}

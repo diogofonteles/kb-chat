@@ -119,9 +119,17 @@ export class PeoplePanel {
   private readonly levelScales = httpResource(() => levelScalesUrl(), {
     parse: (body) => levelScalesSchema.parse(body),
   });
-  protected readonly scales = computed(() =>
-    this.levelScales.hasValue() ? this.levelScales.value().items : [],
+  /** Null while they load or when they failed: a preset's levels then stay as they are. */
+  protected readonly scaleState = computed(() =>
+    this.levelScales.hasValue() ? this.levelScales.value().items : null,
   );
+  protected readonly scales = computed(() => this.scaleState() ?? []);
+  protected readonly scalesFailed = computed(
+    () => this.levelScales.error() !== undefined,
+  );
+  private readonly levelBar = viewChild(PeopleLevelBar);
+  private readonly statusLines =
+    viewChildren<ElementRef<HTMLElement>>('statusLine');
   /** The house default, to name each person's "Padrão" (KBC-022). */
   private readonly house = rxResource({
     stream: () => this.houseApi.houseDefault(),
@@ -199,8 +207,7 @@ export class PeoplePanel {
   protected readonly draftPreset = linkedSignal<InvitationPreset>(() =>
     withPresetLevels(
       this.profiles.find(this.setupChoice())?.preset ?? plainPreset(),
-      this.topics(),
-      this.scales(),
+      { topics: this.topics(), scales: this.scaleState(), mode: 'invite' },
     ),
   );
   /** The chosen profile's levels that no longer exist (KBC-109 BR-3). */
@@ -285,7 +292,13 @@ export class PeoplePanel {
       done: (result) => {
         this.people.reload();
         this.selected.set(new Set());
+        // The bar's button goes disabled: focus goes to what happened (WCAG 2.4.3, QA-1).
+        this.focusAfterRender(() => this.statusLines()[0]);
         return levelNotice(result, this.titles().get(collection) ?? collection);
+      },
+      failed: (text) => {
+        this.notice.set({ kind: 'error', text });
+        this.focusAfterRender(() => this.levelBar()?.applyButton());
       },
     });
   }
@@ -409,6 +422,19 @@ export class PeoplePanel {
           ?.nativeElement.focus(),
       { injector: this.injector },
     );
+  }
+
+  /** The levels of the collections, once more (KBC-109 R1-1). */
+  protected reloadScales(): void {
+    this.levelScales.reload();
+  }
+
+  private focusAfterRender(
+    target: () => ElementRef<HTMLElement> | undefined,
+  ): void {
+    afterNextRender(() => target()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
   }
 
   /** The button was disabled while sending: keyboard focus goes back to it (WCAG 2.4.3). */
@@ -642,12 +668,19 @@ function levelNotice(result: PeopleLevelResult, title: string): string {
     parts.push(
       $localize`:@@people.mastersAllLevels:Masters veem todos os níveis.`,
     );
-  const left = result.withoutAccess + result.unknown;
-  if (left > 0)
+  const { withoutAccess, unknown } = result;
+  if (withoutAccess > 0)
     parts.push(
-      left === 1
+      withoutAccess === 1
         ? $localize`:@@people.levelLeftOne:1 pessoa sem acesso a ${title}:collection: ficou como estava.`
-        : $localize`:@@people.levelLeft:${left}:count: pessoas sem acesso a ${title}:collection: ficaram como estavam.`,
+        : $localize`:@@people.levelLeft:${withoutAccess}:count: pessoas sem acesso a ${title}:collection: ficaram como estavam.`,
+    );
+  // Revoked while the bulk ran (R1-7): not "without access".
+  if (unknown > 0)
+    parts.push(
+      unknown === 1
+        ? $localize`:@@people.levelGoneOne:1 pessoa não está mais na lista.`
+        : $localize`:@@people.levelGone:${unknown}:count: pessoas não estão mais na lista.`,
     );
   return parts.join(' ');
 }

@@ -19,7 +19,7 @@ import {
   mediaQuotaSchema,
   type AppAi,
   type Feature,
-  type InviteProfile,
+  type InviteProfileView,
   type LevelScales,
   type Person,
   type PersonUpdate,
@@ -71,7 +71,7 @@ export class PersonEditor {
   /** Whether the owner's subscription is offered (KBC-024). */
   readonly lending = input<Lending>(NO_LENDING);
   /** The invitation profiles a master can apply here (KBC-028 FR-4). */
-  readonly profiles = input<readonly InviteProfile[]>([]);
+  readonly profiles = input<readonly InviteProfileView[]>([]);
   /** The signed-in account may act as this person (KBC-060): shows "Ver como". */
   readonly mayActAs = input(false);
   /** The owner looks: only it grants "Ver como" to a master (BR-1). */
@@ -103,6 +103,13 @@ export class PersonEditor {
       this.profiles().find((p) => p.id === this.chosenProfileId()) ??
       this.profiles()[0] ??
       null,
+  );
+  /**
+   * The chosen profile's levels that no longer exist: applying it gives the lowest there, and
+   * the confirmation says so (KBC-109 BR-3, never in silence).
+   */
+  protected readonly staleOfChosen = computed(() =>
+    Object.values(this.chosenProfile()?.staleLevels ?? {}),
   );
   /** Applying waits for a confirmation on the line (screens.md T9). */
   protected readonly confirmingApply = signal(false);
@@ -145,6 +152,7 @@ export class PersonEditor {
       : levelRowsAfter(this.topics(), this.scales(), {
           granted: this.checkedTopics(),
           levels: this.person().levels,
+          mode: 'person',
         }),
   );
 

@@ -292,13 +292,22 @@ describe('InviteProfilesPanel (KBC-028 FR-2)', () => {
   });
 });
 
-describe('InviteProfilesPanel: a level that no longer exists (KBC-109 AC-4, BR-3)', () => {
-  it('opens the profile at the lowest level with the warning, and saves the lowest', async () => {
-    const stale = {
-      ...aluno,
-      preset: { ...aluno.preset, levels: { hermetismo: 'ci' } },
-      staleLevels: { hermetismo: 'ci' },
-    };
+describe('InviteProfilesPanel: levels (KBC-109 AC-4, BR-3, R1-1, R1-2)', () => {
+  const SCALES = [
+    {
+      collection: 'hermetismo',
+      levels: [
+        { id: 'qs', code: 'QS' },
+        { id: 'ci', code: 'CI' },
+      ],
+    },
+  ];
+
+  async function renderWith(
+    profile: InviteProfile,
+    inputs: { scales?: typeof SCALES | null; scalesFailed?: boolean } = {},
+  ) {
+    const reloadScales = vi.fn();
     const result = await render(InviteProfilesPanel, {
       providers: [
         provideZonelessChangeDetection(),
@@ -309,31 +318,89 @@ describe('InviteProfilesPanel: a level that no longer exists (KBC-109 AC-4, BR-3
       inputs: {
         topics: TOPICS.items,
         defaultAppAi: 'house',
-        scales: [
-          { collection: 'hermetismo', levels: [{ id: 'qs', code: 'QS' }] },
-        ],
+        scales: SCALES,
+        ...inputs,
       },
+      on: { reloadScales },
     });
     const http = TestBed.inject(HttpTestingController);
     TestBed.tick();
-    http.expectOne(URL).flush({ items: [stale] });
+    http.expectOne(URL).flush({ items: [profile] });
     await result.fixture.whenStable();
     host = result.fixture.nativeElement as HTMLElement;
     openSection();
     await result.fixture.whenStable();
     fireEvent.click(screen.getByRole('button', { name: /Editar\s+Aluno/ }));
     await result.fixture.whenStable();
+    return { ...result, http, reloadScales };
+  }
 
+  const saveButton = () =>
+    screen.getByRole<HTMLButtonElement>('button', { name: 'Salvar perfil' });
+
+  it('R1-2: renaming an old profile sends no preset, so no level is written', async () => {
+    const { http, fixture } = await renderWith(aluno);
     expect(
       screen.getByRole<HTMLSelectElement>('combobox', {
         name: 'Nível em Hermetismo',
       }).value,
-    ).toBe('qs');
+    ).toBe(':keep');
+    fireEvent.input(screen.getByLabelText('Nome do perfil'), {
+      target: { value: 'Aluno novo' },
+    });
+    await fixture.whenStable();
+    fireEvent.click(saveButton());
+    const saved = http.expectOne(`${URL}/${aluno.id}`);
+    expect(saved.request.body).toEqual({ name: 'Aluno novo', isDefault: true });
+  });
+
+  it('AC-4, R1-3: a level that no longer exists asks for a choice before the preset is saved', async () => {
+    const stale = {
+      ...aluno,
+      preset: { ...aluno.preset, levels: { hermetismo: 'cdc' } },
+    };
+    const { http, fixture } = await renderWith(stale);
+    const select = screen.getByRole<HTMLSelectElement>('combobox', {
+      name: 'Nível em Hermetismo',
+    });
+    expect(select.value).toBe(':choose');
     expect(
-      screen.getByText(/O nível ci não existe mais; escolha outro\./),
+      screen.getByText(/O nível cdc não existe mais; escolha outro\./),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar perfil' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Pesquisa com IA' }));
+    await fixture.whenStable();
+    expect(saveButton().disabled).toBe(true);
+    fireEvent.change(select, { target: { value: 'qs' } });
+    await fixture.whenStable();
+    expect(screen.queryByText(/não existe mais/)).toBeNull();
+    fireEvent.click(saveButton());
     const saved = http.expectOne(`${URL}/${aluno.id}`);
     expect(saved.request.body.preset.levels).toEqual({ hermetismo: 'qs' });
+  });
+
+  it('R1-1: with the levels still loading, a saved preset keeps the profile levels', async () => {
+    const leveled = {
+      ...aluno,
+      preset: { ...aluno.preset, levels: { hermetismo: 'ci' } },
+    };
+    const { http, fixture } = await renderWith(leveled, { scales: null });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Pesquisa com IA' }));
+    await fixture.whenStable();
+    fireEvent.click(saveButton());
+    const saved = http.expectOne(`${URL}/${aluno.id}`);
+    expect(saved.request.body.preset.levels).toEqual({ hermetismo: 'ci' });
+  });
+
+  it('R1-1: when the levels failed to load, saving waits and offers to load them again', async () => {
+    const { reloadScales } = await renderWith(aluno, {
+      scales: null,
+      scalesFailed: true,
+    });
+    expect(
+      screen.getByText(/Não consegui carregar os níveis dos acervos/),
+    ).toBeTruthy();
+    expect(saveButton().disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Carregar de novo' }));
+    expect(reloadScales).toHaveBeenCalledTimes(1);
   });
 });

@@ -560,7 +560,7 @@ describe('InvitePresetEditor: levels (KBC-109 FR-5, BR-1, BR-5, AC-7)', () => {
     expect(last(changed).levels).toBeUndefined();
   });
 
-  it('BR-3: warns about a level that no longer exists until another is chosen', async () => {
+  it('BR-3, invitation: says a level that no longer exists gives the lowest', async () => {
     await renderLevels(
       {
         ...plainPreset(),
@@ -572,11 +572,95 @@ describe('InvitePresetEditor: levels (KBC-109 FR-5, BR-1, BR-5, AC-7)', () => {
     const select = screen.getByRole<HTMLSelectElement>('combobox', {
       name: 'Nível em Hermetismo',
     });
+    expect(select.value).toBe('qs');
+    const note = screen.getByText(
+      /O nível cdc não existe mais; este convite dá o nível mais baixo\./,
+    );
+    expect(select.getAttribute('aria-describedby')).toBe(note.id);
+    fireEvent.change(select, { target: { value: 'ci' } });
+    expect(screen.queryByText(/não existe mais/)).toBeNull();
+  });
+});
+
+describe('InvitePresetEditor in a profile (KBC-109 R1-1, R1-2, R1-3)', () => {
+  const SCALES = [
+    {
+      collection: 'hermetismo',
+      levels: [
+        { id: 'qs', code: 'QS' },
+        { id: 'ci', code: 'CI' },
+      ],
+    },
+  ];
+
+  async function renderProfile(
+    preset: InvitationPreset,
+    scales: typeof SCALES | null = SCALES,
+  ) {
+    const changed = vi.fn();
+    const view = await render(InvitePresetEditor, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { preset, topics: TOPICS.items, scales, mode: 'profile' },
+      on: { changed },
+    });
+    return { ...view, changed };
+  }
+
+  const levelSelect = () =>
+    screen.getByRole<HTMLSelectElement>('combobox', {
+      name: 'Nível em Hermetismo',
+    });
+
+  it('R1-2: a collection the profile names no level for keeps the person level, and may name one', async () => {
+    const { changed } = await renderProfile({
+      ...plainPreset(),
+      topics: ['hermetismo'],
+    });
+    expect(levelSelect().value).toBe(':keep');
+    expect(
+      within(levelSelect())
+        .getAllByRole('option')
+        .map((one) => one.textContent?.trim()),
+    ).toEqual(['Manter o nível da pessoa', 'QS', 'CI']);
+    fireEvent.change(levelSelect(), { target: { value: 'ci' } });
+    expect(last(changed).levels).toEqual({ hermetismo: 'ci' });
+    fireEvent.change(levelSelect(), { target: { value: ':keep' } });
+    expect(last(changed).levels).toBeUndefined();
+  });
+
+  it('R1-2: marking a collection keeps the person level by default', async () => {
+    const { changed } = await renderProfile(plainPreset());
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Hermetismo' }));
+    expect(last(changed).topics).toEqual(['hermetismo']);
+    expect(last(changed).levels).toBeUndefined();
+  });
+
+  it('R1-3: a level that no longer exists asks for a choice; choosing the lowest is a choice', async () => {
+    const { changed } = await renderProfile({
+      ...plainPreset(),
+      topics: ['hermetismo'],
+      levels: { hermetismo: 'cdc' },
+    });
+    expect(levelSelect().value).toBe(':choose');
     const warning = screen.getByText(
       /O nível cdc não existe mais; escolha outro\./,
     );
-    expect(select.getAttribute('aria-describedby')).toBe(warning.id);
-    fireEvent.change(select, { target: { value: 'ci' } });
-    expect(screen.queryByText(/não existe mais/)).toBeNull();
+    expect(levelSelect().getAttribute('aria-describedby')).toBe(warning.id);
+    fireEvent.change(levelSelect(), { target: { value: 'qs' } });
+    expect(last(changed).levels).toEqual({ hermetismo: 'qs' });
+  });
+
+  it('R1-1: without the scales, no select and the levels stay as they came', async () => {
+    const { changed } = await renderProfile(
+      {
+        ...plainPreset(),
+        topics: ['hermetismo'],
+        levels: { hermetismo: 'ci' },
+      },
+      null,
+    );
+    expect(screen.queryByRole('combobox', { name: /Nível em/ })).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Pesquisa com IA' }));
+    expect(last(changed).levels).toEqual({ hermetismo: 'ci' });
   });
 });

@@ -1233,4 +1233,51 @@ describe('PeoplePanel: a level for the selection (T9, KBC-109 AC-6)', () => {
       '2 pessoas sem acesso a Hermetismo ficaram como estavam.',
     );
   });
+
+  it('QA-1: focus goes to the outcome after applying, and back to the button after a failure', async () => {
+    const guest = aPerson({ topics: ['hermetismo'] });
+    const { http, fixture } = await renderWithScales([owner, guest]);
+    const pick = () =>
+      fireEvent.click(
+        screen.getByRole('checkbox', { name: 'Selecionar guest@example.com' }),
+      );
+    pick();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Nível' }), {
+      target: { value: 'ci' },
+    });
+    await fixture.whenStable();
+    const apply = () =>
+      screen.getByRole<HTMLButtonElement>('button', {
+        name: /Aplicar nível às selecionadas/,
+      });
+    apply().focus();
+    apply().click();
+    http
+      .expectOne('/api/v1/people/levels')
+      .flush(
+        { error: { code: 'VALIDATION_FAILED', message: 'Unknown level' } },
+        { status: 400, statusText: 'Bad Request' },
+      );
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(apply());
+
+    apply().click();
+    http.expectOne('/api/v1/people/levels').flush({
+      collection: 'hermetismo',
+      level: { id: 'ci', code: 'CI' },
+      updated: 0,
+      unchanged: 0,
+      masters: 0,
+      withoutAccess: 0,
+      unknown: 1,
+    });
+    TestBed.tick();
+    http.expectOne('/api/v1/people').flush({ items: [owner] });
+    await fixture.whenStable();
+    const status = screen.getByRole('status');
+    expect(status.textContent).toContain('1 pessoa não está mais na lista.');
+    expect(status.textContent).not.toContain('sem acesso');
+    // The selection emptied and the button is disabled: focus is on what happened.
+    expect(document.activeElement).toBe(status);
+  });
 });

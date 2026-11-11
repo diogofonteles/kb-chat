@@ -3,6 +3,7 @@ import { DEFAULT_PERSON_AI, type Person } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { TOPICS, aTopic } from '../../testing/fixtures.js';
 import { PersonEditor } from './person-editor.js';
+import { plainPreset } from './preset-defaults.js';
 
 const ana = (overrides: Partial<Person> = {}): Person => ({
   id: '11111111-1111-4111-8111-111111111111',
@@ -116,5 +117,37 @@ describe('PersonEditor: the level right under its collection (T9, KBC-109 AC-7)'
     const follows = Node.DOCUMENT_POSITION_FOLLOWING;
     expect(aulas.compareDocumentPosition(select) & follows).toBeTruthy();
     expect(select.compareDocumentPosition(alquimia) & follows).toBeTruthy();
+  });
+});
+
+describe('PersonEditor: applying a profile whose level no longer exists (KBC-109 BR-3)', () => {
+  it('says the person goes to the lowest level there, before applying', async () => {
+    await render(PersonEditor, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        person: ana(),
+        topics: TOPICS.items,
+        scales: SCALES,
+        profiles: [
+          {
+            id: '44444444-4444-4444-8444-444444444444',
+            name: 'Aluno',
+            isDefault: false,
+            preset: {
+              ...plainPreset(),
+              topics: ['hermetismo'],
+              levels: { hermetismo: 'velho' },
+            },
+            staleLevels: { hermetismo: 'velho' },
+          },
+        ],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar perfil' }));
+    expect(
+      screen.getByText(
+        /O nível velho não existe mais; quem tiver este perfil aplicado fica no nível mais baixo\./,
+      ),
+    ).toBeTruthy();
   });
 });

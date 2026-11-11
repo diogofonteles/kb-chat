@@ -8,6 +8,7 @@ import {
   computed,
   inject,
   input,
+  output,
   signal,
   viewChild,
 } from '@angular/core';
@@ -17,7 +18,6 @@ import type {
   InvitePreset,
   InviteProfile,
   InviteProfileView,
-  LevelScales,
   Topic,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
@@ -25,7 +25,7 @@ import type { Observable } from 'rxjs';
 import { InvitePresetEditor } from './invite-preset-editor.js';
 import { InviteProfilesStore } from './invite-profiles-store.js';
 import { plainPreset } from './preset-defaults.js';
-import { withPresetLevels } from './level-rows.js';
+import { hasStaleLevel, type Scales } from './level-rows.js';
 
 /** The profile being written: a new one has no id yet. */
 interface Draft {
@@ -33,8 +33,11 @@ interface Draft {
   readonly name: string;
   readonly isDefault: boolean;
   readonly preset: InvitePreset;
-  /** The profile's levels that no longer exist (KBC-109 FR-4). */
-  readonly staleLevels: Readonly<Record<string, string>>;
+  /**
+   * The preset was changed here: only then does it go out, so renaming a profile or marking
+   * it the default never writes levels (KBC-109 R1-2).
+   */
+  readonly presetChanged: boolean;
 }
 
 type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
@@ -57,8 +60,12 @@ export class InviteProfilesPanel {
   protected readonly store = inject(InviteProfilesStore);
   readonly topics = input.required<readonly Topic[]>();
   readonly defaultAppAi = input<AppAi | null>(null);
-  /** The collections with access levels (KBC-109 FR-5). */
-  readonly scales = input<LevelScales['items']>([]);
+  /** The collections with access levels (KBC-109 FR-5); null while loading or failed. */
+  readonly scales = input<Scales | null>([]);
+  /** The collections' levels failed to load: saving waits (R1-1). */
+  readonly scalesFailed = input(false);
+  /** "Carregar de novo": the page loads the levels again. */
+  readonly reloadScales = output();
 
   private readonly nameInput =
     viewChild<ElementRef<HTMLInputElement>>('nameInput');
@@ -88,20 +95,27 @@ export class InviteProfilesPanel {
       name: '',
       isDefault: false,
       preset: plainPreset(),
-      staleLevels: {},
+      presetChanged: true,
     });
   }
 
-  /** A level that no longer exists opens at the lowest one, with its warning (BR-3). */
+  /**
+   * The profile opens as it is kept (R1-2): a collection it names no level for shows "Manter
+   * o nível da pessoa", and one whose level no longer exists asks for a choice (R1-3).
+   */
   protected edit(profile: InviteProfileView): void {
-    const { id, name, isDefault, staleLevels } = profile;
-    const preset = withPresetLevels(
-      profile.preset,
-      this.topics(),
-      this.scales(),
-    );
-    this.open({ id, name, isDefault, preset, staleLevels });
+    const { id, name, isDefault, preset } = profile;
+    this.open({ id, name, isDefault, preset, presetChanged: false });
   }
+
+  /** A profile level that no longer exists waits for a choice before the preset is saved. */
+  protected readonly levelsPending = computed(() => {
+    const draft = this.draft();
+    return (
+      !!draft?.presetChanged &&
+      hasStaleLevel(draft.preset.levels, this.scales())
+    );
+  });
 
   protected rename(name: string): void {
     this.nameError.set('');
@@ -113,7 +127,9 @@ export class InviteProfilesPanel {
   }
 
   protected changePreset(preset: InvitePreset): void {
-    this.draft.update((draft) => draft && { ...draft, preset });
+    this.draft.update(
+      (draft) => draft && { ...draft, preset, presetChanged: true },
+    );
   }
 
   protected cancel(): void {
@@ -133,10 +149,15 @@ export class InviteProfilesPanel {
       this.focusAfterRender(() => this.nameInput());
       return;
     }
-    const body = { name, isDefault: draft.isDefault, preset: draft.preset };
+    if (this.scalesFailed() || this.levelsPending()) return;
+    const { isDefault, preset, presetChanged } = draft;
     const call = draft.id
-      ? this.store.update(draft.id, body)
-      : this.store.create(body);
+      ? this.store.update(draft.id, {
+          name,
+          isDefault,
+          ...(presetChanged && { preset }),
+        })
+      : this.store.create({ name, isDefault, preset });
     this.run(call, (saved) => {
       this.draft.set(null);
       this.focusAfterRender(() => this.newButton());

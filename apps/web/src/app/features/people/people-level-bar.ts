@@ -1,10 +1,12 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   input,
   linkedSignal,
   output,
+  viewChild,
 } from '@angular/core';
 import type { LevelScales, Topic } from '@kb-chat/contracts';
 
@@ -70,6 +72,7 @@ export interface PeopleLevelRequest {
       </div>
       <div class="actions">
         <button
+          #applyLevelButton
           type="button"
           class="secondary"
           [disabled]="busy() || selectedCount() === 0 || level() === ''"
@@ -101,6 +104,9 @@ export class PeopleLevelBar {
   readonly selectedCount = input(0);
   readonly busy = input(false);
   readonly apply = output<PeopleLevelRequest>();
+  /** Where focus goes back after a failure (WCAG 2.4.3). */
+  readonly applyButton =
+    viewChild<ElementRef<HTMLButtonElement>>('applyLevelButton');
 
   /** Each collection with levels, by its title. */
   protected readonly choices = computed(() =>
