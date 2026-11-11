@@ -54,6 +54,14 @@ QMD 2.8.3's `query` tool filters only by `collections` (OR) and `minScore`; it c
 - **`content-levels`** ("Classificar nível de conteúdo", granted per person): its holder's view also admits the documents without a level of the collections they see and shows the badges (§9); they give documents a level at or below their own, singly or in bulk (`POST …/document-levels`, by ids or by the "Sem nível" filter as of the list's `asOf`). Unassigned media stays with masters.
 - **Audit:** a bulk is one `bulk` line with the filter (or `{ ids: n }`) and the counts, plus one `item.level` line per document, written in one append and one sync.
 
+## Amendment (KBC-109, 2026-11-11)
+
+- **Presets carry levels:** an invitation preset (and so an invite profile) has an optional `levels` map, absent when empty so a profile without levels stays readable by an older image. A level must name a top-level collection with a scale that the preset's collections reach, by the tree (a sub-collection reaches its parent), and one of its levels: the API checks it (400 `VALIDATION_FAILED`), since the contract cannot see the tree; a master preset holds none.
+- **One resolution for every grant:** an invitation, "Aplicar perfil" and a change of a person's collections (the path after an approved access request) write, for each collection with a scale they reach, the level named when it exists, else the person's valid level when the preset does not name that collection, else the lowest. Collections not reached keep their level. A profile's level that no longer exists counts as the lowest and the profile read marks it in `staleLevels`.
+- **People in bulk:** `POST /api/v1/people/levels` (masters) sets one level of one collection for the people named or for everyone, in one write of `people.json`, inside the levels write queue; masters, people who do not reach the collection and unknown ids are left as they are and counted. Audit: one `bulk` line (`count.people`, `count.skipped`, `filter: { ids: n }`) and one `person.level` line per person changed, in one append.
+- **Where a level was set:** `person.level` and the people `bulk` lines carry `via` (`editor`, `invite`, `profile`, `bulk`); an older image drops the key when it reads the audit.
+- **Invite profiles read tolerantly:** `invite-profiles.json` loads with the features this image does not know left out, with a warning, as `people.json` since KBC-107.
+
 ## Options considered
 
 1. **Scales, person levels and item levels in the app's state; one viewer-scoped view (chosen).** Works on the read-only vault (Q7), survives every sync, changes take effect at once and are audited in one place. Cost: the app holds a second fact about each vault document, and new documents start closed until classified.
