@@ -29,8 +29,7 @@ function ledgerMismatches(db: DatabaseSync): string[] {
         .all(String(row['root_id']), String(row['root_id']))
         .map((one) => String(one['id']));
       return (
-        unitFingerprint(db, { schema: 'main', ids }) !==
-        row['target_digest']
+        unitFingerprint(db, { schema: 'main', ids }) !== row['target_digest']
       );
     })
     .map((row) => String(row['root_id']));
