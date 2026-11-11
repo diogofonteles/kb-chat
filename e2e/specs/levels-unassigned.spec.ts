@@ -84,6 +84,12 @@ async function give(page: Page, code: string, count: number): Promise<void> {
   await expect(confirm).toBeFocused();
   await shoot(page, `unassigned-confirm-${code}`);
   await press(page, confirm);
+  // R1-2: the focus goes to what happened, also when the bar goes with the last ones.
+  const said = page.getByRole('status').filter({ hasText: /foram para/ });
+  await expect(said).toHaveText(
+    `${count} documentos foram para ${code.toUpperCase()}.`,
+  );
+  await expect(said).toBeFocused();
 }
 
 test('AC-8, AC-9, AC-2, FR-6: "Sem nível" on T24 by filter and by row, by touch on the phone, until the queue and the notice are gone', async ({
@@ -93,7 +99,8 @@ test('AC-8, AC-9, AC-2, FR-6: "Sem nível" on T24 by filter and by row, by touch
   const owner = await ownerApi();
   const scale = await owner.get(`/api/v1/topics/${slug}/levels`);
   const kept = ((await scale.json()) as { levels: unknown[] }).levels.length;
-  test.skip(kept > 0, 'A reused server kept this scale: start a fresh one.');
+  // A reused server kept this collection's scale: the test needs a fresh one (R1-10).
+  expect(kept, 'start a fresh E2E server: this scale was kept').toBe(0);
   await scaleOf(owner, slug);
   await arrive(owner, slug);
 
@@ -117,7 +124,6 @@ test('AC-8, AC-9, AC-2, FR-6: "Sem nível" on T24 by filter and by row, by touch
   );
   await expect(page.getByText('2 selecionados')).toBeVisible();
   await give(page, 'ci', 2);
-  await expect(page.getByText('2 documentos foram para CI.')).toBeAttached();
   await expect(
     page.getByRole('heading', { name: 'Sem nível (2)' }),
   ).toBeVisible();
@@ -128,6 +134,12 @@ test('AC-8, AC-9, AC-2, FR-6: "Sem nível" on T24 by filter and by row, by touch
   await press(page, page.getByRole('checkbox', { name: 'Texto Novo Dois' }));
   const bar = page.locator('app-bulk-level-bar');
   if (!desktop(page)) {
+    // The list scrolled with the bar at the foot of the screen (not a full-page shot).
+    await page
+      .getByRole('checkbox', { name: 'Texto Novo Um' })
+      .scrollIntoViewIfNeeded();
+    if (shots)
+      await page.screenshot({ path: `${shots}/unassigned-sticky-bar-390.png` });
     // UP-13: on the phone the bar stays at the bottom of the screen.
     expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe(
       'sticky',
