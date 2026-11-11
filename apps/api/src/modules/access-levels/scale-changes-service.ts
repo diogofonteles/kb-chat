@@ -67,6 +67,9 @@ interface Moved {
   people: HeldLevel[];
 }
 
+/** Who and when, shared by every line of one operation. */
+type AuditBase = Pick<LevelAuditEntry, 'at' | 'by' | 'actingAs'>;
+
 const noneMoved = (): Moved => ({ media: [], documents: [], people: [] });
 
 const NO_IMPACT = { people: 0, documents: 0, media: 0 };
@@ -428,8 +431,10 @@ export class ScaleChangesService {
     },
   ): LevelAuditEntry[] {
     const { root, level, body, moved } = change;
+    // One moment for the whole operation: its lines read as one (AC-1).
+    const base = this.base(actor);
     const head: LevelAuditEntry = {
-      ...this.base(actor),
+      ...base,
       kind: 'scale.delete',
       collection: root,
       target: level.id,
@@ -442,8 +447,8 @@ export class ScaleChangesService {
     };
     return [
       head,
-      ...this.itemLines(actor, moved, body.moveContentTo),
-      ...this.personLines(actor, { root, moved, after: body.movePeopleTo }),
+      ...this.itemLines(base, moved, body.moveContentTo),
+      ...this.personLines(base, { root, moved, after: body.movePeopleTo }),
     ];
   }
 
@@ -456,8 +461,9 @@ export class ScaleChangesService {
     },
   ): LevelAuditEntry[] {
     const { root, scale, moved } = change;
+    const base = this.base(actor);
     const head: LevelAuditEntry = {
-      ...this.base(actor),
+      ...base,
       kind: 'scale.clear',
       collection: root,
       before: scale.map((one) => one.id),
@@ -466,18 +472,17 @@ export class ScaleChangesService {
     };
     return [
       head,
-      ...this.itemLines(actor, moved, null),
-      ...this.personLines(actor, { root, moved, after: null }),
+      ...this.itemLines(base, moved, null),
+      ...this.personLines(base, { root, moved, after: null }),
     ];
   }
 
   /** One `item.level` line per document and audio, to redo by hand (no automatic undo). */
   private itemLines(
-    actor: LevelActor,
+    base: AuditBase,
     moved: Moved,
     after: string | null,
   ): LevelAuditEntry[] {
-    const base = this.base(actor);
     const documents = moved.documents.map((one): LevelAuditEntry => ({
       ...base,
       kind: 'item.level',
@@ -499,14 +504,13 @@ export class ScaleChangesService {
   }
 
   private personLines(
-    actor: LevelActor,
+    base: AuditBase,
     change: {
       readonly root: string;
       readonly moved: Moved;
       readonly after: string | null;
     },
   ): LevelAuditEntry[] {
-    const base = this.base(actor);
     return change.moved.people.map((one): LevelAuditEntry => ({
       ...base,
       kind: 'person.level',
@@ -525,7 +529,7 @@ export class ScaleChangesService {
     };
   }
 
-  private base(actor: LevelActor) {
+  private base(actor: LevelActor): AuditBase {
     return {
       at: this.now(),
       by: actor.by,
