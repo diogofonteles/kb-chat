@@ -212,7 +212,11 @@ async function readHistory(page: Page): Promise<void> {
 }
 
 /** AC-4: the button waits for the collection's name; then nothing has a level. */
-async function clearAll(page: Page, title: string): Promise<void> {
+async function clearAll(
+  page: Page,
+  owner: APIRequestContext,
+  { slug, title }: { readonly slug: string; readonly title: string },
+): Promise<void> {
   await press(
     page,
     page.getByRole('button', { name: 'Tirar todos os níveis' }),
@@ -230,6 +234,19 @@ async function clearAll(page: Page, title: string): Promise<void> {
   await expect(confirm).toBeEnabled();
   await noViolations(page, 'app-level-delete-dialog');
   await shoot(page, 'levels-clear');
+  // QA-r2-2: another master adds a level meanwhile; the dialog counts again, the focus on the name.
+  const added = await owner.post(`/api/v1/topics/${slug}/levels`, {
+    data: { code: 'MX' },
+    headers: CSRF,
+  });
+  expect(added.status(), await added.text()).toBe(201);
+  await press(page, confirm);
+  await expect(
+    dialog.getByRole('status').filter({ hasText: /Contei de novo/ }),
+  ).toBeVisible();
+  await expect(name).toBeFocused();
+  await expect(confirm).toBeEnabled();
+  await expect(name).toBeFocused();
   await press(page, confirm);
   await expect(
     page.getByText(
@@ -273,7 +290,7 @@ test('KBC-108 AC-1, AC-3, AC-4, AC-5, AC-8: delete a level, move with its previe
   await page.goto(`/acervos/${slug}/niveis`);
   await moveCdcUp(page);
   await readHistory(page);
-  await clearAll(page, title);
+  await clearAll(page, owner, { slug, title });
 
   const member = await pageAs(browser, ana, page.viewportSize());
   await member.goto('/');
