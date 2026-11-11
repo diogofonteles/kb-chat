@@ -3,6 +3,7 @@
  * fake docker, flock, ssh, rsync and sqlite3: nothing reaches a VM, nothing stops an API.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   chmod,
   cp,
@@ -416,5 +417,176 @@ describe('sync-vault.sh (KBC-100 FR-4, BR-7)', () => {
   it("review 3: this release's install-index.sh says it swaps hot", async () => {
     const script = await readFile(join(SCRIPTS, 'install-index.sh'), 'utf8');
     expect(script.split('\n')).toContain('KB_CHAT_INSTALL_INDEX_HOT=1');
+  });
+});
+
+/** A VM for the media scripts (KBC-116): the deploy folder, fake docker, flock, id and chown. */
+async function aMediaVm(options: { media: 'on' | 'off'; root?: boolean }) {
+  const root = await mkdtemp(join(tmpdir(), 'kbchat-media-'));
+  const bin = join(root, 'bin');
+  const log = join(root, 'calls.log');
+  await mkdir(bin);
+  await mkdir(join(root, 'deploy', 'scripts'), { recursive: true });
+  await mkdir(join(root, 'media'), { mode: 0o700 });
+  await chmod(join(root, 'media'), 0o700);
+  for (const script of ['import-media.sh', 'deploy.sh'])
+    await cp(join(SCRIPTS, script), join(root, 'deploy', 'scripts', script));
+  await fakeBin(
+    join(root, 'deploy', 'scripts'),
+    'smoke.sh',
+    `echo smoke >>"${log}"`,
+  );
+  await writeFile(
+    join(root, 'deploy', '.env'),
+    `KB_CHAT_MEDIA=${options.media}\nKB_CHAT_OWNER_EMAIL="owner@example.com"\n`,
+  );
+  await writeFile(join(root, 'deploy', 'release.env'), 'KB_CHAT_TAG=abc\n');
+  await fakeBin(
+    bin,
+    'docker',
+    `echo "docker $*" >>"${log}"; case "$*" in *"config --images"*) echo ghcr.io/x/kb-chat-web:abc; echo ghcr.io/x/kb-chat-api:abc ;; esac`,
+  );
+  await fakeBin(bin, 'flock', `echo "flock $*" >>"${log}"`);
+  await fakeBin(bin, 'chown', `echo "chown $*" >>"${log}"`);
+  await fakeBin(bin, 'install', `echo "install $*" >>"${log}"`);
+  if (options.root !== false)
+    await fakeBin(bin, 'id', `[ "$1" = -u ] && echo 0 || /usr/bin/id "$@"`);
+  const uid = String(process.getuid?.() ?? 0);
+  const env = {
+    KB_CHAT_ROOT: root,
+    KB_CHAT_DEPLOY_DIR: join(root, 'deploy'),
+    KB_CHAT_APP_UID: uid,
+    PATH: `${bin}:${process.env['PATH'] ?? ''}`,
+  };
+  return { root, log, env };
+}
+
+/** A package as push-media.sh leaves it: files and their SHA256SUMS. */
+async function aPackage(root: string): Promise<string> {
+  const dir = join(root, 'inbox', 'package');
+  await mkdir(join(dir, 'files', 'audio'), { recursive: true });
+  await writeFile(join(dir, 'media.db'), 'db');
+  await writeFile(join(dir, 'files', 'audio', 'a.m4a'), 'audio');
+  const sum = (text: string) => createHash('sha256').update(text).digest('hex');
+  await writeFile(
+    join(dir, 'SHA256SUMS'),
+    `${sum('db')}  media.db\n${sum('audio')}  files/audio/a.m4a\n`,
+  );
+  return dir;
+}
+
+describe('deploy.sh ensure_media_dir (KBC-116 FR-11, AC-16)', () => {
+  const ensure = (root: string, env: Record<string, string>) =>
+    run('-c', {
+      args: [
+        `source "${join(root, 'deploy', 'scripts', 'deploy.sh')}" && ensure_media_dir`,
+      ],
+      env,
+    });
+
+  it('as root, gives a media folder Docker made as root back to the app (10001, 0700)', async () => {
+    const vm = await aMediaVm({ media: 'off' });
+    await chmod(join(vm.root, 'media'), 0o755);
+
+    const done = await ensure(vm.root, vm.env);
+
+    expect(done.code).toBe(0);
+    expect(done.output).toContain(`gave the app ${join(vm.root, 'media')}`);
+    expect(await calls(vm.log)).toContain(
+      `chown 10001:10001 ${join(vm.root, 'media')}`,
+    );
+    expect((await lstat(join(vm.root, 'media'))).mode & 0o777).toBe(0o700);
+  });
+
+  it('without root it only warns about a wrong owner and lets the deploy go on', async () => {
+    const vm = await aMediaVm({ media: 'off', root: false });
+
+    const done = await ensure(vm.root, vm.env);
+
+    expect(done.code).toBe(0);
+    expect(done.output).toContain("is not the app's (uid 10001, 0700)");
+    expect(await calls(vm.log)).not.toContain('chown');
+  });
+});
+
+describe('import-media.sh (KBC-116, ADR 0038)', () => {
+  const importMedia = (
+    vm: { root: string; env: Record<string, string> },
+    args: string[],
+  ) =>
+    run(join(vm.root, 'deploy', 'scripts', 'import-media.sh'), {
+      args,
+      env: vm.env,
+    });
+
+  it('refuses while the media library is off, touching nothing', async () => {
+    const vm = await aMediaVm({ media: 'off' });
+    const pkg = await aPackage(vm.root);
+
+    const done = await importMedia(vm, [pkg]);
+
+    expect(done.code).toBe(1);
+    expect(done.output).toContain('the media library is off');
+    expect(await calls(vm.log)).toBe('');
+  });
+
+  it('AC-10: refuses a package that does not match its checksums before any docker call', async () => {
+    const vm = await aMediaVm({ media: 'on' });
+    const pkg = await aPackage(vm.root);
+    await writeFile(join(pkg, 'files', 'audio', 'a.m4a'), 'tampered');
+
+    const done = await importMedia(vm, [pkg]);
+
+    expect(done.code).toBe(1);
+    expect(done.output).toContain(
+      'does not match its checksums: nothing changed',
+    );
+    expect(await calls(vm.log)).toBe('');
+  });
+
+  it('AC-11: a dry run imports into a copy in a sealed one-off container, with the API up', async () => {
+    const vm = await aMediaVm({ media: 'on' });
+    const pkg = await aPackage(vm.root);
+
+    const done = await importMedia(vm, [pkg, '--dry-run']);
+
+    expect(done.code).toBe(0);
+    const log = await calls(vm.log);
+    expect(log).not.toContain('stop');
+    const runLine =
+      log.split('\n').find((line) => line.startsWith('docker run')) ?? '';
+    expect(runLine).toContain('--network none --read-only');
+    expect(runLine).toContain(`-v ${pkg}:/import:ro`);
+    expect(runLine).toContain('-e KB_CHAT_OWNER_EMAIL=owner@example.com');
+    expect(runLine).toContain(
+      'ghcr.io/x/kb-chat-api:abc node dist/media-transfer-main.js import --package /import --dry-run',
+    );
+  });
+
+  it('the real run stops the API, keeps a rollback point, imports, brings the stack back and smokes', async () => {
+    const vm = await aMediaVm({ media: 'on' });
+    const pkg = await aPackage(vm.root);
+    await writeFile(join(vm.root, 'media', 'media.db'), 'live');
+    await mkdir(join(vm.root, 'state'));
+    await writeFile(join(vm.root, 'state', 'authors.json'), '{}');
+
+    const done = await importMedia(vm, [pkg]);
+
+    expect(done.code).toBe(0);
+    const steps = (await calls(vm.log))
+      .split('\n')
+      .filter((line) => /compose .*(stop|up)|docker run|smoke/.test(line))
+      .map((line) =>
+        line.includes('node -e')
+          ? 'snapshot'
+          : line.includes('import --package')
+            ? 'import'
+            : line.replace(/^.* (stop|up) .*$/, '$1'),
+      );
+    expect(steps).toEqual(['stop', 'snapshot', 'import', 'up', 'smoke']);
+    const kept = await readdir(join(vm.root, 'state'));
+    expect(
+      kept.some((name) => name.startsWith('authors.json.before-import-')),
+    ).toBe(true);
   });
 });

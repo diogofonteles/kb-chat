@@ -51,8 +51,7 @@ function lines(report: ImportReport): string[] {
     ...report.held.map(
       (one) => `  held ${one.rootId} "${one.title}": ${one.reason}`,
     ),
-    `files copied ${report.files.copied.length} (${report.files.bytes} bytes), already there ${report.files.present}`,
-    ...report.files.copied.map((path) => `  copied ${path}`),
+    `files copied ${report.files.copied.length} (${report.files.bytes} bytes), already there ${report.files.present} (the list: --json)`,
     `people mapped ${report.people.mapped.length}, not in production ${report.people.unmapped.length} (${report.people.skippedRows} rows skipped), personal rows added ${report.people.rows}`,
     ...report.levels.unassigned.map(
       (one) =>
