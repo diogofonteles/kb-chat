@@ -82,7 +82,8 @@ test('AC-1, AC-6, AC-7: a profile at CI, the invitation made with it, the bulk b
   ).toHaveCount(0);
   await section.getByRole('checkbox', { name: title }).check();
   const level = section.getByRole('combobox', { name: `Nível em ${title}` });
-  await expect(level).toHaveValue('qs');
+  // A profile keeps each person's level unless it names one (R1-2).
+  await expect(level).toHaveValue(':keep');
   await level.selectOption('ci');
   await expectAccessible(page);
   await shoot(page, 'profile-level', section);
@@ -111,14 +112,16 @@ test('AC-1, AC-6, AC-7: a profile at CI, the invitation made with it, the bulk b
     .getByRole('combobox', { name: 'Nível', exact: true })
     .selectOption('ci');
   await shoot(page, 'people-level-bar', bar);
+  // By keyboard: the focus lands on the outcome, the button being disabled (QA-1).
   await bar
     .getByRole('button', { name: 'Aplicar nível às selecionadas (3)' })
-    .click();
-  await expect(
-    dialog
-      .getByRole('status')
-      .filter({ hasText: `Nível CI em ${title} aplicado a 2 pessoas.` }),
-  ).toContainText('Masters veem todos os níveis.');
+    .focus();
+  await page.keyboard.press('Enter');
+  const outcome = dialog
+    .getByRole('status')
+    .filter({ hasText: `Nível CI em ${title} aplicado a 2 pessoas.` });
+  await expect(outcome).toContainText('Masters veem todos os níveis.');
+  await expect(outcome).toBeFocused();
   await expect(personRow(dialog, ana)).toContainText(`${title} · CI`);
   await expect(personRow(dialog, bia)).toContainText(`${title} · CI`);
 
