@@ -116,8 +116,26 @@ test('AC-8, AC-9, AC-2, FR-6: "Sem nível" on T24 by filter and by row, by touch
   ).toBeVisible();
   await expect(page.getByRole('checkbox')).toHaveCount(4);
   await shoot(page, 'unassigned-list');
+  // QA-r2-1: a confirmation left open closes with the filter, and never comes back alone.
+  const bar = page.getByRole('group', { name: 'Nível em lote' });
+  await press(
+    page,
+    page.getByRole('button', { name: 'Selecionar os 4 filtrados' }),
+  );
+  await bar.getByRole('combobox', { name: 'Nível' }).selectOption('qs');
+  await press(page, bar.getByRole('button', { name: 'Dar nível' }));
+  await expect(bar.getByText('Dar o nível QS a 4 documentos?')).toBeVisible();
   await page.getByRole('combobox', { name: 'Origem' }).selectOption('audio');
   await expect(page.getByRole('checkbox')).toHaveCount(2);
+  await expect(page.getByText('0 selecionados')).toBeVisible();
+  await press(
+    page,
+    page.getByRole('button', { name: 'Selecionar os 2 filtrados' }),
+  );
+  await expect(bar.getByRole('combobox', { name: 'Nível' })).toBeVisible();
+  await expect(bar.getByRole('button', { name: 'Confirmar' })).toHaveCount(0);
+  await expect(bar.getByText(/Dar o nível/)).toHaveCount(0);
+  await press(page, page.getByRole('button', { name: 'Desmarcar todos' }));
   await press(
     page,
     page.getByRole('button', { name: 'Selecionar os 2 filtrados' }),
@@ -132,7 +150,7 @@ test('AC-8, AC-9, AC-2, FR-6: "Sem nível" on T24 by filter and by row, by touch
   await expect(page.getByRole('checkbox')).toHaveCount(2);
   await press(page, page.getByRole('checkbox', { name: 'Texto Novo Um' }));
   await press(page, page.getByRole('checkbox', { name: 'Texto Novo Dois' }));
-  const bar = page.locator('app-bulk-level-bar');
+  const sticky = page.locator('app-bulk-level-bar');
   if (!desktop(page)) {
     // The list scrolled with the bar at the foot of the screen (not a full-page shot).
     await page
@@ -141,10 +159,10 @@ test('AC-8, AC-9, AC-2, FR-6: "Sem nível" on T24 by filter and by row, by touch
     if (shots)
       await page.screenshot({ path: `${shots}/unassigned-sticky-bar-390.png` });
     // UP-13: on the phone the bar stays at the bottom of the screen.
-    expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe(
+    expect(await sticky.evaluate((el) => getComputedStyle(el).position)).toBe(
       'sticky',
     );
-    const box = await bar.boundingBox();
+    const box = await sticky.boundingBox();
     expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(
       page.viewportSize()?.height ?? 0,
     );

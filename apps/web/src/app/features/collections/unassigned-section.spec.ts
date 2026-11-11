@@ -283,4 +283,42 @@ describe('"Sem nível" on T24 (KBC-107 FR-6)', () => {
       screen.getByRole('button', { name: 'Dar nível' }),
     );
   });
+
+  it('R2-5: choosing the same filter again asks nothing and keeps the selection', async () => {
+    const { fixture, http } = await open();
+    http.expectOne(`${QUEUE}?limit=10`).flush(unassignedPage({ count: 3 }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Novo 1' }));
+    await fixture.whenStable();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Origem' }), {
+      target: { value: '' },
+    });
+    TestBed.tick();
+    http.expectNone(`${QUEUE}?limit=10`);
+    await fixture.whenStable();
+    expect(screen.getByText('1 selecionado')).toBeTruthy();
+  });
+
+  it('R2-4: says one skipped in the singular', async () => {
+    const { fixture, http } = await open();
+    http.expectOne(`${QUEUE}?limit=10`).flush(unassignedPage({ count: 2 }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Novo 0' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Novo 1' }));
+    chooseLevel('QS');
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Dar nível' }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    http
+      .expectOne(BULK)
+      .flush({ level: { id: 'qs', code: 'QS' }, updated: 1, skipped: 1 });
+    TestBed.tick();
+    http.expectOne(`${QUEUE}?limit=10`).flush(unassignedPage({ count: 1 }));
+    http.expectOne(COUNTS).flush({ items: [] });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent?.trim()).toBe(
+      '1 documento foi para QS. 1 não pôde ser classificado.',
+    );
+  });
 });

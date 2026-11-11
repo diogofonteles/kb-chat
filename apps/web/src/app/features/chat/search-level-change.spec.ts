@@ -103,9 +103,7 @@ describe('"Mudar nível" on a search (KBC-107 AC-5)', () => {
       .flush({ level: qs, updated: 1, skipped: 1 });
     await fixture.whenStable();
     expect(
-      screen.getByText(
-        '1 documento foi para QS. 1 não puderam ser classificados.',
-      ),
+      screen.getByText('1 documento foi para QS. 1 não pôde ser classificado.'),
     ).toBeTruthy();
   });
 });

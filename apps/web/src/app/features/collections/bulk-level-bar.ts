@@ -10,7 +10,6 @@ import {
   input,
   linkedSignal,
   output,
-  signal,
   viewChild,
 } from '@angular/core';
 import type { LevelChoice } from '@kb-chat/contracts';
@@ -196,7 +195,17 @@ export class BulkLevelBar {
     source: () => this.choices(),
     computation: () => '',
   });
-  protected readonly confirming = signal(false);
+  /**
+   * Open only for the selection and the levels it was asked on (QA-r2-1): a change of either
+   * closes it, so it never comes back with no level or for another set.
+   */
+  protected readonly confirming = linkedSignal<
+    { readonly count: number; readonly choices: readonly LevelChoice[] },
+    boolean
+  >({
+    source: () => ({ count: this.count(), choices: this.choices() }),
+    computation: () => false,
+  });
   /** A confirmation is only for something to confirm: the selection may empty under it (R1-4). */
   protected readonly showConfirm = computed(
     () => this.confirming() && this.count() > 0,
@@ -225,7 +234,7 @@ export class BulkLevelBar {
   });
 
   protected ask(): void {
-    if (!this.chosenLevel() || this.count() === 0) return;
+    if (!this.chosenLevel() || this.count() === 0 || this.busy()) return;
     this.confirming.set(true);
     this.focusAfterRender(() => this.confirmButton());
   }

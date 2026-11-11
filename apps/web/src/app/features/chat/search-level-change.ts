@@ -25,19 +25,8 @@ import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { LevelsApi, levelChoicesUrl } from '@core/levels/levels-api.js';
 import { UnassignedCountsStore } from '@core/levels/unassigned-counts-store.js';
 import { BulkLevelBar } from '@features/collections/bulk-level-bar.js';
+import { bulkResultText } from '@features/collections/bulk-result-text.js';
 import { finalize } from 'rxjs';
-
-/** "N documentos foram para CI." and, when some were left as they were, how many (R1-4). */
-function resultText(result: BulkLevelResult): string {
-  const { updated, skipped } = result;
-  const code = result.level.code;
-  const done =
-    updated === 1
-      ? $localize`:@@searchLevel.doneOne:1 documento foi para ${code}:code:.`
-      : $localize`:@@searchLevel.done:${updated}:count: documentos foram para ${code}:code:.`;
-  if (skipped === 0) return done;
-  return `${done} ${$localize`:@@unassigned.skipped:${skipped}:count: não puderam ser classificados.`}`;
-}
 
 const keyOf = (hit: Pick<SearchHit, 'topic' | 'id'>): string =>
   `${hit.topic}\n${hit.id}`;
@@ -278,7 +267,7 @@ export class SearchLevelChange {
     }
     this.chosen.set(new Set());
     this.injector.get(UnassignedCountsStore).refresh();
-    this.announcement.set(resultText(result));
+    this.announcement.set(bulkResultText(result));
     // R1-2: the focus goes to what happened, not to a button the result disabled.
     afterNextRender(() => this.result()?.nativeElement.focus(), {
       injector: this.injector,

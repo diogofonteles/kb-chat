@@ -33,6 +33,7 @@ import { UnassignedCountsStore } from '@core/levels/unassigned-counts-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { finalize, map } from 'rxjs';
 import { BulkLevelBar } from './bulk-level-bar.js';
+import { bulkResultText } from './bulk-result-text.js';
 
 const PAGE = 10;
 
@@ -111,7 +112,10 @@ export class UnassignedSection {
   readonly changed = output();
 
   protected readonly form = signal<FilterForm>(NO_FILTERS);
-  private readonly filter = computed(() => toFilter(this.form()));
+  /** Equal by value: the same filter chosen again asks nothing and keeps the selection (R2-5). */
+  private readonly filter = computed(() => toFilter(this.form()), {
+    equal: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+  });
   protected readonly filtered = computed(
     () => Object.keys(this.filter()).length > 0,
   );
@@ -277,7 +281,7 @@ export class UnassignedSection {
       )
       .subscribe({
         next: (result) => {
-          this.announcement.set(this.resultText(result));
+          this.announcement.set(bulkResultText(result));
           // R1-2: the focus goes to what happened, which stays when the bar goes.
           afterNextRender(() => this.result()?.nativeElement.focus(), {
             injector: this.injector,
@@ -305,20 +309,5 @@ export class UnassignedSection {
       .filter((doc) => selection.keys.has(keyOf(doc)))
       .map(({ topic, id }) => ({ topic, id }));
     return ids.length > 0 ? { level: level.id, ids } : null;
-  }
-
-  private resultText(result: {
-    readonly level: LevelChoice;
-    readonly updated: number;
-    readonly skipped: number;
-  }): string {
-    const { code } = result.level;
-    const { updated, skipped } = result;
-    const done =
-      updated === 1
-        ? $localize`:@@unassigned.doneOne:1 documento foi para ${code}:code:.`
-        : $localize`:@@unassigned.done:${updated}:count: documentos foram para ${code}:code:.`;
-    if (skipped === 0) return done;
-    return `${done} ${$localize`:@@unassigned.skipped:${skipped}:count: não puderam ser classificados.`}`;
   }
 }
