@@ -186,3 +186,8 @@ button:disabled {
 .apply-row {
   align-items: end;
 }
+
+/* "Tornar master" erases her levels: said right under the actions (KBC-109 R3-5). */
+.master-levels {
+  flex-basis: 100%;
+}

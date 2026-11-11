@@ -216,6 +216,7 @@
     type="button"
     class="secondary"
     [disabled]="busy()"
+    [attr.aria-describedby]="dropsLevels() ? 'master-levels-' + who.id : null"
     (click)="toggleMaster()"
   >
     @if (isMaster()) {
@@ -224,6 +225,15 @@
       <span i18n="@@people.makeMaster">Tornar master</span>
     }
   </button>
+  @if (dropsLevels()) {
+    <p
+      class="hint master-levels"
+      [id]="'master-levels-' + who.id"
+      i18n="@@people.masterDropsLevels"
+    >
+      Masters veem todos os níveis; os níveis desta pessoa serão apagados.
+    </p>
+  }
   @if (!who.isOwner) {
     @if (confirming()) {
       <p class="confirm" i18n="@@people.confirmRevoke">

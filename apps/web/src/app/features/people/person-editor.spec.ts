@@ -155,3 +155,26 @@ describe('PersonEditor: applying a profile whose level no longer exists (KBC-109
     ).toBe(warning.id);
   });
 });
+
+describe('PersonEditor: "Tornar master" erases the levels (KBC-109 R3-5)', () => {
+  const note =
+    'Masters veem todos os níveis; os níveis desta pessoa serão apagados.';
+
+  it('says so next to the button of a member who holds levels', async () => {
+    await renderEditor(ana({ levels: { hermetismo: 'ci' } }));
+    const button = screen.getByRole('button', { name: 'Tornar master' });
+    expect(button.getAttribute('aria-describedby')).toBe(
+      screen.getByText(note).id,
+    );
+  });
+
+  it('says nothing for a member without levels', async () => {
+    await renderEditor(ana());
+    expect(screen.queryByText(note)).toBeNull();
+  });
+
+  it('says nothing for a master', async () => {
+    await renderEditor(ana({ role: 'master', levels: { hermetismo: 'ci' } }));
+    expect(screen.queryByText(note)).toBeNull();
+  });
+});

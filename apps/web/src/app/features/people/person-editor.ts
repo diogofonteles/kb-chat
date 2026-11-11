@@ -169,6 +169,11 @@ export class PersonEditor {
         }),
   );
 
+  /** "Tornar master" drops the levels she holds (R2-2): said next to it (R3-5). */
+  protected readonly dropsLevels = computed(
+    () => !this.isMaster() && Object.keys(this.person().levels).length > 0,
+  );
+
   protected chooseLevel(collection: string, level: string): void {
     this.changed.emit({ levels: { [collection]: level } });
   }

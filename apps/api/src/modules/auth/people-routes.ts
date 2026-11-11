@@ -189,7 +189,13 @@ async function followInvitedAi(
   log: FastifyBaseLogger,
 ): Promise<void> {
   await deps.ai?.sync(invited, aiOf(invited)).catch(async (err: unknown) => {
-    await undoInvitation(deps, { invited, log });
+    // Whatever happens to the undo, the client gets the AI's failure (R3-3).
+    await undoInvitation(deps, { invited, log }).catch((undo: unknown) =>
+      log.error(
+        { err: undo, person: invited.id },
+        'could not undo a failed invitation; it stays',
+      ),
+    );
     throw err;
   });
 }
@@ -201,14 +207,22 @@ async function undoInvitation(
 ): Promise<void> {
   const { invited, log } = undo;
   await serialLevels(deps.levels, async () => {
+    // As it is now (a bulk may have moved it while the AI was called, R3-2).
+    const now = (await deps.people.find(invited.id)) ?? invited;
     const revoked = await deps.people.revoke(invited.id).then(
       () => true,
-      () => false,
+      (err: unknown) => {
+        log.error(
+          { err, person: invited.id },
+          'could not undo a failed invitation',
+        );
+        return false;
+      },
     );
-    if (!revoked) return log.error('could not undo a failed invitation');
+    if (!revoked) return;
     await recordLevels(deps.levels, {
-      before: invited,
-      after: { ...invited, levels: {} },
+      before: now,
+      after: { ...now, levels: {} },
       by: invited.invitedBy,
       via: 'invite',
       log,
@@ -341,7 +355,13 @@ async function applyProfile(
 /** The whole profile goes back when the house cannot follow its AI, its levels audited. */
 async function followProfileAi(deps: PeopleRouteDeps, change: AiSyncChange) {
   await syncAi(deps, change).catch(async (err: unknown) => {
-    await undoProfile(deps, change);
+    // The client always gets the AI's failure; a failed undo is told in the log (R3-3).
+    await undoProfile(deps, change).catch((undo: unknown) =>
+      change.log.error(
+        { err: undo, person: change.before.id },
+        'could not undo a profile; it stays applied',
+      ),
+    );
     throw err;
   });
 }

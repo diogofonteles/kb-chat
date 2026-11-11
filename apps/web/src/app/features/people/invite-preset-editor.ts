@@ -134,11 +134,25 @@ export class InvitePresetEditor {
         }),
   );
   protected readonly keepLevel = KEEP_LEVEL;
-  /** The select is described by the profile's hint and the stale level's warning. */
+  /** The ids of a collection's notes, made in one place for the template and the select. */
+  protected staleId(collection: string): string {
+    return `${this.uid}-stale-${collection}`;
+  }
+  protected keepId(collection: string): string {
+    return `${this.uid}-keep-${collection}`;
+  }
+  /**
+   * Only "Manter o nível da pessoa" has a level an invitation decides alone (the lowest): a
+   * level named gives that one, and "Escolha" has its own warning (R3-1).
+   */
+  protected keepsPersonLevel(row: LevelRow): boolean {
+    return this.mode() === 'profile' && row.current === KEEP_LEVEL;
+  }
+  /** The select is described by the "Manter" hint and the stale level's warning. */
   protected describedBy(row: LevelRow, inviteStale: boolean): string | null {
     const ids = [
-      this.mode() === 'profile' ? `${this.uid}-keep-${row.collection}` : null,
-      row.stale || inviteStale ? `${this.uid}-stale-${row.collection}` : null,
+      this.keepsPersonLevel(row) ? this.keepId(row.collection) : null,
+      row.stale || inviteStale ? this.staleId(row.collection) : null,
     ].filter((id) => id !== null);
     return ids.length > 0 ? ids.join(' ') : null;
   }

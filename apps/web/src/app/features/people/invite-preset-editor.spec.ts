@@ -665,4 +665,37 @@ describe('InvitePresetEditor in a profile (KBC-109 R1-1, R1-2, R1-3)', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pesquisa com IA' }));
     expect(last(changed).levels).toEqual({ hermetismo: 'ci' });
   });
+
+  it('R3-1: the invitation hint is only for "Manter"; a named level or "Escolha" has none', async () => {
+    const hint =
+      'Ao convidar com este perfil, a pessoa entra no nível mais baixo.';
+    const { fixture } = await renderProfile({
+      ...plainPreset(),
+      topics: ['hermetismo'],
+    });
+    expect(levelSelect().getAttribute('aria-describedby')).toContain(
+      screen.getByText(hint).id,
+    );
+
+    fireEvent.change(levelSelect(), { target: { value: 'ci' } });
+    fixture.componentRef.setInput('preset', {
+      ...plainPreset(),
+      topics: ['hermetismo'],
+      levels: { hermetismo: 'ci' },
+    });
+    await fixture.whenStable();
+    expect(screen.queryByText(hint)).toBeNull();
+    expect(levelSelect().getAttribute('aria-describedby')).toBeNull();
+
+    fixture.componentRef.setInput('preset', {
+      ...plainPreset(),
+      topics: ['hermetismo'],
+      levels: { hermetismo: 'gone' },
+    });
+    await fixture.whenStable();
+    expect(screen.queryByText(hint)).toBeNull();
+    expect(levelSelect().getAttribute('aria-describedby')).toBe(
+      screen.getByText(/O nível gone não existe mais/).id,
+    );
+  });
 });

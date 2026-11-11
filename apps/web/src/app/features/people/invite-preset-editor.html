@@ -36,7 +36,7 @@
     </label>
     @if (levelRows().get(topic.slug); as row) {
       @let inviteStale = staleNotes().get(row.collection);
-      @let noteId = uid + '-stale-' + row.collection;
+      @let noteId = staleId(row.collection);
       <div class="field level-field">
         <label [for]="uid + '-level-' + row.collection" i18n="@@people.levelIn"
           >Nível em {{ row.title }}</label
@@ -73,10 +73,10 @@
             </option>
           }
         </select>
-        @if (mode() === 'profile') {
+        @if (keepsPersonLevel(row)) {
           <span
             class="hint"
-            [id]="uid + '-keep-' + row.collection"
+            [id]="keepId(row.collection)"
             i18n="@@preset.keepLevelHint"
             >Ao convidar com este perfil, a pessoa entra no nível mais
             baixo.</span

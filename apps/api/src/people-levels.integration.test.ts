@@ -1,6 +1,6 @@
 import { chmod, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   LOCAL,
   OWNER_EMAIL,
@@ -627,5 +627,63 @@ describe('Undoing what the house AI cannot follow (KBC-109 R2-1, QA-r2-2)', () =
     ]);
     const people = await peopleFile(world.started.state);
     expect(people.some((one) => one.email === 'nova@example.com')).toBe(false);
+  });
+
+  it('R3-2: an invitation undone after a bulk moved the person audits from the level she has now', async () => {
+    const { world, profileId } = await paidWorld();
+    world.started.fake.failManagement = true;
+    world.started.fake.beforeManagement = async () => {
+      const bulk = await world.owner('POST', BULK, {
+        all: true,
+        topic: 'hermetismo',
+        level: 'qs',
+      });
+      expect(bulk.statusCode, bulk.body).toBe(200);
+    };
+    const invited = await world.owner('POST', '/api/v1/people', {
+      email: 'nova@example.com',
+      sendEmail: false,
+      profileId,
+    });
+    expect(invited.statusCode).toBe(503);
+    const lines = (await levelAudit(world.started.state))
+      .filter(
+        (one) =>
+          one.kind === 'person.level' &&
+          (one.via === 'invite' || one.via === 'bulk'),
+      )
+      .map(({ before, after, via }) => [before, after, via]);
+    expect(lines).toEqual([
+      [null, 'cdc', 'invite'],
+      ['cdc', 'qs', 'bulk'],
+      ['qs', null, 'invite'],
+    ]);
+  });
+
+  it('R3-3: when re-reading the person fails during the undo, the client still gets the AI failure and the log says the profile stays', async () => {
+    const { world, profileId } = await paidWorld();
+    const ana = await memberOf(world, 'ana@example.com');
+    const path = join(world.started.state, 'people.json');
+    const kept = await readFile(path, 'utf8');
+    world.started.fake.failManagement = true;
+    // The cached people are a minute old and the file cannot be read: the undo's read fails.
+    world.started.fake.beforeManagement = async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 61_000 });
+      await writeFile(path, '{ not json');
+    };
+    try {
+      const applied = await world.owner(
+        'POST',
+        `/api/v1/people/${ana.id}/profile`,
+        { profileId },
+      );
+      expect(applied.statusCode).toBe(503);
+    } finally {
+      vi.useRealTimers();
+      await writeFile(path, kept);
+    }
+    expect(world.started.logs.join('\n')).toContain(
+      'could not undo a profile; it stays applied',
+    );
   });
 });
