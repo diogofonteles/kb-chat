@@ -104,3 +104,12 @@ button:disabled {
   color: var(--color-accent-strong);
   text-decoration: underline;
 }
+
+.recounted {
+  margin: 0;
+  font-weight: 600;
+}
+
+.recounted:not(:empty) {
+  margin-bottom: var(--space-3);
+}

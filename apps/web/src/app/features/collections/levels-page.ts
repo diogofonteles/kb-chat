@@ -109,6 +109,8 @@ export class LevelsPage {
   );
   /** The latest answer of a write, over what was loaded. */
   private readonly written = signal<TopicLevels | null>(null);
+  /** Grows with each write: an open history reads itself again (R1-12). */
+  protected readonly revision = signal(0);
   protected readonly scale = computed<TopicLevels | null>(() => {
     const written = this.written();
     if (written && written.collection === this.slug()) return written;
@@ -254,7 +256,12 @@ export class LevelsPage {
           this.moving.set({ ...move, preview });
           this.focusAfterRender(() => this.confirmMove());
         },
-        error: (err: unknown) => this.writeFailed(err),
+        error: (err: unknown) => {
+          const move = this.moving();
+          // A failure for a move cancelled or replaced meanwhile says nothing (R1-13).
+          if (move?.id === level.id && move.to === from + by)
+            this.writeFailed(err);
+        },
       });
   }
 
@@ -326,6 +333,7 @@ export class LevelsPage {
   /** The dialog changed the scale: it replaces the one on screen. */
   protected deleted(scale: TopicLevels): void {
     this.written.set(scale);
+    this.revision.update((n) => n + 1);
     this.announcement.set(
       scale.levels.length === 0
         ? $localize`:@@levels.cleared:Os níveis foram tirados. Todos com acesso veem todo o conteúdo.`
@@ -394,6 +402,7 @@ export class LevelsPage {
       .subscribe({
         next: (scale) => {
           this.written.set(scale);
+          this.revision.update((n) => n + 1);
           outcome.done(scale);
         },
         error: (err: unknown) => this.writeFailed(err, outcome.failed),

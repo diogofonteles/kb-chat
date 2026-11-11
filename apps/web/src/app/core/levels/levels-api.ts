@@ -68,6 +68,13 @@ export const levelsPagePath = (topic: string): string[] => [
 export class LevelsApi {
   private readonly http = inject(HttpClient);
 
+  /** The scale as it is now (a dialog counting again after a 409, KBC-108 BR-3). */
+  levels(topic: string): Observable<TopicLevels> {
+    return this.http
+      .get(topicLevelsUrl(topic))
+      .pipe(map((reply) => topicLevelsSchema.parse(reply)));
+  }
+
   create(topic: string, body: LevelCreate): Observable<TopicLevels> {
     return this.http
       .post(topicLevelsUrl(topic), body)

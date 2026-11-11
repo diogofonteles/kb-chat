@@ -46,6 +46,7 @@ const KIND_LABELS: Record<LevelAuditKind, () => string> = {
   'scale.reorder': () => $localize`:@@history.kindReorder:Ordem da escala`,
   'scale.delete': () => $localize`:@@history.kindDelete:Nível apagado`,
   'scale.clear': () => $localize`:@@history.kindClear:Todos os níveis tirados`,
+  'scale.undone': () => $localize`:@@history.kindUndone:Desfeito`,
   'person.level': () => $localize`:@@history.kindPerson:Nível de pessoa`,
   'item.level': () => $localize`:@@history.kindItem:Nível de item`,
   bulk: () => $localize`:@@history.kindBulk:Lote`,
@@ -66,6 +67,7 @@ const WHAT: Record<LevelAuditKind, (item: LevelAuditItem) => string> = {
     $localize`:@@history.whatReorder:Ordem: ${item.before ?? ''}:before: → ${item.after ?? ''}:after:`,
   'scale.delete': (item) =>
     $localize`:@@history.whatDelete:Apagou ${item.before ?? ''}:code:: conteúdo → ${item.moves?.content ?? ''}:content:, pessoas → ${item.moves?.people ?? ''}:people:`,
+  'scale.undone': () => '',
   'scale.clear': (item) =>
     $localize`:@@history.whatClear:Tirou todos os níveis (${item.before ?? ''}:codes:)`,
   // A person with no level recorded holds the lowest (ADR 0036 §2): "nenhum registrado".
@@ -82,14 +84,21 @@ const WHAT: Record<LevelAuditKind, (item: LevelAuditItem) => string> = {
   },
 };
 
+/** The start or the end of a local day (`YYYY-MM-DD`), as an ISO instant. */
+const localInstant = (day: string, edge: 'start' | 'end'): string =>
+  new Date(
+    `${day}T${edge === 'start' ? '00:00:00.000' : '23:59:59.999'}`,
+  ).toISOString();
+
 /** The API's query: the filters set, the page size. */
 const toQuery = (topic: string, filter: HistoryFilter): LevelAuditQuery => ({
   topic,
   limit: PAGE,
   ...(filter.kind && { kind: filter.kind }),
   ...(filter.actor.trim() && { actor: filter.actor.trim() }),
-  ...(filter.from && { from: filter.from }),
-  ...(filter.to && { to: filter.to }),
+  // The local day as instants, as the list shows the local time (R1-9).
+  ...(filter.from && { from: localInstant(filter.from, 'start') }),
+  ...(filter.to && { to: localInstant(filter.to, 'end') }),
   ...(filter.target && { target: filter.target.id }),
 });
 
@@ -111,14 +120,24 @@ export class LevelsHistory {
 
   /** The top-level collection whose history this is. */
   readonly topic = input.required<string>();
+  /** Grows with each change made on the page: the open list reads itself again (R1-12). */
+  readonly revision = input(0);
 
-  protected readonly kinds = LEVEL_AUDIT_KINDS;
+  /** The kinds a filter offers (an undone mark is never shown). */
+  protected readonly kinds = LEVEL_AUDIT_KINDS.filter(
+    (kind) => kind !== 'scale.undone',
+  );
   protected readonly open = signal(false);
   protected readonly filter = signal<HistoryFilter>(NO_FILTER);
   protected readonly first = rxResource({
     params: () =>
-      this.open() ? toQuery(this.topic(), this.filter()) : undefined,
-    stream: ({ params }) => this.api.history(params),
+      this.open()
+        ? {
+            query: toQuery(this.topic(), this.filter()),
+            revision: this.revision(),
+          }
+        : undefined,
+    stream: ({ params }) => this.api.history(params.query),
   });
   /** Pages after the first ("Carregar mais"), emptied with each first page. */
   private readonly more = linkedSignal<

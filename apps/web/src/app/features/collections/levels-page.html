@@ -299,7 +299,7 @@
     @if (levels().length > 0) {
       <app-unassigned-section [topic]="slug()" (changed)="loaded.reload()" />
     }
-    <app-levels-history [topic]="slug()" />
+    <app-levels-history [topic]="slug()" [revision]="revision()" />
   }
 
   <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>

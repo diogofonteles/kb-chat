@@ -48,8 +48,16 @@ const CI_PREVIEW: LevelPreview = {
     moveContentTo: 'cdc',
     movePeopleTo: 'qs',
     last: false,
-    profiles: 0,
   },
+  profiles: 0,
+};
+
+const ALL_PREVIEW: LevelPreview = {
+  version: 'v1',
+  gaining: { people: 4, documents: 12, media: 3 },
+  losing: { people: 0, documents: 0, media: 0 },
+  removal: null,
+  profiles: 0,
 };
 
 async function dialogFor(scale: TopicLevels) {
@@ -117,11 +125,7 @@ describe('LevelDeleteDialog (T24, KBC-108)', () => {
     const ci = THREE.levels[1];
     if (!ci) throw new Error('no CI');
     dialog.openFor(ci);
-    const removal = CI_PREVIEW.removal;
-    if (!removal) throw new Error('no removal');
-    http
-      .expectOne(`${URL}/preview`)
-      .flush({ ...CI_PREVIEW, removal: { ...removal, profiles: 2 } });
+    http.expectOne(`${URL}/preview`).flush({ ...CI_PREVIEW, profiles: 2 });
     await fixture.whenStable();
     expect(
       screen.getByText(
@@ -130,8 +134,60 @@ describe('LevelDeleteDialog (T24, KBC-108)', () => {
     ).toBeTruthy();
   });
 
-  it('BR-3: a scale changed since the preview says so, keeps the choices and asks for a reload', async () => {
+  it('BR-3, R1-2: after a 409 the dialog reads the scale, counts again on it and confirms only on the new preview', async () => {
     const { fixture, http, dialog, stale } = await dialogFor(THREE);
+    const ci = THREE.levels[1];
+    if (!ci) throw new Error('no CI');
+    dialog.openFor(ci);
+    http.expectOne(`${URL}/preview`).flush(CI_PREVIEW);
+    await fixture.whenStable();
+    const confirm = screen.getByRole('button', {
+      name: 'Apagar CI',
+    }) as HTMLButtonElement;
+    fireEvent.click(confirm);
+    http
+      .expectOne({ method: 'DELETE', url: `${URL}/ci` })
+      .flush(
+        { error: { code: 'LEVELS_CHANGED', message: 'x' } },
+        { status: 409, statusText: 'Conflict' },
+      );
+    expect(stale).toHaveBeenCalled();
+    // Another master moved CI to the top: the people's default is now CDC.
+    const reordered = {
+      ...scaleOf([level('qs', 'QS'), level('cdc', 'CDC'), level('ci', 'CI')]),
+      version: 'v2',
+    };
+    http.expectOne({ method: 'GET', url: URL }).flush(reordered);
+    await fixture.whenStable();
+    expect(confirm.disabled).toBe(true);
+    fireEvent.click(confirm);
+    http.expectNone({ method: 'DELETE', url: `${URL}/ci` });
+    const again = http.expectOne({ method: 'POST', url: `${URL}/preview` });
+    expect(again.request.body).toEqual({ remove: 'ci', version: 'v2' });
+    const removal = CI_PREVIEW.removal;
+    if (!removal) throw new Error('no removal');
+    again.flush({
+      ...CI_PREVIEW,
+      version: 'v2',
+      removal: { ...removal, moveContentTo: 'cdc', movePeopleTo: 'cdc' },
+    });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent?.trim()).toBe(
+      'A escala mudou. Contei de novo com a escala de agora: confira antes de confirmar.',
+    );
+    expect(selectOf('Pessoas em CI vão para:').value).toBe('cdc');
+    expect(confirm.disabled).toBe(false);
+    fireEvent.click(confirm);
+    const removed = http.expectOne({ method: 'DELETE', url: `${URL}/ci` });
+    expect(removed.request.body).toEqual({
+      moveContentTo: 'cdc',
+      movePeopleTo: 'cdc',
+      version: 'v2',
+    });
+  });
+
+  it('BR-3: a level deleted by someone else meanwhile closes the dialog', async () => {
+    const { fixture, http, dialog } = await dialogFor(THREE);
     const ci = THREE.levels[1];
     if (!ci) throw new Error('no CI');
     dialog.openFor(ci);
@@ -144,18 +200,27 @@ describe('LevelDeleteDialog (T24, KBC-108)', () => {
         { error: { code: 'LEVELS_CHANGED', message: 'x' } },
         { status: 409, statusText: 'Conflict' },
       );
+    http.expectOne({ method: 'GET', url: URL }).flush({
+      ...scaleOf([level('qs', 'QS'), level('cdc', 'CDC')]),
+      version: 'v2',
+    });
     await fixture.whenStable();
-    expect(screen.getByRole('alert').textContent?.trim()).toBe(
-      'A escala mudou. Confira de novo.',
-    );
-    expect(selectOf('Conteúdo de CI vai para:').value).toBe('cdc');
-    expect(stale).toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    http.expectNone(`${URL}/preview`);
   });
 
   it('AC-4: "Tirar todos os níveis" stays disabled until the collection name is typed', async () => {
     const { fixture, http, dialog, done } = await dialogFor(THREE);
     dialog.openForAll();
+    const asked = http.expectOne({ method: 'POST', url: `${URL}/preview` });
+    expect(asked.request.body).toEqual({ all: true, version: 'v1' });
+    asked.flush({ ...ALL_PREVIEW, profiles: 1 });
     await fixture.whenStable();
+    expect(
+      screen.getByText(
+        '1 perfil de convite usa um nível deste acervo. Ele não muda: ao aplicá-lo, o nível dele não vale mais.',
+      ),
+    ).toBeTruthy();
     expect(
       screen.getByText(
         'Todos com acesso ao acervo passam a ver todo o conteúdo.',
@@ -186,14 +251,16 @@ describe('LevelDeleteDialog (T24, KBC-108)', () => {
     expect(done).toHaveBeenCalled();
   });
 
-  it('AC-6: the only level opens as "Tirar todos os níveis", with no preview', async () => {
+  it('AC-6: the only level opens as "Tirar todos os níveis", with its preview', async () => {
     const one = scaleOf([level('qs', 'QS')]);
     const { fixture, http, dialog } = await dialogFor(one);
     const qs = one.levels[0];
     if (!qs) throw new Error('no QS');
     dialog.openFor(qs);
+    const asked = http.expectOne({ method: 'POST', url: `${URL}/preview` });
+    expect(asked.request.body).toEqual({ all: true, version: 'v1' });
+    asked.flush(ALL_PREVIEW);
     await fixture.whenStable();
-    http.expectNone(`${URL}/preview`);
     expect(
       screen.getByRole('heading', { name: 'Tirar todos os níveis' }),
     ).toBeTruthy();

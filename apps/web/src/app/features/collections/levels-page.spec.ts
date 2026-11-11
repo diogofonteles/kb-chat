@@ -172,6 +172,7 @@ describe('LevelsPage (T24, KBC-103)', () => {
       gaining: { people: 2, documents: 12, media: 2 },
       losing: { people: 1, documents: 6, media: 0 },
       removal: null,
+      profiles: 0,
     });
     await fixture.whenStable();
     expect(
@@ -207,6 +208,7 @@ describe('LevelsPage (T24, KBC-103)', () => {
       gaining: noImpact,
       losing: noImpact,
       removal: null,
+      profiles: 0,
     });
     await fixture.whenStable();
     expect(
@@ -227,6 +229,36 @@ describe('LevelsPage (T24, KBC-103)', () => {
     expect(screen.getByRole('alert').textContent?.trim()).toBe(
       'A escala mudou. Confira de novo.',
     );
+  });
+
+  it('R1-13: the failure of a move replaced meanwhile leaves the current one alone', async () => {
+    const { fixture, http } = await open('hermetismo', THREE);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mover para baixo: CI' }),
+    );
+    const first = http.expectOne({ method: 'POST', url: `${URL}/preview` });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mover para cima: CDC' }),
+    );
+    const second = http.match({ method: 'POST', url: `${URL}/preview` });
+    first.flush('', { status: 500, statusText: 'x' });
+    await fixture.whenStable();
+    expect(screen.queryByRole('alert')).toBeNull();
+    second.at(-1)?.flush({
+      version: 'v1',
+      gaining: noImpact,
+      losing: noImpact,
+      removal: null,
+      profiles: 0,
+    });
+    await fixture.whenStable();
+    expect(
+      screen.getByText(
+        'Mover CDC para a 2ª posição? Ninguém ganha nem perde acesso.',
+      ),
+    ).toBeTruthy();
   });
 
   it('shows the audios of a level next to its documents and people', async () => {

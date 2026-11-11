@@ -4,6 +4,7 @@
   aria-labelledby="level-delete-title"
   aria-describedby="level-delete-what"
 >
+  <p class="recounted" role="status">{{ recounted() }}</p>
   @if (all()) {
     <h2 id="level-delete-title" i18n="@@levels.clearTitle">
       Tirar todos os níveis
@@ -11,6 +12,9 @@
     <p id="level-delete-what" class="warning" i18n="@@levels.clearWarning">
       Todos com acesso ao acervo passam a ver todo o conteúdo.
     </p>
+    @if (profilesNote(); as note) {
+      <p class="warning">{{ note }}</p>
+    }
     <form (submit)="$event.preventDefault(); confirm()">
       <label class="field">
         <span i18n="@@levels.clearTypeName"

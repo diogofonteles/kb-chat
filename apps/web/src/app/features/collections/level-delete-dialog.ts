@@ -82,11 +82,21 @@ export class LevelDeleteDialog {
   protected readonly typedName = signal('');
   protected readonly busy = signal(false);
   protected readonly failure = signal('');
+  /** Said in a live region when the dialog counted again on a newer scale (BR-3). */
+  protected readonly recounted = signal('');
+  /** The scale the dialog read itself after a 409, until the page's catches up. */
+  private readonly latest = signal<TopicLevels | null>(null);
+  /** The scale the dialog works on: its own after a 409, else the page's. */
+  private readonly current = computed(() => {
+    const latest = this.latest();
+    const page = this.scale();
+    return latest && latest.version !== page.version ? latest : page;
+  });
 
   /** Every level goes: the one level left, or "Tirar todos os níveis". */
   protected readonly all = computed(() => {
     const removing = this.removing();
-    return removing.kind === 'all' || this.scale().levels.length === 1;
+    return removing.kind === 'all' || this.current().levels.length === 1;
   });
   protected readonly level = computed(() => {
     const removing = this.removing();
@@ -94,7 +104,7 @@ export class LevelDeleteDialog {
   });
   /** The other levels, as targets (BR-1). */
   protected readonly targets = computed(() =>
-    this.scale().levels.filter((one) => one.id !== this.level()?.id),
+    this.current().levels.filter((one) => one.id !== this.level()?.id),
   );
   protected readonly nameMatches = computed(() =>
     sameName(this.typedName(), this.title()),
@@ -124,31 +134,37 @@ export class LevelDeleteDialog {
       ? $localize`:@@levels.deleteHoldingsOne:${and(parts)}:parts: está em ${code}:code:.`
       : $localize`:@@levels.deleteHoldings:${and(parts)}:parts: estão em ${code}:code:.`;
   });
-  /** KBC-109: profiles that name the level ask for another one afterwards. */
+  /** KBC-109: profiles that name the level (or, every level going, any) ask for another one. */
   protected readonly profilesNote = computed(() => {
-    const removal = this.preview()?.removal;
-    if (!removal || removal.profiles === 0) return '';
-    const code = removal.level.code;
-    return removal.profiles === 1
-      ? $localize`:@@levels.deleteProfilesOne:1 perfil de convite usa ${code}:code:. Ele não muda: ao aplicá-lo, a pessoa fica no nível mais baixo até alguém escolher outro no perfil.`
-      : $localize`:@@levels.deleteProfiles:${removal.profiles}:count: perfis de convite usam ${code}:code:. Eles não mudam: ao aplicá-los, a pessoa fica no nível mais baixo até alguém escolher outro no perfil.`;
+    const preview = this.preview();
+    if (!preview || preview.profiles === 0) return '';
+    const n = preview.profiles;
+    const code = preview.removal?.level.code;
+    if (code)
+      return n === 1
+        ? $localize`:@@levels.deleteProfilesOne:1 perfil de convite usa ${code}:code:. Ele não muda: ao aplicá-lo, a pessoa fica no nível mais baixo até alguém escolher outro no perfil.`
+        : $localize`:@@levels.deleteProfiles:${n}:count: perfis de convite usam ${code}:code:. Eles não mudam: ao aplicá-los, a pessoa fica no nível mais baixo até alguém escolher outro no perfil.`;
+    return n === 1
+      ? $localize`:@@levels.clearProfilesOne:1 perfil de convite usa um nível deste acervo. Ele não muda: ao aplicá-lo, o nível dele não vale mais.`
+      : $localize`:@@levels.clearProfiles:${n}:count: perfis de convite usam níveis deste acervo. Eles não mudam: ao aplicá-los, os níveis deles não valem mais.`;
   });
-  protected readonly canConfirm = computed(() =>
-    this.all()
-      ? this.nameMatches() && !this.busy()
-      : this.preview() !== null && !this.busy(),
-  );
+  /** Only on a preview of the scale as it is now (BR-3), never while one is coming. */
+  protected readonly canConfirm = computed(() => {
+    if (this.busy() || this.preview() === null) return false;
+    return !this.all() || this.nameMatches();
+  });
 
   /** Opens for one level (or every level when it is the only one). */
   openFor(level: AccessLevel): void {
     if (this.scale().levels.length === 1) return this.openForAll();
     this.reset({ kind: 'one', level });
-    this.loadPreview(level.id);
+    this.loadPreview(this.scale().version);
   }
 
-  /** Opens "Tirar todos os níveis". */
+  /** Opens "Tirar todos os níveis": its preview counts the profiles it leaves (R1-11). */
   openForAll(): void {
     this.reset({ kind: 'all' });
+    this.loadPreview(this.scale().version);
     this.focusAfterRender(() => this.nameInput());
   }
 
@@ -157,8 +173,10 @@ export class LevelDeleteDialog {
   }
 
   protected confirm(): void {
-    if (!this.canConfirm()) return;
-    const { version } = this.scale();
+    const preview = this.preview();
+    if (!this.canConfirm() || !preview) return;
+    // The version the master saw the counts on, never a newer one (R1-2).
+    const { version } = preview;
     const level = this.level();
     const request =
       this.all() || !level
@@ -175,6 +193,8 @@ export class LevelDeleteDialog {
     this.removing.set(removing);
     this.typedName.set('');
     this.failure.set('');
+    this.recounted.set('');
+    this.latest.set(null);
     this.loaded.set({ state: 'loading' });
     this.dialog().nativeElement.showModal();
   }
@@ -187,17 +207,53 @@ export class LevelDeleteDialog {
     });
   }
 
-  private loadPreview(id: string): void {
+  /** The server's count on `version`: the level's, or every level's. */
+  private loadPreview(version: string): void {
+    const removing = this.removing();
+    const body =
+      removing.kind === 'one' && !this.all()
+        ? { remove: removing.level.id, version }
+        : { all: true as const, version };
+    this.loaded.set({ state: 'loading' });
     this.api
-      .preview(this.topic(), { remove: id, version: this.scale().version })
+      .preview(this.topic(), body)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (preview) => {
-          this.contentTo.set(preview.removal?.moveContentTo ?? '');
-          this.peopleTo.set(preview.removal?.movePeopleTo ?? '');
-          this.loaded.set({ state: 'ready', preview });
-          // The targets and what moves are on screen: the danger button takes the focus (MA-27).
-          this.focusAfterRender(() => this.confirmButton());
+        next: (preview) => this.previewed(preview),
+        error: (err: unknown) => this.failed(err),
+      });
+  }
+
+  private previewed(preview: LevelPreview): void {
+    this.contentTo.set(preview.removal?.moveContentTo ?? '');
+    this.peopleTo.set(preview.removal?.movePeopleTo ?? '');
+    this.loaded.set({ state: 'ready', preview });
+    // The targets and what moves are on screen: the danger button takes the focus (MA-27).
+    if (!this.all()) this.focusAfterRender(() => this.confirmButton());
+  }
+
+  /**
+   * BR-3, R1-2: the scale changed under the dialog. It reads the scale again and counts again
+   * on it (new defaults, new counts), the button off until then; a level gone closes it.
+   */
+  private recount(): void {
+    this.stale.emit();
+    this.loaded.set({ state: 'loading' });
+    this.api
+      .levels(this.topic())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (scale) => {
+          this.latest.set(scale);
+          const removing = this.removing();
+          const gone =
+            removing.kind === 'one' &&
+            !scale.levels.some((one) => one.id === removing.level.id);
+          if (gone) return this.close();
+          this.recounted.set(
+            $localize`:@@levels.recounted:A escala mudou. Contei de novo com a escala de agora: confira antes de confirmar.`,
+          );
+          this.loadPreview(scale.version);
         },
         error: (err: unknown) => this.failed(err),
       });
@@ -220,14 +276,14 @@ export class LevelDeleteDialog {
       });
   }
 
-  /** The message stays in the dialog with the choices made (MA-26). */
+  /** The message stays in the dialog (MA-26); a changed scale is counted again (BR-3). */
   private failed(err: unknown): void {
     const code = toUiErrorCode(err);
+    if (code === 'LEVELS_CHANGED') return this.recount();
     const message = errorMessage(code);
     this.failure.set(message);
     if (this.loaded().state === 'loading')
       this.loaded.set({ state: 'failed', message });
-    if (code === 'LEVELS_CHANGED') this.stale.emit();
   }
 
   private count(n: number, what: 'documents' | 'media' | 'people'): string {

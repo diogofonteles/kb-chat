@@ -10,6 +10,10 @@ import { fireEvent, render, screen } from '@testing-library/angular';
 import { LevelsHistory } from './levels-history.js';
 
 const AUDIT = '/api/v1/levels/audit';
+/** R1-9: "De 01/11" is the start of that day where the browser is, as an instant. */
+const FROM = encodeURIComponent(
+  new Date('2026-11-01T00:00:00.000').toISOString(),
+);
 
 const line = (over: Partial<LevelAuditItem> = {}): LevelAuditItem => ({
   at: '2026-11-10T12:30:00.000Z',
@@ -33,9 +37,9 @@ const page = (
   nextCursor: string | null = null,
 ): LevelAuditPage => ({ items, nextCursor });
 
-async function history() {
+async function history(revision = 0) {
   const rendered = await render(LevelsHistory, {
-    inputs: { topic: 'hermetismo' },
+    inputs: { topic: 'hermetismo', revision },
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(),
@@ -141,7 +145,7 @@ describe('LevelsHistory (T24, KBC-108 FR-4)', () => {
     const filtered = http.match((request) => request.url.startsWith(AUDIT));
     const last = filtered.at(-1);
     expect(last?.request.url).toBe(
-      `${AUDIT}?topic=hermetismo&limit=20&kind=person.level&actor=ana&from=2026-11-01`,
+      `${AUDIT}?topic=hermetismo&limit=20&kind=person.level&actor=ana&from=${FROM}`,
     );
     last?.flush(
       page(
@@ -153,7 +157,7 @@ describe('LevelsHistory (T24, KBC-108 FR-4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Carregar mais' }));
     http
       .expectOne(
-        `${AUDIT}?topic=hermetismo&limit=20&kind=person.level&actor=ana&from=2026-11-01&cursor=c1`,
+        `${AUDIT}?topic=hermetismo&limit=20&kind=person.level&actor=ana&from=${FROM}&cursor=c1`,
       )
       .flush(
         page([
@@ -167,6 +171,19 @@ describe('LevelsHistory (T24, KBC-108 FR-4)', () => {
     await fixture.whenStable();
     expect(screen.getByText('CI → CDC: Caio')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Carregar mais' })).toBeNull();
+  });
+
+  it('R1-12: an open history reads itself again after a change on the page', async () => {
+    const { fixture, http } = await history();
+    fireEvent.click(toggle());
+    TestBed.tick();
+    http.expectOne(`${AUDIT}?topic=hermetismo&limit=20`).flush(page([]));
+    await fixture.whenStable();
+    fixture.componentRef.setInput('revision', 1);
+    TestBed.tick();
+    http.expectOne(`${AUDIT}?topic=hermetismo&limit=20`).flush(page([line()]));
+    await fixture.whenStable();
+    expect(screen.getByText('CI → CDC: “Aula 12”')).toBeTruthy();
   });
 
   it('says when the history does not load, and tries again', async () => {
