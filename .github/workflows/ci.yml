@@ -166,9 +166,16 @@ jobs:
           Dir::Cache::archives "$HOME/.cache/kb-chat-apt";
           CONF
           # Each try starts by clearing what a killed one left: its apt holds the dpkg lock.
-          tools/ci/retry.sh 3 180 sh -c \
-            'sudo pkill -KILL -x "apt-get|dpkg|http|https"; sudo dpkg --configure -a &&
-            pnpm --filter @kb-chat/e2e exec playwright install-deps webkit'
+          clear='sudo pkill -KILL -x "apt-get|dpkg|http|https"; sudo dpkg --configure -a'
+          if ! tools/ci/retry.sh 2 180 sh -c \
+            "$clear && pnpm --filter @kb-chat/e2e exec playwright install-deps webkit"; then
+            # When the mirror cannot be reached (an hour of DNS failures on 2026-11-11 failed
+            # every try), the packages a past run downloaded are in the cache above: dpkg
+            # installs them without apt's lists or network.
+            ls ~/.cache/kb-chat-apt/*.deb > /dev/null 2>&1 || exit 1
+            echo "::warning::apt unreachable: installing WebKit's libraries from the cache"
+            sh -c "$clear" && sudo dpkg -i ~/.cache/kb-chat-apt/*.deb
+          fi
           sudo chown -R "$USER" ~/.cache/kb-chat-apt
         timeout-minutes: 10
       - uses: ./.github/actions/setup-ffmpeg
