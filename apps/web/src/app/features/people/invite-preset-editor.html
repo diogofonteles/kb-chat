@@ -45,7 +45,7 @@
           #levelSelect
           class="select"
           [id]="uid + '-level-' + row.collection"
-          [attr.aria-describedby]="row.stale || inviteStale ? noteId : null"
+          [attr.aria-describedby]="describedBy(row, !!inviteStale)"
           (change)="chooseLevel(row.collection, levelSelect.value)"
         >
           @if (row.stale) {
@@ -73,6 +73,15 @@
             </option>
           }
         </select>
+        @if (mode() === 'profile') {
+          <span
+            class="hint"
+            [id]="uid + '-keep-' + row.collection"
+            i18n="@@preset.keepLevelHint"
+            >Ao convidar com este perfil, a pessoa entra no nível mais
+            baixo.</span
+          >
+        }
         @if (row.stale) {
           <span class="field-error" [id]="noteId" i18n="@@preset.staleLevel"
             ><span aria-hidden="true">⚠</span> O nível {{ row.stale }} não

@@ -40,6 +40,7 @@ import {
   NO_LEVEL_ROWS,
   levelRowsAfter,
   withPresetLevels,
+  type LevelRow,
   type Scales,
 } from './level-rows.js';
 import {
@@ -133,6 +134,14 @@ export class InvitePresetEditor {
         }),
   );
   protected readonly keepLevel = KEEP_LEVEL;
+  /** The select is described by the profile's hint and the stale level's warning. */
+  protected describedBy(row: LevelRow, inviteStale: boolean): string | null {
+    const ids = [
+      this.mode() === 'profile' ? `${this.uid}-keep-${row.collection}` : null,
+      row.stale || inviteStale ? `${this.uid}-stale-${row.collection}` : null,
+    ].filter((id) => id !== null);
+    return ids.length > 0 ? ids.join(' ') : null;
+  }
   protected readonly chooseLevelValue = CHOOSE_LEVEL;
   /** The stale levels of an invitation the master has already replaced here. */
   private readonly replaced = signal<ReadonlySet<string>>(new Set());

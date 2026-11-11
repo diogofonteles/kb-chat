@@ -1,6 +1,6 @@
 import type { LevelChoice, LevelScales, Topic } from '@kb-chat/contracts';
 
-/** The collections with access levels; null while they load or when they failed to. */
+/** The collections with access levels (`Scales | null` where they may still be loading). */
 export type Scales = LevelScales['items'];
 type Levels = Readonly<Record<string, string>>;
 
@@ -150,12 +150,34 @@ export function withPresetLevels<
   },
 ): T {
   const { topics, scales, mode } = context;
-  if (scales === null) return preset;
-  const levels = presetLevels(preset, { topics, scales, mode });
+  const levels =
+    scales === null
+      ? reachedLevels(preset, topics)
+      : presetLevels(preset, { topics, scales, mode });
   return {
     ...preset,
     levels: Object.keys(levels).length > 0 ? levels : undefined,
   };
+}
+
+/**
+ * Without the scales: the levels as they came, less those of a collection the preset no
+ * longer reaches or of a master, which only the tree says (QA-r2-1).
+ */
+function reachedLevels(
+  preset: {
+    readonly role: string;
+    readonly topics: readonly string[];
+    readonly levels?: Levels;
+  },
+  topics: readonly Topic[],
+): Record<string, string> {
+  if (preset.role === 'master') return {};
+  return Object.fromEntries(
+    Object.entries(preset.levels ?? {}).filter(([root]) =>
+      reaches(topics, preset.topics, root),
+    ),
+  );
 }
 
 /** A profile's level that no longer exists, still kept: the profile waits for a choice. */

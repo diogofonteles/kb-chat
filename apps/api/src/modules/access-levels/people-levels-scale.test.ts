@@ -16,7 +16,7 @@ import { PeopleLevelsService } from './people-levels-service.js';
  * KBC-109 NFR-1 on 500 members of a collection with a scale, over the real files (atomic
  * people.json, synced audit), as KBC-107 measures its bulk: one write of people.json and one
  * append of the audit. The time is printed; the gate holds it to 5 s (five times the NFR, a
- * shared machine), and `KBC_NFR_STRICT=1` holds it to the NFR's 1 s (work/KBC-109/nfr.txt).
+ * shared machine), and `KBC_NFR_STRICT=1` holds it to the NFR's 1 s (CLAUDE.md, Quality).
  */
 const PEOPLE = 500;
 const LIMIT_MS = process.env['KBC_NFR_STRICT'] === '1' ? 1000 : 5000;

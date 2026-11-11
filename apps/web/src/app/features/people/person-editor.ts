@@ -109,8 +109,21 @@ export class PersonEditor {
    * the confirmation says so (KBC-109 BR-3, never in silence).
    */
   protected readonly staleOfChosen = computed(() =>
-    Object.values(this.chosenProfile()?.staleLevels ?? {}),
+    Object.entries(this.chosenProfile()?.staleLevels ?? {}).map(
+      ([collection, level]) => ({
+        id: `apply-stale-${this.person().id}-${collection}`,
+        level,
+        title:
+          this.topics().find((topic) => topic.slug === collection)?.title ??
+          collection,
+      }),
+    ),
   );
+  /** "Aplicar" is described by each warning, so a screen reader reads them on it. */
+  protected readonly applyDescribedBy = computed(() => {
+    const ids = this.staleOfChosen().map((one) => one.id);
+    return ids.length > 0 ? ids.join(' ') : null;
+  });
   /** Applying waits for a confirmation on the line (screens.md T9). */
   protected readonly confirmingApply = signal(false);
   /** After applying, focus returns to "Aplicar perfil" once the save is over (WCAG 2.4.3). */

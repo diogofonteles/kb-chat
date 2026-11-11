@@ -144,10 +144,14 @@ describe('PersonEditor: applying a profile whose level no longer exists (KBC-109
       },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar perfil' }));
+    const warning = screen.getByText(
+      /Em Hermetismo, o nível velho não existe mais; quem tiver este perfil aplicado fica no nível mais baixo\./,
+    );
+    // The focus goes to "Aplicar": the warning is read there (R2-7).
     expect(
-      screen.getByText(
-        /O nível velho não existe mais; quem tiver este perfil aplicado fica no nível mais baixo\./,
-      ),
-    ).toBeTruthy();
+      screen
+        .getByRole('button', { name: 'Aplicar' })
+        .getAttribute('aria-describedby'),
+    ).toBe(warning.id);
   });
 });

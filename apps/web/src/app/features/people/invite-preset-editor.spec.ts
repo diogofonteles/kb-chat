@@ -645,7 +645,9 @@ describe('InvitePresetEditor in a profile (KBC-109 R1-1, R1-2, R1-3)', () => {
     const warning = screen.getByText(
       /O nível cdc não existe mais; escolha outro\./,
     );
-    expect(levelSelect().getAttribute('aria-describedby')).toBe(warning.id);
+    expect(levelSelect().getAttribute('aria-describedby')).toContain(
+      warning.id,
+    );
     fireEvent.change(levelSelect(), { target: { value: 'qs' } });
     expect(last(changed).levels).toEqual({ hermetismo: 'qs' });
   });

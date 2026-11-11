@@ -400,7 +400,51 @@ describe('InviteProfilesPanel: levels (KBC-109 AC-4, BR-3, R1-1, R1-2)', () => {
       screen.getByText(/Não consegui carregar os níveis dos acervos/),
     ).toBeTruthy();
     expect(saveButton().disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Carregar de novo' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Carregar níveis de novo' }),
+    );
     expect(reloadScales).toHaveBeenCalledTimes(1);
+  });
+
+  it('QA-r2-1: unmarking a collection while the levels load takes its level off', async () => {
+    const leveled = {
+      ...aluno,
+      preset: { ...aluno.preset, levels: { hermetismo: 'ci' } },
+    };
+    const { http, fixture } = await renderWith(leveled, { scales: null });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Hermetismo' }));
+    await fixture.whenStable();
+    fireEvent.click(saveButton());
+    const saved = http.expectOne(`${URL}/${aluno.id}`);
+    expect(saved.request.body.preset.topics).toEqual([]);
+    // Undefined: JSON leaves the key out, as the API keeps a profile without levels.
+    expect(saved.request.body.preset.levels).toBeUndefined();
+  });
+
+  it('QA-r2-1: a refused profile says so in the profile’s words', async () => {
+    const { http, fixture } = await renderWith(aluno);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Pesquisa com IA' }));
+    await fixture.whenStable();
+    fireEvent.click(saveButton());
+    http
+      .expectOne(`${URL}/${aluno.id}`)
+      .flush(
+        { error: { code: 'VALIDATION_FAILED', message: 'Unknown level' } },
+        { status: 400, statusText: 'Bad Request' },
+      );
+    await fixture.whenStable();
+    expect(notice()).toContain('Não consegui salvar o perfil');
+    expect(notice()).not.toContain('pergunta');
+  });
+
+  it('R2-3: "Manter" says what an invitation with the profile gives', async () => {
+    await renderWith(aluno);
+    const select = screen.getByRole('combobox', {
+      name: 'Nível em Hermetismo',
+    });
+    const hint = screen.getByText(
+      'Ao convidar com este perfil, a pessoa entra no nível mais baixo.',
+    );
+    expect(select.getAttribute('aria-describedby')).toContain(hint.id);
   });
 });

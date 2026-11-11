@@ -124,16 +124,22 @@
           Papel, acervos, funcionalidades e IA mudam; as preferências que a
           pessoa já salvou continuam.
         </p>
-        @for (stale of staleOfChosen(); track stale) {
-          <p class="confirm field-error" i18n="@@people.applyStaleLevel">
-            <span aria-hidden="true">⚠</span> O nível {{ stale }} não existe
-            mais; quem tiver este perfil aplicado fica no nível mais baixo.
+        @for (stale of staleOfChosen(); track stale.id) {
+          <p
+            class="confirm field-error"
+            [id]="stale.id"
+            i18n="@@people.applyStaleLevel"
+          >
+            <span aria-hidden="true">⚠</span> Em {{ stale.title }}, o nível
+            {{ stale.level }} não existe mais; quem tiver este perfil aplicado
+            fica no nível mais baixo.
           </p>
         }
         <button
           #applyConfirmButton
           type="button"
           class="secondary"
+          [attr.aria-describedby]="applyDescribedBy()"
           (click)="confirmApply()"
           i18n="@@people.applyConfirm"
         >

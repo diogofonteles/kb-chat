@@ -20,12 +20,22 @@ import type {
   InviteProfileView,
   Topic,
 } from '@kb-chat/contracts';
-import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import {
+  errorMessage,
+  toUiErrorCode,
+  type UiErrorCode,
+} from '@core/api/api-error.js';
 import type { Observable } from 'rxjs';
 import { InvitePresetEditor } from './invite-preset-editor.js';
 import { InviteProfilesStore } from './invite-profiles-store.js';
 import { plainPreset } from './preset-defaults.js';
 import { hasStaleLevel, type Scales } from './level-rows.js';
+
+/** The profile's own words for a refusal, never another screen's (QA-r2-1). */
+const refusedProfile = (code: UiErrorCode): string | null =>
+  code === 'VALIDATION_FAILED'
+    ? $localize`:@@profiles.refused:Não consegui salvar o perfil: confira os acervos e os níveis marcados e tente de novo.`
+    : null;
 
 /** The profile being written: a new one has no id yet. */
 interface Draft {
@@ -150,19 +160,27 @@ export class InviteProfilesPanel {
       return;
     }
     if (this.scalesFailed() || this.levelsPending()) return;
+    this.run(
+      this.saveCall(draft, name),
+      (saved) => {
+        this.draft.set(null);
+        this.focusAfterRender(() => this.newButton());
+        return $localize`:@@profiles.saved:Perfil "${saved.name}:name:" salvo.`;
+      },
+      refusedProfile,
+    );
+  }
+
+  /** Only a preset changed here goes out (R1-2): a rename never writes levels. */
+  private saveCall(draft: Draft, name: string) {
     const { isDefault, preset, presetChanged } = draft;
-    const call = draft.id
+    return draft.id
       ? this.store.update(draft.id, {
           name,
           isDefault,
           ...(presetChanged && { preset }),
         })
       : this.store.create({ name, isDefault, preset });
-    this.run(call, (saved) => {
-      this.draft.set(null);
-      this.focusAfterRender(() => this.newButton());
-      return $localize`:@@profiles.saved:Perfil "${saved.name}:name:" salvo.`;
-    });
   }
 
   /** "Tornar padrão" goes away on that line: focus moves to its "Editar" (WCAG 2.4.3). */
@@ -217,7 +235,11 @@ export class InviteProfilesPanel {
   }
 
   /** One change at a time; its outcome is announced under the list. */
-  private run<T>(call: Observable<T>, done: (value: T) => string): void {
+  private run<T>(
+    call: Observable<T>,
+    done: (value: T) => string,
+    refused?: (code: UiErrorCode) => string | null,
+  ): void {
     this.busy.set(true);
     this.notice.set(null);
     call.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
@@ -227,9 +249,10 @@ export class InviteProfilesPanel {
       },
       error: (err: unknown) => {
         this.busy.set(false);
+        const code = toUiErrorCode(err);
         this.notice.set({
           kind: 'error',
-          text: errorMessage(toUiErrorCode(err)),
+          text: refused?.(code) ?? errorMessage(code),
         });
       },
     });
