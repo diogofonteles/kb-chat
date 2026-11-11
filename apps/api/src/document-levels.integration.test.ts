@@ -47,10 +47,20 @@ const arrivals = (count: number, audio = 0): VaultDoc[] =>
       : doc(`hermetismo/raw/novo-texto-${n}.md`, `Novo Texto ${n}`, 'Novo.'),
   );
 
+/**
+ * The reload a sync makes, and its reconcile: the queue answers only once every write queued
+ * before it is done (R1-11), so asking for it waits for the reconcile, not for time.
+ */
+async function reload(world: LevelsWorld) {
+  await world.started.catalog.load();
+  const settled = await world.owner('GET', UNASSIGNED);
+  expect(settled.statusCode, settled.body).toBe(200);
+}
+
 /** Documents the Mac adds, then the reload a sync makes. */
 async function arrive(world: LevelsWorld, docs: readonly VaultDoc[]) {
   await writeDocs(world.vault, docs);
-  await world.started.catalog.load();
+  await reload(world);
 }
 
 const page = async (call: Call, query = '') => {
@@ -286,24 +296,24 @@ describe('Documents without a level and bulk levels (KBC-107, ADR 0036 §5)', ()
     const removed = ['ci-1.md', 'cdc-1.md'];
     for (const name of removed)
       await rm(join(world.vault, 'hermetismo', 'raw', name));
-    await world.started.catalog.load();
+    await reload(world);
     expect((await page(world.owner)).total).toBe(0);
 
     at(T0.getTime() + 10 * DAY);
     await writeDocs(world.vault, [
       doc('hermetismo/raw/ci-1.md', 'Lua Media Uno', 'De volta.'),
     ]);
-    await world.started.catalog.load();
+    await reload(world);
     expect(
       (await world.owner('GET', documentUrl('raw/ci-1.md'))).json().level,
     ).toEqual({ id: 'ci', code: 'CI' });
 
     at(T0.getTime() + 31 * DAY);
-    await world.started.catalog.load();
+    await reload(world);
     await writeDocs(world.vault, [
       doc('hermetismo/raw/cdc-1.md', 'Zircônio Velado', 'De volta tarde.'),
     ]);
-    await world.started.catalog.load();
+    await reload(world);
     expect(
       (await world.owner('GET', documentUrl('raw/cdc-1.md'))).json().level,
     ).toBeNull();

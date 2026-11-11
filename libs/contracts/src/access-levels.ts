@@ -181,7 +181,7 @@ export const levelAuditEntrySchema = z.object({
     })
     .optional(),
   /** For a `bulk` of KBC-107: the filter it applied, or `{ ids: n }` for a selection. */
-  filter: z.unknown().optional(),
+  filter: z.lazy(() => bulkAuditFilterSchema).optional(),
 });
 export type LevelAuditEntry = z.infer<typeof levelAuditEntrySchema>;
 
@@ -293,6 +293,13 @@ export const bulkLevelRequestSchema = z.union([
   }),
 ]);
 export type BulkLevelRequest = z.infer<typeof bulkLevelRequestSchema>;
+
+/** What a `bulk` line records of its request: the filter as of `asOf`, or how many ids. */
+export const bulkAuditFilterSchema = z.union([
+  unassignedFilterSchema.extend({ asOf: z.iso.datetime() }),
+  z.strictObject({ ids: z.number().int().positive() }),
+]);
+export type BulkAuditFilter = z.infer<typeof bulkAuditFilterSchema>;
 
 export const bulkLevelResultSchema = z.object({
   level: levelChoiceSchema,

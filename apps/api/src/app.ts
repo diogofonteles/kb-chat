@@ -88,6 +88,7 @@ import {
   ContentGate,
   LevelDirectory,
   DocumentLevelsService,
+  LevelWriteQueue,
   accessLevelRoutes,
 } from './modules/access-levels/index.js';
 import { createGoogleVerifier } from './adapters/google-id-token-verifier.js';
@@ -1923,7 +1924,9 @@ async function loadedLevels(
   const { catalog, people, media } = built;
   const gate = new ContentGate({ directory: levels.directory, catalog });
   const parentOf = (slug: string) => catalog.get(slug)?.topic.parent ?? null;
-  const shared = { ...levels, catalog, gate, parentOf };
+  // One queue for both services: a scale change never slips into a document write (R1-7).
+  const queue = new LevelWriteQueue();
+  const shared = { ...levels, catalog, gate, parentOf, queue };
   const service = new AccessLevelsService({
     ...shared,
     people,

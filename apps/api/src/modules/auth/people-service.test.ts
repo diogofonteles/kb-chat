@@ -173,3 +173,36 @@ describe('PeopleService', () => {
     expect(await people.list()).toEqual([]);
   });
 });
+
+describe('PeopleService and features it does not know (KBC-107 QA-2)', () => {
+  it('loads a people.json written by a newer image, ignores the unknown feature and warns once', async () => {
+    const store = new MemoryPeopleStore();
+    const first = await service(store).list();
+    const owner = first[0];
+    await store.write({
+      version: 1,
+      people: [
+        {
+          ...owner,
+          features: ['search', 'a-feature-from-the-future'],
+        },
+      ],
+    });
+    const warn = vi.fn();
+    const people = new PeopleService({
+      store,
+      ownerEmail: OWNER,
+      log: { warn },
+    });
+
+    const loaded = await people.list();
+    expect(loaded[0]?.features).toEqual(['search']);
+    const signedIn = await people.signIn(identity(OWNER));
+    expect(signedIn.email).toBe(OWNER);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      { features: ['a-feature-from-the-future'] },
+      expect.stringContaining('ignored'),
+    );
+  });
+});

@@ -12,6 +12,7 @@ import {
   OWNER_PRINCIPAL,
   isMaster,
   peopleDocumentSchema,
+  unknownFeaturesIn,
   type StoredPerson,
   type Viewer,
 } from './person.js';
@@ -28,6 +29,8 @@ export interface PeopleServiceDeps {
   readonly ownerEmail?: string;
   readonly now?: () => Date;
   readonly newId?: () => string;
+  /** Told when people.json names features this image does not know (they are ignored). */
+  readonly log?: { warn(fields: object, message: string): void };
 }
 
 interface Loaded {
@@ -43,6 +46,8 @@ export class PeopleService {
   private loaded: Loaded | null = null;
   private writing: Promise<unknown> = Promise.resolve();
   private readonly ownerEmail: string | undefined;
+
+  private warned = '';
 
   constructor(private readonly deps: PeopleServiceDeps) {
     this.ownerEmail = deps.ownerEmail?.toLowerCase();
@@ -244,6 +249,7 @@ export class PeopleService {
     const parsed = peopleDocumentSchema.safeParse(raw ?? undefined);
     if (raw !== null && !parsed.success)
       throw new AppError('INTERNAL', 'people.json is invalid');
+    this.warnUnknownFeatures(raw);
     const stored = parsed.success ? parsed.data.people : [];
     const people = rules.ensureOwner(stored, {
       ownerEmail: this.ownerEmail,
@@ -252,6 +258,18 @@ export class PeopleService {
     if (people !== stored) await this.persist(people);
     this.loaded = { people, at: Date.now() };
     return this.loaded;
+  }
+
+  /** Once per set of names: a rollback to an older image would otherwise warn on every read. */
+  private warnUnknownFeatures(raw: unknown): void {
+    const unknown = unknownFeaturesIn(raw);
+    const key = unknown.join(',');
+    if (unknown.length === 0 || key === this.warned) return;
+    this.warned = key;
+    this.deps.log?.warn(
+      { features: unknown },
+      'people.json names features this version does not know; they are ignored',
+    );
   }
 
   private change<T>(

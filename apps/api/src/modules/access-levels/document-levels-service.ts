@@ -1,4 +1,5 @@
 import type {
+  BulkAuditFilter,
   BulkLevelRequest,
   BulkLevelResult,
   ContentLevel,
@@ -10,6 +11,7 @@ import type {
 } from '@kb-chat/contracts';
 import { unassignedQuerySchema } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
+import { LevelWriteQueue } from './write-queue.js';
 import type { LevelAuditPort } from '../../ports/level-audit.js';
 import {
   canSeeTopic,
@@ -45,6 +47,8 @@ import {
 export const MISSING_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface DocumentLevelsDeps {
+  /** Shared with the other levels service (R1-7); its own when absent. */
+  readonly queue?: LevelWriteQueue;
   readonly directory: LevelDirectory;
   readonly catalog: CatalogRegistry;
   readonly gate: ContentGate;
@@ -86,9 +90,11 @@ const choiceOf = ({ id, code }: StoredLevel): LevelChoice => ({ id, code });
  * keep. Writes and reconciles run one after the other; each write is audited before it answers.
  */
 export class DocumentLevelsService {
-  private writing: Promise<unknown> = Promise.resolve();
+  private readonly writes: LevelWriteQueue;
 
-  constructor(private readonly deps: DocumentLevelsDeps) {}
+  constructor(private readonly deps: DocumentLevelsDeps) {
+    this.writes = deps.queue ?? new LevelWriteQueue();
+  }
 
   /** GET …/levels/unassigned (FR-1): one page of the queue the caller may classify. */
   async unassigned(
@@ -166,11 +172,13 @@ export class DocumentLevelsService {
         root,
         request,
       );
-      await this.write(who.actor, {
-        level: chosen,
-        targets,
-        bulk: { root, filter, skipped },
-      });
+      // QA-3: nothing to place, nothing to record.
+      if (targets.length > 0)
+        await this.write(who.actor, {
+          level: chosen,
+          targets,
+          bulk: { root, filter, skipped },
+        });
       return { level: choiceOf(chosen), updated: targets.length, skipped };
     });
   }
@@ -198,9 +206,12 @@ export class DocumentLevelsService {
     person: StoredPerson,
     root: string,
     request: BulkLevelRequest,
-  ): { targets: Target[]; skipped: number; filter: unknown } {
+  ): { targets: Target[]; skipped: number; filter: BulkAuditFilter } {
     if ('filter' in request) {
-      const rows = this.queue(person, root).filter(matches(request.filter));
+      // QA-1: a row with no sighting recorded yet has no known arrival: never in a filter.
+      const rows = this.queue(person, root)
+        .filter((row) => this.sighted(row))
+        .filter(matches(request.filter));
       const targets = rows.flatMap((row) => this.targetOf(person, row) ?? []);
       return { targets, skipped: 0, filter: request.filter };
     }
@@ -262,6 +273,13 @@ export class DocumentLevelsService {
       : undefined;
   }
 
+  /** Whether the app recorded when this document arrived (or was placed). */
+  private sighted(row: UnassignedRow): boolean {
+    const mark = this.deps.directory.presenceMap()[row.topic]?.[row.id];
+    const placed = this.deps.directory.placementsOf(row.topic)[row.id];
+    return firstSeen(mark, placed?.setAt) !== undefined;
+  }
+
   private inScope(root: string, topic: string): boolean {
     return (
       this.deps.catalog.get(topic) !== undefined &&
@@ -289,6 +307,9 @@ export class DocumentLevelsService {
     const scale = this.deps.directory.scaleOf(root);
     if (scale.length === 0) return [];
     const presence = this.deps.directory.presenceMap();
+    // QA-1: a document with no mark yet (its load not reconciled, or a reconcile that
+    // failed) counts as arrived now, so no earlier `asOf` ever takes it (BR-3).
+    const now = new Date().toISOString();
     return this.visibleScope(person, root).flatMap((catalog) => {
       const slug = catalog.topic.slug;
       const placed = this.deps.directory.placementsOf(slug);
@@ -297,7 +318,8 @@ export class DocumentLevelsService {
           toRow(
             slug,
             entry,
-            firstSeen(presence[slug]?.[entry.id], placed[entry.id]?.setAt),
+            firstSeen(presence[slug]?.[entry.id], placed[entry.id]?.setAt) ??
+              now,
           ),
       );
     });
@@ -364,13 +386,11 @@ export class DocumentLevelsService {
   }
 
   private settled(): Promise<void> {
-    return this.writing.then(() => undefined);
+    return this.writes.settled();
   }
 
   private serial<T>(run: () => Promise<T>): Promise<T> {
-    const next = this.writing.then(run);
-    this.writing = next.catch(() => undefined);
-    return next;
+    return this.writes.run(run);
   }
 }
 
@@ -380,7 +400,7 @@ interface LevelChange {
   readonly targets: readonly Target[];
   readonly bulk?: {
     readonly root: string;
-    readonly filter: unknown;
+    readonly filter: BulkAuditFilter;
     readonly skipped: number;
   };
 }
@@ -439,14 +459,15 @@ function arrivals(
 ): Record<string, DocumentPresence> {
   const next = { ...marks };
   for (const { id } of texts)
-    next[id] = { ...next[id], firstSeenAt: next[id]?.firstSeenAt ?? now };
+    // R1-5: only the first sighting; a `missingSince` belongs to a placed document.
+    next[id] = { firstSeenAt: next[id]?.firstSeenAt ?? now };
   return next;
 }
 
 const firstSeen = (
   mark: DocumentPresence | undefined,
   setAt: string | undefined,
-): string => mark?.firstSeenAt ?? setAt ?? new Date(0).toISOString();
+): string | undefined => mark?.firstSeenAt ?? setAt;
 
 /** A placed document's next mark, or `expired` once it has been gone 30 days (BR-5). */
 function absence(

@@ -11,6 +11,7 @@ import {
   type TopicLevels,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
+import { LevelWriteQueue } from './write-queue.js';
 import type { LevelAuditPort } from '../../ports/level-audit.js';
 import type { MediaStorePort } from '../../ports/media-store.js';
 import {
@@ -39,6 +40,8 @@ export interface LevelActor {
 }
 
 export interface AccessLevelsServiceDeps {
+  /** Shared with the other levels service (R1-7); its own when absent. */
+  readonly queue?: LevelWriteQueue;
   readonly directory: LevelDirectory;
   readonly catalog: CatalogRegistry;
   readonly gate: ContentGate;
@@ -103,9 +106,11 @@ function assertFreeCode(
  * run one after the other, and each is audited before it answers.
  */
 export class AccessLevelsService implements PersonLevelRules {
-  private writing: Promise<unknown> = Promise.resolve();
+  private readonly queue: LevelWriteQueue;
 
-  constructor(private readonly deps: AccessLevelsServiceDeps) {}
+  constructor(private readonly deps: AccessLevelsServiceDeps) {
+    this.queue = deps.queue ?? new LevelWriteQueue();
+  }
 
   /** GET …/levels: the scale with its counts (T24). */
   async levelsOf(topic: string): Promise<TopicLevels> {
@@ -419,9 +424,7 @@ export class AccessLevelsService implements PersonLevelRules {
   }
 
   private serial<T>(run: () => Promise<T>): Promise<T> {
-    const next = this.writing.then(run);
-    this.writing = next.catch(() => undefined);
-    return next;
+    return this.queue.run(run);
   }
 
   private now(): string {

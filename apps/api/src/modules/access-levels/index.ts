@@ -27,3 +27,4 @@ export {
   storedLevelViewOf,
 } from './request-view.js';
 export { accessLevelRoutes } from './routes.js';
+export { LevelWriteQueue } from './write-queue.js';
