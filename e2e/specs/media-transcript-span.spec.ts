@@ -23,6 +23,12 @@ const TRACKS = [
   { startMs: 30_000, endMs: 60_000, title: 'Segunda pergunta' },
 ];
 
+/** Enough lines in the first track for its text block to scroll at 390 px (AC-9). */
+const MANY_LINES = Array.from({ length: 14 }, (_, index) => ({
+  at: 2 + index * 2,
+  text: `linha ${index + 1} fala do mestre`,
+}));
+
 interface Media {
   readonly id: string;
 }
@@ -39,6 +45,18 @@ async function lecture(owner: APIRequestContext): Promise<Media> {
   return media;
 }
 
+/** A recording whose first track has many short lines. */
+async function longLecture(owner: APIRequestContext): Promise<Media> {
+  const media = await uploadReady(owner, {
+    title: `Muitas linhas ${uniqueTag()}`,
+    seconds: 70,
+    bitrate: '32k',
+  });
+  await seedTranscript(owner, { id: media.id, raw: rawOf(MANY_LINES) });
+  await seedDraft(owner, media.id, TRACKS);
+  return media;
+}
+
 const textOf = (page: Page) =>
   page.getByRole('region', { name: 'Texto da faixa 1' });
 
@@ -51,10 +69,14 @@ const panel = (page: Page) =>
 const field = (page: Page) =>
   panel(page).getByRole('textbox', { name: 'Texto certo' });
 
-async function openStep3(page: Page, media: Media) {
+async function openStep3(
+  page: Page,
+  media: Media,
+  says = 'o mestre Tiuako disse assim',
+) {
   await page.goto(`/midia/${media.id}/faixas`);
   await trackRow(page, 1).getByRole('button').first().click();
-  await expect(textOf(page)).toContainText('o mestre Tiuako disse assim');
+  await expect(textOf(page)).toContainText(says);
   await expect(audition(page)).toBeAttached();
 }
 
@@ -62,10 +84,10 @@ async function openStep3(page: Page, media: Media) {
 async function wordAt(
   region: Locator,
   word: string,
-  nth = 0,
+  { nth = 0, scroll = true }: { nth?: number; scroll?: boolean } = {},
 ): Promise<{ x: number; y: number }> {
   const box = await region.evaluate(
-    (element, { word, nth }) => {
+    (element, { word, nth, scroll }) => {
       const found = Array.from(element.querySelectorAll('.line'))
         .flatMap((line) => {
           const node = line.firstChild;
@@ -81,14 +103,14 @@ async function wordAt(
         })
         .at(nth);
       if (!found) return null;
-      found.node.parentElement?.scrollIntoView({ block: 'center' });
+      if (scroll) found.node.parentElement?.scrollIntoView({ block: 'center' });
       const range = document.createRange();
       range.setStart(found.node, found.at);
       range.setEnd(found.node, found.at + word.length);
       const rect = range.getBoundingClientRect();
       return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     },
-    { word, nth },
+    { word, nth, scroll },
   );
   if (!box) throw new Error(`no "${word}" in the text`);
   return box;
@@ -295,4 +317,121 @@ test('AC-13: the panel with many words passes axe', async ({
     ['serious', 'critical'].includes(violation.impact ?? ''),
   );
   expect(violations).toEqual([]);
+});
+
+const selected = (page: Page) =>
+  page.evaluate(() => document.getSelection()?.toString().trim() ?? '');
+
+test('IMP-3: a double click selects the word and a triple click the line, for copying', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name === 'media-mobile', 'the mouse');
+  test.setTimeout(180_000);
+  const owner = await ownerApi();
+  const media = await lecture(owner);
+  await owner.dispose();
+  await openStep3(page, media);
+  const region = textOf(page);
+
+  const word = await wordAt(region, 'Tiuako');
+  await page.mouse.dblclick(word.x, word.y);
+  await expect(panel(page)).toHaveAccessibleName('Corrigir palavra, Tiuako');
+  await expect.poll(() => selected(page)).toBe('Tiuako');
+
+  await page.mouse.click(word.x, word.y, { clickCount: 3 });
+  await expect
+    .poll(() => selected(page))
+    .toContain('o mestre Tiuako disse assim');
+});
+
+test('QA-3: a drag that starts in the space after a word starts on that word', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name === 'media-mobile', 'the mouse');
+  test.setTimeout(180_000);
+  const owner = await ownerApi();
+  const media = await lecture(owner);
+  await owner.dispose();
+  await openStep3(page, media);
+  const region = textOf(page);
+
+  const end = await wordAt(region, 'disse');
+  // Just right of "mestre", in the space before "Tiuako".
+  const gap = await region.evaluate((element) => {
+    const line = Array.from(element.querySelectorAll('.line')).find((one) =>
+      one.textContent?.includes('mestre Tiuako disse'),
+    );
+    const node = line?.firstChild;
+    if (!node?.textContent) return null;
+    const at = node.textContent.indexOf('mestre') + 'mestre'.length;
+    const range = document.createRange();
+    range.setStart(node, at - 1);
+    range.setEnd(node, at);
+    const box = range.getBoundingClientRect();
+    return { x: box.right + 1, y: box.top + box.height / 2 };
+  });
+  expect(gap).not.toBeNull();
+  if (!gap) return;
+  await page.mouse.move(gap.x, gap.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 8 });
+  await page.mouse.up();
+  await expect(field(page)).toHaveValue('mestre Tiuako disse');
+});
+
+test('AC-9, IMP-4: on a touch screen a quick swipe scrolls the text and opens nothing; a held finger chooses and does not scroll', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'media-mobile', 'the touch screen');
+  test.setTimeout(180_000);
+  const owner = await ownerApi();
+  const media = await longLecture(owner);
+  await owner.dispose();
+  await openStep3(page, media, 'linha 1 fala do mestre');
+  const region = textOf(page);
+  await expect(region).toContainText('linha 14 fala do mestre');
+  const scroll = () => region.evaluate((element) => element.scrollTop);
+  const scrollable = await region.evaluate(
+    (element) => element.scrollHeight > element.clientHeight,
+  );
+  expect(scrollable, 'the block scrolls').toBe(true);
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (
+    type: 'touchStart' | 'touchMove' | 'touchEnd',
+    point?: { x: number; y: number },
+  ) =>
+    cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints: point ? [{ x: point.x, y: point.y }] : [],
+    });
+
+  // Held on "fala" of the first line, then moved down over the lines below: the choice stops
+  // at the end of its own line, and the block stays where it was. (Before the swipe: a touch
+  // during a swipe's fling cannot hold the scroll back, in Chrome as on a phone.)
+  await region.scrollIntoViewIfNeeded();
+  await region.evaluate((element) => (element.scrollTop = 0));
+  const held = await wordAt(region, 'fala', { scroll: false });
+  const before = await scroll();
+  await touch('touchStart', held);
+  await expect.poll(() => correcting(page)).toBe('fala');
+  for (let step = 1; step <= 6; step++)
+    await touch('touchMove', { x: held.x, y: held.y + step * 25 });
+  await touch('touchEnd');
+  await expect(field(page)).toHaveValue('fala do mestre');
+  expect(await scroll()).toBe(before);
+  await saveEvidence(page, `${testInfo.project.name}-span-held`);
+  await panel(page).getByRole('button', { name: 'Cancelar' }).click();
+  await expect(panel(page)).toHaveCount(0);
+
+  // A quick swipe up from a word: the block scrolls, nothing is chosen.
+  await region.evaluate((element) => (element.scrollTop = 0));
+  const from = await wordAt(region, 'linha 3', { scroll: false });
+  const top = await scroll();
+  await touch('touchStart', from);
+  for (let step = 1; step <= 6; step++)
+    await touch('touchMove', { x: from.x, y: from.y - step * 30 });
+  await touch('touchEnd');
+  await expect.poll(scroll).toBeGreaterThan(top);
+  await expect(panel(page)).toHaveCount(0);
+  expect(await correcting(page)).toBeNull();
 });
