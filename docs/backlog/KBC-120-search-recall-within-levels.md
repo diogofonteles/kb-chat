@@ -1,5 +1,5 @@
 ---
-id: KBC-118
+id: KBC-120
 title: "Recall da busca dentro do nível: o QMD devolve no máximo 20 por sub-busca, então quem vê pouco de um acervo recebe páginas curtas"
 status: draft
 slice: levels-release-2
@@ -8,7 +8,7 @@ depends_on: [KBC-111]
 parent: LEVELS
 ---
 
-# KBC-118 — Recall da busca dentro do nível
+# KBC-120 — Recall da busca dentro do nível
 
 *Aberto pelo KBC-111 (AC-4), 2026-11-12.* Medição em `work/KBC-111/recall.md` com `apps/api/src/scripts/levels-recall.ts --qmd <índice>`: o QMD 2.8.3 pega no máximo 20 resultados por sub-busca (`structuredSearch` chama `searchFTS(…, 20)` e `searchVec(…, 20)` com 20 fixo, funde e corta em `candidateLimit` = 40), seja qual for o `limit` que a API pede. O orçamento adaptativo da ADR 0036 §7 pede 300 ou 1.000 e recebe 20 a 40. Com 20 % visível a primeira página enche 31 % (exact), 41 % (semantic) e 65 % (all); com 5 %, 8 %, 11 % e 17 %. O caminho da API está certo (recall 1,000 com um índice que respeita o `limit`); o teto está no índice. Achado anterior aos níveis: o orçamento base 60/200 (ADR 0003) também nunca foi atendido; total, facetas e `capped` vêm de no máximo 40 candidatos.
 

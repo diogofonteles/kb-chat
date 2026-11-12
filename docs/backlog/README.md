@@ -48,7 +48,7 @@ Pedido do dono: por acervo, o master cadastra níveis de acesso ordenados (ex.: 
 | [KBC-108](KBC-108-manage-the-level-scale-and-history.md) | Gerir a escala: apagar com reatribuição, reordenar com prévia do impacto, tirar todos os níveis, "Histórico de níveis" | levels-release-2 | ready | KBC-103, KBC-105 |
 | [KBC-106](KBC-106-tracks-with-their-own-level.md) | Faixas com nível próprio, trecho restrito no player e documentos de faixa (ADR 0035) com o nível | levels-release-2 | ready | KBC-105 |
 | [KBC-111](KBC-111-prove-no-leakage-across-levels.md) | Prova de não vazamento: suíte em todas as rotas e eventos, teste de fronteira, recall e latência, modelo de ameaças | levels-release-2 | ready | KBC-104, KBC-105, KBC-106, KBC-110 |
-| [KBC-118](KBC-118-search-recall-within-levels.md) | Recall da busca dentro do nível: o QMD devolve no máximo 20 por sub-busca (aberto pelo KBC-111 AC-4) | levels-release-2 | draft | KBC-111 |
+| [KBC-120](KBC-120-search-recall-within-levels.md) | Recall da busca dentro do nível: o QMD devolve no máximo 20 por sub-busca (aberto pelo KBC-111 AC-4) | levels-release-2 | draft | KBC-111 |
 
 Os itens estão `ready`; o dono aprovou em 2026-11-07 todas as decisões que estavam assumidas pelo padrão recomendado (nota em "Decisões de escopo"); a ordem na fila "A fazer" é do dono.
 
