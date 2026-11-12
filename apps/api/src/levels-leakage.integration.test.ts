@@ -84,15 +84,46 @@ const withScript = (request: ProbeRequest): ProbeRequest =>
     ? { ...request, inputs: [...request.inputs, ...SCRIPT_WORDS] }
     : request;
 
+/** The scripted model of a world: its script (completed once the world exists) and batches. */
+interface Model {
+  readonly llm: StubLlmAdapter;
+  readonly script: StubReply[];
+  /** Every sweep batch the model was given, as the app wrote it (sweep-planner). */
+  readonly batches: string[];
+}
+
 /**
  * The stub follows the looking script on a deep turn; on an exhaustive one the app plans and
  * sweeps by itself (ADR 0021) and each batch answers with no finding.
  */
-const stubModel = () =>
-  new StubLlmAdapter({
-    script: LOOKING,
-    batchReply: () => '',
+const stubModel = (): Model => {
+  const script = [...LOOKING];
+  const batches: string[] = [];
+  const llm = new StubLlmAdapter({
+    script,
+    batchReply: (user) => {
+      batches.push(user);
+      return '';
+    },
   });
+  return { llm, script, batches };
+};
+
+/**
+ * The world's open track documents read by id, and the links of the concept they are about:
+ * the sources event and what the model is told carry their "faixa n de N" (QA BUG-2).
+ */
+function readTracks(model: Model, one: LeakageWorld): void {
+  const open = one.tracks
+    .filter((track) => track.title === 'Primeira' || track.title === 'Terceira')
+    .map((track) => `raw/media/${one.recording.id}/${track.id}.md`);
+  model.script.splice(
+    model.script.length - 1,
+    0,
+    call('read_documents', { documents: open }),
+    call('related_documents', { document: 'wiki/concepts/Ritmo.md' }),
+  );
+}
 
 const HIDDEN_DOCUMENTS = [
   ...SENTINEL_DOCS.map((doc) => doc.id),
@@ -154,6 +185,7 @@ const sender =
     });
 
 let sentinel: LeakageWorld;
+let model: Model;
 let llm: StubLlmAdapter;
 let ana: Exchange[] = [];
 let master: Exchange[] = [];
@@ -172,8 +204,10 @@ let sentinelCounts: Awaited<ReturnType<typeof sentinelCountsOf>>;
 
 /** Reads first (GET and the declared POST bodies), as Ana and as the master; writes last. */
 beforeAll(async () => {
-  llm = stubModel();
+  model = stubModel();
+  llm = model.llm;
   sentinel = await leakageWorld({ sentinels: true, llm });
+  readTracks(model, sentinel);
   candidates = candidatesOf(sentinel);
   const app = sentinel.world.started.app;
   const routes = routesOf(app);
@@ -358,22 +392,17 @@ describe('A new route that skips the view is caught (KBC-111 AC-2, BR-2)', () =>
 });
 
 /** UUIDs differ between two worlds; times and the vault's folder too. */
-const VOLATILE = new Set([
-  'tookMs',
-  'asOf',
-  'createdAt',
-  'updatedAt',
-  'at',
-  // A sweep cursor's hashes of the ids it covered: track documents' ids are uuids.
-  'covered',
-]);
+const VOLATILE = new Set(['tookMs', 'asOf', 'createdAt', 'updatedAt', 'at']);
 
 /**
  * The known limit KBC-121: the header line the Mac writes into a track document's own text
  * ("Gravação: X · faixa n de N") counts every track; it reaches Ana only as that raw text
  * (a snippet, a read). Every number the API composes is compared.
  */
-const RAW_TRACK_HEADER = /(Gravação: [^·\n]*) · faixa \d+ de \d+/g;
+// The raw line is followed by the author or the length; the API's own ("· duração") is not
+// masked, so its number is compared.
+const RAW_TRACK_HEADER =
+  /(Gravação: [^·\n]*) · faixa \d+ de \d+(?! · duração)/g;
 
 /**
  * Accepted (ADR 0036, KBC-106 FR-2): where a hidden part of a recording Ana hears is ("Trecho
@@ -389,21 +418,38 @@ const keptKeys = (value: object) =>
     ([key]) => !VOLATILE.has(key) && !(key === 'hidden' && isMediaItem(value)),
   );
 
+/**
+ * A list whose items carry uuid ids (track documents, media) comes in an order that ties
+ * break by those ids, which differ between the worlds: it is compared as a set of what it
+ * holds. The order of results is still compared, through each document's rank score
+ * (`rankScore`) and the [n] the tools give. Other lists keep their order.
+ */
+const sortedIfTied = (items: unknown[]): unknown[] =>
+  items.some((item) => JSON.stringify(item).includes('<id>'))
+    ? [...items].sort((a, b) =>
+        JSON.stringify(a).localeCompare(JSON.stringify(b)),
+      )
+    : items;
+
+/** A sweep cursor's covered ids are 4-byte hashes (of uuids here): their count is compared. */
+const coveredCount = (covered: string): string =>
+  `${Buffer.from(covered, 'base64').length / 4} ids`;
+
 const normalized = (value: unknown): unknown => {
   if (typeof value === 'string')
     return value
       .replace(UUID, '<id>')
       .replace(VAULT, 'vault=<tmp>')
       .replace(RAW_TRACK_HEADER, '$1 · <KBC-121>');
-  // Items that tie are ordered by id, and track documents' ids are uuids that differ between
-  // the worlds: lists are compared as sets of what they hold.
-  if (Array.isArray(value))
-    return value
-      .map(normalized)
-      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  if (Array.isArray(value)) return sortedIfTied(value.map(normalized));
   if (value && typeof value === 'object')
     return Object.fromEntries(
-      keptKeys(value).map(([key, inner]) => [key, normalized(inner)]),
+      keptKeys(value).map(([key, inner]) => [
+        key,
+        key === 'covered' && typeof inner === 'string'
+          ? coveredCount(inner)
+          : normalized(inner),
+      ]),
     );
   return value;
 };
@@ -476,10 +522,7 @@ async function countsOf(one: LeakageWorld): Promise<unknown[]> {
 }
 
 /** The exhaustive turn's coverage and planned set, and the sources a deep turn cites. */
-async function researchCountsOf(
-  who: Call,
-  model: StubLlmAdapter,
-): Promise<unknown> {
+async function researchCountsOf(who: Call, of: Model): Promise<unknown> {
   const turn = async (profile: string) =>
     events(
       (
@@ -489,12 +532,20 @@ async function researchCountsOf(
         })
       ).body,
     );
+  const batched = of.batches.length;
   const exhaustive = await turn('exhaustive');
-  const seen = model.messagesSeen.length;
+  // The sweep's batches as the model got them, unit by unit ([Dn] follows the id order).
+  const batches = of.batches
+    .slice(batched)
+    .join('\n')
+    .split(/(?=\[D\d+\])/)
+    .map((unit) => String(normalized(unit.replace(/^\[D\d+\]/, '[D]'))))
+    .sort();
+  const seen = of.llm.messagesSeen.length;
   const deep = await turn('deep');
   // What the model was told by each tool (list_sources, list_subjects, find_text…): its
   // counts too must be those of a collection without the hidden items (QA IMP-1).
-  const tools = model.messagesSeen
+  const tools = of.llm.messagesSeen
     .slice(seen)
     .at(-1)
     ?.filter((message) => message.role === 'tool')
@@ -503,6 +554,7 @@ async function researchCountsOf(
       message.content
         .replace(/\[\d+\]/g, '[n]')
         .split('\n')
+        .map((line) => String(normalized(line)))
         .sort()
         .join('\n'),
     );
@@ -513,6 +565,7 @@ async function researchCountsOf(
   return normalized({
     coverage: done?.type === 'done' ? done.coverage : null,
     sweeps,
+    batches,
     // The cited sources whole: a track's "faixa n de N" travels in them (review R2-1).
     sources: deep.flatMap((event: ResearchEvent) =>
       event.type === 'sources'
@@ -528,14 +581,25 @@ describe('Side channels (KBC-111 AC-5)', () => {
 
   it('AC-5: Ana counts the same as in a collection where the hidden items do not exist', async () => {
     const { asIs, research, check } = sentinelCounts;
-    const model = stubModel();
-    const twin = await leakageWorld({ sentinels: false, llm: model });
+    const twinModel = stubModel();
+    const twin = await leakageWorld({ sentinels: false, llm: twinModel.llm });
+    readTracks(twinModel, twin);
 
     const without = await countsOf(twin);
-    const twinResearch = await researchCountsOf(twin.ana.call, model);
+    const twinResearch = await researchCountsOf(twin.ana.call, twinModel);
 
     expect(asIs).toEqual(without);
-    expect(research).toMatchObject({ tools: expect.any(Array) });
+    expect(research).toMatchObject({
+      tools: expect.any(Array),
+      batches: expect.arrayContaining([
+        expect.stringContaining('faixa 1 de 2'),
+      ]),
+      sources: expect.arrayContaining([
+        expect.objectContaining({
+          media: expect.objectContaining({ ordinal: 2, total: 2 }),
+        }),
+      ]),
+    });
     expect(research).toEqual(twinResearch);
     // The one answer that differs, decided by KBC-105 FR-5: whoever holds the identical file
     // learns it is already here, and nothing else (no id, title, level or count).
@@ -553,7 +617,7 @@ async function sentinelCountsOf(one: LeakageWorld) {
   });
   return {
     asIs: await countsOf(one),
-    research: await researchCountsOf(who, llm),
+    research: await researchCountsOf(who, model),
     check: check.json(),
   };
 }
