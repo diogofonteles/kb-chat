@@ -5,7 +5,7 @@ import {
   type StoredPerson,
 } from '../auth/index.js';
 import type { CatalogRegistry, TopicCatalog } from '../catalog/index.js';
-import type { ViewedCollection } from '../../ports/level-view.js';
+import type { PlacedTrack, ViewedCollection } from '../../ports/level-view.js';
 import type { LevelDirectory, StoredLevel } from './level-directory.js';
 import {
   CLOSED_VIEW,
@@ -19,6 +19,8 @@ export interface ContentGateDeps {
   readonly catalog: CatalogRegistry;
   /** A media's level in media.db, for track documents (KBC-106); absent with media off. */
   readonly mediaLevelOf?: (mediaId: string) => string | null | undefined;
+  /** The live tracks of a track's recording, for its number among what a viewer hears. */
+  readonly tracksBeside?: (mediaId: string) => readonly PlacedTrack[];
 }
 
 /**
@@ -69,6 +71,7 @@ export class ContentGate {
       classifier,
       placementsOf: (collection) => directory.placementsOf(collection),
       ...(this.deps.mediaLevelOf && { mediaLevelOf: this.deps.mediaLevelOf }),
+      ...(this.deps.tracksBeside && { tracksBeside: this.deps.tracksBeside }),
       memo: (catalog, compute) => this.memo(catalog, key, compute),
     });
   }

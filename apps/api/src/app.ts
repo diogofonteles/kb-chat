@@ -1991,7 +1991,14 @@ const contentGateOf = (
   new ContentGate({
     directory: levels.directory,
     catalog,
-    ...(media && { mediaLevelOf: (id: string) => media.levelOf(id) }),
+    ...(media && {
+      mediaLevelOf: (id: string) => media.levelOf(id),
+      // KBC-111: a track document's "faixa n de N" among the tracks the viewer hears.
+      tracksBeside: (id: string) => {
+        const parent = media.getMedia(id)?.track?.parentId;
+        return parent ? media.liveTrackLevels(parent) : [];
+      },
+    }),
   });
 
 /** The levels' state in memory (tests, and an app built without a state folder). */

@@ -1,6 +1,10 @@
 import type { ResearchStep } from '@kb-chat/contracts';
 import type { z } from 'zod';
-import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
+import {
+  placedFor,
+  type CatalogEntry,
+  type CatalogRegistry,
+} from '../catalog/index.js';
 import { anchorsIn } from '@kb-chat/contracts';
 import {
   acceptsEntry,
@@ -230,7 +234,15 @@ export class GrepTool {
     if (counted.matches.length === 0)
       return nothingFound(request, counted.scanned);
     const mode = phrases.length === 0 ? 'files' : request.args.output_mode;
-    return this.renderers[mode](request, counted);
+    // KBC-111: a track's "faixa n de N" counted over the tracks this person hears.
+    const placed = {
+      ...counted,
+      matches: counted.matches.map((match) => ({
+        ...match,
+        entry: placedFor(context.view, match.entry),
+      })),
+    };
+    return this.renderers[mode](request, placed);
   }
 
   private async filesPage(

@@ -68,8 +68,29 @@ function groupsFor(located: Located, reader: DocumentReader) {
   const { catalog, view, entry } = located;
   const groups = catalog.relations.groupsOf(entry, seenBy(located, reader));
   const inScope = (refs: readonly RelatedDocument[]) =>
-    refs.map((ref) => ({ ...ref, id: view.idOf(catalog.topic.slug, ref.id) }));
+    refs.map((ref) => ({
+      ...ref,
+      id: view.idOf(catalog.topic.slug, ref.id),
+      ...(ref.media && { media: placedRef(reader.level, ref.media) }),
+    }));
   return (group: SeeAlsoGroupName) => inScope(groups[group]);
+}
+
+type RefMedia = NonNullable<RelatedDocument['media']>;
+
+/** KBC-111: a linked track's "faixa n de N" counted over the tracks the reader hears. */
+function placedRef(level: LevelView, media: RefMedia): RefMedia {
+  const place = media.kind === 'track' ? level.trackPlace(media.mediaId) : null;
+  if (!place) return media;
+  return {
+    mediaId: media.mediaId,
+    kind: media.kind,
+    recordingTitle: media.recordingTitle,
+    ...(place.ordinal !== null && { ordinal: place.ordinal }),
+    total: place.total,
+    durationMs: media.durationMs,
+    confidence: media.confidence,
+  };
 }
 
 /** A document, its collection and the scope it was named from (FR-5). */
