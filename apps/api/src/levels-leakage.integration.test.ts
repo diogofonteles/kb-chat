@@ -256,7 +256,8 @@ describe('Nothing leaks across levels (KBC-111, ADR 0036 §12)', () => {
   it('AC-1, BR-1: no response carries a second mark, with no echo taken out', () => {
     const sent = ana.flatMap((one) => one.inputs).join('\n');
     expect(sent.toLowerCase()).not.toContain(SECRET);
-    expect(leaksIn(ana, [SECRET], { echo: false })).toEqual([]);
+    // In audio and files the full second marks are looked for (`MIN_BINARY_MARK`).
+    expect(leaksIn(ana, [SECRET, ...SECRETS], { echo: false })).toEqual([]);
   });
 
   it('AC-1 (control): the master receives every second mark, the audio bytes included', () => {
@@ -380,7 +381,7 @@ describe('A new route that skips the view is caught (KBC-111 AC-2, BR-2)', () =>
     expect(routes.map((one) => one.route).sort()).toEqual(
       [`GET ${ROGUE}`, `GET ${ROGUE_BYTES}`].sort(),
     );
-    const leaks = leaksIn(probed, [SECRET], { echo: false });
+    const leaks = leaksIn(probed, [SECRET, ...SECRETS], { echo: false });
     for (const route of [ROGUE, ROGUE_BYTES])
       expect(leaks.some((leak) => leak.startsWith(`GET ${route} (`))).toBe(
         true,

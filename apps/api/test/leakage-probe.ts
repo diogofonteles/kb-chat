@@ -53,6 +53,8 @@ export interface Exchange extends ProbeRequest {
   readonly body: string;
   /** The headers that can carry content or a count. */
   readonly headers: Readonly<Record<string, string>>;
+  /** Audio or a file: bytes, where a short mark turns up by chance (see `leaksIn`). */
+  readonly binary: boolean;
   /** Body, those headers and what the research model was told during the request. */
   readonly text: string;
 }
@@ -384,11 +386,13 @@ export async function exchange(
       .map((message) => message.content)
       .join('\n');
     const headers = headersOf(response);
+    const type = String(response.headers['content-type'] ?? '');
     done.push({
       ...request,
       status: response.statusCode,
       body: response.body,
       headers,
+      binary: /^(audio|video)\/|^application\/octet-stream/.test(type),
       text: `${response.body}\n${JSON.stringify(headers)}\n${told}`,
     });
   }
@@ -418,8 +422,24 @@ function withoutEcho(one: Exchange): string {
 }
 
 /**
+ * The shortest mark looked for in bytes. Compressed audio is noise to a text search: a
+ * three-letter mark such as `zqx` or `qvk` turns up by chance about once in a megabyte, case
+ * folded (the AAC that ffmpeg 6 encodes for the world holds both, at 137 s and 172 s, outside
+ * any hidden part). In audio and files only the full marks count, as written, case kept.
+ */
+const MIN_BINARY_MARK = 8;
+
+const found = (text: string, mark: string, binary: boolean): number =>
+  binary
+    ? mark.length >= MIN_BINARY_MARK
+      ? text.indexOf(mark)
+      : -1
+    : text.toLowerCase().indexOf(mark.toLowerCase());
+
+/**
  * Each mark found in an exchange, with the bytes around it. With `echo: false` nothing is
- * taken out first: for marks no request ever sends (the second marks).
+ * taken out first: for marks no request ever sends (the second marks). In audio and files
+ * only the long marks are looked for, exactly as written (`MIN_BINARY_MARK`).
  */
 export function leaksIn(
   exchanges: readonly Exchange[],
@@ -427,9 +447,9 @@ export function leaksIn(
   { echo = true }: { readonly echo?: boolean } = {},
 ): string[] {
   return exchanges.flatMap((one) => {
-    const text = unescaped(echo ? withoutEcho(one) : one.text).toLowerCase();
+    const text = unescaped(echo ? withoutEcho(one) : one.text);
     return marks.flatMap((mark) => {
-      const at = text.indexOf(mark.toLowerCase());
+      const at = found(text, mark, one.binary);
       return at < 0
         ? []
         : [
