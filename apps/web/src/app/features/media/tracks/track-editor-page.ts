@@ -29,6 +29,7 @@ import {
   mediaSilencesSchema,
   mediaWaveformSchema,
   type DraftTrack,
+  type NameReview,
   type TrackKind,
   type TrackProblem,
   type VoiceLabel,
@@ -114,6 +115,21 @@ const tracksText = (count: number): string =>
 const LISTEN_KINDS: readonly ListenKind[] = ['track', 'start', 'end'];
 
 const touched = (track: DraftTrack): DraftTrack => ({ ...track, edited: true });
+
+/**
+ * A review lists what the server last read; a title changed or a track deleted here since is
+ * one the person already looked at, and a review left with nothing goes (KBC-102 BR-1).
+ */
+const onScreen = (
+  reviews: readonly NameReview[],
+  tracks: readonly DraftTrack[],
+): NameReview[] =>
+  reviews.flatMap((review) => {
+    const still = review.tracks.filter(({ id, title }) =>
+      tracks.some((track) => track.id === id && track.title === title),
+    );
+    return still.length > 0 ? [{ ...review, tracks: still }] : [];
+  });
 
 /** The name of who asks or answers; a voice without one, by its number. */
 function personText(
@@ -284,7 +300,11 @@ export class TrackEditorPage {
         unnamed.some((one) => one.voice === voice) &&
         !preparation.refusedVoices.includes(voice),
     );
-    return { ...preparation, suggestions };
+    return {
+      ...preparation,
+      suggestions,
+      nameReviews: onScreen(preparation.nameReviews, this.draft.tracks()),
+    };
   });
   /** Up here too: on a phone the names' block is far below (QA I-2). */
   protected readonly titlesToReview = computed(
