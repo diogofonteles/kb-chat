@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   HiddenSpan,
   LearnedSpan,
@@ -176,6 +177,10 @@ const noTranscript = () =>
  * Changes with a new transcript, a word correction (its revision, KBC-093 FR-7), a new
  * post-filter or new subtitle rules.
  */
+/** A short digest of what is sent. */
+const digestOf = (text: string): string =>
+  createHash('sha256').update(text).digest('hex').slice(0, 16);
+
 const etagOf = (summary: TranscriptSummary): string =>
   `"${summary.id}.r${summary.revision}.f${summary.filterVersion}.s${SUBTITLE_RULES_VERSION}"`;
 
@@ -211,7 +216,7 @@ export class TranscriptService {
     const transcript = {
       mediaId,
       version: summary.version,
-      revision: summary.revision,
+      revision: this.revisionFor(summary, hidden),
       confidence: summary.confidence,
       segments,
       ...(options.withTermList ? this.termListOf(summary) : {}),
@@ -222,6 +227,24 @@ export class TranscriptService {
         hidden,
       ),
     );
+  }
+
+  /**
+   * The revision as this person may know it (KBC-111): with a part hidden, a number made of
+   * the text they read, so a correction inside the hidden part does not move it; the client
+   * only compares it to know when to read again.
+   */
+  private revisionFor(
+    summary: TranscriptSummary,
+    hidden: readonly HiddenSpan[],
+  ): number {
+    if (hidden.length === 0) return summary.revision;
+    const closed = this.closedSegments(summary.id, hidden);
+    const heard = this.deps.transcripts
+      .segments(summary.id)
+      .map((segment, index) => (closed.has(index) ? '' : segment.text))
+      .join('\n');
+    return Number.parseInt(digestOf(heard).slice(0, 7), 16);
   }
 
   private termListOf(summary: TranscriptSummary) {
@@ -252,7 +275,7 @@ export class TranscriptService {
     return {
       mediaId,
       version: summary.version,
-      revision: summary.revision,
+      revision: this.revisionFor(summary, hidden),
       words: kept.map((word) => ({
         ...word,
         segment: fold.shown(word.segment),
@@ -364,20 +387,31 @@ export class TranscriptService {
 
   subtitles(actor: MediaActor, mediaId: string): Subtitles {
     const { summary, hidden } = this.readable(actor, mediaId);
-    const etag =
+    const key =
       hidden.length > 0
         ? etagOf(summary).replace(/"$/, `.h${hiddenTagOf(hidden)}"`)
         : etagOf(summary);
-    const cached = this.vtt.get(etag);
+    const body = this.cachedOrDerived(key, { id: summary.id, hidden });
+    // KBC-111: with a part hidden, the tag is made of what this person gets, so a correction
+    // inside the hidden part (a new revision) does not change it.
+    const etag = hidden.length > 0 ? `"v${digestOf(body)}"` : key;
+    return { etag, body };
+  }
+
+  private cachedOrDerived(
+    key: string,
+    transcript: { readonly id: string; readonly hidden: readonly HiddenSpan[] },
+  ): string {
+    const cached = this.vtt.get(key);
     if (cached !== undefined) {
       // Most recently used goes last; the first one is the oldest.
-      this.vtt.delete(etag);
-      this.vtt.set(etag, cached);
-      return { etag, body: cached };
+      this.vtt.delete(key);
+      this.vtt.set(key, cached);
+      return cached;
     }
-    const body = this.derive(summary.id, hidden);
-    this.remember(etag, body);
-    return { etag, body };
+    const body = this.derive(transcript.id, transcript.hidden);
+    this.remember(key, body);
+    return body;
   }
 
   /** The cues with what this person may not hear left out (KBC-106 BR-2). */
