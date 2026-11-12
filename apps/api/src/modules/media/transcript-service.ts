@@ -126,6 +126,39 @@ function restrictedIn(
   };
 }
 
+/** A run of restricted segments becomes one item, with the hidden part's bounds (n7). */
+function foldRestricted(transcript: MediaTranscript): MediaTranscript {
+  const segments = transcript.segments.filter(
+    (segment, index) =>
+      !(segment.restricted && transcript.segments[index - 1]?.restricted),
+  );
+  return segments.length === transcript.segments.length
+    ? transcript
+    : { ...transcript, segments };
+}
+
+/**
+ * The segments' numbers as a folded transcript gives them (review n7): a stored segment's
+ * shown number, and the stored range a shown range of words reads.
+ */
+function foldOf(closed: ReadonlySet<number>, length: number) {
+  const firsts: number[] = [];
+  const shownOf: number[] = [];
+  for (let i = 0; i < length; i++) {
+    if (!(closed.has(i) && closed.has(i - 1))) firsts.push(i);
+    shownOf.push(firsts.length - 1);
+  }
+  return {
+    shown: (stored: number): number => shownOf[stored] ?? stored,
+    storedRange: (range: TranscriptWordsQuery): TranscriptWordsQuery => {
+      if (closed.size === 0) return range;
+      const from = firsts[range.from] ?? length;
+      const end = firsts[range.from + range.count] ?? length;
+      return { from, count: Math.max(1, end - from) };
+    },
+  };
+}
+
 /** A learned span names a word left out. */
 const overlapsPositions = (
   span: { readonly position: number; readonly count: number },
@@ -183,9 +216,11 @@ export class TranscriptService {
       segments,
       ...(options.withTermList ? this.termListOf(summary) : {}),
     };
-    return restrictedIn(
-      this.withSpeakers(transcript, summary, { ...options, withVoices }),
-      hidden,
+    return foldRestricted(
+      restrictedIn(
+        this.withSpeakers(transcript, summary, { ...options, withVoices }),
+        hidden,
+      ),
     );
   }
 
@@ -203,13 +238,26 @@ export class TranscriptService {
     range: TranscriptWordsQuery,
   ): MediaTranscriptWords {
     const { summary, hidden } = this.readable(actor, mediaId);
-    const { kept, dropped } = this.wordsHeard(summary.id, range, hidden);
+    const closed = this.closedSegments(summary.id, hidden);
+    // The segments as the transcript gives them: a hidden part is one (review n7).
+    const fold = foldOf(
+      closed,
+      this.deps.transcripts.segments(summary.id).length,
+    );
+    const stored = fold.storedRange(range);
+    const { kept, dropped } = this.wordsHeard(summary.id, stored, {
+      hidden,
+      closed,
+    });
     return {
       mediaId,
       version: summary.version,
       revision: summary.revision,
-      words: kept,
-      learned: (this.deps.learnedOn?.(summary.id, range) ?? []).filter(
+      words: kept.map((word) => ({
+        ...word,
+        segment: fold.shown(word.segment),
+      })),
+      learned: (this.deps.learnedOn?.(summary.id, stored) ?? []).filter(
         (span) => !overlapsPositions(span, dropped),
       ),
     };
@@ -219,9 +267,11 @@ export class TranscriptService {
   private wordsHeard(
     transcriptId: string,
     range: TranscriptWordsQuery,
-    hidden: readonly HiddenSpan[],
+    {
+      hidden,
+      closed,
+    }: { hidden: readonly HiddenSpan[]; closed: ReadonlySet<number> },
   ) {
-    const closed = this.closedSegments(transcriptId, hidden);
     const words = this.deps.transcripts
       .wordsOfSegments(transcriptId, range)
       .map(({ position, segment, startMs, endMs, text }) => ({

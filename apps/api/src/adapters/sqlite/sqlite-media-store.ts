@@ -62,6 +62,14 @@ function trackLinkOf(row: Row): TrackLink | null {
   };
 }
 
+/** A track's level and bounds, as a hidden part needs them. */
+const liveTrackOf = (row: Row): LiveTrackLevel => ({
+  mediaId: text(row, 'id'),
+  level: nullableText(row, 'level'),
+  startMs: Number(row['start_ms']),
+  endMs: Number(row['end_ms']),
+});
+
 /** A row a level change moved, as it was. */
 const movedOf = (row: Row): MovedMedia => ({
   id: text(row, 'id'),
@@ -469,27 +477,34 @@ export class SqliteMediaStore implements MediaStorePort {
   }
 
   liveTrackLevels(parentId: string): readonly LiveTrackLevel[] {
-    return (
-      this.db
-        // Published, and approved by their asked bounds from the approval on, still being cut
-        // or with a cut that failed (review m4): a part restricted stays so, fail-closed.
-        .prepare(
-          `SELECT id, level, parent_start_ms AS start_ms, parent_end_ms AS end_ms FROM media
-         WHERE parent_media_id = ? AND status = 'ready' AND archived_at IS NULL
+    return this.liveTrackLevelsOf([parentId]).get(parentId) ?? [];
+  }
+
+  liveTrackLevelsOf(
+    parentIds: readonly string[],
+  ): ReadonlyMap<string, readonly LiveTrackLevel[]> {
+    const byParent = new Map<string, LiveTrackLevel[]>();
+    if (parentIds.length === 0) return byParent;
+    const ids = JSON.stringify(parentIds);
+    // Published, and approved by their asked bounds (still cut, or failed): review m4.
+    const rows = this.db
+      .prepare(
+        `SELECT parent_media_id AS parent, id, level, parent_start_ms AS start_ms,
+           parent_end_ms AS end_ms FROM media
+         WHERE parent_media_id IN (SELECT value FROM json_each(?))
+           AND status = 'ready' AND archived_at IS NULL
          UNION ALL
-         SELECT d.id, d.level, t.start_ms, t.end_ms
+         SELECT t.media_id, d.id, d.level, t.start_ms, t.end_ms
          FROM media_tracks t JOIN media d ON d.id = t.derived_media_id
-         WHERE t.media_id = ? AND d.archived_at IS NULL
+         WHERE t.media_id IN (SELECT value FROM json_each(?)) AND d.archived_at IS NULL
          ORDER BY start_ms`,
-        )
-        .all(parentId, parentId)
-        .map((row) => ({
-          mediaId: String(row['id']),
-          level: nullableText(row, 'level'),
-          startMs: Number(row['start_ms']),
-          endMs: Number(row['end_ms']),
-        }))
-    );
+      )
+      .all(ids, ids);
+    for (const row of rows) {
+      const parent = String(row['parent']);
+      byParent.set(parent, [...(byParent.get(parent) ?? []), liveTrackOf(row)]);
+    }
+    return byParent;
   }
 
   trackLevelsUnder(recordingId: string): readonly (string | null)[] {

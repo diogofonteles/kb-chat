@@ -24,11 +24,18 @@ import {
   type MediaLevels,
 } from './media-service.js';
 import { canEditMedia, legacyAuthorshipOf, seesMedia } from './media-policy.js';
-import { levelsBelow } from './track-levels.js';
+import {
+  editAboveYourLevel,
+  hearsAllTracks,
+  levelsBelow,
+} from './track-levels.js';
 import { toCollectionSpeaker } from './voice-labels.js';
 
 export interface MediaEditServiceDeps {
-  readonly store: Pick<MediaStorePort, 'getMedia' | 'editMedia'>;
+  readonly store: Pick<
+    MediaStorePort,
+    'getMedia' | 'editMedia' | 'trackLevelsUnder' | 'ownTrackLevels'
+  >;
   readonly speakers: Pick<SpeakerStorePort, 'labelled' | 'rehome'>;
   /** The collection exists in the vault (a master "sees" any slug, even a wrong one). */
   readonly hasTopic: (topic: string) => boolean;
@@ -80,6 +87,7 @@ export class MediaEditService {
   ): Promise<void> {
     const { actor, mediaId } = call;
     const media = this.editable(actor, mediaId);
+    this.assertKeepsTrackLevels(actor, media, request);
     const edit = this.editOf(actor, media, request);
     const audit = this.auditFor(edit.level !== media.level);
     const tracks = this.save(actor, media, edit);
@@ -119,6 +127,34 @@ export class MediaEditService {
       },
       now: this.now(),
     };
+  }
+
+  /**
+   * KBC-106 (review round 2, B4): a move or a new level touches every track. Whoever is below
+   * any of them may not (403, the edit routes' rule); and a move to another scale, which drops
+   * the tracks' own levels, is a master's (409): nobody else may open a restricted part.
+   */
+  private assertKeepsTrackLevels(
+    actor: MediaActor,
+    media: MediaRecord,
+    request: UpdateMediaRequest,
+  ): void {
+    const moves = request.topic !== undefined && request.topic !== media.topic;
+    if (!moves && request.level === undefined) return;
+    if (!hearsAllTracks(this.deps.store, actor, media.id))
+      throw editAboveYourLevel();
+    const crosses =
+      moves && !this.sameLists(media.topic, request.topic ?? media.topic);
+    if (
+      crosses &&
+      !actor.isMaster &&
+      this.deps.store.ownTrackLevels(media.id).length > 0
+    )
+      throw new AppError(
+        'MEDIA_CONFLICT',
+        'Moving it would drop the levels its tracks hold of their own',
+        { details: { reason: 'tracks-of-their-own' } },
+      );
   }
 
   /** The audit a level change needs, before anything is written; none: no change. */

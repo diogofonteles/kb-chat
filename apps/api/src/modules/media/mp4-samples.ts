@@ -80,10 +80,10 @@ async function readMoov(
   return null;
 }
 
-/** The first track whose handler is sound, with its timescale and sample table. */
 /**
- * The one track of the file, when it is sound (review M2, QA-5): a second track (sound or
- * picture) or fragments (`mvex`, samples in `moof`) would pass unmasked, so they are none.
+ * The one track of the file, when it is sound, with its timescale and sample table (review
+ * M2, QA-5): a second track (sound or picture) or fragments (`mvex`, samples in `moof`)
+ * would pass unmasked, so they are none.
  */
 function soundTrack(buffer: Buffer, moov: Box) {
   const inside = boxesIn(buffer, moov.start, moov.end);

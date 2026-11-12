@@ -320,6 +320,10 @@ export interface MediaStorePort {
   trackLevelsUnder(recordingId: string): readonly (string | null)[];
   /** A media's level: null "Sem nível", undefined when there is no such media (KBC-106). */
   levelOf(mediaId: string): string | null | undefined;
+  /** `liveTrackLevels` of many recordings in one query, by recording (review M4). */
+  liveTrackLevelsOf(
+    parentIds: readonly string[],
+  ): ReadonlyMap<string, readonly LiveTrackLevel[]>;
   /** The own levels of a recording's tracks, one per track that has one (KBC-106 BR-1). */
   ownTrackLevels(parentId: string): readonly string[];
   /**

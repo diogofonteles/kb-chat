@@ -67,11 +67,31 @@ export interface Scene {
   readonly tracks: readonly MediaItem[];
 }
 
-/** A CI recording of hermetismo sent by the owner, converted and transcribed. */
-async function transcribedRecording(world: LevelsWorld): Promise<MediaItem> {
+/** What the recording says: a passage in each track to be. */
+const PASSAGES = [
+  { at: 10, text: OPEN },
+  { at: 70, text: SECRET },
+  { at: 130, text: LATE },
+];
+
+/** Who sends the recording (the owner by default) and what it says. */
+export interface RecordingOptions {
+  readonly by?: {
+    readonly call: Call;
+    readonly headers: Record<string, string>;
+  };
+  readonly passages?: readonly { readonly at: number; readonly text: string }[];
+}
+
+/** A CI recording of hermetismo sent by the owner (or `by`), converted and transcribed. */
+export async function transcribedRecording(
+  world: LevelsWorld,
+  options: RecordingOptions = {},
+): Promise<MediaItem> {
   const media = mediaOf(world);
   const token = await transcriber(media);
-  const created = await world.owner('POST', '/api/v1/topics/hermetismo/media', {
+  const call = options.by?.call ?? world.owner;
+  const created = await call('POST', '/api/v1/topics/hermetismo/media', {
     title: 'Palestra Aberta',
     author: null,
     fileName: 'palestra.mp3',
@@ -80,20 +100,18 @@ async function transcribedRecording(world: LevelsWorld): Promise<MediaItem> {
   });
   expect(created.statusCode, created.body).toBe(201);
   const recording: MediaItem = created.json();
-  expect(
-    (await upload(media, { id: recording.id, body: AUDIO })).statusCode,
-  ).toBe(200);
+  const headers = options.by?.headers ?? world.ownerHeaders;
+  const sent = await upload(media, { id: recording.id, body: AUDIO, headers });
+  expect(sent.statusCode).toBe(200);
   await convertLong(media, await leaseJob(media));
-  await say({ media, token }, [
-    { at: 10, text: OPEN },
-    { at: 70, text: SECRET },
-    { at: 130, text: LATE },
-  ]);
+  await say({ media, token }, options.passages ?? PASSAGES);
   return recording;
 }
 
 /** QS < CI < CDC; a CI recording of three tracks, Ana (CI) with media and tracks. */
-export async function scene(): Promise<Scene> {
+export async function scene(
+  options: Parameters<typeof transcribedRecording>[1] = {},
+): Promise<Scene> {
   const world = await startLevels(SIX, { media: true });
   const ana = await memberOf(world, 'ana@example.com', {
     topics: ['hermetismo'],
@@ -101,7 +119,7 @@ export async function scene(): Promise<Scene> {
   });
   await createScale(world, ['QS', 'CI', 'CDC']);
   await setPersonLevel(world, ana.id, { hermetismo: 'ci' });
-  const recording = await transcribedRecording(world);
+  const recording = await transcribedRecording(world, options);
   const media = mediaOf(world);
   await approve(media, recording.id, [
     { startMs: 0, endMs: 60_000, title: 'Primeira' },

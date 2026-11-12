@@ -46,6 +46,8 @@ export interface TrackSubjectServiceDeps {
   readonly items: { tracksOf(parentId: string): readonly TrackRow[] };
   /** The recording as this person sees it; throws MEDIA_NOT_FOUND when they cannot. */
   readonly findMedia: (actor: MediaActor, mediaId: string) => MediaItem;
+  /** A write is an edit of the recording: refused below any of its tracks (KBC-106). */
+  readonly editable?: (actor: MediaActor, mediaId: string) => unknown;
   /** The top-level collection, whose concepts and subjects a sub-collection uses (BR-1). */
   readonly rootOf: (topic: string) => string;
   /** The concept names of a collection in the catalog as it stands now (FR-5). */
@@ -346,6 +348,7 @@ export class TrackSubjectService {
 
   private writable(call: SubjectCall) {
     const track = this.track(call.actor, call.mediaId);
+    this.deps.editable?.(call.actor, track.parentId);
     if (track.archivedAt !== null) throw notFound();
     return track;
   }

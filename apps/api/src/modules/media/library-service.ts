@@ -347,17 +347,22 @@ function isVisible(actor: MediaActor, record: LibraryRecord): boolean {
 
 /**
  * KBC-106 FR-2: per recording, the parts this person may not hear (its tracks above their
- * level, published or approved, review m4); asked only where levels hold the person.
+ * level, published or approved, review m4), read for all of them in one query (review M4)
+ * and only where levels hold the person.
  */
-function hiddenByRecording(
+export function hiddenByRecording(
   actor: MediaActor,
   records: readonly LibraryRecord[],
-  store: Pick<MediaStorePort, 'liveTrackLevels'>,
+  store: Pick<MediaStorePort, 'liveTrackLevelsOf'>,
 ): ReadonlyMap<string, readonly HiddenSpan[]> {
+  const held = records.filter(
+    (record) => !record.track && actor.levelsIn(record.topic) !== null,
+  );
   const hidden = new Map<string, readonly HiddenSpan[]>();
-  for (const record of records) {
-    if (record.track || actor.levelsIn(record.topic) === null) continue;
-    const spans = hiddenSpansOf(store.liveTrackLevels(record.id), (level) =>
+  if (held.length === 0) return hidden;
+  const levels = store.liveTrackLevelsOf(held.map((record) => record.id));
+  for (const record of held) {
+    const spans = hiddenSpansOf(levels.get(record.id) ?? [], (level) =>
       hearsLevel(actor, record.topic, level),
     );
     if (spans.length > 0) hidden.set(record.id, spans);

@@ -31,6 +31,7 @@ const EDITOR = [
   'media-edit-ai',
   'media-tracks',
   'media-speakers',
+  'media-correct',
 ];
 
 /** The mean volume (dB) of `seconds` from `from` of an MP4 held in `bytes`. */
@@ -98,6 +99,9 @@ describe('an editor below a track of the recording (KBC-106 decision, QA BUG-1, 
       ['POST', `/api/v1/media/${id}/edit/reopen`, {}],
       ['POST', `/api/v1/media/${id}/edit/proposals`, { dryRun: true }],
       ['POST', `/api/v1/media/${first}/restore`, {}],
+      // The word corrections (review round 2, B3).
+      ['GET', `/api/v1/media/${id}/transcript/occurrences?text=segredo`],
+      ['GET', `/api/v1/media/${id}/transcript/corrections`],
     ] as const) {
       const answer = await asEdu(method, url, payload);
       expect(answer.statusCode, `${method} ${url} ${answer.body}`).toBe(403);

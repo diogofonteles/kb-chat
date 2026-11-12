@@ -660,7 +660,8 @@ async function registerCorrections(
   const { media, service, publisher } = input;
   const corrections = new TranscriptCorrectionService({
     store: media.corrections,
-    media: service,
+    // Every correction route reads or writes the words: an edit (KBC-106 review B3).
+    media: { get: (actor, mediaId) => service.editable(actor, mediaId) },
     recordOf: (mediaId) => media.store.getMedia(mediaId),
     afterChange: (recordingId, words) =>
       publisher.afterCorrection(recordingId, words),
