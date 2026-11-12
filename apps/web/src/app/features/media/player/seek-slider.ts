@@ -18,6 +18,7 @@ import {
   roundToSecond,
   sliderMoveOf,
 } from '@kb-chat/player-core';
+import type { HiddenSpan } from '@kb-chat/contracts';
 import { speak } from '@core/i18n/spoken-time.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 
@@ -44,6 +45,8 @@ export class SeekSlider {
   readonly marks = input<readonly number[]>([]);
   /** Where the approved tracks start, in ms (KBC-066 FR-9). */
   readonly trackMarks = input<readonly number[]>([]);
+  /** The parts this person may not hear, skipped by the player (KBC-106 FR-5). */
+  readonly restricted = input<readonly HiddenSpan[]>([]);
   /** A position to go to (a click, a drag, Home/End). */
   readonly seekRequested = output<number>();
   /**
@@ -75,6 +78,27 @@ export class SeekSlider {
     this.loaded()
       ? this.trackMarks().map((ms) => fractionOf(ms, this.durationMs()) * 100)
       : [],
+  );
+  /** Each restricted part as a block of the bar. */
+  protected readonly restrictedBlocks = computed(() => {
+    const duration = this.durationMs();
+    if (!this.loaded()) return [];
+    return this.restricted().map((span) => {
+      const left = fractionOf(span.startMs, duration) * 100;
+      return {
+        left,
+        width: Math.max(0.5, fractionOf(span.endMs, duration) * 100 - left),
+      };
+    });
+  });
+  /** What the thumb says of them: "Trecho restrito de 1:00 a 2:00, pulado." */
+  protected readonly restrictedText = computed(() =>
+    this.restricted()
+      .map(
+        (span) =>
+          $localize`:@@player.restricted.span:Trecho restrito de ${formatClock(span.startMs)}:from: a ${formatClock(span.endMs)}:to:, pulado.`,
+      )
+      .join(' '),
   );
   protected readonly bufferedPercent = computed(
     () => fractionOf(this.bufferedEndMs(), this.durationMs()) * 100,

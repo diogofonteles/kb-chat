@@ -28,7 +28,8 @@ const sameTrack = (row: Row, track: EditTrack): boolean =>
   row['asker_voice'] === track.askerVoice &&
   row['answerer_voice'] === track.answererVoice &&
   row['asker_speaker_id'] === track.askerSpeakerId &&
-  row['answerer_speaker_id'] === track.answererSpeakerId;
+  row['answerer_speaker_id'] === track.answererSpeakerId &&
+  row['level'] === (track.level ?? null);
 
 const toApproved = (row: Row): ApprovedTrack => ({
   id: String(row['id']),
@@ -49,6 +50,7 @@ const trackValues = (track: EditTrack) =>
     track.answererVoice,
     track.askerSpeakerId,
     track.answererSpeakerId,
+    track.level ?? null,
   ] as const;
 
 /** The edits and approved tracks in `media.db` (KBC-066, migration media-edits). */
@@ -169,9 +171,9 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
     this.db
       .prepare(
         `INSERT INTO media_draft_tracks (start_ms, end_ms, kind, title, asker_voice,
-           answerer_voice, asker_speaker_id, answerer_speaker_id, id, media_id, source,
+           answerer_voice, asker_speaker_id, answerer_speaker_id, level, id, media_id, source,
            edited, person_edited, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         ...trackValues(track),
@@ -190,7 +192,7 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
       .prepare(
         `UPDATE media_draft_tracks SET start_ms = ?, end_ms = ?, kind = ?, title = ?,
            asker_voice = ?, answerer_voice = ?, asker_speaker_id = ?, answerer_speaker_id = ?,
-           edited = 1, person_edited = CASE WHEN title IS ? THEN person_edited ELSE 1 END
+           level = ?, edited = 1, person_edited = CASE WHEN title IS ? THEN person_edited ELSE 1 END
          WHERE id = ? AND media_id = ?`,
       )
       .run(...trackValues(track), track.title, track.id, mediaId);
@@ -362,6 +364,21 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
           )
           .run(next, String(row['media_id']));
     }
+  }
+
+  approvedLevels(mediaId: string): ReadonlyMap<string, string | null> {
+    const rows = this.db
+      .prepare(
+        `SELECT t.id, d.level FROM media_tracks t JOIN media d ON d.id = t.derived_media_id
+         WHERE t.media_id = ?`,
+      )
+      .all(mediaId);
+    return new Map(
+      rows.map((row) => [
+        String(row['id']),
+        row['level'] === null ? null : String(row['level']),
+      ]),
+    );
   }
 
   approved(mediaId: string): ApprovedTrack[] {

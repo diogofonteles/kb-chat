@@ -45,6 +45,7 @@ async function appWith(hooks?: LevelHooks): Promise<FastifyInstance> {
 const closed: LevelHooks = {
   codesOf: () => ({}),
   tracksClosedByLevels: () => true,
+  listsClosedByLevels: () => true,
 };
 
 describe('Media and the levels (KBC-103 BR-10, review round 2; research opened by KBC-104)', () => {

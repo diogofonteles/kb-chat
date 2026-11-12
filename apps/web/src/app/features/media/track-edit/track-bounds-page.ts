@@ -91,6 +91,7 @@ const toDraft = (track: TrackNeighbour): DraftTrack => ({
   answererVoice: null,
   askerSpeakerId: null,
   answererSpeakerId: null,
+  level: null,
 });
 
 const timesOf = ({ startMs, endMs }: TrackBoundsRequest): string => {

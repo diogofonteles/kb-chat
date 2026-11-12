@@ -433,7 +433,7 @@ describe('Media with an access level (KBC-105)', () => {
         count: { recordings: 1, tracks: 3 },
       }),
     ]);
-    // Tracks stay closed to members in a collection with levels until KBC-106.
+    // Ana has no `media-tracks`: the tracks are not hers to see (KBC-068 FR-5).
     const library = await ana.call('GET', '/api/v1/media/library');
     expect(
       library

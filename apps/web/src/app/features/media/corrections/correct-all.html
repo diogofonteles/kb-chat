@@ -83,6 +83,11 @@
         <p class="hint" i18n="@@correctAll.loading">
           Procurando as ocorrências…
         </p>
+      } @else if (loadAbove()) {
+        <p class="error" i18n="@@correctAll.loadAbove">
+          Esta gravação tem faixas acima do seu nível. Só quem tem todos os
+          níveis dela pode editá-la.
+        </p>
       } @else if (loadFailed()) {
         <p class="error" i18n="@@correctAll.loadFailed">
           Não consegui procurar as ocorrências. Feche e tente de novo.
@@ -97,6 +102,12 @@
         @case ('stale') {
           <p class="error" i18n="@@correctAll.stale">
             A transcrição foi refeita. Confira as ocorrências no texto novo.
+          </p>
+        }
+        @case ('above') {
+          <p class="error" i18n="@@correctAll.above">
+            Esta gravação tem faixas acima do seu nível. Só quem tem todos os
+            níveis dela pode editá-la.
           </p>
         }
         @case ('failed') {

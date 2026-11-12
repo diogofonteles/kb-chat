@@ -6,6 +6,7 @@ import {
   type Author,
   type ContentLevel,
   type CreateMediaRequest,
+  type HiddenSpan,
   type LevelChoice,
   type MediaAuthor,
   type MediaItem,
@@ -33,9 +34,15 @@ import type { TrackRevisionStorePort } from '../../ports/track-revision-store.js
 import {
   canEditMedia,
   estimatedBytesOf,
+  hearsLevel,
   legacyAuthorshipOf,
   seesMedia,
 } from './media-policy.js';
+import {
+  editAboveYourLevel,
+  hearsAllTracks,
+  hiddenSpansOf,
+} from './track-levels.js';
 import { mediaAuthorOf, toMediaItem, type ItemView } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
 
@@ -207,6 +214,8 @@ export interface PlayableFile {
   readonly size: number;
   readonly modifiedMs: number;
   readonly mime: string;
+  /** The parts of the recording this person may not hear (KBC-106 FR-2); absent: none. */
+  readonly hidden?: readonly HiddenSpan[];
 }
 
 const notFound = () => new AppError('MEDIA_NOT_FOUND', 'Unknown media');
@@ -606,6 +615,34 @@ export class MediaService {
     return media.status === 'ready' || mine ? this.get(actor, mediaId) : null;
   }
 
+  /**
+   * KBC-106 decision (2026-11-12): the item for its edit routes. Whoever does not hear every
+   * level the recording's tracks hold or are drafted at may not edit it, nor any track of it
+   * (403 EDIT_ABOVE_YOUR_LEVEL, fail closed): the edit shows and changes all of them.
+   */
+  editable(actor: MediaActor, mediaId: string): MediaItem {
+    const item = this.get(actor, mediaId);
+    const recordingId = item.parent?.id ?? item.id;
+    if (!hearsAllTracks(this.deps.store, actor, recordingId))
+      throw editAboveYourLevel();
+    return item;
+  }
+
+  /** The recording for its edit routes: `editable`, refusing a track. */
+  editableRecording(actor: MediaActor, mediaId: string): MediaItem {
+    const item = this.editable(actor, mediaId);
+    if (item.parent)
+      throw new AppError('MEDIA_CONFLICT', 'A track follows its recording', {
+        details: { reason: 'track' },
+      });
+    return item;
+  }
+
+  /** Every level the recording's tracks hold or are drafted at is one this person hears. */
+  hearsAllTracks(actor: MediaActor, recordingId: string): boolean {
+    return hearsAllTracks(this.deps.store, actor, recordingId);
+  }
+
   /** The item, for what only a recording has (proposals, voices, an edit). */
   getRecording(actor: MediaActor, mediaId: string): MediaItem {
     const item = this.get(actor, mediaId);
@@ -638,7 +675,22 @@ export class MediaService {
     const file = await this.deps.files.stat(rendition.path);
     if (!file)
       throw new AppError('MEDIA_NOT_READY', 'The converted file is missing');
-    return { path: rendition.path, mime: rendition.mime, ...file };
+    const hidden = this.hiddenFor(actor, media);
+    return { path: rendition.path, mime: rendition.mime, ...file, hidden };
+  }
+
+  /**
+   * KBC-106 FR-2: a recording's live tracks at a level this person does not hear. Nothing for
+   * a track, for a master or in a collection without levels.
+   */
+  hiddenFor(
+    actor: MediaActor,
+    media: Pick<MediaRecord, 'id' | 'topic' | 'track'>,
+  ): HiddenSpan[] {
+    if (media.track !== null || actor.levelsIn(media.topic) === null) return [];
+    return hiddenSpansOf(this.deps.store.liveTrackLevels(media.id), (level) =>
+      hearsLevel(actor, media.topic, level),
+    );
   }
 
   private renditionOf(media: MediaRecord, fileVersion: number | undefined) {
@@ -789,16 +841,23 @@ export class MediaService {
     actor: MediaActor,
     view: ItemView = {},
   ): MediaItem {
+    const level = shownLevel(record, {
+      scale: this.scaleOf(record.topic),
+      shows: actor.isMaster || canEditMedia(actor, record),
+    });
     return toMediaItem(record, actor.isMaster, {
       ...view,
       author: this.authorOf(record),
       canEdit: canEditMedia(actor, record),
       parent: this.parentOf(record),
       groqReady: actor.isMaster && (this.deps.groqReady?.() ?? false),
-      level: shownLevel(record, {
-        scale: this.scaleOf(record.topic),
-        shows: actor.isMaster || canEditMedia(actor, record),
-      }),
+      level,
+      hidden: this.hiddenFor(actor, record),
+      // KBC-106 BR-1: raising the recording says how many tracks go up with it.
+      ...(level !== undefined &&
+        record.track === null && {
+          ownTrackLevels: this.deps.store.ownTrackLevels(record.id),
+        }),
     });
   }
 

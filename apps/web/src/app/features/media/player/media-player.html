@@ -30,6 +30,7 @@
   <app-seek-slider
     [marks]="bookmarks.positions()"
     [trackMarks]="trackStarts()"
+    [restricted]="restricted.spans()"
     [currentMs]="playback().currentMs"
     [durationMs]="playback().durationMs"
     [bufferedEndMs]="playback().bufferedEndMs"

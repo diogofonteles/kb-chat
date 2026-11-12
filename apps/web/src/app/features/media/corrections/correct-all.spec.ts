@@ -97,6 +97,23 @@ describe('Corrigir todas (KBC-093 FR-11)', () => {
     expect(replacementOf('Tiuako', 'Tiuaco')).toBe('Tiuaco');
   });
 
+  it('KBC-106: below a track of the recording, the preview says why instead of failing', async () => {
+    const { view, http } = await renderAll(null);
+    TestBed.tick();
+    http
+      .expectOne((one) => one.url === `${BASE}/occurrences`)
+      .flush(
+        { error: { code: 'EDIT_ABOVE_YOUR_LEVEL', message: 'x' } },
+        { status: 403, statusText: 'Forbidden' },
+      );
+    await view.fixture.whenStable();
+    expect(
+      screen.getByText(
+        'Esta gravação tem faixas acima do seu nível. Só quem tem todos os níveis dela pode editá-la.',
+      ),
+    ).toBeTruthy();
+  });
+
   it('AC-29, AC-30: starts in this track, all checked; unchecking two counts them out; none disables it', async () => {
     const { answer, view } = await renderAll({
       startMs: 60_000,

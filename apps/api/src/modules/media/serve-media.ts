@@ -1,5 +1,16 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Readable } from 'node:stream';
+import { AppError } from '../../app-error.js';
+import {
+  SampleIndexCache,
+  hiddenTagOf,
+  insideHidden,
+  maskCovers,
+  maskPlanOf,
+  maskedStream,
+  readAtOf,
+  type MaskPlan,
+} from './masked-stream.js';
 import type { PlayableFile } from './media-service.js';
 import { entityTagOf, parseRange, rangeStillValid } from './range.js';
 
@@ -10,33 +21,77 @@ export interface RangeOpener {
 /**
  * Sends a media file with HTTP Range (ADR 0022 §5): 206 with `Content-Range` for a range,
  * 200 for the whole file, 416 for a range past the end. The file is streamed from disk,
- * never read whole; `If-Range` with an old tag gets the whole (new) file.
+ * never read whole; `If-Range` with an old tag gets the whole (new) file. With hidden parts
+ * (KBC-106 FR-2) their frames go out silent, and a range wholly inside one is 416.
  */
-export function serveMedia(context: {
+export async function serveMedia(context: {
   readonly id: string;
   readonly file: PlayableFile;
   readonly request: FastifyRequest;
   readonly reply: FastifyReply;
   readonly open: RangeOpener;
+  /** The sample tables a masked stream reads (KBC-106); none: nothing is ever masked. */
+  readonly indexes?: SampleIndexCache;
 }) {
   const { id, file, request, reply, open } = context;
-  const etag = entityTagOf(id, file);
+  const plan = await maskOf(file, { open, indexes: context.indexes });
+  const etag = tagOf(id, file, plan);
   setFileHeaders(reply, { file, etag });
   const answer = parseRange(requestedRange(request, etag), file.size);
-  if (answer.kind === 'unsatisfiable')
-    return reply
-      .code(416)
-      .header('content-range', `bytes */${file.size}`)
-      .send();
+  if (
+    answer.kind === 'unsatisfiable' ||
+    (answer.kind === 'partial' && plan && insideHidden(plan, answer))
+  )
+    return unsatisfiable(reply, file.size);
   const { start, end } =
     answer.kind === 'partial' ? answer : { start: 0, end: file.size - 1 };
   if (answer.kind === 'partial')
     reply
       .code(206)
       .header('content-range', `bytes ${start}-${end}/${file.size}`);
+  const body = open.openRange(file.path, { start, end });
   return reply
     .header('content-length', String(end - start + 1))
-    .send(open.openRange(file.path, { start, end }));
+    .send(plan ? maskedStream(body, plan, start) : body);
+}
+
+/** A masked file is another entity than the whole one: its tag names the hidden set. */
+const tagOf = (id: string, file: PlayableFile, plan: MaskPlan | null) =>
+  plan
+    ? entityTagOf(id, file).replace(
+        /"$/,
+        `-h${hiddenTagOf(file.hidden ?? [])}"`,
+      )
+    : entityTagOf(id, file);
+
+const unsatisfiable = (reply: FastifyReply, size: number) =>
+  reply.code(416).header('content-range', `bytes */${size}`).send();
+
+/** What to silence for this person; null when nothing is hidden. Unreadable: closed. */
+async function maskOf(
+  file: PlayableFile,
+  {
+    open,
+    indexes,
+  }: { open: RangeOpener; indexes: SampleIndexCache | undefined },
+): Promise<MaskPlan | null> {
+  const hidden = file.hidden ?? [];
+  if (hidden.length === 0) return null;
+  // Hidden parts and no way to read the tables: nothing is sent.
+  if (!indexes)
+    throw new AppError('MEDIA_NOT_READY', 'This media cannot be played yet');
+  const index = await indexes.indexOf(
+    file,
+    readAtOf((range) => open.openRange(file.path, range), file.size),
+  );
+  // Without its sample table nothing can be kept from this person: nothing is sent.
+  if (!index)
+    throw new AppError('MEDIA_NOT_READY', 'This media cannot be played yet');
+  const plan = maskPlanOf(index, hidden);
+  // A mask that does not cover every hidden part is no mask: nothing is sent (review M2).
+  if (!maskCovers(index, plan, hidden))
+    throw new AppError('MEDIA_NOT_READY', 'This media cannot be played yet');
+  return plan;
 }
 
 function setFileHeaders(

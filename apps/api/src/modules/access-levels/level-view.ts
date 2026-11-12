@@ -69,6 +69,11 @@ export interface ScaledViewInput {
    */
   readonly classifier?: boolean;
   readonly placementsOf: (collection: string) => CollectionPlacements;
+  /**
+   * The level media.db holds for a track's document (KBC-106, ADR 0036 §3): null "Sem nível",
+   * undefined unknown; both closed to members. Absent: no media, no track seen.
+   */
+  readonly mediaLevelOf?: (mediaId: string) => string | null | undefined;
   /** Memoizes the share per catalog load and state (NFR-1). */
   readonly memo: (catalog: ViewedCollection, compute: () => number) => number;
 }
@@ -97,19 +102,32 @@ function shareOf(
   return texts === 0 ? 1 : Math.max(MIN_VISIBLE_SHARE, visible / texts);
 }
 
+/** §6 for one viewer: a text by its placement, a track by its level in media.db. */
+function allowsFor(
+  input: ScaledViewInput,
+  manages: boolean,
+): LevelView['allows'] {
+  const { scale, rank, placementsOf } = input;
+  return (collection, entry) => {
+    if (rank === 'all') return true;
+    // A track's level lives in media.db (KBC-106): its own, or its recording's.
+    if (entry.media !== null) {
+      const level = input.mediaLevelOf?.(entry.media.mediaId);
+      const found = scale.findIndex((one) => one.id === level);
+      return found >= 0 && found <= rank;
+    }
+    const found = rankOf(scale, placementsOf(collection), entry.id);
+    if (found < 0) return manages;
+    return found <= rank;
+  };
+}
+
 /** The view of a collection with a scale, for a master (`rank: 'all'`) or a person. */
 export function scaledView(input: ScaledViewInput): LevelView {
   const { scale, rank, placementsOf, memo } = input;
   const seesAll = rank === 'all';
   const manages = seesAll || input.classifier === true;
-  const allows: LevelView['allows'] = (collection, entry) => {
-    if (seesAll) return true;
-    // A track's level lives in media.db (KBC-106); until then tracks stay closed.
-    if (entry.media !== null) return false;
-    const found = rankOf(scale, placementsOf(collection), entry.id);
-    if (found < 0) return manages;
-    return found <= rank;
-  };
+  const allows = allowsFor(input, manages);
   return {
     seesAll,
     scaled: true,

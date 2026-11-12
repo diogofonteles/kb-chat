@@ -15,6 +15,7 @@ import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { formatClock, positionToSecond } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
 import { MediaEngine } from '@core/media/media-engine.js';
+import { RestrictedSkipper } from '@core/media/restricted-skipper.js';
 import { TracksStore } from '@core/media/tracks-store.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 import { ProgressSaver } from '@core/media/progress-saver.js';
@@ -43,6 +44,8 @@ import { PlayerShortcuts } from './player-shortcuts.js';
 })
 export class MiniPlayer {
   private readonly engine = inject(MediaEngine);
+  /** Skips the parts above the person's level wherever it plays (KBC-106). */
+  private readonly restricted = inject(RestrictedSkipper);
   private readonly saver = inject(ProgressSaver);
   private readonly preferences = inject(ListeningPreferences);
   private readonly sleepTimer = inject(SleepTimerService);

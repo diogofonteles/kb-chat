@@ -1003,6 +1003,114 @@ describe('moving the media library from the Mac to production (KBC-116)', () => 
   });
 });
 
+describe("KBC-106: a track's own level belongs to production", () => {
+  it("a track's own level and its draft's level set in production stay, and do not hold the Mac's next change", async () => {
+    const world = newWorld();
+    seedRecording(world, { id: 'r1' });
+    onMac(
+      world,
+      `INSERT INTO media_draft_tracks (id, media_id, source, start_ms, end_ms, kind, title, created_at)
+       VALUES ('mt-r1-t1', 'r1', 'manual', 0, 30000, 'talk', 'Faixa 1', '${AT}')`,
+    );
+    await moveOnce(world);
+    onProd(world, (db) => {
+      db.prepare(
+        `UPDATE media SET level = 'alto', level_own = 1, updated_at = '2026-11-11T21:00:00.000Z' WHERE id = 'r1-t1'`,
+      ).run();
+      db.prepare(
+        `UPDATE media_draft_tracks SET level = 'alto' WHERE id = 'mt-r1-t1'`,
+      ).run();
+    });
+    onMac(
+      world,
+      `UPDATE words SET text = 'vegetal' WHERE transcript_id = 't-r1' AND position = 0`,
+    );
+
+    const report = await moveOnce(world);
+
+    expect(report.updated).toEqual(['r1']);
+    onProd(world, (db) => {
+      expect(
+        db
+          .prepare(`SELECT level, level_own FROM media WHERE id = 'r1-t1'`)
+          .get(),
+      ).toMatchObject({ level: 'alto', level_own: 1 });
+      expect(
+        db
+          .prepare(`SELECT level FROM media_draft_tracks WHERE id = 'mt-r1-t1'`)
+          .get()?.['level'],
+      ).toBe('alto');
+    });
+  });
+
+  it("QA-3: a new track from the Mac never lands below its recording's level in production; it follows it", async () => {
+    const world = newWorld();
+    const scale = {
+      version: 1,
+      scales: {
+        udv: [
+          { id: 'ci', code: 'CI' },
+          { id: 'cdc', code: 'CDC' },
+        ],
+      },
+    };
+    writeJson(join(world.mac.state, 'access-levels.json'), scale);
+    writeJson(join(world.prod.state, 'access-levels.json'), scale);
+    seedRecording(world, { id: 'r1', level: 'ci' });
+    await moveOnce(world);
+    onProd(world, (db) =>
+      db
+        .prepare(`UPDATE media SET level = 'cdc' WHERE id IN ('r1', 'r1-t1')`)
+        .run(),
+    );
+    const db = macDb(world);
+    try {
+      insertMedia(db, {
+        id: 'r1-t2',
+        topic: 'udv',
+        title: 'Faixa 2',
+        level: 'ci',
+        parent: 'r1',
+      });
+      db.prepare(
+        `INSERT INTO media_files (media_id, rendition, path, bytes, mime) VALUES ('r1-t2', 'audio', 'audio/r1.r1-t2.m4a', 10, 'audio/mp4')`,
+      ).run();
+    } finally {
+      db.close();
+    }
+    writeFile(world.mac.media, 'audio/r1.r1-t2.m4a', 'audio of r1-t2');
+
+    const report = await moveOnce(world);
+
+    expect(report.updated).toEqual(['r1']);
+    onProd(world, (prod) =>
+      expect({
+        ...prod
+          .prepare(`SELECT level, level_own FROM media WHERE id = 'r1-t2'`)
+          .get(),
+      }).toEqual({ level: 'cdc', level_own: 0 }),
+    );
+  });
+
+  it("a draft's level the production scale lacks arrives as the recording's", async () => {
+    const world = newWorld();
+    seedRecording(world, { id: 'r1' });
+    onMac(
+      world,
+      `INSERT INTO media_draft_tracks (id, media_id, source, start_ms, end_ms, kind, title, level, created_at)
+       VALUES ('mt-r1-t1', 'r1', 'manual', 0, 30000, 'talk', 'Faixa 1', 'cdc', '${AT}')`,
+    );
+    await moveOnce(world);
+    onProd(world, (db) =>
+      expect(
+        db
+          .prepare(`SELECT level FROM media_draft_tracks WHERE id = 'mt-r1-t1'`)
+          .get()?.['level'],
+      ).toBeNull(),
+    );
+  });
+});
+
 /** What never leaves the Mac (spec "Não vai", ADR 0032), as rows of the package's database. */
 const STAYS_ON_THE_MAC = [
   'voice_consents',

@@ -138,6 +138,12 @@
           A transcrição foi refeita. Confira a palavra no texto novo.
         </p>
       }
+      @case ('above') {
+        <p class="error" i18n="@@correct.above">
+          Esta gravação tem faixas acima do seu nível. Só quem tem todos os
+          níveis dela pode editá-la.
+        </p>
+      }
       @case ('failed') {
         <p class="error" i18n="@@correct.failed">
           Não consegui salvar. Sua correção continua aqui.

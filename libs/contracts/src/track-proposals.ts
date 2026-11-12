@@ -48,6 +48,8 @@ export const draftTrackSchema = z.object({
   /** The speaker a person chose (KBC-066); wins over the voice's name. */
   askerSpeakerId: z.uuid().nullable(),
   answererSpeakerId: z.uuid().nullable(),
+  /** Its own level (KBC-106); null: the recording's. */
+  level: z.string().min(1).max(200).nullable().default(null),
 });
 export type DraftTrack = z.infer<typeof draftTrackSchema>;
 

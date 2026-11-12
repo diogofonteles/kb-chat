@@ -21,6 +21,8 @@ import type {
   LeaseOwner,
   LeaseRequest,
   LeasedJob,
+  LiveTrackLevel,
+  TrackLevelWrite,
   EditedMedia,
   MediaEdit,
   MediaLevelRestore,
@@ -60,6 +62,22 @@ function trackLinkOf(row: Row): TrackLink | null {
   };
 }
 
+/** A track's level and bounds, as a hidden part needs them. */
+const liveTrackOf = (row: Row): LiveTrackLevel => ({
+  mediaId: text(row, 'id'),
+  level: nullableText(row, 'level'),
+  startMs: Number(row['start_ms']),
+  endMs: Number(row['end_ms']),
+});
+
+/** A row a level change moved, as it was. */
+const movedOf = (row: Row): MovedMedia => ({
+  id: text(row, 'id'),
+  level: nullableText(row, 'level'),
+  own: row['level_own'] === 1,
+  topic: text(row, 'topic'),
+});
+
 /** A media row, read back through the contract's enums so a bad row fails loudly. */
 function toMediaRecord(row: Row): MediaRecord {
   return {
@@ -83,6 +101,7 @@ function toMediaRecord(row: Row): MediaRecord {
     archivedAt: row['archived_at'] === null ? null : text(row, 'archived_at'),
     transcription: transcriptionOf(row),
     level: nullableText(row, 'level'),
+    levelOwn: row['level_own'] === 1,
   };
 }
 
@@ -134,7 +153,7 @@ const AUTHOR_COLUMN = `COALESCE(author,
 const MEDIA_COLUMNS = `id, topic, title, ${AUTHOR_COLUMN} AS author, owner_principal, file_name, upload_bytes, source_sha256,
   status, progress, failure, duration_ms, bytes, created_at, updated_at,
   parent_media_id, parent_start_ms, parent_end_ms, track_ordinal, archived_at,
-  track_version, file_version, level,
+  track_version, file_version, level, level_own,
   (SELECT j.status FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
      ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS transcribe_job,
   (SELECT j.route FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
@@ -350,8 +369,8 @@ export class SqliteMediaStore implements MediaStorePort {
         );
       this.moveTracks(edit.mediaId, edit.topic, at);
       const tracksRelevelled = this.relevelTracks(edit.mediaId, {
-        from: before.level,
         to: edit.level,
+        ...edit.tracks,
       });
       return { record: this.requireMedia(edit.mediaId), tracksRelevelled };
     });
@@ -366,19 +385,155 @@ export class SqliteMediaStore implements MediaStorePort {
       .run(topic, at, parentId);
   }
 
-  /** The tracks still at the recording's old level take its new one; how many did. */
+  /**
+   * The tracks that follow the recording take its new level; those of their own below it go
+   * up to it and stay their own (KBC-106 BR-1); in a new scale every track follows again. The
+   * draft follows the same way. How many tracks changed.
+   */
   private relevelTracks(
     parentId: string,
-    { from, to }: { readonly from: string | null; readonly to: string | null },
+    change: {
+      readonly to: string | null;
+      readonly below: readonly string[];
+      readonly newScale: boolean;
+    },
   ): number {
-    if (from === to) return 0;
-    return Number(
+    return change.newScale
+      ? this.followAgain(parentId, change.to)
+      : this.liftOwnTracks(parentId, change);
+  }
+
+  /** In another scale every track takes the new level and follows the recording again. */
+  private followAgain(parentId: string, to: string | null): number {
+    this.changes(
+      'UPDATE media_draft_tracks SET level = NULL WHERE media_id = ?',
+      parentId,
+    );
+    return this.changes(
+      `UPDATE media SET level = ?, level_own = 0
+       WHERE parent_media_id = ? AND (level IS NOT ? OR level_own = 1)`,
+      to,
+      parentId,
+      to,
+    );
+  }
+
+  /** Followers take the new level; tracks of their own under it go up to it (BR-1). */
+  private liftOwnTracks(
+    parentId: string,
+    change: { readonly to: string | null; readonly below: readonly string[] },
+  ): number {
+    const { to } = change;
+    const lower = JSON.stringify(change.below);
+    this.changes(
+      `UPDATE media_draft_tracks SET level = ?
+       WHERE media_id = ? AND level IN (SELECT value FROM json_each(?))`,
+      to,
+      parentId,
+      lower,
+    );
+    const followers = this.changes(
+      `UPDATE media SET level = ? WHERE parent_media_id = ? AND level_own = 0 AND level IS NOT ?`,
+      to,
+      parentId,
+      to,
+    );
+    const lifted = this.changes(
+      `UPDATE media SET level = ?
+       WHERE parent_media_id = ? AND level_own = 1
+         AND (level IS NULL OR level IN (SELECT value FROM json_each(?)))`,
+      to,
+      parentId,
+      lower,
+    );
+    return followers + lifted;
+  }
+
+  private changes(sql: string, ...values: (string | null)[]): number {
+    return Number(this.db.prepare(sql).run(...values).changes);
+  }
+
+  setTrackLevel(write: TrackLevelWrite): void {
+    inTransaction(this.db, () => {
       this.db
         .prepare(
-          `UPDATE media SET level = ? WHERE parent_media_id = ? AND level IS ?`,
+          `UPDATE media SET level = ?, level_own = ?, updated_at = ?
+           WHERE id = ? AND parent_media_id IS NOT NULL`,
         )
-        .run(to, parentId, from).changes,
-    );
+        .run(
+          write.level,
+          write.own ? 1 : 0,
+          write.now.toISOString(),
+          write.mediaId,
+        );
+      // The next approval keeps what was set here (the draft row of the same track).
+      this.db
+        .prepare(
+          `UPDATE media_draft_tracks SET level = ?
+           WHERE id IN (SELECT id FROM media_tracks WHERE derived_media_id = ?)`,
+        )
+        .run(write.own ? write.level : null, write.mediaId);
+    });
+  }
+
+  liveTrackLevels(parentId: string): readonly LiveTrackLevel[] {
+    return this.liveTrackLevelsOf([parentId]).get(parentId) ?? [];
+  }
+
+  liveTrackLevelsOf(
+    parentIds: readonly string[],
+  ): ReadonlyMap<string, readonly LiveTrackLevel[]> {
+    const byParent = new Map<string, LiveTrackLevel[]>();
+    if (parentIds.length === 0) return byParent;
+    const ids = JSON.stringify(parentIds);
+    // Published, and approved by their asked bounds (still cut, or failed): review m4.
+    const rows = this.db
+      .prepare(
+        `SELECT parent_media_id AS parent, id, level, parent_start_ms AS start_ms,
+           parent_end_ms AS end_ms FROM media
+         WHERE parent_media_id IN (SELECT value FROM json_each(?))
+           AND status = 'ready' AND archived_at IS NULL
+         UNION ALL
+         SELECT t.media_id, d.id, d.level, t.start_ms, t.end_ms
+         FROM media_tracks t JOIN media d ON d.id = t.derived_media_id
+         WHERE t.media_id IN (SELECT value FROM json_each(?)) AND d.archived_at IS NULL
+         ORDER BY start_ms`,
+      )
+      .all(ids, ids);
+    for (const row of rows) {
+      const parent = String(row['parent']);
+      byParent.set(parent, [...(byParent.get(parent) ?? []), liveTrackOf(row)]);
+    }
+    return byParent;
+  }
+
+  trackLevelsUnder(recordingId: string): readonly (string | null)[] {
+    return this.db
+      .prepare(
+        `SELECT level FROM media WHERE parent_media_id = ?
+         UNION SELECT level FROM media_draft_tracks WHERE media_id = ? AND level IS NOT NULL`,
+      )
+      .all(recordingId, recordingId)
+      .map((row) => nullableText(row, 'level'));
+  }
+
+  levelOf(mediaId: string): string | null | undefined {
+    const row = this.db
+      .prepare('SELECT level FROM media WHERE id = ?')
+      .get(mediaId);
+    return row ? nullableText(row, 'level') : undefined;
+  }
+
+  ownTrackLevels(parentId: string): readonly string[] {
+    return this.db
+      .prepare(
+        `SELECT level FROM media
+         WHERE parent_media_id = ? AND level_own = 1 AND level IS NOT NULL
+           AND archived_at IS NULL
+         ORDER BY parent_start_ms`,
+      )
+      .all(parentId)
+      .map((row) => String(row['level']));
   }
 
   seedLevel(seed: MediaLevelSeed): number | null {
@@ -415,31 +570,74 @@ export class SqliteMediaStore implements MediaStorePort {
     if (change.topics.length === 0) return [];
     const topics = JSON.stringify(change.topics);
     return inTransaction(this.db, () => {
-      const rows = this.db
+      const rows: MovedMedia[] = this.db
         .prepare(
-          `SELECT id, level, topic FROM media
+          `SELECT id, level, level_own, topic FROM media
            WHERE level IS NOT NULL AND (? IS NULL OR level = ?)
              AND topic IN (SELECT value FROM json_each(?))`,
         )
         .all(change.from ?? null, change.from ?? null, topics)
-        .map((row) => ({
-          id: String(row['id']),
-          level: nullableText(row, 'level'),
-          topic: String(row['topic']),
-        }));
+        .map(movedOf);
       this.writeLevels(rows.map(({ id }) => ({ id, level: change.to })));
-      return rows;
+      return change.order ? this.liftUnder(rows, topics, change.order) : rows;
     });
+  }
+
+  liftTracks(
+    topics: readonly string[],
+    order: readonly string[],
+  ): MovedMedia[] {
+    if (topics.length === 0) return [];
+    return inTransaction(this.db, () =>
+      this.liftUnder([], JSON.stringify(topics), order),
+    );
+  }
+
+  /**
+   * KBC-106 review M3: a track the change left below its recording takes the recording's
+   * level and follows it again; it joins the moved rows with what was written.
+   */
+  private liftUnder(
+    rows: readonly MovedMedia[],
+    topics: string,
+    order: readonly string[],
+  ): MovedMedia[] {
+    const ranks = JSON.stringify(order);
+    const below = this.db
+      .prepare(
+        `SELECT t.id, t.level, t.level_own, t.topic, p.level AS parent_level
+         FROM media t JOIN media p ON p.id = t.parent_media_id
+         WHERE t.topic IN (SELECT value FROM json_each(?)) AND p.level IS NOT NULL
+           AND (t.level IS NULL OR (SELECT key FROM json_each(?) WHERE value = t.level)
+             < (SELECT key FROM json_each(?) WHERE value = p.level))`,
+      )
+      .all(topics, ranks, ranks);
+    const lift = this.db.prepare(
+      'UPDATE media SET level = ?, level_own = 0 WHERE id = ?',
+    );
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    for (const row of below) {
+      const written = nullableText(row, 'parent_level');
+      lift.run(written, String(row['id']));
+      const known = byId.get(String(row['id']));
+      byId.set(String(row['id']), { ...(known ?? movedOf(row)), written });
+    }
+    return [...byId.values()];
   }
 
   restoreLevels(rows: readonly MediaLevelRestore[]): string[] {
     return inTransaction(this.db, () => {
+      // A track's own level comes back with its level (KBC-106 review M3).
       const write = this.db.prepare(
-        'UPDATE media SET level = ? WHERE id = ? AND level IS ?',
+        `UPDATE media SET level = ?, level_own = coalesce(?, level_own)
+         WHERE id = ? AND level IS ?`,
       );
+      const own = (row: MediaLevelRestore) =>
+        row.own === undefined ? null : row.own ? 1 : 0;
       return rows
         .filter(
-          (row) => write.run(row.level, row.id, row.written).changes === 0,
+          (row) =>
+            write.run(row.level, own(row), row.id, row.written).changes === 0,
         )
         .map((row) => row.id);
     });
@@ -461,8 +659,12 @@ export class SqliteMediaStore implements MediaStorePort {
 
   /** One statement per row, inside the caller's transaction. */
   private writeLevels(rows: readonly MediaLevelRow[]): void {
-    const write = this.db.prepare('UPDATE media SET level = ? WHERE id = ?');
-    for (const row of rows) write.run(row.level, row.id);
+    // With no level (the scale gone) nothing is a level of its own any more (KBC-106).
+    const write = this.db.prepare(
+      `UPDATE media SET level = ?, level_own = CASE WHEN ? IS NULL THEN 0 ELSE level_own END
+       WHERE id = ?`,
+    );
+    for (const row of rows) write.run(row.level, row.level, row.id);
   }
 
   deleteMedia(id: string): boolean {

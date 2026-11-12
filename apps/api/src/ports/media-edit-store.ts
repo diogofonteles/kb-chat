@@ -58,6 +58,11 @@ export interface MediaEditStorePort {
   /** Back to the draft and step 3; listeners keep the approved tracks (BR-9). */
   reopen(write: EditWrite & { readonly alongside?: () => void }): number | null;
   approved(mediaId: string): ApprovedTrack[];
+  /**
+   * Each approved track's item level, by track id (KBC-106); a track with no item yet is
+   * absent (it has its recording's).
+   */
+  approvedLevels(mediaId: string): ReadonlyMap<string, string | null>;
   /** The draft's tracks whose title the AI wrote and no person touched (KBC-090). */
   proposedTrackIds(mediaId: string): ReadonlySet<string>;
   /** Those titles, rewritten at once; a change moves the edit's version. */

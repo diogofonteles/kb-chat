@@ -79,6 +79,8 @@ export interface MediaRecord {
   readonly archivedAt: string | null;
   /** Its access level (KBC-105), an id of its top-level collection's scale; null: none. */
   readonly level: string | null;
+  /** A track with a level of its own: it no longer follows its recording's (KBC-106). */
+  readonly levelOwn: boolean;
 }
 
 /** A media item with its kind, for the library (KBC-051). */
@@ -114,7 +116,34 @@ export interface MediaEdit {
   readonly legacyAuthorship: LegacyAuthorship;
   /** Its level after the edit; the tracks still at the old one follow it (KBC-105 BR-7). */
   readonly level: string | null;
+  /**
+   * How its tracks follow (KBC-106 BR-1): those of their own below the new level (`below`,
+   * the scale's ids under it) go up to it; in another scale (`newScale`) every track takes
+   * the new level and follows the recording again.
+   */
+  readonly tracks: {
+    readonly below: readonly string[];
+    readonly newScale: boolean;
+  };
   readonly now: Date;
+}
+
+/** A track's level as a person set it (KBC-106 FR-1). */
+export interface TrackLevelWrite {
+  readonly mediaId: string;
+  /** Its level now: its own, or its recording's when it follows. */
+  readonly level: string | null;
+  /** It holds a level of its own. */
+  readonly own: boolean;
+  readonly now: Date;
+}
+
+/** A published track a person may or may not hear (KBC-106 FR-2). */
+export interface LiveTrackLevel {
+  readonly mediaId: string;
+  readonly level: string | null;
+  readonly startMs: number;
+  readonly endMs: number;
 }
 
 /** What an edit left: the item, and how many of its tracks changed level with it. */
@@ -139,6 +168,8 @@ export interface MediaLevelSeed {
 export interface MediaLevelRow {
   readonly id: string;
   readonly level: string | null;
+  /** A track's own level, as it was (KBC-106): an undo puts it back too. */
+  readonly own?: boolean;
 }
 
 /** What an undo puts back: the level before, where the row still holds `written`. */
@@ -149,6 +180,8 @@ export interface MediaLevelRestore extends MediaLevelRow {
 /** A row a level change moved, with its collection (for the audit). */
 export interface MovedMedia extends MediaLevelRow {
   readonly topic: string;
+  /** What the change wrote when it is not the change's level: a track lifted (KBC-106). */
+  readonly written?: string | null;
 }
 
 /** KBC-108: the audios of a scope at one level (or at any) move to another (or to none). */
@@ -159,6 +192,11 @@ export interface MediaRelevel {
   readonly from?: string;
   /** Their new level; null: no level (the scale is gone). */
   readonly to: string | null;
+  /**
+   * The scale after the change, lowest first: a track it would leave below its recording is
+   * lifted to the recording's level and follows it (KBC-106 review M3).
+   */
+  readonly order?: readonly string[];
 }
 
 /** A playable file of a media item (ADR 0022: `media_files`). */
@@ -271,11 +309,33 @@ export interface MediaStorePort {
   getRendition(mediaId: string): MediaRendition | null;
   /** Writes the item's details; null when it no longer exists. */
   editMedia(edit: MediaEdit): EditedMedia | null;
+  /** KBC-106: a track's own level (or back to its recording's), its draft row following. */
+  setTrackLevel(write: TrackLevelWrite): void;
+  /** The live tracks of a recording with their levels and real bounds (KBC-106 FR-2). */
+  liveTrackLevels(parentId: string): readonly LiveTrackLevel[];
+  /**
+   * Every level its tracks hold or are drafted at (archived and still being cut included,
+   * KBC-106 decision): who does not hear all of them does not edit the recording.
+   */
+  trackLevelsUnder(recordingId: string): readonly (string | null)[];
+  /** A media's level: null "Sem nível", undefined when there is no such media (KBC-106). */
+  levelOf(mediaId: string): string | null | undefined;
+  /** `liveTrackLevels` of many recordings in one query, by recording (review M4). */
+  liveTrackLevelsOf(
+    parentIds: readonly string[],
+  ): ReadonlyMap<string, readonly LiveTrackLevel[]>;
+  /** The own levels of a recording's tracks, one per track that has one (KBC-106 BR-1). */
+  ownTrackLevels(parentId: string): readonly string[];
   /**
    * Places the audios with no level at the seed's level, once per collection unless `again`
    * (KBC-105 AC-10); the rows placed, or null when it had been seeded already.
    */
   seedLevel(seed: MediaLevelSeed): number | null;
+  /**
+   * KBC-106: the tracks a scale's new order leaves below their recordings take the
+   * recording's level and follow it; the rows lifted, as they were, with what was written.
+   */
+  liftTracks(topics: readonly string[], order: readonly string[]): MovedMedia[];
   /** KBC-108: moves the audios of a level in one transaction; the rows moved, as they were. */
   relevel(change: MediaRelevel): MovedMedia[];
   /**

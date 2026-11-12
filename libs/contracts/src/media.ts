@@ -171,6 +171,13 @@ export const trackParentSchema = z.object({
 });
 export type TrackParent = z.infer<typeof trackParentSchema>;
 
+/** A stretch of a recording, in its time (KBC-106). */
+export const hiddenSpanSchema = z.object({
+  startMs: z.number().int().nonnegative(),
+  endMs: z.number().int().positive(),
+});
+export type HiddenSpan = z.infer<typeof hiddenSpanSchema>;
+
 export const mediaItemSchema = z.object({
   id: mediaIdSchema,
   topic: topicSlugSchema,
@@ -216,6 +223,17 @@ export const mediaItemSchema = z.object({
    * may edit it, in a collection with levels. Absent for everyone else (ADR 0036 §9).
    */
   level: contentLevelSchema.optional(),
+  /**
+   * The parts of a recording this person may not hear (KBC-106 FR-2): its tracks above their
+   * level. The player skips them; the stream, the text and the search leave them out. Absent
+   * when there is none.
+   */
+  hidden: z.array(hiddenSpanSchema).optional(),
+  /**
+   * The own levels of its tracks (KBC-106 BR-1), one per track that has one: for whoever sees
+   * the level badge, so raising the recording can say how many tracks go up with it.
+   */
+  ownTrackLevels: z.array(levelRefSchema).optional(),
 });
 export type MediaItem = z.infer<typeof mediaItemSchema>;
 
@@ -1548,6 +1566,8 @@ export const transcriptSegmentSchema = z.object({
   endMs: z.number().int().min(0),
   text: z.string(),
   voice: voiceIndexSchema.nullable().optional(),
+  /** Inside a track this person may not hear (KBC-106 BR-2): kept in place, with no text. */
+  restricted: z.literal(true).optional(),
 });
 export type TranscriptSegment = z.infer<typeof transcriptSegmentSchema>;
 

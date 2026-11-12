@@ -438,9 +438,11 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
   movedBookmarks(principal: string) {
     return this.db
       .prepare(
-        `SELECT b.media_id, b.recording_id, b.title, m.topic, count(*) AS n
+        `SELECT b.media_id, b.recording_id, b.title, m.topic,
+           coalesce(t.level, m.level) AS level, count(*) AS n
          FROM media_moved_bookmarks b JOIN media m ON m.id = b.recording_id
-         WHERE b.principal = ? GROUP BY b.media_id, b.recording_id, b.title, m.topic
+           LEFT JOIN media t ON t.id = b.media_id
+         WHERE b.principal = ? GROUP BY b.media_id, b.recording_id, b.title, m.topic, 5
          ORDER BY max(b.moved_at) DESC`,
       )
       .all(principal)
@@ -449,6 +451,7 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
         recordingId: String(row['recording_id']),
         title: String(row['title']),
         topic: String(row['topic']),
+        level: row['level'] === null ? null : String(row['level']),
         count: Number(row['n']),
       }));
   }

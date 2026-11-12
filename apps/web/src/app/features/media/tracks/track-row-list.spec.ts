@@ -29,6 +29,7 @@ const track = (n: number, startMs: number, endMs: number): DraftTrack => ({
   answererVoice: null,
   askerSpeakerId: null,
   answererSpeakerId: null,
+  level: null,
 });
 
 const ONE = { track: track(1, 0, 9_000), ordinal: 1 };
@@ -50,6 +51,7 @@ function setup(selectedId: string, extra: object = {}) {
     listen: vi.fn(),
     listenKey: vi.fn(),
     stopPlaying: vi.fn(),
+    levelChange: vi.fn(),
   };
   return render(TrackRowList, {
     providers: [
@@ -230,5 +232,63 @@ describe('TrackRowList (KBC-066)', () => {
     expect(
       screen.getByRole('region', { name: 'Texto da faixa 1' }),
     ).toBeTruthy();
+  });
+
+  it("offers the recording's level first and the levels above it, and says a track's own (KBC-106 FR-5)", async () => {
+    const levels = {
+      recording: { id: 'ci', code: 'CI' },
+      choices: [{ id: 'cdc', code: 'CDC' }],
+    };
+    const { spies, rerender } = await setup(IDS.one, { levels });
+    const field = screen.getByRole('combobox', { name: 'Nível' });
+    expect(
+      [...(field as HTMLSelectElement).options].map((one) => one.text.trim()),
+    ).toEqual(['O da gravação (CI)', 'CDC']);
+    fireEvent.change(field, { target: { value: 'cdc' } });
+    expect(spies.levelChange).toHaveBeenCalledWith({
+      id: IDS.one,
+      level: 'cdc',
+    });
+    fireEvent.change(field, { target: { value: '' } });
+    expect(spies.levelChange).toHaveBeenLastCalledWith({
+      id: IDS.one,
+      level: null,
+    });
+    await rerender({
+      inputs: {
+        tracks: [{ ...ONE, track: { ...ONE.track, level: 'cdc' } }, TWO],
+        selectedId: IDS.one,
+        levels,
+      },
+      partialUpdate: true,
+    });
+    expect(screen.getByText('Nível: CDC')).toBeTruthy();
+  });
+
+  it('shows a level out of its choices as itself, and the error the server gave on the field (review m6)', async () => {
+    const levels = {
+      recording: { id: 'ci', code: 'CI' },
+      choices: [{ id: 'cdc', code: 'CDC' }],
+    };
+    await setup(IDS.one, {
+      tracks: [{ ...ONE, track: { ...ONE.track, level: 'qm' } }, TWO],
+      levels,
+      levelError: 'Este nível está acima do seu. Escolha o seu ou um abaixo.',
+    });
+    const field = screen.getByRole<HTMLSelectElement>('combobox', {
+      name: 'Nível',
+    });
+    expect(field.value).toBe('qm');
+    expect(field.selectedOptions[0]?.text.trim()).toBe('QM');
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    const described = field.getAttribute('aria-describedby') ?? '';
+    expect(document.getElementById(described)?.textContent).toContain(
+      'Este nível está acima do seu.',
+    );
+  });
+
+  it('has no "Nível" without levels', async () => {
+    await setup(IDS.one);
+    expect(screen.queryByRole('combobox', { name: 'Nível' })).toBeNull();
   });
 });

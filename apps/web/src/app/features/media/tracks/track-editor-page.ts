@@ -308,6 +308,10 @@ export class TrackEditorPage {
   protected readonly saveFirst = (): Observable<unknown> => this.draft.flush();
   /** Nothing can change now: a run writes the draft, or a press runs, or a conflict (R-5). */
   protected readonly readOnly = computed(() => !this.draft.canEdit());
+  /** What a track's "Nível" offers (KBC-106); null without levels. */
+  protected readonly trackLevels = computed(
+    () => this.draft.edit()?.levels ?? null,
+  );
   protected readonly watching = computed(
     () => this.draft.running() && !this.canPropose(),
   );
@@ -617,6 +621,7 @@ export class TrackEditorPage {
       answererVoice: null,
       askerSpeakerId: null,
       answererSpeakerId: null,
+      level: null,
     };
     this.draft.apply([...this.draft.tracks(), track]);
     this.chosenId.set(track.id);
@@ -632,6 +637,11 @@ export class TrackEditorPage {
 
   protected changeKind(change: { id: string; kind: TrackKind }): void {
     this.change(change.id, { kind: change.kind });
+  }
+
+  /** A track's own level, or back to the recording's (KBC-106 FR-5). */
+  protected changeLevel(change: { id: string; level: string | null }): void {
+    this.change(change.id, { level: change.level });
   }
 
   protected changePerson({ id, field, value }: PersonChange): void {

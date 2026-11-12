@@ -6,7 +6,8 @@ import type { ContentLevel } from '@kb-chat/contracts';
  */
 export interface ViewedDocument {
   readonly id: string;
-  readonly media: object | null;
+  /** The track (or recording) of media.db a document was rendered from (ADR 0035). */
+  readonly media: { readonly mediaId: string } | null;
 }
 
 /** One collection's documents (the catalog's `TopicCatalog` is one). */

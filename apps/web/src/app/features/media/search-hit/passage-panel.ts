@@ -168,6 +168,7 @@ export class PassagePanel {
           durationMs: media.durationMs,
           artist: media.author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
           ...(media.parent ? { fileVersion: media.parent.fileVersion } : {}),
+          ...(media.hidden ? { hidden: media.hidden } : {}),
         },
         at,
       );

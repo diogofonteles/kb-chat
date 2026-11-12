@@ -33,6 +33,7 @@ import type {
 } from '../../ports/transcript-store.js';
 import type { MediaActor } from './media-service.js';
 import { seesMedia } from './media-policy.js';
+import { editAboveYourLevel, hearsAllTracks } from './track-levels.js';
 import {
   DERIVATION_VERSION,
   deriveTurns,
@@ -428,9 +429,14 @@ export class DiarizationService {
     };
   }
 
+  /** The recording for the voices' routes, all of them edits (KBC-106 decision). */
   private visible(actor: MediaActor, mediaId: string): MediaRecord {
     const media = this.deps.store.getMedia(mediaId);
     if (!media || !seesMedia(actor, media)) throw notFound();
+    if (
+      !hearsAllTracks(this.deps.store, actor, media.track?.parentId ?? mediaId)
+    )
+      throw editAboveYourLevel();
     return media;
   }
 }

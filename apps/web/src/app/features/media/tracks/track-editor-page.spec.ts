@@ -46,10 +46,12 @@ const aTrack = (n: number, startMs: number, endMs: number): DraftTrack => ({
   answererVoice: null,
   askerSpeakerId: null,
   answererSpeakerId: null,
+  level: null,
 });
 
 const anEdit = (overrides: Partial<MediaEdit> = {}): MediaEdit => ({
   preparation: null,
+  levels: null,
   mediaId: ITEM.id,
   version: 2,
   started: true,
@@ -65,7 +67,7 @@ const anEdit = (overrides: Partial<MediaEdit> = {}): MediaEdit => ({
 });
 
 async function openPage(
-  edit: MediaEdit | { error: number } = anEdit(),
+  edit: MediaEdit | { error: number; code?: string } = anEdit(),
   features: Parameters<typeof sessionAs>[0]['features'] = [
     'media',
     'media-edit',
@@ -92,7 +94,7 @@ async function openPage(
   const read = http.expectOne(`${BASE}/edit`);
   if ('error' in edit)
     read.flush(
-      { error: { code: 'FORBIDDEN', message: 'No' } },
+      { error: { code: edit.code ?? 'FORBIDDEN', message: 'No' } },
       { status: edit.error, statusText: 'Nope' },
     );
   else read.flush(edit);
@@ -165,6 +167,16 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
         'Você não tem permissão para editar esta gravação.',
       ),
     ).toBeTruthy();
+  });
+
+  it('KBC-106: says why when a track of the recording is above the person', async () => {
+    await openPage({ error: 403, code: 'EDIT_ABOVE_YOUR_LEVEL' });
+    expect(
+      await screen.findByText(
+        'Esta gravação tem faixas acima do seu nível. Só quem tem todos os níveis dela pode editá-la.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole('list', { name: 'Faixas' })).toBeNull();
   });
 
   it('opens on step 3 with the tracks and says undo started over (BR-6)', async () => {

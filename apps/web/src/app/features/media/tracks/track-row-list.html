@@ -31,6 +31,11 @@
             >
           }
         </span>
+        @if (row.levelCode) {
+          <span class="level" i18n="@@tracks.level.badge"
+            >Nível: {{ row.levelCode }}</span
+          >
+        }
         @for (warning of row.warnings; track warning) {
           <span class="warning"
             ><span aria-hidden="true">⚠ </span>{{ warning }}</span
@@ -101,6 +106,46 @@
               }
             </select>
           </label>
+          @if (levels(); as choices) {
+            <label class="field">
+              <span i18n="@@tracks.field.level">Nível</span>
+              <select
+                [attr.aria-invalid]="levelError() ? 'true' : null"
+                [attr.aria-describedby]="
+                  levelError() ? 'track-level-error' : null
+                "
+                (change)="chooseLevel($event, row.track.id)"
+              >
+                <option
+                  value=""
+                  [selected]="
+                    !row.track.level || row.track.level === choices.recording.id
+                  "
+                  i18n="@@tracks.level.recording"
+                >
+                  O da gravação ({{ choices.recording.code }})
+                </option>
+                @if (row.levelOutside; as outside) {
+                  <option [value]="outside.id" selected>
+                    {{ outside.code }}
+                  </option>
+                }
+                @for (choice of choices.choices; track choice.id) {
+                  <option
+                    [value]="choice.id"
+                    [selected]="choice.id === row.track.level"
+                  >
+                    {{ choice.code }}
+                  </option>
+                }
+              </select>
+            </label>
+            @if (levelError(); as error) {
+              <span id="track-level-error" class="field-error"
+                ><span aria-hidden="true">⚠ </span>{{ error }}</span
+              >
+            }
+          }
           <div class="actions">
             @if (playingElsewhere()) {
               <button

@@ -60,8 +60,16 @@ export type DeskPhase =
     }
   | { readonly kind: 'stale' }
   | { readonly kind: 'failed' }
+  /** A track of the recording is above the person: correcting is its edit's (KBC-106). */
+  | { readonly kind: 'above' }
   /** Refused for a reason a retry does not change (409 not-aligned, not-contiguous…). */
   | { readonly kind: 'refused' };
+
+/** What a code that needs no detail leaves on the desk. */
+const PLAIN_REFUSALS: Partial<Record<string, 'invalid' | 'above'>> = {
+  CORRECTION_INVALID: 'invalid',
+  EDIT_ABOVE_YOUR_LEVEL: 'above',
+};
 
 /** A message under the text, with an action for a while (FR-3, FR-11). */
 export interface DeskNotice {
@@ -371,8 +379,10 @@ export class CorrectionDesk {
       this.source.reload();
       return;
     }
-    if (code === 'CORRECTION_INVALID') {
-      this.state.set({ kind: 'invalid' });
+    // Refusals a retry does not change: said as they are (KBC-106: above the person).
+    const plain = PLAIN_REFUSALS[code];
+    if (plain) {
+      this.state.set({ kind: plain });
       return;
     }
     const details = correctionConflictSchema.safeParse(errorDetailsOf(err));

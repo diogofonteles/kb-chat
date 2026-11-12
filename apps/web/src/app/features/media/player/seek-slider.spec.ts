@@ -8,6 +8,7 @@ async function renderSlider(
     durationMs: number | null;
     disabled: boolean;
     marks: readonly number[];
+    restricted: readonly { startMs: number; endMs: number }[];
   }> = {},
 ) {
   const seekRequested = vi.fn();
@@ -185,5 +186,27 @@ describe('SeekSlider (APG media seek slider)', () => {
       marks: [10_000],
     });
     expect(container.querySelector('.marks')).toBeNull();
+  });
+
+  it('hatches a restricted part, names it and describes it on the thumb (KBC-106 FR-5)', async () => {
+    const { slider, container } = await renderSlider({
+      durationMs: 600_000,
+      restricted: [{ startMs: 60_000, endMs: 120_000 }],
+    });
+    const block = container.querySelector<HTMLElement>('.restricted');
+    expect(block?.style.left).toBe('10%');
+    expect(block?.style.width).toBe('10%');
+    expect(block?.textContent).toContain('Trecho restrito');
+    const described = slider.getAttribute('aria-describedby');
+    expect(described).toBe('seek-restricted');
+    expect(container.querySelector(`#${described}`)?.textContent).toContain(
+      'Trecho restrito de 1:00 a 2:00, pulado.',
+    );
+  });
+
+  it('draws and says nothing without restricted parts', async () => {
+    const { slider, container } = await renderSlider();
+    expect(container.querySelector('.restricted')).toBeNull();
+    expect(slider.getAttribute('aria-describedby')).toBeNull();
   });
 });

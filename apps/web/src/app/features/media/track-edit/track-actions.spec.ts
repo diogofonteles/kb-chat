@@ -39,6 +39,8 @@ const view = (over: Partial<TrackEditView> = {}): TrackEditView => ({
   cut: 'none',
   locked: false,
   tracks: [],
+  level: null,
+  levels: null,
   ...over,
 });
 

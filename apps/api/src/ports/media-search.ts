@@ -27,7 +27,8 @@ export interface MediaSearchQuery {
   readonly exceptIds?: readonly string[];
   /**
    * The levels the person sees in these collections, which share one scale (KBC-105); null or
-   * absent: every audio. Restricted, only recordings answer: tracks wait for KBC-106.
+   * absent: every audio. Each track answers by its own level, and a recording's passage inside
+   * a track above them does not answer (KBC-106).
    */
   readonly levels?: readonly string[] | null;
 }
@@ -101,6 +102,11 @@ export interface SpokenQuery {
   /** As in `search`: a passage inside a track is the track's. */
   readonly tracks: boolean;
   readonly limit: number;
+  /**
+   * Per collection the levels the person hears there (null: all): a recording's passage inside
+   * a track above them never answers (KBC-106 BR-2). Absent: every level.
+   */
+  readonly levelsByTopic?: ReadonlyMap<string, readonly string[] | null>;
 }
 
 /** Which of the asked media say the words (KBC-096). */

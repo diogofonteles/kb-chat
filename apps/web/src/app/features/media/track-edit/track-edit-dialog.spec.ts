@@ -28,6 +28,8 @@ const view = (over: Partial<TrackEditView> = {}): TrackEditView => ({
   cut: 'none',
   locked: false,
   tracks: [],
+  level: null,
+  levels: null,
   ...over,
 });
 
@@ -78,6 +80,65 @@ describe('TrackEditDialog (KBC-073)', () => {
     expect(request.request.body).toEqual({ title: 'Título novo' });
     expect(request.request.headers.get('If-Match')).toBe('"3"');
     request.flush(null, { status: 500, statusText: 'x' });
+  });
+
+  it('KBC-106: "Nível" offers the recording\'s level first; going back to it sends null', async () => {
+    const levels = {
+      recording: { id: 'ci', code: 'CI' },
+      choices: [{ id: 'cdc', code: 'CDC' }],
+    };
+    const { fixture, root } = await open(view({ level: 'cdc', levels }));
+    const select = root.querySelector<HTMLSelectElement>('#track-level');
+    if (!select) throw new Error('no level field');
+    expect(select.value).toBe('cdc');
+    expect([...select.options].map((one) => one.text.trim())).toEqual([
+      'O da gravação (CI)',
+      'CDC',
+    ]);
+    select.value = '';
+    select.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    root.querySelector('form')?.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+
+    const request = http.expectOne(`/api/v1/media/${ID}`);
+    expect(request.request.body).toEqual({ level: null });
+    request.flush(null, { status: 500, statusText: 'x' });
+  });
+
+  it('KBC-106 review m6: a refused level is said at its field', async () => {
+    const levels = {
+      recording: { id: 'ci', code: 'CI' },
+      choices: [{ id: 'cdc', code: 'CDC' }],
+    };
+    const { fixture, root } = await open(view({ levels }));
+    const select = root.querySelector<HTMLSelectElement>('#track-level');
+    if (!select) throw new Error('no level field');
+    select.value = 'cdc';
+    select.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    root.querySelector('form')?.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+    http.expectOne(`/api/v1/media/${ID}`).flush(
+      {
+        error: {
+          code: 'LEVEL_ABOVE_YOURS',
+          message: 'x',
+          details: { field: 'level' },
+        },
+      },
+      { status: 403, statusText: 'Forbidden' },
+    );
+    await fixture.whenStable();
+    expect(select.getAttribute('aria-invalid')).toBe('true');
+    expect(root.querySelector('#track-level-error')?.textContent).toContain(
+      'Este nível está acima do seu.',
+    );
+  });
+
+  it('KBC-106: no "Nível" in a collection without levels', async () => {
+    const { root } = await open();
+    expect(root.querySelector('#track-level')).toBeNull();
   });
 
   it('BR-10: a 412 shows the other title and keeps what was typed', async () => {

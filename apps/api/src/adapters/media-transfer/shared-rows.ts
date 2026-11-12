@@ -15,7 +15,10 @@ export function createMaps(db: DatabaseSync): void {
     CREATE TEMP TABLE principal_map (src TEXT PRIMARY KEY, dst TEXT NOT NULL);
     CREATE TEMP TABLE speaker_map (src TEXT PRIMARY KEY, dst TEXT NOT NULL);
     CREATE TEMP TABLE subject_map (src TEXT PRIMARY KEY, dst TEXT NOT NULL);
-    CREATE TEMP TABLE level_map (media_id TEXT PRIMARY KEY, level TEXT);
+    CREATE TEMP TABLE level_map (media_id TEXT PRIMARY KEY, level TEXT, own INTEGER);
+    CREATE TEMP TABLE scale_levels (media_id TEXT NOT NULL, level TEXT NOT NULL,
+      PRIMARY KEY (media_id, level));
+    CREATE TEMP TABLE draft_levels (id TEXT PRIMARY KEY, level TEXT NOT NULL);
   `);
 }
 

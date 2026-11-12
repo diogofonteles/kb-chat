@@ -16,6 +16,7 @@ import {
   viewerOf,
   type RouteAccess,
 } from '../auth/index.js';
+import { levelViewsOf } from '../access-levels/index.js';
 import type { MediaActor } from '../media/index.js';
 import type { ProposalService } from './proposal-service.js';
 
@@ -32,13 +33,14 @@ const runParams = z.object({ id: mediaIdSchema, runId: z.uuid() });
 
 function actorOf(request: FastifyRequest): MediaActor {
   const viewer = viewerOf(request);
+  const views = levelViewsOf(request);
   return {
     principal: viewer.principal,
     isMaster: isMaster(viewer.person),
     canUpload: hasFeature(viewer.person, 'media-upload'),
-    // Proposals make tracks: a collection with levels keeps them for masters (KBC-106).
+    // Proposals make tracks: they follow the recording's level (KBC-106).
     canSee: (topic) => canSeeTracks(request, topic),
-    levelsIn: () => null,
+    levelsIn: (topic) => views(topic).allowedLevelIds(),
   };
 }
 

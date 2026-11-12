@@ -35,7 +35,7 @@ import {
   type TrackPatchRequest,
   type TrackSpeakerScope,
 } from '@kb-chat/contracts';
-import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import { errorMessage, fieldOf, toUiErrorCode } from '@core/api/api-error.js';
 import {
   SpeakersApi,
   collectionSpeakersUrl,
@@ -105,16 +105,26 @@ export class TrackEditDialog {
     asker: new FormControl('', { nonNullable: true }),
     answerer: new FormControl('', { nonNullable: true }),
     scope: new FormControl<TrackSpeakerScope>('track', { nonNullable: true }),
+    /** Its own level (KBC-106); '' follows the recording. */
+    level: new FormControl('', { nonNullable: true }),
   });
   private readonly typed = toSignal(this.form.valueChanges, {
     initialValue: null,
   });
   /** What the form was read from: a conflict moves it to the other person's. */
-  private readonly base = linkedSignal(() => this.track());
+  protected readonly base = linkedSignal(() => this.track());
   protected readonly conflict = signal<TrackEditView | null>(null);
   protected readonly submitted = signal(false);
   protected readonly saving = signal(false);
   protected readonly failure = signal('');
+  protected readonly levelFailure = signal('');
+  /** A level the track holds that is not offered (one deleted): shown as itself (m6). */
+  protected readonly levelOutside = computed(() => {
+    const { level, levels } = this.base();
+    if (!level || !levels || levels.choices.some((one) => one.id === level))
+      return null;
+    return { id: level, code: level.toUpperCase() };
+  });
 
   private readonly speakers = httpResource(
     () => collectionSpeakersUrl(this.track().topic),
@@ -193,6 +203,7 @@ export class TrackEditDialog {
       asker: track.asker.name ?? '',
       answerer: track.answerer.name ?? '',
       scope: 'track',
+      level: track.level ?? '',
     });
   }
 
@@ -275,6 +286,7 @@ export class TrackEditDialog {
     if (this.form.invalid || this.saving()) return;
     this.saving.set(true);
     this.failure.set('');
+    this.levelFailure.set('');
     this.speakerChanges()
       .pipe(
         concatMap((speakers) => this.writeDetails(speakers)),
@@ -294,7 +306,10 @@ export class TrackEditDialog {
   }
 
   private fail(err: unknown): void {
-    this.failure.set(errorMessage(toUiErrorCode(err)));
+    const message = errorMessage(toUiErrorCode(err));
+    // A refused level is said at its field (KBC-106 review m6).
+    if (fieldOf(err) === 'level') this.levelFailure.set(message);
+    else this.failure.set(message);
   }
 
   private refused(err: unknown): void {
@@ -352,10 +367,13 @@ export class TrackEditDialog {
     speakers: Partial<TrackPatchRequest>,
   ): Observable<MediaItem | null> {
     const base = this.base();
-    const { title, summary } = this.form.getRawValue();
+    const { title, summary, level } = this.form.getRawValue();
     const written = summary.trim() || null;
+    const ownLevel = level || null;
     const body: TrackPatchRequest = {
       ...(title.trim() === base.title ? {} : { title: title.trim() }),
+      // "O da gravação" is null: back to the recording's level (KBC-106).
+      ...(ownLevel === base.level || !base.levels ? {} : { level: ownLevel }),
       ...(written === base.summary || this.chipsChanged()
         ? {}
         : { summary: written }),

@@ -98,6 +98,15 @@ export class LevelField {
     else this.retryFocusAsked = true;
   }
 
+  /** The focus on the chosen level (or the first), to choose again (KBC-106 review m5). */
+  focusChoice(): void {
+    const box = this.choicesBox()?.nativeElement;
+    (
+      box?.querySelector<HTMLElement>('input:checked, select') ??
+      box?.querySelector<HTMLElement>('input')
+    )?.focus();
+  }
+
   protected retry(): void {
     if (this.retrying()) return;
     this.refocus = true;

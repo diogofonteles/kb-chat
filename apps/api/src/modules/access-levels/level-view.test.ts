@@ -80,9 +80,23 @@ describe('The level rule (KBC-103 BR-3, BR-6, ADR 0036 §6)', () => {
     expect(master.visibleShare(catalogOf(['a']))).toBe(1);
   });
 
-  it('keeps track documents closed to members until KBC-106', () => {
+  it("judges a track document by the track's own level in media.db (KBC-106 BR-3)", () => {
     expect(viewAt(2, {}).allows('hermetismo', track('t'))).toBe(false);
     expect(viewAt('all', {}).allows('hermetismo', track('t'))).toBe(true);
+    const at = (rank: number, held: string | null | undefined) =>
+      scaledView({
+        scale: SCALE,
+        rank,
+        placementsOf: () => ({}),
+        mediaLevelOf: () => held,
+        memo: (_catalog, compute) => compute(),
+      }).allows('hermetismo', track('t'));
+    expect(at(1, 'ci')).toBe(true);
+    expect(at(1, 'cdc')).toBe(false);
+    expect(at(2, 'cdc')).toBe(true);
+    // No level, or no such media: closed to members.
+    expect(at(2, null)).toBe(false);
+    expect(at(2, undefined)).toBe(false);
   });
 
   it('counts the visible share of the texts, never under 5 %', () => {
@@ -229,9 +243,11 @@ describe('The content gate (KBC-103 BR-5, NFR-1)', () => {
       true,
     );
     expect(gate.viewFor(person(), 'alquimia')).toBe(OPEN_VIEW);
-    expect(gate.tracksClosedByLevels(person(), 'hermetismo')).toBe(true);
+    // KBC-106: tracks answer by their own level; the collection's lists stay masters'.
+    expect(gate.tracksClosedByLevels(person(), 'hermetismo')).toBe(false);
+    expect(gate.listsClosedByLevels(person(), 'hermetismo')).toBe(true);
     expect(
-      gate.tracksClosedByLevels(person({ role: 'master' }), 'hermetismo'),
+      gate.listsClosedByLevels(person({ role: 'master' }), 'hermetismo'),
     ).toBe(false);
   });
 

@@ -47,6 +47,8 @@ const view = (over: Partial<TrackEditView> = {}): TrackEditView => ({
   cut: 'none',
   locked: false,
   tracks: [{ id: ID, ordinal: 1, title: 'A faixa', startMs: 0, endMs: 60_000 }],
+  level: null,
+  levels: null,
   ...over,
 });
 
