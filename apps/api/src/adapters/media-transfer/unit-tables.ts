@@ -2,8 +2,9 @@
  * The tables of one unit of the import (ADR 0038 §2): a recording and its tracks. Each table
  * says how its rows reach the unit's media ids, in an order that keeps every foreign key
  * pointing at a row already written. `fingerprint: false` marks what production writes by
- * itself (the queue's history, the documents' publication state): it never makes a unit
- * look changed.
+ * itself (the queue's history, the documents' publication state, and what its janitor
+ * recalculates: waveform and silences): it never makes a unit look changed. `derived` rows
+ * go with a media production does not have yet and are never replaced after.
  */
 export type UnitKey =
   'media' | 'media_id' | 'transcript' | 'diarization' | 'run';
@@ -12,7 +13,15 @@ export interface UnitTable {
   readonly name: string;
   readonly key: UnitKey;
   readonly fingerprint: boolean;
+  readonly derived?: true;
 }
+
+const derived = (name: string): UnitTable => ({
+  name,
+  key: 'media_id',
+  fingerprint: false,
+  derived: true,
+});
 
 const content = (name: string, key: UnitKey): UnitTable => ({
   name,
@@ -32,9 +41,9 @@ export const UNIT_TABLES: readonly UnitTable[] = [
   content('media_word_voices', 'diarization'),
   content('media_voice_labels', 'diarization'),
   content('media_voice_refusals', 'diarization'),
-  content('media_waveforms', 'media_id'),
-  content('media_silence_maps', 'media_id'),
-  content('media_silences', 'media_id'),
+  derived('media_waveforms'),
+  derived('media_silence_maps'),
+  derived('media_silences'),
   content('media_edits', 'media_id'),
   content('media_proposal_runs', 'media_id'),
   content('media_draft_tracks', 'media_id'),
@@ -57,6 +66,27 @@ export const UNIT_TABLES: readonly UnitTable[] = [
 export const REWRITTEN_TABLES = UNIT_TABLES.filter(
   (table) => table.fingerprint && table.name !== 'media',
 );
+
+/**
+ * What never leaves the Mac (spec "Não vai", ADR 0032): emptied in the package's copy of the
+ * database before anything is hashed, children before their parents.
+ */
+export const STAYS_ON_THE_MAC: readonly string[] = [
+  'voice_profile_suggestions',
+  'voice_profile_sources',
+  'voice_profiles',
+  'voice_consent_evidence',
+  'voice_consents',
+  'transcribers',
+  'media_spend',
+  'media_settings',
+  'groq_chunks',
+  'kb_publish_jobs',
+  'media_document_removals',
+  'vault_syncs',
+  'media_level_seeds',
+  'media_imports',
+];
 
 /** Only the queue's history goes: production never runs what the Mac queued (BR-1). */
 export const TERMINAL_JOBS = `status IN ('done', 'failed', 'dead') AND kind <> 'voice-profile'`;

@@ -1,6 +1,13 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { unitFingerprint } from './fingerprint.js';
+import {
+  digestColumns,
+  digestColumnsText,
+  missingDigestColumns,
+  parseDigestColumns,
+  unitFingerprint,
+  type DigestColumns,
+} from './fingerprint.js';
 import type { ImportRun, SourceMedia, SourceUnit } from './import-run.js';
 import { sha256Of } from './media-package.js';
 import { hasCollection, rootOf } from './state-files.js';
@@ -13,7 +20,11 @@ export type UnitPlan =
       readonly fingerprint: string;
       readonly files: readonly string[];
     }
-  | { readonly kind: 'unchanged' }
+  | {
+      readonly kind: 'unchanged';
+      /** The ledger line was made on an older set of columns: redo it on today's (review M2). */
+      readonly rebaseline?: { readonly fingerprint: string };
+    }
   | { readonly kind: 'held'; readonly reason: string };
 
 const held = (reason: string): UnitPlan => ({ kind: 'held', reason });
@@ -104,18 +115,20 @@ async function checkFiles(
 interface Ledger {
   readonly source: string;
   readonly target: string;
+  readonly columns: DigestColumns;
 }
 
 function ledgerOf(run: ImportRun, rootId: string): Ledger | null {
   const row = run.db
     .prepare(
-      'SELECT source_digest, target_digest FROM main.media_imports WHERE root_id = ?',
+      'SELECT source_digest, target_digest, digest_columns FROM main.media_imports WHERE root_id = ?',
     )
     .get(rootId);
   return row
     ? {
         source: String(row['source_digest']),
         target: String(row['target_digest']),
+        columns: parseDigestColumns(String(row['digest_columns'])),
       }
     : null;
 }
@@ -130,17 +143,73 @@ export function targetIds(run: ImportRun, rootId: string): string[] {
     .map((row) => String(row['id']));
 }
 
+interface LedgerCheck {
+  readonly ledger: Ledger;
+  readonly fingerprint: string;
+  readonly fileHashes: readonly string[];
+  readonly files: readonly string[];
+}
+
+/** Columns of a ledger line's set that either side no longer has. */
+function goneColumns(run: ImportRun, columns: DigestColumns): string[] {
+  return [
+    ...missingDigestColumns(run.db, 'src', columns),
+    ...missingDigestColumns(run.db, 'main', columns),
+  ];
+}
+
+/**
+ * The digests to set against the ledger line, on the line's own columns (review M2): the
+ * source's and production's now, or why they cannot be redone (a column a migration dropped).
+ */
+function digestsNow(
+  run: ImportRun,
+  unit: SourceUnit,
+  at: LedgerCheck & { readonly there: readonly string[] },
+):
+  | { readonly same: boolean; readonly source: string; readonly target: string }
+  | { readonly gone: string } {
+  const { columns } = at.ledger;
+  const same =
+    digestColumnsText(columns) ===
+    digestColumnsText(digestColumns(run.db, 'main'));
+  const gone = same ? [] : goneColumns(run, columns);
+  if (gone.length > 0) return { gone: [...new Set(gone)].join(', ') };
+  const ids = unit.media.map((one) => one.id);
+  const source = same
+    ? at.fingerprint
+    : unitFingerprint(run.db, {
+        schema: 'src',
+        ids,
+        fileHashes: at.fileHashes,
+        columns,
+      });
+  const target = unitFingerprint(run.db, {
+    schema: 'main',
+    ids: at.there,
+    columns,
+  });
+  return { same, source, target };
+}
+
 /** What changed since the ledger's import, on either side. */
 function planAgainstLedger(
   run: ImportRun,
   unit: SourceUnit,
-  at: { ledger: Ledger; fingerprint: string; files: string[] },
+  at: LedgerCheck,
 ): UnitPlan {
-  if (at.fingerprint === at.ledger.source) return { kind: 'unchanged' };
   const there = targetIds(run, unit.rootId);
-  if (
-    unitFingerprint(run.db, { schema: 'main', ids: there }) !== at.ledger.target
-  )
+  const now = digestsNow(run, unit, { ...at, there });
+  if ('gone' in now)
+    return held(
+      `a última importação usou colunas que não existem mais: ${now.gone}`,
+    );
+  const productionSame = now.target === at.ledger.target;
+  if (now.source === at.ledger.source)
+    return now.same || !productionSame
+      ? { kind: 'unchanged' }
+      : { kind: 'unchanged', rebaseline: { fingerprint: at.fingerprint } };
+  if (!productionSame)
     return held('mudou na produção desde a última importação');
   const ids = new Set(unit.media.map((one) => one.id));
   if (there.some((id) => !ids.has(id)))
@@ -149,6 +218,19 @@ function planAgainstLedger(
   const scale = scaleMissing(run, added);
   if (scale) return held(`escala ausente na produção: ${scale}`);
   return { kind: 'replace', fingerprint: at.fingerprint, files: at.files };
+}
+
+/** A unit production has no ledger line for: new, or already there by other means. */
+function planFirstImport(
+  run: ImportRun,
+  unit: SourceUnit,
+  at: { readonly fingerprint: string; readonly files: readonly string[] },
+): UnitPlan {
+  if (targetIds(run, unit.rootId).length > 0)
+    return held('já existe na produção sem registro de importação');
+  const scale = scaleMissing(run, unit.media);
+  if (scale) return held(`escala ausente na produção: ${scale}`);
+  return { kind: 'insert', fingerprint: at.fingerprint, files: at.files };
 }
 
 /** Decides what to do with one unit; changes nothing. */
@@ -165,18 +247,19 @@ export async function planUnit(
     );
   const files = await checkFiles(run, unit);
   if (files.reason) return held(files.reason);
-  const fingerprint = unitFingerprint(
-    run.db,
-    { schema: 'src', ids: unit.media.map((one) => one.id) },
-    files.hashes,
-  );
-  const ledger = ledgerOf(run, unit.rootId);
+  const fingerprint = unitFingerprint(run.db, {
+    schema: 'src',
+    ids: unit.media.map((one) => one.id),
+    fileHashes: files.hashes,
+  });
   const paths = files.hashes.map((one) => one.slice(0, one.lastIndexOf(':')));
-  if (ledger)
-    return planAgainstLedger(run, unit, { ledger, fingerprint, files: paths });
-  if (targetIds(run, unit.rootId).length > 0)
-    return held('já existe na produção sem registro de importação');
-  const scale = scaleMissing(run, unit.media);
-  if (scale) return held(`escala ausente na produção: ${scale}`);
-  return { kind: 'insert', fingerprint, files: paths };
+  const ledger = ledgerOf(run, unit.rootId);
+  return ledger
+    ? planAgainstLedger(run, unit, {
+        ledger,
+        fingerprint,
+        fileHashes: files.hashes,
+        files: paths,
+      })
+    : planFirstImport(run, unit, { fingerprint, files: paths });
 }

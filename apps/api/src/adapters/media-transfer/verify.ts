@@ -1,14 +1,19 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { unitFingerprint } from './fingerprint.js';
+import {
+  missingDigestColumns,
+  parseDigestColumns,
+  unitFingerprint,
+} from './fingerprint.js';
 import type { VerifyReport } from './import-run.js';
+import { staleCopies } from './temp-files.js';
 
 /**
  * The check after an import (FR-9) and the rollout's "conferência": the database is sound,
  * every foreign key points somewhere, the search index has exactly the current transcripts,
- * every imported unit still has the rows the ledger recorded, and every file they name is on
- * disk (not looked at by a dry run, which copies nothing).
+ * every imported unit still has the rows the ledger recorded, every file they name is on
+ * disk and no copy was cut short (not looked at by a dry run, which copies nothing).
  */
 function countOf(db: DatabaseSync, sql: string): number {
   return Number(db.prepare(sql).get()?.['n']);
@@ -17,7 +22,7 @@ function countOf(db: DatabaseSync, sql: string): number {
 function ledgerMismatches(db: DatabaseSync): string[] {
   const rows = db
     .prepare(
-      'SELECT root_id, target_digest FROM main.media_imports ORDER BY root_id',
+      'SELECT root_id, target_digest, digest_columns FROM main.media_imports ORDER BY root_id',
     )
     .all();
   return rows
@@ -28,8 +33,11 @@ function ledgerMismatches(db: DatabaseSync): string[] {
         )
         .all(String(row['root_id']), String(row['root_id']))
         .map((one) => String(one['id']));
+      const columns = parseDigestColumns(String(row['digest_columns']));
+      if (missingDigestColumns(db, 'main', columns).length > 0) return true;
       return (
-        unitFingerprint(db, { schema: 'main', ids }) !== row['target_digest']
+        unitFingerprint(db, { schema: 'main', ids, columns }) !==
+        row['target_digest']
       );
     })
     .map((row) => String(row['root_id']));
@@ -43,7 +51,11 @@ function missingFiles(db: DatabaseSync, mediaDir: string): string[] {
        UNION SELECT raw_path FROM main.transcripts t JOIN main.media m ON m.id = t.media_id
          WHERE t.raw_path <> '' AND coalesce(m.parent_media_id, m.id) IN (SELECT root_id FROM main.media_imports)
        UNION SELECT raw_path FROM main.diarizations d JOIN main.media m ON m.id = d.media_id
-         WHERE d.raw_path <> '' AND coalesce(m.parent_media_id, m.id) IN (SELECT root_id FROM main.media_imports)`,
+         WHERE d.raw_path <> '' AND coalesce(m.parent_media_id, m.id) IN (SELECT root_id FROM main.media_imports)
+       UNION SELECT path FROM main.media_track_old_files o JOIN main.media m ON m.id = o.media_id
+         WHERE coalesce(m.parent_media_id, m.id) IN (SELECT root_id FROM main.media_imports)
+       UNION SELECT cut_path FROM main.media_tracks k JOIN main.media m ON m.id = k.media_id
+         WHERE k.cut_path IS NOT NULL AND coalesce(m.parent_media_id, m.id) IN (SELECT root_id FROM main.media_imports)`,
     )
     .all()
     .map((row) => String(row['path']))
@@ -83,6 +95,7 @@ export function verifyMedia(
     indexExpected,
     ledgerMismatches: mismatches,
     missingFiles: missing,
+    staleFiles: at.checkFiles ? staleCopies(at.mediaDir) : [],
     ok:
       integrity === 'ok' &&
       foreignKeys === 0 &&

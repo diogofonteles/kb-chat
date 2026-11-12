@@ -30,10 +30,12 @@ done
 echo "push-media: building the package in $OUT"
 (cd "$REPO/apps/api" && pnpm exec tsx --env-file-if-exists=../../.env src/media-transfer-main.ts export --out "$OUT")
 
-# The inbox: the SSH user writes it, the app's group (10001, the import container) reads it.
+# The inbox: the SSH user writes it, the app's group (10001, the import container) reads it,
+# nobody else (the package holds people's progress and e-mails). The setgid folder gives every
+# file the app's group; import-media.sh seals it again as root before importing.
 # shellcheck disable=SC2029 # $INBOX and $DRY are meant to expand here
-ssh "$HOST" "sudo install -d -o \"\$(id -un)\" -g 10001 -m 0750 $INBOX"
-rsync -a --delete --checksum --chmod=D0755,F0644 "$OUT/" "$HOST:$INBOX/package/"
+ssh "$HOST" "sudo install -d -o \"\$(id -un)\" -g 10001 -m 2750 $INBOX"
+rsync -a --no-group --delete --checksum --chmod=D2750,F0640 "$OUT/" "$HOST:$INBOX/package/"
 
 echo "push-media: importing on $HOST ${DRY:-(real run)}"
 # shellcheck disable=SC2029

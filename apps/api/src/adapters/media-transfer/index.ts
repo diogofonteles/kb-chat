@@ -8,4 +8,5 @@ export {
   verifyProduction,
   type ImportOptions,
 } from './media-import.js';
+export { ImportFailure } from './import-run.js';
 export type { ImportReport, VerifyReport, HeldUnit } from './import-run.js';

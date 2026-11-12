@@ -18,7 +18,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { openMediaDatabase } from '../sqlite/media-database.js';
 import { MEDIA_MIGRATIONS } from '../sqlite/media-migrations.js';
-import { isSafeMediaPath } from './unit-tables.js';
+import { isSafeMediaPath, STAYS_ON_THE_MAC } from './unit-tables.js';
 import { levelCodesOf, principalsOf, readAuthors } from './state-files.js';
 
 /**
@@ -39,7 +39,12 @@ const manifestSchema = z.strictObject({
   packageId: z.string().min(1),
   createdAt: z.string(),
   migrations: z.array(z.tuple([z.number(), z.string()])),
-  parts: z.record(z.string(), fileEntrySchema),
+  parts: z.strictObject({
+    'media.db': fileEntrySchema,
+    'principals.json': fileEntrySchema,
+    'authors.json': fileEntrySchema,
+    'levels.json': fileEntrySchema,
+  }),
   files: z.record(z.string(), fileEntrySchema),
 });
 export type Manifest = z.infer<typeof manifestSchema>;
@@ -69,6 +74,22 @@ const entryOf = async (
   bytes: (await stat(path)).size,
 });
 
+/**
+ * Empties, in the copy, what never leaves the Mac (QA F-1): voice consents and profiles,
+ * paired transcribers (token hashes), spend, settings, provider caches, the publication and
+ * sync queues; voice-profile jobs go with their profiles, and the leases of the jobs still
+ * under way (they travel only to hold their unit, BR-1). VACUUM then rewrites the file, so no
+ * freed page keeps a deleted row.
+ */
+function stripWhatStays(copy: DatabaseSync): void {
+  for (const table of STAYS_ON_THE_MAC) copy.exec(`DELETE FROM ${table}`);
+  copy.exec(`DELETE FROM jobs WHERE kind = 'voice-profile'`);
+  copy.exec(
+    'UPDATE jobs SET lease_id = NULL, lease_until = NULL, heartbeat_at = NULL',
+  );
+  copy.exec('VACUUM');
+}
+
 /** A snapshot from a read-only connection (WAL-safe), migrated in the copy, never in place. */
 function snapshotDatabase(
   mediaDir: string,
@@ -83,6 +104,7 @@ function snapshotDatabase(
   const copy = openMediaDatabase(target, MEDIA_MIGRATIONS);
   try {
     copy.exec('PRAGMA journal_mode = DELETE');
+    stripWhatStays(copy);
     return appliedMigrations(copy);
   } finally {
     copy.close();
@@ -199,14 +221,13 @@ export async function exportPackage(options: ExportOptions): Promise<Manifest> {
   const migrations = snapshotDatabase(options.mediaDir, dbPath);
   const files = await packFiles(options, dbPath);
   await writeParts(options);
-  const parts: Manifest['parts'] = {};
-  for (const name of [
-    'media.db',
-    'principals.json',
-    'authors.json',
-    'levels.json',
-  ])
-    parts[name] = await entryOf(join(options.out, name));
+  const part = (name: string) => entryOf(join(options.out, name));
+  const parts: Manifest['parts'] = {
+    'media.db': await part('media.db'),
+    'principals.json': await part('principals.json'),
+    'authors.json': await part('authors.json'),
+    'levels.json': await part('levels.json'),
+  };
   const manifest: Manifest = {
     format: PACKAGE_FORMAT,
     packageId: randomUUID(),

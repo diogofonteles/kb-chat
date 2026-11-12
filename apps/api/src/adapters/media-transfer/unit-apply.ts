@@ -3,7 +3,11 @@ import { copyFile, mkdir, rename, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { inTransaction } from '../sqlite/media-database.js';
 import { insertUnitRows, updateMediaRows } from './copy-rows.js';
-import { unitFingerprint } from './fingerprint.js';
+import {
+  digestColumns,
+  digestColumnsText,
+  unitFingerprint,
+} from './fingerprint.js';
 import type { ImportRun, SourceMedia, SourceUnit } from './import-run.js';
 import { ensureSharedRows } from './shared-rows.js';
 import { targetIds, type UnitPlan } from './unit-plan.js';
@@ -13,6 +17,7 @@ import {
   type UnitTable,
 } from './unit-tables.js';
 import { rootOf } from './state-files.js';
+import { TEMP_SUFFIX } from './temp-files.js';
 
 /**
  * Writes one planned unit (ADR 0038 §3): its files first, each by a temporary name and a
@@ -20,7 +25,10 @@ import { rootOf } from './state-files.js';
  */
 type Writing = Extract<UnitPlan, { kind: 'insert' | 'replace' }>;
 
-/** Copies the unit's files production lacks; the plan already refused a differing one. */
+/**
+ * Copies the unit's files production lacks; the plan already refused a differing one. A dry
+ * run lists them with the manifest's bytes and copies nothing (FR-8).
+ */
 export async function copyUnitFiles(
   run: ImportRun,
   plan: Writing,
@@ -31,13 +39,16 @@ export async function copyUnitFiles(
       run.report.files.present += 1;
       continue;
     }
-    if (run.dryRun) continue;
-    await mkdir(dirname(to), { recursive: true });
-    const temp = join(dirname(to), `.${Date.now()}.importing`);
-    await copyFile(run.pkg.fileOf(path), temp);
-    await rename(temp, to);
+    if (!run.dryRun) {
+      await mkdir(dirname(to), { recursive: true });
+      const temp = join(dirname(to), `.${Date.now()}${TEMP_SUFFIX}`);
+      await copyFile(run.pkg.fileOf(path), temp);
+      await rename(temp, to);
+    }
     run.report.files.copied.push(path);
-    run.report.files.bytes += (await stat(to)).size;
+    run.report.files.bytes += run.dryRun
+      ? (run.pkg.manifest.files[path]?.bytes ?? 0)
+      : (await stat(to)).size;
   }
 }
 
@@ -73,7 +84,8 @@ function indexTranscripts(run: ImportRun, ids: string): void {
     .run({ ids });
 }
 
-function recordLedger(
+/** The unit's ledger line, both digests on today's set of columns (kept with them). */
+export function recordLedger(
   run: ImportRun,
   unit: SourceUnit,
   fingerprint: string,
@@ -84,16 +96,17 @@ function recordLedger(
   });
   run.db
     .prepare(
-      `INSERT INTO main.media_imports (root_id, source_digest, target_digest, package_id, imported_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO main.media_imports (root_id, source_digest, target_digest, digest_columns, package_id, imported_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (root_id) DO UPDATE SET source_digest = excluded.source_digest,
-         target_digest = excluded.target_digest, package_id = excluded.package_id,
-         imported_at = excluded.imported_at`,
+         target_digest = excluded.target_digest, digest_columns = excluded.digest_columns,
+         package_id = excluded.package_id, imported_at = excluded.imported_at`,
     )
     .run(
       unit.rootId,
       fingerprint,
       target,
+      digestColumnsText(digestColumns(run.db, 'main')),
       run.pkg.manifest.packageId,
       run.now.toISOString(),
     );
@@ -150,6 +163,36 @@ function unindexTranscripts(run: ImportRun, ids: string): void {
     .run({ ids });
 }
 
+/** The library's "about" index of the unit's tracks, from the summaries they have now. */
+function refreshAbout(run: ImportRun, ids: string): void {
+  run.db
+    .prepare(
+      `UPDATE main.track_about_fts SET summary = coalesce(
+         (SELECT s.summary FROM main.media_track_subjects s WHERE s.media_id = track_about_fts.media_id), '')
+       WHERE media_id IN (SELECT value FROM json_each(:ids))`,
+    )
+    .run({ ids });
+}
+
+/** A replacement's insert of one table: derived rows only for media production lacks. */
+function replaceTable(
+  run: ImportRun,
+  table: UnitTable,
+  at: { readonly ids: string; readonly there: string },
+): void {
+  if (table.derived)
+    insertUnitRows(run.db, table, {
+      ids: at.ids,
+      extra: 'x.media_id NOT IN (SELECT value FROM json_each(:there))',
+      params: { there: at.there },
+    });
+  else
+    insertUnitRows(run.db, table, {
+      ids: at.ids,
+      verb: table.fingerprint ? 'INSERT' : 'INSERT OR IGNORE',
+    });
+}
+
 function replaceRows(run: ImportRun, unit: SourceUnit): void {
   const there = new Set(targetIds(run, unit.rootId));
   fillLevels(
@@ -167,12 +210,11 @@ function replaceRows(run: ImportRun, unit: SourceUnit): void {
       ids: unit.ids,
       extra: 'x.id NOT IN (SELECT id FROM main.media)',
     });
+  const known = JSON.stringify([...there]);
   for (const table of rest)
-    insertUnitRows(run.db, table, {
-      ids: unit.ids,
-      verb: table.fingerprint ? 'INSERT' : 'INSERT OR IGNORE',
-    });
+    replaceTable(run, table, { ids: unit.ids, there: known });
   refreshDocuments(run, unit.ids);
+  refreshAbout(run, unit.ids);
 }
 
 /** Writes the unit's rows, its index and its ledger line in one transaction. */

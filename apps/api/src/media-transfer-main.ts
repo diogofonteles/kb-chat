@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import { z } from 'zod';
 import {
   exportPackage,
+  ImportFailure,
   importPackage,
   verifyProduction,
   type ImportReport,
@@ -69,6 +70,9 @@ function verifyLines(verify: VerifyReport): string[] {
         `  edited in production since its import (held if the Mac edits it too): ${id}`,
     ),
     ...verify.missingFiles.map((path) => `  missing file: ${path}`),
+    ...verify.staleFiles.map(
+      (path) => `  copy cut short (the next real import removes it): ${path}`,
+    ),
   ];
 }
 
@@ -147,6 +151,9 @@ main(process.argv.slice(2)).then(
     process.exitCode = code;
   },
   (err: unknown) => {
+    // The report of what the run did before the unit that failed (QA F-4).
+    if (err instanceof ImportFailure)
+      process.stdout.write(`${lines(err.report).join('\n')}\n`);
     const usage = err instanceof UsageError;
     process.stderr.write(
       `${usage ? USAGE : err instanceof Error ? err.message : String(err)}\n`,

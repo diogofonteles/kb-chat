@@ -41,7 +41,13 @@ const RULES: Readonly<Record<string, Readonly<Record<string, ColumnRule>>>> = {
   media_preparations: { principal: person },
   media_subject_runs: { principal: person },
   media_track_subjects: { updated_by: person },
-  media_subject_links: { decided_by: person, subject_id: subject },
+  // A free subject's key names its id ('free:<id>'): it follows the id production keeps.
+  media_subject_links: {
+    decided_by: person,
+    subject_id: subject,
+    subject_key: (ref) =>
+      `CASE WHEN x.kind = 'free' THEN 'free:' || ${subject('x.subject_id')} ELSE ${ref} END`,
+  },
   media_track_changes: { principal: person },
   media_voice_refusals: { refused_by: person },
   media_proposal_runs: { principal: person },
@@ -93,6 +99,7 @@ export function insertUnitRows(
     readonly ids: string;
     readonly extra?: string;
     readonly verb?: string;
+    readonly params?: Readonly<Record<string, string>>;
   },
 ): number {
   const columns = columnsOf(db, 'main', table.name);
@@ -104,7 +111,7 @@ export function insertUnitRows(
       `${options.verb ?? 'INSERT'} INTO main.${table.name} (${quoted(columns)})
        SELECT ${selectedColumns(db, table.name)} FROM src.${table.name} x WHERE ${where}`,
     )
-    .run({ ids: options.ids });
+    .run({ ids: options.ids, ...options.params });
   return Number(result.changes);
 }
 

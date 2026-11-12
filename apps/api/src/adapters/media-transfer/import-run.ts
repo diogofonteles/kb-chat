@@ -24,6 +24,8 @@ export interface VerifyReport {
   /** Units edited in production since their import: not a failure, held if the Mac edits them too. */
   readonly ledgerMismatches: readonly string[];
   readonly missingFiles: readonly string[];
+  /** Copies a crash cut short (`.<ms>.importing`): not a failure, the next real run clears them. */
+  readonly staleFiles: readonly string[];
   readonly ok: boolean;
 }
 
@@ -92,4 +94,16 @@ export function emptyReport(packageId: string, dryRun: boolean): ImportReport {
     switchesAdded: 0,
     verify: null,
   };
+}
+
+/** A unit that could not be written (FR-9): which one, why, and what the run did before it. */
+export class ImportFailure extends Error {
+  constructor(
+    message: string,
+    readonly report: ImportReport,
+    options?: { readonly cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = 'ImportFailure';
+  }
 }

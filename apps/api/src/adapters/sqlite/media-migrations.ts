@@ -1495,6 +1495,8 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         root_id TEXT PRIMARY KEY,
         source_digest TEXT NOT NULL CHECK (length(source_digest) = 64),
         target_digest TEXT NOT NULL CHECK (length(target_digest) = 64),
+        -- The tables and columns both digests cover (JSON), so a later column compares on the same set.
+        digest_columns TEXT NOT NULL,
         package_id TEXT NOT NULL,
         imported_at TEXT NOT NULL
       ) STRICT, WITHOUT ROWID;

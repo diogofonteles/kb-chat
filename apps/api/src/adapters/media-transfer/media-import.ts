@@ -7,8 +7,10 @@ import { inTransaction, openMediaDatabase } from '../sqlite/media-database.js';
 import { MEDIA_MIGRATIONS } from '../sqlite/media-migrations.js';
 import {
   emptyReport,
+  ImportFailure,
   type ImportReport,
   type ImportRun,
+  type SourceUnit,
 } from './import-run.js';
 import {
   appliedMigrations,
@@ -30,7 +32,8 @@ import {
   scalesOf,
   writeAuthors,
 } from './state-files.js';
-import { copyUnitFiles, writeUnit } from './unit-apply.js';
+import { removeStaleCopies } from './temp-files.js';
+import { copyUnitFiles, recordLedger, writeUnit } from './unit-apply.js';
 import { planUnit, sourceUnits } from './unit-plan.js';
 import { verifyMedia } from './verify.js';
 
@@ -59,15 +62,44 @@ function targetPath(options: ImportOptions, work: string): string {
   return copy;
 }
 
-/** Both sides must run the same migrations (BR-9). */
-function assertSameSchema(db: DatabaseSync): void {
-  const there = JSON.stringify(appliedMigrations(db, 'main'));
-  const here = JSON.stringify(appliedMigrations(db, 'src'));
-  if (there === here) return;
-  const last = (list: string): unknown =>
-    (JSON.parse(list) as unknown[]).at(-1);
+function refuseDifferent(
+  here: readonly unknown[],
+  there: readonly unknown[],
+  side: string,
+): void {
+  if (JSON.stringify(here) === JSON.stringify(there)) return;
   throw new Error(
-    `the package's media migrations differ from production's (package ${JSON.stringify(last(here))}, production ${JSON.stringify(last(there))}): export and import with the same release`,
+    `the package's media migrations differ from ${side} (package ${JSON.stringify(here.at(-1))}, ${side} ${JSON.stringify(there.at(-1))}): export and import with the same release`,
+  );
+}
+
+/**
+ * Both sides must run the same migrations (BR-9), looked at before production's database is
+ * opened, since opening it with this code would run the migrations it lacks (review nit).
+ */
+function refuseOtherSchema(pkg: OpenedPackage, options: ImportOptions): void {
+  const code = MEDIA_MIGRATIONS.map((one) => [one.version, one.name]);
+  refuseDifferent(pkg.manifest.migrations, code, "this release's");
+  const live = join(options.mediaDir, 'media.db');
+  if (!existsSync(live)) return;
+  const db = new DatabaseSync(live, { readOnly: true });
+  try {
+    refuseDifferent(
+      pkg.manifest.migrations,
+      appliedMigrations(db),
+      'production',
+    );
+  } finally {
+    db.close();
+  }
+}
+
+/** The same check on the attached copies, the ones the import reads. */
+function assertSameSchema(db: DatabaseSync): void {
+  refuseDifferent(
+    appliedMigrations(db, 'src'),
+    appliedMigrations(db, 'main'),
+    'production',
   );
 }
 
@@ -97,6 +129,7 @@ function startRun(
   options: ImportOptions,
 ): ImportRun {
   createMaps(db);
+  db.exec('CREATE TEMP TABLE open_media (id TEXT PRIMARY KEY)');
   const run: ImportRun = {
     db,
     pkg,
@@ -111,31 +144,68 @@ function startRun(
   return run;
 }
 
+/** A unit production has as the Mac does after this run: its people's rows may go (BR-3). */
+function openUnit(run: ImportRun, unit: SourceUnit, roots: Set<string>): void {
+  const insert = run.db.prepare(
+    'INSERT OR IGNORE INTO temp.open_media (id) VALUES (?)',
+  );
+  for (const media of unit.media) {
+    insert.run(media.id);
+    roots.add(rootOf(run.collections, media.topic));
+  }
+}
+
+async function importUnit(
+  run: ImportRun,
+  unit: SourceUnit,
+  roots: Set<string>,
+): Promise<void> {
+  const plan = await planUnit(run, unit);
+  if (plan.kind === 'held') {
+    run.report.held.push({
+      rootId: unit.rootId,
+      title: unit.title,
+      reason: plan.reason,
+    });
+    return;
+  }
+  if (plan.kind === 'unchanged') {
+    const again = plan.rebaseline;
+    if (again)
+      inTransaction(run.db, () => recordLedger(run, unit, again.fingerprint));
+    run.report.unchanged.push(unit.rootId);
+  } else {
+    await copyUnitFiles(run, plan);
+    writeUnit(run, unit, plan);
+  }
+  openUnit(run, unit, roots);
+}
+
+/**
+ * Every unit in turn. A unit that fails stops the run with its name and the report of what
+ * the run did before it (QA F-4); the units already written stay whole.
+ */
 async function importUnits(run: ImportRun): Promise<Set<string>> {
   const roots = new Set<string>();
   for (const unit of sourceUnits(run)) {
-    const plan = await planUnit(run, unit);
-    if (plan.kind === 'held') {
-      run.report.held.push({
-        rootId: unit.rootId,
-        title: unit.title,
-        reason: plan.reason,
-      });
-      continue;
+    try {
+      await importUnit(run, unit, roots);
+    } catch (err) {
+      throw new ImportFailure(
+        `unit ${unit.rootId} "${unit.title}" failed, nothing of it changed: ${err instanceof Error ? err.message : String(err)}`,
+        run.report,
+        { cause: err },
+      );
     }
-    if (plan.kind === 'unchanged') {
-      run.report.unchanged.push(unit.rootId);
-      continue;
-    }
-    await copyUnitFiles(run, plan);
-    writeUnit(run, unit, plan);
-    for (const media of unit.media)
-      roots.add(rootOf(run.collections, media.topic));
   }
   return roots;
 }
 
-/** The authors the imported media name, appended to production's (BR-7). */
+/**
+ * The authors of every collection production now has units of, appended to production's
+ * (BR-7): the unchanged ones too, so the authors of units an earlier run wrote before it
+ * failed still arrive; appending is idempotent.
+ */
 async function mergeAuthorFiles(
   run: ImportRun,
   options: ImportOptions,
@@ -180,6 +250,8 @@ export async function importPackage(
   options: ImportOptions,
 ): Promise<ImportReport> {
   const pkg = await openPackage(options.packageDir);
+  refuseOtherSchema(pkg, options);
+  if (!options.dryRun) removeStaleCopies(options.mediaDir);
   const work = await mkdtemp(join(tmpdir(), 'kb-chat-media-import-'));
   try {
     const source = join(work, 'source.db');

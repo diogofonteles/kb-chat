@@ -88,14 +88,18 @@ export function ensureSharedRows(db: DatabaseSync, unit: SourceUnit): void {
   ensureShared(db, SUBJECTS, unit.ids);
 }
 
-/** People's own rows, only for people production has and media it has (BR-5). */
+/**
+ * People's own rows, only for people production has (BR-5) and media of units that are open
+ * after this run, written now or unchanged (`temp.open_media`): a held unit gets none (BR-3).
+ */
+const OPEN = 'SELECT id FROM temp.open_media';
 const PERSONAL: Readonly<Record<string, string>> = {
   media_preferences: '1',
   media_library_state: '1',
-  media_progress: 'x.media_id IN (SELECT id FROM main.media)',
-  media_bookmarks: 'x.media_id IN (SELECT id FROM main.media)',
-  media_moved_bookmarks: `x.media_id IN (SELECT id FROM main.media)
-    AND x.recording_id IN (SELECT id FROM main.media)
+  media_progress: `x.media_id IN (${OPEN})`,
+  media_bookmarks: `x.media_id IN (${OPEN})`,
+  media_moved_bookmarks: `x.media_id IN (${OPEN})
+    AND x.recording_id IN (${OPEN})
     AND x.bookmark_id IN (SELECT id FROM main.media_bookmarks)`,
 };
 
