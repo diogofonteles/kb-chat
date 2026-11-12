@@ -425,6 +425,7 @@
               [playing]="playingKind()"
               [playingElsewhere]="playingElsewhere()"
               [levels]="trackLevels()"
+              [levelError]="draft.levelError()"
               (levelChange)="changeLevel($event)"
               (stopPlaying)="audition.stop()"
               (listenKey)="listenByKey($event)"

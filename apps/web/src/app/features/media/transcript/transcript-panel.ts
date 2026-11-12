@@ -68,6 +68,8 @@ interface SegmentView {
   readonly text: string;
   /** Inside a track above the person's level (KBC-106): no text, only its name. */
   readonly restricted: boolean;
+  /** A restricted segment right after another: the part is one line (review m2). */
+  readonly folded: boolean;
   /** Who speaks, on the first segment of each change of speaker (KBC-065 FR-4); else null. */
   readonly speaker: (SpeakerShown & { readonly voice: number }) | null;
 }
@@ -275,6 +277,8 @@ export class TranscriptPanel {
         ? $localize`:@@transcript.restricted:Trecho restrito`
         : segment.text,
       restricted: segment.restricted === true,
+      folded:
+        segment.restricted === true && segments[index - 1]?.restricted === true,
       speaker: changes.get(index) ?? null,
     }));
   });
@@ -744,7 +748,17 @@ export class TranscriptPanel {
     if (key === 'End') return last;
     const step = STEPS[key];
     if (step === undefined) return null;
-    return Math.min(last, Math.max(0, from + step));
+    let target = Math.min(last, Math.max(0, from + step));
+    // A restricted part is one line: the keys pass over the segments folded into it.
+    const segments = this.segments();
+    while (
+      target > 0 &&
+      target < last &&
+      segments[target]?.restricted &&
+      segments[target - 1]?.restricted
+    )
+      target += step;
+    return target;
   }
 
   /**

@@ -127,6 +127,8 @@ export class TrackRowList {
   readonly playingElsewhere = input(false);
   /** What "Nível" offers (KBC-106); null: the collection has no levels. */
   readonly levels = input<TrackLevelChoices>(null);
+  /** What the server said of the selected track's level (review m6). */
+  readonly levelError = input<string | null>(null);
 
   readonly selectTrack = output<string>();
   readonly titleChange = output<{ id: string; title: string }>();
@@ -169,6 +171,7 @@ export class TrackRowList {
       answerer: personValue(track.answererVoice, track.answererSpeakerId),
       proposal: track.source === 'ai' && !track.edited,
       levelCode: this.levelCodeOf(track.level),
+      levelOutside: this.outsideOf(track.level),
       actions: track.id === selectedId ? this.actionsOf(track) : [],
       warnings: problems
         .filter((problem) => problem.trackId === track.id)
@@ -278,6 +281,19 @@ export class TrackRowList {
       this.levels()?.choices.find((one) => one.id === level)?.code ??
       level.toUpperCase()
     );
+  }
+
+  /**
+   * A level the draft holds that is not among the choices (one deleted, or the recording's
+   * own reached by it): shown as itself, never as "O da gravação" (review m6).
+   */
+  private outsideOf(
+    level: string | null | undefined,
+  ): { id: string; code: string } | null {
+    const levels = this.levels();
+    if (!level || !levels || level === levels.recording.id) return null;
+    if (levels.choices.some((one) => one.id === level)) return null;
+    return { id: level, code: level.toUpperCase() };
   }
 
   protected chooseLevel(event: Event, id: string): void {

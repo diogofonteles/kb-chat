@@ -90,6 +90,7 @@
             [class.current-hit]="segment.index === currentHitSegment()"
             [class.cited]="cited().has(segment.index)"
             [class.restricted]="segment.restricted"
+            [hidden]="segment.folded"
             [attr.data-start-ms]="segment.startMs"
             [attr.data-index]="segment.index"
           >

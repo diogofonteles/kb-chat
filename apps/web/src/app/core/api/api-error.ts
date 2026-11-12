@@ -44,6 +44,17 @@ export function refusedFieldOf(err: unknown): string | null {
     : null;
 }
 
+/** The field a refusal names, whatever its status (a level refused with 403, KBC-106). */
+export function fieldOf(err: unknown): string | null {
+  const details = errorDetailsOf(err);
+  return typeof details === 'object' &&
+    details !== null &&
+    'field' in details &&
+    typeof details.field === 'string'
+    ? details.field
+    : null;
+}
+
 /** The `details` of the API's error envelope, null when the error has none. */
 export function errorDetailsOf(err: unknown): unknown {
   if (!(err instanceof HttpErrorResponse)) return null;
@@ -170,6 +181,8 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.levelAboveYours:Este nível está acima do seu. Escolha o seu ou um abaixo.`,
   LEVEL_BELOW_RECORDING: () =>
     $localize`:@@error.levelBelowRecording:A faixa não pode ficar abaixo do nível da gravação.`,
+  EDIT_ABOVE_YOUR_LEVEL: () =>
+    $localize`:@@error.editAboveYourLevel:Esta gravação tem faixas acima do seu nível. Só quem tem todos os níveis dela pode editá-la.`,
   LEVELS_CHANGED: () =>
     $localize`:@@error.levelsChanged:A escala mudou. Confira de novo.`,
   INTERNAL: () =>

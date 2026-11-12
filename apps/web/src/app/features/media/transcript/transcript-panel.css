@@ -237,3 +237,8 @@
   font-style: italic;
   color: var(--color-text-muted);
 }
+
+/* A restricted segment folded into the line of its part (KBC-106 review m2). */
+.segment[hidden] {
+  display: none;
+}

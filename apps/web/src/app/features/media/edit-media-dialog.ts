@@ -251,14 +251,18 @@ export class EditMediaDialog implements OnInit {
     return asks;
   }
 
-  /** "Salvar assim mesmo": the tracks go up with the recording (KBC-106 BR-1). */
+  /** "Salvar e subir as faixas": the tracks go up with the recording (KBC-106 BR-1). */
   protected confirmRaise(): void {
     this.raiseConfirmedFor.set(this.level());
     this.save();
   }
 
+  /** "Escolher outro nível": back to the field, nothing saved (review m5). */
   protected cancelRaise(): void {
     this.confirmingRaise.set(false);
+    afterNextRender(() => this.levelField()?.focusChoice(), {
+      injector: this.injector,
+    });
   }
 
   protected close(): void {

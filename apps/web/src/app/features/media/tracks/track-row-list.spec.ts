@@ -265,6 +265,28 @@ describe('TrackRowList (KBC-066)', () => {
     expect(screen.getByText('Nível: CDC')).toBeTruthy();
   });
 
+  it('shows a level out of its choices as itself, and the error the server gave on the field (review m6)', async () => {
+    const levels = {
+      recording: { id: 'ci', code: 'CI' },
+      choices: [{ id: 'cdc', code: 'CDC' }],
+    };
+    await setup(IDS.one, {
+      tracks: [{ ...ONE, track: { ...ONE.track, level: 'qm' } }, TWO],
+      levels,
+      levelError: 'Este nível está acima do seu. Escolha o seu ou um abaixo.',
+    });
+    const field = screen.getByRole<HTMLSelectElement>('combobox', {
+      name: 'Nível',
+    });
+    expect(field.value).toBe('qm');
+    expect(field.selectedOptions[0]?.text.trim()).toBe('QM');
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    const described = field.getAttribute('aria-describedby') ?? '';
+    expect(document.getElementById(described)?.textContent).toContain(
+      'Este nível está acima do seu.',
+    );
+  });
+
   it('has no "Nível" without levels', async () => {
     await setup(IDS.one);
     expect(screen.queryByRole('combobox', { name: 'Nível' })).toBeNull();

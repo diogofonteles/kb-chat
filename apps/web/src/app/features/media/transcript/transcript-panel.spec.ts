@@ -152,6 +152,26 @@ const current = () =>
   document.querySelector('[aria-current="true"]')?.closest('li');
 
 describe('TranscriptPanel (KBC-038, T15)', () => {
+  it('KBC-106: restricted segments in a row are one line "Trecho restrito", with no time of each', async () => {
+    await renderPanel(
+      transcriptOf({
+        segments: [
+          { startMs: 0, endMs: 4_000, text: 'Aberto antes.' },
+          { startMs: 5_000, endMs: 40_000, text: '', restricted: true },
+          { startMs: 5_000, endMs: 40_000, text: '', restricted: true },
+          { startMs: 41_000, endMs: 45_000, text: 'Aberto depois.' },
+        ],
+      }),
+    );
+    const list = screen.getByRole('list', { name: 'Trechos da transcrição' });
+    const shown = [...list.querySelectorAll('li:not([hidden])')];
+    expect(shown).toHaveLength(3);
+    expect(
+      shown.filter((one) => one.textContent?.includes('Trecho restrito')),
+    ).toHaveLength(1);
+    expect(screen.getByText('Aberto depois.')).toBeTruthy();
+  });
+
   it('marks the segment being heard, and nothing before the first starts', async () => {
     const { media, view } = await renderPanel(
       transcriptOf({

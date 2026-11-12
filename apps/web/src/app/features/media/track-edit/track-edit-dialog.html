@@ -79,11 +79,19 @@
         <select
           id="track-level"
           formControlName="level"
-          aria-describedby="track-level-help"
+          [attr.aria-invalid]="levelFailure() ? 'true' : null"
+          [attr.aria-describedby]="
+            levelFailure()
+              ? 'track-level-help track-level-error'
+              : 'track-level-help'
+          "
         >
           <option value="" i18n="@@tracks.level.recording">
             O da gravação ({{ choices.recording.code }})
           </option>
+          @if (levelOutside(); as outside) {
+            <option [value]="outside.id">{{ outside.code }}</option>
+          }
           @for (choice of choices.choices; track choice.id) {
             <option [value]="choice.id">{{ choice.code }}</option>
           }
@@ -92,6 +100,11 @@
           >Quem não tem este nível ouve a gravação sem o trecho desta
           faixa.</span
         >
+        @if (levelFailure(); as text) {
+          <span id="track-level-error" class="error"
+            ><span aria-hidden="true">⚠</span> {{ text }}</span
+          >
+        }
       </div>
     }
 

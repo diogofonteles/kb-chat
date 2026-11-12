@@ -326,8 +326,15 @@ describe('EditMediaDialog (KBC-050)', () => {
       });
       expect(confirm).toBeTruthy();
       http.expectNone(URL);
+      // One "Cancelar" only: the one of the dialog (review m5).
+      expect(screen.getAllByRole('button', { name: 'Cancelar' })).toHaveLength(
+        1,
+      );
+      expect(
+        screen.getByRole('button', { name: 'Escolher outro nível' }),
+      ).toBeTruthy();
       fireEvent.click(
-        screen.getByRole('button', { name: 'Salvar assim mesmo' }),
+        screen.getByRole('button', { name: 'Salvar e subir as faixas' }),
       );
       expect(http.expectOne(URL).request.body).toEqual({ level: 'cdc' });
     });

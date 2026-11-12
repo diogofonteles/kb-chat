@@ -106,6 +106,36 @@ describe('TrackEditDialog (KBC-073)', () => {
     request.flush(null, { status: 500, statusText: 'x' });
   });
 
+  it('KBC-106 review m6: a refused level is said at its field', async () => {
+    const levels = {
+      recording: { id: 'ci', code: 'CI' },
+      choices: [{ id: 'cdc', code: 'CDC' }],
+    };
+    const { fixture, root } = await open(view({ levels }));
+    const select = root.querySelector<HTMLSelectElement>('#track-level');
+    if (!select) throw new Error('no level field');
+    select.value = 'cdc';
+    select.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    root.querySelector('form')?.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+    http.expectOne(`/api/v1/media/${ID}`).flush(
+      {
+        error: {
+          code: 'LEVEL_ABOVE_YOURS',
+          message: 'x',
+          details: { field: 'level' },
+        },
+      },
+      { status: 403, statusText: 'Forbidden' },
+    );
+    await fixture.whenStable();
+    expect(select.getAttribute('aria-invalid')).toBe('true');
+    expect(root.querySelector('#track-level-error')?.textContent).toContain(
+      'Este nível está acima do seu.',
+    );
+  });
+
   it('KBC-106: no "Nível" in a collection without levels', async () => {
     const { root } = await open();
     expect(root.querySelector('#track-level')).toBeNull();

@@ -109,14 +109,27 @@
           @if (levels(); as choices) {
             <label class="field">
               <span i18n="@@tracks.field.level">Nível</span>
-              <select (change)="chooseLevel($event, row.track.id)">
+              <select
+                [attr.aria-invalid]="levelError() ? 'true' : null"
+                [attr.aria-describedby]="
+                  levelError() ? 'track-level-error' : null
+                "
+                (change)="chooseLevel($event, row.track.id)"
+              >
                 <option
                   value=""
-                  [selected]="!row.track.level"
+                  [selected]="
+                    !row.track.level || row.track.level === choices.recording.id
+                  "
                   i18n="@@tracks.level.recording"
                 >
                   O da gravação ({{ choices.recording.code }})
                 </option>
+                @if (row.levelOutside; as outside) {
+                  <option [value]="outside.id" selected>
+                    {{ outside.code }}
+                  </option>
+                }
                 @for (choice of choices.choices; track choice.id) {
                   <option
                     [value]="choice.id"
@@ -127,6 +140,11 @@
                 }
               </select>
             </label>
+            @if (levelError(); as error) {
+              <span id="track-level-error" class="field-error"
+                ><span aria-hidden="true">⚠ </span>{{ error }}</span
+              >
+            }
           }
           <div class="actions">
             @if (playingElsewhere()) {
