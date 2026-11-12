@@ -163,6 +163,7 @@ Pedido do dono: receber um áudio e editá-lo, dividindo em faixas de pergunta e
 | [KBC-092](KBC-092-track-text-and-spoken-word-highlight.md) | Texto da faixa e destaque da palavra falada na tela de preparo (passos 2 e 3), com a transcrição completa a um toque | phase-2-editing | in-review | KBC-045, KBC-066, KBC-072, KBC-090 |
 | [KBC-093](KBC-093-correct-transcript-words.md) | Corrigir palavras da transcrição na tela de preparo: clicar na palavra leva o áudio a ela e abre a correção, corrigir todas as ocorrências com prévia, histórico e desfazer (também em grupo), busca, legendas e faixas na mesma hora, reaplicar ao transcrever de novo (`media-correct`) | phase-2-editing | in-review | KBC-092, KBC-045, KBC-068, KBC-073 |
 | [KBC-113](KBC-113-learn-from-corrections.md) | Aprender com as correções: cada palavra corrigida vira regra com o seu contexto, aplicada sozinha na próxima transcrição (marcada, com desfazer), e os nomes entram na lista de termos; o master vê e desliga (T21). Decisão do dono de 2026-11-09, substitui as sugestões | phase-2-editing | in-progress | KBC-093, KBC-040 |
+| [KBC-115](KBC-115-select-many-words-to-correct.md) | Selecionar várias palavras para corrigir no Texto da faixa e na transcrição completa: arrastar (mouse e toque), Shift+clique e Shift+setas; a correção abre com todas e "Corrigir todas" procura a sequência inteira (pedido do dono de 2026-11-10) | phase-2-editing | in-progress | KBC-093, KBC-092, KBC-106 |
 
 Todos prontos depois das decisões do dono de 2026-11-03 (nota em "Decisões de escopo").
 
