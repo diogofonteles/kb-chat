@@ -270,3 +270,36 @@ test('AC-1, FR-5: the editor gives track 2 its own level on its row, offered fro
   await shoot(page, 'track-levels-row');
   await owner.dispose();
 });
+
+test('KBC-106 decision: an editor below track 2 is told why instead of getting the editor', async ({
+  browser,
+  viewport,
+}) => {
+  const owner = await ownerApi();
+  const media = await recording(owner);
+  await draft(owner, media.id, TRACKS);
+  await approved(owner, media.id);
+  const email = uniqueEmail('editor-abaixo');
+  const id = await invite(owner, email, {
+    topics: [media.topic],
+    features: ['search', 'media', 'media-tracks', 'media-edit'],
+  });
+  const placed = await owner.patch(`/api/v1/people/${id}`, {
+    data: { levels: { [media.topic]: 'ci' } },
+    headers: CSRF,
+  });
+  expect(placed.status(), await placed.text()).toBe(200);
+  await owner.dispose();
+  const page = await pageAs(browser, email, viewport);
+  await page.goto(`/midia/${media.id}/faixas`);
+  await expect(
+    page.getByRole('alert').filter({
+      hasText:
+        'Esta gravação tem faixas acima do seu nível. Só quem tem todos os níveis dela pode editá-la.',
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Faixas' })).toHaveCount(0);
+  await expect(page.getByText('Pergunta sensível')).toHaveCount(0);
+  await shoot(page, 'track-levels-editor-refused');
+  await page.context().close();
+});
