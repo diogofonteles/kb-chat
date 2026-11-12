@@ -269,6 +269,8 @@ export class MediaService {
   private readonly now: () => Date;
   /** What is writing an item's upload now: a second write is refused, a HEAD waits. */
   private readonly receiving = new Map<string, Promise<unknown>>();
+  /** An item's whole upload being checked and moved to the queue (KBC-118). */
+  private readonly finishing = new Map<string, Promise<boolean>>();
 
   constructor(private readonly deps: MediaServiceDeps) {
     this.now = deps.now ?? (() => new Date());
@@ -424,6 +426,16 @@ export class MediaService {
     // The answer to the last part was lost: for the client, that is a finished upload.
     if (media.status !== 'uploading') return { offset: length, length };
     const offset = await this.deps.files.uploadOffset(mediaId);
+    // A finish may have moved the file away while it was read (KBC-118): once it ends,
+    // the item says what came of it.
+    const finishing = this.finishing.get(mediaId);
+    if (
+      finishing ||
+      this.deps.store.getMedia(mediaId)?.status !== 'uploading'
+    ) {
+      await finishing?.catch(() => undefined);
+      return this.uploadStatus(actor, mediaId);
+    }
     if (offset < length) return { offset, length };
     const running = this.receiving.get(mediaId);
     if (!running) {
@@ -499,6 +511,16 @@ export class MediaService {
    * (false): they would never be found again.
    */
   private async finish(media: MediaRecord): Promise<boolean> {
+    const running = this.finishFile(media);
+    this.finishing.set(media.id, running);
+    try {
+      return await running;
+    } finally {
+      this.finishing.delete(media.id);
+    }
+  }
+
+  private async finishFile(media: MediaRecord): Promise<boolean> {
     const { files } = this.deps;
     if (
       media.sourceSha256 &&
