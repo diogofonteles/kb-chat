@@ -25,7 +25,7 @@ const RULES: Readonly<Record<string, Readonly<Record<string, ColumnRule>>>> = {
     // A level of its own only with the level kept (KBC-106).
     level_own: (ref) =>
       `CASE WHEN (SELECT level FROM temp.level_map WHERE media_id = x.id) IS NULL
-        THEN 0 ELSE ${ref} END`,
+        THEN 0 ELSE coalesce((SELECT own FROM temp.level_map WHERE media_id = x.id), ${ref}) END`,
   },
   media_tracks: {
     approved_by: person,

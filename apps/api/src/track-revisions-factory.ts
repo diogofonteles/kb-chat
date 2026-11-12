@@ -49,7 +49,8 @@ export function createTrackRevisions(
     voiceLabels: media.voiceLabels,
     names: new VoiceNamesService({ ...media, rootOf, speakersOf }),
     fixer: voiceNameFixerOf(media),
-    findMedia: (actor, mediaId) => service.get(actor, mediaId),
+    // Every route of a track's edit: refused below a track of the recording (KBC-106).
+    findMedia: (actor, mediaId) => service.editable(actor, mediaId),
     ...(wiring.trackLevels && { levels: wiring.trackLevels }),
     ...(wiring.levelAudit && { audit: wiring.levelAudit }),
     ...(wiring.log && { log: wiring.log }),

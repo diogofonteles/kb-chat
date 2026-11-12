@@ -29,7 +29,7 @@ const sameTrack = (row: Row, track: EditTrack): boolean =>
   row['answerer_voice'] === track.answererVoice &&
   row['asker_speaker_id'] === track.askerSpeakerId &&
   row['answerer_speaker_id'] === track.answererSpeakerId &&
-  row['level'] === track.level;
+  row['level'] === (track.level ?? null);
 
 const toApproved = (row: Row): ApprovedTrack => ({
   id: String(row['id']),
@@ -50,7 +50,7 @@ const trackValues = (track: EditTrack) =>
     track.answererVoice,
     track.askerSpeakerId,
     track.answererSpeakerId,
-    track.level,
+    track.level ?? null,
   ] as const;
 
 /** The edits and approved tracks in `media.db` (KBC-066, migration media-edits). */

@@ -82,7 +82,7 @@ function proposalService(
     items: media.trackItems,
     edits: media.edits,
     transcripts: media.transcripts,
-    findMedia: (actor, mediaId) => service.getRecording(actor, mediaId),
+    findMedia: (actor, mediaId) => service.editableRecording(actor, mediaId),
     titleOf: (topic) => catalog.get(topic)?.topic.title ?? topic,
     llm: mediaLlm(wiring),
     caps: capsOf(media),

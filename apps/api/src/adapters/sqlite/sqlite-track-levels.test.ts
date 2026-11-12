@@ -130,8 +130,11 @@ describe('track levels in media.db (KBC-106)', () => {
 
   it('reads the levels a recording needs: its live tracks, their own, one by id', () => {
     const { store, edits } = world();
+    // Published ones by their real bounds, and approved ones by their asked bounds (m4).
     expect(store.liveTrackLevels('r').map((one) => one.level)).toEqual([
       'ci',
+      'ci',
+      'cdc',
       'cdc',
       'qs',
     ]);
@@ -168,8 +171,54 @@ describe('the hidden clause of a segment query (KBC-106 BR-2)', () => {
       ]),
     );
     expect(clause.sql).toContain('NOT EXISTS');
-    expect(clause.values).toEqual(['a', 'qs', 'ci', 'b']);
+    // Once for the published tracks, once for the approved ones (review m4).
+    expect(clause.values).toEqual(['a', 'qs', 'ci', 'b', 'a', 'qs', 'ci', 'b']);
     const none = hiddenClause(new Map([['c', []]]));
     expect(none.sql).toContain('NOT (0)');
+  });
+});
+
+describe('a scale change and its undo keep the tracks above their recordings (KBC-106 review M3)', () => {
+  it("the undo puts back a track's own level", () => {
+    const { db, store } = world();
+    // Every level away (scale.clear) wipes the own levels; its undo brings them back.
+    const moved = store.relevel({ topics: ['hermetismo'], to: null });
+    expect(levels(db)[2]).toEqual(['t2', null, 0]);
+    const back = moved.map((row) => ({ ...row, written: row.written ?? null }));
+    expect(store.restoreLevels(back)).toEqual([]);
+    expect(levels(db)[2]).toEqual(['t2', 'cdc', 1]);
+  });
+
+  it('a level taken away never leaves a track below its recording: it follows the recording', () => {
+    const { db, store } = world();
+    const moved = store.relevel({
+      topics: ['hermetismo'],
+      from: 'cdc',
+      to: 'qs',
+      order: ['qs', 'ci'],
+    });
+    expect(levels(db)[2]).toEqual(['t2', 'ci', 0]);
+    expect(moved.find((row) => row.id === 't2')).toMatchObject({
+      level: 'cdc',
+      written: 'ci',
+    });
+    // t3 (QS, of its own, under a CI recording) is lifted too.
+    expect(levels(db)[3]).toEqual(['t3', 'ci', 0]);
+  });
+});
+
+describe('a new order of the scale (KBC-106 review M3)', () => {
+  it('lifts a track it leaves below its recording, which then follows it', () => {
+    const { db, store } = world();
+    // CDC now ranks under CI: t2 (CDC) and t3 (QS) would sit below the CI recording.
+    const lifted = store.liftTracks(['hermetismo'], ['qs', 'cdc', 'ci']);
+    expect(lifted.map((row) => [row.id, row.level, row.written])).toEqual([
+      ['t2', 'cdc', 'ci'],
+      ['t3', 'qs', 'ci'],
+    ]);
+    expect(levels(db).slice(2)).toEqual([
+      ['t2', 'ci', 0],
+      ['t3', 'ci', 0],
+    ]);
   });
 });

@@ -124,6 +124,25 @@ export function hiddenClause(
     [...levelsByTopic.values()].every((one) => one === null)
   )
     return { sql: '1', values: [] };
+  const { sql: visible, values } = heardClause(levelsByTopic);
+  // Published tracks by their real bounds, and approved ones by their asked bounds (m4).
+  return {
+    sql: `NOT EXISTS (SELECT 1 FROM media h WHERE h.parent_media_id = m.id
+      AND h.status = 'ready' AND h.archived_at IS NULL
+      AND s.start_ms < h.parent_end_ms AND s.end_ms > h.parent_start_ms
+      AND NOT (${visible}))
+      AND NOT EXISTS (SELECT 1 FROM media_tracks k JOIN media h ON h.id = k.derived_media_id
+        WHERE k.media_id = m.id AND h.archived_at IS NULL
+        AND s.start_ms < k.end_ms AND s.end_ms > k.start_ms
+        AND NOT (${visible}))`,
+    values: [...values, ...values],
+  };
+}
+
+/** What the person hears of a track `h`, per collection. */
+function heardClause(
+  levelsByTopic: ReadonlyMap<string, readonly string[] | null>,
+): Clause {
   const seen = [...levelsByTopic].flatMap(([topic, levels]): Clause[] => {
     if (levels === null) return [{ sql: '(h.topic = ?)', values: [topic] }];
     if (levels.length === 0) return [];
@@ -134,13 +153,8 @@ export function hiddenClause(
       },
     ];
   });
-  const visible =
-    seen.length === 0 ? '0' : seen.map((one) => one.sql).join(' OR ');
   return {
-    sql: `NOT EXISTS (SELECT 1 FROM media h WHERE h.parent_media_id = m.id
-      AND h.status = 'ready' AND h.archived_at IS NULL
-      AND s.start_ms < h.parent_end_ms AND s.end_ms > h.parent_start_ms
-      AND NOT (${visible}))`,
+    sql: seen.length === 0 ? '0' : seen.map((one) => one.sql).join(' OR '),
     values: seen.flatMap((one) => one.values),
   };
 }

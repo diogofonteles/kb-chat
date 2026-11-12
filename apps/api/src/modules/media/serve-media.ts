@@ -5,6 +5,7 @@ import {
   SampleIndexCache,
   hiddenTagOf,
   insideHidden,
+  maskCovers,
   maskPlanOf,
   maskedStream,
   readAtOf,
@@ -16,9 +17,6 @@ import { entityTagOf, parseRange, rangeStillValid } from './range.js';
 export interface RangeOpener {
   openRange(path: string, range: { start: number; end: number }): Readable;
 }
-
-/** Sample tables of the files played lately, for the masked streams (KBC-106). */
-const indexes = new SampleIndexCache();
 
 /**
  * Sends a media file with HTTP Range (ADR 0022 §5): 206 with `Content-Range` for a range,
@@ -32,9 +30,11 @@ export async function serveMedia(context: {
   readonly request: FastifyRequest;
   readonly reply: FastifyReply;
   readonly open: RangeOpener;
+  /** The sample tables a masked stream reads (KBC-106); none: nothing is ever masked. */
+  readonly indexes?: SampleIndexCache;
 }) {
   const { id, file, request, reply, open } = context;
-  const plan = await maskOf(file, open);
+  const plan = await maskOf(file, { open, indexes: context.indexes });
   const etag = tagOf(id, file, plan);
   setFileHeaders(reply, { file, etag });
   const answer = parseRange(requestedRange(request, etag), file.size);
@@ -70,10 +70,16 @@ const unsatisfiable = (reply: FastifyReply, size: number) =>
 /** What to silence for this person; null when nothing is hidden. Unreadable: closed. */
 async function maskOf(
   file: PlayableFile,
-  open: RangeOpener,
+  {
+    open,
+    indexes,
+  }: { open: RangeOpener; indexes: SampleIndexCache | undefined },
 ): Promise<MaskPlan | null> {
   const hidden = file.hidden ?? [];
   if (hidden.length === 0) return null;
+  // Hidden parts and no way to read the tables: nothing is sent.
+  if (!indexes)
+    throw new AppError('MEDIA_NOT_READY', 'This media cannot be played yet');
   const index = await indexes.indexOf(
     file,
     readAtOf((range) => open.openRange(file.path, range), file.size),
@@ -81,7 +87,11 @@ async function maskOf(
   // Without its sample table nothing can be kept from this person: nothing is sent.
   if (!index)
     throw new AppError('MEDIA_NOT_READY', 'This media cannot be played yet');
-  return maskPlanOf(index, hidden);
+  const plan = maskPlanOf(index, hidden);
+  // A mask that does not cover every hidden part is no mask: nothing is sent (review M2).
+  if (!maskCovers(index, plan, hidden))
+    throw new AppError('MEDIA_NOT_READY', 'This media cannot be played yet');
+  return plan;
 }
 
 function setFileHeaders(

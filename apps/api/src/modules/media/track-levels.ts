@@ -4,7 +4,12 @@ import type {
   TrackLevelChoices,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
-import type { LiveTrackLevel } from '../../ports/media-store.js';
+import type {
+  LiveTrackLevel,
+  MediaStorePort,
+} from '../../ports/media-store.js';
+import { hearsLevel } from './media-policy.js';
+import type { MediaActor } from './media-service.js';
 
 /**
  * A track's own level (KBC-106, ADR 0036 §3): the recording's until someone chooses one above
@@ -116,4 +121,27 @@ export const touchesHidden = (
 ): boolean =>
   spans.some(
     (span) => stretch.startMs < span.endMs && stretch.endMs > span.startMs,
+  );
+
+/**
+ * KBC-106 decision (2026-11-12): whether this person hears every level the recording's tracks
+ * hold or are drafted at; who does not may not use its edit routes.
+ */
+export function hearsAllTracks(
+  store: Pick<MediaStorePort, 'getMedia' | 'trackLevelsUnder'>,
+  actor: MediaActor,
+  recordingId: string,
+): boolean {
+  const recording = store.getMedia(recordingId);
+  if (!recording || actor.levelsIn(recording.topic) === null) return true;
+  return store
+    .trackLevelsUnder(recordingId)
+    .every((level) => hearsLevel(actor, recording.topic, level));
+}
+
+/** The refusal of an edit route to who is below a track of the recording. */
+export const editAboveYourLevel = (): AppError =>
+  new AppError(
+    'EDIT_ABOVE_YOUR_LEVEL',
+    'A track of this recording is above your level',
   );

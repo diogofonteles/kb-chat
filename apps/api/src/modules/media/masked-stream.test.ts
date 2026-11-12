@@ -9,11 +9,37 @@ import {
   SampleIndexCache,
   hiddenTagOf,
   insideHidden,
+  maskCovers,
   maskPlanOf,
   maskedStream,
 } from './masked-stream.js';
 import { readSampleIndex, type ReadAt } from './mp4-samples.js';
 import { silentAacFrame } from './silent-aac.js';
+
+/** An MP4 made by ffmpeg from lavfi `inputs` with the output `args`. */
+function made(inputs: readonly string[], args: readonly string[]): Buffer {
+  const dir = mkdtempSync(join(tmpdir(), 'kbchat-mask-'));
+  const path = join(dir, 'made.mp4');
+  execFileSync(ffmpegBins().ffmpeg, [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-y',
+    ...inputs.flatMap((one) => ['-f', 'lavfi', '-i', one]),
+    ...args,
+    '-f',
+    'mp4',
+    path,
+  ]);
+  return readFileSync(path);
+}
+
+/** The offset of the first box `type` in `file`, past its 8-byte header. */
+function boxAt(file: Buffer, type: string): number {
+  const at = file.indexOf(Buffer.from(type, 'latin1'));
+  if (at < 4) throw new Error(`no ${type}`);
+  return at + 4;
+}
 
 /** 30 s of tone as the worker makes it: AAC 64 kbit/s mono, moov first. */
 function tone(): Buffer {
@@ -216,5 +242,61 @@ describe('the masked stream (KBC-106 FR-2)', () => {
     expect(hiddenTagOf([{ startMs: 1, endMs: 2 }])).not.toBe(
       hiddenTagOf([{ startMs: 1, endMs: 3 }]),
     );
+  });
+});
+
+describe('a file the mask cannot vouch for is no index (KBC-106 review M2, QA-5)', () => {
+  const SINE = 'sine=frequency=330:duration=10';
+  const AAC = ['-c:a', 'aac', '-b:a', '64k'];
+  const indexOf = (file: Buffer) =>
+    readSampleIndex(readerOf(file), file.length);
+
+  it('a fragmented MP4 (its samples in moof boxes)', async () => {
+    const file = made(
+      [SINE],
+      [...AAC, '-movflags', 'frag_keyframe+empty_moov'],
+    );
+    expect(await indexOf(file)).toBeNull();
+  });
+
+  it('two sound tracks, or a picture track beside the sound', async () => {
+    const two = made([SINE, SINE], [...AAC, '-map', '0:a', '-map', '1:a']);
+    expect(await indexOf(two)).toBeNull();
+    const video = made(
+      [SINE, 'color=c=black:s=64x64:d=10'],
+      [...AAC, '-c:v', 'mpeg4'],
+    );
+    expect(await indexOf(video)).toBeNull();
+  });
+
+  it('a time table shorter than the size table', async () => {
+    const file = Buffer.from(tone());
+    const stts = boxAt(file, 'stts');
+    // The first run's sample count, ten samples short.
+    const at = stts + 8;
+    file.writeUInt32BE(file.readUInt32BE(at) - 10, at);
+    expect(await indexOf(file)).toBeNull();
+  });
+
+  it('an edit list that starts with an empty edit', async () => {
+    const file = Buffer.from(tone());
+    const elst = boxAt(file, 'elst');
+    const version = file.readUInt8(elst);
+    const entry = elst + 8;
+    if (version === 1) file.writeBigInt64BE(-1n, entry + 8);
+    else file.writeInt32BE(-1, entry + 4);
+    expect(await indexOf(file)).toBeNull();
+  });
+
+  it('a plan that does not reach the end of a hidden span does not cover it', async () => {
+    const file = tone();
+    const index = await indexOf(file);
+    if (!index) throw new Error('index expected');
+    const hidden = [{ startMs: 10_000, endMs: 20_000 }];
+    expect(maskCovers(index, maskPlanOf(index, hidden), hidden)).toBe(true);
+    expect(maskCovers(index, { frames: [], runs: [] }, hidden)).toBe(false);
+    // Past the end of the audio, as far as the audio goes.
+    const late = [{ startMs: 25_000, endMs: 90_000 }];
+    expect(maskCovers(index, maskPlanOf(index, late), late)).toBe(true);
   });
 });

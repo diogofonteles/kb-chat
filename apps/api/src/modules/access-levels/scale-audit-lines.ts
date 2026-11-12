@@ -42,7 +42,8 @@ function itemLines(
     collection: one.topic,
     target: one.id,
     before: one.level,
-    after,
+    // A track lifted to its recording's level says the level it got (KBC-106).
+    after: one.written === undefined ? after : one.written,
     count: { media: 1 },
   }));
   return [...documents, ...media];

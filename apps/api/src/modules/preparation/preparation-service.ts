@@ -606,7 +606,11 @@ export class PreparationService {
     try {
       return this.deps.findMedia(actor, mediaId);
     } catch (err) {
-      if (err instanceof AppError && err.code === 'MEDIA_NOT_FOUND')
+      // Gone, or now with a track above the person (KBC-106): not theirs to follow here.
+      if (
+        err instanceof AppError &&
+        (err.code === 'MEDIA_NOT_FOUND' || err.code === 'EDIT_ABOVE_YOUR_LEVEL')
+      )
         return null;
       throw err;
     }

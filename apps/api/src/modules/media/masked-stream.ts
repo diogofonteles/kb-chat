@@ -51,6 +51,31 @@ export function maskPlanOf(
   return { frames, runs };
 }
 
+/**
+ * Every sample that touches a hidden span (up to where the audio ends) is in the plan, and a
+ * span that starts before the end of the audio touches some (review M2: no gap passes).
+ */
+export function maskCovers(
+  index: SampleIndex,
+  plan: MaskPlan,
+  hidden: readonly HiddenSpan[],
+): boolean {
+  const masked = new Set(plan.frames.map((frame) => frame.offset));
+  const lastEnd = index.endsMs[index.sizes.length - 1] ?? 0;
+  return hidden.every((span) => {
+    if (span.startMs >= lastEnd) return true;
+    let touched = 0;
+    for (let i = 0; i < index.sizes.length; i++) {
+      const start = index.startsMs[i] ?? 0;
+      const end = index.endsMs[i] ?? 0;
+      if (start >= span.endMs || end <= span.startMs) continue;
+      touched++;
+      if (!masked.has(index.offsets[i] ?? -1)) return false;
+    }
+    return touched > 0;
+  });
+}
+
 /** `[start, end]` (inclusive) lies wholly inside hidden frames. */
 export const insideHidden = (
   plan: MaskPlan,
@@ -131,16 +156,19 @@ export const hiddenTagOf = (hidden: readonly HiddenSpan[]): string =>
 
 interface Cached {
   readonly key: string;
-  readonly index: SampleIndex | null;
+  readonly index: Promise<SampleIndex | null>;
 }
 
 const CACHE_SIZE = 4;
 
-/** Sample indexes of the files played most recently: a 2 h file is ~6 MB of tables. */
+/**
+ * Sample indexes of the files played most recently: a 2 h file is ~6 MB of tables. Requests
+ * for a file not read yet wait for the same read (review n2).
+ */
 export class SampleIndexCache {
   private readonly kept: Cached[] = [];
 
-  async indexOf(
+  indexOf(
     file: {
       readonly path: string;
       readonly size: number;
@@ -151,7 +179,7 @@ export class SampleIndexCache {
     const key = `${file.path}:${file.size}:${file.modifiedMs}`;
     const found = this.kept.find((one) => one.key === key);
     if (found) return found.index;
-    const index = await readSampleIndex(readAt, file.size);
+    const index = readSampleIndex(readAt, file.size);
     this.kept.unshift({ key, index });
     if (this.kept.length > CACHE_SIZE) this.kept.pop();
     return index;

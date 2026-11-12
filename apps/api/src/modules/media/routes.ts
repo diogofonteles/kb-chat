@@ -42,6 +42,7 @@ import type {
   PlanActor,
   UploadPlans,
 } from './media-service.js';
+import { SampleIndexCache } from './masked-stream.js';
 import { serveMedia } from './serve-media.js';
 
 /** Listening needs the `media` feature (owner's rule: every feature is granted per person). */
@@ -376,6 +377,8 @@ function registerItemRoutes(
 }
 
 function registerStream(typed: TypedApp, service: MediaService): void {
+  // The sample tables of the files played lately, for the masked streams (KBC-106).
+  const indexes = new SampleIndexCache();
   typed.get(
     '/api/v1/media/:id/stream',
     OPTIONS.stream,
@@ -391,6 +394,7 @@ function registerStream(typed: TypedApp, service: MediaService): void {
         request,
         reply,
         open: service,
+        indexes,
       });
     },
   );

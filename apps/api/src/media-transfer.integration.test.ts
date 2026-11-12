@@ -1043,6 +1043,55 @@ describe("KBC-106: a track's own level belongs to production", () => {
     });
   });
 
+  it("QA-3: a new track from the Mac never lands below its recording's level in production; it follows it", async () => {
+    const world = newWorld();
+    const scale = {
+      version: 1,
+      scales: {
+        udv: [
+          { id: 'ci', code: 'CI' },
+          { id: 'cdc', code: 'CDC' },
+        ],
+      },
+    };
+    writeJson(join(world.mac.state, 'access-levels.json'), scale);
+    writeJson(join(world.prod.state, 'access-levels.json'), scale);
+    seedRecording(world, { id: 'r1', level: 'ci' });
+    await moveOnce(world);
+    onProd(world, (db) =>
+      db
+        .prepare(`UPDATE media SET level = 'cdc' WHERE id IN ('r1', 'r1-t1')`)
+        .run(),
+    );
+    const db = macDb(world);
+    try {
+      insertMedia(db, {
+        id: 'r1-t2',
+        topic: 'udv',
+        title: 'Faixa 2',
+        level: 'ci',
+        parent: 'r1',
+      });
+      db.prepare(
+        `INSERT INTO media_files (media_id, rendition, path, bytes, mime) VALUES ('r1-t2', 'audio', 'audio/r1.r1-t2.m4a', 10, 'audio/mp4')`,
+      ).run();
+    } finally {
+      db.close();
+    }
+    writeFile(world.mac.media, 'audio/r1.r1-t2.m4a', 'audio of r1-t2');
+
+    const report = await moveOnce(world);
+
+    expect(report.updated).toEqual(['r1']);
+    onProd(world, (prod) =>
+      expect({
+        ...prod
+          .prepare(`SELECT level, level_own FROM media WHERE id = 'r1-t2'`)
+          .get(),
+      }).toEqual({ level: 'cdc', level_own: 0 }),
+    );
+  });
+
   it("a draft's level the production scale lacks arrives as the recording's", async () => {
     const world = newWorld();
     seedRecording(world, { id: 'r1' });

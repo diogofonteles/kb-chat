@@ -150,7 +150,9 @@ export class TrackRevisionService {
       cut: track.cut,
       locked: this.deps.edits.edit(parent.id)?.status !== 'approved',
       tracks: this.neighbours(actor, parent),
-      level: record.levelOwn ? record.level : null,
+      // Of its own and above the recording; one the recording reached reads as following it.
+      level:
+        record.levelOwn && record.level !== parent.level ? record.level : null,
       levels: trackLevelChoices(this.levelContext(actor, parent)),
     };
   }

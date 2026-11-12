@@ -217,7 +217,7 @@ export class LibraryService {
     const titles = new Map(records.map((one) => [one.id, one.title]));
     const totals = countTracks(records);
     const levels = this.deps.levels ?? NO_LEVELS;
-    const hidden = hiddenByRecording(actor, records);
+    const hidden = hiddenByRecording(actor, records, this.deps.store);
     return records
       .filter((record) => isVisible(actor, record))
       .map((record) => {
@@ -346,33 +346,21 @@ function isVisible(actor: MediaActor, record: LibraryRecord): boolean {
 }
 
 /**
- * KBC-106 FR-2: per recording, the parts this person may not hear (its live tracks above
- * their level), from the rows the library read anyway.
+ * KBC-106 FR-2: per recording, the parts this person may not hear (its tracks above their
+ * level, published or approved, review m4); asked only where levels hold the person.
  */
 function hiddenByRecording(
   actor: MediaActor,
   records: readonly LibraryRecord[],
+  store: Pick<MediaStorePort, 'liveTrackLevels'>,
 ): ReadonlyMap<string, readonly HiddenSpan[]> {
-  const tracks = new Map<string, LibraryRecord[]>();
-  for (const record of records) {
-    const { track } = record;
-    if (!track || record.status !== 'ready' || record.archivedAt !== null)
-      continue;
-    if (actor.levelsIn(record.topic) === null) continue;
-    tracks.set(track.parentId, [...(tracks.get(track.parentId) ?? []), record]);
-  }
   const hidden = new Map<string, readonly HiddenSpan[]>();
-  for (const [parentId, list] of tracks) {
-    const spans = hiddenSpansOf(
-      list.map((one) => ({
-        mediaId: one.id,
-        level: one.level,
-        startMs: one.track?.startMs ?? 0,
-        endMs: one.track?.endMs ?? 0,
-      })),
-      (level) => hearsLevel(actor, list[0]?.topic ?? '', level),
+  for (const record of records) {
+    if (record.track || actor.levelsIn(record.topic) === null) continue;
+    const spans = hiddenSpansOf(store.liveTrackLevels(record.id), (level) =>
+      hearsLevel(actor, record.topic, level),
     );
-    if (spans.length > 0) hidden.set(parentId, spans);
+    if (spans.length > 0) hidden.set(record.id, spans);
   }
   return hidden;
 }

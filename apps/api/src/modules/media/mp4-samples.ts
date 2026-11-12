@@ -81,39 +81,54 @@ async function readMoov(
 }
 
 /** The first track whose handler is sound, with its timescale and sample table. */
+/**
+ * The one track of the file, when it is sound (review M2, QA-5): a second track (sound or
+ * picture) or fragments (`mvex`, samples in `moof`) would pass unmasked, so they are none.
+ */
 function soundTrack(buffer: Buffer, moov: Box) {
-  for (const trak of boxesIn(buffer, moov.start, moov.end)) {
-    if (trak.type !== 'trak') continue;
-    const mdia = child(buffer, trak, 'mdia');
-    const hdlr = mdia && child(buffer, mdia, 'hdlr');
-    if (!mdia || !hdlr) continue;
-    if (buffer.toString('latin1', hdlr.start + 8, hdlr.start + 12) !== 'soun')
-      continue;
-    const mdhd = child(buffer, mdia, 'mdhd');
-    const stbl = path(buffer, mdia, ['minf', 'stbl']);
-    if (!mdhd || !stbl) continue;
-    const version = buffer.readUInt8(mdhd.start);
-    const timescale = buffer.readUInt32BE(
-      mdhd.start + (version === 1 ? 20 : 12),
-    );
-    return { trak, stbl, timescale };
-  }
-  return null;
+  const inside = boxesIn(buffer, moov.start, moov.end);
+  const traks = inside.filter((one) => one.type === 'trak');
+  const [trak] = traks;
+  if (traks.length !== 1 || !trak || inside.some((one) => one.type === 'mvex'))
+    return null;
+  const mdia = child(buffer, trak, 'mdia');
+  const hdlr = mdia && child(buffer, mdia, 'hdlr');
+  if (!mdia || !hdlr) return null;
+  if (buffer.toString('latin1', hdlr.start + 8, hdlr.start + 12) !== 'soun')
+    return null;
+  const mdhd = child(buffer, mdia, 'mdhd');
+  const stbl = path(buffer, mdia, ['minf', 'stbl']);
+  if (!mdhd || !stbl) return null;
+  const version = buffer.readUInt8(mdhd.start);
+  const timescale = buffer.readUInt32BE(mdhd.start + (version === 1 ? 20 : 12));
+  return { trak, stbl, timescale };
 }
 
-/** The media time the edit list starts at (the encoder's priming), or 0. */
-function mediaStart(buffer: Buffer, trak: Box): number {
+/**
+ * The media time the edit list starts at (the encoder's priming), or 0 without one. Only a
+ * single edit that starts in the media is read; anything else (an empty edit first, several
+ * edits) shifts the clock in ways the mask cannot follow: null.
+ */
+function mediaStart(buffer: Buffer, trak: Box): number | null {
   const elst = path(buffer, trak, ['edts', 'elst']);
   if (!elst) return 0;
   const version = buffer.readUInt8(elst.start);
-  const count = buffer.readUInt32BE(elst.start + 4);
-  if (count === 0) return 0;
+  if (buffer.readUInt32BE(elst.start + 4) !== 1) return null;
   const entry = elst.start + 8;
   const time =
     version === 1
       ? Number(buffer.readBigInt64BE(entry + 8))
       : buffer.readInt32BE(entry + 4);
-  return Math.max(0, time);
+  return time >= 0 ? time : null;
+}
+
+/** How many samples the time table covers. */
+function timedSamples(buffer: Buffer, stts: Box): number {
+  const entries = buffer.readUInt32BE(stts.start + 4);
+  let count = 0;
+  for (let e = 0; e < entries; e++)
+    count += buffer.readUInt32BE(stts.start + 8 + 8 * e);
+  return count;
 }
 
 function sampleSizes(buffer: Buffer, stsz: Box): Uint32Array {
@@ -207,6 +222,19 @@ function sampleTimes(
   return { startsMs, endsMs };
 }
 
+/** Every sample placed, and inside the file (none left at 0 by a short chunk table). */
+function inFile(
+  offsets: Float64Array,
+  sizes: Uint32Array,
+  fileSize: number,
+): boolean {
+  for (let i = 0; i < sizes.length; i++) {
+    const offset = offsets[i] ?? 0;
+    if (offset <= 0 || offset + (sizes[i] ?? 0) > fileSize) return false;
+  }
+  return true;
+}
+
 /** The sample index of an MP4's sound track; null when the file is not one this can read. */
 export async function readSampleIndex(
   readAt: ReadAt,
@@ -224,13 +252,14 @@ export async function readSampleIndex(
     const chunks = chunkOffsets(buffer, track.stbl);
     if (!stsz || !stsc || !stts || !chunks) return null;
     const sizes = sampleSizes(buffer, stsz);
+    const start = mediaStart(buffer, track.trak);
+    // Every sample timed, and some: a table the mask cannot vouch for is none.
+    if (start === null || sizes.length === 0) return null;
+    if (timedSamples(buffer, stts) !== sizes.length) return null;
     const perChunk = samplesPerChunk(buffer, stsc, chunks.length);
     const offsets = sampleOffsets(chunks, perChunk, sizes);
-    const clock = {
-      timescale: track.timescale,
-      start: mediaStart(buffer, track.trak),
-      count: sizes.length,
-    };
+    if (!inFile(offsets, sizes, size)) return null;
+    const clock = { timescale: track.timescale, start, count: sizes.length };
     return { offsets, sizes, ...sampleTimes(buffer, stts, clock) };
   } catch {
     // A box that lies about its size: not a file this can mask.

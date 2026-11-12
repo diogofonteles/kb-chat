@@ -168,6 +168,8 @@ export interface MediaLevelSeed {
 export interface MediaLevelRow {
   readonly id: string;
   readonly level: string | null;
+  /** A track's own level, as it was (KBC-106): an undo puts it back too. */
+  readonly own?: boolean;
 }
 
 /** What an undo puts back: the level before, where the row still holds `written`. */
@@ -178,6 +180,8 @@ export interface MediaLevelRestore extends MediaLevelRow {
 /** A row a level change moved, with its collection (for the audit). */
 export interface MovedMedia extends MediaLevelRow {
   readonly topic: string;
+  /** What the change wrote when it is not the change's level: a track lifted (KBC-106). */
+  readonly written?: string | null;
 }
 
 /** KBC-108: the audios of a scope at one level (or at any) move to another (or to none). */
@@ -188,6 +192,11 @@ export interface MediaRelevel {
   readonly from?: string;
   /** Their new level; null: no level (the scale is gone). */
   readonly to: string | null;
+  /**
+   * The scale after the change, lowest first: a track it would leave below its recording is
+   * lifted to the recording's level and follows it (KBC-106 review M3).
+   */
+  readonly order?: readonly string[];
 }
 
 /** A playable file of a media item (ADR 0022: `media_files`). */
@@ -304,6 +313,11 @@ export interface MediaStorePort {
   setTrackLevel(write: TrackLevelWrite): void;
   /** The live tracks of a recording with their levels and real bounds (KBC-106 FR-2). */
   liveTrackLevels(parentId: string): readonly LiveTrackLevel[];
+  /**
+   * Every level its tracks hold or are drafted at (archived and still being cut included,
+   * KBC-106 decision): who does not hear all of them does not edit the recording.
+   */
+  trackLevelsUnder(recordingId: string): readonly (string | null)[];
   /** A media's level: null "Sem nível", undefined when there is no such media (KBC-106). */
   levelOf(mediaId: string): string | null | undefined;
   /** The own levels of a recording's tracks, one per track that has one (KBC-106 BR-1). */
@@ -313,6 +327,11 @@ export interface MediaStorePort {
    * (KBC-105 AC-10); the rows placed, or null when it had been seeded already.
    */
   seedLevel(seed: MediaLevelSeed): number | null;
+  /**
+   * KBC-106: the tracks a scale's new order leaves below their recordings take the
+   * recording's level and follow it; the rows lifted, as they were, with what was written.
+   */
+  liftTracks(topics: readonly string[], order: readonly string[]): MovedMedia[];
   /** KBC-108: moves the audios of a level in one transaction; the rows moved, as they were. */
   relevel(change: MediaRelevel): MovedMedia[];
   /**

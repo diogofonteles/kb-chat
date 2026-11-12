@@ -1435,7 +1435,8 @@ function preparationService(
     separation: planSeparation(media, wiring.diarization),
     edits: media.edits,
     drafts: media.trackProposals,
-    findMedia: (actor, mediaId) => service.get(actor, mediaId),
+    // Its edit routes: refused below a track of the recording (KBC-106 decision).
+    findMedia: (actor, mediaId) => service.editable(actor, mediaId),
     followable: (actor, mediaId) => service.followable(actor, mediaId),
     retryConversion: (actor, mediaId) => {
       service.retry(actor, mediaId);
@@ -1520,7 +1521,8 @@ async function registerProposals(
 ): Promise<ProposalService> {
   const proposals = createTrackProposals({
     ...wiring,
-    findMedia: (actor, mediaId) => wiring.service.getRecording(actor, mediaId),
+    findMedia: (actor, mediaId) =>
+      wiring.service.editableRecording(actor, mediaId),
     log: app.log,
   });
   const interrupted = proposals.recover();
@@ -1573,6 +1575,7 @@ async function registerEdit(
         plans: preparations,
         rootOf: (topic) => wiring.authors.rootOf(topic),
         findMedia: (actor, mediaId) => wiring.service.get(actor, mediaId),
+        editable: (actor, mediaId) => wiring.service.editable(actor, mediaId),
         publisher: wiring.publisher,
         preparation: wiring.media.trackItems,
         // A track's own level in the draft and on approval (KBC-106).

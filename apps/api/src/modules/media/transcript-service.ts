@@ -36,7 +36,13 @@ export interface TranscriptServiceDeps {
       readonly archived: boolean;
       /** What this person may not hear of it (KBC-106 FR-2). */
       readonly hidden?: readonly HiddenSpan[];
+      readonly parent?: { readonly id: string } | null;
     };
+    /**
+     * The voices of the whole separation are the edit's (KBC-106 decision): only for who hears
+     * every track of the recording. Absent: everyone the route lets through.
+     */
+    hearsAllTracks?(actor: MediaActor, recordingId: string): boolean;
   };
   /** A track's bounds, to read its voices from the recording (KBC-068 FR-3). */
   readonly recording?: Pick<MediaStorePort, 'getMedia'>;
@@ -95,7 +101,7 @@ const DEFAULT_CACHE_SIZE = 32;
 
 /**
  * KBC-106 BR-2: a segment touching a hidden part stays in its place (positions of words and
- * corrections do not move) with no text and no voice.
+ * corrections do not move) with no text and no voice, and the hidden part's bounds.
  */
 function restrictedIn(
   transcript: MediaTranscript,
@@ -104,17 +110,19 @@ function restrictedIn(
   if (hidden.length === 0) return transcript;
   return {
     ...transcript,
-    segments: transcript.segments.map((segment) =>
-      touchesHidden(hidden, segment)
+    segments: transcript.segments.map((segment) => {
+      const span = hidden.find((one) => touchesHidden([one], segment));
+      // The hidden part's own bounds: nothing tells where each segment in it starts (m2).
+      return span
         ? {
-            startMs: segment.startMs,
-            endMs: segment.endMs,
+            startMs: span.startMs,
+            endMs: span.endMs,
             text: '',
             ...(segment.voice !== undefined && { voice: null }),
             restricted: true as const,
           }
-        : segment,
-    ),
+        : segment;
+    }),
   };
 }
 
@@ -160,7 +168,10 @@ export class TranscriptService {
     mediaId: string,
     options: TranscriptAudience = NOBODY,
   ): MediaTranscript {
-    const { summary, hidden } = this.readable(actor, mediaId);
+    const { summary, hidden, recordingId } = this.readable(actor, mediaId);
+    const withVoices =
+      options.withVoices &&
+      (this.deps.media.hearsAllTracks?.(actor, recordingId) ?? true);
     const segments = this.deps.transcripts
       .segments(summary.id)
       .map(({ startMs, endMs, text }) => ({ startMs, endMs, text }));
@@ -173,7 +184,7 @@ export class TranscriptService {
       ...(options.withTermList ? this.termListOf(summary) : {}),
     };
     return restrictedIn(
-      this.withSpeakers(transcript, summary, options),
+      this.withSpeakers(transcript, summary, { ...options, withVoices }),
       hidden,
     );
   }
@@ -366,11 +377,19 @@ export class TranscriptService {
   private readable(
     actor: MediaActor,
     mediaId: string,
-  ): { summary: TranscriptSummary; hidden: readonly HiddenSpan[] } {
+  ): {
+    summary: TranscriptSummary;
+    hidden: readonly HiddenSpan[];
+    recordingId: string;
+  } {
     const item = this.deps.media.get(actor, mediaId);
     if (item.archived) throw new AppError('MEDIA_NOT_FOUND', 'Unknown media');
     const [newest] = this.deps.transcripts.transcripts(mediaId);
     if (!newest) throw noTranscript();
-    return { summary: newest, hidden: item.hidden ?? [] };
+    return {
+      summary: newest,
+      hidden: item.hidden ?? [],
+      recordingId: item.parent?.id ?? mediaId,
+    };
   }
 }

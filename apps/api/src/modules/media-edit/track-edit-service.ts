@@ -49,6 +49,11 @@ export interface TrackEditServiceDeps {
   readonly rootOf: (topic: string) => string;
   /** The item as this person sees it; throws MEDIA_NOT_FOUND when they cannot. */
   readonly findMedia: (actor: MediaActor, mediaId: string) => MediaItem;
+  /**
+   * The item for its edit: also throws EDIT_ABOVE_YOUR_LEVEL below a track of the recording
+   * (KBC-106 decision); without it, `findMedia`.
+   */
+  readonly editable?: (actor: MediaActor, mediaId: string) => MediaItem;
   /** What an approval turns into (KBC-068); absent, tracks stay chapters. */
   readonly publisher?: TrackPublisher;
   readonly preparation?: Pick<TrackItemStorePort, 'preparation'>;
@@ -80,18 +85,24 @@ export interface SaveEdit {
   readonly step: EditStep;
 }
 
-/** One `item.level` line per live track whose level changed (KBC-106 BR-4). */
+/**
+ * One `item.level` line per track whose level the approval changed (KBC-106 BR-4): a track
+ * kept with another level, and a new one approved with its own (review m3), from the
+ * recording's level it would otherwise have had.
+ */
 function trackLevelLines(change: {
   readonly at: string;
   readonly by: EditAuthor;
   readonly topic: string;
+  readonly recording: string | null;
   readonly before: ReadonlyMap<string, string | null>;
   readonly after: ReadonlyMap<string, string | null>;
 }): LevelAuditEntry[] {
   const { at, by, topic } = change;
   return [...change.after].flatMap(([mediaId, after]) => {
-    const before = change.before.get(mediaId);
-    if (before === undefined || before === after) return [];
+    const known = change.before.get(mediaId);
+    const before = known === undefined ? change.recording : known;
+    if (before === after) return [];
     return [
       {
         at,
@@ -188,12 +199,7 @@ export class TrackEditService {
     this.assertOwnSpeakers(item, request.tracks);
     const problems = timingProblems(request.tracks, item.durationMs);
     if (problems.length > 0) throw invalid(problems);
-    // FR-1: never below the recording, never above the person; its own level, or null.
-    const context = this.levelContext(call.actor, item);
-    const tracks = request.tracks.map((track) => ({
-      ...track,
-      level: ownLevelOf(context, track.level ?? null),
-    }));
+    const tracks = this.levelled(call, item, request.tracks);
     return this.written(
       this.deps.edits.save({
         ...this.writeOf(call),
@@ -205,6 +211,30 @@ export class TrackEditService {
         transcriptVersion: this.transcriptVersion(call.mediaId),
       }),
     );
+  }
+
+  /**
+   * FR-1: never below the recording, never above the person; its own level, or null. A track
+   * sent without a level keeps the one the draft holds (review B1, QA BUG-2).
+   */
+  private levelled(
+    call: EditCall,
+    item: MediaItem,
+    sent: SaveEdit['tracks'],
+  ): EditTrack[] {
+    const context = this.levelContext(call.actor, item);
+    const held = new Map(
+      this.deps.drafts
+        .draft(call.mediaId)
+        .tracks.map((track) => [track.id, track.level]),
+    );
+    return sent.map((track) => ({
+      ...track,
+      level:
+        track.level === undefined
+          ? (held.get(track.id) ?? null)
+          : ownLevelOf(context, track.level),
+    }));
   }
 
   /** The last check and the only way to listeners (BR-1). */
@@ -229,6 +259,7 @@ export class TrackEditService {
     );
     await this.recordLevels(call, {
       topic: item.topic,
+      recording: context.recording,
       before,
       after: this.liveLevels(call.mediaId),
     });
@@ -260,6 +291,7 @@ export class TrackEditService {
     call: EditCall,
     change: {
       readonly topic: string;
+      readonly recording: string | null;
       readonly before: ReadonlyMap<string, string | null>;
       readonly after: ReadonlyMap<string, string | null>;
     },
@@ -360,7 +392,11 @@ export class TrackEditService {
 
   /** Only a recording is edited: a track is changed through its recording's edit. */
   private recording(actor: MediaActor, mediaId: string): MediaItem {
-    const item = this.ready(actor, mediaId);
+    const item = this.ready(
+      actor,
+      mediaId,
+      this.deps.editable ?? this.deps.findMedia,
+    );
     if (item.parent)
       throw new AppError('MEDIA_CONFLICT', 'A track has no edit of its own', {
         details: { reason: 'track' },
@@ -368,8 +404,12 @@ export class TrackEditService {
     return item;
   }
 
-  private ready(actor: MediaActor, mediaId: string): MediaItem {
-    const item = this.deps.findMedia(actor, mediaId);
+  private ready(
+    actor: MediaActor,
+    mediaId: string,
+    find: TrackEditServiceDeps['findMedia'] = this.deps.findMedia,
+  ): MediaItem {
+    const item = find(actor, mediaId);
     if (item.status !== 'ready')
       throw new AppError('MEDIA_NOT_READY', 'This media is not ready yet');
     return item;

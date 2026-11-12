@@ -38,7 +38,11 @@ import {
   legacyAuthorshipOf,
   seesMedia,
 } from './media-policy.js';
-import { hiddenSpansOf } from './track-levels.js';
+import {
+  editAboveYourLevel,
+  hearsAllTracks,
+  hiddenSpansOf,
+} from './track-levels.js';
 import { mediaAuthorOf, toMediaItem, type ItemView } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
 
@@ -609,6 +613,34 @@ export class MediaService {
     if (!media || media.track !== null || !seesMedia(actor, media)) return null;
     const mine = actor.isMaster || media.ownerPrincipal === actor.principal;
     return media.status === 'ready' || mine ? this.get(actor, mediaId) : null;
+  }
+
+  /**
+   * KBC-106 decision (2026-11-12): the item for its edit routes. Whoever does not hear every
+   * level the recording's tracks hold or are drafted at may not edit it, nor any track of it
+   * (403 EDIT_ABOVE_YOUR_LEVEL, fail closed): the edit shows and changes all of them.
+   */
+  editable(actor: MediaActor, mediaId: string): MediaItem {
+    const item = this.get(actor, mediaId);
+    const recordingId = item.parent?.id ?? item.id;
+    if (!hearsAllTracks(this.deps.store, actor, recordingId))
+      throw editAboveYourLevel();
+    return item;
+  }
+
+  /** The recording for its edit routes: `editable`, refusing a track. */
+  editableRecording(actor: MediaActor, mediaId: string): MediaItem {
+    const item = this.editable(actor, mediaId);
+    if (item.parent)
+      throw new AppError('MEDIA_CONFLICT', 'A track follows its recording', {
+        details: { reason: 'track' },
+      });
+    return item;
+  }
+
+  /** Every level the recording's tracks hold or are drafted at is one this person hears. */
+  hearsAllTracks(actor: MediaActor, recordingId: string): boolean {
+    return hearsAllTracks(this.deps.store, actor, recordingId);
   }
 
   /** The item, for what only a recording has (proposals, voices, an edit). */

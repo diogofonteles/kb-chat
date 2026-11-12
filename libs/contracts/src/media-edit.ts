@@ -108,8 +108,11 @@ export const editTrackSchema = z.strictObject({
   answererVoice: voiceSchema.nullable(),
   askerSpeakerId: z.uuid().nullable(),
   answererSpeakerId: z.uuid().nullable(),
-  /** Its own level (KBC-106 FR-1); null or absent: the recording's. */
-  level: levelRefSchema.nullable().default(null),
+  /**
+   * Its own level (KBC-106 FR-1); null: the recording's. Absent: the level the draft holds for
+   * it stays (a save never lowers a track by leaving the field out).
+   */
+  level: levelRefSchema.nullable().optional(),
 });
 export type EditTrack = z.output<typeof editTrackSchema>;
 
