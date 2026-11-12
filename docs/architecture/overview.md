@@ -221,6 +221,29 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
 3. **What are we doing about it?** Same 202 body for every account state and delivery after the reply; 5 attempts per code, 10 min, single use, a new code replaces the old; 1/min and 5/h per email or phone, 5/min and 20/h per address, verify routes rate-limited; scrypt with a salt per code and `timingSafeEqual`; HMAC-signed, 15 min, single-use tickets with a boot-time key; sessions only for people in `people.json`, checked again at verify time; the API refuses to start in production without a complete email provider (Gmail SMTP pair or Resend) or with the SMS log adapter, and with half of the SMTP pair in any environment; SMTP errors carry only the nodemailer and reply codes, never the app password or the body.
 4. **Did we do a good job?** Tests: `one-time-codes.test.ts`, `send-limits.test.ts`, `request-ticket.test.ts`, `request-rules.test.ts`, `access-requests.integration.test.ts` (enumeration, approval gate, revocation after send, cooldown, permissions), `route-access.test.ts`; E2E `access.spec.ts` at 1440 and 390.
 
+### Access levels (KBC-103 to KBC-111, ADR 0036)
+
+1. **What are we building?** Ordered levels per top-level collection (QS < CI < CDC …), one per person and one per item (vault document, audio, track, track document), held in the app's state and `media.db`; every content surface reads through the person's `LevelView` (`ContentGate.viewFor`), masters see everything.
+2. **What can go wrong?**
+   - A surface reads the catalog or the media lists directly and names a hidden item (title, id, snippet, author, passage, citation), or counts it (totals, facets, copies, "Veja também", "Ver todas (N)", coverage, tracks of a recording).
+   - A single item route answers 403 (or a different 404) and so confirms a hidden item exists.
+   - Stored or client-sent content outlives a level change: a saved answer's sources, a sweep cursor's findings, bookmarks, recents and progress, a follow-up's cited ids.
+   - The research model (and the lent Claude or Codex behind the MCP token) gets a hidden text in a tool output and repeats it.
+   - A track above its recording leaks through the recording: the audio bytes, the transcript, subtitles, words, "Na fala", the edit and correction routes, the subjects of the track.
+   - An editor below a track lowers it by saving the draft; an import from the Mac creates a track below its recording.
+   - A new route or a new reader of the catalog skips the view.
+3. **What are we doing about it?**
+   - One rule, `allows(viewer, item)` (ADR 0036 §6), and one place that builds views (`ContentGate`); set surfaces filter before they compute, SQL surfaces filter in the query, the QMD ranking is filtered where hits become entries, with the adaptive budget (§7).
+   - Hidden single items answer 404 exactly like missing ones (`DOCUMENT_NOT_FOUND`, `MEDIA_NOT_FOUND`); stored answers and cursors are re-checked at read (§8, KBC-110); bookmarks, recents and progress of an item the person no longer sees are left out.
+   - The research tools are built per turn with the turn's view, the MCP token maps to those tools (§7).
+   - Tracks answer by their own level everywhere; a hidden part of a recording is masked as silent AAC frames, a restricted transcript item and no words or subtitles (KBC-106); whoever does not hear every track of a recording gets 403 `EDIT_ABOVE_YOUR_LEVEL` on every edit and correction route; imports keep a track at least at its recording's level.
+   - Accepted signals, decided by the owner: the duplicate answer `duplicate-hidden` to whoever sends an identical file (KBC-105 FR-5), and a hidden part's bounds and place among its recording's tracks ("Trecho restrito", "faixa 3 de 3"; KBC-106 FR-2). Residual: a speech hit's BM25 score is computed over the whole FTS5 table, so its value (never its order) moves with the hidden corpus.
+4. **Did we do a good job?** Executable, in CI on every API change (`tools/ci/select-jobs.test.mjs` holds every API path to the API tests):
+   - `levels-leakage.integration.test.ts` (KBC-111): every `/api/v1` route read from `app.routeAccess`, with every candidate id (hidden and open), as Ana (CI, every member feature) and as the master, plus the research SSE stream and what the model was told; no mark of a CDC item reaches Ana, every mark reaches the master, every read route answers someone (or declares why not), a route added without the view is caught by name, and Ana's counts equal those of a twin collection without the hidden items.
+   - `levels-boundary.test.ts` (KBC-111): TypeScript's checker finds every call of `CatalogRegistry.get/scope/scopeView/topics` and of the media store's lists (`listMedia`, `listLibrary`, `findBySource`, `findEverywhere`) outside `catalog`, `access-levels` and the composition root; the readers that remain are pinned per file and method with the reason they are safe.
+   - `open-view-boundary.test.ts` (only the gate builds a view), the per-surface suites (`search-levels`, `research-levels`, `research-levels-tracks`, `sweep-levels`, `media-levels`, `track-levels*`, `conversations-levels`, `track-subjects-levels`) and the recall and latency script `src/scripts/levels-recall.ts` (report in `work/KBC-111/recall.md`: the budget is right, but QMD 2.8.3 returns at most 20 hits per sub-search, so a member who sees a small share gets short pages; KBC-118).
+   - Features not built yet (playlists, sharing, Favoritas, the queue, offline with the revoke reason `level`, KBC-052 to KBC-058) inherit the rule: their routes enter the leakage suite by themselves, and their lists read the library through the view.
+
 ## Phase 2: media library (planned, KBC-034 to KBC-040)
 
 - Module `preparation` (KBC-072): the guided flow's plan per recording; it asks the transcription, the separation and the proposals for each stage in turn and reads their state from them, keeping only what they cannot say. A paid stage starts once, from the person's stored choice, and only reserves then. A run that failed or was cut by a restart keeps its finished windows; only a click goes on, paying for the windows missing.
@@ -244,6 +267,7 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
 ## Fitness functions (QA-14) → backlog
 
 - **Boundaries lint** fails CI on a cross-module or adapter import (QA-15).
+- **Access levels** (ADR 0036 §12, KBC-111): the leakage suite over every `/api/v1` route and research event, and the type-aware boundary test on the catalog and media list readers.
 - **Contract test** runs kb and QMD JSON fixtures through the adapters (Q5), plus a live smoke against the real vault behind `KB_VAULT`.
 - **Latency check** in the skeleton: a script measures p95 for 20 real queries per mode and fails above the thresholds of Q1 and Q2. It starts as a dated warning (QA-16).
 - **Path traversal and Host or CORS tests** (threat model).
