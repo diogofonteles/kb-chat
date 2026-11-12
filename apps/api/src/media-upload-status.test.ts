@@ -110,22 +110,37 @@ const jobsOf = (db: DatabaseSync, id: string) =>
   );
 
 describe('uploadStatus with two status reads at once (KBC-118)', () => {
-  it("answers the whole length to a second status read whose stat lands after the first one's rename (AC-1)", async () => {
+  it("answers the whole length to a second status read whose stat lands between the first one's rename and its queueing (AC-1)", async () => {
     const renamed = barrier();
-    const world = worldWith((files) => {
-      const gated = secondReadWaitsFor(renamed.wait)(files);
-      return Object.assign(gated, {
+    const secondRead = barrier();
+    let reads = 0;
+    let seen: { offset: number; status?: string } | null = null;
+    const world: World = worldWith((files) =>
+      Object.assign(Object.create(files) as FsMediaFiles, {
+        async uploadOffset(mediaId: string) {
+          reads += 1;
+          if (reads !== 2) return files.uploadOffset(mediaId);
+          await renamed.wait;
+          const offset = await files.uploadOffset(mediaId);
+          seen = { offset, status: world.store.getMedia(mediaId)?.status };
+          // The finish goes on only after this read was answered and looked at.
+          setImmediate(() => secondRead.open());
+          return offset;
+        },
         async finishUpload(mediaId: string) {
           await files.finishUpload(mediaId);
           renamed.open();
+          await secondRead.wait;
         },
-      });
-    });
+      }),
+    );
     world.keep(AUDIO);
     const both = await Promise.all([
       world.service.uploadStatus(OWNER, world.id),
       world.service.uploadStatus(OWNER, world.id),
     ]);
+    // The window: the file is moved, the item not yet queued.
+    expect(seen).toEqual({ offset: 0, status: 'uploading' });
     expect(both).toEqual([
       { offset: AUDIO.length, length: AUDIO.length },
       { offset: AUDIO.length, length: AUDIO.length },
@@ -196,5 +211,55 @@ describe('uploadStatus with two status reads at once (KBC-118)', () => {
     });
     partEnds.open();
     expect(await part).toBe(10);
+  });
+  it('starts over a status read that saw the whole wrong file before another one threw it away (AC-6)', async () => {
+    const secondRead = barrier();
+    const firstAnswered = barrier();
+    let reads = 0;
+    const world = worldWith((files) =>
+      Object.assign(Object.create(files) as FsMediaFiles, {
+        async uploadOffset(mediaId: string) {
+          reads += 1;
+          const mine = reads;
+          const offset = await files.uploadOffset(mediaId);
+          if (mine === 2) {
+            secondRead.open();
+            await firstAnswered.wait;
+          }
+          return offset;
+        },
+        async hashUpload(mediaId: string) {
+          await secondRead.wait;
+          return files.hashUpload(mediaId);
+        },
+      }),
+    );
+    world.keep(Buffer.alloc(AUDIO.length, 7));
+    const first = world.service.uploadStatus(OWNER, world.id);
+    const second = world.service.uploadStatus(OWNER, world.id);
+    expect(await first).toEqual({ offset: 0, length: AUDIO.length });
+    firstAnswered.open();
+    expect(await second).toEqual({ offset: 0, length: AUDIO.length });
+    expect(world.store.getMedia(world.id)?.status).toBe('uploading');
+  });
+
+  it('says the item is gone when the upload is cancelled while its whole file is checked (AC-7)', async () => {
+    const hashing = barrier();
+    const cancelled = barrier();
+    const world = worldWith((files) =>
+      Object.assign(Object.create(files) as FsMediaFiles, {
+        async hashUpload(mediaId: string) {
+          hashing.open();
+          await cancelled.wait;
+          return files.hashUpload(mediaId);
+        },
+      }),
+    );
+    world.keep(AUDIO);
+    const status = world.service.uploadStatus(OWNER, world.id);
+    await hashing.wait;
+    await world.service.remove(OWNER, world.id);
+    cancelled.open();
+    await expect(status).rejects.toMatchObject({ code: 'MEDIA_NOT_FOUND' });
   });
 });
