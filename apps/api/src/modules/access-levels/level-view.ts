@@ -149,14 +149,29 @@ export function scaledView(input: ScaledViewInput): LevelView {
     },
     allowedLevelIds: () =>
       seesAll ? null : scale.slice(0, rank + 1).map((one) => one.id),
-    trackPlace: (mediaId) =>
-      rank === 'all' || !input.tracksBeside
-        ? null
-        : placeAmong(
-            input.tracksBeside(mediaId),
-            mediaId,
-            scale.slice(0, rank + 1),
-          ),
+    trackPlace: placesFor(input, rank),
+  };
+}
+
+/**
+ * The view's `trackPlace`: null for a master or without media; else the place among what
+ * the viewer hears, the recording's tracks read once per view (every track of it is cached).
+ */
+function placesFor(
+  input: ScaledViewInput,
+  rank: number | 'all',
+): LevelView['trackPlace'] {
+  const { tracksBeside } = input;
+  if (rank === 'all' || !tracksBeside) return () => null;
+  const heard = input.scale.slice(0, rank + 1);
+  const known = new Map<string, readonly PlacedTrack[]>();
+  return (mediaId) => {
+    let tracks = known.get(mediaId);
+    if (!tracks) {
+      tracks = tracksBeside(mediaId);
+      for (const track of tracks) known.set(track.mediaId, tracks);
+    }
+    return placeAmong(tracks, mediaId, heard);
   };
 }
 
