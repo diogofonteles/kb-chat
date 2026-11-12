@@ -62,4 +62,5 @@ pnpm --filter @kb-chat/api exec tsx src/scripts/media-search-latency.ts   # medi
 (cd tools/transcriber && uv run ruff check && uv run ruff format --check && uv run pytest)   # the Mac transcriber (KBC-036, Python with uv)
 pnpm --filter @kb-chat/api exec tsx src/scripts/transcript-calibration.ts <raw-dir>   # post-filter and confidence over raw transcripts (manual, ADR 0023)
 KBC_NFR_STRICT=1 pnpm --filter @kb-chat/api exec vitest run src/modules/access-levels/people-levels-scale.test.ts   # people's levels in bulk: 500 people ≤ 1 s, one write of people.json (KBC-109 NFR-1; the gates hold it to 5 s)
+pnpm --filter @kb-chat/api exec tsx src/scripts/levels-recall.ts   # recall@10 and p95 of the adaptive budget per visible share (KBC-111 FR-3); --qmd <index> for the real QMD, see the header
 ```

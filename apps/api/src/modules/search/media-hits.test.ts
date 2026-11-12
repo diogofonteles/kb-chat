@@ -7,7 +7,7 @@ import {
   MAX_TERMS,
   authorRuleOf,
   hasDocumentOnlyFilters,
-  scoreOf,
+  passageScore,
   termsOf,
   toMediaHit,
   unmark,
@@ -120,11 +120,13 @@ describe('unmark', () => {
   });
 });
 
-describe('scoreOf', () => {
-  it('maps bm25 to 0–1, better matches higher', () => {
-    expect(scoreOf(0)).toBe(0);
-    expect(scoreOf(-9)).toBeCloseTo(0.9);
-    expect(scoreOf(-9)).toBeGreaterThan(scoreOf(-1));
+describe('passageScore (KBC-111)', () => {
+  it('scores a passage 0–1 by its own marked terms, more marks higher', () => {
+    expect(passageScore('nada')).toBe(0);
+    expect(passageScore('\u0002lua\u0003 cheia')).toBe(0.5);
+    expect(passageScore('\u0002lua\u0003 e \u0002sol\u0003')).toBeCloseTo(
+      2 / 3,
+    );
   });
 });
 

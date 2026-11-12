@@ -6,6 +6,7 @@ import { AppError } from '../../app-error.js';
 import type { ToolCall, ToolDefinition } from '../../ports/llm.js';
 import type { VaultReaderPort } from '../../ports/vault-reader.js';
 import {
+  placedFor,
   splitFrontmatter,
   type CatalogEntry,
   type CatalogRegistry,
@@ -274,8 +275,12 @@ export class ResearchTools {
   }
 
   /** One hit, numbered with its catalog entry so a track keeps its media (KBC-099). */
-  private hitOf(hit: SearchHit, { topic, book, labels }: ToolContext): string {
-    const entry = this.hitEntry(topic, hit);
+  private hitOf(
+    hit: SearchHit,
+    { topic, book, labels, view }: ToolContext,
+  ): string {
+    const found = this.hitEntry(topic, hit);
+    const entry = found && placedFor(view, found);
     const n = book.number(entry ?? textRef(hit));
     if (entry?.media) {
       const anchors = anchorsIn(hit.snippet ?? '');
@@ -480,7 +485,9 @@ export class ResearchTools {
       const label = RELATION_LABELS[group as keyof typeof RELATION_LABELS];
       const lines = refs
         .slice(0, MAX_REFS_PER_GROUP)
-        .map((ref) => this.relatedLine(topic, ref, { book, labels }));
+        .map((ref) =>
+          this.relatedLine(topic, ref, { book, labels, view: context.view }),
+        );
       return [`${label} (${refs.length}):`, ...lines].join('\n');
     });
     if (groups.length === 0)
@@ -514,9 +521,10 @@ export class ResearchTools {
   private relatedLine(
     topic: string,
     ref: { id: string; title: string },
-    { book, labels }: Pick<ToolContext, 'book' | 'labels'>,
+    { book, labels, view }: Pick<ToolContext, 'book' | 'labels' | 'view'>,
   ): string {
-    const entry = this.entry(topic, ref.id);
+    const found = this.entry(topic, ref.id);
+    const entry = found && placedFor(view, found);
     // The catalog entry carries the authorship the source keeps (KBC-020).
     const n = book.number(entry ?? ref);
     return entry ? refLine(n, entry, labels) : `[${n}] ${ref.title}`;

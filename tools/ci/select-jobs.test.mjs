@@ -277,3 +277,27 @@ test('every web feature the table names exists', () => {
       );
   }
 });
+
+// KBC-111 (ADR 0036 §12): the leakage suite and the boundary test are API tests. Whatever
+// they guard (every API source, its test worlds, the shared contracts) must select them, so
+// no rule added above can let a change that could reveal a hidden item skip them.
+test('the level guards run whenever a path they protect changes', () => {
+  const root = new URL('../../', import.meta.url);
+  const guarded = ['apps/api/src', 'apps/api/test', 'libs/contracts/src']
+    .flatMap((dir) =>
+      readdirSync(new URL(`${dir}/`, root), { recursive: true }).map(
+        (file) => `${dir}/${file}`,
+      ),
+    )
+    .filter((path) => /\.(ts|json|md)$/.test(path));
+  assert.ok(guarded.length > 500);
+  const skipped = guarded.filter(
+    (path) => !unitNames(onPullRequest(path)).includes('api'),
+  );
+  assert.deepEqual(skipped, []);
+  for (const guard of [
+    'apps/api/src/levels-leakage.integration.test.ts',
+    'apps/api/src/levels-boundary.test.ts',
+  ])
+    assert.ok(guarded.includes(guard), guard);
+});

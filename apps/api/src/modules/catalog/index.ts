@@ -3,6 +3,7 @@ export { ScopeView, type DocumentHome } from './scope-view.js';
 export {
   isSeenDocument,
   isTrackEntry,
+  placedFor,
   toCatalogEntry,
   toConceptName,
   type CatalogEntry,

@@ -4,6 +4,7 @@ import type { LevelView } from '../../../ports/level-view.js';
 import type { TrackShelf } from '../../../ports/track-shelf.js';
 import type { VaultReaderPort } from '../../../ports/vault-reader.js';
 import {
+  placedFor,
   splitFrontmatter,
   type CatalogEntry,
   type CatalogRegistry,
@@ -248,10 +249,14 @@ export class SweepPlanner {
     const filter = filterOf(plan, (entry) =>
       isVisible(entry, { topic, tracks, view }),
     );
-    return view
-      .entries(scope)
-      .filter((entry) => acceptsEntry(filter, entry))
-      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    return (
+      view
+        .entries(scope)
+        .filter((entry) => acceptsEntry(filter, entry))
+        // KBC-111: a track's "faixa n de N" counted over the tracks this person hears.
+        .map((entry) => placedFor(view, entry))
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    );
   }
 
   /**

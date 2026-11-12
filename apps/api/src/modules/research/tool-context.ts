@@ -4,6 +4,7 @@ import type { TrackShelf } from '../../ports/track-shelf.js';
 import { allowsInScope, type LevelView } from '../access-levels/index.js';
 import {
   isSeenDocument,
+  placedFor,
   type CatalogEntry,
   type CatalogRegistry,
 } from '../catalog/index.js';
@@ -83,7 +84,10 @@ export function resolveEntry(
   const id = n === null ? String(ref) : book.find(n)?.id;
   // The collection and its sub-collections (KBC-101 FR-5).
   const entry = id ? (catalog.scopeView(topic)?.entries.get(id) ?? null) : null;
-  return entry && isVisible(entry, context) ? entry : null;
+  // KBC-111: a track's "faixa n de N" counted over the tracks this person hears.
+  return entry && isVisible(entry, context)
+    ? placedFor(context.view, entry)
+    : null;
 }
 
 export const notFound = (ref: string | number): string =>

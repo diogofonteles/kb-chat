@@ -38,6 +38,7 @@ import {
   legacyAuthorshipOf,
   seesMedia,
 } from './media-policy.js';
+import { placeAmongHeard } from './track-place.js';
 import {
   editAboveYourLevel,
   hearsAllTracks,
@@ -849,7 +850,7 @@ export class MediaService {
       ...view,
       author: this.authorOf(record),
       canEdit: canEditMedia(actor, record),
-      parent: this.parentOf(record),
+      parent: this.parentOf(record, actor),
       groqReady: actor.isMaster && (this.deps.groqReady?.() ?? false),
       level,
       hidden: this.hiddenFor(actor, record),
@@ -862,10 +863,9 @@ export class MediaService {
   }
 
   /** Where a track item comes from (FR-4); null for a recording. */
-  private parentOf(record: MediaRecord): TrackParent | null {
+  private parentOf(record: MediaRecord, actor: MediaActor): TrackParent | null {
     if (!record.track) return null;
-    const { parentId, startMs, endMs, ordinal, version, fileVersion } =
-      record.track;
+    const { parentId, startMs, endMs, version, fileVersion } = record.track;
     const parent = this.deps.store.getMedia(parentId);
     if (!parent) return null;
     return {
@@ -873,11 +873,28 @@ export class MediaService {
       title: parent.title,
       startMs,
       endMs,
-      ordinal,
-      total: this.deps.store.trackTotal(parentId),
+      ...this.placeOf(record, actor),
       version,
       fileVersion,
     };
+  }
+
+  /** KBC-111: the track's number and the total over the tracks this person hears. */
+  private placeOf(
+    record: MediaRecord,
+    actor: MediaActor,
+  ): { ordinal: number | null; total: number } {
+    const { parentId, ordinal } = record.track ?? {
+      parentId: '',
+      ordinal: null,
+    };
+    const stored = { ordinal, total: this.deps.store.trackTotal(parentId) };
+    if (actor.levelsIn(record.topic) === null) return stored;
+    return placeAmongHeard(
+      this.deps.store.liveTrackLevels(parentId),
+      record.id,
+      (level) => hearsLevel(actor, record.topic, level),
+    );
   }
 
   /** The stored author as the list now names it (still shown if no longer listed). */

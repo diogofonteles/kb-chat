@@ -123,7 +123,9 @@ export const RULES = [
   webFeature('tutorial', appE2e(['tutorial'])),
   { match: /^apps\/web\//, ...web, ...everyE2e },
 
-  // API: the browser only matters where it reads the media bytes.
+  // API: the browser only matters where it reads the media bytes. Every API path runs the
+  // API's tests, the leakage suite and the boundary test of the access levels among them
+  // (KBC-111, ADR 0036 §12); select-jobs.test.mjs holds every real path to it.
   {
     match: /^apps\/api\/src\/modules\/media\/(range|serve-media)\.ts$/,
     ...api,

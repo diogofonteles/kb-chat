@@ -168,10 +168,15 @@ export function excerptOf(passage: {
   };
 }
 
-/** bm25 (negative, lower is better) to 0–1, as QMD scores the documents' lexical match. */
-export const scoreOf = (bm25: number): number => {
-  const magnitude = Math.abs(bm25);
-  return magnitude / (1 + magnitude);
+/**
+ * A passage's relevance, 0–1, from its own words: how many times the question's terms are
+ * marked in it (h / (h + 1)). Not FTS5's bm25, whose statistics span the whole table and so
+ * move with transcripts above the person's level (KBC-111): the order still comes from bm25,
+ * the number shown and mixed with the documents tells nothing of what is hidden.
+ */
+export const passageScore = (marked: string): number => {
+  const hits = unmark(marked).highlights.length;
+  return hits / (hits + 1);
 };
 
 /** How a match names its author, and its group in the "Autoria" filter. */
@@ -203,7 +208,7 @@ export function toMediaHit(
     startMs: match.startMs,
     endMs: match.endMs,
     confidence: match.confidence,
-    score: scoreOf(match.bm25),
+    score: passageScore(match.marked),
     match: 'speech',
     subjects: [],
   };

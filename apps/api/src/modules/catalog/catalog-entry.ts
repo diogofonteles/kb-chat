@@ -1,3 +1,4 @@
+import type { LevelView } from '../../ports/level-view.js';
 import {
   authorshipSchema,
   depthLevelSchema,
@@ -205,3 +206,22 @@ export const isSeenDocument = (
 ): boolean =>
   entry.media === null ||
   (tracks?.trackOf(topic, entry.media) ?? null) !== null;
+
+/**
+ * A track document's media as one viewer may know it (KBC-111, owner decision): "faixa n de N"
+ * counted over the tracks they hear, not the frontmatter's count over every track.
+ */
+export function placedFor<E extends { readonly media: CatalogMedia | null }>(
+  view: Pick<LevelView, 'trackPlace'>,
+  entry: E,
+): E {
+  const { media } = entry;
+  if (!media || media.kind !== 'track') return entry;
+  const place = view.trackPlace(media.mediaId);
+  return place
+    ? {
+        ...entry,
+        media: { ...media, ordinal: place.ordinal, total: place.total },
+      }
+    : entry;
+}
