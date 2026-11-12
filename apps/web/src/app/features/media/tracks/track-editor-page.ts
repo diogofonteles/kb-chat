@@ -29,7 +29,9 @@ import {
   mediaSilencesSchema,
   mediaWaveformSchema,
   type DraftTrack,
+  mentionsName,
   type NameReview,
+  type PreparationVoice,
   type TrackKind,
   type TrackProblem,
   type VoiceLabel,
@@ -117,18 +119,46 @@ const LISTEN_KINDS: readonly ListenKind[] = ['track', 'start', 'end'];
 const touched = (track: DraftTrack): DraftTrack => ({ ...track, edited: true });
 
 /**
- * A review lists what the server last read; a title changed or a track deleted here since is
- * one the person already looked at, and a review left with nothing goes (KBC-102 BR-1).
+ * A review lists what the server last read; here it follows the tracks on screen (KBC-102
+ * BR-1): a deleted track leaves it, a changed title stays while it still says the name, by the
+ * server's own rule, and a review left with nothing goes.
  */
 const onScreen = (
   reviews: readonly NameReview[],
   tracks: readonly DraftTrack[],
+  voices: readonly PreparationVoice[],
 ): NameReview[] =>
   reviews.flatMap((review) => {
-    const still = review.tracks.filter(({ id, title }) =>
-      tracks.some((track) => track.id === id && track.title === title),
-    );
+    const right = voices.find(({ voice }) => voice === review.voice)?.name;
+    const still = review.tracks.flatMap(({ id, title }) => {
+      const now = tracks.find((track) => track.id === id)?.title ?? null;
+      const says =
+        now !== null &&
+        (now === title || mentionsName(now, review.name, right ?? null));
+      return says ? [{ id, title: now }] : [];
+    });
     return still.length > 0 ? [{ ...review, tracks: still }] : [];
+  });
+
+/** Same reviews, same tracks and titles: what is on screen did not change. */
+const sameReviews = (
+  a: readonly NameReview[],
+  b: readonly NameReview[],
+): boolean =>
+  a.length === b.length &&
+  a.every((one, at) => {
+    const other = b[at];
+    return (
+      other !== undefined &&
+      one.voice === other.voice &&
+      one.name === other.name &&
+      one.tracks.length === other.tracks.length &&
+      one.tracks.every(
+        ({ id, title }, index) =>
+          id === other.tracks[index]?.id &&
+          title === other.tracks[index]?.title,
+      )
+    );
   });
 
 /** The name of who asks or answers; a voice without one, by its number. */
@@ -303,9 +333,25 @@ export class TrackEditorPage {
     return {
       ...preparation,
       suggestions,
-      nameReviews: onScreen(preparation.nameReviews, this.draft.tracks()),
+      nameReviews: this.reviewsOnScreen(),
     };
   });
+  /** Its own signal, so a drag that changes no title leaves the names' block as it is. */
+  private readonly reviewsOnScreen = computed(
+    () => {
+      const preparation = this.preparation.hasValue()
+        ? this.preparation.value()
+        : null;
+      return preparation
+        ? onScreen(
+            preparation.nameReviews,
+            this.draft.tracks(),
+            preparation.voices,
+          )
+        : [];
+    },
+    { equal: sameReviews },
+  );
   /** Up here too: on a phone the names' block is far below (QA I-2). */
   protected readonly titlesToReview = computed(
     () => (this.voicesToName()?.nameReviews.length ?? 0) > 0,

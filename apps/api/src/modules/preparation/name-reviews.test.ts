@@ -100,6 +100,29 @@ describe('nameReviewsOf (KBC-090, KBC-102)', () => {
     ]);
   });
 
+  it('reads the given name by the same word boundaries as a title', () => {
+    for (const given of ['Laércio, Fonseca', 'Laércio-Fonseca'])
+      expect(
+        nameReviewsOf({
+          texts: [text(1, 'Laércio')],
+          labels: [person(1, given)],
+          refused: [],
+          tracks: [{ id: ONE, title: 'Laércio explica a Tábua' }],
+        }),
+      ).toEqual([]);
+  });
+
+  it("BR-2: a one-word name held by another voice's given name is that voice's", () => {
+    expect(
+      nameReviewsOf({
+        texts: [text(1, 'Pedro')],
+        labels: [person(1, 'Marcos'), person(2, 'Pedro Álvares')],
+        refused: [],
+        tracks: [{ id: ONE, title: 'Pedro explica a viagem' }],
+      }),
+    ).toEqual([]);
+  });
+
   it('a name that only shares a word with the given one is still reviewed', () => {
     expect(
       nameReviewsOf({

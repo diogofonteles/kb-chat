@@ -28,12 +28,12 @@ Como quem valida as faixas de uma gravação, quero que o aviso "Reveja" apareç
 **Out:** a reescrita dos títulos (`VoiceNameFixer`), o texto do aviso, o passo 2 (preparo) além do que a mesma API devolve, dispensar uma revisão à mão, avisar títulos de vozes de plateia.
 
 ## Business rules
-- BR-1: uma revisão só lista títulos que estão no rascunho mostrado agora, com o texto mostrado agora; título mudado ou faixa apagada na tela sai da lista; revisão sem título some, e o banner some sem revisão.
-- BR-2: um nome errado que aparece inteiro, palavra por palavra (sem acento nem caixa), dentro de um nome que uma pessoa deu a qualquer voz da gravação não é errado e não gera revisão. Exceção: nenhuma; nome de uma palavra que não é parte de nome dado continua revisado (KBC-090).
+- BR-1: uma revisão só lista faixas que estão no rascunho mostrado agora, com o título mostrado agora: faixa apagada na tela sai da lista; título mudado fica nela enquanto ainda disser o nome errado (a mesma regra de `mentionsName` da API, KBC-090: texto de pessoa é revisado) e sai quando deixa de dizer; revisão sem faixa some, e o banner some sem revisão.
+- BR-2: um nome errado que aparece inteiro, palavra por palavra (sem acento nem caixa, com as mesmas fronteiras de palavra do título: espaço, vírgula, hífen), dentro de um nome que uma pessoa deu a qualquer voz da gravação não é errado e não gera revisão; vale também para um nome de uma palavra dentro do nome de outra voz ("Pedro" em "Pedro Álvares"). Exceção: nenhuma; nome de uma palavra que não é parte de nome dado continua revisado (KBC-090).
 - BR-3: um nome recusado, ou um nome corrigido que não é parte de nenhum nome dado, continua gerando revisão (KBC-090).
 
 ## Functional requirements
-- FR-1: Quando o rascunho do editor muda, o sistema deve recalcular, sem ler a preparação de novo, quais títulos de cada revisão ainda estão na tela iguais, e mostrar o banner só com alguma revisão restante. (BR-1)
+- FR-1: Quando o rascunho do editor muda, o sistema deve recalcular, sem ler a preparação de novo, quais faixas de cada revisão ainda estão na tela e ainda dizem o nome (título igual, ou `mentionsName` de `@kb-chat/contracts`), mostrar o título atual, e mostrar o banner só com alguma revisão restante. (BR-1)
 - FR-2: Ao calcular `nameReviews`, a API deve descartar o nome errado contido, por palavras e com `speakerKeyOf`, num nome dado a uma voz da gravação. (BR-2, BR-3)
 
 ## Non-functional requirements
@@ -41,6 +41,7 @@ Nenhum específico.
 
 ## Acceptance criteria
 - **AC-1** (FR-1, BR-1): Given o passo 3 com a revisão de "Joana Prado" na faixa "Pergunta de Joana Prado", When a pessoa muda esse título para "Pergunta da plateia", Then o banner "Alguns títulos podem citar…" e a revisão somem sem recarregar a página.
+- **AC-1b** (FR-1, BR-1, negativo): Given a mesma revisão, When a pessoa muda o título para "Pergunta de Joana Prado (parte 2)", Then o banner continua e a revisão lista o título novo.
 - **AC-2** (FR-1, BR-1): Given a mesma revisão em duas faixas, When a pessoa apaga uma delas, Then a revisão continua só com a outra e o banner continua.
 - **AC-3** (FR-2, BR-2): Given a sugestão "Laércio" para a Voz 1 e o título "Laércio explica a Tábua", When a pessoa dá à Voz 1 o nome "Laércio Fonseca", Then `nameReviews` vem vazio.
 - **AC-4** (FR-2, BR-2): Given a sugestão "Ana Souza" para as Vozes 1 e 2, a Voz 1 nomeada "Ana Souza", When a pessoa recusa o nome da Voz 2, Then `nameReviews` vem vazio.
@@ -51,8 +52,8 @@ Nenhum específico.
 ## Test strategy
 | AC | Nível | Notas |
 |---|---|---|
-| AC-1, AC-2 | unitário (web) | `track-editor-page.spec.ts`: preparação com `nameReviews` servida pelo `HttpTestingController`, título mudado pelo campo e faixa apagada pelo menu |
-| AC-3 a AC-6 | unitário (API) | `apps/api/src/modules/preparation/name-reviews.test.ts` |
+| AC-1, AC-1b, AC-2 | unitário (web) | `track-editor-page.spec.ts`: preparação com `nameReviews` servida pelo `HttpTestingController`, título mudado pelo campo e faixa apagada pelo menu |
+| AC-3 a AC-6 | unitário (API, contracts) | `apps/api/src/modules/preparation/name-reviews.test.ts` (com vírgula, hífen e "Pedro" × "Pedro Álvares"), `libs/contracts/src/voice-names.test.ts` |
 | AC-6, AC-7 | integração API e E2E | `voice-name-correction.integration.test.ts` (já existentes) e `e2e/specs/media-queue.spec.ts` "KBC-090: a correction and a refusal reach the published track" |
 
 ## References

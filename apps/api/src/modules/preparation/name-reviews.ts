@@ -1,10 +1,10 @@
 import {
-  speakerKeyOf,
+  holdsName,
+  mentionsName,
   type NameReview,
   type VoiceLabel,
 } from '@kb-chat/contracts';
 import type { VoiceText } from '../../ports/track-proposal-store.js';
-import { mentionsName } from '../media-edit/index.js';
 
 interface ReviewTrack {
   readonly id: string;
@@ -34,15 +34,6 @@ function saying(
 }
 
 /**
- * A name a person gave some voice of the recording holds this one whole, word by word, as the
- * catalog compares names (KBC-102): "Laércio" in "Laércio Fonseca", or another voice's name.
- */
-const heldBy = (wrong: string, names: readonly string[]): boolean => {
-  const words = ` ${speakerKeyOf(wrong)} `;
-  return names.some((name) => ` ${speakerKeyOf(name)} `.includes(words));
-};
-
-/**
  * The titles a wrong name may still be in (KBC-090): a one-word name, what a person wrote, a
  * title the right name did not fit in and a refused name are never rewritten, so a person looks
  * at them before they are published. Both the suggested name and the one last written may be in
@@ -65,7 +56,7 @@ export function nameReviewsOf(input: {
     // What the words should say: nothing for a refused name, else the name given or suggested.
     const right = refused.includes(voice) ? null : (given ?? name);
     const wrongs = [...new Set([written ?? name, name])].filter(
-      (one) => one !== right && !heldBy(one, names),
+      (one) => one !== right && !names.some((given) => holdsName(given, one)),
     );
     const review = saying(tracks, wrongs, right);
     return review ? [{ voice, ...review }] : [];

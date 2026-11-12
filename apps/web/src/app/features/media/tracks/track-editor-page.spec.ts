@@ -958,6 +958,27 @@ describe('the "Reveja" warning follows the titles on screen (KBC-102)', () => {
     expect(review()).toBeNull();
   });
 
+  it('a title changed on screen that still says the name stays in review', async () => {
+    const tracks = [asked(1, 0, 20_000)];
+    const { harness } = await openPage(
+      anEdit({ tracks }),
+      undefined,
+      reviewing(tracks),
+    );
+    const field = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Título',
+    });
+    field.value = `Pergunta 1 de ${REFUSED} (parte 2)`;
+    fireEvent.blur(field);
+    await harness.fixture.whenStable();
+
+    expect(banner()).toBeTruthy();
+    const listed = [
+      ...(review()?.closest('.review')?.querySelectorAll('li') ?? []),
+    ].map((li) => li.textContent?.trim());
+    expect(listed).toEqual([`Pergunta 1 de ${REFUSED} (parte 2)`]);
+  });
+
   it('AC-2: a deleted track leaves the review with the other one', async () => {
     const tracks = [asked(1, 0, 20_000), asked(2, 20_000, 40_000)];
     const { harness } = await openPage(

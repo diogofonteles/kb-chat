@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fixesOf, mentionsName, withNameFixed } from './voice-name-fixer.js';
+import { fixesOf, withNameFixed } from './voice-name-fixer.js';
 
 const FIX = { from: 'Márcio da Roça', to: 'Márcio da Rós' };
 const label = (voice: number, name: string | null, audience = false) => ({
@@ -61,16 +61,6 @@ describe('withNameFixed (KBC-090)', () => {
         80,
       ),
     ).toBe(FIX.from);
-  });
-});
-
-describe('mentionsName (KBC-090)', () => {
-  it('sees the name, but not inside the right one', () => {
-    expect(mentionsName('São Pedro', 'Pedro', 'Marcos')).toBe(true);
-    expect(mentionsName('Pedro Silva e nada', 'Pedro', 'Pedro Silva')).toBe(
-      false,
-    );
-    expect(mentionsName('Pedrosa', 'Pedro', null)).toBe(false);
   });
 });
 
