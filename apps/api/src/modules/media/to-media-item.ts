@@ -1,6 +1,7 @@
 import type {
   Author,
   ContentLevel,
+  HiddenSpan,
   MediaAuthor,
   MediaFailure,
   MediaItem,
@@ -41,6 +42,10 @@ export interface ItemView {
   readonly groqReady?: boolean;
   /** Its level, for masters and its editors in a collection with levels (KBC-105). */
   readonly level?: ContentLevel;
+  /** The parts this person may not hear (KBC-106 FR-2); empty or absent: none. */
+  readonly hidden?: readonly HiddenSpan[];
+  /** Its tracks' own levels, for whoever sees its level (KBC-106 BR-1). */
+  readonly ownTrackLevels?: readonly string[];
 }
 
 /** The stored author as the list now names it (still shown if no longer listed, KBC-049). */
@@ -128,7 +133,14 @@ const transcriptionActions = (
 });
 
 /** Where it sits: its recording, whether it left the edit, and its level for who may see it. */
-const placeOf = (record: MediaRecord, { parent, level }: ItemView) => ({
+const placeOf = (
+  record: MediaRecord,
+  { parent, level, hidden, ownTrackLevels }: ItemView,
+) => ({
+  ...(hidden && hidden.length > 0 ? { hidden: [...hidden] } : {}),
+  ...(ownTrackLevels && ownTrackLevels.length > 0
+    ? { ownTrackLevels: [...ownTrackLevels] }
+    : {}),
   parent: parent ?? null,
   archived: record.archivedAt !== null,
   // KBC-105, ADR 0036 §9: absent for whoever does not manage or edit it.

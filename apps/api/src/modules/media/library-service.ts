@@ -1,6 +1,7 @@
 import {
   DEFAULT_LIBRARY_PREFERENCES,
   type Author,
+  type HiddenSpan,
   type HitSubject,
   type LibraryHome,
   type LibraryItem,
@@ -35,7 +36,8 @@ import {
   type MediaActor,
   type MediaLevels,
 } from './media-service.js';
-import { canEditMedia, seesMedia } from './media-policy.js';
+import { canEditMedia, hearsLevel, seesMedia } from './media-policy.js';
+import { hiddenSpansOf } from './track-levels.js';
 import { mediaAuthorOf, toMediaItem } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
 
@@ -117,6 +119,12 @@ export class LibraryService {
       // A summary is derived from the speech: only for who may search it (R4).
       about: subjects && actor.searchesSpeech ? this.deps.about : undefined,
       tracks: actor.seesTracks ?? false,
+      levelsByTopic: new Map(
+        [...new Set(candidates.map((item) => item.topic))].map((topic) => [
+          topic,
+          actor.levelsIn(topic),
+        ]),
+      ),
     });
   }
 
@@ -209,6 +217,7 @@ export class LibraryService {
     const titles = new Map(records.map((one) => [one.id, one.title]));
     const totals = countTracks(records);
     const levels = this.deps.levels ?? NO_LEVELS;
+    const hidden = hiddenByRecording(actor, records);
     return records
       .filter((record) => isVisible(actor, record))
       .map((record) => {
@@ -224,6 +233,7 @@ export class LibraryService {
               scale: levels.scaleOf(record.topic),
               shows: actor.isMaster || canEditMedia(actor, record),
             }),
+            hidden: hidden.get(record.id) ?? [],
           }),
           kind: record.kind,
           lastPlayedAt: saved?.playedAt ?? null,
@@ -333,4 +343,36 @@ function isVisible(actor: MediaActor, record: LibraryRecord): boolean {
     actor.isMaster ||
     record.ownerPrincipal === actor.principal
   );
+}
+
+/**
+ * KBC-106 FR-2: per recording, the parts this person may not hear (its live tracks above
+ * their level), from the rows the library read anyway.
+ */
+function hiddenByRecording(
+  actor: MediaActor,
+  records: readonly LibraryRecord[],
+): ReadonlyMap<string, readonly HiddenSpan[]> {
+  const tracks = new Map<string, LibraryRecord[]>();
+  for (const record of records) {
+    const { track } = record;
+    if (!track || record.status !== 'ready' || record.archivedAt !== null)
+      continue;
+    if (actor.levelsIn(record.topic) === null) continue;
+    tracks.set(track.parentId, [...(tracks.get(track.parentId) ?? []), record]);
+  }
+  const hidden = new Map<string, readonly HiddenSpan[]>();
+  for (const [parentId, list] of tracks) {
+    const spans = hiddenSpansOf(
+      list.map((one) => ({
+        mediaId: one.id,
+        level: one.level,
+        startMs: one.track?.startMs ?? 0,
+        endMs: one.track?.endMs ?? 0,
+      })),
+      (level) => hearsLevel(actor, list[0]?.topic ?? '', level),
+    );
+    if (spans.length > 0) hidden.set(parentId, spans);
+  }
+  return hidden;
 }

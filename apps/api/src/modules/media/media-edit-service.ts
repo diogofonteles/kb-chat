@@ -24,6 +24,7 @@ import {
   type MediaLevels,
 } from './media-service.js';
 import { canEditMedia, legacyAuthorshipOf, seesMedia } from './media-policy.js';
+import { levelsBelow } from './track-levels.js';
 import { toCollectionSpeaker } from './voice-labels.js';
 
 export interface MediaEditServiceDeps {
@@ -79,25 +80,45 @@ export class MediaEditService {
   ): Promise<void> {
     const { actor, mediaId } = call;
     const media = this.editable(actor, mediaId);
-    const topic = this.destinationOf(actor, media, request.topic);
-    const edit: MediaEdit = {
-      mediaId,
-      title: request.title ?? media.title,
-      topic,
-      ...this.authorship(media, topic, request.author),
-      level: this.levelAfter(actor, { media, topic, asked: request.level }),
-      now: this.now(),
-    };
+    const edit = this.editOf(actor, media, request);
     const audit = this.auditFor(edit.level !== media.level);
     const tracks = this.save(actor, media, edit);
     if (audit)
       await this.recordLevel(audit, call.by ?? { by: actor.principal }, {
-        topic,
+        topic: edit.topic,
         mediaId,
         before: media.level,
         after: edit.level,
         tracks,
       });
+  }
+
+  /** What the recording becomes, and how its tracks follow (KBC-106 BR-1). */
+  private editOf(
+    actor: MediaActor,
+    media: MediaRecord,
+    request: UpdateMediaRequest,
+  ): MediaEdit {
+    const topic = this.destinationOf(actor, media, request.topic);
+    const level = this.levelAfter(actor, {
+      media,
+      topic,
+      asked: request.level,
+    });
+    const scale = (this.deps.levels ?? NO_LEVELS).scaleOf(topic);
+    return {
+      mediaId: media.id,
+      title: request.title ?? media.title,
+      topic,
+      ...this.authorship(media, topic, request.author),
+      level,
+      // Tracks of their own below the new level go up with it.
+      tracks: {
+        below: levelsBelow(scale, level),
+        newScale: !this.sameLists(media.topic, topic),
+      },
+      now: this.now(),
+    };
   }
 
   /** The audit a level change needs, before anything is written; none: no change. */

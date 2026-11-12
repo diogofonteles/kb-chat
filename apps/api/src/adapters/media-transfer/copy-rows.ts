@@ -22,6 +22,10 @@ const RULES: Readonly<Record<string, Readonly<Record<string, ColumnRule>>>> = {
   media: {
     owner_principal: person,
     level: () => '(SELECT level FROM temp.level_map WHERE media_id = x.id)',
+    // A level of its own only with the level kept (KBC-106).
+    level_own: (ref) =>
+      `CASE WHEN (SELECT level FROM temp.level_map WHERE media_id = x.id) IS NULL
+        THEN 0 ELSE ${ref} END`,
   },
   media_tracks: {
     approved_by: person,
@@ -31,6 +35,9 @@ const RULES: Readonly<Record<string, Readonly<Record<string, ColumnRule>>>> = {
   media_draft_tracks: {
     asker_speaker_id: speaker,
     answerer_speaker_id: speaker,
+    // A draft's level only if production's scale has it (KBC-106); else the recording's.
+    level: (ref) =>
+      `(SELECT s.level FROM temp.scale_levels s WHERE s.media_id = x.media_id AND s.level = ${ref})`,
   },
   media_track_archive: {
     asker_speaker_id: speaker,
@@ -133,11 +140,12 @@ export function insertMissingRows(
 
 /**
  * Updates production's rows of a unit's media from the package, all columns but the id and
- * the level, which belongs to production after the first import (BR-6).
+ * the level (with a track's own level, KBC-106), which belong to production after the first
+ * import (BR-6).
  */
 export function updateMediaRows(db: DatabaseSync, ids: string): void {
   const columns = columnsOf(db, 'main', 'media').filter(
-    (column) => column !== 'id' && column !== 'level',
+    (column) => !['id', 'level', 'level_own'].includes(column),
   );
   const values = columns
     .map((column) =>

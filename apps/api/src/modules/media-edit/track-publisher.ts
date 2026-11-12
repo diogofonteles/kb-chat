@@ -97,8 +97,12 @@ export class TrackPublisher {
   /**
    * Inside the approval's transaction: keeps the id of what overlaps enough (BR-5), queues
    * a cut for what is new or moved (FR-1), publishes at once when there is nothing to cut.
+   * `levels`: each track's own level by its id (KBC-106), absent when it follows the recording.
    */
-  afterApproval(parentId: string): void {
+  afterApproval(
+    parentId: string,
+    levels: ReadonlyMap<string, string | null> = new Map(),
+  ): void {
     const { items } = this.deps;
     const tracks = this.approvedTracks(parentId);
     const previous = items.published(parentId);
@@ -112,6 +116,7 @@ export class TrackPublisher {
         keptMediaId: mediaId,
         newMediaId: randomUUID(),
         cutJobId: old && sameBounds(old, track) ? null : randomUUID(),
+        level: levels.get(track.id) ?? null,
       };
     });
     items.plan({ parentId, plans, now });

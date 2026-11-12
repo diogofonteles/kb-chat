@@ -1326,7 +1326,7 @@ async function registerEditing(
   const diarization = diarizationService(wiring);
   const proposals = await registerProposals(app, { ...wiring, diarization });
   await registerEdit(app, wiring);
-  const revisions = createTrackRevisions({ ...wiring, diarization });
+  const revisions = trackRevisions(app, { ...wiring, diarization });
   await app.register(trackRevisionRoutes(revisions));
   const subjects = await registerSubjects(app, wiring);
   const preparation = preparationService(app, {
@@ -1341,6 +1341,23 @@ async function registerEditing(
     publisher: wiring.publisher,
   });
   return { proposals, preparation, subjects, revisions, corrections };
+}
+
+/** What changes a track after its approval, its own level included (KBC-073, KBC-106). */
+function trackRevisions(
+  app: FastifyInstance,
+  wiring: MediaWiring & {
+    readonly service: MediaService;
+    readonly publisher: TrackPublisher;
+    readonly diarization: DiarizationService;
+  },
+) {
+  return createTrackRevisions({
+    ...wiring,
+    trackLevels: mediaLevelsOf(wiring),
+    levelAudit: wiring.levels.audit,
+    log: app.log,
+  });
 }
 
 /** The person who asked for a plan, as they stand now (KBC-072 BR-4). */
@@ -1558,6 +1575,11 @@ async function registerEdit(
         findMedia: (actor, mediaId) => wiring.service.get(actor, mediaId),
         publisher: wiring.publisher,
         preparation: wiring.media.trackItems,
+        // A track's own level in the draft and on approval (KBC-106).
+        levels: mediaLevelsOf(wiring),
+        store: wiring.media.store,
+        audit: wiring.levels.audit,
+        log: app.log,
       }),
     ),
   );
@@ -1936,7 +1958,7 @@ async function loadedLevels(
   const levels = given.levels ?? inMemoryLevels();
   await levels.directory.load();
   const { catalog, people, media } = built;
-  const gate = new ContentGate({ directory: levels.directory, catalog });
+  const gate = contentGateOf(levels, catalog, media);
   const parentOf = (slug: string) => catalog.get(slug)?.topic.parent ?? null;
   // One queue for both services: a scale change never slips into a document write (R1-7).
   const queue = new LevelWriteQueue();
@@ -1955,6 +1977,18 @@ async function loadedLevels(
     history: new LevelHistoryService(withMedia),
   };
 }
+
+/** The gate every content route asks; a track document's level is media.db's (KBC-106). */
+const contentGateOf = (
+  levels: LevelDeps,
+  catalog: CatalogRegistry,
+  media: MediaStorePort | undefined,
+): ContentGate =>
+  new ContentGate({
+    directory: levels.directory,
+    catalog,
+    ...(media && { mediaLevelOf: (id: string) => media.levelOf(id) }),
+  });
 
 /** The levels' state in memory (tests, and an app built without a state folder). */
 const inMemoryLevels = (): LevelDeps => ({

@@ -9,8 +9,10 @@ import {
   VoiceNamesService,
   type DiarizationService,
   type MediaActor,
+  type MediaLevels,
   type MediaService,
 } from './modules/media/index.js';
+import type { LevelAuditPort } from './ports/level-audit.js';
 
 export interface TrackRevisionWiring {
   readonly media: MediaDeps;
@@ -21,6 +23,10 @@ export interface TrackRevisionWiring {
     rootOf(topic: string): string;
     authorOf(topic: string, slug: string): Author | null;
   };
+  /** The scales, the levels audit and the log of a track's level change (KBC-106). */
+  readonly trackLevels?: MediaLevels;
+  readonly levelAudit?: LevelAuditPort;
+  readonly log?: { error(fields: object, message: string): void };
 }
 
 /** What changes a track after its approval (KBC-073), over the stores of the media database. */
@@ -44,6 +50,9 @@ export function createTrackRevisions(
     names: new VoiceNamesService({ ...media, rootOf, speakersOf }),
     fixer: voiceNameFixerOf(media),
     findMedia: (actor, mediaId) => service.get(actor, mediaId),
+    ...(wiring.trackLevels && { levels: wiring.trackLevels }),
+    ...(wiring.levelAudit && { audit: wiring.levelAudit }),
+    ...(wiring.log && { log: wiring.log }),
     rootOf,
     authorOf: (topic, slug) => authors.authorOf(topic, slug),
   });

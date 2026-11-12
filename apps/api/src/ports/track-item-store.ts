@@ -10,6 +10,8 @@ export interface TrackPlan {
   readonly newMediaId: string;
   /** Its bounds changed, or it is new: a cut is queued with this job id. */
   readonly cutJobId: string | null;
+  /** Its own level (KBC-106), never below the recording's; null: it follows the recording. */
+  readonly level: string | null;
 }
 
 /** An approved track, with its item and where its cut is. */

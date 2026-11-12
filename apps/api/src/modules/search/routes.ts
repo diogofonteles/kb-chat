@@ -57,15 +57,16 @@ function searchViewerOf(
 ): SearchViewer {
   const { person } = viewerOf(request);
   const mayHear = hasFeature(person, 'media');
-  // KBC-105: in a collection with levels a member hears the recordings at their level; its
-  // tracks, and the subjects that lead to them, wait for their own level (KBC-106).
+  // KBC-105/106: in a collection with levels a member hears the recordings and the tracks at
+  // their level; the subjects across the collection stay with masters (KBC-106 decision 7).
   const levels = levelViewOf(request, topic).allowedLevelIds();
-  const tracksOpen = levels === null && canSeeTracks(request, topic);
+  const tracksOpen = canSeeTracks(request, topic);
   const seesTracks = tracksOpen && hasFeature(person, 'media-tracks');
   return {
     mayHear,
     seesTracks,
-    seesSubjects: tracksOpen && hasFeature(person, 'media-subjects'),
+    seesSubjects:
+      levels === null && tracksOpen && hasFeature(person, 'media-subjects'),
     canSee: (slug) => canSee(request, slug),
     levels,
     ...(mayHear && seesTracks && tracks && { tracks: tracks() }),

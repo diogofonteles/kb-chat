@@ -8,6 +8,7 @@ import {
 import type {
   LevelView,
   ScopedDocument,
+  ViewedDocument,
   ViewedScope,
 } from '../../ports/level-view.js';
 
@@ -17,7 +18,7 @@ export type ScopeOf = (
 ) => ViewedScope<ScopedDocument> | undefined;
 
 /** Whether the reader may see the document `id` of `topic`, judged like a research tool does. */
-type Visible = (id: string, media: object | null) => boolean;
+type Visible = (id: string, media: ViewedDocument['media']) => boolean;
 
 function visibilityIn(
   topic: string,

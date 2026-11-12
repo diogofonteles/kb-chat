@@ -89,6 +89,8 @@ export const API_ERROR_CODES = [
   'LEVEL_REQUIRED',
   /** The level chosen is above the person's own (KBC-105 BR-2). */
   'LEVEL_ABOVE_YOURS',
+  /** A track's level below its recording's (KBC-106 BR-1): the passage is in the whole recording. */
+  'LEVEL_BELOW_RECORDING',
   /** The scale changed since the preview a reorder or a delete was confirmed on (KBC-108 BR-3). */
   'LEVELS_CHANGED',
   'INTERNAL',

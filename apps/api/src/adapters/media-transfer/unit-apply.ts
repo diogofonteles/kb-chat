@@ -72,6 +72,36 @@ function fillLevels(run: ImportRun, media: readonly SourceMedia[]): void {
   }
 }
 
+/** The levels of production's scale each media of the unit may hold (KBC-106 drafts). */
+function fillScaleLevels(run: ImportRun, media: readonly SourceMedia[]): void {
+  run.db.exec('DELETE FROM temp.scale_levels');
+  const insert = run.db.prepare(
+    'INSERT OR IGNORE INTO temp.scale_levels (media_id, level) VALUES (?, ?)',
+  );
+  for (const item of media)
+    for (const level of run.scales.get(rootOf(run.collections, item.topic)) ??
+      [])
+      insert.run(item.id, level);
+}
+
+/** The draft levels production gave the unit, kept across a replacement (KBC-106). */
+function keepDraftLevels(run: ImportRun, ids: string): void {
+  run.db.exec('DELETE FROM temp.draft_levels');
+  run.db
+    .prepare(
+      `INSERT INTO temp.draft_levels (id, level) SELECT id, level FROM main.media_draft_tracks
+       WHERE media_id IN (SELECT value FROM json_each(:ids)) AND level IS NOT NULL`,
+    )
+    .run({ ids });
+}
+
+function restoreDraftLevels(run: ImportRun): void {
+  run.db.exec(`
+    UPDATE main.media_draft_tracks
+    SET level = (SELECT d.level FROM temp.draft_levels d WHERE d.id = media_draft_tracks.id)
+    WHERE id IN (SELECT id FROM temp.draft_levels)`);
+}
+
 /** The unit's current transcripts in the search index, as migration 12 builds it. */
 function indexTranscripts(run: ImportRun, ids: string): void {
   run.db
@@ -114,6 +144,7 @@ export function recordLedger(
 
 function insertRows(run: ImportRun, unit: SourceUnit): void {
   fillLevels(run, unit.media);
+  fillScaleLevels(run, unit.media);
   ensureSharedRows(run.db, unit);
   for (const table of UNIT_TABLES)
     insertUnitRows(run.db, table, { ids: unit.ids });
@@ -199,7 +230,9 @@ function replaceRows(run: ImportRun, unit: SourceUnit): void {
     run,
     unit.media.filter((one) => !there.has(one.id)),
   );
+  fillScaleLevels(run, unit.media);
   ensureSharedRows(run.db, unit);
+  keepDraftLevels(run, unit.ids);
   unindexTranscripts(run, unit.ids);
   for (const table of [...REWRITTEN_TABLES].reverse())
     deleteRows(run, table, unit.ids);
@@ -213,6 +246,7 @@ function replaceRows(run: ImportRun, unit: SourceUnit): void {
   const known = JSON.stringify([...there]);
   for (const table of rest)
     replaceTable(run, table, { ids: unit.ids, there: known });
+  restoreDraftLevels(run);
   refreshDocuments(run, unit.ids);
   refreshAbout(run, unit.ids);
 }

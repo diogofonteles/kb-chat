@@ -98,8 +98,8 @@ const exceptClause = (ids: readonly string[] | undefined): Clause =>
 
 /**
  * The levels a person sees (KBC-105, ADR 0036 §7): the filter is in the query, so counts and
- * the ranking only ever meet what the person may hear. Restricted, only recordings: a track's
- * own level is KBC-106.
+ * the ranking only ever meet what the person may hear. A track answers by its own level
+ * (KBC-106).
  */
 const levelClause = (levels: readonly string[] | null | undefined): Clause =>
   levels === null || levels === undefined
@@ -107,9 +107,65 @@ const levelClause = (levels: readonly string[] | null | undefined): Clause =>
     : levels.length === 0
       ? { sql: '0', values: [] }
       : {
-          sql: `(m.level IN (${placeholders(levels.length)}) AND ${ONLY_RECORDINGS})`,
+          sql: `m.level IN (${placeholders(levels.length)})`,
           values: levels,
         };
+
+/**
+ * KBC-106 BR-2: a recording's segment that touches one of its live tracks the person may not
+ * hear never answers (any overlap, fail-closed). `levelsByTopic`: per collection the levels
+ * seen there, null for all; a collection absent from it sees none.
+ */
+export function hiddenClause(
+  levelsByTopic: ReadonlyMap<string, readonly string[] | null> | undefined,
+): Clause {
+  if (
+    !levelsByTopic ||
+    [...levelsByTopic.values()].every((one) => one === null)
+  )
+    return { sql: '1', values: [] };
+  const seen = [...levelsByTopic].flatMap(([topic, levels]): Clause[] => {
+    if (levels === null) return [{ sql: '(h.topic = ?)', values: [topic] }];
+    if (levels.length === 0) return [];
+    return [
+      {
+        sql: `(h.topic = ? AND h.level IN (${placeholders(levels.length)}))`,
+        values: [topic, ...levels],
+      },
+    ];
+  });
+  const visible =
+    seen.length === 0 ? '0' : seen.map((one) => one.sql).join(' OR ');
+  return {
+    sql: `NOT EXISTS (SELECT 1 FROM media h WHERE h.parent_media_id = m.id
+      AND h.status = 'ready' AND h.archived_at IS NULL
+      AND s.start_ms < h.parent_end_ms AND s.end_ms > h.parent_start_ms
+      AND NOT (${visible}))`,
+    values: seen.flatMap((one) => one.values),
+  };
+}
+
+/** The same levels in every collection searched (they share one scale, KBC-105). */
+const sameLevels = (
+  topics: readonly string[],
+  levels: readonly string[] | null | undefined,
+): ReadonlyMap<string, readonly string[] | null> | undefined =>
+  levels === null || levels === undefined
+    ? undefined
+    : new Map(topics.map((topic) => [topic, levels]));
+
+/** The levels of the media and of what is hidden inside a recording, for a segment query. */
+const segmentLevelClause = (
+  topics: readonly string[],
+  levels: readonly string[] | null | undefined,
+): Clause => {
+  const level = levelClause(levels);
+  const hidden = hiddenClause(sameLevels(topics, levels));
+  return {
+    sql: `${level.sql} AND ${hidden.sql}`,
+    values: [...level.values, ...hidden.values],
+  };
+};
 
 /** A track someone may be told about: published, not archived (KBC-068 FR-1, BR-5). */
 const LIVE_TRACK_ROW = `m.parent_media_id IS NOT NULL AND m.status = 'ready'
@@ -231,7 +287,7 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
       return { matches: [], total: 0 };
     const scope = scopeClause(topics, authors);
     const except = exceptClause(exceptIds);
-    const level = levelClause(levels);
+    const level = segmentLevelClause(topics, levels);
     const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql} AND ${level.sql} AND ${except.sql}`;
     const values = [
       toMatchExpression(terms),
@@ -258,7 +314,7 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     if (terms.length === 0 || topics.length === 0)
       return { main: 0, others: 0 };
     const except = exceptClause(exceptIds);
-    const level = levelClause(levels);
+    const level = segmentLevelClause(topics, levels);
     const countFor = (kind: 'main' | 'others'): number => {
       const scope = scopeClause(topics, { kind, mainOf });
       const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql} AND ${level.sql} AND ${except.sql}`;
@@ -389,41 +445,45 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
    * best; past that, each media asks its own stretch of the index, in the order of `ids`, until
    * the limit is passed: such a word ranks nothing useful (NFR-1).
    */
-  spokenAmong({ terms, ids, tracks, limit }: SpokenQuery): SpokenAmong {
+  spokenAmong(query: SpokenQuery): SpokenAmong {
+    const { terms, ids, limit } = query;
     if (terms.length === 0 || ids.length === 0)
       return { places: [], more: false };
     const expression = toMatchExpression(terms);
     const places =
       this.matchesInIndex(expression) <= RANKED
-        ? this.rankedPlaces(expression, ids, tracks)
-        : this.scannedPlaces(expression, { ids, tracks, limit });
+        ? this.rankedPlaces(expression, query)
+        : this.scannedPlaces(expression, query);
     return { places: places.slice(0, limit), more: places.length > limit };
   }
 
   private rankedPlaces(
     expression: string,
-    ids: readonly string[],
-    tracks: boolean,
+    { ids, tracks, levelsByTopic }: Omit<SpokenQuery, 'terms'>,
   ): readonly SpokenPlace[] {
+    const hidden = hiddenClause(levelsByTopic);
     const rows = this.db
       .prepare(
         `SELECT t.media_id, s.rowid AS place ${FROM_INDEX}
-         WHERE segments_fts MATCH ? AND ${IN_IDS} AND ${passagesFor(tracks)} ${ORDER}`,
+         WHERE segments_fts MATCH ? AND ${IN_IDS} AND ${passagesFor(tracks)}
+           AND ${hidden.sql} ${ORDER}`,
       )
-      .all(expression, JSON.stringify(ids));
+      .all(expression, JSON.stringify(ids), ...hidden.values);
     return firstOfEach(rows);
   }
 
   /** Normal confidence first (BR-3), among what was read. */
   private scannedPlaces(
     expression: string,
-    { ids, tracks, limit }: Omit<SpokenQuery, 'terms'>,
+    { ids, tracks, limit, levelsByTopic }: Omit<SpokenQuery, 'terms'>,
   ): readonly SpokenPlace[] {
+    const hidden = hiddenClause(levelsByTopic);
     const scan = this.db.prepare(
       `SELECT r.media_id, x.confidence, (
          SELECT f.rowid FROM segments_fts f CROSS JOIN segments s ON s.rowid = f.rowid
          WHERE segments_fts MATCH ? AND f.rowid BETWEEN r.first AND r.last
-           AND s.transcript_id = r.transcript_id AND ${passagesFor(tracks)} LIMIT 1
+           AND s.transcript_id = r.transcript_id AND ${passagesFor(tracks)}
+           AND ${hidden.sql} LIMIT 1
        ) AS place
        FROM (${SEGMENT_RANGES}) r
        CROSS JOIN transcripts x ON x.id = r.transcript_id
@@ -433,7 +493,9 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     for (let at = 0; at < ids.length && found.length <= limit;) {
       const batch = JSON.stringify(ids.slice(at, at + SCAN_BATCH));
       found.push(
-        ...scan.all(expression, batch).filter((row) => row['place'] !== null),
+        ...scan
+          .all(expression, ...hidden.values, batch)
+          .filter((row) => row['place'] !== null),
       );
       at += SCAN_BATCH;
     }

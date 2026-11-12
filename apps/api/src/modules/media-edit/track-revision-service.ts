@@ -4,6 +4,7 @@ import {
   timingProblems,
   type ArchivedTracks,
   type Author,
+  type LevelAuditEntry,
   type MediaItem,
   type MovedBookmarks,
   type TrackBoundsRequest,
@@ -31,9 +32,14 @@ import type {
   TrackRole,
 } from '../../ports/track-revision-store.js';
 import type { TrackSubjectStorePort } from '../../ports/track-subject-store.js';
+import type { LevelAuditPort } from '../../ports/level-audit.js';
 import {
-  seesTracksIn,
+  NO_LEVELS,
+  hearsLevel,
+  ownLevelOf,
+  trackLevelChoices,
   type MediaActor,
+  type MediaLevels,
   type TrackCall,
   type VoiceNamesService,
 } from '../media/index.js';
@@ -51,7 +57,16 @@ export interface TrackRevisionDeps {
     | 'retryCuts'
   >;
   readonly edits: Pick<MediaEditStorePort, 'edit'>;
-  readonly store: Pick<MediaStorePort, 'getMedia'>;
+  readonly store: Pick<
+    MediaStorePort,
+    'getMedia' | 'setTrackLevel' | 'levelOf'
+  >;
+  /** The collections' scales (KBC-106); none: no collection has levels. */
+  readonly levels?: MediaLevels;
+  /** Where a track's level change is recorded (ADR 0036 §11); required once levels exist. */
+  readonly audit?: LevelAuditPort;
+  /** Where a change applied but not recorded is said. */
+  readonly log?: { error(fields: object, message: string): void };
   readonly files: Pick<MediaFilesPort, 'remove'>;
   readonly summaries: Pick<TrackSubjectStorePort, 'read' | 'writeSummary'>;
   readonly speakers: Pick<SpeakerStorePort, 'get' | 'list'>;
@@ -68,6 +83,13 @@ export interface TrackRevisionDeps {
 }
 
 const ROLES: readonly TrackRole[] = ['asker', 'answerer'];
+
+/** A track's level before and after a patch (KBC-106). */
+interface TrackRelevel {
+  readonly before: string | null;
+  readonly after: string | null;
+  readonly own: boolean;
+}
 
 /** How long a replaced cut stays for who is on it (BR-3). */
 const OLD_CUT_MS = 24 * 60 * 60 * 1000;
@@ -127,23 +149,57 @@ export class TrackRevisionService {
       answerer: this.speakerOf(track, 'answerer', parent),
       cut: track.cut,
       locked: this.deps.edits.edit(parent.id)?.status !== 'approved',
-      tracks: this.deps.revisions.tracks(parent.id).map((one) => ({
+      tracks: this.neighbours(actor, parent),
+      level: record.levelOwn ? record.level : null,
+      levels: trackLevelChoices(this.levelContext(actor, parent)),
+    };
+  }
+
+  /** The recording's tracks, those above the person's level left out (KBC-106 BR-2). */
+  private neighbours(actor: MediaActor, parent: MediaRecord) {
+    return this.deps.revisions
+      .tracks(parent.id)
+      .filter((one) =>
+        hearsLevel(
+          actor,
+          parent.topic,
+          this.deps.store.levelOf(one.mediaId) ?? null,
+        ),
+      )
+      .map((one) => ({
         id: one.mediaId,
         ordinal: one.ordinal,
         title: one.title,
         startMs: one.startMs,
         endMs: one.endMs,
-      })),
+      }));
+  }
+
+  /** The scale a track of `parent` is placed in, and what this person may choose there. */
+  private levelContext(actor: MediaActor, parent: MediaRecord) {
+    return {
+      scale: (this.deps.levels ?? NO_LEVELS).scaleOf(parent.topic),
+      recording: parent.level,
+      allowed: actor.levelsIn(parent.topic),
     };
   }
 
-  patch(call: TrackCall, patch: TrackPatch): void {
-    const { track } = this.writable(call.actor, call.mediaId);
+  async patch(call: TrackCall, patch: TrackPatch): Promise<void> {
+    const { record, track } = this.writable(call.actor, call.mediaId);
     const author = this.authorOf(call.actor);
     const { revisions, publisher } = this.deps;
     const scope = patch.scope ?? 'track';
+    const relevel = this.relevelOf(call.actor, record, patch.level);
+    const audit = relevel && this.auditFor(relevel);
     revisions.atomically(() => {
       if (!revisions.bump(call.mediaId, call.expectedVersion)) throw stale();
+      if (relevel)
+        this.deps.store.setTrackLevel({
+          mediaId: call.mediaId,
+          level: relevel.after,
+          own: relevel.own,
+          now: author.now,
+        });
       const changes = [
         ...this.renamed(track, patch),
         ...this.summarized(call, patch),
@@ -155,6 +211,66 @@ export class TrackRevisionService {
         publisher.afterRecordingEdit(track.parentId);
       else publisher.afterChange(track.parentId);
     });
+    if (audit && relevel)
+      await this.recordLevel(audit, call, { ...relevel, topic: record.topic });
+  }
+
+  /**
+   * KBC-106 FR-1: the level a patch asks for, checked against the recording's and the
+   * person's; null when nothing about the level changes.
+   */
+  private relevelOf(
+    actor: MediaActor,
+    record: MediaRecord,
+    asked: string | null | undefined,
+  ): TrackRelevel | null {
+    if (asked === undefined || !record.track) return null;
+    const parent = this.parentOf(record.track.parentId);
+    const own = ownLevelOf(this.levelContext(actor, parent), asked);
+    const after = own ?? parent.level;
+    if (after === record.level && (own !== null) === record.levelOwn)
+      return null;
+    return { before: record.level, after, own: own !== null };
+  }
+
+  private auditFor(relevel: TrackRelevel): LevelAuditPort | null {
+    if (relevel.before === relevel.after) return null;
+    const { audit } = this.deps;
+    if (!audit)
+      throw new Error('A level would change with no audit to record it');
+    return audit;
+  }
+
+  /**
+   * ADR 0036 §11, BR-4: written first, recorded right after; a record that fails is logged with
+   * what changed and fails the request.
+   */
+  private async recordLevel(
+    audit: LevelAuditPort,
+    call: TrackCall,
+    change: TrackRelevel & { readonly topic: string },
+  ): Promise<void> {
+    const by = call.by ?? { by: call.actor.principal };
+    const entry: LevelAuditEntry = {
+      at: this.now().toISOString(),
+      by: by.by,
+      ...(by.actingAs && { actingAs: by.actingAs }),
+      kind: 'item.level',
+      collection: change.topic,
+      target: call.mediaId,
+      before: change.before,
+      after: change.after,
+      count: { recordings: 0, tracks: 1 },
+    };
+    try {
+      await audit.append(entry);
+    } catch (err) {
+      this.deps.log?.error(
+        { err, by: by.by, mediaId: call.mediaId, ...change },
+        'media level changed but not audited',
+      );
+      throw err;
+    }
   }
 
   private renamed(track: RevisableTrack, patch: TrackPatch): NewChange[] {
@@ -504,8 +620,12 @@ export class TrackRevisionService {
     return {
       moved: this.deps.revisions
         .movedBookmarks(actor.principal)
-        // Tracks of a collection with levels wait for KBC-106.
-        .filter((entry) => seesTracksIn(actor, entry.topic))
+        // A track above the person's level is not named (KBC-106 BR-2).
+        .filter(
+          (entry) =>
+            actor.canSee(entry.topic) &&
+            hearsLevel(actor, entry.topic, entry.level),
+        )
         .map(({ mediaId, recordingId, title, count }) => ({
           mediaId,
           recordingId,

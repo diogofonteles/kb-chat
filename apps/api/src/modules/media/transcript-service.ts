@@ -1,4 +1,5 @@
 import type {
+  HiddenSpan,
   LearnedSpan,
   MediaTranscript,
   MediaTranscriptWords,
@@ -12,7 +13,9 @@ import type {
   TranscriptSummary,
 } from '../../ports/transcript-store.js';
 import type { TranscriptVoices } from './diarization-service.js';
+import { hiddenTagOf } from './masked-stream.js';
 import type { MediaActor } from './media-service.js';
+import { touchesHidden } from './track-levels.js';
 import {
   SUBTITLE_RULES_VERSION,
   cuesOf,
@@ -26,7 +29,14 @@ export interface TranscriptServiceDeps {
   >;
   /** Who sees which media: `get` throws the stream's 404 (KBC-038 FR-1). */
   readonly media: {
-    get(actor: MediaActor, mediaId: string): { readonly archived: boolean };
+    get(
+      actor: MediaActor,
+      mediaId: string,
+    ): {
+      readonly archived: boolean;
+      /** What this person may not hear of it (KBC-106 FR-2). */
+      readonly hidden?: readonly HiddenSpan[];
+    };
   };
   /** A track's bounds, to read its voices from the recording (KBC-068 FR-3). */
   readonly recording?: Pick<MediaStorePort, 'getMedia'>;
@@ -83,6 +93,41 @@ export interface Subtitles {
 
 const DEFAULT_CACHE_SIZE = 32;
 
+/**
+ * KBC-106 BR-2: a segment touching a hidden part stays in its place (positions of words and
+ * corrections do not move) with no text and no voice.
+ */
+function restrictedIn(
+  transcript: MediaTranscript,
+  hidden: readonly HiddenSpan[],
+): MediaTranscript {
+  if (hidden.length === 0) return transcript;
+  return {
+    ...transcript,
+    segments: transcript.segments.map((segment) =>
+      touchesHidden(hidden, segment)
+        ? {
+            startMs: segment.startMs,
+            endMs: segment.endMs,
+            text: '',
+            ...(segment.voice !== undefined && { voice: null }),
+            restricted: true as const,
+          }
+        : segment,
+    ),
+  };
+}
+
+/** A learned span names a word left out. */
+const overlapsPositions = (
+  span: { readonly position: number; readonly count: number },
+  dropped: ReadonlySet<number>,
+): boolean => {
+  for (let at = span.position; at < span.position + span.count; at++)
+    if (dropped.has(at)) return true;
+  return false;
+};
+
 const noTranscript = () =>
   new AppError('MEDIA_NOT_READY', 'This media has no transcript yet');
 
@@ -115,7 +160,7 @@ export class TranscriptService {
     mediaId: string,
     options: TranscriptAudience = NOBODY,
   ): MediaTranscript {
-    const summary = this.currentOf(actor, mediaId);
+    const { summary, hidden } = this.readable(actor, mediaId);
     const segments = this.deps.transcripts
       .segments(summary.id)
       .map(({ startMs, endMs, text }) => ({ startMs, endMs, text }));
@@ -127,7 +172,10 @@ export class TranscriptService {
       segments,
       ...(options.withTermList ? this.termListOf(summary) : {}),
     };
-    return this.withSpeakers(transcript, summary, options);
+    return restrictedIn(
+      this.withSpeakers(transcript, summary, options),
+      hidden,
+    );
   }
 
   private termListOf(summary: TranscriptSummary) {
@@ -143,22 +191,42 @@ export class TranscriptService {
     mediaId: string,
     range: TranscriptWordsQuery,
   ): MediaTranscriptWords {
-    const summary = this.currentOf(actor, mediaId);
+    const { summary, hidden } = this.readable(actor, mediaId);
+    const { kept, dropped } = this.wordsHeard(summary.id, range, hidden);
     return {
       mediaId,
       version: summary.version,
       revision: summary.revision,
-      words: this.deps.transcripts
-        .wordsOfSegments(summary.id, range)
-        .map(({ position, segment, startMs, endMs, text }) => ({
-          position,
-          segment,
-          startMs,
-          endMs,
-          text,
-        })),
-      learned: this.deps.learnedOn?.(summary.id, range) ?? [],
+      words: kept,
+      learned: (this.deps.learnedOn?.(summary.id, range) ?? []).filter(
+        (span) => !overlapsPositions(span, dropped),
+      ),
     };
+  }
+
+  /** A page of words, those touching a hidden part left out (KBC-106 BR-2). */
+  private wordsHeard(
+    transcriptId: string,
+    range: TranscriptWordsQuery,
+    hidden: readonly HiddenSpan[],
+  ) {
+    const closed = this.closedSegments(transcriptId, hidden);
+    const words = this.deps.transcripts
+      .wordsOfSegments(transcriptId, range)
+      .map(({ position, segment, startMs, endMs, text }) => ({
+        position,
+        segment,
+        startMs,
+        endMs,
+        text,
+      }));
+    const kept = words.filter(
+      (word) => !closed.has(word.segment) && !touchesHidden(hidden, word),
+    );
+    const dropped = new Set(
+      words.filter((word) => !kept.includes(word)).map((one) => one.position),
+    );
+    return { kept, dropped };
   }
 
   /** The transcript with what `audience` may read of the current separation, if any. */
@@ -234,8 +302,11 @@ export class TranscriptService {
   }
 
   subtitles(actor: MediaActor, mediaId: string): Subtitles {
-    const summary = this.currentOf(actor, mediaId);
-    const etag = etagOf(summary);
+    const { summary, hidden } = this.readable(actor, mediaId);
+    const etag =
+      hidden.length > 0
+        ? etagOf(summary).replace(/"$/, `.h${hiddenTagOf(hidden)}"`)
+        : etagOf(summary);
     const cached = this.vtt.get(etag);
     if (cached !== undefined) {
       // Most recently used goes last; the first one is the oldest.
@@ -243,19 +314,41 @@ export class TranscriptService {
       this.vtt.set(etag, cached);
       return { etag, body: cached };
     }
-    const body = this.derive(summary.id);
+    const body = this.derive(summary.id, hidden);
     this.remember(etag, body);
     return { etag, body };
   }
 
-  private derive(transcriptId: string): string {
+  /** The cues with what this person may not hear left out (KBC-106 BR-2). */
+  private derive(transcriptId: string, hidden: readonly HiddenSpan[]): string {
     const { transcripts } = this.deps;
+    const closed = this.closedSegments(transcriptId, hidden);
+    const segments = transcripts
+      .segments(transcriptId)
+      .map((segment, index) =>
+        closed.has(index) ? { ...segment, text: '' } : segment,
+      );
+    const words = transcripts
+      .words(transcriptId)
+      .filter(
+        (word) => !closed.has(word.segment) && !touchesHidden(hidden, word),
+      );
     return formatWebVtt(
-      cuesOf({
-        segments: transcripts.segments(transcriptId),
-        words: transcripts.words(transcriptId),
-      }),
+      cuesOf({ segments, words }).filter((cue) => cue.text.trim() !== ''),
     );
+  }
+
+  /** The positions of the segments that touch a hidden part. */
+  private closedSegments(
+    transcriptId: string,
+    hidden: readonly HiddenSpan[],
+  ): ReadonlySet<number> {
+    if (hidden.length === 0) return new Set();
+    const closed = new Set<number>();
+    this.deps.transcripts.segments(transcriptId).forEach((segment, index) => {
+      if (touchesHidden(hidden, segment)) closed.add(index);
+    });
+    return closed;
   }
 
   private remember(etag: string, body: string): void {
@@ -270,11 +363,14 @@ export class TranscriptService {
    * A deleted track's text goes with its sound (KBC-073 BR-5, KBC-099 BUG-1): an old answer
    * that cites it may not read its passage any more.
    */
-  private currentOf(actor: MediaActor, mediaId: string): TranscriptSummary {
-    if (this.deps.media.get(actor, mediaId).archived)
-      throw new AppError('MEDIA_NOT_FOUND', 'Unknown media');
+  private readable(
+    actor: MediaActor,
+    mediaId: string,
+  ): { summary: TranscriptSummary; hidden: readonly HiddenSpan[] } {
+    const item = this.deps.media.get(actor, mediaId);
+    if (item.archived) throw new AppError('MEDIA_NOT_FOUND', 'Unknown media');
     const [newest] = this.deps.transcripts.transcripts(mediaId);
     if (!newest) throw noTranscript();
-    return newest;
+    return { summary: newest, hidden: item.hidden ?? [] };
   }
 }
