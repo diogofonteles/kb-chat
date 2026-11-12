@@ -30,7 +30,7 @@ Como pessoa com um nível que vê só parte de um acervo, quero que a busca me t
 
 ## Acceptance criteria
 - **AC-1** (NFR-1 do KBC-111): Given o script do KBC-111 com `--qmd`, Then recall@10 ≥ 0,95 nas fatias de 20 % e 50 % e ≥ 0,90 na de 5 %, nos três modos.
-- **AC-2** (NFR-2 do KBC-111): Then p95 a 20 % ≤ 1,25 × o p95 sem escala, em cada modo.
+- **AC-2** (NFR-2 do KBC-111): Then p95 a 20 % ≤ 1,25 × o p95 sem escala, em cada modo. Atenção: no índice em memória (que respeita o `limit`) o caminho da API já sai 1,5 a 1,9 × a 20 % e 50 %, porque a chamada mais funda (× 4) roda em ~45 % das buscas a 20 % (`ceil(60 / fatia)` mira exatamente 60 visíveis); com o QMD real o NFR-2 só passa hoje porque ele não devolve candidatos a mais. Uma folga no orçamento (pedir mais que `60 / fatia` na primeira chamada) entra aqui.
 - **AC-3** (BR-1): Given `levels-leakage.integration.test.ts`, Then continua verde.
 
 ## Open questions
