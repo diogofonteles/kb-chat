@@ -194,6 +194,25 @@ describe('EditMediaDialog (KBC-050)', () => {
     expect(saved).not.toHaveBeenCalled();
   });
 
+  it("KBC-106: a move that would drop tracks of their own says it is a master's", async () => {
+    const { http, fixture } = await open();
+    save();
+    http.expectOne(URL).flush(
+      {
+        error: {
+          code: 'MEDIA_CONFLICT',
+          message: 'x',
+          details: { reason: 'tracks-of-their-own' },
+        },
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Só um master pode mudar esta gravação de escala',
+    );
+  });
+
   it.each([
     [0, /verifique a conexão/],
     [502, /verifique a conexão/],

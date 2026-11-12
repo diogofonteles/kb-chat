@@ -24,6 +24,7 @@ import {
 } from '@angular/forms';
 import type { MediaItem, Topic, UpdateMediaRequest } from '@kb-chat/contracts';
 import {
+  errorDetailsOf,
   errorMessage,
   refusedFieldOf,
   toUiErrorCode,
@@ -362,6 +363,9 @@ function failureTextOf(err: unknown): string {
   if (offline)
     return $localize`:@@media.edit.offline:Não consegui salvar: verifique a conexão e tente de novo.`;
   const code = toUiErrorCode(err);
+  const reason = (errorDetailsOf(err) as { reason?: unknown } | null)?.reason;
+  if (code === 'MEDIA_CONFLICT' && reason === 'tracks-of-their-own')
+    return $localize`:@@media.edit.tracksOwnLevels:Esta gravação tem faixas com nível próprio. Só um master pode mudar esta gravação de escala (outro acervo de topo ou um acervo sem níveis).`;
   return code === 'VALIDATION_FAILED'
     ? $localize`:@@media.edit.refused:Não consegui salvar: revise os campos e tente de novo.`
     : errorMessage(code);

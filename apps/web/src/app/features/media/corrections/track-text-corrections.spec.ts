@@ -288,6 +288,24 @@ describe('TrackText: correcting a word (KBC-093)', () => {
     expect(screen.getByText('Áudio em 1:12')).toBeTruthy();
   });
 
+  it('KBC-106: a correction refused below a track of the recording says why', async () => {
+    const rendered = await renderText();
+    await clickWord(rendered, 'Tiuako');
+    await type(rendered, 'Tiuaco');
+    fireEvent.keyDown(field(), { key: 'Enter' });
+    await rendered.settle();
+    posted(rendered).flush(
+      { error: { code: 'EDIT_ABOVE_YOUR_LEVEL', message: 'x' } },
+      { status: 403, statusText: 'Forbidden' },
+    );
+    await rendered.settle();
+    expect(
+      screen.getAllByText(
+        'Esta gravação tem faixas acima do seu nível. Só quem tem todos os níveis dela pode editá-la.',
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
   it('AC-1, FR-3: Enter saves; the text is read again and "Palavra corrigida." offers Desfazer', async () => {
     const rendered = await renderText();
     await clickWord(rendered, 'Tiuako');
