@@ -215,6 +215,8 @@ export class TrackText {
   /** A pointer held on a word; the click after a drag is not a click. */
   private press: Press | null = null;
   private swallowClick = false;
+  /** The last click opened or changed the panel: its double click takes that back. */
+  private openedByClick = false;
   /** The gesture comes from Shift+arrows: it opens when Shift is released (FR-4). */
   private byKeys = false;
   /** When the person last scrolled the block themselves. */
@@ -304,6 +306,9 @@ export class TrackText {
       this.swallowClick = false;
       return;
     }
+    // The second and third clicks of a double or triple click select for copying: they
+    // choose nothing, and the browser's selection stays as it made it.
+    if (event.detail >= 2) return;
     const point = this.pointAt(event.clientX, event.clientY);
     const line = point ? this.lines()[point.line] : undefined;
     if (!point || !line) return;
@@ -314,7 +319,9 @@ export class TrackText {
       this.document.getSelection()?.removeAllRanges();
     }
     const selected = this.selectedOffsets(point.line);
+    const before = this.desk.selection();
     this.pick(line, selected ?? { start: point.offset, end: point.offset });
+    this.openedByClick = this.desk.selection() !== before;
   }
 
   /** The line and character under a point of the screen, if it is in a line. */
@@ -549,9 +556,20 @@ export class TrackText {
     this.endPress();
   }
 
-  /** The second press of a double or triple click selects as the browser does (IMP-3). */
+  /**
+   * The second press of a double or triple click selects as the browser does (IMP-3): the
+   * panel the first click opened closes untouched, and the focus stays on the text.
+   */
   protected mousePressed(event: MouseEvent): void {
-    if (event.detail >= 2) this.endPress();
+    if (event.detail < 2) return;
+    this.endPress();
+    if (this.openedByClick && !this.desk.dirty()) this.desk.close();
+    this.openedByClick = false;
+  }
+
+  /** Only the block's own capture ends a drag: a line's implicit one bubbles here too. */
+  protected lostCapture(event: PointerEvent): void {
+    if (event.target === this.body().nativeElement) this.cancelled(event);
   }
 
   /** Every way a press ends takes its mark away and lets the block scroll again (IMP-1). */

@@ -1246,4 +1246,55 @@ describe('TrackText: choosing many words at once (KBC-115)', () => {
       ),
     ).toBeTruthy();
   });
+
+  it('round 2: a double click opens no panel, keeps the focus on the text and the selection intact', async () => {
+    const rendered = await renderSpans();
+    const line = caretOn('Tiuako');
+    fireEvent.pointerDown(line, pointer('mouse', 0));
+    fireEvent.mouseDown(line, { detail: 1 });
+    fireEvent.pointerUp(line, pointer('mouse', 0));
+    fireEvent.click(line, { detail: 1 });
+    await rendered.settle();
+    expect(panel()).not.toBeNull();
+
+    fireEvent.pointerDown(line, pointer('mouse', 0));
+    fireEvent.mouseDown(line, { detail: 2 });
+    selectInLine('Tiuako');
+    fireEvent.pointerUp(line, pointer('mouse', 0));
+    fireEvent.click(line, { detail: 2 });
+    await rendered.settle();
+    expect(panel()).toBeNull();
+    expect(document.activeElement).toBe(region());
+    expect(document.getSelection()?.toString()).toBe('Tiuako');
+    document.getSelection()?.removeAllRanges();
+  });
+
+  it('round 2: a triple click on a line of seven words keeps the whole line selected and opens nothing', async () => {
+    const rendered = await renderSpans();
+    const line = caretOn('quatro');
+    for (const detail of [1, 2, 3]) {
+      fireEvent.pointerDown(line, pointer('mouse', 0));
+      fireEvent.mouseDown(line, { detail });
+      if (detail === 3) selectInLine('um dois três quatro cinco seis sete');
+      fireEvent.pointerUp(line, pointer('mouse', 0));
+      fireEvent.click(line, { detail });
+      await rendered.settle();
+    }
+    expect(panel()).toBeNull();
+    expect(document.getSelection()?.toString()).toBe(
+      'um dois três quatro cinco seis sete',
+    );
+    document.getSelection()?.removeAllRanges();
+  });
+
+  it('round 2: a lost capture bubbling from a line does not end the drag', async () => {
+    const rendered = await renderSpans();
+    const target = await holdAndMove(rendered);
+    fireEvent.lostPointerCapture(lineWith('mestre'), pointer('touch', 40));
+    await rendered.settle();
+    expect(rendered.painted.get('correcting-word')).toBe(1);
+    fireEvent.pointerUp(target, pointer('touch', 40));
+    await rendered.settle();
+    expect(field().value).toBe('mestre Tiuako');
+  });
 });
