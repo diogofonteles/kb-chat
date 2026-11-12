@@ -67,15 +67,8 @@ export interface Scene {
   readonly tracks: readonly MediaItem[];
 }
 
-/** QS < CI < CDC; a CI recording of three tracks, Ana (CI) with media and tracks. */
-export async function scene(): Promise<Scene> {
-  const world = await startLevels(SIX, { media: true });
-  const ana = await memberOf(world, 'ana@example.com', {
-    topics: ['hermetismo'],
-    features: FEATURES,
-  });
-  await createScale(world, ['QS', 'CI', 'CDC']);
-  await setPersonLevel(world, ana.id, { hermetismo: 'ci' });
+/** A CI recording of hermetismo sent by the owner, converted and transcribed. */
+async function transcribedRecording(world: LevelsWorld): Promise<MediaItem> {
   const media = mediaOf(world);
   const token = await transcriber(media);
   const created = await world.owner('POST', '/api/v1/topics/hermetismo/media', {
@@ -96,6 +89,20 @@ export async function scene(): Promise<Scene> {
     { at: 70, text: SECRET },
     { at: 130, text: LATE },
   ]);
+  return recording;
+}
+
+/** QS < CI < CDC; a CI recording of three tracks, Ana (CI) with media and tracks. */
+export async function scene(): Promise<Scene> {
+  const world = await startLevels(SIX, { media: true });
+  const ana = await memberOf(world, 'ana@example.com', {
+    topics: ['hermetismo'],
+    features: FEATURES,
+  });
+  await createScale(world, ['QS', 'CI', 'CDC']);
+  await setPersonLevel(world, ana.id, { hermetismo: 'ci' });
+  const recording = await transcribedRecording(world);
+  const media = mediaOf(world);
   await approve(media, recording.id, [
     { startMs: 0, endMs: 60_000, title: 'Primeira' },
     { startMs: 60_000, endMs: 120_000, title: 'Pergunta Sensivel' },
@@ -126,11 +133,8 @@ export async function setTrackLevel(
 }
 
 /** The recording's file replaced by real AAC: 3 minutes of tone, as the worker makes it. */
-export function realRendition(
-  world: LevelsWorld,
-  recordingId: string,
-  options: { readonly video?: boolean } = {},
-): string {
+/** Where a recording's converted file is on disk. */
+function renditionPath(world: LevelsWorld, recordingId: string): string {
   const db = new DatabaseSync(join(world.started.state, 'media', 'media.db'), {
     readOnly: true,
   });
@@ -140,32 +144,25 @@ export function realRendition(
     )
     .get(recordingId);
   db.close();
-  const path = join(world.started.state, 'media', String(row?.['path']));
+  return join(world.started.state, 'media', String(row?.['path']));
+}
+
+export function realRendition(
+  world: LevelsWorld,
+  recordingId: string,
+  options: { readonly video?: boolean } = {},
+): string {
+  const path = renditionPath(world, recordingId);
   // With `video`, a picture track beside the sound (a file the mask cannot vouch for).
   const video = options.video
     ? ['-f', 'lavfi', '-i', 'color=c=black:s=64x64:d=180', '-c:v', 'mpeg4']
     : [];
   execFileSync(ffmpegBins().ffmpeg, [
-    '-hide_banner',
-    '-loglevel',
-    'error',
-    '-y',
-    '-f',
-    'lavfi',
-    '-i',
-    'sine=frequency=330:duration=180',
+    ...['-hide_banner', '-loglevel', 'error', '-y'],
+    ...['-f', 'lavfi', '-i', 'sine=frequency=330:duration=180'],
     ...video,
-    '-ac',
-    '1',
-    '-c:a',
-    'aac',
-    '-b:a',
-    '64k',
-    '-movflags',
-    '+faststart',
-    '-f',
-    'mp4',
-    path,
+    ...['-ac', '1', '-c:a', 'aac', '-b:a', '64k'],
+    ...['-movflags', '+faststart', '-f', 'mp4', path],
   ]);
   return path;
 }
