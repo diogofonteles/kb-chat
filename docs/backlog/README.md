@@ -118,6 +118,7 @@ Plano completo (fases A a E, custos e riscos): plano da fase 2 v3, publicado pel
 | [KBC-045](KBC-045-word-by-word-highlight.md) | Destaque palavra a palavra | phase-2-a | ready | KBC-038 |
 | [KBC-040](KBC-040-editable-term-list-and-retranscribe.md) | Lista de termos editável e "Transcrever de novo" | phase-2-a | ready | KBC-036 |
 | [KBC-035](KBC-035-resumable-upload-quotas-video-duplicates.md) | Envio retomável, vídeo 720p, cota por pessoa e arquivos repetidos | phase-2-a | ready | KBC-034 |
+| [KBC-118](KBC-118-resumable-upload-status-race.md) | Dois pedidos de status do envio retomável ao mesmo tempo nunca devolvem offset 0 para um arquivo inteiro (corrida no `uploadStatus`) | phase-2-a | in-progress | KBC-035 |
 | [KBC-037](KBC-037-groq-transcription-fallback.md) | Groq como reserva da transcrição, com teto mensal | phase-2-a | ready | KBC-036 |
 | [KBC-047](KBC-047-people-groups-with-permissions.md) | Grupos de pessoas com permissões e acervos | backlog | draft | KBC-028 |
 | [KBC-051](KBC-051-media-library-home.md) | Biblioteca de mídia: continuar ouvindo, ouvidas recentemente, filtros, ordenação, grade ou lista e marcar como ouvida (`media-library`) | phase-2-library | ready | KBC-041 |
