@@ -23,6 +23,7 @@ export * from './voice-prints.js';
 export * from './voice-profiles.js';
 export * from './authors.js';
 export * from './speakers.js';
+export * from './voice-names.js';
 export * from './track-proposals.js';
 export * from './media-edit.js';
 export * from './media-preparation.js';
