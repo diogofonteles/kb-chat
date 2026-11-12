@@ -231,3 +231,9 @@
     border-left-color: Highlight;
   }
 }
+
+/* A part above the person's level (KBC-106): named, in the muted voice of a note. */
+.segment.restricted .text {
+  font-style: italic;
+  color: var(--color-text-muted);
+}

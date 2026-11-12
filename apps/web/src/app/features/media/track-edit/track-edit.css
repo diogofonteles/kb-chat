@@ -77,6 +77,7 @@ a:not(.primary, .secondary, .danger) {
 }
 
 .field input[type='text'],
+.field select,
 .field textarea {
   width: 100%;
   min-height: var(--target);

@@ -93,6 +93,8 @@ export class EditMediaDialog implements OnInit {
   private readonly injector = inject(Injector);
   private readonly titleInput =
     viewChild.required<ElementRef<HTMLInputElement>>('titleInput');
+  private readonly raiseCancel =
+    viewChild<ElementRef<HTMLButtonElement>>('raiseCancel');
 
   readonly item = input.required<MediaItem>();
   /** The collections the person sees (AC-4: no other is offered). */
@@ -147,6 +149,31 @@ export class EditMediaDialog implements OnInit {
   private readonly levelMissing = computed(
     () => this.levels.levels().length > 0 && this.level() === null,
   );
+  /**
+   * KBC-106 BR-1: the tracks with a level of their own that the new level lifts, said before
+   * anything goes (the scale's order is the levels offered, lowest first).
+   */
+  protected readonly tracksRaised = computed(() => {
+    const level = this.level();
+    if (this.movesScale() || level === null) return 0;
+    const order = this.levels.levels().map((one) => one.id);
+    const target = order.indexOf(level);
+    return (this.item().ownTrackLevels ?? []).filter((own) => {
+      const at = order.indexOf(own);
+      return at >= 0 && at < target;
+    }).length;
+  });
+  /** The level whose lift was confirmed; another level asks again. */
+  private readonly raiseConfirmedFor = signal<string | null>(null);
+  protected readonly confirmingRaise = signal(false);
+  protected readonly raiseText = computed(() => {
+    const count = this.tracksRaised();
+    const code =
+      this.levels.levels().find((one) => one.id === this.level())?.code ?? '';
+    return count === 1
+      ? $localize`:@@media.level.raiseOne:1 faixa com nível próprio sobe para ${code}:level:.`
+      : $localize`:@@media.level.raiseMany:${count}:count: faixas com nível próprio sobem para ${code}:level:.`;
+  });
   protected readonly submitted = signal(false);
   protected readonly levelInvalid = computed(
     () => this.submitted() && this.levelMissing(),
@@ -192,6 +219,7 @@ export class EditMediaDialog implements OnInit {
     if (this.waitingForLevels() || this.levelsUnknown()) return;
     // With a scale, nothing goes without a level (BR-1).
     if (this.levelMissing()) return;
+    if (this.asksToRaise()) return;
     this.saving.set(true);
     this.failure.set('');
     const draft = this.draft();
@@ -206,6 +234,31 @@ export class EditMediaDialog implements OnInit {
         next: (item) => this.finish(item),
         error: (err: unknown) => this.stop(err),
       });
+  }
+
+  /**
+   * KBC-106 BR-1: tracks of their own the new level lifts are said first, the focus on the
+   * safe answer (MA-27); true while that waits for an answer.
+   */
+  private asksToRaise(): boolean {
+    const asks =
+      this.tracksRaised() > 0 && this.raiseConfirmedFor() !== this.level();
+    this.confirmingRaise.set(asks);
+    if (asks)
+      afterNextRender(() => this.raiseCancel()?.nativeElement.focus(), {
+        injector: this.injector,
+      });
+    return asks;
+  }
+
+  /** "Salvar assim mesmo": the tracks go up with the recording (KBC-106 BR-1). */
+  protected confirmRaise(): void {
+    this.raiseConfirmedFor.set(this.level());
+    this.save();
+  }
+
+  protected cancelRaise(): void {
+    this.confirmingRaise.set(false);
   }
 
   protected close(): void {

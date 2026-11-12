@@ -105,12 +105,14 @@ export class TrackEditDialog {
     asker: new FormControl('', { nonNullable: true }),
     answerer: new FormControl('', { nonNullable: true }),
     scope: new FormControl<TrackSpeakerScope>('track', { nonNullable: true }),
+    /** Its own level (KBC-106); '' follows the recording. */
+    level: new FormControl('', { nonNullable: true }),
   });
   private readonly typed = toSignal(this.form.valueChanges, {
     initialValue: null,
   });
   /** What the form was read from: a conflict moves it to the other person's. */
-  private readonly base = linkedSignal(() => this.track());
+  protected readonly base = linkedSignal(() => this.track());
   protected readonly conflict = signal<TrackEditView | null>(null);
   protected readonly submitted = signal(false);
   protected readonly saving = signal(false);
@@ -193,6 +195,7 @@ export class TrackEditDialog {
       asker: track.asker.name ?? '',
       answerer: track.answerer.name ?? '',
       scope: 'track',
+      level: track.level ?? '',
     });
   }
 
@@ -352,10 +355,13 @@ export class TrackEditDialog {
     speakers: Partial<TrackPatchRequest>,
   ): Observable<MediaItem | null> {
     const base = this.base();
-    const { title, summary } = this.form.getRawValue();
+    const { title, summary, level } = this.form.getRawValue();
     const written = summary.trim() || null;
+    const ownLevel = level || null;
     const body: TrackPatchRequest = {
       ...(title.trim() === base.title ? {} : { title: title.trim() }),
+      // "O da gravação" is null: back to the recording's level (KBC-106).
+      ...(ownLevel === base.level || !base.levels ? {} : { level: ownLevel }),
       ...(written === base.summary || this.chipsChanged()
         ? {}
         : { summary: written }),

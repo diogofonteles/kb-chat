@@ -4,6 +4,7 @@ import { resumeFrom } from '@kb-chat/player-core';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { mediaStreamUrl } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
+import { RestrictedSkipper } from '@core/media/restricted-skipper.js';
 import { ProgressSaver } from '@core/media/progress-saver.js';
 
 /**
@@ -14,6 +15,8 @@ import { ProgressSaver } from '@core/media/progress-saver.js';
 @Injectable({ providedIn: 'root' })
 export class PlayNow {
   private readonly engine = inject(MediaEngine);
+  /** Skips the parts above the person's level wherever it plays (KBC-106). */
+  private readonly restricted = inject(RestrictedSkipper);
   private readonly saver = inject(ProgressSaver);
 
   /** True while this media is the one loaded and playing. */
@@ -58,6 +61,7 @@ export class PlayNow {
         durationMs: item.durationMs,
         artist: item.author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
         ...(item.parent ? { fileVersion: item.parent.fileVersion } : {}),
+        ...(item.hidden ? { hidden: item.hidden } : {}),
       },
       atMs,
     );

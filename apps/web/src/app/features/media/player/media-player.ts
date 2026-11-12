@@ -46,6 +46,7 @@ import { ShortcutsDialog } from './shortcuts-dialog.js';
 import { SkipsDialog } from './skips-dialog.js';
 import { SleepTimerDialog } from './sleep-timer-dialog.js';
 import { SilencesDialog } from './silences-dialog.js';
+import { RestrictedSkipper } from '@core/media/restricted-skipper.js';
 import { SilenceSkipper } from '@core/media/silence-skipper.js';
 import { BookmarkNote } from './bookmark-note.js';
 
@@ -114,6 +115,8 @@ export class MediaPlayer {
   private readonly silencesDialog = viewChild.required(SilencesDialog);
   /** Skips long pauses while the option is on (KBC-044); lives with the engine. */
   private readonly silences = inject(SilenceSkipper);
+  /** Skips the parts above the person's level, always (KBC-106); lives with the engine. */
+  protected readonly restricted = inject(RestrictedSkipper);
   private readonly more = viewChild.required<MenuButton>('more');
   private readonly injector = inject(Injector);
   private readonly sleepTimer = inject(SleepTimerService);

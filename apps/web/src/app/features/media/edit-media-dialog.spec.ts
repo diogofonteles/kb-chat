@@ -309,6 +309,29 @@ describe('EditMediaDialog (KBC-050)', () => {
       expect(group).toBeTruthy();
     });
 
+    it('KBC-106 BR-1: raising it over a track of its own asks first, and says how many go up', async () => {
+      const own = aMediaItem({
+        level: { id: 'qs', code: 'QS' },
+        ownTrackLevels: ['qs', 'ci'],
+      });
+      const { http, fixture } = await open(own, {
+        hermetismo: [...QS_CI, { id: 'cdc', code: 'CDC' }],
+      });
+      fireEvent.click(screen.getByRole('radio', { name: 'CDC' }));
+      await fixture.whenStable();
+      save();
+      await fixture.whenStable();
+      const confirm = screen.getByRole('group', {
+        name: '2 faixas com nível próprio sobem para CDC.',
+      });
+      expect(confirm).toBeTruthy();
+      http.expectNone(URL);
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Salvar assim mesmo' }),
+      );
+      expect(http.expectOne(URL).request.body).toEqual({ level: 'cdc' });
+    });
+
     it('sends no level when only the title changed', async () => {
       const { http } = await open(LEVELLED, SCALES);
       typeTitle('Outro título');

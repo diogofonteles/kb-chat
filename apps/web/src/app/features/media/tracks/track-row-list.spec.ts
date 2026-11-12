@@ -29,6 +29,7 @@ const track = (n: number, startMs: number, endMs: number): DraftTrack => ({
   answererVoice: null,
   askerSpeakerId: null,
   answererSpeakerId: null,
+  level: null,
 });
 
 const ONE = { track: track(1, 0, 9_000), ordinal: 1 };
@@ -50,6 +51,7 @@ function setup(selectedId: string, extra: object = {}) {
     listen: vi.fn(),
     listenKey: vi.fn(),
     stopPlaying: vi.fn(),
+    levelChange: vi.fn(),
   };
   return render(TrackRowList, {
     providers: [
@@ -230,5 +232,41 @@ describe('TrackRowList (KBC-066)', () => {
     expect(
       screen.getByRole('region', { name: 'Texto da faixa 1' }),
     ).toBeTruthy();
+  });
+
+  it("offers the recording's level first and the levels above it, and says a track's own (KBC-106 FR-5)", async () => {
+    const levels = {
+      recording: { id: 'ci', code: 'CI' },
+      choices: [{ id: 'cdc', code: 'CDC' }],
+    };
+    const { spies, rerender } = await setup(IDS.one, { levels });
+    const field = screen.getByRole('combobox', { name: 'Nível' });
+    expect(
+      [...(field as HTMLSelectElement).options].map((one) => one.text.trim()),
+    ).toEqual(['O da gravação (CI)', 'CDC']);
+    fireEvent.change(field, { target: { value: 'cdc' } });
+    expect(spies.levelChange).toHaveBeenCalledWith({
+      id: IDS.one,
+      level: 'cdc',
+    });
+    fireEvent.change(field, { target: { value: '' } });
+    expect(spies.levelChange).toHaveBeenLastCalledWith({
+      id: IDS.one,
+      level: null,
+    });
+    await rerender({
+      inputs: {
+        tracks: [{ ...ONE, track: { ...ONE.track, level: 'cdc' } }, TWO],
+        selectedId: IDS.one,
+        levels,
+      },
+      partialUpdate: true,
+    });
+    expect(screen.getByText('Nível: CDC')).toBeTruthy();
+  });
+
+  it('has no "Nível" without levels', async () => {
+    await setup(IDS.one);
+    expect(screen.queryByRole('combobox', { name: 'Nível' })).toBeNull();
   });
 });

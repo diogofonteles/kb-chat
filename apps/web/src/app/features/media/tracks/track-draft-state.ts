@@ -98,6 +98,7 @@ export const toEditTrack = (track: DraftTrack) => ({
   answererVoice: track.answererVoice,
   askerSpeakerId: track.askerSpeakerId,
   answererSpeakerId: track.answererSpeakerId,
+  level: track.level ?? null,
 });
 
 const comparable = (tracks: readonly DraftTrack[]): readonly EditTrack[] =>

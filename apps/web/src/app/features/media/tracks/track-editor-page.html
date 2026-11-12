@@ -424,6 +424,8 @@
               [readOnly]="readOnly()"
               [playing]="playingKind()"
               [playingElsewhere]="playingElsewhere()"
+              [levels]="trackLevels()"
+              (levelChange)="changeLevel($event)"
               (stopPlaying)="audition.stop()"
               (listenKey)="listenByKey($event)"
               (selectTrack)="choose($event)"

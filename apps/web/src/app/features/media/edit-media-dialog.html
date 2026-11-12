@@ -82,6 +82,31 @@
       />
     }
 
+    @if (confirmingRaise() && tracksRaised() > 0) {
+      <div class="confirm" role="group" aria-labelledby="media-raise-text">
+        <p id="media-raise-text">{{ raiseText() }}</p>
+        <div class="confirm-actions">
+          <button
+            #raiseCancel
+            type="button"
+            class="secondary"
+            (click)="cancelRaise()"
+            i18n="@@media.level.raiseCancel"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="primary"
+            (click)="confirmRaise()"
+            i18n="@@media.level.raiseConfirm"
+          >
+            Salvar assim mesmo
+          </button>
+        </div>
+      </div>
+    }
+
     @if (failure()) {
       <p class="error" role="alert">
         <span aria-hidden="true">⚠</span> {{ failure() }}

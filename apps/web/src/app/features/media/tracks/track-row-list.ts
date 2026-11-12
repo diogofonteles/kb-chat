@@ -15,6 +15,7 @@ import {
   TRACK_TITLE_MAX,
   type DraftTrack,
   type TrackKind,
+  type TrackLevelChoices,
   type TrackProblem,
 } from '@kb-chat/contracts';
 import type { TrackSpan } from '@kb-chat/player-core';
@@ -124,11 +125,14 @@ export class TrackRowList {
   readonly playing = input<ListenKind | null>(null);
   /** Another row plays: this one offers to stop it. */
   readonly playingElsewhere = input(false);
+  /** What "Nível" offers (KBC-106); null: the collection has no levels. */
+  readonly levels = input<TrackLevelChoices>(null);
 
   readonly selectTrack = output<string>();
   readonly titleChange = output<{ id: string; title: string }>();
   readonly kindChange = output<{ id: string; kind: TrackKind }>();
   readonly personChange = output<PersonChange>();
+  readonly levelChange = output<{ id: string; level: string | null }>();
   readonly listen = output<ListenKind>();
   readonly listenKey = output<ListenKind>();
   readonly stopPlaying = output();
@@ -164,6 +168,7 @@ export class TrackRowList {
       asker: personValue(track.askerVoice, track.askerSpeakerId),
       answerer: personValue(track.answererVoice, track.answererSpeakerId),
       proposal: track.source === 'ai' && !track.edited,
+      levelCode: this.levelCodeOf(track.level),
       actions: track.id === selectedId ? this.actionsOf(track) : [],
       warnings: problems
         .filter((problem) => problem.trackId === track.id)
@@ -264,6 +269,20 @@ export class TrackRowList {
     }
     const { value } = event.target as HTMLInputElement;
     if (value.trim() !== current) this.titleChange.emit({ id, title: value });
+  }
+
+  /** A track's own level, by its code; none while it follows the recording. */
+  private levelCodeOf(level: string | null | undefined): string | null {
+    if (!level) return null;
+    return (
+      this.levels()?.choices.find((one) => one.id === level)?.code ??
+      level.toUpperCase()
+    );
+  }
+
+  protected chooseLevel(event: Event, id: string): void {
+    const { value } = event.target as HTMLSelectElement;
+    this.levelChange.emit({ id, level: value || null });
   }
 
   protected chooseKind(event: Event, id: string): void {

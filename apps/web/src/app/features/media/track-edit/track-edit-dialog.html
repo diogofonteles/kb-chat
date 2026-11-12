@@ -73,6 +73,28 @@
       ></textarea>
     </div>
 
+    @if (base().levels; as choices) {
+      <div class="field">
+        <label for="track-level" i18n="@@trackEdit.field.level">Nível</label>
+        <select
+          id="track-level"
+          formControlName="level"
+          aria-describedby="track-level-help"
+        >
+          <option value="" i18n="@@tracks.level.recording">
+            O da gravação ({{ choices.recording.code }})
+          </option>
+          @for (choice of choices.choices; track choice.id) {
+            <option [value]="choice.id">{{ choice.code }}</option>
+          }
+        </select>
+        <span id="track-level-help" class="note" i18n="@@trackEdit.level.help"
+          >Quem não tem este nível ouve a gravação sem o trecho desta
+          faixa.</span
+        >
+      </div>
+    }
+
     <datalist id="track-speakers">
       @for (name of speakerNames(); track name) {
         <option [value]="name"></option>

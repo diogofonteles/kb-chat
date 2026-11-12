@@ -46,10 +46,12 @@ const aTrack = (n: number, startMs: number, endMs: number): DraftTrack => ({
   answererVoice: null,
   askerSpeakerId: null,
   answererSpeakerId: null,
+  level: null,
 });
 
 const anEdit = (overrides: Partial<MediaEdit> = {}): MediaEdit => ({
   preparation: null,
+  levels: null,
   mediaId: ITEM.id,
   version: 2,
   started: true,

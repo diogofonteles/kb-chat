@@ -168,6 +168,8 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.levelRequired:Escolha o nível deste áudio.`,
   LEVEL_ABOVE_YOURS: () =>
     $localize`:@@error.levelAboveYours:Este nível está acima do seu. Escolha o seu ou um abaixo.`,
+  LEVEL_BELOW_RECORDING: () =>
+    $localize`:@@error.levelBelowRecording:A faixa não pode ficar abaixo do nível da gravação.`,
   LEVELS_CHANGED: () =>
     $localize`:@@error.levelsChanged:A escala mudou. Confira de novo.`,
   INTERNAL: () =>

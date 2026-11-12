@@ -66,6 +66,8 @@ interface SegmentView {
   readonly clock: string;
   readonly label: string;
   readonly text: string;
+  /** Inside a track above the person's level (KBC-106): no text, only its name. */
+  readonly restricted: boolean;
   /** Who speaks, on the first segment of each change of speaker (KBC-065 FR-4); else null. */
   readonly speaker: (SpeakerShown & { readonly voice: number }) | null;
 }
@@ -268,7 +270,11 @@ export class TranscriptPanel {
       clock: formatClock(segment.startMs),
       // The name starts with the visible time, for voice control (WCAG 2.5.3).
       label: $localize`:@@transcript.playFromClock:${formatClock(segment.startMs)}:clock:, tocar de ${speak(segment.startMs)}:time:`,
-      text: segment.text,
+      // KBC-106: a part above the person's level comes with no text; it is named instead.
+      text: segment.restricted
+        ? $localize`:@@transcript.restricted:Trecho restrito`
+        : segment.text,
+      restricted: segment.restricted === true,
       speaker: changes.get(index) ?? null,
     }));
   });
