@@ -322,7 +322,7 @@ test('AC-13: the panel with many words passes axe', async ({
 const selected = (page: Page) =>
   page.evaluate(() => document.getSelection()?.toString().trim() ?? '');
 
-test('IMP-3: a double click selects the word and a triple click the line, for copying', async ({
+test('IMP-3: a double click selects the word and a triple click a long line, for copying, and nothing opens', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name === 'media-mobile', 'the mouse');
@@ -335,13 +335,20 @@ test('IMP-3: a double click selects the word and a triple click the line, for co
 
   const word = await wordAt(region, 'Tiuako');
   await page.mouse.dblclick(word.x, word.y);
-  await expect(panel(page)).toHaveAccessibleName('Corrigir palavra, Tiuako');
   await expect.poll(() => selected(page)).toBe('Tiuako');
+  await expect(panel(page)).toHaveCount(0);
+  await expect(region).toBeFocused();
 
-  await page.mouse.click(word.x, word.y, { clickCount: 3 });
+  // Seven words, more than a correction takes: the whole line is still selected to copy.
+  await page.getByRole('button', { name: 'Ver transcrição completa' }).click();
+  await expect(region).toContainText('o mestre Tiuako falou na segunda faixa');
+  const long = await wordAt(region, 'falou');
+  await page.mouse.click(long.x, long.y, { clickCount: 3 });
   await expect
     .poll(() => selected(page))
-    .toContain('o mestre Tiuako disse assim');
+    .toBe('o mestre Tiuako falou na segunda faixa');
+  await expect(panel(page)).toHaveCount(0);
+  await expect(region).toBeFocused();
 });
 
 test('QA-3: a drag that starts in the space after a word starts on that word', async ({
