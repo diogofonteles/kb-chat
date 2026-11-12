@@ -93,6 +93,13 @@ QMD 2.8.3's `query` tool filters only by `collections` (OR) and `minScore`; it c
 - **Accepted:** the waveform and the silences of a hidden part are not masked (no content; the part is announced in `hidden`).
 - **The transcript of a hidden part:** its segments take the part's own bounds and the web shows them as one "Trecho restrito" line.
 
+### Round 2 of review (KBC-106, 2026-11-12)
+
+- **More edit routes under the same rule:** the word corrections (`…/transcript/occurrences`, `…/transcript/corrections` and their batch and undos), the AI suggestion of a track (`…/suggestions`) and the writes of a track's subjects answer 403 `EDIT_ABOVE_YOUR_LEVEL` below any track of the recording; the web says why where correcting is offered.
+- **"Editar informações":** changing a recording's collection or level is refused (403) to whoever is below any of its tracks; a title or author still changes. A move to another scale or to a collection without one, which drops the tracks' own levels, is a master's: anyone else gets 409 `MEDIA_CONFLICT` with `reason: tracks-of-their-own` (the owner's recommended default, recorded as a decision).
+- **One query:** the library reads the hidden parts of every recording at once (`liveTrackLevelsOf`).
+- **The hidden part is one item:** the transcript sends a run of hidden segments as a single restricted item with the part's bounds, and numbers the words' segments as it does (a page of words is asked in those numbers), so nothing tells how many segments it held.
+
 ## Options considered
 
 1. **Scales, person levels and item levels in the app's state; one viewer-scoped view (chosen).** Works on the read-only vault (Q7), survives every sync, changes take effect at once and are audited in one place. Cost: the app holds a second fact about each vault document, and new documents start closed until classified.
