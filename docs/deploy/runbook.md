@@ -317,7 +317,9 @@ sudo docker compose --env-file .env --env-file release.env ps media-worker   # h
 A produção só recebe mídia por esta migração: nunca transcreve de novo, e o transcritor continua no Mac. O comando é o mesmo na primeira vez e nas seguintes: leva só o que mudou, nunca apaga nada na produção e nunca sobrescreve o que mudou lá. A unidade é a gravação com as suas faixas.
 
 **Vai:** as mídias `ready`, os arquivos de áudio, as transcrições (com o índice de "Na fala"), as correções, o aprendizado (termos e chaves), a separação de vozes e os nomes, as faixas, os assuntos, a forma de onda, os silêncios, o estado dos documentos de faixa, o histórico da fila (só o que terminou), o nível de cada mídia, a autoria, os autores que faltam no acervo, e o progresso, os marcadores e as preferências de quem existe na produção (pelo e-mail).
-**Não vai:** impressões de voz, a lista de revogações, consentimentos e perfis de voz (ADR 0032); uploads incompletos e gravações com trabalho em andamento no Mac (vão na próxima vez); transcritores pareados, gastos, ajustes de mídia.
+**Não vai:** impressões de voz, a lista de revogações, consentimentos e perfis de voz (ADR 0032); uploads incompletos e gravações com trabalho em andamento no Mac (vão na próxima vez); transcritores pareados, gastos, ajustes de mídia. O pacote nem leva essas linhas: a exportação as apaga da cópia do banco (e o `VACUUM` reescreve o arquivo) antes de calcular os hashes.
+**O pacote na VM** fica em `/srv/kb-chat/media-inbox/package` entre uma execução e outra (o `rsync` seguinte manda só as diferenças): leva o progresso e os e-mails das pessoas, nenhum segredo, e só o root e o grupo do app (10001) o leem. Para apagá-lo: `ssh ubuntu@<IP> sudo rm -rf /srv/kb-chat/media-inbox/package` (a próxima vez manda tudo de novo).
+**Termos:** os termos do Mac que faltam na produção entram como uma versão nova da lista; um termo que um master tirou na produção volta na importação seguinte enquanto o Mac o tiver. Tire termos no Mac, onde a transcrição roda (ADR 0038 §9).
 
 **Antes:** a release com o KBC-116 em produção (`ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/deploy.sh --status`: o `running=` é o SHA do merge ou mais novo). A importação é sempre feita pela imagem que está no ar, e as migrações do Mac e da produção têm de ser iguais: rode do checkout do Mac na mesma release (`git switch main && git pull`); senão ela recusa e diz qual lado atualizar.
 
@@ -338,8 +340,12 @@ A produção só recebe mídia por esta migração: nunca transcreve de novo, e 
    sudo grep -q '^KB_CHAT_MEDIA_WORKER_TOKEN=.' /srv/kb-chat/deploy/.env ||
      sudo sh -c 'printf "KB_CHAT_MEDIA_WORKER_TOKEN=%s\n" "$(openssl rand -base64 32)" >> /srv/kb-chat/deploy/.env'
    sudo sed -i '/^KB_CHAT_MEDIA=/d' /srv/kb-chat/deploy/.env && echo 'KB_CHAT_MEDIA=on' | sudo tee -a /srv/kb-chat/deploy/.env
-   sudo grep '^COMPOSE_PROFILES=' /srv/kb-chat/deploy/.env   # sem linha: a de baixo; com "codex": troque por COMPOSE_PROFILES=codex,media
-   echo 'COMPOSE_PROFILES=media' | sudo tee -a /srv/kb-chat/deploy/.env
+   # acrescenta "media" aos perfis sem apagar os que já estão (ex.: codex → codex,media); rodar de novo não muda nada
+   sudo sh -s /srv/kb-chat/deploy/.env <<'EOF'
+   f="$1"; p="$(sed -n 's/^COMPOSE_PROFILES=//p' "$f" | tail -n 1 | tr -d "\"'")"
+   case ",$p," in *,media,*) ;; *) grep -v '^COMPOSE_PROFILES=' "$f" > "$f.new"; echo "COMPOSE_PROFILES=${p:+$p,}media" >> "$f.new"; cat "$f.new" > "$f"; rm "$f.new" ;; esac
+   EOF
+   sudo grep '^COMPOSE_PROFILES=' /srv/kb-chat/deploy/.env   # uma linha só, com media (e codex, se já havia)
    cd /srv/kb-chat/deploy
    sudo docker compose --env-file .env --env-file release.env up -d --wait api media-worker
    sudo docker compose --env-file .env --env-file release.env ps api media-worker   # os dois healthy
@@ -359,7 +365,7 @@ A produção só recebe mídia por esta migração: nunca transcreve de novo, e 
    deploy/scripts/push-media.sh --host ubuntu@<IP> --dry-run
    ```
 
-   Monta o pacote em `~/.cache/kb-chat/media-package` (só lê `~/.kb-chat-media` e `~/.kb-chat`), manda por `rsync` para `/srv/kb-chat/media-inbox/package` e roda `import-media.sh --dry-run`, que confere o sha256 de cada arquivo antes de tudo. Esperado hoje: `inserted 11, updated 0, unchanged 0, held 0`, `people mapped 1` (o dono), código 0. Qualquer `held` aparece com o motivo; veja a tabela abaixo antes de seguir.
+   Monta o pacote em `~/.cache/kb-chat/media-package` (só lê `~/.kb-chat-media` e `~/.kb-chat`), manda por `rsync` para `/srv/kb-chat/media-inbox/package` e roda `import-media.sh --dry-run`, que confere o sha256 de cada arquivo antes de tudo e monta o estado do app só para leitura. O relatório já lista os arquivos que a execução real copiaria (`files copied`, com os bytes). Esperado hoje: `inserted 11, updated 0, unchanged 0, held 0`, `people mapped 1` (o dono), código 0. Qualquer `held` aparece com o motivo; veja a tabela abaixo antes de seguir.
 
 5. **Migração** (a API e o processador param enquanto a importação roda, cerca de um minuto):
 
@@ -387,13 +393,14 @@ Depois de transcrever ou editar no Mac: passos 3 a 6 (sync do vault, ensaio, mig
 |---|---|
 | 0 | tudo levado e conferido, nada retido |
 | 3 | algo ficou retido (listado com o motivo); o resto foi levado |
-| 1 | falha: a unidade que falhou não mudou nada; leia o relatório |
+| 1 | falha: a unidade que falhou não mudou nada; a mensagem diz qual (id e título) e o relatório mostra o que entrou antes dela; corrija e rode de novo |
 
 | Retido por | O que fazer |
 |---|---|
 | `acervo ausente na produção` | rode o sync do vault (passo 3) e repita |
 | `escala ausente na produção` | a mídia tem nível no Mac e o acervo não tem escala na produção: crie a escala lá (Níveis) e repita; sem escala, o nível não restringiria ninguém |
-| `mudou na produção desde a última importação` | alguém editou na produção: decida qual vale; a migração nunca mescla |
+| `mudou na produção desde a última importação` | alguém editou na produção: decida qual vale; a migração nunca mescla. A forma de onda e os silêncios que a produção recalcula sozinha não contam |
+| `a última importação usou colunas que não existem mais` | uma migração removeu uma coluna que o livro de importações usava: decida antes de seguir (raro; as migrações só acrescentam) |
 | `faixa removida no Mac` | a produção tem uma faixa que o Mac não tem mais: a migração nunca apaga |
 | `arquivo diferente na produção` / `já existe na produção sem registro` | um arquivo ou mídia com o mesmo id e outro conteúdo: investigue antes |
 | `em andamento no Mac` | termine o preparo no Mac (fila, corte); vai na próxima |
@@ -414,7 +421,7 @@ Depois de transcrever ou editar no Mac: passos 3 a 6 (sync do vault, ensaio, mig
    sudo docker compose --env-file .env --env-file release.env up -d --wait
    ```
 
-2. Na primeira importação não há `before-import` do banco (a produção não tinha `media.db`): mova `media.db*` para `media.after-import-$S/` e suba; a API cria um banco vazio. Ou desligue a mídia (seção 9d).
+2. Na primeira importação também há `before-import` do banco: com a mídia ligada no passo 2 a API já criou um `media.db` vazio, e o script o guardou antes de importar; o item 1 vale igual. Se não houver arquivo `before-import` com o UTC do relatório, mova `media.db*` para `media.after-import-$S/` e suba (a API cria um banco vazio), ou desligue a mídia (seção 9d). O script guarda os cinco últimos pontos de cada tipo e apaga os mais velhos.
 3. Os arquivos copiados ficam em `media/audio` e `media/transcripts`, sem linha que os cite (não aparecem); a lista está no relatório (`--json` no ensaio).
 4. Nunca toque em `media/voice-prints/` nem em `media/voice-revocations.list` (seção 11).
 5. Voltar a imagem para antes do KBC-116 (`rollback.sh`) é seguro: a migração 32 só criou a tabela `media_imports`, que a versão anterior ignora.
