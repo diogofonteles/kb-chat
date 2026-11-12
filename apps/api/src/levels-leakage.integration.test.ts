@@ -1,11 +1,25 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance } from 'fastify';
 import type { ResearchEvent } from '@kb-chat/contracts';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { closeApp, events, type Call } from '../test/ai-app-harness.js';
+import {
+  closeApp,
+  events,
+  type Call,
+  type StartOptions,
+} from '../test/ai-app-harness.js';
 import type { CatalogRegistry } from './modules/catalog/index.js';
 import {
   BODIES,
+  HIDDEN_FINDING,
   NO_CONTENT,
+  SCHEMA_ONLY,
+  UNKNOWN_BOOKMARK,
+  UNKNOWN_DOCUMENT,
+  UNKNOWN_MEDIA,
+  differFromUnknown,
   exchange,
   leaksIn,
   leavesOf,
@@ -14,12 +28,15 @@ import {
   type Candidates,
   type Exchange,
   type ProbeRequest,
+  type Send,
 } from '../test/leakage-probe.js';
 import {
   HIDDEN_AUDIO,
   HIDDEN_SHA,
   MARK,
   OPEN_DOC_IDS,
+  SECRET,
+  SECRETS,
   SENTINEL_DOCS,
   leakageWorld,
   type LeakageWorld,
@@ -53,17 +70,8 @@ const LOOKING: readonly StubReply[] = [
   { text: 'Segundo o acervo, a lua aparece [1].' },
 ];
 
-const PLAN: StubReply = {
-  toolCalls: [
-    {
-      name: 'plan_sweep',
-      arguments: { target: {}, phrases: [], extract: 'o que se diz da lua' },
-    },
-  ],
-};
-
 /** What the scripted model itself writes in its tool calls: its echo is not a leak. */
-const SCRIPT_WORDS = [...LOOKING, PLAN].flatMap((reply) =>
+const SCRIPT_WORDS = LOOKING.flatMap((reply) =>
   'toolCalls' in reply
     ? reply.toolCalls.flatMap((one) => leavesOf(one.arguments))
     : [],
@@ -74,30 +82,53 @@ const withScript = (request: ProbeRequest): ProbeRequest =>
     ? { ...request, inputs: [...request.inputs, ...SCRIPT_WORDS] }
     : request;
 
-/** The stub: the looking script for a deep turn, a whole-collection plan for the exhaustive. */
+/**
+ * The stub follows the looking script on a deep turn; on an exhaustive one the app plans and
+ * sweeps by itself (ADR 0021) and each batch answers with no finding.
+ */
 const stubModel = () =>
   new StubLlmAdapter({
     script: LOOKING,
     batchReply: () => '',
   });
 
-const candidatesOf = (one: LeakageWorld): Candidates => ({
-  documents: [
-    ...SENTINEL_DOCS.map((doc) => doc.id),
-    // The sub-collection's text by its id in the top-level collection (ADR 0028).
-    'aulas/raw/zqx-aula.md',
-    ...OPEN_DOC_IDS,
-  ],
-  media: [
-    ...new Set([
-      ...(one.hidden ? [one.hidden.recording, one.hidden.track] : []),
-      one.recording.id,
-      ...one.tracks.map((track) => track.id),
+const HIDDEN_DOCUMENTS = [
+  ...SENTINEL_DOCS.map((doc) => doc.id),
+  // The sub-collection's text by its id in the top-level collection (ADR 0028).
+  'aulas/raw/zqx-aula.md',
+];
+
+const candidatesOf = (one: LeakageWorld): Candidates => {
+  const hiddenMedia = one.hidden
+    ? [one.hidden.recording, one.hidden.track]
+    : [];
+  const hiddenBookmarks = one.bookmark ? [one.bookmark] : [];
+  return {
+    documents: [...HIDDEN_DOCUMENTS, ...OPEN_DOC_IDS, UNKNOWN_DOCUMENT],
+    media: [
+      ...new Set([
+        ...hiddenMedia,
+        one.recording.id,
+        ...one.tracks.map((track) => track.id),
+        UNKNOWN_MEDIA,
+      ]),
+    ],
+    conversations: one.conversation ? [one.conversation] : [],
+    bookmarks: [...hiddenBookmarks, UNKNOWN_BOOKMARK],
+    unknownOf: new Map([
+      ...hiddenMedia.map((id) => [id, UNKNOWN_MEDIA] as const),
+      ...hiddenBookmarks.map((id) => [id, UNKNOWN_BOOKMARK] as const),
+      ...HIDDEN_DOCUMENTS.map((id) => [id, UNKNOWN_DOCUMENT] as const),
     ]),
-  ],
-  conversations: one.conversation ? [one.conversation] : [],
-  bookmarks: one.bookmark ? [one.bookmark] : [],
-});
+    bodies: [
+      ...hiddenMedia.map((uuid, at) => ({
+        uuid,
+        document: HIDDEN_DOCUMENTS[at] ?? UNKNOWN_DOCUMENT,
+      })),
+      { uuid: UNKNOWN_MEDIA, document: UNKNOWN_DOCUMENT },
+    ],
+  };
+};
 
 const BODIES_HERE: Readonly<Record<string, readonly object[]>> = {
   ...BODIES,
@@ -106,10 +137,26 @@ const BODIES_HERE: Readonly<Record<string, readonly object[]>> = {
   ],
 };
 
+/** A person's requests; a write carries an If-Match, so version checks are reached too. */
+const sender =
+  (app: FastifyInstance, headers: Record<string, string>): Send =>
+  (request) =>
+    app.inject({
+      method: request.method,
+      url: request.url,
+      headers: {
+        ...headers,
+        ...(request.method !== 'GET' && { 'if-match': '"1"' }),
+      },
+      ...(request.payload && { payload: request.payload }),
+    });
+
 let sentinel: LeakageWorld;
 let llm: StubLlmAdapter;
 let ana: Exchange[] = [];
 let master: Exchange[] = [];
+let anaWrites: Exchange[] = [];
+let candidates: Candidates;
 let readRoutes: string[] = [];
 let sentinelCounts: Awaited<ReturnType<typeof sentinelCountsOf>>;
 
@@ -117,21 +164,24 @@ let sentinelCounts: Awaited<ReturnType<typeof sentinelCountsOf>>;
 beforeAll(async () => {
   llm = stubModel();
   sentinel = await leakageWorld({ sentinels: true, llm });
-  const candidates = candidatesOf(sentinel);
-  const routes = routesOf(sentinel.world.started.app);
-  readRoutes = routes.filter(
-    (route) => route.startsWith('GET ') || BODIES_HERE[route] !== undefined,
-  );
-  const reads = readRoutes
-    .flatMap((route) => requestsOf(route, candidates, BODIES_HERE))
+  candidates = candidatesOf(sentinel);
+  const app = sentinel.world.started.app;
+  const routes = routesOf(app);
+  const isRead = (route: string) =>
+    route.startsWith('GET ') || BODIES_HERE[route] !== undefined;
+  readRoutes = routes.map((one) => one.route).filter(isRead);
+  const reads = routes
+    .filter((one) => isRead(one.route))
+    .flatMap((one) => requestsOf(one, candidates, BODIES_HERE))
     .map(withScript);
-  ana = await exchange(sentinel.ana.call, reads, llm);
-  master = await exchange(sentinel.world.owner, reads, llm);
-  sentinelCounts = await sentinelCountsOf(sentinel.ana.call);
+  ana = await exchange(sender(app, sentinel.ana.headers), reads, llm);
+  master = await exchange(sender(app, sentinel.world.ownerHeaders), reads, llm);
+  sentinelCounts = await sentinelCountsOf(sentinel);
   const writes = routes
-    .filter((route) => !readRoutes.includes(route))
-    .flatMap((route) => requestsOf(route, candidates, BODIES_HERE));
-  ana.push(...(await exchange(sentinel.ana.call, writes, llm)));
+    .filter((one) => !isRead(one.route))
+    .flatMap((one) => requestsOf(one, candidates, BODIES_HERE));
+  anaWrites = await exchange(sender(app, sentinel.ana.headers), writes, llm);
+  ana.push(...anaWrites);
 }, 120_000);
 
 afterAll(async () => {
@@ -142,28 +192,37 @@ const hiddenIds = () =>
   sentinel.hidden ? [sentinel.hidden.recording, sentinel.hidden.track] : [];
 
 describe('Nothing leaks across levels (KBC-111, ADR 0036 §12)', () => {
-  it('AC-1, BR-1: no route nor research event gives Ana a mark of a CDC item', () => {
-    expect(ana.length).toBeGreaterThan(300);
+  it('AC-1, BR-1: no route, header nor research event gives Ana a mark of a CDC item', () => {
     expect(leaksIn(ana, [MARK, ...hiddenIds()])).toEqual([]);
   });
 
-  it('AC-1 (control): the master gets every mark through the same calls', () => {
+  it('AC-1, BR-1: no response carries a second mark, with no echo taken out', () => {
+    const sent = ana.flatMap((one) => one.inputs).join('\n');
+    expect(sent.toLowerCase()).not.toContain(SECRET);
+    expect(leaksIn(ana, [SECRET], { echo: false })).toEqual([]);
+  });
+
+  it('AC-1 (control): the master receives every second mark, the audio bytes included', () => {
     const text = master
       .map((one) => one.text)
       .join('\n')
       .toLowerCase();
-    const marks = [
-      'zqx-raiz',
-      'zqx-aula',
-      'zqxconceito',
-      'zqx-copia',
-      'zqxfaixa',
-      'zqxfala',
-      'zqxgravacao',
-      'zqxgravfala',
-      ...hiddenIds(),
-    ];
-    expect(marks.filter((mark) => !text.includes(mark))).toEqual([]);
+    expect(SECRETS.filter((mark) => !text.includes(mark))).toEqual([]);
+  });
+
+  it('ADR 0036 §8: a hidden finding Ana sends back in a sweep cursor reaches neither her stream nor her model', () => {
+    const research = (people: readonly Exchange[]) =>
+      people.filter((one) => one.route.endsWith('/research'));
+    expect(leaksIn(research(ana), [HIDDEN_FINDING], { echo: false })).toEqual(
+      [],
+    );
+    expect(
+      leaksIn(research(master), [HIDDEN_FINDING], { echo: false }),
+    ).not.toEqual([]);
+  });
+
+  it('PD-07: every request naming a hidden item answers Ana exactly like one naming an unknown item', () => {
+    expect(differFromUnknown(ana, candidates.unknownOf)).toEqual([]);
   });
 
   it('BR-2: every read route answers someone with content, or says why not', () => {
@@ -177,11 +236,30 @@ describe('Nothing leaks across levels (KBC-111, ADR 0036 §12)', () => {
     );
     expect(empty).toEqual([]);
   });
+
+  it('BR-2: every write reaches its handler (an answer other than a schema 400), or says why not', () => {
+    // A 400 from the schema names the field it refused ("keyword"); one from the handler
+    // (an unknown level, a path id that differs) means the request reached it.
+    const bySchema = (one: Exchange) =>
+      one.status === 400 && one.body.includes('"keyword"');
+    const reached = new Set(
+      anaWrites.filter((one) => !bySchema(one)).map((one) => one.route),
+    );
+    const routes = [...new Set(anaWrites.map((one) => one.route))];
+    expect(
+      routes.filter(
+        (route) => !reached.has(route) && SCHEMA_ONLY[route] === undefined,
+      ),
+    ).toEqual([]);
+  });
 });
 
-/** A route as a careless new feature would write it: every title, no view (AC-2). */
+/** Routes as a careless new feature would write them: no view (AC-2). */
 const ROGUE = '/api/v1/topics/:topic/leak-probe';
-const rogueRoute = (app: FastifyInstance, catalog: CatalogRegistry) => {
+const ROGUE_BYTES = '/api/v1/media/:id/leak-download';
+
+/** Every title of the collection, read from the catalog. */
+const rogueTitles = (app: FastifyInstance, catalog: CatalogRegistry) =>
   app.get<{ Params: { topic: string } }>(
     ROGUE,
     { config: { access: { topicParam: 'topic' } } },
@@ -191,58 +269,75 @@ const rogueRoute = (app: FastifyInstance, catalog: CatalogRegistry) => {
       ].map((entry) => entry.title),
     }),
   );
+
+/** The file of any media id, as a download (an offline copy) would send it. */
+const rogueDownload = (app: FastifyInstance, state: string) =>
+  app.get<{ Params: { id: string } }>(
+    ROGUE_BYTES,
+    { config: { access: { feature: 'media' } } },
+    async (request, reply) => {
+      const media = join(state, 'media');
+      const db = new DatabaseSync(join(media, 'media.db'), { readOnly: true });
+      const row = db
+        .prepare('SELECT path FROM media_files WHERE media_id = ?')
+        .get(request.params.id);
+      db.close();
+      if (!row) return reply.code(404).send();
+      const bytes = await readFile(join(media, String(row['path'])));
+      return reply.type('application/octet-stream').send(bytes);
+    },
+  );
+
+const rogueRoutes: StartOptions['routes'] = (app, { catalog, state }) => {
+  rogueTitles(app, catalog);
+  rogueDownload(app, state);
 };
 
 describe('A new route that skips the view is caught (KBC-111 AC-2, BR-2)', () => {
   afterEach(closeApp);
 
-  it('AC-2: the probe finds the route by itself and fails naming it', async () => {
-    const rogue = await leakageWorld({ sentinels: true, routes: rogueRoute });
+  it('AC-2: the probe finds each route by itself and fails naming it, text or bytes', async () => {
+    const rogue = await leakageWorld({ sentinels: true, routes: rogueRoutes });
     const app = rogue.world.started.app;
-    const routes = routesOf(app).filter((route) => route.endsWith(ROGUE));
-
-    const probed = await exchange(
-      rogue.ana.call,
-      routes.flatMap((route) => requestsOf(route, candidatesOf(rogue))),
+    const routes = routesOf(app).filter(
+      (one) => one.route.endsWith(ROGUE) || one.route.endsWith(ROGUE_BYTES),
     );
 
-    expect(routes).toEqual([`GET ${ROGUE}`]);
-    const leaks = leaksIn(probed, [MARK]);
-    expect(leaks.length).toBeGreaterThan(0);
-    expect(leaks.every((leak) => leak.startsWith(`GET ${ROGUE} (`))).toBe(true);
+    const probed = await exchange(
+      sender(app, rogue.ana.headers),
+      routes.flatMap((one) => requestsOf(one, candidatesOf(rogue))),
+    );
+
+    expect(routes.map((one) => one.route).sort()).toEqual(
+      [`GET ${ROGUE}`, `GET ${ROGUE_BYTES}`].sort(),
+    );
+    const leaks = leaksIn(probed, [SECRET], { echo: false });
+    for (const route of [ROGUE, ROGUE_BYTES])
+      expect(leaks.some((leak) => leak.startsWith(`GET ${route} (`))).toBe(
+        true,
+      );
+    expect(
+      differFromUnknown(probed, candidatesOf(rogue).unknownOf),
+    ).not.toEqual([]);
   });
 });
 
-/** UUIDs differ between two worlds; times, timings and the vault's folder too. */
-const VOLATILE = new Set([
-  'tookMs',
-  'asOf',
-  'createdAt',
-  'updatedAt',
-  'at',
-  'version',
-  'etag',
-  // Accepted (ADR 0036 KBC-106 FR-2): the player and the transcript announce a hidden part of
-  // a recording Ana hears, with its bounds ("Trecho restrito").
-  'hidden',
-  // Accepted with it: a speech hit's BM25 score is computed over the whole FTS5 table, so its
-  // value moves with the size of the hidden transcripts; the order of what Ana sees does not.
-  'score',
-]);
+/** UUIDs differ between two worlds; times and the vault's folder too. */
+const VOLATILE = new Set(['tookMs', 'asOf', 'createdAt', 'updatedAt', 'at']);
+
 /**
- * Accepted with the hidden part: a track's place among its recording's tracks ("faixa 3 de
- * 3"), which says no more than the announced part does (no title, level or text).
+ * Accepted (ADR 0036, KBC-106 FR-2): where a hidden part of a recording Ana hears is ("Trecho
+ * restrito"), only on a media item, the only object with both `hidden` and `parent`.
  */
-const TRACK_PLACE = ['ordinal', 'total'];
+const isMediaItem = (value: object) => 'hidden' in value && 'parent' in value;
+
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
 const VAULT = /vault=[^&]+/g;
 
-const keptKeys = (value: object) => {
-  const place = 'ordinal' in value;
-  return Object.entries(value).filter(
-    ([key]) => !VOLATILE.has(key) && !(place && TRACK_PLACE.includes(key)),
+const keptKeys = (value: object) =>
+  Object.entries(value).filter(
+    ([key]) => !VOLATILE.has(key) && !(key === 'hidden' && isMediaItem(value)),
   );
-};
 
 const normalized = (value: unknown): unknown => {
   if (typeof value === 'string')
@@ -257,6 +352,8 @@ const normalized = (value: unknown): unknown => {
 
 /** What Ana reads of counts: lists, facets, totals, copies, relations, library and search. */
 const COUNTED: readonly (readonly [string, string, object?])[] = [
+  // Public, no session needed (review IMP-6).
+  ['GET', '/health'],
   ['GET', '/api/v1/topics'],
   ['GET', '/api/v1/topics/hermetismo/facets'],
   ['GET', '/api/v1/topics/hermetismo%2Faulas/facets'],
@@ -275,23 +372,50 @@ const COUNTED: readonly (readonly [string, string, object?])[] = [
   ['GET', '/api/v1/media/library/search?q=lua'],
   ['GET', '/api/v1/media/library/home'],
   ['GET', '/api/v1/media/bookmarks'],
+  ['GET', '/api/v1/media/:recording/tracks'],
+  ['GET', '/api/v1/media/:track1'],
+  ['GET', '/api/v1/media/:track3'],
 ];
 
-async function countsOf(who: Call): Promise<unknown[]> {
+/** The open recording's ids in a world, for the COUNTED urls that name them. */
+const idsIn = (one: LeakageWorld) => ({
+  ':recording': one.recording.id,
+  ':track1': one.tracks.find((track) => track.title === 'Primeira')?.id ?? '',
+  ':track3': one.tracks.find((track) => track.title === 'Terceira')?.id ?? '',
+});
+
+async function countsOf(one: LeakageWorld): Promise<unknown[]> {
+  const who = one.ana.call;
   const read: unknown[] = [];
-  for (const [method, url, payload] of COUNTED) {
+  for (const [method, template, payload] of COUNTED) {
+    const url = Object.entries(idsIn(one)).reduce(
+      (text, [name, id]) => text.replace(name, id),
+      template,
+    );
     const response = await who(method as 'GET', url, payload);
     read.push({
-      url,
+      url: template,
       status: response.statusCode,
       body: normalized(response.json()),
+      // Content-Length is left out: it moves with `tookMs` and times, which are volatile.
+      headers: normalized(
+        Object.fromEntries(
+          ['etag', 'location', 'content-disposition'].map((name) => [
+            name,
+            response.headers[name] ?? null,
+          ]),
+        ),
+      ),
     });
   }
   return read;
 }
 
 /** The exhaustive turn's coverage and planned set, and the sources a deep turn cites. */
-async function researchCountsOf(who: Call): Promise<unknown> {
+async function researchCountsOf(
+  who: Call,
+  model: StubLlmAdapter,
+): Promise<unknown> {
   const turn = async (profile: string) =>
     events(
       (
@@ -302,7 +426,15 @@ async function researchCountsOf(who: Call): Promise<unknown> {
       ).body,
     );
   const exhaustive = await turn('exhaustive');
+  const seen = model.messagesSeen.length;
   const deep = await turn('deep');
+  // What the model was told by each tool (list_sources, list_subjects, find_text…): its
+  // counts too must be those of a collection without the hidden items (QA IMP-1).
+  const tools = model.messagesSeen
+    .slice(seen)
+    .at(-1)
+    ?.filter((message) => message.role === 'tool')
+    .map((message) => message.content);
   const done = exhaustive.find((event) => event.type === 'done');
   const sweeps = exhaustive.flatMap((event) =>
     event.type === 'sweep' ? [event.sweep] : [],
@@ -313,6 +445,7 @@ async function researchCountsOf(who: Call): Promise<unknown> {
     sources: deep.flatMap((event: ResearchEvent) =>
       event.type === 'sources' ? event.sources.map((one) => one.title) : [],
     ),
+    tools,
   });
 }
 
@@ -321,12 +454,14 @@ describe('Side channels (KBC-111 AC-5)', () => {
 
   it('AC-5: Ana counts the same as in a collection where the hidden items do not exist', async () => {
     const { asIs, research, check } = sentinelCounts;
-    const twin = await leakageWorld({ sentinels: false, llm: stubModel() });
+    const model = stubModel();
+    const twin = await leakageWorld({ sentinels: false, llm: model });
 
-    const without = await countsOf(twin.ana.call);
-    const twinResearch = await researchCountsOf(twin.ana.call);
+    const without = await countsOf(twin);
+    const twinResearch = await researchCountsOf(twin.ana.call, model);
 
     expect(asIs).toEqual(without);
+    expect(research).toMatchObject({ tools: expect.any(Array) });
     expect(research).toEqual(twinResearch);
     // The one answer that differs, decided by KBC-105 FR-5: whoever holds the identical file
     // learns it is already here, and nothing else (no id, title, level or count).
@@ -335,15 +470,16 @@ describe('Side channels (KBC-111 AC-5)', () => {
 });
 
 /** Ana's counts in the sentinel world, read before the probe's writes run. */
-async function sentinelCountsOf(who: Call) {
+async function sentinelCountsOf(one: LeakageWorld) {
+  const who = one.ana.call;
   const check = await who('POST', '/api/v1/topics/hermetismo/media/check', {
     sha256: HIDDEN_SHA,
     bytes: HIDDEN_AUDIO.length,
     durationMs: null,
   });
   return {
-    asIs: await countsOf(who),
-    research: await researchCountsOf(who),
+    asIs: await countsOf(one),
+    research: await researchCountsOf(who, llm),
     check: check.json(),
   };
 }

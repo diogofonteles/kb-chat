@@ -5,6 +5,7 @@
  * while she was at CDC. The twin (`sentinels: false`) is the same collection without them.
  */
 import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
 import type { MediaItem } from '@kb-chat/contracts';
 import { GRANTABLE_FEATURES } from '@kb-chat/contracts';
 import { expect } from 'vitest';
@@ -29,10 +30,41 @@ import {
   say,
   type Bounds,
 } from './track-items-harness.js';
-import { mediaOf, transcriber } from './track-levels-world.js';
+import {
+  mediaOf,
+  packetAt,
+  realRendition,
+  renditionPath,
+  transcriber,
+} from './track-levels-world.js';
 
 /** What every hidden title, id and text carries: one of these in Ana's bytes is a leak. */
 export const MARK = 'zqx';
+
+/**
+ * The second mark (review IMP-1/2): in every hidden title, passage, subject, summary and in
+ * the hidden audio bytes, and never in anything the probe sends. It is looked for with no
+ * echo taken out, and the master's control counts only it.
+ */
+export const SECRET = 'qvk';
+
+/** Each hidden item's second mark: the master must receive every one of them. */
+export const SECRETS = [
+  'qvkraiztitulo',
+  'qvkraizcorpo',
+  'qvkaulatitulo',
+  'qvkaulacorpo',
+  'qvkconceito',
+  'qvkcopia',
+  'qvkgravacao',
+  'qvkgravfala',
+  'qvkgravsom',
+  'qvkfaixa',
+  'qvkfala',
+  'qvkfaixasom',
+  'qvkassunto',
+  'qvkresumo',
+] as const;
 
 /** Visible to Ana: a copy group's open member and a text linking to a hidden concept. */
 const BRIDGES = [
@@ -47,16 +79,24 @@ const BRIDGES = [
 const SENTINELS = [
   doc(
     'hermetismo/raw/zqx-raiz.md',
-    'Zqxraiz Velado',
-    'A lua no zqxcorpo da raiz.',
+    'Zqxraiz Velado Qvkraiztitulo',
+    'A lua no zqxcorpo da raiz qvkraizcorpo.',
   ),
   doc(
     'hermetismo/aulas/raw/zqx-aula.md',
-    'Zqxaula Velada',
-    'A lua na zqxaula velada.',
+    'Zqxaula Velada Qvkaulatitulo',
+    'A lua na zqxaula velada qvkaulacorpo.',
   ),
-  doc('hermetismo/wiki/concepts/Zqxconceito.md', 'Zqxconceito', 'A lua zqxv.'),
-  doc('hermetismo/raw/zqx-copia.md', 'Tábua de Esmeralda', 'A lua zqxcopia.'),
+  doc(
+    'hermetismo/wiki/concepts/Zqxconceito.md',
+    'Zqxconceito',
+    'A lua zqxv qvkconceito.',
+  ),
+  doc(
+    'hermetismo/raw/zqx-copia.md',
+    'Tábua de Esmeralda',
+    'A lua zqxcopia qvkcopia.',
+  ),
 ];
 
 /** Their keys for the level writes and their ids as routes take them. */
@@ -93,7 +133,7 @@ export const OPEN_DOC_IDS = [
 /** The CI recording: its second track goes to CDC with a marked title and passage. */
 const OPEN_PASSAGES = [
   { at: 10, text: 'lua aberta do comeco' },
-  { at: 70, text: 'zqxfala da faixa velada' },
+  { at: 70, text: 'zqxfala da faixa velada qvkfala' },
   { at: 130, text: 'lua final da palestra' },
 ];
 const TWIN_PASSAGES = [OPEN_PASSAGES[0], OPEN_PASSAGES[2]].flatMap((one) =>
@@ -101,13 +141,18 @@ const TWIN_PASSAGES = [OPEN_PASSAGES[0], OPEN_PASSAGES[2]].flatMap((one) =>
 );
 const TRACKS: readonly Bounds[] = [
   { startMs: 0, endMs: 60_000, title: 'Primeira' },
-  { startMs: 60_000, endMs: 120_000, title: 'Zqxfaixa Velada', level: 'cdc' },
+  {
+    startMs: 60_000,
+    endMs: 120_000,
+    title: 'Zqxfaixa Velada Qvkfaixa',
+    level: 'cdc',
+  },
   { startMs: 120_000, endMs: 180_000, title: 'Terceira' },
 ];
 const TWIN_TRACKS = [TRACKS[0], TRACKS[2]].flatMap((one) => (one ? [one] : []));
 
 /** The bytes of the hidden recording: its duplicate is what Ana sends in the AC-5 check. */
-export const HIDDEN_AUDIO = Buffer.from('ID3 zqx hidden recording bytes');
+export const HIDDEN_AUDIO = Buffer.from('ID3 zqx qvkgravsom recording bytes');
 export const HIDDEN_SHA = createHash('sha256')
   .update(HIDDEN_AUDIO)
   .digest('hex');
@@ -189,9 +234,9 @@ const CITED = [
   {
     n: 2,
     id: 'raw/zqx-raiz.md',
-    title: 'Zqxraiz Velado',
+    title: 'Zqxraiz Velado Qvkraiztitulo',
     authorship: 'outros-autores',
-    author: 'Zqxautor',
+    author: 'Zqxautor Qvkautor',
   },
 ];
 
@@ -231,7 +276,7 @@ async function bookmarkAndPlay(
     {
       id: bookmark,
       positionMs: 5_000,
-      note: 'zqxnota',
+      note: 'zqxnota qvknota',
     },
   );
   expect(marked.statusCode, marked.body).toBe(201);
@@ -305,6 +350,54 @@ async function openRecording(media: Media, token: string, sentinels: boolean) {
 }
 
 /**
+ * The audio as the worker leaves it, with the second mark where Ana must not hear: real AAC
+ * for the open recording with marks inside the CDC track's frames (only the silent frames of
+ * the mask take them out), and marked bytes in the CDC track's cut and the CDC recording.
+ */
+function markAudio(
+  world: LevelsWorld,
+  open: string,
+  hidden: { readonly recording: string; readonly track: string },
+): void {
+  const path = realRendition(world, open);
+  const frames = [65, 80, 95, 110].map((seconds) => packetAt(path, seconds));
+  const file = readFileSync(path);
+  for (const at of frames) file.write('qvkfaixasom', at + 4);
+  writeFileSync(path, file);
+  writeFileSync(
+    renditionPath(world, hidden.track),
+    Buffer.from('cut of qvkfaixasom'),
+  );
+  writeFileSync(renditionPath(world, hidden.recording), HIDDEN_AUDIO);
+}
+
+/** The master gives the CDC track a subject and a summary, both marked. */
+async function describeHiddenTrack(world: LevelsWorld, track: string) {
+  const subject = await world.owner(
+    'POST',
+    '/api/v1/topics/hermetismo/subjects',
+    { name: 'Qvkassunto' },
+  );
+  expect(subject.statusCode, subject.body).toBe(201);
+  const url = `/api/v1/media/${track}/subjects`;
+  const read = await world.owner('GET', url);
+  expect(read.statusCode, read.body).toBe(200);
+  const saved = await world.started.app.inject({
+    method: 'PUT',
+    url,
+    headers: {
+      ...world.ownerHeaders,
+      'if-match': `"${read.json<{ version: number }>().version}"`,
+    },
+    payload: {
+      subjects: [{ kind: 'free', id: subject.json<{ id: string }>().id }],
+      summary: 'Resumo qvkresumo da faixa.',
+    },
+  });
+  expect(saved.statusCode, saved.body).toBe(200);
+}
+
+/**
  * The world: SIX (the CDC pair of SIX placed at QS, so every hidden item here is marked), the
  * bridges, and with `sentinels` the marked items at CDC and Ana's acts on them.
  */
@@ -318,14 +411,16 @@ export async function leakageWorld(
   const nothing = { hidden: null, conversation: null, bookmark: null };
   if (!options.sentinels) return { world, ana, ...open, ...nothing };
   const hiddenRecording = await recorded(media, token, {
-    title: 'Zqxgravacao Velada',
+    title: 'Zqxgravacao Velada Qvkgravacao',
     level: 'cdc',
     body: HIDDEN_AUDIO,
-    passages: [{ at: 20, text: 'lua zqxgravfala velada' }],
+    passages: [{ at: 20, text: 'lua zqxgravfala velada qvkgravfala' }],
   });
   const acts = await anaActsAtCdc(world, ana, hiddenRecording.id);
-  const track = open.tracks.find((one) => one.title === 'Zqxfaixa Velada');
+  const track = open.tracks.find((one) => one.title.startsWith('Zqxfaixa'));
   if (!track) throw new Error('the CDC track is missing');
   const hidden = { recording: hiddenRecording.id, track: track.id };
+  markAudio(world, open.recording.id, hidden);
+  await describeHiddenTrack(world, track.id);
   return { world, ana, ...open, hidden, ...acts };
 }

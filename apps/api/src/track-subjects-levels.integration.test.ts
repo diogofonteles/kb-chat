@@ -26,6 +26,8 @@ describe('the subjects of a track above the person (KBC-111)', () => {
     expect(asAna.json()).toEqual(missing.json());
     expect(asAna.body).not.toMatch(/zqx/i);
     expect(asMaster.statusCode, asMaster.body).toBe(200);
-    expect(asMaster.json()).toMatchObject({ title: 'Zqxfaixa Velada' });
+    expect(asMaster.json()).toMatchObject({
+      title: 'Zqxfaixa Velada Qvkfaixa',
+    });
   });
 });

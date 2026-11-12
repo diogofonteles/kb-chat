@@ -126,7 +126,10 @@ export interface StartOptions {
    * Routes a test adds before the app is ready (KBC-111 AC-2: a route that reads the catalog
    * without the person's view, which the leakage suite must catch).
    */
-  readonly routes?: (app: FastifyInstance, catalog: CatalogRegistry) => void;
+  readonly routes?: (
+    app: FastifyInstance,
+    built: { readonly catalog: CatalogRegistry; readonly state: string },
+  ) => void;
 }
 
 /** The media worker token of `start({ media: true })`. */
@@ -331,7 +334,10 @@ async function appOf(
     levels: levelsOnDisk(config.KB_CHAT_STATE_DIR),
     ...(options.llm && { llm: options.llm }),
   });
-  options.routes?.(app, core.catalog);
+  options.routes?.(app, {
+    catalog: core.catalog,
+    state: config.KB_CHAT_STATE_DIR,
+  });
   return app;
 }
 

@@ -152,7 +152,7 @@ export async function setTrackLevel(
 
 /** The recording's file replaced by real AAC: 3 minutes of tone, as the worker makes it. */
 /** Where a recording's converted file is on disk. */
-function renditionPath(world: LevelsWorld, recordingId: string): string {
+export function renditionPath(world: LevelsWorld, recordingId: string): string {
   const db = new DatabaseSync(join(world.started.state, 'media', 'media.db'), {
     readOnly: true,
   });
