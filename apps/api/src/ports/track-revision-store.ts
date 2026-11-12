@@ -117,9 +117,11 @@ export interface TrackRevisionStorePort {
   /** Forgets the files of tracks archived before `before`; the records stay (BR-7). */
   takeArchivedFiles(before: Date): readonly string[];
   /** With the recording's collection: the notice is only for who still sees it. */
-  movedBookmarks(
-    principal: string,
-  ): readonly (MovedBookmarksEntry & { readonly topic: string })[];
+  movedBookmarks(principal: string): readonly (MovedBookmarksEntry & {
+    readonly topic: string;
+    /** The track's level (its recording's once it is gone), KBC-106. */
+    readonly level: string | null;
+  })[];
   /** One track's notice: the others are still unread. */
   acknowledgeMoved(principal: string, trackId: string): void;
 }

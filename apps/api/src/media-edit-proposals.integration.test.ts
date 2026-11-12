@@ -31,6 +31,7 @@ const manual = (startMs: number, endMs: number): EditTrack => ({
   answererVoice: null,
   askerSpeakerId: null,
   answererSpeakerId: null,
+  level: null,
 });
 
 const reply = (titles: readonly string[]) => () =>

@@ -24,10 +24,18 @@ import {
   type MediaLevels,
 } from './media-service.js';
 import { canEditMedia, legacyAuthorshipOf, seesMedia } from './media-policy.js';
+import {
+  editAboveYourLevel,
+  hearsAllTracks,
+  levelsBelow,
+} from './track-levels.js';
 import { toCollectionSpeaker } from './voice-labels.js';
 
 export interface MediaEditServiceDeps {
-  readonly store: Pick<MediaStorePort, 'getMedia' | 'editMedia'>;
+  readonly store: Pick<
+    MediaStorePort,
+    'getMedia' | 'editMedia' | 'trackLevelsUnder' | 'ownTrackLevels'
+  >;
   readonly speakers: Pick<SpeakerStorePort, 'labelled' | 'rehome'>;
   /** The collection exists in the vault (a master "sees" any slug, even a wrong one). */
   readonly hasTopic: (topic: string) => boolean;
@@ -79,25 +87,74 @@ export class MediaEditService {
   ): Promise<void> {
     const { actor, mediaId } = call;
     const media = this.editable(actor, mediaId);
-    const topic = this.destinationOf(actor, media, request.topic);
-    const edit: MediaEdit = {
-      mediaId,
-      title: request.title ?? media.title,
-      topic,
-      ...this.authorship(media, topic, request.author),
-      level: this.levelAfter(actor, { media, topic, asked: request.level }),
-      now: this.now(),
-    };
+    this.assertKeepsTrackLevels(actor, media, request);
+    const edit = this.editOf(actor, media, request);
     const audit = this.auditFor(edit.level !== media.level);
     const tracks = this.save(actor, media, edit);
     if (audit)
       await this.recordLevel(audit, call.by ?? { by: actor.principal }, {
-        topic,
+        topic: edit.topic,
         mediaId,
         before: media.level,
         after: edit.level,
         tracks,
       });
+  }
+
+  /** What the recording becomes, and how its tracks follow (KBC-106 BR-1). */
+  private editOf(
+    actor: MediaActor,
+    media: MediaRecord,
+    request: UpdateMediaRequest,
+  ): MediaEdit {
+    const topic = this.destinationOf(actor, media, request.topic);
+    const level = this.levelAfter(actor, {
+      media,
+      topic,
+      asked: request.level,
+    });
+    const scale = (this.deps.levels ?? NO_LEVELS).scaleOf(topic);
+    return {
+      mediaId: media.id,
+      title: request.title ?? media.title,
+      topic,
+      ...this.authorship(media, topic, request.author),
+      level,
+      // Tracks of their own below the new level go up with it.
+      tracks: {
+        below: levelsBelow(scale, level),
+        newScale: !this.sameLists(media.topic, topic),
+      },
+      now: this.now(),
+    };
+  }
+
+  /**
+   * KBC-106 (review round 2, B4): a move or a new level touches every track. Whoever is below
+   * any of them may not (403, the edit routes' rule); and a move to another scale, which drops
+   * the tracks' own levels, is a master's (409): nobody else may open a restricted part.
+   */
+  private assertKeepsTrackLevels(
+    actor: MediaActor,
+    media: MediaRecord,
+    request: UpdateMediaRequest,
+  ): void {
+    const moves = request.topic !== undefined && request.topic !== media.topic;
+    if (!moves && request.level === undefined) return;
+    if (!hearsAllTracks(this.deps.store, actor, media.id))
+      throw editAboveYourLevel();
+    const crosses =
+      moves && !this.sameLists(media.topic, request.topic ?? media.topic);
+    if (
+      crosses &&
+      !actor.isMaster &&
+      this.deps.store.ownTrackLevels(media.id).length > 0
+    )
+      throw new AppError(
+        'MEDIA_CONFLICT',
+        'Moving it would drop the levels its tracks hold of their own',
+        { details: { reason: 'tracks-of-their-own' } },
+      );
   }
 
   /** The audit a level change needs, before anything is written; none: no change. */

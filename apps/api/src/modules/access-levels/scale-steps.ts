@@ -107,7 +107,12 @@ export function scaleStep(
  */
 export function mediaStep(
   ctx: StepContext,
-  change: { readonly from?: string; readonly to: string | null },
+  change: {
+    readonly from?: string;
+    readonly to: string | null;
+    /** The scale after the change: tracks it leaves below a recording are lifted (KBC-106). */
+    readonly order?: readonly string[];
+  },
 ): UndoableStep {
   const { media, catalog } = ctx.deps;
   return {
@@ -118,7 +123,10 @@ export function mediaStep(
       ctx.moved.media.push(...rows);
       const undo: Undo = {
         run: async () => {
-          const back = rows.map((row) => ({ ...row, written: change.to }));
+          const back = rows.map((row) => ({
+            ...row,
+            written: row.written === undefined ? change.to : row.written,
+          }));
           warnSkipped(ctx, 'media', media?.restoreLevels(back) ?? []);
         },
         before: () => beforeOf(ctx.root, rows),

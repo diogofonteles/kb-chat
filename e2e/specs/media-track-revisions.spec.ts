@@ -214,6 +214,15 @@ test("BR-3, BR-4: a position saved on the old cut is translated by the browser's
   });
   expect(moved.status()).toBe(202);
   await waitForCut(owner, first.id);
+  // On a loaded machine the cut may take longer than the 15 s track has left: it ended, so
+  // "Pausar" is gone. Played again, it is still the old cut (the page keeps its version).
+  const replay = page.getByRole('button', { name: 'Tocar', exact: true });
+  if (await replay.isVisible()) {
+    await replay.click();
+    await expect
+      .poll(async () => (await audioState(page)).currentTime)
+      .toBeGreaterThan(4);
+  }
 
   const saved = page.waitForRequest(
     (request) =>

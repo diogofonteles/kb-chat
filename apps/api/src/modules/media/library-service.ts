@@ -1,6 +1,7 @@
 import {
   DEFAULT_LIBRARY_PREFERENCES,
   type Author,
+  type HiddenSpan,
   type HitSubject,
   type LibraryHome,
   type LibraryItem,
@@ -35,7 +36,9 @@ import {
   type MediaActor,
   type MediaLevels,
 } from './media-service.js';
-import { canEditMedia, seesMedia } from './media-policy.js';
+import { canEditMedia, hearsLevel, seesMedia } from './media-policy.js';
+import { hiddenSpansOf } from './track-levels.js';
+import type { TrackPlace } from './track-place.js';
 import { mediaAuthorOf, toMediaItem } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
 
@@ -117,6 +120,12 @@ export class LibraryService {
       // A summary is derived from the speech: only for who may search it (R4).
       about: subjects && actor.searchesSpeech ? this.deps.about : undefined,
       tracks: actor.seesTracks ?? false,
+      levelsByTopic: new Map(
+        [...new Set(candidates.map((item) => item.topic))].map((topic) => [
+          topic,
+          actor.levelsIn(topic),
+        ]),
+      ),
     });
   }
 
@@ -207,8 +216,9 @@ export class LibraryService {
     const presence = this.deps.presence?.();
     const records = this.deps.store.listLibrary();
     const titles = new Map(records.map((one) => [one.id, one.title]));
-    const totals = countTracks(records);
+    const places = placesOf(actor, records);
     const levels = this.deps.levels ?? NO_LEVELS;
+    const hidden = hiddenByRecording(actor, records, this.deps.store);
     return records
       .filter((record) => isVisible(actor, record))
       .map((record) => {
@@ -219,11 +229,12 @@ export class LibraryService {
             presence,
             author: mediaAuthorOf(record, this.deps.authorOf),
             canEdit: canEditMedia(actor, record),
-            parent: parentOf(record, { titles, totals }),
+            parent: parentOf(record, { titles, places }),
             level: shownLevel(record, {
               scale: levels.scaleOf(record.topic),
               shows: actor.isMaster || canEditMedia(actor, record),
             }),
+            hidden: hidden.get(record.id) ?? [],
           }),
           kind: record.kind,
           lastPlayedAt: saved?.playedAt ?? null,
@@ -263,33 +274,50 @@ function distinctSubjects(
   );
 }
 
-/** How many tracks each recording has in force. */
-function countTracks(records: readonly LibraryRecord[]) {
-  const totals = new Map<string, number>();
-  for (const { track } of records)
-    if (track?.ordinal != null)
-      totals.set(track.parentId, (totals.get(track.parentId) ?? 0) + 1);
-  return totals;
+/**
+ * Each track's number and its recording's total, counted over the tracks this person hears
+ * (KBC-111, owner decision): a track above their level is neither numbered nor counted.
+ */
+function placesOf(
+  actor: MediaActor,
+  records: readonly LibraryRecord[],
+): ReadonlyMap<string, TrackPlace> {
+  const byParent = new Map<string, LibraryRecord[]>();
+  for (const record of records)
+    if (record.track?.ordinal != null && seesMedia(actor, record))
+      byParent.set(record.track.parentId, [
+        ...(byParent.get(record.track.parentId) ?? []),
+        record,
+      ]);
+  const places = new Map<string, TrackPlace>();
+  for (const tracks of byParent.values())
+    tracks
+      .sort((a, b) => (a.track?.ordinal ?? 0) - (b.track?.ordinal ?? 0))
+      .forEach((track, at) =>
+        places.set(track.id, { ordinal: at + 1, total: tracks.length }),
+      );
+  return places;
 }
 
 function parentOf(
   record: LibraryRecord,
   known: {
     readonly titles: ReadonlyMap<string, string>;
-    readonly totals: ReadonlyMap<string, number>;
+    readonly places: ReadonlyMap<string, TrackPlace>;
   },
 ): TrackParent | null {
   if (!record.track) return null;
-  const { parentId: id, startMs, endMs, ordinal } = record.track;
+  const { parentId: id, startMs, endMs } = record.track;
   const { version, fileVersion } = record.track;
   const title = known.titles.get(id) ?? record.title;
+  const place = known.places.get(record.id);
   return {
     id,
     title,
     startMs,
     endMs,
-    ordinal,
-    total: known.totals.get(id) ?? 0,
+    ordinal: place?.ordinal ?? null,
+    total: place?.total ?? 0,
     version,
     fileVersion,
   };
@@ -333,4 +361,29 @@ function isVisible(actor: MediaActor, record: LibraryRecord): boolean {
     actor.isMaster ||
     record.ownerPrincipal === actor.principal
   );
+}
+
+/**
+ * KBC-106 FR-2: per recording, the parts this person may not hear (its tracks above their
+ * level, published or approved, review m4), read for all of them in one query (review M4)
+ * and only where levels hold the person.
+ */
+export function hiddenByRecording(
+  actor: MediaActor,
+  records: readonly LibraryRecord[],
+  store: Pick<MediaStorePort, 'liveTrackLevelsOf'>,
+): ReadonlyMap<string, readonly HiddenSpan[]> {
+  const held = records.filter(
+    (record) => !record.track && actor.levelsIn(record.topic) !== null,
+  );
+  const hidden = new Map<string, readonly HiddenSpan[]>();
+  if (held.length === 0) return hidden;
+  const levels = store.liveTrackLevelsOf(held.map((record) => record.id));
+  for (const record of held) {
+    const spans = hiddenSpansOf(levels.get(record.id) ?? [], (level) =>
+      hearsLevel(actor, record.topic, level),
+    );
+    if (spans.length > 0) hidden.set(record.id, spans);
+  }
+  return hidden;
 }

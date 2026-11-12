@@ -140,3 +140,18 @@
   flex: 1 1 12rem;
   overflow-wrap: anywhere;
 }
+
+/* How to choose several words (KBC-115): the mouse's way, or the finger's on a touch screen. */
+.how .coarse {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .how .fine {
+    display: none;
+  }
+
+  .how .coarse {
+    display: inline;
+  }
+}

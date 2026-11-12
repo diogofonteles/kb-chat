@@ -71,7 +71,12 @@ export class FixtureSearchAdapter implements SearchIndexPort {
       const hit = scoreDocument({ id, text, tokens, mode: query.mode });
       if (hit) hits.push(hit);
     }
+    // Like QMD's bm25 or RRF, a score that also depends on the rest of the collection (here
+    // how many documents match): the same order, a value that moves with every document,
+    // those above a person's level included (KBC-111 review R2-2).
+    const spread = 1 / (1 + hits.length / 100);
     return hits
+      .map((hit) => ({ ...hit, score: hit.score * spread }))
       .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
       .slice(0, query.limit);
   }

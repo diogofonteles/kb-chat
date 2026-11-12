@@ -33,6 +33,7 @@ const track = (n: number, startMs: number, endMs: number): DraftTrack => ({
   answererVoice: null,
   askerSpeakerId: null,
   answererSpeakerId: null,
+  level: null,
 });
 
 const edit = (
@@ -41,6 +42,7 @@ const edit = (
   overrides: Partial<MediaEdit> = {},
 ): MediaEdit => ({
   preparation: null,
+  levels: null,
   mediaId: MEDIA,
   version,
   started: true,

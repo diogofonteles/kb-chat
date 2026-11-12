@@ -194,6 +194,25 @@ describe('EditMediaDialog (KBC-050)', () => {
     expect(saved).not.toHaveBeenCalled();
   });
 
+  it("KBC-106: a move that would drop tracks of their own says it is a master's", async () => {
+    const { http, fixture } = await open();
+    save();
+    http.expectOne(URL).flush(
+      {
+        error: {
+          code: 'MEDIA_CONFLICT',
+          message: 'x',
+          details: { reason: 'tracks-of-their-own' },
+        },
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Só um master pode mudar esta gravação de escala',
+    );
+  });
+
   it.each([
     [0, /verifique a conexão/],
     [502, /verifique a conexão/],
@@ -307,6 +326,36 @@ describe('EditMediaDialog (KBC-050)', () => {
       const request = http.expectOne(URL);
       expect(request.request.body).toEqual({ level: 'qs' });
       expect(group).toBeTruthy();
+    });
+
+    it('KBC-106 BR-1: raising it over a track of its own asks first, and says how many go up', async () => {
+      const own = aMediaItem({
+        level: { id: 'qs', code: 'QS' },
+        ownTrackLevels: ['qs', 'ci'],
+      });
+      const { http, fixture } = await open(own, {
+        hermetismo: [...QS_CI, { id: 'cdc', code: 'CDC' }],
+      });
+      fireEvent.click(screen.getByRole('radio', { name: 'CDC' }));
+      await fixture.whenStable();
+      save();
+      await fixture.whenStable();
+      const confirm = screen.getByRole('group', {
+        name: '2 faixas com nível próprio sobem para CDC.',
+      });
+      expect(confirm).toBeTruthy();
+      http.expectNone(URL);
+      // One "Cancelar" only: the one of the dialog (review m5).
+      expect(screen.getAllByRole('button', { name: 'Cancelar' })).toHaveLength(
+        1,
+      );
+      expect(
+        screen.getByRole('button', { name: 'Escolher outro nível' }),
+      ).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Salvar e subir as faixas' }),
+      );
+      expect(http.expectOne(URL).request.body).toEqual({ level: 'cdc' });
     });
 
     it('sends no level when only the title changed', async () => {

@@ -42,6 +42,7 @@ import type {
   PlanActor,
   UploadPlans,
 } from './media-service.js';
+import { SampleIndexCache } from './masked-stream.js';
 import { serveMedia } from './serve-media.js';
 
 /** Listening needs the `media` feature (owner's rule: every feature is granted per person). */
@@ -104,7 +105,7 @@ export function levelsOf(
 }
 
 /** Who edits, for the levels audit: the master, and the person they act as (ADR 0027). */
-function editAuthorOf(request: FastifyRequest): EditAuthor {
+export function editAuthorOf(request: FastifyRequest): EditAuthor {
   const viewer = viewerOf(request);
   const real = viewer.actor?.viewer ?? viewer;
   return {
@@ -138,11 +139,13 @@ export interface TrackCall {
   readonly actor: MediaActor;
   readonly mediaId: string;
   readonly expectedVersion: number;
+  /** Who the levels audit names (KBC-106 BR-4). */
+  readonly by?: EditAuthor;
 }
 
 /** The writes on a track that arrive by the item's own routes (KBC-073 FR-1, FR-3). */
 export interface TrackWrites {
-  patch(call: TrackCall, patch: TrackPatch): void;
+  patch(call: TrackCall, patch: TrackPatch): Promise<void>;
   archive(actor: MediaActor, mediaId: string): Promise<void>;
 }
 
@@ -310,6 +313,27 @@ function trackEdit(body: z.output<typeof updateMediaBodySchema>) {
   return patch.data;
 }
 
+/** A track's own fields, its level among them (KBC-073, KBC-106): `media-edit`. */
+async function patchTrack(
+  request: FastifyRequest,
+  track: {
+    readonly id: string;
+    readonly body: z.output<typeof updateMediaBodySchema>;
+    readonly writes: TrackWrites;
+  },
+): Promise<void> {
+  assertFeature(request, 'media-edit');
+  await track.writes.patch(
+    {
+      actor: actorOf(request),
+      mediaId: track.id,
+      expectedVersion: versionOf(request),
+      by: editAuthorOf(request),
+    },
+    trackEdit(track.body),
+  );
+}
+
 /** "Editar informações" (KBC-050 FR-1): the answer is the item as the person now sees it. */
 function registerEditRoute(
   typed: TypedApp,
@@ -323,13 +347,9 @@ function registerEditRoute(
   typed.patch('/api/v1/media/:id', OPTIONS.edit, async (request) => {
     const actor = actorOf(request);
     const { id } = request.params;
-    if (service.isTrack(actor, id)) {
-      assertFeature(request, 'media-edit');
-      tracks.patch(
-        { actor, mediaId: id, expectedVersion: versionOf(request) },
-        trackEdit(request.body),
-      );
-    } else
+    if (service.isTrack(actor, id))
+      await patchTrack(request, { id, body: request.body, writes: tracks });
+    else
       await editor.edit(
         { actor, mediaId: id, by: editAuthorOf(request) },
         recordingEdit(request.body),
@@ -357,6 +377,8 @@ function registerItemRoutes(
 }
 
 function registerStream(typed: TypedApp, service: MediaService): void {
+  // The sample tables of the files played lately, for the masked streams (KBC-106).
+  const indexes = new SampleIndexCache();
   typed.get(
     '/api/v1/media/:id/stream',
     OPTIONS.stream,
@@ -372,6 +394,7 @@ function registerStream(typed: TypedApp, service: MediaService): void {
         request,
         reply,
         open: service,
+        indexes,
       });
     },
   );

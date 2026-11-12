@@ -20,6 +20,7 @@ const track = (n: number, startMs: number, endMs: number): DraftTrack => ({
   answererVoice: null,
   askerSpeakerId: null,
   answererSpeakerId: null,
+  level: null,
 });
 
 const ONE = { track: track(1, 10_000, 20_000), ordinal: 1 };

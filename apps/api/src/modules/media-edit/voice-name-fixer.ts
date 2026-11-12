@@ -1,4 +1,4 @@
-import { TRACK_TITLE_MAX } from '@kb-chat/contracts';
+import { TRACK_TITLE_MAX, nameIn } from '@kb-chat/contracts';
 import type { MediaEditStorePort } from '../../ports/media-edit-store.js';
 import type { StoredVoiceLabel } from '../../ports/speaker-store.js';
 import type {
@@ -39,16 +39,6 @@ export interface NameFix {
   readonly to: string;
 }
 
-const escaped = (text: string): string =>
-  text.replaceAll(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-
-/** A name as a whole, in any case; accents count, however they are stored. */
-const nameIn = (name: string): RegExp =>
-  new RegExp(
-    `(?<![\\p{L}\\p{N}\\p{M}])${escaped(name.normalize('NFC'))}(?![\\p{L}\\p{N}\\p{M}])`,
-    'giu',
-  );
-
 /** A single word can be anyone ("São Pedro"): it never decides a rewrite. */
 const isFullName = (name: string): boolean => /\s/u.test(name.trim());
 
@@ -70,17 +60,6 @@ export function withNameFixed(
     )
     .join('');
   return fixed === normal || fixed.length > max ? text : fixed;
-}
-
-/** Whether a text still says this name, apart from where it is part of the right one. */
-export function mentionsName(
-  text: string,
-  name: string,
-  right: string | null,
-): boolean {
-  const normal = text.normalize('NFC');
-  const rest = right ? normal.replace(nameIn(right), ' ') : normal;
-  return nameIn(name).test(rest);
 }
 
 /** Every voice's correction: what its words may say now and what they should. */

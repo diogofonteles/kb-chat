@@ -53,16 +53,27 @@ export async function copyUnitFiles(
 }
 
 /** The level each new media gets (BR-6): kept in production's scale, else none. */
-function fillLevels(run: ImportRun, media: readonly SourceMedia[]): void {
+function fillLevels(
+  run: ImportRun,
+  unit: Pick<SourceUnit, 'rootId'>,
+  media: readonly SourceMedia[],
+): void {
   run.db.exec('DELETE FROM temp.level_map');
   const insert = run.db.prepare(
-    'INSERT INTO temp.level_map (media_id, level) VALUES (?, ?)',
+    'INSERT INTO temp.level_map (media_id, level, own) VALUES (?, ?, ?)',
   );
+  const recording = recordingLevel(run, unit.rootId, media);
   for (const item of media) {
     const root = rootOf(run.collections, item.topic);
     const kept =
       item.level !== null && run.scales.get(root)?.has(item.level) === true;
-    insert.run(item.id, kept ? item.level : null);
+    const level = kept ? item.level : null;
+    // KBC-106 QA-3: a new track never lands below its recording; lifted, it follows it.
+    const lifted =
+      item.id !== unit.rootId &&
+      recording !== null &&
+      below(run, root, { level, than: recording });
+    insert.run(item.id, lifted ? recording : level, lifted ? 0 : null);
     if (item.level !== null && !kept)
       run.report.levels.unassigned.push({
         mediaId: item.id,
@@ -70,6 +81,63 @@ function fillLevels(run: ImportRun, media: readonly SourceMedia[]): void {
         code: run.pkg.levelCodes[`${root}/${item.level}`] ?? null,
       });
   }
+}
+
+/** The recording's level in production, or the one it arrives with (a new unit). */
+function recordingLevel(
+  run: ImportRun,
+  rootId: string,
+  media: readonly SourceMedia[],
+): string | null {
+  const there = run.db
+    .prepare('SELECT level FROM main.media WHERE id = ?')
+    .get(rootId);
+  if (there) return there['level'] === null ? null : String(there['level']);
+  const arriving = media.find((one) => one.id === rootId);
+  if (!arriving || arriving.level === null) return null;
+  const root = rootOf(run.collections, arriving.topic);
+  return run.scales.get(root)?.has(arriving.level) ? arriving.level : null;
+}
+
+/** `level` ranks under `than` in the collection's scale (no level ranks under any). */
+function below(
+  run: ImportRun,
+  root: string,
+  { level, than }: { readonly level: string | null; readonly than: string },
+): boolean {
+  const order = [...(run.scales.get(root) ?? [])];
+  const rank = level === null ? -1 : order.indexOf(level);
+  return rank < order.indexOf(than);
+}
+
+/** The levels of production's scale each media of the unit may hold (KBC-106 drafts). */
+function fillScaleLevels(run: ImportRun, media: readonly SourceMedia[]): void {
+  run.db.exec('DELETE FROM temp.scale_levels');
+  const insert = run.db.prepare(
+    'INSERT OR IGNORE INTO temp.scale_levels (media_id, level) VALUES (?, ?)',
+  );
+  for (const item of media)
+    for (const level of run.scales.get(rootOf(run.collections, item.topic)) ??
+      [])
+      insert.run(item.id, level);
+}
+
+/** The draft levels production gave the unit, kept across a replacement (KBC-106). */
+function keepDraftLevels(run: ImportRun, ids: string): void {
+  run.db.exec('DELETE FROM temp.draft_levels');
+  run.db
+    .prepare(
+      `INSERT INTO temp.draft_levels (id, level) SELECT id, level FROM main.media_draft_tracks
+       WHERE media_id IN (SELECT value FROM json_each(:ids)) AND level IS NOT NULL`,
+    )
+    .run({ ids });
+}
+
+function restoreDraftLevels(run: ImportRun): void {
+  run.db.exec(`
+    UPDATE main.media_draft_tracks
+    SET level = (SELECT d.level FROM temp.draft_levels d WHERE d.id = media_draft_tracks.id)
+    WHERE id IN (SELECT id FROM temp.draft_levels)`);
 }
 
 /** The unit's current transcripts in the search index, as migration 12 builds it. */
@@ -113,7 +181,8 @@ export function recordLedger(
 }
 
 function insertRows(run: ImportRun, unit: SourceUnit): void {
-  fillLevels(run, unit.media);
+  fillLevels(run, unit, unit.media);
+  fillScaleLevels(run, unit.media);
   ensureSharedRows(run.db, unit);
   for (const table of UNIT_TABLES)
     insertUnitRows(run.db, table, { ids: unit.ids });
@@ -197,9 +266,12 @@ function replaceRows(run: ImportRun, unit: SourceUnit): void {
   const there = new Set(targetIds(run, unit.rootId));
   fillLevels(
     run,
+    unit,
     unit.media.filter((one) => !there.has(one.id)),
   );
+  fillScaleLevels(run, unit.media);
   ensureSharedRows(run.db, unit);
+  keepDraftLevels(run, unit.ids);
   unindexTranscripts(run, unit.ids);
   for (const table of [...REWRITTEN_TABLES].reverse())
     deleteRows(run, table, unit.ids);
@@ -213,6 +285,7 @@ function replaceRows(run: ImportRun, unit: SourceUnit): void {
   const known = JSON.stringify([...there]);
   for (const table of rest)
     replaceTable(run, table, { ids: unit.ids, there: known });
+  restoreDraftLevels(run);
   refreshDocuments(run, unit.ids);
   refreshAbout(run, unit.ids);
 }

@@ -55,7 +55,7 @@ describe('contract schemas', () => {
     const health = {
       status: 'degraded',
       search: 'degraded',
-      catalog: { documents: 3 },
+      catalog: { loaded: true },
     };
     expect(healthSchema.parse(health)).toEqual(health);
   });

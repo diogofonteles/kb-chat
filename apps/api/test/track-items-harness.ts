@@ -46,6 +46,8 @@ export interface Bounds {
   readonly title?: string;
   readonly answererSpeakerId?: string | null;
   readonly answererVoice?: number | null;
+  /** Its own level (KBC-106); absent: the recording's. */
+  readonly level?: string | null;
 }
 
 const TEN_MINUTES_MS = 600_000;
@@ -210,6 +212,7 @@ const draftOf = (tracks: readonly Bounds[]) =>
     answererVoice: track.answererVoice ?? null,
     askerSpeakerId: null,
     answererSpeakerId: track.answererSpeakerId ?? null,
+    ...(track.level !== undefined && { level: track.level }),
   }));
 
 async function reopenIfApproved(media: Media, id: string): Promise<void> {

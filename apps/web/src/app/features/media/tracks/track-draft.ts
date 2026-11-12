@@ -13,6 +13,7 @@ import {
   type MediaEdit,
   type TrackProblem,
 } from '@kb-chat/contracts';
+import { errorMessage, fieldOf, toUiErrorCode } from '@core/api/api-error.js';
 import { MediaEditApi } from '@core/media/media-edit-api.js';
 import {
   EMPTY,
@@ -80,6 +81,9 @@ export class TrackDraft {
   private readonly state = signal<DraftPhase>({ kind: 'loading' });
   private readonly shown = signal<readonly DraftTrack[]>([]);
   private readonly server = signal<MediaEdit | null>(null);
+  private readonly levelRefusal = signal<string | null>(null);
+  /** What the server said of a track's level on the last save (KBC-106 review m6). */
+  readonly levelError = this.levelRefusal.asReadonly();
   /** Bumps when the tracks or the history move: its getters are not signals. */
   private readonly moves = signal(0);
   private readonly spoken = signal('');
@@ -475,6 +479,7 @@ export class TrackDraft {
   }
 
   private accepted(version: number): void {
+    this.levelRefusal.set(null);
     this.version = version;
     this.unanswered = [];
     this.server.update((edit) => edit && { ...edit, version, started: true });
@@ -502,6 +507,9 @@ export class TrackDraft {
 
   private refused(err: unknown, sent: readonly DraftTrack[]): void {
     const status = statusOf(err);
+    this.levelRefusal.set(
+      fieldOf(err) === 'level' ? errorMessage(toUiErrorCode(err)) : null,
+    );
     const problems = problemsOf(err);
     if (isUncertain(status)) this.lost();
     else if (status === 412) this.compare();

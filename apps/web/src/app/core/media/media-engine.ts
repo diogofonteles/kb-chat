@@ -22,6 +22,7 @@ import {
   type PlaybackSpeed,
   type PlaybackState,
 } from '@kb-chat/player-core';
+import type { HiddenSpan } from '@kb-chat/contracts';
 
 /** What the engine plays: a media item of the library and its stream URL. */
 export interface PlayableSource {
@@ -34,6 +35,8 @@ export interface PlayableSource {
   readonly artist?: string;
   /** A track's cut: positions read on it name it, so an older one is translated (KBC-073). */
   readonly fileVersion?: number;
+  /** The parts this person may not hear, skipped by the player (KBC-106 FR-5). */
+  readonly hidden?: readonly HiddenSpan[];
 }
 
 /**

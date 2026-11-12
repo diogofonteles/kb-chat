@@ -52,14 +52,13 @@ export interface LevelledMedia {
 /**
  * The visibility rule of media (ADR 0036 §6, KBC-105 BR-5, BR-8): the collection must be one
  * the person sees and, in a collection with levels, the audio must hold one of the levels
- * the person sees; one with none ("Sem nível") is for masters only. A track's own level is
- * KBC-106: until then, tracks stay closed to members in a collection with levels.
+ * the person sees; one with none ("Sem nível") is for masters only. A track holds its own
+ * level (KBC-106): its recording's, or one above it.
  */
 export function seesLevelled(actor: MediaActor, media: LevelledMedia): boolean {
   if (!actor.canSee(media.topic)) return false;
   const allowed = actor.levelsIn(media.topic);
   if (allowed === null) return true;
-  if (media.isTrack) return false;
   return media.level !== null && allowed.includes(media.level);
 }
 
@@ -74,6 +73,12 @@ export const seesMedia = (
     isTrack: media.track !== null,
   });
 
-/** The tracks of a collection reach this person: no levels hold them there (KBC-106). */
-export const seesTracksIn = (actor: MediaActor, topic: string): boolean =>
-  actor.canSee(topic) && actor.levelsIn(topic) === null;
+/** Whether a level of `topic` is one this person hears (a master, or no levels: all). */
+export const hearsLevel = (
+  actor: MediaActor,
+  topic: string,
+  level: string | null,
+): boolean => {
+  const allowed = actor.levelsIn(topic);
+  return allowed === null || (level !== null && allowed.includes(level));
+};

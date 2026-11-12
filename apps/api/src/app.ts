@@ -660,7 +660,8 @@ async function registerCorrections(
   const { media, service, publisher } = input;
   const corrections = new TranscriptCorrectionService({
     store: media.corrections,
-    media: service,
+    // Every correction route reads or writes the words: an edit (KBC-106 review B3).
+    media: { get: (actor, mediaId) => service.editable(actor, mediaId) },
     recordOf: (mediaId) => media.store.getMedia(mediaId),
     afterChange: (recordingId, words) =>
       publisher.afterCorrection(recordingId, words),
@@ -1326,7 +1327,7 @@ async function registerEditing(
   const diarization = diarizationService(wiring);
   const proposals = await registerProposals(app, { ...wiring, diarization });
   await registerEdit(app, wiring);
-  const revisions = createTrackRevisions({ ...wiring, diarization });
+  const revisions = trackRevisions(app, { ...wiring, diarization });
   await app.register(trackRevisionRoutes(revisions));
   const subjects = await registerSubjects(app, wiring);
   const preparation = preparationService(app, {
@@ -1341,6 +1342,23 @@ async function registerEditing(
     publisher: wiring.publisher,
   });
   return { proposals, preparation, subjects, revisions, corrections };
+}
+
+/** What changes a track after its approval, its own level included (KBC-073, KBC-106). */
+function trackRevisions(
+  app: FastifyInstance,
+  wiring: MediaWiring & {
+    readonly service: MediaService;
+    readonly publisher: TrackPublisher;
+    readonly diarization: DiarizationService;
+  },
+) {
+  return createTrackRevisions({
+    ...wiring,
+    trackLevels: mediaLevelsOf(wiring),
+    levelAudit: wiring.levels.audit,
+    log: app.log,
+  });
 }
 
 /** The person who asked for a plan, as they stand now (KBC-072 BR-4). */
@@ -1418,7 +1436,8 @@ function preparationService(
     separation: planSeparation(media, wiring.diarization),
     edits: media.edits,
     drafts: media.trackProposals,
-    findMedia: (actor, mediaId) => service.get(actor, mediaId),
+    // Its edit routes: refused below a track of the recording (KBC-106 decision).
+    findMedia: (actor, mediaId) => service.editable(actor, mediaId),
     followable: (actor, mediaId) => service.followable(actor, mediaId),
     retryConversion: (actor, mediaId) => {
       service.retry(actor, mediaId);
@@ -1503,7 +1522,8 @@ async function registerProposals(
 ): Promise<ProposalService> {
   const proposals = createTrackProposals({
     ...wiring,
-    findMedia: (actor, mediaId) => wiring.service.getRecording(actor, mediaId),
+    findMedia: (actor, mediaId) =>
+      wiring.service.editableRecording(actor, mediaId),
     log: app.log,
   });
   const interrupted = proposals.recover();
@@ -1556,8 +1576,14 @@ async function registerEdit(
         plans: preparations,
         rootOf: (topic) => wiring.authors.rootOf(topic),
         findMedia: (actor, mediaId) => wiring.service.get(actor, mediaId),
+        editable: (actor, mediaId) => wiring.service.editable(actor, mediaId),
         publisher: wiring.publisher,
         preparation: wiring.media.trackItems,
+        // A track's own level in the draft and on approval (KBC-106).
+        levels: mediaLevelsOf(wiring),
+        store: wiring.media.store,
+        audit: wiring.levels.audit,
+        log: app.log,
       }),
     ),
   );
@@ -1936,7 +1962,7 @@ async function loadedLevels(
   const levels = given.levels ?? inMemoryLevels();
   await levels.directory.load();
   const { catalog, people, media } = built;
-  const gate = new ContentGate({ directory: levels.directory, catalog });
+  const gate = contentGateOf(levels, catalog, media);
   const parentOf = (slug: string) => catalog.get(slug)?.topic.parent ?? null;
   // One queue for both services: a scale change never slips into a document write (R1-7).
   const queue = new LevelWriteQueue();
@@ -1955,6 +1981,25 @@ async function loadedLevels(
     history: new LevelHistoryService(withMedia),
   };
 }
+
+/** The gate every content route asks; a track document's level is media.db's (KBC-106). */
+const contentGateOf = (
+  levels: LevelDeps,
+  catalog: CatalogRegistry,
+  media: MediaStorePort | undefined,
+): ContentGate =>
+  new ContentGate({
+    directory: levels.directory,
+    catalog,
+    ...(media && {
+      mediaLevelOf: (id: string) => media.levelOf(id),
+      // KBC-111: a track document's "faixa n de N" among the tracks the viewer hears.
+      tracksBeside: (id: string) => {
+        const parent = media.getMedia(id)?.track?.parentId;
+        return parent ? media.liveTrackLevels(parent) : [];
+      },
+    }),
+  });
 
 /** The levels' state in memory (tests, and an app built without a state folder). */
 const inMemoryLevels = (): LevelDeps => ({

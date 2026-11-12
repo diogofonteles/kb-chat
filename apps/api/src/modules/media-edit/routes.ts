@@ -19,7 +19,7 @@ import type {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { assertFeature, type RouteAccess } from '../auth/index.js';
-import { actorOf, versionOf } from '../media/index.js';
+import { actorOf, editAuthorOf, versionOf } from '../media/index.js';
 import type { EditCall, TrackEditService } from './track-edit-service.js';
 
 /** Editing is `media-edit`, on top of `media` as every other media route (BR-8). */
@@ -71,6 +71,7 @@ function callOf(request: FastifyRequest, mediaId: string): EditCall {
     actor: actorOf(request),
     mediaId,
     expectedVersion: versionOf(request),
+    by: editAuthorOf(request),
   };
 }
 

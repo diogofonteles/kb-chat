@@ -30,7 +30,7 @@ import { AROUND_WORD_MS } from './word-correction.js';
 type Scope = 'window' | 'recording';
 
 /** Where the confirmation is: refused for a reason the person can act on, or not. */
-type Outcome = 'idle' | 'saving' | 'stale' | 'failed' | 'invalid';
+type Outcome = 'idle' | 'saving' | 'stale' | 'failed' | 'invalid' | 'above';
 
 /** An occurrence's new text: the typed one inside its own edge punctuation (BR-11). */
 export function replacementOf(found: string, typed: string): string {
@@ -107,6 +107,10 @@ export class CorrectAll {
   });
   protected readonly loading = computed(() => this.preview.isLoading());
   protected readonly loadFailed = computed(() => !!this.preview.error());
+  /** A track of the recording is above the person (KBC-106): said as such. */
+  protected readonly loadAbove = computed(
+    () => toUiErrorCode(this.preview.error()) === 'EDIT_ABOVE_YOUR_LEVEL',
+  );
   protected readonly occurrences = computed<readonly Occurrence[]>(() =>
     this.preview.hasValue() ? this.preview.value().occurrences : [],
   );
@@ -242,7 +246,13 @@ export class CorrectAll {
     } else if (details.data?.reason === 'word-changed') {
       this.markChanged(details.data.changed ?? []);
     } else {
-      this.outcome.set(code === 'CORRECTION_INVALID' ? 'invalid' : 'failed');
+      this.outcome.set(
+        code === 'CORRECTION_INVALID'
+          ? 'invalid'
+          : code === 'EDIT_ABOVE_YOUR_LEVEL'
+            ? 'above'
+            : 'failed',
+      );
       return;
     }
     // Something changed: the next confirmation is another group.

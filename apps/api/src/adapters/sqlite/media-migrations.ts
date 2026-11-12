@@ -1502,4 +1502,17 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       ) STRICT, WITHOUT ROWID;
     `,
   },
+  {
+    // KBC-106 (ADR 0036 §3): a track may hold a level of its own above its recording's.
+    // `level_own` says it no longer follows the recording; the draft keeps the level chosen
+    // in the validation step (NULL: the recording's). Expand only: the previous image
+    // ignores both columns.
+    version: 33,
+    name: 'track-levels',
+    sql: `
+      ALTER TABLE media ADD COLUMN level_own INTEGER NOT NULL DEFAULT 0
+        CHECK (level_own IN (0, 1));
+      ALTER TABLE media_draft_tracks ADD COLUMN level TEXT;
+    `,
+  },
 ];

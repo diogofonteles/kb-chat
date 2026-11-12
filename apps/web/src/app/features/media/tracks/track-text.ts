@@ -21,7 +21,7 @@ import type { TranscriptCorrection } from '@kb-chat/contracts';
 import { wordAtOffset, type TimedSpan } from '@kb-chat/player-core';
 import { SessionStore } from '@core/auth/session-store.js';
 import { CorrectAll } from '../corrections/correct-all.js';
-import { CorrectionDesk } from '../corrections/correction-desk.js';
+import { CorrectionDesk, insideSaid } from '../corrections/correction-desk.js';
 import { CorrectionHistory } from '../corrections/correction-history.js';
 import { WordCorrection } from '../corrections/word-correction.js';
 import { WordSearch, type WordHit } from '../corrections/word-search.js';
@@ -39,6 +39,15 @@ import {
   type TextLine,
 } from './track-text-lines.js';
 import { TrackTextSource } from './track-text-source.js';
+import {
+  gestureOffsets,
+  gestureStep,
+  gestureTo,
+  placedWords,
+  wordAt,
+  type Gesture,
+  type TextPoint,
+} from './word-gesture.js';
 
 /** Where a choice falls in a line's text. */
 interface Offsets {
@@ -54,6 +63,24 @@ const positionOf = (word: object | null): number | null =>
 
 /** After the person scrolls the block, it does not follow the word for this long (FR-4). */
 export const OWN_SCROLL_MS = 5_000;
+
+/** A finger held this long on a word starts choosing words (KBC-115 FR-2). */
+export const LONG_PRESS_MS = 400;
+/** A mouse moved this far with its button down is a drag, not a click (FR-1). */
+const MOUSE_SLOP_PX = 4;
+/** A finger moved this far before the long press is a scroll (FR-2). */
+const TOUCH_SLOP_PX = 10;
+
+/** A pointer held down on a word: it may become a drag (KBC-115 FR-1, FR-2). */
+interface Press {
+  readonly pointerId: number;
+  readonly touch: boolean;
+  readonly x: number;
+  readonly y: number;
+  readonly from: TextPoint;
+  selecting: boolean;
+  timer: ReturnType<typeof setTimeout> | null;
+}
 
 /** The word is kept within this share of the block from its top and bottom. */
 const COMFORT = 0.15;
@@ -183,6 +210,15 @@ export class TrackText {
   protected readonly carry = computed(() => this.desk.history()?.carry ?? null);
   /** Where the chosen word came from: the focus goes back there (FR-3, AC-22). */
   private chosenFrom: 'text' | 'search' = 'text';
+  /** Words being chosen by dragging or by Shift+arrows, before the panel (KBC-115). */
+  private readonly gesture = signal<Gesture | null>(null);
+  /** A pointer held on a word; the click after a drag is not a click. */
+  private press: Press | null = null;
+  private swallowClick = false;
+  /** The last click opened or changed the panel: its double click takes that back. */
+  private openedByClick = false;
+  /** The gesture comes from Shift+arrows: it opens when Shift is released (FR-4). */
+  private byKeys = false;
   /** When the person last scrolled the block themselves. */
   private ownScrollAt = Number.NEGATIVE_INFINITY;
   /** The retry button disappears with the error: the focus goes on to the text. */
@@ -197,7 +233,10 @@ export class TrackText {
     this.showTrackInWhole();
     this.focusAfterRetry();
     afterNextRender(() => this.listenPassively());
-    if (this.canCorrect) this.followCorrections();
+    if (this.canCorrect) {
+      this.followCorrections();
+      this.holdScrollWhileChoosing();
+    }
   }
 
   /** The history once the text is there, the chosen words painted, the focus kept. */
@@ -211,7 +250,7 @@ export class TrackText {
     });
     afterRenderEffect({
       write: () => {
-        const range = this.chosenRange();
+        const range = this.gestureRange() ?? this.chosenRange();
         this.highlights.show('correcting-word', range ? [range] : []);
       },
     });
@@ -263,16 +302,432 @@ export class TrackText {
   /** A word clicked (BR-17): the audio goes to it and the panel opens on it, once. */
   protected clickedText(event: MouseEvent): void {
     if (!this.canCorrect || this.state() !== 'ready') return;
-    const caret = this.caretAt(event.clientX, event.clientY);
-    if (!caret) return;
-    const index = this.lineElements().findIndex(({ nativeElement }) =>
+    if (this.swallowClick) {
+      this.swallowClick = false;
+      return;
+    }
+    // The second and third clicks of a double or triple click select for copying: they
+    // choose nothing, and the browser's selection stays as it made it.
+    if (event.detail >= 2) return;
+    const point = this.pointAt(event.clientX, event.clientY);
+    const line = point ? this.lines()[point.line] : undefined;
+    if (!point || !line) return;
+    this.chosenFrom = 'text';
+    if (event.shiftKey) {
+      if (this.stretchTo(point)) return;
+      // With nothing open, Shift+click is a click: not the browser's stretched selection.
+      this.document.getSelection()?.removeAllRanges();
+    }
+    const selected = this.selectedOffsets(point.line);
+    const before = this.desk.selection();
+    this.pick(line, selected ?? { start: point.offset, end: point.offset });
+    this.openedByClick = this.desk.selection() !== before;
+  }
+
+  /** The line and character under a point of the screen, if it is in a line. */
+  private pointAt(x: number, y: number): TextPoint | null {
+    const caret = this.caretAt(x, y);
+    if (!caret) return null;
+    const line = this.lineElements().findIndex(({ nativeElement }) =>
       nativeElement.contains(caret.node),
     );
-    const line = this.lines()[index];
-    if (!line) return;
+    return line < 0 ? null : { line, offset: caret.offset };
+  }
+
+  /**
+   * A point on a word for a drag (QA-3): in the space between two words, the nearer one by
+   * where they are drawn, so every browser picks the same words whichever side of the space
+   * its caret falls on. Where nothing is drawn (no layout), the caret's word.
+   */
+  private wordPointAt(x: number, y: number): TextPoint | null {
+    const point = this.pointAt(x, y);
+    if (!point) return null;
+    const words = placedWords(this.lines()[point.line]);
+    // Strictly inside a word: that word. At its first character the caret may stand for the
+    // space before it (WebKit), so the drawing decides.
+    const inside = words.some(
+      (word) => word.charStart < point.offset && point.offset < word.charEnd,
+    );
+    const before = words.findLast((word) => word.charEnd <= point.offset);
+    const after = words.find((word) => word.charStart >= point.offset);
+    if (inside || !before || !after) return point;
+    const box = (word: { charStart: number; charEnd: number }) => {
+      const range = this.rangeOf({
+        line: point.line,
+        start: word.charStart,
+        end: word.charEnd,
+        whole: false,
+      });
+      return typeof range?.getBoundingClientRect === 'function'
+        ? range.getBoundingClientRect()
+        : null;
+    };
+    const left = box(before);
+    const right = box(after);
+    if (!left || !right || (left.width === 0 && right.width === 0))
+      return point;
+    // On a word, that word; in the space, the nearer edge.
+    const nearer =
+      x >= right.left || right.left - x < x - left.right ? after : before;
+    return { line: point.line, offset: nearer.charStart };
+  }
+
+  /**
+   * A point while dragging: off the lines (between them, past the block), the line above or
+   * below the gesture's own, so the choice stops at its edge (BR-1).
+   */
+  private dragPointAt(x: number, y: number, at: number): TextPoint | null {
+    const point = this.wordPointAt(x, y);
+    if (point) return point;
+    const element = this.lineOf(at);
+    if (typeof element?.getBoundingClientRect !== 'function') return null;
+    const box = element.getBoundingClientRect();
+    if (y > box.bottom) return { line: at + 1, offset: 0 };
+    if (y < box.top) return { line: at - 1, offset: 0 };
+    return null;
+  }
+
+  /** A restricted segment (KBC-106) never takes part in a choice (KBC-115 BR-2). */
+  private hidden(line: number): boolean {
+    const segment = this.lines()[line]?.segment;
+    return (
+      segment === undefined || this.segments()[segment]?.restricted === true
+    );
+  }
+
+  /**
+   * Shift+click with the panel open (KBC-115 FR-3): the choice stretches from its anchor to
+   * the word, within its segment; false when there is nothing open to stretch.
+   */
+  private stretchTo(point: TextPoint): boolean {
+    const selection = this.desk.selection();
+    const anchor = this.desk.anchor();
+    if (!selection || anchor === null) return false;
+    const at = this.lines().findIndex(
+      (line) => line.segment === selection.segment,
+    );
+    const gesture =
+      at < 0 ? null : gestureTo(this.lines(), { line: at, anchor }, point);
+    if (!gesture) return false;
+    this.document.getSelection()?.removeAllRanges();
+    this.commit(gesture, true);
+    return true;
+  }
+
+  /** The words chosen go to the panel: a new choice, or the open one stretched (BR-3, BR-4). */
+  private commit(gesture: Gesture, stretch: boolean): void {
+    this.gesture.set(null);
+    this.byKeys = false;
+    const line = this.lines()[gesture.line];
+    if (!line || this.hidden(gesture.line)) return;
     this.chosenFrom = 'text';
-    const selected = this.selectedOffsets(index);
-    this.pick(line, selected ?? { start: caret.offset, end: caret.offset });
+    if (
+      stretch &&
+      this.desk.extend(line.segment, gesture.focus, {
+        anchor: gesture.anchor,
+        clamped: gesture.clamped,
+      }) !== null
+    )
+      return;
+    this.desk.choose(line.segment, Math.min(gesture.anchor, gesture.focus), {
+      to: Math.max(gesture.anchor, gesture.focus),
+      anchor: gesture.anchor,
+      clamped: gesture.clamped,
+    });
+  }
+
+  /** A press on a word, by whoever corrects: it may become a drag (FR-1, FR-2). */
+  private startPress(event: PointerEvent): void {
+    // A second finger, or another pointer while one drags: the drag goes on (IMP-1).
+    if (event.isPrimary === false) return;
+    if (this.press?.selecting && this.press.pointerId !== event.pointerId)
+      return;
+    this.swallowClick = false;
+    this.endPress();
+    if (!this.pressable(event)) return;
+    const from = this.wordPointAt(event.clientX, event.clientY);
+    if (!from || this.hidden(from.line)) return;
+    this.wordsFor(from.line);
+    const touch = event.pointerType === 'touch' || event.pointerType === 'pen';
+    const press: Press = {
+      pointerId: event.pointerId,
+      touch,
+      x: event.clientX,
+      y: event.clientY,
+      from,
+      selecting: false,
+      timer: null,
+    };
+    if (touch)
+      press.timer = setTimeout(() => this.beginDrag(press), LONG_PRESS_MS);
+    this.press = press;
+  }
+
+  /** A main button or a finger, with no Shift (Shift+click stretches), on a ready text. */
+  private pressable(event: PointerEvent): boolean {
+    return (
+      this.canCorrect &&
+      this.state() === 'ready' &&
+      event.button === 0 &&
+      event.isPrimary !== false &&
+      !event.shiftKey
+    );
+  }
+
+  /** A line whose words are not here yet gets them now: the drag needs them. */
+  private wordsFor(index: number): void {
+    const line = this.lines()[index];
+    if (line?.words !== null) return;
+    this.source.words
+      .load(wordsPageOf(line.segment))
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe();
+  }
+
+  /** The drag starts: the word under the press is chosen alone, and painted (UP-01). */
+  private beginDrag(press: Press): void {
+    if (this.press !== press) return;
+    press.timer = null;
+    press.selecting = true;
+    this.byKeys = false;
+    this.document.getSelection()?.removeAllRanges();
+    const body = this.body().nativeElement;
+    if (typeof body.setPointerCapture === 'function')
+      try {
+        body.setPointerCapture(press.pointerId);
+      } catch {
+        // The pointer is gone already: the release ends the drag as well.
+      }
+    this.dragTo(press, press.from);
+  }
+
+  private dragTo(press: Press, point: TextPoint): void {
+    const anchor = wordAt(this.lines()[press.from.line], press.from.offset);
+    if (anchor === null) return;
+    this.gesture.set(
+      gestureTo(this.lines(), { line: press.from.line, anchor }, point),
+    );
+  }
+
+  protected moved(event: PointerEvent): void {
+    const press = this.press;
+    if (press?.pointerId !== event.pointerId) return;
+    if (!press.selecting && !this.dragStarts(press, event)) return;
+    const point = this.dragPointAt(
+      event.clientX,
+      event.clientY,
+      press.from.line,
+    );
+    if (point) this.dragTo(press, point);
+  }
+
+  /**
+   * Whether a move starts the drag: a mouse moved past its slop does; a finger moved before
+   * its long press scrolls the block, as before, and ends the press.
+   */
+  private dragStarts(press: Press, event: PointerEvent): boolean {
+    const far = Math.hypot(event.clientX - press.x, event.clientY - press.y);
+    if (press.touch) {
+      if (far > TOUCH_SLOP_PX) this.endPress();
+      return false;
+    }
+    if (far <= MOUSE_SLOP_PX) return false;
+    this.beginDrag(press);
+    return true;
+  }
+
+  protected released(event: PointerEvent): void {
+    const press = this.press;
+    if (press?.pointerId !== event.pointerId) return;
+    const gesture = this.gesture();
+    this.endPress();
+    if (!press.selecting) return;
+    // The click that follows a drag is the drag's end, not a click on a word.
+    this.swallowClick = true;
+    const line = this.lines()[press.from.line];
+    if (gesture) this.commit(gesture, false);
+    else if (line)
+      this.pick(line, { start: press.from.offset, end: press.from.offset });
+  }
+
+  /** Cancelled, or the capture lost with no release: nothing is chosen, the mark goes. */
+  protected cancelled(event: PointerEvent): void {
+    if (this.press?.pointerId !== event.pointerId) return;
+    this.endPress();
+  }
+
+  /**
+   * The second press of a double or triple click selects as the browser does (IMP-3): the
+   * panel the first click opened closes untouched, and the focus stays on the text.
+   */
+  protected mousePressed(event: MouseEvent): void {
+    if (event.detail < 2) return;
+    this.endPress();
+    if (this.openedByClick && !this.desk.dirty()) this.desk.close();
+    this.openedByClick = false;
+  }
+
+  /** Only the block's own capture ends a drag: a line's implicit one bubbles here too. */
+  protected lostCapture(event: PointerEvent): void {
+    if (event.target === this.body().nativeElement) this.cancelled(event);
+  }
+
+  /** Every way a press ends takes its mark away and lets the block scroll again (IMP-1). */
+  private endPress(): void {
+    const press = this.press;
+    if (!press) return;
+    if (press.timer !== null) clearTimeout(press.timer);
+    this.press = null;
+    if (!this.byKeys) this.gesture.set(null);
+    const body = this.body().nativeElement;
+    if (
+      typeof body.hasPointerCapture === 'function' &&
+      body.hasPointerCapture(press.pointerId)
+    )
+      body.releasePointerCapture(press.pointerId);
+  }
+
+  /**
+   * While a single press is on a word, the browser neither selects text nor opens its menu;
+   * a double or triple click ends the press first, so it still selects for copying.
+   */
+  protected heldBack(event: Event): void {
+    if (this.press) event.preventDefault();
+  }
+
+  /** Shift+→ / Shift+← choose words from the keyboard; Esc gives up (KBC-115 FR-4). */
+  protected keyOnText(event: KeyboardEvent): void {
+    const arrow =
+      event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    if (
+      arrow !== 0 &&
+      event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      this.canCorrect &&
+      this.state() === 'ready'
+    ) {
+      event.preventDefault();
+      this.stepByKey(arrow);
+      return;
+    }
+    if (event.key === 'Escape' && this.press?.selecting) {
+      // Esc during a drag gives up, as with the keys (QA-2): the release opens nothing.
+      event.preventDefault();
+      this.endPress();
+      this.swallowClick = true;
+      return;
+    }
+    if (event.key === 'Escape' && this.byKeys) {
+      event.preventDefault();
+      this.giveUpKeys();
+      return;
+    }
+    this.scrolledByKey(event);
+  }
+
+  /** Shift released: what the arrows chose goes to the panel (FR-4). */
+  protected keyUpOnText(event: KeyboardEvent): void {
+    if (event.key !== 'Shift' || !this.byKeys) return;
+    const gesture = this.gesture();
+    if (!gesture) {
+      this.byKeys = false;
+      return;
+    }
+    const open = this.desk.selection();
+    const segment = this.lines()[gesture.line]?.segment;
+    this.commit(gesture, open !== null && open.segment === segment);
+  }
+
+  /** The focus left the text halfway: nothing is chosen. */
+  protected leftText(): void {
+    if (this.byKeys) this.giveUpKeys();
+  }
+
+  private giveUpKeys(): void {
+    this.byKeys = false;
+    this.gesture.set(null);
+  }
+
+  private stepByKey(direction: 1 | -1): void {
+    const current = this.byKeys ? this.gesture() : this.keyStart(direction);
+    if (!current) return;
+    this.byKeys = true;
+    const next = gestureStep(this.lines(), current, direction) ?? current;
+    this.gesture.set(next);
+    const offsets = gestureOffsets(this.lines(), next);
+    const text = offsets
+      ? (this.lines()[next.line]?.text ?? '').slice(offsets.start, offsets.end)
+      : '';
+    this.desk.say(next.clamped ? insideSaid() : text);
+  }
+
+  /**
+   * Where Shift+arrows start (FR-4): the open choice, with its anchor; else the word chosen
+   * last; else the word being said; else the first word of the text.
+   */
+  private keyStart(direction: 1 | -1): Gesture | null {
+    return this.openGesture(direction) ?? this.freshGesture();
+  }
+
+  /**
+   * The open choice as a gesture: its anchor stays, its other end moves. An anchor in the
+   * middle (after Incluir on both sides) goes to the end behind the arrow, so nothing is lost.
+   */
+  private openGesture(direction: 1 | -1): Gesture | null {
+    const open = this.desk.selection();
+    const anchor = this.desk.anchor();
+    if (!open || anchor === null) return null;
+    const line = this.lines().findIndex((one) => one.segment === open.segment);
+    const words = this.desk.words();
+    const first = words[0]?.position;
+    const last = words.at(-1)?.position;
+    if (line < 0 || first === undefined || last === undefined) return null;
+    const atEnd = anchor === first || anchor === last;
+    const from = atEnd ? anchor : direction === 1 ? first : last;
+    return {
+      line,
+      anchor: from,
+      focus: from === first ? last : first,
+      clamped: false,
+    };
+  }
+
+  private freshGesture(): Gesture | null {
+    const lines = this.lines();
+    const at = (line: number, position: number | null): Gesture | null =>
+      line >= 0 && position !== null && !this.hidden(line)
+        ? { line, anchor: position, focus: position, clamped: false }
+        : null;
+    const last = this.desk.lastChosen();
+    if (last) {
+      const line = lines.findIndex((one) => one.segment === last.segment);
+      const known = placedWords(lines[line]).some(
+        (word) => word.position === last.position,
+      );
+      const found = known ? at(line, last.position) : null;
+      if (found) return found;
+    }
+    const spoken = this.spoken();
+    if (spoken && !spoken.whole) {
+      const found = at(spoken.line, wordAt(lines[spoken.line], spoken.start));
+      if (found) return found;
+    }
+    const line = lines.findIndex(
+      (one, index) => placedWords(one).length > 0 && !this.hidden(index),
+    );
+    return at(line, placedWords(lines[line])[0]?.position ?? null);
+  }
+
+  /** The words being chosen, painted as the chosen ones are (NFR-1). */
+  private gestureRange(): Range | null {
+    const gesture = this.gesture();
+    if (!gesture) return null;
+    const offsets = gestureOffsets(this.lines(), gesture);
+    return offsets
+      ? this.rangeOf({ line: gesture.line, ...offsets, whole: false })
+      : null;
   }
 
   /** "Procurar palavra": an occurrence chosen with Enter or a click (FR-4, FR-14). */
@@ -312,7 +767,7 @@ export class TrackText {
       wordAtOffset(words, Math.max(at.start, at.end - 1)),
     );
     if (first === null) return;
-    this.desk.choose(line.segment, first, last ?? first);
+    this.desk.choose(line.segment, first, { to: last ?? first });
   }
 
   /** A stretch selected in one line when clicking: the choice starts from it (FR-2). */
@@ -411,6 +866,7 @@ export class TrackText {
 
   protected pressed(event: PointerEvent): void {
     if (event.target === this.body().nativeElement) this.ownScroll();
+    this.startPress(event);
   }
 
   private ownScroll(): void {
@@ -549,6 +1005,30 @@ export class TrackText {
     const stops = ['wheel', 'touchmove'].map((name) =>
       this.renderer.listen(body, name, () => this.ownScroll(), passive),
     );
-    this.destroyRef.onDestroy(() => stops.forEach((stop) => stop()));
+    this.destroyRef.onDestroy(() => {
+      stops.forEach((stop) => stop());
+      this.endPress();
+    });
+  }
+
+  /**
+   * Only whoever corrects, once the text is there, gets a touchmove that may stop the scroll
+   * while a finger chooses words (KBC-115 FR-2). Not passive, so the browser waits for it on
+   * every touch scroll of the block: everyone else keeps the passive listeners only (BR-5).
+   */
+  private holdScrollWhileChoosing(): void {
+    let stop: (() => void) | null = null;
+    afterRenderEffect(() => {
+      if (stop || this.state() !== 'ready') return;
+      stop = this.renderer.listen(
+        this.body().nativeElement,
+        'touchmove',
+        (event: TouchEvent) => {
+          if (this.press?.selecting) event.preventDefault();
+        },
+        { passive: false },
+      );
+    });
+    this.destroyRef.onDestroy(() => stop?.());
   }
 }

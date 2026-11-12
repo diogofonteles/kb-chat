@@ -15,7 +15,7 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { makeMp3, uniqueTag, uploadReady } from './media-helpers.js';
-import { audioWithTracks, trackRow } from './tracks-helpers.js';
+import { audioWithTracks, expectSaved, trackRow } from './tracks-helpers.js';
 import {
   seedTranscript,
   separateVoices,
@@ -283,6 +283,46 @@ test('KBC-090: a correction and a refusal reach the published track', async ({
       }),
     ]),
   );
+  await owner.dispose();
+});
+
+test('KBC-102: the "Reveja" warning goes once the title on screen no longer says the name', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const tag = uniqueTag();
+  const refused = `Joana Prado ${tag}`;
+  const media = await proposedAudio(owner, {
+    tracks: [
+      { ...FIRST, title: `Abertura ${tag}` },
+      { ...SECOND, title: `Pergunta de ${refused}` },
+    ],
+    voices: [{ voice: 2, name: refused }],
+  });
+  await page.goto(`/midia/${media.id}/preparar`);
+  await page
+    .getByRole('button', { name: 'Recusar o nome sugerido para a Voz 2' })
+    .click();
+  await expect(page.getByText(/Reveja estes títulos/)).toContainText(refused);
+  await page.getByRole('button', { name: 'Validar faixas' }).click();
+  await expect(page).toHaveURL(/\/faixas$/);
+  const warning = page.getByText(/Alguns títulos podem citar/);
+  await expect(warning).toBeVisible();
+
+  await trackRow(page, 2).getByRole('button').first().click();
+  const title = page.getByRole('textbox', { name: 'Título' });
+  await expect(title).toHaveValue(`Pergunta de ${refused}`);
+  await title.fill(`Pergunta da plateia ${tag}`);
+  await title.press('Enter');
+  await expect(warning).toHaveCount(0);
+  await expect(page.getByText(/Reveja estes títulos/)).toHaveCount(0);
+
+  await expectSaved(owner, media.id, (tracks) =>
+    tracks.some(({ title }) => title === `Pergunta da plateia ${tag}`),
+  );
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Título' })).toBeVisible();
+  await expect(warning).toHaveCount(0);
   await owner.dispose();
 });
 

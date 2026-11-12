@@ -26,6 +26,7 @@ import {
   isSeenDocument,
   isTrackEntry,
   splitFrontmatter,
+  placedFor,
   type CatalogEntry,
   type CatalogMedia,
   type CatalogRegistry,
@@ -183,7 +184,7 @@ export class SearchService {
     const totals = kindTotals(groups, filters);
     const response: SearchResponse = {
       ...refined,
-      items: await this.hitsOf(page, { tracks, view }),
+      items: await this.hitsOf(page, { tracks, view, offset }),
       trackTotal: kinds.includes('audio') ? totals.tracks : 0,
       capped: found.some((one) => one.capped),
       // Documents only: SearchWithMedia adds the spoken passages (KBC-039).
@@ -387,20 +388,20 @@ export class SearchService {
 
   private async toSearchHit(
     group: CopyGroup,
-    { tracks, view }: Pick<SearchScope, 'tracks' | 'view'>,
+    scope: Pick<SearchScope, 'tracks' | 'view'> & { readonly rank: number },
   ): Promise<SearchHit> {
     const { lead, copies } = group;
     const { hit, entry } = lead;
+    const { tracks, view, rank } = scope;
     const catalog = this.topicOf.get(group);
     if (!catalog) throw new Error('search group without its collection');
     const topic = catalog.topic.slug;
-    const source = {
-      body: await this.bodyOf(topic, hit.id),
-      summary: entry.summary,
-    };
+    const source = await this.sourceOf(topic, hit.id, entry.summary);
+    // KBC-111: "faixa n de N" counted over the tracks this person hears.
+    const media = placedFor(view, entry).media;
     const track =
-      entry.media && tracks
-        ? trackHit(entry.media, { raw: hit.snippet, source, topic, tracks })
+      media && tracks
+        ? trackHit(media, { raw: hit.snippet, source, topic, tracks })
         : null;
     return {
       ...facetsOf(entry),
@@ -408,7 +409,7 @@ export class SearchService {
       id: entry.id,
       title: entry.title,
       snippet: track?.snippet ?? cleanSnippet(hit.snippet, source),
-      score: hit.score,
+      score: rankScore(rank),
       copies: copies.map((copy) => ({ id: copy.id, title: copy.title })),
       ...(track && { media: track.media }),
       ...levelOf(view, topic, entry.id),
@@ -417,9 +418,18 @@ export class SearchService {
 
   private hitsOf(
     page: readonly CopyGroup[],
-    scope: Pick<SearchScope, 'tracks' | 'view'>,
+    scope: Pick<SearchScope, 'tracks' | 'view'> & { readonly offset: number },
   ): Promise<SearchHit[]> {
-    return Promise.all(page.map((group) => this.toSearchHit(group, scope)));
+    return Promise.all(
+      page.map((group, at) =>
+        this.toSearchHit(group, { ...scope, rank: scope.offset + at }),
+      ),
+    );
+  }
+
+  /** The document's body and the kb summary: what a snippet is cut from. */
+  private async sourceOf(topic: string, id: string, summary: string | null) {
+    return { body: await this.bodyOf(topic, id), summary };
   }
 
   private async bodyOf(topic: string, id: string): Promise<string> {
@@ -427,6 +437,15 @@ export class SearchService {
     return text === null ? '' : splitFrontmatter(text).body;
   }
 }
+
+/**
+ * A document's relevance as sent, 0–1, from its place among the results this person gets:
+ * 1, 1/2, 1/3… (KBC-111). QMD's own score (bm25 over the whole vault, RRF positions among
+ * every document) moves with documents above the person's level; the order still comes from
+ * it. Beside a passage's h/(h+1) (0.5, 0.67, 0.75…) a strong passage still mixes in near the
+ * top of the list (KBC-039 FR-6).
+ */
+export const rankScore = (rank: number): number => 1 / (1 + rank);
 
 /** What a card says of a document's facets and authorship. */
 const facetsOf = (entry: CatalogEntry) => ({

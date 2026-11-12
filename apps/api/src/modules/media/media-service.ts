@@ -6,6 +6,7 @@ import {
   type Author,
   type ContentLevel,
   type CreateMediaRequest,
+  type HiddenSpan,
   type LevelChoice,
   type MediaAuthor,
   type MediaItem,
@@ -33,9 +34,16 @@ import type { TrackRevisionStorePort } from '../../ports/track-revision-store.js
 import {
   canEditMedia,
   estimatedBytesOf,
+  hearsLevel,
   legacyAuthorshipOf,
   seesMedia,
 } from './media-policy.js';
+import { placeAmongHeard } from './track-place.js';
+import {
+  editAboveYourLevel,
+  hearsAllTracks,
+  hiddenSpansOf,
+} from './track-levels.js';
 import { mediaAuthorOf, toMediaItem, type ItemView } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
 
@@ -207,9 +215,13 @@ export interface PlayableFile {
   readonly size: number;
   readonly modifiedMs: number;
   readonly mime: string;
+  /** The parts of the recording this person may not hear (KBC-106 FR-2); absent: none. */
+  readonly hidden?: readonly HiddenSpan[];
 }
 
 const notFound = () => new AppError('MEDIA_NOT_FOUND', 'Unknown media');
+const isMissingFile = (err: unknown): boolean =>
+  err instanceof Error && 'code' in err && err.code === 'ENOENT';
 const notWaiting = () =>
   new AppError('MEDIA_CONFLICT', 'This media is not waiting for this part');
 
@@ -259,6 +271,8 @@ export class MediaService {
   private readonly now: () => Date;
   /** What is writing an item's upload now: a second write is refused, a HEAD waits. */
   private readonly receiving = new Map<string, Promise<unknown>>();
+  /** An item's whole upload being checked and moved to the queue (KBC-118). */
+  private readonly finishing = new Map<string, Promise<boolean>>();
 
   constructor(private readonly deps: MediaServiceDeps) {
     this.now = deps.now ?? (() => new Date());
@@ -414,6 +428,16 @@ export class MediaService {
     // The answer to the last part was lost: for the client, that is a finished upload.
     if (media.status !== 'uploading') return { offset: length, length };
     const offset = await this.deps.files.uploadOffset(mediaId);
+    // A finish may have moved the file away while it was read (KBC-118): once it ends,
+    // the item says what came of it.
+    const finishing = this.finishing.get(mediaId);
+    if (
+      finishing ||
+      this.deps.store.getMedia(mediaId)?.status !== 'uploading'
+    ) {
+      await finishing?.catch(() => undefined);
+      return this.uploadStatus(actor, mediaId);
+    }
     if (offset < length) return { offset, length };
     const running = this.receiving.get(mediaId);
     if (!running) {
@@ -489,6 +513,23 @@ export class MediaService {
    * (false): they would never be found again.
    */
   private async finish(media: MediaRecord): Promise<boolean> {
+    const running = this.finishFile(media);
+    this.finishing.set(media.id, running);
+    try {
+      return await running;
+    } catch (err) {
+      // Cancelled while it was checked: the item is gone (KBC-118).
+      if (!this.deps.store.getMedia(media.id)) throw notFound();
+      // Another read already started these bytes over: so does this one.
+      if (isMissingFile(err)) return false;
+      throw err;
+    } finally {
+      if (this.finishing.get(media.id) === running)
+        this.finishing.delete(media.id);
+    }
+  }
+
+  private async finishFile(media: MediaRecord): Promise<boolean> {
     const { files } = this.deps;
     if (
       media.sourceSha256 &&
@@ -606,6 +647,34 @@ export class MediaService {
     return media.status === 'ready' || mine ? this.get(actor, mediaId) : null;
   }
 
+  /**
+   * KBC-106 decision (2026-11-12): the item for its edit routes. Whoever does not hear every
+   * level the recording's tracks hold or are drafted at may not edit it, nor any track of it
+   * (403 EDIT_ABOVE_YOUR_LEVEL, fail closed): the edit shows and changes all of them.
+   */
+  editable(actor: MediaActor, mediaId: string): MediaItem {
+    const item = this.get(actor, mediaId);
+    const recordingId = item.parent?.id ?? item.id;
+    if (!hearsAllTracks(this.deps.store, actor, recordingId))
+      throw editAboveYourLevel();
+    return item;
+  }
+
+  /** The recording for its edit routes: `editable`, refusing a track. */
+  editableRecording(actor: MediaActor, mediaId: string): MediaItem {
+    const item = this.editable(actor, mediaId);
+    if (item.parent)
+      throw new AppError('MEDIA_CONFLICT', 'A track follows its recording', {
+        details: { reason: 'track' },
+      });
+    return item;
+  }
+
+  /** Every level the recording's tracks hold or are drafted at is one this person hears. */
+  hearsAllTracks(actor: MediaActor, recordingId: string): boolean {
+    return hearsAllTracks(this.deps.store, actor, recordingId);
+  }
+
   /** The item, for what only a recording has (proposals, voices, an edit). */
   getRecording(actor: MediaActor, mediaId: string): MediaItem {
     const item = this.get(actor, mediaId);
@@ -638,7 +707,22 @@ export class MediaService {
     const file = await this.deps.files.stat(rendition.path);
     if (!file)
       throw new AppError('MEDIA_NOT_READY', 'The converted file is missing');
-    return { path: rendition.path, mime: rendition.mime, ...file };
+    const hidden = this.hiddenFor(actor, media);
+    return { path: rendition.path, mime: rendition.mime, ...file, hidden };
+  }
+
+  /**
+   * KBC-106 FR-2: a recording's live tracks at a level this person does not hear. Nothing for
+   * a track, for a master or in a collection without levels.
+   */
+  hiddenFor(
+    actor: MediaActor,
+    media: Pick<MediaRecord, 'id' | 'topic' | 'track'>,
+  ): HiddenSpan[] {
+    if (media.track !== null || actor.levelsIn(media.topic) === null) return [];
+    return hiddenSpansOf(this.deps.store.liveTrackLevels(media.id), (level) =>
+      hearsLevel(actor, media.topic, level),
+    );
   }
 
   private renditionOf(media: MediaRecord, fileVersion: number | undefined) {
@@ -789,24 +873,30 @@ export class MediaService {
     actor: MediaActor,
     view: ItemView = {},
   ): MediaItem {
+    const level = shownLevel(record, {
+      scale: this.scaleOf(record.topic),
+      shows: actor.isMaster || canEditMedia(actor, record),
+    });
     return toMediaItem(record, actor.isMaster, {
       ...view,
       author: this.authorOf(record),
       canEdit: canEditMedia(actor, record),
-      parent: this.parentOf(record),
+      parent: this.parentOf(record, actor),
       groqReady: actor.isMaster && (this.deps.groqReady?.() ?? false),
-      level: shownLevel(record, {
-        scale: this.scaleOf(record.topic),
-        shows: actor.isMaster || canEditMedia(actor, record),
-      }),
+      level,
+      hidden: this.hiddenFor(actor, record),
+      // KBC-106 BR-1: raising the recording says how many tracks go up with it.
+      ...(level !== undefined &&
+        record.track === null && {
+          ownTrackLevels: this.deps.store.ownTrackLevels(record.id),
+        }),
     });
   }
 
   /** Where a track item comes from (FR-4); null for a recording. */
-  private parentOf(record: MediaRecord): TrackParent | null {
+  private parentOf(record: MediaRecord, actor: MediaActor): TrackParent | null {
     if (!record.track) return null;
-    const { parentId, startMs, endMs, ordinal, version, fileVersion } =
-      record.track;
+    const { parentId, startMs, endMs, version, fileVersion } = record.track;
     const parent = this.deps.store.getMedia(parentId);
     if (!parent) return null;
     return {
@@ -814,11 +904,28 @@ export class MediaService {
       title: parent.title,
       startMs,
       endMs,
-      ordinal,
-      total: this.deps.store.trackTotal(parentId),
+      ...this.placeOf(record, actor),
       version,
       fileVersion,
     };
+  }
+
+  /** KBC-111: the track's number and the total over the tracks this person hears. */
+  private placeOf(
+    record: MediaRecord,
+    actor: MediaActor,
+  ): { ordinal: number | null; total: number } {
+    const { parentId, ordinal } = record.track ?? {
+      parentId: '',
+      ordinal: null,
+    };
+    const stored = { ordinal, total: this.deps.store.trackTotal(parentId) };
+    if (actor.levelsIn(record.topic) === null) return stored;
+    return placeAmongHeard(
+      this.deps.store.liveTrackLevels(parentId),
+      record.id,
+      (level) => hearsLevel(actor, record.topic, level),
+    );
   }
 
   /** The stored author as the list now names it (still shown if no longer listed). */

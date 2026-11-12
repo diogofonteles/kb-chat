@@ -135,7 +135,10 @@ export class ScaleChangesService {
    */
   private removalSteps(removal: Removal): UndoableStep[] {
     const { ctx, scale, level, body, base } = removal;
-    const moved = { from: level.id, to: body.moveContentTo };
+    const order = scale
+      .filter((one) => one.id !== level.id)
+      .map((one) => one.id);
+    const moved = { from: level.id, to: body.moveContentTo, order };
     return [
       scaleStep(
         ctx,

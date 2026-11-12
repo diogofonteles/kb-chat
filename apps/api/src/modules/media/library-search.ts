@@ -29,6 +29,8 @@ export interface LibrarySearchInput {
   readonly speech?: Pick<TrackLinksPort, 'spokenAmong' | 'passagesAt'>;
   readonly about?: Pick<TrackLinksPort, 'tracksAbout'>;
   readonly tracks: boolean;
+  /** Per collection the levels the person hears: a hidden track's speech never answers (KBC-106). */
+  readonly levelsByTopic?: ReadonlyMap<string, readonly string[] | null>;
 }
 
 /** One result before its passage is read. */
@@ -93,13 +95,14 @@ function spoken(
   input: LibrarySearchInput,
   totals: ReadonlyMap<string, number>,
 ): { readonly places: readonly SpokenPlace[]; readonly more: boolean } {
-  const { speech, candidates, query, tracks } = input;
+  const { speech, candidates, query, tracks, levelsByTopic } = input;
   if (!speech) return { places: [], more: false };
   return speech.spokenAmong({
     terms: termsOf(query.q),
     ids: speakersFirst(candidates, totals),
     tracks,
     limit: LIBRARY_SEARCH_MAX,
+    ...(levelsByTopic && { levelsByTopic }),
   });
 }
 

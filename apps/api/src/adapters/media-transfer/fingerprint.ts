@@ -6,10 +6,12 @@ import { UNIT_TABLES, unitFilter, type UnitTable } from './unit-tables.js';
 /**
  * Columns a unit's fingerprint leaves out: the level belongs to production after the first
  * import, and a level change there touches `updated_at` alone (found in the local
- * validation): neither makes the unit look edited in production.
+ * validation): neither makes the unit look edited in production. A track's own level and the
+ * level its draft holds (KBC-106) are levels too.
  */
 const OWNED_BY_PRODUCTION: Readonly<Record<string, readonly string[]>> = {
-  media: ['level', 'updated_at'],
+  media: ['level', 'level_own', 'updated_at'],
+  media_draft_tracks: ['level'],
 };
 
 /**

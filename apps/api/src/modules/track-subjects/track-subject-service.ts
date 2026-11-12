@@ -21,7 +21,7 @@ import type {
   StoredTrackSubjects,
   TrackSubjectStorePort,
 } from '../../ports/track-subject-store.js';
-import type { MediaActor } from '../media/index.js';
+import { seesMedia, type MediaActor } from '../media/index.js';
 import type { SubjectDirectory } from './subject-directory.js';
 
 /** A track as a list shows it; a track that left the approved ones has no place. */
@@ -40,12 +40,14 @@ export interface TrackSubjectServiceDeps {
       id: string,
     ): Pick<
       NonNullable<ReturnType<MediaStorePort['getMedia']>>,
-      'id' | 'topic' | 'title' | 'track' | 'archivedAt' | 'status'
+      'id' | 'topic' | 'title' | 'track' | 'archivedAt' | 'status' | 'level'
     > | null;
   };
   readonly items: { tracksOf(parentId: string): readonly TrackRow[] };
   /** The recording as this person sees it; throws MEDIA_NOT_FOUND when they cannot. */
   readonly findMedia: (actor: MediaActor, mediaId: string) => MediaItem;
+  /** A write is an edit of the recording: refused below any of its tracks (KBC-106). */
+  readonly editable?: (actor: MediaActor, mediaId: string) => unknown;
   /** The top-level collection, whose concepts and subjects a sub-collection uses (BR-1). */
   readonly rootOf: (topic: string) => string;
   /** The concept names of a collection in the catalog as it stands now (FR-5). */
@@ -328,10 +330,14 @@ export class TrackSubjectService {
     return { kind: 'free', id };
   }
 
-  /** A track of a recording this person can see, published or still being cut. */
+  /**
+   * A track of a recording this person can see, published or still being cut. The track
+   * answers by its own level (KBC-106): one above the person is not found, like its recording
+   * (KBC-111, found by the leakage suite).
+   */
   private track(actor: MediaActor, trackId: string) {
     const record = this.deps.media.getMedia(trackId);
-    if (!record) throw notFound();
+    if (!record || !seesMedia(actor, record)) throw notFound();
     this.deps.findMedia(actor, record.track?.parentId ?? record.id);
     if (!record.track)
       throw new AppError('MEDIA_CONFLICT', 'Subjects belong to tracks', {
@@ -346,6 +352,7 @@ export class TrackSubjectService {
 
   private writable(call: SubjectCall) {
     const track = this.track(call.actor, call.mediaId);
+    this.deps.editable?.(call.actor, track.parentId);
     if (track.archivedAt !== null) throw notFound();
     return track;
   }

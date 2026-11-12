@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  contentLevelSchema,
+  levelChoiceSchema,
+  levelRefSchema,
+} from './access-levels.js';
 import { mediaIdSchema } from './media.js';
 import {
   MIN_TRACK_MS,
@@ -42,6 +47,18 @@ export const trackPreparationSchema = z.object({
 });
 export type TrackPreparation = z.infer<typeof trackPreparationSchema>;
 
+/**
+ * The levels a track of this recording may hold (KBC-106 BR-1): the recording's, then the
+ * scale's above it, up to the editor's own. Null in a collection without levels.
+ */
+export const trackLevelChoicesSchema = z
+  .object({
+    recording: levelChoiceSchema,
+    choices: z.array(levelChoiceSchema),
+  })
+  .nullable();
+export type TrackLevelChoices = z.infer<typeof trackLevelChoicesSchema>;
+
 export const mediaEditSchema = z.object({
   mediaId: mediaIdSchema,
   /** 0 before the first save: `If-Match: "0"` starts the edit. */
@@ -69,6 +86,8 @@ export const mediaEditSchema = z.object({
     .union([z.literal(2), z.literal(3)])
     .nullable()
     .optional(),
+  /** What the "Nível" of a track row offers (KBC-106 FR-5). */
+  levels: trackLevelChoicesSchema.default(null),
 });
 export type MediaEdit = z.infer<typeof mediaEditSchema>;
 
@@ -89,6 +108,11 @@ export const editTrackSchema = z.strictObject({
   answererVoice: voiceSchema.nullable(),
   askerSpeakerId: z.uuid().nullable(),
   answererSpeakerId: z.uuid().nullable(),
+  /**
+   * Its own level (KBC-106 FR-1); null: the recording's. Absent: the level the draft holds for
+   * it stays (a save never lowers a track by leaving the field out).
+   */
+  level: levelRefSchema.nullable().optional(),
 });
 export type EditTrack = z.output<typeof editTrackSchema>;
 
@@ -204,6 +228,8 @@ export const approvedTrackSchema = z.object({
   endMs: z.number().int().positive(),
   kind: trackKindSchema,
   title: z.string().min(1).max(TRACK_TITLE_MAX),
+  /** Its level, for whoever sees level badges (KBC-106 AC-6). */
+  level: contentLevelSchema.optional(),
 });
 export type ApprovedTrack = z.infer<typeof approvedTrackSchema>;
 

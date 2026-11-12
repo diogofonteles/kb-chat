@@ -15,7 +15,7 @@ export function readHealth({ catalog, index }: HealthDeps): Health {
   return {
     status: search === 'ok' ? 'ok' : 'degraded',
     search,
-    catalog: { documents: catalog.documentCount() },
+    catalog: { loaded: catalog.topics().length > 0 },
   };
 }
 

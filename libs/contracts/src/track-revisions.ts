@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { editTrackSchema, trackProblemSchema } from './media-edit.js';
+import { levelRefSchema } from './access-levels.js';
+import {
+  editTrackSchema,
+  trackLevelChoicesSchema,
+  trackProblemSchema,
+} from './media-edit.js';
 import { mediaIdSchema, updateMediaRequestSchema } from './media.js';
 import { TRACK_TITLE_MAX, voiceSchema } from './track-proposals.js';
 import { TRACK_SUMMARY_MAX } from './track-subjects.js';
@@ -33,6 +38,8 @@ export const trackPatchSchema = z.strictObject({
   askerSpeakerId: z.uuid().nullable().optional(),
   answererSpeakerId: z.uuid().nullable().optional(),
   scope: trackSpeakerScopeSchema.optional(),
+  /** Its own level (KBC-106 FR-1); null: back to the recording's. */
+  level: levelRefSchema.nullable().optional(),
 });
 export type TrackPatch = z.output<typeof trackPatchSchema>;
 export type TrackPatchRequest = z.input<typeof trackPatchSchema>;
@@ -43,6 +50,8 @@ export const updateMediaBodySchema = updateMediaRequestSchema.extend({
   askerSpeakerId: trackPatchSchema.shape.askerSpeakerId,
   answererSpeakerId: trackPatchSchema.shape.answererSpeakerId,
   scope: trackPatchSchema.shape.scope,
+  // A track goes back to its recording's level with null; a recording never takes null.
+  level: trackPatchSchema.shape.level,
 });
 
 /** Who speaks in one role of a track: its own choice or else its voice's name. */
@@ -90,6 +99,10 @@ export const trackEditViewSchema = z.object({
   locked: z.boolean(),
   /** Every track of the recording, this one included, in time order. */
   tracks: z.array(trackNeighbourSchema),
+  /** Its own level, null while it follows the recording (KBC-106). */
+  level: levelRefSchema.nullable().default(null),
+  /** What its "Nível" offers; null without levels. */
+  levels: trackLevelChoicesSchema.default(null),
 });
 export type TrackEditView = z.infer<typeof trackEditViewSchema>;
 

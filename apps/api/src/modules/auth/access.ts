@@ -50,8 +50,16 @@ declare module 'fastify' {
 export interface LevelHooks {
   /** FR-8: the person's level code per top-level collection with a scale they see. */
   codesOf(person: Viewer['person'], parentOf: ParentOf): Record<string, string>;
-  /** The tracks of a scaled collection stay with masters until they carry a level (KBC-106). */
+  /**
+   * A sub-collection whose scale cannot be known keeps its tracks closed (fail-closed); in a
+   * known collection each track answers by its own level (KBC-106).
+   */
   tracksClosedByLevels(person: Viewer['person'], topic: string): boolean;
+  /**
+   * The lists across a scaled collection's media (its subjects, its speakers) stay with
+   * masters (KBC-103 BR-10, KBC-106 decision 7).
+   */
+  listsClosedByLevels(person: Viewer['person'], topic: string): boolean;
 }
 
 /** Health, login and the token-authenticated MCP turns. */
@@ -149,9 +157,8 @@ export const levelCodesOf = (request: FastifyRequest): Record<string, string> =>
   ) ?? {};
 
 /**
- * The tracks of a collection the person may reach: one they see, and, in a collection with
- * levels, only for masters until a track carries its own level (KBC-106). Recordings follow
- * their level (KBC-105, `seesMedia`).
+ * The tracks of a collection the person may reach: one they see whose scale is known. Each
+ * track then answers by its own level (KBC-106), as recordings do (KBC-105, `seesMedia`).
  */
 export function canSeeTracks(request: FastifyRequest, topic: string): boolean {
   const hooks = request.server.levelHooks;
@@ -164,11 +171,16 @@ export function canSeeTracks(request: FastifyRequest, topic: string): boolean {
 }
 
 /**
- * BR-10: in a collection the person sees whose tracks wait for levels (KBC-106), what lists
- * across all of its media (its subjects, its speakers) answers LEVELS_PENDING, the same for
- * every name, so nothing in it is confirmed.
+ * BR-10: in a collection the person sees whose media is held by levels, what lists across all
+ * of its media (its subjects, its speakers) answers LEVELS_PENDING, the same for every name,
+ * so nothing in it is confirmed.
  */
 export function assertTracksOpen(request: FastifyRequest, topic: string): void {
-  if (canSee(request, topic) && !canSeeTracks(request, topic))
+  const hooks = request.server.levelHooks;
+  if (!hooks) throw new Error('The level hooks are not registered');
+  if (
+    canSee(request, topic) &&
+    hooks.listsClosedByLevels(viewerOf(request).person, topic)
+  )
     throw new AppError('LEVELS_PENDING', 'Media waits for levels here');
 }

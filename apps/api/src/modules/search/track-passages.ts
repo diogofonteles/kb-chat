@@ -1,6 +1,6 @@
 import type { SearchHit } from '@kb-chat/contracts';
 import type { TrackLinksPort } from '../../ports/media-search.js';
-import { excerptOf, scoreOf, unmark } from './media-hits.js';
+import { excerptOf, passageScore, unmark } from './media-hits.js';
 
 /**
  * One card per track (KBC-101 BR-8, FR-9): a track's card on the page carries the passage
@@ -27,7 +27,7 @@ export function withSpokenPassages(
     if (!item.media || !match) return item;
     return {
       ...item,
-      score: Math.max(item.score, scoreOf(match.bm25)),
+      score: Math.max(item.score, passageScore(match.marked)),
       media: {
         ...item.media,
         startMs: match.startMs,

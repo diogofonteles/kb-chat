@@ -11,7 +11,7 @@ export {
   UPLOAD_ABANDON_MS,
   legacyAuthorshipOf,
   seesMedia,
-  seesTracksIn,
+  hearsLevel,
 } from './media-policy.js';
 export {
   MediaService,
@@ -24,8 +24,15 @@ export {
 } from './media-service.js';
 export {
   MediaEditService,
+  type EditAuthor,
   type MediaEditServiceDeps,
 } from './media-edit-service.js';
+export {
+  approvedLevelOf,
+  levelsBelow,
+  ownLevelOf,
+  trackLevelChoices,
+} from './track-levels.js';
 export { bookmarkRoutes } from './bookmark-routes.js';
 export {
   BookmarkService,
@@ -41,6 +48,7 @@ export {
 } from './listening-service.js';
 export {
   actorOf,
+  editAuthorOf,
   mediaRoutes,
   planActorOf,
   versionOf,
@@ -157,3 +165,4 @@ export { groqRoutes } from './groq-routes.js';
 export { chunkResultOf } from './groq-result.js';
 export { monthlyCapOf, saveMonthlyCap } from './media-cap.js';
 export { countPromptTokens, promptOf } from './whisper-tokens.js';
+export { placeAmongHeard, type TrackPlace } from './track-place.js';

@@ -6,6 +6,8 @@ export interface RouteAccessEntry {
   readonly method: HTTPMethods | HTTPMethods[];
   readonly url: string;
   readonly access: RouteAccess | undefined;
+  /** The route's body schema, when it declares one (the leakage suite builds bodies from it). */
+  readonly body?: unknown;
 }
 
 declare module 'fastify' {
@@ -30,7 +32,12 @@ const routeAccess: FastifyPluginAsync = async (app) => {
       throw new Error(
         `${String(route.method)} ${route.url} declares no config.access (ADR 0008)`,
       );
-    table.push({ method: route.method, url: route.url, access });
+    table.push({
+      method: route.method,
+      url: route.url,
+      access,
+      ...(route.schema?.body !== undefined && { body: route.schema.body }),
+    });
   });
 };
 

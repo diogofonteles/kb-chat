@@ -57,7 +57,8 @@ export interface AccessLevelsServiceDeps {
   readonly presets?: InvitePresetLevels;
   readonly parentOf: ParentOf;
   /** The media library's audios, placed with the documents (KBC-105); absent with media off. */
-  readonly media?: Pick<MediaStorePort, 'seedLevel' | 'countLevels'>;
+  readonly media?: Pick<MediaStorePort, 'seedLevel' | 'countLevels'> &
+    Partial<Pick<MediaStorePort, 'liftTracks'>>;
   readonly now?: () => Date;
 }
 
@@ -282,8 +283,31 @@ export class AccessLevelsService {
         before: ids,
         after: [...order],
       });
+      await this.liftTracksUnder(actor, root, order);
       return this.levelsOf(root);
     });
+  }
+
+  /**
+   * KBC-106: a new order never leaves a track below its recording: such a track takes the
+   * recording's level (and follows it), each one audited.
+   */
+  private async liftTracksUnder(
+    actor: LevelActor,
+    root: string,
+    order: readonly string[],
+  ): Promise<void> {
+    const topics = this.deps.catalog.scope(root).map((one) => one.topic.slug);
+    const lifted = this.deps.media?.liftTracks?.(topics, order) ?? [];
+    for (const row of lifted)
+      await this.record(actor, {
+        kind: 'item.level',
+        collection: row.topic,
+        target: row.id,
+        before: row.level,
+        after: row.written ?? null,
+        count: { media: 1 },
+      });
   }
 
   /** BR-4: every text of the scope and every person with access, at the first level. */

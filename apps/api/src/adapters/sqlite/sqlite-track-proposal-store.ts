@@ -72,6 +72,7 @@ function toTrack(row: Row): DraftTrack {
     answererVoice: numberOrNull(row, 'answerer_voice'),
     askerSpeakerId: textOrNull(row, 'asker_speaker_id'),
     answererSpeakerId: textOrNull(row, 'answerer_speaker_id'),
+    level: textOrNull(row, 'level'),
   };
 }
 

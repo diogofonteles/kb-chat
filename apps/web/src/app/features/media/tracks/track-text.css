@@ -91,6 +91,16 @@
   cursor: pointer;
 }
 
+/* On a touch screen, holding a word chooses words (KBC-115 FR-2): no browser selection or
+   callout competes with it. */
+@media (pointer: coarse) {
+  .body.correctable {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
 .tools {
   display: flex;
   flex-wrap: wrap;

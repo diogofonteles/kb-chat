@@ -7,10 +7,12 @@ import {
 import type { ApprovedTrack } from '@kb-chat/contracts';
 import { formatClock, formatDuration } from '@kb-chat/player-core';
 import { TracksStore } from '@core/media/tracks-store.js';
+import { MediaLevelBadge } from '../media-level-badge.js';
 
 /** "Faixas" beside the transcript (KBC-066 FR-9), for `media-tracks`. */
 @Component({
   selector: 'app-track-nav-list',
+  imports: [MediaLevelBadge],
   template: `
     @if (rows().length) {
       <section aria-labelledby="track-nav-title">
@@ -29,6 +31,13 @@ import { TracksStore } from '@core/media/tracks-store.js';
                 <span class="number">{{ row.track.ordinal }}</span>
                 <span class="name">{{ row.track.title }}</span>
                 <span class="time">{{ row.at }} · {{ row.length }}</span>
+                @if (row.track.level !== undefined) {
+                  <app-media-level-badge
+                    class="level"
+                    [level]="row.track.level"
+                    [shown]="true"
+                  />
+                }
                 @if (row.current) {
                   <span class="visually-hidden" i18n="@@tracks.nav.playing"
                     >tocando agora</span
@@ -77,6 +86,9 @@ import { TracksStore } from '@core/media/tracks-store.js';
     }
     .row:hover {
       background: var(--color-surface-muted);
+    }
+    .level {
+      grid-column: 2 / -1;
     }
     .row[aria-current] {
       border-color: var(--color-accent);

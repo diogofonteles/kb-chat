@@ -8,7 +8,12 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { fireEvent, screen } from '@testing-library/angular';
-import type { DraftTrack, MediaEdit, ProposalRun } from '@kb-chat/contracts';
+import type {
+  DraftTrack,
+  MediaEdit,
+  MediaPreparation,
+  ProposalRun,
+} from '@kb-chat/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MEDIA_ELEMENT_FACTORY } from '@core/media/media-engine.js';
 import { fakeMediaElement } from '../../../testing/fake-media-element.js';
@@ -17,6 +22,7 @@ import {
   aTranscription,
   sessionAs,
 } from '../../../testing/media-fixtures.js';
+import { aPreparation } from '../../../testing/preparation-fixtures.js';
 import { MEDIA_POLL_MS } from '../media-polling.js';
 import { TrackEditorPage } from './track-editor-page.js';
 import { SAVE_DELAY_MS } from './track-draft.js';
@@ -46,10 +52,12 @@ const aTrack = (n: number, startMs: number, endMs: number): DraftTrack => ({
   answererVoice: null,
   askerSpeakerId: null,
   answererSpeakerId: null,
+  level: null,
 });
 
 const anEdit = (overrides: Partial<MediaEdit> = {}): MediaEdit => ({
   preparation: null,
+  levels: null,
   mediaId: ITEM.id,
   version: 2,
   started: true,
@@ -65,11 +73,12 @@ const anEdit = (overrides: Partial<MediaEdit> = {}): MediaEdit => ({
 });
 
 async function openPage(
-  edit: MediaEdit | { error: number } = anEdit(),
+  edit: MediaEdit | { error: number; code?: string } = anEdit(),
   features: Parameters<typeof sessionAs>[0]['features'] = [
     'media',
     'media-edit',
   ],
+  preparation?: MediaPreparation,
 ) {
   const media = fakeMediaElement('audio');
   TestBed.configureTestingModule({
@@ -92,7 +101,7 @@ async function openPage(
   const read = http.expectOne(`${BASE}/edit`);
   if ('error' in edit)
     read.flush(
-      { error: { code: 'FORBIDDEN', message: 'No' } },
+      { error: { code: edit.code ?? 'FORBIDDEN', message: 'No' } },
       { status: edit.error, statusText: 'Nope' },
     );
   else read.flush(edit);
@@ -102,7 +111,11 @@ async function openPage(
     TestBed.tick();
     http
       .match((request) => pass > 0 && request.method === 'GET')
-      .forEach((one) => one.flush({}, { status: 404, statusText: 'None' }));
+      .forEach((one) =>
+        preparation && one.request.url === `${BASE}/preparation`
+          ? one.flush(preparation)
+          : one.flush({}, { status: 404, statusText: 'None' }),
+      );
   }
   await harness.fixture.whenStable();
   return { harness, http };
@@ -165,6 +178,16 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
         'Você não tem permissão para editar esta gravação.',
       ),
     ).toBeTruthy();
+  });
+
+  it('KBC-106: says why when a track of the recording is above the person', async () => {
+    await openPage({ error: 403, code: 'EDIT_ABOVE_YOUR_LEVEL' });
+    expect(
+      await screen.findByText(
+        'Esta gravação tem faixas acima do seu nível. Só quem tem todos os níveis dela pode editá-la.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole('list', { name: 'Faixas' })).toBeNull();
   });
 
   it('opens on step 3 with the tracks and says undo started over (BR-6)', async () => {
@@ -887,5 +910,90 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
         .expectOne({ method: 'PUT', url: `${BASE}/edit` })
         .flush({ version: 3 });
     });
+  });
+});
+
+describe('the "Reveja" warning follows the titles on screen (KBC-102)', () => {
+  const REFUSED = 'Joana Prado';
+  const asked = (n: number, startMs: number, endMs: number): DraftTrack => ({
+    ...aTrack(n, startMs, endMs),
+    title: `Pergunta ${n} de ${REFUSED}`,
+  });
+  const reviewing = (tracks: DraftTrack[]) =>
+    aPreparation({
+      mediaId: ITEM.id,
+      step: 3,
+      separation: 1,
+      voices: [{ voice: 2, speakingMs: 9_000, name: null, audience: false }],
+      refusedVoices: [2],
+      nameReviews: [
+        {
+          voice: 2,
+          name: REFUSED,
+          tracks: tracks.map(({ id, title }) => ({ id, title: title ?? '' })),
+        },
+      ],
+    });
+  const banner = () => screen.queryByText(/Alguns títulos podem citar/);
+  const review = () => screen.queryByText(/Reveja estes títulos/);
+
+  it('AC-1: a title changed on screen takes the warning away', async () => {
+    const tracks = [asked(1, 0, 20_000)];
+    const { harness } = await openPage(
+      anEdit({ tracks }),
+      undefined,
+      reviewing(tracks),
+    );
+    expect(banner()).toBeTruthy();
+    expect(review()).toBeTruthy();
+
+    const field = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Título',
+    });
+    field.value = 'Pergunta da plateia';
+    fireEvent.blur(field);
+    await harness.fixture.whenStable();
+
+    expect(banner()).toBeNull();
+    expect(review()).toBeNull();
+  });
+
+  it('a title changed on screen that still says the name stays in review', async () => {
+    const tracks = [asked(1, 0, 20_000)];
+    const { harness } = await openPage(
+      anEdit({ tracks }),
+      undefined,
+      reviewing(tracks),
+    );
+    const field = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Título',
+    });
+    field.value = `Pergunta 1 de ${REFUSED} (parte 2)`;
+    fireEvent.blur(field);
+    await harness.fixture.whenStable();
+
+    expect(banner()).toBeTruthy();
+    const listed = [
+      ...(review()?.closest('.review')?.querySelectorAll('li') ?? []),
+    ].map((li) => li.textContent?.trim());
+    expect(listed).toEqual([`Pergunta 1 de ${REFUSED} (parte 2)`]);
+  });
+
+  it('AC-2: a deleted track leaves the review with the other one', async () => {
+    const tracks = [asked(1, 0, 20_000), asked(2, 20_000, 40_000)];
+    const { harness } = await openPage(
+      anEdit({ tracks }),
+      undefined,
+      reviewing(tracks),
+    );
+    expect(screen.getAllByText(/de Joana Prado$/).length).toBeGreaterThan(0);
+
+    await deleteTrack(harness);
+
+    expect(banner()).toBeTruthy();
+    const listed = [
+      ...(review()?.closest('.review')?.querySelectorAll('li') ?? []),
+    ].map((li) => li.textContent?.trim());
+    expect(listed).toEqual([`Pergunta 2 de ${REFUSED}`]);
   });
 });

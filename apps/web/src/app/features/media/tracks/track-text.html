@@ -101,8 +101,17 @@
   [attr.aria-busy]="state() === 'loading' || retrying() ? 'true' : null"
   [attr.tabindex]="state() === 'ready' ? 0 : null"
   [class.correctable]="canCorrect"
-  (keydown)="scrolledByKey($event)"
+  (keydown)="keyOnText($event)"
+  (keyup)="keyUpOnText($event)"
+  (focusout)="leftText()"
   (pointerdown)="pressed($event)"
+  (pointermove)="moved($event)"
+  (pointerup)="released($event)"
+  (pointercancel)="cancelled($event)"
+  (lostpointercapture)="lostCapture($event)"
+  (mousedown)="mousePressed($event)"
+  (selectstart)="heldBack($event)"
+  (contextmenu)="heldBack($event)"
   (click)="clickedText($event)"
 >
   @switch (state()) {

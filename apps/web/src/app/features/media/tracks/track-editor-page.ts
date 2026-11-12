@@ -29,6 +29,9 @@ import {
   mediaSilencesSchema,
   mediaWaveformSchema,
   type DraftTrack,
+  mentionsName,
+  type NameReview,
+  type PreparationVoice,
   type TrackKind,
   type TrackProblem,
   type VoiceLabel,
@@ -114,6 +117,49 @@ const tracksText = (count: number): string =>
 const LISTEN_KINDS: readonly ListenKind[] = ['track', 'start', 'end'];
 
 const touched = (track: DraftTrack): DraftTrack => ({ ...track, edited: true });
+
+/**
+ * A review lists what the server last read; here it follows the tracks on screen (KBC-102
+ * BR-1): a deleted track leaves it, a changed title stays while it still says the name, by the
+ * server's own rule, and a review left with nothing goes.
+ */
+const onScreen = (
+  reviews: readonly NameReview[],
+  tracks: readonly DraftTrack[],
+  voices: readonly PreparationVoice[],
+): NameReview[] =>
+  reviews.flatMap((review) => {
+    const right = voices.find(({ voice }) => voice === review.voice)?.name;
+    const still = review.tracks.flatMap(({ id, title }) => {
+      const now = tracks.find((track) => track.id === id)?.title ?? null;
+      const says =
+        now !== null &&
+        (now === title || mentionsName(now, review.name, right ?? null));
+      return says ? [{ id, title: now }] : [];
+    });
+    return still.length > 0 ? [{ ...review, tracks: still }] : [];
+  });
+
+/** Same reviews, same tracks and titles: what is on screen did not change. */
+const sameReviews = (
+  a: readonly NameReview[],
+  b: readonly NameReview[],
+): boolean =>
+  a.length === b.length &&
+  a.every((one, at) => {
+    const other = b[at];
+    return (
+      other !== undefined &&
+      one.voice === other.voice &&
+      one.name === other.name &&
+      one.tracks.length === other.tracks.length &&
+      one.tracks.every(
+        ({ id, title }, index) =>
+          id === other.tracks[index]?.id &&
+          title === other.tracks[index]?.title,
+      )
+    );
+  });
 
 /** The name of who asks or answers; a voice without one, by its number. */
 function personText(
@@ -284,8 +330,28 @@ export class TrackEditorPage {
         unnamed.some((one) => one.voice === voice) &&
         !preparation.refusedVoices.includes(voice),
     );
-    return { ...preparation, suggestions };
+    return {
+      ...preparation,
+      suggestions,
+      nameReviews: this.reviewsOnScreen(),
+    };
   });
+  /** Its own signal, so a drag that changes no title leaves the names' block as it is. */
+  private readonly reviewsOnScreen = computed(
+    () => {
+      const preparation = this.preparation.hasValue()
+        ? this.preparation.value()
+        : null;
+      return preparation
+        ? onScreen(
+            preparation.nameReviews,
+            this.draft.tracks(),
+            preparation.voices,
+          )
+        : [];
+    },
+    { equal: sameReviews },
+  );
   /** Up here too: on a phone the names' block is far below (QA I-2). */
   protected readonly titlesToReview = computed(
     () => (this.voicesToName()?.nameReviews.length ?? 0) > 0,
@@ -308,6 +374,10 @@ export class TrackEditorPage {
   protected readonly saveFirst = (): Observable<unknown> => this.draft.flush();
   /** Nothing can change now: a run writes the draft, or a press runs, or a conflict (R-5). */
   protected readonly readOnly = computed(() => !this.draft.canEdit());
+  /** What a track's "Nível" offers (KBC-106); null without levels. */
+  protected readonly trackLevels = computed(
+    () => this.draft.edit()?.levels ?? null,
+  );
   protected readonly watching = computed(
     () => this.draft.running() && !this.canPropose(),
   );
@@ -617,6 +687,7 @@ export class TrackEditorPage {
       answererVoice: null,
       askerSpeakerId: null,
       answererSpeakerId: null,
+      level: null,
     };
     this.draft.apply([...this.draft.tracks(), track]);
     this.chosenId.set(track.id);
@@ -632,6 +703,11 @@ export class TrackEditorPage {
 
   protected changeKind(change: { id: string; kind: TrackKind }): void {
     this.change(change.id, { kind: change.kind });
+  }
+
+  /** A track's own level, or back to the recording's (KBC-106 FR-5). */
+  protected changeLevel(change: { id: string; level: string | null }): void {
+    this.change(change.id, { level: change.level });
   }
 
   protected changePerson({ id, field, value }: PersonChange): void {

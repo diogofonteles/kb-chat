@@ -6,7 +6,8 @@ import type { ContentLevel } from '@kb-chat/contracts';
  */
 export interface ViewedDocument {
   readonly id: string;
-  readonly media: object | null;
+  /** The track (or recording) of media.db a document was rendered from (ADR 0035). */
+  readonly media: { readonly mediaId: string } | null;
 }
 
 /** One collection's documents (the catalog's `TopicCatalog` is one). */
@@ -51,4 +52,23 @@ export interface LevelView {
   levelOf(collection: string, id: string): ContentLevel | undefined;
   /** The level ids the viewer sees, for SQL filters (KBC-105); null: every item. */
   allowedLevelIds(): readonly string[] | null;
+  /**
+   * A track's number and its recording's total among the tracks the viewer hears (KBC-111,
+   * owner decision): null when they hear every track (the stored numbers stand).
+   */
+  trackPlace(mediaId: string): TrackPlace | null;
+}
+
+/** "faixa n de N", counted over what one viewer hears. */
+export interface TrackPlace {
+  /** Null when the track is not among the live tracks the viewer hears. */
+  readonly ordinal: number | null;
+  readonly total: number;
+}
+
+/** A live track of a recording with its level, as media.db holds it. */
+export interface PlacedTrack {
+  readonly mediaId: string;
+  readonly level: string | null;
+  readonly startMs: number;
 }

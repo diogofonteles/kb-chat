@@ -5,7 +5,7 @@ import {
   type StoredPerson,
 } from '../auth/index.js';
 import type { CatalogRegistry, TopicCatalog } from '../catalog/index.js';
-import type { ViewedCollection } from '../../ports/level-view.js';
+import type { PlacedTrack, ViewedCollection } from '../../ports/level-view.js';
 import type { LevelDirectory, StoredLevel } from './level-directory.js';
 import {
   CLOSED_VIEW,
@@ -17,6 +17,10 @@ import {
 export interface ContentGateDeps {
   readonly directory: LevelDirectory;
   readonly catalog: CatalogRegistry;
+  /** A media's level in media.db, for track documents (KBC-106); absent with media off. */
+  readonly mediaLevelOf?: (mediaId: string) => string | null | undefined;
+  /** The live tracks of a track's recording, for its number among what a viewer hears. */
+  readonly tracksBeside?: (mediaId: string) => readonly PlacedTrack[];
 }
 
 /**
@@ -66,6 +70,8 @@ export class ContentGate {
       rank,
       classifier,
       placementsOf: (collection) => directory.placementsOf(collection),
+      ...(this.deps.mediaLevelOf && { mediaLevelOf: this.deps.mediaLevelOf }),
+      ...(this.deps.tracksBeside && { tracksBeside: this.deps.tracksBeside }),
       memo: (catalog, compute) => this.memo(catalog, key, compute),
     });
   }
@@ -112,8 +118,13 @@ export class ContentGate {
     return codes;
   }
 
-  /** Until KBC-106, the tracks of a scaled collection are masters' only (KBC-105). */
+  /** Tracks follow their own level (KBC-106); an orphan's scale is unknown: closed. */
   tracksClosedByLevels(person: StoredPerson, topic: string): boolean {
+    return !isMaster(person) && this.orphaned(topic);
+  }
+
+  /** The subjects and speakers of a scaled collection stay masters' (KBC-103 BR-10). */
+  listsClosedByLevels(person: StoredPerson, topic: string): boolean {
     if (isMaster(person)) return false;
     return this.orphaned(topic) || this.scaleOf(topic).length > 0;
   }

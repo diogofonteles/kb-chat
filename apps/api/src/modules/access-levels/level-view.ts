@@ -1,6 +1,8 @@
 import type {
   LevelView,
+  PlacedTrack,
   ScopedDocument,
+  TrackPlace,
   ViewedCollection,
 } from '../../ports/level-view.js';
 import type { CollectionPlacements, StoredLevel } from './level-directory.js';
@@ -39,6 +41,7 @@ export const OPEN_VIEW: LevelView = {
   visibleShare: () => 1,
   levelOf: () => undefined,
   allowedLevelIds: () => null,
+  trackPlace: () => null,
 };
 
 /**
@@ -54,6 +57,7 @@ export const CLOSED_VIEW: LevelView = {
   visibleShare: () => MIN_VISIBLE_SHARE,
   levelOf: () => undefined,
   allowedLevelIds: () => [],
+  trackPlace: () => null,
 };
 
 /** A turn with no collection at all (the AI connection test): nothing to see. */
@@ -69,6 +73,13 @@ export interface ScaledViewInput {
    */
   readonly classifier?: boolean;
   readonly placementsOf: (collection: string) => CollectionPlacements;
+  /**
+   * The level media.db holds for a track's document (KBC-106, ADR 0036 §3): null "Sem nível",
+   * undefined unknown; both closed to members. Absent: no media, no track seen.
+   */
+  readonly mediaLevelOf?: (mediaId: string) => string | null | undefined;
+  /** The live tracks of the recording a track belongs to (KBC-111); absent: no media. */
+  readonly tracksBeside?: (mediaId: string) => readonly PlacedTrack[];
   /** Memoizes the share per catalog load and state (NFR-1). */
   readonly memo: (catalog: ViewedCollection, compute: () => number) => number;
 }
@@ -97,19 +108,32 @@ function shareOf(
   return texts === 0 ? 1 : Math.max(MIN_VISIBLE_SHARE, visible / texts);
 }
 
+/** §6 for one viewer: a text by its placement, a track by its level in media.db. */
+function allowsFor(
+  input: ScaledViewInput,
+  manages: boolean,
+): LevelView['allows'] {
+  const { scale, rank, placementsOf } = input;
+  return (collection, entry) => {
+    if (rank === 'all') return true;
+    // A track's level lives in media.db (KBC-106): its own, or its recording's.
+    if (entry.media !== null) {
+      const level = input.mediaLevelOf?.(entry.media.mediaId);
+      const found = scale.findIndex((one) => one.id === level);
+      return found >= 0 && found <= rank;
+    }
+    const found = rankOf(scale, placementsOf(collection), entry.id);
+    if (found < 0) return manages;
+    return found <= rank;
+  };
+}
+
 /** The view of a collection with a scale, for a master (`rank: 'all'`) or a person. */
 export function scaledView(input: ScaledViewInput): LevelView {
   const { scale, rank, placementsOf, memo } = input;
   const seesAll = rank === 'all';
   const manages = seesAll || input.classifier === true;
-  const allows: LevelView['allows'] = (collection, entry) => {
-    if (seesAll) return true;
-    // A track's level lives in media.db (KBC-106); until then tracks stay closed.
-    if (entry.media !== null) return false;
-    const found = rankOf(scale, placementsOf(collection), entry.id);
-    if (found < 0) return manages;
-    return found <= rank;
-  };
+  const allows = allowsFor(input, manages);
   return {
     seesAll,
     scaled: true,
@@ -125,5 +149,47 @@ export function scaledView(input: ScaledViewInput): LevelView {
     },
     allowedLevelIds: () =>
       seesAll ? null : scale.slice(0, rank + 1).map((one) => one.id),
+    trackPlace: placesFor(input, rank),
   };
+}
+
+/**
+ * The view's `trackPlace`: null for a master or without media; else the place among what
+ * the viewer hears, the recording's tracks read once per view (every track of it is cached).
+ */
+function placesFor(
+  input: ScaledViewInput,
+  rank: number | 'all',
+): LevelView['trackPlace'] {
+  const { tracksBeside } = input;
+  if (rank === 'all' || !tracksBeside) return () => null;
+  const heard = input.scale.slice(0, rank + 1);
+  const known = new Map<string, readonly PlacedTrack[]>();
+  return (mediaId) => {
+    let tracks = known.get(mediaId);
+    if (!tracks) {
+      tracks = tracksBeside(mediaId);
+      for (const track of tracks) known.set(track.mediaId, tracks);
+    }
+    return placeAmong(tracks, mediaId, heard);
+  };
+}
+
+/** The track's place among the live tracks at the levels the viewer holds. */
+function placeAmong(
+  tracks: readonly PlacedTrack[],
+  mediaId: string,
+  heard: readonly StoredLevel[],
+): TrackPlace {
+  const ids = heard.map((one) => one.id);
+  const order = [
+    ...new Set(
+      [...tracks]
+        .sort((a, b) => a.startMs - b.startMs)
+        .filter((track) => track.level !== null && ids.includes(track.level))
+        .map((track) => track.mediaId),
+    ),
+  ];
+  const at = order.indexOf(mediaId);
+  return { ordinal: at < 0 ? null : at + 1, total: order.length };
 }

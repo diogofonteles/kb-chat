@@ -94,6 +94,7 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
     const at = input.now.toISOString();
     const mediaId = plan.keptMediaId ?? plan.newMediaId;
     if (plan.keptMediaId === null) this.insertItem(input.parentId, plan, at);
+    else this.levelItem(input.parentId, plan);
     this.db
       .prepare(
         `UPDATE media_tracks SET derived_media_id = ?, cut_status = ? WHERE id = ?`,
@@ -113,13 +114,33 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
     this.db
       .prepare(
         `INSERT INTO media (id, topic, title, author, authorship, owner_principal, kind,
-           file_name, upload_bytes, status, created_at, updated_at, parent_media_id, level)
+           file_name, upload_bytes, status, created_at, updated_at, parent_media_id, level,
+           level_own)
          SELECT ?, p.topic, t.title, p.author, p.authorship, p.owner_principal, p.kind,
-           t.id || '.m4a', 1, 'queued', ?, ?, p.id, p.level
+           t.id || '.m4a', 1, 'queued', ?, ?, p.id, coalesce(?, p.level), ?
          FROM media p JOIN media_tracks t ON t.media_id = p.id
          WHERE p.id = ? AND t.id = ?`,
       )
-      .run(plan.newMediaId, at, at, parentId, plan.trackId);
+      .run(
+        plan.newMediaId,
+        at,
+        at,
+        plan.level,
+        plan.level === null ? 0 : 1,
+        parentId,
+        plan.trackId,
+      );
+  }
+
+  /** A kept item takes the level the approval gave it, at once (KBC-106 FR-1). */
+  private levelItem(parentId: string, plan: TrackPlan): void {
+    this.db
+      .prepare(
+        `UPDATE media SET level = coalesce(?, (SELECT p.level FROM media p WHERE p.id = ?)),
+           level_own = ?
+         WHERE id = ?`,
+      )
+      .run(plan.level, parentId, plan.level === null ? 0 : 1, plan.keptMediaId);
   }
 
   hasPendingCuts(parentId: string): boolean {
