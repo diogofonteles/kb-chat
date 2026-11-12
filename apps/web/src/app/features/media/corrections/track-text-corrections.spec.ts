@@ -19,7 +19,7 @@ import { SessionStore } from '@core/auth/session-store.js';
 import { SEARCH_HIGHLIGHTS } from '../transcript/search-highlights.js';
 import { CARET_AT_POINT, type TextCaret } from '../transcript/text-caret.js';
 import { TrackAudition } from '../tracks/track-audition.js';
-import { TrackText } from '../tracks/track-text.js';
+import { LONG_PRESS_MS, TrackText } from '../tracks/track-text.js';
 import { TrackTextSource } from '../tracks/track-text-source.js';
 
 const MEDIA = '11111111-1111-4111-8111-111111111111';
@@ -38,15 +38,17 @@ const WORDS: MediaTranscriptWords['words'] = [
   { position: 6, segment: 1, startMs: 81_000, endMs: 81_500, text: 'aqui' },
 ];
 
-const transcript = (revision = 0): MediaTranscript => ({
+const SEGMENTS: MediaTranscript['segments'] = [
+  { startMs: 70_000, endMs: 74_000, text: 'O mestre Tiuako disse' },
+  { startMs: 80_000, endMs: 81_500, text: 'sem tempo aqui' },
+];
+
+const transcript = (revision = 0, segments = SEGMENTS): MediaTranscript => ({
   mediaId: MEDIA,
   version: 1,
   revision,
   confidence: 'normal',
-  segments: [
-    { startMs: 70_000, endMs: 74_000, text: 'O mestre Tiuako disse' },
-    { startMs: 80_000, endMs: 81_500, text: 'sem tempo aqui' },
-  ],
+  segments,
 });
 
 const EMPTY_HISTORY: CorrectionHistory = {
@@ -99,6 +101,8 @@ let http: HttpTestingController | null = null;
 let caret: TextCaret | null = null;
 /** How often the chosen words are in the recording, as the panel asks (FR-11). */
 let occurrenceTotal = 1;
+/** The texts the occurrences were asked for (FR-11; KBC-115 FR-5). */
+let askedFor: string[] = [];
 
 /** What the fake API answers to reads, and how many of each it answered. */
 interface Server {
@@ -106,6 +110,8 @@ interface Server {
   history: CorrectionHistory;
   /** The learning's replacements on the words (KBC-113 FR-5). */
   learned: MediaTranscriptWords['learned'];
+  readonly segments: MediaTranscript['segments'];
+  readonly words: MediaTranscriptWords['words'];
   readonly served: Record<'transcript' | 'words' | 'history', number>;
 }
 
@@ -140,20 +146,21 @@ function answerRead(read: TestRequest, server: Server): void {
   const { url } = read.request;
   if (url === BASE) {
     server.served.transcript++;
-    read.flush(transcript(server.revision));
+    read.flush(transcript(server.revision, server.segments));
   } else if (url === `${BASE}/words`) {
     server.served.words++;
     read.flush({
       mediaId: MEDIA,
       version: 1,
       revision: server.revision,
-      words: WORDS,
+      words: server.words,
       learned: server.learned,
     });
   } else if (url === `${BASE}/corrections`) {
     server.served.history++;
     read.flush(server.history);
   } else if (url === `${BASE}/occurrences`) {
+    askedFor.push(read.request.params.get('text') ?? '');
     read.flush(occurrences(occurrenceTotal));
   }
 }
@@ -163,6 +170,8 @@ async function renderText(
     canCorrect?: boolean;
     history?: CorrectionHistory;
     learned?: MediaTranscriptWords['learned'];
+    segments?: MediaTranscript['segments'];
+    words?: MediaTranscriptWords['words'];
   } = {},
 ) {
   const painted = new Map<string, number>();
@@ -209,6 +218,8 @@ async function renderText(
     revision: 0,
     history: options.history ?? EMPTY_HISTORY,
     learned: options.learned ?? [],
+    segments: options.segments ?? SEGMENTS,
+    words: options.words ?? WORDS,
     served: { transcript: 0, words: 0, history: 0 },
   };
   const settle = () =>
@@ -258,6 +269,7 @@ afterEach(() => {
   http = null;
   caret = null;
   occurrenceTotal = 1;
+  askedFor = [];
 });
 
 describe('TrackText: correcting a word (KBC-093)', () => {
@@ -697,5 +709,325 @@ describe('TrackText: a word the learning replaced (KBC-113)', () => {
     expect(rendered.painted.get('learned-word')).toBe(1);
     await clickWord(rendered, 'Tiuako');
     expect(panel()).toBeNull();
+  });
+});
+
+/** A restricted part between two lines (KBC-106), and a line of seven words. */
+const SPAN_SEGMENTS: MediaTranscript['segments'] = [
+  SEGMENTS[0] ?? { startMs: 70_000, endMs: 74_000, text: '' },
+  { startMs: 76_000, endMs: 79_000, text: '', restricted: true },
+  {
+    startMs: 90_000,
+    endMs: 97_000,
+    text: 'um dois três quatro cinco seis sete',
+  },
+];
+const SEVEN = ['um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete'];
+const SPAN_WORDS: MediaTranscriptWords['words'] = [
+  ...WORDS.filter((word) => word.segment === 0),
+  ...SEVEN.map((text, index) => ({
+    position: 8 + index,
+    segment: 2,
+    startMs: 90_000 + index * 1_000,
+    endMs: 90_500 + index * 1_000,
+    text,
+  })),
+];
+
+const renderSpans = (options: { canCorrect?: boolean } = {}) =>
+  renderText({ ...options, segments: SPAN_SEGMENTS, words: SPAN_WORDS });
+
+const region = () => screen.getByRole('region', { name: 'Texto da faixa 1' });
+
+/** The browser's caret on a word: where a pointer at it falls in the text. */
+function caretOn(word: string): HTMLElement {
+  const line = lineWith(word);
+  const node = line.firstChild;
+  if (!node) throw new Error('a line has its text');
+  caret = { node, offset: (line.textContent ?? '').indexOf(word) + 1 };
+  return line;
+}
+
+/** The restricted part's line: it has no text, so the caret falls on the element. */
+function caretOnRestricted(): HTMLElement {
+  const line = [...region().querySelectorAll<HTMLElement>('.line')].find(
+    (one) => one.textContent === '',
+  );
+  if (!line) throw new Error('no restricted line');
+  caret = { node: line, offset: 0 };
+  return line;
+}
+
+const pointer = (type: 'mouse' | 'touch', x: number) => ({
+  pointerId: 7,
+  pointerType: type,
+  isPrimary: true,
+  button: 0,
+  clientX: x,
+  clientY: 0,
+});
+
+/** Mouse down on one word, moved, and up on another; the browser then clicks. */
+async function drag(
+  { settle }: Rendered,
+  from: string,
+  to: string | (() => HTMLElement),
+) {
+  fireEvent.pointerDown(caretOn(from), pointer('mouse', 0));
+  const target = typeof to === 'string' ? caretOn(to) : to();
+  fireEvent.pointerMove(target, pointer('mouse', 40));
+  fireEvent.pointerUp(target, pointer('mouse', 40));
+  fireEvent.click(target, { clientX: 40, clientY: 0 });
+  await settle();
+}
+
+async function shiftArrow(
+  { settle }: Rendered,
+  key: 'ArrowRight' | 'ArrowLeft',
+) {
+  fireEvent.keyDown(region(), { key, shiftKey: true });
+  await settle();
+}
+
+const said = () =>
+  screen
+    .getAllByRole('status')
+    .map((one) => one.textContent ?? '')
+    .join(' | ');
+
+describe('TrackText: choosing many words at once (KBC-115)', () => {
+  it('AC-1, FR-5, FR-6: a mouse drag over two words opens the panel on both, the audio at the first', async () => {
+    occurrenceTotal = 2;
+    const rendered = await renderSpans();
+    await drag(rendered, 'mestre', 'Tiuako');
+
+    expect(
+      screen.getByRole('dialog', { name: 'Corrigir palavras, mestre Tiuako' }),
+    ).toBeTruthy();
+    expect(field().value).toBe('mestre Tiuako');
+    expect(document.activeElement).toBe(field());
+    expect(
+      screen.getByRole('button', { name: 'Apagar palavras' }),
+    ).toBeTruthy();
+    expect(rendered.audition.seek).toHaveBeenCalledTimes(1);
+    expect(rendered.audition.seek).toHaveBeenCalledWith(71_000, 120_000);
+    expect(rendered.painted.get('correcting-word')).toBe(1);
+    expect(said()).toContain(
+      '2 palavras escolhidas: mestre Tiuako. Áudio em 1:11',
+    );
+    expect(
+      screen.getByText('Este trecho aparece 2 vezes na gravação'),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Corrigir todas' }));
+    await rendered.settle();
+    expect(askedFor).toContain('mestre Tiuako');
+    expect(screen.getByText('Ocorrências de «mestre Tiuako»')).toBeTruthy();
+  });
+
+  it('BR-1: a drag to the left keeps its anchor, and Shift+click stretches from it', async () => {
+    const rendered = await renderSpans();
+    await drag(rendered, 'disse', 'mestre');
+    expect(field().value).toBe('mestre Tiuako disse');
+    expect(rendered.audition.seek).toHaveBeenLastCalledWith(71_000, 120_000);
+
+    fireEvent.click(caretOn('Tiuako'), { shiftKey: true });
+    await rendered.settle();
+    expect(field().value).toBe('Tiuako disse');
+  });
+
+  it('AC-3, AC-5, BR-2: a drag into the restricted part stops at the edge of its own line and says why', async () => {
+    const rendered = await renderSpans();
+    await drag(rendered, 'Tiuako', caretOnRestricted);
+
+    expect(field().value).toBe('Tiuako disse');
+    expect(said()).toContain(
+      'A correção fica dentro de um trecho, com até 5 palavras.',
+    );
+    fireEvent.keyDown(field(), { key: 'Enter' });
+    await rendered.settle();
+    expect(screen.getByRole('button', { name: 'Salvar' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+  });
+
+  it('AC-3: a drag from the line below up into the restricted part stops at its own first word', async () => {
+    const rendered = await renderSpans();
+    await drag(rendered, 'três', caretOnRestricted);
+    expect(field().value).toBe('um dois três');
+  });
+
+  it('AC-4: a drag over seven words keeps the first five', async () => {
+    const rendered = await renderSpans();
+    await drag(rendered, 'um', 'sete');
+    expect(field().value).toBe('um dois três quatro cinco');
+    expect(said()).toContain(
+      'A correção fica dentro de um trecho, com até 5 palavras.',
+    );
+  });
+
+  it('AC-6, BR-4: Shift+click stretches the open choice, keeps the typed text and leaves the audio', async () => {
+    const rendered = await renderSpans();
+    await clickWord(rendered, 'mestre');
+    await type(rendered, 'Mestre');
+    fireEvent.click(caretOn('disse'), { shiftKey: true });
+    await rendered.settle();
+
+    expect(
+      screen.getByRole('dialog', {
+        name: 'Corrigir palavras, mestre Tiuako disse',
+      }),
+    ).toBeTruthy();
+    expect(field().value).toBe('Mestre');
+    expect(rendered.audition.seek).toHaveBeenCalledTimes(1);
+  });
+
+  it('FR-3: Shift+click with no panel open is a click', async () => {
+    const rendered = await renderSpans();
+    fireEvent.click(caretOn('Tiuako'), { shiftKey: true });
+    await rendered.settle();
+    expect(field().value).toBe('Tiuako');
+  });
+
+  it('FR-3, BR-1: Shift+click on another line stops at the edge of the open one', async () => {
+    const rendered = await renderSpans();
+    await clickWord(rendered, 'Tiuako');
+    fireEvent.click(caretOn('dois'), { shiftKey: true });
+    await rendered.settle();
+    expect(field().value).toBe('Tiuako disse');
+  });
+
+  it('AC-7, FR-4: Shift+→ on the text, from the word chosen last, says each step and opens on Shift release', async () => {
+    const rendered = await renderSpans();
+    await clickWord(rendered, 'mestre');
+    fireEvent.keyDown(field(), { key: 'Escape' });
+    await rendered.settle();
+    expect(panel()).toBeNull();
+    expect(document.activeElement).toBe(region());
+
+    await shiftArrow(rendered, 'ArrowRight');
+    expect(said()).toContain('mestre Tiuako');
+    expect(panel()).toBeNull();
+    expect(rendered.painted.get('correcting-word')).toBe(1);
+    await shiftArrow(rendered, 'ArrowRight');
+    expect(said()).toContain('mestre Tiuako disse');
+    await shiftArrow(rendered, 'ArrowRight');
+    expect(said()).toContain('A correção fica dentro de um trecho');
+
+    fireEvent.keyUp(region(), { key: 'Shift' });
+    await rendered.settle();
+    expect(field().value).toBe('mestre Tiuako disse');
+    expect(document.activeElement).toBe(field());
+  });
+
+  it('FR-4: with the panel open, Shift+← on the text shrinks the choice from its anchor', async () => {
+    const rendered = await renderSpans();
+    await drag(rendered, 'O', 'Tiuako');
+    region().focus();
+    await shiftArrow(rendered, 'ArrowLeft');
+    fireEvent.keyUp(region(), { key: 'Shift' });
+    await rendered.settle();
+    expect(field().value).toBe('O mestre');
+  });
+
+  it('FR-4: with nothing chosen yet, Shift+→ starts at the first word of the text', async () => {
+    const rendered = await renderSpans();
+    region().focus();
+    await shiftArrow(rendered, 'ArrowRight');
+    fireEvent.keyUp(region(), { key: 'Shift' });
+    await rendered.settle();
+    expect(field().value).toBe('O mestre');
+  });
+
+  it('AC-8: Esc before releasing Shift gives up: nothing opens and the mark goes', async () => {
+    const rendered = await renderSpans();
+    region().focus();
+    await shiftArrow(rendered, 'ArrowRight');
+    fireEvent.keyDown(region(), { key: 'Escape' });
+    fireEvent.keyUp(region(), { key: 'Shift' });
+    await rendered.settle();
+    expect(panel()).toBeNull();
+    expect(rendered.painted.get('correcting-word')).toBe(0);
+  });
+
+  it('AC-10, BR-3: with a changed text, a drag over other words moves nothing', async () => {
+    const rendered = await renderSpans();
+    await clickWord(rendered, 'Tiuako');
+    await type(rendered, 'Tiuaco');
+    await drag(rendered, 'um', 'dois');
+
+    expect(field().value).toBe('Tiuaco');
+    expect(rendered.audition.seek).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByText(
+        'Salve ou cancele esta correção antes de escolher outra palavra.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('AC-11, BR-5: without media-correct, a drag opens nothing and moves nothing', async () => {
+    const rendered = await renderSpans({ canCorrect: false });
+    await drag(rendered, 'mestre', 'Tiuako');
+    expect(panel()).toBeNull();
+    expect(rendered.audition.seek).not.toHaveBeenCalled();
+  });
+
+  it('AC-12, KBC-106: saving many words below a track of the recording says why', async () => {
+    const rendered = await renderSpans();
+    await drag(rendered, 'mestre', 'Tiuako');
+    await type(rendered, 'Mestre Tiuaco');
+    fireEvent.keyDown(field(), { key: 'Enter' });
+    await rendered.settle();
+    const request = posted(rendered);
+    expect(request.request.body).toMatchObject({
+      position: 1,
+      count: 2,
+      expected: ['mestre', 'Tiuako'],
+      text: 'Mestre Tiuaco',
+    });
+    request.flush(
+      { error: { code: 'EDIT_ABOVE_YOUR_LEVEL', message: 'x' } },
+      { status: 403, statusText: 'Forbidden' },
+    );
+    await rendered.settle();
+    expect(
+      screen.getAllByText(
+        'Esta gravação tem faixas acima do seu nível. Só quem tem todos os níveis dela pode editá-la.',
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('AC-9, FR-2: a finger held on a word, then moved, chooses the words', async () => {
+    const rendered = await renderSpans();
+    fireEvent.pointerDown(caretOn('mestre'), pointer('touch', 0));
+    await new Promise((resolve) => setTimeout(resolve, LONG_PRESS_MS + 50));
+    await rendered.settle();
+    expect(rendered.painted.get('correcting-word')).toBe(1);
+    const target = caretOn('Tiuako');
+    fireEvent.pointerMove(target, pointer('touch', 40));
+    fireEvent.pointerUp(target, pointer('touch', 40));
+    await rendered.settle();
+    expect(field().value).toBe('mestre Tiuako');
+  });
+
+  it('AC-9, FR-2: a finger that moves before the long press scrolls, and nothing is chosen', async () => {
+    const rendered = await renderSpans();
+    fireEvent.pointerDown(caretOn('mestre'), pointer('touch', 0));
+    fireEvent.pointerMove(caretOn('mestre'), pointer('touch', 30));
+    await new Promise((resolve) => setTimeout(resolve, LONG_PRESS_MS + 50));
+    fireEvent.pointerCancel(region(), pointer('touch', 30));
+    await rendered.settle();
+    expect(panel()).toBeNull();
+    expect(rendered.painted.get('correcting-word')).toBe(0);
+  });
+
+  it('a mouse press that does not move is a click on one word', async () => {
+    const rendered = await renderSpans();
+    const line = caretOn('Tiuako');
+    fireEvent.pointerDown(line, pointer('mouse', 0));
+    fireEvent.pointerUp(line, pointer('mouse', 2));
+    fireEvent.click(line, { clientX: 2, clientY: 0 });
+    await rendered.settle();
+    expect(field().value).toBe('Tiuako');
   });
 });
