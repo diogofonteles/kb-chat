@@ -367,7 +367,8 @@ export class TrackEditService {
 
   /**
    * KBC-106: a track above the person's level is not listed (its title is content too); the
-   * others keep their numbers. Whoever sees level badges gets each track's.
+   * others are numbered among themselves (KBC-111, owner decision), so no gap tells how many
+   * are hidden. Whoever sees level badges gets each track's.
    */
   private listenable(actor: MediaActor, item: MediaItem): ApprovedTrack[] {
     const { edits } = this.deps;
@@ -381,6 +382,7 @@ export class TrackEditService {
     const badge = actor.isMaster || item.level !== undefined;
     return approved
       .filter((track) => hearsLevel(actor, item.topic, levelOf(track)))
+      .map((track, at) => ({ ...track, ordinal: at + 1 }))
       .map((track) => {
         if (!badge) return track;
         const found = scale.find((one) => one.id === levelOf(track));

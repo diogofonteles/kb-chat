@@ -165,3 +165,4 @@ export { groqRoutes } from './groq-routes.js';
 export { chunkResultOf } from './groq-result.js';
 export { monthlyCapOf, saveMonthlyCap } from './media-cap.js';
 export { countPromptTokens, promptOf } from './whisper-tokens.js';
+export { placeAmongHeard, type TrackPlace } from './track-place.js';
