@@ -122,6 +122,8 @@ function setup(
         topic: String(row['topic']),
         title: String(row['title']),
         status: 'ready' as const,
+        // No scale in these tests: every track is open (KBC-111 checks a track's own level).
+        level: null,
         archivedAt:
           row['archived_at'] === null ? null : String(row['archived_at']),
         track:

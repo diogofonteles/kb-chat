@@ -122,6 +122,11 @@ export interface StartOptions {
   readonly env?: Readonly<Record<string, string>>;
   /** One model for every research turn, whoever asks (a scripted stub). */
   readonly llm?: AgentLlmPort;
+  /**
+   * Routes a test adds before the app is ready (KBC-111 AC-2: a route that reads the catalog
+   * without the person's view, which the leakage suite must catch).
+   */
+  readonly routes?: (app: FastifyInstance, catalog: CatalogRegistry) => void;
 }
 
 /** The media worker token of `start({ media: true })`. */
@@ -317,7 +322,7 @@ async function appOf(
   options: StartOptions,
 ): Promise<FastifyInstance> {
   const { config, core, groq, ...rest } = built;
-  return buildApp({
+  const app = await buildApp({
     config,
     ...core,
     ...rest,
@@ -326,6 +331,8 @@ async function appOf(
     levels: levelsOnDisk(config.KB_CHAT_STATE_DIR),
     ...(options.llm && { llm: options.llm }),
   });
+  options.routes?.(app, core.catalog);
+  return app;
 }
 
 /** The CLIs see the machine's PATH only when a test runs the Claude CLI. */
