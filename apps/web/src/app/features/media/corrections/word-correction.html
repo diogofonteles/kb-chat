@@ -4,7 +4,11 @@
   [attr.aria-label]="label()"
   aria-describedby="word-correction-context"
 >
-  <h3 class="title" i18n="@@correct.title">Corrigir palavra</h3>
+  @if (many()) {
+    <h3 class="title" i18n="@@correct.titleMany">Corrigir palavras</h3>
+  } @else {
+    <h3 class="title" i18n="@@correct.title">Corrigir palavra</h3>
+  }
   <p id="word-correction-context" class="context">
     @if (desk.contextBefore()) {
       <span>…{{ desk.contextBefore() }} </span>
@@ -117,6 +121,19 @@
       A correção fica dentro de um trecho, com até 5 palavras.
     </p>
   }
+  @if (!many()) {
+    <!-- How to choose several at once (KBC-115): said for the pointer the person has. -->
+    <p class="hint how">
+      <span class="fine" i18n="@@correct.howMouse"
+        >Para escolher várias palavras, arraste sobre elas, use Shift+clique ou
+        Shift+setas no texto.</span
+      >
+      <span class="coarse" i18n="@@correct.howTouch"
+        >Para escolher várias palavras, segure o dedo numa palavra e
+        arraste.</span
+      >
+    </p>
+  }
   @if (!desk.timed()) {
     <p id="word-correction-untimed" class="hint" i18n="@@correct.untimed">
       Esta palavra não tem tempo na transcrição.
@@ -171,9 +188,15 @@
 
   @if (elsewhere() > 1) {
     <p class="all">
-      <span i18n="@@correct.elsewhere"
-        >Esta palavra aparece {{ elsewhere() }} vezes na gravação</span
-      >
+      @if (many()) {
+        <span i18n="@@correct.elsewhereMany"
+          >Este trecho aparece {{ elsewhere() }} vezes na gravação</span
+        >
+      } @else {
+        <span i18n="@@correct.elsewhere"
+          >Esta palavra aparece {{ elsewhere() }} vezes na gravação</span
+        >
+      }
       ·
       <button
         type="button"
@@ -211,9 +234,14 @@
         class="secondary"
         [disabled]="saving() || refused()"
         (click)="remove()"
-        i18n="@@correct.remove"
       >
-        Apagar palavra
+        @if (many()) {
+          <ng-container i18n="@@correct.removeMany"
+            >Apagar palavras</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@correct.remove">Apagar palavra</ng-container>
+        }
       </button>
       <button
         type="button"

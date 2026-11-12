@@ -29,6 +29,7 @@ import { CorrectionsApi } from '@core/media/corrections-api.js';
 import { TrackAudition } from '../tracks/track-audition.js';
 import { TrackTextSource } from '../tracks/track-text-source.js';
 import type { PlacedWord } from '../transcript/transcript-words.js';
+import { spanAround, type WordSpan } from './word-span.js';
 
 /** "Palavra corrigida." stays this long with its Desfazer (FR-3). */
 export const NOTICE_MS = 10_000;
@@ -45,6 +46,22 @@ export interface Selection {
   readonly words: readonly CorrectableWord[];
   readonly first: number;
   readonly last: number;
+}
+
+/** How a choice was made: the word it stretches from, and whether it was cut (KBC-115). */
+export interface ChoiceOptions {
+  /** The last word chosen, by place; the first one alone by default. */
+  readonly to?: number;
+  /** The word a Shift+click or Shift+arrow stretches from; the first one by default. */
+  readonly anchor?: number;
+  /** The gesture went past the segment or the 5th word (BR-1): said with the words. */
+  readonly clamped?: boolean;
+}
+
+/** A word's place, with its segment: where the keyboard starts again (KBC-115 FR-4). */
+export interface WordPlace {
+  readonly segment: number;
+  readonly position: number;
 }
 
 /** Where the panel is (T20 "Corrigir palavra", its states). */
@@ -109,6 +126,10 @@ function lastWithin(
 const spoken = (words: readonly CorrectableWord[]): string =>
   words.map((word) => word.text).join(' ');
 
+/** Said when a gesture stops at the segment's edge or the 5th word (KBC-115 BR-1). */
+export const insideSaid = (): string =>
+  $localize`:@@correct.inside:A correção fica dentro de um trecho, com até 5 palavras.`;
+
 /**
  * The word corrections of one text block (KBC-093): which words are chosen, the typed text,
  * saving with its conflicts, the undo notice and the history. The audio follows the chosen
@@ -132,6 +153,10 @@ export class CorrectionDesk {
   /** Pages of the history asked: a newer ask drops the answer to an older one (PD-03). */
   private readonly historyAsked = new Subject<number>();
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The word a selection stretches from (KBC-115 BR-4). */
+  private anchorAt: number | null = null;
+  /** The anchor of the last choice, kept after the panel closes (KBC-115 FR-4). */
+  private lastPlace: WordPlace | null = null;
 
   readonly selection = this.chosen.asReadonly();
   readonly draft = this.typed.asReadonly();
@@ -210,11 +235,16 @@ export class CorrectionDesk {
    * A word clicked, or chosen in "Procurar palavra" (BR-17): the audio goes to it and the
    * panel opens on it, once. With a changed text not saved, nothing moves (AC-44).
    */
-  choose(segment: number, position: number, to = position): boolean {
+  choose(
+    segment: number,
+    position: number,
+    options: ChoiceOptions = {},
+  ): boolean {
+    const to = options.to ?? position;
     const current = this.chosen();
     if (current && this.dirty()) {
-      const same = this.words().some((word) => word.position === position);
-      if (!same) this.state.set({ kind: 'blocked' });
+      if (!this.sameChoice(position, options.to))
+        this.state.set({ kind: 'blocked' });
       return false;
     }
     const words = (this.source.words.of(segment) ?? []).filter(hasText);
@@ -227,20 +257,95 @@ export class CorrectionDesk {
       current.last === last
     )
       return true;
-    this.select({ segment, words, first, last });
+    const anchor = words.some((word) => word.position === options.anchor)
+      ? options.anchor
+      : undefined;
+    this.select({ segment, words, first, last }, anchor, options.clamped);
     return true;
   }
 
-  private select(selection: Selection, seek = true): void {
+  /**
+   * With a changed text, what may be asked again without a word (AC-44): a click on one of
+   * the open words, or a drag over exactly them; a drag over others is told (KBC-115 BR-3).
+   */
+  private sameChoice(position: number, to = position): boolean {
+    const words = this.words();
+    if (to === position)
+      return words.some((word) => word.position === position);
+    return words[0]?.position === position && words.at(-1)?.position === to;
+  }
+
+  private select(
+    selection: Selection,
+    anchor = selection.words[selection.first]?.position,
+    clamped = false,
+  ): void {
     this.chosen.set(selection);
+    this.anchorAt = anchor ?? null;
+    if (anchor !== undefined)
+      this.lastPlace = { segment: selection.segment, position: anchor };
     this.typed.set(this.original());
     this.state.set({ kind: 'editing' });
     const [first] = this.words();
-    if (!seek || !first || !isTimed(first)) return;
-    this.audition.seek(first.startMs, this.untilMs);
-    this.say(
-      $localize`:@@correct.audioAt:Áudio em ${formatClock(first.startMs)}:clock:`,
-    );
+    const audio =
+      first && isTimed(first)
+        ? $localize`:@@correct.audioAt:Áudio em ${formatClock(first.startMs)}:clock:`
+        : '';
+    if (first && isTimed(first))
+      this.audition.seek(first.startMs, this.untilMs);
+    const said = [this.chosenSaid(clamped), audio].filter(Boolean).join(' ');
+    if (said !== '') this.say(said);
+  }
+
+  /** "3 palavras escolhidas: o mestre Tiuako" (KBC-115 FR-6); a single word says nothing. */
+  private chosenSaid(clamped: boolean): string {
+    const words = this.words();
+    const chosen =
+      words.length > 1
+        ? $localize`:@@correct.chosenMany:${words.length}:count: palavras escolhidas: ${this.original()}:words:.`
+        : '';
+    // Each part is a sentence with its own full stop (QA-1).
+    return [chosen, clamped ? insideSaid() : ''].filter(Boolean).join(' ');
+  }
+
+  /** The word a Shift+click or Shift+arrow stretches from (KBC-115 BR-4). */
+  anchor(): number | null {
+    return this.anchorAt;
+  }
+
+  /** Where the last choice started, even after the panel closed (KBC-115 FR-4). */
+  lastChosen(): WordPlace | null {
+    return this.lastPlace;
+  }
+
+  /**
+   * Shift+click or Shift+arrows (KBC-115 BR-4): from the anchor to `to`, within the segment and
+   * 5 places; the typed text stays and the audio does not move, as "Incluir a próxima". Null
+   * when there is nothing open in that segment to stretch.
+   */
+  extend(
+    segment: number,
+    to: number,
+    options: Omit<ChoiceOptions, 'to'> = {},
+  ): WordSpan | null {
+    const selection = this.chosen();
+    if (selection?.segment !== segment) return null;
+    const from = options.anchor ?? this.anchorAt;
+    const anchor = selection.words.findIndex((word) => word.position === from);
+    const focus = selection.words.findIndex((word) => word.position === to);
+    if (anchor < 0 || focus < 0) return null;
+    const span = spanAround(selection.words, anchor, focus);
+    const cut = options.clamped === true || span.clamped;
+    this.anchorAt = from;
+    if (span.first !== selection.first || span.last !== selection.last) {
+      const keepTyped = this.dirty();
+      const typed = this.typed();
+      this.chosen.set({ ...selection, first: span.first, last: span.last });
+      this.typed.set(keepTyped ? typed : this.original());
+    }
+    const said = this.chosenSaid(cut);
+    if (said !== '') this.say(said);
+    return { ...span, clamped: cut };
   }
 
   /** ◀ Anterior / Próxima ▶: the word beside, alone; the audio goes there too (BR-17). */
@@ -367,7 +472,10 @@ export class CorrectionDesk {
     this.source.reload();
     this.loadHistory();
     const id = result.correction?.id;
-    const text = $localize`:@@correct.saved:Palavra corrigida.`;
+    const text =
+      (result.correction?.count ?? 1) > 1
+        ? $localize`:@@correct.savedMany:Palavras corrigidas.`
+        : $localize`:@@correct.saved:Palavra corrigida.`;
     this.say(text);
     this.tell({ text, undo: id ? () => this.undo(id) : null });
   }

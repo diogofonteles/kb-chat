@@ -52,10 +52,13 @@ export class WordCorrection {
 
   protected readonly maxChars = CORRECTION_MAX_CHARS;
   /** "Corrigir palavra, Tiuako": what the screen reader says as it opens (AC-45). */
-  protected readonly label = computed(
-    () =>
-      $localize`:@@correct.name:Corrigir palavra, ${this.desk.original()}:words:`,
+  protected readonly label = computed(() =>
+    this.many()
+      ? $localize`:@@correct.nameMany:Corrigir palavras, ${this.desk.original()}:words:`
+      : $localize`:@@correct.name:Corrigir palavra, ${this.desk.original()}:words:`,
   );
+  /** More than one word chosen (KBC-115 FR-5): the panel says "palavras" and "trecho". */
+  protected readonly many = computed(() => this.desk.words().length > 1);
   protected readonly phase = this.desk.phase;
   protected readonly saving = computed(() => this.phase().kind === 'saving');
   /** A retry would be refused the same way: no Salvar nor Tentar de novo. */
