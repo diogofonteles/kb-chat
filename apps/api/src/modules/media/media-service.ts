@@ -220,6 +220,8 @@ export interface PlayableFile {
 }
 
 const notFound = () => new AppError('MEDIA_NOT_FOUND', 'Unknown media');
+const isMissingFile = (err: unknown): boolean =>
+  err instanceof Error && 'code' in err && err.code === 'ENOENT';
 const notWaiting = () =>
   new AppError('MEDIA_CONFLICT', 'This media is not waiting for this part');
 
@@ -515,8 +517,15 @@ export class MediaService {
     this.finishing.set(media.id, running);
     try {
       return await running;
+    } catch (err) {
+      // Cancelled while it was checked: the item is gone (KBC-118).
+      if (!this.deps.store.getMedia(media.id)) throw notFound();
+      // Another read already started these bytes over: so does this one.
+      if (isMissingFile(err)) return false;
+      throw err;
     } finally {
-      this.finishing.delete(media.id);
+      if (this.finishing.get(media.id) === running)
+        this.finishing.delete(media.id);
     }
   }
 
