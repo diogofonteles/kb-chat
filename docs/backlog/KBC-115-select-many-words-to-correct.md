@@ -26,8 +26,8 @@ Como quem prepara um áudio, quero marcar várias palavras seguidas do texto de 
 - BR-5: só quem tem `media-correct` seleciona; para os outros, arrastar no texto continua sendo seleção comum do navegador e nada abre (KBC-093 BR-5).
 
 ## Functional requirements
-- FR-1: Quando a pessoa aperta o botão do mouse numa palavra e o move mais de 4 px, o sistema deve marcar no texto as palavras da âncora até a palavra sob o ponteiro (BR-1), sem a seleção azul do navegador, e ao soltar abrir **Corrigir palavra** com elas (BR-3). (BR-1, BR-3)
-- FR-2: Quando a pessoa segura o dedo numa palavra por 0,4 s sem mover, o sistema deve começar a escolha nessa palavra (sem o menu do navegador nem a rolagem do bloco) e acompanhar o dedo até soltar; um deslize antes disso rola o bloco como hoje e um toque curto escolhe uma palavra como no KBC-093. (BR-1, BR-3)
+- FR-1: Quando a pessoa aperta o botão do mouse numa palavra (um clique só) e o move mais de 4 px, o sistema deve marcar no texto as palavras da âncora até a palavra sob o ponteiro (BR-1), sem a seleção azul do navegador, e ao soltar abrir **Corrigir palavra** com elas (BR-3); começar no espaço entre duas palavras vale pela mais próxima; Esc antes de soltar desiste. Duplo e triplo clique continuam selecionando como o navegador (copiar), e um trecho já selecionado numa linha ao clicar continua sendo o começo da escolha (KBC-093 FR-2). (BR-1, BR-3)
+- FR-2: Quando a pessoa segura o dedo numa palavra por 0,4 s sem mover, o sistema deve começar a escolha nessa palavra (sem o menu do navegador nem a rolagem do bloco) e acompanhar o dedo até soltar; um deslize antes disso rola o bloco como hoje e um toque curto escolhe uma palavra como no KBC-093. Um segundo dedo não interrompe a escolha; um cancelamento do navegador a desfaz sem deixar marca. Só quem corrige recebe o ouvinte de toque que pode segurar a rolagem. (BR-1, BR-3, BR-5)
 - FR-3: Quando a pessoa dá Shift+clique numa palavra com o painel aberto, o sistema deve estender a escolha da âncora até essa palavra (BR-1, BR-4); sem painel aberto, Shift+clique é um clique.
 - FR-4: Quando o bloco de texto tem o foco e a pessoa aperta Shift+→ ou Shift+←, o sistema deve mover a ponta da escolha uma palavra (começando pela escolha aberta, senão pela última palavra escolhida, senão pela palavra falada, senão pela primeira palavra do texto), marcar no texto e anunciar as palavras numa região viva; ao soltar o Shift, abrir o painel com elas (ou atualizar o aberto, BR-4). Esc antes de soltar desiste. No campo do painel, Shift+setas continuam selecionando letras.
 - FR-5: Com mais de uma palavra, o painel deve se chamar "Corrigir palavras, <palavras>" e dizer "Este trecho aparece N vezes na gravação · **Corrigir todas**", que abre com a sequência inteira. (Corrigir todas: KBC-093 FR-11)
@@ -55,9 +55,9 @@ Como quem prepara um áudio, quero marcar várias palavras seguidas do texto de 
 ## Test strategy
 | AC | Nível | Notas |
 |---|---|---|
-| AC-1, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-10, AC-11, AC-12 | unidade (Vitest, `track-text-selection.spec.ts`) | caret falso (`CARET_AT_POINT`), eventos de ponteiro e teclado, `HttpTestingController` |
+| AC-1, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-10, AC-11, AC-12 | unidade (Vitest, `corrections/track-text-corrections.spec.ts`, bloco KBC-115; `corrections/word-span.spec.ts`) | caret falso (`CARET_AT_POINT`), eventos de ponteiro e teclado, `HttpTestingController`. AC-5 e AC-12 só por unidade: o editor de faixas já recusa quem está abaixo de uma faixa, então a interface não chega a esses estados |
 | AC-1, AC-2, AC-3, AC-6, AC-7 | E2E (`media-transcript-span.spec.ts`, desktop) | transcrição semeada com tempos conhecidos |
-| AC-9 | E2E (media-mobile) | toque por CDP (`Input.dispatchTouchEvent`) |
+| AC-9 | E2E (media-mobile) + unidade | toque por CDP (`Input.dispatchTouchEvent`): segurar e arrastar na vertical sem rolar, deslize rápido que rola sem abrir; unidade que falha sem o corte de 10 px |
 | AC-13 | E2E axe | tema claro |
 | FR-5/FR-6 rótulos | unidade (`correction-desk`/painel) | |
 
@@ -65,7 +65,7 @@ Como quem prepara um áudio, quero marcar várias palavras seguidas do texto de 
 Tela: [`docs/design/screens.md`](../design/screens.md) T20 "Corrigir palavra" · ADR: [0034](../adr/0034-transcript-word-corrections.md), [0037](../adr/0037-learning-from-transcript-corrections.md), [0036](../adr/0036-access-levels-per-collection.md) · Itens: [KBC-093](KBC-093-correct-transcript-words.md), [KBC-092](KBC-092-track-text-and-spoken-word-highlight.md), [KBC-106](KBC-106-tracks-with-their-own-level.md)
 
 ## Open questions
-- Nenhuma. Padrões assumidos (o dono pode mudar): o limite de 5 palavras de um trecho fica; a escolha não cruza trechos nem vozes; no toque, segurar 0,4 s começa a escolha.
+- Nenhuma. Padrões assumidos (o dono pode mudar): o limite de 5 palavras de um trecho fica; a escolha não cruza trechos nem vozes; no toque, segurar 0,4 s começa a escolha (e, para quem corrige, segurar no texto não seleciona para copiar; no mouse, duplo e triplo clique continuam copiando).
 
 ## Definition of ready
 - [x] Story, scope and outcome stated
