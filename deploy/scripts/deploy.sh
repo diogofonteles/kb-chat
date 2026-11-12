@@ -269,16 +269,27 @@ check_env() {
   fi
 }
 
-# The media volume (ADR 0022) on a VM provisioned before KBC-034: owned by the app (10001).
+# The media volume (ADR 0022), owned by the app (10001, 0700). A VM provisioned before
+# KBC-034 got it from Docker as root:root: the release that brought the mount was activated
+# by the deploy.sh before it, and `compose up` made the missing folder (KBC-116). A folder
+# that is there with another owner or mode is given back to the app; non-root only warns.
 ensure_media_dir() {
   local dir="${DEPLOY_DIR%/deploy}/media"
-  [ -d "$dir" ] && return 0
+  if [ -d "$dir" ] && [ -n "$(find "$dir" -maxdepth 0 -uid 10001 -perm 0700 2>/dev/null)" ]; then
+    return 0
+  fi
   if [ "$(id -u)" -ne 0 ]; then
+    if [ -d "$dir" ]; then
+      log "warning: $dir is not the app's (uid 10001, 0700): run deploy.sh with sudo to fix it"
+      return 0
+    fi
     log "$dir is missing and only root can create it for the app (uid 10001): run deploy.sh with sudo"
     return 1
   fi
-  mkdir -p "$dir" && chmod 0700 "$dir" && chown 10001:10001 "$dir"
-  log "created $dir for the media library"
+  local verb="created"
+  [ -d "$dir" ] && verb="gave the app"
+  mkdir -p "$dir" && chown 10001:10001 "$dir" && chmod 0700 "$dir"
+  log "$verb $dir for the media library"
 }
 
 main() {
@@ -365,4 +376,5 @@ main() {
   exit 1
 }
 
-main "$@"
+# Sourced by the tests (deploy-scripts.test.ts) to reach one function; run, it deploys.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then main "$@"; fi
