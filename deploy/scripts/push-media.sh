@@ -32,10 +32,11 @@ echo "push-media: building the package in $OUT"
 
 # The inbox: the SSH user writes it, the app's group (10001, the import container) reads it,
 # nobody else (the package holds people's progress and e-mails). The setgid folder gives every
-# file the app's group; import-media.sh seals it again as root before importing.
+# file the app's group and keeps everyone else out of what is inside; import-media.sh seals it
+# again as root before importing. No --chmod: macOS's rsync (openrsync) refuses it.
 # shellcheck disable=SC2029 # $INBOX and $DRY are meant to expand here
 ssh "$HOST" "sudo install -d -o \"\$(id -un)\" -g 10001 -m 2750 $INBOX"
-rsync -a --no-group --delete --checksum --chmod=D2750,F0640 "$OUT/" "$HOST:$INBOX/package/"
+rsync -a --no-group --delete --checksum "$OUT/" "$HOST:$INBOX/package/"
 
 echo "push-media: importing on $HOST ${DRY:-(real run)}"
 # shellcheck disable=SC2029

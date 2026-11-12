@@ -778,7 +778,7 @@ describe('import-media.sh and push-media.sh after review round 1 (KBC-116)', () 
     expect(authors).toHaveLength(5);
   });
 
-  it('push-media.sh sends the package for the app group only (no world read)', async () => {
+  it("push-media.sh sends the package for the app group only, with flags macOS's rsync accepts", async () => {
     const mac = await aMac();
     await fakeBin(
       join(mac.home, 'bin'),
@@ -794,8 +794,9 @@ describe('import-media.sh and push-media.sh after review round 1 (KBC-116)', () 
     expect(done.code).toBe(0);
     const log = await calls(mac.log);
     expect(log).toContain('-m 2750');
-    expect(log).toContain('[--chmod=D2750,F0640]');
     expect(log).toContain('[--no-group]');
+    // macOS's rsync (openrsync) refuses --chmod: the 2750 inbox keeps others out instead
+    expect(log).not.toContain('--chmod');
     expect(log).not.toContain('0644');
   });
 });
