@@ -19,6 +19,7 @@ import {
   setPersonLevel,
   startLevels,
   titlesOf,
+  reorderScale,
 } from '../test/levels-world.js';
 
 afterEach(closeApp);
@@ -57,6 +58,7 @@ describe('Access levels per collection: the scale (KBC-103, ADR 0036)', () => {
         description: 'Quadro Social',
         documents: 6,
         people: 2,
+        media: 0,
       },
     ]);
     const stored = JSON.parse(
@@ -133,11 +135,9 @@ describe('Access levels per collection: the scale (KBC-103, ADR 0036)', () => {
     expect(titlesOf((await search(ana.call, 'lua')).json())).not.toContain(
       'Zircônio Velado',
     );
-    const wrong = await world.owner('PATCH', LEVELS, { order: ['qs', 'ci'] });
+    const wrong = await reorderScale(world, ['qs', 'ci']);
     expect(wrong.statusCode).toBe(400);
-    const moved = await world.owner('PATCH', LEVELS, {
-      order: ['qs', 'cdc', 'ci'],
-    });
+    const moved = await reorderScale(world, ['qs', 'cdc', 'ci']);
     expect(moved.statusCode, moved.body).toBe(200);
     expect(moved.json<TopicLevels>().levels.map((one) => one.id)).toEqual([
       'qs',

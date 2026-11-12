@@ -135,6 +135,32 @@ export interface MediaLevelSeed {
   readonly again: boolean;
 }
 
+/** One row's level, as a level change found it (KBC-108: what an undo puts back). */
+export interface MediaLevelRow {
+  readonly id: string;
+  readonly level: string | null;
+}
+
+/** What an undo puts back: the level before, where the row still holds `written`. */
+export interface MediaLevelRestore extends MediaLevelRow {
+  readonly written: string | null;
+}
+
+/** A row a level change moved, with its collection (for the audit). */
+export interface MovedMedia extends MediaLevelRow {
+  readonly topic: string;
+}
+
+/** KBC-108: the audios of a scope at one level (or at any) move to another (or to none). */
+export interface MediaRelevel {
+  /** The collection and its sub-collections. */
+  readonly topics: readonly string[];
+  /** The level they hold now; absent: any level. */
+  readonly from?: string;
+  /** Their new level; null: no level (the scale is gone). */
+  readonly to: string | null;
+}
+
 /** A playable file of a media item (ADR 0022: `media_files`). */
 export interface MediaRendition {
   readonly mediaId: string;
@@ -250,6 +276,15 @@ export interface MediaStorePort {
    * (KBC-105 AC-10); the rows placed, or null when it had been seeded already.
    */
   seedLevel(seed: MediaLevelSeed): number | null;
+  /** KBC-108: moves the audios of a level in one transaction; the rows moved, as they were. */
+  relevel(change: MediaRelevel): MovedMedia[];
+  /**
+   * Puts rows back at the levels they had (the undo of `relevel`), in one transaction, only
+   * where a row still holds what the change wrote (KBC-108 R1-3); the ids left as they are.
+   */
+  restoreLevels(rows: readonly MediaLevelRestore[]): string[];
+  /** How many audios (recordings and tracks) of these collections hold each level. */
+  countLevels(topics: readonly string[]): Readonly<Record<string, number>>;
   /** Removes the item, its renditions and jobs; false when it did not exist. */
   deleteMedia(id: string): boolean;
   /** A failed item goes back to the queue with a fresh attempt count. */

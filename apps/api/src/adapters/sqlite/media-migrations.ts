@@ -1482,4 +1482,24 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       ) STRICT, WITHOUT ROWID;
     `,
   },
+  {
+    // KBC-116 (ADR 0038 §2): what the import from the owner's Mac wrote, per recording (with
+    // its tracks): the digest of the rows it came from and of the rows it wrote, so a
+    // run takes only what changed and holds what production changed since. Expand only:
+    // the previous image ignores the table. "digest", not "fingerprint": no column of this
+    // database may name a print (KBC-064's guard over voice prints).
+    version: 32,
+    name: 'media-imports',
+    sql: `
+      CREATE TABLE media_imports (
+        root_id TEXT PRIMARY KEY,
+        source_digest TEXT NOT NULL CHECK (length(source_digest) = 64),
+        target_digest TEXT NOT NULL CHECK (length(target_digest) = 64),
+        -- The tables and columns both digests cover (JSON), so a later column compares on the same set.
+        digest_columns TEXT NOT NULL,
+        package_id TEXT NOT NULL,
+        imported_at TEXT NOT NULL
+      ) STRICT, WITHOUT ROWID;
+    `,
+  },
 ];

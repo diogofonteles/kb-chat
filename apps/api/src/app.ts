@@ -89,7 +89,10 @@ import {
   LevelDirectory,
   DocumentLevelsService,
   PeopleLevelsService,
+  InvitePresetLevels,
+  LevelHistoryService,
   LevelWriteQueue,
+  ScaleChangesService,
   accessLevelRoutes,
 } from './modules/access-levels/index.js';
 import { createGoogleVerifier } from './adapters/google-id-token-verifier.js';
@@ -317,6 +320,9 @@ type FullDeps = AppDeps & {
     service: AccessLevelsService;
     documents: DocumentLevelsService;
     people: PeopleLevelsService;
+    changes: ScaleChangesService;
+    history: LevelHistoryService;
+    presets: InvitePresetLevels;
   };
   /** The collections the legacy seed wrote at this start (KBC-049 BR-4). */
   legacySeeded: readonly string[];
@@ -1680,6 +1686,10 @@ async function loadInviteProfiles(
     ),
   });
   await profiles.load();
+  // KBC-108: a removal's preview counts the profiles that name the level.
+  deps.levels.presets.bind(() =>
+    profiles.list().map((profile) => profile.preset),
+  );
   return profiles;
 }
 
@@ -1920,7 +1930,7 @@ async function loadedLevels(
   built: {
     catalog: CatalogRegistry;
     people: PeopleService;
-    media: Pick<MediaStorePort, 'seedLevel'> | undefined;
+    media: MediaStorePort | undefined;
   },
 ): Promise<FullDeps['levels']> {
   const levels = given.levels ?? inMemoryLevels();
@@ -1931,14 +1941,19 @@ async function loadedLevels(
   // One queue for both services: a scale change never slips into a document write (R1-7).
   const queue = new LevelWriteQueue();
   const shared = { ...levels, catalog, gate, parentOf, queue };
-  const service = new AccessLevelsService({
-    ...shared,
-    people,
-    ...(media && { media }),
-  });
-  const documents = new DocumentLevelsService(shared);
-  const peopleLevels = new PeopleLevelsService({ ...shared, people });
-  return { ...levels, gate, service, documents, people: peopleLevels };
+  // The invite profiles load later (registerPeople) and are bound there.
+  const presets = new InvitePresetLevels();
+  const withMedia = { ...shared, people, presets, ...(media && { media }) };
+  return {
+    ...levels,
+    gate,
+    presets,
+    service: new AccessLevelsService(withMedia),
+    documents: new DocumentLevelsService(shared),
+    people: new PeopleLevelsService({ ...shared, people }),
+    changes: new ScaleChangesService(withMedia),
+    history: new LevelHistoryService(withMedia),
+  };
 }
 
 /** The levels' state in memory (tests, and an app built without a state folder). */

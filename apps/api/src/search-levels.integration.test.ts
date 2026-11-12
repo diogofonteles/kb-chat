@@ -15,6 +15,7 @@ import {
   startLevels,
   titlesOf,
   writeDocs,
+  reorderScale,
 } from '../test/levels-world.js';
 
 afterEach(closeApp);
@@ -314,13 +315,7 @@ describe('Search and reading within the person level (KBC-103, ADR 0036 §7)', (
     const ana = await memberOf(world, 'ana@example.com');
     // Everything starts at CI; QS enters above it and is then moved to the bottom.
     await createScale(world, ['CI', 'QS']);
-    const moved = await world.owner(
-      'PATCH',
-      '/api/v1/topics/hermetismo/levels',
-      {
-        order: ['qs', 'ci'],
-      },
-    );
+    const moved = await reorderScale(world, ['qs', 'ci']);
     expect(moved.statusCode).toBe(200);
     const open: Record<string, string> = {};
     for (let n = 0; n < 1000; n += 20) open[`hermetismo:${name(n)}`] = 'qs';

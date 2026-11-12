@@ -152,6 +152,26 @@ export async function createScale(
   }
 }
 
+/** The scale's version now (KBC-108 FR-5): what a reorder or a delete is confirmed on. */
+export async function scaleVersionOf(
+  world: LevelsWorld,
+  topic = 'hermetismo',
+): Promise<string> {
+  const read = await world.owner('GET', levelsUrl(topic));
+  expect(read.statusCode, read.body).toBe(200);
+  return read.json<{ version: string }>().version;
+}
+
+/** The scale in a new order, on its current version (KBC-108 BR-3). */
+export async function reorderScale(
+  world: LevelsWorld,
+  order: readonly string[],
+  topic = 'hermetismo',
+) {
+  const version = await scaleVersionOf(world, topic);
+  return world.owner('PATCH', levelsUrl(topic), { order, version });
+}
+
 export const documentLevelUrl = (topic: string, id: string) =>
   `/api/v1/topics/${encodeURIComponent(topic)}/documents/${encodeURIComponent(id)}/level`;
 

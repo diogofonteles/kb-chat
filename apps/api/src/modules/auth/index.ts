@@ -51,7 +51,11 @@ export type {
   LevelGrant,
   PersonLevelRules,
 } from './people-level-writes.js';
-export type { ApprovedRequest, LevelChanged } from './people-rules.js';
+export type {
+  ApprovedRequest,
+  HeldLevel,
+  LevelChanged,
+} from './people-rules.js';
 export {
   PEOPLE_CACHE_MS,
   PeopleService,

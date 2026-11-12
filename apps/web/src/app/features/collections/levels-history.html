@@ -1,0 +1,149 @@
+<section class="history" aria-labelledby="history-title">
+  <h3 id="history-title" class="title">
+    <button
+      type="button"
+      class="toggle"
+      aria-controls="history-body"
+      [attr.aria-expanded]="open()"
+      (click)="toggle()"
+    >
+      <span aria-hidden="true">{{ open() ? '▾' : '▸' }}</span>
+      <ng-container i18n="@@history.title">Histórico de níveis</ng-container>
+    </button>
+  </h3>
+  @if (open()) {
+    <div id="history-body" class="body">
+      <div class="filters" role="group" aria-labelledby="history-filters">
+        <span
+          id="history-filters"
+          class="visually-hidden"
+          i18n="@@history.filters"
+          >Filtros do histórico</span
+        >
+        <label class="field">
+          <span i18n="@@history.kind">Tipo</span>
+          <select #kindSelect (change)="changeKind(kindSelect.value)">
+            <option
+              value=""
+              [selected]="filter().kind === ''"
+              i18n="@@history.anyKind"
+            >
+              Todos
+            </option>
+            @for (kind of kinds; track kind) {
+              <option [value]="kind" [selected]="filter().kind === kind">
+                {{ kindLabel(kind) }}
+              </option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span i18n="@@history.actor">Quem</span>
+          <input
+            #actorInput
+            type="search"
+            autocomplete="off"
+            placeholder="e-mail"
+            i18n-placeholder="@@history.actorPlaceholder"
+            [value]="filter().actor"
+            (change)="change({ actor: actorInput.value })"
+          />
+        </label>
+        <label class="field">
+          <span i18n="@@history.from">De</span>
+          <input
+            #fromInput
+            type="date"
+            [value]="filter().from"
+            (change)="change({ from: fromInput.value })"
+          />
+        </label>
+        <label class="field">
+          <span i18n="@@history.to">Até</span>
+          <input
+            #toInput
+            type="date"
+            [value]="filter().to"
+            (change)="change({ to: toInput.value })"
+          />
+        </label>
+      </div>
+      @if (filter().target; as target) {
+        <p class="only">
+          <span i18n="@@history.onlyShown">Só: {{ target.label }}</span>
+          <button
+            type="button"
+            class="link"
+            (click)="change({ target: null })"
+            i18n="@@history.clearOnly"
+          >
+            Limpar
+          </button>
+        </p>
+      }
+
+      @if (first.error()) {
+        <div class="notice" role="alert">
+          <p i18n="@@history.failed">Não consegui carregar o histórico.</p>
+          <button
+            type="button"
+            class="secondary"
+            (click)="first.reload()"
+            i18n="@@history.retry"
+          >
+            Tentar de novo
+          </button>
+        </div>
+      } @else if (!first.hasValue()) {
+        <p class="muted" aria-busy="true" i18n="@@history.loading">
+          Carregando o histórico…
+        </p>
+      } @else if (items().length === 0) {
+        <p class="muted" i18n="@@history.empty">
+          Nenhuma mudança de nível neste período.
+        </p>
+      } @else {
+        <ol class="lines">
+          @for (item of items(); track $index) {
+            <li class="line">
+              <p class="what">{{ what(item) }}</p>
+              <p class="meta">
+                <time [attr.datetime]="item.at">{{
+                  item.at | date: 'dd/MM/yyyy HH:mm'
+                }}</time>
+                · {{ who(item) }} · {{ kindLabel(item.kind) }}
+              </p>
+              @if (canFilterBy(item)) {
+                <button
+                  type="button"
+                  class="link only-button"
+                  [attr.aria-label]="onlyAria(item)"
+                  (click)="only(item)"
+                >
+                  {{ onlyLabel(item) }}
+                </button>
+              }
+            </li>
+          }
+        </ol>
+        @if (moreFailed()) {
+          <p class="error" role="alert" i18n="@@history.moreFailed">
+            Não consegui carregar mais. Tente de novo.
+          </p>
+        }
+        @if (hasMore()) {
+          <button
+            type="button"
+            class="secondary more"
+            [disabled]="loadingMore()"
+            [attr.aria-busy]="loadingMore()"
+            (click)="loadMore()"
+            i18n="@@history.more"
+          >
+            Carregar mais
+          </button>
+        }
+      }
+    </div>
+  }
+</section>

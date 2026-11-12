@@ -228,7 +228,13 @@ export class LevelDirectory {
     const result = await this.scaleDoc.change((doc) => {
       const { next, result: answer } = apply(doc.scales[root] ?? NO_LEVELS);
       assertWritable(doc.scales[root] ?? NO_LEVELS, next);
-      const changed = { ...doc, scales: { ...doc.scales, [root]: [...next] } };
+      // KBC-108: a scale with no level left is gone, as if it never was (BR-4).
+      const others = Object.fromEntries(
+        Object.entries(doc.scales).filter(([slug]) => slug !== root),
+      );
+      const scales =
+        next.length === 0 ? others : { ...others, [root]: [...next] };
+      const changed = { ...doc, scales };
       written.doc = changed;
       return { doc: changed, result: answer };
     });
@@ -236,6 +242,30 @@ export class LevelDirectory {
     if (written.doc) this.scales = written.doc;
     this.changes += 1;
     return result;
+  }
+
+  /**
+   * KBC-108: the placements of these collections, replaced as given (null: none left), in
+   * one write; what a scale change and its undo use.
+   */
+  async replacePlacements(
+    byCollection: Readonly<Record<string, CollectionPlacements | null>>,
+  ): Promise<void> {
+    const written: { doc?: Placements } = {};
+    await this.placementDoc.change((doc) => {
+      const merged = { ...doc.collections, ...byCollection };
+      const collections = Object.fromEntries(
+        Object.entries(merged).flatMap(([collection, placed]) =>
+          placed === null || Object.keys(placed).length === 0
+            ? []
+            : [[collection, { ...placed }]],
+        ),
+      );
+      written.doc = { ...doc, collections };
+      return { doc: written.doc, result: undefined };
+    });
+    if (written.doc) this.placements = written.doc;
+    this.changes += 1;
   }
 
   /** Sets the level of documents, collection by collection, in one write. */

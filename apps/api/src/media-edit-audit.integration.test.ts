@@ -57,6 +57,8 @@ describe('MediaEditService: a level change and its audit (KBC-105, ADR 0036 §11
     const failing: LevelAuditPort = {
       append: () => Promise.reject(new Error('disk full')),
       appendMany: () => Promise.reject(new Error('disk full')),
+      read: () => Promise.resolve({ entries: [], next: null }),
+      scaleLines: () => Promise.resolve([]),
     };
     const { service, log, id } = world(failing);
 
