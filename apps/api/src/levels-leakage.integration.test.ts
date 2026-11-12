@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance } from 'fastify';
 import type { ResearchEvent } from '@kb-chat/contracts';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { fix } from '../test/correction-harness.js';
 import {
   closeApp,
   events,
@@ -21,6 +22,7 @@ import {
   UNKNOWN_MEDIA,
   differFromUnknown,
   exchange,
+  namingHidden,
   leaksIn,
   leavesOf,
   requestsOf,
@@ -156,6 +158,14 @@ let llm: StubLlmAdapter;
 let ana: Exchange[] = [];
 let master: Exchange[] = [];
 let anaWrites: Exchange[] = [];
+let firstReads: Exchange[] = [];
+let afterCorrection: Exchange[] = [];
+
+/** A read as compared across the correction: timings and times aside. */
+const readKey = (one: Exchange) =>
+  `${one.status} ${JSON.stringify(one.headers)} ${one.body
+    .replace(/"tookMs":\d+/g, '')
+    .replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, '<at>')}`;
 let candidates: Candidates;
 let readRoutes: string[] = [];
 let sentinelCounts: Awaited<ReturnType<typeof sentinelCountsOf>>;
@@ -177,6 +187,19 @@ beforeAll(async () => {
   ana = await exchange(sender(app, sentinel.ana.headers), reads, llm);
   master = await exchange(sender(app, sentinel.world.ownerHeaders), reads, llm);
   sentinelCounts = await sentinelCountsOf(sentinel);
+  // SUG-6: the master corrects a word inside the hidden part; Ana reads everything again.
+  const gets = reads.filter((one) => one.method === 'GET');
+  firstReads = ana.filter((one) => one.method === 'GET');
+  const fixed = await fix(sentinel.world.owner, sentinel.recording.id, {
+    from: 'velada',
+    to: 'escondida',
+  });
+  expect(fixed.statusCode, fixed.body).toBe(201);
+  afterCorrection = await exchange(
+    sender(app, sentinel.ana.headers),
+    gets,
+    llm,
+  );
   const writes = routes
     .filter((one) => !isRead(one.route))
     .flatMap((one) => requestsOf(one, candidates, BODIES_HERE));
@@ -222,7 +245,19 @@ describe('Nothing leaks across levels (KBC-111, ADR 0036 §12)', () => {
   });
 
   it('PD-07: every request naming a hidden item answers Ana exactly like one naming an unknown item', () => {
+    expect(namingHidden(ana, candidates.unknownOf)).toBeGreaterThan(300);
     expect(differFromUnknown(ana, candidates.unknownOf)).toEqual([]);
+  });
+
+  it("SUG-6: a correction inside the hidden part changes none of Ana's reads", () => {
+    expect(afterCorrection.length).toBe(firstReads.length);
+    // Her spend moves with her own research turns, which run between the two passes.
+    const changed = afterCorrection.filter(
+      (one, at) =>
+        one.route !== 'GET /api/v1/spend/today' &&
+        readKey(one) !== readKey(firstReads[at] ?? one),
+    );
+    expect(changed.map((one) => `${one.route} ${one.url}`)).toEqual([]);
   });
 
   it('BR-2: every read route answers someone with content, or says why not', () => {
@@ -323,7 +358,22 @@ describe('A new route that skips the view is caught (KBC-111 AC-2, BR-2)', () =>
 });
 
 /** UUIDs differ between two worlds; times and the vault's folder too. */
-const VOLATILE = new Set(['tookMs', 'asOf', 'createdAt', 'updatedAt', 'at']);
+const VOLATILE = new Set([
+  'tookMs',
+  'asOf',
+  'createdAt',
+  'updatedAt',
+  'at',
+  // A sweep cursor's hashes of the ids it covered: track documents' ids are uuids.
+  'covered',
+]);
+
+/**
+ * The known limit KBC-121: the header line the Mac writes into a track document's own text
+ * ("Gravação: X · faixa n de N") counts every track; it reaches Ana only as that raw text
+ * (a snippet, a read). Every number the API composes is compared.
+ */
+const RAW_TRACK_HEADER = /(Gravação: [^·\n]*) · faixa \d+ de \d+/g;
 
 /**
  * Accepted (ADR 0036, KBC-106 FR-2): where a hidden part of a recording Ana hears is ("Trecho
@@ -341,8 +391,16 @@ const keptKeys = (value: object) =>
 
 const normalized = (value: unknown): unknown => {
   if (typeof value === 'string')
-    return value.replace(UUID, '<id>').replace(VAULT, 'vault=<tmp>');
-  if (Array.isArray(value)) return value.map(normalized);
+    return value
+      .replace(UUID, '<id>')
+      .replace(VAULT, 'vault=<tmp>')
+      .replace(RAW_TRACK_HEADER, '$1 · <KBC-121>');
+  // Items that tie are ordered by id, and track documents' ids are uuids that differ between
+  // the worlds: lists are compared as sets of what they hold.
+  if (Array.isArray(value))
+    return value
+      .map(normalized)
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   if (value && typeof value === 'object')
     return Object.fromEntries(
       keptKeys(value).map(([key, inner]) => [key, normalized(inner)]),
@@ -375,6 +433,12 @@ const COUNTED: readonly (readonly [string, string, object?])[] = [
   ['GET', '/api/v1/media/:recording/tracks'],
   ['GET', '/api/v1/media/:track1'],
   ['GET', '/api/v1/media/:track3'],
+  // The concept of the track documents: its "Veja também" lists them (ADR 0035).
+  ['GET', '/api/v1/topics/hermetismo/documents/wiki%2Fconcepts%2FRitmo.md'],
+  [
+    'GET',
+    '/api/v1/topics/hermetismo/documents/wiki%2Fconcepts%2FRitmo.md/relations/relatedFrom',
+  ],
 ];
 
 /** The open recording's ids in a world, for the COUNTED urls that name them. */
@@ -434,7 +498,14 @@ async function researchCountsOf(
     .slice(seen)
     .at(-1)
     ?.filter((message) => message.role === 'tool')
-    .map((message) => message.content);
+    // [n] follows the order ties come in (uuid ids differ between the worlds).
+    .map((message) =>
+      message.content
+        .replace(/\[\d+\]/g, '[n]')
+        .split('\n')
+        .sort()
+        .join('\n'),
+    );
   const done = exhaustive.find((event) => event.type === 'done');
   const sweeps = exhaustive.flatMap((event) =>
     event.type === 'sweep' ? [event.sweep] : [],
@@ -442,8 +513,11 @@ async function researchCountsOf(
   return normalized({
     coverage: done?.type === 'done' ? done.coverage : null,
     sweeps,
+    // The cited sources whole: a track's "faixa n de N" travels in them (review R2-1).
     sources: deep.flatMap((event: ResearchEvent) =>
-      event.type === 'sources' ? event.sources.map((one) => one.title) : [],
+      event.type === 'sources'
+        ? event.sources.map((source) => ({ ...source, n: 0 }))
+        : [],
     ),
     tools,
   });

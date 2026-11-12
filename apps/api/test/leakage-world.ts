@@ -6,7 +6,9 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
-import type { MediaItem } from '@kb-chat/contracts';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { KbPublishJob, MediaItem } from '@kb-chat/contracts';
 import { GRANTABLE_FEATURES } from '@kb-chat/contracts';
 import { expect } from 'vitest';
 import type { StubLlmAdapter } from '../src/adapters/stub-llm-adapter.js';
@@ -21,6 +23,12 @@ import {
   startLevels,
   type LevelsWorld,
 } from './levels-world.js';
+import {
+  kbResult,
+  leaseAs,
+  publisherMac,
+  writeAsMac,
+} from './kb-publish-harness.js';
 import { leaseJob, upload, type Media } from './media-harness.js';
 import {
   approve,
@@ -74,6 +82,12 @@ const BRIDGES = [
     extra: 'related: ["[[Zqxconceito]]", "[[Lua Primeira Aberta]]"]',
   }),
 ];
+
+/**
+ * The concept every track document is about (the fake kb gives them "Ritmo"): its "Veja
+ * também" lists the track documents with their "faixa n de N" (KBC-111 review R2-1).
+ */
+const RHYTHM = doc('hermetismo/wiki/concepts/Ritmo.md', 'Ritmo', 'O ritmo.');
 
 /** At CDC: a text at the root and one in the sub-collection, a concept and a copy. */
 const SENTINELS = [
@@ -315,7 +329,12 @@ interface WorldOptions {
 
 /** The documents placed on the scale, and Ana at CI with every member feature. */
 async function scaledDocuments(options: WorldOptions) {
-  const docs = [...SIX, ...BRIDGES, ...(options.sentinels ? SENTINELS : [])];
+  const docs = [
+    ...SIX,
+    ...BRIDGES,
+    RHYTHM,
+    ...(options.sentinels ? SENTINELS : []),
+  ];
   const world = await startLevels(docs, {
     media: true,
     ...(options.llm && { llm: options.llm }),
@@ -397,6 +416,40 @@ async function describeHiddenTrack(world: LevelsWorld, track: string) {
   expect(saved.statusCode, saved.body).toBe(200);
 }
 
+/** What `kb link` would add: each track document related to the concept "Ritmo". */
+async function linkToRhythm(vault: string, job: KbPublishJob): Promise<void> {
+  for (const item of job.items) {
+    if (item.op !== 'write') continue;
+    const file = join(vault, job.topic, item.path);
+    const text = await readFile(file, 'utf8');
+    await writeFile(
+      file,
+      text.replace(/^---\n/, '---\nrelated: ["[[Ritmo]]"]\n'),
+    );
+  }
+}
+
+/**
+ * The Mac publishes every track (and the recording without tracks) as a kb document in the
+ * vault (ADR 0035), then the catalog reads them: track documents are content too, at their
+ * track's level, with "faixa n de N" in their header (KBC-111 review R2-1).
+ */
+async function publishDocuments(world: LevelsWorld): Promise<void> {
+  const media = mediaOf(world);
+  const { token } = await publisherMac(media);
+  for (;;) {
+    const leased = await leaseAs(media, token);
+    if (leased.statusCode === 204) break;
+    expect(leased.statusCode, leased.body).toBe(200);
+    const job = leased.json<KbPublishJob>();
+    await writeAsMac(world.vault, job);
+    await linkToRhythm(world.vault, job);
+    const done = await kbResult(media, { token, job });
+    expect(done.statusCode, done.body).toBe(204);
+  }
+  await world.started.catalog.load();
+}
+
 /**
  * The world: SIX (the CDC pair of SIX placed at QS, so every hidden item here is marked), the
  * bridges, and with `sentinels` the marked items at CDC and Ana's acts on them.
@@ -409,7 +462,10 @@ export async function leakageWorld(
   const token = await transcriber(media);
   const open = await openRecording(media, token, options.sentinels);
   const nothing = { hidden: null, conversation: null, bookmark: null };
-  if (!options.sentinels) return { world, ana, ...open, ...nothing };
+  if (!options.sentinels) {
+    await publishDocuments(world);
+    return { world, ana, ...open, ...nothing };
+  }
   const hiddenRecording = await recorded(media, token, {
     title: 'Zqxgravacao Velada Qvkgravacao',
     level: 'cdc',
@@ -422,5 +478,6 @@ export async function leakageWorld(
   const hidden = { recording: hiddenRecording.id, track: track.id };
   markAudio(world, open.recording.id, hidden);
   await describeHiddenTrack(world, track.id);
+  await publishDocuments(world);
   return { world, ana, ...open, hidden, ...acts };
 }

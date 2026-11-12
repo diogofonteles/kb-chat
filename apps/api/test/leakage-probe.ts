@@ -445,7 +445,9 @@ function asUnknown(
   unknownOf: ReadonlyMap<string, string>,
 ): string {
   let key = `${one.method} ${one.url} ${JSON.stringify(one.payload ?? null)}`;
-  for (const [hidden, unknown] of unknownOf)
+  // Longest first: `aulas/raw/zqx-aula.md` holds `raw/zqx-aula.md`.
+  const pairs = [...unknownOf].sort(([a], [b]) => b.length - a.length);
+  for (const [hidden, unknown] of pairs)
     for (const [from, to] of [
       [encodeURIComponent(hidden), encodeURIComponent(unknown)],
       [hidden, unknown],
@@ -467,6 +469,14 @@ function comparable(
   return `${one.status} ${text.replace(UUID, '<id>').replace(ISO, '<at>')}`;
 }
 
+/**
+ * Requests naming a hidden item that are not paired with an unknown one, each with why.
+ */
+export const UNPAIRED: Readonly<Record<string, string>> = {
+  'POST /api/v1/topics/:topic/research':
+    "a turn's stream carries its own timings and cost; the hidden finding its cursor names has its own assertion (it reaches neither the stream nor the model)",
+};
+
 const ISO = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g;
 
 /** A per-person rate limit answers by how many requests came before, not by the item. */
@@ -480,16 +490,17 @@ export function differFromUnknown(
   exchanges: readonly Exchange[],
   unknownOf: ReadonlyMap<string, string>,
 ): string[] {
-  const byKey = new Map(
-    exchanges.map((one) => [
-      `${one.method} ${one.url} ${JSON.stringify(one.payload ?? null)}`,
-      one,
-    ]),
-  );
+  const keyOf = (one: ProbeRequest) =>
+    `${one.method} ${one.url} ${JSON.stringify(one.payload ?? null)}`;
+  const byKey = new Map(exchanges.map((one) => [keyOf(one), one]));
   return exchanges.flatMap((one) => {
     const key = asUnknown(one, unknownOf);
+    // A request that names no hidden item has nothing to compare.
+    if (key === keyOf(one) || UNPAIRED[one.route]) return [];
     const twin = byKey.get(key);
-    if (!twin || twin === one) return [];
+    // Every request naming a hidden item has its pair: none is skipped silently.
+    if (!twin)
+      return [`${one.route} (${one.url}): no request naming an unknown item`];
     if (one.status === RATE_LIMITED || twin.status === RATE_LIMITED) return [];
     const mine = comparable(one, unknownOf);
     const theirs = comparable(twin, unknownOf);
@@ -500,3 +511,15 @@ export function differFromUnknown(
         ];
   });
 }
+
+/** How many requests name a hidden item: what the comparison above must have paired. */
+export const namingHidden = (
+  exchanges: readonly Exchange[],
+  unknownOf: ReadonlyMap<string, string>,
+): number =>
+  exchanges.filter(
+    (one) =>
+      !UNPAIRED[one.route] &&
+      asUnknown(one, unknownOf) !==
+        `${one.method} ${one.url} ${JSON.stringify(one.payload ?? null)}`,
+  ).length;
