@@ -217,7 +217,7 @@ describe('GET /health', () => {
     expect(response.json()).toEqual({
       status: 'ok',
       search: 'ok',
-      catalog: { documents: 23 },
+      catalog: { loaded: true },
     });
   });
 });

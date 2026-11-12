@@ -124,11 +124,4 @@ export class CatalogRegistry {
     this.views.set(root, view);
     return view;
   }
-
-  documentCount(): number {
-    return this.topics().reduce(
-      (sum, catalog) => sum + catalog.entries.size,
-      0,
-    );
-  }
 }
