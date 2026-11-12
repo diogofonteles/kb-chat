@@ -1013,12 +1013,20 @@ describe('TrackText: choosing many words at once (KBC-115)', () => {
   it('AC-9, FR-2: a finger that moves before the long press scrolls, and nothing is chosen', async () => {
     const rendered = await renderSpans();
     fireEvent.pointerDown(caretOn('mestre'), pointer('touch', 0));
-    fireEvent.pointerMove(caretOn('mestre'), pointer('touch', 30));
+    fireEvent.pointerMove(caretOn('mestre'), {
+      ...pointer('touch', 0),
+      clientY: 30,
+    });
     await new Promise((resolve) => setTimeout(resolve, LONG_PRESS_MS + 50));
-    fireEvent.pointerCancel(region(), pointer('touch', 30));
+    await rendered.settle();
+    // The swipe ended the press: the long press never comes, nothing is painted.
+    expect(rendered.painted.get('correcting-word') ?? 0).toBe(0);
+    fireEvent.pointerUp(caretOn('mestre'), {
+      ...pointer('touch', 0),
+      clientY: 30,
+    });
     await rendered.settle();
     expect(panel()).toBeNull();
-    expect(rendered.painted.get('correcting-word')).toBe(0);
   });
 
   it('a mouse press that does not move is a click on one word', async () => {
@@ -1029,5 +1037,213 @@ describe('TrackText: choosing many words at once (KBC-115)', () => {
     fireEvent.click(line, { clientX: 2, clientY: 0 });
     await rendered.settle();
     expect(field().value).toBe('Tiuako');
+  });
+
+  /** A finger held on "mestre" until the long press, then moved to "Tiuako". */
+  async function holdAndMove(rendered: Rendered) {
+    fireEvent.pointerDown(caretOn('mestre'), pointer('touch', 0));
+    await new Promise((resolve) => setTimeout(resolve, LONG_PRESS_MS + 50));
+    await rendered.settle();
+    const target = caretOn('Tiuako');
+    fireEvent.pointerMove(target, pointer('touch', 40));
+    await rendered.settle();
+    return target;
+  }
+
+  it('IMP-1: a second finger during the choice is ignored; the first one still ends it', async () => {
+    const rendered = await renderSpans();
+    const target = await holdAndMove(rendered);
+    fireEvent.pointerDown(caretOn('dois'), {
+      ...pointer('touch', 90),
+      pointerId: 8,
+      isPrimary: false,
+    });
+    fireEvent.pointerDown(caretOn('dois'), {
+      ...pointer('mouse', 90),
+      pointerId: 9,
+    });
+    await rendered.settle();
+    expect(rendered.painted.get('correcting-word')).toBe(1);
+    fireEvent.pointerUp(target, pointer('touch', 40));
+    await rendered.settle();
+    expect(field().value).toBe('mestre Tiuako');
+  });
+
+  it('IMP-1: a cancelled press or a lost capture takes the mark away', async () => {
+    const rendered = await renderSpans();
+    await holdAndMove(rendered);
+    fireEvent.pointerCancel(region(), pointer('touch', 40));
+    await rendered.settle();
+    expect(rendered.painted.get('correcting-word')).toBe(0);
+
+    await holdAndMove(rendered);
+    expect(rendered.painted.get('correcting-word')).toBe(1);
+    fireEvent.lostPointerCapture(region(), pointer('touch', 40));
+    await rendered.settle();
+    expect(rendered.painted.get('correcting-word')).toBe(0);
+    expect(panel()).toBeNull();
+  });
+
+  it('QA-2: Esc during a mouse drag gives up: nothing opens and the mark goes', async () => {
+    const rendered = await renderSpans();
+    fireEvent.pointerDown(caretOn('mestre'), pointer('mouse', 0));
+    const target = caretOn('disse');
+    fireEvent.pointerMove(target, pointer('mouse', 40));
+    await rendered.settle();
+    expect(rendered.painted.get('correcting-word')).toBe(1);
+    fireEvent.keyDown(region(), { key: 'Escape' });
+    fireEvent.pointerUp(target, pointer('mouse', 40));
+    fireEvent.click(target, { clientX: 40, clientY: 0 });
+    await rendered.settle();
+    expect(panel()).toBeNull();
+    expect(rendered.painted.get('correcting-word')).toBe(0);
+  });
+
+  /** The touchmove listeners that are not passive: the browser waits for them. */
+  function blockingTouchmoves(added: { mock: { calls: unknown[][] } }): number {
+    return added.mock.calls.filter(
+      ([name, , options]) =>
+        name === 'touchmove' &&
+        typeof options === 'object' &&
+        options !== null &&
+        (options as AddEventListenerOptions).passive === false,
+    ).length;
+  }
+
+  it('IMP-2: without media-correct, every touch listener of the text is passive', async () => {
+    const added = vi.spyOn(HTMLElement.prototype, 'addEventListener');
+    await renderSpans({ canCorrect: false });
+    expect(blockingTouchmoves(added)).toBe(0);
+    added.mockRestore();
+  });
+
+  it('IMP-2: whoever corrects gets one touch listener that may stop scrolling, once the text is there', async () => {
+    const added = vi.spyOn(HTMLElement.prototype, 'addEventListener');
+    await renderSpans();
+    expect(blockingTouchmoves(added)).toBe(1);
+    added.mockRestore();
+  });
+
+  it('IMP-3: a double click keeps the browser selection for copying; a single press does not', async () => {
+    await renderSpans();
+    const line = caretOn('Tiuako');
+    const selectStart = () => {
+      const event = new Event('selectstart', {
+        bubbles: true,
+        cancelable: true,
+      });
+      line.firstChild?.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    fireEvent.pointerDown(line, pointer('mouse', 0));
+    fireEvent.mouseDown(line, { detail: 1 });
+    expect(selectStart()).toBe(true);
+    fireEvent.pointerUp(line, pointer('mouse', 0));
+
+    fireEvent.pointerDown(line, pointer('mouse', 0));
+    fireEvent.mouseDown(line, { detail: 2 });
+    expect(selectStart()).toBe(false);
+    fireEvent.pointerMove(caretOn('disse'), pointer('mouse', 40));
+    expect(panel()).toBeNull();
+  });
+
+  /** The browser's own selection over `text` in its line. */
+  function selectInLine(text: string): void {
+    const line = lineWith(text);
+    const node = line.firstChild;
+    if (!node) throw new Error('a line has its text');
+    const at = (line.textContent ?? '').indexOf(text);
+    const range = document.createRange();
+    range.setStart(node, at);
+    range.setEnd(node, at + text.length);
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+
+  it('IMP-3, KBC-093 FR-2: with a stretch selected in a line, a click starts the choice from it', async () => {
+    const rendered = await renderSpans();
+    selectInLine('mestre Tiuako');
+    fireEvent.click(caretOn('Tiuako'));
+    await rendered.settle();
+    expect(field().value).toBe('mestre Tiuako');
+    document.getSelection()?.removeAllRanges();
+  });
+
+  it('FR-3: Shift+click with no panel and a browser selection is still one word', async () => {
+    const rendered = await renderSpans();
+    selectInLine('O mestre Tiuako');
+    fireEvent.click(caretOn('Tiuako'), { shiftKey: true });
+    await rendered.settle();
+    expect(field().value).toBe('Tiuako');
+  });
+
+  it('BR-4: after Incluir a anterior and a próxima, Shift+← stretches from the far end, keeping all', async () => {
+    const rendered = await renderSpans();
+    await clickWord(rendered, 'Tiuako');
+    fireEvent.click(screen.getByRole('button', { name: 'Incluir a anterior' }));
+    await rendered.settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Incluir a próxima' }));
+    await rendered.settle();
+    expect(field().value).toBe('mestre Tiuako disse');
+    region().focus();
+    await shiftArrow(rendered, 'ArrowLeft');
+    fireEvent.keyUp(region(), { key: 'Shift' });
+    await rendered.settle();
+    expect(field().value).toBe('O mestre Tiuako disse');
+  });
+
+  it('BR-3: with a changed text, a drag starting on the open word says to save or cancel first', async () => {
+    const rendered = await renderSpans();
+    await clickWord(rendered, 'mestre');
+    await type(rendered, 'Mestre');
+    await drag(rendered, 'mestre', 'disse');
+    expect(field().value).toBe('Mestre');
+    expect(
+      screen.getByText(
+        'Salve ou cancele esta correção antes de escolher outra palavra.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('QA-1: the cut is said once, in sentences, before the audio', async () => {
+    const rendered = await renderSpans();
+    await drag(rendered, 'um', 'sete');
+    expect(said()).toContain(
+      '5 palavras escolhidas: um dois três quatro cinco. A correção fica dentro de um trecho, com até 5 palavras. Áudio em 1:30',
+    );
+  });
+
+  it('QA-6: saving many words says "Palavras corrigidas."', async () => {
+    const rendered = await renderSpans();
+    await drag(rendered, 'mestre', 'Tiuako');
+    await type(rendered, 'Mestre Tiuaco');
+    fireEvent.keyDown(field(), { key: 'Enter' });
+    await rendered.settle();
+    const correction = saved.correction;
+    if (!correction) throw new Error('the saved fixture has its correction');
+    posted(rendered).flush(
+      { ...saved, correction: { ...correction, position: 1, count: 2 } },
+      { status: 201, statusText: 'Created' },
+    );
+    await rendered.settle();
+    expect(screen.getAllByText('Palavras corrigidas.').length).toBeGreaterThan(
+      0,
+    );
+  });
+
+  it('the hint says every way to choose several words', async () => {
+    const rendered = await renderSpans();
+    await clickWord(rendered, 'Tiuako');
+    expect(
+      screen.getByText(
+        'Para escolher várias palavras, arraste sobre elas, use Shift+clique ou Shift+setas no texto.',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Para escolher várias palavras, segure o dedo numa palavra e arraste.',
+      ),
+    ).toBeTruthy();
   });
 });

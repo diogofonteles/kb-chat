@@ -108,6 +108,8 @@
   (pointermove)="moved($event)"
   (pointerup)="released($event)"
   (pointercancel)="cancelled($event)"
+  (lostpointercapture)="cancelled($event)"
+  (mousedown)="mousePressed($event)"
   (selectstart)="heldBack($event)"
   (contextmenu)="heldBack($event)"
   (click)="clickedText($event)"

@@ -231,7 +231,10 @@ export class TrackText {
     this.showTrackInWhole();
     this.focusAfterRetry();
     afterNextRender(() => this.listenPassively());
-    if (this.canCorrect) this.followCorrections();
+    if (this.canCorrect) {
+      this.followCorrections();
+      this.holdScrollWhileChoosing();
+    }
   }
 
   /** The history once the text is there, the chosen words painted, the focus kept. */
@@ -305,7 +308,11 @@ export class TrackText {
     const line = point ? this.lines()[point.line] : undefined;
     if (!point || !line) return;
     this.chosenFrom = 'text';
-    if (event.shiftKey && this.stretchTo(point)) return;
+    if (event.shiftKey) {
+      if (this.stretchTo(point)) return;
+      // With nothing open, Shift+click is a click: not the browser's stretched selection.
+      this.document.getSelection()?.removeAllRanges();
+    }
     const selected = this.selectedOffsets(point.line);
     this.pick(line, selected ?? { start: point.offset, end: point.offset });
   }
@@ -321,11 +328,49 @@ export class TrackText {
   }
 
   /**
+   * A point on a word for a drag (QA-3): in the space between two words, the nearer one by
+   * where they are drawn, so every browser picks the same words whichever side of the space
+   * its caret falls on. Where nothing is drawn (no layout), the caret's word.
+   */
+  private wordPointAt(x: number, y: number): TextPoint | null {
+    const point = this.pointAt(x, y);
+    if (!point) return null;
+    const words = placedWords(this.lines()[point.line]);
+    // Strictly inside a word: that word. At its first character the caret may stand for the
+    // space before it (WebKit), so the drawing decides.
+    const inside = words.some(
+      (word) => word.charStart < point.offset && point.offset < word.charEnd,
+    );
+    const before = words.findLast((word) => word.charEnd <= point.offset);
+    const after = words.find((word) => word.charStart >= point.offset);
+    if (inside || !before || !after) return point;
+    const box = (word: { charStart: number; charEnd: number }) => {
+      const range = this.rangeOf({
+        line: point.line,
+        start: word.charStart,
+        end: word.charEnd,
+        whole: false,
+      });
+      return typeof range?.getBoundingClientRect === 'function'
+        ? range.getBoundingClientRect()
+        : null;
+    };
+    const left = box(before);
+    const right = box(after);
+    if (!left || !right || (left.width === 0 && right.width === 0))
+      return point;
+    // On a word, that word; in the space, the nearer edge.
+    const nearer =
+      x >= right.left || right.left - x < x - left.right ? after : before;
+    return { line: point.line, offset: nearer.charStart };
+  }
+
+  /**
    * A point while dragging: off the lines (between them, past the block), the line above or
    * below the gesture's own, so the choice stops at its edge (BR-1).
    */
   private dragPointAt(x: number, y: number, at: number): TextPoint | null {
-    const point = this.pointAt(x, y);
+    const point = this.wordPointAt(x, y);
     if (point) return point;
     const element = this.lineOf(at);
     if (typeof element?.getBoundingClientRect !== 'function') return null;
@@ -371,7 +416,10 @@ export class TrackText {
     this.chosenFrom = 'text';
     if (
       stretch &&
-      this.desk.extend(line.segment, gesture.focus, gesture.clamped) !== null
+      this.desk.extend(line.segment, gesture.focus, {
+        anchor: gesture.anchor,
+        clamped: gesture.clamped,
+      }) !== null
     )
       return;
     this.desk.choose(line.segment, Math.min(gesture.anchor, gesture.focus), {
@@ -383,10 +431,14 @@ export class TrackText {
 
   /** A press on a word, by whoever corrects: it may become a drag (FR-1, FR-2). */
   private startPress(event: PointerEvent): void {
+    // A second finger, or another pointer while one drags: the drag goes on (IMP-1).
+    if (event.isPrimary === false) return;
+    if (this.press?.selecting && this.press.pointerId !== event.pointerId)
+      return;
     this.swallowClick = false;
     this.endPress();
     if (!this.pressable(event)) return;
-    const from = this.pointAt(event.clientX, event.clientY);
+    const from = this.wordPointAt(event.clientX, event.clientY);
     if (!from || this.hidden(from.line)) return;
     this.wordsFor(from.line);
     const touch = event.pointerType === 'touch' || event.pointerType === 'pen';
@@ -480,28 +532,35 @@ export class TrackText {
   protected released(event: PointerEvent): void {
     const press = this.press;
     if (press?.pointerId !== event.pointerId) return;
+    const gesture = this.gesture();
     this.endPress();
     if (!press.selecting) return;
     // The click that follows a drag is the drag's end, not a click on a word.
     this.swallowClick = true;
-    const gesture = this.gesture();
     const line = this.lines()[press.from.line];
     if (gesture) this.commit(gesture, false);
     else if (line)
       this.pick(line, { start: press.from.offset, end: press.from.offset });
   }
 
+  /** Cancelled, or the capture lost with no release: nothing is chosen, the mark goes. */
   protected cancelled(event: PointerEvent): void {
     if (this.press?.pointerId !== event.pointerId) return;
     this.endPress();
-    if (!this.byKeys) this.gesture.set(null);
   }
 
+  /** The second press of a double or triple click selects as the browser does (IMP-3). */
+  protected mousePressed(event: MouseEvent): void {
+    if (event.detail >= 2) this.endPress();
+  }
+
+  /** Every way a press ends takes its mark away and lets the block scroll again (IMP-1). */
   private endPress(): void {
     const press = this.press;
     if (!press) return;
     if (press.timer !== null) clearTimeout(press.timer);
     this.press = null;
+    if (!this.byKeys) this.gesture.set(null);
     const body = this.body().nativeElement;
     if (
       typeof body.hasPointerCapture === 'function' &&
@@ -510,7 +569,10 @@ export class TrackText {
       body.releasePointerCapture(press.pointerId);
   }
 
-  /** While a press is on a word, the browser neither selects text nor opens its menu. */
+  /**
+   * While a single press is on a word, the browser neither selects text nor opens its menu;
+   * a double or triple click ends the press first, so it still selects for copying.
+   */
   protected heldBack(event: Event): void {
     if (this.press) event.preventDefault();
   }
@@ -530,6 +592,13 @@ export class TrackText {
     ) {
       event.preventDefault();
       this.stepByKey(arrow);
+      return;
+    }
+    if (event.key === 'Escape' && this.press?.selecting) {
+      // Esc during a drag gives up, as with the keys (QA-2): the release opens nothing.
+      event.preventDefault();
+      this.endPress();
+      this.swallowClick = true;
       return;
     }
     if (event.key === 'Escape' && this.byKeys) {
@@ -564,7 +633,7 @@ export class TrackText {
   }
 
   private stepByKey(direction: 1 | -1): void {
-    const current = this.byKeys ? this.gesture() : this.keyStart();
+    const current = this.byKeys ? this.gesture() : this.keyStart(direction);
     if (!current) return;
     this.byKeys = true;
     const next = gestureStep(this.lines(), current, direction) ?? current;
@@ -580,12 +649,15 @@ export class TrackText {
    * Where Shift+arrows start (FR-4): the open choice, with its anchor; else the word chosen
    * last; else the word being said; else the first word of the text.
    */
-  private keyStart(): Gesture | null {
-    return this.openGesture() ?? this.freshGesture();
+  private keyStart(direction: 1 | -1): Gesture | null {
+    return this.openGesture(direction) ?? this.freshGesture();
   }
 
-  /** The open choice as a gesture: its anchor stays, its other end moves. */
-  private openGesture(): Gesture | null {
+  /**
+   * The open choice as a gesture: its anchor stays, its other end moves. An anchor in the
+   * middle (after Incluir on both sides) goes to the end behind the arrow, so nothing is lost.
+   */
+  private openGesture(direction: 1 | -1): Gesture | null {
     const open = this.desk.selection();
     const anchor = this.desk.anchor();
     if (!open || anchor === null) return null;
@@ -594,10 +666,12 @@ export class TrackText {
     const first = words[0]?.position;
     const last = words.at(-1)?.position;
     if (line < 0 || first === undefined || last === undefined) return null;
+    const atEnd = anchor === first || anchor === last;
+    const from = atEnd ? anchor : direction === 1 ? first : last;
     return {
       line,
-      anchor,
-      focus: anchor === first ? last : first,
+      anchor: from,
+      focus: from === first ? last : first,
       clamped: false,
     };
   }
@@ -913,19 +987,30 @@ export class TrackText {
     const stops = ['wheel', 'touchmove'].map((name) =>
       this.renderer.listen(body, name, () => this.ownScroll(), passive),
     );
-    // Only while a finger chooses words does the block not scroll (KBC-115 FR-2).
-    const choosing = this.renderer.listen(
-      body,
-      'touchmove',
-      (event: TouchEvent) => {
-        if (this.press?.selecting) event.preventDefault();
-      },
-      { passive: false },
-    );
     this.destroyRef.onDestroy(() => {
       stops.forEach((stop) => stop());
-      choosing();
       this.endPress();
     });
+  }
+
+  /**
+   * Only whoever corrects, once the text is there, gets a touchmove that may stop the scroll
+   * while a finger chooses words (KBC-115 FR-2). Not passive, so the browser waits for it on
+   * every touch scroll of the block: everyone else keeps the passive listeners only (BR-5).
+   */
+  private holdScrollWhileChoosing(): void {
+    let stop: (() => void) | null = null;
+    afterRenderEffect(() => {
+      if (stop || this.state() !== 'ready') return;
+      stop = this.renderer.listen(
+        this.body().nativeElement,
+        'touchmove',
+        (event: TouchEvent) => {
+          if (this.press?.selecting) event.preventDefault();
+        },
+        { passive: false },
+      );
+    });
+    this.destroyRef.onDestroy(() => stop?.());
   }
 }

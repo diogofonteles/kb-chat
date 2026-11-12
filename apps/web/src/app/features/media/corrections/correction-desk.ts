@@ -243,8 +243,8 @@ export class CorrectionDesk {
     const to = options.to ?? position;
     const current = this.chosen();
     if (current && this.dirty()) {
-      const same = this.words().some((word) => word.position === position);
-      if (!same) this.state.set({ kind: 'blocked' });
+      if (!this.sameChoice(position, options.to))
+        this.state.set({ kind: 'blocked' });
       return false;
     }
     const words = (this.source.words.of(segment) ?? []).filter(hasText);
@@ -262,6 +262,17 @@ export class CorrectionDesk {
       : undefined;
     this.select({ segment, words, first, last }, anchor, options.clamped);
     return true;
+  }
+
+  /**
+   * With a changed text, what may be asked again without a word (AC-44): a click on one of
+   * the open words, or a drag over exactly them; a drag over others is told (KBC-115 BR-3).
+   */
+  private sameChoice(position: number, to = position): boolean {
+    const words = this.words();
+    if (to === position)
+      return words.some((word) => word.position === position);
+    return words[0]?.position === position && words.at(-1)?.position === to;
   }
 
   private select(
@@ -282,7 +293,7 @@ export class CorrectionDesk {
         : '';
     if (first && isTimed(first))
       this.audition.seek(first.startMs, this.untilMs);
-    const said = [this.chosenSaid(clamped), audio].filter(Boolean).join('. ');
+    const said = [this.chosenSaid(clamped), audio].filter(Boolean).join(' ');
     if (said !== '') this.say(said);
   }
 
@@ -291,9 +302,10 @@ export class CorrectionDesk {
     const words = this.words();
     const chosen =
       words.length > 1
-        ? $localize`:@@correct.chosenMany:${words.length}:count: palavras escolhidas: ${this.original()}:words:`
+        ? $localize`:@@correct.chosenMany:${words.length}:count: palavras escolhidas: ${this.original()}:words:.`
         : '';
-    return [chosen, clamped ? insideSaid() : ''].filter(Boolean).join('. ');
+    // Each part is a sentence with its own full stop (QA-1).
+    return [chosen, clamped ? insideSaid() : ''].filter(Boolean).join(' ');
   }
 
   /** The word a Shift+click or Shift+arrow stretches from (KBC-115 BR-4). */
@@ -311,16 +323,20 @@ export class CorrectionDesk {
    * 5 places; the typed text stays and the audio does not move, as "Incluir a próxima". Null
    * when there is nothing open in that segment to stretch.
    */
-  extend(segment: number, to: number, clamped = false): WordSpan | null {
+  extend(
+    segment: number,
+    to: number,
+    options: Omit<ChoiceOptions, 'to'> = {},
+  ): WordSpan | null {
     const selection = this.chosen();
     if (selection?.segment !== segment) return null;
-    const anchor = selection.words.findIndex(
-      (word) => word.position === this.anchorAt,
-    );
+    const from = options.anchor ?? this.anchorAt;
+    const anchor = selection.words.findIndex((word) => word.position === from);
     const focus = selection.words.findIndex((word) => word.position === to);
     if (anchor < 0 || focus < 0) return null;
     const span = spanAround(selection.words, anchor, focus);
-    const cut = clamped || span.clamped;
+    const cut = options.clamped === true || span.clamped;
+    this.anchorAt = from;
     if (span.first !== selection.first || span.last !== selection.last) {
       const keepTyped = this.dirty();
       const typed = this.typed();
@@ -456,7 +472,10 @@ export class CorrectionDesk {
     this.source.reload();
     this.loadHistory();
     const id = result.correction?.id;
-    const text = $localize`:@@correct.saved:Palavra corrigida.`;
+    const text =
+      (result.correction?.count ?? 1) > 1
+        ? $localize`:@@correct.savedMany:Palavras corrigidas.`
+        : $localize`:@@correct.saved:Palavra corrigida.`;
     this.say(text);
     this.tell({ text, undo: id ? () => this.undo(id) : null });
   }
