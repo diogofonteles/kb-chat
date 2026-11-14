@@ -1,8 +1,38 @@
 import { API_ERROR_CODES } from '@kb-chat/contracts';
 import { HttpErrorResponse } from '@angular/common/http';
-import { errorMessage, toUiErrorCode } from './api-error.js';
+import {
+  errorMessage,
+  listenToInternalErrors,
+  toUiErrorCode,
+} from './api-error.js';
 
 describe('toUiErrorCode', () => {
+  it('tells its listener of a failure read as INTERNAL, and only of those (KBC-123 AC-4)', () => {
+    const heard = vi.fn();
+    const stop = listenToInternalErrors(heard);
+    const outside = new Error('reply outside the contract');
+    toUiErrorCode(outside);
+    toUiErrorCode(new HttpErrorResponse({ status: 500, error: 'not json' }));
+    toUiErrorCode(new HttpErrorResponse({ status: 0 }));
+    toUiErrorCode(
+      new HttpErrorResponse({
+        status: 403,
+        error: { error: { code: 'FORBIDDEN', message: 'x' } },
+      }),
+    );
+    expect(heard).toHaveBeenCalledTimes(2);
+    expect(heard).toHaveBeenCalledWith(outside);
+    // A stale stop never removes a newer listener.
+    const newer = vi.fn();
+    listenToInternalErrors(newer);
+    stop();
+    toUiErrorCode(new Error('x'));
+    expect(newer).toHaveBeenCalledTimes(1);
+    listenToInternalErrors(heard)();
+    toUiErrorCode(new Error('y'));
+    expect(heard).toHaveBeenCalledTimes(2);
+  });
+
   it('reads the contract envelope', () => {
     const err = new HttpErrorResponse({
       status: 503,

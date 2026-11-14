@@ -14,6 +14,7 @@ import {
   Router,
   RouterOutlet,
 } from '@angular/router';
+import { AppVersion } from '@core/app-version/app-version.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { publicPageOf } from '@core/routing/public-pages.js';
 import { filter, map } from 'rxjs';
@@ -22,12 +23,14 @@ import { PrivacyPage } from '@features/privacy/privacy-page.js';
 import { SettingsHost } from '@features/settings/settings-host.js';
 import { TutorialPage } from '@features/tutorial/tutorial-page.js';
 import { ActingBanner } from '@features/acting/acting-banner.js';
+import { UpdateBanner } from './update-banner.js';
 
 /**
  * Who is signed in decides between the login screen and the app (KBC-010 BR-1). A public
  * page (the privacy policy, KBC-016; the tutorial, KBC-032) shows either way, rendered here rather than in the
  * router outlet: the outlet only exists with a session, so a protected page is never built
- * without one. Settings and the public pages load in their own chunks.
+ * without one. Settings and the public pages load in their own chunks. The shell also keeps
+ * the tab on the deployed version (KBC-123).
  */
 @Component({
   selector: 'app-session-shell',
@@ -38,8 +41,10 @@ import { ActingBanner } from '@features/acting/acting-banner.js';
     PrivacyPage,
     TutorialPage,
     ActingBanner,
+    UpdateBanner,
   ],
   template: `
+    <app-update-banner />
     @if (publicPage() === 'privacy') {
       @defer (on immediate) {
         <app-privacy-page />
@@ -110,5 +115,6 @@ export class SessionShell {
 
   constructor() {
     this.session.start();
+    inject(AppVersion).start();
   }
 }

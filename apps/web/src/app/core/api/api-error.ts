@@ -14,6 +14,27 @@ function parseBody(body: unknown): unknown {
   }
 }
 
+/**
+ * Who hears of a failure read as INTERNAL ("Algo deu errado do nosso lado"): a reply outside
+ * the contract may mean this tab runs an app older than the server (KBC-123 AC-4).
+ */
+let internalErrorListener: ((err: unknown) => void) | null = null;
+
+/** Listens to INTERNAL failures (one listener, the app's version check); returns the stop. */
+export function listenToInternalErrors(
+  listener: (err: unknown) => void,
+): () => void {
+  internalErrorListener = listener;
+  return () => {
+    if (internalErrorListener === listener) internalErrorListener = null;
+  };
+}
+
+function internal(err: unknown): 'INTERNAL' {
+  internalErrorListener?.(err);
+  return 'INTERNAL';
+}
+
 /** Reads the contract's error envelope; a network failure (status 0) or a gateway error is OFFLINE. */
 export function toUiErrorCode(err: unknown): UiErrorCode {
   // rxResource wraps non-Error failures (HttpErrorResponse is one) and keeps the original as `cause`.
@@ -24,11 +45,11 @@ export function toUiErrorCode(err: unknown): UiErrorCode {
   ) {
     return toUiErrorCode(err.cause);
   }
-  if (!(err instanceof HttpErrorResponse)) return 'INTERNAL';
+  if (!(err instanceof HttpErrorResponse)) return internal(err);
   if (err.status === 0 || err.status === 502 || err.status === 504)
     return 'OFFLINE';
   const parsed = apiErrorSchema.safeParse(parseBody(err.error));
-  return parsed.success ? parsed.data.error.code : 'INTERNAL';
+  return parsed.success ? parsed.data.error.code : internal(err);
 }
 
 /** The field a 400 names (`details.field` of the API's error envelope), if any. */

@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   computed,
+  inject,
   input,
   model,
   output,
@@ -16,6 +17,7 @@ import {
   type ResearchProfile,
   type SearchMode,
 } from '@kb-chat/contracts';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { MODE_OPTIONS } from '@core/i18n/facet-labels.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
 
@@ -69,6 +71,11 @@ export class Composer {
   protected readonly modeHelp = computed(
     () => MODE_OPTIONS.find((o) => o.value === this.mode())?.help ?? '',
   );
+
+  constructor() {
+    // A question typed and not sent is never lost to a reload into a new version (KBC-123 AC-2).
+    inject(BusyWork).holdWhile(computed(() => this.text().trim().length > 0));
+  }
 
   /** True for the question field while it is still empty (the "/" hint's target). */
   isEmptyField(target: EventTarget | null): boolean {

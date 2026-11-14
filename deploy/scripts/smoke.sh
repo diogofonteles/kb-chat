@@ -8,7 +8,8 @@
 # Checks: /health answers with a status; the SPA shell loads with the security headers;
 # /mcp is not served publicly; without a session the API refuses (401) once sign-in is on;
 # the public privacy policy (/privacidade, KBC-016) and tutorial (/tutorial, KBC-032) are
-# served without a session.
+# served without a session; /version.json is never cached and names the version of the
+# shell's kb-app-version meta (KBC-123: open tabs compare it to reload into a new deploy).
 #   SMOKE_URL=...    base URL when no argument is given
 #   SMOKE_AUTH=off   skips the 401 check (a build without KBC-010)
 #   SMOKE_STRICT=1   also fails when /health reports "degraded" (qmd down, kb fallback)
@@ -83,6 +84,24 @@ check_shell() {
   rm -f "$headers"
 }
 
+# A tab compares its own version (the meta of index.html) with /version.json (KBC-123): the
+# file must never be cached and must name the version the shell is stamped with.
+check_version() {
+  local headers body shell served stamped
+  headers="$(mktemp)"
+  body="$("${CURL[@]}" -f -D "$headers" "$BASE/version.json" 2>/dev/null)" || { fail "/version.json did not answer 200"; rm -f "$headers"; return; }
+  if grep -qi '^cache-control:.*no-cache' "$headers"; then pass "/version.json is not cached"; else fail "/version.json without Cache-Control: no-cache"; fi
+  rm -f "$headers"
+  served="$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' <<<"$body")"
+  shell="$("${CURL[@]}" -f "$BASE/" 2>/dev/null)" || { fail "/ did not answer 200"; return; }
+  stamped="$(sed -n 's/.*<meta name="kb-app-version" content="\([^"]*\)".*/\1/p' <<<"$shell" | head -n 1)"
+  if [ -n "$served" ] && [ "$served" = "$stamped" ]; then
+    pass "/version.json names the shell's version ($served)"
+  else
+    fail "/version.json says '${served}', the shell's kb-app-version meta says '${stamped}'"
+  fi
+}
+
 status_of() {
   "${CURL[@]}" -o /dev/null -w '%{http_code}' "$@" 2>/dev/null || echo 000
 }
@@ -115,6 +134,7 @@ check_auth() {
 
 check_health
 check_shell
+check_version
 check_public_page /privacidade
 check_public_page /tutorial
 # Every other route falls back to the shell and is never cached either (KBC-122).
