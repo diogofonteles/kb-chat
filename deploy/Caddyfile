@@ -72,15 +72,29 @@
 
 	handle {
 		root * /srv/www
-		# Bundles and the tutorial's pictures (KBC-032) carry a content hash in their names.
-		@hashed path_regexp hashed -[A-Z0-9]{8}\.(js|css|webp)$
+		# Bundles and the tutorial's pictures (KBC-032) carry a content hash in their names:
+		# kept for a year, but only when the file exists.
+		@hashed {
+			path_regexp -[A-Z0-9]{8}\.(js|css|webp)$
+			file
+		}
 		header @hashed Cache-Control "public, max-age=31536000, immutable"
 		# Everything else is revalidated: every SPA route (/login, /conversas/<id>, ...) falls
 		# back to index.html, and a cached copy would run an old bundle against a new API (KBC-122).
-		@unhashed not path_regexp -[A-Z0-9]{8}\.(js|css|webp)$
+		@unhashed not {
+			path_regexp -[A-Z0-9]{8}\.(js|css|webp)$
+			file
+		}
 		header @unhashed Cache-Control "no-cache"
-		try_files {path} /index.html
-		file_server
+		# A bundle from an older build is a 404, never the shell as JavaScript (KBC-122).
+		@bundle path_regexp -[A-Z0-9]{8}\.(js|css|webp)$
+		handle @bundle {
+			file_server
+		}
+		handle {
+			try_files {path} /index.html
+			file_server
+		}
 	}
 
 	log {

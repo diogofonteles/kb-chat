@@ -75,6 +75,7 @@ check_shell() {
   headers="$(mktemp)"
   body="$("${CURL[@]}" -f -D "$headers" "$BASE/" 2>/dev/null)" || { fail "/ did not answer 200"; rm -f "$headers"; return; }
   if grep -q '<app-root' <<<"$body"; then pass "/ serves the SPA shell"; else fail "/ is not the SPA shell"; fi
+  if grep -qi '^cache-control:.*no-cache' "$headers"; then pass "/ is not cached"; else fail "/ without Cache-Control: no-cache"; fi
   local header
   for header in content-security-policy strict-transport-security x-content-type-options; do
     if grep -qi "^$header:" "$headers"; then pass "header $header"; else fail "missing header $header"; fi

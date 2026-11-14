@@ -22,15 +22,31 @@ const UNITS: Record<string, number> = {
 
 describe('the web edge never lets a browser keep an old app (KBC-122)', () => {
   const edge = caddyfile.slice(caddyfile.indexOf('root * /srv/www'));
+  const bundle = String.raw`-[A-Z0-9]{8}\.(js|css|webp)$`;
 
-  it('sends no-cache on every response that is not a hashed bundle, deep SPA routes included', () => {
+  it('names a hashed bundle with one pattern everywhere', () => {
+    const patterns = [...edge.matchAll(/path_regexp\s+(\S+)/g)].map(
+      ([, p]) => p,
+    );
+    expect(patterns).toEqual([bundle, bundle, bundle]);
+  });
+
+  it('keeps only an existing hashed bundle and revalidates everything else, deep SPA routes included', () => {
     // A route like /login or /conversas/<id> falls back to index.html: without no-cache the
     // browser keeps it by heuristic freshness and runs the old bundle against a new API.
     expect(edge).toMatch(
-      /@unhashed\s+not\s+path_regexp\s+-\[A-Z0-9\]\{8\}\\\.\(js\|css\|webp\)\$/,
+      /@hashed \{\s+path_regexp \S+\s+file\s+\}\s+header @hashed Cache-Control "public, max-age=31536000, immutable"/,
     );
-    expect(edge).toMatch(/header\s+@unhashed\s+Cache-Control\s+"no-cache"/);
-    expect(edge).not.toMatch(/@html\s+path\s/);
+    expect(edge).toMatch(
+      /@unhashed not \{\s+path_regexp \S+\s+file\s+\}\s+header @unhashed Cache-Control "no-cache"/,
+    );
+  });
+
+  it('answers a bundle from an older build with 404, not the shell', () => {
+    // try_files takes no matcher: bundles get a handle of their own, without the fallback.
+    expect(edge).toMatch(
+      /@bundle path_regexp \S+\s+handle @bundle \{\s+file_server\s+\}\s+handle \{\s+try_files \{path\} \/index\.html\s+file_server\s+\}/,
+    );
   });
 });
 
