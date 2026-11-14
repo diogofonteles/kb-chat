@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
   authConfigSchema,
-  meSchema,
+  meReplySchema,
   personListSchema,
   peopleLevelResultSchema,
   personSchema,
@@ -38,21 +38,23 @@ export class AuthApi {
   }
 
   me(): Observable<Me> {
-    return this.http.get(meUrl()).pipe(map((body) => meSchema.parse(body)));
+    return this.http
+      .get(meUrl())
+      .pipe(map((body) => meReplySchema.parse(body)));
   }
 
   /** Trades a one-time code for the session cookie (KBC-014). */
   verifyCode(identifier: string, code: string): Observable<Me> {
     return this.http
       .post('/api/v1/auth/code/verify', { identifier, code })
-      .pipe(map((body) => meSchema.parse(body)));
+      .pipe(map((body) => meReplySchema.parse(body)));
   }
 
   /** Trades Google's ID token for the session cookie. */
   signIn(credential: string): Observable<Me> {
     return this.http
       .post(googleLoginUrl(), { credential })
-      .pipe(map((body) => meSchema.parse(body)));
+      .pipe(map((body) => meReplySchema.parse(body)));
   }
 
   signOut(): Observable<void> {
