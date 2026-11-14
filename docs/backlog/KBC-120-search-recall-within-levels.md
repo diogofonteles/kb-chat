@@ -1,7 +1,7 @@
 ---
 id: KBC-120
 title: "Recall da busca dentro do nível: o QMD devolve no máximo 20 por sub-busca, então quem vê pouco de um acervo recebe páginas curtas"
-status: draft
+status: in-progress
 slice: levels-release-2
 outcome: um membro que vê 20 % de um acervo recebe na primeira página pelo menos 95 % dos 10 melhores resultados que existem para ele (90 % com 5 %), sem passar de 1,25 × o p95 de hoje
 depends_on: [KBC-111]
@@ -34,9 +34,16 @@ Como pessoa com um nível que vê só parte de um acervo, quero que a busca me t
 - **AC-3** (BR-1): Given `levels-leakage.integration.test.ts`, Then continua verde.
 
 ## Open questions
-- Q-1 (dono/arquitetura): qual das três opções.
+- ~~Q-1 (dono/arquitetura): qual das três opções.~~ Respondida em 2026-11-14: **opção 2**, com um patch nosso no QMD 2.8.3 aplicado na imagem da API (`deploy/qmd/candidates-per-subsearch.mjs`, ADR 0036, emenda KBC-120).
+- Q-2 (dono, 2026-11-14): o AC-2 não passa com a opção 2 (`work/KBC-120/recall.md`): a 20 % o p95 vai de 5,8 → 42 ms (exact), 96 → 131 ms (semantic) e 98 → 150 ms (all), contra 1,25 ×. O custo é do QMD por candidato (~0,08 ms), não do app (no índice em memória o AC-2 passa). Caminhos: aceitar o custo (NFR-2 revisto pelo dono), filtrar dentro do índice (opção 3) ou um orçamento menor que `base / fatia` (decisão de produto sobre totais e facetas).
 
 ## Definition of ready
 - [x] Story, escopo e resultado
 - [x] Medição de partida
-- [ ] Opção escolhida (Q-1)
+- [x] Opção escolhida (Q-1: opção 2, 2026-11-14)
+
+## Estado (2026-11-14)
+- AC-1: **passa** com o QMD patchado (recall@10 1,000 em exact e semantic, 0,955–0,985 em all, a 50 %, 20 % e 5 %).
+- AC-2: **falha** nos três modos (Q-2).
+- AC-3: `levels-leakage.integration.test.ts` verde nos gates.
+- BR-2: 60 de 60 primeiras páginas iguais às do QMD sem patch, a 100 %.
