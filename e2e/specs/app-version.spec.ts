@@ -118,7 +118,10 @@ test('AC-2: a question typed and not sent only gets "Nova versão disponível", 
   await comeBack(page);
 
   const shown = notice(page);
-  await expect(shown.text).toBeVisible();
+  // Work in progress holds the reload, so the notice asks to save it first (review R2-3).
+  await expect(shown.text).toHaveText(
+    'Nova versão disponível. Salve o que estiver fazendo antes de atualizar.',
+  );
   await expect(shown.update).toBeVisible();
   expect(deploy.loads).toBe(1);
   await expect(question).toHaveValue('o que diz o princípio do ritmo?');
@@ -183,6 +186,30 @@ test('AC-2: work in a dialog (Configurações) holds the reload too, not only th
   await expect(settings).toBeHidden();
   await expect(notice(page).text).toBeVisible();
   expect(deploy.loads).toBe(1);
+});
+
+test('AC-1: a dialog typed in and closed with Esc no longer holds the reload ("Novo acervo", review R2-1)', async ({
+  page,
+}) => {
+  const deploy = await playDeploys(page);
+  await page.goto('/');
+  await expect(page.getByLabel('Sua pergunta')).toBeVisible();
+  if ((page.viewportSize()?.width ?? 0) < 1024)
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('button', { name: '+ Novo acervo' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
+  await dialog.getByRole('textbox', { name: 'Nome' }).fill('Alquimia');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  const menu = page.getByRole('dialog', { name: 'Menu' });
+  if (await menu.isVisible()) {
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+  }
+
+  shipNewVersion(deploy);
+  await comeBack(page);
+  await expect.poll(() => deploy.loads).toBe(2);
 });
 
 test('the notice covers neither the top bar nor the question box, at every width', async ({

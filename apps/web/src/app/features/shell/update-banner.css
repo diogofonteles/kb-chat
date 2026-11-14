@@ -4,13 +4,12 @@
 
 /*
  * Fixed, so the page under it never moves while someone types; the question box is at the
- * bottom. Under the top bar, so it covers none of its text or controls: 5.5rem holds the
- * one-row top bar of wide screens, 8.5rem the two rows (Menu, title, view switch) the app
- * uses below 1024 px. Without a notice it is an empty, zero-size live region.
+ * bottom. Under the top bar (--topbar-height, the bar's own min-height), so it covers none
+ * of its text or controls. Without a notice it is an empty, zero-size live region.
  */
 .notice {
   position: fixed;
-  top: 5.5rem;
+  top: calc(var(--topbar-height) + var(--space-2));
   left: 50%;
   z-index: 60;
   transform: translateX(-50%);
@@ -71,12 +70,6 @@ button {
 button:focus-visible {
   outline: 3px solid var(--color-focus);
   outline-offset: 2px;
-}
-
-@media (max-width: 1023px) {
-  .notice {
-    top: 8.5rem;
-  }
 }
 
 /* On a phone: the whole width, text on the left, both buttons on the right. */

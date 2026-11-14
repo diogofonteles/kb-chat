@@ -107,6 +107,7 @@ describe('AppVersion (KBC-123)', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     // Back to jsdom's own getter on Document.prototype.
     Reflect.deleteProperty(document, 'visibilityState');
     document.body.replaceChildren();
@@ -434,7 +435,66 @@ describe('AppVersion (KBC-123)', () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
-  it('AC-6: with storage blocked, the guard holds in memory for this page', () => {
+  it('AC-2: the notice asks to save the work first when work holds the reload, and is plain when only the loop guard does (review R2-3)', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    sessionStorage.setItem(
+      RELOAD_MARK_KEY,
+      JSON.stringify({ version: 'v2', at: Date.now() }),
+    );
+    const { version, work, http } = setup();
+    comeBack();
+    serve(http, 'v2');
+    expect(version.notice()).toBe('plain');
+    work.hold('upload-1');
+    vi.setSystemTime(Date.now() + 61_000);
+    comeBack();
+    serve(http, 'v2');
+    expect(version.notice()).toBe('save-first');
+  });
+
+  it('AC-5: a failed route the server explains with the same version is forgotten (review R2-2)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const { goTo, reload, http } = setup();
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/midia/abc').catch(() => undefined);
+    serve(http, 'v1');
+    expect(goTo).not.toHaveBeenCalled();
+    vi.setSystemTime(Date.now() + 61_000);
+    comeBack();
+    serve(http, 'v2');
+    expect(goTo).not.toHaveBeenCalled();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC-5: a failed route whose check fails (offline) is forgotten (review R2-2)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { goTo, reload, http } = setup();
+    await TestBed.inject(Router)
+      .navigateByUrl('/midia/abc')
+      .catch(() => undefined);
+    http.expectOne(VERSION_URL).error(new ProgressEvent('error'));
+    vi.setSystemTime(Date.now() + 61_000);
+    comeBack();
+    serve(http, 'v2');
+    expect(goTo).not.toHaveBeenCalled();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC-5: a page reached after the failed route wins: "Atualizar" reloads where the person is (review R2-2)', async () => {
+    const { version, goTo, reload, work, http } = setup();
+    work.hold('audio');
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/midia/abc').catch(() => undefined);
+    serve(http, 'v2');
+    expect(version.updateAvailable()).toBe(true);
+    await router.navigateByUrl('/login');
+    version.update();
+    expect(goTo).not.toHaveBeenCalled();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC-6: with storage blocked, a reload that did not take only offers the notice next time', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const refuse = () => {
       throw new DOMException('blocked', 'SecurityError');

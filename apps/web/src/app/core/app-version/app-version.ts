@@ -1,6 +1,12 @@
 import { DOCUMENT } from '@angular/common';
 import { HttpBackend, HttpClient } from '@angular/common/http';
-import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import {
+  DestroyRef,
+  Injectable,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Meta } from '@angular/platform-browser';
 import { NavigationEnd, NavigationError, Router } from '@angular/router';
@@ -21,6 +27,9 @@ export const RELOAD_MARK_KEY = 'kb-chat.app-version-reload';
 
 const LOOP_WINDOW_MS = 5 * 60_000;
 const POLL_MS = 30 * 60_000;
+
+/** Which notice the banner shows (see AppVersion.notice). */
+export type UpdateNotice = 'save-first' | 'plain';
 
 /** What makes the app ask the server for its version. */
 export type CheckReason = 'visible' | 'interval' | 'contract' | 'chunk';
@@ -75,7 +84,7 @@ export class AppVersion {
   private readonly destroyRef = inject(DestroyRef);
   private readonly storage = sessionStorageOf(this.document.defaultView);
   private readonly work = inject(BusyWork);
-  private readonly available = signal(false);
+  private readonly shownNotice = signal<UpdateNotice | null>(null);
   private started = false;
   private checking = false;
   private lastCheckAt = Number.NEGATIVE_INFINITY;
@@ -83,12 +92,18 @@ export class AppVersion {
   private dismissed: string | null = null;
   /** The newer version the notice offers. */
   private pending: string | null = null;
-  /** The page a failed lazy route asked for: the reload goes there, not to the old page. */
+  /**
+   * The page a failed lazy route asked for: the reload goes there, not to the old page.
+   * Forgotten once the server has this same version, on a failed check and on any page the
+   * router reaches after it.
+   */
   private pendingUrl: string | null = null;
   /**
-   * This page already reloaded by itself once: if it is still here with another version,
-   * the next answer only offers the notice. The loop guard in memory, for this page's life,
-   * also when storage is blocked (AC-6).
+   * This page already asked for a reload by itself and is still here (the browser did not
+   * leave it): the next answer only offers the notice. It lives in memory, so it does not
+   * survive a reload; the guard across reloads is the sessionStorage mark, and with storage
+   * blocked that one is off (AC-6). No check runs at boot and coming back to the tab waits
+   * 60 s between checks, so even then the reloads are never back to back.
    */
   private autoReloaded = false;
   private updating = false;
@@ -96,8 +111,14 @@ export class AppVersion {
   /** This app's version; null in development, where the check is off. */
   readonly current: string | null =
     inject(Meta).getTag(`name="${APP_VERSION_META}"`)?.content || null;
-  /** A newer version is deployed and something here is in progress: the banner shows. */
-  readonly updateAvailable = this.available.asReadonly();
+  /**
+   * The notice of a newer version, or null: "save-first" when something here is in
+   * progress (KBC-123 review R2-3: the reload would lose it), "plain" when the page only
+   * held back to avoid a reload loop.
+   */
+  readonly notice = this.shownNotice.asReadonly();
+  /** A newer version is deployed and this page did not reload into it: the banner shows. */
+  readonly updateAvailable = computed(() => this.shownNotice() !== null);
 
   /** Starts listening to the triggers (once; nothing in development). */
   start(): void {
@@ -120,7 +141,10 @@ export class AppVersion {
         filter((event) => event instanceof NavigationEnd),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe(() => this.work.forgetEdits());
+      .subscribe(() => {
+        this.work.forgetEdits();
+        this.pendingUrl = null;
+      });
     this.destroyRef.onDestroy(
       listenToInternalErrors(() => this.check('contract')),
     );
@@ -130,10 +154,13 @@ export class AppVersion {
   check(reason: CheckReason, url?: string): void {
     const now = Date.now();
     if (!this.current) return;
-    // Kept even when a check is already in flight: that one's answer goes there too.
-    if (url) this.pendingUrl = url;
-    if (this.checking) return;
+    if (this.checking) {
+      // The check in flight answers for this failed route too.
+      if (url) this.pendingUrl = url;
+      return;
+    }
     if (now - this.lastCheckAt < MIN_GAP_MS[reason]) return;
+    if (url) this.pendingUrl = url;
     this.checking = true;
     this.lastCheckAt = now;
     this.http
@@ -144,8 +171,12 @@ export class AppVersion {
       )
       .subscribe({
         next: (served) => this.decide(served),
-        // Offline, or a server without the file: nothing changes; the next trigger asks again.
-        error: (err: unknown) => console.warn('version check failed', err),
+        // Offline, or a server without the file: nothing changes; the next trigger asks
+        // again, and a failed route was the network's, not a deploy's.
+        error: (err: unknown) => {
+          this.pendingUrl = null;
+          console.warn('version check failed', err);
+        },
       });
   }
 
@@ -159,23 +190,24 @@ export class AppVersion {
   /** "Agora não": the notice goes until another version is deployed (or the tab is free). */
   dismiss(): void {
     this.dismissed = this.pending;
-    this.available.set(false);
+    this.shownNotice.set(null);
   }
 
   private decide(served: string): void {
     if (served === this.current) {
-      // The deploy was rolled back: nothing newer to offer any more.
+      // Nothing newer (or the deploy was rolled back): no notice, and a failed route was
+      // not this app's being old.
       this.pending = null;
-      this.available.set(false);
+      this.pendingUrl = null;
+      this.shownNotice.set(null);
       return;
     }
-    if (
-      this.inProgress() ||
-      this.autoReloaded ||
-      this.reloadedRecentlyFor(served)
-    ) {
+    const busy = this.inProgress();
+    if (busy || this.autoReloaded || this.reloadedRecentlyFor(served)) {
       this.pending = served;
-      this.available.set(served !== this.dismissed);
+      this.shownNotice.set(
+        served === this.dismissed ? null : busy ? 'save-first' : 'plain',
+      );
       return;
     }
     this.markReload(served);
@@ -226,7 +258,7 @@ export class AppVersion {
         JSON.stringify({ version: served, at: Date.now() }),
       );
     } catch {
-      // Storage refused (private mode, full): without the mark the loop guard is off.
+      // Storage refused (private mode, full): only `autoReloaded` guards, for this page.
     }
   }
 

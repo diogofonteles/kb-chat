@@ -16,7 +16,7 @@ const SCOPE = 'form, dialog, [role="dialog"]';
 /** A field whose draft survives a reload by itself (the question box keeps its text, KBC-123). */
 export const DRAFT_KEPT_ATTRIBUTE = 'data-draft-kept';
 /** An open dialog holds work the person has not finished. */
-const OPEN_DIALOG = 'dialog[open], [role="dialog"]';
+const OPEN_DIALOG = 'dialog[open], [role="dialog"]:not([hidden])';
 
 /** What a field holds now; a select or a checkbox always holds a choice. */
 function hasContent(field: Element): boolean {
@@ -28,6 +28,12 @@ function hasContent(field: Element): boolean {
   if (field instanceof HTMLSelectElement) return true;
   return (field.textContent ?? '').trim() !== '';
 }
+
+/** An edited field that a reload would still lose. */
+const stillEdited = (field: Element): boolean =>
+  field.isConnected &&
+  hasContent(field) &&
+  field.closest('dialog:not([open]), [hidden]') === null;
 
 /**
  * What a reload would lose right now (KBC-123): text typed and not sent, an upload, audio
@@ -109,11 +115,17 @@ export class BusyWork {
     this.edited.clear();
   }
 
-  /** Busy by registration, by an edited field still on screen, or by an open dialog. */
+  /**
+   * Busy by registration, by an edited field that still matters, or by an open dialog. A
+   * field stops mattering once it left the page, holds nothing, or its dialog was closed
+   * or hidden (a closed <dialog> stays in the DOM: "Novo acervo" cancelled with Esc).
+   */
   inProgress(): boolean {
+    for (const field of this.edited)
+      if (!stillEdited(field)) this.edited.delete(field);
     return (
       this.busy() ||
-      [...this.edited].some((field) => field.isConnected) ||
+      this.edited.size > 0 ||
       this.document.querySelector(OPEN_DIALOG) !== null
     );
   }

@@ -1,11 +1,17 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+} from '@angular/core';
 import { AppVersion } from '@core/app-version/app-version.js';
 
 /**
  * "Nova versão disponível." (KBC-123 AC-2): a newer app is deployed while something here is
  * in progress, so the page waits for "Atualizar". It floats under the top bar, over none
  * of its controls nor the question box at the bottom, and never moves the page under the
- * person's typing. "Agora não" (×) closes it for that version.
+ * person's typing. With work in progress it asks to save it first: only the question box
+ * keeps its draft across the reload. "Agora não" (×) closes it for that version.
  */
 @Component({
   selector: 'app-update-banner',
@@ -18,7 +24,7 @@ import { AppVersion } from '@core/app-version/app-version.js';
     >
       <div class="message" role="status">
         @if (shown()) {
-          <p i18n="@@update.available">Nova versão disponível.</p>
+          <p>{{ message() }}</p>
         }
       </div>
       @if (shown()) {
@@ -48,6 +54,12 @@ import { AppVersion } from '@core/app-version/app-version.js';
 export class UpdateBanner {
   protected readonly version = inject(AppVersion);
   protected readonly shown = this.version.updateAvailable;
+  /** With work in progress the reload would lose it: the notice says so (review R2-3). */
+  protected readonly message = computed(() =>
+    this.version.notice() === 'save-first'
+      ? $localize`:@@update.availableSaveFirst:Nova versão disponível. Salve o que estiver fazendo antes de atualizar.`
+      : $localize`:@@update.available:Nova versão disponível.`,
+  );
   /** Where the focus came from into the notice: it goes back there when the notice closes. */
   private focusedBefore: HTMLElement | null = null;
 

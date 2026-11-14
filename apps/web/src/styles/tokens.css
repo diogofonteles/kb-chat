@@ -21,6 +21,15 @@
   --sidebar: 16rem;
   --target: 2.75rem;
   --ease: cubic-bezier(0.2, 0, 0, 1);
+  /* The chat layout's top bar (its min-height): one row on wide screens, two below 1024 px
+     (Menu and title, then the view switch). What floats under it starts from here (KBC-123). */
+  --topbar-height: 4.8125rem;
+}
+
+@media (max-width: 1023px) {
+  :root {
+    --topbar-height: 8rem;
+  }
 }
 
 :root,

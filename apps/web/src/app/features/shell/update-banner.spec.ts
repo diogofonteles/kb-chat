@@ -1,11 +1,18 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { fireEvent, render, screen } from '@testing-library/angular';
-import { AppVersion } from '@core/app-version/app-version.js';
+import {
+  AppVersion,
+  type UpdateNotice,
+} from '@core/app-version/app-version.js';
 import { UpdateBanner } from './update-banner.js';
 
 describe('UpdateBanner (KBC-123 AC-2)', () => {
-  async function renderBanner(available: boolean) {
+  async function renderBanner(
+    available: boolean,
+    notice: UpdateNotice | null = available ? 'plain' : null,
+  ) {
     const version = {
+      notice: signal(notice),
       updateAvailable: signal(available),
       update: vi.fn(),
       dismiss: vi.fn(),
@@ -19,9 +26,17 @@ describe('UpdateBanner (KBC-123 AC-2)', () => {
     return { view, version };
   }
 
+  it('asks to save the work in progress first when that is why the page did not reload (review R2-3)', async () => {
+    await renderBanner(true, 'save-first');
+    expect(screen.getByRole('status').textContent?.trim()).toBe(
+      'Nova versão disponível. Salve o que estiver fazendo antes de atualizar.',
+    );
+  });
+
   it('offers "Atualizar" in a status region, which reloads the app', async () => {
     const { version } = await renderBanner(true);
-    expect(screen.getByRole('status').textContent).toContain(
+    // Held back only against a reload loop: nothing to save.
+    expect(screen.getByRole('status').textContent?.trim()).toBe(
       'Nova versão disponível.',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Atualizar' }));

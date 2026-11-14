@@ -19,7 +19,11 @@ import {
   type SearchMode,
 } from '@kb-chat/contracts';
 import { BusyWork, DRAFT_KEPT_ATTRIBUTE } from '@core/app-version/busy-work.js';
-import { keepDraft, takeKeptDraft } from '@core/app-version/kept-draft.js';
+import {
+  DRAFT_OWNER,
+  keepDraft,
+  takeKeptDraft,
+} from '@core/app-version/kept-draft.js';
 import { MODE_OPTIONS } from '@core/i18n/facet-labels.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
 
@@ -39,6 +43,7 @@ export const COMPOSER_DRAFT_KEY = 'kb-chat.composer-draft';
 })
 export class Composer {
   private readonly view = inject(DOCUMENT).defaultView;
+  private readonly draftOwner = inject(DRAFT_OWNER);
 
   readonly disabled = input(false);
   readonly research = input(false);
@@ -52,7 +57,7 @@ export class Composer {
   protected readonly maxLength = computed(() => (this.research() ? 2000 : 500));
   /** A question typed before the app reloaded into a new version comes back (KBC-123). */
   protected readonly text = signal(
-    takeKeptDraft(this.view, COMPOSER_DRAFT_KEY),
+    takeKeptDraft(this.view, COMPOSER_DRAFT_KEY, this.draftOwner()),
   );
   /** The question box keeps its own draft: the app-wide edit rule leaves it out. */
   protected readonly draftKept = DRAFT_KEPT_ATTRIBUTE;
@@ -90,7 +95,10 @@ export class Composer {
     const work = inject(BusyWork);
     work.holdWhile(computed(() => this.text().trim().length > 0));
     work.keepBeforeReload(() =>
-      keepDraft(this.view, COMPOSER_DRAFT_KEY, this.text()),
+      keepDraft(this.view, COMPOSER_DRAFT_KEY, {
+        owner: this.draftOwner(),
+        text: this.text(),
+      }),
     );
   }
 

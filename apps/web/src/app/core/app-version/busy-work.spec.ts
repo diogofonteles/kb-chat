@@ -97,6 +97,29 @@ describe('BusyWork (KBC-123)', () => {
       expect(work.inProgress()).toBe(false);
     });
 
+    it('lets go of a dialog closed with Esc that stays on the page ("Novo acervo", review R2-1)', () => {
+      const work = TestBed.inject(BusyWork);
+      const name = formWith(document.createElement('input'), 'dialog');
+      const dialog = name.parentElement as HTMLDialogElement;
+      dialog.showModal();
+      type(name, 'Alquimia');
+      expect(work.inProgress()).toBe(true);
+      dialog.close();
+      expect(dialog.isConnected).toBe(true);
+      expect(work.inProgress()).toBe(false);
+    });
+
+    it('lets go of a field emptied without an input event, or inside a hidden part', () => {
+      const work = TestBed.inject(BusyWork);
+      const field = formWith(document.createElement('textarea'));
+      type(field, 'nota');
+      field.value = '';
+      expect(work.inProgress()).toBe(false);
+      type(field, 'nota');
+      field.form?.setAttribute('hidden', '');
+      expect(work.inProgress()).toBe(false);
+    });
+
     it('counts typing in an editable text', () => {
       const work = TestBed.inject(BusyWork);
       const text = formWith(document.createElement('div'));

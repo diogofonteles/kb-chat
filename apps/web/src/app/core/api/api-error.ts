@@ -1,5 +1,4 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { untracked } from '@angular/core';
 import { apiErrorSchema, type ApiErrorCode } from '@kb-chat/contracts';
 
 /** Client-side failure kinds next to the API's own codes. */
@@ -36,7 +35,7 @@ export function listenToInternalErrors(
  * reactive read must not start a request or write a signal.
  */
 function internal(err: unknown): 'INTERNAL' {
-  untracked(() => queueMicrotask(() => internalErrorListener?.(err)));
+  queueMicrotask(() => internalErrorListener?.(err));
   return 'INTERNAL';
 }
 
