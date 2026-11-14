@@ -20,6 +20,20 @@ const UNITS: Record<string, number> = {
   GB: 1000 ** 3,
 };
 
+describe('the web edge never lets a browser keep an old app (KBC-122)', () => {
+  const edge = caddyfile.slice(caddyfile.indexOf('root * /srv/www'));
+
+  it('sends no-cache on every response that is not a hashed bundle, deep SPA routes included', () => {
+    // A route like /login or /conversas/<id> falls back to index.html: without no-cache the
+    // browser keeps it by heuristic freshness and runs the old bundle against a new API.
+    expect(edge).toMatch(
+      /@unhashed\s+not\s+path_regexp\s+-\[A-Z0-9\]\{8\}\\\.\(js\|css\|webp\)\$/,
+    );
+    expect(edge).toMatch(/header\s+@unhashed\s+Cache-Control\s+"no-cache"/);
+    expect(edge).not.toMatch(/@html\s+path\s/);
+  });
+});
+
 describe('deploy limits match the contract', () => {
   it('lets the proxy pass every upload the API accepts (KBC-034 FR-2)', () => {
     const block = caddyfile.slice(caddyfile.indexOf('handle @mediaUpload'));

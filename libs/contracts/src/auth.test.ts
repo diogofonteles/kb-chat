@@ -3,12 +3,32 @@ import {
   actAsRequestSchema,
   DEFAULT_INVITE_FEATURES,
   inviteRequestSchema,
+  meReplySchema,
   meSchema,
   personSchema,
   personUpdateSchema,
 } from './auth.js';
 
 describe('auth contracts', () => {
+  it('lets the app read a /me with a feature it does not know yet, dropping it (KBC-122)', () => {
+    // An app opened before a release meets a newer API: refusing the reply locked people out.
+    const me = {
+      email: 'a@example.com',
+      name: 'A',
+      picture: null,
+      role: 'master',
+      features: ['search', 'a-feature-from-a-newer-release', 'media'],
+      topics: [],
+      isOwner: true,
+      media: true,
+    };
+    expect(meReplySchema.parse(me).features).toEqual(['search', 'media']);
+    expect(meSchema.safeParse(me).success).toBe(false);
+    expect(meReplySchema.safeParse({ ...me, features: 'search' }).success).toBe(
+      false,
+    );
+  });
+
   it('defaults a new invite to search only (BR-3)', () => {
     expect(DEFAULT_INVITE_FEATURES).toEqual(['search']);
   });

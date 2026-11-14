@@ -116,6 +116,9 @@ check_health
 check_shell
 check_public_page /privacidade
 check_public_page /tutorial
+# Every other route falls back to the shell and is never cached either (KBC-122).
+check_public_page /login
+check_public_page /conversas/smoke-check-route
 check_mcp_hidden
 check_auth
 
