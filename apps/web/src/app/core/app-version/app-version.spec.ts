@@ -1,5 +1,6 @@
 import {
   Component,
+  computed,
   provideZonelessChangeDetection,
   signal,
 } from '@angular/core';
@@ -106,6 +107,9 @@ describe('AppVersion (KBC-123)', () => {
   });
 
   afterEach(() => {
+    // Back to jsdom's own getter on Document.prototype.
+    Reflect.deleteProperty(document, 'visibilityState');
+    document.body.replaceChildren();
     TestBed.inject(HttpTestingController).verify();
     vi.useRealTimers();
     document.head
@@ -213,7 +217,7 @@ describe('AppVersion (KBC-123)', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it('AC-4: a reply outside the contract with another version deployed reloads', () => {
+  it('AC-4: a reply outside the contract with another version deployed reloads', async () => {
     const { reload, http } = setup();
     let code = '';
     TestBed.inject(AuthApi)
@@ -222,17 +226,29 @@ describe('AppVersion (KBC-123)', () => {
     // The new API's /me no longer has the shape this old app reads.
     http.expectOne('/api/v1/me').flush({ unexpected: true });
     expect(code).toBe('INTERNAL');
+    await Promise.resolve();
     serve(http, 'v2');
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it('AC-4: with the same version the error stays as always', () => {
+  it('AC-4: a contract error read inside computed() starts no request there, only after it', async () => {
+    const { reload, http } = setup();
+    const shown = computed(() => toUiErrorCode(new Error('outside')));
+    expect(shown()).toBe('INTERNAL');
+    http.expectNone(VERSION_URL);
+    await Promise.resolve();
+    serve(http, 'v2');
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC-4: with the same version the error stays as always', async () => {
     const { reload, version, http } = setup();
     let code = '';
     TestBed.inject(AuthApi)
       .me()
       .subscribe({ error: (err: unknown) => (code = toUiErrorCode(err)) });
     http.expectOne('/api/v1/me').flush({ unexpected: true });
+    await Promise.resolve();
     serve(http, 'v1');
     expect(reload).not.toHaveBeenCalled();
     expect(version.updateAvailable()).toBe(false);
@@ -242,7 +258,7 @@ describe('AppVersion (KBC-123)', () => {
     );
   });
 
-  it('AC-4: an error with its own code from the API does not ask for the version', () => {
+  it('AC-4: an error with its own code from the API does not ask for the version', async () => {
     const { http } = setup();
     TestBed.inject(AuthApi)
       .me()
@@ -253,6 +269,7 @@ describe('AppVersion (KBC-123)', () => {
         { error: { code: 'FORBIDDEN', message: 'x' } },
         { status: 403, statusText: 'Forbidden' },
       );
+    await Promise.resolve();
     http.expectNone(VERSION_URL);
   });
 
@@ -317,13 +334,155 @@ describe('AppVersion (KBC-123)', () => {
     expect(warn).toHaveBeenCalled();
   });
 
-  it('does nothing in development, where the build has no version meta', () => {
+  it('AC-2: a form with edits holds the reload, anywhere in the app', () => {
+    const { version, reload, http } = setup();
+    const form = document.createElement('form');
+    const note = document.createElement('textarea');
+    form.append(note);
+    document.body.append(form);
+    note.value = 'nota do marcador';
+    note.dispatchEvent(new Event('input', { bubbles: true }));
+    comeBack();
+    serve(http, 'v2');
+    expect(reload).not.toHaveBeenCalled();
+    expect(version.updateAvailable()).toBe(true);
+  });
+
+  it('AC-2: an open dialog holds the reload', () => {
+    const { version, reload, http } = setup();
+    const dialog = document.createElement('dialog');
+    dialog.setAttribute('open', '');
+    document.body.append(dialog);
+    comeBack();
+    serve(http, 'v2');
+    expect(reload).not.toHaveBeenCalled();
+    expect(version.updateAvailable()).toBe(true);
+  });
+
+  it('AC-2: edits are forgotten when the page changes', async () => {
+    const { reload, http } = setup();
+    const form = document.createElement('form');
+    const field = document.createElement('input');
+    form.append(field);
+    document.body.append(form);
+    field.value = 'rascunho';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await TestBed.inject(Router).navigateByUrl('/login');
+    comeBack();
+    serve(http, 'v2');
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC-2: kept drafts are written down before any reload, and "Atualizar" reloads once', () => {
+    const { version, reload, work, http } = setup();
+    const save = vi.fn();
+    TestBed.runInInjectionContext(() => work.keepBeforeReload(save));
+    work.hold('upload-1');
+    comeBack();
+    serve(http, 'v2');
+    expect(save).not.toHaveBeenCalled();
+    version.update();
+    version.update();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC-2: the automatic reload also writes the kept drafts down', () => {
+    const { reload, work, http } = setup();
+    const save = vi.fn();
+    TestBed.runInInjectionContext(() => work.keepBeforeReload(save));
+    comeBack();
+    serve(http, 'v2');
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the notice when the server is back on this version (a rolled-back deploy)', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const { version, work, http } = setup();
+    work.hold('upload-1');
+    comeBack();
+    serve(http, 'v2');
+    expect(version.updateAvailable()).toBe(true);
+    vi.setSystemTime(Date.now() + 61_000);
+    comeBack();
+    serve(http, 'v1');
+    expect(version.updateAvailable()).toBe(false);
+  });
+
+  it('AC-5: a chunk failure during a check in flight still loads the asked page', async () => {
+    const { goTo, reload, http } = setup();
+    comeBack();
+    await TestBed.inject(Router)
+      .navigateByUrl('/midia/abc')
+      .catch(() => undefined);
+    serve(http, 'v2');
+    expect(goTo).toHaveBeenCalledWith('/midia/abc');
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('AC-5: with something in progress, "Atualizar" goes to the page a failed route asked for', async () => {
+    const { version, goTo, reload, work, http } = setup();
+    work.hold('audio');
+    await TestBed.inject(Router)
+      .navigateByUrl('/midia/abc')
+      .catch(() => undefined);
+    serve(http, 'v2');
+    expect(goTo).not.toHaveBeenCalled();
+    version.update();
+    expect(goTo).toHaveBeenCalledWith('/midia/abc');
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('AC-6: with storage blocked, the guard holds in memory for this page', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const refuse = () => {
+      throw new DOMException('blocked', 'SecurityError');
+    };
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(refuse);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(refuse);
+    const { version, reload, http } = setup();
+    comeBack();
+    serve(http, 'v2');
+    expect(reload).toHaveBeenCalledTimes(1);
+    // The reload did not take (the page is still here): the next answer only offers it.
+    vi.setSystemTime(Date.now() + 61_000);
+    comeBack();
+    serve(http, 'v2');
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(version.updateAvailable()).toBe(true);
+  });
+
+  for (const [what, answer] of [
+    [
+      'HTML instead of JSON',
+      { body: '<!doctype html><html></html>', ok: true },
+    ],
+    ['a network error', { body: null, ok: false }],
+    ['JSON without a version', { body: { build: 'x' }, ok: true }],
+  ] as const)
+    it(`keeps the page when the version file is ${what}`, () => {
+      const warn = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      const { reload, version, http } = setup();
+      comeBack();
+      const request = http.expectOne(VERSION_URL);
+      if (answer.ok) request.flush(answer.body);
+      else request.error(new ProgressEvent('error'));
+      expect(reload).not.toHaveBeenCalled();
+      expect(version.updateAvailable()).toBe(false);
+      expect(warn).toHaveBeenCalled();
+    });
+
+  it('does nothing in development, where the build has no version meta', async () => {
     vi.useFakeTimers();
     const { version, http } = setup({ meta: null });
     expect(version.current).toBeNull();
     comeBack();
     vi.advanceTimersByTime(30 * 60_000);
     toUiErrorCode(new Error('outside the contract'));
+    await Promise.resolve();
     version.check('contract');
     http.expectNone(VERSION_URL);
   });

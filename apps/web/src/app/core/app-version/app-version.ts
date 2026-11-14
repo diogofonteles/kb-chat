@@ -3,7 +3,7 @@ import { HttpBackend, HttpClient } from '@angular/common/http';
 import { DestroyRef, Injectable, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Meta } from '@angular/platform-browser';
-import { NavigationError, Router } from '@angular/router';
+import { NavigationEnd, NavigationError, Router } from '@angular/router';
 import { listenToInternalErrors } from '@core/api/api-error.js';
 import { RELOAD_PAGE, SessionStore } from '@core/auth/session-store.js';
 import { GO_TO_URL } from '@core/routing/go-to-url.js';
@@ -35,6 +35,7 @@ const MIN_GAP_MS: Readonly<Record<CheckReason, number>> = {
 
 const versionFileSchema = z.object({ version: z.string().min(1) });
 const reloadMarkSchema = z.object({ version: z.string(), at: z.number() });
+type ReloadMark = z.infer<typeof reloadMarkSchema>;
 
 /** A lazy route's chunk that is gone (a deploy removed it), as each browser words it. */
 const CHUNK_FAILURE =
@@ -82,6 +83,15 @@ export class AppVersion {
   private dismissed: string | null = null;
   /** The newer version the notice offers. */
   private pending: string | null = null;
+  /** The page a failed lazy route asked for: the reload goes there, not to the old page. */
+  private pendingUrl: string | null = null;
+  /**
+   * This page already reloaded by itself once: if it is still here with another version,
+   * the next answer only offers the notice. The loop guard in memory, for this page's life,
+   * also when storage is blocked (AC-6).
+   */
+  private autoReloaded = false;
+  private updating = false;
 
   /** This app's version; null in development, where the check is off. */
   readonly current: string | null =
@@ -103,6 +113,14 @@ export class AppVersion {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.check('interval'));
     this.listenToChunkFailures();
+    this.work.watchEdits(this.destroyRef);
+    // Edits belong to the page they were made on (KBC-123 review: busy = any edited field).
+    this.router.events
+      .pipe(
+        filter((event) => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => this.work.forgetEdits());
     this.destroyRef.onDestroy(
       listenToInternalErrors(() => this.check('contract')),
     );
@@ -111,7 +129,10 @@ export class AppVersion {
   /** Asks the server which version it has, and acts on the answer. */
   check(reason: CheckReason, url?: string): void {
     const now = Date.now();
-    if (!this.current || this.checking) return;
+    if (!this.current) return;
+    // Kept even when a check is already in flight: that one's answer goes there too.
+    if (url) this.pendingUrl = url;
+    if (this.checking) return;
     if (now - this.lastCheckAt < MIN_GAP_MS[reason]) return;
     this.checking = true;
     this.lastCheckAt = now;
@@ -122,15 +143,17 @@ export class AppVersion {
         finalize(() => (this.checking = false)),
       )
       .subscribe({
-        next: (served) => this.decide(served, url),
+        next: (served) => this.decide(served),
         // Offline, or a server without the file: nothing changes; the next trigger asks again.
         error: (err: unknown) => console.warn('version check failed', err),
       });
   }
 
-  /** "Atualizar": the person chose to reload now. */
+  /** "Atualizar": the person chose to reload now (a second press does nothing more). */
   update(): void {
-    this.reloadPage();
+    if (this.updating) return;
+    this.updating = true;
+    this.reload();
   }
 
   /** "Agora não": the notice goes until another version is deployed (or the tab is free). */
@@ -139,15 +162,31 @@ export class AppVersion {
     this.available.set(false);
   }
 
-  private decide(served: string, url?: string): void {
-    if (served === this.current) return;
-    if (this.inProgress() || this.reloadedRecentlyFor(served)) {
+  private decide(served: string): void {
+    if (served === this.current) {
+      // The deploy was rolled back: nothing newer to offer any more.
+      this.pending = null;
+      this.available.set(false);
+      return;
+    }
+    if (
+      this.inProgress() ||
+      this.autoReloaded ||
+      this.reloadedRecentlyFor(served)
+    ) {
       this.pending = served;
       this.available.set(served !== this.dismissed);
       return;
     }
     this.markReload(served);
-    if (url) this.goToUrl(url);
+    this.autoReloaded = true;
+    this.reload();
+  }
+
+  /** Saves the drafts that can be kept, then loads the new app on the page asked for. */
+  private reload(): void {
+    this.work.saveDrafts();
+    if (this.pendingUrl) this.goToUrl(this.pendingUrl);
     else this.reloadPage();
   }
 
@@ -156,22 +195,27 @@ export class AppVersion {
     const inApp =
       this.session.state().kind === 'signed-in' &&
       !isPublicUrl(this.router.url);
-    return inApp && this.work.busy();
+    return inApp && this.work.inProgress();
   }
 
   /** This tab already reloaded for `served` a moment ago and still runs another version. */
   private reloadedRecentlyFor(served: string): boolean {
+    const mark = this.storedMark();
+    return (
+      mark !== null &&
+      mark.version === served &&
+      Date.now() - mark.at < LOOP_WINDOW_MS
+    );
+  }
+
+  private storedMark(): ReloadMark | null {
     try {
       const mark = reloadMarkSchema.safeParse(
         JSON.parse(this.storage?.getItem(RELOAD_MARK_KEY) ?? 'null'),
       );
-      return (
-        mark.success &&
-        mark.data.version === served &&
-        Date.now() - mark.data.at < LOOP_WINDOW_MS
-      );
+      return mark.success ? mark.data : null;
     } catch {
-      return false;
+      return null;
     }
   }
 

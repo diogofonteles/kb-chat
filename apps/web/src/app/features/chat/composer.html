@@ -1,4 +1,8 @@
-<form class="composer" (submit)="$event.preventDefault(); send()">
+<form
+  class="composer"
+  [attr.data-draft-kept]="''"
+  (submit)="$event.preventDefault(); send()"
+>
   <label class="visually-hidden" for="question" i18n="@@composer.label"
     >Sua pergunta</label
   >

@@ -23,6 +23,7 @@ import { PrivacyPage } from '@features/privacy/privacy-page.js';
 import { SettingsHost } from '@features/settings/settings-host.js';
 import { TutorialPage } from '@features/tutorial/tutorial-page.js';
 import { ActingBanner } from '@features/acting/acting-banner.js';
+import { ChunkFailed } from './chunk-failed.js';
 import { UpdateBanner } from './update-banner.js';
 
 /**
@@ -42,18 +43,23 @@ import { UpdateBanner } from './update-banner.js';
     TutorialPage,
     ActingBanner,
     UpdateBanner,
+    ChunkFailed,
   ],
   template: `
     <app-update-banner />
     @if (publicPage() === 'privacy') {
       @defer (on immediate) {
         <app-privacy-page />
+      } @error {
+        <app-chunk-failed />
       } @placeholder {
         <p class="boot" role="status" i18n="@@app.loading">Carregando…</p>
       }
     } @else if (publicPage() === 'tutorial') {
       @defer (on immediate) {
         <app-tutorial-page />
+      } @error {
+        <app-chunk-failed />
       } @placeholder {
         <p class="boot" role="status" i18n="@@app.loading">Carregando…</p>
       }
@@ -62,6 +68,8 @@ import { UpdateBanner } from './update-banner.js';
       <router-outlet />
       @defer (on immediate) {
         <app-settings-host />
+      } @error {
+        <app-chunk-failed quiet />
       }
     } @else if (deciding()) {
       <p class="boot" role="status" i18n="@@app.loading">Carregando…</p>

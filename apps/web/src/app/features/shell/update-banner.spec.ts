@@ -32,7 +32,8 @@ describe('UpdateBanner (KBC-123 AC-2)', () => {
 
   it('shows nothing while the app is up to date, and says it once it is not', async () => {
     const { view, version } = await renderBanner(false);
-    expect(screen.queryByRole('status')).toBeNull();
+    // The live region is there before the text, so the text is announced when it comes.
+    expect(screen.getByRole('status').textContent?.trim()).toBe('');
     expect(screen.queryByRole('button')).toBeNull();
     version.updateAvailable.set(true);
     await view.fixture.whenStable();

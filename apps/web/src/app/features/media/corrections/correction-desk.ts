@@ -25,6 +25,7 @@ import {
 } from '@kb-chat/contracts';
 import { formatClock, type TimedSpan } from '@kb-chat/player-core';
 import { errorDetailsOf, toUiErrorCode } from '@core/api/api-error.js';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { CorrectionsApi } from '@core/media/corrections-api.js';
 import { TrackAudition } from '../tracks/track-audition.js';
 import { TrackTextSource } from '../tracks/track-text-source.js';
@@ -222,6 +223,8 @@ export class CorrectionDesk {
   });
 
   constructor() {
+    // A correction typed and not saved holds a reload into a new version (KBC-123 AC-2).
+    inject(BusyWork).holdWhile(this.dirty, this.destroyRef);
     this.destroyRef.onDestroy(() => this.clearNotice());
     this.followHistory();
   }

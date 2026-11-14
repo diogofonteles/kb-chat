@@ -7,7 +7,7 @@ import {
 } from './api-error.js';
 
 describe('toUiErrorCode', () => {
-  it('tells its listener of a failure read as INTERNAL, and only of those (KBC-123 AC-4)', () => {
+  it('tells its listener of a failure read as INTERNAL, only of those, and after the caller (KBC-123 AC-4)', async () => {
     const heard = vi.fn();
     const stop = listenToInternalErrors(heard);
     const outside = new Error('reply outside the contract');
@@ -20,6 +20,9 @@ describe('toUiErrorCode', () => {
         error: { error: { code: 'FORBIDDEN', message: 'x' } },
       }),
     );
+    // Never inside the caller (a computed() may be reading the code).
+    expect(heard).not.toHaveBeenCalled();
+    await Promise.resolve();
     expect(heard).toHaveBeenCalledTimes(2);
     expect(heard).toHaveBeenCalledWith(outside);
     // A stale stop never removes a newer listener.
@@ -27,9 +30,11 @@ describe('toUiErrorCode', () => {
     listenToInternalErrors(newer);
     stop();
     toUiErrorCode(new Error('x'));
+    await Promise.resolve();
     expect(newer).toHaveBeenCalledTimes(1);
     listenToInternalErrors(heard)();
     toUiErrorCode(new Error('y'));
+    await Promise.resolve();
     expect(heard).toHaveBeenCalledTimes(2);
   });
 
