@@ -42,4 +42,18 @@ describe('UpdateBanner (KBC-123 AC-2)', () => {
     );
     expect(screen.getByRole('button', { name: 'Atualizar' })).toBeTruthy();
   });
+
+  it('gives the focus back to where it came from when "Agora não" closes the notice', async () => {
+    const { version } = await renderBanner(true);
+    const before = document.createElement('button');
+    before.textContent = 'antes';
+    document.body.append(before);
+    before.focus();
+    const dismiss = screen.getByRole('button', { name: 'Agora não' });
+    dismiss.focus();
+    fireEvent.click(dismiss);
+    expect(version.dismiss).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(before);
+    before.remove();
+  });
 });

@@ -133,8 +133,12 @@ test('AC-2: a question typed and not sent only gets "Nova versão disponível", 
   await shot(page, testInfo, 'kbc-123-update-banner');
 
   // "Agora não" closes it, and the top bar stays reachable all along.
-  await shown.dismiss.click();
+  // By keyboard: the focus goes back to the question box, never to nothing (PD-01).
+  await question.focus();
+  await shown.dismiss.focus();
+  await page.keyboard.press('Enter');
   await expect(shown.text).toHaveCount(0);
+  await expect(question).toBeFocused();
   // A trial click fails while anything covers the control.
   await page
     .locator('.topbar')

@@ -11,7 +11,11 @@ import { AppVersion } from '@core/app-version/app-version.js';
   selector: 'app-update-banner',
   template: `
     <!-- The live region is always there, empty, so the text put in it is announced. -->
-    <div class="notice" [class.shown]="shown()">
+    <div
+      class="notice"
+      [class.shown]="shown()"
+      (focusin)="rememberFocusFrom($event)"
+    >
       <div class="message" role="status">
         @if (shown()) {
           <p i18n="@@update.available">Nova versão disponível.</p>
@@ -29,7 +33,7 @@ import { AppVersion } from '@core/app-version/app-version.js';
         <button
           type="button"
           class="dismiss"
-          (click)="version.dismiss()"
+          (click)="dismiss()"
           aria-label="Agora não"
           i18n-aria-label="@@update.dismiss"
         >
@@ -44,4 +48,24 @@ import { AppVersion } from '@core/app-version/app-version.js';
 export class UpdateBanner {
   protected readonly version = inject(AppVersion);
   protected readonly shown = this.version.updateAvailable;
+  /** Where the focus came from into the notice: it goes back there when the notice closes. */
+  private focusedBefore: HTMLElement | null = null;
+
+  protected rememberFocusFrom(event: FocusEvent): void {
+    const from = event.relatedTarget;
+    const notice = event.currentTarget;
+    if (
+      from instanceof HTMLElement &&
+      notice instanceof HTMLElement &&
+      !notice.contains(from)
+    )
+      this.focusedBefore = from;
+  }
+
+  /** "Agora não": the closed notice never leaves the focus on nothing (PD-01). */
+  protected dismiss(): void {
+    this.version.dismiss();
+    if (this.focusedBefore?.isConnected) this.focusedBefore.focus();
+    this.focusedBefore = null;
+  }
 }
