@@ -92,6 +92,9 @@ export class QmdMcpAdapter implements SearchIndexPort {
           searches: toTypedSearches(query.mode, query.q),
           collections: [query.collection],
           limit: query.limit,
+          // QMD patched by deploy/qmd/candidates-per-subsearch.mjs looks max(20, candidateLimit)
+          // deep per sub-search (KBC-120); a stock one keeps its 20 and only fuses more.
+          ...(query.deep ? { candidateLimit: query.limit } : {}),
           rerank: false,
         },
       });

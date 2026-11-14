@@ -111,6 +111,31 @@ describe('QmdMcpAdapter', () => {
     expect(types).toEqual(['lex', 'vec']);
   });
 
+  it('asks each sub-search as deep as the limit only for a deep query (KBC-120)', async () => {
+    const logFile = join(
+      await mkdtemp(join(tmpdir(), 'kbchat-qmd-')),
+      'queries.jsonl',
+    );
+    adapter = new QmdMcpAdapter({
+      command: process.execPath,
+      args: [fakeQmd, logFile],
+    });
+    await adapter.start();
+    await adapter.search({ ...query, limit: 300, deep: true });
+    await adapter.search({ ...query, limit: 60 });
+    const [deep, plain] = (await readFile(logFile, 'utf8'))
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    expect(deep).toMatchObject({
+      limit: 300,
+      candidateLimit: 300,
+      rerank: false,
+    });
+    expect(plain).toMatchObject({ limit: 60, rerank: false });
+    expect(plain).not.toHaveProperty('candidateLimit');
+  });
+
   it('does not keep a process alive when closed during a reconnect', async () => {
     adapter = new QmdMcpAdapter({ command: process.execPath, args: [fakeQmd] });
     const starting = adapter.start();

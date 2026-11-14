@@ -5,6 +5,12 @@ export interface IndexQuery {
   readonly q: string;
   readonly mode: SearchMode;
   readonly limit: number;
+  /**
+   * Rank within the whole `limit` (KBC-120): each sub-search of a fused query looks `limit`
+   * deep instead of the index's default depth (QMD: 20). Set for a viewer who sees part of a
+   * collection; absent, the ranking is the index's own, as before levels.
+   */
+  readonly deep?: boolean;
 }
 
 /** A hit as the index reports it; `id` is the topic-relative markdown path. */

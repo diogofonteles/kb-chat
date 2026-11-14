@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { IndexQuery, SearchIndexPort } from '../../ports/search-index.js';
 import type { TopicFolder, VaultReaderPort } from '../../ports/vault-reader.js';
-import { scaledView } from '../access-levels/index.js';
+import {
+  OPEN_VIEW,
+  scaledView,
+  type LevelView,
+} from '../access-levels/index.js';
 import { CatalogRegistry } from '../catalog/index.js';
 import { SearchService } from './search-service.js';
 
@@ -33,9 +37,11 @@ function world(count: number, hidden: (n: number) => boolean) {
     readDocument: async (_topic, id) => `---\ntitle: ${id}\n---\n\nlua\n`,
   };
   const limits: number[] = [];
+  const deep: (boolean | undefined)[] = [];
   const index: SearchIndexPort = {
     search: async (query: IndexQuery) => {
       limits.push(query.limit);
+      deep.push(query.deep);
       return ids
         .slice(0, query.limit)
         .map((id, n) => ({ id, score: 1 - n / 10_000, snippet: 'lua' }));
@@ -56,38 +62,55 @@ function world(count: number, hidden: (n: number) => boolean) {
     placementsOf: () => placed,
     memo: (_catalog, compute) => compute(),
   });
-  return { vault, index, limits, view };
+  return { vault, index, limits, deep, view };
 }
 
-async function searchIn(count: number, hidden: (n: number) => boolean) {
-  const { vault, index, limits, view } = world(count, hidden);
+async function searchIn(
+  count: number,
+  hidden: (n: number) => boolean,
+  seen?: LevelView,
+) {
+  const { vault, index, limits, deep, view } = world(count, hidden);
   const catalog = new CatalogRegistry(vault);
   await catalog.load();
   const service = new SearchService({ catalog, index, vault });
-  const found = await service.search('hermetismo', { q: 'lua' }, { view });
-  return { found, limits };
+  const found = await service.search(
+    'hermetismo',
+    { q: 'lua' },
+    { view: seen ?? view },
+  );
+  return { found, limits, deep };
 }
 
 describe('SearchService within a level (KBC-103 FR-6, ADR 0036 §7)', () => {
   it('asks the index once more, four times deeper, when the first page comes back short', async () => {
-    // Half of 1 000 visible (the first call asks 120), but the top 115 are hidden.
-    const { found, limits } = await searchIn(1000, (n) => n < 115 || n >= 615);
-    expect(limits).toEqual([120, 480]);
+    // Half of 1 000 visible (the first call asks 60 / 0.5 × 1.5 = 180), but the top 125 are
+    // hidden: 55 visible come back.
+    const { found, limits } = await searchIn(1000, (n) => n < 125 || n >= 625);
+    expect(limits).toEqual([180, 720]);
     expect(found.total).toBeGreaterThanOrEqual(60);
     expect(found.items.length).toBeGreaterThan(0);
-    expect(found.items.every((item) => item.id >= docId(115))).toBe(true);
+    expect(found.items.every((item) => item.id >= docId(125))).toBe(true);
     expect(found.capped).toBe(true);
   });
 
   it('asks once when the first page is full', async () => {
     const { found, limits } = await searchIn(1000, (n) => n < 10 || n >= 510);
-    expect(limits).toEqual([120]);
+    expect(limits).toEqual([180]);
     expect(found.capped).toBe(true);
+  });
+
+  it('asks a deep ranking only for a partial view; whoever sees all gets the index default (KBC-120)', async () => {
+    const partial = await searchIn(1000, (n) => n < 125 || n >= 625);
+    expect(partial.deep).toEqual([true, true]);
+    const whole = await searchIn(1000, () => false, OPEN_VIEW);
+    expect(whole.limits).toEqual([60]);
+    expect(whole.deep).toEqual([undefined]);
   });
 
   it('is not capped when the index ran out before the limit', async () => {
     const { found, limits } = await searchIn(100, (n) => n < 50);
-    expect(limits).toEqual([120]);
+    expect(limits).toEqual([180]);
     expect(found.total).toBe(50);
     expect(found.capped).toBe(false);
   });
