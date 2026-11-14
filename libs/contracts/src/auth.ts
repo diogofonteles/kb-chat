@@ -213,6 +213,20 @@ export const meSchema = z.object({
 });
 export type Me = z.infer<typeof meSchema>;
 
+const KNOWN_FEATURES: ReadonlySet<string> = new Set(FEATURES);
+
+/**
+ * The app's read of `/me` (KBC-122): a feature it does not know is dropped, never refused.
+ * An app opened before a release meets a newer API, and refusing the reply locks people out.
+ */
+export const meReplySchema = meSchema.extend({
+  features: z
+    .array(z.string())
+    .transform((names) =>
+      names.filter((name): name is Feature => KNOWN_FEATURES.has(name)),
+    ),
+});
+
 export const personIdSchema = z.uuid();
 
 /**
