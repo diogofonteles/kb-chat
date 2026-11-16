@@ -1,6 +1,7 @@
+/* v2 · Conversa, chat-results*: the filters in chips over the results (KBC-126 FR-3). */
 :host {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
   /* Grid/flex children default to min-width:auto; without this the chip row widens the page. */
   min-width: 0;
 }
@@ -9,7 +10,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -17,41 +18,47 @@
   flex: 1 1 auto;
 }
 
-/* KBC-020: the authorship control, a radio group drawn as segments (screens.md T2). */
+/* KBC-020: the authorship, a radio group drawn as chips with their counts ("Todos 15"). */
 .authorship {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
   min-width: 0;
 }
 
-.authorship-title {
-  margin-right: var(--space-1);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.segment {
+.segment,
+.chip,
+.active-chip {
   position: relative;
   display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: var(--space-2);
-  min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-surface);
-  font-size: var(--text-sm);
+  gap: 0.375rem;
+  min-height: 2rem;
+  padding: 0 0.875rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-meta);
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.segment:hover {
-  border-color: var(--color-accent);
+.segment:hover,
+.chip:hover,
+.active-chip:hover {
+  background: color-mix(
+    in srgb,
+    var(--color-surface-muted) 80%,
+    var(--color-text)
+  );
 }
 
-/* The native radio stays focusable and announced; the segment draws its state. */
+/* The native radio stays focusable and announced; the chip draws its state. */
 .segment-input {
   position: absolute;
   inset: 0;
@@ -63,36 +70,42 @@
 }
 
 .segment:has(.segment-input:focus-visible) {
-  outline: 2px solid var(--color-focus);
+  outline: 3px solid var(--color-focus);
   outline-offset: 2px;
 }
 
 .segment-text {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-}
-
-.segment.on {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-weight: 600;
+  gap: 0.25rem;
 }
 
 .segment-count {
-  font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.segment.on,
+.chip.on,
+.active-chip {
+  background: var(--color-text);
+  color: var(--color-bg);
 }
 
 .segment.on .segment-count {
   color: inherit;
+  opacity: 0.7;
 }
 
 .segment.off {
-  border-style: dashed;
-  color: var(--color-text-muted);
+  opacity: 0.45;
   cursor: not-allowed;
+}
+
+.divider {
+  width: 1px;
+  height: 1.5rem;
+  background: var(--overlay-4);
 }
 
 .bar {
@@ -109,32 +122,11 @@
   gap: var(--space-2);
 }
 
-.facet {
-  position: relative;
-}
-
-.chip,
-.active-chip {
-  display: inline-flex;
+.active-row {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1);
-  min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-surface);
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.chip:hover,
-.active-chip:hover {
-  border-color: var(--color-accent);
-}
-
-.chip.on {
-  border-color: var(--color-accent);
-  font-weight: 600;
+  gap: var(--space-2);
 }
 
 .active {
@@ -146,62 +138,68 @@
   list-style: none;
 }
 
-.active-chip {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-on-accent);
-}
-
 /* In the top layer, anchored to its chip and kept on screen (ui/overlay.ts, D5). */
 .popover {
   display: grid;
-  gap: var(--space-1);
+  gap: 0.125rem;
   width: max-content;
-  min-width: 16rem;
-  max-width: min(24rem, 80vw);
+  min-width: 20rem;
+  max-width: min(24rem, 90vw);
   max-height: 22rem;
   overflow-y: auto;
   padding: var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--color-elevated);
+  color: var(--color-text);
   box-shadow: var(--shadow);
+}
+
+.popover-title {
+  margin: 0;
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.popover-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-2) var(--space-1) 0;
 }
 
 .option {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: var(--space-2);
-  min-height: var(--target);
+  gap: 0.625rem;
+  min-height: 2.5rem;
   padding: 0 var(--space-2);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-cover);
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
-.option:hover {
-  background: var(--color-surface-muted);
-}
-
-.option input {
-  width: 1.125rem;
-  height: 1.125rem;
-  accent-color: var(--color-accent);
+.option:hover,
+.option.on {
+  background: var(--overlay-3);
 }
 
 .option-count {
-  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
 
 .link {
   justify-self: start;
-  min-height: var(--target);
+  min-height: 2rem;
   padding: 0 var(--space-2);
   border: none;
   background: transparent;
-  color: var(--color-accent-strong);
+  color: var(--color-accent-text);
+  font: inherit;
   font-size: var(--text-sm);
   text-decoration: underline;
   cursor: pointer;
@@ -209,52 +207,61 @@
 
 .hidden-note {
   font-size: var(--text-sm);
-  color: var(--color-text-muted);
 }
 
 .sheet-button {
   display: none;
 }
 
+/* Phones: a sheet of 85% from the bottom (v2 · Folha do celular). */
 .sheet {
-  /* Full-screen modal: undo the user-agent dialog box (margins, max sizes, padding). */
   box-sizing: border-box;
   position: fixed;
-  inset: 0;
+  inset: auto 0 0;
   width: 100vw;
-  height: 100dvh;
   max-width: none;
+  height: 85dvh;
   max-height: none;
   margin: 0;
   padding: 0;
   border: none;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   overflow: hidden;
-  background: var(--color-bg);
+  background: var(--color-elevated);
   color: var(--color-text);
 }
 
 .sheet[open] {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
 .sheet::backdrop {
-  background: rgb(0 0 0 / 40%);
+  background: var(--scrim);
 }
 
-.sheet-head .hidden-note {
-  margin: var(--space-1) 0 0;
+.handle {
+  justify-self: center;
+  width: 2.25rem;
+  height: 0.25rem;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-4);
 }
 
 .sheet-head {
-  padding: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-3) var(--space-4) var(--space-2);
 }
 
 .sheet-head h2 {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
+  font-size: var(--text-section);
+  font-weight: 700;
+}
+
+.sheet-head .hidden-note {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
 }
 
 .sheet-body {
@@ -266,7 +273,7 @@
 
 fieldset {
   display: grid;
-  gap: var(--space-1);
+  gap: 0;
   margin: 0 0 var(--space-4);
   padding: 0;
   border: none;
@@ -274,97 +281,56 @@ fieldset {
 
 legend {
   margin-bottom: var(--space-1);
-  font-weight: 600;
+  font-size: var(--text-item);
+  font-weight: 700;
+}
+
+.sheet .option {
+  min-height: var(--target);
+  padding: 0;
+}
+
+.sheet .option:hover {
+  background: transparent;
 }
 
 .sheet-foot {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--color-border);
-  background: var(--color-surface);
-}
-
-.cancel,
-.apply {
-  min-height: 3rem;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.cancel {
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-}
-
-.apply {
-  border: none;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+  padding: var(--space-3) var(--space-4)
+    calc(var(--space-4) + env(safe-area-inset-bottom));
 }
 
 @media (max-width: 1023px) {
-  /* Phones: the authorship control takes its own row, three equal segments (KBC-020). */
+  .segment,
+  .chip,
+  .active-chip {
+    min-height: 2.25rem;
+  }
+
+  /* Phones: one row that scrolls, "Filtros" first, then the authorship (chat-results@mobile). */
   .row {
-    display: grid;
-  }
-
-  .authorship {
-    display: grid;
-    /* "✦ Mestre Laércio" is the longest label: its segment gets the most room. */
-    grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.3fr) minmax(0, 1.1fr);
-  }
-
-  .authorship-title {
-    grid-column: 1 / -1;
-  }
-
-  .segment {
-    flex-direction: column;
-    justify-content: center;
-    gap: 0;
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-sm);
-    font-size: 0.8125rem;
-    text-align: center;
-    line-height: 1.2;
-  }
-
-  .segment-text {
-    display: block;
-  }
-
-  .segment-text .check,
-  .segment-text .mark {
-    margin-right: 0.2em;
-  }
-
-  /* Phones: facet chips scroll in one row and open the sheet (screens.md T2). */
-  .bar {
     flex-wrap: nowrap;
-  }
-
-  .facets {
-    flex: 1 1 auto;
-    flex-wrap: nowrap;
-    min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
   }
 
-  .chip {
-    flex: 0 0 auto;
-    white-space: nowrap;
+  .row > .bar {
+    order: -1;
+    flex: none;
+  }
+
+  .facets,
+  .divider {
+    display: none;
+  }
+
+  .authorship {
+    flex-wrap: nowrap;
   }
 
   .sheet-button {
     display: inline-flex;
-    flex: 0 0 auto;
-  }
-
-  .bar .hidden-note {
-    display: none;
   }
 }

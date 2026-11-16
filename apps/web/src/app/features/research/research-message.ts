@@ -1,9 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DOCUMENT,
+  ElementRef,
+  afterRenderEffect,
   computed,
   inject,
   input,
+  linkedSignal,
   output,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
@@ -14,6 +18,14 @@ import type {
   SweepCoverage,
 } from '@kb-chat/contracts';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
+import {
+  UiBanner,
+  UiButton,
+  UiCover,
+  UiIcon,
+  UiPill,
+  UiProgress,
+} from '@ui/index.js';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import {
   citedAt,
@@ -50,6 +62,14 @@ function leftText(coverage: SweepCoverage): string {
   return coverage.reason ? unansweredText(coverage.reason) : '';
 }
 
+/** A text source opened from the answer, and the citation or row that opened it. */
+export type OpenedSource = DocumentRef & {
+  readonly trigger: HTMLElement | null;
+};
+
+type CopyState = 'idle' | 'copied' | 'failed';
+const FEEDBACK_MS = 2000;
+
 /** Who paid, as the answer's footer says it (ADR 0016, ADR 0019). */
 const PLAN_LABELS: Record<ResearchPlan, () => string> = {
   house: () =>
@@ -68,7 +88,16 @@ const PLAN_LABELS: Record<ResearchPlan, () => string> = {
  */
 @Component({
   selector: 'app-research-message',
-  imports: [AuthorshipBadge, NgTemplateOutlet],
+  imports: [
+    AuthorshipBadge,
+    NgTemplateOutlet,
+    UiBanner,
+    UiButton,
+    UiCover,
+    UiIcon,
+    UiPill,
+    UiProgress,
+  ],
   templateUrl: './research-message.html',
   styleUrl: './research-message.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -79,13 +108,23 @@ export class ResearchMessage {
   readonly turn = input.required<ResearchTurn>();
   /** Only the last turn offers "Tentar de novo" (asking again in its place). */
   readonly last = input(false);
-  readonly opened = output<DocumentRef>();
+  /** The source open beside the answer (its row and its [n] are marked, FR-1). */
+  readonly activeSource = input<number | null>(null);
+  readonly opened = output<OpenedSource>();
   /** A cited track (KBC-099): the panel opens on its passage with the player (T22). */
   readonly trackOpened = output<TrackOpening>();
   readonly stopped = output();
   readonly retried = output();
   readonly continued = output();
   private readonly settings = inject(SettingsStore);
+  private readonly host =
+    inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  private readonly clipboard =
+    inject(DOCUMENT).defaultView?.navigator.clipboard;
+  protected readonly copyState = linkedSignal<number, CopyState>({
+    source: () => this.turn().id,
+    computation: () => 'idle',
+  });
 
   protected readonly streaming = computed(
     () => this.turn().phase === 'streaming',
@@ -210,6 +249,14 @@ export class ResearchMessage {
       line: coverageText(coverage),
       target: targetText(coverage.target, coverage.phrases, this.labels()),
       missing: leftText(coverage),
+      // "10 de 22" with its bar: of the documents to analyze, those the AI analyzed.
+      share:
+        coverage.needed > 0
+          ? {
+              label: $localize`:@@sweep.share:${coverage.read}:read: de ${coverage.needed}:needed:`,
+              value: Math.min(1, coverage.read / coverage.needed),
+            }
+          : null,
     };
   });
   /** A sweep stopped on this page before its coverage came: what was left (QA F-3). */
@@ -227,6 +274,50 @@ export class ResearchMessage {
   protected readonly canContinue = computed(
     () => this.last() && canContinueSweep(this.turn()),
   );
+  /** An answer cut short: the "interrompida" pill after its text (chat-research-interrupted). */
+  protected readonly interruptedWithText = computed(() => {
+    const turn = this.turn();
+    return turn.phase === 'done' && turn.interrupted && turn.text.trim() !== '';
+  });
+  /** "Tentar de novo" where no banner (error, interrupted) already offers it. */
+  protected readonly retryAlone = computed(() => {
+    if (!this.canRetry()) return false;
+    const turn = this.turn();
+    if (turn.phase === 'error') return false;
+    return !(turn.interrupted && !this.sweepExplainsStop());
+  });
+
+  constructor() {
+    // The [n] of the open source is marked in the sanitized answer (DOM-only work).
+    afterRenderEffect(() => {
+      const active = this.activeSource();
+      this.html();
+      for (const link of this.host.querySelectorAll<HTMLElement>(
+        '.answer a.cite',
+      )) {
+        const n = citedSource(link);
+        link.classList.toggle('active', n !== null && n === active);
+      }
+    });
+  }
+
+  /** "Copiar": the answer's text as written, with its [n]. */
+  protected copyAnswer(): void {
+    const text = this.turn().text.trim();
+    if (!text || !this.clipboard) {
+      this.flashCopy('failed');
+      return;
+    }
+    this.clipboard.writeText(text).then(
+      () => this.flashCopy('copied'),
+      () => this.flashCopy('failed'),
+    );
+  }
+
+  private flashCopy(state: CopyState): void {
+    this.copyState.set(state);
+    setTimeout(() => this.copyState.set('idle'), FEEDBACK_MS);
+  }
 
   protected openSettings(): void {
     this.settings.openSettings();
@@ -244,9 +335,10 @@ export class ResearchMessage {
     event.preventDefault();
     const link =
       event.target instanceof Element ? event.target.closest('a') : null;
+    const trigger = link instanceof HTMLElement ? link : null;
     if (source.media)
       this.trackOpened.emit({ source, at: citedAt(link), trigger: link });
-    else this.opened.emit({ id: source.id, title: source.title });
+    else this.opened.emit({ id: source.id, title: source.title, trigger });
   }
 
   /** A chip: a text opens in the document panel, a track on its first cited passage. */
@@ -259,6 +351,6 @@ export class ResearchMessage {
         at: source.passages?.[0]?.at ?? '',
         trigger,
       });
-    else this.opened.emit({ id: source.id, title: source.title });
+    else this.opened.emit({ id: source.id, title: source.title, trigger });
   }
 }

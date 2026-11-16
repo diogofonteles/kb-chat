@@ -91,3 +91,11 @@ Serviços da casca:
 - Playwright em 1440 e 390 com capturas (`KBC_SHOTS=<pasta>`), comparadas com o frame da página `v2 · …`.
 - Abra cada menu e confira nas capturas que nada sai cortado: `expectWholeOnTop` em `e2e/specs/v2-shell.spec.ts` é o modelo.
 - Axe sem violação séria ou crítica, nos quatro temas.
+
+## Conversa e Pesquisa com IA (KBC-126, KBC-127)
+
+- **Início:** `features/chat/home/conversation-home.ts` entra no lugar da antiga `.welcome` de `chat-page.html`. Os atalhos recentes vêm de `homeTiles` (histórico do servidor na ordem do último uso, depois os acervos). Os chips de escopo usam `ChatStore.setKinds` e `ViewStore.select`.
+- **Resultados:** `result-message` é uma página de busca; o container `results` (46rem) decide entre "Melhor resultado" ao lado da tabela ou uma lista só. A casca ainda limita `.thread` a `--column` (45rem): com isso o desktop mostra a lista única. Para o desenho de duas colunas, a casca precisa deixar a conversa ocupar o painel principal.
+- **Filtros:** popovers com `[uiOverlay]`; no celular a folha mostra "Ver N resultados" quando as contagens na tela dizem o número (`draftResultCount`), senão "Ver resultados".
+- **Fonte aberta:** `ChatStore.openSource`/`switchSource`/`leaveSources` levam a lista de fontes da resposta ao `app-document-panel`, que mostra "Fonte n de m", "Abrir documento", "Copiar trecho", "Próximo trecho" e "Tela cheia". No celular, `research-thread` abre a folha de leitura de 85% com abas por fonte; arrastar para baixo ou Esc devolve o foco à citação.
+- **Seletores de E2E:** `e2e/specs/v2-conversa.spec.ts` e `e2e/specs/v2-pesquisa.spec.ts` (capturas com `KBC_SHOTS`).

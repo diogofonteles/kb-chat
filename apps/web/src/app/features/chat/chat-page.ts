@@ -12,12 +12,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import type {
-  DocumentRef,
-  SearchFilters,
-  SearchKind,
-  SearchMode,
-} from '@kb-chat/contracts';
+import type { SearchFilters, SearchKind, SearchMode } from '@kb-chat/contracts';
 import { httpResource } from '@angular/common/http';
 import {
   takeUntilDestroyed,
@@ -52,12 +47,14 @@ import {
   type TriggerPlace,
 } from '@features/research/trigger-place.js';
 import { ResearchStore } from '@features/research/research-store.js';
-import { ResearchThread } from '@features/research/research-thread.js';
+import {
+  ResearchThread,
+  type SourceOpening,
+} from '@features/research/research-thread.js';
 import { ViewStore, type ChatView } from './view-store.js';
 import { ViewSwitch } from './view-switch.js';
 import { MiniPlayer } from '@features/media/player/mini-player.js';
 import { MediaEngine } from '@core/media/media-engine.js';
-import { PendingTranscriptions } from '@features/transcribers/pending-transcriptions.js';
 import { AudioPresence } from '@features/shell/audio-presence.js';
 import { BottomNav, navTabs, type NavTab } from '@features/shell/bottom-nav.js';
 import { RightPanel } from '@features/shell/right-panel.js';
@@ -70,6 +67,7 @@ import { UiIcon } from '@ui/icon.js';
 
 /** Where Sua biblioteca's collapsed state is kept (a per-viewer convenience). */
 const COLLAPSED_KEY = 'kb-chat.library-collapsed';
+import { ConversationHome } from './home/conversation-home.js';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
@@ -96,13 +94,13 @@ const isMediaUrl = (url: string): boolean =>
     DecimalPipe,
     RouterOutlet,
     MiniPlayer,
-    PendingTranscriptions,
     TopBar,
     BottomNav,
     NgComponentOutlet,
     UiAvatar,
     UiIcon,
     UiIconButton,
+    ConversationHome,
   ],
   providers: [
     ChatStore,
@@ -215,6 +213,11 @@ export class ChatPage {
   );
   protected readonly messages = this.store.messages;
   protected readonly opened = this.store.openDocument;
+  /** The source of an AI answer open in the panel: marked in its answer. */
+  protected readonly openSourceId = computed(() => {
+    const open = this.opened();
+    return open?.sources ? open.id : null;
+  });
   protected readonly currentView = this.views.current;
   protected readonly researching = computed(
     () => this.currentView() === 'research',
@@ -223,6 +226,10 @@ export class ChatPage {
     this.researching()
       ? this.research.turns().length === 0
       : this.messages().length === 0,
+  );
+  /** Search results are a page in the main panel, wider than the reading column (KBC-126). */
+  protected readonly searchPage = computed(
+    () => !this.researching() && !this.isEmpty(),
   );
   /** On phones the panel covers the conversation: make it inert so Tab stays in the panel. */
   private readonly router = inject(Router);
@@ -492,10 +499,29 @@ export class ChatPage {
     });
   }
 
-  /** A cited source opens in the same document panel (AC-3). */
-  protected openSource(doc: DocumentRef): void {
+  /**
+   * A cited source opens in the document panel beside the answer, on the answer's words,
+   * with the answer's other sources at hand (KBC-127 FR-1).
+   */
+  protected openSource({ doc, question, sources }: SourceOpening): void {
     const topic = this.store.topicSlug();
-    if (topic) this.store.open(topic, doc);
+    if (topic) this.store.openSource(topic, doc, { question, sources });
+  }
+
+  /**
+   * "Perguntar à IA" on a document (KBC-127): the research view, with a question about it
+   * ready in the box to finish and send (nothing is asked, nor spent, before that).
+   */
+  protected askAiAbout(title: string): void {
+    this.views.select('research');
+    this.closeDocument();
+    afterNextRender(
+      () =>
+        this.composer()?.fill(
+          $localize`:@@research.aboutDocument:O que “${title}:title:” diz sobre `,
+        ),
+      { injector: this.injector },
+    );
   }
 
   /** A cited track opens on its passage, paused, in the reading panel (KBC-099 FR-8). */

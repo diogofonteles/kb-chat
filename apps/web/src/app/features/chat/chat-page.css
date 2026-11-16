@@ -220,6 +220,13 @@
   overflow-y: auto;
 }
 
+/* v2 chat-results: a search page uses the whole main panel (32 at the sides), not the
+   reading column, so "Melhor resultado" fits beside the "Documentos" table (KBC-126 FR-2). */
+.thread.search-page {
+  max-width: none;
+  padding-inline: var(--space-8);
+}
+
 .welcome {
   display: grid;
   gap: var(--space-2);
@@ -462,6 +469,10 @@
 
   .composer-dock {
     padding: 0 var(--space-3) var(--space-3);
+  }
+
+  .thread.search-page {
+    padding-inline: var(--space-4);
   }
 }
 

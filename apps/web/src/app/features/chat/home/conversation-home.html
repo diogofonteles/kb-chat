@@ -1,0 +1,224 @@
+<div
+  class="scope"
+  role="group"
+  aria-label="Onde buscar"
+  i18n-aria-label="@@home.scope"
+>
+  @if (views.searchAllowed()) {
+    <button
+      uiChip
+      type="button"
+      [selected]="scope() === 'all'"
+      (click)="chooseScope('all')"
+      i18n="@@home.scopeAll"
+    >
+      Tudo
+    </button>
+    <button
+      uiChip
+      type="button"
+      [selected]="scope() === 'documents'"
+      (click)="chooseScope('documents')"
+      i18n="@@home.scopeDocuments"
+    >
+      Documentos
+    </button>
+  }
+  @if (views.researchAllowed()) {
+    <button
+      uiChip
+      type="button"
+      [selected]="scope() === 'research'"
+      [disabled]="!views.researchAvailable()"
+      (click)="chooseScope('research')"
+    >
+      <ui-icon name="sparkleFill" [size]="14" />
+      <span i18n="@@home.scopeResearch">Pesquisa com IA</span>
+    </button>
+  }
+  @if (topic(); as current) {
+    <span class="in">
+      <span class="in-label" i18n="@@home.in">Em:</span>
+      <ui-menu
+        label="Trocar de acervo"
+        i18n-label="@@home.collectionMenu"
+        menuId="home-collection-menu"
+        triggerClass="ui-chip collection-chip"
+        align="end"
+      >
+        <span uiMenuTrigger class="collection-trigger">
+          <span class="collection-name">{{ current.title }}</span>
+          <span class="collection-count" i18n="@@home.collectionCount"
+            >·
+            {current.documentCount, plural,
+              =1 {1 documento}
+              other {{{ current.documentCount | number }} documentos}
+            }</span
+          >
+          <ui-icon name="chevDown" [size]="14" />
+        </span>
+        @for (one of collections(); track one.slug) {
+          <button
+            uiMenuItem
+            type="button"
+            [attr.aria-current]="one.slug === current.slug ? 'true' : null"
+            (click)="chooseCollection(one.slug)"
+          >
+            <ui-cover [title]="one.title" [size]="24" />
+            <span class="menu-title">{{ one.title }}</span>
+            <span class="ui-menu__meta">{{ one.documentCount | number }}</span>
+          </button>
+        }
+      </ui-menu>
+    </span>
+  }
+</div>
+
+<div class="greeting-block">
+  @if (topicNotice()) {
+    <p class="topic-notice" role="status">{{ topicNotice() }}</p>
+  }
+  @if (pendingTopic(); as slug) {
+    <app-pending-transcriptions class="pending" [topic]="slug" />
+  }
+  @if (researching()) {
+    <p class="greeting" i18n="@@page.greetingResearch">
+      O que você quer pesquisar no acervo?
+    </p>
+  } @else {
+    <p class="greeting" i18n="@@page.greeting">O que você quer estudar hoje?</p>
+  }
+  @if (showContent()) {
+    <p class="hint">
+      @if (researching()) {
+        <span i18n="@@page.hintResearch"
+          >A IA busca, lê os documentos e responde com as fontes.</span
+        >
+      } @else {
+        <span i18n="@@page.hint">Pergunte em linguagem natural.</span>
+      }
+      <span class="hint-keyboard" i18n="@@page.hintKeyboard"
+        >Dica: pressione / para escrever.</span
+      >
+    </p>
+  }
+</div>
+
+@if (topicsError()) {
+  <ui-banner class="state" tone="err" [title]="topicsError()" role="alert">
+    <button
+      uiBannerAction
+      uiButton="white"
+      size="sm"
+      type="button"
+      (click)="reloadTopics.emit()"
+      i18n="@@page.retry"
+    >
+      Tentar de novo
+    </button>
+  </ui-banner>
+} @else if (noTopics()) {
+  @if (guest()) {
+    <ui-empty-state
+      class="state empty"
+      icon="lock"
+      title="Nenhum acervo liberado"
+      i18n-title="@@home.noTopicsGrantedTitle"
+      text="Nenhum acervo foi liberado para você ainda; peça a um master."
+      i18n-text="@@page.noTopicsGranted"
+      role="alert"
+    />
+  } @else {
+    <ui-empty-state
+      class="state empty"
+      icon="folder"
+      title="Nenhum acervo encontrado"
+      i18n-title="@@home.noTopicsTitle"
+      text="Nenhum acervo kb encontrado no vault configurado (KB_VAULT)."
+      i18n-text="@@page.noTopics"
+      role="alert"
+    />
+  }
+} @else {
+  @if (emptyTopic()) {
+    <!-- A collection created on the screen: its texts come from the vault later (ADR 0028). -->
+    <ui-banner
+      class="state"
+      tone="info"
+      title="Este acervo ainda não tem textos para buscar."
+      i18n-title="@@home.emptyTopicTitle"
+      ><span i18n="@@home.emptyTopicText"
+        >Eles aparecem aqui assim que forem adicionados.</span
+      ></ui-banner
+    >
+  }
+  @if (tiles().length > 0) {
+    <nav class="recents" aria-label="Recentes" i18n-aria-label="@@home.recents">
+      <ul class="tiles">
+        @for (item of tiles(); track item.tile.key) {
+          <li>
+            <button type="button" class="tile" (click)="openTile(item.tile)">
+              @if (item.tile.kind === 'collection') {
+                <ui-cover
+                  class="tile-art"
+                  [title]="item.title"
+                  [size]="56"
+                  [label]="false"
+                />
+              } @else if (item.tile.conversation.kind === 'research') {
+                <ui-cover
+                  class="tile-art"
+                  icon="sparkle"
+                  from="#1f6b3c"
+                  to="#1f1f1f"
+                  [size]="56"
+                />
+              } @else {
+                <ui-cover
+                  class="tile-art"
+                  icon="search"
+                  from="#3a3a3a"
+                  to="#1f1f1f"
+                  [size]="56"
+                />
+              }
+              <span class="tile-text">
+                <span class="tile-title">{{ item.title }}</span>
+                <span class="tile-meta">{{ item.meta }}</span>
+              </span>
+            </button>
+          </li>
+        }
+      </ul>
+    </nav>
+  }
+  @if (subjects().length > 0) {
+    <section class="subjects" aria-labelledby="suggestions-title">
+      <h2
+        id="suggestions-title"
+        class="ui-section-title"
+        i18n="@@page.suggestions"
+      >
+        Comece por um assunto
+      </h2>
+      <ul class="subject-list">
+        @for (subject of subjects(); track subject.concept) {
+          <li>
+            <button
+              type="button"
+              class="subject suggestion"
+              (click)="subjectChosen.emit(subject.concept)"
+            >
+              <ui-cover
+                class="subject-art"
+                [title]="subject.concept"
+                [size]="150"
+              />
+              <span class="subject-title">{{ subject.concept }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+}

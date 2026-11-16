@@ -5,14 +5,15 @@ import { startInSearchView } from './search-view.js';
 
 test.beforeEach(startInSearchView);
 
+/** The sheet's apply button: "Ver 2 resultados", or "Ver resultados" when the count needs the search. */
+const VIEW_RESULTS = /^Ver (\d+ )?resultados?$/;
+
 async function askSemantic(page: Page, question: string): Promise<void> {
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
     'Hermetismo',
   );
-  await page
-    .getByLabel('Como buscar')
-    .selectOption({ label: 'Por significado' });
+  await page.getByRole('radio', { name: 'Por significado' }).check();
   await page.getByLabel('Sua pergunta').fill(question);
   await page.getByRole('button', { name: 'Buscar' }).click();
 }
@@ -84,7 +85,7 @@ test.describe('mobile filter sheet', () => {
     'the sheet is the mobile layout',
   );
 
-  test('AC-10: Cancelar keeps the filters and Aplicar applies them', async ({
+  test('AC-10: Cancelar keeps the filters and "Ver resultados" applies them', async ({
     page,
   }) => {
     await askSemantic(page, 'natureza');
@@ -96,7 +97,7 @@ test.describe('mobile filter sheet', () => {
     await expect(page.getByText(/3 documentos ·/)).toBeVisible();
     await page.getByRole('button', { name: 'Filtros', exact: true }).click();
     await sheet.getByRole('checkbox', { name: /Cabala/ }).check();
-    await sheet.getByRole('button', { name: 'Aplicar' }).click();
+    await sheet.getByRole('button', { name: VIEW_RESULTS }).click();
     await expect(page.getByText(/2 documentos ·/)).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Filtros (1)' }),
@@ -149,7 +150,7 @@ test.describe('paging and empty filters', () => {
       })
       .click();
     await page.getByRole('checkbox', { name: /Texto\/apostila/ }).check();
-    if (phone) await page.getByRole('button', { name: 'Aplicar' }).click();
+    if (phone) await page.getByRole('button', { name: VIEW_RESULTS }).click();
     await expect(
       page.getByText('Nada encontrado para "ritmo" com estes filtros.'),
     ).toBeVisible();
@@ -181,7 +182,7 @@ test.describe('paging and empty filters', () => {
     await page
       .getByRole('checkbox', { name: /Cosmologia Espiritual e Metafísica/ })
       .check();
-    if (phone) await page.getByRole('button', { name: 'Aplicar' }).click();
+    if (phone) await page.getByRole('button', { name: VIEW_RESULTS }).click();
     await expect(
       page.getByRole('button', { name: /Remover Assuntos/ }),
     ).toBeVisible();
@@ -249,8 +250,11 @@ test.describe('authorship (KBC-020)', () => {
     await expect(cards).toHaveCount(1);
     await cards.first().getByRole('button').first().click();
     const panel = page.getByRole('dialog');
-    await expect(panel.getByText('Mestre Laércio')).toBeVisible();
-    await expect(panel.getByText('José Laércio do Egito')).toBeVisible();
+    const about = panel.getByRole('complementary', {
+      name: 'Sobre este documento',
+    });
+    await expect(about.getByText('Mestre Laércio')).toBeVisible();
+    await expect(about.getByText('José Laércio do Egito')).toBeVisible();
     await panel.getByRole('button', { name: /Fechar/ }).click();
 
     await control.getByRole('radio', { name: /^Todos/ }).check();

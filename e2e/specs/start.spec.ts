@@ -7,15 +7,17 @@ test('AC-1/AC-2: start suggestions list the largest subjects and search one with
   page,
 }) => {
   await page.goto('/');
-  const group = page.getByRole('group', { name: 'Comece por um assunto:' });
+  const group = page.getByRole('region', { name: 'Comece por um assunto' });
   const buttons = group.getByRole('button');
+  // Each card's name, without the initials of its cover.
+  const titles = group.locator('.subject-title');
   await expect(buttons.first()).toBeVisible();
   expect(await buttons.count()).toBeLessThanOrEqual(6);
-  const counts = (await buttons.allTextContents()).map((text) =>
+  const counts = (await titles.allTextContents()).map((text) =>
     Number(text.replace(/\D/g, '')),
   );
   expect(counts).toEqual([...counts].sort((a, b) => b - a));
-  const name = (await buttons.first().textContent())
+  const name = (await titles.first().textContent())
     ?.replace(/[\d.]/g, '')
     .trim();
   await buttons.first().click();

@@ -220,3 +220,47 @@ export const withAuthorship = (
   filters: SearchFilters,
   value: Authorship | null,
 ): SearchFilters => ({ ...filters, authorships: value ? [value] : [] });
+
+/** Facets whose documents have one value each: their counts add up exactly. */
+const SINGLE_VALUED: readonly FacetKey[] = [
+  'genres',
+  'depths',
+  'relevances',
+  'authorships',
+  'topics',
+];
+
+const sameValues = (a: readonly FacetValue[], b: readonly FacetValue[]) =>
+  a.length === b.length && a.every((value) => b.includes(value));
+
+/**
+ * How many results the phone sheet's selection would show ("Ver 2 resultados", KBC-126
+ * FR-3), or null when the counts on screen cannot tell: each facet counts the documents of
+ * the other filters, so a change in one facet whose documents have a single value is the
+ * sum of its chosen options; nothing changed is the total; anything else (subjects, where
+ * a document has several, or two facets at once) needs the search.
+ */
+export function draftResultCount({
+  facets,
+  applied,
+  draft,
+  total,
+}: {
+  readonly facets: ResultFacets;
+  readonly applied: SearchFilters;
+  readonly draft: SearchFilters;
+  readonly total: number;
+}): number | null {
+  const changed = FILTER_KEYS.filter(
+    (key) => !sameValues(applied[key], draft[key]),
+  );
+  if (changed.length === 0) return total;
+  const [key] = changed;
+  if (changed.length > 1 || !key || !SINGLE_VALUED.includes(key)) return null;
+  const chosen: readonly FacetValue[] = draft[key];
+  // "Fora do tema" adds hidden documents back: not in the counts on screen.
+  if (chosen.length === 0 || chosen.includes('off_topic')) return null;
+  return (facets[key] as readonly CountedValue[])
+    .filter(({ value }) => chosen.includes(value))
+    .reduce((sum, { count }) => sum + count, 0);
+}

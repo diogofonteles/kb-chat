@@ -1,5 +1,9 @@
-import { UiOverlay } from '@ui/overlay.js';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
+import { UiBanner } from '@ui/banner.js';
+import { UiButton } from '@ui/button.js';
+import { UiIcon } from '@ui/icon.js';
+import { UiOverlay } from '@ui/overlay.js';
+import { NO_FILTERS } from './chat-message.js';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -25,6 +29,7 @@ import {
   activeFilters,
   authorshipOptions,
   countActive,
+  draftResultCount,
   selectedAuthorship,
   toFacetGroups,
   toggleFilter,
@@ -44,11 +49,15 @@ let nextBarId = 0;
 /**
  * Facet chips over a result list (screens.md T2). Desktop: one popover per facet,
  * applied on each change. Mobile: the chips scroll and open one "Filtros" sheet with
- * Aplicar/Cancelar (SL-21), a native modal dialog that traps and restores focus.
+ * Aplicar/Cancelar (SL-21), a native modal dialog that traps and restores focus. v2
+ * (KBC-126 FR-3): the authorship as segmented chips with their counts, the facets as chips
+ * whose popover lives in the top layer (D5), the active ones with ✕ and "Limpar filtros",
+ * the hidden off-topic results in a banner with "Mostrar", and "Ver N resultados" in the
+ * sheet.
  */
 @Component({
   selector: 'app-filter-bar',
-  imports: [UiOverlay],
+  imports: [UiBanner, UiButton, UiIcon, UiOverlay],
   templateUrl: './filter-bar.html',
   styleUrl: './filter-bar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -66,6 +75,8 @@ export class FilterBar {
   readonly facets = input.required<ResultFacets>();
   readonly filters = input.required<SearchFilters>();
   readonly hiddenOffTopic = input(0);
+  /** The results the applied filters show: what the sheet offers while unchanged. */
+  readonly total = input(0);
   /** Application order of the active filters ("facet:value", newest last). */
   readonly order = input<readonly string[]>([]);
   /** Names of the collections a parent's search spans (the "Sub-acervo" filter, KBC-048). */
@@ -101,6 +112,14 @@ export class FilterBar {
   );
   protected readonly barId = `filters-${nextBarId++}`;
   protected readonly activeCount = computed(() => countActive(this.filters()));
+  protected readonly draftCount = computed(() =>
+    draftResultCount({
+      facets: this.facets(),
+      applied: this.filters(),
+      draft: this.draft(),
+      total: this.total(),
+    }),
+  );
 
   protected visibleOptions(group: FacetGroup): readonly FacetOption[] {
     return this.expanded().has(group.key)
@@ -147,6 +166,28 @@ export class FilterBar {
         ? this.sheetButton().nativeElement
         : facetChip;
     target.focus();
+  }
+
+  /** "Limpar" in a facet's popover: that facet's choices go, the popover stays. */
+  protected clearFacet(key: FacetKey, chip: HTMLElement): void {
+    this.filtersChange.emit({ ...this.filters(), [key]: [] });
+    chip.focus();
+  }
+
+  /** "Limpar filtros": every filter goes; the focus stays on the first facet's chip. */
+  protected clearAll(): void {
+    this.filtersChange.emit(NO_FILTERS);
+    const first = this.host.querySelector<HTMLElement>('[data-facet]');
+    (this.isPhone() || !first
+      ? this.sheetButton().nativeElement
+      : first
+    ).focus();
+  }
+
+  /** "Mostrar" on the hidden off-topic results: the "Fora do tema" link filter brings them. */
+  protected showOffTopic(): void {
+    if (this.filters().relevances.includes('off_topic')) return;
+    this.toggle('relevances', 'off_topic');
   }
 
   private isPhone(): boolean {

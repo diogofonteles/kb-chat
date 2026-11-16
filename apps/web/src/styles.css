@@ -189,14 +189,30 @@ app-document-panel .body mark.current {
   outline-offset: 1px;
 }
 
-/* AI answer text is rendered with [innerHTML]: citation links styled globally. */
+/* AI answer text is rendered with [innerHTML]: citation links styled globally. v2 (KBC-127):
+   a small green [n]; the one whose source is open is filled (FR-1, AC-1). */
 app-research-message .answer a.cite {
-  color: var(--color-accent-strong);
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0 0.3em;
+  border-radius: var(--radius-pill);
+  color: var(--color-accent-text);
   font-family: var(--font-ui);
-  font-size: 0.8em;
-  font-weight: 600;
+  font-size: 0.75em;
+  font-weight: 800;
+  line-height: 1.5;
+  text-align: center;
   text-decoration: none;
   vertical-align: super;
+}
+
+app-research-message .answer a.cite:hover {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+app-research-message .answer a.cite.active {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
 }
 
 /* A citation of a restricted source (KBC-110): the number as plain text, no link. */

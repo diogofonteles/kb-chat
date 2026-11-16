@@ -51,7 +51,7 @@ test('opens in the research view with the provider configured, and remembers the
   await expect(
     page.getByText('O que você quer pesquisar no acervo?'),
   ).toBeVisible();
-  await expect(page.getByLabel('Como buscar')).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Como buscar' })).toHaveCount(0);
   await page.getByRole('radio', { name: 'Buscar documentos' }).check();
   await page.reload();
   await expect(

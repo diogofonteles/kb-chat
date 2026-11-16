@@ -207,11 +207,13 @@ describe('ResearchMessage', () => {
     expect(view.opened).toHaveBeenCalledWith({
       id: 'raw/b.md',
       title: 'O Caibalion',
+      trigger: expect.any(HTMLElement),
     });
     fireEvent.click(screen.getByRole('button', { name: 'Os Princípios' }));
     expect(view.opened).toHaveBeenLastCalledWith({
       id: 'raw/a.md',
       title: 'Os Princípios',
+      trigger: expect.any(HTMLElement),
     });
     // Only the documents the answer cites are listed as sources.
     expect(screen.queryByRole('button', { name: 'Não citado' })).toBeNull();
@@ -317,6 +319,7 @@ describe('ResearchMessage', () => {
     expect(opened).toHaveBeenCalledWith({
       id: 'raw/a.md',
       title: 'Os Princípios',
+      trigger: expect.any(HTMLElement),
     });
     expect(trackOpened).not.toHaveBeenCalled();
     expect(document.querySelector('.track-mark')).toBeNull();
@@ -498,7 +501,8 @@ describe('ResearchMessage', () => {
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
     view.fixture.componentRef.setInput('turn', aTurn({ interrupted: true }));
     await view.fixture.whenStable();
-    expect(screen.getByText('(interrompida)')).toBeTruthy();
+    expect(screen.getByText('interrompida')).toBeTruthy();
+    expect(screen.getByText('A resposta foi interrompida.')).toBeTruthy();
   });
 });
 
@@ -759,7 +763,8 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
 
     it('still marks an answer cut short after a complete sweep, with its partial cost (review round 3)', async () => {
       await renderMessage(aTurn({ interrupted: true, coverage }));
-      expect(screen.getByText('(interrompida)')).toBeTruthy();
+      expect(screen.getByText('interrompida')).toBeTruthy();
+      expect(screen.getByText('A resposta foi interrompida.')).toBeTruthy();
       expect(
         screen.getByText(
           'O custo do que já foi processado entra no gasto do dia.',

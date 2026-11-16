@@ -26,37 +26,45 @@
         aria-label="Limpar pergunta"
         i18n-aria-label="@@composer.clear"
       >
-        <span aria-hidden="true">×</span>
+        <ui-icon name="close" [size]="18" />
       </button>
     }
   </div>
   <div class="actions">
     @if (!research()) {
-      <label class="mode">
-        <span class="mode-label" i18n="@@composer.mode">Como buscar</span>
-        <select [value]="mode()" (change)="selectMode($event)">
-          @for (option of modes; track option.value) {
-            <option [value]="option.value" [selected]="option.value === mode()">
-              {{ option.label }}
-            </option>
-          }
-        </select>
-      </label>
+      <fieldset class="choices mode" aria-describedby="mode-help">
+        <legend class="visually-hidden" i18n="@@composer.mode">
+          Como buscar
+        </legend>
+        @for (option of modes; track option.value) {
+          <label class="choice" [class.selected]="option.value === mode()">
+            <input
+              type="radio"
+              name="search-mode"
+              class="choice-radio"
+              [value]="option.value"
+              [checked]="option.value === mode()"
+              (change)="selectMode($event)"
+            />
+            <span>{{ option.label }}</span>
+          </label>
+        }
+      </fieldset>
       <span id="mode-help" class="help">{{ modeHelp() }}</span>
     } @else {
-      <fieldset class="profile" aria-describedby="profile-help">
+      <fieldset class="choices profile" aria-describedby="profile-help">
         <legend class="visually-hidden" i18n="@@composer.profile">
           Tipo de pesquisa
         </legend>
         @for (option of profiles; track option.value) {
           <label
-            class="profile-option"
+            class="choice profile-option"
             [class.selected]="option.value === profile()"
           >
             <input
               type="radio"
               name="research-profile"
-              class="profile-radio"
+              class="choice-radio profile-radio"
               [value]="option.value"
               [checked]="option.value === profile()"
               (change)="selectProfile(option.value)"
@@ -84,9 +92,11 @@
       [attr.aria-describedby]="canSend() ? null : 'send-hint'"
     >
       @if (research()) {
-        <ng-container i18n="@@composer.ask">Perguntar</ng-container>
+        <ui-icon name="send" [size]="18" />
+        <span class="send-text" i18n="@@composer.ask">Perguntar</span>
       } @else {
-        <ng-container i18n="@@composer.send">Buscar</ng-container>
+        <ui-icon name="search" [size]="18" />
+        <span class="send-text" i18n="@@composer.send">Buscar</span>
       }
     </button>
     @if (!canSend()) {
