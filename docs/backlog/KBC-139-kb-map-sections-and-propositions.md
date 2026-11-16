@@ -15,7 +15,7 @@ Como estudante, quando pergunto sobre um assunto tratado num capítulo de um liv
 ## Scope
 **In:**
 - a ferramenta `tools/kb-map` (Python com uv, no Mac);
-- a divisão em seções de cada documento, respeitando títulos e capítulos;
+- a divisão em seções de cada documento, respeitando títulos e capítulos (que vêm do Markdown estruturado do KBC-148; sem ele, a divisão cai para parágrafos e tamanho);
 - por seção: uma linha de contexto, as proposições (os ensinamentos afirmados), as entidades, o autor da afirmação (Mestre Laércio ou outro, ADR 0015) e a posição no corpo (a mesma contagem do `read_document`);
 - a gravação em `<topic>/map/sections/<doc>.json`, ao lado do vault, sem mudar o documento;
 - o provedor plugável: o CLI do Claude ou do Codex (assinatura) ou o modelo do kb (OpenRouter).

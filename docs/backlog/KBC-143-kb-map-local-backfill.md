@@ -4,7 +4,7 @@ title: "Mapa do acervo (5): mapear localmente o acervo que já existe, com a ass
 status: ready
 slice: complete-answers
 outcome: o Hermetismo inteiro (cerca de 3.000 documentos) e os outros acervos com o mapa pronto e verificado, sem custo por token além do plano
-depends_on: [KBC-142]
+depends_on: [KBC-142, KBC-148]
 ---
 
 # KBC-143 — Backfill local com a assinatura

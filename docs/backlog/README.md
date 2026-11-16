@@ -52,7 +52,7 @@ Pedido do dono: a Pesquisa com IA, a partir do Profundo, deve devolver sempre um
 - uma árvore de assuntos com sinônimos;
 - um dossiê por assunto.
 
-Ele é atualizado a cada documento que entra e montado localmente, com a assinatura, para o acervo que já existe. A análise está em [`docs/research/2026-11-16-complete-answers-deep.md`](../research/2026-11-16-complete-answers-deep.md). O KBC-120 foi ampliado: o patch do QMD vale para todos no modo "Tudo". O mapa segue por inteiro o padrão de wiki compilado de Karpathy: dossiês como artigos do wiki do kb, páginas de entidade, índice, respostas que se acumulam e lint com modelo (análise, §2a).
+Ele é atualizado a cada documento que entra e montado localmente, com a assinatura, para o acervo que já existe. A análise está em [`docs/research/2026-11-16-complete-answers-deep.md`](../research/2026-11-16-complete-answers-deep.md). O KBC-120 foi ampliado: o patch do QMD vale para todos no modo "Tudo". O mapa segue por inteiro o padrão de wiki compilado de Karpathy: dossiês como artigos do wiki do kb, páginas de entidade, índice, respostas que se acumulam e lint com modelo (análise, §2a). A entrada das fontes (conversão estruturada, originais guardados e proveniência) está em [`docs/research/2026-11-16-source-to-raw.md`](../research/2026-11-16-source-to-raw.md).
 
 | ID | Título | Fatia | Status | Depende de |
 |---|---|---|---|---|
@@ -66,6 +66,8 @@ Ele é atualizado a cada documento que entra e montado localmente, com a assinat
 | [KBC-145](KBC-145-citation-verification.md) | Verificação de citações | complete-answers | ready | KBC-144 |
 | [KBC-146](KBC-146-full-term-search.md) | Busca completa por termos na tela de Buscar | complete-answers | ready | — |
 | [KBC-147](KBC-147-compounding-answers-and-model-lint.md) | Wiki que se acumula: respostas boas viram páginas, e lint com modelo | complete-answers | ready | KBC-141, KBC-144 |
+| [KBC-148](KBC-148-structured-conversion-originals-provenance.md) | Da fonte ao raw: conversão estruturada (Docling, MarkItDown, Firecrawl), originais e proveniência, com a reconversão do acervo (antes do backfill KBC-143) | complete-answers | ready | — |
+| [KBC-149](KBC-149-upload-documents-and-links.md) | Enviar documento e link pelo app, com o mesmo tratamento de um texto | complete-answers | ready | KBC-148, KBC-142 |
 
 Decisões assumidas (o dono pode mudar), na análise, §7:
 - D1: a completude vem do mapa, verificado por `kb-map check`;
