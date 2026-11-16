@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { Router, provideRouter } from '@angular/router';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import type { AiStatus } from '@kb-chat/contracts';
 import { aSettingsView, anAiStatus } from '../../testing/settings-fixtures.js';
@@ -126,18 +127,25 @@ describe('SettingsStore.returnFromOpenRouter (KBC-022 AC-1)', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideRouter([]),
       ],
     });
     const store = TestBed.inject(SettingsStore);
+    const navigate = vi
+      .spyOn(TestBed.inject(Router), 'navigate')
+      .mockResolvedValue(true);
     expect(store.returnFromOpenRouter('?q=1')).toBe(false);
     expect(store.returnFromOpenRouter('?openrouter=connected&for=house')).toBe(
       true,
     );
     expect(store.connectOutcome()).toBe('connected');
-    expect(store.section()).toBe('house');
-    expect(store.panel()).toBe('settings');
+    expect(navigate).toHaveBeenLastCalledWith([
+      '/configuracoes',
+      'ia-da-aplicacao',
+    ]);
+    expect(store.panel()).toBeNull();
     store.returnFromOpenRouter('?openrouter=error');
-    expect(store.section()).toBe('ai');
+    expect(navigate).toHaveBeenLastCalledWith(['/configuracoes', 'sua-ia']);
   });
 
   it('KBC-024 AC-5: says in front that the administrator’s subscription is lent for now', async () => {

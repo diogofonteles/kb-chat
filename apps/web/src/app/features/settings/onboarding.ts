@@ -14,6 +14,7 @@ import { AiProviderForm } from './ai-provider-form.js';
 import { aiDraftFrom, aiUpdateFrom, type AiDraft } from './ai-draft.js';
 import { PreferencesForm, type PreferenceField } from './preferences-form.js';
 import { SettingsStore } from './settings-store.js';
+import { UiBanner, UiButton, UiIcon, UiProgress } from '@ui/index.js';
 
 interface Step {
   readonly title: string;
@@ -47,10 +48,20 @@ const STEPS: readonly Step[] = [
   },
 ];
 
-/** First-run wizard (KBC-007 FR-1, BR-5): four short steps, each skippable. */
+/**
+ * First-run wizard (KBC-007 FR-1, BR-5): four short steps, each skippable; in v2 a full screen
+ * with the step, a progress bar and large choice cards (KBC-131 FR-4).
+ */
 @Component({
   selector: 'app-onboarding',
-  imports: [AiProviderForm, PreferencesForm],
+  imports: [
+    AiProviderForm,
+    PreferencesForm,
+    UiBanner,
+    UiButton,
+    UiIcon,
+    UiProgress,
+  ],
   templateUrl: './onboarding.html',
   styleUrl: './onboarding.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -64,6 +75,9 @@ export class Onboarding {
   protected readonly index = signal(0);
   protected readonly step = computed(() => STEPS[this.index()] ?? AI_STEP);
   protected readonly stepNumber = computed(() => this.index() + 1);
+  protected readonly fraction = computed(
+    () => this.stepNumber() / STEPS.length,
+  );
   protected readonly last = computed(() => this.index() === STEPS.length - 1);
   protected readonly saving = signal(false);
   protected readonly failed = signal(false);

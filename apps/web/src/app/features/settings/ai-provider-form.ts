@@ -36,12 +36,23 @@ import { GO_TO_URL } from '@core/routing/go-to-url.js';
 import { HouseAiApi } from '@core/api/house-ai-api.js';
 import { ProviderGuideCard } from './provider-guide.js';
 import { SettingsStore } from './settings-store.js';
+import {
+  UiButton,
+  UiCover,
+  UiIcon,
+  UiPill,
+  type IconName,
+  type Tone,
+} from '@ui/index.js';
 
 interface ProviderOption {
   readonly info: ProviderInfo;
   readonly name: string;
   readonly description: string;
   readonly billing: string;
+  readonly icon: IconName;
+  /** The price pill: free in green, subscriptions in blue, paid by use muted (KBC-131). */
+  readonly tone: Tone;
   /** Why the card cannot be chosen and what to do (BR-3, AC-3); null when it can. */
   readonly blocked: { readonly label: string; readonly steps: string } | null;
 }
@@ -63,6 +74,24 @@ function blockedBy(info: ProviderInfo): ProviderOption['blocked'] {
   return { label: BLOCKED_LABEL[reason](), steps };
 }
 
+const ICON_OF: Record<AiProvider, IconName> = {
+  app: 'sparkleFill',
+  openrouter: 'link',
+  gemini: 'sparkle',
+  anthropic: 'key',
+  openai: 'key',
+  'claude-subscription': 'cpu',
+  'chatgpt-subscription': 'cpu',
+  none: 'search',
+};
+
+function toneOf(info: ProviderInfo, ownBilling: boolean): Tone {
+  if (info.billing === 'subscription') return 'info';
+  // OpenRouter and Gemini say "Gratuito ou por uso": they can be free.
+  if (info.billing === 'per-token') return ownBilling ? 'ok' : 'muted';
+  return 'ok';
+}
+
 const toOption = (info: ProviderInfo): ProviderOption => {
   const copy = PROVIDER_COPY[info.id];
   return {
@@ -70,6 +99,8 @@ const toOption = (info: ProviderInfo): ProviderOption => {
     name: copy.name(),
     description: copy.description(),
     billing: (copy.billing ?? BILLING_COPY[info.billing])(),
+    icon: ICON_OF[info.id] ?? 'sparkle',
+    tone: toneOf(info, copy.billing !== undefined),
     blocked: blockedBy(info),
   };
 };
@@ -100,7 +131,14 @@ const seconds = (ms: number): string =>
  */
 @Component({
   selector: 'app-ai-provider-form',
-  imports: [ProviderGuideCard, NgTemplateOutlet],
+  imports: [
+    ProviderGuideCard,
+    NgTemplateOutlet,
+    UiButton,
+    UiCover,
+    UiIcon,
+    UiPill,
+  ],
   templateUrl: './ai-provider-form.html',
   styleUrl: './settings-form.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -224,6 +262,11 @@ export class AiProviderForm {
     return result.ok
       ? $localize`:@@aiTest.ok:Conexão funcionando (${result.model}:model:, ${seconds(result.latencyMs)}:seconds: s).`
       : TEST_COPY[result.code ?? 'PROVIDER_UNAVAILABLE']();
+  });
+  /** A refused key is said on the key field itself (KBC-131 AC-2). */
+  protected readonly keyRejected = computed(() => {
+    const state = this.testState();
+    return state.kind === 'done' && state.result.code === 'LLM_KEY_REJECTED';
   });
   protected readonly testOk = computed(() => {
     const state = this.testState();

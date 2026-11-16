@@ -74,7 +74,6 @@
       uiIconButton
       type="button"
       class="people"
-      aria-haspopup="dialog"
       [attr.aria-label]="peopleLabel()"
       (click)="openPeople()"
     >
@@ -105,31 +104,16 @@
         <span class="who-email">{{ person.email }}</span>
       </p>
     }
-    <button
-      uiMenuItem
-      type="button"
-      aria-haspopup="dialog"
-      (click)="openSettings()"
-    >
+    <button uiMenuItem type="button" (click)="openSettings()">
       <ui-icon name="settings" [size]="18" />
       <span i18n="@@settings.open">Configurações</span>
     </button>
     @if (session.isMaster()) {
-      <button
-        uiMenuItem
-        type="button"
-        aria-haspopup="dialog"
-        (click)="openPeople()"
-      >
+      <button uiMenuItem type="button" (click)="openPeople()">
         <ui-icon name="people" [size]="18" />
         <span i18n="@@sidebar.people">Pessoas e permissões</span>
       </button>
-      <button
-        uiMenuItem
-        type="button"
-        aria-haspopup="dialog"
-        (click)="openPeople()"
-      >
+      <button uiMenuItem type="button" (click)="openPeople()">
         <ui-icon name="eye" [size]="18" />
         <span i18n="@@topbar.actAs">Ver como</span>
       </button>

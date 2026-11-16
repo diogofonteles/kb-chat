@@ -5,12 +5,7 @@ import { SettingsStore } from './settings-store.js';
 @Component({
   selector: 'app-settings-button',
   template: `
-    <button
-      type="button"
-      class="settings-button"
-      aria-haspopup="dialog"
-      (click)="open()"
-    >
+    <button type="button" class="settings-button" (click)="open()">
       <span class="icon" aria-hidden="true">⚙</span>
       <span i18n="@@settings.open">Configurações</span>
     </button>

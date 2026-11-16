@@ -1,16 +1,18 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { CSRF, expect, test } from './fixtures.js';
-import { openSettings as shellOpenSettings } from './shell-helpers.js';
+import {
+  closeSettings,
+  desktop,
+  openSection,
+  openSettings as openPage,
+  SETTINGS_AXE,
+  settingsPage,
+} from './settings-helpers.js';
 
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
-
-/** The ⚙ entry: in the side panel on desktop, in the "Menu" drawer on phones (FR-6). */
+/** Configurações opened at Sua IA (a region of its own on the page). */
 async function openSettings(page: Page) {
-  await shellOpenSettings(page);
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await expect(dialog).toBeVisible();
-  return dialog;
+  return openPage(page, 'Sua IA');
 }
 
 const SETTINGS_VIEW = {
@@ -30,7 +32,7 @@ test.beforeEach(async ({ page }) => {
   await page.reload();
 });
 
-test('FR-6: ⚙ Configurações opens over the conversation and closes back to it', async ({
+test('FR-6: ⚙ Configurações opens as a page and goes back to the conversation', async ({
   page,
 }) => {
   await page.getByRole('radio', { name: 'Buscar documentos' }).check();
@@ -41,14 +43,11 @@ test('FR-6: ⚙ Configurações opens over the conversation and closes back to i
   await expect(
     dialog.getByRole('radio', { name: /Assinatura do Claude/ }),
   ).toBeVisible();
-  // The dialog fades in: contrast is measured once the animation is over.
   await page.waitForFunction(() => document.getAnimations().length === 0);
-  const axe = await new AxeBuilder({ page }).include('dialog').analyze();
+  const axe = await new AxeBuilder({ page }).include(SETTINGS_AXE).analyze();
   expect(axe.violations).toEqual([]);
-  await dialog.getByRole('button', { name: 'Fechar configurações' }).click();
+  await closeSettings(page);
   await expect(dialog).toBeHidden();
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Fechar menu' }).click();
   await expect(page.locator('app-result-message .question')).toHaveText([
     /ritmo/,
   ]);
@@ -127,8 +126,7 @@ test('KBC-011: each provider shows a fast and a deep model with its defaults', a
 test('ADR 0009: "Aprofundar automaticamente" is on by default in Preferências', async ({
   page,
 }) => {
-  const dialog = await openSettings(page);
-  await dialog.getByRole('button', { name: 'Preferências' }).click();
+  const dialog = await openPage(page, 'Preferências');
   await expect(
     dialog.getByRole('checkbox', { name: 'Aprofundar automaticamente' }),
   ).toBeChecked();
@@ -155,7 +153,7 @@ test('AC-1: the wizard shows on the first run and not again after "Concluir"', a
   await expect(wizard.getByText('Passo 1 de 4')).toBeVisible();
   for (let step = 0; step < 3; step += 1)
     await wizard.getByRole('button', { name: 'Continuar' }).click();
-  await wizard.getByLabel('Tema').selectOption('dark');
+  await wizard.getByRole('radio', { name: 'Escuro', exact: true }).check();
   await wizard.getByRole('button', { name: 'Concluir' }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
   expect(saved).toMatchObject({ preferences: { theme: 'dark' } });
@@ -184,4 +182,168 @@ test('the default view saved in Settings opens on the next page', async ({
     page.getByRole('radio', { name: 'Buscar documentos' }),
   ).toBeChecked();
   await expect(page.getByText('O que você quer estudar hoje?')).toBeVisible();
+});
+
+test('KBC-131 AC-1: /configuracoes/preferencias opens there on reload, and scrolling moves the index and the address', async ({
+  page,
+}) => {
+  await page.goto('/configuracoes/preferencias');
+  const settings = settingsPage(page);
+  if (!desktop(page)) {
+    // A phone opens the section as its own screen, with the way back to the root.
+    await expect(
+      settings.getByRole('heading', { name: 'Preferências', level: 2 }),
+    ).toBeVisible();
+    await expect(
+      settings.getByRole('checkbox', { name: 'Aprofundar automaticamente' }),
+    ).toBeVisible();
+    return;
+  }
+  const index = settings.getByRole('navigation', { name: 'Seções' });
+  await expect(
+    index.getByRole('link', { name: 'Preferências', exact: true }),
+  ).toHaveAttribute('aria-current', 'location');
+  await expect(
+    settings.getByRole('heading', { name: 'Preferências', level: 2 }),
+  ).toBeInViewport();
+  // The wheel over the page, until Acessos' title passes the top of the panel.
+  const accesses = settings.getByRole('heading', {
+    name: 'Acessos à sua conta',
+    level: 2,
+  });
+  await settings
+    .getByRole('heading', { name: 'Preferências', level: 2 })
+    .hover();
+  await expect
+    .poll(async () => {
+      await page.mouse.wheel(0, 120);
+      return (await accesses.boundingBox())?.y ?? 1e4;
+    })
+    .toBeLessThan(140);
+  await expect(
+    index.getByRole('link', { name: 'Acessos à sua conta', exact: true }),
+  ).toHaveAttribute('aria-current', 'location');
+  await expect(page).toHaveURL(/\/configuracoes\/acessos$/);
+});
+
+/** Two frames: a scroll the page made has been read by the scroll spy by then. */
+const settled = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(done)),
+      ),
+  );
+
+test('KBC-131 AC-1: the last sections, too short to reach the top, keep their address by URL, by index and by back', async ({
+  page,
+}) => {
+  test.skip(!desktop(page), 'The scroll spy is the desktop layout.');
+  const settings = settingsPage(page);
+  const index = settings.getByRole('navigation', { name: 'Seções' });
+  const link = (name: string) => index.getByRole('link', { name, exact: true });
+  for (const [slug, name] of [
+    ['sobre', 'Sobre'],
+    ['perfis-de-voz', 'Perfis de voz'],
+  ] as const) {
+    await page.goto(`/configuracoes/${slug}`);
+    await expect(
+      settings.getByRole('heading', { name, level: 2 }),
+    ).toBeInViewport();
+    await settled(page);
+    await expect(link(name)).toHaveAttribute('aria-current', 'location');
+    await expect(page).toHaveURL(new RegExp(`/configuracoes/${slug}$`));
+  }
+  // By the index, from the top of the page: each stays where it was asked for.
+  await page.goto('/configuracoes/conta');
+  for (const [slug, name] of [
+    ['sobre', 'Sobre'],
+    ['perfis-de-voz', 'Perfis de voz'],
+  ] as const) {
+    await link(name).click();
+    await settled(page);
+    await expect(link(name)).toHaveAttribute('aria-current', 'location');
+    await expect(page).toHaveURL(new RegExp(`/configuracoes/${slug}$`));
+  }
+  // Back and forward land on the section of each entry, not a neighbour.
+  await page.goBack();
+  await settled(page);
+  await expect(page).toHaveURL(/\/configuracoes\/sobre$/);
+  await expect(link('Sobre')).toHaveAttribute('aria-current', 'location');
+  await page.goForward();
+  await settled(page);
+  await expect(page).toHaveURL(/\/configuracoes\/perfis-de-voz$/);
+  await expect(link('Perfis de voz')).toHaveAttribute(
+    'aria-current',
+    'location',
+  );
+  // The wheel to the end of the page: the last section is the current one.
+  await settings
+    .getByRole('heading', { name: 'Perfis de voz', level: 2 })
+    .hover();
+  await expect
+    .poll(async () => {
+      await page.mouse.wheel(0, 400);
+      return page.url();
+    })
+    .toMatch(/\/configuracoes\/sobre$/);
+  await expect(link('Sobre')).toHaveAttribute('aria-current', 'location');
+});
+
+test('KBC-131 AC-5: on a phone the root lists the sections and "‹" goes back to it', async ({
+  page,
+}) => {
+  test.skip(
+    desktop(page),
+    'The root and the pushed screens are the phone layout.',
+  );
+  const settings = await openPage(page);
+  await expect(
+    settings.getByRole('heading', { name: 'Configurações', level: 1 }),
+  ).toBeVisible();
+  await openSection(page, 'Sua IA');
+  await expect(page).toHaveURL(/\/configuracoes\/sua-ia$/);
+  // The pushed screen takes the focus on its title, so it is announced (WCAG 2.4.3).
+  await expect(
+    settings.getByRole('heading', { name: 'Sua IA', level: 2 }),
+  ).toBeFocused();
+  await expect(
+    settings.getByRole('radio', { name: /OpenRouter/ }),
+  ).toBeVisible();
+  await settings
+    .getByRole('button', { name: 'Voltar às configurações' })
+    .click();
+  await expect(page).toHaveURL(/\/configuracoes$/);
+  await expect(
+    settings.getByRole('link', { name: 'Preferências', exact: true }),
+  ).toBeVisible();
+  // Back at the root, the focus is on the row of the section just left.
+  await expect(
+    settings.getByRole('link', { name: 'Sua IA', exact: true }),
+  ).toBeFocused();
+});
+
+test('KBC-131 AC-6: the wizard goes back with the choice kept, and Pular opens the home', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/settings', async (route) => {
+    if (route.request().method() === 'PUT')
+      return route.fulfill({ json: { exists: true, ...SETTINGS_VIEW } });
+    return route.fulfill({ json: { exists: false, ...SETTINGS_VIEW } });
+  });
+  await page.goto('/configuracoes/sobre');
+  const wizard = page.getByRole('dialog');
+  await expect(wizard.getByText('Passo 1 de 4')).toBeVisible();
+  await wizard.getByRole('button', { name: 'Continuar' }).click();
+  await wizard.getByRole('radio', { name: /Buscar documentos/ }).check();
+  await wizard.getByRole('button', { name: 'Continuar' }).click();
+  await expect(wizard.getByText('Passo 3 de 4')).toBeVisible();
+  await wizard.getByRole('button', { name: 'Voltar' }).click();
+  await expect(wizard.getByText('Passo 2 de 4')).toBeVisible();
+  await expect(
+    wizard.getByRole('radio', { name: /Buscar documentos/ }),
+  ).toBeChecked();
+  await wizard.getByRole('button', { name: 'Pular' }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await expect(page).toHaveURL(/\/$/);
 });

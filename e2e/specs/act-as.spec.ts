@@ -8,18 +8,11 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { openSettings as shellOpenSettings } from './shell-helpers.js';
+import { openSection, openSettings } from './settings-helpers.js';
 
 /** KBC-060: a master acts as a person, audited (ADR 0027). */
 
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
-
-async function openSettings(page: Page) {
-  await shellOpenSettings(page);
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await expect(dialog).toBeVisible();
-  return dialog;
-}
 
 /** A member who saw only "hermetismo", already signed in once (their name is known). */
 async function aMember(page: Page) {
@@ -48,7 +41,7 @@ async function skipWizard(page: Page) {
 async function startActingAs(page: Page, email: string, reason: string) {
   await page.goto('/');
   const settings = await openSettings(page);
-  await settings.getByRole('button', { name: 'Pessoas e permissões' }).click();
+  await openSection(settings, 'Pessoas e permissões');
   await settings.getByRole('button', { name: new RegExp(email) }).click();
   await settings.getByRole('button', { name: 'Ver como', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: /^Ver como / });
@@ -69,11 +62,11 @@ test('AC-1, AC-2, AC-6, AC-8: the owner sees the app as a member, changes a sett
   // Her view: only her collection, and no "Pessoas e permissões".
   const settings = await openSettings(page);
   await expect(
-    settings.getByRole('button', { name: 'Pessoas e permissões' }),
+    settings.getByRole('link', { name: 'Pessoas e permissões', exact: true }),
   ).toHaveCount(0);
-  await settings.getByRole('button', { name: 'Acessos à sua conta' }).click();
+  await openSection(settings, 'Acessos à sua conta');
   await expect(settings.getByText('(agora)')).toBeVisible();
-  await settings.getByRole('button', { name: 'Preferências' }).click();
+  await openSection(settings, 'Preferências');
   await settings
     .getByRole('combobox', { name: 'Tema' })
     .selectOption({ label: 'Escuro' });
@@ -85,7 +78,7 @@ test('AC-1, AC-2, AC-6, AC-8: the owner sees the app as a member, changes a sett
   await page.getByRole('button', { name: 'Voltar para a minha conta' }).click();
   await expect(band).toHaveCount(0);
   const own = await openSettings(page);
-  await own.getByRole('button', { name: 'Auditoria do Ver como' }).click();
+  await openSection(own, 'Auditoria do Ver como');
   await own
     .getByRole('searchbox', { name: 'Filtrar por pessoa ou master' })
     .fill(email);
@@ -95,7 +88,7 @@ test('AC-1, AC-2, AC-6, AC-8: the owner sees the app as a member, changes a sett
   // Ana sees who entered, why and what changed.
   await member.reload();
   const hers = await openSettings(member);
-  await hers.getByRole('button', { name: 'Acessos à sua conta' }).click();
+  await openSection(hers, 'Acessos à sua conta');
   await expect(hers.getByText('não vê os marcadores')).toBeVisible();
   await expect(hers.getByText(/1 alteração/)).toBeVisible();
   await member.context().close();
@@ -124,7 +117,7 @@ test('AC-9: the dialog needs a reason, and Esc gives the focus back', async ({
   await member.context().close();
   await page.goto('/');
   const settings = await openSettings(page);
-  await settings.getByRole('button', { name: 'Pessoas e permissões' }).click();
+  await openSection(settings, 'Pessoas e permissões');
   await settings.getByRole('button', { name: new RegExp(email) }).click();
   const actAs = settings.getByRole('button', { name: 'Ver como', exact: true });
   await actAs.click();
@@ -149,9 +142,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await member.context().close();
     await page.goto('/');
     const settings = await openSettings(page);
-    await settings
-      .getByRole('button', { name: 'Pessoas e permissões' })
-      .click();
+    await openSection(settings, 'Pessoas e permissões');
     await settings.getByRole('button', { name: new RegExp(email) }).click();
     await settings
       .getByRole('button', { name: 'Ver como', exact: true })

@@ -9,13 +9,11 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { collectionItem } from './shell-helpers.js';
+import { openSection, openSettings } from './settings-helpers.js';
 import { aCollection, uniqueTag, uploadReady } from './media-helpers.js';
 import { approve, seedDraft } from './tracks-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
-import {
-  openSettings as shellOpenSettings,
-  collectionItem,
-} from './shell-helpers.js';
 
 /*
  * KBC-114: a collection made on the screen (no vault folder) shows masters the
@@ -301,9 +299,8 @@ async function sendStatus(
 }
 
 async function openTranscribers(page: Page): Promise<Locator> {
-  await shellOpenSettings(page);
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await dialog.getByRole('button', { name: 'Transcritores' }).click();
+  const dialog = await openSettings(page);
+  await openSection(dialog, 'Transcritores');
   return dialog;
 }
 

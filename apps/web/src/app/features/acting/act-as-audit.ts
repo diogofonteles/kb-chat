@@ -9,6 +9,7 @@ import {
 import { rxResource } from '@angular/core/rxjs-interop';
 import type { ActAsAuditEntry } from '@kb-chat/contracts';
 import { ActAsApi } from '@core/auth/act-as-api.js';
+import { UiBanner, UiIcon, UiPill, type Tone } from '@ui/index.js';
 
 const KIND_LABELS: Record<ActAsAuditEntry['kind'], () => string> = {
   start: () => $localize`:@@audit.start:Começou`,
@@ -32,46 +33,66 @@ const ENDED_LABELS: Record<
  */
 @Component({
   selector: 'app-act-as-audit',
-  imports: [DatePipe],
+  imports: [DatePipe, UiBanner, UiIcon, UiPill],
   template: `
-    <label class="filter">
-      <span i18n="@@audit.filter">Filtrar por pessoa ou master</span>
+    <label class="ui-search filter">
+      <ui-icon name="search" [size]="18" />
+      <span class="visually-hidden" i18n="@@audit.filter"
+        >Filtrar por pessoa ou master</span
+      >
       <input
         #query
         type="search"
         autocomplete="off"
+        placeholder="Filtrar por pessoa ou master"
+        i18n-placeholder="@@audit.filter"
         (input)="filter.set(query.value)"
       />
     </label>
     @if (audit.error()) {
-      <p role="alert" i18n="@@audit.failed">
-        Não consegui carregar a auditoria.
-      </p>
+      <ui-banner tone="err" role="alert">
+        <p i18n="@@audit.failed">Não consegui carregar a auditoria.</p>
+      </ui-banner>
     } @else if (audit.hasValue()) {
       @if (shown().length === 0) {
         <p class="muted" i18n="@@audit.none">Nenhum registro.</p>
       } @else {
-        <ul class="list">
+        <div class="table-head audit-cols" aria-hidden="true">
+          <span i18n="@@audit.colEvent">Evento</span>
+          <span i18n="@@audit.colWho">Quem</span>
+          <span i18n="@@audit.colWhen">Quando</span>
+          <span i18n="@@audit.colDetail">Detalhe</span>
+          <span i18n="@@audit.colReason">Motivo</span>
+        </div>
+        <ul class="list table">
           @for (entry of shown(); track $index) {
-            <li class="item">
+            <li class="item row audit-cols">
+              <p class="event">
+                <ui-pill [tone]="toneOf(entry)">{{ kindLabel(entry) }}</ui-pill>
+              </p>
               <p class="who">
-                <strong>{{ kindLabel(entry) }}</strong
-                >:
-                {{ entry.actor.name || entry.actor.email }}
-                <span i18n="@@audit.as">como</span>
-                {{ entry.person.name || entry.person.email }}
+                <span
+                  >{{ entry.actor.name || entry.actor.email }}
+                  <span i18n="@@audit.as">como</span>
+                  {{ entry.person.name || entry.person.email }}</span
+                >
               </p>
               <p class="when">
                 {{ entry.at | date: 'dd/MM/yyyy HH:mm:ss' }}
+              </p>
+              <p class="detail">
                 @if (entry.route) {
-                  · <code>{{ entry.method }} {{ entry.route }}</code>
-                }
-                @if (endedLabel(entry); as ended) {
-                  · {{ ended }}
+                  <code>{{ entry.method }} {{ entry.route }}</code>
+                } @else if (endedLabel(entry); as ended) {
+                  {{ ended }}
+                } @else {
+                  <span aria-hidden="true">—</span>
                 }
               </p>
               <p class="reason">
-                <span i18n="@@accesses.reason">Motivo:</span>
+                <span class="reason-label" i18n="@@accesses.reason"
+                  >Motivo:</span
+                >
                 {{ entry.reason }}
               </p>
             </li>
@@ -103,6 +124,13 @@ export class ActAsAudit {
 
   protected kindLabel(entry: ActAsAuditEntry): string {
     return KIND_LABELS[entry.kind]();
+  }
+
+  /** Started in green, a change in yellow, the rest muted (KBC-132). */
+  protected toneOf(entry: ActAsAuditEntry): Tone {
+    if (entry.kind === 'start') return 'ok';
+    if (entry.kind === 'write') return 'warn';
+    return entry.kind === 'refused' ? 'err' : 'muted';
   }
 
   protected endedLabel(entry: ActAsAuditEntry): string {

@@ -1,11 +1,15 @@
-<fieldset class="providers">
-  <legend class="legend" [class.visually-hidden]="compact()" i18n="@@ai.legend">
+<fieldset class="providers" [class.grid]="compact()">
+  <legend
+    class="group-title"
+    [class.visually-hidden]="compact()"
+    i18n="@@ai.legend"
+  >
     Como a IA responde
   </legend>
   @if (loading() && options().length === 0) {
-    <p class="note" i18n="@@ai.loading">Verificando o que está disponível…</p>
+    <p class="hint" i18n="@@ai.loading">Verificando o que está disponível…</p>
   } @else if (options().length === 0) {
-    <p class="note" role="alert" i18n="@@ai.unavailable">
+    <p class="hint" role="alert" i18n="@@ai.unavailable">
       Não consegui listar os provedores. Verifique se o servidor está rodando.
     </p>
   }
@@ -15,24 +19,16 @@
       [class.selected]="option.info.id === draft().provider"
       [class.disabled]="option.blocked !== null"
     >
-      <input
-        #providerRadio
-        type="radio"
-        name="ai-provider"
-        class="radio"
-        [value]="option.info.id"
-        [checked]="option.info.id === draft().provider"
-        [disabled]="option.blocked !== null"
-        (change)="choose(option.info.id)"
+      <ui-cover
+        class="card-art"
+        [icon]="option.icon"
+        [title]="option.name"
+        [size]="compact() ? 40 : 44"
       />
       <span class="card-body">
         <span class="card-head">
           <span class="card-title">{{ option.name }}</span>
-          <span
-            class="badge"
-            [class.included]="option.info.billing !== 'per-token'"
-            >{{ option.billing }}</span
-          >
+          <ui-pill [tone]="option.tone">{{ option.billing }}</ui-pill>
         </span>
         <span class="card-hint">{{ option.description }}</span>
         @if (option.blocked; as blocked) {
@@ -42,6 +38,16 @@
           </span>
         }
       </span>
+      <input
+        #providerRadio
+        type="radio"
+        name="ai-provider"
+        class="ui-radio"
+        [value]="option.info.id"
+        [checked]="option.info.id === draft().provider"
+        [disabled]="option.blocked !== null"
+        (change)="choose(option.info.id)"
+      />
     </label>
     @if (option.info.id === draft().provider) {
       <div class="details">
@@ -60,11 +66,13 @@
   @if (current.info.id === 'openrouter') {
     <div class="field">
       <button
+        uiButton="white"
         type="button"
-        class="primary"
+        class="connect"
         [disabled]="connecting()"
         (click)="connectOpenRouter()"
       >
+        <ui-icon name="link" [size]="18" />
         @if (savedKey()) {
           <span i18n="@@ai.reconnectOpenRouter">Conectar outra conta</span>
         } @else {
@@ -80,22 +88,24 @@
         </p>
       }
     </div>
-    <fieldset class="providers plans">
+    <fieldset class="plans">
       <legend class="field-label" i18n="@@ai.orModeLegend">
         Quais modelos usar
       </legend>
-      <label class="check">
+      <label class="option">
         <input
           type="radio"
+          class="ui-radio"
           name="or-mode"
           [checked]="draft().openrouterMode === 'free'"
           (change)="setOpenRouterMode('free')"
         />
         <span i18n="@@ai.orModeFree">Só modelos gratuitos (recomendado)</span>
       </label>
-      <label class="check">
+      <label class="option">
         <input
           type="radio"
+          class="ui-radio"
           name="or-mode"
           [checked]="draft().openrouterMode === 'models'"
           (change)="setOpenRouterMode('models')"
@@ -111,7 +121,7 @@
         <input
           #paidInput
           id="ai-paid"
-          class="input"
+          class="ui-input"
           autocomplete="off"
           spellcheck="false"
           list="ai-paid-models"
@@ -139,22 +149,24 @@
   }
 
   @if (current.info.id === 'gemini') {
-    <fieldset class="providers plans">
+    <fieldset class="plans">
       <legend class="field-label" i18n="@@ai.geminiTierLegend">
         Plano do Google AI Studio
       </legend>
-      <label class="check">
+      <label class="option">
         <input
           type="radio"
+          class="ui-radio"
           name="gemini-tier"
           [checked]="draft().geminiTier === 'free'"
           (change)="setGeminiTier('free')"
         />
         <span i18n="@@ai.geminiFree">Gratuito (sem faturamento ativado)</span>
       </label>
-      <label class="check">
+      <label class="option">
         <input
           type="radio"
+          class="ui-radio"
           name="gemini-tier"
           [checked]="draft().geminiTier === 'paid'"
           (change)="setGeminiTier('paid')"
@@ -204,8 +216,12 @@
       }
       <input
         id="ai-key"
-        class="input"
+        class="ui-input"
         type="password"
+        [attr.aria-invalid]="keyRejected() ? true : null"
+        [attr.aria-describedby]="
+          keyRejected() ? 'ai-key-error ai-key-hint' : 'ai-key-hint'
+        "
         autocomplete="off"
         spellcheck="false"
         [value]="draft().key"
@@ -213,7 +229,13 @@
         (input)="setKey(keyInput.value)"
         #keyInput
       />
-      <p class="hint" i18n="@@ai.keyPrivacy">
+      @if (keyRejected()) {
+        <p id="ai-key-error" class="field-error" role="alert">
+          <ui-icon name="xcircle" [size]="14" />
+          {{ testMessage() }}
+        </p>
+      }
+      <p id="ai-key-hint" class="hint" i18n="@@ai.keyPrivacy">
         Fica só no servidor da Nova Alexandria, num arquivo que só o servidor
         lê. Depois de salva, ela não é mostrada de novo.
       </p>
@@ -226,7 +248,7 @@
         <label class="field-label" [for]="field.id">{{ field.label }}</label>
         @if (current.info.freeModel) {
           <input
-            class="input"
+            class="ui-input"
             autocomplete="off"
             spellcheck="false"
             [id]="field.id"
@@ -250,7 +272,7 @@
           </datalist>
         } @else {
           <select
-            class="input"
+            class="ui-input"
             [id]="field.id"
             (change)="setModel(field.key, modelSelect.value)"
             #modelSelect
@@ -280,7 +302,7 @@
       >
       <input
         id="ai-cap"
-        class="input cap"
+        class="ui-input cap"
         type="number"
         inputmode="decimal"
         min="0"
@@ -309,8 +331,9 @@
   @if (hasModels()) {
     <div class="test">
       <button
+        uiButton="outline"
+        size="sm"
         type="button"
-        class="secondary"
         [disabled]="testState().kind === 'running'"
         (click)="test()"
         i18n="@@ai.test"
@@ -323,7 +346,7 @@
         [class.ok]="testOk()"
         [class.failed]="testState().kind !== 'running' && !testOk()"
       >
-        {{ testMessage() }}
+        {{ keyRejected() ? '' : testMessage() }}
       </p>
     </div>
   }

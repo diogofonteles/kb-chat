@@ -38,7 +38,8 @@ Estas notas servem a quem migra uma área para a v2 depois da fundação (KBC-12
 | `ui-card` | Cartão com capa, título, subtítulo e `progress` |
 | `ui-menu` + `[uiMenuItem]` | Menu com gatilho próprio (`[uiMenuTrigger]` projetado), `label`, `menuId`, `align`, `direction`. Fica na camada de cima e vira folha abaixo de 1024 px |
 | `[uiOverlay]`, `anchorOverlay`, `placeOverlay` | A camada de cima de qualquer popover ou lista (D5), detalhada abaixo |
-| `ui-dialog` | Modal escuro: título 22, fechar no canto, ações à direita. Num celular vira folha alta |
+| `ui-dialog` | Modal escuro: título 22, fechar no canto, ações à direita. Num celular vira folha alta. O fundo só fecha com o clique começado e terminado nele; `[closeOnBackdrop]="false"` onde fechar perde trabalho (o convite configurado) |
+| `uiTablist` | Teclado de uma `role="tablist"` (APG): ← → trocam de aba e levam o foco, Home e End vão às pontas |
 | `ui-sheet` | Folha do celular sobre um `<dialog>` modal (`full` ocupa a tela) |
 | `ui-field`, `.ui-input`, `.ui-search` | Campo com rótulo, dica e erro (`fieldDescribedBy`) |
 | `.ui-switch`, `.ui-check`, `.ui-radio` | Seleção sobre os `input` nativos |
@@ -96,7 +97,14 @@ Serviços da casca:
 ## Conversa e Pesquisa com IA (KBC-126, KBC-127)
 
 - **Início:** `features/chat/home/conversation-home.ts` entra no lugar da antiga `.welcome` de `chat-page.html`. Os atalhos recentes vêm de `homeTiles` (histórico do servidor na ordem do último uso, depois os acervos). Os chips de escopo usam `ChatStore.setKinds` e `ViewStore.select`.
-- **Resultados:** `result-message` é uma página de busca; o container `results` (46rem) decide entre "Melhor resultado" ao lado da tabela ou uma lista só. A casca ainda limita `.thread` a `--column` (45rem): com isso o desktop mostra a lista única. Para o desenho de duas colunas, a casca precisa deixar a conversa ocupar o painel principal.
+- **Resultados:** `result-message` é uma página de busca; o container `results` (46rem) decide entre "Melhor resultado" ao lado da tabela ou uma lista só. Na busca, `.thread.search-page` (`searchPage` em `chat-page.ts`) solta o limite de `--column` e ocupa o painel principal, então o desktop mostra as duas colunas.
 - **Filtros:** popovers com `[uiOverlay]`; no celular a folha mostra "Ver N resultados" quando as contagens na tela dizem o número (`draftResultCount`), senão "Ver resultados".
 - **Fonte aberta:** `ChatStore.openSource`/`switchSource`/`leaveSources` levam a lista de fontes da resposta ao `app-document-panel`, que mostra "Fonte n de m", "Abrir documento", "Copiar trecho", "Próximo trecho" e "Tela cheia". No celular, `research-thread` abre a folha de leitura de 85% com abas por fonte; arrastar para baixo ou Esc devolve o foco à citação.
 - **Seletores de E2E:** `e2e/specs/v2-conversa.spec.ts` e `e2e/specs/v2-pesquisa.spec.ts` (capturas com `KBC_SHOTS`).
+
+## Configurações (KBC-131, KBC-132)
+
+- **Página, não modal:** `/configuracoes` e `/configuracoes/<seção>` (`settings-routes.ts`, uma rota só). `SettingsStore.openSettings(seção)` navega até lá; a `SettingsHost` ficou só com o Assistente. As entradas são as da casca: o menu do avatar e o botão de pessoas na barra do topo (desktop), o Menu no celular; `settings-helpers.ts` usa as de `shell-helpers.ts`.
+- **Seções:** `settings-index.ts` (id, endereço, grupo, quem vê). No desktop todas ficam na página, uma após a outra; rolar marca o índice e troca o endereço com `replaceUrl`. No celular a raiz lista as seções e cada uma é uma tela empurrada.
+- **Seletores de E2E:** `e2e/specs/settings-helpers.ts` (`openSettings(page, seção)`, `openSection`, `openPeople`, `closeSettings`, `settingsSection`, `showTab`, `SETTINGS_AXE`). A página é a região "Configurações"; cada seção é uma região com o próprio título.
+- **Modais:** o editor de pessoa, o convite configurado, o perfil de voz, recusar pedido e revogar transcritor usam `ui-dialog`. Um rodapé dentro de `ui-dialog` vai num elemento com `uiDialogFooter` fora de `@if`.

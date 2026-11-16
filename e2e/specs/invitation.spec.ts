@@ -7,7 +7,7 @@ import {
   uniqueEmail,
   WEB_ORIGIN,
 } from './fixtures.js';
-import { openPeople as shellOpenPeople } from './shell-helpers.js';
+import { openPeople as openPeopleSettings } from './settings-helpers.js';
 
 /**
  * KBC-026: inviting sends an e-mail (read from the E2E server's outbox, never sent), the
@@ -16,8 +16,7 @@ import { openPeople as shellOpenPeople } from './shell-helpers.js';
 
 async function openPeople(page: Page): Promise<Locator> {
   await page.goto('/');
-  await shellOpenPeople(page);
-  return page.getByRole('dialog', { name: 'Configurações' });
+  return openPeopleSettings(page);
 }
 
 const shots = process.env['KBC_SHOTS'];

@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { CSRF, OWNER_EMAIL, expect, pageAs, test } from './fixtures.js';
 import { startInSearchView } from './search-view.js';
-import { openSettings, startNewConversation } from './shell-helpers.js';
+import { startNewConversation } from './shell-helpers.js';
+import { closeSettings, openSettings } from './settings-helpers.js';
 
 test.beforeEach(startInSearchView);
 
@@ -180,14 +181,12 @@ test('AC-5: another collection starts a new conversation and updates the count',
 
 test('AC-6: the esoteric theme survives a reload', async ({ page }) => {
   // v2 (KBC-125 BR-4): the theme is in Configurações › Preferências.
-  await openSettings(page);
-  const settings = page.getByRole('dialog', { name: 'Configurações' });
-  await settings.getByRole('button', { name: 'Preferências' }).click();
+  const settings = await openSettings(page, 'Preferências');
   await settings
     .getByRole('combobox', { name: 'Tema' })
     .selectOption({ label: 'Esotérico' });
   await expect(settings.getByText('Salvo automaticamente.')).toBeVisible();
-  await page.keyboard.press('Escape');
+  await closeSettings(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'esoteric');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'esoteric');

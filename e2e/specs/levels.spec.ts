@@ -9,10 +9,8 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import {
-  openPeople as shellOpenPeople,
-  chooseCollectionSlug,
-} from './shell-helpers.js';
+import { chooseCollectionSlug } from './shell-helpers.js';
+import { openPeople } from './settings-helpers.js';
 
 /**
  * KBC-103 (ADR 0036, screens.md T24, T9, T3, T4): a master builds the scale of a collection,
@@ -136,8 +134,7 @@ async function place(
 /** T9: the member's "Nível em <acervo>" shows CI. */
 async function seePersonLevel(page: Page, title: string, email: string) {
   await page.goto('/');
-  await shellOpenPeople(page);
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
+  const dialog = await openPeople(page);
   await dialog.getByRole('button', { name: new RegExp(email) }).click();
   const select = dialog.getByRole('combobox', { name: `Nível em ${title}` });
   await expect(select).toHaveValue('ci');

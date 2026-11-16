@@ -7,10 +7,8 @@ import {
   shipNewVersion,
 } from './app-version-helpers.js';
 import { expect, test } from './fixtures.js';
-import {
-  openSettings as shellOpenSettings,
-  startNewCollection,
-} from './shell-helpers.js';
+import { startNewCollection } from './shell-helpers.js';
+import { openSettings } from './settings-helpers.js';
 
 async function shot(page: Page, testInfo: TestInfo, name: string) {
   await page.screenshot({
@@ -119,22 +117,24 @@ test('AC-2: "Atualizar" reloads into the new version and the question box keeps 
   await expect(notice(page).text).toHaveCount(0);
 });
 
-test('AC-2: work in a dialog (Configurações) holds the reload too, not only the question box', async ({
+test('AC-2: work in Configurações (a key typed, not saved) holds the reload too, not only the question box', async ({
   page,
 }) => {
   const deploy = await playDeploys(page);
   await page.goto('/');
-  await shellOpenSettings(page);
-  const settings = page.getByRole('dialog', { name: 'Configurações' });
-  await expect(settings).toBeVisible();
+  // Configurações is a page (KBC-131): what holds the reload is the unsaved key in Sua IA.
+  const settings = await openSettings(page, 'Sua IA');
+  await settings.getByRole('radio', { name: /OpenAI \(API\)/ }).check();
+  await settings.getByLabel(/Chave da API/).fill('sk-not-saved-yet');
 
   shipNewVersion(deploy);
   const asked = page.waitForResponse('**/version.json');
   await comeBack(page);
   await asked;
-  await page.keyboard.press('Escape');
-  await expect(settings).toBeHidden();
   await expect(notice(page).text).toBeVisible();
+  await expect(settings.getByLabel(/Chave da API/)).toHaveValue(
+    'sk-not-saved-yet',
+  );
   expect(deploy.loads).toBe(1);
 });
 

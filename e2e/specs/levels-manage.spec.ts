@@ -9,7 +9,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { openPeople as shellOpenPeople } from './shell-helpers.js';
+import { openPeople } from './settings-helpers.js';
 
 /**
  * KBC-108 (ADR 0036 §10, §11, screens.md T24): the master deletes a level choosing where its
@@ -98,8 +98,7 @@ async function profileAtCi(owner: APIRequestContext, slug: string) {
 /** KBC-109 on T9: the profile asks for another level, named in the field's note. */
 async function seeStaleProfile(page: Page, name: string): Promise<void> {
   await page.goto('/');
-  await shellOpenPeople(page);
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
+  const dialog = await openPeople(page);
   const section = dialog.getByRole('region', { name: /Perfis de convite/ });
   await section.getByRole('button', { name: /Perfis de convite/ }).click();
   await section

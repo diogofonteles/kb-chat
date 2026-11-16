@@ -8,10 +8,10 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { openSection, openSettings } from './settings-helpers.js';
 import { aCollectionInVault, uniqueTag, uploadReady } from './media-helpers.js';
 import { approve, seedDraft } from './tracks-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
-import { openSettings as shellOpenSettings } from './shell-helpers.js';
 
 /*
  * KBC-099 AC-16 (the owner's scope of 2026-11-06): tracks published before the track
@@ -71,10 +71,9 @@ async function titleOf(owner: APIRequestContext, topic: string) {
 }
 
 async function openTranscribers(page: Page) {
-  await shellOpenSettings(page);
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
+  const dialog = await openSettings(page);
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: 'Transcritores' }).click();
+  await openSection(dialog, 'Transcritores');
   const section = dialog.getByRole('region', {
     name: 'Faixas que já existem',
   });

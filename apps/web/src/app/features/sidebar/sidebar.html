@@ -577,12 +577,7 @@
         }
       }
       @if (session.isMaster()) {
-        <button
-          type="button"
-          class="action"
-          aria-haspopup="dialog"
-          (click)="openPeople()"
-        >
+        <button type="button" class="action" (click)="openPeople()">
           <ui-icon name="people" [size]="20" />
           <span i18n="@@sidebar.people">Pessoas e permissões</span>
           @if (requests.count(); as pending) {

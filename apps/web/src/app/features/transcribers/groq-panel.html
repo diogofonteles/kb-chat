@@ -18,7 +18,7 @@
   </div>
 } @else if (settings(); as current) {
   <form class="block" (submit)="testKey($event)" novalidate>
-    <h4 class="block-title" i18n="@@groq.keyTitle">Conexão</h4>
+    <h3 class="block-title" i18n="@@groq.keyTitle">Conexão</h3>
     @if (current.keyProblem === 'rejected') {
       <p class="key-problem">
         <span aria-hidden="true">⚠</span>
@@ -110,29 +110,33 @@
   </form>
 
   <form class="block" (submit)="saveMode($event)" novalidate>
-    <fieldset class="providers">
+    <fieldset class="group">
       <legend class="legend block-title" i18n="@@groq.modeTitle">
         Quando usar o Groq
       </legend>
-      @for (option of options; track option.mode) {
-        <label class="card" [class.selected]="mode() === option.mode">
-          <input
-            class="radio"
-            type="radio"
-            name="groq-mode"
-            [value]="option.mode"
-            [checked]="mode() === option.mode"
-            [attr.aria-describedby]="'groq-mode-' + option.mode"
-            (change)="chooseMode(option.mode)"
-          />
-          <span class="card-body">
-            <span class="card-title">{{ option.label() }}</span>
-            <span class="card-hint" [id]="'groq-mode-' + option.mode">{{
-              option.hint()
-            }}</span>
-          </span>
-        </label>
-      }
+      <div class="choices three">
+        @for (option of options; track option.mode) {
+          <label class="choice-label">
+            <ui-choice-card
+              [title]="option.label()"
+              [chosen]="mode() === option.mode"
+            >
+              <span class="ui-choice__help" [id]="'groq-mode-' + option.mode">{{
+                option.hint()
+              }}</span>
+              <input
+                class="ui-radio choice-radio"
+                type="radio"
+                name="groq-mode"
+                [value]="option.mode"
+                [checked]="mode() === option.mode"
+                [attr.aria-describedby]="'groq-mode-' + option.mode"
+                (change)="chooseMode(option.mode)"
+              />
+            </ui-choice-card>
+          </label>
+        }
+      </div>
     </fieldset>
     @if (mode() === 'idle') {
       <label class="field" for="groq-hours">
@@ -167,9 +171,11 @@
       }
     }
     @if (!current.connected && mode() !== 'never') {
-      <p class="hint" i18n="@@groq.needsKey">
-        Sem uma chave conectada, o Groq não é usado em nenhum modo.
-      </p>
+      <ui-banner tone="warn">
+        <p i18n="@@groq.needsKey">
+          Sem uma chave conectada, o Groq não é usado em nenhum modo.
+        </p>
+      </ui-banner>
     }
     <button
       type="submit"
@@ -194,9 +200,9 @@
   </form>
 
   <form class="block" (submit)="saveCap($event)" novalidate>
-    <h4 class="block-title" i18n="@@groq.monthTitle">
+    <h3 class="block-title" i18n="@@groq.monthTitle">
       Gasto com mídia neste mês
-    </h4>
+    </h3>
     <p class="spent">{{ spentText() }}</p>
     <p class="hint" i18n="@@groq.monthHint">
       Inclui o Groq e a IA que propõe faixas e assuntos. Nada é enviado se

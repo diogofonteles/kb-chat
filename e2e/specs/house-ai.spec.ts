@@ -8,7 +8,13 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { openSettings as shellOpenSettings } from './shell-helpers.js';
+import {
+  openSection,
+  openSettings,
+  SETTINGS_AXE,
+  settingsPage,
+  showTab,
+} from './settings-helpers.js';
 
 /**
  * "IA da aplicação" (KBC-022) against the E2E server's fake OpenRouter: the consent page
@@ -17,27 +23,20 @@ import { openSettings as shellOpenSettings } from './shell-helpers.js';
  */
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
-async function openSettings(page: Page) {
-  await shellOpenSettings(page);
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await expect(dialog).toBeVisible();
-  return dialog;
-}
-
 test('AC-1, AC-8, AC-4: a master connects OpenRouter, lends the house plan to one person, who researches for free', async ({
   page,
   browser,
 }) => {
   await page.goto('/');
   let dialog = await openSettings(page);
-  await dialog.getByRole('button', { name: 'IA da aplicação' }).click();
+  await openSection(dialog, 'IA da aplicação');
   // "Conectar outra conta" when another spec already connected the shared server's house.
   await dialog
     .getByRole('button', { name: /^Conectar (OpenRouter|outra conta)$/ })
     .click();
   // OpenRouter (faked) approves and sends the master back: the section reopens by itself.
   await page.waitForURL((url) => !url.search.includes('openrouter='));
-  dialog = page.getByRole('dialog', { name: 'Configurações' });
+  dialog = settingsPage(page);
   await expect(dialog.getByText('Conta conectada.')).toBeVisible();
   await expect(dialog.getByText('••••wxyz')).toBeVisible();
   await expect(
@@ -45,7 +44,7 @@ test('AC-1, AC-8, AC-4: a master connects OpenRouter, lends the house plan to on
   ).toBeVisible();
   await expect(dialog.getByText('Fake Large (free)')).toBeVisible();
   await page.waitForFunction(() => document.getAnimations().length === 0);
-  const axe = await new AxeBuilder({ page }).include('dialog').analyze();
+  const axe = await new AxeBuilder({ page }).include(SETTINGS_AXE).analyze();
   expect(axe.violations).toEqual([]);
 
   const email = uniqueEmail('house');
@@ -54,8 +53,10 @@ test('AC-1, AC-8, AC-4: a master connects OpenRouter, lends the house plan to on
     topics: ['hermetismo'],
     features: ['search', 'research'],
   });
-  await dialog.getByRole('button', { name: 'Pessoas e permissões' }).click();
+  await openSection(dialog, 'Pessoas e permissões');
   await dialog.getByRole('button', { name: new RegExp(email) }).click();
+  // The person's editor is a modal, the AI in its own tab (KBC-132).
+  await showTab(dialog, 'IA e limites');
   await dialog
     .getByLabel('Qual IA atende esta pessoa')
     .selectOption({ label: 'Plano da casa (OpenRouter)' });
@@ -126,7 +127,7 @@ test('AC-5: the quota spent offers the person their own AI', async ({
   if (process.env['KBC_EVIDENCE'])
     await person.screenshot({ path: process.env['KBC_EVIDENCE'] });
   await person.getByRole('button', { name: 'Conectar a minha IA' }).click();
-  const dialog = person.getByRole('dialog', { name: 'Configurações' });
+  const dialog = settingsPage(person);
   await expect(dialog.getByText('Quem atende você agora')).toBeVisible();
   await expect(
     dialog.getByText('IA da aplicação (cedida pelo administrador)'),

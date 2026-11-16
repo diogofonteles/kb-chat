@@ -208,8 +208,10 @@ test('AC-6 (master): the avatar menu has every v1 entry', async ({ page }) => {
   await shoot(page, 'shell-account-menu');
   await page.keyboard.press('Escape');
   await openSettings(page);
+  // Configurações is a page (KBC-131).
+  await expect(page).toHaveURL(/\/configuracoes/);
   await expect(
-    page.getByRole('dialog', { name: 'Configurações' }),
+    page.getByRole('region', { name: 'Configurações' }),
   ).toBeVisible();
 });
 

@@ -14,6 +14,8 @@ import { APP_AI_LABELS } from '@features/house-ai/app-ai-labels.js';
 import { PROVIDER_COPY, TEST_COPY } from './provider-copy.js';
 import { SettingsStore } from './settings-store.js';
 
+import { UiButton, UiCover, UiProgress } from '@ui/index.js';
+
 const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
 
 /**
@@ -22,168 +24,190 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
  */
 @Component({
   selector: 'app-ai-status-card',
-  imports: [DatePipe],
+  imports: [DatePipe, UiButton, UiCover, UiProgress],
   template: `
     @if (status(); as current) {
       <div class="card" role="group" aria-labelledby="ai-status-title">
-        <p id="ai-status-title" class="title" i18n="@@aiStatus.title">
-          Quem atende você agora
-        </p>
-        @if (current.source === 'app') {
-          @if (lent()) {
-            <p class="who">
-              <strong i18n="@@aiStatus.appShort">IA da aplicação</strong>
-            </p>
-          } @else {
-            <p class="who">
-              <strong i18n="@@aiStatus.app"
-                >IA da aplicação (cedida pelo administrador)</strong
-              >
-              · {{ appLabel() }}
-            </p>
-          }
-          <p class="detail">
+        <ui-cover class="art" icon="sparkleFill" title="IA" [size]="48" />
+        <div class="text">
+          <p id="ai-status-title" class="title" i18n="@@aiStatus.title">
+            Quem atende você agora
+          </p>
+          @if (current.source === 'app') {
             @if (lent()) {
-              <span i18n="@@aiStatus.lentIncluded"
-                >Incluído na assinatura do administrador</span
-              >
+              <p class="who">
+                <strong i18n="@@aiStatus.appShort">IA da aplicação</strong>
+              </p>
             } @else {
-              <span i18n="@@aiStatus.free">Gratuito para você</span>
-            }
-            @if (current.remainingToday !== null) {
-              ·
-              <span i18n="@@aiStatus.remaining"
-                >Pesquisas restantes hoje: {{ current.remainingToday }} de
-                {{ current.dailyResearches }}</span
-              >
-            }
-          </p>
-          @if (lent()) {
-            <div class="lent" role="note">
-              @if (lentChatgpt()) {
-                <p i18n="@@aiStatus.lentGpt">
-                  Você está usando temporariamente a IA da aplicação (assinatura
-                  do ChatGPT do administrador).
-                </p>
-              } @else {
-                <p i18n="@@aiStatus.lent">
-                  Você está usando temporariamente a IA da aplicação (assinatura
-                  do Claude do administrador).
-                </p>
-              }
-              @if (canConfigureOwn()) {
-                <button
-                  type="button"
-                  class="own"
-                  (click)="configureOwn.emit()"
-                  i18n="@@aiStatus.configureOwn"
+              <p class="who">
+                <strong i18n="@@aiStatus.app"
+                  >IA da aplicação (cedida pelo administrador)</strong
                 >
-                  Configurar a minha IA
-                </button>
+                · {{ appLabel() }}
+              </p>
+            }
+            <p class="detail">
+              @if (lent()) {
+                <span i18n="@@aiStatus.lentIncluded"
+                  >Incluído na assinatura do administrador</span
+                >
+              } @else {
+                <span i18n="@@aiStatus.free">Gratuito para você</span>
               }
-            </div>
-          }
-          @if (current.enforced) {
-            <p class="detail" i18n="@@aiStatus.enforced">
-              O administrador definiu que a IA da aplicação atende você, mesmo
-              com uma IA sua configurada.
+              @if (current.remainingToday !== null) {
+                ·
+                <span i18n="@@aiStatus.remaining"
+                  >Pesquisas restantes hoje: {{ current.remainingToday }} de
+                  {{ current.dailyResearches }}</span
+                >
+              }
             </p>
-          }
-        } @else if (current.source === 'own') {
-          <p class="who">
-            <strong i18n="@@aiStatus.own">Sua IA</strong> ·
-            {{ providerLabel() }}
-            @if (planLabel()) {
-              · {{ planLabel() }}
+            @if (lent()) {
+              <div class="lent" role="note">
+                @if (lentChatgpt()) {
+                  <p i18n="@@aiStatus.lentGpt">
+                    Você está usando temporariamente a IA da aplicação
+                    (assinatura do ChatGPT do administrador).
+                  </p>
+                } @else {
+                  <p i18n="@@aiStatus.lent">
+                    Você está usando temporariamente a IA da aplicação
+                    (assinatura do Claude do administrador).
+                  </p>
+                }
+                @if (canConfigureOwn()) {
+                  <button
+                    uiButton="outline"
+                    size="sm"
+                    type="button"
+                    (click)="configureOwn.emit()"
+                    i18n="@@aiStatus.configureOwn"
+                  >
+                    Configurar a minha IA
+                  </button>
+                }
+              </div>
             }
-          </p>
-          @if (current.free && current.provider === 'gemini') {
-            <p class="detail" i18n="@@aiStatus.ownFreeGoogle">
-              Gratuito se o faturamento estiver desativado no Google Cloud.
+            @if (current.enforced) {
+              <p class="detail" i18n="@@aiStatus.enforced">
+                O administrador definiu que a IA da aplicação atende você, mesmo
+                com uma IA sua configurada.
+              </p>
+            }
+          } @else if (current.source === 'own') {
+            <p class="who">
+              <strong i18n="@@aiStatus.own">Sua IA</strong> ·
+              {{ providerLabel() }}
+              @if (planLabel()) {
+                · {{ planLabel() }}
+              }
             </p>
-          } @else if (current.free) {
-            <p class="detail" i18n="@@aiStatus.ownFree">Gratuito para você.</p>
-          } @else if (spentLabel(); as spent) {
-            <p class="detail" i18n="@@aiStatus.ownSpent">
-              Você paga · Gasto hoje: {{ spent }}
-            </p>
-          } @else {
-            <p class="detail" i18n="@@aiStatus.ownPays">
-              Você paga o provedor (ou a sua assinatura).
-            </p>
-          }
-        }
-        @if (current.lastTest; as test) {
-          <p class="detail">
-            @if (test.ok) {
-              <span i18n="@@aiStatus.testOk"
-                >Último teste: funcionando ({{
-                  test.at | date: 'dd/MM HH:mm'
-                }})</span
-              >
+            @if (current.free && current.provider === 'gemini') {
+              <p class="detail" i18n="@@aiStatus.ownFreeGoogle">
+                Gratuito se o faturamento estiver desativado no Google Cloud.
+              </p>
+            } @else if (current.free) {
+              <p class="detail" i18n="@@aiStatus.ownFree">
+                Gratuito para você.
+              </p>
+            } @else if (spentLabel(); as spent) {
+              <p class="detail" i18n="@@aiStatus.ownSpent">
+                Você paga · Gasto hoje: {{ spent }}
+              </p>
             } @else {
-              <span i18n="@@aiStatus.testFailed"
-                >Último teste: falhou ({{
-                  test.at | date: 'dd/MM HH:mm'
-                }}).</span
-              >
-              {{ testReason() }}
+              <p class="detail" i18n="@@aiStatus.ownPays">
+                Você paga o provedor (ou a sua assinatura).
+              </p>
             }
-          </p>
-        }
-        @if (current.source === 'none') {
-          <p class="who" i18n="@@aiStatus.none">
-            Nenhuma IA atende você agora: só a busca nos documentos.
-          </p>
+          }
+          @if (current.lastTest; as test) {
+            <p class="detail">
+              @if (test.ok) {
+                <span i18n="@@aiStatus.testOk"
+                  >Último teste: funcionando ({{
+                    test.at | date: 'dd/MM HH:mm'
+                  }})</span
+                >
+              } @else {
+                <span i18n="@@aiStatus.testFailed"
+                  >Último teste: falhou ({{
+                    test.at | date: 'dd/MM HH:mm'
+                  }}).</span
+                >
+                {{ testReason() }}
+              }
+            </p>
+          }
+          @if (current.source === 'none') {
+            <p class="who" i18n="@@aiStatus.none">
+              Nenhuma IA atende você agora: só a busca nos documentos.
+            </p>
+          }
+        </div>
+        @if (remaining(); as left) {
+          <ui-progress class="left" [value]="left" />
         }
       </div>
     }
   `,
   styles: `
     .card {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.875rem;
+      padding: var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--overlay-2);
+    }
+    .text {
       display: grid;
-      gap: var(--space-1);
-      padding: var(--space-3) var(--space-4);
-      border: 1px solid var(--color-border);
-      border-left: 4px solid var(--color-accent);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-muted);
+      flex: 1;
+      gap: 0.1875rem;
+      min-width: 0;
     }
     .title {
       margin: 0;
-      font-size: var(--text-sm);
       color: var(--color-text-muted);
+      font-size: var(--text-xs);
+      font-weight: 700;
     }
     .who,
     .detail {
       margin: 0;
     }
+    .who {
+      font-size: var(--text-md);
+    }
     .detail {
-      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+      font-size: var(--text-meta);
+    }
+    .left {
+      flex: none;
+      width: 10rem;
+      align-self: center;
     }
     .lent {
       display: grid;
       gap: var(--space-2);
       justify-items: start;
-      margin-top: var(--space-1);
-      padding: var(--space-2) var(--space-3);
+      margin-top: var(--space-2);
+      padding: var(--space-3);
       border: 1px solid var(--color-accent);
-      border-radius: var(--radius-sm);
-      background: var(--color-surface);
+      border-radius: var(--radius-card);
+      background: var(--overlay-1);
     }
     .lent p {
       margin: 0;
       font-weight: 600;
     }
-    .own {
-      min-height: var(--target);
-      padding: 0 var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      background: var(--color-surface);
-      color: var(--color-text);
-      font: inherit;
-      cursor: pointer;
+    @media (max-width: 1023px) {
+      .card {
+        flex-wrap: wrap;
+      }
+      .left {
+        width: 100%;
+      }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -239,6 +263,13 @@ export class AiStatusCard {
     const code = this.status()?.lastTest?.code;
     const known = code ? aiTestCodeSchema.safeParse(code) : null;
     return known?.success ? TEST_COPY[known.data]() : '';
+  });
+  /** The day's researches left, drawn as a bar beside the words (KBC-131 AC-4). */
+  protected readonly remaining = computed(() => {
+    const status = this.status();
+    const total = status?.dailyResearches ?? 0;
+    if (status?.source !== 'app' || status.remainingToday === null) return 0;
+    return total > 0 ? Math.max(status.remainingToday / total, 0.0001) : 0;
   });
   protected readonly providerLabel = computed(() => {
     const provider = this.status()?.provider ?? '';

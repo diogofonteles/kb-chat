@@ -4,10 +4,47 @@
 }
 
 .invite {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
+}
+
+.invite-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+/* The invitation bar: e-mail · Perfil · Configurar agora · Convidar (v2 · Pessoas). */
+.invite-fields {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
   gap: var(--space-3);
+}
+
+.email-field {
+  order: 0;
+}
+
+.setup {
+  order: 1;
+}
+
+.invite-send {
+  order: 2;
+  min-height: 2.75rem;
+}
+
+.invite-fields > .check {
+  order: 3;
+}
+
+.invite-fields > .hint {
+  order: 4;
+  flex-basis: 100%;
 }
 
 .field {
@@ -19,16 +56,6 @@
 
 .label {
   font-weight: 600;
-}
-
-input[type='email'] {
-  min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font: inherit;
 }
 
 .primary,
@@ -77,111 +104,6 @@ input[type='email'] {
 
 .alert p {
   margin: 0 0 var(--space-2);
-}
-
-.people {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.person {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-}
-
-.person > :not(.pick, .row) {
-  grid-column: 1 / -1;
-}
-
-.pick,
-.select-all {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--target);
-  cursor: pointer;
-}
-
-.pick {
-  justify-content: center;
-  min-width: var(--target);
-  padding-left: var(--space-2);
-}
-
-.pick input,
-.select-all input {
-  width: 1.125rem;
-  height: 1.125rem;
-  accent-color: var(--color-accent);
-}
-
-.row {
-  display: grid;
-  gap: var(--space-1);
-  width: 100%;
-  min-height: var(--target);
-  padding: var(--space-3) var(--space-4);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.row:hover {
-  background: var(--color-surface-muted);
-}
-
-.person > .row {
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-}
-
-.ai {
-  font-size: var(--text-sm);
-}
-
-.who {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 var(--space-2);
-  align-items: baseline;
-  min-width: 0;
-}
-
-.name {
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.email,
-.meta {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  overflow-wrap: anywhere;
-}
-
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-  align-items: center;
-}
-
-.badge {
-  padding: 0 var(--space-2);
-  border: 1px solid var(--color-accent-strong);
-  border-radius: var(--radius-sm);
-  color: var(--color-accent-strong);
-  font-weight: 600;
 }
 
 .editor {
@@ -267,4 +189,271 @@ input[aria-invalid='true'] {
 
 .setup-hint {
   flex-basis: 100%;
+}
+
+/* ---------- The people as a table (KBC-132 FR-1): ☐ · pessoa · acervos e IA · hoje · situação ---------- */
+.table-head,
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 7.5rem 10rem 1.25rem;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.table-head {
+  min-height: 2.25rem;
+  padding: 0 var(--space-3) 0 calc(var(--target) + var(--space-3));
+  border-bottom: 1px solid var(--overlay-line);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.table-head > span:first-child {
+  display: none;
+}
+
+.people {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.person {
+  display: grid;
+  grid-template-columns: var(--target) minmax(0, 1fr);
+  align-items: center;
+  border-radius: 4px;
+}
+
+.person:hover,
+.person.open {
+  background: var(--overlay-2);
+}
+
+.pick {
+  justify-content: center;
+}
+
+.row {
+  width: 100%;
+  min-height: 3.5rem;
+  padding: var(--space-2) var(--space-3) var(--space-2) 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.who {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.who-text,
+.access {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.name-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.email,
+.ai,
+.when {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.topics {
+  font-size: var(--text-meta);
+  overflow-wrap: anywhere;
+}
+
+.spent {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.last {
+  display: grid;
+  justify-items: start;
+  gap: 0.125rem;
+}
+
+.more {
+  color: var(--color-text-muted);
+}
+
+.invitation {
+  display: flex;
+}
+
+@media (max-width: 1023px) {
+  .invite {
+    padding: var(--space-4);
+  }
+
+  .invite-fields > * {
+    flex: 1 1 100%;
+  }
+
+  .invite-send {
+    order: 2;
+  }
+
+  .table-head {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr) 1.25rem;
+    gap: var(--space-1) var(--space-2);
+  }
+
+  .row > .who {
+    grid-column: 1;
+  }
+
+  .row > .access,
+  .row > .spent,
+  .row > .last {
+    grid-column: 1;
+    padding-left: 2.875rem;
+  }
+
+  .row > .more {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .last {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+}
+
+.pick,
+.select-all {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+/* ---------- v2 look of the controls (KBC-132): pill buttons, inputs on the overlay tokens ---------- */
+.primary,
+.secondary,
+.danger,
+.link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.secondary {
+  border-color: var(--overlay-4);
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: var(--color-text);
+}
+
+.danger,
+.secondary.danger {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.link {
+  padding: 0 var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.link:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.danger-text {
+  color: var(--color-danger);
+}
+
+.primary:disabled,
+.secondary:disabled,
+.danger:disabled,
+.link:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.select,
+.number,
+textarea.input,
+input.input {
+  min-height: 2.5rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--overlay-line);
+  border-radius: 4px;
+  background: var(--overlay-2);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.select:focus-visible,
+.number:focus-visible {
+  border-color: var(--color-text);
+  outline: 1px solid var(--color-text);
+}
+
+.select option {
+  background: var(--color-elevated);
+  color: var(--color-text);
 }

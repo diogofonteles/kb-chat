@@ -8,20 +8,21 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { openSettings as shellOpenSettings } from './shell-helpers.js';
+import {
+  closeSettings,
+  desktop,
+  openSettings as openPage,
+  SETTINGS_AXE,
+  settingsSection,
+} from './settings-helpers.js';
 
 /**
  * "Sua IA" (KBC-023) against the E2E server's fakes: OpenRouter (consent approved at once,
  * free models) and Gemini (a key ending in "valid" is accepted).
  */
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
-async function openSettings(page: Page) {
-  await shellOpenSettings(page);
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await expect(dialog).toBeVisible();
-  return dialog;
-}
+/** Configurações at Sua IA (KBC-131: a page, the section a region of its own). */
+const openSettings = (page: Page) => openPage(page, 'Sua IA');
 
 /** A person with research and their own AI settings; the first-run wizard skipped. */
 async function personWithOwnAi(
@@ -62,18 +63,18 @@ test('AC-1, AC-2: connects one’s own OpenRouter in one click and answers for f
   ).toBeVisible();
   await person.waitForFunction(() => document.getAnimations().length === 0);
   const axe = await new AxeBuilder({ page: person })
-    .include('dialog')
+    .include(SETTINGS_AXE)
     .analyze();
   expect(axe.violations).toEqual([]);
   await dialog.getByRole('button', { name: 'Conectar OpenRouter' }).click();
   await person.waitForURL((url) => !url.search.includes('openrouter='));
-  const back = person.getByRole('dialog', { name: 'Configurações' });
+  const back = settingsSection(person, 'Sua IA');
   await expect(back.getByText('Conta conectada.')).toBeVisible();
   await expect(
     back.getByRole('group', { name: 'Quem atende você agora' }),
   ).toContainText('Sua IA · OpenRouter');
   await expect(back.getByText('Gratuito para você.')).toBeVisible();
-  await back.getByRole('button', { name: 'Fechar configurações' }).click();
+  await closeSettings(person);
   const answer = await research(person);
   await expect(answer.getByText('Resposta do plano da casa.')).toBeVisible();
   await expect(answer.getByText('Sua IA', { exact: true })).toBeVisible();
@@ -101,7 +102,7 @@ test('AC-4, AC-7: guides the free Google key, tests it and shows the last test',
   await expect(dialog.getByText('Salvo.')).toBeVisible();
   await dialog.getByRole('button', { name: 'Testar conexão' }).click();
   await expect(dialog.getByText(/Conexão funcionando/)).toBeVisible();
-  await dialog.getByRole('button', { name: 'Fechar configurações' }).click();
+  await closeSettings(person);
   const answer = await research(person);
   await expect(answer.getByText('Resposta do Gemini.')).toBeVisible();
   await expect(answer.getByText('Gratuito', { exact: true })).toBeVisible();

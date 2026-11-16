@@ -1,7 +1,7 @@
 <section class="learning" aria-labelledby="learning-title">
-  <h4 id="learning-title" class="block-title" i18n="@@learning.title">
+  <h3 id="learning-title" class="block-title" i18n="@@learning.title">
     Aprendido das correções
-  </h4>
+  </h3>
   <p class="hint" i18n="@@learning.lead">
     O que as pessoas corrigem na preparação vira regra para as próximas
     transcrições. Desligue o que estiver errado; o que já foi transcrito não
@@ -15,9 +15,9 @@
         preparação aparecem aqui.
       </p>
     } @else {
-      <h5 class="sub-title" i18n="@@learning.rulesTitle">
+      <h4 class="sub-title" i18n="@@learning.rulesTitle">
         Regras ({{ learned.rules.length }})
-      </h5>
+      </h4>
       @if (learned.rules.length === 0) {
         <p class="hint" i18n="@@learning.noRules">Nenhuma regra.</p>
       } @else {
@@ -104,9 +104,9 @@
         }
       }
 
-      <h5 class="sub-title" i18n="@@learning.termsTitle">
+      <h4 class="sub-title" i18n="@@learning.termsTitle">
         Termos ({{ learned.terms.length }})
-      </h5>
+      </h4>
       <p class="hint" i18n="@@learning.tokens">
         Termos aprendidos: {{ learned.tokens.learned }} de {{ free() }} tokens
         livres.

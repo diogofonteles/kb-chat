@@ -274,3 +274,49 @@ button:disabled {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* ---------- v2 (KBC-132): pairing in a card, the paired box in green, the list as rows ---------- */
+.block-title {
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.pair {
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
+}
+
+.paired {
+  padding: var(--space-5);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.list {
+  gap: 0;
+}
+
+.item {
+  min-height: 3.5rem;
+  padding: var(--space-3);
+  border: 0;
+  border-bottom: 1px solid var(--overlay-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.item:hover {
+  background: var(--overlay-1);
+}
+
+@media (max-width: 1023px) {
+  .item {
+    margin-bottom: var(--space-2);
+    padding: var(--space-4);
+    border: 0;
+    border-radius: var(--radius-card);
+    background: var(--overlay-2);
+  }
+}

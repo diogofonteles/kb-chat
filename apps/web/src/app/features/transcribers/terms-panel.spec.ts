@@ -139,6 +139,18 @@ describe('TermsPanel (KBC-040)', () => {
     http.expectNone((request) => request.method === 'PUT');
   });
 
+  it('KBC-132 AC-6: past the limit the meter turns red and "Salvar lista" waits', async () => {
+    await add('Muitos termos');
+    await measured(231);
+    const save = element<HTMLButtonElement>('button[type="submit"]');
+    expect(save.disabled).toBe(true);
+    expect(element('.usage').classList).toContain('over');
+    expect(button('Descartar mudanças')).toBeTruthy();
+    button('Descartar mudanças').click();
+    await fixture.whenStable();
+    expect(save.disabled).toBe(false);
+  });
+
   it('AC-3: says the same when only the API found out', async () => {
     await add('Outro');
     await measured(200);

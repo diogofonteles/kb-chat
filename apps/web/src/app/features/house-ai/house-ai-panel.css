@@ -99,3 +99,29 @@ button:disabled {
 .check input {
   flex-shrink: 0;
 }
+
+/* ---------- v2 (KBC-132): the account as a card with its state in a pill ---------- */
+.block {
+  padding-top: var(--space-2);
+}
+
+.account {
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
+}
+
+.account-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.account-head .block-title {
+  margin: 0;
+}
+
+.push-end {
+  margin-left: auto;
+}

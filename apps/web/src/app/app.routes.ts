@@ -3,6 +3,7 @@ import type { Routes } from '@angular/router';
 import { PRIVACY_PATH, TUTORIAL_PATH } from '@core/routing/public-pages.js';
 import { LEVELS_ROUTES } from './features/collections/levels-routes.js';
 import { MEDIA_ROUTES } from './features/media/media-routes.js';
+import { SETTINGS_ROUTES } from './features/settings/settings-routes.js';
 
 export const routes: Routes = [
   {
@@ -17,6 +18,7 @@ export const routes: Routes = [
       { path: '', children: [] },
       ...MEDIA_ROUTES,
       ...LEVELS_ROUTES,
+      ...SETTINGS_ROUTES,
       {
         // The v2 component catalog (KBC-124 FR-3): development builds only.
         path: 'catalogo-ui',

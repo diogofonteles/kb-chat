@@ -30,13 +30,19 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
           }
         </ol>
         <dl class="facts">
-          <dt i18n="@@guide.cost">Quanto custa</dt>
-          <dd>{{ current.cost() }}</dd>
-          <dt i18n="@@guide.privacy">Privacidade</dt>
-          <dd>{{ current.privacy() }}</dd>
+          <div class="fact">
+            <dt i18n="@@guide.cost">Quanto custa</dt>
+            <dd>{{ current.cost() }}</dd>
+          </div>
+          <div class="fact">
+            <dt i18n="@@guide.privacy">Privacidade</dt>
+            <dd>{{ current.privacy() }}</dd>
+          </div>
           @if (current.limits) {
-            <dt i18n="@@guide.limits">Limites</dt>
-            <dd>{{ current.limits() }}</dd>
+            <div class="fact">
+              <dt i18n="@@guide.limits">Limites</dt>
+              <dd>{{ current.limits() }}</dd>
+            </div>
           }
         </dl>
         @if (current.note) {
@@ -50,38 +56,73 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
   styles: `
     .guide {
       display: grid;
-      gap: var(--space-3);
-      padding: var(--space-3) var(--space-4);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-muted);
+      gap: var(--space-4);
     }
     .steps {
       display: grid;
-      gap: var(--space-2);
+      gap: var(--space-3);
       margin: 0;
-      padding-left: var(--space-5, 1.25rem);
+      padding: 0;
+      list-style: none;
+      counter-reset: step;
+      font-size: var(--text-sm);
+      line-height: 1.45;
+    }
+    .steps li {
+      position: relative;
+      padding-left: 2.25rem;
+      counter-increment: step;
+    }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      top: -0.0625rem;
+      left: 0;
+      display: grid;
+      place-items: center;
+      width: 1.5rem;
+      height: 1.5rem;
+      border-radius: var(--radius-pill);
+      background: var(--color-accent);
+      color: var(--color-on-accent);
+      font-size: var(--text-xs);
+      font-weight: 800;
     }
     .steps a {
       margin-left: var(--space-1);
-      color: var(--color-accent-strong);
+      color: var(--color-accent-text);
       overflow-wrap: anywhere;
     }
     .facts {
       display: grid;
-      gap: var(--space-1);
+      grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+      gap: var(--space-3);
       margin: 0;
-      font-size: var(--text-sm);
     }
-    .facts dt {
-      font-weight: 600;
+    .fact {
+      display: grid;
+      align-content: start;
+      gap: var(--space-2);
+      padding: 0.875rem;
+      border-radius: var(--radius-card);
+      background: var(--overlay-2);
+      font-size: var(--text-meta);
     }
-    .facts dd {
-      margin: 0 0 var(--space-2);
+    .fact dt {
+      font-weight: 700;
+    }
+    .fact dd {
+      margin: 0;
+      color: var(--color-text-muted);
+      line-height: 1.4;
     }
     .note {
+      display: flex;
+      gap: var(--space-2);
       margin: 0;
-      padding: var(--space-2) var(--space-3);
-      border-left: 3px solid var(--color-accent);
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--overlay-2);
       font-size: var(--text-sm);
     }
   `,
