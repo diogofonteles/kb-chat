@@ -93,8 +93,11 @@ export class QmdMcpAdapter implements SearchIndexPort {
           collections: [query.collection],
           limit: query.limit,
           // QMD patched by deploy/qmd/candidates-per-subsearch.mjs looks max(20, candidateLimit)
-          // deep per sub-search (KBC-120); a stock one keeps its 20 and only fuses more.
-          ...(query.deep ? { candidateLimit: query.limit } : {}),
+          // deep per sub-search and cuts the fusion there (KBC-120); a stock one keeps its 20
+          // and only fuses more. Below `limit` the fusion would cut the page.
+          ...(query.depth === undefined
+            ? {}
+            : { candidateLimit: Math.max(query.limit, query.depth) }),
           rerank: false,
         },
       });
