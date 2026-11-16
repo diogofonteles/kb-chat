@@ -1,7 +1,7 @@
 import { expect, ownerApi, test } from './fixtures.js';
 import { aCollection, uniqueTag, uploadReady } from './media-helpers.js';
 import { approve, audioWithTracks } from './tracks-helpers.js';
-import { capture } from './v2-media-helpers.js';
+import { capture, expectInsideViewport } from './v2-media-helpers.js';
 
 // KBC-130 (v2): "Preparar áudio" with the four-bar stepper, a track picked on the waveform
 // selects its row, the approve bar never covers the last row, and "Desfazer" on /limites.
@@ -118,5 +118,42 @@ test('KBC-130 AC-5: on /limites "Desfazer" brings the previous bound back', asyn
   await expect(
     page.getByRole('button', { name: 'Salvar limites' }),
   ).toBeDisabled();
+  await owner.dispose();
+});
+
+test('D5: the subject list of the last track rises above the approve bar and stays whole on screen', async ({
+  page,
+}, info) => {
+  const owner = await ownerApi();
+  const media = await audioWithTracks(owner);
+  await approve(owner, media.id);
+  await page.goto(`/midia/${media.id}/faixas`);
+  await expect(page.getByRole('heading', { name: 'Assuntos' })).toBeVisible();
+  const rows = page
+    .getByRole('list', { name: 'Assuntos por faixa' })
+    .getByRole('listitem')
+    .filter({ has: page.locator('app-track-subject-row') });
+  const last = rows.last();
+  await last.scrollIntoViewIfNeeded();
+  const field = last.getByRole('combobox', {
+    name: /^Adicionar assunto à faixa/,
+  });
+  await field.click();
+  await expect(field).toHaveAttribute('aria-expanded', 'true');
+  const list = page.getByRole('listbox', { name: 'Assuntos do acervo' });
+  await expect(list.getByRole('option').first()).toBeVisible();
+  await expectInsideViewport(page, list);
+  // Nothing covers it: its middle is its own (the approve bar and the panels stay under).
+  const onTop = await list.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+    );
+    return hit !== null && element.contains(hit);
+  });
+  expect(onTop).toBe(true);
+  await capture(page, 'subjects-last-open', info.project.name);
+  await page.keyboard.press('Escape');
   await owner.dispose();
 });
