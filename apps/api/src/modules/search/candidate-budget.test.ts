@@ -8,10 +8,10 @@ import {
 } from './candidate-budget.js';
 
 describe('The adaptive candidate budget (KBC-103 FR-6, ADR 0036 §7)', () => {
-  it('divides the base by the visible share, up to the cap', () => {
-    expect(candidateLimit(60, 1)).toBe(60);
-    expect(candidateLimit(60, 0.5)).toBe(120);
-    expect(candidateLimit(60, 0.3)).toBe(200);
+  it('divides the base by the visible share, with headroom, up to the cap', () => {
+    expect(candidateLimit(60, 1)).toBe(90);
+    expect(candidateLimit(60, 0.5)).toBe(180);
+    expect(candidateLimit(60, 0.2)).toBe(450);
     expect(candidateLimit(200, 0.1)).toBe(CANDIDATE_CAP);
     expect(candidateLimit(60, 0.05)).toBe(CANDIDATE_CAP);
   });
