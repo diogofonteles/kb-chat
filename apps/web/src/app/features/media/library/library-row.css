@@ -316,19 +316,45 @@ app-menu-button {
     color: var(--color-on-accent);
   }
 
+  .title {
+    padding-top: var(--space-1);
+  }
+
+  /* One line under the title: status, author · length · collection, cut at the end
+     rather than wrapped, so the row keeps the frame's 64 px. */
   .cells {
     grid-area: cells;
     align-self: start;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 0 var(--space-2);
     min-width: 0;
-    padding-bottom: var(--space-2);
+    padding-bottom: var(--space-1);
+    overflow: hidden;
+    white-space: nowrap;
   }
 
   .status {
+    flex: none;
+    flex-wrap: nowrap;
     order: -1;
+  }
+
+  .status:empty {
+    display: none;
+  }
+
+  /* Nothing is pushed past the row's end: the author gives way after the collection. */
+  .byline {
+    flex: 0 1 auto;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+
+  /* A badge with nothing to say takes no gap. */
+  .byline > :empty {
+    display: none;
   }
 
   .byline,
@@ -338,12 +364,35 @@ app-menu-button {
     padding: 0;
   }
 
-  .topic,
   .duration {
+    flex: none;
     display: inline;
   }
 
-  .duration::before {
+  /* The last to give way: cut at the end, never pushed out of the row. */
+  .topic {
+    flex: 0 100 auto;
+    display: inline;
+    min-width: 0;
+    order: 1;
+  }
+
+  /* The frame's 48 px bar says how far; the words stay for a screen reader. */
+  .position {
+    width: 3rem;
+  }
+
+  .resume {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .duration::before,
+  .topic::before {
     content: '·';
     margin-right: var(--space-2);
   }

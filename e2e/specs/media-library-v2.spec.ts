@@ -36,6 +36,7 @@ async function shoot(page: Page, name: string): Promise<void> {
 
 const LIBRARY = ['search', 'media', 'media-library'];
 const viewportOf = () => test.info().project.use.viewport ?? null;
+const wide = () => (viewportOf()?.width ?? 0) >= 1024;
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 const all = (page: Page) => page.getByRole('region', { name: 'Todas' });
 const rowOf = (page: Page, media: UploadedMedia) =>
@@ -108,10 +109,11 @@ test.beforeAll(async () => {
   const owner = await ownerApi();
   collection = await aCollection(owner);
   lectures = [];
-  for (const n of [1, 2, 3])
+  // Words, not digits: the clock-based tag may hold any digit (NFR-3).
+  for (const word of ['um', 'dois', 'três'])
     lectures.push(
       await uploadReady(owner, {
-        title: `Palestra ${tag} número ${n}`,
+        title: `Palestra ${tag} número ${word}`,
         seconds: 6,
         topic: collection,
       }),
@@ -208,7 +210,8 @@ test('AC-6: the grid, the search with and without results, and the dialogs rende
   await expect(all(page).locator('app-library-row')).toHaveCount(3);
 
   const search = page.getByLabel('Buscar na biblioteca');
-  await search.fill('número 2');
+  // Only lecture 2 has the word, whatever the tag is.
+  await search.fill('dois');
   await expect(
     page.locator('app-library-search-results').getByRole('listitem'),
   ).toHaveCount(1);
@@ -314,41 +317,40 @@ test('AC-5: a member who may not edit sees neither Editar nor Remover in the ⋯
   await page.context().close();
 });
 
-test('AC-2: "Precisa da sua atenção" names what failed and what waits, each with its way', async ({
-  browser,
-}) => {
-  const page = await listener(
-    browser,
-    [collection],
-    [...LIBRARY, 'media-upload', 'media-edit'],
-  );
-  const item = (n: number, over: Record<string, unknown>) => ({
-    mediaId: lecture(n).id,
-    title: lecture(n).title,
-    topic: collection,
-    phase: 'attention',
-    stage: 'transcribe',
-    state: 'waiting',
-    percent: null,
-    cuts: null,
-    windows: null,
-    failure: null,
-    blockedBy: null,
-    position: null,
-    nextStage: null,
-    waitsForTranscriber: false,
-    action: null,
-    retryStage: null,
-    step: 2,
-    ...over,
-  });
-  // The two states seeded as the queue reports them (KBC-090's contract).
+/** A line of the queue as the API reports it (KBC-090's contract), for seeded states. */
+const queueLine = (n: number, over: Record<string, unknown>) => ({
+  mediaId: lecture(n).id,
+  title: lecture(n).title,
+  topic: collection,
+  phase: 'attention',
+  stage: 'transcribe',
+  state: 'waiting',
+  percent: null,
+  cuts: null,
+  windows: null,
+  failure: null,
+  blockedBy: null,
+  position: null,
+  nextStage: null,
+  waitsForTranscriber: false,
+  canUseGroq: false,
+  durationMs: 6_000,
+  action: null,
+  retryStage: null,
+  step: 2,
+  ...over,
+});
+
+/** One failed, one waiting with no Groq for this person, one Groq may take now. */
+async function seedAttention(page: Page): Promise<void> {
+  const waiting = { phase: 'next', state: 'queued', waitsForTranscriber: true };
   await page.route('**/api/v1/media/processing', (route) =>
     route.fulfill({
       json: {
         items: [
-          item(1, { state: 'failed', failure: 'work' }),
-          item(2, { phase: 'next', waitsForTranscriber: true }),
+          queueLine(1, { state: 'failed', failure: 'work' }),
+          queueLine(2, waiting),
+          queueLine(3, { ...waiting, canUseGroq: true }),
         ],
         active: 0,
         transcriber: 'off',
@@ -356,27 +358,124 @@ test('AC-2: "Precisa da sua atenção" names what failed and what waits, each wi
       },
     }),
   );
+}
+
+/** Its centre is on the screen and is its own: nothing (bar, mini player) covers it. */
+async function expectAboveTheFold(page: Page, element: Locator): Promise<void> {
+  const box = await element.boundingBox();
+  const view = page.viewportSize();
+  if (!box || !view) throw new Error('no box to measure');
+  expect(box.y + box.height).toBeLessThanOrEqual(view.height);
+  const own = await element.evaluate(
+    (node, at) => {
+      const top = document.elementFromPoint(at.x, at.y);
+      return !!top && node.contains(top);
+    },
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+  );
+  expect(own).toBe(true);
+}
+
+test('AC-2: "Precisa da sua atenção" names what failed and what waits, each with its way', async ({
+  browser,
+}) => {
+  test.skip(
+    !wide(),
+    'The desktop cards; a phone has one card (the next test).',
+  );
+  const page = await listener(
+    browser,
+    [collection],
+    [...LIBRARY, 'media-upload', 'media-edit'],
+  );
+  await seedAttention(page);
+  const groqSent: string[] = [];
+  await page.route('**/api/v1/media/*/transcription/groq', async (route) => {
+    groqSent.push(route.request().url());
+    // Groq is paid: the answer is the item as it stands, nothing is sent.
+    const item = await page.request.get(`/api/v1/media/${lecture(3).id}`);
+    await route.fulfill({ json: await item.json() });
+  });
   await openLibrary(page, collection);
   const attention = page.getByRole('region', {
     name: 'Precisa da sua atenção',
   });
   await expect(attention.getByText('Falhou', { exact: true })).toBeVisible();
-  await expect(
-    attention.getByText('Aguardando', { exact: true }),
-  ).toBeVisible();
+  await expect(attention.getByText('Aguardando', { exact: true })).toHaveCount(
+    2,
+  );
   const details = attention.getByRole('link', {
     name: `Ver detalhes: ${lecture(1).title}`,
   });
   await expect(details).toHaveAttribute('href', `/midia/${lecture(1).id}`);
+  // Waiting, and Groq may not take it for this person: its page has the details.
   await expect(
     attention.getByRole('link', { name: `Ver detalhes: ${lecture(2).title}` }),
   ).toBeVisible();
   await expect(
+    attention.getByRole('button', {
+      name: `Transcrever com Groq: ${lecture(2).title}`,
+    }),
+  ).toHaveCount(0);
+  // Waiting, and Groq may take it: the card offers it, as the media page does.
+  const groq = attention.getByRole('button', {
+    name: `Transcrever com Groq: ${lecture(3).title}`,
+  });
+  await expect(groq).toBeVisible();
+  await expect(
+    attention.getByRole('link', { name: `Ver detalhes: ${lecture(3).title}` }),
+  ).toHaveCount(0);
+  await expect(
     attention.getByRole('link', { name: 'Ver a fila' }),
   ).toBeVisible();
   await shoot(page, 'media-library-attention');
+  await groq.click();
+  const question = attention.getByRole('group', {
+    name: /Transcrever este áudio com o Groq agora\?/,
+  });
+  await expect(question).toContainText('Custa cerca de US$');
+  await shoot(page, 'media-library-attention-groq');
+  await question.getByRole('button', { name: 'Transcrever com Groq' }).click();
+  await expect(question).toHaveCount(0);
+  expect(groqSent).toEqual([
+    expect.stringContaining(
+      `/api/v1/media/${lecture(3).id}/transcription/groq`,
+    ),
+  ]);
   await details.click();
   await expect(page).toHaveURL(new RegExp(`/midia/${lecture(1).id}`));
+  await page.context().close();
+});
+
+test('AC-1, AC-2, BR-3: on a phone one card sums up the attention, and the list starts above the fold', async ({
+  browser,
+}) => {
+  test.skip(
+    wide(),
+    'The phone layout (media-library@mobile); the desktop cards are AC-2 above.',
+  );
+  const page = await listener(
+    browser,
+    [collection],
+    [...LIBRARY, 'media-upload', 'media-edit'],
+  );
+  await seedAttention(page);
+  await openLibrary(page, collection);
+  const card = page.getByRole('link', { name: /3 itens precisam de atenção/ });
+  await expect(card).toHaveAttribute('href', '/fila');
+  await expect(card).toContainText('1 falhou · 2 aguardando');
+  // The desktop cards give way to the one card.
+  await expect(
+    page.getByRole('link', { name: `Ver detalhes: ${lecture(1).title}` }),
+  ).toHaveCount(0);
+  const first = all(page).getByRole('listitem').first();
+  await expectAboveTheFold(page, first);
+  // The frame's row: cover 52, about 64 px, the title and one line under it.
+  const box = await first.boundingBox();
+  expect(box?.height ?? 0).toBeLessThanOrEqual(72);
+  await shoot(page, 'media-library-attention-phone');
+  await card.click();
+  await expect(page).toHaveURL(/\/fila/);
   await page.context().close();
 });
 

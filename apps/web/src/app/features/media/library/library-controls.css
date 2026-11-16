@@ -103,9 +103,26 @@
 }
 
 @media (max-width: 1023px) {
+  /* A compact chip row (media-library@mobile): a long choice is cut, not a line of its
+     own; the whole name is in its list. */
+  .chips {
+    flex-basis: 100%;
+  }
+
   .choice,
   .choice select {
     min-height: var(--target);
+  }
+
+  .choice select {
+    max-width: 8.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tools {
+    margin-left: 0;
   }
 
   .sort {

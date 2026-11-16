@@ -63,7 +63,8 @@ const waitsOnTranscriber = (stage: PreparationStage | undefined): boolean =>
   (stage.stage === 'transcribe' || stage.stage === 'speakers');
 
 interface QueueFacts {
-  readonly item: Pick<MediaItem, 'id' | 'title' | 'topic'>;
+  readonly item: Pick<MediaItem, 'id' | 'title' | 'topic'> &
+    Partial<Pick<MediaItem, 'canUseGroq' | 'durationMs'>>;
   readonly stages: readonly PreparationStage[];
   readonly next: NextAction | null;
   readonly position: number | null;
@@ -102,6 +103,27 @@ function actionOf(
   return none;
 }
 
+/** Whether it waits for the transcriber, and whether Groq may take it instead (KBC-037). */
+function transcriberFacts(
+  { item, transcriberOn }: QueueFacts,
+  current: PreparationStage | undefined,
+): Pick<
+  ProcessingQueueItem,
+  'waitsForTranscriber' | 'canUseGroq' | 'durationMs'
+> {
+  const waits =
+    current !== undefined &&
+    waitsOnTranscriber(current) &&
+    !transcriberOn(current);
+  return {
+    waitsForTranscriber: waits,
+    // Groq transcribes; it does not tell the voices apart.
+    canUseGroq:
+      waits && current.stage === 'transcribe' && (item.canUseGroq ?? false),
+    durationMs: item.durationMs ?? null,
+  };
+}
+
 /** One audio as the queue shows it: the first stage not done says where it is. */
 export function queueItemOf(facts: QueueFacts): ProcessingQueueItem {
   const { item, stages, position, step } = facts;
@@ -110,6 +132,7 @@ export function queueItemOf(facts: QueueFacts): ProcessingQueueItem {
   const after = stages.slice(index + 1).find(({ state }) => state !== 'done');
   const moves = actionOf(facts, current);
   const atWork = current && PHASE_OF[current.state];
+  const transcriber = transcriberFacts(facts, current);
   return {
     mediaId: item.id,
     title: item.title,
@@ -124,10 +147,7 @@ export function queueItemOf(facts: QueueFacts): ProcessingQueueItem {
     blockedBy: current?.blockedBy ?? null,
     position: current?.state === 'queued' ? position : null,
     nextStage: index < 0 ? null : (after?.stage ?? null),
-    waitsForTranscriber:
-      current !== undefined &&
-      waitsOnTranscriber(current) &&
-      !facts.transcriberOn(current),
+    ...transcriber,
     ...moves,
     step,
   };

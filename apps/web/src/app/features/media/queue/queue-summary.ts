@@ -14,7 +14,12 @@ import {
   preparationPagePath,
 } from '@core/media/preparation-api.js';
 import { UiCover } from '@ui/cover.js';
+import { UiIcon } from '@ui/icon.js';
 import { UiPill, type Tone } from '@ui/pill.js';
+import {
+  TranscribeWithGroq,
+  type GroqCandidate,
+} from '../transcribe-with-groq.js';
 import { ProcessingQueueStore } from './processing-queue-store.js';
 import { queueStateText } from './queue-labels.js';
 
@@ -24,14 +29,24 @@ const SHOWN = 3;
 /**
  * The queue, in brief, on the library (KBC-090; v2 KBC-128 FR-2 "Precisa da sua atenção"):
  * one card per audio with its cover, its state in a word and in full, and the direct action
- * (validate, continue, conclude, try again, or see the details). Nothing when nothing is there.
+ * (validate, continue, conclude, try again, transcribe with Groq, or see the details). On a
+ * phone, one card sums it all up and leads to the queue (media-library@mobile), so the list
+ * starts above the fold. Nothing when nothing is there.
  */
 @Component({
   selector: 'app-queue-summary',
-  imports: [RouterLink, UiCover, UiPill],
+  imports: [RouterLink, TranscribeWithGroq, UiCover, UiIcon, UiPill],
   template: `
     @if (lines().length > 0) {
       <section class="summary" aria-labelledby="queue-summary-title">
+        <a class="phone-card" [routerLink]="path">
+          <ui-cover icon="upload" from="#1f9c56" to="#0b3d22" [size]="40" />
+          <span class="body">
+            <span class="name">{{ compactTitle() }}</span>
+            <span class="state">{{ compactParts() }}</span>
+          </span>
+          <ui-icon class="chevron" name="chevRight" [size]="20" />
+        </a>
         <div class="top">
           <h3 id="queue-summary-title">{{ titleText() }}</h3>
           <a class="see" [routerLink]="path" i18n="@@queue.open">Ver a fila</a>
@@ -49,13 +64,23 @@ const SHOWN = 3;
                   <span class="state">{{ line.state }}</span>
                 </span>
               </span>
-              <a
-                class="action"
-                [class.strong]="line.strong"
-                [routerLink]="line.link"
-                [attr.aria-label]="line.actionLabel"
-                >{{ line.action }}</a
-              >
+              @if (line.groq; as groq) {
+                <app-transcribe-with-groq
+                  [media]="groq"
+                  [subject]="line.title"
+                  [compact]="true"
+                  (sent)="refresh()"
+                  (capped)="refresh()"
+                />
+              } @else {
+                <a
+                  class="action"
+                  [class.strong]="line.strong"
+                  [routerLink]="line.link"
+                  [attr.aria-label]="line.actionLabel"
+                  >{{ line.action }}</a
+                >
+              }
             </li>
           }
         </ul>
@@ -69,6 +94,33 @@ const SHOWN = 3;
     .summary {
       display: grid;
       gap: var(--space-3);
+    }
+
+    /* The phone's single card (media-library@mobile): hidden on a wide screen. */
+    .phone-card {
+      display: none;
+      align-items: center;
+      gap: var(--space-3);
+      min-width: 0;
+      padding: var(--space-3);
+      border-radius: var(--radius-menu);
+      background: var(--overlay-1);
+      color: var(--color-text);
+      text-decoration: none;
+    }
+
+    .phone-card:hover {
+      background: var(--overlay-2);
+    }
+
+    .phone-card:focus-visible {
+      outline: 2px solid var(--color-focus);
+      outline-offset: 2px;
+    }
+
+    .chevron {
+      flex: none;
+      color: var(--color-text-muted);
     }
 
     .top {
@@ -104,6 +156,7 @@ const SHOWN = 3;
     .cards {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+      align-items: start;
       gap: var(--space-3);
       margin: 0;
       padding: 0;
@@ -113,6 +166,7 @@ const SHOWN = 3;
     /* "Precisa da sua atenção": cover, title, status in a word and the direct action. */
     .card {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: var(--space-3);
       min-width: 0;
@@ -153,6 +207,15 @@ const SHOWN = 3;
       overflow-wrap: anywhere;
     }
 
+    app-transcribe-with-groq {
+      flex: none;
+    }
+
+    /* Its question and its estimate take the card's whole width. */
+    app-transcribe-with-groq:has(.confirm, .error) {
+      flex-basis: 100%;
+    }
+
     .action {
       flex: none;
       display: inline-flex;
@@ -177,37 +240,20 @@ const SHOWN = 3;
     }
 
     @media (max-width: 1023px) {
-      h3 {
-        font-size: var(--text-md);
+      .phone-card {
+        display: flex;
       }
 
-      .see,
-      .action {
-        min-height: var(--target);
+      .top,
+      .cards,
+      .more {
+        display: none;
       }
 
-      .cards {
-        grid-template-columns: minmax(0, 1fr);
-        gap: var(--space-2);
-      }
-
-      .card {
-        padding: var(--space-2) var(--space-3);
-      }
-
-      .card ui-cover {
-        --ui-cover-size: 40px !important;
-      }
-
-      .state {
-        display: -webkit-box;
+      .phone-card .state {
         overflow: hidden;
-        -webkit-line-clamp: 1;
-        -webkit-box-orient: vertical;
-      }
-
-      .action {
-        padding: 0 var(--space-3);
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
     }
   `,
@@ -242,11 +288,24 @@ export class QueueSummary {
           action,
           actionLabel: `${action}: ${item.title}`,
           strong: item.action === 'validate' || item.action === 'conclude',
+          groq: groqOf(item),
         };
       }),
   );
   protected readonly hiddenCount = computed(() =>
     Math.max(0, this.shown().length - SHOWN),
+  );
+  /** The phone's card: how many, then what each needs (media-library@mobile). */
+  protected readonly compactTitle = computed(() => {
+    const active = this.store.active();
+    if (active > 0) return this.titleText();
+    const count = this.shown().length;
+    return count === 1
+      ? $localize`:@@queue.summary.attentionOne:1 item precisa de atenção`
+      : $localize`:@@queue.summary.attentionMany:${count}:count: itens precisam de atenção`;
+  });
+  protected readonly compactParts = computed(() =>
+    partsOf(this.shown()).join(' · '),
   );
   protected readonly titleText = computed(() => {
     const active = this.store.active();
@@ -256,6 +315,46 @@ export class QueueSummary {
       ? $localize`:@@queue.summary.one:1 áudio em processamento`
       : $localize`:@@queue.summary.many:${active}:count: áudios em processamento`;
   });
+
+  /** Groq took it, or the cap held it: the queue says where it is now. */
+  protected refresh(): void {
+    this.store.refresh();
+  }
+}
+
+/** Groq may take this one now (KBC-037): the card offers it in place of the details. */
+function groqOf(item: ProcessingQueueItem): GroqCandidate | null {
+  if (!item.waitsForTranscriber || !item.canUseGroq) return null;
+  return { id: item.mediaId, durationMs: item.durationMs, canUseGroq: true };
+}
+
+/** "1 para validar · 1 falhou · 1 aguardando", leaving out what has none. */
+function partsOf(items: readonly ProcessingQueueItem[]): string[] {
+  const count = (test: (item: ProcessingQueueItem) => boolean) =>
+    items.filter(test).length;
+  const validate = count(({ action }) => action === 'validate');
+  const failed = count(({ state }) => state === 'failed');
+  const waiting = count(
+    (item) => item.state !== 'failed' && item.waitsForTranscriber,
+  );
+  const working = count(
+    (item) =>
+      item.state !== 'failed' &&
+      !item.waitsForTranscriber &&
+      (item.phase === 'running' || item.phase === 'next'),
+  );
+  return [
+    validate > 0 &&
+      $localize`:@@queue.part.validate:${validate}:count: para validar`,
+    failed > 0 &&
+      (failed === 1
+        ? $localize`:@@queue.part.failedOne:1 falhou`
+        : $localize`:@@queue.part.failedMany:${failed}:count: falharam`),
+    waiting > 0 &&
+      $localize`:@@queue.part.waiting:${waiting}:count: aguardando`,
+    working > 0 &&
+      $localize`:@@queue.part.working:${working}:count: em processamento`,
+  ].filter((part): part is string => typeof part === 'string');
 }
 
 /** The state in a word, its tone backing it (never the colour alone). */

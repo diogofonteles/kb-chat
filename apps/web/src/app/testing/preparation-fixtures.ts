@@ -49,6 +49,8 @@ export const aQueueItem = (
   position: null,
   nextStage: 'speakers',
   waitsForTranscriber: false,
+  canUseGroq: false,
+  durationMs: 3_600_000,
   action: null,
   retryStage: null,
   step: 2,
