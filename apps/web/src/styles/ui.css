@@ -925,6 +925,19 @@ select.ui-input option {
   display: none;
 }
 
+/* The overlay layer (overlay.ts) lifts a panel into the top layer as a [popover]: the
+   browser's box for it (centred by margin auto, a solid border, its own colours, fit-content
+   width) gives way to the panel's own. :where keeps it under any panel's own rules. */
+:where(.ui-overlay) {
+  margin: 0;
+  border: 0;
+  color: inherit;
+}
+
+:where(.ui-overlay)::backdrop {
+  background: transparent;
+}
+
 @media (max-width: 1023px) {
   /* A sheet from the bottom over a scrim (DESIGN.md: menus become sheets on phones). */
   .ui-menu__scrim {
@@ -947,6 +960,16 @@ select.ui-input option {
     padding: var(--space-4) var(--space-2)
       calc(var(--space-8) + env(safe-area-inset-bottom));
     border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  }
+
+  /* The sheet spans the viewport (left and right 0), not the popover's fit-content. */
+  .ui-menu__panel.ui-overlay--sheet {
+    width: auto;
+  }
+
+  /* Its scrim is the popover's own backdrop: a tap on it closes the menu (menu.ts). */
+  .ui-menu__panel.ui-overlay--sheet::backdrop {
+    background: var(--scrim);
   }
 
   .ui-menu__item {

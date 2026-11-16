@@ -125,6 +125,7 @@
       @if (!onMedia()) {
         <section
           class="thread"
+          [class.search-page]="searchPage()"
           aria-label="Conversa"
           i18n-aria-label="@@page.thread"
         >

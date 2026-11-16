@@ -136,6 +136,12 @@
   .best .copies-area {
     padding: 0 var(--space-5) var(--space-4);
   }
+
+  /* The card's own tint would stack under the pills' and drop their text under 4.5:1 (light
+     and dark): over the card they are opaque, tinted over the page instead (NFR-1). */
+  .best .ui-pill {
+    background: color-mix(in srgb, var(--ui-pill-fg) 15%, var(--color-bg));
+  }
 }
 
 .copies-area {

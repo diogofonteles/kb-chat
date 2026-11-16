@@ -148,6 +148,12 @@ h2:focus-visible {
   background: color-mix(in srgb, var(--color-bg) 55%, transparent);
 }
 
+.not-found {
+  margin: 0 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
 .counter {
   display: inline-flex;
   flex-wrap: wrap;

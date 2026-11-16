@@ -160,10 +160,15 @@ test('AC-4: the subject filter says documents and tracks apart', async ({
   const page = await reader(browser, viewport);
   await page.goto('/');
   await page.getByRole('button', { name: 'Cabala', exact: true }).click();
-  await page
-    .getByRole('button', { name: /^Assuntos/ })
-    .first()
-    .click();
+  // Desktop filters in a popover from the "Assuntos" chip; phones in the "Filtros" sheet
+  // (KBC-126), where the subjects are the "Assuntos" group too.
+  if ((viewport?.width ?? 0) < 1024)
+    await page.getByRole('button', { name: /^Filtros/ }).click();
+  else
+    await page
+      .getByRole('button', { name: /^Assuntos/ })
+      .first()
+      .click();
   await expect(
     page
       .getByRole('group', { name: 'Assuntos' })

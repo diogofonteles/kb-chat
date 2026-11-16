@@ -97,7 +97,7 @@ let nextPanel = 0;
   host: {
     '[attr.role]': 'inSheet() ? "tabpanel" : "dialog"',
     '[attr.aria-modal]': 'inSheet() ? null : "false"',
-    '[attr.aria-labelledby]': 'titleId',
+    '[attr.aria-labelledby]': 'labelledBy() ?? titleId',
     '[class.full]': 'full()',
     '[class.in-sheet]': 'inSheet()',
     '(keydown.escape)': 'closed.emit()',
@@ -122,6 +122,10 @@ export class DocumentPanel {
   readonly sources = input<readonly CitedSource[]>([]);
   /** Inside the phone's reading sheet: its tabs and handle replace "Fonte ‹ ›" and ✕. */
   readonly inSheet = input(false);
+  /** The element that names it instead of its title (the selected tab of a reading sheet). */
+  readonly labelledBy = input<string | null>(null);
+  /** False while the reader moves between a sheet's tabs: the focus stays on the tab. */
+  readonly focusTitle = input(true);
   /** A source of an answer, also without its list (the sheet): "Abrir documento". */
   readonly sourceMode = input(false);
   /** "Perguntar à IA" only where the research view is available. */
@@ -239,6 +243,11 @@ export class DocumentPanel {
   protected readonly totalMatches = computed(() =>
     countTerms(this.loaded()?.body ?? '', this.terms()),
   );
+  /** A source of an answer with none of the question's words: say so instead of marking. */
+  protected readonly passageNotFound = computed(
+    () =>
+      this.inSource() && this.loaded() !== null && this.totalMatches() === 0,
+  );
   /** Occurrence in focus; back to the first one on every new document. */
   protected readonly current = linkedSignal({
     source: this.documentId,
@@ -260,7 +269,8 @@ export class DocumentPanel {
     afterRenderEffect(() => {
       this.documentId();
       this.host.scrollTop = 0;
-      this.heading().nativeElement.focus({ preventScroll: true });
+      if (untracked(this.focusTitle))
+        this.heading().nativeElement.focus({ preventScroll: true });
     });
     // The occurrence in focus is outlined (DOM-only work).
     afterRenderEffect(() => {

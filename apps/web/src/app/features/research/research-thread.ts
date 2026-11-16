@@ -11,6 +11,7 @@ import {
   output,
   signal,
   viewChild,
+  viewChildren,
 } from '@angular/core';
 import type { DocumentRef } from '@kb-chat/contracts';
 import { ChatStore, type CitedSource } from '@features/chat/chat-store.js';
@@ -33,6 +34,26 @@ export interface SourceOpening {
 const PHONE_QUERY = '(max-width: 1023px)';
 /** How far the sheet's head is dragged down before it lets go (a flick, not a tap). */
 const DRAG_CLOSE_PX = 80;
+
+/** Where each tab key moves from tab `at` of `count` (ARIA APG tabs, wrapping at the ends). */
+const TAB_KEYS: Readonly<
+  Record<string, ((at: number, count: number) => number) | undefined>
+> = {
+  ArrowRight: (at, count) => (at + 1) % count,
+  ArrowLeft: (at, count) => (at - 1 + count) % count,
+  Home: () => 0,
+  End: (_at, count) => count - 1,
+};
+
+/** The tab an arrow, Home or End selects from tab `at` of `count` (null: not a tab key). */
+export function tabTarget(
+  key: string,
+  at: number,
+  count: number,
+): number | null {
+  const move = TAB_KEYS[key];
+  return move ? move(at, count) : null;
+}
 
 /** What the reading sheet shows: the answer's sources and the one open. */
 interface Reading {
@@ -92,13 +113,18 @@ interface Reading {
               i18n-aria-label="@@source.tabs"
             >
               @for (source of open.opening.sources; track source.n) {
+                <!-- The APG tabs: only the selected tab is a Tab stop; arrows, Home and End move. -->
                 <button
+                  #tab
                   type="button"
                   role="tab"
                   class="tab"
+                  [id]="tabId(source)"
                   [attr.aria-selected]="source.n === open.current.n"
-                  [attr.aria-controls]="'reading-source'"
+                  [attr.tabindex]="source.n === open.current.n ? 0 : -1"
+                  aria-controls="reading-source"
                   (click)="choose(source)"
+                  (keydown)="tabKey($event)"
                   i18n="@@source.tab"
                 >
                   Fonte {{ source.n }}
@@ -115,12 +141,23 @@ interface Reading {
             >
               <ui-icon name="expand" [size]="18" />
             </button>
+            <button
+              type="button"
+              class="sheet-tool"
+              aria-label="Fechar"
+              i18n-aria-label="@@ui.dialog.close"
+              (click)="closeSheet()"
+            >
+              <ui-icon name="close" [size]="20" />
+            </button>
           </div>
         </div>
         <app-document-panel
           id="reading-source"
           role="tabpanel"
           class="sheet-reader"
+          [labelledBy]="tabId(open.current)"
+          [focusTitle]="!fromTab()"
           [topic]="topic()"
           [documentId]="open.current.id"
           [fallbackTitle]="open.current.title"
@@ -144,6 +181,7 @@ export class ResearchThread {
   private readonly chat = inject(ChatStore);
   private readonly sheet =
     viewChild.required<ElementRef<HTMLDialogElement>>('sheet');
+  private readonly tabs = viewChildren<ElementRef<HTMLButtonElement>>('tab');
 
   readonly turns = input.required<readonly ResearchTurn[]>();
   /** The document open in the page's panel: its source is marked in its answer. */
@@ -159,6 +197,10 @@ export class ResearchThread {
   protected readonly reading = signal<Reading | null>(null);
   protected readonly full = signal(false);
   private readonly drag = signal<{ start: number; now: number } | null>(null);
+  /** The sheet closed into the page's document: focus stays there, not on the citation. */
+  private leftToDocument = false;
+  /** The source on screen was chosen on a tab, which keeps the focus (ARIA APG tabs). */
+  protected readonly fromTab = signal(false);
   protected readonly dragOffset = computed(() => {
     const drag = this.drag();
     return drag ? `0 ${Math.max(0, drag.now - drag.start)}px` : null;
@@ -209,6 +251,7 @@ export class ResearchThread {
       return;
     }
     this.reading.set({ opening, current });
+    this.fromTab.set(false);
     this.full.set(false);
     afterNextRender(() => this.sheet().nativeElement.showModal(), {
       injector: this.injector,
@@ -216,12 +259,33 @@ export class ResearchThread {
   }
 
   protected choose(source: CitedSource): void {
+    this.fromTab.set(true);
     this.reading.update((open) => open && { ...open, current: source });
+  }
+
+  protected tabId(source: CitedSource): string {
+    return `reading-tab-${source.n}`;
+  }
+
+  /** Arrows, Home and End choose another tab and move the focus to it (ARIA APG tabs). */
+  protected tabKey(event: KeyboardEvent): void {
+    const reading = this.reading();
+    if (!reading) return;
+    const sources = reading.opening.sources;
+    const at = sources.findIndex((source) => source.n === reading.current.n);
+    const target = tabTarget(event.key, at, sources.length);
+    if (target === null) return;
+    event.preventDefault();
+    const source = sources[target];
+    if (!source) return;
+    this.choose(source);
+    this.tabs()[target]?.nativeElement.focus();
   }
 
   /** "Abrir documento" or a related one: the page's document, out of the sheet. */
   protected openDocument(doc: DocumentRef): void {
     const reading = this.reading();
+    this.leftToDocument = reading !== null;
     this.closeSheet();
     if (!reading) return;
     this.chat.openSource(this.topic(), doc, {
@@ -237,7 +301,10 @@ export class ResearchThread {
 
   /** Native "close" (Escape, ✕, drag or backdrop): back to the citation that opened it. */
   protected sheetClosed(): void {
-    const trigger = this.reading()?.opening.trigger ?? null;
+    const trigger = this.leftToDocument
+      ? null
+      : (this.reading()?.opening.trigger ?? null);
+    this.leftToDocument = false;
     this.reading.set(null);
     this.drag.set(null);
     trigger?.focus();

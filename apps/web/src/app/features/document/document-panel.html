@@ -185,6 +185,11 @@
           <ui-icon name="chevDown" [size]="16" />
         </button>
       </div>
+    } @else if (passageNotFound()) {
+      <!-- The source is marked by the question's words (KBC-127 BR-4): none in this text. -->
+      <p class="not-found" role="status" i18n="@@source.passageNotFound">
+        Trecho não localizado: nenhuma palavra da pergunta aparece neste texto.
+      </p>
     }
   </div>
 }

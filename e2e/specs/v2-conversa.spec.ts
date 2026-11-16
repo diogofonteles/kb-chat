@@ -185,12 +185,21 @@ test('AC-3: the first result is the "Melhor resultado" and the others fill the t
     /documentos · Tudo ·/,
   );
   await shot(page, 'chat-results');
-  const width = await message.evaluate((element) => element.clientWidth);
-  if (width > 736) {
-    // Where two columns fit (46rem), the best result is a card beside the table.
+  if (!phone(page)) {
+    // At 1440 the search page uses the main panel: the best result is a card left of the
+    // table (FR-2), and both column headings are shown.
+    await expect(
+      best.getByRole('heading', { name: 'Melhor resultado' }),
+    ).toBeVisible();
+    await expect(
+      rest.getByRole('heading', { name: 'Documentos' }),
+    ).toBeVisible();
     const bestBox = await best.boundingBox();
     const restBox = await rest.boundingBox();
-    expect(bestBox && restBox && bestBox.x < restBox.x).toBe(true);
+    if (!bestBox || !restBox)
+      throw new Error('Both result columns must render.');
+    expect(bestBox.x + bestBox.width).toBeLessThanOrEqual(restBox.x);
+    expect(Math.abs(bestBox.y - restBox.y)).toBeLessThan(8);
   }
 });
 
@@ -257,6 +266,24 @@ test('the collection menu of the home is whole on screen and switches the collec
   await trigger.click();
   const menu = page.getByRole('menu', { name: 'Trocar de acervo' });
   await expectWholeOnScreen(page, menu);
+  // No browser popover box: no border, no centring margin.
+  expect(
+    await menu.evaluate((element) => getComputedStyle(element).borderTopWidth),
+  ).toBe('0px');
+  if (phone(page)) {
+    // On a phone it is the full-width sheet at the foot, over a scrim.
+    const box = await menu.boundingBox();
+    const view = page.viewportSize();
+    if (!box || !view) throw new Error('The menu must render.');
+    expect(Math.round(box.width)).toBe(view.width);
+    expect(Math.round(box.x)).toBe(0);
+    expect(Math.round(box.y + box.height)).toBe(view.height);
+    expect(
+      await menu.evaluate(
+        (element) => getComputedStyle(element, '::backdrop').backgroundColor,
+      ),
+    ).not.toBe('rgba(0, 0, 0, 0)');
+  }
   await shot(page, 'chat-collection-menu');
   await menu.getByRole('menuitem', { name: /Alquimia/ }).click();
   await expect(page.getByRole('heading', { level: 1 })).toContainText(

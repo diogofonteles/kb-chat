@@ -166,10 +166,33 @@ test('AC-3: on a phone [1] opens the reading sheet on "Fonte 1"; dragging it dow
   expect(Math.round(box?.height ?? 0)).toBe(Math.round(height * 0.85));
   await shot(page, 'chat-research-answer-source');
 
-  await sheet.getByRole('tab', { name: 'Fonte 2' }).click();
+  // The APG tabs: one Tab stop, arrows move the selection and the focus, and the panel is
+  // named by the selected tab.
+  const first = sheet.getByRole('tab', { name: 'Fonte 1' });
+  const second = sheet.getByRole('tab', { name: 'Fonte 2' });
+  await expect(first).toHaveAttribute('tabindex', '0');
+  await expect(second).toHaveAttribute('tabindex', '-1');
+  await first.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(second).toBeFocused();
+  await expect(second).toHaveAttribute('aria-selected', 'true');
+  await expect(second).toHaveAttribute('tabindex', '0');
+  await expect(sheet.getByRole('tabpanel', { name: 'Fonte 2' })).toBeVisible();
   await expect(
     sheet.getByRole('heading', { name: 'A Árvore da Vida' }),
   ).toBeVisible();
+  await page.keyboard.press('Home');
+  await expect(first).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(second).toBeFocused();
+
+  // A labelled ✕ closes it, also in "Tela cheia", back to [1].
+  await sheet.getByRole('button', { name: 'Tela cheia' }).click();
+  await sheet.getByRole('button', { name: 'Fechar' }).click();
+  await expect(sheet).toBeHidden();
+  await expect(cite).toBeFocused();
+  await cite.click();
+  await expect(sheet).toBeVisible();
 
   const handle = sheet.locator('.sheet-head');
   const head = await handle.boundingBox();
@@ -180,6 +203,55 @@ test('AC-3: on a phone [1] opens the reading sheet on "Fonte 1"; dragging it dow
   await page.mouse.up();
   await expect(sheet).toBeHidden();
   await expect(cite).toBeFocused();
+  await page.context().close();
+});
+
+test("BR-4: a source with none of the question's words says its passage was not found", async ({
+  browser,
+}, testInfo) => {
+  const viewport = testInfo.project.use.viewport ?? null;
+  const page = await readerWith(browser, viewport, turn('qa fontes'));
+  await page.locator('app-research-message a.cite').first().click();
+  const reader = phone(page)
+    ? page.getByRole('dialog', { name: 'Fonte' })
+    : page.locator('app-document-panel');
+  await expect(
+    reader.getByRole('heading', { name: 'A Lei do Ritmo' }),
+  ).toBeVisible();
+  await expect(reader.locator('.body mark')).toHaveCount(0);
+  await expect(
+    reader.getByRole('status').getByText(/Trecho não localizado/),
+  ).toBeVisible();
+  // Nothing to copy or step through, and the document is still a click away.
+  await expect(
+    reader.getByRole('button', { name: 'Copiar trecho' }),
+  ).toHaveCount(0);
+  await expect(
+    reader.getByRole('button', { name: 'Abrir documento' }),
+  ).toBeVisible();
+  await shot(page, 'chat-research-source-no-passage');
+  await page.context().close();
+});
+
+test('on a phone "Abrir documento" leaves the sheet for the document, with the focus on its title', async ({
+  browser,
+}, testInfo) => {
+  const viewport = testInfo.project.use.viewport ?? null;
+  test.skip((viewport?.width ?? 0) >= 1024, 'Only phones read in the sheet.');
+  const page = await readerWith(browser, viewport, turn('ritmo e vida'));
+  await page.locator('app-research-message a.cite').first().click();
+  const sheet = page.getByRole('dialog', { name: 'Fonte' });
+  await expect(
+    sheet.getByRole('heading', { name: 'A Lei do Ritmo' }),
+  ).toBeVisible();
+  await sheet.getByRole('button', { name: 'Abrir documento' }).click();
+  await expect(sheet).toBeHidden();
+  const title = page
+    .locator('app-document-panel')
+    .getByRole('heading', { name: 'A Lei do Ritmo' });
+  await expect(title).toBeVisible();
+  // Not on the citation, which the full-screen document covers.
+  await expect(title).toBeFocused();
   await page.context().close();
 });
 

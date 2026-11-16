@@ -148,6 +148,10 @@ export class ChatPage {
       ? this.research.turns().length === 0
       : this.messages().length === 0,
   );
+  /** Search results are a page in the main panel, wider than the reading column (KBC-126). */
+  protected readonly searchPage = computed(
+    () => !this.researching() && !this.isEmpty(),
+  );
   /** On phones the panel covers the conversation: make it inert so Tab stays in the panel. */
   private readonly router = inject(Router);
   /** /midia and /midia/:id render in this layout instead of the conversation (T14, T15). */
