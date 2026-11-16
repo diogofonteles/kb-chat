@@ -10,6 +10,11 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { TURNS, separateVoices, transcribedAudio } from './voices-helpers.js';
+import {
+  openSection,
+  openSettings,
+  settingsSection,
+} from './settings-helpers.js';
 
 // KBC-071: voice profiles. A master has the feature by the role; a member never has it.
 // Everything here is synthetic: the E2E server plays the Mac with a made-up vector, and no
@@ -31,14 +36,6 @@ const aConsent = {
   evidence: { kind: 'text', text: 'Autorizo o uso da minha voz (teste).' },
 };
 
-/** The ⚙ dialog: in the side panel on desktop, in the "Menu" drawer on phones. */
-async function openSettings(page: Page) {
-  if ((page.viewportSize()?.width ?? 0) < 1024)
-    await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
-  return page.getByRole('dialog', { name: 'Configurações' });
-}
-
 /** A person's first visit: past the first-run wizard, at home. */
 async function firstVisit(page: Page) {
   await page.goto('/');
@@ -50,12 +47,13 @@ async function firstVisit(page: Page) {
 
 async function openPanel(page: Page) {
   const dialog = await openSettings(page);
-  await dialog.getByRole('button', { name: 'Perfis de voz' }).click();
+  await openSection(dialog, 'Perfis de voz');
   await expect(
-    dialog.getByRole('heading', { name: 'Perfis de voz', level: 3 }),
+    dialog.getByRole('heading', { name: 'Perfis de voz', exact: true }),
   ).toBeVisible();
   await dialog.getByLabel('Acervo', { exact: true }).selectOption(TOPIC);
-  return dialog;
+  // Every section is on the page (KBC-131): the voice profiles one is the one used.
+  return settingsSection(page, 'Perfis de voz');
 }
 
 /** A master, signed in, with the API of that browser. */
@@ -133,7 +131,7 @@ test('AC-7: a member with `media-edit` sees no screen and the API refuses', asyn
   const dialog = await openSettings(page);
   await expect(dialog.getByRole('heading').first()).toBeVisible();
   await expect(
-    dialog.getByRole('button', { name: 'Perfis de voz' }),
+    dialog.getByRole('link', { name: 'Perfis de voz', exact: true }),
   ).toHaveCount(0);
   const refused = await page.request.get(PROFILES);
   expect(refused.status()).toBe(403);

@@ -9,6 +9,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { SETTINGS_AXE, settingsPage } from './settings-helpers.js';
 
 /**
  * KBC-109 (T9, ADR 0036 §9): the level of a collection in an invitation profile, in the
@@ -33,12 +34,12 @@ async function openPeople(page: Page): Promise<Locator> {
     ? page.getByRole('complementary', { name: 'Lateral' })
     : page.getByRole('dialog', { name: 'Menu' });
   await side.getByRole('button', { name: /Pessoas e permissões/ }).click();
-  return page.getByRole('dialog', { name: 'Configurações' });
+  return settingsPage(page);
 }
 
 /** WCAG 2.2 AA in the dialog, and no sideways scroll on the page (AC-7). */
 async function expectAccessible(page: Page): Promise<void> {
-  const axe = await new AxeBuilder({ page }).include('dialog').analyze();
+  const axe = await new AxeBuilder({ page }).include(SETTINGS_AXE).analyze();
   expect(axe.violations).toEqual([]);
   expect(
     await page.evaluate(
@@ -102,6 +103,9 @@ test('AC-1, AC-6, AC-7: a profile at CI, the invitation made with it, the bulk b
   await expect(
     dialog.getByRole('combobox', { name: `Nível em ${title}` }),
   ).toHaveValue('ci');
+  // The new person's editor opened as a modal (KBC-132): closed to reach the table.
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 
   // AC-6: two members and the owner selected; the owner is a master and is left out.
   for (const email of [ana, bia, OWNER_EMAIL])
@@ -133,14 +137,14 @@ test('AC-1, AC-6, AC-7: a profile at CI, the invitation made with it, the bulk b
   await expect(
     dialog.getByRole('combobox', { name: `Nível em ${title}` }),
   ).toHaveCount(0);
-  await personRow(dialog, OWNER_EMAIL).first().click();
+  await page.keyboard.press('Escape');
 
   // The member's editor: the select under her collection, its label visible (390 px too).
   await personRow(dialog, ana).click();
   const mine = dialog.getByRole('combobox', { name: `Nível em ${title}` });
   await expect(mine).toHaveValue('ci');
   await expect(
-    dialog.getByText(`Nível em ${title}`, { exact: true }),
+    page.getByRole('dialog').getByText(`Nível em ${title}`, { exact: true }),
   ).toBeVisible();
   const box = await dialog
     .getByRole('checkbox', { name: title, exact: true })
@@ -148,11 +152,7 @@ test('AC-1, AC-6, AC-7: a profile at CI, the invitation made with it, the bulk b
   const select = await mine.boundingBox();
   expect(select && box && select.y > box.y).toBe(true);
   await expectAccessible(page);
-  await shoot(
-    page,
-    'person-level',
-    dialog.getByRole('listitem').filter({ hasText: ana }),
-  );
+  await shoot(page, 'person-level', page.getByRole('dialog'));
 
   const removed = await owner.get('/api/v1/invite-profiles');
   const profile = (

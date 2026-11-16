@@ -9,21 +9,18 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import {
+  openSection,
+  openSettings,
+  SETTINGS_AXE,
+  showTab,
+} from './settings-helpers.js';
 
 /**
  * QA of KBC-022 on "Pessoas e permissões" and the section's visibility (AC-2, AC-12, NFR-3).
  * Only "Aplicar às selecionadas" runs here: "Aplicar a todos os usuários" changes every person
  * of the shared E2E server and would break the specs running beside this one.
  */
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
-
-async function openSettings(page: Page) {
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await expect(dialog).toBeVisible();
-  return dialog;
-}
 
 async function noHorizontalScroll(page: Page) {
   const overflow = await page.evaluate(
@@ -48,13 +45,13 @@ test('AC-2: a member sees no "IA da aplicação" section', async ({
   await expect(member.getByRole('dialog')).toHaveCount(0);
   const dialog = await openSettings(member);
   await expect(
-    dialog.getByRole('button', { name: 'Preferências' }),
+    dialog.getByRole('link', { name: 'Preferências', exact: true }),
   ).toBeVisible();
   await expect(
-    dialog.getByRole('button', { name: 'IA da aplicação' }),
+    dialog.getByRole('link', { name: 'IA da aplicação', exact: true }),
   ).toHaveCount(0);
   await expect(
-    dialog.getByRole('button', { name: 'Pessoas e permissões' }),
+    dialog.getByRole('link', { name: 'Pessoas e permissões', exact: true }),
   ).toHaveCount(0);
   await member.context().close();
   await owner.dispose();
@@ -75,7 +72,7 @@ test('AC-12: the master lends the house plan to two of three selected people, wi
 
   await page.goto('/');
   const dialog = await openSettings(page);
-  await dialog.getByRole('button', { name: 'Pessoas e permissões' }).click();
+  await openSection(dialog, 'Pessoas e permissões');
   await dialog.getByLabel(`Selecionar ${first}`).check();
   await dialog.getByLabel(`Selecionar ${second}`).check();
   const bar = dialog.getByRole('group', {
@@ -85,7 +82,7 @@ test('AC-12: the master lends the house plan to two of three selected people, wi
     .getByRole('combobox')
     .selectOption({ label: 'Plano da casa (OpenRouter)' });
   await page.waitForFunction(() => document.getAnimations().length === 0);
-  const axe = await new AxeBuilder({ page }).include('dialog').analyze();
+  const axe = await new AxeBuilder({ page }).include(SETTINGS_AXE).analyze();
   expect(axe.violations).toEqual([]);
   await noHorizontalScroll(page);
 
@@ -112,6 +109,8 @@ test('AC-12: the master lends the house plan to two of three selected people, wi
 
   // The person's editor shows the AI fieldset and its history (T9).
   await dialog.getByRole('button', { name: new RegExp(first) }).click();
+  // The person's editor is a modal, the AI in its own tab (KBC-132).
+  await showTab(dialog, 'IA e limites');
   const fieldset = dialog.getByRole('group', { name: 'IA da aplicação' });
   await expect(fieldset.getByLabel('Qual IA atende esta pessoa')).toHaveValue(
     'house',
@@ -120,7 +119,9 @@ test('AC-12: the master lends the house plan to two of three selected people, wi
   await expect(fieldset.getByLabel('Teto por mês (US$)')).toBeVisible();
   await dialog.getByText('Histórico da IA').click();
   await page.waitForFunction(() => document.getAnimations().length === 0);
-  const editorAxe = await new AxeBuilder({ page }).include('dialog').analyze();
+  const editorAxe = await new AxeBuilder({ page })
+    .include(SETTINGS_AXE)
+    .analyze();
   expect(editorAxe.violations).toEqual([]);
   await noHorizontalScroll(page);
   await owner.patch(`/api/v1/people/${firstId}`, {

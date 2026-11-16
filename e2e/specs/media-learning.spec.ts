@@ -10,6 +10,7 @@ import {
   seedTranscript,
   type SpokenLine,
 } from './transcript-helpers.js';
+import { openSection, settingsPage } from './settings-helpers.js';
 
 // KBC-113: what a correction teaches. A recording's "a <word>" corrected to "Atlântida"
 // becomes a rule with its context; the next recording seeded with the rules gets it
@@ -171,9 +172,11 @@ test('AC-1, AC-15, AC-19: a master sees the rule with its context and turns it o
   await page.goto('/biblioteca');
   if (!desktop(page))
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await dialog.getByRole('button', { name: 'Termos da transcrição' }).click();
+  await page
+    .getByRole('button', { name: 'Configurações', exact: true })
+    .click();
+  const dialog = settingsPage(page);
+  await openSection(dialog, 'Termos da transcrição');
   // The name holds what the switch shows, "Ligada"/"Desligada" (WCAG 2.5.3).
   const name = new RegExp(`^Regra a ${word} → Atlântida: `);
   const rule = dialog.getByRole('switch', { name });

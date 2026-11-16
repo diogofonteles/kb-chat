@@ -2,6 +2,12 @@ import AxeBuilder from '@axe-core/playwright';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { CSRF, expect, ownerApi, test } from './fixtures.js';
 import { uniqueTag, uploadReady } from './media-helpers.js';
+import {
+  openSection,
+  SETTINGS_AXE,
+  settingsPage,
+  settingsSection,
+} from './settings-helpers.js';
 
 // KBC-037: "Groq de reserva" in Configurações and "Transcrever com Groq" on an audio. The
 // E2E server's Groq is a fake (a key ending in "valid" is accepted): nothing is paid. The
@@ -13,18 +19,21 @@ async function openGroq(page: Page): Promise<Locator> {
   await page.goto('/biblioteca');
   if (!desktop(page))
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await dialog.getByRole('button', { name: 'Groq de reserva' }).click();
+  await page
+    .getByRole('button', { name: 'Configurações', exact: true })
+    .click();
+  const dialog = settingsPage(page);
+  await openSection(dialog, 'Groq de reserva');
   await expect(
     dialog.getByRole('heading', { name: 'Groq de reserva' }),
   ).toBeVisible();
-  return dialog;
+  // Every section is on the page (KBC-131): the Groq one is the one used.
+  return settingsSection(page, 'Groq de reserva');
 }
 
 const seriousViolations = async (page: Page) =>
   (
-    await new AxeBuilder({ page }).include('dialog').analyze()
+    await new AxeBuilder({ page }).include(SETTINGS_AXE).analyze()
   ).violations.filter((violation) =>
     ['serious', 'critical'].includes(violation.impact ?? ''),
   );

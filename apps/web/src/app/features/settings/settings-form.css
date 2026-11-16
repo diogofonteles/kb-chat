@@ -430,3 +430,155 @@ fieldset {
     width: 100%;
   }
 }
+
+/*
+ * ---------- The generic controls of the settings panels (house AI, transcribers, terms, Groq,
+ * voice profiles), in the v2 look: inputs on the overlay tokens, pill buttons, legend 17 ----------
+ */
+.legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-desktop);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.check input,
+.radio {
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--overlay-line);
+  border-radius: 4px;
+  background: var(--overlay-2);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+textarea.input {
+  min-height: 5.5rem;
+  padding: var(--space-3);
+  resize: vertical;
+}
+
+.input:hover:not(:disabled) {
+  border-color: var(--overlay-4);
+}
+
+.input:focus-visible {
+  border-color: var(--color-text);
+  outline: 1px solid var(--color-text);
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+select.input option {
+  background: var(--color-elevated);
+  color: var(--color-text);
+}
+
+.primary,
+.secondary,
+.danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 2.5rem;
+  padding: 0 var(--space-5);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.secondary {
+  border-color: var(--overlay-4);
+  background: transparent;
+  color: var(--color-text);
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: var(--color-text);
+}
+
+.danger {
+  border-color: var(--color-danger);
+  background: transparent;
+  color: var(--color-danger);
+}
+
+.primary:disabled,
+.secondary:disabled,
+.danger:disabled,
+.link:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.375rem;
+  padding: 0 0.625rem;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.badge.included {
+  color: var(--color-accent-text);
+}
+
+.confirm-text {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.footer-actions {
+  display: contents;
+}
+
+/* A button in a grid column keeps its own width (Salvar modo, Testar conexão). */
+.primary,
+.secondary,
+.danger {
+  justify-self: start;
+}

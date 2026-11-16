@@ -10,6 +10,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { settingsPage } from './settings-helpers.js';
 
 /**
  * KBC-014: ask for access (form or Google), a master decides, and an approved person signs
@@ -40,7 +41,7 @@ async function openPeople(owner: Page): Promise<Locator> {
   const entry = side.getByRole('button', { name: /Pessoas e permissões/ });
   await expect(entry).toHaveAccessibleName(/solicita(ção|ções) pendentes?/);
   await entry.click();
-  return owner.getByRole('dialog', { name: 'Configurações' });
+  return settingsPage(owner);
 }
 
 const requestItem = (dialog: Locator, email: string) =>
@@ -184,10 +185,20 @@ test('a master refuses a request, and the person is told when to ask again', asy
   const dialog = await openPeople(page);
   const item = requestItem(dialog, email);
   await item.getByRole('button', { name: 'Recusar' }).click();
+  // The refusal asks first, in a modal (KBC-132 FR-4).
+  const confirm = page.getByRole('dialog', {
+    name: /^Recusar a solicitação de /,
+  });
   await expect(
-    item.getByText(/só poderá pedir de novo em 24 horas/),
+    confirm.getByText(/só poderá pedir de novo em 24 horas/),
   ).toBeVisible();
+  await shoot(page, 'refuse-request');
+  // KBC-132 AC-2: "Cancelar" changes nothing.
+  await confirm.getByRole('button', { name: 'Cancelar' }).click();
+  await expect(confirm).toBeHidden();
+  await expect(item).toBeVisible();
   await item.getByRole('button', { name: 'Recusar' }).click();
+  await confirm.getByRole('button', { name: 'Recusar' }).click();
   await expect(requestItem(dialog, email)).toHaveCount(0);
 
   const context = await browser.newContext({

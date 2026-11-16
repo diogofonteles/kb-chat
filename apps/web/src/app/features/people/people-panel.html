@@ -1,124 +1,155 @@
 <form class="invite" (submit)="invite($event)">
-  <label class="field">
-    <span class="label" i18n="@@people.inviteLabel">Convidar por e-mail</span>
-    <input
-      #emailInput
-      type="email"
-      name="email"
-      autocomplete="off"
-      inputmode="email"
-      required
-      [attr.aria-describedby]="
-        inviteError() ? 'invite-error invite-hint' : 'invite-hint'
-      "
-      [attr.aria-invalid]="inviteError() ? 'true' : null"
-      [attr.aria-errormessage]="inviteError() ? 'invite-error' : null"
-      [value]="email()"
-      (input)="typeEmail(emailInput.value)"
-    />
-  </label>
-  <label class="check">
-    <input
-      #skipBox
-      type="checkbox"
-      name="skipEmail"
-      [checked]="skipEmail()"
-      (change)="skipEmail.set(skipBox.checked)"
-    />
-    <span i18n="@@people.skipEmail">Não enviar e-mail de convite</span>
-  </label>
-  <div class="setup">
-    @if (profiles.list().length > 0) {
-      <label class="field setup-field">
-        <span class="label" i18n="@@people.inviteProfile">Perfil</span>
-        <select
-          #setupSelect
-          class="select"
-          name="profile"
-          [attr.aria-describedby]="configuring() ? 'invite-setup-hint' : null"
-          (change)="chooseSetup(setupSelect.value)"
-        >
-          @for (profile of profiles.list(); track profile.id) {
-            <option
-              [value]="profile.id"
-              [selected]="profile.id === setupChoice()"
-            >
-              {{ profile.name }}
-              @if (profile.isDefault) {
-                <ng-container i18n="@@people.profileIsDefault"
-                  >(padrão)</ng-container
-                >
-              }
-            </option>
-          }
-          <option
-            [value]="noProfile"
-            [selected]="setupChoice() === noProfile"
-            i18n="@@people.noProfile"
-          >
-            Nenhum
-          </option>
-        </select>
-      </label>
-    }
-    <button
-      type="button"
-      class="secondary"
-      aria-controls="invite-preset"
-      [attr.aria-expanded]="configuring()"
-      (click)="toggleConfigure()"
+  @if (!configuring()) {
+    <p class="invite-title" i18n="@@people.inviteTitle">Convidar por e-mail</p>
+    <ng-container *ngTemplateOutlet="inviteFields" />
+  } @else {
+    <!-- The configured invitation in a wide modal with tabs (KBC-132); closing discards it. -->
+    <ui-dialog
+      #inviteDialog
+      titleId="invite-dialog-title"
+      i18n-step="@@people.inviteKicker"
+      step="Convite"
+      i18n-title="@@people.inviteSetupTitle"
+      title="Configurar o convite"
+      [width]="800"
+      (closed)="discardConfiguration()"
     >
-      @if (configuring()) {
-        <span i18n="@@people.discardConfiguration">Descartar configuração</span>
-      } @else {
-        <span i18n="@@people.configureNow">Configurar agora</span>
+      <ng-container *ngTemplateOutlet="inviteFields" />
+      <!-- Another profile starts the editor over, its field errors included. -->
+      @for (choice of [setupChoice()]; track choice) {
+        <app-invite-preset-editor
+          id="invite-preset"
+          class="preset"
+          [preset]="draftPreset()"
+          [topics]="topics()"
+          [defaultAppAi]="defaultAppAi()"
+          [lending]="lending()"
+          [scales]="scaleState()"
+          [staleLevels]="draftStaleLevels()"
+          [busy]="busy()"
+          (changed)="draftPreset.set($event)"
+          (invalidChange)="presetInvalid.set($event)"
+          (lendPending)="lendPending.set($event)"
+        />
       }
-    </button>
-  </div>
-  @if (configuring() && profiles.list().length > 0) {
-    <p
-      id="invite-setup-hint"
-      class="hint setup-hint"
-      i18n="@@people.setupSwitchHint"
-    >
-      Trocar o perfil recomeça a configuração a partir dele.
-    </p>
-  }
-  @if (configuring()) {
-    <!-- Another profile starts the editor over, its field errors included. -->
-    @for (choice of [setupChoice()]; track choice) {
-      <app-invite-preset-editor
-        id="invite-preset"
-        class="preset"
-        [preset]="draftPreset()"
-        [topics]="topics()"
-        [defaultAppAi]="defaultAppAi()"
-        [lending]="lending()"
-        [scales]="scaleState()"
-        [staleLevels]="draftStaleLevels()"
-        [busy]="busy()"
-        (changed)="draftPreset.set($event)"
-        (invalidChange)="presetInvalid.set($event)"
-        (lendPending)="lendPending.set($event)"
-      />
-    }
-  }
-  <button
-    type="submit"
-    class="primary"
-    [disabled]="busy() || !email().trim() || (configuring() && presetInvalid())"
-    [attr.aria-describedby]="waitsForLend() ? 'invite-lend-wait' : null"
-    i18n="@@people.invite"
-  >
-    Convidar
-  </button>
-  @if (waitsForLend()) {
-    <p id="invite-lend-wait" class="hint" i18n="@@people.inviteLendWait">
-      Confirme ou cancele a cessão da assinatura em “IA da aplicação” para
-      convidar.
-    </p>
+    </ui-dialog>
   }
 </form>
+
+<ng-template #inviteFields>
+  <div class="invite-fields">
+    <label class="field email-field">
+      <span class="visually-hidden" i18n="@@people.inviteLabel"
+        >Convidar por e-mail</span
+      >
+      <input
+        #emailInput
+        type="email"
+        class="ui-input"
+        placeholder="nome@exemplo.test"
+        name="email"
+        autocomplete="off"
+        inputmode="email"
+        required
+        [attr.aria-describedby]="
+          inviteError() ? 'invite-error invite-hint' : 'invite-hint'
+        "
+        [attr.aria-invalid]="inviteError() ? 'true' : null"
+        [attr.aria-errormessage]="inviteError() ? 'invite-error' : null"
+        [value]="email()"
+        (input)="typeEmail(emailInput.value)"
+      />
+    </label>
+    <label class="check">
+      <input
+        #skipBox
+        type="checkbox"
+        class="ui-check"
+        name="skipEmail"
+        [checked]="skipEmail()"
+        (change)="skipEmail.set(skipBox.checked)"
+      />
+      <span i18n="@@people.skipEmail">Não enviar e-mail de convite</span>
+    </label>
+    <div class="setup">
+      @if (profiles.list().length > 0) {
+        <label class="field setup-field">
+          <span class="label" i18n="@@people.inviteProfile">Perfil</span>
+          <select
+            #setupSelect
+            class="ui-input select"
+            name="profile"
+            [attr.aria-describedby]="configuring() ? 'invite-setup-hint' : null"
+            (change)="chooseSetup(setupSelect.value)"
+          >
+            @for (profile of profiles.list(); track profile.id) {
+              <option
+                [value]="profile.id"
+                [selected]="profile.id === setupChoice()"
+              >
+                {{ profile.name }}
+                @if (profile.isDefault) {
+                  <ng-container i18n="@@people.profileIsDefault"
+                    >(padrão)</ng-container
+                  >
+                }
+              </option>
+            }
+            <option
+              [value]="noProfile"
+              [selected]="setupChoice() === noProfile"
+              i18n="@@people.noProfile"
+            >
+              Nenhum
+            </option>
+          </select>
+        </label>
+      }
+      <button
+        uiButton="outline"
+        type="button"
+        aria-controls="invite-preset"
+        [attr.aria-expanded]="configuring()"
+        (click)="toggleConfigure()"
+      >
+        @if (configuring()) {
+          <span i18n="@@people.discardConfiguration"
+            >Descartar configuração</span
+          >
+        } @else {
+          <span i18n="@@people.configureNow">Configurar agora</span>
+        }
+      </button>
+    </div>
+    @if (configuring() && profiles.list().length > 0) {
+      <p
+        id="invite-setup-hint"
+        class="hint setup-hint"
+        i18n="@@people.setupSwitchHint"
+      >
+        Trocar o perfil recomeça a configuração a partir dele.
+      </p>
+    }
+    <button
+      uiButton="primary"
+      type="submit"
+      class="invite-send"
+      [disabled]="
+        busy() || !email().trim() || (configuring() && presetInvalid())
+      "
+      [attr.aria-describedby]="waitsForLend() ? 'invite-lend-wait' : null"
+      i18n="@@people.invite"
+    >
+      Convidar
+    </button>
+    @if (waitsForLend()) {
+      <p id="invite-lend-wait" class="hint" i18n="@@people.inviteLendWait">
+        Confirme ou cancele a cessão da assinatura em “IA da aplicação” para
+        convidar.
+      </p>
+    }
+  </div>
+</ng-template>
 @if (inviteError()) {
   <p id="invite-error" class="invite-error" role="alert">
     <span class="visually-hidden" i18n="@@people.errorPrefix">Erro:</span>
@@ -201,18 +232,27 @@
     <input
       #allBox
       type="checkbox"
+      class="ui-check"
       [checked]="allSelected()"
       (change)="selectAll(allBox.checked)"
     />
     <span i18n="@@people.selectAll">Selecionar todos</span>
   </label>
+  <div class="table-head" aria-hidden="true">
+    <span></span>
+    <span i18n="@@people.colPerson">Pessoa</span>
+    <span i18n="@@people.colAccess">Acervos e IA</span>
+    <span i18n="@@people.colToday">Hoje</span>
+    <span i18n="@@people.colStatus">Situação</span>
+  </div>
   <ul class="people" aria-label="Pessoas" i18n-aria-label="@@people.listLabel">
     @for (person of list(); track person.id) {
-      <li class="person">
+      <li class="person" [class.open]="openId() === person.id">
         <label class="pick">
           <input
             #pickBox
             type="checkbox"
+            class="ui-check"
             [checked]="selected().has(person.id)"
             (change)="select(person, pickBox.checked)"
           />
@@ -224,110 +264,132 @@
           #row
           type="button"
           class="row"
+          aria-haspopup="dialog"
           [attr.data-id]="person.id"
           [attr.aria-expanded]="openId() === person.id"
-          [attr.aria-controls]="'person-' + person.id"
           (click)="toggle(person)"
         >
           <span class="who">
-            <span class="name">{{ person.name || person.email }}</span>
-            @if (person.name) {
-              <span class="email">{{ person.email }}</span>
-            }
-          </span>
-          <span class="meta">
-            @if (person.role === 'master') {
-              <span class="badge" i18n="@@people.master">Master</span>
-            }
-            @if (person.isOwner) {
-              <span class="badge" i18n="@@people.owner">Dono</span>
-            }
-            <span class="topics">{{ topicNames(person) }}</span>
-            <span class="ai">{{ aiLabel(person) }}</span>
-            @if (spendOf(person); as spent) {
-              <span class="spent">{{ spent }}</span>
-            }
-            @let invitation = invitations().get(person.id);
-            <span class="last">
-              @switch (invitation?.kind) {
-                @case ('active') {
-                  <span class="badge active" i18n="@@people.active">Ativo</span>
-                  <ng-container i18n="@@people.lastLogin"
-                    >Último acesso
-                    {{
-                      person.lastLoginAt | date: 'dd/MM/yyyy HH:mm'
-                    }}</ng-container
-                  >
+            <ui-avatar
+              [name]="person.name || person.email"
+              [picture]="null"
+              [size]="36"
+            />
+            <span class="who-text">
+              <span class="name-line">
+                <span class="name">{{ person.name || person.email }}</span>
+                @if (person.role === 'master') {
+                  <ui-pill tone="info" i18n="@@people.master">Master</ui-pill>
                 }
-                @case ('sent') {
-                  <ng-container i18n="@@people.invitationSentAt"
-                    >Convite enviado em
-                    {{
-                      person.invitation?.sentAt | date: 'dd/MM/yyyy HH:mm'
-                    }}</ng-container
-                  >
+                @if (person.isOwner) {
+                  <ui-pill tone="warn" i18n="@@people.owner">Dono</ui-pill>
                 }
-                @case ('failed') {
-                  <span class="failed"
-                    ><span aria-hidden="true">⚠</span>&ngsp;<ng-container
-                      i18n="@@people.invitationFailed"
-                      >Falha ao enviar o convite</ng-container
-                    ></span
-                  >
-                }
-                @default {
-                  <ng-container i18n="@@people.neverSignedIn"
-                    >Ainda não entrou</ng-container
-                  >
-                }
+              </span>
+              @if (person.name) {
+                <span class="email">{{ person.email }}</span>
               }
             </span>
           </span>
+          <span class="access">
+            <span class="topics">{{ topicNames(person) }}</span>
+            <span class="ai">{{ aiLabel(person) }}</span>
+          </span>
+          <span class="spent">{{ spendOf(person) || '—' }}</span>
+          @let invitation = invitations().get(person.id);
+          <span class="last">
+            @switch (invitation?.kind) {
+              @case ('active') {
+                <ui-pill tone="ok" i18n="@@people.active">Ativo</ui-pill>
+                <span class="when" i18n="@@people.lastLogin"
+                  >Último acesso
+                  {{ person.lastLoginAt | date: 'dd/MM/yyyy HH:mm' }}</span
+                >
+              }
+              @case ('sent') {
+                <ui-pill tone="info" i18n="@@people.invitationSent"
+                  >Convite enviado</ui-pill
+                >
+                <span class="when" i18n="@@people.invitationSentAt"
+                  >Convite enviado em
+                  {{
+                    person.invitation?.sentAt | date: 'dd/MM/yyyy HH:mm'
+                  }}</span
+                >
+              }
+              @case ('failed') {
+                <ui-pill tone="err"
+                  ><span aria-hidden="true">⚠</span>&ngsp;<ng-container
+                    i18n="@@people.invitationFailed"
+                    >Falha ao enviar o convite</ng-container
+                  ></ui-pill
+                >
+              }
+              @default {
+                <ui-pill i18n="@@people.neverSignedIn"
+                  >Ainda não entrou</ui-pill
+                >
+              }
+            }
+          </span>
+          <ui-icon class="more" name="chevRight" [size]="18" />
         </button>
-        @if (openId() === person.id) {
-          <app-person-editor
-            [id]="'person-' + person.id"
-            class="editor"
-            [person]="person"
-            [defaultAppAi]="defaultAppAi()"
-            [lending]="lending()"
-            [topics]="topics()"
-            [busy]="busy()"
-            [saving]="writes.busyFor(person.id)"
-            [pending]="pending().get(person.id) ?? noPending"
-            [profiles]="profiles.list()"
-            [mayActAs]="mayActAs(person)"
-            [ownerView]="ownerView()"
-            [scales]="scales()"
-            (actAs)="askActAs(person)"
-            (changed)="change(person, $event)"
-            (toggled)="toggleBox(person, $event)"
-            (profileApplied)="applyProfile(person, $event)"
-            (revoked)="revoke(person)"
-          />
-          @let invitationKind = invitations().get(person.id)?.kind;
-          @if (!person.isOwner && invitationKind !== 'active') {
-            <div class="invitation">
-              <button
-                #resendButton
-                type="button"
-                class="secondary"
-                [disabled]="busy()"
-                (click)="resend(person)"
-              >
-                @if (invitationKind === 'none') {
-                  <span i18n="@@people.sendInvitation">Enviar convite</span>
-                } @else {
-                  <span i18n="@@people.resendInvitation">Reenviar convite</span>
-                }
-              </button>
-            </div>
-          }
-          <ng-container *ngTemplateOutlet="status" />
-        }
       </li>
     }
   </ul>
+}
+
+<!-- The person's editor in a wide modal with tabs; a tall sheet on a phone (KBC-132 FR-2). -->
+@if (openPerson(); as person) {
+  <ui-dialog
+    #personDialog
+    titleId="person-dialog-title"
+    i18n-step="@@people.personKicker"
+    step="Pessoa"
+    [title]="person.name || person.email"
+    [width]="800"
+    (closed)="closeEditor()"
+  >
+    <app-person-editor
+      [id]="'person-' + person.id"
+      class="editor"
+      [person]="person"
+      [defaultAppAi]="defaultAppAi()"
+      [lending]="lending()"
+      [topics]="topics()"
+      [busy]="busy()"
+      [saving]="writes.busyFor(person.id)"
+      [pending]="pending().get(person.id) ?? noPending"
+      [profiles]="profiles.list()"
+      [mayActAs]="mayActAs(person)"
+      [ownerView]="ownerView()"
+      [scales]="scales()"
+      (actAs)="askActAs(person)"
+      (changed)="change(person, $event)"
+      (toggled)="toggleBox(person, $event)"
+      (profileApplied)="applyProfile(person, $event)"
+      (revoked)="revoke(person)"
+    />
+    @let invitationKind = invitations().get(person.id)?.kind;
+    @if (!person.isOwner && invitationKind !== 'active') {
+      <div class="invitation">
+        <button
+          #resendButton
+          uiButton="outline"
+          size="sm"
+          type="button"
+          [disabled]="busy()"
+          (click)="resend(person)"
+        >
+          @if (invitationKind === 'none') {
+            <span i18n="@@people.sendInvitation">Enviar convite</span>
+          } @else {
+            <span i18n="@@people.resendInvitation">Reenviar convite</span>
+          }
+        </button>
+      </div>
+    }
+    <ng-container *ngTemplateOutlet="status" />
+  </ui-dialog>
 }
 
 <!-- The outcome of the last change, next to the person it changed (MA-23). -->

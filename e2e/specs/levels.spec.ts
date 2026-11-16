@@ -9,6 +9,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { settingsPage } from './settings-helpers.js';
 
 /**
  * KBC-103 (ADR 0036, screens.md T24, T9, T3, T4): a master builds the scale of a collection,
@@ -134,7 +135,7 @@ async function seePersonLevel(page: Page, title: string, email: string) {
   await page.goto('/');
   const side = await sidebar(page);
   await side.getByRole('button', { name: /Pessoas e permissões/ }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
+  const dialog = settingsPage(page);
   await dialog.getByRole('button', { name: new RegExp(email) }).click();
   const select = dialog.getByRole('combobox', { name: `Nível em ${title}` });
   await expect(select).toHaveValue('ci');

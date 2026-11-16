@@ -9,20 +9,18 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import {
+  closeSettings,
+  openSection,
+  openSettings,
+  SETTINGS_AXE,
+  showTab,
+} from './settings-helpers.js';
 
 /**
  * KBC-024: the owner lends his Claude subscription to one person, after the terms; the person
  * sees it is temporary. The E2E server's lent subscription answers with the stub (no CLI).
  */
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
-
-async function openSettings(page: Page) {
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await expect(dialog).toBeVisible();
-  return dialog;
-}
 
 async function noHorizontalScroll(page: Page) {
   const overflow = await page.evaluate(
@@ -44,8 +42,10 @@ test('AC-1, AC-2, AC-5: the owner lends his subscription after the terms; the pe
 
   await page.goto('/');
   const dialog = await openSettings(page);
-  await dialog.getByRole('button', { name: 'Pessoas e permissões' }).click();
+  await openSection(dialog, 'Pessoas e permissões');
   await dialog.getByRole('button', { name: new RegExp(email) }).click();
+  // The person's editor is a modal, the AI in its own tab (KBC-132).
+  await showTab(dialog, 'IA e limites');
   const fieldset = dialog.getByRole('group', { name: 'IA da aplicação' });
   await fieldset
     .getByLabel('Qual IA atende esta pessoa')
@@ -58,7 +58,7 @@ test('AC-1, AC-2, AC-5: the owner lends his subscription after the terms; the pe
     fieldset.getByRole('button', { name: 'Cancelar' }),
   ).toBeFocused();
   await page.waitForFunction(() => document.getAnimations().length === 0);
-  const axe = await new AxeBuilder({ page }).include('dialog').analyze();
+  const axe = await new AxeBuilder({ page }).include(SETTINGS_AXE).analyze();
   expect(axe.violations).toEqual([]);
   await noHorizontalScroll(page);
   await expect(
@@ -75,7 +75,7 @@ test('AC-1, AC-2, AC-5: the owner lends his subscription after the terms; the pe
   await person.goto('/');
   await person.getByRole('button', { name: 'Pular' }).click();
   await expect(person.getByRole('dialog')).toHaveCount(0);
-  const settings = await openSettings(person);
+  const settings = await openSettings(person, 'Sua IA');
   await expect(
     settings.getByText(
       'Você está usando temporariamente a IA da aplicação (assinatura do Claude do administrador).',
@@ -87,14 +87,12 @@ test('AC-1, AC-2, AC-5: the owner lends his subscription after the terms; the pe
   ).toBeFocused();
   await person.waitForFunction(() => document.getAnimations().length === 0);
   const personAxe = await new AxeBuilder({ page: person })
-    .include('dialog')
+    .include(SETTINGS_AXE)
     .analyze();
   expect(personAxe.violations).toEqual([]);
   await noHorizontalScroll(person);
-  await settings.getByRole('button', { name: 'Fechar configurações' }).click();
-  // On a phone, closing Settings goes back to the menu it was opened from.
-  if (!desktop(person))
-    await person.getByRole('button', { name: 'Fechar menu' }).click();
+  // Configurações is a page (KBC-131): back is the conversation, the phone's menu closed.
+  await closeSettings(settings);
   await person.getByLabel('Sua pergunta').fill('o que é o mentalismo?');
   await person.getByRole('button', { name: 'Perguntar' }).click();
   const answer = person.locator('app-research-message').last();
@@ -116,7 +114,7 @@ test('AC-6: lending to the selected people asks for the terms first, never as th
   const id = await invite(owner, email);
   await page.goto('/');
   const dialog = await openSettings(page);
-  await dialog.getByRole('button', { name: 'Pessoas e permissões' }).click();
+  await openSection(dialog, 'Pessoas e permissões');
   await dialog.getByLabel(`Selecionar ${email}`).check();
   const bar = dialog.getByRole('group', {
     name: 'IA da aplicação para várias pessoas',
@@ -172,7 +170,7 @@ test('QA F-3: a person without their own AI settings is told in Preferências', 
   expect(lent.status()).toBe(200);
   const person = await pageAs(browser, email, page.viewportSize());
   await person.goto('/');
-  const settings = await openSettings(person);
+  const settings = await openSettings(person, 'Preferências');
   await expect(
     settings.getByText(
       'Você está usando temporariamente a IA da aplicação (assinatura do Claude do administrador).',

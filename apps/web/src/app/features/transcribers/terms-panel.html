@@ -6,26 +6,25 @@
 
 @if (saved(); as current) {
   <form class="block" (submit)="save($event)" novalidate>
-    <div class="usage">
-      @if (usage(); as use) {
-        <p class="use" role="status" i18n="@@terms.usage">
-          {{ use.tokens }} de {{ use.limit }} do limite do transcritor
+    <!-- The limit as a large meter; red past it (KBC-132 FR-3). -->
+    <div class="usage" [class.over]="over()">
+      <div class="usage-line">
+        @if (usage(); as use) {
+          <p class="use" role="status" i18n="@@terms.usage">
+            {{ use.tokens }} de {{ use.limit }} do limite do transcritor
+          </p>
+        }
+        <p class="hint version" i18n="@@terms.current">
+          Versão {{ current.version }}, de
+          {{ current.createdAt | date: 'dd/MM/yyyy' }}
         </p>
-        <meter
-          aria-hidden="true"
-          min="0"
-          optimum="0"
-          [max]="use.limit"
-          [high]="use.limit - 1"
-          [value]="use.tokens"
-        ></meter>
+      </div>
+      @if (usage()) {
+        <span class="bar" aria-hidden="true"
+          ><span class="fill" [style.width.%]="usedPercent()"></span
+        ></span>
       }
-      <p class="hint" i18n="@@terms.current">
-        Versão {{ current.version }}, de
-        {{ current.createdAt | date: 'dd/MM/yyyy' }}
-      </p>
     </div>
-
     @if (overLimit(); as text) {
       <p class="field-error" role="alert">
         <span aria-hidden="true">⚠</span> {{ text }}
@@ -65,14 +64,16 @@
     @if (rows().length === 0) {
       <p class="hint" i18n="@@terms.none">Nenhum termo na lista.</p>
     } @else {
+      <!-- Each term a chip with ✕; it stays editable in place (KBC-132). -->
       <ol class="terms">
         @for (row of rows(); track row.id; let index = $index) {
           <li>
             <div class="term">
               <input
-                class="input"
+                class="chip-input"
                 type="text"
                 maxlength="100"
+                [attr.size]="sizeOf(row)"
                 autocomplete="off"
                 [id]="'term-' + row.id"
                 [value]="row.text"
@@ -85,11 +86,11 @@
               />
               <button
                 type="button"
-                class="ghost remove"
+                class="remove"
                 [attr.aria-label]="removeLabel(row)"
                 (click)="removeRow(index)"
               >
-                <span aria-hidden="true">×</span>
+                <ui-icon name="close" [size]="14" />
               </button>
             </div>
             @if (!isValid(row)) {
@@ -120,7 +121,7 @@
       <button
         type="submit"
         class="primary"
-        [disabled]="busy()"
+        [disabled]="busy() || over()"
         i18n="@@terms.save"
       >
         Salvar lista
@@ -161,24 +162,37 @@
     </p>
   </form>
 
-  <details class="versions">
-    <summary i18n="@@terms.versions">Versões da lista</summary>
-    <ul>
-      @for (one of current.versions; track one.version) {
-        <li>
-          <span i18n="@@terms.versionLine"
-            >Versão {{ one.version }}, {{ one.termCount }} termos, em
-            {{ one.createdAt | date: 'dd/MM/yyyy' }}</span
-          >
-          @if (one.authorName; as name) {
-            <span i18n="@@terms.versionAuthor">por {{ name }}</span>
-          } @else {
-            <span i18n="@@terms.versionInitial">(lista inicial)</span>
-          }
-        </li>
-      }
-    </ul>
-  </details>
+  <section class="versions" aria-labelledby="terms-versions-title">
+    <h3 id="terms-versions-title" class="block-title" i18n="@@terms.versions">
+      Versões da lista
+    </h3>
+    <!-- A phone keeps the list in a sheet (KBC-132). -->
+    <button
+      type="button"
+      class="secondary versions-open"
+      aria-haspopup="dialog"
+      (click)="versionsSheet.open()"
+      i18n="@@terms.versionsOpen"
+    >
+      Ver as versões ({{ current.versions.length }})
+    </button>
+    <ng-container
+      *ngTemplateOutlet="versionList; context: { $implicit: current }"
+    />
+  </section>
+  <ui-sheet
+    #versionsSheet
+    i18n-label="@@terms.versions"
+    label="Versões da lista"
+  >
+    <h3 class="sheet-title" i18n="@@terms.versions">Versões da lista</h3>
+    <ng-container
+      *ngTemplateOutlet="
+        versionList;
+        context: { $implicit: current, sheet: true }
+      "
+    />
+  </ui-sheet>
 } @else if (list.error()) {
   <div class="block">
     <p class="field-error" role="alert" i18n="@@terms.loadFailed">
@@ -196,3 +210,26 @@
 } @else {
   <p class="hint" role="status" i18n="@@terms.loading">Carregando a lista…</p>
 }
+
+<ng-template #versionList let-current let-sheet="sheet">
+  <ul class="version-list" [class.in-sheet]="sheet">
+    @for (one of current.versions; track one.version) {
+      <li>
+        <ui-icon name="clock" [size]="18" />
+        <span class="version-text">
+          <span i18n="@@terms.versionLine"
+            >Versão {{ one.version }}, {{ one.termCount }} termos, em
+            {{ one.createdAt | date: 'dd/MM/yyyy' }}</span
+          >
+          @if (one.authorName; as name) {
+            <span class="by" i18n="@@terms.versionAuthor">por {{ name }}</span>
+          } @else {
+            <span class="by" i18n="@@terms.versionInitial"
+              >(lista inicial)</span
+            >
+          }
+        </span>
+      </li>
+    }
+  </ul>
+</ng-template>

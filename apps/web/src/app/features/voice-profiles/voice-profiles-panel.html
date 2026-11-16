@@ -53,10 +53,12 @@
       </div>
     }
     @if (noTranscriber()) {
-      <p class="hint" i18n="@@voiceProfiles.noTranscriber">
-        Nenhum transcritor ligado trata perfis de voz; o cálculo espera até que
-        um seja marcado em Transcritores.
-      </p>
+      <ui-banner tone="warn">
+        <p i18n="@@voiceProfiles.noTranscriber">
+          Nenhum transcritor ligado trata perfis de voz; o cálculo espera até
+          que um seja marcado em Transcritores.
+        </p>
+      </ui-banner>
     }
     <h3
       class="block-title"
@@ -67,9 +69,11 @@
       Perfis deste acervo
     </h3>
     @if (items().length === 0) {
-      <p class="hint" i18n="@@voiceProfiles.empty">
-        Nenhum perfil neste acervo.
-      </p>
+      <ui-empty-state
+        icon="mic"
+        i18n-title="@@voiceProfiles.empty"
+        title="Nenhum perfil neste acervo."
+      />
     }
     <ul class="profiles">
       @for (profile of items(); track profile.id) {
@@ -143,22 +147,35 @@
       }
     </ul>
 
-    @if (adding()) {
-      <app-voice-profile-form
-        [topic]="topic()"
-        [taken]="taken()"
-        (created)="created($event)"
-        (cancelled)="adding.set(false)"
-      />
-    } @else if (!printsStopped()) {
+    @if (!printsStopped()) {
       <button
         type="button"
-        class="primary"
+        class="primary add"
         (click)="adding.set(true)"
         i18n="@@voiceProfiles.add"
       >
         Cadastrar perfil
       </button>
+    }
+    <!-- The consent and the recordings in a wide modal; a tall sheet on a phone (KBC-132). -->
+    @if (adding()) {
+      <ui-dialog
+        #formDialog
+        titleId="voice-profile-dialog-title"
+        i18n-step="@@voiceProfiles.dialogStep"
+        step="Perfis de voz"
+        i18n-title="@@voiceProfiles.dialogTitle"
+        title="Cadastrar perfil"
+        [width]="800"
+        (closed)="adding.set(false)"
+      >
+        <app-voice-profile-form
+          [topic]="topic()"
+          [taken]="taken()"
+          (created)="created($event)"
+          (cancelled)="adding.set(false)"
+        />
+      </ui-dialog>
     }
   } @else {
     <p class="hint" i18n="@@voiceProfiles.loading">Carregando…</p>

@@ -12,6 +12,7 @@ import {
   closeSettings,
   desktop,
   openSettings as openPage,
+  SETTINGS_AXE,
   settingsSection,
 } from './settings-helpers.js';
 
@@ -62,7 +63,7 @@ test('AC-1, AC-2: connects one’s own OpenRouter in one click and answers for f
   ).toBeVisible();
   await person.waitForFunction(() => document.getAnimations().length === 0);
   const axe = await new AxeBuilder({ page: person })
-    .include('section[aria-label="Configurações"]')
+    .include(SETTINGS_AXE)
     .analyze();
   expect(axe.violations).toEqual([]);
   await dialog.getByRole('button', { name: 'Conectar OpenRouter' }).click();

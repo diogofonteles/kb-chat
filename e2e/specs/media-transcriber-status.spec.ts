@@ -12,6 +12,7 @@ import {
 import { aCollection, uniqueTag, uploadReady } from './media-helpers.js';
 import { approve, seedDraft } from './tracks-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
+import { openSection, settingsPage } from './settings-helpers.js';
 
 /*
  * KBC-114: a collection made on the screen (no vault folder) shows masters the
@@ -312,9 +313,11 @@ async function sendStatus(
 async function openTranscribers(page: Page): Promise<Locator> {
   if (!desktop(page))
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await dialog.getByRole('button', { name: 'Transcritores' }).click();
+  await page
+    .getByRole('button', { name: 'Configurações', exact: true })
+    .click();
+  const dialog = settingsPage(page);
+  await openSection(dialog, 'Transcritores');
   return dialog;
 }
 

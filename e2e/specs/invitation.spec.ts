@@ -7,6 +7,7 @@ import {
   uniqueEmail,
   WEB_ORIGIN,
 } from './fixtures.js';
+import { settingsPage } from './settings-helpers.js';
 
 /**
  * KBC-026: inviting sends an e-mail (read from the E2E server's outbox, never sent), the
@@ -21,7 +22,7 @@ async function openPeople(page: Page): Promise<Locator> {
     ? page.getByRole('complementary', { name: 'Lateral' })
     : page.getByRole('dialog', { name: 'Menu' });
   await side.getByRole('button', { name: /Pessoas e permissões/ }).click();
-  return page.getByRole('dialog', { name: 'Configurações' });
+  return settingsPage(page);
 }
 
 const shots = process.env['KBC_SHOTS'];

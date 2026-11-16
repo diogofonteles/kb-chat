@@ -191,11 +191,23 @@ export class SettingsPage {
     return groups;
   });
 
+  /**
+   * How many times each section was chosen in the index: choosing one draws it anew, so it
+   * reads its data again, as opening a section of the v1 modal did.
+   */
+  protected readonly visits = signal<Readonly<Record<string, number>>>({});
+
   /** The page title left the screen: the compact "Configurações › Seção" strip shows. */
   protected readonly scrolled = signal(false);
 
   protected readonly settings = this.store.settings;
-  protected readonly connectOutcome = this.store.connectOutcome;
+  /** The OpenRouter outcome, said only in the section the connection started from. */
+  protected readonly ownOutcome = computed(() =>
+    this.store.connectFor() === 'ai' ? this.store.connectOutcome() : null,
+  );
+  protected readonly houseOutcome = computed(() =>
+    this.store.connectFor() === 'house' ? this.store.connectOutcome() : null,
+  );
   protected readonly loadFailed = computed(
     () => this.store.view.error() !== undefined,
   );
@@ -261,6 +273,7 @@ export class SettingsPage {
     if (!slug) return;
     this.scrolledTo = null;
     this.active.set(id);
+    this.visits.update((all) => ({ ...all, [id]: (all[id] ?? 0) + 1 }));
     if (slug === this.routeSlug()) {
       this.scrollTo(id, this.sectionEls());
       return;

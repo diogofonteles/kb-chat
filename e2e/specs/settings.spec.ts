@@ -6,6 +6,7 @@ import {
   desktop,
   openSection,
   openSettings as openPage,
+  SETTINGS_AXE,
   settingsPage,
 } from './settings-helpers.js';
 
@@ -43,9 +44,7 @@ test('FR-6: ⚙ Configurações opens as a page and goes back to the conversatio
     dialog.getByRole('radio', { name: /Assinatura do Claude/ }),
   ).toBeVisible();
   await page.waitForFunction(() => document.getAnimations().length === 0);
-  const axe = await new AxeBuilder({ page })
-    .include('section[aria-label="Configurações"]')
-    .analyze();
+  const axe = await new AxeBuilder({ page }).include(SETTINGS_AXE).analyze();
   expect(axe.violations).toEqual([]);
   await closeSettings(page);
   await expect(dialog).toBeHidden();
@@ -193,7 +192,7 @@ test('KBC-131 AC-1: /configuracoes/preferencias opens there on reload, and scrol
   if (!desktop(page)) {
     // A phone opens the section as its own screen, with the way back to the root.
     await expect(
-      settings.getByRole('heading', { name: 'Preferências', level: 1 }),
+      settings.getByRole('heading', { name: 'Preferências', level: 2 }),
     ).toBeVisible();
     await expect(
       settings.getByRole('checkbox', { name: 'Aprofundar automaticamente' }),

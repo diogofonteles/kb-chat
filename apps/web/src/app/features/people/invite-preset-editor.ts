@@ -71,6 +71,9 @@ let nextId = 0;
  * app AI and its limits, and the initial preferences. Presentational: each change goes up as
  * the whole preset; the invitation or the profile keeps it.
  */
+/** A page-unique id for each editor's tabs. */
+let presetEditors = 0;
+
 @Component({
   selector: 'app-invite-preset-editor',
   templateUrl: './invite-preset-editor.html',
@@ -83,6 +86,9 @@ export class InvitePresetEditor {
   /** The house default app AI (KBC-022), named in the "Padrão" option. */
   readonly defaultAppAi = input<AppAi | null>(null);
   readonly busy = input(false);
+  /** The parts of the preset as tabs (KBC-132): Acessos · IA e limites · Preferências iniciais. */
+  protected readonly tab = signal<'access' | 'ai' | 'prefs'>('access');
+  protected readonly tabsId = `preset-tabs-${(presetEditors += 1)}`;
   /**
    * The owner's subscriptions this invitation may lend (KBC-031); a profile never gets any,
    * so its editor keeps the default (none).

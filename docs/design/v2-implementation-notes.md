@@ -91,3 +91,10 @@ Serviços da casca:
 - Playwright em 1440 e 390 com capturas (`KBC_SHOTS=<pasta>`), comparadas com o frame da página `v2 · …`.
 - Abra cada menu e confira nas capturas que nada sai cortado: `expectWholeOnTop` em `e2e/specs/v2-shell.spec.ts` é o modelo.
 - Axe sem violação séria ou crítica, nos quatro temas.
+
+## Configurações (KBC-131, KBC-132)
+
+- **Página, não modal:** `/configuracoes` e `/configuracoes/<seção>` (`settings-routes.ts`, uma rota só). `SettingsStore.openSettings(seção)` navega até lá; a `SettingsHost` ficou só com o Assistente.
+- **Seções:** `settings-index.ts` (id, endereço, grupo, quem vê). No desktop todas ficam na página, uma após a outra; rolar marca o índice e troca o endereço com `replaceUrl`. No celular a raiz lista as seções e cada uma é uma tela empurrada.
+- **Seletores de E2E:** `e2e/specs/settings-helpers.ts` (`openSettings(page, seção)`, `openSection`, `openPeople`, `closeSettings`, `settingsSection`, `showTab`, `SETTINGS_AXE`). A página é a região "Configurações"; cada seção é uma região com o próprio título.
+- **Modais:** o editor de pessoa, o convite configurado, o perfil de voz, recusar pedido e revogar transcritor usam `ui-dialog`. Um rodapé dentro de `ui-dialog` vai num elemento com `uiDialogFooter` fora de `@if`.

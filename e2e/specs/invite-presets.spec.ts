@@ -9,6 +9,12 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import {
+  openSection,
+  SETTINGS_AXE,
+  settingsPage,
+  showTab,
+} from './settings-helpers.js';
 
 /**
  * KBC-028: an invitation profile sets the person up at once (collections, features, the app
@@ -26,7 +32,7 @@ async function openPeople(page: Page): Promise<Locator> {
     ? page.getByRole('complementary', { name: 'Lateral' })
     : page.getByRole('dialog', { name: 'Menu' });
   await side.getByRole('button', { name: /Pessoas e permissões/ }).click();
-  return page.getByRole('dialog', { name: 'Configurações' });
+  return settingsPage(page);
 }
 
 const shots = process.env['KBC_SHOTS'];
@@ -76,9 +82,11 @@ async function createAluno(dialog: Locator, name: string): Promise<void> {
   await section.getByLabel('Nome do perfil').fill(name);
   await section.getByRole('checkbox', { name: 'Hermetismo' }).check();
   await section.getByRole('checkbox', { name: 'Pesquisa com IA' }).check();
+  await showTab(section, 'IA e limites');
   await section.getByLabel('Qual IA atende a pessoa').selectOption('house');
   await section.getByLabel('Pesquisas por dia (vazio = padrão)').fill('3');
   await section.getByLabel('Pesquisas por dia (vazio = padrão)').blur();
+  await showTab(section, 'Preferências iniciais');
   await section.getByLabel('Acervo padrão').selectOption('hermetismo');
   await section.getByLabel('Visão inicial').selectOption('research');
   await section.getByLabel('Perfil de pesquisa').selectOption('fast');
@@ -90,7 +98,7 @@ async function createAluno(dialog: Locator, name: string): Promise<void> {
 
 /** WCAG 2.2 AA in the dialog as it stands (NFR-1). */
 async function expectAccessible(page: Page): Promise<void> {
-  const axe = await new AxeBuilder({ page }).include('dialog').analyze();
+  const axe = await new AxeBuilder({ page }).include(SETTINGS_AXE).analyze();
   expect(axe.violations).toEqual([]);
 }
 
@@ -127,24 +135,25 @@ test('AC-1: inviting with a profile sets up access, AI and the first Settings', 
   ).toBeVisible();
   await expect(personRow(dialog, email)).toContainText('Hermetismo');
   await expect(personRow(dialog, email)).toContainText('IA: Plano da casa');
+  // The new person's editor opened as a modal (KBC-132), the AI in its own tab.
+  await showTab(dialog, 'IA e limites');
   await dialog.getByText('Histórico da IA').click();
   await expect(
     dialog.getByText(/owner@kb-chat\.test · Plano da casa/),
   ).toBeVisible();
-  await shoot(
-    page,
-    'invite-with-profile',
-    dialog.getByRole('listitem').filter({ hasText: email }),
-  );
+  await shoot(page, 'invite-with-profile', page.getByRole('dialog'));
+  await page.keyboard.press('Escape');
 
   const guest = await pageAs(browser, email, page.viewportSize());
   await guest.goto('/');
   await expect(guest.locator('html')).toHaveAttribute('data-theme', 'dark');
   if (!desktop(guest))
     await guest.getByRole('button', { name: 'Menu' }).click();
-  await guest.getByRole('button', { name: 'Configurações' }).click();
-  const settings = guest.getByRole('dialog', { name: 'Configurações' });
-  await settings.getByRole('button', { name: 'Preferências' }).click();
+  await guest
+    .getByRole('button', { name: 'Configurações', exact: true })
+    .click();
+  const settings = settingsPage(guest);
+  await openSection(settings, 'Preferências');
   await expect(settings.getByLabel('Tema')).toHaveValue('dark');
   await expect(settings.getByLabel('Acervo padrão')).toHaveValue('hermetismo');
   await shoot(guest, 'invited-first-settings', settings);
@@ -169,6 +178,7 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
   await dialog.getByLabel('Convidar por e-mail').fill(existing);
   await dialog.getByRole('button', { name: 'Convidar' }).click();
   await expect(personRow(dialog, existing)).toContainText('Nenhum acervo');
+  await page.keyboard.press('Escape');
 
   await inviteForm(dialog)
     .locator('select[name="profile"]')
@@ -178,11 +188,13 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
     dialog.getByRole('button', { name: 'Descartar configuração' }),
   ).toHaveAttribute('aria-expanded', 'true');
   const preset = dialog.locator('#invite-preset');
+  await showTab(preset, 'IA e limites');
   await expect(
     preset.getByLabel('Pesquisas por dia (vazio = padrão)'),
   ).toHaveValue('3');
   await preset.getByLabel('Pesquisas por dia (vazio = padrão)').fill('7');
   await preset.getByLabel('Pesquisas por dia (vazio = padrão)').blur();
+  await showTab(preset, 'Preferências iniciais');
   await preset.getByLabel('Tema').selectOption('light');
   await expectAccessible(page);
   await shoot(page, 'invite-configure-now', inviteForm(dialog));
@@ -194,13 +206,16 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
       .filter({ hasText: 'Perfil: configuração própria.' }),
   ).toBeVisible();
   await expect(personRow(dialog, adjusted)).toContainText('Hermetismo');
+  await showTab(dialog, 'IA e limites');
   await expect(
     dialog.getByLabel('Pesquisas por dia (vazio = padrão)'),
   ).toHaveValue('7');
+  await page.keyboard.press('Escape');
 
   // The profile kept its own numbers.
   const section = profiles(dialog);
   await section.getByRole('button', { name: `Editar ${name}` }).click();
+  await showTab(section, 'IA e limites');
   await expect(
     section.getByLabel('Pesquisas por dia (vazio = padrão)'),
   ).toHaveValue('3');
@@ -229,6 +244,7 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
   await expect(personRow(dialog, existing)).toContainText('Hermetismo');
   await expect(personRow(dialog, existing)).toContainText('IA: Plano da casa');
 
+  await page.keyboard.press('Escape');
   await removeProfile(dialog, name);
 });
 
@@ -240,6 +256,7 @@ test('KBC-031 AC-5: the owner lends his subscription in the invitation, after th
   const dialog = await openPeople(page);
   await dialog.getByRole('button', { name: 'Configurar agora' }).click();
   const preset = dialog.locator('#invite-preset');
+  await showTab(preset, 'IA e limites');
   await preset
     .getByLabel('Qual IA atende a pessoa')
     .selectOption({ label: 'Claude do administrador' });
@@ -297,6 +314,7 @@ test('KBC-033: "Acervo padrão" says why it is empty, takes the only collection 
   const dialog = await openPeople(page);
   await dialog.getByRole('button', { name: 'Configurar agora' }).click();
   const preset = dialog.locator('#invite-preset');
+  await showTab(preset, 'Preferências iniciais');
   const defaultTopic = preset.getByLabel('Acervo padrão');
   // The dialog scrolls: the screenshots show the preferences, where the field is.
   const preferences = preset.getByRole('group', {
@@ -310,23 +328,29 @@ test('KBC-033: "Acervo padrão" says why it is empty, takes the only collection 
   // AC-1: no collection checked, the field says why it offers only "Sem preferência".
   await expect(defaultTopic.locator('option')).toHaveText(['Sem preferência']);
   await expect(defaultTopic).toHaveAccessibleDescription(
-    'Marque ao menos um acervo em “Acervos” acima para escolher o padrão.',
+    'Marque ao menos um acervo em “Acervos”, na aba Acessos, para escolher o padrão.',
   );
   await expectAccessible(page);
   await shootPreferences('default-topic-hint');
 
   // AC-2: the only collection checked becomes the default, still changeable.
+  await showTab(preset, 'Acessos');
   await preset.getByRole('checkbox', { name: 'Hermetismo' }).check();
+  await showTab(preset, 'Preferências iniciais');
   await expect(defaultTopic).toHaveValue('hermetismo');
   await expect(
-    preset.getByText('Marque ao menos um acervo em “Acervos” acima'),
+    preset.getByText('Marque ao menos um acervo em “Acervos”, na aba Acessos'),
   ).toBeHidden();
   await shootPreferences('default-topic-preselected');
 
   // AC-3: unchecking the chosen default clears it, and a polite notice says why.
+  await showTab(preset, 'Acessos');
   await preset.getByRole('checkbox', { name: 'Alquimia' }).check();
+  await showTab(preset, 'Preferências iniciais');
   await defaultTopic.selectOption('alquimia');
+  await showTab(preset, 'Acessos');
   await preset.getByRole('checkbox', { name: 'Alquimia' }).uncheck();
+  await showTab(preset, 'Preferências iniciais');
   await expect(defaultTopic).toHaveValue('');
   await expect(
     preset.getByRole('status').filter({

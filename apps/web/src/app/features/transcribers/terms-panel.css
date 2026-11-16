@@ -1,16 +1,46 @@
 .usage {
   display: grid;
-  gap: var(--space-1);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
+}
+
+.usage-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-4);
 }
 
 .use {
   margin: 0;
-  font-weight: 600;
+  font-size: var(--text-item);
+  font-weight: 700;
 }
 
-meter {
-  width: 100%;
-  height: 0.5rem;
+.over .use {
+  color: var(--color-danger);
+}
+
+.bar {
+  display: block;
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-accent);
+}
+
+.over .fill {
+  background: var(--color-danger);
 }
 
 .add {
@@ -24,31 +54,75 @@ meter {
   margin-top: var(--space-1);
 }
 
+/* The terms as chips with ✕ (v2 · Termos), each still editable in place. */
 .terms {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.term {
+.terms > li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--target);
-  gap: var(--space-2);
+  gap: var(--space-1);
+  max-width: 100%;
+}
+
+.term {
+  display: inline-flex;
   align-items: center;
+  gap: 0.125rem;
+  max-width: 100%;
+  min-height: 2rem;
+  padding: 0 var(--space-1) 0 0.875rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+}
+
+.term:has([aria-invalid='true']) {
+  border-color: var(--color-danger);
+}
+
+.term:focus-within {
+  border-color: var(--color-text);
+}
+
+.chip-input {
+  min-width: 2rem;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-meta);
+  font-weight: 500;
+  field-sizing: content;
+}
+
+.chip-input:focus {
+  outline: none;
 }
 
 .remove {
-  width: var(--target);
-  min-height: var(--target);
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text-muted);
-  font-size: 1.25rem;
   cursor: pointer;
+}
+
+.remove:hover {
+  background: var(--overlay-3);
+  color: var(--color-text);
 }
 
 .remove:focus-visible {
@@ -57,27 +131,58 @@ meter {
 }
 
 .versions {
+  display: grid;
+  gap: var(--space-3);
   margin-top: var(--space-4);
 }
 
-.versions summary {
-  min-height: var(--target);
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-}
-
-.versions li {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 0.25em;
-}
-
-.versions ul {
+.version-list {
   display: grid;
-  gap: var(--space-1);
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.version-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-menu);
+  background: var(--overlay-1);
+  color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+
+.version-text {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.25em;
+  color: var(--color-text);
+}
+
+.by {
+  color: var(--color-text-muted);
+}
+
+.versions-open {
+  display: none;
+  justify-self: start;
+}
+
+.sheet-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+@media (max-width: 1023px) {
+  .versions .version-list:not(.in-sheet) {
+    display: none;
+  }
+
+  .versions-open {
+    display: inline-flex;
+  }
 }

@@ -76,8 +76,11 @@ export class SettingsStore {
   private readonly requested = signal<SettingsPanel | null>(null);
   private readonly onboardingDismissed = signal(false);
   private readonly returned = signal<ConnectOutcome | null>(null);
+  private readonly returnedFor = signal<'ai' | 'house'>('ai');
   /** The outcome of the last OpenRouter round trip, shown once where it was started. */
   readonly connectOutcome = this.returned.asReadonly();
+  /** Where that round trip started: one's own AI or the app's (KBC-022). */
+  readonly connectFor = this.returnedFor.asReadonly();
   /** Choosing a provider or a key is a feature of its own (KBC-010). */
   readonly ownAi = computed(() => this.session.can('own-ai-settings'));
   /** The profile this browser picked in the research composer (KBC-011). */
@@ -152,8 +155,10 @@ export class SettingsStore {
       params.get(OPENROUTER_RETURN_PARAM),
     );
     if (!outcome.success) return false;
+    const target = params.get('for') === 'house' ? 'house' : 'ai';
     this.returned.set(outcome.data);
-    this.openSettings(params.get('for') === 'house' ? 'house' : 'ai');
+    this.returnedFor.set(target);
+    this.openSettings(target);
     return true;
   }
 

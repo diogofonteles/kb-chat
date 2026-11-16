@@ -1,5 +1,6 @@
-import { DatePipe, DOCUMENT } from '@angular/common';
+import { DatePipe, DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import { httpResource } from '@angular/common/http';
+import { UiIcon, UiSheet } from '@ui/index.js';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -82,7 +83,7 @@ function versionIn(err: unknown): number | null {
  */
 @Component({
   selector: 'app-terms-panel',
-  imports: [DatePipe],
+  imports: [DatePipe, NgTemplateOutlet, UiIcon, UiSheet],
   templateUrl: './terms-panel.html',
   styleUrls: [
     '../settings/settings-form.css',
@@ -142,8 +143,22 @@ export class TermsPanel {
       : '';
   });
 
+  /** Past the transcriber's limit (or the 500 terms): red, and "Salvar lista" waits (AC-6). */
+  protected readonly over = computed(() => this.overLimit() !== '');
+  protected readonly usedPercent = computed(() => {
+    const usage = this.usage();
+    return usage && usage.limit > 0
+      ? Math.min(100, (usage.tokens / usage.limit) * 100)
+      : 0;
+  });
+
   constructor() {
     this.measureChanges();
+  }
+
+  /** A chip as wide as its term. */
+  protected sizeOf(row: TermRow): number {
+    return Math.max(row.text.length, 4);
   }
 
   protected isValid(row: TermRow): boolean {

@@ -9,6 +9,7 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { uniqueTag } from './media-helpers.js';
+import { SETTINGS_AXE, settingsPage } from './settings-helpers.js';
 
 /**
  * KBC-062: in "Pessoas e permissões" a master who uses only the keyboard checks collections
@@ -25,7 +26,7 @@ async function openPeople(page: Page): Promise<Locator> {
     ? page.getByRole('complementary', { name: 'Lateral' })
     : page.getByRole('dialog', { name: 'Menu' });
   await side.getByRole('button', { name: /Pessoas e permissões/ }).click();
-  return page.getByRole('dialog', { name: 'Configurações' });
+  return settingsPage(page);
 }
 
 const shots = process.env['KBC_SHOTS'];
@@ -105,7 +106,7 @@ async function savedPerson(api: APIRequestContext, id: string) {
 
 /** WCAG 2.2 AA in the dialog as it stands: no serious or critical violation. */
 async function expectAccessible(page: Page): Promise<void> {
-  const axe = await new AxeBuilder({ page }).include('dialog').analyze();
+  const axe = await new AxeBuilder({ page }).include(SETTINGS_AXE).analyze();
   expect(
     axe.violations.filter((v) =>
       ['serious', 'critical'].includes(v.impact ?? ''),
@@ -139,7 +140,10 @@ test('AC-1, AC-2: checking boxes with the keyboard keeps focus and every change'
   await expect(alquimia).toBeFocused();
   await expect(alquimia).toBeEnabled();
   await expect(collections).toHaveAttribute('aria-busy', 'false');
-  await expect(dialog.getByRole('status')).toContainText('Salvo.');
+  // The outcome is said in the person's modal (KBC-132), next to the editor.
+  await expect(
+    page.getByRole('dialog').getByRole('status').filter({ hasText: 'Salvo.' }),
+  ).toBeVisible();
   await expect(alquimia).toBeFocused();
   await expect(alquimia).toBeChecked();
 
@@ -186,9 +190,10 @@ test('BUG-1: closing and reopening the person while a change saves keeps it', as
 
   await tabTo(page, alquimia);
   await page.keyboard.press('Space');
-  await row.focus();
-  await page.keyboard.press('Enter');
+  // The editor is a modal (KBC-132): Esc closes it and gives the focus back to the row.
+  await page.keyboard.press('Escape');
   await expect(editor).toHaveCount(0);
+  await expect(row).toBeFocused();
   await page.keyboard.press('Enter');
   // Reopened while it saves: the change on its way shows checked, at once (no retry, so a
   // box that only catches up when the save lands does not pass).

@@ -18,10 +18,20 @@
     </button>
   </div>
 } @else if (view(); as current) {
-  <section class="block" aria-labelledby="house-account">
-    <h3 id="house-account" class="block-title" i18n="@@house.account">
-      Conta OpenRouter da aplicação
-    </h3>
+  <section class="block account" aria-labelledby="house-account">
+    <div class="account-head">
+      <ui-cover icon="link" title="OpenRouter" [size]="48" />
+      <h3 id="house-account" class="block-title" i18n="@@house.account">
+        Conta OpenRouter da aplicação
+      </h3>
+      @if (current.connection) {
+        <ui-pill tone="ok" i18n="@@house.pillConnected">Conectada</ui-pill>
+      } @else {
+        <ui-pill tone="warn" i18n="@@house.pillDisconnected"
+          >Não conectada</ui-pill
+        >
+      }
+    </div>
     @if (current.connection; as connection) {
       <p class="saved-key">
         <span class="connected">
@@ -109,7 +119,7 @@
         } @else {
           <button
             type="button"
-            class="link danger"
+            class="link danger push-end"
             (click)="confirmingDisconnect.set(true)"
             i18n="@@house.disconnect"
           >

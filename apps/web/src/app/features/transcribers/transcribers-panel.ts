@@ -23,6 +23,7 @@ import {
 } from '@kb-chat/contracts';
 import { seenAtFormat } from '@core/i18n/date-formats.js';
 import { TranscriberStatus } from './transcriber-status.js';
+import { UiButton, UiDialog } from '@ui/index.js';
 import { TranscriberStatusStore } from './transcriber-status-store.js';
 import {
   TranscribersApi,
@@ -70,7 +71,7 @@ const isTranscriberKind = (kind: string): kind is Kind =>
  */
 @Component({
   selector: 'app-transcribers-panel',
-  imports: [DatePipe, TranscriberStatus],
+  imports: [DatePipe, TranscriberStatus, UiButton, UiDialog],
   providers: [TranscriberStatusStore],
   templateUrl: './transcribers-panel.html',
   styleUrls: ['../settings/settings-form.css', './transcribers-panel.css'],
@@ -128,6 +129,15 @@ export class TranscribersPanel {
   /** The pairing just made: its token is shown until the master closes the box. */
   protected readonly paired = signal<PairedTranscriber | null>(null);
   protected readonly confirming = signal<string | null>(null);
+  /** The transcriber the revoke modal asks about (KBC-132 FR-4). */
+  protected readonly revoking = computed(
+    () => this.items().find((item) => item.id === this.confirming()) ?? null,
+  );
+  protected readonly revokeTitle = computed(
+    () =>
+      $localize`:@@transcribers.revokeTitle:Revogar "${this.revoking()?.name ?? ''}:name:"?`,
+  );
+  private readonly revokeDialog = viewChild.required<UiDialog>('revokeDialog');
   protected readonly copyState = signal<{ what: Copied; state: CopyState }>({
     what: 'command',
     state: 'idle',
@@ -171,12 +181,14 @@ export class TranscribersPanel {
   /** "Revogar" turns into the question: the focus goes to its safe answer, "Cancelar". */
   protected askRevoke(id: string): void {
     this.confirming.set(id);
+    this.revokeDialog().open();
     this.focusAfterRender(() => this.find(`[data-cancel-revoke="${id}"]`));
   }
 
   /** Back to the row's own "Revogar". */
   protected cancelRevoke(id: string): void {
     this.confirming.set(null);
+    this.revokeDialog().close();
     this.focusAfterRender(() => this.find(`[data-revoke="${id}"]`));
   }
 
@@ -331,8 +343,15 @@ export class TranscribersPanel {
   }
 
   /** The row went: the focus goes to the list's title and the status says what happened. */
+  /** ✕ or Esc: the same as "Cancelar". */
+  protected revokeDialogClosed(): void {
+    const id = this.confirming();
+    if (id !== null) this.cancelRevoke(id);
+  }
+
   private revoked(transcriber: Transcriber): void {
     this.confirming.set(null);
+    this.revokeDialog().close();
     this.settle({
       kind: 'ok',
       text: $localize`:@@transcribers.revoked:"${transcriber.name}:name:" revogado.`,

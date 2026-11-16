@@ -10,6 +10,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { settingsPage } from './settings-helpers.js';
 
 /**
  * KBC-010: Google sign-in (faked, see fixtures.ts) and permissions per person, at 1440 and
@@ -211,16 +212,16 @@ test('a master grants collections and features on "Pessoas e permissões"', asyn
   await page.goto('/');
   const side = await sidebar(page);
   await side.getByRole('button', { name: 'Pessoas e permissões' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
+  const dialog = settingsPage(page);
   await expect(
     dialog.getByRole('heading', { name: 'Pessoas e permissões' }),
   ).toBeVisible();
 
   await dialog.getByLabel('Convidar por e-mail').fill(email);
   await dialog.getByRole('button', { name: 'Convidar' }).click();
-  await expect(dialog.getByRole('status').first()).toContainText(
-    `Convite enviado para ${email}.`,
-  );
+  await expect(
+    dialog.getByRole('status').filter({ hasText: 'Convite enviado para' }),
+  ).toContainText(`Convite enviado para ${email}.`);
   await dialog.getByRole('checkbox', { name: 'Hermetismo' }).check();
   await expect(dialog.getByText('Salvo.')).toBeVisible();
   await dialog.getByRole('checkbox', { name: 'Pesquisa com IA' }).check();
@@ -253,12 +254,13 @@ test('AC-7: with two masters one demotes the other, then cannot demote themselve
     await page.goto('/');
     const side = await sidebar(page);
     await side.getByRole('button', { name: 'Pessoas e permissões' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Configurações' });
+    const dialog = settingsPage(page);
 
     await dialog.getByRole('button', { name: new RegExp(second) }).click();
     await dialog.getByRole('button', { name: 'Remover master' }).click();
     await expect(dialog.getByText('Salvo.')).toBeVisible();
-    await dialog.getByRole('button', { name: new RegExp(second) }).click();
+    // The editor is a modal (KBC-132): closed before the next person.
+    await page.keyboard.press('Escape');
     await dialog.getByRole('button', { name: new RegExp(OWNER_EMAIL) }).click();
     await dialog.getByRole('button', { name: 'Remover master' }).click();
 
