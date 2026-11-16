@@ -149,10 +149,7 @@
       (change)="setTheme(themeSelect.value)"
     >
       @for (theme of themes; track theme.value) {
-        <option
-          [value]="theme.value"
-          [selected]="theme.value === preferences().theme"
-        >
+        <option [value]="theme.value" [selected]="theme.value === shownTheme()">
           {{ theme.label }}
         </option>
       }

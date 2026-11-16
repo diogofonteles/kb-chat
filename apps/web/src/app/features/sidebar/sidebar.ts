@@ -23,7 +23,13 @@ import { HistoryStore } from '@core/history/history-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import { EMPTY, Subject, catchError, switchMap } from 'rxjs';
 import { SpendStore } from '@core/spend/spend-store.js';
-import { THEMES, ThemeStore, type Theme } from '@core/theme/theme-store.js';
+import {
+  THEMES,
+  THEME_CHOICES,
+  THEME_LABELS,
+  ThemeStore,
+  shownTheme,
+} from '@core/theme/theme-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
 import { ResearchStore } from '@features/research/research-store.js';
@@ -36,13 +42,6 @@ import { hasLibrary } from '@features/media/library/library-access.js';
 import { ProcessingQueueStore } from '@features/media/queue/processing-queue-store.js';
 
 export type SidebarAction = 'new' | 'restore' | 'topic' | 'media' | 'levels';
-
-const THEME_LABELS: Record<Theme, () => string> = {
-  auto: () => $localize`:@@theme.auto:Automático (claro/escuro)`,
-  light: () => $localize`:@@theme.light:Claro`,
-  dark: () => $localize`:@@theme.dark:Escuro`,
-  esoteric: () => $localize`:@@theme.esoteric:Esotérico`,
-};
 
 /** How a conversation stands, in words (KBC-029): never color alone. */
 const STATUS_LABELS: Record<ConversationStatus, () => string> = {
@@ -132,7 +131,8 @@ export class Sidebar {
     const me = this.session.me();
     return (me?.name || me?.email || '?').charAt(0).toUpperCase();
   });
-  protected readonly themeOptions = THEMES.map((value) => ({
+  protected readonly shownTheme = computed(() => shownTheme(this.theme()));
+  protected readonly themeOptions = THEME_CHOICES.map((value) => ({
     value,
     label: THEME_LABELS[value](),
   }));

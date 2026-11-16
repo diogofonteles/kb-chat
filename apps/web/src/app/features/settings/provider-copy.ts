@@ -4,7 +4,6 @@ import type {
   DefaultView,
   ProviderBilling,
   ProviderUnavailableReason,
-  Theme,
 } from '@kb-chat/contracts';
 
 /**
@@ -154,9 +153,5 @@ export const VIEW_COPY: Record<DefaultView, () => string> = {
   search: () => $localize`:@@view.search:Buscar documentos`,
 };
 
-export const THEME_COPY: Record<Theme, () => string> = {
-  auto: () => $localize`:@@theme.auto:Automático (claro/escuro)`,
-  light: () => $localize`:@@theme.light:Claro`,
-  dark: () => $localize`:@@theme.dark:Escuro`,
-  esoteric: () => $localize`:@@theme.esoteric:Esotérico`,
-};
+/** The theme names, with "Escuro (revisado)" first (KBC-124): one list for every picker. */
+export { THEME_LABELS as THEME_COPY } from '@core/theme/theme-store.js';

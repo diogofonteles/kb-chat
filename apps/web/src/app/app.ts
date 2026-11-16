@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { BootScreen } from '@features/shell/boot-screen.js';
 import { SessionShell } from '@features/shell/session-shell.js';
 
 /**
@@ -7,20 +8,12 @@ import { SessionShell } from '@features/shell/session-shell.js';
  */
 @Component({
   selector: 'app-root',
-  imports: [SessionShell],
+  imports: [SessionShell, BootScreen],
   template: `
     @defer (on immediate) {
       <app-session-shell />
     } @placeholder {
-      <p class="boot" role="status" i18n="@@app.loading">Carregando…</p>
-    }
-  `,
-  styles: `
-    .boot {
-      margin: 0;
-      padding: var(--space-8);
-      text-align: center;
-      color: var(--color-text-muted);
+      <app-boot-screen />
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

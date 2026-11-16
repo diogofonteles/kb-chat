@@ -23,6 +23,7 @@ import { PrivacyPage } from '@features/privacy/privacy-page.js';
 import { SettingsHost } from '@features/settings/settings-host.js';
 import { TutorialPage } from '@features/tutorial/tutorial-page.js';
 import { ActingBanner } from '@features/acting/acting-banner.js';
+import { BootScreen } from './boot-screen.js';
 import { ChunkFailed } from './chunk-failed.js';
 import { UpdateBanner } from './update-banner.js';
 
@@ -42,6 +43,7 @@ import { UpdateBanner } from './update-banner.js';
     PrivacyPage,
     TutorialPage,
     ActingBanner,
+    BootScreen,
     UpdateBanner,
     ChunkFailed,
   ],
@@ -53,7 +55,7 @@ import { UpdateBanner } from './update-banner.js';
       } @error {
         <app-chunk-failed />
       } @placeholder {
-        <p class="boot" role="status" i18n="@@app.loading">Carregando…</p>
+        <app-boot-screen />
       }
     } @else if (publicPage() === 'tutorial') {
       @defer (on immediate) {
@@ -61,7 +63,7 @@ import { UpdateBanner } from './update-banner.js';
       } @error {
         <app-chunk-failed />
       } @placeholder {
-        <p class="boot" role="status" i18n="@@app.loading">Carregando…</p>
+        <app-boot-screen />
       }
     } @else if (signedIn()) {
       <app-acting-banner />
@@ -72,17 +74,9 @@ import { UpdateBanner } from './update-banner.js';
         <app-chunk-failed quiet />
       }
     } @else if (deciding()) {
-      <p class="boot" role="status" i18n="@@app.loading">Carregando…</p>
+      <app-boot-screen />
     } @else {
       <app-login-page />
-    }
-  `,
-  styles: `
-    .boot {
-      margin: 0;
-      padding: var(--space-8);
-      text-align: center;
-      color: var(--color-text-muted);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -1,9 +1,13 @@
 import {
+  ReadingPage,
+  type ReadingLink,
+} from '@features/public/reading-page.js';
+import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   afterNextRender,
   inject,
+  viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
@@ -19,16 +23,22 @@ import { TUTORIAL_SECTIONS } from './tutorial-sections.js';
  */
 @Component({
   selector: 'app-tutorial-page',
-  imports: [RouterLink, TutorialFigure],
+  imports: [RouterLink, TutorialFigure, ReadingPage],
   templateUrl: './tutorial-page.html',
   styleUrl: './tutorial-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TutorialPage {
   private readonly router = inject(Router);
-  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly reading = viewChild(ReadingPage);
 
   protected readonly sections = TUTORIAL_SECTIONS;
+  protected readonly title = $localize`:@@tutorial.title:Como usar a Nova Alexandria`;
+  protected readonly intro = $localize`:@@tutorial.intro:Um passo a passo curto, com imagens das telas, de tudo o que dá para fazer na Nova Alexandria: entrar, buscar nos documentos, pesquisar com ajuda da inteligência artificial (IA) e ajustar o app do seu jeito. Leia na ordem ou pule direto para o que precisa. Nas imagens, as letras (A, B, C…) marcam o que a legenda logo abaixo explica.`;
+  protected readonly other: ReadingLink = {
+    label: $localize`:@@reading.privacy:Privacidade`,
+    path: '/privacidade',
+  };
 
   constructor() {
     afterNextRender(() => this.showSection(this.currentFragment()));
@@ -46,13 +56,7 @@ export class TutorialPage {
    * fragment it is already on.
    */
   protected showSection(id: string | null): void {
-    if (!id) return;
-    // Focus has no Angular API: the heading is looked up by id, inside this page only.
-    const page = this.host.nativeElement;
-    const heading = page.ownerDocument.getElementById(id);
-    if (!heading || !page.contains(heading)) return;
-    heading.scrollIntoView({ block: 'start' });
-    heading.focus({ preventScroll: true });
+    this.reading()?.showSection(id);
   }
 
   private currentFragment(): string | null {

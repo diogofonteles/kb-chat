@@ -59,7 +59,7 @@ const DESKTOP_QUERY = '(min-width: 1024px)';
 /** The media pages: the list and player (T14, T15) and the library (T16, KBC-051). */
 /** A page that renders in place of the conversation: media pages and T24 (KBC-103). */
 const isMediaUrl = (url: string): boolean =>
-  /^\/(midia|biblioteca|fila|acervos)(\/|\?|#|$)/.test(url);
+  /^\/(midia|biblioteca|fila|acervos|catalogo-ui)(\/|\?|#|$)/.test(url);
 
 /**
  * Chat page (screens.md): two views over one question box and document panel, the free

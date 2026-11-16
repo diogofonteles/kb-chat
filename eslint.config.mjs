@@ -48,13 +48,14 @@ export default defineConfig(
     extends: [angular.configs.tsRecommended],
     processor: angular.processInlineTemplates,
     rules: {
+      // "ui" is the v2 base component library (apps/web/src/app/ui, KBC-124).
       '@angular-eslint/directive-selector': [
         'error',
-        { type: 'attribute', prefix: 'app', style: 'camelCase' },
+        { type: 'attribute', prefix: ['app', 'ui'], style: 'camelCase' },
       ],
       '@angular-eslint/component-selector': [
         'error',
-        { type: 'element', prefix: 'app', style: 'kebab-case' },
+        { type: 'element', prefix: ['app', 'ui'], style: 'kebab-case' },
       ],
       // An Angular component is a decorated class; the root shell legitimately has no members.
       '@typescript-eslint/no-extraneous-class': [

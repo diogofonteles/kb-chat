@@ -87,7 +87,9 @@ test.describe('without a session', () => {
     await expect(
       page.getByText('Se o e-mail puder ser usado, enviamos um código'),
     ).toBeVisible();
-    await page.getByLabel('Código').fill(await codeSentTo(page.request, email));
+    await page
+      .getByLabel('Dígito 1 de 6')
+      .fill(await codeSentTo(page.request, email));
     await page.getByRole('button', { name: 'Confirmar' }).click();
     await expect(page.getByText(/Solicitação enviada/)).toBeVisible();
     await shoot(page, 'signup-done');
@@ -119,7 +121,7 @@ test.describe('without a session', () => {
     await page.getByRole('button', { name: 'Enviar código' }).click();
     await shoot(page, 'code-sent');
     const code = await codeSentTo(page.request, email, 2);
-    await page.getByLabel('Código').fill(code);
+    await page.getByLabel('Dígito 1 de 6').fill(code);
     await page.getByRole('button', { name: 'Entrar' }).click();
     // Approved with the invite defaults: signed in, search on no collection yet (BR-6).
     await expect(

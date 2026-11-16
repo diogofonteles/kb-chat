@@ -10,7 +10,6 @@ import {
 import {
   DEFAULT_VIEWS,
   RESEARCH_PROFILES,
-  THEMES,
   defaultViewSchema,
   researchProfileSchema,
   searchModeSchema,
@@ -22,6 +21,7 @@ import { topicsUrl } from '@core/api/kb-api.js';
 import { MODE_OPTIONS } from '@core/i18n/facet-labels.js';
 import { openable, treeTitle } from '@core/topics/topic-tree.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
+import { THEME_CHOICES, shownTheme } from '@core/theme/theme-store.js';
 import { THEME_COPY, VIEW_COPY } from './provider-copy.js';
 
 export type PreferenceField =
@@ -73,10 +73,14 @@ export class PreferencesForm {
     help: PROFILE_COPY[value].help(),
   }));
   protected readonly modes = MODE_OPTIONS;
-  protected readonly themes = THEMES.map((value) => ({
+  protected readonly themes = THEME_CHOICES.map((value) => ({
     value,
     label: THEME_COPY[value](),
   }));
+  /** Nothing chosen ("auto") shows as the revised theme, the default (KBC-124 D2). */
+  protected readonly shownTheme = computed(() =>
+    shownTheme(this.preferences().theme),
+  );
 
   protected shows(field: PreferenceField): boolean {
     return this.fields().includes(field);

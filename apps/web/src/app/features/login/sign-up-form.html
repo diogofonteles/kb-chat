@@ -1,10 +1,6 @@
-<button
-  type="button"
-  class="link back"
-  (click)="back.emit()"
-  i18n="@@login.back"
->
-  ← Voltar
+<button type="button" class="back" (click)="back.emit()">
+  <ui-icon name="chevLeft" [size]="18" />
+  <span i18n="@@login.back">Voltar</span>
 </button>
 <h2 #title tabindex="-1" class="title" i18n="@@signUp.title">
   Pedir acesso sem conta Google
@@ -13,36 +9,42 @@
 @switch (step()) {
   @case ('form') {
     <form (submit)="submit($event)" novalidate>
-      <div class="field">
-        <label class="label" for="signup-email" i18n="@@login.email"
+      <div class="ui-field" [class.ui-field--invalid]="!!errors().email">
+        <label class="ui-field__label" for="signup-email" i18n="@@login.email"
           >E-mail</label
         >
         <input
           #emailInput
           id="signup-email"
+          class="ui-input ui-input--lg"
           type="email"
           name="email"
           autocomplete="email"
           inputmode="email"
+          placeholder="nome@exemplo.com"
           [value]="form().email"
           [attr.aria-invalid]="errors().email ? 'true' : null"
           [attr.aria-describedby]="errors().email ? 'signup-email-error' : null"
           (input)="type('email', emailInput.value)"
         />
         @if (errors().email; as error) {
-          <p id="signup-email-error" class="field-error" role="alert">
-            <span aria-hidden="true">⚠</span>&ngsp;{{ error }}
+          <p id="signup-email-error" class="ui-field__error" role="alert">
+            <ui-icon name="warn" [size]="14" />{{ error }}
           </p>
         }
       </div>
       <div class="names">
-        <div class="field">
-          <label class="label" for="signup-firstName" i18n="@@signUp.firstName"
+        <div class="ui-field" [class.ui-field--invalid]="!!errors().firstName">
+          <label
+            class="ui-field__label"
+            for="signup-firstName"
+            i18n="@@signUp.firstName"
             >Nome</label
           >
           <input
             #firstNameInput
             id="signup-firstName"
+            class="ui-input ui-input--lg"
             type="text"
             name="firstName"
             autocomplete="given-name"
@@ -55,18 +57,22 @@
             (input)="type('firstName', firstNameInput.value)"
           />
           @if (errors().firstName; as error) {
-            <p id="signup-firstName-error" class="field-error" role="alert">
-              <span aria-hidden="true">⚠</span>&ngsp;{{ error }}
+            <p id="signup-firstName-error" class="ui-field__error" role="alert">
+              <ui-icon name="warn" [size]="14" />{{ error }}
             </p>
           }
         </div>
-        <div class="field">
-          <label class="label" for="signup-lastName" i18n="@@signUp.lastName"
+        <div class="ui-field" [class.ui-field--invalid]="!!errors().lastName">
+          <label
+            class="ui-field__label"
+            for="signup-lastName"
+            i18n="@@signUp.lastName"
             >Sobrenome</label
           >
           <input
             #lastNameInput
             id="signup-lastName"
+            class="ui-input ui-input--lg"
             type="text"
             name="lastName"
             autocomplete="family-name"
@@ -79,26 +85,25 @@
             (input)="type('lastName', lastNameInput.value)"
           />
           @if (errors().lastName; as error) {
-            <p id="signup-lastName-error" class="field-error" role="alert">
-              <span aria-hidden="true">⚠</span>&ngsp;{{ error }}
+            <p id="signup-lastName-error" class="ui-field__error" role="alert">
+              <ui-icon name="warn" [size]="14" />{{ error }}
             </p>
           }
         </div>
       </div>
-      <div class="field">
-        <label class="label" for="signup-phone" i18n="@@login.phone"
+      <div class="ui-field" [class.ui-field--invalid]="!!errors().phone">
+        <label class="ui-field__label" for="signup-phone" i18n="@@login.phone"
           >Celular</label
         >
-        <p id="signup-phone-hint" class="hint" i18n="@@signUp.phoneHint">
-          Com DDD. Ex.: (81) 99999-0000. Sem código de país, usamos +55.
-        </p>
         <input
           #phoneInput
           id="signup-phone"
+          class="ui-input ui-input--lg"
           type="tel"
           name="phone"
           autocomplete="tel"
           inputmode="tel"
+          placeholder="(81) 99999-0000"
           [value]="form().phone"
           [attr.aria-invalid]="errors().phone ? 'true' : null"
           [attr.aria-describedby]="
@@ -109,14 +114,23 @@
           (input)="type('phone', phoneInput.value)"
         />
         @if (errors().phone; as error) {
-          <p id="signup-phone-error" class="field-error" role="alert">
-            <span aria-hidden="true">⚠</span>&ngsp;{{ error }}
+          <p id="signup-phone-error" class="ui-field__error" role="alert">
+            <ui-icon name="warn" [size]="14" />{{ error }}
           </p>
         }
+        <p
+          id="signup-phone-hint"
+          class="ui-field__hint"
+          i18n="@@signUp.phoneHint"
+        >
+          Com DDD. Ex.: (81) 99999-0000. Sem código de país, usamos +55.
+        </p>
       </div>
       <button
+        uiButton
+        size="lg"
+        [block]="true"
         type="submit"
-        class="primary"
         [disabled]="busy()"
         i18n="@@login.sendCode"
       >
@@ -127,34 +141,33 @@
   @case ('code') {
     <p class="sent" role="status" i18n="@@signUp.codeSent">
       Se o e-mail puder ser usado, enviamos um código de 6 dígitos para
-      {{ email() }}.
+      <strong>{{ email() }}</strong
+      >.
     </p>
     <form (submit)="confirm($event)" novalidate>
-      <label class="field">
-        <span class="label" i18n="@@login.code">Código</span>
-        <input
-          #codeInput
-          type="text"
-          class="code-input"
-          name="code"
-          inputmode="numeric"
-          autocomplete="one-time-code"
-          maxlength="6"
+      <div class="ui-field" [class.ui-field--invalid]="!!errors().code">
+        <span id="signup-code-label" class="ui-field__label" i18n="@@login.code"
+          >Código</span
+        >
+        <ui-code-input
+          labelledBy="signup-code-label"
           [value]="code()"
-          [attr.aria-invalid]="errors().code ? 'true' : null"
-          [attr.aria-describedby]="errors().code ? 'signup-code-error' : null"
-          (input)="typeCode(codeInput.value)"
+          (valueChange)="typeCode($event)"
+          [invalid]="!!errors().code"
+          [describedBy]="errors().code ? 'signup-code-error' : null"
         />
-      </label>
-      @if (errors().code) {
-        <p id="signup-code-error" class="field-error" role="alert">
-          <span aria-hidden="true">⚠</span>&ngsp;{{ errors().code }}
-        </p>
-      }
+        @if (errors().code) {
+          <p id="signup-code-error" class="ui-field__error" role="alert">
+            <ui-icon name="warn" [size]="14" />{{ errors().code }}
+          </p>
+        }
+      </div>
       <button
+        uiButton
+        size="lg"
+        [block]="true"
         type="submit"
-        class="primary"
-        [disabled]="busy()"
+        [disabled]="busy() || code().length !== 6"
         i18n="@@signUp.confirm"
       >
         Confirmar
@@ -162,7 +175,7 @@
       <div class="actions">
         <button
           type="button"
-          class="link"
+          class="text-link"
           [disabled]="busy()"
           (click)="submit()"
           i18n="@@login.resend"
@@ -171,7 +184,7 @@
         </button>
         <button
           type="button"
-          class="link"
+          class="text-link"
           (click)="changeEmail()"
           i18n="@@signUp.changeEmail"
         >
@@ -181,10 +194,13 @@
     </form>
   }
   @case ('done') {
-    <p class="done" role="status" i18n="@@signUp.done">
-      Solicitação enviada. Um master vai analisar; você recebe um e-mail quando
-      for aprovado.
-    </p>
+    <div class="done" role="status">
+      <span class="mark ok"><ui-icon name="check" [size]="36" /></span>
+      <p class="headline" i18n="@@signUp.doneTitle">Solicitação enviada.</p>
+      <p i18n="@@signUp.doneText">
+        Um master vai analisar; você recebe um e-mail quando for aprovado.
+      </p>
+    </div>
   }
 }
 
@@ -198,5 +214,5 @@
   }
 </p>
 @if (failure()) {
-  <p class="error" role="alert">{{ failure() }}</p>
+  <ui-banner tone="err" role="alert" [title]="failure()" />
 }

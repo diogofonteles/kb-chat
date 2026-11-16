@@ -226,7 +226,10 @@
     <span class="label" i18n="@@sidebar.theme">Tema</span>
     <select #themeSelect (change)="changeTheme(themeSelect.value)">
       @for (option of themeOptions; track option.value) {
-        <option [value]="option.value" [selected]="option.value === theme()">
+        <option
+          [value]="option.value"
+          [selected]="option.value === shownTheme()"
+        >
           {{ option.label }}
         </option>
       }

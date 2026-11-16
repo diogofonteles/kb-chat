@@ -31,6 +31,7 @@ import {
 import { assignmentLabel } from '@features/house-ai/app-ai-labels.js';
 import { parseCap, parseDaily } from '@features/house-ai/number-fields.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
+import { THEME_CHOICES } from '@core/theme/theme-store.js';
 import { THEME_COPY, VIEW_COPY } from '@features/settings/provider-copy.js';
 import { collectionChoices, treeTitle } from '@core/topics/topic-tree.js';
 import { FEATURE_LABELS } from './feature-labels.js';
@@ -241,7 +242,7 @@ export class InvitePresetEditor {
     id,
     label: PROFILE_COPY[id].label(),
   }));
-  protected readonly themes = THEMES.map((id) => ({
+  protected readonly themes = THEME_CHOICES.map((id) => ({
     id,
     label: THEME_COPY[id](),
   }));
