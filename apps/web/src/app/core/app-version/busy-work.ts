@@ -11,8 +11,13 @@ import {
 /** A field that a person edits. */
 const FIELD =
   'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
-/** Where an edit is kept until it is saved: a form or a dialog. Edits elsewhere (a filter, the theme) apply at once. */
-const SCOPE = 'form, dialog, [role="dialog"]';
+/**
+ * Where an edit is kept until it is saved: a form, a dialog, or a container marked with
+ * `data-edit-scope` (an inline editor without a <form>, such as a bookmark's note). Edits
+ * elsewhere (a filter, the theme) apply at once.
+ */
+export const EDIT_SCOPE_ATTRIBUTE = 'data-edit-scope';
+const SCOPE = `form, dialog, [role="dialog"], [${EDIT_SCOPE_ATTRIBUTE}]`;
 /** A field whose draft survives a reload by itself (the question box keeps its text, KBC-123). */
 export const DRAFT_KEPT_ATTRIBUTE = 'data-draft-kept';
 /** An open dialog holds work the person has not finished. */

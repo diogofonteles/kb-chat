@@ -26,6 +26,8 @@ export const VERSION_URL = '/version.json';
 export const RELOAD_MARK_KEY = 'kb-chat.app-version-reload';
 
 const LOOP_WINDOW_MS = 5 * 60_000;
+/** The reload mark kept in `window.name` when storage is blocked (QA F-3). */
+const TAB_NAME_PREFIX = 'kb-chat.reload:';
 const POLL_MS = 30 * 60_000;
 
 /** Which notice the banner shows (see AppVersion.notice). */
@@ -101,9 +103,8 @@ export class AppVersion {
   /**
    * This page already asked for a reload by itself and is still here (the browser did not
    * leave it): the next answer only offers the notice. It lives in memory, so it does not
-   * survive a reload; the guard across reloads is the sessionStorage mark, and with storage
-   * blocked that one is off (AC-6). No check runs at boot and coming back to the tab waits
-   * 60 s between checks, so even then the reloads are never back to back.
+   * survive a reload; the guard across reloads is the reload mark, kept in sessionStorage
+   * and in the tab's name, so it holds with storage blocked too (AC-6, QA F-3).
    */
   private autoReloaded = false;
   private updating = false;
@@ -240,7 +241,12 @@ export class AppVersion {
     );
   }
 
+  /** The mark of the last reload: sessionStorage, or the tab's name when storage is blocked. */
   private storedMark(): ReloadMark | null {
+    return this.markFromStorage() ?? this.markFromTabName();
+  }
+
+  private markFromStorage(): ReloadMark | null {
     try {
       const mark = reloadMarkSchema.safeParse(
         JSON.parse(this.storage?.getItem(RELOAD_MARK_KEY) ?? 'null'),
@@ -251,15 +257,34 @@ export class AppVersion {
     }
   }
 
-  private markReload(served: string): void {
+  /**
+   * `window.name` survives a reload of the same tab without any storage (KBC-123 QA F-3):
+   * the guard across reloads holds in private mode too. Only a name this app wrote is read.
+   */
+  private markFromTabName(): ReloadMark | null {
+    const name = this.document.defaultView?.name ?? '';
+    if (!name.startsWith(TAB_NAME_PREFIX)) return null;
     try {
-      this.storage?.setItem(
-        RELOAD_MARK_KEY,
-        JSON.stringify({ version: served, at: Date.now() }),
+      const mark = reloadMarkSchema.safeParse(
+        JSON.parse(name.slice(TAB_NAME_PREFIX.length)),
       );
+      return mark.success ? mark.data : null;
     } catch {
-      // Storage refused (private mode, full): only `autoReloaded` guards, for this page.
+      return null;
     }
+  }
+
+  private markReload(served: string): void {
+    const mark = JSON.stringify({ version: served, at: Date.now() });
+    try {
+      this.storage?.setItem(RELOAD_MARK_KEY, mark);
+    } catch {
+      // Storage refused (private mode, full): the tab's name below still guards.
+    }
+    const view = this.document.defaultView;
+    // Never overwrite a name someone else gave the tab (a window opened by name).
+    if (view && (view.name === '' || view.name.startsWith(TAB_NAME_PREFIX)))
+      view.name = TAB_NAME_PREFIX + mark;
   }
 
   /** A lazy route whose chunk a deploy removed: load the asked page from the new app (AC-5). */

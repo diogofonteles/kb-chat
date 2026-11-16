@@ -6,7 +6,11 @@ import {
   signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { BusyWork, DRAFT_KEPT_ATTRIBUTE } from './busy-work.js';
+import {
+  BusyWork,
+  DRAFT_KEPT_ATTRIBUTE,
+  EDIT_SCOPE_ATTRIBUTE,
+} from './busy-work.js';
 
 describe('BusyWork (KBC-123)', () => {
   beforeEach(() =>
@@ -68,6 +72,27 @@ describe('BusyWork (KBC-123)', () => {
       document.body.append(container);
       return field;
     }
+
+    it('QA BUG-1: a note typed in an inline editor marked data-edit-scope holds the reload until it leaves', () => {
+      const work = TestBed.inject(BusyWork);
+      const editor = document.createElement('div');
+      editor.setAttribute(EDIT_SCOPE_ATTRIBUTE, '');
+      const note = document.createElement('input');
+      editor.append(note);
+      document.body.append(editor);
+      type(note, 'rever este trecho');
+      expect(work.inProgress()).toBe(true);
+      editor.remove();
+      expect(work.inProgress()).toBe(false);
+    });
+
+    it('an input outside any form, dialog or edit scope never holds the reload', () => {
+      const work = TestBed.inject(BusyWork);
+      const search = document.createElement('input');
+      document.body.append(search);
+      type(search, 'ritmo');
+      expect(work.inProgress()).toBe(false);
+    });
 
     it('is in progress while a field of a form holds text, and free once it is empty again', () => {
       const work = TestBed.inject(BusyWork);

@@ -66,7 +66,7 @@ import { MediaEngine } from '@core/media/media-engine.js';
               </button>
               @if (editingId() === bookmark.id) {
                 <!-- No <form>: the Enter that pressed "Editar" must not save too. -->
-                <div class="edit">
+                <div class="edit" data-edit-scope>
                   <label
                     class="visually-hidden"
                     [attr.for]="'note-' + bookmark.id"

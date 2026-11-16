@@ -104,6 +104,7 @@ describe('AppVersion (KBC-123)', () => {
       get: () => 'visible',
     });
     sessionStorage.clear();
+    window.name = '';
   });
 
   afterEach(() => {
@@ -511,6 +512,35 @@ describe('AppVersion (KBC-123)', () => {
     serve(http, 'v2');
     expect(reload).toHaveBeenCalledTimes(1);
     expect(version.updateAvailable()).toBe(true);
+  });
+
+  it('AC-6 (QA F-3): with storage blocked, the next page of the same tab does not reload again', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const refuse = () => {
+      throw new DOMException('blocked', 'SecurityError');
+    };
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(refuse);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(refuse);
+    const first = setup();
+    comeBack();
+    serve(first.http, 'v2');
+    expect(first.reload).toHaveBeenCalledTimes(1);
+    // The reload brought the old shell again (a new page, nothing in memory): only the tab's name remains.
+    TestBed.resetTestingModule();
+    const second = setup();
+    comeBack();
+    serve(second.http, 'v2');
+    expect(second.reload).not.toHaveBeenCalled();
+    expect(second.version.updateAvailable()).toBe(true);
+  });
+
+  it('AC-6 (QA F-3): never takes over a name the tab already had', () => {
+    window.name = 'some-other-window';
+    const { reload, http } = setup();
+    comeBack();
+    serve(http, 'v2');
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(window.name).toBe('some-other-window');
   });
 
   for (const [what, answer] of [

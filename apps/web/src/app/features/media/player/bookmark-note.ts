@@ -48,7 +48,12 @@ import { BookmarksStore } from '@core/media/bookmarks-store.js';
     }
     @if (bookmark(); as current) {
       <!-- No <form>: an Enter that opened the note (on 🔖) must not submit it too. -->
-      <div class="note" role="group" aria-labelledby="bookmark-note-label">
+      <div
+        class="note"
+        role="group"
+        aria-labelledby="bookmark-note-label"
+        data-edit-scope
+      >
         <label id="bookmark-note-label" for="bookmark-note" class="label">{{
           label()
         }}</label>
