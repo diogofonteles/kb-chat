@@ -9,6 +9,12 @@ import {
   useTheme,
   type UploadedMedia,
 } from './media-helpers.js';
+import {
+  comeBack,
+  notice,
+  playDeploys,
+  shipNewVersion,
+} from './app-version-helpers.js';
 
 let lecture: UploadedMedia;
 
@@ -370,3 +376,21 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     expect(await serious()).toEqual([]);
   });
 }
+
+test("KBC-123 (QA BUG-1): a note typed and not saved holds a new version's reload, and is still there", async ({
+  page,
+}) => {
+  const deploy = await playDeploys(page);
+  await openPlayer(page);
+  await page.getByRole('button', { name: 'Marcar este trecho' }).click();
+  const note = page.getByRole('textbox', { name: /Nota do marcador/ });
+  await note.fill('rever o trecho sobre o ritmo');
+
+  shipNewVersion(deploy);
+  const asked = page.waitForResponse('**/version.json');
+  await comeBack(page);
+  await asked;
+  await expect(notice(page).text).toBeVisible();
+  expect(deploy.loads).toBe(1);
+  await expect(note).toHaveValue('rever o trecho sobre o ritmo');
+});

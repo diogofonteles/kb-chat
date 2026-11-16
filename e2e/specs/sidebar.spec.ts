@@ -170,9 +170,10 @@ test('AC-5: another collection starts a new conversation and updates the count',
     .first()
     .getAttribute('value');
   await select.selectOption(other ?? '');
-  await expect(page.getByRole('status').first()).toContainText(
-    'Nova conversa em',
-  );
+  // The page has more than one live region (the new-version notice's is always there, KBC-123).
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Nova conversa em' }),
+  ).toBeVisible();
   await expect(page.locator('app-result-card')).toHaveCount(0);
   await expect(page.getByRole('heading', { level: 1 })).not.toHaveText(
     before ?? '',

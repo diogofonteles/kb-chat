@@ -23,6 +23,7 @@ import {
   type PlaybackState,
 } from '@kb-chat/player-core';
 import type { HiddenSpan } from '@kb-chat/contracts';
+import { BusyWork } from '@core/app-version/busy-work.js';
 
 /** What the engine plays: a media item of the library and its stream URL. */
 export interface PlayableSource {
@@ -155,6 +156,8 @@ export class MediaEngine {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.unload());
+    // Audio playing is never cut by a reload into a new version (KBC-123 AC-2).
+    inject(BusyWork).holdWhile(this.playing);
   }
 
   /** Loads a source (paused, never autoplay: KBC-041 BR-3); `startAtMs` seeks once ready. */

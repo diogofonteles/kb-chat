@@ -18,6 +18,7 @@ import {
   type SweepCursor,
 } from '@kb-chat/contracts';
 import { ResearchApi } from '@core/api/research-api.js';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { toUiErrorCode } from '@core/api/api-error.js';
 import { SpendStore } from '@core/spend/spend-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
@@ -145,6 +146,14 @@ export class ResearchStore {
 
   constructor() {
     this.destroyRef.onDestroy(() => (this.destroyed = true));
+    // An answer arriving is never cut by a reload into a new version (KBC-123 AC-2), in
+    // whichever collection it was asked.
+    inject(BusyWork).holdWhile(
+      computed(() =>
+        this.state().turns.some((turn) => turn.phase === 'streaming'),
+      ),
+      this.destroyRef,
+    );
     this.reopenAfterReload();
   }
 

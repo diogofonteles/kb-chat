@@ -8,6 +8,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import type { MediaBookmark } from '@kb-chat/contracts';
 import {
@@ -136,6 +137,8 @@ export class BookmarksStore {
         takeUntilDestroyed(),
       )
       .subscribe();
+    // A note the server does not have yet holds a reload into a new version (KBC-123 AC-2).
+    inject(BusyWork).holdWhile(computed(() => this.unsaved().size > 0));
     const view = inject(DOCUMENT).defaultView;
     const leaving = () => this.commitDelete(true);
     view?.addEventListener('pagehide', leaving);

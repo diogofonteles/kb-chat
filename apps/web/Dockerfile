@@ -19,6 +19,8 @@ RUN pnpm fetch
 COPY . .
 RUN pnpm install --frozen-lockfile --offline
 RUN pnpm --filter @kb-chat/contracts build && pnpm --filter @kb-chat/web build
+# The version stamp first (KBC-123): it changes index.html, and the CSP is read from it.
+RUN node deploy/web/version.mjs apps/web/dist/browser
 RUN node deploy/web/csp.mjs apps/web/dist/browser/index.html > /workspace/csp.caddy
 
 # --- Runtime: Caddy (runs as root to bind 80/443 inside the container only) ---

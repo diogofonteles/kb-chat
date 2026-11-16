@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type {
@@ -289,6 +290,18 @@ describe('ResearchStore', () => {
         },
       ],
     });
+  });
+
+  it('holds a reload into a new version while an answer arrives, in any collection (KBC-123 AC-2)', () => {
+    const { store, streams, chat } = setup();
+    const work = TestBed.inject(BusyWork);
+    store.ask('quais são?');
+    expect(work.busy()).toBe(true);
+    chat.selectTopic('alquimia');
+    expect(store.streaming()).toBe(false);
+    expect(work.busy()).toBe(true);
+    answer(streams[0] as Subject<ResearchEvent>, 'Os sete.');
+    expect(work.busy()).toBe(false);
   });
 
   it('stops the turn in flight on "Parar", keeping the partial text', () => {

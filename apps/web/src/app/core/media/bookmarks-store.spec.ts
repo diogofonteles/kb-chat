@@ -1,4 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -113,6 +114,18 @@ describe('BookmarksStore (KBC-042)', () => {
     expect(post.request.body).toEqual({ id, positionMs: 758_000 });
     post.flush(saved(id, 758_000));
     expect(store.unsaved().has(id)).toBe(false);
+  });
+
+  it('holds a reload into a new version while a bookmark is not saved yet (KBC-123 AC-2)', () => {
+    const { store, http, at } = setup();
+    const work = TestBed.inject(BusyWork);
+    at(760);
+    store.mark();
+    expect(work.busy()).toBe(true);
+    http
+      .expectOne({ method: 'POST', url: URL })
+      .flush(saved('00000000-0000-4000-8000-000000000001', 758_000));
+    expect(work.busy()).toBe(false);
   });
 
   it('never marks before the start (AC-7)', () => {

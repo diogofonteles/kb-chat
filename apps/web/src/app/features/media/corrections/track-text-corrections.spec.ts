@@ -1,4 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -357,6 +358,17 @@ describe('TrackText: correcting a word (KBC-093)', () => {
     await rendered.settle();
     expect(rendered.server.served.transcript).toBe(3);
     expect(screen.getAllByText('Correção desfeita.').length).toBeGreaterThan(0);
+  });
+
+  it('KBC-123 AC-2: a correction typed and not saved holds a reload into a new version', async () => {
+    const rendered = await renderText();
+    const work = TestBed.inject(BusyWork);
+    await clickWord(rendered, 'Tiuako');
+    expect(work.busy()).toBe(false);
+    await type(rendered, 'Tiuaco');
+    expect(work.busy()).toBe(true);
+    await type(rendered, 'Tiuako');
+    expect(work.busy()).toBe(false);
   });
 
   it('AC-44: with a changed text, another word does not move the audio nor the panel', async () => {

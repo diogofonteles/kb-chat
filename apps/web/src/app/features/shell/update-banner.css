@@ -1,0 +1,99 @@
+:host {
+  display: contents;
+}
+
+/*
+ * Fixed, so the page under it never moves while someone types; the question box is at the
+ * bottom. Under the top bar (--topbar-height, the bar's own min-height), so it covers none
+ * of its text or controls. Without a notice it is an empty, zero-size live region.
+ */
+.notice {
+  position: fixed;
+  top: calc(var(--topbar-height) + var(--space-2));
+  left: 50%;
+  z-index: 60;
+  transform: translateX(-50%);
+}
+
+.notice.shown {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: max-content;
+  max-width: calc(100vw - 2 * var(--space-4));
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow);
+}
+
+p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+button {
+  flex: none;
+  min-height: var(--target);
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  cursor: pointer;
+}
+
+.reload {
+  padding: 0 var(--space-4);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+
+.reload:hover {
+  background: var(--color-accent-strong);
+}
+
+.dismiss {
+  min-width: var(--target);
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.dismiss:hover {
+  color: var(--color-text);
+}
+
+button:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* On a phone: the whole width, text on the left, both buttons on the right. */
+@media (max-width: 599px) {
+  .notice.shown {
+    gap: var(--space-2);
+    width: calc(100vw - 2 * var(--space-3));
+    max-width: none;
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+    font-size: var(--text-sm);
+    line-height: 1.25;
+  }
+
+  .message {
+    flex: 1;
+  }
+
+  .reload {
+    padding: 0 var(--space-3);
+  }
+}
+
+@media (forced-colors: active) {
+  .notice.shown {
+    border: 2px solid CanvasText;
+  }
+}

@@ -15,6 +15,7 @@ import {
   type UploadCheck,
   type UploadCheckRequest,
 } from '@kb-chat/contracts';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { CSRF } from '@core/auth/auth-interceptor.js';
 import { SessionEvents } from '@core/auth/session-events.js';
 import {
@@ -80,6 +81,8 @@ export class MediaApi {
   private readonly tus = inject(TUS_UPLOAD);
   private readonly session = inject(SessionEvents);
   private readonly view = inject(DOCUMENT).defaultView;
+  private readonly work = inject(BusyWork);
+  private uploads = 0;
 
   create(topic: string, request: CreateMediaRequest): Observable<MediaItem> {
     return this.http
@@ -116,6 +119,9 @@ export class MediaApi {
 
   private sendParts(id: string, file: Blob): Observable<UploadEvent> {
     return new Observable<UploadEvent>((subscriber) => {
+      // An upload in progress is never cut by a reload into a new version (KBC-123 AC-2).
+      const busyKey = `upload-${++this.uploads}`;
+      this.work.hold(busyKey);
       let waiting = Subscription.EMPTY;
       const session = this.tus(file, {
         uploadUrl: `${mediaUrl(id)}/upload`,
@@ -136,6 +142,7 @@ export class MediaApi {
       });
       session.start();
       return () => {
+        this.work.release(busyKey);
         waiting.unsubscribe();
         void session.abort();
       };
