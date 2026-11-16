@@ -25,6 +25,8 @@ import { ProgressSaver } from '@core/media/progress-saver.js';
 import { SleepTimerService } from '@core/media/sleep-timer.js';
 import { filter, map } from 'rxjs';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
+import { RightPanel } from '@features/shell/right-panel.js';
+import { NowPlayingPanel } from './now-playing-panel.js';
 import { PlayerShortcuts } from './player-shortcuts.js';
 
 /**
@@ -90,6 +92,11 @@ export class MiniPlayer {
   readonly shownElsewhere = input<string | null>(null);
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly rightPanel = inject(RightPanel);
+  /** "Tocando agora" is in the shell's right panel (KBC-129 FR-2). */
+  protected readonly nowPlayingOpen = computed(
+    () => this.rightPanel.content()?.component === NowPlayingPanel,
+  );
 
   protected readonly skipBack = computed(
     () => this.preferences.value().skipBackSec,
@@ -179,6 +186,19 @@ export class MiniPlayer {
     this.engine.retry();
   }
 
+  /** The transcript button: opens "Tocando agora" beside any screen, or closes it. */
+  protected toggleNowPlaying(): void {
+    if (this.nowPlayingOpen()) {
+      this.rightPanel.close();
+      return;
+    }
+    this.rightPanel.open({
+      component: NowPlayingPanel,
+      width: 'narrow',
+      label: $localize`:@@mini.nowPlaying:Tocando agora`,
+    });
+  }
+
   /**
    * "Fechar o player": stops, saves where it stopped and goes away (AC-11). The focus,
    * which was on the button that goes, moves to the main area (WCAG 2.4.3).
@@ -187,6 +207,7 @@ export class MiniPlayer {
     this.engine.pause();
     if (!this.gone()) this.saver.saveNow();
     this.engine.unload();
+    if (this.nowPlayingOpen()) this.rightPanel.close();
     const main = this.host.nativeElement.ownerDocument.querySelector('main');
     if (main) {
       main.tabIndex = -1;

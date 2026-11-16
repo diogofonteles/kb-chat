@@ -350,9 +350,19 @@ export class MediaPlayerPage {
     () => this.canEdit() || this.hasTracks(),
   );
   /** The view chosen; back on the transcript for each media opened. */
-  protected readonly view = linkedSignal<string, PlayerView>({
+  protected readonly chosenView = linkedSignal<string, PlayerView>({
     source: this.id,
     computation: () => 'transcript',
+  });
+  /**
+   * The view shown: the one chosen while it is still offered, else the transcript (the
+   * tracks went away, or the person may no longer edit), so a chip is always selected.
+   */
+  protected readonly view = computed((): PlayerView => {
+    const chosen = this.chosenView();
+    if (chosen === 'tracks' && !this.hasTracks()) return 'transcript';
+    if (chosen === 'voices' && !this.canEdit()) return 'transcript';
+    return chosen;
   });
   /** The transcript is the body now: its own low-confidence notice is in view (BR-2). */
   protected readonly transcriptInView = computed(

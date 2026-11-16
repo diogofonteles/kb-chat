@@ -168,6 +168,12 @@ a.title:hover {
 .extras {
   display: flex;
   justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+/* "Tocando agora" open in the right panel: the transcript button in green (v2 player bar). */
+.now-playing.on {
+  color: var(--color-accent);
 }
 
 .spinner {
@@ -219,8 +225,24 @@ a.title:hover {
     gap: var(--space-1);
   }
 
-  .forward {
+  .forward,
+  .now-playing {
     display: none;
+  }
+
+  /* A tap anywhere on the mini player opens the full-screen player (KBC-129 FR-2, AC-3):
+     the title's link covers the card; the buttons stay above it. */
+  a.title::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  .buttons,
+  .extras,
+  .retry {
+    position: relative;
+    z-index: 1;
   }
 
   .timeline {

@@ -393,6 +393,13 @@
       color-mix(in srgb, var(--color-bg) 85%, transparent);
   }
 
+  /* The full-screen player: the foot keeps only the player's announcer, out of sight. */
+  .shell-foot.bare {
+    position: absolute;
+    padding: 0;
+    box-shadow: none;
+  }
+
   .panel {
     border-radius: 0;
   }

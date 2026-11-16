@@ -205,7 +205,7 @@
               uiChip
               type="button"
               [selected]="view() === 'transcript'"
-              (click)="view.set('transcript')"
+              (click)="chosenView.set('transcript')"
               i18n="@@player.view.transcript"
             >
               Transcrição
@@ -215,7 +215,7 @@
                 uiChip
                 type="button"
                 [selected]="view() === 'tracks'"
-                (click)="view.set('tracks')"
+                (click)="chosenView.set('tracks')"
                 i18n="@@player.view.tracks"
               >
                 Faixas
@@ -226,7 +226,7 @@
                 uiChip
                 type="button"
                 [selected]="view() === 'voices'"
-                (click)="view.set('voices')"
+                (click)="chosenView.set('voices')"
                 i18n="@@player.view.voices"
               >
                 Vozes

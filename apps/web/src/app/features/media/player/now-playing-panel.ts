@@ -19,7 +19,8 @@ import {
   mediaTranscriptUrl,
   mediaUrl,
 } from '@core/media/media-api.js';
-import { UiCover, UiIcon } from '@ui/index.js';
+import { RightPanel } from '@features/shell/right-panel.js';
+import { UiCover, UiIcon, UiIconButton } from '@ui/index.js';
 
 /** The line heard at `ms` and the one before it: what the transcript card shows. */
 export function linesAt(
@@ -48,16 +49,27 @@ export function linesAt(
  * panel beside any screen. The cover, the title and author, the transcript card with the
  * line before and the line heard now, and "Sobre a autora". Only data that exists (BR-4):
  * no "Seguir" (KBC-135) and no share (KBC-136). Opened by the player bar's transcript
- * button through `RightPanel.open({ component: NowPlayingPanel, width: 'narrow', … })`.
+ * button (MiniPlayer) through `RightPanel.open`; its own close button takes it away.
  */
 @Component({
   selector: 'app-now-playing-panel',
-  imports: [RouterLink, UiCover, UiIcon],
+  imports: [RouterLink, UiCover, UiIcon, UiIconButton],
   template: `
     <section class="now" aria-labelledby="now-playing-title">
-      <h2 id="now-playing-title" class="label" i18n="@@nowPlaying.title">
-        Tocando agora
-      </h2>
+      <div class="bar">
+        <h2 id="now-playing-title" class="label" i18n="@@nowPlaying.title">
+          Tocando agora
+        </h2>
+        <button
+          uiIconButton
+          type="button"
+          aria-label="Fechar Tocando agora"
+          i18n-aria-label="@@nowPlaying.close"
+          (click)="panel.close()"
+        >
+          <ui-icon name="close" [size]="18" />
+        </button>
+      </div>
       @if (source(); as playing) {
         <ui-cover class="art" [title]="playing.title" [size]="308" />
         <div class="head">
@@ -115,6 +127,7 @@ export function linesAt(
 })
 export class NowPlayingPanel {
   private readonly engine = inject(MediaEngine);
+  protected readonly panel = inject(RightPanel);
   protected readonly source = this.engine.source;
   protected readonly pagePath = computed(() => {
     const playing = this.source();

@@ -6,7 +6,7 @@ import {
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { screen } from '@testing-library/angular';
+import { fireEvent, screen } from '@testing-library/angular';
 import {
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
@@ -20,6 +20,7 @@ import {
   aTranscription,
   mediaId,
 } from '../../../testing/media-fixtures.js';
+import { RightPanel } from '@features/shell/right-panel.js';
 import { NowPlayingPanel, linesAt } from './now-playing-panel.js';
 
 const ITEM = aMediaItem({
@@ -99,6 +100,17 @@ describe('NowPlayingPanel (KBC-129 FR-2, BR-4)', () => {
     ).toBeTruthy();
     expect(screen.getByText('2 áudios neste acervo')).toBeTruthy();
     http.verify();
+  });
+
+  it('closes itself from its own button (on a phone it covers the screen)', async () => {
+    const { fixture } = await setup();
+    const panel = TestBed.inject(RightPanel);
+    panel.open({ component: NowPlayingPanel, width: 'narrow', label: 'x' });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Fechar Tocando agora' }),
+    );
+    await fixture.whenStable();
+    expect(panel.content()).toBeNull();
   });
 
   it('AC-4: offers no "Seguir" and no share, which do not exist yet', async () => {

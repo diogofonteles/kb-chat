@@ -3,7 +3,10 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import {
+  provideZonelessChangeDetection,
+  type WritableSignal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { Router, provideRouter } from '@angular/router';
@@ -25,6 +28,7 @@ import {
   sessionAs,
 } from '../../testing/media-fixtures.js';
 import { answeringLevels } from '../../testing/level-fixtures.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { MediaPlayerPage } from './media-player-page.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
@@ -503,6 +507,40 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
         'Legendas de baixa confiança: podem ter trechos errados.',
       ),
     ).toBeTruthy();
+  });
+
+  it('goes back to the transcript when the view chosen is no longer offered (KBC-129 FR-3)', async () => {
+    localStorage.clear();
+    const { harness, http } = await openPage(undefined, {
+      features: ['media', 'media-edit'],
+    });
+    http.expectOne(ITEM_URL).flush(TRANSCRIBED);
+    await settle();
+    answerArchivedTracks(http);
+    http.expectOne(transcriptRequest).flush(TRANSCRIPT);
+    http.expectOne(`${ITEM_URL}/edit`).flush(NOT_STARTED);
+    await harness.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Vozes' }));
+    await settle();
+    http.expectOne(`${ITEM_URL}/speakers`).flush({
+      mediaId: ITEM.id,
+      status: 'none',
+      transcriber: 'on',
+      transcriberOffSince: null,
+      canRequest: true,
+      diarization: null,
+    });
+    await harness.fixture.whenStable();
+    expect(screen.queryByText('Existia um rei.')).toBeNull();
+
+    // The session ends meanwhile: "Vozes" is no longer offered, nor any chip.
+    (TestBed.inject(SessionStore).me as WritableSignal<unknown>).set(null);
+    await settle();
+    await harness.fixture.whenStable();
+
+    expect(screen.queryByRole('button', { name: 'Vozes' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Vozes' })).toBeNull();
+    expect(screen.getByText('Existia um rei.')).toBeTruthy();
   });
 
   it('hides the column when asked, keeps it hidden for the next media, and the header says low (FR-9, AC-10)', async () => {

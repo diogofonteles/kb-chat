@@ -11,8 +11,8 @@ import { RouterLink } from '@angular/router';
 import type {
   PreparationStageId,
   ProcessingQueueItem,
+  QueueAction,
   RetryStage,
-  StageState,
 } from '@kb-chat/contracts';
 import { UiCover, UiPill, type Tone } from '@ui/index.js';
 import { mediaPagePath } from '@core/media/media-api.js';
@@ -42,31 +42,61 @@ const STEP_OF: Record<PreparationStageId, number> = {
 
 export type QueueStepState = 'done' | 'current' | 'ahead';
 
-/** Where an item is on the four steps; past the last stage every step is done. */
+/**
+ * Where an item is on the four steps; past the last stage every step is done, unless the
+ * person still has to validate or conclude the plan: then "Preparar" is the current one.
+ */
 export function queueSteps(
   stage: PreparationStageId | null,
+  action: QueueAction | null = null,
 ): readonly QueueStepState[] {
-  const at = stage === null ? STEP_NAMES.length : STEP_OF[stage];
+  const last = STEP_NAMES.length - 1;
+  const at =
+    stage !== null
+      ? STEP_OF[stage]
+      : action === 'validate' || action === 'conclude'
+        ? last
+        : STEP_NAMES.length;
   return STEP_NAMES.map((_, index) =>
     index < at ? 'done' : index === at ? 'current' : 'ahead',
   );
 }
 
-/** The tone of the situation: the word carries it, the colour backs it. */
-export function queueTone(state: StageState | null): Tone {
-  if (state === null || state === 'done') return 'ok';
-  if (state === 'failed') return 'err';
-  if (state === 'running') return 'info';
-  return 'warn';
-}
+/** The pill's word: "Precisa de você" when the row asks this person something. */
+export type QueueStatus = 'done' | 'failed' | 'running' | 'waiting' | 'you';
 
-const TONE_WORD: Record<Tone, () => string> = {
-  ok: () => $localize`:@@queue.tone.ok:Concluído`,
-  err: () => $localize`:@@queue.tone.err:Falhou`,
-  info: () => $localize`:@@queue.tone.info:Processando`,
-  warn: () => $localize`:@@queue.tone.warn:Aguardando`,
-  muted: () => '',
+const STATUS_TONE: Record<QueueStatus, Tone> = {
+  done: 'ok',
+  failed: 'err',
+  running: 'info',
+  waiting: 'warn',
+  you: 'warn',
 };
+
+const STATUS_WORD: Record<QueueStatus, () => string> = {
+  done: () => $localize`:@@queue.tone.ok:Concluído`,
+  failed: () => $localize`:@@queue.tone.err:Falhou`,
+  running: () => $localize`:@@queue.tone.info:Processando`,
+  waiting: () => $localize`:@@queue.tone.warn:Aguardando`,
+  you: () => $localize`:@@queue.attention:Precisa de você`,
+};
+
+/**
+ * The row's situation, from its action first and its stage's state after (KBC-129 FR-4): a
+ * row whose stages are all done but that waits for the person never says "Concluído".
+ */
+export function queueStatus(item: ProcessingQueueItem): QueueStatus {
+  if (item.action === 'retry' || item.state === 'failed') return 'failed';
+  if (
+    item.action === 'validate' ||
+    item.action === 'conclude' ||
+    item.action === 'continue'
+  )
+    return 'you';
+  if (item.waitsForTranscriber) return 'waiting';
+  if (item.state === null || item.state === 'done') return 'done';
+  return item.state === 'running' ? 'running' : 'waiting';
+}
 
 /** What pressing a row's button asks. */
 export type QueueMove =
@@ -107,12 +137,11 @@ export class QueueRow {
     return step === 3 ? editPagePath(mediaId) : preparationPagePath(mediaId);
   });
   protected readonly stateText = computed(() => queueStateText(this.item()));
-  protected readonly tone = computed(() =>
-    this.item().waitsForTranscriber ? 'warn' : queueTone(this.item().state),
-  );
-  protected readonly toneWord = computed(() => TONE_WORD[this.tone()]());
+  private readonly status = computed(() => queueStatus(this.item()));
+  protected readonly tone = computed(() => STATUS_TONE[this.status()]);
+  protected readonly toneWord = computed(() => STATUS_WORD[this.status()]());
   protected readonly steps = computed(() =>
-    queueSteps(this.item().stage).map((state, index) => ({
+    queueSteps(this.item().stage, this.item().action).map((state, index) => ({
       state,
       name: STEP_NAMES[index]?.() ?? '',
     })),
