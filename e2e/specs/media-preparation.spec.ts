@@ -212,7 +212,8 @@ test('AC-15: only "Transcrever" goes back to the list as ever', async ({
   await chooseFile(dialog, title);
   await expect(dialog.getByTestId('step-text')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Enviar', exact: true }).click();
-  await expect(page.getByText(title)).toBeVisible();
+  // Exact: the list's live region also says "<title>: Conversão: 0 %" while it converts.
+  await expect(page.getByText(title, { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/midia$/);
   await owner.dispose();
 });
@@ -258,7 +259,9 @@ test('AC-16: an audio already sent offers only what is missing', async ({
   const { page, owner } = await person(browser, viewport);
   const media = await transcribedAudio(owner);
   await page.goto(`/midia/${media.id}`);
-  await page.getByRole('link', { name: 'Preparar áudio' }).click();
+  // v2 (KBC-129): "Preparar áudio" is at the top of the player's ⋯.
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  await page.getByRole('menuitem', { name: 'Preparar áudio' }).click();
   await expect(page.getByTestId('step-text')).toContainText(/1.*Enviar/);
   await expect(page.getByRole('checkbox', { name: 'Transcrever' })).toHaveCount(
     0,

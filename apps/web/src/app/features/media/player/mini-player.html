@@ -109,6 +109,18 @@
       <button
         uiIconButton
         type="button"
+        class="now-playing"
+        [class.on]="nowPlayingOpen()"
+        aria-label="Tocando agora"
+        i18n-aria-label="@@mini.nowPlaying"
+        [attr.aria-pressed]="nowPlayingOpen()"
+        (click)="toggleNowPlaying()"
+      >
+        <ui-icon name="cc" [size]="20" />
+      </button>
+      <button
+        uiIconButton
+        type="button"
         aria-label="Fechar o player"
         i18n-aria-label="@@mini.close"
         (click)="close()"

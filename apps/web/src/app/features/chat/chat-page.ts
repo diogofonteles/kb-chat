@@ -196,6 +196,18 @@ export class ChatPage {
     if (!source) return true;
     return this.path() !== `/midia/${encodeURIComponent(source.id)}`;
   });
+  /**
+   * On a phone the page of what plays is the full-screen player (KBC-129 FR-2, v2 · Mídia —
+   * Player, celular): no navigation under it; its own "← Biblioteca" leads back.
+   */
+  protected readonly fullScreenPlayer = computed(() => {
+    const source = this.engineSource();
+    return (
+      !this.desktop() &&
+      source !== null &&
+      this.path() === `/midia/${encodeURIComponent(source.id)}`
+    );
+  });
   /** The collection in the header: on a media page, the one that page shows (KBC-091). */
   protected readonly topic = computed(() => {
     if (!this.onMedia()) return this.store.topic();

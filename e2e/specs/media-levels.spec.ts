@@ -202,7 +202,9 @@ test('AC-9: moving her audio to another collection with levels asks for a level 
   });
 
   await ana.goto(`/midia/${audio.id}`);
-  await ana.getByRole('button', { name: 'Editar informações' }).click();
+  // v2 (KBC-129): the page's editing actions are at the top of the player's ⋯.
+  await ana.getByRole('button', { name: 'Mais opções' }).click();
+  await ana.getByRole('menuitem', { name: 'Editar informações' }).click();
   const editor = ana.getByRole('dialog', { name: 'Editar informações' });
   await expect(
     editor.getByRole('group', { name: 'Nível' }).getByRole('radio', {

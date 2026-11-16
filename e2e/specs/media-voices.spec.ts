@@ -10,7 +10,7 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { useTheme } from './media-helpers.js';
-import { TURNS, transcribedAudio } from './voices-helpers.js';
+import { TURNS, showView, transcribedAudio } from './voices-helpers.js';
 
 // KBC-064: "Separar vozes" on the audio page, for whoever edits recordings. The E2E server
 // stores the transcript and the turns through the real paths (E2E-only routes), as a
@@ -31,6 +31,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     const owner = await ownerApi();
     const media = await transcribedAudio(owner);
     await page.goto(`/midia/${media.id}`);
+    await showView(page, 'Vozes');
     const block = voicesBlock(page);
     await expect(block.getByRole('heading', { name: 'Vozes' })).toBeVisible();
     await expect(block).toContainText('nenhuma impressão de voz é guardada');
@@ -52,6 +53,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     );
     expect(leased.status()).toBe(204);
     await page.reload();
+    await showView(page, 'Vozes');
     await expect(voicesBlock(page).getByRole('status')).toHaveText(
       'Separando vozes…',
     );
@@ -76,7 +78,8 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
       voicesBlock(page).getByRole('button', { name: 'Separar vozes de novo' }),
     ).toBeVisible();
     expect(await seriousViolations(page, 'app-voices-panel')).toEqual([]);
-    // The transcript beside the player labels each change of voice (FR-5).
+    // The transcript labels each change of voice (FR-5).
+    await showView(page, 'Transcrição');
     const transcript = page.getByRole('list', {
       name: 'Trechos da transcrição',
     });
@@ -98,6 +101,7 @@ test('AC-6: "número de vozes" travels with the request and a wrong one is said 
   const owner = await ownerApi();
   const media = await transcribedAudio(owner);
   await page.goto(`/midia/${media.id}`);
+  await showView(page, 'Vozes');
   const block = voicesBlock(page);
   const field = block.getByLabel('Número de vozes (opcional)');
   await field.fill('11');
@@ -129,6 +133,7 @@ test('AC-6: "número de vozes" travels with the request and a wrong one is said 
   });
   await owner.dispose();
   await page.reload();
+  await showView(page, 'Vozes');
   await expect(voicesBlock(page).getByRole('status')).toHaveText(
     'Vozes separadas: 2',
   );

@@ -67,7 +67,7 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
       >
         <span i18n="@@prep.step.name1">1 Enviar e escolher</span>
         @if (step() > 1) {
-          ✓
+          <span class="check">✓</span>
         }
       </li>
       <li
@@ -82,7 +82,7 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
           <span i18n="@@prep.step.name2">2 Processar</span>
         }
         @if (step() > 2) {
-          ✓
+          <span class="check">✓</span>
         }
       </li>
       <li
@@ -96,7 +96,7 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
           <a [routerLink]="validateLink()" i18n="@@tracks.step3"
             >3 Validar faixas</a
           >
-          ✓
+          <span class="check">✓</span>
         } @else {
           <span i18n="@@tracks.step3">3 Validar faixas</span>
         }
@@ -107,7 +107,7 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
       >
         @if (finished()) {
           <span i18n="@@tracks.step4Finished">4 Concluído</span>
-          ✓
+          <span class="check">✓</span>
         } @else if (skipped()) {
           <span i18n="@@prep.step.conclude">4 Concluir</span>
         } @else {

@@ -3,7 +3,10 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import {
+  provideZonelessChangeDetection,
+  type WritableSignal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { Router, provideRouter } from '@angular/router';
@@ -25,6 +28,7 @@ import {
   sessionAs,
 } from '../../testing/media-fixtures.js';
 import { answeringLevels } from '../../testing/level-fixtures.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { MediaPlayerPage } from './media-player-page.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
@@ -441,6 +445,17 @@ const answerArchivedTracks = (http: HttpTestingController): void => {
     .flush({ mediaId: ITEM.id, publication: null });
 };
 
+/** Opens the player's ⋯ "Mais opções" and chooses one of the page's actions (v2). */
+async function chooseInMore(
+  harness: RouterTestingHarness,
+  name: string,
+): Promise<void> {
+  fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+  await harness.fixture.whenStable();
+  fireEvent.click(screen.getByRole('menuitem', { name }));
+  await harness.fixture.whenStable();
+}
+
 async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve));
   TestBed.tick();
@@ -494,6 +509,40 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
     ).toBeTruthy();
   });
 
+  it('goes back to the transcript when the view chosen is no longer offered (KBC-129 FR-3)', async () => {
+    localStorage.clear();
+    const { harness, http } = await openPage(undefined, {
+      features: ['media', 'media-edit'],
+    });
+    http.expectOne(ITEM_URL).flush(TRANSCRIBED);
+    await settle();
+    answerArchivedTracks(http);
+    http.expectOne(transcriptRequest).flush(TRANSCRIPT);
+    http.expectOne(`${ITEM_URL}/edit`).flush(NOT_STARTED);
+    await harness.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Vozes' }));
+    await settle();
+    http.expectOne(`${ITEM_URL}/speakers`).flush({
+      mediaId: ITEM.id,
+      status: 'none',
+      transcriber: 'on',
+      transcriberOffSince: null,
+      canRequest: true,
+      diarization: null,
+    });
+    await harness.fixture.whenStable();
+    expect(screen.queryByText('Existia um rei.')).toBeNull();
+
+    // The session ends meanwhile: "Vozes" is no longer offered, nor any chip.
+    (TestBed.inject(SessionStore).me as WritableSignal<unknown>).set(null);
+    await settle();
+    await harness.fixture.whenStable();
+
+    expect(screen.queryByRole('button', { name: 'Vozes' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Vozes' })).toBeNull();
+    expect(screen.getByText('Existia um rei.')).toBeTruthy();
+  });
+
   it('hides the column when asked, keeps it hidden for the next media, and the header says low (FR-9, AC-10)', async () => {
     localStorage.clear();
     const { harness, http } = await openPage();
@@ -501,16 +550,17 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
     await settle();
     http.expectOne(transcriptRequest).flush(TRANSCRIPT);
     await harness.fixture.whenStable();
-    const toggle = screen.getByRole('button', { name: 'Esconder transcrição' });
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(toggle.getAttribute('aria-controls')).toBe('transcript-column');
-    fireEvent.click(toggle);
-    await harness.fixture.whenStable();
+    // v2 (KBC-129): the toggle is the first of the page's actions in ⋯ "Mais opções".
+    expect(document.getElementById('transcript-column')).not.toBeNull();
+    await chooseInMore(harness, 'Esconder transcrição');
     expect(screen.queryByRole('heading', { name: 'Transcrição' })).toBeNull();
+    expect(document.getElementById('transcript-column')).toBeNull();
     expect(screen.getAllByText(LOW)).toHaveLength(1);
-    const shown = screen.getByRole('button', { name: 'Mostrar transcrição' });
-    expect(shown.getAttribute('aria-expanded')).toBe('false');
-    expect(shown.hasAttribute('aria-controls')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+    await harness.fixture.whenStable();
+    expect(
+      screen.getByRole('menuitem', { name: 'Mostrar transcrição' }),
+    ).toBeTruthy();
     expect(localStorage.getItem('kb-chat.player.transcript-collapsed')).toBe(
       'on',
     );
@@ -574,6 +624,11 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     TestBed.tick();
     answerArchivedTracks(http);
     http.expectOne(`${ITEM_URL}/edit`).flush(NOT_STARTED);
+    await harness.fixture.whenStable();
+    // v2 (KBC-129 FR-3): the voices are the "Vozes" view of the body.
+    fireEvent.click(screen.getByRole('button', { name: 'Vozes' }));
+    await Promise.resolve();
+    TestBed.tick();
     http.expectOne(`${ITEM_URL}/speakers`).flush({
       mediaId: ITEM.id,
       status: 'none',
@@ -585,8 +640,12 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     await harness.fixture.whenStable();
     expect(screen.getByRole('heading', { name: 'Vozes' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Separar vozes' })).toBeTruthy();
-    // Not transcribed yet: "Preparar áudio" offers that too (KBC-072 AC-16).
-    expect(screen.getByRole('link', { name: 'Preparar áudio' })).toBeTruthy();
+    // Not transcribed yet: "Preparar áudio" offers that too (KBC-072 AC-16), in ⋯.
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+    await harness.fixture.whenStable();
+    expect(
+      screen.getByRole('menuitem', { name: 'Preparar áudio' }),
+    ).toBeTruthy();
   });
 
   it('names the recording of a track and listens in context (KBC-068 AC-2)', async () => {
@@ -790,6 +849,9 @@ describe('MediaPlayerPage: the transcript reads its voices again (KBC-064 FR-5)'
     answerArchivedTracks(http);
     http.expectOne(transcriptRequest).flush(TWO_SEGMENTS);
     http.expectOne(`${ITEM_URL}/edit`).flush(NOT_STARTED);
+    await harness.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Vozes' }));
+    await settle();
     http.expectOne(`${ITEM_URL}/speakers`).flush({
       mediaId: ITEM.id,
       status: 'done',
@@ -818,6 +880,8 @@ describe('MediaPlayerPage: the transcript reads its voices again (KBC-064 FR-5)'
       .flush({ items: [] });
     http.expectOne(`/api/v1/topics/${ITEM.topic}/authors`).flush({ items: [] });
     await harness.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Transcrição' }));
+    await harness.fixture.whenStable();
     const list = screen.getByRole('list', { name: 'Trechos da transcrição' });
     expect(within(list).getByText('Voz 1')).toBeTruthy();
     expect(within(list).getByText('Voz 2')).toBeTruthy();
@@ -840,8 +904,7 @@ describe('MediaPlayerPage: "Editar informações" (KBC-050 FR-2)', () => {
     const editable = aMediaItem({ canEdit: true });
     http.expectOne(ITEM_URL).flush(editable);
     await harness.fixture.whenStable();
-    fireEvent.click(screen.getByRole('button', { name: 'Editar informações' }));
-    await harness.fixture.whenStable();
+    await chooseInMore(harness, 'Editar informações');
     fireEvent.input(screen.getByLabelText('Título'), {
       target: { value: 'A conselheira do rei' },
     });
@@ -905,6 +968,30 @@ describe('MediaPlayerPage: listening by track (KBC-066 FR-9)', () => {
     http.expectOne(`${ITEM_URL}/tracks`).flush(TRACKS);
     await harness.fixture.whenStable();
     expect(screen.getByRole('heading', { name: 'Faixas' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Segunda/ }));
+    expect(media.element.currentTime).toBe(600);
+  });
+
+  it('shows the tracks as the "Faixas" view of the body, listed once (KBC-129 FR-3)', async () => {
+    const { harness, http, media } = await openPage(undefined, {
+      features: ['media', 'media-tracks'],
+    });
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await Promise.resolve();
+    TestBed.tick();
+    http.expectOne(`${ITEM_URL}/tracks`).flush(TRACKS);
+    await harness.fixture.whenStable();
+    const views = screen.getByRole('group', { name: 'Ver' });
+    // Who only listens: Transcrição · Faixas, never "Vozes".
+    expect(within(views).queryByRole('button', { name: 'Vozes' })).toBeNull();
+    fireEvent.click(within(views).getByRole('button', { name: 'Faixas' }));
+    await harness.fixture.whenStable();
+    expect(
+      within(views)
+        .getByRole('button', { name: 'Faixas' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(screen.getAllByRole('heading', { name: 'Faixas' })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: /Segunda/ }));
     expect(media.element.currentTime).toBe(600);
   });

@@ -56,8 +56,9 @@ import { MediaLevelBadge } from '../media-level-badge.js';
     }
     .title {
       margin: 0 0 var(--space-2);
-      font-family: var(--font-reading);
-      font-size: var(--text-lg);
+      font-family: var(--font-ui);
+      font-size: var(--text-item);
+      font-weight: 700;
     }
     .rows {
       display: grid;
@@ -76,8 +77,8 @@ import { MediaLevelBadge } from '../media-level-badge.js';
       width: 100%;
       min-height: 44px;
       padding: var(--space-2);
-      border: 1px solid transparent;
-      border-radius: var(--radius-md);
+      border: 0;
+      border-radius: var(--radius-menu);
       background: none;
       color: inherit;
       font: inherit;
@@ -85,14 +86,15 @@ import { MediaLevelBadge } from '../media-level-badge.js';
       cursor: pointer;
     }
     .row:hover {
-      background: var(--color-surface-muted);
+      background: var(--overlay-2);
     }
     .level {
       grid-column: 2 / -1;
     }
+    /* The track playing in the accent, besides "tocando agora" read aloud (UP-20). */
     .row[aria-current] {
-      border-color: var(--color-accent);
-      font-weight: 600;
+      color: var(--color-accent-text);
+      font-weight: 700;
     }
     .number,
     .time {

@@ -456,13 +456,17 @@ test('AC-10: a selection is copied in quotes with the title and the link to its 
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toMatch(new RegExp(`/midia/${lecture.id}\\?t=0$`));
 
-  await page.getByRole('button', { name: 'Esconder transcrição' }).click();
+  // v2 (KBC-129): showing and hiding the transcript is a page action in ⋯.
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  await page.getByRole('menuitem', { name: 'Esconder transcrição' }).click();
   await expect(segmentsList(page)).toHaveCount(0);
   await page.goto(`/midia/${other.id}`);
   await expect(page.getByRole('heading', { name: other.title })).toBeVisible();
+  await page.getByRole('button', { name: 'Mais opções' }).click();
   await expect(
-    page.getByRole('button', { name: 'Mostrar transcrição' }),
+    page.getByRole('menuitem', { name: 'Mostrar transcrição' }),
   ).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(segmentsList(page)).toHaveCount(0);
 });
 
@@ -527,7 +531,8 @@ test('AC-6: a low-confidence transcript says so above the text', async ({
   else await expect(badge).toBeInViewport();
   await captionsButton(page).click();
   // Hidden column, subtitles on: the header keeps the notice in view (KBC-036 BR-5).
-  await page.getByRole('button', { name: 'Esconder transcrição' }).click();
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  await page.getByRole('menuitem', { name: 'Esconder transcrição' }).click();
   await captionsButton(page).click();
   await expect(
     page.getByText(
@@ -785,18 +790,21 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
   });
 }
 
-test('the column sits beside the player on a wide screen and below it on a phone', async ({
+// v2 (KBC-129): the transcript is the page's body, under the action bar at every width;
+// on a wide screen "Sobre este áudio" (the bookmarks) sits beside it, on a phone below it.
+test('the transcript sits under the player, with "Sobre" beside it on a wide screen and below it on a phone', async ({
   page,
 }) => {
   await openPlayer(page, lecture);
-  const [player, panel] = await Promise.all([
+  const [player, panel, about] = await Promise.all([
     page.locator('app-media-player').boundingBox(),
     page.locator('app-transcript-panel').boundingBox(),
+    page.getByRole('complementary', { name: 'Sobre este áudio' }).boundingBox(),
   ]);
-  if (!player || !panel) throw new Error('not laid out');
-  if (desktop(page))
-    expect(panel.x).toBeGreaterThan(player.x + player.width - 1);
-  else expect(panel.y).toBeGreaterThan(player.y + player.height - 1);
+  if (!player || !panel || !about) throw new Error('not laid out');
+  expect(panel.y).toBeGreaterThan(player.y + player.height - 1);
+  if (desktop(page)) expect(about.x).toBeGreaterThan(panel.x + panel.width - 1);
+  else expect(about.y).toBeGreaterThan(panel.y + panel.height - 1);
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth,
   );
