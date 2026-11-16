@@ -1,6 +1,8 @@
 <section class="page" aria-labelledby="track-bounds-title">
-  <a class="back" [routerLink]="['/midia', id()]" i18n="@@trackEdit.backToTrack"
-    >← Voltar à faixa</a
+  <a class="back" [routerLink]="['/midia', id()]"
+    ><ui-icon name="chevLeft" [size]="16" /><span i18n="@@trackEdit.backToTrack"
+      >Voltar à faixa</span
+    ></a
   >
   @if (loadError(); as text) {
     <div role="alert">
@@ -15,10 +17,16 @@
       </button>
     </div>
   } @else if (current(); as track) {
-    <h2 id="track-bounds-title" i18n="@@trackEdit.bounds">
-      Ajustar início e fim
-    </h2>
-    <p class="note">{{ track.title }} · {{ track.recordingTitle }}</p>
+    <header class="v2-head">
+      <ui-cover class="head-cover" [title]="track.title" [size]="112" />
+      <div class="head-text">
+        <h2 id="track-bounds-title" class="kicker" i18n="@@trackEdit.bounds">
+          Ajustar início e fim
+        </h2>
+        <p class="heading">{{ track.title }}</p>
+        <p class="sub">{{ track.recordingTitle }}</p>
+      </div>
+    </header>
     <audio
       #auditionElement
       hidden
@@ -47,7 +55,9 @@
       (listen)="listen($event)"
       (edgeChange)="edge.set($event)"
     />
-    <p class="times" aria-live="polite">{{ timesText() }}</p>
+    <!-- The text starts the paragraph: "Início 0:00,0 · Fim 0:15,0", read as one. -->
+    <!-- prettier-ignore -->
+    <p class="times" aria-live="polite" [class.start-moved]="startMoved()" [class.end-moved]="endMoved()">{{ timesText() }}</p>
     <div class="line">
       <span class="note">
         @if (edge() === 'start') {
@@ -161,7 +171,21 @@
         <ng-container i18n="@@trackEdit.cutDone">Pronto</ng-container>
       }
     </p>
-    <div class="line-actions">
+    <div class="line-actions save-bar">
+      @if (unsaved()) {
+        <p class="unsaved">
+          <span i18n="@@trackEdit.unsaved">Não salvo</span>
+          ·
+          <button
+            type="button"
+            class="link"
+            (click)="undo()"
+            i18n="@@tracks.undo"
+          >
+            Desfazer
+          </button>
+        </p>
+      }
       <a
         class="secondary"
         [routerLink]="['/midia', id()]"

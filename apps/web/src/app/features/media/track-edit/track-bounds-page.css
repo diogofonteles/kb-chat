@@ -1,9 +1,9 @@
+/* v2 "/limites" (KBC-130): back, the assistant head, the big waveform, the start and end in
+   a pill (the moved one in green), the tools in pills and "Não salvo · Desfazer" by save. */
 .page {
   display: grid;
-  gap: var(--space-3);
-  max-width: 72rem;
-  margin: 0 auto;
-  padding: var(--space-6);
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-8);
 }
 
 h2 {
@@ -11,13 +11,42 @@ h2 {
 }
 
 .back {
-  color: var(--color-accent-strong);
-  font-weight: 600;
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  justify-self: start;
+  min-height: var(--target);
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.back:hover {
+  color: var(--color-text);
 }
 
 .times {
+  justify-self: start;
   margin: 0;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
+  font-size: var(--text-sm);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.times.start-moved,
+.times.end-moved {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: var(--color-accent-text);
+}
+
+.note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
 }
 
 .status {
@@ -35,8 +64,51 @@ h2 {
   gap: var(--space-2);
 }
 
+.line-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2) var(--space-3);
+}
+
+.unsaved {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 auto 0 0;
+  color: var(--color-warn);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.link {
+  min-height: var(--target);
+  padding: 0 var(--space-1);
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.conflict {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-warn) 14%, transparent);
+}
+
+.conflict p {
+  margin: 0;
+}
+
 @media (max-width: 1023px) {
   .page {
-    padding: var(--space-4);
+    padding: var(--space-4) var(--space-4)
+      calc(var(--space-6) + var(--shell-mobile-foot));
   }
 }

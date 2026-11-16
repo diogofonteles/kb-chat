@@ -25,6 +25,7 @@ import {
   type RetryStage,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import { UiButton, UiCover, UiIcon } from '@ui/index.js';
 import { mediaPagePath, mediaUrl } from '@core/media/media-api.js';
 import { editPagePath } from '@core/media/media-edit-api.js';
 import { PreparationApi } from '@core/media/preparation-api.js';
@@ -82,9 +83,16 @@ function concludedText({ tracks, voices }: MediaPreparation): string {
     PreparationTracks,
     PreparationVoices,
     TranscriberStatus,
+    UiButton,
+    UiCover,
+    UiIcon,
   ],
   templateUrl: './preparation-page.html',
-  styleUrls: ['./preparation-buttons.css', './preparation-page.css'],
+  styleUrls: [
+    './preparation-buttons.css',
+    './prep-head.css',
+    './preparation-page.css',
+  ],
   providers: [
     PlanForm,
     PreparationWatch,

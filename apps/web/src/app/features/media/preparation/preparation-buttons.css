@@ -1,4 +1,6 @@
-/* The flow's buttons: every component keeps its own styles (NG-32), so these are shared. */
+/* The flow's buttons: every component keeps its own styles (NG-32), so these are shared.
+   v2 (KBC-130): pills, outline for the secondary action and the accent for the main one,
+   like `[uiButton]` (styles/ui.css). */
 .secondary,
 .primary {
   display: inline-flex;
@@ -6,25 +8,46 @@
   justify-content: center;
   gap: var(--space-1);
   min-height: var(--target);
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--overlay-4);
+  border-radius: var(--radius-pill);
   background: none;
-  color: inherit;
+  color: var(--color-text);
   font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
   text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
+  transition:
+    transform 120ms var(--ease),
+    border-color 120ms var(--ease);
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: var(--color-text);
+  transform: scale(1.03);
 }
 
 .primary {
-  border-color: var(--color-accent);
-  background: var(--color-accent-strong);
+  border-color: transparent;
+  background: var(--color-accent);
   color: var(--color-on-accent);
-  font-weight: 600;
+}
+
+.primary:hover:not(:disabled) {
+  transform: scale(1.03);
 }
 
 .secondary:disabled,
 .primary:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: default;
+}
+
+@media (min-width: 1024px) {
+  .secondary,
+  .primary {
+    min-height: 2.25rem;
+  }
 }

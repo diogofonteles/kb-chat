@@ -1,6 +1,9 @@
+/* v2 step 1 (KBC-130): the free stages as rows with a switch, the division in three big
+   cards (the chosen one in green, one that cannot be chosen faded), the summary below. */
 :host {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
+  container-type: inline-size;
 }
 
 .options,
@@ -14,23 +17,39 @@
 }
 
 legend {
+  margin-bottom: var(--space-3);
   padding: 0;
-  font-weight: 600;
+  font-size: var(--text-meta);
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.tracks {
+  margin-top: var(--space-2);
+}
+
+@container (min-width: 40rem) {
+  .tracks {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .tracks legend {
-  font-weight: 500;
+  margin-bottom: var(--space-3);
+  color: var(--color-text);
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
 }
 
 .choice {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--space-3);
   align-items: center;
-  min-height: 48px;
+  min-height: var(--target);
   cursor: pointer;
 }
 
-.choice input {
+.choice input[type='radio'] {
   flex: none;
   width: 20px;
   height: 20px;
@@ -39,12 +58,86 @@ legend {
 }
 
 .name {
-  font-weight: 500;
+  font-weight: 700;
 }
 
+/* The free stages: a row with the switch on the right. */
+.option.row {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--overlay-1);
+}
+
+.option.row .choice {
+  justify-content: space-between;
+}
+
+.option.row .choice input {
+  order: 2;
+}
+
+.option.row .hint,
+.option.row .note {
+  padding-right: 3.5rem;
+}
+
+.option.subjects {
+  grid-column: 1 / -1;
+}
+
+/* The division: a card, the whole card chooses (its label stretches over it). */
+.option.card {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-height: 9rem;
+  padding: var(--space-4);
+  border: 1px solid var(--overlay-line);
+  border-radius: var(--radius-card);
+  background: var(--overlay-1);
+}
+
+.option.card .choice {
+  align-items: flex-start;
+  font-weight: 700;
+  font-size: var(--text-md);
+}
+
+.option.card .choice::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+/* The radio stays above the stretched label: a click on it is its own. */
+.option.card .choice input {
+  position: relative;
+  z-index: 1;
+}
+
+.option.card:has(input:checked) {
+  border: 2px solid var(--color-accent);
+  padding: calc(var(--space-4) - 1px);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.option.card:has(input:focus-visible) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Cannot be chosen: muted words and a dashed edge, never faded below the contrast. */
 .option.off .choice {
   color: var(--color-text-muted);
   cursor: not-allowed;
+}
+
+.option.card.off {
+  border-style: dashed;
 }
 
 .option.off input {
@@ -54,9 +147,13 @@ legend {
 .hint,
 .note {
   margin: 0;
-  padding-left: calc(20px + var(--space-2));
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
+  line-height: 1.4;
+}
+
+.option.card .hint {
+  padding-left: calc(20px + var(--space-3));
 }
 
 .note {
@@ -65,8 +162,6 @@ legend {
 
 .summary {
   margin: 0;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-muted);
-  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
 }

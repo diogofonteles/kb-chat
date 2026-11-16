@@ -152,6 +152,7 @@ export class TrackTimeline {
     return this.tracks().map(({ track, ordinal }) => ({
       id: track.id,
       ordinal,
+      hue: regionHue(ordinal),
       left: (track.startMs / total) * 100,
       width: ((track.endMs - track.startMs) / total) * 100,
       proposed: isProposal(track),
@@ -172,6 +173,7 @@ export class TrackTimeline {
         return {
           id: track.id,
           ordinal,
+          hue: regionHue(ordinal),
           active,
           proposed: isProposal(track),
           left: this.percent(active ? this.shownEdge('start') : track.startMs),
@@ -543,3 +545,6 @@ const LISTEN_KEYS: Readonly<Record<string, ListenKind>> = {
   i: 'start',
   f: 'end',
 };
+
+/** The v2 region colours cycle by track number (blue, orange, green), as in the stepper's cards. */
+export const regionHue = (ordinal: number): number => (ordinal - 1) % 3;

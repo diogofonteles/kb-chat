@@ -1,3 +1,6 @@
+/* v2 stepper (KBC-130 FR-1): four thin bars, green when done, white on the current step,
+   faint ahead; the step names under them. On a phone the bars stay and the names open
+   with "Ver os passos". */
 :host {
   display: block;
   container-type: inline-size;
@@ -6,8 +9,8 @@
 .step-text {
   display: inline;
   margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
+  font-weight: 700;
 }
 
 .step-text .wide {
@@ -15,45 +18,96 @@
 }
 
 .toggle {
-  min-height: 48px;
+  min-height: var(--target);
   margin-left: var(--space-2);
   padding: 0 var(--space-2);
   border: none;
   background: none;
-  color: var(--color-accent);
+  color: var(--color-text-muted);
   font: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
+  font-weight: 700;
   text-decoration: underline;
   cursor: pointer;
 }
 
 .steps {
-  display: none;
-  gap: var(--space-1) var(--space-3);
-  margin: var(--space-1) 0 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
   padding: 0;
   list-style: none;
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
+  font-weight: 500;
   color: var(--color-text-muted);
 }
 
-.steps.open {
-  display: grid;
+.steps li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-1);
+  align-items: baseline;
+  min-width: 0;
+}
+
+/* The bar of each step: its state in shape and words, never by colour alone (UP-20). */
+.steps li::before {
+  content: '';
+  flex-basis: 100%;
+  height: 4px;
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-4);
+}
+
+.steps li.done::before {
+  background: var(--color-accent);
+}
+
+.steps li[aria-current]::before {
+  background: var(--color-text);
+}
+
+.steps li.done,
+.steps [aria-current] {
+  color: var(--color-text);
 }
 
 .steps [aria-current] {
-  color: var(--color-text);
   font-weight: 700;
+}
+
+.steps li.done {
+  color: var(--color-text);
+}
+
+.steps a {
+  color: inherit;
 }
 
 .steps .skipped {
   font-style: italic;
 }
 
+/* A phone keeps the bars and hides the names until asked. */
+.steps:not(.open) li > * {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.steps:not(.open) li {
+  font-size: 0;
+}
+
 .why {
-  margin: var(--space-1) 0 0;
+  margin: var(--space-2) 0 0;
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
 }
 
 @container (min-width: 44rem) {
@@ -66,8 +120,21 @@
     display: none;
   }
 
-  .steps {
-    display: flex;
-    flex-wrap: wrap;
+  .steps:not(.open) li > * {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
   }
+
+  .steps:not(.open) li {
+    font-size: var(--text-meta);
+  }
+}
+
+.check {
+  color: var(--color-accent-text);
+  font-weight: 700;
 }
