@@ -14,6 +14,65 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 
 ## Itens (ordem de execução)
 
+### Prioridade máxima: redesign v2 (pedido de 2026-11-15)
+
+Pedido do dono: levar o app inteiro para a UI/UX v2 desenhada no Figma ("Nova Alexandria — UI", páginas `v2 ·`) e criar itens para as funcionalidades que a v2 idealizou e ainda não existem. O plano, o conceito, os tokens, a regra de áudio, a estratégia e a barra de qualidade estão em [`docs/design/redesign-v2.md`](../design/redesign-v2.md). Estes itens vêm antes de todos os outros `ready`, na ordem abaixo: primeiro a fundação e a casca, depois as áreas, depois as funcionalidades novas.
+
+| Atividade → | Entrar | Navegar | Perguntar e achar | Ler e conferir | Ouvir | Preparar | Configurar | Acompanhar | Compartilhar e seguir |
+|---|---|---|---|---|---|---|---|---|---|
+| **Esqueleto v2** | Tema revisado, componentes, Entrar e páginas públicas (KBC-124) | Casca: barra superior, Sua biblioteca, player e navegação do celular (KBC-125) | — | — | — | — | — | — | — |
+| **Áreas v2** | — | — | Home e busca (KBC-126) | Documento e Pesquisa com IA com a fonte ao lado (KBC-127) | Biblioteca (KBC-128); Player, Fila e Marcadores (KBC-129) | Preparar, Faixas e Limites (KBC-130) | Pessoais e Assistente (KBC-131); administração e mídia (KBC-132) | — | — |
+| **Funcionalidades da v2** | — | Busca global com sugestões e recentes (KBC-134) | Página do assunto (KBC-137) | — | Favoritas (KBC-052), Fila "A seguir" (KBC-053), Playlists (KBC-054), Pastas e fixar (KBC-055), Página do autor (KBC-059) | — | — | Notificações (KBC-133) | Compartilhar link (KBC-136); Seguir autor (KBC-135) |
+
+| ID | Título | Fatia | Status | Depende de |
+|---|---|---|---|---|
+| [KBC-124](KBC-124-v2-foundation-sign-in-and-public-pages.md) | **Prioridade.** Redesign v2 (esqueleto): tema revisado, Figtree e componentes base, com Entrar e as páginas públicas já na v2 | ui-v2-skeleton | ready | — |
+| [KBC-125](KBC-125-v2-shell.md) | **Prioridade.** Casca v2: barra superior, Sua biblioteca, barra do player e navegação do celular com mini player | ui-v2-skeleton | ready | KBC-124 |
+| [KBC-126](KBC-126-v2-conversation-home-and-search.md) | Conversa e busca v2: home de streaming, Melhor resultado e filtros em chips | ui-v2-areas | ready | KBC-125 |
+| [KBC-127](KBC-127-v2-document-and-ai-research.md) | Documento como página e Pesquisa com IA com a fonte aberta ao lado (460) ou em folha (85%) | ui-v2-areas | ready | KBC-125 |
+| [KBC-128](KBC-128-v2-media-library.md) | Biblioteca de mídia v2: cabeçalho com capa, tabela, atenção, grade e seleção | ui-v2-areas | ready | KBC-125 |
+| [KBC-129](KBC-129-v2-player-queue-and-bookmarks.md) | Player como "Tocando agora" expandido, painel direito, Fila de processamento e Meus marcadores | ui-v2-areas | ready | KBC-125 |
+| [KBC-130](KBC-130-v2-prepare-tracks-and-bounds.md) | Preparar, Faixas e Limites v2: stepper, editor com a onda e barra de aprovar | ui-v2-areas | ready | KBC-125 |
+| [KBC-131](KBC-131-v2-settings-page-personal-and-wizard.md) | Configurações como página: Conta, Sua IA, Preferências, Acessos, Sobre e o Assistente | ui-v2-areas | ready | KBC-125 |
+| [KBC-132](KBC-132-v2-settings-admin-and-media.md) | Configurações de administração e mídia: Pessoas em tabela, modais com abas, IA da aplicação, Auditoria, Transcritores, Termos, Groq e Perfis de voz | ui-v2-areas | ready | KBC-131 |
+| [KBC-133](KBC-133-notifications.md) | Notificações no sino: áudio processado, faixas para validar, falhas e pedidos de acesso | ui-v2-features | ready | KBC-125 |
+| [KBC-134](KBC-134-global-search-suggestions-and-recents.md) | Busca global: sugestões enquanto digita, buscas recentes e teclado | ui-v2-features | ready | KBC-125 |
+| [KBC-137](KBC-137-subject-pages.md) | Página do assunto com prateleiras | ui-v2-features | ready | KBC-127 |
+| [KBC-136](KBC-136-share-links.md) | Compartilhar link de documento, de áudio no tempo e de trecho, só para quem tem acesso | ui-v2-features | ready | KBC-127, KBC-129 |
+| [KBC-135](KBC-135-follow-authors.md) | Seguir autor, com novidades na home e no sino (revê o "Out" do KBC-059; o dono confirma) | ui-v2-features | ready | KBC-059, KBC-133, KBC-129 |
+
+Itens que já existiam e que a v2 desenhou (sobem de prioridade junto, na ordem: KBC-052, KBC-053, KBC-054, KBC-055, KBC-059): ver a seção "Fase 2" abaixo. Cada um ganhou a nota "Redesign v2" com o ponto de entrada na casca nova.
+
+Decisões assumidas pelo padrão recomendado (o dono pode mudar), em `docs/design/redesign-v2.md` › Decisões: D1, troca área por área sem feature flag; D2, "Escuro (revisado)" como tema padrão; D3, os textos novos do Figma entram como estão; D4, só as páginas `v2 ·` valem como referência.
+
+### Resposta completa e correta no Profundo (pedido de 2026-11-16)
+
+Pedido do dono: a Pesquisa com IA, a partir do Profundo, deve devolver sempre uma resposta completa e correta sobre o assunto, sem o estudante precisar conhecer o acervo. O caminho é um **mapa do acervo** feito antes da pergunta e verificado por código:
+- trechos com os ensinamentos;
+- uma árvore de assuntos com sinônimos;
+- um dossiê por assunto.
+
+Ele é atualizado a cada documento que entra e montado localmente, com a assinatura, para o acervo que já existe. A análise está em [`docs/research/2026-11-16-complete-answers-deep.md`](../research/2026-11-16-complete-answers-deep.md). O KBC-120 foi ampliado: o patch do QMD vale para todos no modo "Tudo".
+
+| ID | Título | Fatia | Status | Depende de |
+|---|---|---|---|---|
+| [KBC-138](KBC-138-study-answer-key-and-coverage.md) | Gabarito de estudo: medir quanto a resposta do Profundo cobre | complete-answers | ready | — |
+| [KBC-139](KBC-139-kb-map-sections-and-propositions.md) | Mapa (1): seções com os ensinamentos, o contexto e o autor | complete-answers | ready | KBC-138 |
+| [KBC-140](KBC-140-kb-map-subject-tree.md) | Mapa (2): árvore de assuntos com sinônimos, revisada pelo dono | complete-answers | ready | KBC-139 |
+| [KBC-141](KBC-141-kb-map-subject-dossiers-and-check.md) | Mapa (3): dossiê por assunto e a checagem de completude | complete-answers | ready | KBC-140 |
+| [KBC-142](KBC-142-kb-map-update-on-insert.md) | Mapa (4): todo documento que entra compõe o mapa sozinho | complete-answers | ready | KBC-141 |
+| [KBC-143](KBC-143-kb-map-local-backfill.md) | Mapa (5): mapear localmente o acervo existente com a assinatura e subir | complete-answers | ready | KBC-142 |
+| [KBC-144](KBC-144-deep-research-guided-by-the-map.md) | Profundo guiado pelo mapa, com cobertura por aspecto | complete-answers | ready | KBC-143, KBC-120 |
+| [KBC-145](KBC-145-citation-verification.md) | Verificação de citações | complete-answers | ready | KBC-144 |
+| [KBC-146](KBC-146-full-term-search.md) | Busca completa por termos na tela de Buscar | complete-answers | ready | — |
+
+Decisões assumidas (o dono pode mudar), na análise, §7:
+- D1: a completude vem do mapa, verificado por `kb-map check`;
+- D2: o dono revisa a árvore;
+- D3: `tools/kb-map` neste repositório;
+- D4: a meta de 95 % dos aspectos;
+- D5: o backfill na assinatura.
+
 ### Prioridade: faixas transcritas como documentos do acervo (pedido de 2026-11-05)
 
 Pedido do dono, prioridade: cada faixa transcrita vira um documento do acervo, classificado pelo `kb` como os textos (complemento: "usar o kb para fazer o index e classificacao"), pesquisável pela IA, e a referência abre a transcrição no trecho com o player ao lado. ADR [0035](../adr/0035-tracks-as-kb-documents.md) (substitui o §4 da 0024); tela T22. Vem antes dos demais itens `ready`.
