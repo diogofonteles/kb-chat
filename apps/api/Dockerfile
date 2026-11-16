@@ -59,6 +59,10 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate \
      fi \
   && pnpm add -g "@openai/codex@${CODEX_VERSION}" \
   && rm -rf /tmp/pnpm-store
+# QMD's sub-searches sized by candidateLimit (KBC-120, ADR 0036 §7): a text other than the
+# expected one (a new QMD_VERSION) fails the build here instead of shipping short pages.
+COPY deploy/qmd/candidates-per-subsearch.mjs /opt/qmd-patch/
+RUN node /opt/qmd-patch/candidates-per-subsearch.mjs "$(pnpm root -g)/@tobilu/qmd"
 
 # --- Runtime: non-root, tini as PID 1 (the CLIs run in their own process groups) ---
 FROM ${NODE_IMAGE} AS runtime

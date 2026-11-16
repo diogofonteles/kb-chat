@@ -5,6 +5,13 @@ export interface IndexQuery {
   readonly q: string;
   readonly mode: SearchMode;
   readonly limit: number;
+  /**
+   * How deep each sub-search of a fused query ranks before the fusion (KBC-120), never less
+   * than `limit`: QMD's default is 20 per sub-search and 40 fused, so the best hits of the whole
+   * ranking may lie past it. Set for a viewer who sees part of a collection (the whole budget)
+   * and for the hybrid mode of whoever sees all of it; absent, the index's own depth.
+   */
+  readonly depth?: number;
 }
 
 /** A hit as the index reports it; `id` is the topic-relative markdown path. */

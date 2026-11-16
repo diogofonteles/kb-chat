@@ -15,6 +15,7 @@ server.registerTool(
       searches: z.array(z.object({ type: z.string(), query: z.string() })),
       collections: z.array(z.string()),
       limit: z.number(),
+      candidateLimit: z.number().optional(),
       rerank: z.boolean(),
     },
   },

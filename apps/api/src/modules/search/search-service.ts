@@ -48,6 +48,7 @@ import {
   candidateLimit,
   deeperLimit,
   needsDeeper,
+  WHOLE_VIEW_HYBRID_DEPTH,
 } from './candidate-budget.js';
 
 export interface SearchServiceDeps {
@@ -221,14 +222,27 @@ export class SearchService {
     const filtered = Object.values(filters).some((values) => values.length > 0);
     const base = filtered ? CANDIDATES.filtered : CANDIDATES.plain;
     if (view.seesAll) {
-      const found = await this.candidates(catalog, query, base);
+      // Exact and semantic as the index ranks them, as before levels; the hybrid fusion deep
+      // enough to match the fusion over every text (KBC-120 BR-2).
+      const found = await this.candidates(catalog, query, {
+        limit: base,
+        ...(query.mode === 'all' ? { depth: WHOLE_VIEW_HYBRID_DEPTH } : {}),
+      });
       return this.grouped(catalog, found.kept, found.full);
     }
+    // Each sub-search ranks the whole budget: the best visible hits may lie past the index's
+    // default depth (KBC-120).
     const first = candidateLimit(base, view.visibleShare(catalog));
-    let found = await this.candidates(catalog, query, first);
+    let found = await this.candidates(catalog, query, {
+      limit: first,
+      depth: first,
+    });
     const short = { visible: found.kept.length, base, limit: first };
     if (needsDeeper({ ...short, indexFull: found.full }))
-      found = await this.candidates(catalog, query, deeperLimit(first));
+      found = await this.candidates(catalog, query, {
+        limit: deeperLimit(first),
+        depth: deeperLimit(first),
+      });
     const capped = found.full && found.kept.length >= base;
     return this.grouped(catalog, found.kept, capped);
   }
@@ -237,13 +251,14 @@ export class SearchService {
   private async candidates(
     catalog: TopicCatalog,
     { q, mode, filters, tracks, view }: GroupQuery,
-    limit: number,
+    { limit, depth }: { readonly limit: number; readonly depth?: number },
   ): Promise<{ kept: Candidate[]; full: boolean }> {
     const hits = await this.textsAndTracks(catalog, {
       // A subject alone (KBC-070): the documents are found by its name.
       q: normalizeQuestion(q) || normalizeQuestion(filters.concepts.join(' ')),
       mode,
       base: limit,
+      depth,
     });
     const kept = this.keepCataloged(catalog, { hits: hits.kept, tracks, view });
     return { kept, full: hits.texts >= limit };
@@ -268,7 +283,12 @@ export class SearchService {
    */
   private async textsAndTracks(
     catalog: TopicCatalog,
-    query: { q: string; mode: IndexQuery['mode']; base: number },
+    query: {
+      q: string;
+      mode: IndexQuery['mode'];
+      base: number;
+      depth: number | undefined;
+    },
   ): Promise<{ kept: readonly IndexHit[]; texts: number }> {
     const tracks = this.tracksIn(catalog);
     const isTrack = (hit: IndexHit) => {
@@ -283,6 +303,7 @@ export class SearchService {
         q: query.q,
         mode: query.mode,
         limit,
+        ...(query.depth === undefined ? {} : { depth: query.depth }),
       });
       const texts = hits.filter((hit) => !isTrack(hit)).length;
       if (hits.length < limit || extra >= tracks || texts >= query.base)
