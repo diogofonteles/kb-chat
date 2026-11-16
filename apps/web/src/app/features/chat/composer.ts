@@ -115,6 +115,15 @@ export class Composer {
     this.field().nativeElement.focus();
   }
 
+  /** A question started elsewhere ("Perguntar à IA" on a document), the caret at its end. */
+  fill(text: string): void {
+    this.text.set(text);
+    const field = this.field().nativeElement;
+    field.value = text;
+    field.focus();
+    field.setSelectionRange(text.length, text.length);
+  }
+
   protected updateText(event: Event): void {
     this.text.set((event.target as HTMLTextAreaElement).value);
   }

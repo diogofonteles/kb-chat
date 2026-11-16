@@ -18,6 +18,17 @@ import { documentSchema, type DocumentRef } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { documentUrl } from '@core/api/kb-api.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
+import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
+import type { CitedSource } from '@features/chat/chat-store.js';
+import {
+  UiAvatar,
+  UiButton,
+  UiChip,
+  UiCover,
+  UiEmptyState,
+  UiIcon,
+  UiIconButton,
+} from '@ui/index.js';
 import { describeFacets } from '@core/i18n/facet-labels.js';
 import {
   sectionIndex,
@@ -56,17 +67,39 @@ const BLOCK_SELECTOR = 'p, li, blockquote, h1, h2, h3, h4, h5, h6, td';
 
 type CopyState = 'idle' | 'copied' | 'failed';
 
-/** Reads one document beside the conversation (desktop) or full screen (mobile) — screens.md T3. */
+/** Each panel's own ids: the page's panel and the phone's reading sheet may both exist. */
+let nextPanel = 0;
+
+/**
+ * Reads one document beside the conversation (desktop) or full screen (mobile) — screens.md
+ * T3. v2 (KBC-127): the document as a page (cover, the facets over the title, "Perguntar à
+ * IA", the occurrences "1 de N" and "Sobre este documento"), and a source of an AI answer
+ * with "Fonte ‹ ›", "Abrir documento", "Copiar trecho" and "Próximo trecho" (FR-1); also
+ * inside the phone's reading sheet (FR-2). "Tela cheia" spreads it over the window.
+ */
 @Component({
   selector: 'app-document-panel',
-  imports: [SeeAlsoSection, AuthorshipBadge, DocumentLevel],
+  imports: [
+    SeeAlsoSection,
+    AuthorshipBadge,
+    DocumentLevel,
+    UiAvatar,
+    UiButton,
+    UiChip,
+    UiCover,
+    UiEmptyState,
+    UiIcon,
+    UiIconButton,
+  ],
   templateUrl: './document-panel.html',
   styleUrl: './document-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    role: 'dialog',
-    'aria-modal': 'false',
-    '[attr.aria-labelledby]': '"document-title"',
+    '[attr.role]': 'inSheet() ? "tabpanel" : "dialog"',
+    '[attr.aria-modal]': 'inSheet() ? null : "false"',
+    '[attr.aria-labelledby]': 'titleId',
+    '[class.full]': 'full()',
+    '[class.in-sheet]': 'inSheet()',
     '(keydown.escape)': 'closed.emit()',
   },
 })
@@ -85,7 +118,19 @@ export class DocumentPanel {
   /** The question that led here; its words are highlighted in the text (KBC-003 FR-1). */
   readonly highlight = input<string | null>(null);
   readonly canGoBack = input(false);
+  /** The text sources of the AI answer that opened it, for "Fonte ‹ ›" (KBC-127 FR-1). */
+  readonly sources = input<readonly CitedSource[]>([]);
+  /** Inside the phone's reading sheet: its tabs and handle replace "Fonte ‹ ›" and ✕. */
+  readonly inSheet = input(false);
+  /** A source of an answer, also without its list (the sheet): "Abrir documento". */
+  readonly sourceMode = input(false);
+  /** "Perguntar à IA" only where the research view is available. */
+  readonly canAskAi = input(false);
   readonly closed = output();
+  readonly sourceChosen = output<CitedSource>();
+  readonly documentOpened = output();
+  /** "Perguntar à IA": the document's title, for the question to start from. */
+  readonly askedAi = output<string>();
   readonly back = output();
   readonly navigated = output<DocumentRef>();
   /** A track linked in "Veja também" opens the T22 panel (KBC-101 AC-7). */
@@ -109,6 +154,41 @@ export class DocumentPanel {
     const doc = this.loaded();
     return doc ? describeFacets(doc) : '';
   });
+  protected readonly titleId = `document-title-${nextPanel++}`;
+  protected readonly full = linkedSignal({
+    source: this.inSheet,
+    computation: () => false,
+  });
+  protected readonly inSource = computed(
+    () => this.sourceMode() || this.sources().length > 0,
+  );
+  /** "Fonte 2 de 4" and the source's [n], when the answer's list came along. */
+  protected readonly sourceNav = computed(() => {
+    const sources = this.sources();
+    const at = sources.findIndex((one) => one.id === this.documentId());
+    const source = sources[at];
+    if (this.inSheet() || !source) return null;
+    return { position: at + 1, total: sources.length, n: source.n };
+  });
+  protected readonly nextLabel = computed(() =>
+    this.inSource()
+      ? $localize`:@@source.nextPassage:Próximo trecho`
+      : $localize`:@@panel.next:Próxima ocorrência`,
+  );
+  protected readonly conceptLine = computed(() =>
+    (this.loaded()?.concepts ?? []).join(' · '),
+  );
+  private readonly labels = injectAuthorshipLabels();
+  /** The avatar of "Autoria": the author's name, else the authorship's own label. */
+  protected readonly authorName = computed(() => {
+    const doc = this.loaded();
+    if (!doc) return '';
+    return doc.author ?? this.labels()[doc.authorship];
+  });
+  protected readonly failedTitle = computed(
+    () =>
+      $localize`:@@panel.failedTitle:Não foi possível abrir “${this.title()}:title:”`,
+  );
   protected readonly conceptButtons = computed(() =>
     (this.loaded()?.concepts ?? []).map((name) => ({
       name,
@@ -199,6 +279,14 @@ export class DocumentPanel {
     });
     // A section picked in the index scrolls into view once its chunk is rendered.
     afterRenderEffect(() => this.scrollToSection(this.pendingSection()));
+  }
+
+  /** "Fonte ‹ ›": the answer's previous or next text source, round the list. */
+  protected moveSource(delta: 1 | -1): void {
+    const sources = this.sources();
+    const at = sources.findIndex((one) => one.id === this.documentId());
+    const next = sources[(at + delta + sources.length) % sources.length];
+    if (next) this.sourceChosen.emit(next);
   }
 
   /** ▼ past the last occurrence on screen reads on into the next chunk; otherwise it wraps. */

@@ -291,19 +291,25 @@ test('the states of the results: nothing found and the error, each with its acti
   await shot(page, 'chat-results-error');
 });
 
-test('NFR-1: the home and the results have no serious or critical axe violation', async ({
-  page,
-}) => {
-  await page.goto('/');
-  await expect(page.getByText('O que você quer estudar hoje?')).toBeVisible();
-  const serious = async () =>
-    (
-      await new AxeBuilder({ page }).include('main').analyze()
-    ).violations.filter(
-      (violation) =>
-        violation.impact === 'serious' || violation.impact === 'critical',
+for (const theme of ['revised', 'light', 'dark', 'esoteric']) {
+  test(`NFR-1: the home and the results have no serious or critical axe violation (${theme})`, async ({
+    page,
+  }) => {
+    await page.addInitScript(
+      (chosen) => localStorage.setItem('kb-chat.theme', chosen),
+      theme,
     );
-  expect(await serious()).toEqual([]);
-  await ask(page, 'ritmo');
-  expect(await serious()).toEqual([]);
-});
+    await page.goto('/');
+    await expect(page.getByText('O que você quer estudar hoje?')).toBeVisible();
+    const serious = async () =>
+      (
+        await new AxeBuilder({ page }).include('main').analyze()
+      ).violations.filter(
+        (violation) =>
+          violation.impact === 'serious' || violation.impact === 'critical',
+      );
+    expect(await serious()).toEqual([]);
+    await ask(page, 'ritmo');
+    expect(await serious()).toEqual([]);
+  });
+}

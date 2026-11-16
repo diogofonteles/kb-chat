@@ -25,6 +25,7 @@ import { authorsUrl } from '@core/media/authors-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { levelsPagePath, topicLevelsUrl } from '@core/levels/levels-api.js';
 import { RouterLink } from '@angular/router';
+import { UiButton, UiCover, UiIcon } from '@ui/index.js';
 import type { Observable } from 'rxjs';
 
 /** No parent: a top-level collection. */
@@ -38,10 +39,12 @@ const NO_AUTHOR = '';
  * before creating and never changes (BR-4). Editing a top-level collection also chooses its
  * main author among its authors (KBC-049 FR-2); a sub-collection uses its parent's. Esc and
  * "Cancelar" close it, and the browser gives the focus back to the button that opened it.
+ * v2 (KBC-127, "Editar detalhes"): the cover by the initials beside the fields, a tall
+ * sheet on a phone.
  */
 @Component({
   selector: 'app-collection-dialog',
-  imports: [RouterLink],
+  imports: [RouterLink, UiButton, UiCover, UiIcon],
   template: `
     <dialog
       #dialog
@@ -60,166 +63,184 @@ const NO_AUTHOR = '';
       </h2>
       <!-- A form: Enter in the name creates (or saves), like any form. -->
       <form (submit)="$event.preventDefault(); save()">
-        <label class="field" for="collection-name">
-          <span i18n="@@collection.name">Nome</span>
-          <input
-            #nameInput
-            id="collection-name"
-            type="text"
-            autocomplete="off"
-            [attr.maxlength]="titleMax"
-            [value]="name()"
-            [attr.aria-invalid]="invalid() ? 'true' : null"
-            [attr.aria-describedby]="
-              invalid() ? 'collection-name-error' : 'collection-address'
-            "
-            (input)="typeName(nameInput.value)"
-          />
-        </label>
-        @if (invalid()) {
-          <p
-            id="collection-name-error"
-            class="error"
-            i18n="@@collection.nameRequired"
-          >
-            Escreva um nome com pelo menos uma letra ou número.
-          </p>
-        }
-        <p id="collection-address" class="hint">
-          @if (address(); as where) {
-            <ng-container i18n="@@collection.address"
-              >Identificador (não muda depois):
-              <code>{{ where }}</code></ng-container
-            >
-          }
-        </p>
-        <label class="field" for="collection-description">
-          <span i18n="@@collection.description">Descrição (opcional)</span>
-          <textarea
-            #descriptionInput
-            id="collection-description"
-            rows="2"
-            [attr.maxlength]="descriptionMax"
-            [value]="description()"
-            (input)="description.set(descriptionInput.value)"
-          ></textarea>
-        </label>
-        @if (choosesMainAuthor()) {
-          <label class="field" for="collection-main-author">
-            <span i18n="@@collection.mainAuthor">Autor principal</span>
-            <select
-              #mainAuthorSelect
-              id="collection-main-author"
-              aria-describedby="collection-main-author-hint"
-              [disabled]="!authorList.hasValue()"
-              (change)="mainAuthor.set(mainAuthorSelect.value)"
-            >
-              @if (authorList.hasValue()) {
-                <option
-                  [value]="noAuthor"
-                  [selected]="mainAuthor() === noAuthor"
-                  i18n="@@collection.noMainAuthor"
-                >
-                  Nenhum
-                </option>
-                @for (author of authors(); track author.slug) {
-                  <option
-                    [value]="author.slug"
-                    [selected]="mainAuthor() === author.slug"
-                  >
-                    {{ author.name }}
-                  </option>
-                }
-              } @else {
-                <!-- Until the list arrives, what the collection has now, never a false "Nenhum". -->
-                <option [value]="mainAuthor()" selected>
-                  {{ currentMainName() }}
-                </option>
-              }
-            </select>
-          </label>
-          <div id="collection-main-author-hint" class="hint">
-            @if (authorList.error()) {
-              <p class="error" role="alert">
-                <ng-container i18n="@@collection.authorsFailed"
-                  >Não foi possível carregar os autores.</ng-container
-                >
-                <button
-                  type="button"
-                  class="link"
-                  (click)="authorList.reload()"
-                  i18n="@@collection.authorsRetry"
-                >
-                  Tentar de novo
-                </button>
-              </p>
-            } @else if (authorList.isLoading()) {
-              <p i18n="@@collection.authorsLoading">Carregando os autores…</p>
-            } @else if (authors().length === 0) {
-              <p i18n="@@collection.noAuthorsYet">
-                Este acervo ainda não tem autores: eles são cadastrados ao
-                enviar um áudio.
-              </p>
+        <div class="columns">
+          <!-- The cover is the collection's initials over its colour (v2 · Capa): decorative. -->
+          <div class="cover-slot" aria-hidden="true">
+            @if (name().trim()) {
+              <ui-cover [title]="name()" [size]="180" />
             } @else {
-              <p i18n="@@collection.mainAuthorHint">
-                Aparece com ✦ nos selos e filtros, e a IA nunca atribui a ele o
-                que é de outros autores.
-              </p>
+              <span class="cover-empty">
+                <ui-icon name="folder" [size]="40" />
+                <span i18n="@@collection.coverHint">Capa pela sigla</span>
+              </span>
             }
           </div>
-        }
-        @if (levelsTarget(); as target) {
-          <p class="levels-link">
-            @if (target.inherited) {
-              <ng-container i18n="@@collection.levelsInherited"
-                >Este sub-acervo usa os níveis de
-                <a [routerLink]="target.path" (click)="close()">{{
-                  target.title
-                }}</a
-                >.</ng-container
+          <div class="fields">
+            <label class="field" for="collection-name">
+              <span i18n="@@collection.name">Nome</span>
+              <input
+                #nameInput
+                id="collection-name"
+                type="text"
+                autocomplete="off"
+                [attr.maxlength]="titleMax"
+                [value]="name()"
+                [attr.aria-invalid]="invalid() ? 'true' : null"
+                [attr.aria-describedby]="
+                  invalid() ? 'collection-name-error' : 'collection-address'
+                "
+                (input)="typeName(nameInput.value)"
+              />
+            </label>
+            @if (invalid()) {
+              <p
+                id="collection-name-error"
+                class="error"
+                i18n="@@collection.nameRequired"
               >
-            } @else {
-              <a
-                [routerLink]="target.path"
-                (click)="close()"
-                i18n="@@collection.levels"
-                >Níveis de acesso</a
-              >
-              <span class="hint-inline">{{ levelsSummary() }}</span>
+                Escreva um nome com pelo menos uma letra ou número.
+              </p>
             }
-          </p>
-        }
-        @if (!editing()) {
-          <label class="field" for="collection-parent">
-            <span i18n="@@collection.parent">Dentro de</span>
-            <select
-              #parentSelect
-              id="collection-parent"
-              (change)="parent.set(parentSelect.value)"
-            >
-              <option
-                [value]="topLevel"
-                [selected]="parent() === topLevel"
-                i18n="@@collection.noParent"
-              >
-                Nenhum (acervo principal)
-              </option>
-              @for (option of parents(); track option.slug) {
-                <option
-                  [value]="option.slug"
-                  [selected]="parent() === option.slug"
+            <p id="collection-address" class="hint">
+              @if (address(); as where) {
+                <ng-container i18n="@@collection.address"
+                  >Identificador (não muda depois):
+                  <code>{{ where }}</code></ng-container
                 >
-                  {{ option.title }}
-                </option>
               }
-            </select>
-          </label>
-        }
+            </p>
+            <label class="field" for="collection-description">
+              <span i18n="@@collection.description">Descrição (opcional)</span>
+              <textarea
+                #descriptionInput
+                id="collection-description"
+                rows="2"
+                [attr.maxlength]="descriptionMax"
+                [value]="description()"
+                (input)="description.set(descriptionInput.value)"
+              ></textarea>
+            </label>
+            @if (choosesMainAuthor()) {
+              <label class="field" for="collection-main-author">
+                <span i18n="@@collection.mainAuthor">Autor principal</span>
+                <select
+                  #mainAuthorSelect
+                  id="collection-main-author"
+                  aria-describedby="collection-main-author-hint"
+                  [disabled]="!authorList.hasValue()"
+                  (change)="mainAuthor.set(mainAuthorSelect.value)"
+                >
+                  @if (authorList.hasValue()) {
+                    <option
+                      [value]="noAuthor"
+                      [selected]="mainAuthor() === noAuthor"
+                      i18n="@@collection.noMainAuthor"
+                    >
+                      Nenhum
+                    </option>
+                    @for (author of authors(); track author.slug) {
+                      <option
+                        [value]="author.slug"
+                        [selected]="mainAuthor() === author.slug"
+                      >
+                        {{ author.name }}
+                      </option>
+                    }
+                  } @else {
+                    <!-- Until the list arrives, what the collection has now, never a false "Nenhum". -->
+                    <option [value]="mainAuthor()" selected>
+                      {{ currentMainName() }}
+                    </option>
+                  }
+                </select>
+              </label>
+              <div id="collection-main-author-hint" class="hint">
+                @if (authorList.error()) {
+                  <p class="error" role="alert">
+                    <ng-container i18n="@@collection.authorsFailed"
+                      >Não foi possível carregar os autores.</ng-container
+                    >
+                    <button
+                      type="button"
+                      class="link"
+                      (click)="authorList.reload()"
+                      i18n="@@collection.authorsRetry"
+                    >
+                      Tentar de novo
+                    </button>
+                  </p>
+                } @else if (authorList.isLoading()) {
+                  <p i18n="@@collection.authorsLoading">
+                    Carregando os autores…
+                  </p>
+                } @else if (authors().length === 0) {
+                  <p i18n="@@collection.noAuthorsYet">
+                    Este acervo ainda não tem autores: eles são cadastrados ao
+                    enviar um áudio.
+                  </p>
+                } @else {
+                  <p i18n="@@collection.mainAuthorHint">
+                    Aparece com ✦ nos selos e filtros, e a IA nunca atribui a
+                    ele o que é de outros autores.
+                  </p>
+                }
+              </div>
+            }
+            @if (levelsTarget(); as target) {
+              <p class="levels-link">
+                @if (target.inherited) {
+                  <ng-container i18n="@@collection.levelsInherited"
+                    >Este sub-acervo usa os níveis de
+                    <a [routerLink]="target.path" (click)="close()">{{
+                      target.title
+                    }}</a
+                    >.</ng-container
+                  >
+                } @else {
+                  <a
+                    [routerLink]="target.path"
+                    (click)="close()"
+                    i18n="@@collection.levels"
+                    >Níveis de acesso</a
+                  >
+                  <span class="hint-inline">{{ levelsSummary() }}</span>
+                }
+              </p>
+            }
+            @if (!editing()) {
+              <label class="field" for="collection-parent">
+                <span i18n="@@collection.parent">Dentro de</span>
+                <select
+                  #parentSelect
+                  id="collection-parent"
+                  (change)="parent.set(parentSelect.value)"
+                >
+                  <option
+                    [value]="topLevel"
+                    [selected]="parent() === topLevel"
+                    i18n="@@collection.noParent"
+                  >
+                    Nenhum (acervo principal)
+                  </option>
+                  @for (option of parents(); track option.slug) {
+                    <option
+                      [value]="option.slug"
+                      [selected]="parent() === option.slug"
+                    >
+                      {{ option.title }}
+                    </option>
+                  }
+                </select>
+              </label>
+            }
+          </div>
+        </div>
         @if (failure(); as message) {
           <p class="error" role="alert">{{ message }}</p>
         }
         <div class="actions">
           <button
+            uiButton="ghost"
             type="button"
             class="secondary"
             (click)="close()"
@@ -228,6 +249,7 @@ const NO_AUTHOR = '';
             Cancelar
           </button>
           <button
+            uiButton="white"
             type="submit"
             class="primary"
             [disabled]="busy()"

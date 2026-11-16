@@ -253,9 +253,10 @@
   content: '”';
 }
 
+/* The words found keep the text colour over the mark, also in a muted snippet (contrast). */
 mark {
   background: var(--color-mark);
-  color: inherit;
+  color: var(--color-text);
 }
 
 .states {

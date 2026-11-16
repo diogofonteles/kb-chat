@@ -1,3 +1,7 @@
+/* v2 · Conversa, chat-document* and v2 · Telas-chave, chat-research-answer (KBC-127): the
+   document as a page, or a source beside its answer. It fills whatever the shell gives it
+   (the 460 panel, the phone's screen or sheet, or the whole window in "Tela cheia") and
+   lays itself out by that width. */
 :host {
   display: flex;
   flex-direction: column;
@@ -5,220 +9,207 @@
   height: 100%;
   overflow-y: auto;
   background: var(--color-surface);
-  border-left: 1px solid var(--color-border);
+  color: var(--color-text);
+  container: docpanel / inline-size;
+}
+
+:host(.full) {
+  position: fixed;
+  inset: var(--shell-gap);
+  z-index: 30;
+  height: auto;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+}
+
+:host(.in-sheet) {
+  height: 100%;
+  background: transparent;
 }
 
 .head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5) var(--space-2);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent) 10%, var(--color-surface)) 0,
+    var(--color-surface) 100%
+  );
+}
+
+:host(.in-sheet) .head {
+  padding-top: 0;
+  background: transparent;
+}
+
+.top-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2rem;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.source-kicker {
+  margin: 0 var(--space-2) 0 0;
+  color: var(--color-accent-text);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.page-head[hidden] {
+  display: none;
+}
+
+.art {
+  /* A source or the 460 panel: 64; the document page grows it (below). */
+  --ui-cover-size: 64px !important;
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+}
+
+.titles {
   display: grid;
   gap: var(--space-1);
-  padding: var(--space-3) var(--space-6);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  min-width: 0;
 }
 
-.head-actions {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.nav {
-  min-height: var(--target);
-  padding: 0 var(--space-2);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-accent-strong);
-  cursor: pointer;
-}
-
-.close {
-  margin-left: auto;
-  justify-self: end;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-width: var(--target);
-  min-height: var(--target);
-  padding: 0 var(--space-2);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  font-size: 1.25rem;
-  cursor: pointer;
-}
-
-.close:hover {
-  background: var(--color-surface-muted);
+.kicker {
+  margin: 0;
+  font-size: var(--text-meta);
+  font-weight: 700;
 }
 
 h2 {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  line-height: 1.25;
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 
 h2:focus-visible {
   outline: none;
 }
 
-.meta {
-  display: grid;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-6) 0;
-}
-
-.authorship {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-.facets {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-.concepts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-.concept {
-  min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.concept:hover {
-  border-color: var(--color-accent);
-}
-
-.badge {
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
-  border-left: 3px solid var(--color-accent);
-  background: var(--color-surface-muted);
-  font-size: var(--text-sm);
-}
-
-.tools {
+.byline {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1) var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.author {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+/* The tools stay on screen while reading on (a long document, "Próxima ocorrência"). */
+.actions {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-5) var(--space-3);
+  background: var(--color-surface);
+}
+
+:host(.in-sheet) .actions {
+  background: var(--color-surface);
+}
+
+.occurrences {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-inline-start: auto;
+  padding: 0 var(--space-1) 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-bg) 55%, transparent);
 }
 
 .counter {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0 0.35em;
+  font-size: var(--text-meta);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
-.tool {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: var(--target);
-  min-height: var(--target);
-  padding: 0 var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: var(--text-sm);
-  text-decoration: none;
-  cursor: pointer;
+.cited {
+  color: var(--color-accent-text);
+  font-weight: 800;
 }
 
-.tool:hover {
-  border-color: var(--color-accent);
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
+  padding: var(--space-2) var(--space-5) var(--space-8);
+}
+
+.text {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
 }
 
 .criterion {
-  margin: var(--space-4) var(--space-6) 0;
+  margin: 0;
   font-size: var(--text-sm);
 }
 
 .summary {
-  margin: var(--space-4) var(--space-6) 0;
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   background: var(--color-surface-muted);
   font-size: var(--text-sm);
 }
 
 .summary summary {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-weight: 700;
+  list-style: none;
   cursor: pointer;
-  font-weight: 600;
+}
+
+.summary summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary:not([open]) .chev {
+  transform: rotate(-90deg);
 }
 
 .summary p {
   margin: var(--space-2) 0 0;
-}
-
-.body {
-  padding: var(--space-4) var(--space-6) var(--space-8);
-  max-width: 70ch;
-  font-family: var(--font-reading);
-  font-size: 1.0625rem;
-  line-height: 1.7;
-  overflow-wrap: anywhere;
-}
-
-.loading,
-.error {
-  padding: var(--space-6);
   color: var(--color-text-muted);
-}
-
-.error {
-  border-left: 3px solid var(--color-danger);
-  margin: var(--space-6);
-  padding: 0 var(--space-3);
-  color: var(--color-text);
-}
-
-@media (max-width: 1023px) {
-  :host {
-    border-left: none;
-  }
-
-  .close {
-    justify-self: start;
-    font-size: 1rem;
-  }
-}
-
-.body :is(pre, code) {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.head .tools {
-  padding-top: var(--space-1);
-}
-
-.close-label {
-  font-size: var(--text-sm);
+  font-size: var(--text-item);
+  line-height: 1.55;
 }
 
 .sections ul {
@@ -233,18 +224,218 @@ h2:focus-visible {
   padding: var(--space-1) 0;
   border: none;
   background: transparent;
-  color: var(--color-accent-strong);
+  color: var(--color-accent-text);
+  font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
+.body {
+  max-width: 70ch;
+  font-family: var(--font-reading);
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.body :is(pre, code) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .read-more {
-  margin: 0 var(--space-6) var(--space-6);
-  min-height: var(--target);
-  padding: 0 var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  cursor: pointer;
+  justify-self: start;
+}
+
+/* "Sobre este documento": sections in cards, as the v2 right panel draws them. */
+.about {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.about-title {
+  margin: 0;
+  font-size: var(--text-item);
+  font-weight: 700;
+}
+
+.about-section {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-muted);
+}
+
+.about-section h4 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.person-text p {
+  margin: 0;
+}
+
+.person-meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.badge {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-cover);
+  background: var(--overlay-2);
+  font-size: var(--text-sm);
+}
+
+.failed {
+  display: grid;
+  flex: 1 1 auto;
+  place-items: center;
+  padding: var(--space-8) var(--space-5);
+}
+
+.loading {
+  padding: var(--space-2) var(--space-5) var(--space-8);
+}
+
+.skeleton {
+  align-items: flex-end;
+}
+
+.skeleton-art {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  background: var(--overlay-3);
+}
+
+.skeleton-lines,
+.skeleton-text {
+  display: grid;
+  flex: 1 1 auto;
+  gap: var(--space-3);
+}
+
+.skeleton-lines span,
+.skeleton-text span {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--overlay-2);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-lines span:nth-child(1) {
+  width: 40%;
+}
+
+.skeleton-lines span:nth-child(2) {
+  width: 80%;
+  height: 28px;
+  background: var(--overlay-3);
+}
+
+.skeleton-lines span:nth-child(3) {
+  width: 60%;
+}
+
+.skeleton-text span:nth-child(odd) {
+  width: 95%;
+}
+
+.skeleton-text span:nth-child(even) {
+  width: 80%;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* A document page with room (the window in "Tela cheia"): the album head, cover 208 and
+   the 56–72 title, and "Sobre este documento" at the right (chat-document). */
+@container docpanel (min-width: 52rem) {
+  :host(:not(.in-sheet)) .head {
+    padding: var(--space-4) var(--space-8) var(--space-3);
+  }
+
+  .actions {
+    padding-inline: var(--space-8);
+  }
+
+  .page-head {
+    align-items: flex-end;
+    gap: var(--space-6);
+  }
+
+  .art {
+    --ui-cover-size: 208px !important;
+  }
+
+  h2 {
+    font-size: var(--text-hero);
+    font-weight: var(--weight-hero);
+    line-height: 1.02;
+    letter-spacing: var(--tracking-hero);
+  }
+
+  .page {
+    grid-template-columns: minmax(0, 1fr) var(--shell-right);
+    gap: var(--space-8);
+    padding: var(--space-2) var(--space-8) var(--space-8);
+  }
+}
+
+/* A phone's page (not a source): the cover centred over the title (chat-document@mobile). */
+@media (max-width: 1023px) {
+  .full-toggle {
+    display: none;
+  }
+
+  :host(:not(.in-sheet)) .page-head:not(.skeleton) {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  :host(:not(.in-sheet)) .art {
+    --ui-cover-size: 200px !important;
+    align-self: center;
+  }
+
+  :host(:not(.in-sheet)) h2 {
+    font-size: 1.75rem;
+  }
+
+  .head,
+  .actions,
+  .page,
+  .loading {
+    padding-inline: var(--space-4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-lines span,
+  .skeleton-text span {
+    animation: none;
+  }
 }

@@ -250,8 +250,11 @@ test.describe('authorship (KBC-020)', () => {
     await expect(cards).toHaveCount(1);
     await cards.first().getByRole('button').first().click();
     const panel = page.getByRole('dialog');
-    await expect(panel.getByText('Mestre Laércio')).toBeVisible();
-    await expect(panel.getByText('José Laércio do Egito')).toBeVisible();
+    const about = panel.getByRole('complementary', {
+      name: 'Sobre este documento',
+    });
+    await expect(about.getByText('Mestre Laércio')).toBeVisible();
+    await expect(about.getByText('José Laércio do Egito')).toBeVisible();
     await panel.getByRole('button', { name: /Fechar/ }).click();
 
     await control.getByRole('radio', { name: /^Todos/ }).check();

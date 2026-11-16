@@ -146,6 +146,7 @@
           @if (researching()) {
             <app-research-thread
               [turns]="research.turns()"
+              [openDocumentId]="openSourceId()"
               (opened)="openSource($event)"
               (trackOpened)="openTrack($event)"
               (stopped)="stopResearch()"
@@ -204,9 +205,14 @@
         [fallbackTitle]="doc.title"
         [highlight]="doc.question"
         [canGoBack]="store.canGoBack()"
+        [sources]="doc.sources ?? []"
+        [canAskAi]="views.researchAvailable()"
         (closed)="closeDocument()"
         (back)="store.back()"
         (navigated)="store.openWithin($event)"
+        (sourceChosen)="store.switchSource($event)"
+        (documentOpened)="store.leaveSources()"
+        (askedAi)="askAiAbout($event)"
         (trackOpened)="openTrack($event)"
         (conceptSelected)="filterByConcept($event)"
       />

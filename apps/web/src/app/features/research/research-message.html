@@ -9,7 +9,14 @@
       @if (turn().steps.length > 0) {
         <details class="steps" [class.working]="streaming()">
           <summary>
+            <span class="steps-icon" aria-hidden="true">
+              <ui-icon
+                [name]="streaming() ? 'refresh' : 'sparkleFill'"
+                [size]="12"
+              />
+            </span>
             <span class="steps-text">{{ stepsLine() }}</span>
+            <ui-icon class="chev" name="chevDown" [size]="14" />
           </summary>
           <ol>
             @for (step of stepItems(); track $index) {
@@ -28,8 +35,35 @@
         </details>
       } @else {
         <p class="steps" [class.working]="streaming()">
+          <span class="steps-icon" aria-hidden="true">
+            <ui-icon
+              [name]="streaming() ? 'refresh' : 'sparkleFill'"
+              [size]="12"
+            />
+          </span>
           <span class="steps-text">{{ stepsLine() }}</span>
         </p>
+      }
+    }
+
+    @if (streaming()) {
+      <div class="working-row">
+        <button
+          uiButton="outline"
+          size="sm"
+          type="button"
+          class="stop"
+          (click)="stopped.emit()"
+          i18n="@@ai.stop"
+        >
+          Parar
+        </button>
+      </div>
+      @if (!turn().text && !sweep()) {
+        <!-- The answer's place while the agent works (chat-research-streaming). -->
+        <div class="pending" aria-hidden="true">
+          <span></span><span></span><span class="last"></span>
+        </div>
       }
     }
 
@@ -56,35 +90,97 @@
     }
 
     @if (turn().text) {
-      <div class="answer" [innerHTML]="html()"></div>
+      <div class="answer-block">
+        <div class="answer" [innerHTML]="html()"></div>
+        @if (interruptedWithText()) {
+          <ui-pill class="interrupted" tone="warn" i18n="@@ai.interruptedPill"
+            >interrompida</ui-pill
+          >
+        }
+      </div>
+    }
+
+    @if (turn().phase === 'done' && turn().text) {
+      <div class="answer-actions">
+        <button
+          uiButton="outline"
+          size="sm"
+          type="button"
+          (click)="copyAnswer()"
+        >
+          <ui-icon name="copy" [size]="16" />
+          <span i18n="@@ai.copyAnswer">{copyState(), select,
+            copied {Copiado}
+            failed {Não consegui copiar}
+            other {Copiar}
+          }</span>
+        </button>
+      </div>
     }
 
     @if (coverage(); as coverage) {
       <div class="coverage" [class.incomplete]="coverage.missing">
-        <p>{{ coverage.line }}</p>
+        @if (coverage.share; as share) {
+          <p class="coverage-head" aria-hidden="true">
+            <span i18n="@@sweep.coverageTitle"
+              >Cobertura (medida pelo aplicativo)</span
+            >
+            <span class="coverage-share">{{ share.label }}</span>
+          </p>
+          <ui-progress class="coverage-bar" [value]="share.value" />
+        }
+        <p class="coverage-line">{{ coverage.line }}</p>
         <p class="coverage-target">
           <span i18n="@@sweep.target">Conjunto:</span> {{ coverage.target }}
         </p>
-        @if (coverage.missing) {
-          <p class="coverage-missing">
+      </div>
+      @if (coverage.missing) {
+        <ui-banner class="coverage-missing" tone="info">
+          <p>
             <strong i18n="@@sweep.incomplete">Varredura incompleta.</strong>
             {{ coverage.missing }}
           </p>
-        }
-      </div>
+          @if (canContinue()) {
+            <button
+              uiBannerAction
+              uiButton="white"
+              size="sm"
+              type="button"
+              class="continue"
+              (click)="continued.emit()"
+              i18n="@@sweep.continue"
+            >
+              Continuar varredura
+            </button>
+          }
+        </ui-banner>
+      }
     } @else if (stoppedAt()) {
-      <div class="coverage incomplete">
-        <p class="coverage-missing">
+      <ui-banner class="coverage-missing" tone="info">
+        <p>
           <strong i18n="@@sweep.incomplete">Varredura incompleta.</strong>
           {{ stoppedAt() }}
         </p>
-      </div>
-    }
-
-    @if (canContinue()) {
+        @if (canContinue()) {
+          <button
+            uiBannerAction
+            uiButton="white"
+            size="sm"
+            type="button"
+            class="continue"
+            (click)="continued.emit()"
+            i18n="@@sweep.continue"
+          >
+            Continuar varredura
+          </button>
+        }
+      </ui-banner>
+    } @else if (canContinue()) {
       <button
+        uiButton="white"
+        size="sm"
         type="button"
-        class="primary continue"
+        class="continue"
         (click)="continued.emit()"
         i18n="@@sweep.continue"
       >
@@ -93,50 +189,85 @@
     }
 
     @if (turn().phase === 'error') {
-      <p class="error" role="alert">
-        {{ errorText() }}
-        @if (turn().error === 'LLM_INSUFFICIENT_CREDIT') {
-          <a
-            href="https://openrouter.ai/settings/credits"
-            target="_blank"
-            rel="noopener"
-            i18n="@@ai.addCredits"
-            >Adicionar créditos</a
-          >
-        }
-      </p>
-      @if (offerOwnAi()) {
-        <button
-          type="button"
-          class="secondary"
-          (click)="openOwnAi()"
-          i18n="@@ai.connectOwn"
-        >
-          Conectar a minha IA
-        </button>
-      }
-      @if (capReached()) {
-        <button
-          type="button"
-          class="secondary"
-          (click)="openSettings()"
-          i18n="@@ai.openSettings"
-        >
-          Abrir Configurações
-        </button>
-      }
+      <ui-banner class="error" tone="err" role="alert">
+        <p>
+          {{ errorText() }}
+          @if (turn().error === 'LLM_INSUFFICIENT_CREDIT') {
+            <a
+              href="https://openrouter.ai/settings/credits"
+              target="_blank"
+              rel="noopener"
+              i18n="@@ai.addCredits"
+              >Adicionar créditos</a
+            >
+          }
+        </p>
+        <div class="banner-actions">
+          @if (canRetry()) {
+            <button
+              uiButton="white"
+              size="sm"
+              type="button"
+              (click)="retried.emit()"
+            >
+              <ui-icon name="refresh" [size]="16" />
+              <span i18n="@@ai.retry">Tentar de novo</span>
+            </button>
+          }
+          @if (offerOwnAi()) {
+            <button
+              uiButton="outline"
+              size="sm"
+              type="button"
+              (click)="openOwnAi()"
+              i18n="@@ai.connectOwn"
+            >
+              Conectar a minha IA
+            </button>
+          }
+          @if (capReached()) {
+            <button
+              uiButton="outline"
+              size="sm"
+              type="button"
+              (click)="openSettings()"
+              i18n="@@ai.openSettings"
+            >
+              Abrir Configurações
+            </button>
+          }
+        </div>
+      </ui-banner>
     }
 
     @if (turn().phase === 'done') {
       @if (turn().interrupted && !sweepExplainsStop()) {
-        <p class="note" i18n="@@ai.interrupted">
-          {turn().text ? 1 : 0, select,
-            1 {(interrompida)}
-            other {Resposta interrompida antes de começar.}
+        <ui-banner class="interrupted-banner" tone="warn">
+          <p class="note" i18n="@@ai.interrupted">
+            {turn().text ? 1 : 0, select,
+              1 {A resposta foi interrompida.}
+              other {Resposta interrompida antes de começar.}
+            }
+          </p>
+          @if (partialCost()) {
+            <p class="note" i18n="@@ai.partialCost">
+              O custo do que já foi processado entra no gasto do dia.
+            </p>
           }
-        </p>
-      }
-      @if (turn().interrupted && partialCost()) {
+          @if (canRetry()) {
+            <button
+              uiBannerAction
+              uiButton="white"
+              size="sm"
+              type="button"
+              (click)="retried.emit()"
+            >
+              <ui-icon name="refresh" [size]="16" />
+              <span i18n="@@ai.retry">Tentar de novo</span>
+            </button>
+          }
+        </ui-banner>
+      } @else if (turn().interrupted && partialCost()) {
         <p class="note" i18n="@@ai.partialCost">
           O custo do que já foi processado entra no gasto do dia.
         </p>
@@ -169,6 +300,9 @@
                 <li>
                   <span class="source restricted">
                     <span class="source-n" aria-hidden="true">{{ n }}</span>
+                    <span class="source-art" aria-hidden="true">
+                      <ui-icon name="lock" [size]="18" />
+                    </span>
                     <span
                       class="source-title"
                       aria-hidden="true"
@@ -202,6 +336,10 @@
                     type="button"
                     class="source"
                     [class.track]="source.media"
+                    [class.active]="source.n === activeSource()"
+                    [attr.aria-current]="
+                      source.n === activeSource() ? 'true' : null
+                    "
                     [attr.data-doc-id]="source.id"
                     [title]="source.title"
                     (click)="openSource(source, $event)"
@@ -209,36 +347,53 @@
                     <span class="source-n" aria-hidden="true">{{
                       source.n
                     }}</span>
-                    <app-authorship-badge [authorship]="source.authorship" />
-                    @if (trackChips().get(source.n); as track) {
-                      <span class="track-mark" aria-hidden="true">♪</span>
-                      <span class="visually-hidden" i18n="@@ai.trackSource"
-                        >Faixa de áudio:</span
-                      >
-                      <span class="source-text">
-                        <span class="source-title">{{ source.title }}</span>
-                        <span class="source-track">
-                          <span class="track-recording">{{
-                            track.recording
-                          }}</span>
-                          @if (track.clock) {
-                            <span aria-hidden="true">·</span>
-                            <span class="track-clock">{{ track.clock }}</span>
-                          }
-                          @if (track.more > 0) {
-                            <span
-                              i18n="@@ai.trackMorePassages"
-                              >{track.more, plural,
-                                =1 {+1 trecho}
-                                other {+{{ track.more }} trechos}
-                              }</span
-                            >
-                          }
+                    <ui-cover
+                      class="source-art"
+                      [title]="source.title"
+                      [size]="40"
+                      [label]="false"
+                    />
+                    <span class="source-body">
+                      @if (trackChips().get(source.n); as track) {
+                        <span class="track-mark" aria-hidden="true">♪</span>
+                        <span class="visually-hidden" i18n="@@ai.trackSource"
+                          >Faixa de áudio:</span
+                        >
+                        <span class="source-text">
+                          <span class="source-title">{{ source.title }}</span>
+                          <span class="source-track">
+                            <span class="track-recording">{{
+                              track.recording
+                            }}</span>
+                            @if (track.clock) {
+                              <span aria-hidden="true">·</span>
+                              <span class="track-clock">{{ track.clock }}</span>
+                            }
+                            @if (track.more > 0) {
+                              <span
+                                i18n="@@ai.trackMorePassages"
+                                >{track.more, plural,
+                                  =1 {+1 trecho}
+                                  other {+{{ track.more }} trechos}
+                                }</span
+                              >
+                            }
+                          </span>
                         </span>
-                      </span>
-                    } @else {
-                      <span class="source-title">{{ source.title }}</span>
-                    }
+                      } @else {
+                        <span class="source-title">{{ source.title }}</span>
+                      }
+                      <app-authorship-badge
+                        class="source-authorship"
+                        [authorship]="source.authorship"
+                      />
+                    </span>
+                    <span
+                      class="source-open"
+                      aria-hidden="true"
+                      i18n="@@ai.openSource"
+                      >Abrir</span
+                    >
                   </button>
                 </li>
               }
@@ -278,25 +433,16 @@
       </p>
     }
 
-    @if (canRetry()) {
+    @if (retryAlone()) {
       <button
+        uiButton="white"
+        size="sm"
         type="button"
-        class="secondary"
+        class="retry"
         (click)="retried.emit()"
-        i18n="@@ai.retry"
       >
-        Tentar de novo
-      </button>
-    }
-
-    @if (streaming()) {
-      <button
-        type="button"
-        class="secondary stop"
-        (click)="stopped.emit()"
-        i18n="@@ai.stop"
-      >
-        Parar
+        <ui-icon name="refresh" [size]="16" />
+        <span i18n="@@ai.retry">Tentar de novo</span>
       </button>
     }
   </div>

@@ -45,7 +45,7 @@ test('AC-3/AC-6: "Veja também" opens the concept, which lists its examples, and
   await expect(panel.getByRole('heading', { level: 2 })).toHaveText('Cabala');
   await expect(panel.getByRole('heading', { name: 'Exemplos' })).toBeVisible();
   await expect(panel.getByText(/Sobre este assunto/)).toBeVisible();
-  await panel.getByRole('button', { name: '← Voltar' }).click();
+  await panel.getByRole('button', { name: 'Voltar', exact: true }).click();
   await expect(panel.getByRole('heading', { level: 2 })).toHaveText(
     'A Árvore da Vida',
   );

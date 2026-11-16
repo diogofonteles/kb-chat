@@ -106,7 +106,7 @@ describe('ChatPage research view (KBC-008)', () => {
     expect(
       screen.getByText('O que você quer pesquisar no acervo?'),
     ).toBeTruthy();
-    expect(screen.queryByLabelText('Como buscar')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Como buscar' })).toBeNull();
     expect(
       screen.getByLabelText('Sua pergunta').getAttribute('placeholder'),
     ).toBe('Pergunte qualquer coisa sobre o acervo…');
@@ -160,7 +160,7 @@ describe('ChatPage research view (KBC-008)', () => {
     await send(page, 'o que é o ritmo?', 'Perguntar');
     await answer(page, 0, 'Tudo flui [1].');
     await switchTo(page, 'Buscar documentos');
-    expect(screen.getByLabelText('Como buscar')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Como buscar' })).toBeTruthy();
     await send(page, 'ritmo', 'Buscar');
     page.http.expectOne(SEARCH_URL).flush(aResponse());
     await page.fixture.whenStable();

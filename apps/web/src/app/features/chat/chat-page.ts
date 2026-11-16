@@ -12,12 +12,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import type {
-  DocumentRef,
-  SearchFilters,
-  SearchKind,
-  SearchMode,
-} from '@kb-chat/contracts';
+import type { SearchFilters, SearchKind, SearchMode } from '@kb-chat/contracts';
 import { httpResource } from '@angular/common/http';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
@@ -48,7 +43,10 @@ import {
   type TriggerPlace,
 } from '@features/research/trigger-place.js';
 import { ResearchStore } from '@features/research/research-store.js';
-import { ResearchThread } from '@features/research/research-thread.js';
+import {
+  ResearchThread,
+  type SourceOpening,
+} from '@features/research/research-thread.js';
 import { ViewStore, type ChatView } from './view-store.js';
 import { ViewSwitch } from './view-switch.js';
 import { MiniPlayer } from '@features/media/player/mini-player.js';
@@ -136,6 +134,11 @@ export class ChatPage {
   );
   protected readonly messages = this.store.messages;
   protected readonly opened = this.store.openDocument;
+  /** The source of an AI answer open in the panel: marked in its answer. */
+  protected readonly openSourceId = computed(() => {
+    const open = this.opened();
+    return open?.sources ? open.id : null;
+  });
   protected readonly currentView = this.views.current;
   protected readonly researching = computed(
     () => this.currentView() === 'research',
@@ -345,10 +348,29 @@ export class ChatPage {
     });
   }
 
-  /** A cited source opens in the same document panel (AC-3). */
-  protected openSource(doc: DocumentRef): void {
+  /**
+   * A cited source opens in the document panel beside the answer, on the answer's words,
+   * with the answer's other sources at hand (KBC-127 FR-1).
+   */
+  protected openSource({ doc, question, sources }: SourceOpening): void {
     const topic = this.store.topicSlug();
-    if (topic) this.store.open(topic, doc);
+    if (topic) this.store.openSource(topic, doc, { question, sources });
+  }
+
+  /**
+   * "Perguntar à IA" on a document (KBC-127): the research view, with a question about it
+   * ready in the box to finish and send (nothing is asked, nor spent, before that).
+   */
+  protected askAiAbout(title: string): void {
+    this.views.select('research');
+    this.closeDocument();
+    afterNextRender(
+      () =>
+        this.composer()?.fill(
+          $localize`:@@research.aboutDocument:O que “${title}:title:” diz sobre `,
+        ),
+      { injector: this.injector },
+    );
   }
 
   /** A cited track opens on its passage, paused, in the reading panel (KBC-099 FR-8). */
