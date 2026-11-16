@@ -59,18 +59,18 @@
   --shell-player: 4.5rem;
   --shell-mobile-nav: 4.25rem;
   --shell-mini-player: 3.5rem;
-  /* The space a phone page leaves at its foot for the mini player and the nav (FR-4). */
-  --shell-mobile-foot: var(--shell-mobile-nav);
-  /* The chat layout's top bar (its min-height): one row on wide screens, two below 1024 px
-     (Menu and title, then the view switch). What floats under it starts from here (KBC-123).
-     It follows the top bar actually rendered: the v2 shell values (--shell-topbar plus
-     --shell-gap, 3.5rem on phones) come with the v2 top bar itself (KBC-125). */
-  --topbar-height: 4.8125rem;
+  /* The space a phone page leaves at its foot for the mini player and the nav (FR-4). The
+     v2 shell lays them out in its own grid row under the main panel, so nothing scrolls under
+     them and a page's sticky bar needs no room for them (KBC-125). */
+  --shell-mobile-foot: 0px;
+  /* The shell's top bar (its min-height): what floats under it starts from here (KBC-123). */
+  --topbar-height: calc(var(--shell-topbar) + var(--shell-gap));
 }
 
 @media (max-width: 1023px) {
   :root {
-    --topbar-height: 8rem;
+    /* The phone header: avatar, title and the view switch. */
+    --topbar-height: 3.5rem;
   }
 }
 

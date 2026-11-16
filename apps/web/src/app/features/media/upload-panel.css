@@ -85,10 +85,11 @@
   min-width: 0;
 }
 
+/* No tint of its own: each choice inside is already a tinted row or card (KBC-130), and two
+   tints over the modal take the muted hints under 4.5:1 in the dark theme. */
 .options {
   padding: var(--space-4);
   border-radius: var(--radius-card);
-  background: var(--overlay-1);
 }
 
 .kept {
