@@ -4,6 +4,7 @@ import {
   Component,
   Directive,
   ElementRef,
+  DestroyRef,
   afterNextRender,
   inject,
   Injector,
@@ -11,6 +12,10 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { anchorOverlay, outsideBox } from './overlay.js';
+
+/** Below this width a menu is a sheet from the bottom (the shell's phone layout). */
+const SHEET_BELOW_PX = 1024;
 
 /** An item of a UiMenu: a native button or link with the menu item role. */
 @Directive({
@@ -30,8 +35,9 @@ export class UiMenuItem {
 /**
  * A v2 menu (v2 · Componentes › Menu): the trigger (its content projected with
  * `[uiMenuTrigger]`) opens a #282828 list of 40 items under it; below 1024 px the same list
- * is a sheet from the bottom over a scrim. Arrows move, Escape closes back to the trigger,
- * a choice or a click outside closes it.
+ * is a sheet from the bottom over a scrim. The list lives in the top layer, anchored to the
+ * trigger and kept inside the viewport (D5): no container clips it. Arrows move, Escape
+ * closes back to the trigger, a choice or a click outside closes it.
  */
 @Component({
   selector: 'ui-menu',
@@ -48,11 +54,6 @@ export class UiMenuItem {
     >
       <ng-content select="[uiMenuTrigger]" />
     </button>
-    @if (open()) {
-      <!-- The scrim closes the phone sheet on a tap; Escape closes it from the keyboard. -->
-      <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
-      <div class="ui-menu__scrim" (click)="close()"></div>
-    }
     <!-- Choosing an item closes the menu: the click bubbles up from the item. -->
     <!-- eslint-disable-next-line @angular-eslint/template/interactive-supports-focus -->
     <div
@@ -61,8 +62,6 @@ export class UiMenuItem {
       role="menu"
       [attr.id]="menuId()"
       [attr.aria-label]="label()"
-      [class.ui-menu__panel--end]="align() === 'end'"
-      [class.ui-menu__panel--up]="direction() === 'up'"
       [hidden]="!open()"
       (keydown)="keydown($event)"
       (click)="chosen($event)"
@@ -92,6 +91,12 @@ export class UiMenu {
   private readonly trigger =
     viewChild.required<ElementRef<HTMLButtonElement>>('trigger');
   private readonly panel = viewChild.required<ElementRef<HTMLElement>>('panel');
+  /** Takes the open list out of the top layer. */
+  private release: (() => void) | null = null;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.release?.());
+  }
 
   protected toggle(): void {
     if (this.open()) this.close();
@@ -100,14 +105,29 @@ export class UiMenu {
 
   show(): void {
     this.open.set(true);
-    afterNextRender(() => this.items()[0]?.focus(), {
-      injector: this.injector,
-    });
+    afterNextRender(
+      () => {
+        this.release?.();
+        this.release = anchorOverlay(
+          this.panel().nativeElement,
+          this.trigger().nativeElement,
+          {
+            align: this.align(),
+            side: this.direction() === 'up' ? 'above' : 'below',
+            sheetBelow: SHEET_BELOW_PX,
+          },
+        );
+        this.items()[0]?.focus();
+      },
+      { injector: this.injector },
+    );
   }
 
   close(focusTrigger = true): void {
     if (!this.open()) return;
     this.open.set(false);
+    this.release?.();
+    this.release = null;
     if (focusTrigger) this.trigger().nativeElement.focus();
   }
 
@@ -136,8 +156,11 @@ export class UiMenu {
     if (item) this.close(false);
   }
 
+  /** A click outside, or on the phone sheet's scrim (the panel's own backdrop). */
   protected outside(event: MouseEvent): void {
-    if (!this.host.nativeElement.contains(event.target as Node))
+    const panel = this.panel().nativeElement;
+    const onScrim = event.target === panel && outsideBox(panel, event);
+    if (onScrim || !this.host.nativeElement.contains(event.target as Node))
       this.close(false);
   }
 

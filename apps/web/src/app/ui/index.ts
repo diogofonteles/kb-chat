@@ -22,6 +22,14 @@ export { ICONS, type IconName } from './icons.js';
 export { UiLibraryItem } from './library-item.js';
 export { UiLogo } from './logo.js';
 export { UiMenu, UiMenuItem } from './menu.js';
+export {
+  UiOverlay,
+  anchorOverlay,
+  outsideBox,
+  placeOverlay,
+  type OverlayAlign,
+  type OverlaySide,
+} from './overlay.js';
 export { UiPill, type Tone } from './pill.js';
 export { UiProgress } from './progress.js';
 export { UiSettingRow } from './setting-row.js';

@@ -12,8 +12,8 @@ import { UiIcon } from './icon.js';
   template: `
     <ng-content select="ui-cover" />
     <span class="ui-libitem__text">
-      <span class="ui-libitem__title">{{ title() }}</span>
-      <span class="ui-libitem__meta">
+      <span class="ui-libitem__title">{{ title() }}</span
+      >&ngsp;<span class="ui-libitem__meta">
         @if (pinned()) {
           <ui-icon class="ui-libitem__pin" name="pin" [size]="12" />
         }
@@ -29,4 +29,6 @@ export class UiLibraryItem {
   readonly title = input.required<string>();
   readonly meta = input('');
   readonly pinned = input(false);
+  /** The meta's id, for a row named by its title alone (aria-describedby). */
+  readonly metaId = input<string | null>(null);
 }
