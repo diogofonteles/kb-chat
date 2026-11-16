@@ -71,6 +71,17 @@ function alphabetical(topics: readonly Topic[]): Topic[] {
 }
 
 /** Conversations and documents: matching the search; alphabetical or as they come (recent). */
+/**
+ * The documents of the collections this person sees now (KBC-125 FR-5): a recent document
+ * of a collection out of reach (access changed, another view) is left out.
+ */
+export function inVisibleCollections<T extends { readonly topic: string }>(
+  docs: readonly T[],
+  visible: ReadonlySet<string> | ReadonlyMap<string, unknown>,
+): T[] {
+  return docs.filter((doc) => visible.has(doc.topic));
+}
+
 export function orderByTitle<T extends { readonly title: string }>(
   items: readonly T[],
   view: LibraryView,

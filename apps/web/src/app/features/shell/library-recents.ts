@@ -1,8 +1,9 @@
 import { DOCUMENT } from '@angular/common';
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, linkedSignal } from '@angular/core';
+import { SessionStore } from '@core/auth/session-store.js';
 import { z } from 'zod';
 
-const STORAGE_KEY = 'kb-chat.library-recents';
+const STORAGE_PREFIX = 'kb-chat.library-recents';
 /** The documents "Sua biblioteca" lists under "Documentos": the last ones opened. */
 const MAX_DOCUMENTS = 20;
 
@@ -26,14 +27,32 @@ const EMPTY: Recents = { collections: {}, documents: [] };
 /**
  * The "Recentes" order of "Sua biblioteca" (KBC-125 FR-5): when each collection was last
  * chosen and the documents last opened, kept in this browser only (a per-viewer
- * convenience; conversations carry their own date from the server).
+ * convenience; conversations carry their own date from the server). Each account has its
+ * own list, so the next person in the same browser never sees another one's titles; with no
+ * one signed in nothing is read or kept on disk.
  */
 @Injectable({ providedIn: 'root' })
 export class LibraryRecents {
   private readonly storage = storageOf(inject(DOCUMENT).defaultView);
-  private readonly state = signal<Recents>(this.read());
+  private readonly session = inject(SessionStore);
+  private readonly key = computed(() => {
+    const email = this.session.me()?.email;
+    return email
+      ? `${STORAGE_PREFIX}:${fingerprint(email.toLowerCase())}`
+      : null;
+  });
+  private readonly state = linkedSignal(() => this.read(this.key()));
   readonly collections = () => this.state().collections;
   readonly documents = () => this.state().documents;
+
+  constructor() {
+    // The list of one browser before it was kept per account: whose it was is unknown.
+    try {
+      this.storage?.removeItem(STORAGE_PREFIX);
+    } catch {
+      // Storage unavailable: there is nothing to remove.
+    }
+  }
 
   noteCollection(slug: string, at = Date.now()): void {
     this.save({
@@ -54,22 +73,38 @@ export class LibraryRecents {
 
   private save(next: Recents): void {
     this.state.set(next);
+    const key = this.key();
+    if (!key) return;
     try {
-      this.storage?.setItem(STORAGE_KEY, JSON.stringify(next));
+      this.storage?.setItem(key, JSON.stringify(next));
     } catch {
       // Storage unavailable: the order lasts for this page only.
     }
   }
 
-  private read(): Recents {
+  private read(key: string | null): Recents {
+    if (!key) return EMPTY;
     try {
-      const raw = this.storage?.getItem(STORAGE_KEY);
+      const raw = this.storage?.getItem(key);
       const parsed = recentsSchema.safeParse(raw ? JSON.parse(raw) : {});
       return parsed.success ? parsed.data : EMPTY;
     } catch {
       return EMPTY;
     }
   }
+}
+
+/**
+ * A short stand-in for the address in the storage key (FNV-1a), so the next person in the
+ * same browser does not read who used it before. Not a secret: only a name for the list.
+ */
+function fingerprint(text: string): string {
+  let hash = 0x811c9dc5;
+  for (const char of text) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 function storageOf(view: Window | null): Storage | undefined {

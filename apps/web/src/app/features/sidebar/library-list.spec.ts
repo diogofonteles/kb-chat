@@ -2,6 +2,7 @@ import { aTopic } from '../../testing/fixtures.js';
 import {
   collectionTree,
   groupByRecency,
+  inVisibleCollections,
   matches,
   orderByTitle,
   orderCollections,
@@ -123,5 +124,17 @@ describe('Sua biblioteca list (KBC-125 FR-5)', () => {
     expect(
       collectionTree(entries).map((node) => node.entry.topic.slug),
     ).toEqual(['alquimia/metais']);
+  });
+});
+
+describe('the recent documents (KBC-125 FR-5)', () => {
+  it('lists only documents of collections the person sees now', () => {
+    const docs = [
+      { topic: 'hermetismo', id: 'a.md', title: 'Caibalion' },
+      { topic: 'restrito', id: 'b.md', title: 'Nível fechado' },
+    ];
+    expect(
+      inVisibleCollections(docs, new Set(['hermetismo'])).map((d) => d.title),
+    ).toEqual(['Caibalion']);
   });
 });

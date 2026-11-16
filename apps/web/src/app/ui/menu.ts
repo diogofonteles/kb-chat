@@ -17,12 +17,21 @@ import { anchorOverlay, outsideBox } from './overlay.js';
 /** Below this width a menu is a sheet from the bottom (the shell's phone layout). */
 const SHEET_BELOW_PX = 1024;
 
-/** An item of a UiMenu: a native button or link with the menu item role. */
+/** The roles of a menu's items: a plain action, or one choice of a set (an order). */
+const ITEM = '[role="menuitem"], [role="menuitemradio"]';
+const ENABLED_ITEM =
+  '[role="menuitem"]:not([disabled]), [role="menuitemradio"]:not([disabled])';
+
+/**
+ * An item of a UiMenu: a native button or link with the menu item role. Given `checked`, it
+ * is one choice of a set (`menuitemradio`, aria-checked) and the chosen one shows a check.
+ */
 @Directive({
   selector: '[uiMenuItem]',
   host: {
     class: 'ui-menu__item',
-    role: 'menuitem',
+    '[attr.role]': 'checked() === null ? "menuitem" : "menuitemradio"',
+    '[attr.aria-checked]': 'checked()',
     tabindex: '-1',
     '[class.ui-menu__item--danger]': 'danger()',
   },
@@ -30,6 +39,8 @@ const SHEET_BELOW_PX = 1024;
 export class UiMenuItem {
   /** A destructive item, in the danger colour (with its own words). */
   readonly danger = input(false);
+  /** One choice of a set: whether it is the chosen one (null: a plain action). */
+  readonly checked = input<boolean | null>(null);
 }
 
 /**
@@ -151,9 +162,26 @@ export class UiMenu {
     End: () => this.items().at(-1)?.focus(),
   };
 
+  /**
+   * A choice closes the menu. The item's own handler ran first (the click bubbles up from
+   * it): when it took the focus elsewhere (a dialog, a field) the focus stays there, else it
+   * goes back to the trigger instead of dropping to the page (APG menu button).
+   */
   protected chosen(event: MouseEvent): void {
-    const item = (event.target as HTMLElement).closest('[role="menuitem"]');
-    if (item) this.close(false);
+    const item = (event.target as HTMLElement).closest(ITEM);
+    if (!item) return;
+    this.close(false);
+    afterNextRender(
+      () => {
+        const at = this.document.activeElement;
+        const lost =
+          !at ||
+          at === this.document.body ||
+          this.panel().nativeElement.contains(at);
+        if (lost) this.trigger().nativeElement.focus();
+      },
+      { injector: this.injector },
+    );
   }
 
   /** A click outside, or on the phone sheet's scrim (the panel's own backdrop). */
@@ -172,9 +200,7 @@ export class UiMenu {
 
   private items(): HTMLElement[] {
     return [
-      ...this.panel().nativeElement.querySelectorAll<HTMLElement>(
-        '[role="menuitem"]:not([disabled])',
-      ),
+      ...this.panel().nativeElement.querySelectorAll<HTMLElement>(ENABLED_ITEM),
     ];
   }
 }

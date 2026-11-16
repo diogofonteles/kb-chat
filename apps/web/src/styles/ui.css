@@ -911,6 +911,22 @@ select.ui-input option {
   color: var(--color-danger);
 }
 
+/* The chosen one of a set (an order): in the accent, with a check at the end. */
+.ui-menu__item[aria-checked='true'] {
+  color: var(--color-accent-text);
+}
+
+.ui-menu__item[aria-checked='true']::after {
+  content: '';
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  margin-left: auto;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 12.5 4 4 8-9'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
 .ui-menu__item > .ui-kbd,
 .ui-menu__item > .ui-menu__meta {
   margin-left: auto;

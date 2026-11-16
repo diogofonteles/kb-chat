@@ -1,10 +1,14 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
+  inject,
   input,
   output,
 } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { filter, map } from 'rxjs';
 import { UiIcon } from '@ui/icon.js';
 import type { IconName } from '@ui/icons.js';
 
@@ -29,7 +33,7 @@ export interface NavTabItem {
  */
 @Component({
   selector: 'app-bottom-nav',
-  imports: [RouterLink, RouterLinkActive, UiIcon],
+  imports: [RouterLink, UiIcon],
   template: `
     <nav aria-label="Navegação" i18n-aria-label="@@nav.label">
       <ul>
@@ -39,10 +43,8 @@ export interface NavTabItem {
               <a
                 class="tab"
                 [routerLink]="tab.path"
-                [routerLinkActive]="tab.acts ? [] : ['on']"
-                [ariaCurrentWhenActive]="tab.acts ? false : 'page'"
-                [class.on]="active() === tab.id"
-                [routerLinkActiveOptions]="{ exact: tab.path === '/' }"
+                [class.on]="current() === tab.id"
+                [attr.aria-current]="current() === tab.id ? 'page' : null"
                 (click)="chosen.emit(tab.id)"
               >
                 <ui-icon [name]="tab.icon" [size]="24" />
@@ -52,8 +54,8 @@ export interface NavTabItem {
               <button
                 type="button"
                 class="tab"
-                [class.on]="active() === tab.id"
-                [attr.aria-pressed]="active() === tab.id"
+                [class.on]="current() === tab.id"
+                [attr.aria-pressed]="current() === tab.id"
                 (click)="chosen.emit(tab.id)"
               >
                 <ui-icon [name]="tab.icon" [size]="24" />
@@ -93,8 +95,7 @@ export interface NavTabItem {
       text-decoration: none;
       cursor: pointer;
     }
-    .tab.on,
-    .tab[aria-current] {
+    .tab.on {
       color: var(--color-text);
       font-weight: 700;
     }
@@ -103,9 +104,37 @@ export interface NavTabItem {
 })
 export class BottomNav {
   readonly tabs = input.required<readonly NavTabItem[]>();
-  /** The acting tab on (Buscar while searching). */
+  /** The acting tab on (Buscar while searching): it takes the place of the route's tab. */
   readonly active = input<NavTab | null>(null);
   readonly chosen = output<NavTab>();
+  private readonly router = inject(Router);
+  private readonly url = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => this.router.url),
+    ),
+    { initialValue: this.router.url },
+  );
+  /**
+   * The one tab on, the current page for assistive tech: the acting tab when there is one,
+   * else the page tab of the route (Buscar and Conversas share "/", never both on).
+   */
+  protected readonly current = computed((): NavTab | null => {
+    const active = this.active();
+    if (active) return active;
+    const [path = '/'] = this.url().split(/[?#]/);
+    return (
+      this.tabs().find((tab) => !tab.acts && tab.path && onPath(path, tab.path))
+        ?.id ?? null
+    );
+  });
+}
+
+/** Whether `path` is the tab's page: "/" exactly, any other one with what is under it. */
+function onPath(path: string, tabPath: string): boolean {
+  return tabPath === '/'
+    ? path === '/'
+    : path === tabPath || path.startsWith(`${tabPath}/`);
 }
 
 /** The tabs every collection has: Conversas, Buscar and Acervos. */

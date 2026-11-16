@@ -117,7 +117,7 @@
       <button
         uiMenuItem
         type="button"
-        [attr.aria-checked]="order() === 'recent'"
+        [checked]="order() === 'recent'"
         (click)="order.set('recent')"
         i18n="@@library.recent"
       >
@@ -126,7 +126,7 @@
       <button
         uiMenuItem
         type="button"
-        [attr.aria-checked]="order() === 'alpha'"
+        [checked]="order() === 'alpha'"
         (click)="order.set('alpha')"
         i18n="@@library.alpha"
       >

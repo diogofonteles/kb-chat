@@ -144,18 +144,16 @@ test('AC-5: on a phone the last item of a long list stays above the navigation',
 }) => {
   test.skip(desktop(page), 'Phones only.');
   await page.goto('/');
-  await page
-    .getByRole('navigation', { name: 'Navegação' })
-    .getByRole('link', { name: 'Buscar' })
-    .click();
+  const tabs = page.getByRole('navigation', { name: 'Navegação' });
+  await tabs.getByRole('link', { name: 'Buscar' }).click();
   await page.getByLabel('Sua pergunta').fill('ritmo');
   await page.getByRole('button', { name: 'Buscar', exact: true }).click();
   await expect(page.getByText(/documentos? · Tudo ·/)).toBeVisible();
+  // One current tab: Buscar, never Conversas too though both open "/".
+  await expect(tabs.locator('[aria-current="page"]')).toHaveText(['Buscar']);
   const last = page.locator('app-result-card').last();
   await last.scrollIntoViewIfNeeded();
-  const nav = await page
-    .getByRole('navigation', { name: 'Navegação' })
-    .boundingBox();
+  const nav = await tabs.boundingBox();
   const item = await last.boundingBox();
   expect(item && nav && item.y + item.height <= nav.y).toBe(true);
   // The band behind the navigation is opaque: the page never shows through.
@@ -287,7 +285,8 @@ async function expectWholeOnTop(page: Page, menuName: string): Promise<void> {
   expect(box.x + box.width).toBeLessThanOrEqual(size.width);
   expect(box.y + box.height).toBeLessThanOrEqual(size.height);
   // Nothing covers or clips the items: the point under each one is the item itself.
-  for (const item of await menu.getByRole('menuitem').all()) {
+  // Actions and choices (an order) alike.
+  for (const item of await menu.locator('[role^="menuitem"]').all()) {
     const hit = await item.evaluate((el) => {
       const r = el.getBoundingClientRect();
       const at = document.elementFromPoint(
@@ -320,11 +319,27 @@ test('D5: "+ Criar", "Recentes" and the avatar menu open whole, over the sidebar
     side.getByRole('button', { name: 'Criar', exact: true }),
   ).toBeFocused();
 
-  await side.getByRole('button', { name: /Ordenar por/ }).click();
+  const order = side.getByRole('button', { name: /Ordenar por/ });
+  await order.click();
   await expectWholeOnTop(page, 'Ordenar');
+  // The order is a choice: the current one is checked, and the open menu passes axe.
+  await expect(
+    page.getByRole('menuitemradio', { name: 'Recentes' }),
+  ).toHaveAttribute('aria-checked', 'true');
+  await expect(
+    page.getByRole('menuitemradio', { name: 'Ordem alfabética' }),
+  ).toHaveAttribute('aria-checked', 'false');
+  expect(await seriousViolations(page)).toEqual([]);
   await shoot(page, 'shell-order-menu');
-  await page.getByRole('menuitem', { name: 'Ordem alfabética' }).click();
+  await page.getByRole('menuitemradio', { name: 'Ordem alfabética' }).click();
   await expect(page.getByRole('menu', { name: 'Ordenar' })).toBeHidden();
+  // Back on the trigger, not lost on the page (APG menu button).
+  await expect(order).toBeFocused();
+  await order.click();
+  await expect(
+    page.getByRole('menuitemradio', { name: 'Ordem alfabética' }),
+  ).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
 
   if (desktop(page)) {
     await page.getByRole('button', { name: /^Conta de / }).click();

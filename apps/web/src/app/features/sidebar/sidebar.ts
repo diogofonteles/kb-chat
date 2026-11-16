@@ -46,6 +46,7 @@ import { UiProgress } from '@ui/progress.js';
 import {
   collectionTree,
   groupByRecency,
+  inVisibleCollections,
   orderByTitle,
   orderCollections,
   shows,
@@ -270,7 +271,10 @@ export class Sidebar {
   protected readonly pinnedCount = computed(() => this.pinned().length);
   protected readonly documents = computed(() =>
     shows(this.kind(), 'documents')
-      ? orderByTitle(this.recents.documents(), this.view()).map((doc) => ({
+      ? orderByTitle(
+          inVisibleCollections(this.recents.documents(), this.titles()),
+          this.view(),
+        ).map((doc) => ({
           ...doc,
           meta: this.titles().get(doc.topic) ?? doc.topic,
         }))
