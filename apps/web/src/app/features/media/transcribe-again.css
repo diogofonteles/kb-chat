@@ -34,14 +34,23 @@
   font-weight: 600;
 }
 
+/* v2 pills (KBC-129): the editing entries under the action bar. */
 .primary,
 .secondary {
   min-height: var(--target);
   padding: 0 var(--space-4);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   font: inherit;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: 700;
   cursor: pointer;
+}
+
+@media (min-width: 1024px) {
+  .primary,
+  .secondary {
+    min-height: 2.25rem;
+  }
 }
 
 .primary {
@@ -51,8 +60,8 @@
 }
 
 .secondary {
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid var(--overlay-4);
+  background: none;
   color: var(--color-text);
 }
 

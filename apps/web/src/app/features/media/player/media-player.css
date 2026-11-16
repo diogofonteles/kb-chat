@@ -1,16 +1,15 @@
 :host {
   display: block;
+  /* The host is the container: the bar's own grid answers to its width. */
+  container: player / inline-size;
 }
 
+/* v2 action bar (KBC-129): no card; on a wide page the green play leads a row with the
+   skips, the speed pill, CC, volume, mark and ⋯, and the seek line runs under it. On a
+   phone it is the full-screen player's centred controls. */
 .player {
-  container: player / inline-size;
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-4) var(--space-6) var(--space-6);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow);
 }
 
 .alert {
@@ -20,9 +19,8 @@
   justify-content: space-between;
   gap: var(--space-2) var(--space-4);
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-sm);
-  border-left: 4px solid var(--color-danger);
-  background: var(--color-surface-muted);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
 }
 
 .alert p {
@@ -82,7 +80,7 @@
 }
 
 .skip:hover:not(:disabled) {
-  background: var(--color-surface-muted);
+  background: var(--overlay-2);
 }
 
 .skip-amount {
@@ -137,10 +135,12 @@
 .again {
   min-height: var(--target);
   padding: 0 var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  font-weight: 600;
+  border: 1px solid var(--overlay-4);
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 700;
 }
 
 .again {
@@ -244,7 +244,7 @@
 }
 
 .cc:hover:not(:disabled) {
-  background: var(--color-surface-muted);
+  background: var(--overlay-2);
 }
 
 .cc:disabled {
@@ -273,7 +273,7 @@
 
 .bookmark:hover:not(:disabled),
 .mute:hover {
-  background: var(--color-surface-muted);
+  background: var(--overlay-2);
 }
 
 .bookmark:disabled {
@@ -286,9 +286,45 @@
   accent-color: var(--color-accent);
 }
 
-@media (max-width: 1023px) {
+/* The page's action bar: play first, everything in one row, the seek line under it. */
+@container player (min-width: 40rem) {
   .player {
-    padding: var(--space-3) var(--space-4) var(--space-4);
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: var(--space-4);
+    align-items: center;
+  }
+
+  .player > :not(.controls, .options) {
+    grid-column: 1 / -1;
+  }
+
+  .controls {
+    order: -2;
+    justify-content: flex-start;
+    gap: var(--space-2);
+  }
+
+  .options {
+    order: -1;
+    justify-content: flex-start;
+    gap: var(--space-2);
+  }
+
+  .alert,
+  .low-badge,
+  .caption-area {
+    order: -3;
+  }
+
+  /* The play button leads: 56, then the skips at 40. */
+  .controls .play {
+    order: -1;
+    margin-right: var(--space-2);
+  }
+
+  .skip {
+    width: 2.5rem;
+    height: 2.5rem;
   }
 }
 
@@ -301,26 +337,39 @@
 }
 
 .track-now {
+  display: grid;
   margin: 0;
+  font-size: var(--text-item);
+  font-weight: 700;
   text-align: center;
   overflow-wrap: anywhere;
 }
 
 .track-number {
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .track-step {
-  min-height: 44px;
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: none;
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
   color: inherit;
   font: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
+  font-weight: 700;
   cursor: pointer;
+}
+
+@media (max-width: 1023px) {
+  .track-step {
+    min-height: var(--target);
+  }
 }
 
 .track-step:disabled {

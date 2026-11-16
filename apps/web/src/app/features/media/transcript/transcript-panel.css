@@ -10,22 +10,20 @@
   flex-direction: column;
   gap: var(--space-3);
   min-height: 0;
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
 }
 
+/* v2 (KBC-129 FR-1): the transcript is the page's body; the chips already name it. */
 .title {
   margin: 0;
-  font-size: var(--text-md);
+  font-size: 1.25rem;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .made-with {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
 }
 
 .empty {
@@ -53,12 +51,17 @@
   flex: 1;
   min-width: 0;
   min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
   color: var(--color-text);
   font: inherit;
+}
+
+.search input:focus-visible {
+  border-color: var(--color-text);
+  outline: none;
 }
 
 .count {
@@ -76,9 +79,9 @@
 
 .ghost {
   min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--overlay-4);
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text);
   font: inherit;
@@ -87,12 +90,12 @@
 }
 
 .ghost:hover {
-  background: var(--color-surface-muted);
+  background: var(--overlay-2);
 }
 
 .strong {
-  font-weight: 600;
-  color: var(--color-accent-strong);
+  font-weight: 700;
+  color: var(--color-text);
 }
 
 .copy {
@@ -118,8 +121,8 @@
   overscroll-behavior: contain;
   list-style: none;
   font-family: var(--font-reading);
-  font-size: var(--text-md);
-  line-height: 1.55;
+  font-size: 1.125rem;
+  line-height: 1.5;
 }
 
 .segment {
@@ -136,13 +139,26 @@
 }
 
 .segment:hover {
+  background: var(--overlay-1);
+}
+
+/* The segment heard now: large and bold with a side bar, never colour alone (UP-20); what
+   comes after it is muted, as in the v2 frame. Only colours change on the others. */
+.segment.active {
+  border-left-color: var(--color-accent);
+  /* Opaque, so the text and the voices keep their measured contrast over it. */
   background: var(--color-surface-muted);
 }
 
-/* The segment heard now: background and a side bar, never colour alone (UP-20). */
-.segment.active {
-  border-left-color: var(--color-accent);
-  background: var(--color-surface-muted);
+.segment.active .text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.segment.active ~ .segment .text {
+  color: var(--color-text-muted);
 }
 
 .time {
@@ -152,7 +168,7 @@
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-accent-strong);
+  color: var(--color-accent-text);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
   font-weight: 600;

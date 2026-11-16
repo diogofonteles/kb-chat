@@ -1,37 +1,47 @@
+/* v2 row of the Fila (KBC-129 FR-4): item (cover, title, collection) · the mini stepper ·
+   the situation in a pill with its detail · the one action. On a phone, a card. */
 :host {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-4);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-}
-
-:host(.current) {
-  border-left-color: var(--color-accent);
-}
-
-:host(.failed) {
-  border-left-color: var(--color-danger);
-}
-
-.main {
   display: grid;
-  flex: 1 1 16rem;
-  gap: var(--space-1);
+  grid-template-columns:
+    minmax(12rem, 1.4fr) minmax(16rem, 1.4fr) minmax(12rem, 1fr)
+    9rem;
+  gap: var(--space-3) var(--space-5);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-menu);
+}
+
+:host(:hover) {
+  background: var(--overlay-1);
+}
+
+.item {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+}
+
+.cover {
+  flex: none;
+}
+
+.names {
+  display: grid;
   min-width: 0;
 }
 
 .title {
   display: block;
-  padding-block: var(--space-1);
   color: var(--color-text);
-  font-weight: 600;
+  font-size: var(--text-item);
+  font-weight: 500;
+  text-decoration: none;
   overflow-wrap: anywhere;
+}
+
+.title:hover {
+  text-decoration: underline;
 }
 
 .topic,
@@ -42,9 +52,71 @@
 }
 
 .topic,
+.state,
 .detail {
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+}
+
+.topic {
+  font-size: var(--text-meta);
+}
+
+/* The four steps: green done, the current one in the situation's colour, faint ahead. */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+}
+
+.steps li::before {
+  content: '';
+  display: block;
+  height: 4px;
+  margin-bottom: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-4);
+}
+
+.steps li.done::before {
+  background: var(--color-accent);
+}
+
+.steps li.current {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.steps li.current::before {
+  background: var(--tone, var(--color-text));
+}
+
+:host([data-tone='err']) {
+  --tone: var(--color-danger);
+}
+
+:host([data-tone='warn']) {
+  --tone: var(--color-warn);
+}
+
+:host([data-tone='ok']) {
+  --tone: var(--color-accent);
+}
+
+:host([data-tone='info']) {
+  --tone: var(--color-info);
+}
+
+.main {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  min-width: 0;
 }
 
 :host(.failed) .state {
@@ -59,10 +131,10 @@
 
 .bar {
   width: 100%;
-  height: 6px;
+  height: 4px;
   overflow: hidden;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-4);
 }
 
 .bar span {
@@ -72,5 +144,24 @@
 }
 
 .action {
-  flex: none;
+  justify-self: end;
+}
+
+.primary.action {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+@media (max-width: 1023px) {
+  :host {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border-radius: var(--radius-card);
+    background: var(--overlay-1);
+  }
+
+  .action {
+    justify-self: stretch;
+  }
 }

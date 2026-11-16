@@ -10,6 +10,7 @@ import {
   effect,
   inject,
   input,
+  output,
   untracked,
   viewChild,
 } from '@angular/core';
@@ -100,6 +101,12 @@ export class MediaPlayer {
    * layout): a short notice goes with the subtitles (KBC-036 BR-5).
    */
   readonly lowConfidence = input(false);
+  /**
+   * The page's own actions at the top of ⋯ (v2, KBC-129: "Editar informações", "Preparar
+   * áudio", "Esconder transcrição"); a choice of one goes back to the page.
+   */
+  readonly pageOptions = input<readonly MenuOption[]>([]);
+  readonly pageChosen = output<string>();
 
   protected readonly engine = inject(MediaEngine);
   private readonly transcriptPreferences = inject(TranscriptPreferences);
@@ -207,6 +214,7 @@ export class MediaPlayer {
       : '',
   );
   protected readonly moreOptions = computed<readonly MenuOption[]>(() => [
+    ...this.pageOptions(),
     {
       id: 'link',
       label: $localize`:@@player.copyMinuteLink:Copiar link deste minuto`,
@@ -365,7 +373,16 @@ export class MediaPlayer {
     );
   }
 
+  /** After a page action's dialog closes, the focus goes back to ⋯ (WCAG 2.4.3). */
+  focusMore(): void {
+    this.more().focus();
+  }
+
   protected chooseMore(id: string): void {
+    if (this.pageOptions().some((option) => option.id === id)) {
+      this.pageChosen.emit(id);
+      return;
+    }
     if (id === 'link') this.copyMinuteLink();
     if (id === 'word-highlight') this.toggleWordHighlight();
     if (id === 'speakers') this.transcriptPreferences.toggleSpeakers();

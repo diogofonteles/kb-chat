@@ -9,7 +9,12 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { TURNS, separateVoices, transcribedAudio } from './voices-helpers.js';
+import {
+  TURNS,
+  separateVoices,
+  showView,
+  transcribedAudio,
+} from './voices-helpers.js';
 import { openSettings as shellOpenSettings } from './shell-helpers.js';
 
 // KBC-071: voice profiles. A master has the feature by the role; a member never has it.
@@ -215,6 +220,7 @@ test('AC-2, AC-3: a suggestion needs a person, and revoking takes what is pendin
 
   await firstVisit(page);
   await page.goto(`/midia/${accepted}`);
+  await showView(page, 'Vozes');
   const voices = page.getByRole('region', { name: 'Vozes' });
   await expect(voices).toContainText(
     `Parece ser ${speakerName} (semelhança alta)`,
@@ -246,9 +252,11 @@ test('AC-2, AC-3: a suggestion needs a person, and revoking takes what is pendin
   );
 
   await page.goto(`/midia/${pending}`);
+  await showView(page, 'Vozes');
   await expect(voices.getByRole('combobox').first()).toBeVisible();
   await expect(voices.getByText(/Parece ser/)).toHaveCount(0);
   await page.goto(`/midia/${accepted}`);
+  await showView(page, 'Vozes');
   await expect(
     voices.getByRole('combobox', { name: 'Quem é a Voz 2?' }),
   ).toHaveValue(speakerName);

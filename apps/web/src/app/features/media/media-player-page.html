@@ -1,9 +1,14 @@
+<!-- v2 player (KBC-129): "Tocando agora" expanded. The cover header, the action bar (the
+     player, with the page's editing actions at the top of ⋯), the views in chips and the
+     synced transcript as the body, and "Sobre" (bookmarks, tracks, removed tracks) beside it. -->
 <article
   class="page"
-  [class.with-transcript]="showTranscript()"
+  [class.with-about]="ready()"
+  [class.with-transcript]="transcriptInView()"
+  [class.failed]="!!loadError()"
   aria-labelledby="media-item-title"
 >
-  <div class="main">
+  <div class="top">
     @if (backToLibrary()) {
       <a class="back" routerLink="/biblioteca" i18n="@@library.back"
         >← Biblioteca</a
@@ -11,32 +16,45 @@
     } @else {
       <a class="back" routerLink="/midia" i18n="@@media.back">← Mídia</a>
     }
+  </div>
 
-    @if (loadError()) {
-      <div class="notice" role="alert">
-        <p>{{ loadError() }}</p>
-        <div class="notice-actions">
-          <a
-            #backToList
-            class="secondary"
-            routerLink="/midia"
-            i18n="@@media.backToList"
-            >Voltar à Mídia</a
+  @if (loadError()) {
+    <div class="notice page-empty" role="alert">
+      <ui-icon
+        class="empty-icon"
+        [name]="notFound() ? 'music' : 'xcircle'"
+        [size]="28"
+      />
+      @if (notFound()) {
+        <p class="empty-title" i18n="@@media.notFoundTitle">
+          Mídia não encontrada
+        </p>
+      }
+      <p>{{ loadError() }}</p>
+      <div class="notice-actions">
+        <a
+          #backToList
+          uiButton="white"
+          routerLink="/midia"
+          i18n="@@media.backToList"
+          >Voltar à Mídia</a
+        >
+        @if (!notFound()) {
+          <button
+            uiButton="outline"
+            type="button"
+            (click)="reload()"
+            i18n="@@media.reload"
           >
-          @if (!notFound()) {
-            <button
-              type="button"
-              class="secondary"
-              (click)="reload()"
-              i18n="@@media.reload"
-            >
-              Tentar de novo
-            </button>
-          }
-        </div>
+            Tentar de novo
+          </button>
+        }
       </div>
-    } @else if (media(); as current) {
-      <header class="head">
+    </div>
+  } @else if (media(); as current) {
+    <header class="hero">
+      <ui-cover class="art" [title]="current.title" [size]="208" />
+      <div class="hero-text">
         @if (current.parent; as parent) {
           <p class="part-of">
             <span i18n="@@tracks.partOf">Parte de:</span>
@@ -52,6 +70,8 @@
               >Ouvir no contexto</a
             >
           </p>
+        } @else {
+          <p class="kicker" i18n="@@media.kicker">Áudio</p>
         }
         <h2 id="media-item-title">{{ current.title }}</h2>
         <p class="meta">
@@ -63,62 +83,72 @@
             >enviado em {{ current.createdAt | date: 'dd/MM/yyyy' }}</span
           >
           @if (transcription(); as text) {
-            <span class="transcription">{{ text }}</span>
+            <ui-pill class="transcription" [tone]="transcriptionTone()">{{
+              text
+            }}</ui-pill>
           }
         </p>
         @if (canEdit() || canEditTrack()) {
           <app-track-publication-status [mediaId]="current.id" />
         }
-        @if (canReadAbout()) {
-          <app-track-about-view
-            [mediaId]="current.id"
-            [canSearch]="canSearch()"
-            (subjectChosen)="searchSubject($event)"
-          />
-        }
-        @if (canSeeSubjects()) {
-          <app-track-subjects-view [mediaId]="current.id" />
-        }
-        @if (lowConfidence()) {
-          <p
-            class="warning-notice low-confidence"
-            i18n="@@media.transcription.lowNotice"
-          >
-            Transcrição automática de baixa confiança: pode haver trechos
-            errados.
-          </p>
-        }
-        @if (canEditTrack()) {
-          <app-moved-bookmarks-notice [mediaId]="current.id" />
-          <app-track-actions
-            [media]="current"
-            (changed)="trackChanged($event)"
-          />
-        } @else if (current.parent) {
-          <app-moved-bookmarks-notice [mediaId]="current.id" />
-        }
-        @if (current.canEdit) {
-          <button
-            #editButton
-            type="button"
-            class="secondary edit"
-            aria-haspopup="dialog"
-            (click)="editing.set(true)"
-          >
-            {{ editLabel }}
-          </button>
-        }
-      </header>
+      </div>
+    </header>
 
-      @if (ready()) {
+    <div class="notes">
+      @if (canReadAbout()) {
+        <app-track-about-view
+          [mediaId]="current.id"
+          [canSearch]="canSearch()"
+          (subjectChosen)="searchSubject($event)"
+        />
+      }
+      @if (canSeeSubjects()) {
+        <app-track-subjects-view [mediaId]="current.id" />
+      }
+      @if (lowConfidence()) {
+        <p
+          class="warning-notice low-confidence"
+          i18n="@@media.transcription.lowNotice"
+        >
+          Transcrição automática de baixa confiança: pode haver trechos errados.
+        </p>
+      }
+      @if (canEditTrack()) {
+        <app-moved-bookmarks-notice [mediaId]="current.id" />
+        <app-track-actions [media]="current" (changed)="trackChanged($event)" />
+      } @else if (current.parent) {
+        <app-moved-bookmarks-notice [mediaId]="current.id" />
+      }
+      @if (current.canEdit && !ready()) {
+        <button
+          #editButton
+          uiButton="outline"
+          type="button"
+          class="edit"
+          aria-haspopup="dialog"
+          (click)="editing.set(true)"
+        >
+          <ui-icon name="edit" [size]="16" />
+          {{ editLabel }}
+        </button>
+      }
+    </div>
+
+    @if (ready()) {
+      <div class="action-bar">
         @if (resumeAt() !== null) {
           <div class="resume">
-            <button type="button" class="primary" (click)="resume()">
+            <button
+              uiButton="primary"
+              type="button"
+              class="resume-from"
+              (click)="resume()"
+            >
               {{ resumeLabel() }}
             </button>
             <button
+              uiButton="ghost"
               type="button"
-              class="secondary"
               (click)="startOver()"
               i18n="@@player.startOver"
             >
@@ -131,123 +161,175 @@
           [captionsAvailable]="hasTranscript()"
           [speakersAvailable]="canSeeSpeakers()"
           [lowConfidence]="lowCaptions()"
+          [pageOptions]="pageOptions()"
+          (pageChosen)="choosePageAction($event)"
         />
-        <app-track-nav-list />
         @if (editEntry(); as entry) {
-          <p class="edit-entry">
-            @switch (entry.state) {
-              @case ('new') {
-                <a
-                  class="secondary"
-                  [routerLink]="prepareLink()"
-                  i18n="@@prep.entry.new"
-                  >Preparar áudio</a
-                >
+          @if (entry.state !== 'new') {
+            <p class="edit-entry">
+              @switch (entry.state) {
+                @case ('paused') {
+                  <app-preparation-entry [mediaId]="id()" [step]="entry.step" />
+                }
+                @case ('approved') {
+                  <span>{{ appliedText() }}</span>
+                  ·
+                  <a [routerLink]="editLink()" i18n="@@tracks.entry.see"
+                    >Ver edição</a
+                  >
+                  <app-track-preparation [mediaId]="id()" />
+                }
               }
-              @case ('paused') {
-                <app-preparation-entry [mediaId]="id()" [step]="entry.step" />
-              }
-              @case ('approved') {
-                <span>{{ appliedText() }}</span>
-                ·
-                <a [routerLink]="editLink()" i18n="@@tracks.entry.see"
-                  >Ver edição</a
-                >
-                <app-track-preparation [mediaId]="id()" />
-              }
-            }
-          </p>
+            </p>
+          }
         }
-        @if (hasTranscript()) {
-          <button
-            type="button"
-            class="secondary toggle-transcript"
-            [attr.aria-expanded]="!collapsed()"
-            [attr.aria-controls]="collapsed() ? null : 'transcript-column'"
-            (click)="toggleTranscript()"
-          >
-            @if (collapsed()) {
-              <ng-container i18n="@@transcript.show"
-                >Mostrar transcrição</ng-container
-              >
-            } @else {
-              <ng-container i18n="@@transcript.hide"
-                >Esconder transcrição</ng-container
-              >
-            }
-          </button>
-        }
-        <app-transcribe-again [media]="current" (queued)="item.set($event)" />
-        <app-transcribe-with-groq
-          [media]="current"
-          (sent)="item.set($event)"
-          (capped)="reload()"
-        />
-      } @else if (current.archived) {
-        <div class="notice" role="status">
-          <p i18n="@@tracks.removedFromEdit">Faixa removida da edição</p>
+        <div class="edit-tools">
+          <app-transcribe-again [media]="current" (queued)="item.set($event)" />
+          <app-transcribe-with-groq
+            [media]="current"
+            (sent)="item.set($event)"
+            (capped)="reload()"
+          />
         </div>
-      } @else {
-        <p class="not-ready" role="status">
-          <span class="status">{{ status() }}</span>
-          <span i18n="@@media.notReady"
-            >Ela aparece aqui para ouvir assim que estiver pronta.</span
+      </div>
+
+      <div class="body">
+        @if (hasViews()) {
+          <div
+            class="views"
+            role="group"
+            aria-label="Ver"
+            i18n-aria-label="@@player.views"
           >
-        </p>
-      }
+            <button
+              uiChip
+              type="button"
+              [selected]="view() === 'transcript'"
+              (click)="view.set('transcript')"
+              i18n="@@player.view.transcript"
+            >
+              Transcrição
+            </button>
+            @if (hasTracks()) {
+              <button
+                uiChip
+                type="button"
+                [selected]="view() === 'tracks'"
+                (click)="view.set('tracks')"
+                i18n="@@player.view.tracks"
+              >
+                Faixas
+              </button>
+            }
+            @if (canEdit()) {
+              <button
+                uiChip
+                type="button"
+                [selected]="view() === 'voices'"
+                (click)="view.set('voices')"
+                i18n="@@player.view.voices"
+              >
+                Vozes
+              </button>
+            }
+          </div>
+        }
+
+        @if (view() === 'transcript') {
+          @if (showTranscript()) {
+            <section
+              id="transcript-column"
+              class="side"
+              aria-label="Transcrição"
+              i18n-aria-label="@@transcript.region"
+            >
+              @if (transcript.hasValue()) {
+                <app-transcript-panel
+                  [transcript]="transcript.value()"
+                  [title]="current.title"
+                  [showSpeakers]="speakersOn()"
+                  [wordByWord]="wordHighlight()"
+                />
+              } @else if (transcriptError()) {
+                <div class="notice" role="alert">
+                  <p>{{ transcriptError() }}</p>
+                  <div class="notice-actions">
+                    <button
+                      uiButton="outline"
+                      type="button"
+                      (click)="reloadTranscript()"
+                      i18n="@@transcript.reload"
+                    >
+                      Tentar de novo
+                    </button>
+                  </div>
+                </div>
+              } @else {
+                <div class="side-skeleton" aria-busy="true">
+                  <span class="visually-hidden" i18n="@@transcript.loading"
+                    >Carregando a transcrição…</span
+                  >
+                </div>
+              }
+            </section>
+          } @else if (hasTranscript()) {
+            <p class="hidden-note" i18n="@@transcript.hiddenNote">
+              Transcrição escondida. Mostre de novo em ⋯ Mais opções.
+            </p>
+          } @else if (hasViews()) {
+            <p class="hidden-note" i18n="@@transcript.notYet">
+              A transcrição aparece aqui quando ficar pronta.
+            </p>
+          }
+        } @else if (view() === 'tracks') {
+          <app-track-nav-list class="tracks-view" />
+        } @else if (canEdit()) {
+          <app-voices-panel
+            class="voices"
+            [mediaId]="current.id"
+            [topic]="current.topic"
+            (separated)="readVoicesOf($event)"
+            (renamed)="reloadTranscript()"
+          />
+        }
+      </div>
+
+      <aside
+        class="about"
+        aria-label="Sobre este áudio"
+        i18n-aria-label="@@player.about"
+      >
+        <app-bookmark-list class="bookmarks" />
+        @if (view() !== 'tracks') {
+          <app-track-nav-list />
+        }
+        @if (canEdit()) {
+          <app-archived-tracks class="archived" [recordingId]="current.id" />
+        }
+      </aside>
+    } @else if (current.archived) {
+      <div class="notice" role="status">
+        <p i18n="@@tracks.removedFromEdit">Faixa removida da edição</p>
+      </div>
     } @else {
-      <div class="skeleton" aria-busy="true">
-        <span class="bar title-bar"></span>
-        <span class="bar"></span>
-        <span class="player-box"></span>
+      <div class="not-ready" role="status">
+        <ui-icon
+          class="empty-icon"
+          [name]="current.status === 'failed' ? 'xcircle' : 'clock'"
+          [size]="28"
+        />
+        <p class="status">{{ status() }}</p>
+        <p i18n="@@media.notReady">
+          Ela aparece aqui para ouvir assim que estiver pronta.
+        </p>
       </div>
     }
-  </div>
-
-  @if (showTranscript() && media(); as current) {
-    <aside id="transcript-column" class="side">
-      @if (transcript.hasValue()) {
-        <app-transcript-panel
-          [transcript]="transcript.value()"
-          [title]="current.title"
-          [showSpeakers]="speakersOn()"
-          [wordByWord]="wordHighlight()"
-        />
-      } @else if (transcriptError()) {
-        <div class="notice" role="alert">
-          <p>{{ transcriptError() }}</p>
-          <div class="notice-actions">
-            <button
-              type="button"
-              class="secondary"
-              (click)="reloadTranscript()"
-              i18n="@@transcript.reload"
-            >
-              Tentar de novo
-            </button>
-          </div>
-        </div>
-      } @else {
-        <div class="side-skeleton" aria-busy="true">
-          <span class="visually-hidden" i18n="@@transcript.loading"
-            >Carregando a transcrição…</span
-          >
-        </div>
-      }
-    </aside>
-  }
-  @if (ready()) {
-    <app-bookmark-list class="bookmarks" />
-    @if (canEdit() && media(); as current) {
-      <app-archived-tracks class="archived" [recordingId]="current.id" />
-      <app-voices-panel
-        class="voices"
-        [mediaId]="current.id"
-        [topic]="current.topic"
-        (separated)="readVoicesOf($event)"
-        (renamed)="reloadTranscript()"
-      />
-    }
+  } @else {
+    <div class="skeleton" aria-busy="true">
+      <span class="bar title-bar"></span>
+      <span class="bar"></span>
+      <span class="player-box"></span>
+    </div>
   }
   <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
 </article>

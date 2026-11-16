@@ -8,7 +8,13 @@ import {
   viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import type { ProcessingQueueItem, RetryStage } from '@kb-chat/contracts';
+import type {
+  PreparationStageId,
+  ProcessingQueueItem,
+  RetryStage,
+  StageState,
+} from '@kb-chat/contracts';
+import { UiCover, UiPill, type Tone } from '@ui/index.js';
 import { mediaPagePath } from '@core/media/media-api.js';
 import { editPagePath } from '@core/media/media-edit-api.js';
 import { preparationPagePath } from '@core/media/preparation-api.js';
@@ -18,6 +24,49 @@ import {
   queueProgressText,
   queueStateText,
 } from './queue-labels.js';
+
+/** The mini stepper of a row (v2 · Fila): Enviar → Converter → Transcrever → Preparar. */
+const STEP_NAMES: readonly (() => string)[] = [
+  () => $localize`:@@queue.step.upload:Enviar`,
+  () => $localize`:@@queue.step.convert:Converter`,
+  () => $localize`:@@queue.step.transcribe:Transcrever`,
+  () => $localize`:@@queue.step.prepare:Preparar`,
+];
+const STEP_OF: Record<PreparationStageId, number> = {
+  upload: 0,
+  convert: 1,
+  transcribe: 2,
+  speakers: 3,
+  tracks: 3,
+};
+
+export type QueueStepState = 'done' | 'current' | 'ahead';
+
+/** Where an item is on the four steps; past the last stage every step is done. */
+export function queueSteps(
+  stage: PreparationStageId | null,
+): readonly QueueStepState[] {
+  const at = stage === null ? STEP_NAMES.length : STEP_OF[stage];
+  return STEP_NAMES.map((_, index) =>
+    index < at ? 'done' : index === at ? 'current' : 'ahead',
+  );
+}
+
+/** The tone of the situation: the word carries it, the colour backs it. */
+export function queueTone(state: StageState | null): Tone {
+  if (state === null || state === 'done') return 'ok';
+  if (state === 'failed') return 'err';
+  if (state === 'running') return 'info';
+  return 'warn';
+}
+
+const TONE_WORD: Record<Tone, () => string> = {
+  ok: () => $localize`:@@queue.tone.ok:Concluído`,
+  err: () => $localize`:@@queue.tone.err:Falhou`,
+  info: () => $localize`:@@queue.tone.info:Processando`,
+  warn: () => $localize`:@@queue.tone.warn:Aguardando`,
+  muted: () => '',
+};
 
 /** What pressing a row's button asks. */
 export type QueueMove =
@@ -31,7 +80,7 @@ export type QueueMove =
  */
 @Component({
   selector: 'app-queue-row',
-  imports: [RouterLink],
+  imports: [RouterLink, UiCover, UiPill],
   templateUrl: './queue-row.html',
   styleUrls: ['../preparation/preparation-buttons.css', './queue-row.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -39,6 +88,7 @@ export type QueueMove =
     role: 'listitem',
     '[class.failed]': "item().state === 'failed'",
     '[class.current]': "item().phase === 'running'",
+    '[attr.data-tone]': 'tone()',
   },
 })
 export class QueueRow {
@@ -57,6 +107,16 @@ export class QueueRow {
     return step === 3 ? editPagePath(mediaId) : preparationPagePath(mediaId);
   });
   protected readonly stateText = computed(() => queueStateText(this.item()));
+  protected readonly tone = computed(() =>
+    this.item().waitsForTranscriber ? 'warn' : queueTone(this.item().state),
+  );
+  protected readonly toneWord = computed(() => TONE_WORD[this.tone()]());
+  protected readonly steps = computed(() =>
+    queueSteps(this.item().stage).map((state, index) => ({
+      state,
+      name: STEP_NAMES[index]?.() ?? '',
+    })),
+  );
   protected readonly positionText = computed(() =>
     queuePositionText(this.item()),
   );
