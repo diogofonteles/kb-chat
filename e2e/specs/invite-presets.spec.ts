@@ -14,6 +14,7 @@ import {
   openSettings,
   SETTINGS_AXE,
   showTab,
+  openPeople as openPeopleSettings,
 } from './settings-helpers.js';
 
 /**
@@ -26,7 +27,7 @@ import {
 
 async function openPeople(page: Page): Promise<Locator> {
   await page.goto('/');
-  return openPeople(page);
+  return openPeopleSettings(page);
 }
 
 const shots = process.env['KBC_SHOTS'];

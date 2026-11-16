@@ -9,6 +9,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { startNewCollection } from './shell-helpers.js';
 
 // KBC-127: the source of an AI answer beside it (460) or in the phone's reading sheet (85%),
 // the document as a page, the states of an answer and the collection dialog, at 1440 and
@@ -328,8 +329,8 @@ test('AC-7: "Novo acervo" with no name says why and keeps the dialog open', asyn
   page,
 }) => {
   await page.goto('/');
-  if (phone(page)) await page.getByRole('button', { name: /Menu/ }).click();
-  await page.getByRole('button', { name: /Novo acervo/ }).click();
+  // v2 shell (KBC-125): "+ Criar" › "Novo acervo" in Sua biblioteca, at both widths.
+  await startNewCollection(page);
   const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
   await expect(dialog).toBeVisible();
   await dialog.getByLabel('Nome').fill('Rosacruz');
