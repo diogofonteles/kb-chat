@@ -70,6 +70,12 @@ const PHONE_QUERY = '(max-width: 1023px)';
 const READING_LINE = 96;
 /** Room left above a section reached from the index, for the compact strip. */
 const SECTION_GAP = 52;
+/** How close to the end of the page counts as "cannot scroll any further". */
+const BOTTOM_SLACK = 2;
+/** What a person does to scroll the page themselves (the wheel, a touch, the keyboard). */
+const OWN_SCROLL_EVENTS = ['wheel', 'touchmove', 'pointerdown', 'keydown'];
+/** What a person does to change a section's content (a field, a chip's ✕, a choice). */
+const EDIT_EVENTS = ['input', 'change', 'pointerdown', 'keydown'];
 
 /**
  * Configurações as a page in the main panel (KBC-131): title, the corner search, an index
@@ -192,10 +198,13 @@ export class SettingsPage {
   });
 
   /**
-   * How many times each section was chosen in the index: choosing one draws it anew, so it
-   * reads its data again, as opening a section of the v1 modal did.
+   * How many times each section was chosen in the index: choosing another section draws it
+   * anew, so it reads its data again, as opening a section of the v1 modal did. A section
+   * the person worked in since it was drawn is kept as it is (a draft, chips, a form).
    */
   protected readonly visits = signal<Readonly<Record<string, number>>>({});
+  /** The sections the person typed, pressed or chose in since they were last drawn. */
+  private readonly touched = new Set<string>();
 
   /** The page title left the screen: the compact "Configurações › Seção" strip shows. */
   protected readonly scrolled = signal(false);
@@ -234,6 +243,13 @@ export class SettingsPage {
 
   /** The section scrolled to last; the scroll spy's own address changes do not scroll. */
   private scrolledTo: SettingsSection | null = null;
+  /**
+   * The section the address or the index asked for: it stays the current one, and the scroll
+   * spy leaves the address alone, until the person scrolls the page themselves (BR-5).
+   */
+  private pinned: SettingsSection | null = null;
+  /** The phone's section seen at the last render: undefined before the first one. */
+  private shownOnPhone: string | null | undefined = undefined;
 
   constructor() {
     this.store.start();
@@ -252,7 +268,14 @@ export class SettingsPage {
       this.routeSlug();
       untracked(() => this.closeShellDrawer());
     });
+    // A phone: focus follows the pushed screen, in and back out (WCAG 2.4.3, FR-3).
+    afterRenderEffect(() => {
+      const slug = this.phone() ? (this.requested()?.slug ?? null) : undefined;
+      const ready = this.settings() !== null;
+      untracked(() => this.focusPhoneScreen(slug, ready));
+    });
     this.spyOnScroll();
+    this.watchEdits();
     this.destroyRef.onDestroy(() => this.store.clearConnectOutcome());
   }
 
@@ -272,8 +295,11 @@ export class SettingsPage {
     const slug = SETTINGS_SECTIONS.find((entry) => entry.id === id)?.slug;
     if (!slug) return;
     this.scrolledTo = null;
+    const another = id !== this.active();
     this.active.set(id);
-    this.visits.update((all) => ({ ...all, [id]: (all[id] ?? 0) + 1 }));
+    this.pinned = id;
+    if (another && !this.touched.has(id))
+      this.visits.update((all) => ({ ...all, [id]: (all[id] ?? 0) + 1 }));
     if (slug === this.routeSlug()) {
       this.scrollTo(id, this.sectionEls());
       return;
@@ -356,6 +382,7 @@ export class SettingsPage {
     if (target === this.scrolledTo) return;
     this.scrolledTo = target;
     if (target === null) return;
+    this.pinned = target;
     const el = els.find(
       (ref) => ref.nativeElement.dataset['section'] === target,
     );
@@ -389,20 +416,33 @@ export class SettingsPage {
           this.readCurrent();
         }) ?? 0;
     };
+    // The person scrolls on their own: the section asked for lets the spy lead again.
+    const release = () => (this.pinned = null);
     host.addEventListener('scroll', onScroll, { passive: true });
+    for (const type of OWN_SCROLL_EVENTS)
+      host.addEventListener(type, release, { passive: true, capture: true });
     this.destroyRef.onDestroy(() => {
       host.removeEventListener('scroll', onScroll);
+      for (const type of OWN_SCROLL_EVENTS)
+        host.removeEventListener(type, release, { capture: true });
       if (frame) this.view?.cancelAnimationFrame(frame);
     });
   }
 
-  /** The last section whose title is above the reading line. */
+  /**
+   * The current section: the one asked for while it holds, else the last whose title is above
+   * the reading line. At the end of the page the last sections are too short for their title
+   * to get there: the last one is current then.
+   */
   private readCurrent(): void {
-    const line =
-      this.host.nativeElement.getBoundingClientRect().top + READING_LINE;
+    const host = this.host.nativeElement;
     const els = this.sectionEls().map((ref) => ref.nativeElement);
+    const line = host.getBoundingClientRect().top + READING_LINE;
+    const atEnd =
+      host.scrollTop + host.clientHeight >= host.scrollHeight - BOTTOM_SLACK;
     const passed = els.filter((el) => el.getBoundingClientRect().top <= line);
-    const id = (passed.at(-1) ?? els[0])?.dataset['section'];
+    const reached = atEnd ? els.at(-1) : (passed.at(-1) ?? els[0]);
+    const id = this.pinned ?? reached?.dataset['section'];
     const current = this.items().find((item) => item.id === id);
     if (!current || current.id === this.active()) return;
     this.active.set(current.id);
@@ -411,6 +451,51 @@ export class SettingsPage {
       void this.router.navigate(['/configuracoes', current.slug], {
         replaceUrl: true,
       });
+  }
+
+  /** Marks the section a person works in, so the index does not draw it anew. */
+  private watchEdits(): void {
+    const host = this.host.nativeElement;
+    const onEdit = (event: Event) => {
+      if (!(event.target instanceof Element)) return;
+      const id =
+        event.target.closest<HTMLElement>('[data-section]')?.dataset['section'];
+      if (id) this.touched.add(id);
+    };
+    for (const type of EDIT_EVENTS)
+      host.addEventListener(type, onEdit, { passive: true, capture: true });
+    this.destroyRef.onDestroy(() => {
+      for (const type of EDIT_EVENTS)
+        host.removeEventListener(type, onEdit, { capture: true });
+    });
+  }
+
+  /**
+   * Entering a section on a phone focuses its title; going back focuses the row of the
+   * section left, so the element pressed is never lost to <body>. The first screen keeps the
+   * focus where it is.
+   */
+  private focusPhoneScreen(
+    slug: string | null | undefined,
+    ready: boolean,
+  ): void {
+    const before = this.shownOnPhone;
+    if (slug === undefined) {
+      this.shownOnPhone = undefined;
+      return;
+    }
+    // A section's title waits for its data; the root needs none.
+    if (slug !== null && !ready) return;
+    this.shownOnPhone = slug;
+    if (before === undefined || before === slug) return;
+    const host = this.host.nativeElement;
+    const target =
+      slug !== null
+        ? host.querySelector<HTMLElement>('.screen-title')
+        : before !== null
+          ? host.querySelector<HTMLElement>(`.root-item[data-slug="${before}"]`)
+          : null;
+    target?.focus();
   }
 
   private closeShellDrawer(): void {

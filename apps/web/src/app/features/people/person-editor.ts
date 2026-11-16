@@ -36,7 +36,7 @@ import {
   type Toggle,
 } from './pending-changes.js';
 import { PersonAiEditor } from './person-ai-editor.js';
-import { UiButton, UiIcon } from '@ui/index.js';
+import { UiButton, UiIcon, UiTablist } from '@ui/index.js';
 
 const BYTES_PER_GB = 1024 ** 3;
 
@@ -52,7 +52,7 @@ const quotaFormat = new Intl.NumberFormat('pt-BR', {
  */
 @Component({
   selector: 'app-person-editor',
-  imports: [PersonAiEditor, UiButton, UiIcon],
+  imports: [PersonAiEditor, UiButton, UiIcon, UiTablist],
   templateUrl: './person-editor.html',
   styleUrl: './person-editor.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

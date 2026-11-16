@@ -28,6 +28,7 @@ import { UiIcon } from './icon.js';
       [style.--ui-dialog-width.px]="width()"
       [attr.aria-labelledby]="titleId()"
       (close)="closed.emit()"
+      (pointerdown)="pressedOnBackdrop = $event.target === $event.currentTarget"
       (click)="backdropClick($event)"
     >
       <header class="ui-dialog__head">
@@ -85,6 +86,11 @@ export class UiDialog {
   /** The phone header's action ("Criar", "Salvar"); empty keeps the footer on phones. */
   readonly primaryLabel = input('');
   readonly primaryDisabled = input(false);
+  /**
+   * A click on the backdrop closes the dialog; false where closing loses work the person
+   * set up (a configured invitation): only ✕, Cancelar and Escape close it then.
+   */
+  readonly closeOnBackdrop = input(true);
   readonly primary = output();
   readonly closed = output();
   private readonly dialog =
@@ -103,8 +109,22 @@ export class UiDialog {
     this.dialog().nativeElement.close();
   }
 
-  /** A click on the backdrop lands on the <dialog> itself, outside its box. */
+  /** The last press started on the backdrop, not inside the box. */
+  protected pressedOnBackdrop = false;
+
+  /**
+   * A click on the backdrop lands on the <dialog> itself, outside its box. Both the press
+   * and the release must be there: selecting text in a field and letting go outside the
+   * box also ends in a click on the <dialog>.
+   */
   protected backdropClick(event: MouseEvent): void {
-    if (event.target === event.currentTarget) this.close();
+    const pressed = this.pressedOnBackdrop;
+    this.pressedOnBackdrop = false;
+    if (
+      this.closeOnBackdrop() &&
+      pressed &&
+      event.target === event.currentTarget
+    )
+      this.close();
   }
 }

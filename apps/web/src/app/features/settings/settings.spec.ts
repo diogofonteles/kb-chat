@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { fireEvent, render, screen } from '@testing-library/angular';
+import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { ThemeStore } from '@core/theme/theme-store.js';
 import { GO_TO_URL } from '@core/routing/go-to-url.js';
 import { TOPICS } from '../../testing/fixtures.js';
@@ -750,5 +750,50 @@ describe('Configurações', () => {
     await fixture.whenStable();
     expect(dialog()?.open).toBe(false);
     expect(home).toHaveBeenCalledWith('/');
+  });
+
+  it('keeps a section the person worked in, and the current one, when the index is clicked (KBC-131 review)', async () => {
+    const { fixture, http } = await openSettings();
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    /** What a section drawn anew asks for again. */
+    const settle = async () => {
+      TestBed.tick();
+      for (const request of http.match('/api/v1/topics')) request.flush(TOPICS);
+      for (const request of http.match('/api/v1/ai/free-models'))
+        request.flush({ items: [], paid: [], updatedAt: null, stale: false });
+      await fixture.whenStable();
+    };
+    const index = screen.getByRole('navigation', { name: 'Seções' });
+    const entry = (name: string) => within(index).getByRole('link', { name });
+    const radio = () =>
+      within(screen.getByRole('region', { name: 'Sua IA' })).getAllByRole(
+        'radio',
+      )[0] as HTMLInputElement;
+    const choice = radio();
+    // A choice in Sua IA, not saved yet: going away and back keeps it drawn as it is.
+    fireEvent.click(choice);
+    await settle();
+    fireEvent.click(entry('Preferências'));
+    await settle();
+    const preferences = screen.getByRole('region', {
+      name: 'Preferências',
+    }).lastElementChild;
+    fireEvent.click(entry('Sua IA'));
+    await settle();
+    expect(choice.isConnected).toBe(true);
+    expect(radio()).toBe(choice);
+    // Another section, not worked in, is drawn anew (it reads its data again)...
+    fireEvent.click(entry('Preferências'));
+    await settle();
+    expect(preferences?.isConnected).toBe(false);
+    // ...but not again by its own entry while it is the current one.
+    const drawn = screen.getByRole('region', {
+      name: 'Preferências',
+    }).lastElementChild;
+    fireEvent.click(entry('Preferências'));
+    await settle();
+    expect(drawn?.isConnected).toBe(true);
   });
 });

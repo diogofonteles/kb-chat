@@ -28,6 +28,25 @@ async function show(tab: string): Promise<void> {
   await TestBed.inject(ApplicationRef).whenStable();
 }
 
+describe('InvitePresetEditor: the tabs by keyboard (KBC-132 FR-2, APG Tabs)', () => {
+  it('reaches every part with the arrows, the focus on the chosen tab', async () => {
+    await renderEditor();
+    const settle = () => TestBed.inject(ApplicationRef).whenStable();
+    const access = screen.getByRole('tab', { name: 'Acessos' });
+    const prefs = screen.getByRole('tab', { name: 'Preferências iniciais' });
+    access.focus();
+    fireEvent.keyDown(access, { key: 'ArrowLeft' });
+    await settle();
+    expect(prefs.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(prefs);
+    fireEvent.keyDown(prefs, { key: 'ArrowLeft' });
+    await settle();
+    const ai = screen.getByRole('tab', { name: 'IA e limites' });
+    expect(ai.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(ai);
+  });
+});
+
 const OWNER_LENDS_CLAUDE: Lending = {
   canLend: true,
   lendable: { 'claude-subscription': true, 'chatgpt-subscription': false },

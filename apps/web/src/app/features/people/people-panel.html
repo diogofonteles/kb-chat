@@ -3,7 +3,8 @@
     <p class="invite-title" i18n="@@people.inviteTitle">Convidar por e-mail</p>
     <ng-container *ngTemplateOutlet="inviteFields" />
   } @else {
-    <!-- The configured invitation in a wide modal with tabs (KBC-132); closing discards it. -->
+    <!-- The configured invitation in a wide modal with tabs (KBC-132); closing discards it, so
+         the backdrop does not close it (only ✕ and Escape do). -->
     <ui-dialog
       #inviteDialog
       titleId="invite-dialog-title"
@@ -12,6 +13,7 @@
       i18n-title="@@people.inviteSetupTitle"
       title="Configurar o convite"
       [width]="800"
+      [closeOnBackdrop]="false"
       (closed)="discardConfiguration()"
     >
       <ng-container *ngTemplateOutlet="inviteFields" />

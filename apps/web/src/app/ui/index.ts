@@ -34,3 +34,4 @@ export { UiPill, type Tone } from './pill.js';
 export { UiProgress } from './progress.js';
 export { UiSettingRow } from './setting-row.js';
 export { UiSheet } from './sheet.js';
+export { UiTablist } from './tabs.js';

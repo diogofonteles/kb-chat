@@ -669,11 +669,13 @@ describe('ChatPage side panel (KBC-005)', () => {
     await view.fixture.whenStable();
     expect(document.documentElement.dataset['theme']).toBe('esoteric');
     expect(localStorage.getItem('kb-chat.theme')).toBe('esoteric');
+    // Back to the v2 default, now a choice of its own (KBC-124 D2): no more "auto".
     fireEvent.change(screen.getByLabelText('Tema'), {
-      target: { value: 'auto' },
+      target: { value: 'revised' },
     });
     await view.fixture.whenStable();
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+    expect(document.documentElement.dataset['theme']).toBe('revised');
+    expect(localStorage.getItem('kb-chat.theme')).toBe('revised');
   });
 
   it('says the history is unavailable when the API fails, and search still works', async () => {

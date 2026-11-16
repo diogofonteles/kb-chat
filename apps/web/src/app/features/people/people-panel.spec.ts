@@ -1090,6 +1090,29 @@ describe('PeoplePanel invitation profiles (KBC-028)', () => {
     expect(screen.getByRole('button', { name: 'Aplicar perfil' })).toBeTruthy();
     http.expectNone(`/api/v1/people/${guest.id}/profile`);
   });
+  it('a click on the backdrop keeps the configured invitation (KBC-132 review)', async () => {
+    const { fixture } = await renderPanel([owner], [aluno]);
+    fireEvent.click(screen.getByRole('button', { name: 'Configurar agora' }));
+    await fixture.whenStable();
+    await show('IA e limites', fixture);
+    fireEvent.change(
+      screen.getByLabelText('Pesquisas por dia (vazio = padrão)'),
+      { target: { value: '5' } },
+    );
+    const modal = document.querySelector('dialog') as HTMLDialogElement;
+    fireEvent.pointerDown(modal);
+    fireEvent.click(modal);
+    await fixture.whenStable();
+    expect(modal.open).toBe(true);
+    expect(
+      (
+        screen.getByLabelText(
+          'Pesquisas por dia (vazio = padrão)',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe('5');
+  });
+
   it('"Descartar configuração" closes the preset, and a bad number holds the invitation', async () => {
     const { fixture } = await renderPanel([owner], [aluno]);
     fireEvent.input(screen.getByLabelText('Convidar por e-mail'), {

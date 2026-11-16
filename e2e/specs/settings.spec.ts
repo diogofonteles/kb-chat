@@ -226,6 +226,70 @@ test('KBC-131 AC-1: /configuracoes/preferencias opens there on reload, and scrol
   await expect(page).toHaveURL(/\/configuracoes\/acessos$/);
 });
 
+/** Two frames: a scroll the page made has been read by the scroll spy by then. */
+const settled = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(done)),
+      ),
+  );
+
+test('KBC-131 AC-1: the last sections, too short to reach the top, keep their address by URL, by index and by back', async ({
+  page,
+}) => {
+  test.skip(!desktop(page), 'The scroll spy is the desktop layout.');
+  const settings = settingsPage(page);
+  const index = settings.getByRole('navigation', { name: 'Seções' });
+  const link = (name: string) => index.getByRole('link', { name, exact: true });
+  for (const [slug, name] of [
+    ['sobre', 'Sobre'],
+    ['perfis-de-voz', 'Perfis de voz'],
+  ] as const) {
+    await page.goto(`/configuracoes/${slug}`);
+    await expect(
+      settings.getByRole('heading', { name, level: 2 }),
+    ).toBeInViewport();
+    await settled(page);
+    await expect(link(name)).toHaveAttribute('aria-current', 'location');
+    await expect(page).toHaveURL(new RegExp(`/configuracoes/${slug}$`));
+  }
+  // By the index, from the top of the page: each stays where it was asked for.
+  await page.goto('/configuracoes/conta');
+  for (const [slug, name] of [
+    ['sobre', 'Sobre'],
+    ['perfis-de-voz', 'Perfis de voz'],
+  ] as const) {
+    await link(name).click();
+    await settled(page);
+    await expect(link(name)).toHaveAttribute('aria-current', 'location');
+    await expect(page).toHaveURL(new RegExp(`/configuracoes/${slug}$`));
+  }
+  // Back and forward land on the section of each entry, not a neighbour.
+  await page.goBack();
+  await settled(page);
+  await expect(page).toHaveURL(/\/configuracoes\/sobre$/);
+  await expect(link('Sobre')).toHaveAttribute('aria-current', 'location');
+  await page.goForward();
+  await settled(page);
+  await expect(page).toHaveURL(/\/configuracoes\/perfis-de-voz$/);
+  await expect(link('Perfis de voz')).toHaveAttribute(
+    'aria-current',
+    'location',
+  );
+  // The wheel to the end of the page: the last section is the current one.
+  await settings
+    .getByRole('heading', { name: 'Perfis de voz', level: 2 })
+    .hover();
+  await expect
+    .poll(async () => {
+      await page.mouse.wheel(0, 400);
+      return page.url();
+    })
+    .toMatch(/\/configuracoes\/sobre$/);
+  await expect(link('Sobre')).toHaveAttribute('aria-current', 'location');
+});
+
 test('KBC-131 AC-5: on a phone the root lists the sections and "‹" goes back to it', async ({
   page,
 }) => {
@@ -239,6 +303,10 @@ test('KBC-131 AC-5: on a phone the root lists the sections and "‹" goes back t
   ).toBeVisible();
   await openSection(page, 'Sua IA');
   await expect(page).toHaveURL(/\/configuracoes\/sua-ia$/);
+  // The pushed screen takes the focus on its title, so it is announced (WCAG 2.4.3).
+  await expect(
+    settings.getByRole('heading', { name: 'Sua IA', level: 2 }),
+  ).toBeFocused();
   await expect(
     settings.getByRole('radio', { name: /OpenRouter/ }),
   ).toBeVisible();
@@ -249,6 +317,10 @@ test('KBC-131 AC-5: on a phone the root lists the sections and "‹" goes back t
   await expect(
     settings.getByRole('link', { name: 'Preferências', exact: true }),
   ).toBeVisible();
+  // Back at the root, the focus is on the row of the section just left.
+  await expect(
+    settings.getByRole('link', { name: 'Sua IA', exact: true }),
+  ).toBeFocused();
 });
 
 test('KBC-131 AC-6: the wizard goes back with the choice kept, and Pular opens the home', async ({

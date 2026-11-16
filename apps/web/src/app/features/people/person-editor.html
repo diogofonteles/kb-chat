@@ -1,6 +1,7 @@
 @let who = person();
 <div
   class="tabs"
+  uiTablist
   role="tablist"
   aria-label="Partes do editor"
   i18n-aria-label="@@people.editorTabs"
@@ -14,8 +15,6 @@
     [attr.aria-controls]="'panel-access-' + who.id"
     [attr.tabindex]="tab() === 'access' ? 0 : -1"
     (click)="tab.set('access')"
-    (keydown.arrowRight)="tab.set('ai')"
-    (keydown.arrowLeft)="tab.set('ai')"
     i18n="@@people.tabAccess"
   >
     Acessos
@@ -29,8 +28,6 @@
     [attr.aria-controls]="'panel-ai-' + who.id"
     [attr.tabindex]="tab() === 'ai' ? 0 : -1"
     (click)="tab.set('ai')"
-    (keydown.arrowRight)="tab.set('access')"
-    (keydown.arrowLeft)="tab.set('access')"
     i18n="@@people.tabAi"
   >
     IA e limites

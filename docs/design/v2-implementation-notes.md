@@ -38,7 +38,8 @@ Estas notas servem a quem migra uma área para a v2 depois da fundação (KBC-12
 | `ui-card` | Cartão com capa, título, subtítulo e `progress` |
 | `ui-menu` + `[uiMenuItem]` | Menu com gatilho próprio (`[uiMenuTrigger]` projetado), `label`, `menuId`, `align`, `direction`. Fica na camada de cima e vira folha abaixo de 1024 px |
 | `[uiOverlay]`, `anchorOverlay`, `placeOverlay` | A camada de cima de qualquer popover ou lista (D5), detalhada abaixo |
-| `ui-dialog` | Modal escuro: título 22, fechar no canto, ações à direita. Num celular vira folha alta |
+| `ui-dialog` | Modal escuro: título 22, fechar no canto, ações à direita. Num celular vira folha alta. O fundo só fecha com o clique começado e terminado nele; `[closeOnBackdrop]="false"` onde fechar perde trabalho (o convite configurado) |
+| `uiTablist` | Teclado de uma `role="tablist"` (APG): ← → trocam de aba e levam o foco, Home e End vão às pontas |
 | `ui-sheet` | Folha do celular sobre um `<dialog>` modal (`full` ocupa a tela) |
 | `ui-field`, `.ui-input`, `.ui-search` | Campo com rótulo, dica e erro (`fieldDescribedBy`) |
 | `.ui-switch`, `.ui-check`, `.ui-radio` | Seleção sobre os `input` nativos |

@@ -83,7 +83,8 @@
         </button>
         <!-- The page's title stays for screen readers; the section is the one in sight. -->
         <h1 class="visually-hidden" i18n="@@settings.title">Configurações</h1>
-        <h2 class="screen-title" [id]="'settings-' + current.id">
+        <!-- Focus lands here when the screen is pushed (WCAG 2.4.3). -->
+        <h2 class="screen-title" tabindex="-1" [id]="'settings-' + current.id">
           {{ current.label }}
         </h2>
         <span class="screen-spacer" aria-hidden="true"></span>
@@ -139,7 +140,11 @@
             <hr class="index-rule" />
           }
           @for (item of group.items; track item.id) {
-            <a class="root-item" [routerLink]="['/configuracoes', item.slug]">
+            <a
+              class="root-item"
+              [attr.data-slug]="item.slug"
+              [routerLink]="['/configuracoes', item.slug]"
+            >
               <span class="root-label">{{ item.label }}</span>
               <ui-icon name="chevRight" [size]="20" />
             </a>

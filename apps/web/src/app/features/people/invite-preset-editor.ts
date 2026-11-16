@@ -34,6 +34,7 @@ import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { THEME_CHOICES } from '@core/theme/theme-store.js';
 import { THEME_COPY, VIEW_COPY } from '@features/settings/provider-copy.js';
 import { collectionChoices, treeTitle } from '@core/topics/topic-tree.js';
+import { UiTablist } from '@ui/index.js';
 import { FEATURE_LABELS } from './feature-labels.js';
 import {
   CHOOSE_LEVEL,
@@ -76,6 +77,7 @@ let presetEditors = 0;
 
 @Component({
   selector: 'app-invite-preset-editor',
+  imports: [UiTablist],
   templateUrl: './invite-preset-editor.html',
   styleUrls: ['./person-editor.css', './invite-preset-editor.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
