@@ -365,7 +365,7 @@
       [mayActAs]="mayActAs(person)"
       [ownerView]="ownerView()"
       [scales]="scales()"
-      (actAs)="askActAs(person)"
+      (actAs)="askActAs(person, $event)"
       (changed)="change(person, $event)"
       (toggled)="toggleBox(person, $event)"
       (profileApplied)="applyProfile(person, $event)"

@@ -502,8 +502,9 @@ export class PeoplePanel {
   private readonly actAsDialog = viewChild(ActAsDialog);
   private actAsOpener: HTMLElement | null = null;
 
-  protected askActAs(person: Person): void {
-    const active = this.document.activeElement;
+  protected askActAs(person: Person, opener?: HTMLElement): void {
+    // The button pressed, not the focus: a click does not always move it (Safari, a modal).
+    const active = opener ?? this.document.activeElement;
     this.actAsOpener = active instanceof HTMLElement ? active : null;
     this.actingTarget.set(person);
     afterNextRender(() => this.actAsDialog()?.open(), {

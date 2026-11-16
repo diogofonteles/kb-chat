@@ -338,7 +338,7 @@
           size="sm"
           type="button"
           [disabled]="busy()"
-          (click)="actAs.emit()"
+          (click)="pressActAs($event)"
         >
           <ui-icon name="eye" [size]="16" />
           <span i18n="@@people.actAs">Ver como</span>
