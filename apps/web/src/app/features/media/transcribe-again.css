@@ -60,3 +60,29 @@ button:disabled {
   cursor: default;
   opacity: 0.6;
 }
+
+/* As a card's action (TranscribeWithGroq in the library, KBC-128): the card's pill. */
+:host(.compact) .secondary,
+:host(.compact) .primary {
+  min-height: var(--target-desktop);
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+:host(.compact) .secondary {
+  background: var(--overlay-3);
+}
+
+:host(.compact) .secondary:hover {
+  background: var(--overlay-4);
+}
+
+:host(.compact) .confirm {
+  padding: var(--space-3);
+  border: none;
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
+  font-size: var(--text-sm);
+}

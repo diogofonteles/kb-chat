@@ -7,12 +7,12 @@
   @for (chip of stateChips(); track chip.value) {
     <button
       type="button"
-      class="chip"
-      [attr.aria-pressed]="chip.pressed"
+      uiChip
+      [selected]="chip.pressed"
       (click)="toggleState(chip.value)"
     >
       @if (chip.pressed) {
-        <span aria-hidden="true">✓ </span>
+        <ui-icon name="check" [size]="16" />
       }
       {{ chip.label }}
     </button>
@@ -37,6 +37,7 @@
           </option>
         }
       </select>
+      <ui-icon class="caret" name="chevDown" [size]="16" />
     </label>
   }
   @if (showSubjects()) {
@@ -59,6 +60,7 @@
           </option>
         }
       </select>
+      <ui-icon class="caret" name="chevDown" [size]="16" />
     </label>
   }
   @if (showTopics()) {
@@ -81,6 +83,7 @@
           </option>
         }
       </select>
+      <ui-icon class="caret" name="chevDown" [size]="16" />
     </label>
   }
   @if (compact() && hiddenActive() > 0) {
@@ -89,6 +92,8 @@
   @if (active() > 0) {
     <button
       type="button"
+      uiButton="ghost"
+      size="sm"
       class="clear"
       (click)="clear()"
       i18n="@@library.clearFilters"
@@ -103,39 +108,13 @@
       kind="choice"
       class="sort"
       [label]="sortLabel()"
+      menuLabel="Ordenar e ver como"
+      i18n-menuLabel="@@library.sortAndView"
       [options]="sortOptions()"
       (chosen)="chooseSort($event)"
     >
-      <span>{{ sortLabel() }} <span aria-hidden="true">▾</span></span>
+      <span class="sort-words">{{ sortName() }}</span>
+      <ui-icon [name]="view() === 'grid' ? 'grid' : 'list'" [size]="18" />
     </app-menu-button>
-    <div
-      class="views"
-      role="group"
-      aria-label="Visão"
-      i18n-aria-label="@@library.view"
-    >
-      <button
-        type="button"
-        class="view"
-        [attr.aria-pressed]="view() === 'list'"
-        (click)="viewChange.emit('list')"
-      >
-        <span aria-hidden="true">☰</span>
-        <span class="visually-hidden" i18n="@@library.viewList"
-          >Ver em lista</span
-        >
-      </button>
-      <button
-        type="button"
-        class="view"
-        [attr.aria-pressed]="view() === 'grid'"
-        (click)="viewChange.emit('grid')"
-      >
-        <span aria-hidden="true">▦</span>
-        <span class="visually-hidden" i18n="@@library.viewGrid"
-          >Ver em grade</span
-        >
-      </button>
-    </div>
   </div>
 }

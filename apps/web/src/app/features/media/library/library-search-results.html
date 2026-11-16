@@ -32,7 +32,8 @@
       <p>{{ failureText() }}</p>
       <button
         type="button"
-        class="secondary"
+        uiButton="white"
+        size="sm"
         (click)="reload()"
         i18n="@@media.reload"
       >
@@ -51,8 +52,9 @@
     </ul>
   } @else if (nothingFound()) {
     <div class="empty">
+      <span class="empty-icon"><ui-icon name="search" [size]="32" /></span>
       @if (searchesSpeech()) {
-        <p i18n="@@library.searchEmpty">
+        <p class="empty-title" i18n="@@library.searchEmpty">
           Nada encontrado para '{{ query().trim() }}' na fala, no título, no
           autor ou nos assuntos.
         </p>
@@ -61,7 +63,7 @@
           outra palavra.
         </p>
       } @else {
-        <p i18n="@@library.searchEmptyTitles">
+        <p class="empty-title" i18n="@@library.searchEmptyTitles">
           Nada encontrado para '{{ query().trim() }}' no título, no autor ou nos
           assuntos.
         </p>
@@ -70,7 +72,7 @@
         @if (otherCollections()) {
           <button
             type="button"
-            class="secondary"
+            uiButton="outline"
             (click)="searchEverywhere()"
             i18n="@@library.searchAllTopics"
           >
@@ -79,7 +81,7 @@
         }
         <button
           type="button"
-          class="secondary"
+          uiButton="white"
           (click)="clearedSearch.emit()"
           i18n="@@library.clearSearch"
         >
@@ -88,7 +90,7 @@
         @if (filtered()) {
           <button
             type="button"
-            class="secondary"
+            uiButton="outline"
             (click)="clearedFilters.emit()"
             i18n="@@library.clearFilters"
           >
@@ -112,13 +114,14 @@
     </ol>
     @if (moreError()) {
       <p class="error" role="alert">
-        <span aria-hidden="true">⚠</span> {{ moreError() }}
+        <ui-icon name="warn" [size]="16" /> {{ moreError() }}
       </p>
     }
     @if (hasMore()) {
       <button
         type="button"
-        class="secondary more"
+        uiButton="outline"
+        class="more"
         appNearEnd
         [disabled]="loadingMore()"
         (nearEnd)="loadMore()"

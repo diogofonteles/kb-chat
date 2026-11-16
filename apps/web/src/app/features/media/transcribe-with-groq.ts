@@ -23,6 +23,10 @@ import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { GroqApi } from '@core/media/groq-api.js';
 
 const HOUR_MS = 3_600_000;
+let nextId = 0;
+
+/** What the offer reads: the media page's item, or the queue's line (KBC-128 AC-2). */
+export type GroqCandidate = Pick<MediaItem, 'id' | 'durationMs' | 'canUseGroq'>;
 
 /**
  * "Transcrever com Groq" (KBC-037; masters, with Groq on): sends one item's waiting
@@ -34,7 +38,7 @@ const HOUR_MS = 3_600_000;
   templateUrl: './transcribe-with-groq.html',
   styleUrl: './transcribe-again.css',
   // Where the focus lands when the buttons go away (WCAG 2.4.3).
-  host: { tabindex: '-1' },
+  host: { tabindex: '-1', '[class.compact]': 'compact()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TranscribeWithGroq {
@@ -48,11 +52,23 @@ export class TranscribeWithGroq {
   private readonly cancelButton =
     viewChild<ElementRef<HTMLButtonElement>>('cancelButton');
 
-  readonly media = input.required<MediaItem>();
+  readonly media = input.required<GroqCandidate>();
+  /** The audio's title, when the offer stands among others (the library's cards). */
+  readonly subject = input('');
+  /** A card's action (the library's "Precisa da sua atenção"): a pill, small type. */
+  readonly compact = input(false);
   readonly sent = output<MediaItem>();
   /** The cap refused it: the item is now held, and the page reads it again. */
   readonly capped = output();
 
+  /** The library may show several offers at once: each question has its own id. */
+  protected readonly questionId = `groq-item-question-${++nextId}`;
+  protected readonly openLabel = computed(() => {
+    const subject = this.subject();
+    return subject
+      ? $localize`:@@groqItem.openFor:Transcrever com Groq: ${subject}:title:`
+      : null;
+  });
   protected readonly confirming = signal(false);
   protected readonly busy = signal(false);
   protected readonly error = signal('');

@@ -61,12 +61,20 @@ import { injectOpenPreparations } from './preparation/open-preparations.js';
 import { PreparationEntry } from './preparation/preparation-entry.js';
 import { RowMenu } from './row-menu.js';
 import { UploadPanel } from './upload-panel.js';
+import { UiBanner } from '@ui/banner.js';
+import { UiButton } from '@ui/button.js';
+import { UiCover } from '@ui/cover.js';
+import { UiEmptyState } from '@ui/empty-state.js';
+import { UiIcon } from '@ui/icon.js';
+import { UiPill, type Tone } from '@ui/pill.js';
+import { UiProgress } from '@ui/progress.js';
 
 /** The title filter appears from this many items on (T14). */
 export const FILTER_FROM = 11;
 
 /**
- * "Mídia" (screens.md T14, KBC-034 FR-6): the selected collection's audio, its status in
+ * "Mídia" (screens.md T14, KBC-034 FR-6; v2 KBC-128 media-list): the selected collection's
+ * audio as an album page — its cover, the track table with the date sent and the status in
  * words, the upload for who may send, and the masters' "Tentar de novo" and "Remover".
  */
 @Component({
@@ -81,6 +89,13 @@ export const FILTER_FROM = 11;
     UploadPanel,
     RowMenu,
     PreparationEntry,
+    UiBanner,
+    UiButton,
+    UiCover,
+    UiEmptyState,
+    UiIcon,
+    UiPill,
+    UiProgress,
   ],
   templateUrl: './media-list-page.html',
   styleUrl: './media-list-page.css',
@@ -105,6 +120,12 @@ export class MediaListPage {
 
   protected readonly topic = this.chat.topic;
   protected readonly topics = this.chat.topicList;
+  /** "Mídia — Hermetismo": the heading's name, the two lines of the header in one. */
+  protected readonly headingText = computed(() => {
+    const word = $localize`:@@media.title:Mídia`;
+    const topic = this.topic();
+    return topic ? `${word} — ${topic.title}` : word;
+  });
   /** Where each preparation stopped (KBC-072 FR-6). */
   protected readonly preparations = injectOpenPreparations();
   protected readonly list = httpResource(
@@ -202,6 +223,12 @@ export class MediaListPage {
 
   protected statusOf(item: MediaItem): string {
     return statusTextOf(item);
+  }
+
+  /** The pill's tone backs its words: ready, failed, or still on its way. */
+  protected statusToneOf(item: MediaItem): Tone {
+    if (item.status === 'ready') return 'ok';
+    return item.status === 'failed' ? 'err' : 'info';
   }
 
   protected menuLabelOf(item: MediaItem): string {

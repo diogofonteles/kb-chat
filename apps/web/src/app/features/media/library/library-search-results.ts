@@ -12,6 +12,8 @@ import {
   output,
   viewChild,
 } from '@angular/core';
+import { UiButton } from '@ui/button.js';
+import { UiIcon } from '@ui/icon.js';
 import { rxResource } from '@angular/core/rxjs-interop';
 import {
   librarySearchSchema,
@@ -63,7 +65,7 @@ interface MorePages {
  */
 @Component({
   selector: 'app-library-search-results',
-  imports: [LibraryControls, LibraryHit, NearEnd],
+  imports: [LibraryControls, LibraryHit, NearEnd, UiButton, UiIcon],
   templateUrl: './library-search-results.html',
   styleUrl: './library-search-results.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

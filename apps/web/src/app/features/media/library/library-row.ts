@@ -13,6 +13,11 @@ import {
 } from '@kb-chat/contracts';
 import { formatDuration } from '@kb-chat/player-core';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
+import { UiButton } from '@ui/button.js';
+import { UiCover } from '@ui/cover.js';
+import { UiIcon } from '@ui/icon.js';
+import { UiPill } from '@ui/pill.js';
+import { UiProgress } from '@ui/progress.js';
 import { editDetailsLabel } from '../edit-labels.js';
 import { MediaLevelBadge } from '../media-level-badge.js';
 import { statusTextOf } from '../media-labels.js';
@@ -24,8 +29,10 @@ import { percentOf, resumeTextOf, stateTextOf } from './library-labels.js';
 export type RowAction = 'mark-played' | 'mark-unplayed' | 'edit' | 'remove';
 
 /**
- * One media in "Todas" as a list (screens.md T16): the whole row opens the player, ▶ plays
- * at once, the box selects it, and the ⋯ marks it heard or not (masters also remove).
+ * One media in "Todas" as a row of the v2 track table (KBC-128): # · cover and title ·
+ * collection · status · length · ⋯. The whole row opens the player, ▶ on the cover plays at
+ * once (green while it plays), the box selects it, and the ⋯ marks it heard or not, edits
+ * (who may) and removes (masters).
  */
 @Component({
   // The host is the list item (role), so the list holds only items (axe "list").
@@ -36,6 +43,11 @@ export type RowAction = 'mark-played' | 'mark-unplayed' | 'edit' | 'remove';
     MediaLevelBadge,
     MenuButton,
     PreparationEntry,
+    UiButton,
+    UiCover,
+    UiIcon,
+    UiPill,
+    UiProgress,
   ],
   templateUrl: './library-row.html',
   styleUrl: './library-row.css',
@@ -45,12 +57,15 @@ export type RowAction = 'mark-played' | 'mark-unplayed' | 'edit' | 'remove';
     role: 'listitem',
     '[class.selected]': 'selected()',
     '[class.failed]': "item().status === 'failed'",
+    '[class.playing]': 'playing()',
   },
 })
 export class LibraryRow {
   readonly item = input.required<LibraryItem>();
   /** The collection's name, as the person knows it. */
   readonly topicTitle = input('');
+  /** Its place in the list (the # column); 0 leaves it out. */
+  readonly position = input(0);
   readonly selected = input(false);
   readonly playing = input(false);
   readonly master = input(false);
@@ -93,19 +108,23 @@ export class LibraryRow {
           ? {
               id: 'mark-unplayed',
               label: $localize`:@@library.markUnplayed:Marcar como não ouvida`,
+              icon: 'eyeOff',
             }
           : {
               id: 'mark-played',
               label: $localize`:@@library.markPlayed:Marcar como ouvida`,
+              icon: 'checkcircle',
             },
       );
     if (this.item().canEdit)
-      options.push({ id: 'edit', label: editDetailsLabel() });
+      options.push({ id: 'edit', label: editDetailsLabel(), icon: 'edit' });
     if (this.master())
       options.push({
         id: 'remove',
         label: $localize`:@@media.remove:Remover`,
         danger: true,
+        icon: 'trash',
+        divider: options.length > 0,
       });
     return options;
   });

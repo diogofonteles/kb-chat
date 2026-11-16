@@ -1,53 +1,79 @@
 :host {
-  display: grid;
-  gap: var(--space-3);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
 }
 
 /* Chips wrap instead of scrolling sideways: no option hides off screen (MA-18). */
 .chips {
   display: flex;
+  flex: 1 1 24rem;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
 }
 
-.chip,
-.clear,
-.view {
-  min-height: var(--target);
-  padding: 0 var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-surface);
+/* A choice in a pill, like the chips (v2 · Componentes › Chip): the native list opens it,
+   so nothing it shows is ever clipped by the page (D5). */
+.choice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 2rem;
+  padding: 0 var(--space-3) 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
   color: var(--color-text);
-  font-weight: 600;
-  cursor: pointer;
+  font-size: var(--text-sm);
 }
 
-.chip[aria-pressed='true'] {
-  border-color: var(--color-text);
+.choice:hover {
+  background: var(--overlay-4);
+}
+
+.choice:focus-within {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.choice.on {
   background: var(--color-text);
   color: var(--color-bg);
 }
 
-.clear {
-  border-style: dashed;
+.label {
+  font-weight: 600;
 }
 
-.choice {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--target);
-  padding: 0 var(--space-2) 0 var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-surface);
+.choice select {
+  max-width: 14rem;
+  min-height: 2rem;
+  padding: 0 1.25rem 0 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  appearance: none;
+  cursor: pointer;
 }
 
-.choice.on {
-  border-color: var(--color-text);
-  box-shadow: inset 0 0 0 1px var(--color-text);
+.choice select:focus {
+  outline: none;
+}
+
+.choice select option {
+  background: var(--color-elevated);
+  color: var(--color-text);
+}
+
+.caret {
+  position: absolute;
+  right: var(--space-3);
+  pointer-events: none;
 }
 
 .hidden-filters {
@@ -55,48 +81,51 @@
   font-size: var(--text-sm);
 }
 
-.label {
-  font-weight: 600;
-  font-size: var(--text-sm);
-}
-
-.choice select {
-  min-height: 2.25rem;
-  max-width: 14rem;
-  border: none;
-  background: transparent;
-  color: var(--color-text);
-  font: inherit;
-}
-
 .tools {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+  margin-left: auto;
 }
 
 .sort {
   --menu-trigger-padding: var(--space-3);
   --menu-trigger-size: var(--text-sm);
-  --menu-trigger-weight: 600;
-  --menu-trigger-color: var(--color-text);
+  --menu-trigger-weight: 500;
+  --menu-trigger-color: var(--color-text-muted);
+  --menu-trigger-height: 2rem;
 }
 
-.views {
-  display: flex;
-  gap: var(--space-1);
+.sort-words {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.view {
-  min-width: var(--target);
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-sm);
-}
+@media (max-width: 1023px) {
+  /* A compact chip row (media-library@mobile): a long choice is cut, not a line of its
+     own; the whole name is in its list. */
+  .chips {
+    flex-basis: 100%;
+  }
 
-.view[aria-pressed='true'] {
-  border-color: var(--color-text);
-  background: var(--color-surface-muted);
-  box-shadow: inset 0 0 0 1px var(--color-text);
+  .choice,
+  .choice select {
+    min-height: var(--target);
+  }
+
+  .choice select {
+    max-width: 8.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tools {
+    margin-left: 0;
+  }
+
+  .sort {
+    --menu-trigger-height: var(--target);
+  }
 }

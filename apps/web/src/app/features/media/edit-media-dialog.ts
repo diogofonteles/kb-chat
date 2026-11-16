@@ -15,6 +15,9 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { UiButton, UiIconButton } from '@ui/button.js';
+import { UiCover } from '@ui/cover.js';
+import { UiIcon } from '@ui/icon.js';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import {
   FormControl,
@@ -77,7 +80,15 @@ interface Draft {
  */
 @Component({
   selector: 'app-edit-media-dialog',
-  imports: [ReactiveFormsModule, AuthorCombobox, LevelField],
+  imports: [
+    ReactiveFormsModule,
+    AuthorCombobox,
+    LevelField,
+    UiButton,
+    UiCover,
+    UiIcon,
+    UiIconButton,
+  ],
   templateUrl: './edit-media-dialog.html',
   styleUrls: ['./upload-panel.css', './edit-media-dialog.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,

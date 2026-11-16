@@ -1,19 +1,30 @@
 <span class="lead">
+  @if (playing()) {
+    <ui-icon class="wave" name="wave" [size]="16" />
+  } @else if (position()) {
+    <span class="number" aria-hidden="true">{{ position() }}</span>
+  }
   @if (ready()) {
     <input
       type="checkbox"
-      class="select"
+      class="select ui-check"
       [checked]="selected()"
       [attr.aria-label]="selectLabel()"
       (change)="toggleSelected($event)"
     />
+  }
+</span>
+<span class="art">
+  <ui-cover [title]="item().title" [size]="40" />
+  @if (ready()) {
     <button
       type="button"
       class="play"
+      [class.on]="playing()"
       [attr.aria-label]="playLabel()"
       (click)="played.emit()"
     >
-      <span aria-hidden="true">{{ playing() ? '❚❚' : '▶' }}</span>
+      <ui-icon [name]="playing() ? 'pause' : 'play'" [size]="16" />
     </button>
   }
 </span>
@@ -29,53 +40,49 @@
     ><span class="title" [title]="item().title">{{ item().title }}</span></span
   >
 }
-<span class="meta">
-  <app-authorship-badge [mediaAuthor]="item().author" />
-  <app-media-level-badge [level]="item().level" [shown]="master()" />
-  @if (topicTitle()) {
-    <span class="topic">{{ topicTitle() }}</span>
-  }
-  @if (duration()) {
-    <span class="duration">{{ duration() }}</span>
-  }
-  @if (status()) {
-    <span class="status" [class.failed]="item().status === 'failed'">{{
-      status()
-    }}</span>
-  }
-  @if (state()) {
-    <span class="state">{{ state() }}</span>
-  }
-  @if (resume()) {
-    <span class="resume">{{ resume() }}</span>
-  }
-  @if (paused(); as step) {
-    <app-preparation-entry [mediaId]="item().id" [step]="step" />
-  }
+<span class="cells">
+  <span class="byline">
+    <app-authorship-badge [mediaAuthor]="item().author" />
+    <app-media-level-badge [level]="item().level" [shown]="master()" />
+  </span>
+  <span class="topic">{{ topicTitle() }}</span>
+  <span class="status">
+    @if (status()) {
+      <ui-pill [tone]="item().status === 'failed' ? 'err' : 'info'">{{
+        status()
+      }}</ui-pill>
+    }
+    @if (resume()) {
+      <ui-progress class="position" [value]="percent() / 100" />
+      <span class="resume">{{ resume() }}</span>
+    } @else if (state()) {
+      <span class="state">{{ state() }}</span>
+    }
+    @if (paused(); as step) {
+      <app-preparation-entry [mediaId]="item().id" [step]="step" />
+    }
+    @if (master() && item().canRetry) {
+      <button
+        type="button"
+        uiButton="outline"
+        size="sm"
+        (click)="retried.emit()"
+        i18n="@@media.retry"
+      >
+        Tentar de novo
+      </button>
+    }
+  </span>
+  <span class="duration">{{ duration() }}</span>
 </span>
-@if (resume()) {
-  <span class="position" aria-hidden="true"
-    ><span [style.width.%]="percent()"></span
-  ></span>
-}
 <span class="actions">
-  @if (master() && item().canRetry) {
-    <button
-      type="button"
-      class="secondary"
-      (click)="retried.emit()"
-      i18n="@@media.retry"
-    >
-      Tentar de novo
-    </button>
-  }
   @if (options().length > 0) {
     <app-menu-button
       [label]="menuLabel()"
       [options]="options()"
       (chosen)="choose($event)"
     >
-      <span aria-hidden="true">⋯</span>
+      <ui-icon name="more" [size]="18" />
     </app-menu-button>
   }
 </span>

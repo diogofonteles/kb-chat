@@ -195,6 +195,17 @@ async function renderLibrary(
 const pause = () =>
   new Promise((resolve) => setTimeout(resolve, SEARCH_DEBOUNCE_MS + 50));
 
+/** "Ver como" lives in the order's menu (KBC-128 FR-3): opens it and finds the view. */
+async function viewItem(name: string): Promise<HTMLElement> {
+  if (!screen.queryByRole('menu'))
+    fireEvent.click(screen.getByRole('button', { name: /^Ordenar:/ }));
+  return screen.findByRole('menuitemradio', { name });
+}
+
+async function chooseView(name: string): Promise<void> {
+  fireEvent.click(await viewItem(name));
+}
+
 describe('LibraryPage (T16, KBC-051)', () => {
   it('shows skeletons first, then "Continuar ouvindo" with where to resume (AC-3)', async () => {
     const { open } = await renderLibrary();
@@ -569,7 +580,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
   it('switches to the grid and keeps the choice in the account (AC-10)', async () => {
     const { open, http, tick } = await renderLibrary();
     await open(aPage([anItem(1)]));
-    fireEvent.click(screen.getByRole('button', { name: 'Ver em grade' }));
+    await chooseView('Grade');
     await tick();
     const save = http.expectOne({ method: 'PUT', url: PREFS });
     expect(save.request.body).toEqual({ libraryView: 'grid' });
@@ -577,11 +588,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
     await tick();
     // The view is not part of the question: nothing is asked again.
     http.verify();
-    expect(
-      screen
-        .getByRole('button', { name: 'Ver em grade' })
-        .getAttribute('aria-pressed'),
-    ).toBe('true');
+    expect((await viewItem('Grade')).getAttribute('aria-checked')).toBe('true');
     expect(
       screen.queryByRole('checkbox', { name: 'Selecionar Palestra 1' }),
     ).toBeNull();
@@ -602,11 +609,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(
       screen.getByRole('button', { name: 'Ordenar: Duração' }),
     ).toBeTruthy();
-    expect(
-      screen
-        .getByRole('button', { name: 'Ver em grade' })
-        .getAttribute('aria-pressed'),
-    ).toBe('true');
+    expect((await viewItem('Grade')).getAttribute('aria-checked')).toBe('true');
   });
 
   it('starts filtered by the collection it came from (/midia, FR-7)', async () => {
@@ -1715,7 +1718,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
         .flush(aPage([anItem(1)]));
       await settle();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Ver em grade' }));
+      await chooseView('Grade');
       http.expectOne({ method: 'PUT', url: PREFS }).flush(PREFERENCES);
       await settle();
       fireEvent.click(
@@ -1772,7 +1775,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
   it('says so when the choice cannot reach the account (AC-10)', async () => {
     const { open, http, settle } = await renderLibrary();
     await open(aPage([anItem(1)]));
-    fireEvent.click(screen.getByRole('button', { name: 'Ver em grade' }));
+    await chooseView('Grade');
     http
       .expectOne({ method: 'PUT', url: PREFS })
       .flush(null, { status: 500, statusText: 'x' });

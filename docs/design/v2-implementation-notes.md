@@ -54,6 +54,7 @@ Estas notas servem a quem migra uma área para a v2 depois da fundação (KBC-12
 - **Menu de ações ou escolhas:** use `ui-menu`. Ele já resolve o foco, as setas, Escape, o clique fora e a folha no celular.
 - **Popover ou lista que só existe aberta (`@if`):** ponha `[uiOverlay]="gatilho"` no elemento. Há opções para alinhar (`overlayAlign="start|end"`), escolher o lado (`overlaySide="below|above"`), igualar a largura ao gatilho (`overlayMatchWidth`) e virar folha abaixo de uma largura (`overlaySheetBelow`).
 - **Lista sempre no DOM e mostrada por `[hidden]`:** chame `anchorOverlay(lista, gatilho, opções)` ao abrir e guarde a função que ela devolve, que tira a lista de novo. `subject-picker.ts` é o exemplo.
+- **Menu de escolhas com rádio (mídia):** `app-menu-button` (`features/media/menu-button.ts`) também sobe para a camada de cima por `[uiOverlay]` e vira folha abaixo de 1024 px. Aceita `icon`, `group` (um título por grupo, como "Ordenar por" e "Ver como" da Biblioteca) e `divider` em cada opção.
 - **O CSS do painel desenha só a aparência** (fundo, borda, raio, sombra, `max-height`). Nada de `position`, `top`/`left` nem `z-index`: a posição vem de `placeOverlay`, que vira de lado e desloca o painel para dentro da tela, com margem de 8.
 
 ## Casca (`features/chat/chat-page.html` e `features/shell/`)

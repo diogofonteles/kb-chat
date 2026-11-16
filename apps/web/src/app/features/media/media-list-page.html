@@ -1,230 +1,268 @@
 <section class="media" aria-labelledby="media-title">
-  <header class="head">
-    <div class="titles">
-      <h2 id="media-title" #heading tabindex="-1">
-        <ng-container i18n="@@media.title">Mídia</ng-container>
+  <header class="ui-page-header hero">
+    <ui-cover
+      class="hero-art"
+      [title]="topic()?.title ?? ''"
+      [icon]="topic() ? null : 'music'"
+      [size]="208"
+    />
+    <div class="hero-text">
+      <h2
+        id="media-title"
+        #heading
+        tabindex="-1"
+        [attr.aria-label]="headingText()"
+      >
+        <span class="ui-page-header__kicker kicker" i18n="@@media.title"
+          >Mídia</span
+        >
         @if (topic(); as current) {
-          &ngsp;<span class="topic">— {{ current.title }}</span>
+          <span class="ui-page-header__title name">{{ current.title }}</span>
         }
       </h2>
       @if (list.hasValue() && items().length > 0) {
-        <p class="summary">{{ summary() }}</p>
-      }
-    </div>
-    <div class="head-actions">
-      <a
-        class="secondary"
-        routerLink="/midia/marcadores"
-        i18n="@@bookmarks.mine"
-        >Meus marcadores</a
-      >
-      @if (canUpload() && topic()) {
-        <button
-          type="button"
-          class="primary"
-          aria-haspopup="dialog"
-          (click)="openUpload()"
-          i18n="@@media.upload.open"
-        >
-          Enviar áudio
-        </button>
+        <p class="ui-page-header__meta summary">{{ summary() }}</p>
       }
     </div>
   </header>
 
-  @if (showFilter() || showAuthorFilter()) {
-    <div class="filters">
-      @if (showFilter()) {
-        <label class="filter">
-          <span class="label" i18n="@@media.filter">Filtrar por título</span>
-          <input
-            type="search"
-            autocomplete="off"
-            [value]="query()"
-            (input)="filterBy($event)"
-          />
-        </label>
-      }
-      @if (showAuthorFilter()) {
-        <label class="filter author-filter">
-          <span class="label" i18n="@@media.authorFilter">Autoria</span>
-          <select (change)="filterByAuthor($event)">
-            <option
-              value=""
-              [selected]="author() === ''"
-              i18n="@@authorship.all"
-            >
-              Todos
-            </option>
-            @for (option of authorOptions(); track option.value) {
-              <option
-                [value]="option.value"
-                [selected]="author() === option.value"
-              >
-                {{ option.label }} ({{ option.count }})
-              </option>
-            }
-          </select>
-        </label>
-      }
-    </div>
-  }
-
-  <p class="sent-elsewhere" role="status">{{ sentElsewhere() }}</p>
-  <app-moved-notice
-    [move]="moved()"
-    path="/midia"
-    (opened)="openMovedTopic($event)"
-  />
-
-  @if (actionError()) {
-    <p class="error" role="alert">
-      <span aria-hidden="true">⚠</span> {{ actionError() }}
-    </p>
-  }
-
-  @if (loadError()) {
-    <div class="notice" role="alert">
-      <p i18n="@@media.loadError">
-        Não consegui carregar a mídia deste acervo.
-      </p>
+  <div class="ui-action-bar actions-bar">
+    @if (canUpload() && topic()) {
       <button
         type="button"
-        class="secondary"
-        (click)="reload()"
-        i18n="@@media.reload"
+        uiButton="outline"
+        size="sm"
+        aria-haspopup="dialog"
+        (click)="openUpload()"
       >
-        Tentar de novo
+        <ui-icon name="upload" [size]="16" />
+        <span i18n="@@media.upload.open">Enviar áudio</span>
       </button>
-    </div>
-  } @else if (!list.hasValue()) {
-    <ul
-      class="rows skeleton"
-      aria-busy="true"
-      aria-label="Carregando…"
-      i18n-aria-label="@@app.loading"
-    >
-      @for (n of [1, 2, 3, 4, 5]; track n) {
-        <li class="row"><span class="bar"></span></li>
-      }
-    </ul>
-  } @else if (items().length === 0) {
-    <div class="empty">
-      <p i18n="@@media.empty">Ainda não há áudios neste acervo.</p>
-      @if (canUpload()) {
+    }
+    <a uiButton="dark" size="sm" routerLink="/midia/marcadores">
+      <ui-icon name="bookmark" [size]="16" />
+      <span i18n="@@bookmarks.mine">Meus marcadores</span>
+    </a>
+    @if (showFilter() || showAuthorFilter()) {
+      <div class="filters">
+        @if (showFilter()) {
+          <label class="ui-search filter">
+            <ui-icon name="search" [size]="18" />
+            <span class="visually-hidden" i18n="@@media.filter"
+              >Filtrar por título</span
+            >
+            <input
+              type="search"
+              autocomplete="off"
+              placeholder="Filtrar por título"
+              i18n-placeholder="@@media.filter"
+              [value]="query()"
+              (input)="filterBy($event)"
+            />
+          </label>
+        }
+        @if (showAuthorFilter()) {
+          <label class="choice" [class.on]="author() !== ''">
+            <span class="label" i18n="@@media.authorFilter">Autoria</span>
+            <select (change)="filterByAuthor($event)">
+              <option
+                value=""
+                [selected]="author() === ''"
+                i18n="@@authorship.all"
+              >
+                Todos
+              </option>
+              @for (option of authorOptions(); track option.value) {
+                <option
+                  [value]="option.value"
+                  [selected]="author() === option.value"
+                >
+                  {{ option.label }} ({{ option.count }})
+                </option>
+              }
+            </select>
+            <ui-icon class="caret" name="chevDown" [size]="16" />
+          </label>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="content">
+    <p class="sent-elsewhere" role="status">{{ sentElsewhere() }}</p>
+    <app-moved-notice
+      [move]="moved()"
+      path="/midia"
+      (opened)="openMovedTopic($event)"
+    />
+
+    @if (actionError()) {
+      <p class="error" role="alert">
+        <ui-icon name="warn" [size]="16" /> {{ actionError() }}
+      </p>
+    }
+
+    @if (loadError()) {
+      <ui-banner
+        tone="err"
+        role="alert"
+        title="Não consegui carregar a mídia deste acervo."
+        i18n-title="@@media.loadError"
+      >
+        <button
+          uiBannerAction
+          type="button"
+          uiButton="white"
+          size="sm"
+          (click)="reload()"
+          i18n="@@media.reload"
+        >
+          Tentar de novo
+        </button>
+      </ui-banner>
+    } @else if (!list.hasValue()) {
+      <ul
+        class="rows skeleton"
+        aria-busy="true"
+        aria-label="Carregando…"
+        i18n-aria-label="@@app.loading"
+      >
+        @for (n of [1, 2, 3, 4, 5]; track n) {
+          <li class="row"><span class="bar"></span></li>
+        }
+      </ul>
+    } @else if (items().length === 0) {
+      <ui-empty-state
+        icon="upload"
+        title="Ainda não há áudios neste acervo."
+        i18n-title="@@media.empty"
+      >
+        @if (canUpload()) {
+          <button type="button" uiButton="primary" (click)="openUpload()">
+            <ui-icon name="upload" [size]="18" />
+            <span i18n="@@media.upload.open">Enviar áudio</span>
+          </button>
+        }
+      </ui-empty-state>
+    } @else if (visible().length === 0) {
+      <div class="empty">
+        <span class="empty-icon"><ui-icon name="search" [size]="32" /></span>
+        @if (query()) {
+          <p class="empty-title" i18n="@@media.filterEmpty">
+            Nenhum áudio com "{{ query() }}" no título.
+          </p>
+        } @else {
+          <p class="empty-title" i18n="@@media.authorFilterEmpty">
+            Nenhum áudio desta autoria.
+          </p>
+        }
         <button
           type="button"
-          class="secondary"
-          (click)="openUpload()"
-          i18n="@@media.upload.open"
+          uiButton="white"
+          (click)="clearFilter()"
+          i18n="@@media.clearFilter"
         >
-          Enviar áudio
+          Limpar filtro
         </button>
-      }
-    </div>
-  } @else if (visible().length === 0) {
-    <div class="empty">
-      @if (query()) {
-        <p i18n="@@media.filterEmpty">
-          Nenhum áudio com "{{ query() }}" no título.
-        </p>
-      } @else {
-        <p i18n="@@media.authorFilterEmpty">Nenhum áudio desta autoria.</p>
-      }
-      <button
-        type="button"
-        class="secondary"
-        (click)="clearFilter()"
-        i18n="@@media.clearFilter"
-      >
-        Limpar filtro
-      </button>
-    </div>
-  } @else {
-    <ul class="rows">
-      @for (item of visible(); track item.id) {
-        <li class="row" [class.failed]="item.status === 'failed'">
-          @if (item.status === 'ready') {
-            <a
-              #row
-              class="main"
-              [attr.data-media-id]="item.id"
-              [routerLink]="['/midia', item.id]"
-            >
-              <span class="title" [title]="item.title">{{ item.title }}</span>
-            </a>
-          } @else {
-            <span
-              #row
-              class="main"
-              tabindex="-1"
-              [attr.data-media-id]="item.id"
-            >
-              <span class="title" [title]="item.title">{{ item.title }}</span>
-            </span>
-          }
-          <span class="meta">
-            <app-authorship-badge [mediaAuthor]="item.author" />
-            <app-media-level-badge [level]="item.level" [shown]="isMaster()" />
-            @if (item.durationMs !== null) {
-              <span class="duration">{{ durationOf(item) }}</span>
-            }
-            <span class="date">{{ item.createdAt | date: 'dd/MM/yyyy' }}</span>
-            <span
-              class="status"
-              [class.ready]="item.status === 'ready'"
-              [class.failed]="item.status === 'failed'"
-              >{{ statusOf(item) }}</span
-            >
-            @if (transcriptionOf(item); as transcription) {
-              <span
-                class="transcription"
-                [class.low]="
-                  item.transcription.status === 'done' && isLow(item)
-                "
-                >{{ transcription }}</span
+      </div>
+    } @else {
+      <div class="table-head" aria-hidden="true">
+        <span class="col-lead">#</span>
+        <span class="col-title" i18n="@@library.col.title">Título</span>
+        <span class="col-date" i18n="@@media.col.sent">Enviado em</span>
+        <span class="col-status" i18n="@@library.col.status">Situação</span>
+      </div>
+      <ul class="rows">
+        @for (item of visible(); track item.id; let index = $index) {
+          <li class="row" [class.failed]="item.status === 'failed'">
+            <span class="lead" aria-hidden="true">{{ index + 1 }}</span>
+            <ui-cover class="art" [title]="item.title" [size]="52" />
+            @if (item.status === 'ready') {
+              <a
+                #row
+                class="main"
+                [attr.data-media-id]="item.id"
+                [routerLink]="['/midia', item.id]"
               >
+                <span class="title" [title]="item.title">{{ item.title }}</span>
+              </a>
+            } @else {
+              <span
+                #row
+                class="main"
+                tabindex="-1"
+                [attr.data-media-id]="item.id"
+              >
+                <span class="title" [title]="item.title">{{ item.title }}</span>
+              </span>
             }
-            @if (lowNoticeOf(item); as notice) {
-              <span class="transcription low">{{ notice }}</span>
-            }
-            @if (resumeTextOf(item); as resume) {
-              <span class="resume">{{ resume }}</span>
-            }
-            @if (preparations.steps().get(item.id); as step) {
-              <app-preparation-entry [mediaId]="item.id" [step]="step" />
-            }
-          </span>
-          @if (resumeTextOf(item)) {
-            <span class="position" aria-hidden="true"
-              ><span [style.width.%]="percentOf(item)"></span
-            ></span>
-          }
-          @if (isMaster() || item.canEdit) {
-            <span class="actions">
-              @if (item.canRetry) {
-                <button
-                  type="button"
-                  class="secondary"
-                  (click)="retry(item)"
-                  i18n="@@media.retry"
-                >
-                  Tentar de novo
-                </button>
-              }
-              <app-row-menu
-                [label]="menuLabelOf(item)"
-                [canEdit]="item.canEdit"
-                [canRemove]="isMaster()"
-                (editChosen)="openEdit(item)"
-                (removeChosen)="askRemove(item)"
-              />
+            <span class="meta">
+              <span class="byline">
+                <app-authorship-badge [mediaAuthor]="item.author" />
+                <app-media-level-badge
+                  [level]="item.level"
+                  [shown]="isMaster()"
+                />
+              </span>
+              <span class="date">{{
+                item.createdAt | date: 'dd/MM/yyyy'
+              }}</span>
+              <span class="states">
+                <ui-pill [tone]="statusToneOf(item)" class="status">{{
+                  statusOf(item)
+                }}</ui-pill>
+                @if (transcriptionOf(item); as transcription) {
+                  <span
+                    class="transcription"
+                    [class.low]="
+                      item.transcription.status === 'done' && isLow(item)
+                    "
+                    >{{ transcription }}</span
+                  >
+                }
+                @if (lowNoticeOf(item); as notice) {
+                  <span class="transcription low">{{ notice }}</span>
+                }
+                @if (resumeTextOf(item); as resume) {
+                  <ui-progress
+                    class="position"
+                    [value]="percentOf(item) / 100"
+                  />
+                  <span class="resume">{{ resume }}</span>
+                }
+                @if (preparations.steps().get(item.id); as step) {
+                  <app-preparation-entry [mediaId]="item.id" [step]="step" />
+                }
+              </span>
+              <span class="duration">{{ durationOf(item) }}</span>
             </span>
-          }
-        </li>
-      }
-    </ul>
-  }
+            @if (isMaster() || item.canEdit) {
+              <span class="actions">
+                @if (item.canRetry) {
+                  <button
+                    type="button"
+                    uiButton="outline"
+                    size="sm"
+                    (click)="retry(item)"
+                    i18n="@@media.retry"
+                  >
+                    Tentar de novo
+                  </button>
+                }
+                <app-row-menu
+                  [label]="menuLabelOf(item)"
+                  [canEdit]="item.canEdit"
+                  [canRemove]="isMaster()"
+                  (editChosen)="openEdit(item)"
+                  (removeChosen)="askRemove(item)"
+                />
+              </span>
+            }
+          </li>
+        }
+      </ul>
+    }
+  </div>
 
   <p class="visually-hidden" aria-live="polite">{{ readyNotice() }}</p>
   <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
@@ -270,19 +308,15 @@
     <div class="confirm-actions">
       <button
         type="button"
-        class="secondary"
+        uiButton="ghost"
         (click)="cancelRemove()"
         i18n="@@media.removeCancel"
       >
         Cancelar
       </button>
-      <button
-        type="button"
-        class="danger"
-        (click)="confirmRemove()"
-        i18n="@@media.removeConfirm"
-      >
-        Remover
+      <button type="button" uiButton="danger" (click)="confirmRemove()">
+        <ui-icon name="trash" [size]="18" />
+        <span i18n="@@media.removeConfirm">Remover</span>
       </button>
     </div>
   </dialog>

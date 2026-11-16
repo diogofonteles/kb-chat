@@ -6,39 +6,37 @@ import {
   output,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { UiCover } from '@ui/cover.js';
+import { UiIcon } from '@ui/icon.js';
+import { UiProgress } from '@ui/progress.js';
 import type { LibraryItem } from '@kb-chat/contracts';
 import { formatDuration } from '@kb-chat/player-core';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
-import {
-  coverToneOf,
-  initialsOf,
-  percentOf,
-  resumeTextOf,
-  stateTextOf,
-} from './library-labels.js';
+import { percentOf, resumeTextOf, stateTextOf } from './library-labels.js';
 
 /**
- * A media as a card (screens.md T16): in "Continuar ouvindo" and in the grid view. The
- * cover is generated (the title's initials on the collection's tone): lectures seldom
- * have one. The title opens the player; ▶ plays at once from the saved position.
+ * A media as a card (screens.md T16, v2 KBC-128): a 64 px shortcut tile in "Continuar
+ * ouvindo" and a card in the grid view. The cover is the v2 typographic one (the title's
+ * initials on its own gradient): lectures seldom have one. The title opens the player; ▶
+ * plays at once from the saved position.
  */
 @Component({
   // The host is the list item (role), so the list holds only items (axe "list").
   selector: 'app-library-card',
-  imports: [RouterLink, AuthorshipBadge],
+  imports: [RouterLink, AuthorshipBadge, UiCover, UiIcon, UiProgress],
   templateUrl: './library-card.html',
   styleUrl: './library-card.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'card', role: 'listitem' },
+  host: { class: 'card', role: 'listitem', '[class.tile]': 'tile()' },
 })
 export class LibraryCard {
   readonly item = input.required<LibraryItem>();
   readonly playing = input(false);
+  /** A 64 px shortcut in "Continuar ouvindo" instead of the grid's card (KBC-128). */
+  readonly tile = input(false);
   readonly played = output();
 
   protected readonly ready = computed(() => this.item().status === 'ready');
-  protected readonly initials = computed(() => initialsOf(this.item().title));
-  protected readonly tone = computed(() => coverToneOf(this.item().topic));
   protected readonly duration = computed(() => {
     const ms = this.item().durationMs;
     return ms === null ? '' : formatDuration(ms);

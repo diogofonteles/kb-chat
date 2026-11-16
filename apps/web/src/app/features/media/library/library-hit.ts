@@ -6,6 +6,8 @@ import {
   output,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { UiCover } from '@ui/cover.js';
+import { UiIcon } from '@ui/icon.js';
 import type { LibraryHit as Hit } from '@kb-chat/contracts';
 import { formatClock, formatDuration } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
@@ -19,7 +21,7 @@ import { playbackStartOf } from '../search-hit/passage-focus.js';
  */
 @Component({
   selector: 'app-library-hit',
-  imports: [RouterLink, AuthorshipBadge],
+  imports: [RouterLink, AuthorshipBadge, UiCover, UiIcon],
   templateUrl: './library-hit.html',
   styleUrl: './library-hit.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
