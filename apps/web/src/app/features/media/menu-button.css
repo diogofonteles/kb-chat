@@ -4,15 +4,18 @@
 }
 
 .trigger {
-  display: grid;
-  place-items: center;
-  min-width: var(--target);
-  height: var(--target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: var(--menu-trigger-min, var(--target));
+  height: var(--menu-trigger-height, var(--target));
   padding: 0 var(--menu-trigger-padding, 0);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border: 0;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--menu-trigger-color, var(--color-text-muted));
+  font: inherit;
   font-size: var(--menu-trigger-size, 1.25rem);
   font-weight: var(--menu-trigger-weight, normal);
   font-variant-numeric: tabular-nums;
@@ -22,43 +25,85 @@
 
 .trigger:hover,
 .trigger[aria-expanded='true'] {
-  border-color: var(--color-border);
-  background: var(--color-surface-muted);
+  background: var(--overlay-3);
   color: var(--color-text);
 }
 
+/* The v2 menu (v2 · Componentes › Menu): the look only; the place comes from the overlay
+   layer (placeOverlay), so no position, top, left or z-index here (D5). */
 .menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + var(--space-1));
-  z-index: 5;
-  display: grid;
-  min-width: 10rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  max-height: min(70vh, 32rem);
+  margin: 0;
   padding: var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  overflow-y: auto;
+  border: 0;
+  border-radius: var(--radius-menu);
+  background: var(--color-elevated);
+  color: var(--color-text);
   box-shadow: var(--shadow);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.group + .group {
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--overlay-3);
+}
+
+.heading {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.divider {
+  height: 1px;
+  margin: var(--space-1) 0;
+  border: 0;
+  background: var(--overlay-3);
 }
 
 .menu button {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  min-height: var(--target);
-  white-space: var(--menu-item-wrap, nowrap);
+  gap: var(--space-3);
+  min-height: 2.5rem;
   padding: 0 var(--space-3);
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
   text-align: left;
-  font-weight: 600;
+  white-space: var(--menu-item-wrap, nowrap);
   cursor: pointer;
 }
 
 .menu button:hover,
 .menu button:focus-visible {
-  background: var(--color-surface-muted);
+  background: var(--overlay-3);
+}
+
+.menu button:focus-visible {
+  outline-offset: -2px;
+}
+
+.words {
+  flex: 1;
+}
+
+.menu button.checked {
+  color: var(--color-accent-text);
 }
 
 .check {
@@ -67,14 +112,27 @@
   text-align: center;
 }
 
-.danger {
+.menu button.danger {
   color: var(--color-danger);
 }
 
-/* On phones the row's actions sit on the left (T14): the menu opens to the right of them. */
-@media (max-width: 1023px) {
-  .menu {
-    right: var(--menu-phone-right, auto);
-    left: var(--menu-phone-left, 0);
-  }
+/* A phone: a sheet from the bottom over a scrim (DESIGN.md: menus become sheets). */
+.menu.ui-overlay--sheet {
+  position: fixed;
+  inset: auto 0 0;
+  width: 100%;
+  max-width: none;
+  max-height: 85dvh;
+  padding: var(--space-3) var(--space-2)
+    calc(var(--space-4) + env(safe-area-inset-bottom));
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+}
+
+.menu.ui-overlay--sheet::backdrop {
+  background: var(--scrim);
+}
+
+.menu.ui-overlay--sheet button {
+  min-height: var(--target);
+  font-size: var(--text-md);
 }

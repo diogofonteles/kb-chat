@@ -13,6 +13,8 @@ import {
 import {
   aCollection,
   audioState,
+  chooseLibraryView,
+  expectLibraryView,
   uniqueTag,
   uploadReady,
   useTheme,
@@ -369,10 +371,8 @@ test('AC-10: the order and the grid follow the account to another browser', asyn
     .getByRole('button', { name: 'Ordenar: Ouvidas recentemente' })
     .click();
   await page.getByRole('menuitemradio', { name: /Duração/ }).click();
-  await page.getByRole('button', { name: 'Ver em grade' }).click();
-  await expect(
-    page.getByRole('button', { name: 'Ver em grade' }),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await chooseLibraryView(page, 'Grade');
+  await expectLibraryView(page, 'Grade');
   await expect
     .poll(
       async () =>
@@ -391,9 +391,7 @@ test('AC-10: the order and the grid follow the account to another browser', asyn
   await expect(
     other.getByRole('button', { name: 'Ordenar: Duração' }),
   ).toBeVisible();
-  await expect(
-    other.getByRole('button', { name: 'Ver em grade' }),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await expectLibraryView(other, 'Grade');
   await other.context().close();
   await page.context().close();
 });
@@ -477,7 +475,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
       .getByRole('checkbox', { name: `Selecionar ${lecture(3).title}` })
       .check();
     expect(await seriousViolations(page)).toEqual([]);
-    await page.getByRole('button', { name: 'Ver em grade' }).click();
+    await chooseLibraryView(page, 'Grade');
     await expect(all(page).getByRole('checkbox')).toHaveCount(0);
     expect(await seriousViolations(page)).toEqual([]);
     await page.context().close();

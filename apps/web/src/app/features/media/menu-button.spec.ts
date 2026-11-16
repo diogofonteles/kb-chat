@@ -86,6 +86,10 @@ describe('MenuButton (APG menu button)', () => {
       vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
         rectOf(left, right),
       );
+      // The list as wide as its text, lined up with the button's end.
+      vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(
+        right - left,
+      );
       const { trigger, fixture } = await renderChoice();
       fireEvent.click(trigger);
       await fixture.whenStable();
@@ -96,22 +100,28 @@ describe('MenuButton (APG menu button)', () => {
       vi.restoreAllMocks();
     });
 
+    /** The menu's left edge and the room it keeps from both sides of a 390 screen. */
+    const onScreen = (menu: HTMLElement) => {
+      const left = Number.parseFloat(menu.style.left);
+      return left >= 8 && left <= 390 - 8;
+    };
+
     it('moves right when it would start past the left edge', async () => {
       const menu = await openWith(-27.5, 182.5);
-      await vi.waitFor(() => expect(menu.style.translate).toBe('35.5px'));
+      await vi.waitFor(() => expect(menu.style.left).toBe('8px'));
+      expect(onScreen(menu)).toBe(true);
     });
 
     it('moves left when it would end past the right edge', async () => {
       const menu = await openWith(200, 410);
-      await vi.waitFor(() => expect(menu.style.translate).toBe('-28px'));
+      await vi.waitFor(() => expect(menu.style.left).toBe('172px'));
+      expect(onScreen(menu)).toBe(true);
     });
 
-    it('stays where it opened when it fits', async () => {
+    it('stays under the button when it fits', async () => {
       const menu = await openWith(40, 250);
-      await vi.waitFor(() =>
-        expect(document.activeElement).not.toBe(document.body),
-      );
-      expect(menu.style.translate).toBe('');
+      await vi.waitFor(() => expect(menu.style.left).toBe('40px'));
+      expect(onScreen(menu)).toBe(true);
     });
   });
 });

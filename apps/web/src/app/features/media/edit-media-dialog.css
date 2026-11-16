@@ -7,19 +7,13 @@
   display: none;
 }
 
-.primary:disabled {
-  opacity: 0.7;
-  cursor: default;
-}
-
 /* Raising the recording over tracks of their own (KBC-106 BR-1): said in line before saving. */
 .confirm {
   display: grid;
   gap: var(--space-2);
   padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius, 0.5rem);
-  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
 }
 
 .confirm p {

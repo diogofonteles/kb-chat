@@ -5,7 +5,7 @@
   [attr.aria-controls]="open() ? listId() : null"
   (click)="open.set(!open())"
 >
-  <span class="chevron" [class.open]="open()" aria-hidden="true">▸</span>
+  <ui-icon class="chevron" [class.open]="open()" name="chevRight" [size]="16" />
   {{ label() }}
 </button>
 @if (open()) {
@@ -21,9 +21,10 @@
           [attr.aria-label]="playLabel(track)"
           (click)="played.emit(track)"
         >
-          <span aria-hidden="true">{{
-            playingId() === track.id ? '❚❚' : '▶'
-          }}</span>
+          <ui-icon
+            [name]="playingId() === track.id ? 'pause' : 'play'"
+            [size]="16"
+          />
         </button>
         <a
           class="title"
@@ -48,7 +49,7 @@
             [options]="trackOptions"
             (chosen)="chooseAction(track, $event)"
           >
-            <span aria-hidden="true">⋯</span>
+            <ui-icon name="more" [size]="18" />
           </app-menu-button>
         }
       </li>
