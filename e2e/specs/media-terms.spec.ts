@@ -3,17 +3,14 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, ownerApi, test } from './fixtures.js';
 import { newListener, uniqueTag, uploadReady } from './media-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
+import { openSettings as shellOpenSettings } from './shell-helpers.js';
 
 // KBC-040: the term list a master edits and "Transcrever de novo" on a media.
-
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 /** The API is shared with the other projects, which may save the one list meanwhile. */
 async function openTerms(page: Page): Promise<Locator> {
   await page.goto('/biblioteca');
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
+  await shellOpenSettings(page);
   const dialog = page.getByRole('dialog', { name: 'Configurações' });
   await dialog.getByRole('button', { name: 'Termos da transcrição' }).click();
   await expect(dialog.getByText(/\d+ de 224 do limite/)).toBeVisible();

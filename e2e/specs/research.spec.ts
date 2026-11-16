@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { CSRF, expect, test } from './fixtures.js';
+import { startNewConversation } from './shell-helpers.js';
 
 /**
  * "Pesquisa com IA" (KBC-008) against the stub agent (KB_CHAT_LLM=stub): it searches, finds
@@ -12,7 +13,7 @@ const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 async function sidebar(page: Page) {
   if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
   return desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
+    ? page.getByRole('complementary', { name: 'Sua biblioteca' })
     : page.getByRole('dialog', { name: 'Menu' });
 }
 
@@ -234,7 +235,7 @@ test('KBC-030: a sweep that stopped early says what was left and "Continuar varr
   await (
     await sidebar(page)
   )
-    .getByRole('navigation', { name: 'Histórico' })
+    .getByRole('navigation', { name: 'Conversas' })
     .getByRole('button', { name: title })
     .click();
   const first = page.locator('app-research-message').first();
@@ -363,16 +364,12 @@ test('AC-9: a research conversation restored from the history shows its saved an
   page,
 }) => {
   await research(page, 'natureza sétupla');
-  await (
-    await sidebar(page)
-  )
-    .getByRole('button', { name: /Nova conversa/ })
-    .click();
+  await startNewConversation(page);
   await expect(page.locator('app-research-message')).toHaveCount(0);
   const researchCalls = countResearchCalls(page);
   // The history is shared by every test of the run; this page lists its own save on top.
   const saved = (await sidebar(page))
-    .getByRole('navigation', { name: 'Histórico' })
+    .getByRole('navigation', { name: 'Conversas' })
     .getByRole('button', { name: /natureza sétupla/ })
     .first();
   await expect(saved).toContainText('IA');
@@ -514,15 +511,11 @@ test('a question stopped before any text stays in the history and restores as in
   await expect(
     stopped.getByRole('button', { name: 'Tentar de novo' }),
   ).toBeVisible();
+  await startNewConversation(page);
   await (
     await sidebar(page)
   )
-    .getByRole('button', { name: /Nova conversa/ })
-    .click();
-  await (
-    await sidebar(page)
-  )
-    .getByRole('navigation', { name: 'Histórico' })
+    .getByRole('navigation', { name: 'Conversas' })
     .getByRole('button', { name: new RegExp(question) })
     .click();
   await expect(

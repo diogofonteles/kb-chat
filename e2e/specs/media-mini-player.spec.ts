@@ -7,6 +7,7 @@ import {
   uploadReady,
   type UploadedMedia,
 } from './media-helpers.js';
+import { startNewConversation } from './shell-helpers.js';
 
 let lecture: UploadedMedia;
 
@@ -65,9 +66,7 @@ const mini = (page: Page) => page.getByRole('region', { name: 'Mini-player' });
 
 /** To the conversation without reloading the page (phones open the Menu first). */
 async function toConversation(page: Page) {
-  const menu = page.getByRole('button', { name: 'Menu' });
-  if (await menu.isVisible()) await menu.click();
-  await page.getByRole('button', { name: /Nova conversa/ }).click();
+  await startNewConversation(page);
   await expect(page.getByLabel('Sua pergunta')).toBeVisible();
 }
 

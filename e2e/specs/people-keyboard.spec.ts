@@ -9,6 +9,7 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { uniqueTag } from './media-helpers.js';
+import { openPeople as shellOpenPeople } from './shell-helpers.js';
 
 /**
  * KBC-062: in "Pessoas e permissões" a master who uses only the keyboard checks collections
@@ -16,15 +17,10 @@ import { uniqueTag } from './media-helpers.js';
  * changes are all kept, in order. The same holds in the invitation profile editor. 1440 and
  * 390 px.
  */
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 async function openPeople(page: Page): Promise<Locator> {
   await page.goto('/');
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  const side = desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
-    : page.getByRole('dialog', { name: 'Menu' });
-  await side.getByRole('button', { name: /Pessoas e permissões/ }).click();
+  await shellOpenPeople(page);
   return page.getByRole('dialog', { name: 'Configurações' });
 }
 

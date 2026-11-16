@@ -152,11 +152,8 @@
   color: var(--color-on-accent);
 }
 
+/* In the top layer, anchored to its chip and kept on screen (ui/overlay.ts, D5). */
 .popover {
-  position: absolute;
-  top: calc(100% + var(--space-1));
-  left: 0;
-  z-index: 5;
   display: grid;
   gap: var(--space-1);
   width: max-content;

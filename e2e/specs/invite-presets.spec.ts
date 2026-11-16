@@ -9,6 +9,10 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import {
+  openPeople as shellOpenPeople,
+  openSettings as shellOpenSettings,
+} from './shell-helpers.js';
 
 /**
  * KBC-028: an invitation profile sets the person up at once (collections, features, the app
@@ -17,15 +21,10 @@ import {
  *
  * The profiles here are never the default one: the E2E server is shared by parallel specs.
  */
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 async function openPeople(page: Page): Promise<Locator> {
   await page.goto('/');
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  const side = desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
-    : page.getByRole('dialog', { name: 'Menu' });
-  await side.getByRole('button', { name: /Pessoas e permissões/ }).click();
+  await shellOpenPeople(page);
   return page.getByRole('dialog', { name: 'Configurações' });
 }
 
@@ -140,9 +139,7 @@ test('AC-1: inviting with a profile sets up access, AI and the first Settings', 
   const guest = await pageAs(browser, email, page.viewportSize());
   await guest.goto('/');
   await expect(guest.locator('html')).toHaveAttribute('data-theme', 'dark');
-  if (!desktop(guest))
-    await guest.getByRole('button', { name: 'Menu' }).click();
-  await guest.getByRole('button', { name: 'Configurações' }).click();
+  await shellOpenSettings(guest);
   const settings = guest.getByRole('dialog', { name: 'Configurações' });
   await settings.getByRole('button', { name: 'Preferências' }).click();
   await expect(settings.getByLabel('Tema')).toHaveValue('dark');

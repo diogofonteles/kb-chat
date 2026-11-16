@@ -10,6 +10,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { account } from './shell-helpers.js';
 
 /**
  * KBC-014: ask for access (form or Google), a master decides, and an approved person signs
@@ -20,7 +21,7 @@ const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 async function sidebar(page: Page): Promise<Locator> {
   if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
   return desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
+    ? page.getByRole('complementary', { name: 'Sua biblioteca' })
     : page.getByRole('dialog', { name: 'Menu' });
 }
 
@@ -36,7 +37,10 @@ async function shoot(page: Page, name: string): Promise<void> {
 /** The owner's "Pessoas e permissões", opened from the sidebar entry with the badge. */
 async function openPeople(owner: Page): Promise<Locator> {
   await owner.goto('/');
-  const side = await sidebar(owner);
+  // v2 (KBC-125): the top bar's button on desktop, the Menu's entry on a phone.
+  const side = desktop(owner)
+    ? owner.locator('app-top-bar')
+    : await sidebar(owner);
   const entry = side.getByRole('button', { name: /Pessoas e permissões/ });
   await expect(entry).toHaveAccessibleName(/solicita(ção|ções) pendentes?/);
   await entry.click();
@@ -128,8 +132,8 @@ test.describe('without a session', () => {
       page.getByText('Nenhum acervo foi liberado para você ainda'),
     ).toBeVisible();
     await shoot(page, 'signed-in-with-code');
-    const side = await sidebar(page);
-    await expect(side.getByText(email)).toBeVisible();
+    // v2 (KBC-125): the account is named in the avatar menu (desktop) or the phone's Menu.
+    await expect((await account(page)).getByText(email)).toBeVisible();
   });
 
   test('Google without an invite → "Solicitar acesso" → pending for the masters', async ({

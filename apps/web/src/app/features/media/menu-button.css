@@ -27,11 +27,8 @@
   color: var(--color-text);
 }
 
+/* In the top layer, anchored to the trigger and kept on screen (ui/overlay.ts, D5). */
 .menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + var(--space-1));
-  z-index: 5;
   display: grid;
   min-width: 10rem;
   padding: var(--space-1);
@@ -69,12 +66,4 @@
 
 .danger {
   color: var(--color-danger);
-}
-
-/* On phones the row's actions sit on the left (T14): the menu opens to the right of them. */
-@media (max-width: 1023px) {
-  .menu {
-    right: var(--menu-phone-right, auto);
-    left: var(--menu-phone-left, 0);
-  }
 }

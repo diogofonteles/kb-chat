@@ -2,18 +2,15 @@ import AxeBuilder from '@axe-core/playwright';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { CSRF, expect, ownerApi, test } from './fixtures.js';
 import { uniqueTag, uploadReady } from './media-helpers.js';
+import { openSettings as shellOpenSettings } from './shell-helpers.js';
 
 // KBC-037: "Groq de reserva" in Configurações and "Transcrever com Groq" on an audio. The
 // E2E server's Groq is a fake (a key ending in "valid" is accepted): nothing is paid. The
 // settings are one row shared by every spec of the run, so no test turns Groq back off.
 
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
-
 async function openGroq(page: Page): Promise<Locator> {
   await page.goto('/biblioteca');
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
+  await shellOpenSettings(page);
   const dialog = page.getByRole('dialog', { name: 'Configurações' });
   await dialog.getByRole('button', { name: 'Groq de reserva' }).click();
   await expect(

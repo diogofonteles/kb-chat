@@ -9,13 +9,13 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { openMediaFromLibrary } from './shell-helpers.js';
 import { uniqueTag, uploadReady, useTheme } from './media-helpers.js';
 
 /** KBC-050: "Editar informações" in the list (T14), the library (T16) and the page (T15). */
 
 const UPLOADER = ['search', 'media', 'media-upload'] as const;
 const SEEN = ['hermetismo', 'alquimia'];
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 const viewport = () => test.info().project.use.viewport ?? null;
 
 async function personPage(
@@ -31,8 +31,8 @@ async function personPage(
 
 async function openMedia(page: Page) {
   await page.goto('/');
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('link', { name: 'Mídia' }).click();
+  // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
+  await openMediaFromLibrary(page);
   await expect(
     page.getByRole('heading', { name: /Mídia — Hermetismo/ }),
   ).toBeVisible();

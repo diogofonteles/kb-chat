@@ -8,14 +8,14 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { openSettings as shellOpenSettings } from './shell-helpers.js';
 
 /** KBC-060: a master acts as a person, audited (ADR 0027). */
 
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 async function openSettings(page: Page) {
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
+  await shellOpenSettings(page);
   const dialog = page.getByRole('dialog', { name: 'Configurações' });
   await expect(dialog).toBeVisible();
   return dialog;

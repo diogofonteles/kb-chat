@@ -62,13 +62,13 @@ Toda rota com sessão roda dentro de `ChatPage`. Rotas novas entram como filhas 
 
 | Slot | O que é | Como uma área usa |
 |---|---|---|
-| Barra superior | `TopBar` (`app-top-bar`): ‹ ›, Início, busca global (⌘K / Ctrl K), atalho da Pesquisa com IA, Pessoas e o menu do avatar | Não mexa nela. A busca global leva à busca do acervo em uso |
+| Barra superior | `TopBar` (`app-top-bar`): ‹ ›, Início, busca global (⌘K / Ctrl K), atalho da Pesquisa com IA, o espaço das notificações, Pessoas e o menu do avatar | Não mexa nela. A busca global leva à busca do acervo em uso. O sino (KBC-133) entra no espaço `[topBarNotifications]` |
 | Sua biblioteca | `Sidebar` (`app-sidebar`): "+ Criar", os chips, a busca e "Recentes", e as seções da D5. No celular é a folha "Menu" | Um item novo da biblioteca entra como linha de uma das seções, nunca como seção nova sem decisão |
 | Painel principal | `main.conversation`, com o degradê `--tint` da capa do acervo | Use `.ui-page-header` e `.ui-action-bar` no topo da página |
 | Painel direito | `RightPanel` (root): `open({ component, inputs, width: 'narrow' \| 'source', label })` e `close()` | 340 para "Tocando agora" ou a Fila, 460 para uma fonte. No celular ele cobre o painel principal |
 | Barra do player / mini player | `app-mini-player` em `.shell-foot`. Mantém o elemento de mídia entre rotas | Só aparece com `AudioPresence.shown()`. Não crie outro `<audio>` |
 | Navegação do celular | `BottomNav` com `navTabs()`: Conversas · Buscar · Biblioteca · Fila, ou Conversas · Buscar · Acervos sem áudio | Uma página de celular deixa `--shell-mobile-foot` livre no pé |
-| Faixa "Vendo como" | `ActingBanner`, no topo de todas as telas | Não cubra |
+| Faixa "Vendo como" | `ActingBanner`, no topo de todas as telas. A `SessionShell` põe a faixa e a casca numa coluna da altura da tela | Não cubra. Não use `100dvh` numa página: a casca já tira a faixa da altura |
 | Aviso de nova versão | `UpdateBanner` (KBC-123), fixo sob `--float-top` | Não cubra |
 
 Serviços da casca:

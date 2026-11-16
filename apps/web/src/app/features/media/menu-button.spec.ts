@@ -75,16 +75,22 @@ describe('MenuButton (APG menu button)', () => {
     expect(outside).not.toHaveBeenCalled();
   });
 
-  describe('stays on the screen, however wide its text', () => {
-    const rectOf = (left: number, right: number) =>
-      ({ left, right }) as DOMRect;
-
+  describe('stays on the screen, however wide its text (top layer, D5)', () => {
     const openWith = async (left: number, right: number) => {
       vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(
         390,
       );
-      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
-        rectOf(left, right),
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+        left,
+        right,
+        top: 100,
+        bottom: 140,
+        width: right - left,
+        height: 40,
+      } as DOMRect);
+      // The menu's own width: its text's, in whatever font came.
+      vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(
+        210,
       );
       const { trigger, fixture } = await renderChoice();
       fireEvent.click(trigger);
@@ -97,21 +103,19 @@ describe('MenuButton (APG menu button)', () => {
     });
 
     it('moves right when it would start past the left edge', async () => {
-      const menu = await openWith(-27.5, 182.5);
-      await vi.waitFor(() => expect(menu.style.translate).toBe('35.5px'));
+      const menu = await openWith(0, 40);
+      await vi.waitFor(() => expect(menu.style.left).toBe('8px'));
     });
 
     it('moves left when it would end past the right edge', async () => {
-      const menu = await openWith(200, 410);
-      await vi.waitFor(() => expect(menu.style.translate).toBe('-28px'));
+      const menu = await openWith(350, 400);
+      await vi.waitFor(() => expect(menu.style.left).toBe('172px'));
     });
 
-    it('stays where it opened when it fits', async () => {
-      const menu = await openWith(40, 250);
-      await vi.waitFor(() =>
-        expect(document.activeElement).not.toBe(document.body),
-      );
-      expect(menu.style.translate).toBe('');
+    it('stays where it opened, its end under the trigger, when it fits', async () => {
+      const menu = await openWith(200, 300);
+      await vi.waitFor(() => expect(menu.style.left).toBe('90px'));
+      expect(menu.style.top).toBe('146px');
     });
   });
 });

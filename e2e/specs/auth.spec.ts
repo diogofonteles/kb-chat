@@ -10,6 +10,12 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import {
+  account,
+  openPeople as shellOpenPeople,
+  signOut as shellSignOut,
+  collectionButtons,
+} from './shell-helpers.js';
 
 /**
  * KBC-010: Google sign-in (faked, see fixtures.ts) and permissions per person, at 1440 and
@@ -20,7 +26,7 @@ const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 async function sidebar(page: Page): Promise<Locator> {
   if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
   return desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
+    ? page.getByRole('complementary', { name: 'Sua biblioteca' })
     : page.getByRole('dialog', { name: 'Menu' });
 }
 
@@ -109,13 +115,14 @@ test('AC-3: a guest with collection A and search sees only A, without the resear
     guest.getByRole('radio', { name: /Pesquisa com IA/ }),
   ).toHaveCount(0);
   const side = await sidebar(guest);
-  const topics = side.getByRole('combobox', { name: 'Acervo', exact: true });
-  await expect(topics.locator('option')).toHaveCount(1);
-  await expect(topics.locator('option')).toContainText('Hermetismo');
+  const topics = collectionButtons(side);
+  await expect(topics).toHaveCount(1);
+  await expect(topics).toContainText('Hermetismo');
   await expect(
     side.getByRole('button', { name: 'Pessoas e permissões' }),
   ).toHaveCount(0);
-  await expect(side.getByText(email)).toBeVisible();
+  // v2 (KBC-125): the account is named in the avatar menu (desktop) or the phone's Menu.
+  await expect((await account(guest)).getByText(email)).toBeVisible();
   const hidden = await guest.request.post('/api/v1/topics/alquimia/searches', {
     data: { q: 'ouro' },
     headers: CSRF,
@@ -209,8 +216,7 @@ test('a master grants collections and features on "Pessoas e permissões"', asyn
 }) => {
   const email = uniqueEmail('granted');
   await page.goto('/');
-  const side = await sidebar(page);
-  await side.getByRole('button', { name: 'Pessoas e permissões' }).click();
+  await shellOpenPeople(page);
   const dialog = page.getByRole('dialog', { name: 'Configurações' });
   await expect(
     dialog.getByRole('heading', { name: 'Pessoas e permissões' }),
@@ -251,8 +257,7 @@ test('AC-7: with two masters one demotes the other, then cannot demote themselve
     const second = uniqueEmail('master');
     await invite(owner, second, { role: 'master' });
     await page.goto('/');
-    const side = await sidebar(page);
-    await side.getByRole('button', { name: 'Pessoas e permissões' }).click();
+    await shellOpenPeople(page);
     const dialog = page.getByRole('dialog', { name: 'Configurações' });
 
     await dialog.getByRole('button', { name: new RegExp(second) }).click();
@@ -280,8 +285,7 @@ test('"Sair" ends the session and returns to the login screen', async ({
   const guest = await pageAs(browser, email, page.viewportSize());
   await guest.goto('/');
 
-  const side = await sidebar(guest);
-  await side.getByRole('button', { name: 'Sair' }).click();
+  await shellSignOut(guest);
 
   await expect(
     guest.getByRole('button', { name: 'Fazer login com o Google' }),

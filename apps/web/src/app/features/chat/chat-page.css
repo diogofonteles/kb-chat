@@ -1,34 +1,73 @@
 :host {
   display: block;
+  /* In the session shell's column it takes the screen less the band of "Vendo como". */
+  flex: 1 1 0;
+  min-height: 0;
   height: 100dvh;
 }
 
-.shell {
+/* The v2 shell (KBC-125): the top bar, Sua biblioteca and the main panel (with the optional
+   right panel) as rounded panels with an 8 gap over the shell backdrop, the player bar at
+   the foot. One screen tall: the panels scroll inside it, never the page. */
+.app-shell {
   display: grid;
-  grid-template-columns: var(--sidebar) minmax(0, 1fr);
-  /* One screen tall: the thread, the panel and the history scroll inside it, never the page. */
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: var(--shell-sidebar) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'top top'
+    'library main'
+    'foot foot';
+  gap: var(--shell-gap);
   height: 100%;
+  padding: 0 var(--shell-gap) var(--shell-gap);
+  background: var(--color-shell);
 }
 
-.sidebar {
-  /* The column is tinted, so the current conversation stands out on the surface color. */
-  --sidebar-active: var(--color-surface);
+.app-shell.collapsed {
+  grid-template-columns: var(--shell-sidebar-collapsed) minmax(0, 1fr);
+}
+
+.app-shell:not(.with-player) {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.top {
+  grid-area: top;
+}
+
+.library {
+  grid-area: library;
   min-height: 0;
-  border-right: 1px solid var(--color-border);
-  background: var(--color-surface-muted);
+  overflow-y: auto;
+  border-radius: var(--radius-card);
+  background: var(--color-bg);
 }
 
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-  height: 100%;
+.shell-foot {
+  grid-area: foot;
   min-width: 0;
 }
 
+/* No bar row (the page of what plays): the foot keeps only its announcer, out of the grid. */
+.app-shell.desktop:not(.with-player) .shell-foot {
+  position: absolute;
+}
+
+.layout {
+  grid-area: main;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: var(--shell-gap);
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* A source open beside the conversation: 460, as v2 draws it (redesign-v2 › Casca), so the
+   main panel keeps its header on one line at 1440 next to the 300 library. */
 .layout.with-panel {
-  grid-template-columns: minmax(0, 1fr) minmax(24rem, var(--panel));
+  grid-template-columns: minmax(0, 1fr) minmax(24rem, var(--shell-source));
 }
 
 /* A track's passage (T22): 48rem, so its player fits beside the transcript. */
@@ -36,12 +75,48 @@
   grid-template-columns: minmax(0, 1fr) minmax(24rem, 48rem);
 }
 
+/* The areas' right panel: 340 (now playing, the queue) or 460 (a source open). */
+.layout.with-panel:has(> .right-panel) {
+  grid-template-columns: minmax(0, 1fr) var(--shell-right);
+}
+
+.layout.with-panel:has(> .right-panel.source) {
+  grid-template-columns: minmax(0, 1fr) var(--shell-source);
+}
+
+.panel {
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--color-bg);
+}
+
+.right-panel {
+  overflow-y: auto;
+}
+
 .conversation {
+  position: relative;
   display: grid;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  /* The v2 main panel: a gradient of the collection's colour (--tint) into the background. */
+  background:
+    linear-gradient(
+        180deg,
+        color-mix(
+            in srgb,
+            var(--tint, var(--color-surface-muted)) 45%,
+            var(--color-bg)
+          )
+          0,
+        var(--color-bg) 18.75rem
+      )
+      no-repeat,
+    var(--color-bg);
   /* One column that may shrink: with the document panel open on a narrow desktop, the
      results and the question box wrap instead of spilling under the panel. */
   grid-template-columns: minmax(0, 1fr);
-  /* The last row is the mini-player's (KBC-041): empty when it is closed. */
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   min-width: 0;
   min-height: 0;
@@ -94,65 +169,19 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: var(--topbar-height);
-  padding: var(--space-3) var(--space-6);
-  border-bottom: 1px solid var(--color-border);
+  min-height: 4rem;
+  padding: var(--space-4) var(--space-8) var(--space-2);
 }
 
-.brand {
+/* The esoteric theme's one ornament: a discreet ☿ before the title, never in running text (DS-16). */
+:host-context([data-theme='esoteric']) .topic::before {
+  content: '☿ ';
   color: var(--color-accent);
-  font-size: 1.25rem;
-}
-
-.brand::before {
-  content: '✦';
-}
-
-/* The esoteric theme's one ornament: a discreet ☿ in the title bar, never in running text (DS-16). */
-:host-context([data-theme='esoteric']) .brand::before {
-  content: '☿';
 }
 
 .view-switch {
   flex-shrink: 0;
   margin-left: auto;
-}
-
-/* Help (KBC-032): right-aligned, after the view switch when there is one. */
-.help {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  min-width: var(--target);
-  min-height: var(--target);
-  margin-left: auto;
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  text-decoration: none;
-}
-
-.view-switch ~ .help {
-  margin-left: 0;
-}
-
-/* With the document panel open the top bar stays on one line: the help is just its icon. */
-.layout.with-panel .help-text {
-  display: none;
-}
-
-.help:hover {
-  color: var(--color-text);
-  background: var(--color-surface-muted);
-}
-
-.help:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
 }
 
 .topic {
@@ -161,8 +190,9 @@
   margin: 0;
   overflow: hidden;
   font-family: var(--font-display);
-  font-size: 1.125rem;
-  font-weight: 600;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -281,51 +311,47 @@
   padding: 0 var(--space-4) var(--space-4);
 }
 
-/* Phones: the side panel is a modal drawer opened from the top bar. */
+/* Phones: Sua biblioteca as a full-screen "Menu" (chat-sidebar-drawer-mobile). */
 .drawer {
-  width: min(20rem, 85vw);
+  width: 100vw;
+  max-width: 100vw;
   height: 100dvh;
   max-height: none;
   margin: 0;
   padding: 0;
   border: 0;
-  background: var(--color-surface);
+  background: var(--color-bg);
   color: var(--color-text);
 }
 
 .drawer::backdrop {
-  background: rgb(0 0 0 / 0.45);
+  background: var(--scrim);
 }
 
 .drawer-body {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: 100%;
+  position: relative;
+  min-height: 100%;
+  overflow-y: auto;
 }
 
 .drawer-close {
-  justify-self: end;
-  min-width: var(--target);
-  min-height: var(--target);
-  margin: var(--space-2) var(--space-2) 0 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-text);
-  font-size: 1.5rem;
-  cursor: pointer;
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-4);
+  z-index: 1;
 }
 
 .menu {
   display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: var(--space-1);
+  justify-content: center;
+  min-width: var(--target);
   min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font: inherit;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
   cursor: pointer;
 }
 
@@ -339,8 +365,36 @@
 }
 
 @media (max-width: 1023px) {
-  .shell {
+  /* Phones: the page, then the foot (mini player and navigation) on an opaque band, so a
+     list never shows through the labels and its last item stays above them (FR-4, AC-5). */
+  .app-shell,
+  .app-shell.collapsed,
+  .app-shell:not(.with-player) {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'main'
+      'foot';
+    gap: 0;
+    padding: 0;
+    background: var(--color-bg);
+  }
+
+  .conversation {
+    border-radius: 0;
+  }
+
+  .shell-foot {
+    display: grid;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2) 0;
+    background: color-mix(in srgb, var(--color-bg) 95%, transparent);
+    box-shadow: 0 -24px 24px -8px
+      color-mix(in srgb, var(--color-bg) 85%, transparent);
+  }
+
+  .panel {
+    border-radius: 0;
   }
 
   .layout.with-panel,
@@ -362,7 +416,12 @@
 
   .topbar {
     flex-wrap: wrap;
+    min-height: var(--topbar-height);
     padding: var(--space-2) var(--space-4) var(--space-3);
+  }
+
+  .topic {
+    font-size: 1.375rem;
   }
 
   /* Phones: the view switch takes its own full-width row under the title. */
@@ -370,15 +429,6 @@
     flex-basis: 100%;
     order: 1;
     margin-left: 0;
-  }
-
-  /* Phones: the help stays on the title row, as an icon. */
-  .view-switch ~ .help {
-    margin-left: auto;
-  }
-
-  .help-text {
-    display: none;
   }
 
   .hint-keyboard {
@@ -391,11 +441,6 @@
     grid-template-rows: auto minmax(0, 1fr) auto auto;
   }
 
-  /* With the mini-player open, the question box takes the last row, under it (T15). */
-  .conversation:has(> app-mini-player.open) > .composer-dock {
-    grid-row: -2 / -1;
-  }
-
   .conversation.empty > .thread {
     grid-row: auto;
     align-content: safe center;
@@ -404,11 +449,6 @@
 
   .conversation.empty > .composer-dock {
     grid-row: auto;
-  }
-
-  /* The Menu button takes the brand's place; the title keeps one line. */
-  .brand {
-    display: none;
   }
 
   .topic {

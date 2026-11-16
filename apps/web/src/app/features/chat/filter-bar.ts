@@ -1,3 +1,4 @@
+import { UiOverlay } from '@ui/overlay.js';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import {
   ChangeDetectionStrategy,
@@ -47,6 +48,7 @@ let nextBarId = 0;
  */
 @Component({
   selector: 'app-filter-bar',
+  imports: [UiOverlay],
   templateUrl: './filter-bar.html',
   styleUrl: './filter-bar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

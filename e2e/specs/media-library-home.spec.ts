@@ -18,11 +18,11 @@ import {
   useTheme,
   type UploadedMedia,
 } from './media-helpers.js';
+import { library } from './shell-helpers.js';
 
 /** KBC-051 (screens.md T16): the media library home. */
 
 const LIBRARY = ['search', 'media', 'media-library'];
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 const viewportOf = () => test.info().project.use.viewport ?? null;
 
 /** A new person with the library on this spec's collection: positions are theirs alone. */
@@ -40,9 +40,12 @@ async function libraryListener(
 /** "Biblioteca" in the sidebar, or in the phone's menu. */
 async function openLibrary(page: Page) {
   await page.goto('/');
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('link', { name: 'Biblioteca' }).click();
+  // v2 (KBC-125): the pinned "Biblioteca" of Sua biblioteca (the column, or the phone's Menu).
+  await (
+    await library(page)
+  )
+    .getByRole('link', { name: 'Biblioteca', exact: true })
+    .click();
   await expect(
     page.getByRole('heading', { name: 'Biblioteca', level: 2 }),
   ).toBeVisible();
@@ -105,9 +108,12 @@ test('AC-1: with the library, the sidebar shows Biblioteca and /midia leads to i
   const { page } = await libraryListener(browser);
   await openLibrary(page);
   await expect(page).toHaveURL(/\/biblioteca/);
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Mídia' })).toHaveCount(0);
+  await expect(
+    (await library(page)).getByRole('link', { name: 'Mídia', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('link', { name: 'Mídia', exact: true }),
+  ).toHaveCount(0);
   await page.goto('/midia');
   await expect(page).toHaveURL(`/biblioteca?acervo=${collection}`);
   await expect(
@@ -121,10 +127,12 @@ test('AC-2: with only "Ouvir mídia", the person keeps Mídia and the library is
 }) => {
   const { page } = await libraryListener(browser, ['search', 'media']);
   await page.goto('/');
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Mídia' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Biblioteca' })).toHaveCount(0);
+  await expect(
+    (await library(page)).getByRole('link', { name: 'Mídia', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Biblioteca', exact: true }),
+  ).toHaveCount(0);
   await page.goto('/biblioteca');
   await expect(page).toHaveURL(/\/$/);
   expect((await page.request.get('/api/v1/media/library')).status()).toBe(403);

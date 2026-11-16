@@ -627,8 +627,9 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
       samples++;
       const now = audio.currentTime * 1000;
       const shown = Number(
-        document.querySelector<HTMLElement>('li:has([aria-current="true"])')
-          ?.dataset['startMs'] ?? -1,
+        document.querySelector<HTMLElement>(
+          'li[data-start-ms]:has([aria-current="true"])',
+        )?.dataset['startMs'] ?? -1,
       );
       const index = starts.indexOf(shown);
       const next = starts[index + 1] ?? Number.POSITIVE_INFINITY;

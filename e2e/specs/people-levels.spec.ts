@@ -9,6 +9,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { openPeople as shellOpenPeople } from './shell-helpers.js';
 
 /**
  * KBC-109 (T9, ADR 0036 §9): the level of a collection in an invitation profile, in the
@@ -16,7 +17,6 @@ import {
  * project has its own collection (`zz-pessoas-<project>`, apps/api/src/e2e/server.ts): a scale
  * changes what everyone sees there. The profiles are never the default one (shared server).
  */
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 const shots = process.env['KBC_SHOTS'];
 async function shoot(page: Page, name: string, part?: Locator): Promise<void> {
@@ -28,11 +28,7 @@ async function shoot(page: Page, name: string, part?: Locator): Promise<void> {
 
 async function openPeople(page: Page): Promise<Locator> {
   await page.goto('/');
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  const side = desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
-    : page.getByRole('dialog', { name: 'Menu' });
-  await side.getByRole('button', { name: /Pessoas e permissões/ }).click();
+  await shellOpenPeople(page);
   return page.getByRole('dialog', { name: 'Configurações' });
 }
 

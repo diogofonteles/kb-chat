@@ -4,12 +4,13 @@
 
 /*
  * Fixed, so the page under it never moves while someone types; the question box is at the
- * bottom. Under the top bar (--topbar-height, the bar's own min-height), so it covers none
- * of its text or controls. Without a notice it is an empty, zero-size live region.
+ * bottom. Under the top bar, so it covers none of its text or controls: --float-top is the
+ * bottom edge of the page's header as the v2 shell lays it out (chat-page.ts), else
+ * --topbar-height (the bar's own min-height). Without a notice it is an empty, zero-size live region.
  */
 .notice {
   position: fixed;
-  top: calc(var(--topbar-height) + var(--space-2));
+  top: calc(var(--float-top, var(--topbar-height)) + var(--space-2));
   left: 50%;
   z-index: 60;
   transform: translateX(-50%);

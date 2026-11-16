@@ -267,7 +267,8 @@ test('AC-6: without `media-subjects` nothing of a subject shows', async ({
   });
   expect(saved.ok()).toBe(true);
   await page.goto('/biblioteca');
-  await expect(page.getByRole('searchbox')).toBeVisible();
+  // The library's own search (the v2 top bar has the global one, KBC-125).
+  await expect(page.getByRole('main').getByRole('searchbox')).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Assunto' })).toHaveCount(0);
   await expect(
     page.getByRole('button', { name: 'Limpar filtros' }),

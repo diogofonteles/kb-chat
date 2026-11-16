@@ -818,9 +818,37 @@ select.ui-input option {
   }
 }
 
+/* ---------- Overlay layer (D5) ---------- */
+/*
+ * Every menu, popover and select list rises to the top layer (popover API, ui/overlay.ts),
+ * anchored to its trigger: no container clips or covers it. The browser's own popover look
+ * is undone here at the lowest specificity; each panel draws its own.
+ */
+:where(.ui-overlay) {
+  position: fixed;
+  inset: auto;
+  z-index: 60;
+  width: max-content;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+}
+
+:where(.ui-overlay)::backdrop {
+  background: transparent;
+}
+
+/* Below 1024 a menu is a sheet from the bottom: its backdrop is the scrim. */
+.ui-overlay--sheet::backdrop {
+  background: var(--scrim);
+}
+
 /* ---------- Menu ---------- */
 .ui-menu {
-  position: relative;
   display: inline-flex;
 }
 
@@ -837,10 +865,6 @@ select.ui-input option {
 }
 
 .ui-menu__panel {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  left: 0;
-  z-index: 40;
   display: flex;
   flex-direction: column;
   min-width: 15rem;
@@ -854,16 +878,6 @@ select.ui-input option {
 
 .ui-menu__panel[hidden] {
   display: none;
-}
-
-.ui-menu__panel--end {
-  right: 0;
-  left: auto;
-}
-
-.ui-menu__panel--up {
-  top: auto;
-  bottom: calc(100% + 0.5rem);
 }
 
 .ui-menu__item {
@@ -880,6 +894,7 @@ select.ui-input option {
   font-size: var(--text-sm);
   text-align: left;
   text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -921,28 +936,15 @@ select.ui-input option {
   font-weight: 700;
 }
 
-.ui-menu__scrim {
-  display: none;
-}
-
 @media (max-width: 1023px) {
-  /* A sheet from the bottom over a scrim (DESIGN.md: menus become sheets on phones). */
-  .ui-menu__scrim {
-    position: fixed;
-    inset: 0;
-    z-index: 39;
-    display: block;
-    background: var(--scrim);
-  }
-
-  .ui-menu__panel,
-  .ui-menu__panel--end,
-  .ui-menu__panel--up {
-    position: fixed;
+  /* A sheet from the bottom over the scrim (DESIGN.md: menus become sheets on phones). */
+  .ui-menu__panel.ui-overlay--sheet {
     top: auto;
     right: 0;
     bottom: 0;
     left: 0;
+    width: auto;
+    max-width: none;
     max-height: 85dvh;
     padding: var(--space-4) var(--space-2)
       calc(var(--space-8) + env(safe-area-inset-bottom));

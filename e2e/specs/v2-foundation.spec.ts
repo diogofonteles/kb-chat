@@ -204,6 +204,12 @@ test('AC-8: every component of the catalog passes axe, with a visible focus', as
       (name) => document.documentElement.setAttribute('data-theme', name),
       theme,
     );
+    // The buttons ease into the new theme's colours: measured once they got there.
+    await page.evaluate(() =>
+      Promise.all(
+        document.getAnimations().map((animation) => animation.finished),
+      ),
+    );
     expect(
       await seriousViolations(page, 'app-ui-catalog-page'),
       `theme ${theme}`,
@@ -219,7 +225,8 @@ test('AC-8: every component of the catalog passes axe, with a visible focus', as
   );
   expect(outline).not.toBe('none');
 
-  await page.getByRole('button', { name: 'Conta' }).click();
+  // The catalog's own "Conta" (exact): the shell's avatar is "Conta de <nome>" (KBC-125).
+  await page.getByRole('button', { name: 'Conta', exact: true }).click();
   const menu = page.getByRole('menu', { name: 'Conta' });
   await expect(menu.getByRole('menuitem').first()).toBeFocused();
   await page.keyboard.press('ArrowDown');
@@ -228,7 +235,9 @@ test('AC-8: every component of the catalog passes axe, with a visible focus', as
   ).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Conta' })).toBeFocused();
+  await expect(
+    page.getByRole('button', { name: 'Conta', exact: true }),
+  ).toBeFocused();
 
   await page.getByRole('button', { name: 'Abrir modal' }).click();
   const dialog = page.getByRole('dialog', { name: 'Editar detalhes' });

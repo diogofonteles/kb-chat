@@ -23,6 +23,13 @@ export class SpendStore {
   readonly configured = computed(() => this.value()?.configured ?? true);
   /** Today's spend in US$, or null while unknown. */
   readonly usd = computed(() => this.value()?.usd ?? null);
+  /** How much of today's cap is spent, 0 to 1 (the thin bar of Sua biblioteca), or null. */
+  readonly ratio = computed(() => {
+    const spend = this.value();
+    return spend && spend.capUsd > 0
+      ? Math.min(1, spend.usd / spend.capUsd)
+      : null;
+  });
   /** "US$ 0,03 de US$ 1,00", or '' while loading or on error. */
   readonly label = computed(() => {
     const spend = this.value();

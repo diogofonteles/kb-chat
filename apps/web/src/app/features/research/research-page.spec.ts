@@ -130,7 +130,7 @@ describe('ChatPage research view (KBC-008)', () => {
       topic: 'hermetismo',
       turns: [{ question: 'o que é o ritmo?', answer: 'Tudo flui [1].' }],
     });
-    const history = screen.getByRole('navigation', { name: 'Histórico' });
+    const history = screen.getByRole('navigation', { name: 'Conversas' });
     expect(history.textContent?.replace(/\s+/g, ' ')).toContain(
       'o que é o ritmo? IA · Hermetismo',
     );
@@ -182,7 +182,9 @@ describe('ChatPage research view (KBC-008)', () => {
     await switchTo(page, 'Pesquisa com IA');
     await send(page, 'o que é o ritmo?', 'Perguntar');
     await answer(page, 0, 'Tudo flui [1].');
-    fireEvent.click(screen.getByRole('button', { name: /Nova conversa/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Criar' }));
+    await page.fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Nova conversa' }));
     await page.fixture.whenStable();
     expect(screen.queryByText(/Tudo flui/)).toBeNull();
     await switchTo(page, 'Buscar documentos');

@@ -12,6 +12,9 @@ import {
   toSignal,
 } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { UiButton, UiIconButton } from '@ui/button.js';
+import { UiCover } from '@ui/cover.js';
+import { UiIcon } from '@ui/icon.js';
 import { formatClock, positionToSecond } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
 import { MediaEngine } from '@core/media/media-engine.js';
@@ -32,7 +35,7 @@ import { PlayerShortcuts } from './player-shortcuts.js';
  */
 @Component({
   selector: 'app-mini-player',
-  imports: [RouterLink],
+  imports: [RouterLink, UiButton, UiCover, UiIcon, UiIconButton],
   templateUrl: './mini-player.html',
   styleUrl: './mini-player.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -74,6 +77,15 @@ export class MiniPlayer {
 
   /** On phones, above the question box (screens.md T15); else at the foot. */
   readonly aboveComposer = input(false);
+  /**
+   * Nothing loaded but the collection in use has audio (the v2 audio rule, KBC-125 BR-2):
+   * the bar stays, saying so.
+   */
+  readonly idle = input(false);
+  /** Where "Escolha um áudio" leads (the library), when the person has it. */
+  readonly idleLink = input<string | null>(null);
+  /** The idle link names the page it opens: "Biblioteca", or "Mídia" without the library. */
+  protected readonly idleInMedia = computed(() => this.idleLink() === '/midia');
   /** A media the full player shows elsewhere on screen (the reading panel, KBC-039). */
   readonly shownElsewhere = input<string | null>(null);
 
@@ -86,6 +98,18 @@ export class MiniPlayer {
     () =>
       $localize`:@@player.backBy:Voltar ${this.skipBack()}:seconds: segundos`,
   );
+
+  protected readonly skipForward = computed(
+    () => this.preferences.value().skipForwardSec,
+  );
+  protected readonly forwardLabel = computed(
+    () =>
+      $localize`:@@player.forwardBy:Avançar ${this.skipForward()}:seconds: segundos`,
+  );
+  protected readonly total = computed(() => {
+    const { durationMs } = this.engine.playback();
+    return durationMs ? formatClock(durationMs) : '';
+  });
 
   protected readonly source = this.engine.source;
   /** The track playing, under the recording's title (KBC-066 FR-9). */
@@ -147,6 +171,10 @@ export class MiniPlayer {
     this.engine.skip(-this.preferences.skipBackMs());
   }
 
+  protected forward(): void {
+    this.engine.skip(this.preferences.skipForwardMs());
+  }
+
   protected retry(): void {
     this.engine.retry();
   }
@@ -159,7 +187,7 @@ export class MiniPlayer {
     this.engine.pause();
     if (!this.gone()) this.saver.saveNow();
     this.engine.unload();
-    const main = this.host.nativeElement.closest('main');
+    const main = this.host.nativeElement.ownerDocument.querySelector('main');
     if (main) {
       main.tabIndex = -1;
       main.focus();

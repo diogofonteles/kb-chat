@@ -1,0 +1,155 @@
+<div class="start">
+  <ui-logo [size]="28" />
+  <button
+    uiIconButton
+    type="button"
+    aria-label="Voltar"
+    i18n-aria-label="@@topbar.back"
+    (click)="back()"
+  >
+    <ui-icon name="chevLeft" [size]="22" />
+  </button>
+  <button
+    uiIconButton
+    type="button"
+    aria-label="Avançar"
+    i18n-aria-label="@@topbar.forward"
+    (click)="forward()"
+  >
+    <ui-icon name="chevRight" [size]="22" />
+  </button>
+</div>
+
+<div class="center">
+  <button
+    uiIconButton="surface"
+    [size]="48"
+    type="button"
+    class="home"
+    aria-label="Início"
+    i18n-aria-label="@@topbar.home"
+    (click)="homeRequested.emit()"
+  >
+    <ui-icon name="home" [size]="24" />
+  </button>
+  <form class="search" role="search" (submit)="submit($event)">
+    <ui-icon class="search-icon" name="search" [size]="22" />
+    <label
+      class="visually-hidden"
+      for="global-search"
+      i18n="@@topbar.searchLabel"
+      >Buscar no acervo em uso</label
+    >
+    <input
+      #search
+      id="global-search"
+      type="search"
+      name="q"
+      autocomplete="off"
+      placeholder="O que você quer estudar hoje?"
+      i18n-placeholder="@@topbar.searchPlaceholder"
+      aria-keyshortcuts="Meta+K Control+K"
+      enterkeyhint="search"
+    />
+    <kbd class="ui-kbd shortcut" aria-hidden="true">⌘ K</kbd>
+    <span class="divider" aria-hidden="true"></span>
+    <button
+      uiIconButton
+      type="button"
+      class="research"
+      aria-label="Pesquisa com IA"
+      i18n-aria-label="@@view.research"
+      (click)="researchRequested.emit()"
+    >
+      <ui-icon name="sparkle" [size]="20" />
+    </button>
+  </form>
+</div>
+
+<div class="end">
+  <!-- The notifications slot: the bell comes with KBC-133 and does not show yet. -->
+  <ng-content select="[topBarNotifications]" />
+  @if (session.isMaster()) {
+    <button
+      uiIconButton
+      type="button"
+      class="people"
+      aria-haspopup="dialog"
+      [attr.aria-label]="peopleLabel()"
+      (click)="openPeople()"
+    >
+      <ui-icon name="people" [size]="22" />
+      @if (requests.count()) {
+        <span class="dot" aria-hidden="true"></span>
+      }
+    </button>
+  }
+  <ui-menu
+    label="Conta"
+    i18n-label="@@topbar.accountMenu"
+    menuId="account-menu"
+    triggerClass="avatar-trigger"
+    [triggerLabel]="accountLabel()"
+    align="end"
+  >
+    <span uiMenuTrigger class="avatar-ring">
+      <ui-avatar
+        [name]="me()?.name || me()?.email || ''"
+        [picture]="me()?.picture"
+        [size]="32"
+      />
+    </span>
+    @if (me(); as person) {
+      <p class="ui-menu__heading who" aria-hidden="true">
+        <span class="who-name">{{ person.name || person.email }}</span>
+        <span class="who-email">{{ person.email }}</span>
+      </p>
+    }
+    <button
+      uiMenuItem
+      type="button"
+      aria-haspopup="dialog"
+      (click)="openSettings()"
+    >
+      <ui-icon name="settings" [size]="18" />
+      <span i18n="@@settings.open">Configurações</span>
+    </button>
+    @if (session.isMaster()) {
+      <button
+        uiMenuItem
+        type="button"
+        aria-haspopup="dialog"
+        (click)="openPeople()"
+      >
+        <ui-icon name="people" [size]="18" />
+        <span i18n="@@sidebar.people">Pessoas e permissões</span>
+      </button>
+      <button
+        uiMenuItem
+        type="button"
+        aria-haspopup="dialog"
+        (click)="openPeople()"
+      >
+        <ui-icon name="eye" [size]="18" />
+        <span i18n="@@topbar.actAs">Ver como</span>
+      </button>
+    }
+    <a
+      uiMenuItem
+      href="/tutorial"
+      target="_blank"
+      rel="noopener"
+      aria-label="Como usar a Nova Alexandria (abre em nova aba)"
+      i18n-aria-label="@@page.helpLabel"
+    >
+      <ui-icon name="help" [size]="18" />
+      <span i18n="@@page.help">Como usar</span>
+      <ui-icon class="ui-menu__meta" name="external" [size]="14" />
+    </a>
+    <hr class="ui-menu__divider" />
+    <button uiMenuItem type="button" (click)="signOut()">
+      <ui-icon name="arrowRight" [size]="18" />
+      <span i18n="@@sidebar.signOut">Sair</span>
+    </button>
+  </ui-menu>
+</div>

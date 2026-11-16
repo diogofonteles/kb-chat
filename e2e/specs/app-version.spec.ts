@@ -7,6 +7,10 @@ import {
   shipNewVersion,
 } from './app-version-helpers.js';
 import { expect, test } from './fixtures.js';
+import {
+  openSettings as shellOpenSettings,
+  startNewCollection,
+} from './shell-helpers.js';
 
 async function shot(page: Page, testInfo: TestInfo, name: string) {
   await page.screenshot({
@@ -90,8 +94,9 @@ test('AC-2: a question typed and not sent only gets "Nova versão disponível", 
   await expect(shown.text).toHaveCount(0);
   await expect(question).toBeFocused();
   // A trial click fails while anything covers the control.
+  // v2 (KBC-125): on desktop the top bar is the shell's (app-top-bar), over the page's header.
   await page
-    .locator('.topbar')
+    .locator('app-top-bar, .topbar')
     .locator('button:visible, a:visible')
     .first()
     .click({ trial: true, timeout: 5_000 });
@@ -119,9 +124,7 @@ test('AC-2: work in a dialog (Configurações) holds the reload too, not only th
 }) => {
   const deploy = await playDeploys(page);
   await page.goto('/');
-  if ((page.viewportSize()?.width ?? 0) < 1024)
-    await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
+  await shellOpenSettings(page);
   const settings = page.getByRole('dialog', { name: 'Configurações' });
   await expect(settings).toBeVisible();
 
@@ -141,9 +144,8 @@ test('AC-1: a dialog typed in and closed with Esc no longer holds the reload ("N
   const deploy = await playDeploys(page);
   await page.goto('/');
   await expect(page.getByLabel('Sua pergunta')).toBeVisible();
-  if ((page.viewportSize()?.width ?? 0) < 1024)
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: '+ Novo acervo' }).click();
+  // v2 (KBC-125): "+ Criar" › "Novo acervo", in the phone's Menu too.
+  await startNewCollection(page);
   const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
   await dialog.getByRole('textbox', { name: 'Nome' }).fill('Alquimia');
   await page.keyboard.press('Escape');

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { CSRF, OWNER_EMAIL, expect, pageAs, test } from './fixtures.js';
 import { startInSearchView } from './search-view.js';
+import { openSettings, startNewConversation } from './shell-helpers.js';
 
 test.beforeEach(startInSearchView);
 
@@ -11,7 +12,7 @@ const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 async function sidebar(page: Page) {
   if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
   return desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
+    ? page.getByRole('complementary', { name: 'Sua biblioteca' })
     : page.getByRole('dialog', { name: 'Menu' });
 }
 
@@ -19,7 +20,7 @@ async function sidebar(page: Page) {
 const uniqueTag = (): string => `e2e${randomUUID().slice(0, 8)}`;
 
 const historyOf = async (page: Page) =>
-  (await sidebar(page)).getByRole('navigation', { name: 'Histórico' });
+  (await sidebar(page)).getByRole('navigation', { name: 'Conversas' });
 
 async function ask(page: Page, question: string) {
   await page.getByLabel('Sua pergunta').fill(question);
@@ -38,11 +39,7 @@ test('AC-1/AC-2: a new conversation clears the screen and the history brings the
 }) => {
   const tag = uniqueTag();
   await ask(page, `ritmo ${tag}`);
-  await (
-    await sidebar(page)
-  )
-    .getByRole('button', { name: /Nova conversa/ })
-    .click();
+  await startNewConversation(page);
   await expect(page.getByText('O que você quer estudar hoje?')).toBeVisible();
   await expect(page.getByLabel('Sua pergunta')).toBeFocused();
   await ask(page, `natureza ${tag}`);
@@ -164,12 +161,13 @@ test('AC-5: another collection starts a new conversation and updates the count',
   await ask(page, 'ritmo');
   const before = await page.getByRole('heading', { level: 1 }).textContent();
   const panel = await sidebar(page);
-  const select = panel.getByRole('combobox', { name: 'Acervo', exact: true });
-  const other = await select
-    .locator('option:not(:checked)')
+  // v2 (KBC-125 BR-4): another collection of Sua biblioteca's list.
+  await panel
+    .locator(
+      'li.collection > .row > button.ui-libitem-row:not([aria-current]):not([disabled])',
+    )
     .first()
-    .getAttribute('value');
-  await select.selectOption(other ?? '');
+    .click();
   // The page has more than one live region (the new-version notice's is always there, KBC-123).
   await expect(
     page.getByRole('status').filter({ hasText: 'Nova conversa em' }),
@@ -181,7 +179,15 @@ test('AC-5: another collection starts a new conversation and updates the count',
 });
 
 test('AC-6: the esoteric theme survives a reload', async ({ page }) => {
-  await (await sidebar(page)).getByLabel('Tema').selectOption('esoteric');
+  // v2 (KBC-125 BR-4): the theme is in Configurações › Preferências.
+  await openSettings(page);
+  const settings = page.getByRole('dialog', { name: 'Configurações' });
+  await settings.getByRole('button', { name: 'Preferências' }).click();
+  await settings
+    .getByRole('combobox', { name: 'Tema' })
+    .selectOption({ label: 'Esotérico' });
+  await expect(settings.getByText('Salvo automaticamente.')).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'esoteric');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'esoteric');

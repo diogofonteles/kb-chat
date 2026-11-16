@@ -1,3 +1,4 @@
+import { UiOverlay } from '@ui/overlay.js';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -21,9 +22,6 @@ export interface MenuOption {
   readonly danger?: boolean;
 }
 
-/** The least gap a menu keeps from the edges of the screen. */
-const SCREEN_MARGIN_PX = 8;
-
 /**
  * A button that opens a menu (APG menu button): Enter/Space/↓ opens on the first item (or
  * the checked one), ↑ on the last, ↑/↓ move, Escape closes and Tab leaves, and the focus
@@ -32,6 +30,7 @@ const SCREEN_MARGIN_PX = 8;
  */
 @Component({
   selector: 'app-menu-button',
+  imports: [UiOverlay],
   template: `
     <button
       #trigger
@@ -53,7 +52,8 @@ const SCREEN_MARGIN_PX = 8;
         class="menu"
         role="menu"
         tabindex="-1"
-        [style.translate]="nudge()"
+        [uiOverlay]="trigger"
+        overlayAlign="end"
         [attr.aria-label]="menuLabel() || label()"
         (keydown)="onMenuKey($event)"
         (focusout)="onFocusOut($event)"
@@ -92,7 +92,6 @@ export class MenuButton {
   private readonly trigger =
     viewChild.required<ElementRef<HTMLButtonElement>>('trigger');
   private readonly items = viewChildren<ElementRef<HTMLButtonElement>>('item');
-  private readonly menu = viewChild<ElementRef<HTMLElement>>('menu');
 
   /** The button's accessible name. */
   readonly label = input.required<string>();
@@ -107,8 +106,6 @@ export class MenuButton {
   protected readonly open = signal(false);
   /** The item that has the focus, as the items report it. */
   protected readonly focused = signal(0);
-  /** What brings the menu back on screen: its width is its text's, in whatever font came. */
-  protected readonly nudge = signal<string | null>(null);
   private readonly checkedIndex = computed(() =>
     Math.max(
       0,
@@ -161,27 +158,8 @@ export class MenuButton {
   }
 
   private openOn(index: number): void {
-    this.nudge.set(null);
     this.open.set(true);
-    afterNextRender(
-      () => {
-        this.keepOnScreen();
-        this.focusItem(index);
-      },
-      { injector: this.injector },
-    );
-  }
-
-  /** The left edge wins: that is where the text starts. */
-  private keepOnScreen(): void {
-    const box = this.menu()?.nativeElement.getBoundingClientRect();
-    if (!box) return;
-    const screenWidth = this.host.ownerDocument.documentElement.clientWidth;
-    const shift = Math.max(
-      SCREEN_MARGIN_PX - box.left,
-      Math.min(0, screenWidth - SCREEN_MARGIN_PX - box.right),
-    );
-    if (shift !== 0) this.nudge.set(`${shift}px`);
+    afterNextRender(() => this.focusItem(index), { injector: this.injector });
   }
 
   private move(step: number): void {

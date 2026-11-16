@@ -10,6 +10,7 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { TURNS, separateVoices, transcribedAudio } from './voices-helpers.js';
+import { openSettings as shellOpenSettings } from './shell-helpers.js';
 
 // KBC-071: voice profiles. A master has the feature by the role; a member never has it.
 // Everything here is synthetic: the E2E server plays the Mac with a made-up vector, and no
@@ -33,9 +34,7 @@ const aConsent = {
 
 /** The ⚙ dialog: in the side panel on desktop, in the "Menu" drawer on phones. */
 async function openSettings(page: Page) {
-  if ((page.viewportSize()?.width ?? 0) < 1024)
-    await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
+  await shellOpenSettings(page);
   return page.getByRole('dialog', { name: 'Configurações' });
 }
 

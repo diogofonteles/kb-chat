@@ -66,8 +66,11 @@ import { UpdateBanner } from './update-banner.js';
         <app-boot-screen />
       }
     } @else if (signedIn()) {
-      <app-acting-banner />
-      <router-outlet />
+      <!-- One screen: the band of "Vendo como" on top, the app shell in what is left. -->
+      <div class="session">
+        <app-acting-banner />
+        <router-outlet />
+      </div>
       @defer (on immediate) {
         <app-settings-host />
       } @error {
@@ -77,6 +80,13 @@ import { UpdateBanner } from './update-banner.js';
       <app-boot-screen />
     } @else {
       <app-login-page />
+    }
+  `,
+  styles: `
+    .session {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

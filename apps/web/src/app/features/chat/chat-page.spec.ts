@@ -10,12 +10,14 @@ import {
 } from '@angular/common/http/testing';
 import {
   Component,
+  DestroyRef,
   ErrorHandler,
+  inject,
   provideZonelessChangeDetection,
   signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import {
@@ -27,6 +29,7 @@ import {
 } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
 import { ChatPage } from './chat-page.js';
+import { ChatStore } from './chat-store.js';
 import { CollectionHeading, type HeadingScope } from './collection-heading.js';
 import { ResearchApi } from '@core/api/research-api.js';
 import { UsageLog } from '@core/usage/usage-log.js';
@@ -94,13 +97,40 @@ async function ask(
   await view.fixture.whenStable();
 }
 
+/** "+ Criar" › "Nova conversa" (v2 shell, KBC-125). */
+async function startNewConversation(
+  view: Awaited<ReturnType<typeof renderPage>>,
+) {
+  fireEvent.click(screen.getByRole('button', { name: 'Criar' }));
+  await view.fixture.whenStable();
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Nova conversa' }));
+  await view.fixture.whenStable();
+}
+
+/** A row of Sua biblioteca as read: its title and meta (the cover is decorative). */
+const itemText = (item: Element): string =>
+  [...item.querySelectorAll('.ui-libitem__title, .ui-libitem__meta')]
+    .map((part) => part.textContent?.replace(/\s+/g, ' ').trim())
+    .join(' ');
+
+/** The collections of Sua biblioteca, in their order. */
+const collectionButtons = (): HTMLButtonElement[] => [
+  ...document.querySelectorAll<HTMLButtonElement>(
+    'li.collection > .row > button.ui-libitem-row',
+  ),
+];
+
 describe('ChatPage', () => {
   it('greets with the current collection and its size', async () => {
     await renderPage();
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
       'Hermetismo',
     );
-    expect(screen.getByText(/4\.235 documentos/)).toBeTruthy();
+    expect(
+      within(screen.getByRole('heading', { level: 1 })).getByText(
+        /4\.235 documentos/,
+      ),
+    ).toBeTruthy();
     expect(screen.getByText('O que você quer estudar hoje?')).toBeTruthy();
   });
 
@@ -137,8 +167,11 @@ describe('ChatPage', () => {
   });
 
   it('offers the tutorial in a new tab, so the conversation stays (KBC-032 AC-4)', async () => {
-    await renderPage();
-    const help = screen.getByRole('link', {
+    const view = await renderPage();
+    // v2 (KBC-125): in the avatar menu of the top bar.
+    fireEvent.click(screen.getByRole('button', { name: /^Conta de/ }));
+    await view.fixture.whenStable();
+    const help = screen.getByRole('menuitem', {
       name: 'Como usar a Nova Alexandria (abre em nova aba)',
     });
     expect(help.getAttribute('href')).toBe('/tutorial');
@@ -478,7 +511,7 @@ describe('ChatPage side panel (KBC-005)', () => {
     await ask('lei do ritmo', view);
     view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();
-    fireEvent.click(screen.getByRole('button', { name: /Nova conversa/ }));
+    await startNewConversation(view);
     await view.fixture.whenStable();
     expect(screen.getByText('O que você quer estudar hoje?')).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByLabelText('Sua pergunta'));
@@ -489,11 +522,11 @@ describe('ChatPage side panel (KBC-005)', () => {
     await ask('lei do ritmo', view);
     view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();
-    fireEvent.click(screen.getByRole('button', { name: /Nova conversa/ }));
+    await startNewConversation(view);
     await ask('caibalion', view);
     view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();
-    const history = screen.getByRole('navigation', { name: /Histórico/ });
+    const history = screen.getByRole('navigation', { name: 'Conversas' });
     const items = history.querySelectorAll('button');
     expect([...items].map((b) => b.textContent)).toEqual([
       expect.stringContaining('caibalion'),
@@ -517,7 +550,7 @@ describe('ChatPage side panel (KBC-005)', () => {
   it('KBC-029: shows the question in the history as soon as it is sent, selected and "pesquisando…"', async () => {
     const view = await renderPage();
     await ask('lei do ritmo', view);
-    const history = screen.getByRole('navigation', { name: /Histórico/ });
+    const history = screen.getByRole('navigation', { name: 'Conversas' });
     const current = within(history).getByRole('button', {
       name: /lei do ritmo.*pesquisando…/,
     });
@@ -551,7 +584,7 @@ describe('ChatPage side panel (KBC-005)', () => {
     conversations.saved.set(stopped.id, stopped);
     conversations.saved.set(failed.id, failed);
     await renderPage();
-    const history = screen.getByRole('navigation', { name: /Histórico/ });
+    const history = screen.getByRole('navigation', { name: 'Conversas' });
     expect(
       within(history).getByRole('button', { name: /polaridade.*interrompida/ }),
     ).toBeTruthy();
@@ -565,9 +598,8 @@ describe('ChatPage side panel (KBC-005)', () => {
     await ask('lei do ritmo', view);
     view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();
-    fireEvent.change(screen.getByLabelText('Acervo'), {
-      target: { value: 'alquimia' },
-    });
+    // v2 (KBC-125 BR-4): the collection selector is the list of Sua biblioteca.
+    fireEvent.click(screen.getByRole('button', { name: /^Alquimia / }));
     await view.fixture.whenStable();
     expect(
       screen
@@ -598,13 +630,12 @@ describe('ChatPage side panel (KBC-005)', () => {
       ],
       defaultSlug: null,
     });
-    const options = within(screen.getByLabelText('Acervo')).getAllByRole(
-      'option',
-    ) as HTMLOptionElement[];
-    expect(options.map((option) => [option.text, option.disabled])).toEqual([
-      ['UDV — só os sub-acervos abaixo', true],
-      ['\u00a0\u00a0\u00a0\u00a0Palavra do Mestre (7)', false],
+    const items = collectionButtons();
+    expect(items.map((item) => [itemText(item), item.disabled])).toEqual([
+      ['UDV Só os sub-acervos abaixo', true],
+      ['Palavra do Mestre Acervo · 7 documentos', false],
     ]);
+    expect(items[1]?.closest('li')?.classList).toContain('child');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
       'Palavra do Mestre',
     );
@@ -625,7 +656,9 @@ describe('ChatPage side panel (KBC-005)', () => {
 
   it('creates a collection from the sidebar and switches to it at once (KBC-048 AC-1)', async () => {
     const view = await renderPage();
-    fireEvent.click(screen.getByRole('button', { name: '+ Novo acervo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Criar' }));
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Novo acervo' }));
     await view.fixture.whenStable();
     fireEvent.input(screen.getByRole('textbox', { name: 'Nome' }), {
       target: { value: 'UDV' },
@@ -645,13 +678,13 @@ describe('ChatPage side panel (KBC-005)', () => {
     await view.fixture.whenStable();
     // It joins the list as the API answered: the list is not asked again.
     view.http.expectNone('/api/v1/topics');
-    const select = screen.getByLabelText('Acervo') as HTMLSelectElement;
-    expect([...select.options].map((option) => option.text)).toEqual([
-      'Alquimia (1)',
-      'Hermetismo (4.235)',
-      'UDV (0)',
+    const items = collectionButtons();
+    expect(items.map((item) => itemText(item))).toEqual([
+      'UDV Acervo · 0 documentos',
+      'Alquimia Acervo · 1 documento',
+      'Hermetismo Acervo · 4.235 documentos',
     ]);
-    expect(select.value).toBe('udv');
+    expect(items[0]?.getAttribute('aria-current')).toBe('true');
     expect(
       screen.getByText(/Este acervo ainda não tem textos para buscar/),
     ).toBeTruthy();
@@ -660,20 +693,10 @@ describe('ChatPage side panel (KBC-005)', () => {
     );
   });
 
-  it('shows today’s AI spend and applies the chosen theme (AC-8, FR-4)', async () => {
-    const view = await renderPage();
+  it('shows today’s AI spend; the theme left the side panel for Configurações (AC-8, KBC-125 BR-4)', async () => {
+    await renderPage();
     expect(screen.getByText(/^US\$\s0,00 de US\$\s1,00$/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Tema'), {
-      target: { value: 'esoteric' },
-    });
-    await view.fixture.whenStable();
-    expect(document.documentElement.dataset['theme']).toBe('esoteric');
-    expect(localStorage.getItem('kb-chat.theme')).toBe('esoteric');
-    fireEvent.change(screen.getByLabelText('Tema'), {
-      target: { value: 'auto' },
-    });
-    await view.fixture.whenStable();
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+    expect(screen.queryByLabelText('Tema')).toBeNull();
   });
 
   it('says the history is unavailable when the API fails, and search still works', async () => {
@@ -699,7 +722,7 @@ describe('ChatPage side panel (KBC-005)', () => {
     for (const saved of [search, research])
       conversations.saved.set(saved.id, saved);
     await renderPage();
-    const history = screen.getByRole('navigation', { name: 'Histórico' });
+    const history = screen.getByRole('navigation', { name: 'Conversas' });
     expect(screen.getByText('salvo no servidor')).toBeTruthy();
     const items = within(history).getAllByRole('button');
     expect(
@@ -853,6 +876,15 @@ describe('ChatPage start suggestions and usage log (KBC-006)', () => {
 @Component({ template: '' })
 class MediaStub {}
 
+/** A page in the conversation's place that, leaving, starts a new conversation. */
+@Component({ template: '' })
+class ResettingStub {
+  constructor() {
+    const chat = inject(ChatStore);
+    inject(DestroyRef).onDestroy(() => chat.newConversation());
+  }
+}
+
 describe('ChatPage on the media pages (no question box)', () => {
   async function openMediaWith(scope: HeadingScope | null) {
     TestBed.configureTestingModule({
@@ -981,6 +1013,112 @@ describe('ChatPage on the media pages (no question box)', () => {
       await harness.fixture.whenStable();
 
       expect(document.activeElement).toBe(screen.getByRole('textbox'));
+    } finally {
+      Reflect.deleteProperty(window, 'matchMedia');
+    }
+  });
+
+  it('searches from the top bar once the conversation is back, after what the leaving page did (KBC-125 FR-2)', async () => {
+    localStorage.clear();
+    localStorage.setItem('kb-chat.view', 'search');
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: () => ({
+        matches: true,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }),
+    });
+    try {
+      TestBed.configureTestingModule({
+        providers: [
+          provideZonelessChangeDetection(),
+          provideHttpClient(withInterceptors([fakeStartRequests])),
+          provideHttpClientTesting(),
+          FAKE_ANSWERS,
+          { provide: UsageLog, useValue: usage },
+          provideRouter([
+            {
+              path: '',
+              component: ChatPage,
+              children: [
+                { path: '', children: [] },
+                { path: 'biblioteca', component: ResettingStub },
+              ],
+            },
+          ]),
+        ],
+      });
+      const harness = await RouterTestingHarness.create('/biblioteca');
+      const http = TestBed.inject(HttpTestingController);
+      http.match('/api/v1/topics').forEach((request) => request.flush(TOPICS));
+      await harness.fixture.whenStable();
+
+      fireEvent.input(
+        screen.getByRole('searchbox', { name: 'Buscar no acervo em uso' }),
+        { target: { value: 'ritmo' } },
+      );
+      fireEvent.submit(screen.getByRole('search'));
+      await harness.fixture.whenStable();
+
+      const thread = screen.getByRole('region', { name: 'Conversa' });
+      expect(within(thread).getByText('ritmo')).toBeTruthy();
+      expect(http.match(SEARCH_URL)).toHaveLength(1);
+    } finally {
+      Reflect.deleteProperty(window, 'matchMedia');
+    }
+  });
+
+  it('keeps a top bar search typed before the collections arrive and asks it once they do (KBC-125 FR-2)', async () => {
+    localStorage.clear();
+    localStorage.setItem('kb-chat.view', 'search');
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: () => ({
+        matches: true,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }),
+    });
+    try {
+      TestBed.configureTestingModule({
+        providers: [
+          provideZonelessChangeDetection(),
+          provideHttpClient(withInterceptors([fakeStartRequests])),
+          provideHttpClientTesting(),
+          FAKE_ANSWERS,
+          { provide: UsageLog, useValue: usage },
+          provideRouter([
+            {
+              path: '',
+              component: ChatPage,
+              children: [
+                { path: '', children: [] },
+                { path: 'biblioteca', component: ResettingStub },
+              ],
+            },
+          ]),
+        ],
+      });
+      const harness = await RouterTestingHarness.create('/biblioteca');
+      const http = TestBed.inject(HttpTestingController);
+
+      fireEvent.input(
+        screen.getByRole('searchbox', { name: 'Buscar no acervo em uso' }),
+        { target: { value: 'ritmo' } },
+      );
+      fireEvent.submit(screen.getByRole('search'));
+      // Back on the conversation while the collections are still on their way.
+      await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/'));
+      await new Promise((resolve) => setTimeout(resolve));
+      expect(http.match(SEARCH_URL)).toHaveLength(0);
+
+      http.match('/api/v1/topics').forEach((request) => request.flush(TOPICS));
+      await harness.fixture.whenStable();
+
+      const thread = screen.getByRole('region', { name: 'Conversa' });
+      expect(within(thread).getByText('ritmo')).toBeTruthy();
+      expect(http.match(SEARCH_URL)).toHaveLength(1);
     } finally {
       Reflect.deleteProperty(window, 'matchMedia');
     }

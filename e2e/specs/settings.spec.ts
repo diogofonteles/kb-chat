@@ -1,13 +1,13 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { CSRF, expect, test } from './fixtures.js';
+import { openSettings as shellOpenSettings } from './shell-helpers.js';
 
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 /** The ⚙ entry: in the side panel on desktop, in the "Menu" drawer on phones (FR-6). */
 async function openSettings(page: Page) {
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
+  await shellOpenSettings(page);
   const dialog = page.getByRole('dialog', { name: 'Configurações' });
   await expect(dialog).toBeVisible();
   return dialog;

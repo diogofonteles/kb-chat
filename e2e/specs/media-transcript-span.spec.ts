@@ -119,8 +119,11 @@ async function wordAt(
 /** A mouse drag from one word to another, in steps as a hand moves. */
 async function drag(region: Locator, from: string, to: string) {
   const page = region.page();
-  const start = await wordAt(region, from);
+  await wordAt(region, from);
   const end = await wordAt(region, to);
+  // Centering the end may scroll the text (the v2 shell's main panel is shorter): read the
+  // start again where it is now, so the drag starts on the word and not on its old place.
+  const start = await wordAt(region, from, { scroll: false });
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
   await page.mouse.move(end.x, end.y, { steps: 8 });

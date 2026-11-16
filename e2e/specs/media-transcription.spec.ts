@@ -10,15 +10,15 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { uniqueTag, uploadReady, useTheme } from './media-helpers.js';
+import {
+  openMediaFromLibrary,
+  openSettings as shellOpenSettings,
+} from './shell-helpers.js';
 
 // KBC-036: the transcription status of the media and the masters' "Transcritores".
 
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
-
 async function openSettings(page: Page) {
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
+  await shellOpenSettings(page);
   const dialog = page.getByRole('dialog', { name: 'Configurações' });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -26,9 +26,8 @@ async function openSettings(page: Page) {
 
 async function openMedia(page: Page) {
   await page.goto('/');
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('link', { name: 'Mídia' }).click();
+  // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
+  await openMediaFromLibrary(page);
   await expect(
     page.getByRole('heading', { name: /Mídia — Hermetismo/ }),
   ).toBeVisible();

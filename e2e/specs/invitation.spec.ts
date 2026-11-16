@@ -7,20 +7,16 @@ import {
   uniqueEmail,
   WEB_ORIGIN,
 } from './fixtures.js';
+import { openPeople as shellOpenPeople } from './shell-helpers.js';
 
 /**
  * KBC-026: inviting sends an e-mail (read from the E2E server's outbox, never sent), the
  * list shows the invitation until the first sign-in, and a resend is limited. 1440 and 390.
  */
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 async function openPeople(page: Page): Promise<Locator> {
   await page.goto('/');
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  const side = desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
-    : page.getByRole('dialog', { name: 'Menu' });
-  await side.getByRole('button', { name: /Pessoas e permissões/ }).click();
+  await shellOpenPeople(page);
   return page.getByRole('dialog', { name: 'Configurações' });
 }
 

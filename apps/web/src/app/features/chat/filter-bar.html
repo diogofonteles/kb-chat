@@ -69,6 +69,7 @@
           @if (openKey() === group.key) {
             <div
               class="popover"
+              [uiOverlay]="chip"
               [id]="'facet-' + group.key"
               role="group"
               [attr.aria-label]="group.title"

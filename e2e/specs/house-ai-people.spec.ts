@@ -9,17 +9,16 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { openSettings as shellOpenSettings } from './shell-helpers.js';
 
 /**
  * QA of KBC-022 on "Pessoas e permissões" and the section's visibility (AC-2, AC-12, NFR-3).
  * Only "Aplicar às selecionadas" runs here: "Aplicar a todos os usuários" changes every person
  * of the shared E2E server and would break the specs running beside this one.
  */
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 async function openSettings(page: Page) {
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
+  await shellOpenSettings(page);
   const dialog = page.getByRole('dialog', { name: 'Configurações' });
   await expect(dialog).toBeVisible();
   return dialog;

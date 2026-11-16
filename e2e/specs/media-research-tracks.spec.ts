@@ -281,10 +281,10 @@ async function reopenFromHistory(member: Page) {
   if (!desktop(member))
     await member.getByRole('button', { name: 'Menu', exact: true }).click();
   const side = desktop(member)
-    ? member.getByRole('complementary', { name: 'Lateral' })
+    ? member.getByRole('complementary', { name: 'Sua biblioteca' })
     : member.getByRole('dialog', { name: 'Menu' });
   await side
-    .getByRole('navigation', { name: 'Histórico' })
+    .getByRole('navigation', { name: 'Conversas' })
     .getByRole('button', { name: /pêndulo/ })
     .first()
     .click();
@@ -328,8 +328,8 @@ test('AC-12 (QA BUG-2): in a conversation reopened from the history, Esc gives t
     // The race QA saw, made certain: the history brings the same conversation back while
     // the panel is open, so the answer (and the citation pressed) is drawn anew.
     await member
-      .getByRole('complementary', { name: 'Lateral' })
-      .getByRole('navigation', { name: 'Histórico' })
+      .getByRole('complementary', { name: 'Sua biblioteca' })
+      .getByRole('navigation', { name: 'Conversas' })
       .getByRole('button', { name: /pêndulo/ })
       .first()
       .click();

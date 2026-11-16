@@ -39,7 +39,7 @@ async function openPeople(page, desktop) {
   await page.goto(base);
   if (!desktop) await page.getByRole('button', { name: 'Menu' }).click();
   const side = desktop
-    ? page.getByRole('complementary', { name: 'Lateral' })
+    ? page.getByRole('complementary', { name: 'Sua biblioteca' })
     : page.getByRole('dialog', { name: 'Menu' });
   await side.getByRole('button', { name: /Pessoas e permissões/ }).click();
   return page.getByRole('dialog', { name: 'Configurações' });

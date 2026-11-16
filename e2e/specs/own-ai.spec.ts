@@ -8,6 +8,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { openSettings as shellOpenSettings } from './shell-helpers.js';
 
 /**
  * "Sua IA" (KBC-023) against the E2E server's fakes: OpenRouter (consent approved at once,
@@ -16,8 +17,7 @@ import {
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 async function openSettings(page: Page) {
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
+  await shellOpenSettings(page);
   const dialog = page.getByRole('dialog', { name: 'Configurações' });
   await expect(dialog).toBeVisible();
   return dialog;

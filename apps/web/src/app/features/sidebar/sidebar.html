@@ -1,329 +1,618 @@
-<button type="button" class="new" (click)="startNew()">
-  <span aria-hidden="true">+</span>&ngsp;<span i18n="@@sidebar.new"
-    >Nova conversa</span
-  >
-</button>
-
-<nav class="history" aria-labelledby="history-title">
-  <div class="heading">
-    <h2 id="history-title" class="label" i18n="@@sidebar.history">Histórico</h2>
-    <p class="where" i18n="@@sidebar.thisComputer">salvo no servidor</p>
-  </div>
-  @if (!history.available()) {
-    <p class="note" role="status">
-      @if (history.lastError()?.action === 'save') {
-        <ng-container i18n="@@sidebar.historySaveFailed"
-          >Ainda não consegui salvar uma conversa no histórico. Ela fica
-          guardada neste navegador e eu tento de novo sozinho.</ng-container
-        >
-      } @else {
-        <ng-container i18n="@@sidebar.historyUnavailable"
-          >Histórico indisponível no momento.</ng-container
-        >
-      }
-    </p>
-  } @else if (history.lastError()?.action === 'load') {
-    <p class="note" role="status" i18n="@@sidebar.historyLoadFailed">
-      Não consegui abrir essa conversa. Tente de novo.
-    </p>
-  }
-  @if (history.conversations().length === 0) {
-    @if (history.available()) {
-      <p class="note" i18n="@@sidebar.historyEmpty">
-        Suas conversas aparecem aqui.
-      </p>
-    }
-  } @else {
-    <ul>
-      @for (conversation of entries(); track conversation.id) {
-        <li>
-          <button
-            type="button"
-            class="conversation"
-            [attr.aria-current]="
-              conversation.id === currentId() ? 'true' : null
-            "
-            (click)="open(conversation)"
-          >
-            <span class="question" [title]="conversation.title">{{
-              conversation.title
-            }}</span
-            >&ngsp;<span class="meta">
-              <span
-                class="kind"
-                [class.research]="conversation.kind === 'research'"
-                >{{ kindLabels[conversation.kind] }}</span
-              >
-              · {{ titles().get(conversation.topic) ?? conversation.topic }}
-              @if (conversation.count > 1) {
-                <span i18n="@@sidebar.questions"
-                  >·
-                  {conversation.count, plural,
-                    other {{{ conversation.count }} perguntas}
-                  }</span
-                >
-              }
-              @if (conversation.status; as status) {
-                <span
-                  class="status"
-                  [class.pending]="status === 'pending'"
-                  [class.failed]="status === 'failed'"
-                >
-                  @if (status === 'pending') {
-                    <span class="spinner" aria-hidden="true"></span>
-                  }
-                  {{ statusLabels[status] }}</span
-                >
-              }
-            </span>
-          </button>
-        </li>
-      }
-    </ul>
-  }
-</nav>
-
-<div class="settings">
-  <label class="field">
-    <span class="label" i18n="@@sidebar.topic">Acervo</span>
-    <select
-      #topicSelect
-      [disabled]="chat.topicList().length === 0"
-      (change)="changeTopic(topicSelect.value)"
-    >
-      @for (option of topicOptions(); track option.slug) {
-        <option
-          [value]="option.slug"
-          [selected]="option.slug === chat.topicSlug()"
-          [disabled]="!option.canOpen"
-        >
-          {{ option.label }}
-        </option>
-      }
-    </select>
-  </label>
-  <app-unassigned-notice [topic]="chat.topic()" (opened)="openLevels()" />
-
-  @if (canCreateCollections()) {
-    <div class="collection-actions">
-      <button
-        type="button"
-        class="collection-action"
-        (click)="collectionDialog.openNew()"
-        i18n="@@sidebar.newCollection"
-      >
-        + Novo acervo
-      </button>
-      @if (chat.topic(); as current) {
-        @if (current.canRename) {
-          <button
-            type="button"
-            class="collection-action"
-            (click)="collectionDialog.openEdit(current)"
-            i18n="@@sidebar.editCollection"
-          >
-            Editar acervo
-          </button>
-        }
-      }
-    </div>
-  }
-  <app-collection-dialog
-    #collectionDialog
-    [topics]="chat.topicList()"
-    (saved)="collectionSaved($event)"
-  />
-
-  @if (libraryOn()) {
-    <a
-      class="media-link"
-      routerLink="/biblioteca"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      (click)="openMedia()"
-    >
-      <svg
-        class="icon"
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        width="18"
-        height="18"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-      >
-        <path d="M9 18V6l11-2v12" />
-        <circle cx="6" cy="18" r="3" />
-        <circle cx="17" cy="16" r="3" />
-      </svg>
-      <span i18n="@@sidebar.library">Biblioteca</span>
-    </a>
-  } @else if (mediaOn()) {
-    <a
-      class="media-link"
-      routerLink="/midia"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      (click)="openMedia()"
-    >
-      <svg
-        class="icon"
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        width="18"
-        height="18"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-      >
-        <path d="M9 18V6l11-2v12" />
-        <circle cx="6" cy="18" r="3" />
-        <circle cx="17" cy="16" r="3" />
-      </svg>
-      <span i18n="@@sidebar.media">Mídia</span>
-    </a>
-  }
-
-  @if (queue.allowed()) {
-    <a
-      class="media-link"
-      routerLink="/fila"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      (click)="openMedia()"
-    >
-      <svg
-        class="icon"
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        width="18"
-        height="18"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-      >
-        <path d="M4 6h16M4 12h16M4 18h10" />
-      </svg>
-      <span i18n="@@sidebar.queue">Fila</span>
-      @if (queue.active(); as active) {
-        <span class="count" aria-hidden="true">{{ active }}</span>
-        <span
-          class="visually-hidden"
-          i18n="@@sidebar.queueActive"
-          >{active, plural,
-            =1 {1 áudio em processamento}
-            other {{{ active }} áudios em processamento}
-          }</span
-        >
-      }
-    </a>
-  }
-
-  <label class="field">
-    <span class="label" i18n="@@sidebar.theme">Tema</span>
-    <select #themeSelect (change)="changeTheme(themeSelect.value)">
-      @for (option of themeOptions; track option.value) {
-        <option
-          [value]="option.value"
-          [selected]="option.value === shownTheme()"
-        >
-          {{ option.label }}
-        </option>
-      }
-    </select>
-  </label>
-
-  @if (appServed(); as served) {
-    <p class="spend">
-      <span class="label" i18n="@@sidebar.appAi">IA da aplicação</span>
-      <span i18n="@@sidebar.appAiLeft"
-        >Gratuita · {{ served.remaining }} de {{ served.daily }} pesquisas
-        hoje</span
-      >
-    </p>
-  } @else if (ownFree()) {
-    <p class="spend">
-      <span class="label" i18n="@@sidebar.ownAi">Sua IA</span>
-      <span i18n="@@sidebar.ownAiFree">Gratuita</span>
-    </p>
-  } @else {
-    <p class="spend">
-      <span class="label" i18n="@@sidebar.spend">Gasto com IA hoje</span>
-      @if (!spend.configured()) {
-        <span i18n="@@sidebar.spendOff">IA não configurada</span>
-      } @else if (spend.label()) {
-        <span class="amount">{{ spend.label() }}</span>
-      } @else if (spend.today.error()) {
-        <span i18n="@@sidebar.spendError">Gasto indisponível</span>
-      } @else {
-        <span i18n="@@sidebar.spendLoading">Carregando…</span>
-      }
-    </p>
-  }
-
-  @if (session.isMaster()) {
-    <button
-      type="button"
-      class="people-button"
-      aria-haspopup="dialog"
-      (click)="openPeople()"
-    >
-      <svg
-        class="icon"
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        width="18"
-        height="18"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-      >
-        <circle cx="9" cy="8" r="3.5" />
-        <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
-        <circle cx="17" cy="9" r="2.5" />
-        <path d="M17 14c2.6 0 4.5 1.8 4.5 4.5" />
-      </svg>
-      <span i18n="@@sidebar.people">Pessoas e permissões</span>
-      @if (requests.count(); as pending) {
-        <span class="count" aria-hidden="true">{{ pending }}</span>
-        <span
-          class="visually-hidden"
-          i18n="@@sidebar.pendingRequests"
-          >{pending, plural,
-            =1 {1 solicitação pendente}
-            other {{{ pending }} solicitações pendentes}
-          }</span
-        >
-      }
-    </button>
-  }
-  <app-settings-button />
-
+@if (mobile()) {
   @if (session.me(); as me) {
     <div class="account">
-      @if (me.picture) {
-        <img
-          class="avatar"
-          [src]="me.picture"
-          alt=""
-          width="32"
-          height="32"
-          referrerpolicy="no-referrer"
-        />
-      } @else {
-        <span class="avatar initial" aria-hidden="true">{{ initial() }}</span>
-      }
+      <ui-avatar
+        [name]="me.name || me.email"
+        [picture]="me.picture"
+        [size]="32"
+      />
       <span class="person">
         <span class="name">{{ me.name || me.email }}</span>
         <span class="email">{{ me.email }}</span>
       </span>
+    </div>
+  }
+}
+
+<div class="head">
+  <!-- Not a heading: the pages' own h2 ("Biblioteca") stay the only ones of the outline. -->
+  <p id="your-library-title" class="title" i18n="@@library.title">
+    Sua biblioteca
+  </p>
+  <ui-menu
+    #createMenu
+    class="create"
+    label="Criar"
+    i18n-label="@@library.createMenu"
+    menuId="library-create"
+    triggerClass="create-trigger"
+    [triggerLabel]="collapsed() ? createLabel : ''"
+  >
+    <span uiMenuTrigger class="create-content">
+      <ui-icon name="plus" [size]="16" />
+      <span class="create-text" i18n="@@library.create">Criar</span>
+    </span>
+    <button uiMenuItem type="button" (click)="startNew()">
+      <ui-icon name="chat" [size]="18" />
+      <span i18n="@@sidebar.new">Nova conversa</span>
+    </button>
+    @if (canCreateCollections()) {
+      <!-- The menu gives the focus back to "Criar" first: the dialog returns it there. -->
+      <button
+        uiMenuItem
+        type="button"
+        (click)="createMenu.close(); collectionDialog.openNew()"
+      >
+        <ui-icon name="folder" [size]="18" />
+        <span i18n="@@library.newCollection">Novo acervo</span>
+      </button>
+    }
+    @if (mediaFallback(); as link) {
+      <a uiMenuItem [routerLink]="link.path" (click)="openMedia()">
+        <ui-icon name="music" [size]="18" />
+        <span>{{ link.title }}</span>
+      </a>
+    }
+  </ui-menu>
+  @if (!mobile()) {
+    <button
+      uiIconButton
+      type="button"
+      class="collapse"
+      [attr.aria-label]="collapsed() ? expandLabel : collapseLabel"
+      [attr.aria-expanded]="!collapsed()"
+      aria-controls="library-body"
+      (click)="collapseToggled.emit()"
+    >
+      <ui-icon [name]="collapsed() ? 'chevRight' : 'chevLeft'" [size]="18" />
+    </button>
+  }
+</div>
+
+<div id="library-body" class="body">
+  <div
+    class="chips"
+    role="group"
+    aria-label="Mostrar"
+    i18n-aria-label="@@library.show"
+  >
+    @for (chip of chips(); track chip.kind) {
+      <button
+        uiChip
+        type="button"
+        [selected]="kind() === chip.kind"
+        (click)="chooseKind(chip.kind)"
+      >
+        {{ chip.label }}
+      </button>
+    }
+  </div>
+
+  <div class="tools">
+    <button
+      uiIconButton
+      type="button"
+      aria-label="Filtrar Sua biblioteca"
+      i18n-aria-label="@@library.filter"
+      [attr.aria-expanded]="searching()"
+      aria-controls="library-search"
+      (click)="toggleSearch()"
+    >
+      <ui-icon name="search" [size]="16" />
+    </button>
+    <ui-menu
+      label="Ordenar"
+      i18n-label="@@library.sort"
+      menuId="library-order"
+      triggerClass="order-trigger"
+      align="end"
+    >
+      <span uiMenuTrigger class="order-content">
+        <span class="visually-hidden" i18n="@@library.sortBy"
+          >Ordenar por:</span
+        >
+        {{ orderLabel() }}
+        <ui-icon name="list" [size]="14" />
+      </span>
+      <button
+        uiMenuItem
+        type="button"
+        [attr.aria-checked]="order() === 'recent'"
+        (click)="order.set('recent')"
+        i18n="@@library.recent"
+      >
+        Recentes
+      </button>
+      <button
+        uiMenuItem
+        type="button"
+        [attr.aria-checked]="order() === 'alpha'"
+        (click)="order.set('alpha')"
+        i18n="@@library.alpha"
+      >
+        Ordem alfabética
+      </button>
+    </ui-menu>
+  </div>
+  @if (searching()) {
+    <label class="ui-search search">
+      <ui-icon name="search" [size]="16" />
+      <span class="visually-hidden" i18n="@@library.filter"
+        >Filtrar Sua biblioteca</span
+      >
+      <input
+        #searchInput
+        id="library-search"
+        type="search"
+        placeholder="Filtrar"
+        i18n-placeholder="@@library.filterPlaceholder"
+        [value]="query()"
+        (input)="query.set(searchInput.value)"
+      />
+    </label>
+  }
+
+  <!--
+    D5: the sections never mix. Each has its heading (h2 inside the aside), its count and a
+    caret that folds it; the chips show one section alone. Groups, not regions: the aside
+    is the landmark, its sections are not.
+  -->
+  <div class="sections">
+    @if (pinned().length > 0) {
+      <section
+        class="section"
+        role="group"
+        aria-labelledby="library-pinned-head"
+      >
+        <ng-container
+          [ngTemplateOutlet]="sectionHead"
+          [ngTemplateOutletContext]="{
+            key: 'pinned',
+            id: 'library-pinned',
+            label: pinnedLabel,
+            count: pinnedCount(),
+          }"
+        />
+        @if (isOpen('section:pinned')) {
+          <ul id="library-pinned" class="items">
+            @for (item of pinned(); track item.key) {
+              <li>
+                <a
+                  class="ui-libitem-row"
+                  [routerLink]="item.path"
+                  routerLinkActive="active"
+                  ariaCurrentWhenActive="page"
+                  [routerLinkActiveOptions]="{ exact: true }"
+                  [attr.aria-label]="item.title"
+                  [attr.aria-describedby]="'pinned-' + item.key"
+                  (click)="openMedia()"
+                >
+                  <ui-library-item
+                    [title]="item.title"
+                    [meta]="item.meta"
+                    [metaId]="'pinned-' + item.key"
+                    [pinned]="true"
+                  >
+                    <ui-cover
+                      [icon]="item.icon"
+                      [from]="item.colors[0]"
+                      [to]="item.colors[1]"
+                      [size]="40"
+                    />
+                  </ui-library-item>
+                </a>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    }
+
+    @if (collections().length > 0) {
+      <section
+        class="section"
+        role="group"
+        aria-labelledby="library-collections-head"
+      >
+        <ng-container
+          [ngTemplateOutlet]="sectionHead"
+          [ngTemplateOutletContext]="{
+            key: 'collections',
+            id: 'library-collections',
+            label: collectionsLabel,
+            count: collections().length,
+          }"
+        />
+        @if (isOpen('section:collections')) {
+          <ul id="library-collections" class="items tree">
+            @for (node of collectionNodes(); track node.entry.topic.slug) {
+              <li class="collection" [class.parent]="node.children.length > 0">
+                <div class="row">
+                  @if (node.children.length > 0) {
+                    <button
+                      uiIconButton
+                      type="button"
+                      class="caret"
+                      [attr.aria-expanded]="
+                        isOpen('branch:' + node.entry.topic.slug)
+                      "
+                      [attr.aria-controls]="
+                        'library-branch-' + node.entry.topic.slug
+                      "
+                      [attr.aria-label]="branchLabel(node.entry.topic.title)"
+                      (click)="toggleFold('branch:' + node.entry.topic.slug)"
+                    >
+                      <ui-icon
+                        [name]="
+                          isOpen('branch:' + node.entry.topic.slug)
+                            ? 'chevDown'
+                            : 'chevRight'
+                        "
+                        [size]="16"
+                      />
+                    </button>
+                  } @else if (hasBranches()) {
+                    <span class="caret-gap" aria-hidden="true"></span>
+                  }
+                  <ng-container
+                    [ngTemplateOutlet]="collectionRow"
+                    [ngTemplateOutletContext]="{ entry: node.entry, size: 48 }"
+                  />
+                </div>
+                @if (node.entry.active) {
+                  <div class="notice">
+                    <app-unassigned-notice
+                      [topic]="chat.topic()"
+                      (opened)="openLevels()"
+                    />
+                  </div>
+                }
+                @if (
+                  node.children.length > 0 &&
+                  isOpen('branch:' + node.entry.topic.slug)
+                ) {
+                  <ul
+                    class="children"
+                    [id]="'library-branch-' + node.entry.topic.slug"
+                  >
+                    @for (child of node.children; track child.topic.slug) {
+                      <li class="collection child">
+                        <div class="row">
+                          <span class="branch-line" aria-hidden="true"></span>
+                          <ng-container
+                            [ngTemplateOutlet]="collectionRow"
+                            [ngTemplateOutletContext]="{
+                              entry: child,
+                              size: 40,
+                            }"
+                          />
+                        </div>
+                        @if (child.active) {
+                          <div class="notice">
+                            <app-unassigned-notice
+                              [topic]="chat.topic()"
+                              (opened)="openLevels()"
+                            />
+                          </div>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    }
+
+    @if (showsConversations()) {
+      <section
+        class="section"
+        role="group"
+        aria-labelledby="library-conversations-head"
+      >
+        <ng-container
+          [ngTemplateOutlet]="sectionHead"
+          [ngTemplateOutletContext]="{
+            key: 'conversations',
+            id: 'library-conversations',
+            label: conversationsLabel,
+            count: entries().length,
+          }"
+        />
+        @if (isOpen('section:conversations')) {
+          <nav
+            id="library-conversations"
+            class="history"
+            aria-label="Conversas"
+            i18n-aria-label="@@library.conversations"
+          >
+            <!-- v1's "Histórico · salvo no servidor", for screen readers. -->
+            <p class="visually-hidden" i18n="@@sidebar.thisComputer">
+              salvo no servidor
+            </p>
+            @if (!history.available()) {
+              <p class="note" role="status">
+                @if (history.lastError()?.action === 'save') {
+                  <ng-container i18n="@@sidebar.historySaveFailed"
+                    >Ainda não consegui salvar uma conversa no histórico. Ela
+                    fica guardada neste navegador e eu tento de novo
+                    sozinho.</ng-container
+                  >
+                } @else {
+                  <ng-container i18n="@@sidebar.historyUnavailable"
+                    >Histórico indisponível no momento.</ng-container
+                  >
+                }
+              </p>
+            } @else if (history.lastError()?.action === 'load') {
+              <p class="note" role="status" i18n="@@sidebar.historyLoadFailed">
+                Não consegui abrir essa conversa. Tente de novo.
+              </p>
+            }
+            @if (history.conversations().length === 0) {
+              @if (history.available()) {
+                <p class="note" i18n="@@sidebar.historyEmpty">
+                  Suas conversas aparecem aqui.
+                </p>
+              }
+            } @else {
+              @for (group of conversationGroups(); track group.group) {
+                <p class="recency" [id]="'library-recency-' + group.group">
+                  {{ group.label }}
+                </p>
+                <ul
+                  class="conversations"
+                  [attr.aria-labelledby]="'library-recency-' + group.group"
+                >
+                  @for (conversation of group.items; track conversation.id) {
+                    <li>
+                      <button
+                        type="button"
+                        class="conversation"
+                        [attr.aria-current]="
+                          conversation.id === currentId() ? 'true' : null
+                        "
+                        (click)="open(conversation)"
+                      >
+                        <ui-icon
+                          class="conversation-icon"
+                          [class.research]="conversation.kind === 'research'"
+                          [name]="
+                            conversation.kind === 'research'
+                              ? 'sparkle'
+                              : 'search'
+                          "
+                          [size]="16"
+                        />
+                        <span class="conversation-text">
+                          <span class="question" [title]="conversation.title">{{
+                            conversation.title
+                          }}</span
+                          >&ngsp;<span class="meta">
+                            <span
+                              class="kind"
+                              [class.research]="
+                                conversation.kind === 'research'
+                              "
+                              >{{ kindLabels[conversation.kind] }}</span
+                            >
+                            ·
+                            {{
+                              titles().get(conversation.topic) ??
+                                conversation.topic
+                            }}
+                            @if (conversation.count > 1) {
+                              <span i18n="@@sidebar.questions"
+                                >·
+                                {conversation.count, plural,
+                                  other {{{ conversation.count }} perguntas}
+                                }</span
+                              >
+                            }
+                            @if (conversation.status; as status) {
+                              <span
+                                class="status"
+                                [class.pending]="status === 'pending'"
+                                [class.failed]="status === 'failed'"
+                              >
+                                @if (status === 'pending') {
+                                  <span
+                                    class="spinner"
+                                    aria-hidden="true"
+                                  ></span>
+                                }
+                                · {{ statusLabels[status] }}</span
+                              >
+                            }
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  }
+                </ul>
+              } @empty {
+                <p class="note" i18n="@@library.noConversationFound">
+                  Nenhuma conversa com esse texto.
+                </p>
+              }
+            }
+          </nav>
+        }
+      </section>
+    }
+
+    @if (kind() === 'documents') {
+      <section
+        class="section"
+        role="group"
+        aria-labelledby="library-documents-head"
+      >
+        <ng-container
+          [ngTemplateOutlet]="sectionHead"
+          [ngTemplateOutletContext]="{
+            key: 'documents',
+            id: 'library-documents',
+            label: documentsLabel,
+            count: documents().length,
+          }"
+        />
+        @if (isOpen('section:documents')) {
+          <ul id="library-documents" class="items">
+            @for (doc of documents(); track doc.topic + doc.id) {
+              <li>
+                <button
+                  type="button"
+                  class="ui-libitem-row"
+                  (click)="openDocument(doc)"
+                >
+                  <ui-library-item [title]="doc.title" [meta]="doc.meta">
+                    <ui-cover
+                      icon="doc"
+                      from="#3a3a3a"
+                      to="#1f1f1f"
+                      [size]="40"
+                    />
+                  </ui-library-item>
+                </button>
+              </li>
+            } @empty {
+              <li class="note" i18n="@@library.noDocuments">
+                Os documentos que você abrir aparecem aqui.
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    }
+
+    @if (nothingFound()) {
+      <p class="note" role="status" i18n="@@library.nothingFound">
+        Nada na sua biblioteca com esse texto.
+      </p>
+    }
+  </div>
+
+  <ng-template
+    #sectionHead
+    let-key="key"
+    let-id="id"
+    let-label="label"
+    let-count="count"
+  >
+    <h2 class="section-head" [id]="id + '-head'">
       <button
         type="button"
-        class="sign-out"
+        class="section-toggle"
+        [attr.aria-expanded]="isOpen('section:' + key)"
+        [attr.aria-controls]="id"
+        (click)="toggleFold('section:' + key)"
+      >
+        <span class="section-title">{{ label }}</span>
+        <span class="section-count">{{ count }}</span>
+        <ui-icon
+          class="section-caret"
+          [name]="isOpen('section:' + key) ? 'chevDown' : 'chevRight'"
+          [size]="16"
+        />
+      </button>
+    </h2>
+  </ng-template>
+
+  <ng-template #collectionRow let-entry="entry" let-size="size">
+    <button
+      type="button"
+      class="ui-libitem-row"
+      [disabled]="!entry.topic.canOpen"
+      [attr.data-slug]="entry.topic.slug"
+      [attr.aria-current]="entry.active ? 'true' : null"
+      (click)="changeTopic(entry.topic.slug)"
+    >
+      <ui-library-item [title]="entry.topic.title" [meta]="entry.meta">
+        <ui-cover [title]="entry.topic.title" [size]="size" />
+      </ui-library-item>
+    </button>
+    @if (
+      !mobile() &&
+      entry.active &&
+      entry.topic.canRename &&
+      canCreateCollections()
+    ) {
+      <button
+        uiIconButton
+        type="button"
+        class="edit"
+        aria-label="Editar acervo"
+        i18n-aria-label="@@sidebar.editCollection"
+        (click)="collectionDialog.openEdit(entry.topic)"
+      >
+        <ui-icon name="edit" [size]="16" />
+      </button>
+    }
+  </ng-template>
+
+  @if (mobile()) {
+    <div class="menu-actions">
+      @if (canCreateCollections()) {
+        <button
+          type="button"
+          class="action"
+          (click)="collectionDialog.openNew()"
+        >
+          <ui-icon name="plus" [size]="20" />
+          <span i18n="@@sidebar.newCollection">+ Novo acervo</span>
+        </button>
+        @if (chat.topic(); as current) {
+          @if (current.canRename) {
+            <button
+              type="button"
+              class="action"
+              (click)="collectionDialog.openEdit(current)"
+            >
+              <ui-icon name="edit" [size]="20" />
+              <span i18n="@@library.editCollection">Editar acervo</span>
+            </button>
+          }
+        }
+      }
+      @if (session.isMaster()) {
+        <button
+          type="button"
+          class="action"
+          aria-haspopup="dialog"
+          (click)="openPeople()"
+        >
+          <ui-icon name="people" [size]="20" />
+          <span i18n="@@sidebar.people">Pessoas e permissões</span>
+          @if (requests.count(); as pending) {
+            <span class="count" aria-hidden="true">{{ pending }}</span>
+            <span
+              class="visually-hidden"
+              i18n="@@sidebar.pendingRequests"
+              >{pending, plural,
+                =1 {1 solicitação pendente}
+                other {{{ pending }} solicitações pendentes}
+              }</span
+            >
+          }
+        </button>
+      }
+      <app-settings-button />
+      <a
+        class="action"
+        href="/tutorial"
+        target="_blank"
+        rel="noopener"
+        aria-label="Como usar a Nova Alexandria (abre em nova aba)"
+        i18n-aria-label="@@page.helpLabel"
+      >
+        <ui-icon name="help" [size]="20" />
+        <span i18n="@@page.help">Como usar</span>
+      </a>
+      <button
+        type="button"
+        class="action"
         (click)="signOut()"
         i18n="@@sidebar.signOut"
       >
@@ -332,3 +621,51 @@
     </div>
   }
 </div>
+
+<div class="spend">
+  <ui-icon name="sparkle" [size]="16" />
+  <div class="spend-body">
+    @if (appServed(); as served) {
+      <p class="spend-line">
+        <span class="label" i18n="@@sidebar.appAi">IA da aplicação</span>
+        <span class="amount" i18n="@@sidebar.appAiLeft"
+          >Gratuita · {{ served.remaining }} de {{ served.daily }} pesquisas
+          hoje</span
+        >
+      </p>
+    } @else if (ownFree()) {
+      <p class="spend-line">
+        <span class="label" i18n="@@sidebar.ownAi">Sua IA</span>
+        <span class="amount" i18n="@@sidebar.ownAiFree">Gratuita</span>
+      </p>
+    } @else {
+      <p class="spend-line">
+        <span class="label" i18n="@@sidebar.spend">Gasto com IA hoje</span>
+        @if (!spend.configured()) {
+          <span class="amount" i18n="@@sidebar.spendOff"
+            >IA não configurada</span
+          >
+        } @else if (spend.label()) {
+          <span class="amount">{{ spend.label() }}</span>
+        } @else if (spend.today.error()) {
+          <span class="amount" i18n="@@sidebar.spendError"
+            >Gasto indisponível</span
+          >
+        } @else {
+          <span class="amount" i18n="@@sidebar.spendLoading">Carregando…</span>
+        }
+      </p>
+      @if (spend.ratio(); as ratio) {
+        <ui-progress class="spend-bar" [value]="ratio" />
+      } @else if (spend.label()) {
+        <ui-progress class="spend-bar" [value]="0" />
+      }
+    }
+  </div>
+</div>
+
+<app-collection-dialog
+  #collectionDialog
+  [topics]="chat.topicList()"
+  (saved)="collectionSaved($event)"
+/>
