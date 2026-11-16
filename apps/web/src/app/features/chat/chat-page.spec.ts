@@ -94,13 +94,26 @@ async function ask(
   await view.fixture.whenStable();
 }
 
+/** The search summary as read: "1 documento · Tudo · 0,6 s" (count, mode pill, time). */
+const summaryText = (): string =>
+  document.querySelector('app-result-message .summary')?.textContent?.trim() ??
+  '';
+
+/** The library beside the conversation (the home repeats its conversations as shortcuts). */
+const sidebar = (): HTMLElement =>
+  screen.getByRole('complementary', { name: 'Lateral' });
+
 describe('ChatPage', () => {
   it('greets with the current collection and its size', async () => {
     await renderPage();
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
       'Hermetismo',
     );
-    expect(screen.getByText(/4\.235 documentos/)).toBeTruthy();
+    expect(
+      within(screen.getByRole('heading', { level: 1 })).getByText(
+        /4\.235 documentos/,
+      ),
+    ).toBeTruthy();
     expect(screen.getByText('O que você quer estudar hoje?')).toBeTruthy();
   });
 
@@ -162,7 +175,7 @@ describe('ChatPage', () => {
     });
     request.flush(aResponse());
     await view.fixture.whenStable();
-    expect(screen.getByText(/^1 documento · Tudo · 0,6 s$/)).toBeTruthy();
+    expect(summaryText()).toMatch(/^1 documento · Tudo · 0,6 s$/);
     expect(
       document.querySelector('.page-announcement')?.textContent?.trim(),
     ).toBe('lei do ritmo: 1 documento encontrado.');
@@ -174,16 +187,16 @@ describe('ChatPage', () => {
     expect(screen.getByText(/0,6 s/)).toBeTruthy();
     expect(screen.getByRole('button', { name: /A Lei do Ritmo/ })).toBeTruthy();
     expect(
-      screen.getByText('Texto/apostila · Aprofundado · Central'),
-    ).toBeTruthy();
+      [...document.querySelectorAll('app-result-card .facet')].map((pill) =>
+        pill.textContent?.trim(),
+      ),
+    ).toEqual(['Texto/apostila', 'Aprofundado', 'Central']);
     expect(screen.getByText(/\(\+1\)/)).toBeTruthy();
   });
 
   it('sends with Enter, keeps Shift+Enter for a new line and remembers the mode', async () => {
     const view = await renderPage();
-    fireEvent.change(screen.getByLabelText('Como buscar'), {
-      target: { value: 'exact' },
-    });
+    fireEvent.click(screen.getByRole('radio', { name: 'Palavras exatas' }));
     const field = screen.getByLabelText('Sua pergunta');
     fireEvent.input(field, { target: { value: 'ritmo' } });
     fireEvent.keyDown(field, { key: 'Enter', shiftKey: true });
@@ -687,7 +700,7 @@ describe('ChatPage side panel (KBC-005)', () => {
     await ask('lei do ritmo', view);
     view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();
-    expect(screen.getByText(/^1 documento · Tudo/)).toBeTruthy();
+    expect(summaryText()).toMatch(/^1 documento · Tudo/);
   });
 
   it('lists conversations saved before, of both kinds, with their label', async () => {
@@ -718,7 +731,9 @@ describe('ChatPage side panel (KBC-005)', () => {
       { provide: ResearchApi, useValue: answers },
     ]);
     fireEvent.click(
-      screen.getByRole('button', { name: /quais são os princípios/ }),
+      within(sidebar()).getByRole('button', {
+        name: /quais são os princípios/,
+      }),
     );
     await view.fixture.whenStable();
     expect(
@@ -739,7 +754,9 @@ describe('ChatPage side panel (KBC-005)', () => {
     const view = await renderPage();
     fireEvent.click(screen.getByRole('radio', { name: /Pesquisa com IA/ }));
     await view.fixture.whenStable();
-    fireEvent.click(screen.getByRole('button', { name: /lei do ritmo/ }));
+    fireEvent.click(
+      within(sidebar()).getByRole('button', { name: /lei do ritmo/ }),
+    );
     await view.fixture.whenStable();
     expect(
       (
@@ -758,7 +775,9 @@ describe('ChatPage side panel (KBC-005)', () => {
     conversations.saved.set(search.id, search);
     const view = await renderPage();
     conversations.saved.delete(search.id);
-    fireEvent.click(screen.getByRole('button', { name: /lei do ritmo/ }));
+    fireEvent.click(
+      within(sidebar()).getByRole('button', { name: /lei do ritmo/ }),
+    );
     await view.fixture.whenStable();
     expect(
       screen.getByText('Não consegui abrir essa conversa. Tente de novo.'),
@@ -802,12 +821,13 @@ describe('ChatPage start suggestions and usage log (KBC-006)', () => {
       { concept: 'Alquimia', count: 80 },
     ];
     const view = await renderPage();
-    const group = screen.getByRole('group', { name: 'Comece por um assunto:' });
+    const group = screen.getByRole('region', { name: 'Comece por um assunto' });
     const buttons = within(group).getAllByRole('button');
-    expect(buttons.map((b) => b.textContent?.trim())).toEqual([
-      'Cabala',
-      'Alquimia',
-    ]);
+    expect(
+      buttons.map((b) =>
+        b.querySelector('.subject-title')?.textContent?.trim(),
+      ),
+    ).toEqual(['Cabala', 'Alquimia']);
     fireEvent.click(buttons[0] as HTMLElement);
     await view.fixture.whenStable();
     const request = view.http.expectOne(SEARCH_URL);
@@ -822,7 +842,7 @@ describe('ChatPage start suggestions and usage log (KBC-006)', () => {
   it('hides the suggestions when the collection has none', async () => {
     await renderPage();
     expect(
-      screen.queryByRole('group', { name: 'Comece por um assunto:' }),
+      screen.queryByRole('region', { name: 'Comece por um assunto' }),
     ).toBeNull();
   });
 

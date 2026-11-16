@@ -1,4 +1,4 @@
-<div class="frame" [class.active]="active()">
+<div class="frame" [class.active]="active()" [class.best]="best()">
   <button
     type="button"
     class="card"
@@ -9,69 +9,81 @@
     [attr.aria-describedby]="trackDescription()"
     (click)="open(hit(), $event)"
   >
-    @if (media(); as track) {
-      <span class="kind">
-        <span class="kind-head">
-          <span class="note" aria-hidden="true">♪</span>
-          <span i18n="@@trackCard.kind">Faixa</span>
-          <span aria-hidden="true">·</span>
-          <span class="clock">{{ clock() }}</span>
+    <ui-cover class="art" [title]="hit().title" [size]="44" [label]="false" />
+    <span class="body">
+      @if (media(); as track) {
+        <span class="kind">
+          <span class="kind-head">
+            <span class="note" aria-hidden="true">♪</span>
+            <span i18n="@@trackCard.kind">Faixa</span>
+            <span aria-hidden="true">·</span>
+            <span class="clock">{{ clock() }}</span>
+          </span>
+          <span class="recording" [id]="idOf('recording')">
+            {{ track.recordingTitle }}
+            @if (ordinal(); as where) {
+              <span aria-hidden="true">·</span> {{ where }}
+            }
+          </span>
         </span>
-        <span class="recording" [id]="idOf('recording')">
-          {{ track.recordingTitle }}
-          @if (ordinal(); as where) {
-            <span aria-hidden="true">·</span> {{ where }}
+      }
+      <app-authorship-badge
+        class="authorship"
+        [attr.id]="idOf('authorship')"
+        [authorship]="hit().authorship"
+      />
+      <span class="title">{{ hit().title }}</span>
+      @if (spoken(); as parts) {
+        <span class="snippet spoken" [id]="idOf('snippet')">
+          @for (part of parts; track $index) {
+            @if (part.marked) {
+              <mark>{{ part.text }}</mark>
+            } @else {
+              <span>{{ part.text }}</span>
+            }
           }
         </span>
-      </span>
-    }
-    <app-authorship-badge
-      class="authorship"
-      [attr.id]="idOf('authorship')"
-      [authorship]="hit().authorship"
-    />
-    <span class="title">{{ hit().title }}</span>
-    @if (spoken(); as parts) {
-      <span class="snippet spoken" [id]="idOf('snippet')">
-        @for (part of parts; track $index) {
-          @if (part.marked) {
-            <mark>{{ part.text }}</mark>
-          } @else {
-            <span>{{ part.text }}</span>
-          }
-        }
-      </span>
-    } @else {
-      <span class="snippet" [id]="idOf('snippet')">{{ hit().snippet }}</span>
-    }
-    @if (place(); as where) {
-      <span class="place" [id]="idOf('place')" i18n="@@card.place"
-        >em {{ where }}</span
-      >
-    }
-    @if (facets()) {
-      <span class="facets" [id]="idOf('facets')">{{ facets() }}</span>
-    }
-    @if (concepts()) {
-      <span class="concepts" [id]="idOf('concepts')">
-        <span i18n="@@card.concepts">Assuntos:</span> {{ concepts() }}
-        @if (extraConcepts()) {
-          <span>(+{{ extraConcepts() }})</span>
-        }
-      </span>
-    }
-    @if (media(); as track) {
-      @if (track.confidence === 'low' || track.stale) {
-        <span class="states" [id]="idOf('states')">
-          @if (track.confidence === 'low') {
-            <span class="low" i18n="@@mediaHit.low">baixa confiança</span>
-          }
-          @if (track.stale) {
-            <span class="stale" i18n="@@trackCard.stale">· atualizando</span>
+      } @else {
+        <span class="snippet" [id]="idOf('snippet')">{{ hit().snippet }}</span>
+      }
+      @if (place(); as where) {
+        <span class="place" [id]="idOf('place')" i18n="@@card.place"
+          >em {{ where }}</span
+        >
+      }
+      @if (facetParts().length > 0) {
+        <span class="facets" [id]="idOf('facets')">
+          @for (part of facetParts(); track part) {
+            @if (!$first) {
+              <span class="facet-sep"> · </span>
+            }
+            <ui-pill class="facet" [tone]="part === central ? 'ok' : 'muted'">{{
+              part
+            }}</ui-pill>
           }
         </span>
       }
-    }
+      @if (concepts()) {
+        <span class="concepts" [id]="idOf('concepts')">
+          <span i18n="@@card.concepts">Assuntos:</span> {{ concepts() }}
+          @if (extraConcepts()) {
+            <span>(+{{ extraConcepts() }})</span>
+          }
+        </span>
+      }
+      @if (media(); as track) {
+        @if (track.confidence === 'low' || track.stale) {
+          <span class="states" [id]="idOf('states')">
+            @if (track.confidence === 'low') {
+              <span class="low" i18n="@@mediaHit.low">baixa confiança</span>
+            }
+            @if (track.stale) {
+              <span class="stale" i18n="@@trackCard.stale">· atualizando</span>
+            }
+          </span>
+        }
+      }
+    </span>
   </button>
   @if (hit().copies.length > 0) {
     <div class="copies-area">

@@ -8,11 +8,13 @@ import {
 } from '@angular/core';
 import type { AnswerSource, DocumentRef, SearchHit } from '@kb-chat/contracts';
 import { formatClock } from '@kb-chat/player-core';
-import { describeFacets } from '@core/i18n/facet-labels.js';
+import { RELEVANCE_LABELS, describeFacets } from '@core/i18n/facet-labels.js';
 import { speak } from '@core/i18n/spoken-time.js';
 import { textParts } from '@core/text/text-parts.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import type { TrackOpening } from '@features/research/track-opening.js';
+import { UiCover } from '@ui/cover.js';
+import { UiPill } from '@ui/pill.js';
 
 const VISIBLE_CONCEPTS = 2;
 
@@ -55,7 +57,7 @@ export function trackSourceOf(hit: SearchHit): AnswerSource | null {
  */
 @Component({
   selector: 'app-result-card',
-  imports: [AuthorshipBadge],
+  imports: [AuthorshipBadge, UiCover, UiPill],
   templateUrl: './result-card.html',
   styleUrl: './result-card.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -63,6 +65,8 @@ export function trackSourceOf(hit: SearchHit): AnswerSource | null {
 export class ResultCard {
   readonly hit = input.required<SearchHit>();
   readonly active = input(false);
+  /** The first result as the "Melhor resultado" card; the others are rows of the table. */
+  readonly best = input(false);
   /** The sub-collection the hit is in, when searching its parent (ADR 0028). */
   readonly place = input<string | null>(null);
   readonly opened = output<OpenedHit>();
@@ -72,6 +76,11 @@ export class ResultCard {
   private readonly cardId = nextCard++;
   protected readonly copiesOpen = signal(false);
   protected readonly facets = computed(() => describeFacets(this.hit()));
+  /** The facets as pills: genre, depth and link ("Central" in the ok tone). */
+  protected readonly facetParts = computed(() =>
+    this.facets() ? this.facets().split(' · ') : [],
+  );
+  protected readonly central = RELEVANCE_LABELS.core;
   protected readonly concepts = computed(() =>
     this.hit().concepts.slice(0, VISIBLE_CONCEPTS).join(' · '),
   );

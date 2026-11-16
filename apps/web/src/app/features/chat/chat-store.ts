@@ -371,6 +371,11 @@ export class ChatStore {
     });
   }
 
+  /** The home's scope chips ("Tudo", "Documentos"): the reach of the next search, remembered. */
+  setKinds(kinds: readonly SearchKind[]): void {
+    this.kindsState.set(kinds);
+  }
+
   /** "Buscar em" changed on a message: remembered, and that message runs again. */
   chooseKinds(message: ChatMessage, kinds: readonly SearchKind[]): void {
     this.kindsState.set(kinds);

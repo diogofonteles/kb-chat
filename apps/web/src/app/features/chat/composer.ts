@@ -26,6 +26,7 @@ import {
 } from '@core/app-version/kept-draft.js';
 import { MODE_OPTIONS } from '@core/i18n/facet-labels.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
+import { UiIcon } from '@ui/icon.js';
 
 /** Where the question box keeps its draft across a reload into a new version. */
 export const COMPOSER_DRAFT_KEY = 'kb-chat.composer-draft';
@@ -33,10 +34,12 @@ export const COMPOSER_DRAFT_KEY = 'kb-chat.composer-draft';
 /**
  * Question box: multiline text, "Como buscar" mode and send (screens.md T1). Shared by both
  * views; in "Pesquisa com IA" there is no search mode, the question may be longer and a
- * "Rápido | Profundo" toggle picks the research profile (KBC-011).
+ * "Rápido | Profundo" toggle picks the research profile (KBC-011). v2 (KBC-126 FR-4): a
+ * rounded box fixed at the panel's foot, the modes and profiles as chips with their help.
  */
 @Component({
   selector: 'app-composer',
+  imports: [UiIcon],
   templateUrl: './composer.html',
   styleUrl: './composer.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -118,7 +121,7 @@ export class Composer {
 
   protected selectMode(event: Event): void {
     const parsed = searchModeSchema.safeParse(
-      (event.target as HTMLSelectElement).value,
+      (event.target as HTMLInputElement).value,
     );
     if (parsed.success) this.mode.set(parsed.data);
   }

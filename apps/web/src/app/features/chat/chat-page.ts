@@ -52,7 +52,7 @@ import { ResearchThread } from '@features/research/research-thread.js';
 import { ViewStore, type ChatView } from './view-store.js';
 import { ViewSwitch } from './view-switch.js';
 import { MiniPlayer } from '@features/media/player/mini-player.js';
-import { PendingTranscriptions } from '@features/transcribers/pending-transcriptions.js';
+import { ConversationHome } from './home/conversation-home.js';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
@@ -79,7 +79,7 @@ const isMediaUrl = (url: string): boolean =>
     DecimalPipe,
     RouterOutlet,
     MiniPlayer,
-    PendingTranscriptions,
+    ConversationHome,
   ],
   providers: [
     ChatStore,
