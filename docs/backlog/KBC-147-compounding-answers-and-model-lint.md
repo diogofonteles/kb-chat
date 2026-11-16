@@ -25,7 +25,9 @@ Como dono, quero que quem eu habilitar avalie as respostas da Pesquisa com IA, e
   - afirmações superadas por fontes mais novas;
   - entidades e conceitos citados sem página própria;
   - páginas órfãs;
-  - lacunas, que são aspectos com uma fonte só.
+  - lacunas, que são aspectos com uma fonte só;
+  - links ausentes, quando uma página cita uma entidade ou um conceito sem ligar;
+  - **sugestões de novas perguntas e de fontes:** o que os estudantes perguntam e o mapa não cobre (do `log.md` e das avaliações 👎), e as obras citadas nos textos que não estão no acervo.
 
   O resultado vai para a fila de revisão do kb e para um relatório em `outputs/reports/`.
 

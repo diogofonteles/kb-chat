@@ -14,12 +14,13 @@ Como estudante que não domina o tema, quando pergunto no Profundo, quero uma re
 
 ## Scope
 **In:**
-- o app (não a IA) situa a pergunta nos nós da árvore, usando os sinônimos e uma chamada curta à IA;
+- o app (não a IA) situa a pergunta nos nós da árvore, lendo primeiro o `index.md` do acervo (KBC-140) e usando os sinônimos e uma chamada curta à IA (a operação Query do ciclo Ingest, Query e Lint);
 - o app carrega os dossiês desses nós, filtrados pelo que a pessoa vê (níveis, KBC-110);
 - a IA recebe os trechos centrais de cada aspecto e escreve a resposta por aspecto;
 - a busca por termos e por sentido completa o que está fora do mapa e os documentos "pendentes no mapa";
 - o app confere se todo aspecto foi tratado ou descartado com motivo e, se faltou algum, manda a IA tratar antes de entregar;
-- no fim da resposta, a linha "Esta resposta cobre os N aspectos que o acervo trata sobre <assunto>", com os aspectos clicáveis.
+- no fim da resposta, a linha "Esta resposta cobre os N aspectos que o acervo trata sobre <assunto>", com os aspectos clicáveis;
+- cada pergunta do Profundo que caiu no mapa fica registrada no `log.md` do acervo (data, nós, aspectos cobertos e avaliação, quando houver), pelo mesmo caminho do Mac (a API não escreve no vault, Q7). Isso alimenta o lint (KBC-147).
 
 **Out:** o Rápido (segue como hoje); o Exaustivo (segue a varredura da ADR 0021, que pode partir do mapa num item futuro); a verificação de citações (KBC-145).
 

@@ -84,6 +84,23 @@ O kb já tem a estrutura certa: as páginas `wiki/concepts`, o `kb link` com o m
 5. **Respostas que se acumulam:** uma resposta do Profundo que um master marca como boa vira página do wiki (`outputs/queries/` e depois promovida), ligada aos assuntos. A próxima pergunta parecida já parte dela (item novo, KBC-147).
 6. **Lint com modelo, periódico:** contradições entre autores e entre páginas (separando sempre Mestre Laércio dos outros), afirmações superadas por fontes novas, conceitos citados sem página, lacunas. O resultado vai para a fila de revisão do kb (KBC-147).
 7. **Proveniência obrigatória:** o risco conhecido do padrão é a página compilada deixar cair um fato específico que a busca acharia. Por isso cada frase de página cita as seções de origem, a checagem por código (KBC-141) garante que nenhuma seção ficou fora, e o Profundo completa com a busca o que estiver fora do mapa (KBC-144).
+8. **O ciclo inteiro, item por item:**
+
+   | Operação | Passo | Onde |
+   |---|---|---|
+   | Ingest | Adiciona a fonte em `raw/` (convertida, com o original e a proveniência) | KBC-148, KBC-149 |
+   | Ingest | Extrai os ensinamentos | KBC-139 |
+   | Ingest | Cria e atualiza as páginas do wiki | KBC-141, KBC-142 |
+   | Ingest | Atualiza o `index.md` e registra no `log.md` | KBC-140, KBC-142 |
+   | Query | Lê o `index.md` para achar as páginas | KBC-144 |
+   | Query | Sintetiza a resposta com citações conferidas | KBC-144, KBC-145 |
+   | Query | Salva bons resultados como páginas, com avaliação por pessoa | KBC-147 |
+   | Query | Registra a exploração no `log.md` | KBC-144 |
+   | Lint | Contradições e conteúdo obsoleto | KBC-147 |
+   | Lint | Páginas órfãs e links ausentes | KBC-147 |
+   | Lint | Conceitos e lacunas sem cobertura | KBC-147 |
+   | Lint | Sugere novas perguntas e fontes | KBC-147 |
+
 
 ## 3. Proposta: o mapa do assunto é feito antes, e o Profundo responde a partir dele
 
