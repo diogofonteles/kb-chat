@@ -23,6 +23,12 @@ import { openable, treeTitle } from '@core/topics/topic-tree.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { THEME_CHOICES, shownTheme } from '@core/theme/theme-store.js';
 import { THEME_COPY, VIEW_COPY } from './provider-copy.js';
+import {
+  UiChoiceCard,
+  UiCover,
+  UiSettingRow,
+  type IconName,
+} from '@ui/index.js';
 
 export type PreferenceField =
   'view' | 'profile' | 'deepen' | 'mode' | 'topic' | 'theme';
@@ -38,11 +44,12 @@ const ALL_FIELDS: readonly PreferenceField[] = [
 
 /**
  * Default view, research profile (KBC-011), collection, search mode and theme (KBC-007);
- * one field per wizard step.
+ * one field per wizard step. v2 (KBC-131): choice cards, a toggle and rows with the control
+ * on the right.
  */
 @Component({
   selector: 'app-preferences-form',
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, UiChoiceCard, UiCover, UiSettingRow],
   templateUrl: './preferences-form.html',
   styleUrl: './settings-form.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,6 +57,9 @@ const ALL_FIELDS: readonly PreferenceField[] = [
 export class PreferencesForm {
   readonly preferences = model.required<Preferences>();
   readonly fields = input<readonly PreferenceField[]>(ALL_FIELDS);
+  /** The wizard shows the collection and the theme as large cards (KBC-131 FR-4). */
+  readonly variant = input<'settings' | 'wizard'>('settings');
+  protected readonly wizard = computed(() => this.variant() === 'wizard');
 
   /** Only a form that shows the collection field asks for the collections. */
   private readonly topicList = httpResource(
@@ -66,6 +76,11 @@ export class PreferencesForm {
   protected readonly views = DEFAULT_VIEWS.map((value) => ({
     value,
     label: VIEW_COPY[value](),
+    icon: (value === 'research' ? 'sparkle' : 'search') satisfies IconName,
+    help:
+      value === 'research'
+        ? $localize`:@@prefs.viewResearchHint:Pergunte e a IA pesquisa o acervo e responde com as fontes.`
+        : $localize`:@@prefs.viewSearchHint:Busca sem IA: cartões, filtros e o documento ao lado.`,
   }));
   protected readonly profiles = RESEARCH_PROFILES.map((value) => ({
     value,

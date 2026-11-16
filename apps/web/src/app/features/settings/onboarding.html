@@ -1,16 +1,34 @@
 <header class="head">
-  <p class="eyebrow" i18n="@@wizard.welcome">Boas-vindas à Nova Alexandria</p>
+  <span class="mark" aria-hidden="true"
+    ><ui-icon name="sparkleFill" [size]="18"
+  /></span>
+  <p class="welcome" i18n="@@wizard.welcome">Boas-vindas à Nova Alexandria</p>
+  <button
+    uiButton="ghost"
+    size="sm"
+    type="button"
+    [disabled]="saving()"
+    (click)="skip()"
+    i18n="@@wizard.skip"
+  >
+    Pular
+  </button>
+</header>
+
+<div class="intro">
   <p class="progress" i18n="@@wizard.progress">
     Passo {{ stepNumber() }} de {{ steps.length }}
   </p>
-</header>
-
-<div class="content">
+  <ui-progress class="bar" [value]="fraction()" />
   <h2 id="wizard-title" class="title" tabindex="-1">{{ step().title }}</h2>
   <p class="lead">{{ step().lead }}</p>
+</div>
+
+<div class="content">
   @if (step().fields; as fields) {
     @if (preferences(); as current) {
       <app-preferences-form
+        variant="wizard"
         [preferences]="current"
         (preferencesChange)="preferences.set($event)"
         [fields]="fields"
@@ -26,27 +44,21 @@
     <p class="lead" i18n="@@settings.loading">Carregando…</p>
   }
   @if (failed()) {
-    <p class="error" role="alert" i18n="@@wizard.failed">
-      Não consegui salvar. Verifique se o servidor está rodando e tente de novo.
-    </p>
+    <ui-banner tone="err" role="alert">
+      <p i18n="@@wizard.failed">
+        Não consegui salvar. Verifique se o servidor está rodando e tente de
+        novo.
+      </p>
+    </ui-banner>
   }
 </div>
 
 <footer class="foot">
-  <button
-    type="button"
-    class="ghost"
-    [disabled]="saving()"
-    (click)="skip()"
-    i18n="@@wizard.skip"
-  >
-    Pular
-  </button>
-  <span class="spacer"></span>
   @if (index() > 0) {
     <button
+      uiButton="outline"
+      size="lg"
       type="button"
-      class="secondary"
       [disabled]="saving()"
       (click)="back()"
       i18n="@@wizard.back"
@@ -56,8 +68,10 @@
   }
   @if (last()) {
     <button
+      uiButton="white"
+      size="lg"
+      class="next"
       type="button"
-      class="primary"
       [disabled]="saving()"
       (click)="finish()"
       i18n="@@wizard.finish"
@@ -66,8 +80,10 @@
     </button>
   } @else {
     <button
+      uiButton="white"
+      size="lg"
+      class="next"
       type="button"
-      class="primary"
       [disabled]="saving()"
       (click)="next()"
       i18n="@@wizard.next"

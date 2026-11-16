@@ -12,6 +12,7 @@ import type {
   SettingsUpdate,
   SettingsView,
 } from '@kb-chat/contracts';
+import { Router } from '@angular/router';
 import { SettingsApi } from '@core/api/settings-api.js';
 import { HouseAiApi } from '@core/api/house-ai-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
@@ -23,11 +24,14 @@ import {
   writeProfilePreference,
 } from '@features/research/profile-preference.js';
 import { tap, type Observable } from 'rxjs';
+import { slugOf } from './settings-index.js';
 
-export type SettingsPanel = 'settings' | 'onboarding';
+/** The screen over the app: only the first-run wizard now (KBC-131: Configurações is a page). */
+export type SettingsPanel = 'onboarding';
 
 /** The sections of Configurações; `people` is "Pessoas e permissões" (masters, KBC-010). */
 export type SettingsSection =
+  | 'account'
   | 'ai'
   | 'house'
   | 'preferences'
@@ -66,13 +70,11 @@ export class SettingsStore {
   private readonly houseApi = inject(HouseAiApi);
   private readonly themes = inject(ThemeStore);
   private readonly session = inject(SessionStore);
+  private readonly router = inject(Router);
   private readonly storage = safeStorage(inject(DOCUMENT).defaultView);
   private readonly started = signal(false);
   private readonly requested = signal<SettingsPanel | null>(null);
   private readonly onboardingDismissed = signal(false);
-  private readonly requestedSection = signal<SettingsSection | null>(null);
-  /** The section Configurações opens at (the sidebar's "Pessoas e permissões"). */
-  readonly section = this.requestedSection.asReadonly();
   private readonly returned = signal<ConnectOutcome | null>(null);
   /** The outcome of the last OpenRouter round trip, shown once where it was started. */
   readonly connectOutcome = this.returned.asReadonly();
@@ -127,10 +129,12 @@ export class SettingsStore {
     this.started.set(true);
   }
 
+  /** Configurações is a route (KBC-131 BR-5): /configuracoes, or /configuracoes/<section>. */
   openSettings(section: SettingsSection | null = null): void {
     this.start();
-    this.requestedSection.set(section);
-    this.requested.set('settings');
+    void this.router.navigate(
+      section ? ['/configuracoes', slugOf(section)] : ['/configuracoes'],
+    );
   }
 
   openOnboarding(): void {
@@ -153,11 +157,15 @@ export class SettingsStore {
     return true;
   }
 
+  /** The wizard closed (finished or skipped): it does not open by itself again. */
   close(): void {
-    // The OpenRouter outcome is said once, where it happened.
-    this.returned.set(null);
     this.requested.set(null);
     this.onboardingDismissed.set(true);
+  }
+
+  /** The OpenRouter outcome is said once, where it happened: gone when Configurações closes. */
+  clearConnectOutcome(): void {
+    this.returned.set(null);
   }
 
   save(update: SettingsUpdate): Observable<SettingsView> {

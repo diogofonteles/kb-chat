@@ -1,8 +1,8 @@
 @if (store.count() > 0) {
   <section class="requests" aria-labelledby="requests-title">
-    <h4 id="requests-title" class="title" i18n="@@requests.title">
+    <h3 id="requests-title" class="title" i18n="@@requests.title">
       Solicitações pendentes ({{ store.count() }})
-    </h4>
+    </h3>
     <ul class="list">
       @for (row of rows(); track row.request.id) {
         @let request = row.request;

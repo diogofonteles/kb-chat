@@ -18,7 +18,7 @@
   </div>
 } @else if (settings(); as current) {
   <form class="block" (submit)="testKey($event)" novalidate>
-    <h4 class="block-title" i18n="@@groq.keyTitle">Conexão</h4>
+    <h3 class="block-title" i18n="@@groq.keyTitle">Conexão</h3>
     @if (current.keyProblem === 'rejected') {
       <p class="key-problem">
         <span aria-hidden="true">⚠</span>
@@ -194,9 +194,9 @@
   </form>
 
   <form class="block" (submit)="saveCap($event)" novalidate>
-    <h4 class="block-title" i18n="@@groq.monthTitle">
+    <h3 class="block-title" i18n="@@groq.monthTitle">
       Gasto com mídia neste mês
-    </h4>
+    </h3>
     <p class="spent">{{ spentText() }}</p>
     <p class="hint" i18n="@@groq.monthHint">
       Inclui o Groq e a IA que propõe faixas e assuntos. Nada é enviado se

@@ -3,8 +3,14 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import {
+  ApplicationRef,
+  EnvironmentInjector,
+  createComponent,
+  provideZonelessChangeDetection,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { Router, provideRouter } from '@angular/router';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { ThemeStore } from '@core/theme/theme-store.js';
 import { GO_TO_URL } from '@core/routing/go-to-url.js';
@@ -18,6 +24,7 @@ import {
 import { aiDraftFrom, aiUpdateFrom, suggestedProvider } from './ai-draft.js';
 import { SettingsButton } from './settings-button.js';
 import { SettingsHost } from './settings-host.js';
+import { SettingsPage } from './settings-page.js';
 import { SettingsStore } from './settings-store.js';
 
 const goTo = vi.fn();
@@ -25,6 +32,7 @@ const providers = [
   provideZonelessChangeDetection(),
   provideHttpClient(),
   provideHttpClientTesting(),
+  provideRouter([]),
   { provide: GO_TO_URL, useValue: goTo },
 ];
 
@@ -167,15 +175,11 @@ describe('first-run wizard (AC-1)', () => {
     TestBed.tick();
     http.expectOne('/api/v1/topics').flush(TOPICS);
     await fixture.whenStable();
-    fireEvent.change(screen.getByLabelText('Acervo padrão'), {
-      target: { value: 'hermetismo' },
-    });
+    fireEvent.click(screen.getByRole('radio', { name: /Hermetismo/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     await fixture.whenStable();
     expect(screen.getByText('Passo 4 de 4')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Tema'), {
-      target: { value: 'dark' },
-    });
+    fireEvent.click(screen.getByRole('radio', { name: 'Escuro' }));
     fireEvent.click(screen.getByRole('button', { name: 'Concluir' }));
     const put = http.expectOne({ method: 'PUT', url: '/api/v1/settings' });
     expect(put.request.body).toEqual({
@@ -219,17 +223,35 @@ describe('first-run wizard (AC-1)', () => {
 });
 
 describe('Configurações', () => {
+  /** The wizard's host (it loads the settings) and the page, as the app has them (KBC-131). */
   async function openSettings(view = aSettingsView(), list = aProviderList()) {
     const result = await renderHost(view, list);
-    TestBed.inject(SettingsStore).openSettings();
-    await result.fixture.whenStable();
-    return result;
+    // Beside the host, not in place of it: TestBed.createComponent would drop the host.
+    const appRef = TestBed.inject(ApplicationRef);
+    const ref = createComponent(SettingsPage, {
+      environmentInjector: TestBed.inject(EnvironmentInjector),
+    });
+    appRef.attachView(ref.hostView);
+    document.body.appendChild(ref.location.nativeElement);
+    const page = { whenStable: () => appRef.whenStable() };
+    TestBed.tick();
+    // The other sections of the page load too: Preferências' collections, the accesses.
+    for (const request of result.http.match('/api/v1/topics'))
+      request.flush(TOPICS);
+    for (const request of result.http.match('/api/v1/me/accesses'))
+      request.flush([]);
+    await page.whenStable();
+    return { ...result, fixture: page, host: result.fixture };
   }
 
-  it('opens from the ⚙ button', async () => {
+  it('opens from the ⚙ button, as the page /configuracoes', async () => {
     await render(SettingsButton, { providers });
+    const navigate = vi
+      .spyOn(TestBed.inject(Router), 'navigate')
+      .mockResolvedValue(true);
     fireEvent.click(screen.getByRole('button', { name: /Configurações/ }));
-    expect(TestBed.inject(SettingsStore).panel()).toBe('settings');
+    expect(navigate).toHaveBeenCalledWith(['/configuracoes']);
+    expect(TestBed.inject(SettingsStore).panel()).toBeNull();
   });
 
   it('shows a missing Claude Code disabled, with how to install it (AC-3)', async () => {
@@ -455,9 +477,7 @@ describe('Configurações', () => {
     await fixture.whenStable();
     expect(screen.getByText('Salvo.')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Preferências' }));
-    TestBed.tick();
-    http.expectOne('/api/v1/topics').flush(TOPICS);
+    // Every section is on the page: Preferências is already below Sua IA.
     await fixture.whenStable();
     expect(screen.getByText('Ao abrir a Nova Alexandria')).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Como buscar/), {
@@ -632,9 +652,10 @@ describe('Configurações', () => {
   });
 
   it('tells where the data lives and reopens the wizard', async () => {
-    const { fixture } = await openSettings();
-    fireEvent.click(screen.getByRole('button', { name: 'Sobre' }));
-    await fixture.whenStable();
+    const { host } = await openSettings();
+    expect(
+      screen.getByRole('heading', { name: 'Sobre', level: 2 }),
+    ).toBeTruthy();
     expect(
       screen.getByText(
         /Suas conversas e configurações ficam no servidor da Nova Alexandria/,
@@ -648,27 +669,27 @@ describe('Configurações', () => {
     fireEvent.click(
       screen.getByRole('button', { name: 'Rever o assistente de início' }),
     );
-    await fixture.whenStable();
-    expect(screen.getByText('Passo 1 de 4')).toBeTruthy();
+    await host.whenStable();
+    expect(await screen.findByText('Passo 1 de 4')).toBeTruthy();
   });
 
-  it('a late "close" of the dialog closed before does not close the one opened since', async () => {
-    const { fixture } = await openSettings();
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Fechar configurações' }),
-    );
+  it('a late "close" of the wizard closed before does not close the one opened since', async () => {
+    const { fixture } = await renderHost();
+    TestBed.inject(SettingsStore).openOnboarding();
     await fixture.whenStable();
-    TestBed.inject(SettingsStore).openSettings();
+    dialog()?.close();
+    await fixture.whenStable();
+    TestBed.inject(SettingsStore).openOnboarding();
     await fixture.whenStable();
     expect(dialog()?.open).toBe(true);
     // The browser fires "close" in a task of its own: it can land after the new opening.
     dialog()?.dispatchEvent(new Event('close'));
     await fixture.whenStable();
-    expect(TestBed.inject(SettingsStore).panel()).toBe('settings');
+    expect(TestBed.inject(SettingsStore).panel()).toBe('onboarding');
     expect(dialog()?.open).toBe(true);
   });
 
-  it("QA I-9: the wizard's own close landing after ⚙ was pressed, before a render, keeps Configurações", async () => {
+  it("QA I-9: the wizard's own close landing after it was asked for again, before a render, keeps it", async () => {
     const { http, fixture } = await renderHost(
       aSettingsView({ exists: false }),
     );
@@ -691,17 +712,19 @@ describe('Configurações', () => {
     expect(element.open).toBe(false);
     expect(held).toHaveLength(1);
 
-    // ⚙ pressed: the panel is asked for, and no render has opened the dialog yet.
-    TestBed.inject(SettingsStore).openSettings();
+    // "Rever o assistente de início": asked for, and no render has opened the dialog yet.
+    TestBed.inject(SettingsStore).openOnboarding();
     for (const late of held.splice(0)) element.dispatchEvent(late);
     await fixture.whenStable();
 
-    expect(TestBed.inject(SettingsStore).panel()).toBe('settings');
+    expect(TestBed.inject(SettingsStore).panel()).toBe('onboarding');
     expect(element.open).toBe(true);
   });
 
-  it('a close the person makes (Esc) while the panel is asked for closes it', async () => {
-    const { fixture } = await openSettings();
+  it('a close the person makes (Esc) while the wizard is asked for closes it', async () => {
+    const { fixture } = await renderHost();
+    TestBed.inject(SettingsStore).openOnboarding();
+    await fixture.whenStable();
     const element = dialog();
     // Esc: the browser closes the dialog by itself, not through the host.
     element?.removeAttribute('open');
@@ -710,17 +733,22 @@ describe('Configurações', () => {
     expect(TestBed.inject(SettingsStore).panel()).toBeNull();
   });
 
-  it('closes with × and with Esc', async () => {
-    const { fixture } = await openSettings();
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Fechar configurações' }),
-    );
+  it('Pular from Configurações leaves the page for the home (KBC-131 AC-6)', async () => {
+    const { http, fixture } = await renderHost();
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'url', 'get').mockReturnValue('/configuracoes/sobre');
+    const home = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    TestBed.inject(SettingsStore).openOnboarding();
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Pular' }));
+    http
+      .expectOne({ method: 'PUT', url: '/api/v1/settings' })
+      .flush(aSettingsView());
+    TestBed.tick();
+    http.expectOne('/api/v1/ai/providers').flush(aProviderList());
+    flushAiStatus(http);
     await fixture.whenStable();
     expect(dialog()?.open).toBe(false);
-    TestBed.inject(SettingsStore).openSettings();
-    await fixture.whenStable();
-    dialog()?.close();
-    await fixture.whenStable();
-    expect(TestBed.inject(SettingsStore).panel()).toBeNull();
+    expect(home).toHaveBeenCalledWith('/');
   });
 });
