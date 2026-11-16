@@ -53,7 +53,7 @@ Como estudante, quando pergunto sobre um assunto tratado num capítulo de um liv
 `docs/research/2026-11-16-complete-answers-deep.md` §3 e §5 · ADR 0003, 0015, 0035 · `tools/transcriber` (modelo de ferramenta)
 
 ## Decisões assumidas (o dono pode mudar)
-- O mapa vive em `<topic>/map/`, ao lado do vault, e vai para a produção pelo `sync-vault.sh`. Uma ADR nova registra isso.
+- Segue o padrão LLM Wiki (análise §2a): as seções de cada fonte são o "resumo por fonte" do ingest. A parte de máquina vive em `<topic>/map/` (só leitura para o kb), o que é para ler vai para as páginas do wiki do kb (KBC-141), e tudo vai para a produção pelo `sync-vault.sh`. Uma ADR nova registra isso.
 
 ## Definition of ready
 - [x] Story, scope and outcome stated

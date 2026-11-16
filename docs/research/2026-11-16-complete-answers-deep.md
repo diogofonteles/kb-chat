@@ -48,6 +48,43 @@ Os conceitos são 39 páginas largas, e uma página de conceito tem só o crité
 
 O kb já tem a estrutura certa: as páginas `wiki/concepts`, o `kb link` com o modelo de decisão e o `kb find` com candidatos por código e julgamento por modelo. **A proposta estende o kb, não o troca:** a classificação desce do documento para o trecho, e as páginas de conceito deixam de ser stubs e viram o mapa.
 
+## 2a. O padrão "LLM Wiki" (Karpathy, abr/2026) e o que o kb usa dele (pedido do dono, 2026-11-16)
+
+**O padrão** (gist `karpathy/442a6bf555914893e9891c11519de94f`): em vez de redescobrir o conhecimento nos documentos brutos a cada pergunta (RAG), o modelo **compila uma vez** um wiki persistente de páginas Markdown ligadas entre si e o **mantém atualizado**. O conhecimento é "compiled once and then kept current, not re-derived on every query". Três camadas e três operações:
+
+| Elemento | O que o padrão pede |
+|---|---|
+| Fontes brutas | Imutáveis: o modelo lê e nunca altera |
+| Wiki | Páginas escritas pelo modelo: resumo de cada fonte, páginas de entidades e de conceitos, comparações, visão geral |
+| Esquema | O documento (`AGENTS.md`/`CLAUDE.md`) com a estrutura, as convenções e os fluxos |
+| Ingest | Cada fonte nova: resumo, atualização do índice, das páginas de entidades e conceitos que ela toca ("a single source might touch 10-15 wiki pages") e do log |
+| Query | Responde a partir do wiki, com citações; **respostas boas viram páginas novas do wiki**, e o conhecimento se acumula |
+| Lint | Revisão periódica: contradições entre páginas, afirmações superadas por fontes novas, páginas órfãs, conceitos sem página própria, referências cruzadas faltando, lacunas |
+| `index.md` / `log.md` | Catálogo por categoria com uma linha por página (lido primeiro em toda pergunta) e o registro cronológico de cada operação |
+
+**O que o kb já faz** (o `AGENTS.md` do Hermetismo diz seguir esse padrão):
+
+| Elemento | Hermetismo hoje |
+|---|---|
+| Fontes brutas imutáveis | Sim (`raw/`, 2.947 textos) |
+| Esquema | Sim, mas incompleto: o escopo ainda é o texto de modelo, e o inventário está zerado |
+| Ingest | Parcial: entra, classifica o **documento** (resumo de uma frase, conceitos, entidades, perguntas) e liga. Não atualiza nenhuma página de conceito |
+| **Wiki compilado** | **Não existe.** "Current wiki articles: None yet". Os 39 conceitos são stubs (critério e sinônimos). Não há página de entidade (Mestre Laércio, Hermes, o Caibalion…) nem visão geral. O kb deixa a escrita dos artigos para um agente ("Articles are still written by the agent"), e isso nunca foi feito |
+| Query | Não volta para o wiki: `outputs/queries/` está vazio, e as respostas do app morrem na conversa |
+| Lint | Só estrutural (`needs-compile`, revisão, conflitos de chave), sem modelo. Nada de contradições, lacunas ou conceitos sem página |
+| `index.md` / `log.md` | O log existe (25 mil linhas de operações). O índice de conceitos tem 434 caracteres e não serve de mapa |
+
+**Conclusão:** o kb usa a **estrutura** do LLM Wiki (camadas, esquema, log, ligações e o gatilho `needs-compile`), mas **não a parte que dá o ganho**: a compilação e a manutenção do wiki. O "mapa do acervo" desta análise **é** essa compilação, feita na escala do acervo (3.000 fontes e 128 MB, 30 vezes o tamanho que o gist diz funcionar só com o índice).
+
+**Como a proposta passa a seguir o padrão por inteiro:**
+1. **O mapa mora no wiki do kb, não numa pasta à parte.** Os dossiês são os artigos de `wiki/concepts/` (hoje stubs) e as páginas novas de subassunto e de entidade. A parte que a máquina confere (o conjunto exato de seções de cada nó) fica num arquivo ao lado. Assim, o `kb link` (relações `affects`) e o `kb lint` (`needs-compile`) já marcam sozinhos os artigos que um documento novo deixou desatualizados: é o gatilho do KBC-142.
+2. **Páginas de entidade:** Mestre Laércio, os outros autores, Hermes Trismegisto, o Caibalion, cada obra. Cada uma com o que o acervo diz dela e de onde.
+3. **Resumo por fonte no ingest:** as seções e proposições (KBC-139) são o "summary page" do padrão, mais finas, para livros inteiros.
+4. **Índice de verdade:** um `index.md` gerado, por categoria e com uma linha por página, para a IA (e o estudante) navegarem. Ele é a raiz da árvore do KBC-140.
+5. **Respostas que se acumulam:** uma resposta do Profundo que um master marca como boa vira página do wiki (`outputs/queries/` e depois promovida), ligada aos assuntos. A próxima pergunta parecida já parte dela (item novo, KBC-147).
+6. **Lint com modelo, periódico:** contradições entre autores e entre páginas (separando sempre Mestre Laércio dos outros), afirmações superadas por fontes novas, conceitos citados sem página, lacunas. O resultado vai para a fila de revisão do kb (KBC-147).
+7. **Proveniência obrigatória:** o risco conhecido do padrão é a página compilada deixar cair um fato específico que a busca acharia. Por isso cada frase de página cita as seções de origem, a checagem por código (KBC-141) garante que nenhuma seção ficou fora, e o Profundo completa com a busca o que estiver fora do mapa (KBC-144).
+
 ## 3. Proposta: o mapa do assunto é feito antes, e o Profundo responde a partir dele
 
 O princípio: **a completude é garantida na indexação**, quando há tempo de ler tudo, e não na hora da pergunta, com 15 passos.
@@ -148,6 +185,7 @@ Os cerca de 3.000 documentos de hoje passam pelo mapa uma vez, no Mac, usando a 
 | 8 | KBC-144 Profundo guiado pelo mapa, com cobertura por aspecto | app | A resposta completa, e o mapa mostrado ao estudante |
 | 9 | KBC-145 Verificação de citações | app | Nenhuma frase sem apoio |
 | 10 | KBC-146 Busca completa por termos na tela de Buscar | app | A lista de todo documento com os termos |
+| 11 | KBC-147 Respostas que viram páginas do wiki e lint com modelo | `tools/kb-map` + app | O wiki cresce com o uso e aponta contradições e lacunas |
 
 O KBC-138 vem antes do resto de propósito: mostra quanto falta hoje e prova o ganho de cada passo seguinte. O dossiê também alimenta a Página do assunto da v2 (KBC-137).
 
