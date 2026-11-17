@@ -22,6 +22,7 @@ import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { SleepTimerService } from '@core/media/sleep-timer.js';
 import { RightPanel } from '@features/shell/right-panel.js';
 import { MiniPlayer } from './mini-player.js';
+import { ClosePlayer } from './close-player.js';
 import { NowPlayingPanel } from './now-playing-panel.js';
 
 const ID = '11111111-1111-4111-8111-111111111111';
@@ -132,9 +133,10 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     const { harness } = await setup();
     fireEvent.click(screen.getByRole('button', { name: 'Tocando agora' }));
     await harness.fixture.whenStable();
-    // The card's × (a phone's; on desktop v2 puts it in "Tocando agora" ⋯, hidden here).
-    fireEvent.click(
-      screen.getByLabelText('Fechar o player', { selector: 'button' }),
+    expect(screen.queryByLabelText('Fechar o player')).toBeNull();
+    // v2 has no × on the bar: "Tocando agora" ⋯ and the phone's Menu run the same close.
+    TestBed.inject(ClosePlayer).run(
+      TestBed.inject(RightPanel).content() !== null,
     );
     await harness.fixture.whenStable();
     expect(TestBed.inject(RightPanel).content()).toBeNull();
@@ -154,9 +156,10 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
 
   it('closes: stops, saves the position and goes away (AC-11)', async () => {
     const { media, http, harness, engine } = await setup();
-    // The card's × (a phone's; on desktop v2 puts it in "Tocando agora" ⋯, hidden here).
-    fireEvent.click(
-      screen.getByLabelText('Fechar o player', { selector: 'button' }),
+    expect(screen.queryByLabelText('Fechar o player')).toBeNull();
+    // v2 has no × on the bar: "Tocando agora" ⋯ and the phone's Menu run the same close.
+    TestBed.inject(ClosePlayer).run(
+      TestBed.inject(RightPanel).content() !== null,
     );
     await harness.fixture.whenStable();
     expect(media.calls).toContain('pause');

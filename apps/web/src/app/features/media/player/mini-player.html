@@ -155,6 +155,19 @@
       >
         <ui-icon name="cc" [size]="20" />
       </button>
+      <!-- v2 player bar: Fila opens the right panel on its tabs (Sobre · Fila · Ouvidas). -->
+      <button
+        uiIconButton
+        type="button"
+        class="queue"
+        [class.on]="queueOpen()"
+        aria-label="Fila"
+        i18n-aria-label="@@mini.queue"
+        [attr.aria-pressed]="queueOpen()"
+        (click)="toggleQueue()"
+      >
+        <ui-icon name="queue" [size]="20" />
+      </button>
       @if (volumeSupported()) {
         <span class="volume">
           <button
@@ -192,18 +205,6 @@
       >
         <ui-icon name="expand" [size]="20" />
       </a>
-      <!-- Not drawn in v2: on a phone it stays on the card; on desktop "Tocando agora" ⋯
-           has it too. -->
-      <button
-        uiIconButton
-        type="button"
-        class="close"
-        aria-label="Fechar o player"
-        i18n-aria-label="@@mini.close"
-        (click)="close()"
-      >
-        <ui-icon name="close" [size]="20" />
-      </button>
     </div>
     <app-sleep-timer-dialog #sleepDialog />
   </section>

@@ -323,13 +323,35 @@ export async function expectLibraryView(page: Page, view: LibraryView) {
 }
 
 /**
- * "Fechar o player" (KBC-041 AC-11): the × of the phone's mini player; on desktop v2 draws no
- * close on the player bar, it is in "Tocando agora" ⋯ (opened from the bar if need be).
+ * "Fechar o player" (KBC-041 AC-11): v2 draws no × on the bar or on the phone's mini player.
+ * On a phone it is a row of the Menu (the avatar); on desktop it is in "Tocando agora" ⋯
+ * (opened from the bar if need be) and, `via: 'account'`, in the avatar's menu (where a
+ * source panel takes the right panel, so "Tocando agora" cannot open).
  */
-export async function closePlayer(page: Page): Promise<void> {
+export async function closePlayer(
+  page: Page,
+  via: 'panel' | 'account' = 'panel',
+): Promise<void> {
   const bar = page.getByRole('region', { name: 'Mini-player' });
+  await expect(
+    bar.getByRole('button', { name: 'Fechar o player' }),
+  ).toHaveCount(0);
   if ((page.viewportSize()?.width ?? 0) < 1024) {
-    await bar.getByRole('button', { name: 'Fechar o player' }).click();
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    const close = menu.getByRole('button', { name: 'Fechar o player' });
+    // The drawn rows stay at the sheet's foot: in sight without scrolling.
+    await expect(close).toBeInViewport();
+    await close.click();
+    await expect(menu).toBeHidden();
+    return;
+  }
+  if (via === 'account') {
+    await page.getByRole('button', { name: /^Conta de / }).click();
+    await page
+      .getByRole('menu', { name: 'Conta' })
+      .getByRole('menuitem', { name: 'Fechar o player' })
+      .click();
     return;
   }
   const nowPlaying = bar.getByRole('button', { name: 'Tocando agora' });

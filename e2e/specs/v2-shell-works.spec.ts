@@ -349,6 +349,27 @@ test.describe('the shell', () => {
     expect(
       await page.evaluate(() => document.scrollingElement?.scrollTop),
     ).toBe(0);
+    // Every row has its ⋯ (v2 · Biblioteca expandida), its menu whole in the window.
+    const rowMore = wide.getByRole('button', {
+      name: 'Mais opções de Hermetismo',
+    });
+    await rowMore.click();
+    const rowMenu = page.getByRole('menu', {
+      name: 'Mais opções de Hermetismo',
+    });
+    await expect(rowMenu).toBeVisible();
+    const menuBox = await rowMenu.boundingBox();
+    expect(menuBox && menuBox.x + menuBox.width).toBeLessThanOrEqual(1440);
+    expect(menuBox && menuBox.y + menuBox.height).toBeLessThanOrEqual(900);
+    await page.keyboard.press('Escape');
+    await expect(rowMenu).toBeHidden();
+    await expect(rowMore).toBeFocused();
+    await rowMore.click();
+    await rowMenu.getByRole('menuitem', { name: 'Abrir acervo' }).click();
+    await expect(wide).toBeHidden();
+    await expect(page.getByLabel('Sua pergunta')).toBeVisible();
+    await widen.click();
+    await expect(wide).toBeVisible();
     await rowsShown.first().click();
     await expect(wide).toBeHidden();
     await expect(widen).toHaveAttribute('aria-pressed', 'false');
@@ -378,6 +399,23 @@ test.describe('the shell', () => {
       menu.getByRole('button', { name: 'Criar', exact: true }),
     ).toHaveCount(0);
     await expect(menu.getByRole('group', { name: 'Mostrar' })).toBeVisible();
+    // The drawn rows stay at the sheet's foot however long the list (12 collections here),
+    // and the list scrolls under them by finger and by keyboard.
+    for (const name of ['Novo acervo', 'Configurações']) {
+      await expect(
+        menu.getByRole('button', { name, exact: true }),
+      ).toBeInViewport();
+    }
+    const sheet = menu.locator('.drawer-body');
+    await sheet.hover();
+    await page.mouse.wheel(0, 400);
+    await expect
+      .poll(() => sheet.evaluate((e) => e.scrollTop))
+      .toBeGreaterThan(0);
+    await expect(
+      menu.getByRole('button', { name: 'Configurações', exact: true }),
+    ).toBeInViewport();
+    await sheet.evaluate((e) => e.scrollTo(0, 0));
     for (const name of [
       'Novo acervo',
       'Configurações',

@@ -121,10 +121,77 @@ describe('NowPlayingPanel (KBC-129 FR-2, BR-4)', () => {
     expect(panel.content()).toBeNull();
   });
 
-  it('AC-4: offers no "Seguir" and no share, which do not exist yet', async () => {
+  it('AC-4: offers no "Seguir", which does not exist yet', async () => {
     await setup();
     expect(screen.queryByRole('button', { name: /Seguir/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Compartilhar/ })).toBeNull();
+  });
+
+  it('v2 · Tocando agora: Compartilhar copies the link of the minute heard', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const { fixture } = await setup(7);
+    fireEvent.click(screen.getByRole('button', { name: 'Compartilhar' }));
+    await fixture.whenStable();
+    expect(writeText).toHaveBeenCalledWith(
+      `${location.origin}/midia/${ITEM.id}?t=7`,
+    );
+  });
+
+  it('v2 · Fila: opened on the tabs, shows what to go on with and the recently played', async () => {
+    const { fixture, http } = await setup();
+    fixture.componentRef.setInput('start', 'fila');
+    TestBed.tick();
+    const other = aMediaItem({
+      id: mediaId(4),
+      title: 'Aula sobre o Caibalion',
+    });
+    const heard = aMediaItem({
+      id: mediaId(5),
+      title: 'Conversa sobre os princípios',
+    });
+    const entry = (item: typeof other) => ({
+      ...item,
+      kind: 'audio',
+      lastPlayedAt: null,
+      tracks: [],
+    });
+    http.expectOne('/api/v1/media/library/home').flush({
+      continueListening: [entry(ITEM), entry(other)],
+      recentlyPlayed: [entry(heard)],
+      recentsClearedAt: null,
+    });
+    await settle();
+    await fixture.whenStable();
+    const fila = screen.getByRole('tab', { name: 'Fila' });
+    expect(fila.getAttribute('aria-selected')).toBe('true');
+    expect(
+      screen.getByRole('heading', { name: 'Continuar ouvindo' }),
+    ).toBeTruthy();
+    // What plays is not listed again as what comes next.
+    expect(
+      screen.getByRole('button', { name: `Tocar ${other.title}` }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: `Tocar ${ITEM.title}` }),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Ouvidas' }));
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('button', { name: `Tocar ${heard.title}` }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Sobre' }));
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('heading', { name: 'Sobre a autora' }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar o painel' }));
+    expect(TestBed.inject(RightPanel).content()).toBeNull();
   });
 });
 

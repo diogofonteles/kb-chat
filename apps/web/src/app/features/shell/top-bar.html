@@ -169,6 +169,13 @@
       <span i18n="@@page.help">Como usar</span>
       <ui-icon class="ui-menu__meta" name="external" [size]="14" />
     </a>
+    @if (playing()) {
+      <!-- The bar has no × in v2: closing the player also lives here, beside any panel. -->
+      <button uiMenuItem type="button" (click)="closePlayer()">
+        <ui-icon name="xcircle" [size]="18" />
+        <span i18n="@@mini.close">Fechar o player</span>
+      </button>
+    }
     <hr class="ui-menu__divider" />
     <button uiMenuItem type="button" (click)="signOut()">
       <ui-icon name="arrowRight" [size]="18" />

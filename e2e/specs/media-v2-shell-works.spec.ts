@@ -170,3 +170,89 @@ test('on a phone the mini player plays and pauses, opens the player and closes',
   await closePlayer(page);
   await expect(mini).toHaveCount(0);
 });
+
+test('the player bar’s Fila opens the panel on its tabs, and Compartilhar copies the minute', async ({
+  page,
+}) => {
+  test.skip(!desktop(page), 'The player bar is the desktop one.');
+  test.setTimeout(150_000);
+  await playThenLibrary(page);
+  const bar = page.getByRole('region', { name: 'Mini-player' });
+  // v2 player bar, right side: transcript, Fila, volume and expand, in that order.
+  const names = await bar
+    .locator('.extras')
+    .getByRole('button')
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute('aria-label')),
+    );
+  expect(names.slice(0, 2)).toEqual(['Tocando agora', 'Fila']);
+  await expect(bar.getByRole('link', { name: 'Abrir o player' })).toBeVisible();
+
+  const queue = bar.getByRole('button', { name: 'Fila', exact: true });
+  await queue.click();
+  await expect(queue).toHaveAttribute('aria-pressed', 'true');
+  const panel = page.getByRole('complementary', { name: 'Fila' });
+  const tabs = panel.getByRole('tab');
+  await expect(tabs).toHaveText(['Sobre', 'Fila', 'Ouvidas']);
+  await expect(panel.getByRole('tab', { name: 'Fila' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(
+    panel.getByRole('heading', { name: 'Continuar ouvindo' }),
+  ).toBeVisible();
+  // The arrows move between the tabs (APG tabs).
+  await panel.getByRole('tab', { name: 'Fila' }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(panel.getByRole('tab', { name: 'Ouvidas' })).toBeFocused();
+  await expect(
+    panel.getByRole('heading', { name: 'Ouvidas recentemente' }),
+  ).toBeVisible();
+  // Ouvidas lists what was played (this run's earlier media), and a row plays it.
+  const heard = panel.getByRole('button', { name: /^Tocar / });
+  await expect(heard.first()).toBeVisible();
+  const label = (await heard.first().getAttribute('aria-label')) ?? '';
+  await heard.first().click();
+  await expect(bar.locator('a.title')).toHaveText(label.replace(/^Tocar /, ''));
+  await expect.poll(async () => (await audioState(page)).paused).toBe(false);
+  await panel.getByRole('tab', { name: 'Sobre' }).click();
+  const share = panel.getByRole('button', { name: 'Compartilhar' });
+  await expect(share).toBeVisible();
+  await page.evaluate(() => {
+    const copied: string[] = [];
+    Object.assign(window, { copied });
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (text: string) => (copied.push(text), Promise.resolve()),
+      },
+    });
+  });
+  // The link of what plays now (the row chosen in Ouvidas), at the second heard.
+  const playingPath = (await bar.locator('a.title').getAttribute('href')) ?? '';
+  expect(playingPath).toMatch(/^\/midia\//);
+  await share.click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { copied: string[] }).copied[0] ?? '',
+      ),
+    )
+    .toMatch(new RegExp(`${playingPath}\\?t=\\d+$`));
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Link deste minuto copiado.' }),
+  ).toHaveCount(1);
+  // The transcript button takes the panel back to "Tocando agora" without tabs; × closes.
+  await bar.getByRole('button', { name: 'Tocando agora' }).click();
+  await expect(page.getByRole('tab')).toHaveCount(0);
+  await queue.click();
+  await page
+    .getByRole('complementary', { name: 'Fila' })
+    .getByRole('button', { name: 'Fechar o painel' })
+    .click();
+  await expect(page.getByRole('complementary', { name: 'Fila' })).toHaveCount(
+    0,
+  );
+  await expect(queue).toHaveAttribute('aria-pressed', 'false');
+  await closePlayer(page);
+});

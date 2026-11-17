@@ -595,6 +595,38 @@
   padding: 0 var(--space-8) var(--space-3);
 }
 
+:host(.expanded) li,
+:host(.expanded) .row {
+  position: relative;
+}
+
+/* The drawn rows' ⋯ (18, muted) in the 2rem the type column leaves at their end. */
+.row-more {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+}
+
+.row-more ::ng-deep .row-more-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.row-more ::ng-deep .row-more-trigger:hover,
+.row-more ::ng-deep .row-more-trigger[aria-expanded='true'] {
+  color: var(--color-text);
+}
+
 :host(.expanded) .ui-libitem-row {
   gap: 0.875rem;
   padding: 0 var(--space-3);
@@ -640,6 +672,34 @@
 :host(.mobile) .menu-actions {
   gap: 0;
   margin: var(--space-3) var(--space-4) 0;
+}
+
+/* Sticky at the foot of the Menu's scroll while the list runs under it; in its drawn
+   place, right after the list, once the list is short or scrolled past. */
+:host(.mobile) .menu-actions.drawn {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) var(--space-4) 0;
+  border-top: 0;
+  background: var(--color-bg);
+}
+
+/* The drawn divider, 16 in from each side. */
+:host(.mobile) .menu-actions.drawn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: var(--space-4);
+  left: var(--space-4);
+  border-top: 1px solid var(--overlay-3);
+}
+
+:host(.mobile) .menu-actions.more {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 :host(.mobile) .menu-actions ::ng-deep .order-trigger {

@@ -38,6 +38,10 @@ import { ProcessingQueueStore } from '@features/media/queue/processing-queue-sto
 import { AudioPresence } from '@features/shell/audio-presence.js';
 import { LibraryRecents } from '@features/shell/library-recents.js';
 import { SignOut } from '@features/shell/sign-out.js';
+import { RightPanel } from '@features/shell/right-panel.js';
+import { MediaEngine } from '@core/media/media-engine.js';
+import { ClosePlayer } from '@features/media/player/close-player.js';
+import { NowPlayingPanel } from '@features/media/player/now-playing-panel.js';
 import { UiAvatar } from '@ui/avatar.js';
 import { UiButton, UiChip, UiIconButton } from '@ui/button.js';
 import { UiCover } from '@ui/cover.js';
@@ -59,7 +63,7 @@ import {
 } from './library-list.js';
 
 export type SidebarAction =
-  'new' | 'restore' | 'topic' | 'media' | 'levels' | 'document';
+  'new' | 'restore' | 'topic' | 'media' | 'levels' | 'document' | 'player';
 
 /** How a conversation stands, in words (KBC-029): never color alone. */
 const STATUS_LABELS: Record<ConversationStatus, () => string> = {
@@ -165,6 +169,10 @@ export class Sidebar {
   private readonly recents = inject(LibraryRecents);
   private readonly settings = inject(SettingsStore);
   private readonly signOutAction = inject(SignOut);
+  private readonly closer = inject(ClosePlayer);
+  private readonly rightPanel = inject(RightPanel);
+  /** What the player has loaded: the phone Menu offers "Fechar o player" then. */
+  protected readonly playing = inject(MediaEngine).source;
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   /** Research conversations go to the research view (KBC-008 FR-6), shown as saved. */
@@ -453,6 +461,17 @@ export class Sidebar {
 
   protected openMedia(): void {
     this.acted.emit('media');
+  }
+
+  /** The name of a row's ⋯ in "Biblioteca expandida". */
+  protected rowMenuLabel(title: string): string {
+    return $localize`:@@library.rowMore:Mais opções de ${title}:title:`;
+  }
+
+  /** "Fechar o player" (KBC-041 AC-11) from the phone Menu: v2 draws no × on the card. */
+  protected closePlayer(): void {
+    this.closer.run(this.rightPanel.content()?.component === NowPlayingPanel);
+    this.acted.emit('player');
   }
 
   /** "N documentos sem nível" (KBC-107) leads to T24: the drawer closes. */

@@ -317,6 +317,28 @@
                     />
                   </ui-library-item>
                 </a>
+                @if (expanded()) {
+                  <ui-menu
+                    class="row-more"
+                    [label]="rowMenuLabel(item.title)"
+                    [triggerLabel]="rowMenuLabel(item.title)"
+                    [menuId]="ns() + '-more-' + item.key"
+                    triggerClass="row-more-trigger"
+                    align="end"
+                  >
+                    <span uiMenuTrigger class="row-more-content">
+                      <ui-icon name="more" [size]="18" />
+                    </span>
+                    <a
+                      uiMenuItem
+                      [routerLink]="item.path"
+                      (click)="openMedia()"
+                    >
+                      <ui-icon [name]="item.icon" [size]="18" />
+                      <span i18n="@@library.openItem">Abrir</span>
+                    </a>
+                  </ui-menu>
+                }
               </li>
             }
           </ul>
@@ -556,6 +578,31 @@
                           }}</span>
                         }
                       </button>
+                      @if (expanded()) {
+                        <ui-menu
+                          #rowMenu
+                          class="row-more"
+                          [label]="rowMenuLabel(conversation.title)"
+                          [triggerLabel]="rowMenuLabel(conversation.title)"
+                          [menuId]="ns() + '-more-' + conversation.id"
+                          triggerClass="row-more-trigger"
+                          align="end"
+                        >
+                          <span uiMenuTrigger class="row-more-content">
+                            <ui-icon name="more" [size]="18" />
+                          </span>
+                          <button
+                            uiMenuItem
+                            type="button"
+                            (click)="open(conversation)"
+                          >
+                            <ui-icon name="chat" [size]="18" />
+                            <span i18n="@@library.openConversation"
+                              >Abrir conversa</span
+                            >
+                          </button>
+                        </ui-menu>
+                      }
                     </li>
                   }
                 </ul>
@@ -611,6 +658,29 @@
                     >
                   }
                 </button>
+                @if (expanded()) {
+                  <ui-menu
+                    #rowMenu
+                    class="row-more"
+                    [label]="rowMenuLabel(doc.title)"
+                    [triggerLabel]="rowMenuLabel(doc.title)"
+                    [menuId]="ns() + '-more-doc-' + doc.id"
+                    triggerClass="row-more-trigger"
+                    align="end"
+                  >
+                    <span uiMenuTrigger class="row-more-content">
+                      <ui-icon name="more" [size]="18" />
+                    </span>
+                    <button
+                      uiMenuItem
+                      type="button"
+                      (click)="openDocument(doc)"
+                    >
+                      <ui-icon name="doc" [size]="18" />
+                      <span i18n="@@library.openDocument">Abrir documento</span>
+                    </button>
+                  </ui-menu>
+                }
               </li>
             } @empty {
               <li class="note" i18n="@@library.noDocuments">
@@ -676,8 +746,43 @@
         >
       }
     </button>
+    @if (expanded()) {
+      <ui-menu
+        #rowMenu
+        class="row-more"
+        [label]="rowMenuLabel(entry.topic.title)"
+        [triggerLabel]="rowMenuLabel(entry.topic.title)"
+        [menuId]="ns() + '-more-' + entry.topic.slug"
+        triggerClass="row-more-trigger"
+        align="end"
+      >
+        <span uiMenuTrigger class="row-more-content">
+          <ui-icon name="more" [size]="18" />
+        </span>
+        <button
+          uiMenuItem
+          type="button"
+          [disabled]="!entry.topic.canOpen"
+          (click)="changeTopic(entry.topic.slug)"
+        >
+          <ui-icon name="folder" [size]="18" />
+          <span i18n="@@library.openCollection">Abrir acervo</span>
+        </button>
+        @if (entry.topic.canRename && canCreateCollections()) {
+          <button
+            uiMenuItem
+            type="button"
+            (click)="rowMenu.close(); collectionDialog.openEdit(entry.topic)"
+          >
+            <ui-icon name="edit" [size]="18" />
+            <span i18n="@@library.editCollection">Editar acervo</span>
+          </button>
+        }
+      </ui-menu>
+    }
     @if (
       !mobile() &&
+      !expanded() &&
       entry.active &&
       entry.topic.canRename &&
       canCreateCollections()
@@ -696,7 +801,8 @@
   </ng-template>
 
   @if (mobile()) {
-    <div class="menu-actions">
+    <!-- v2 · Menu: the drawn rows stay in reach at the sheet's foot however long the list. -->
+    <div class="menu-actions drawn">
       @if (canCreateCollections()) {
         <button
           type="button"
@@ -737,8 +843,17 @@
         </button>
       }
       <app-settings-button />
-      <!-- v1 actions the drawn Menu has no row for ("+ Criar", its search and order on the
-           desktop column) come after the drawn ones. -->
+      @if (playing(); as current) {
+        <!-- The mini player has no × in v2: closing the player is a row here on a phone. -->
+        <button type="button" class="action" (click)="closePlayer()">
+          <ui-icon name="xcircle" [size]="20" />
+          <span i18n="@@mini.close">Fechar o player</span>
+        </button>
+      }
+    </div>
+    <!-- v1 actions the drawn Menu has no row for ("+ Criar", its search and order on the
+         desktop column) come after the drawn ones. -->
+    <div class="menu-actions more">
       <button type="button" class="action" (click)="startNew()">
         <ui-icon name="chat" [size]="20" />
         <span i18n="@@sidebar.new">Nova conversa</span>

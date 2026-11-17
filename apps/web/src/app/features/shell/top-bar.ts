@@ -20,6 +20,10 @@ import { UiIconButton } from '@ui/button.js';
 import { UiIcon } from '@ui/icon.js';
 import { UiLogo } from '@ui/logo.js';
 import { UiMenu, UiMenuItem } from '@ui/menu.js';
+import { MediaEngine } from '@core/media/media-engine.js';
+import { ClosePlayer } from '@features/media/player/close-player.js';
+import { NowPlayingPanel } from '@features/media/player/now-playing-panel.js';
+import { RightPanel } from './right-panel.js';
 import { SignOut } from './sign-out.js';
 
 /**
@@ -52,6 +56,15 @@ export class TopBar {
   private readonly location = inject(Location);
   private readonly router = inject(Router);
   private readonly signOutAction = inject(SignOut);
+  private readonly closer = inject(ClosePlayer);
+  private readonly rightPanel = inject(RightPanel);
+  /** What the player has loaded: the account menu offers "Fechar o player" then. */
+  protected readonly playing = inject(MediaEngine).source;
+
+  /** "Fechar o player" (KBC-041 AC-11): also when a source panel hides "Tocando agora". */
+  protected closePlayer(): void {
+    this.closer.run(this.rightPanel.content()?.component === NowPlayingPanel);
+  }
   /** Enter in the global search: the free search of the collection in use (FR-2). */
   readonly searched = output<string>();
   /** ✦: the research view, ready to type into. */

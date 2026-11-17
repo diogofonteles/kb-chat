@@ -390,8 +390,10 @@
 
 .drawer-body {
   position: relative;
-  min-height: 100%;
+  /* The Menu's own scroller (one screen tall), so its drawn rows can stick to its foot. */
+  height: 100%;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .drawer-close {

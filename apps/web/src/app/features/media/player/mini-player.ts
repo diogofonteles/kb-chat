@@ -33,7 +33,6 @@ import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import { PlayerVolume } from './player-volume.js';
 import { SleepTimerDialog } from './sleep-timer-dialog.js';
-import { ClosePlayer } from './close-player.js';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { RightPanel } from '@features/shell/right-panel.js';
 import { NowPlayingPanel } from './now-playing-panel.js';
@@ -45,8 +44,8 @@ const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
 /**
  * The persistent mini-player (screens.md T15, KBC-041 FR-8): while a media plays and the
  * person is anywhere but its page, a bar at the foot of the main area keeps it going, with
- * its title (back to the player), back 15 s, play/pause, a thin progress bar and "Fechar o
- * player". It also holds the player's status region (FR-10), present on every page.
+ * its title (back to the player), back 15 s, play/pause and a thin progress bar ("Fechar o
+ * player" is in "Tocando agora" ⋯ and, on a phone, in the Menu). It also holds the player's status region (FR-10), present on every page.
  */
 @Component({
   selector: 'app-mini-player',
@@ -114,8 +113,18 @@ export class MiniPlayer {
 
   private readonly rightPanel = inject(RightPanel);
   /** "Tocando agora" is in the shell's right panel (KBC-129 FR-2). */
-  protected readonly nowPlayingOpen = computed(
+  /** The right panel shows this player's panel: "Tocando agora" or its tabs. */
+  private readonly panelOpen = computed(
     () => this.rightPanel.content()?.component === NowPlayingPanel,
+  );
+  private readonly panelStart = computed(
+    () => this.rightPanel.content()?.inputs?.['start'] ?? 'now',
+  );
+  protected readonly nowPlayingOpen = computed(
+    () => this.panelOpen() && this.panelStart() === 'now',
+  );
+  protected readonly queueOpen = computed(
+    () => this.panelOpen() && this.panelStart() !== 'now',
   );
 
   protected readonly skipBack = computed(
@@ -191,7 +200,6 @@ export class MiniPlayer {
   }
 
   private readonly bookmarks = inject(BookmarksStore);
-  private readonly closer = inject(ClosePlayer);
   private readonly volumeMemory = inject(PlayerVolume);
   /** Marking needs the loaded media's bookmarks (KBC-042 FR-2). */
   protected readonly canMark = computed(
@@ -282,13 +290,23 @@ export class MiniPlayer {
     }
     this.rightPanel.open({
       component: NowPlayingPanel,
+      inputs: { start: 'now' },
       width: 'narrow',
       label: $localize`:@@mini.nowPlaying:Tocando agora`,
     });
   }
 
-  /** "Fechar o player" (AC-11): on the phone's card; on desktop in "Tocando agora" ⋯. */
-  protected close(): void {
-    this.closer.run(this.nowPlayingOpen());
+  /** The Fila button: the panel on its tabs, at the Fila (v2 player bar). */
+  protected toggleQueue(): void {
+    if (this.queueOpen()) {
+      this.rightPanel.close();
+      return;
+    }
+    this.rightPanel.open({
+      component: NowPlayingPanel,
+      inputs: { start: 'fila' },
+      width: 'narrow',
+      label: $localize`:@@mini.queue:Fila`,
+    });
   }
 }

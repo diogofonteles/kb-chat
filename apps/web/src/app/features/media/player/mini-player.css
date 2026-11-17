@@ -260,13 +260,9 @@ a.title:hover {
   gap: var(--space-3);
 }
 
-/* "Fechar o player" is not on the v2 bar: on desktop it is in "Tocando agora" ⋯. */
-.close {
-  display: none;
-}
-
-/* "Tocando agora" open in the right panel: the transcript button in green (v2 player bar). */
-.now-playing.on {
+/* "Tocando agora" or the Fila open in the right panel: its button in green (v2 player bar). */
+.now-playing.on,
+.queue.on {
   color: var(--color-accent);
 }
 
@@ -286,10 +282,10 @@ a.title:hover {
 }
 
 @media (max-width: 1023px) {
-  /* The mini player: cover, title, play and close; the line of progress at its foot. */
+  /* The mini player: cover, title, mark and play; the line of progress at its foot. */
   .bar {
     position: relative;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--space-2);
     /* v2 · celular: a 56 card, 8 before the cover and 12 after the last control. */
     height: var(--shell-mini-player);
@@ -329,26 +325,29 @@ a.title:hover {
     gap: var(--space-1);
   }
 
-  /* v2 · celular: the cover, the title and its author, the mark and play; "Fechar o
-     player" stays at the end of the card (it has no other place on a phone). */
+  /* v2 · celular: the cover, the title and its author, the mark and play ("Fechar o
+     player" is a row of the Menu on a phone). */
   .forward,
   .skip,
   .speed,
   .sleep-button,
   .now-playing,
+  .queue,
   .volume,
   .expand,
+  .extras,
   .time {
     display: none;
-  }
-
-  .close {
-    display: inline-flex;
   }
 
   .title {
     font-size: 0.8125rem;
     font-weight: 700;
+  }
+
+  /* v2 · celular: the author in white at 80% on the cover's tint (≥ 4.5:1 on any tint). */
+  .subtitle {
+    color: color-mix(in srgb, var(--color-text) 80%, transparent);
   }
 
   .now {
@@ -370,7 +369,6 @@ a.title:hover {
   }
 
   .buttons,
-  .extras,
   .retry {
     position: relative;
     z-index: 1;
@@ -401,6 +399,12 @@ a.title:hover {
     height: var(--target);
     background: transparent;
     color: var(--color-text);
+  }
+
+  /* v2 · celular: play and pause at 24 on the bare card. */
+  .play ui-icon ::ng-deep svg {
+    width: 1.5rem;
+    height: 1.5rem;
   }
 }
 
