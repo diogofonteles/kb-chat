@@ -127,6 +127,10 @@ describe('wholeSentences (KBC-156)', () => {
     expect(wholeSentences(ITALIANO, span(300, 301))).toEqual(span(300, 301));
   });
 
+  it('never shrinks a span wider than its segments (an answer saved with other times)', () => {
+    expect(wholeSentences(ITALIANO, span(12, 22))).toEqual(span(12, 22));
+  });
+
   it('an empty span at a segment start names that segment', () => {
     expect(wholeSentences(ITALIANO, span(0, 0))).toEqual(span(0, 12));
   });

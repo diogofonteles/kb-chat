@@ -163,5 +163,10 @@ export function wholeSentences(
     if (!grown) break;
     bounds = grown;
   }
-  return sentences.span(bounds);
+  // Only grows: a span wider than its segments (an answer saved with other times) keeps it.
+  const grown = sentences.span(bounds);
+  return {
+    startMs: Math.min(span.startMs, grown.startMs),
+    endMs: Math.max(span.endMs, grown.endMs),
+  };
 }
