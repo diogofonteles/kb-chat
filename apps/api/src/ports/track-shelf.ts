@@ -39,6 +39,8 @@ export interface ShelfRow {
 export interface ShelfSegment {
   readonly startMs: number;
   readonly endMs: number;
+  /** What it says: where its sentence starts and ends (KBC-156). */
+  readonly text: string;
 }
 
 /**

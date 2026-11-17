@@ -125,7 +125,7 @@ export class MediaTrackShelf implements TrackShelf {
     const segments = current
       ? this.deps.transcripts
           .segments(current.id)
-          .map(({ startMs, endMs }) => ({ startMs, endMs }))
+          .map(({ startMs, endMs, text }) => ({ startMs, endMs, text }))
       : [];
     this.segments.set(mediaId, segments);
     return segments;

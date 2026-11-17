@@ -23,10 +23,14 @@ const track: AnswerSource = {
 const text: AnswerSource = { n: 2, id: 'raw/articles/x.md', title: 'Um texto' };
 
 const SEGMENTS = [
-  { startMs: 0, endMs: 40_500 },
-  { startMs: 41_300, endMs: 70_000 },
-  { startMs: 70_000, endMs: 95_000 },
-  { startMs: 125_900, endMs: 140_000 },
+  { startMs: 0, endMs: 40_500, text: 'A abertura da palestra.' },
+  { startMs: 41_300, endMs: 70_000, text: 'O ritmo é a lei do pêndulo.' },
+  {
+    startMs: 70_000,
+    endMs: 95_000,
+    text: 'Tudo flui para fora e para dentro.',
+  },
+  { startMs: 125_900, endMs: 140_000, text: 'Outra pergunta.' },
 ];
 
 const shown = (anchors: number[], last: number | null): ShownPassages => ({
@@ -110,6 +114,35 @@ describe('resolvePassages (KBC-099 FR-6, BR-5, ADR 0035 §6)', () => {
       ten,
     ]);
     expect(cited?.passages?.[0]?.startMs).toBe(41_300);
+  });
+});
+
+describe('resolvePassages: the whole sentence (KBC-156)', () => {
+  const FRAGMENT = [
+    { startMs: 0, endMs: 1_000, text: 'É, italiano, tá.' },
+    {
+      startMs: 1_200,
+      endMs: 6_000,
+      text: 'Meu pai veio da Itália com a família,',
+    },
+    {
+      startMs: 6_100,
+      endMs: 12_000,
+      text: 'e eu cresci na roça ouvindo as histórias.',
+    },
+    { startMs: 12_500, endMs: 21_000, text: 'Depois a gente foi para Manaus.' },
+  ];
+
+  it('AC-1: [1@0:00] on a 1 s fragment cites the fragment and the whole sentence after it', () => {
+    const [cited] = resolvePassages({
+      answer: 'Ele conta lembranças da infância [1@0:00].',
+      sources: [track],
+      shownOf: () => shown([0], 0),
+      segmentsOf: () => FRAGMENT,
+    });
+    expect(cited?.passages).toEqual([
+      { at: '0:00', startMs: 0, endMs: 12_000 },
+    ]);
   });
 });
 
