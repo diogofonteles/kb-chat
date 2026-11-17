@@ -283,6 +283,11 @@ export interface AppDeps {
   /** The media library (ADR 0022); without it no media route exists (KB_CHAT_MEDIA=off). */
   readonly media?: MediaDeps;
   /**
+   * Told the doc-ingest queue once it is built (KBC-149): the E2E server's fake Mac plays
+   * the owner's Mac on it, with no transcriber paired. Production passes nothing.
+   */
+  readonly onDocIngest?: (queue: DocIngestQueue) => void;
+  /**
    * Collections created on the screen (ADR 0028). When given, `vault` must already be its
    * CollectionsVault (main builds the catalog before the app); in memory when not given.
    */
@@ -562,6 +567,8 @@ interface MediaWiring {
   readonly documents?: MediaDocuments;
   /** The scales and their audit (KBC-105): an audio's level is one of its collection's. */
   readonly levels: FullDeps['levels'];
+  /** The E2E server's fake Mac (KBC-149); nothing in production. */
+  readonly onDocIngest?: (queue: DocIngestQueue) => void;
 }
 
 /** The collections' scales as media reads them (KBC-105, ADR 0036 §1). */
@@ -1310,7 +1317,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
 }
 
 /** Documents and links sent from the app (KBC-149, ADR 0040): people's routes, the queue. */
-function startDocumentUploads(
+async function startDocumentUploads(
   app: FastifyInstance,
   input: {
     wiring: MediaWiring;
@@ -1319,7 +1326,7 @@ function startDocumentUploads(
   },
 ): Promise<DocIngestQueue> {
   const { wiring, media, documents } = input;
-  return registerDocumentUploads(app, {
+  const queue = await registerDocumentUploads(app, {
     ...wiring,
     mediaService: media,
     documents,
@@ -1330,6 +1337,8 @@ function startDocumentUploads(
     },
     createPerMinute: wiring.media.createPerMinute,
   });
+  wiring.onDocIngest?.(queue);
+  return queue;
 }
 
 /** People's routes over their media: details, the guided flow's plans, tracks. */

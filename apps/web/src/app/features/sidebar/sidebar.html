@@ -47,6 +47,17 @@
         <span i18n="@@library.newCollection">Novo acervo</span>
       </button>
     }
+    @if (canSendDocuments()) {
+      <!-- KBC-149: into the collection in use; the dialog gives the focus back to "Criar". -->
+      <button
+        uiMenuItem
+        type="button"
+        (click)="createMenu.close(); documentDialog.open()"
+      >
+        <ui-icon name="upload" [size]="18" />
+        <span i18n="@@library.sendDocument">Enviar documento ou link</span>
+      </button>
+    }
     @if (mediaFallback(); as link) {
       <a uiMenuItem [routerLink]="link.path" (click)="openMedia()">
         <ui-icon name="music" [size]="18" />
@@ -54,6 +65,12 @@
       </a>
     }
   </ui-menu>
+  <app-document-upload-dialog
+    #documentDialog
+    [topic]="chat.topicSlug()"
+    [topicTitle]="currentTopicTitle()"
+    (documentOpened)="openDocument($event)"
+  />
   @if (!mobile()) {
     <button
       uiIconButton

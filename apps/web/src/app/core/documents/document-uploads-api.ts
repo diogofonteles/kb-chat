@@ -1,0 +1,86 @@
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import {
+  MEDIA_UPLOAD_PART_BYTES,
+  createDocumentUploadResponseSchema,
+  documentUploadListSchema,
+  type CreateDocumentUploadRequest,
+  type CreateDocumentUploadResponse,
+  type DocumentUpload,
+} from '@kb-chat/contracts';
+import { BusyWork } from '@core/app-version/busy-work.js';
+import { CSRF } from '@core/auth/auth-interceptor.js';
+import { TUS_UPLOAD, toHttpError } from '@core/media/tus-upload.js';
+import { Observable, map } from 'rxjs';
+
+/** "Documentos em processamento" (KBC-149): one's own sent documents; masters, everyone's. */
+export const documentUploadsUrl = (): string => '/api/v1/document-uploads';
+export const documentsUrl = (topic: string): string =>
+  `/api/v1/topics/${encodeURIComponent(topic)}/documents`;
+export const parseDocumentUploads = (body: unknown) =>
+  documentUploadListSchema.parse(body).items;
+
+/** Retries of a part that did not arrive, as the media library's (ADR 0033). */
+const RETRY_DELAYS_MS = [0, 1_000, 3_000, 5_000, 10_000, 20_000, 30_000];
+
+export type SendEvent =
+  | {
+      readonly kind: 'progress';
+      readonly loaded: number;
+      readonly total: number;
+    }
+  | { readonly kind: 'done' };
+
+/** Sending documents and links to a collection (KBC-149, ADR 0040). */
+@Injectable({ providedIn: 'root' })
+export class DocumentUploadsApi {
+  private readonly http = inject(HttpClient);
+  private readonly tus = inject(TUS_UPLOAD);
+  private readonly work = inject(BusyWork);
+  private sends = 0;
+
+  /** "Documentos em processamento": one's own sent documents (masters: everyone's). */
+  list(): Observable<DocumentUpload[]> {
+    return this.http
+      .get(documentUploadsUrl())
+      .pipe(map((body) => parseDocumentUploads(body)));
+  }
+
+  /** A file announced (its bytes go by `send`) or a link; or what is already there (BR-3). */
+  create(
+    topic: string,
+    request: CreateDocumentUploadRequest,
+  ): Observable<CreateDocumentUploadResponse> {
+    return this.http
+      .post(documentsUrl(topic), request)
+      .pipe(map((body) => createDocumentUploadResponseSchema.parse(body)));
+  }
+
+  /** The file's bytes over tus, from wherever the server stopped; unsubscribing stops. */
+  send(uploadUrl: string, file: Blob): Observable<SendEvent> {
+    return new Observable<SendEvent>((subscriber) => {
+      // A new version of the app never reloads in the middle of a send (KBC-123 AC-2).
+      const busyKey = `document-upload-${++this.sends}`;
+      this.work.hold(busyKey);
+      const session = this.tus(file, {
+        uploadUrl,
+        chunkSize: MEDIA_UPLOAD_PART_BYTES,
+        retryDelays: RETRY_DELAYS_MS,
+        storeFingerprintForResuming: false,
+        headers: { [CSRF.header]: CSRF.value },
+        onProgress: (loaded, total) =>
+          subscriber.next({ kind: 'progress', loaded, total }),
+        onSuccess: () => {
+          subscriber.next({ kind: 'done' });
+          subscriber.complete();
+        },
+        onError: (err) => subscriber.error(toHttpError(err)),
+      });
+      session.start();
+      return () => {
+        this.work.release(busyKey);
+        void session.abort();
+      };
+    });
+  }
+}

@@ -4,6 +4,8 @@ import { registerTranscriptSeed } from './transcript-seed-routes.js';
 import { registerDiarizationSeed } from './diarization-seed-routes.js';
 import { registerProposalSeed } from './proposal-seed-routes.js';
 import { registerKbPublishMac } from './kb-publish-routes.js';
+import { registerDocIngestMac } from './doc-ingest-routes.js';
+import type { DocIngestQueue } from '../modules/document-uploads/index.js';
 import { registerLevelArrivals } from './level-arrival-routes.js';
 import { startMediaWorkers } from './media-worker-runner.js';
 import { privateTemp } from '../../../../tools/test-temp.mjs';
@@ -313,7 +315,12 @@ const media = await createMedia(
       Promise.resolve({ code: 0, output: 'kickstarted (E2E fake)' }),
   },
 );
+// The fake Mac of sent documents (KBC-149) gets the app's queue once it is built.
+let docIngest: DocIngestQueue | null = null;
 const app = await buildApp({
+  onDocIngest: (queue) => {
+    docIngest = queue;
+  },
   config,
   auth,
   access,
@@ -346,6 +353,11 @@ if (media) {
     authors,
     vault: config.KB_VAULT,
     mediaDir: config.KB_CHAT_MEDIA_DIR,
+  });
+  registerDocIngestMac(app, {
+    queue: () => docIngest,
+    vault: config.KB_VAULT,
+    catalog,
   });
 }
 registerOpenRouterConsent(app, openRouter);

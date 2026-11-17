@@ -102,15 +102,11 @@ export class DocIngestQueue {
    * The oldest leasable document; a lease that expired counts as an attempt spent. In the
    * map at once (one writer), saved in the background: a lease lost to a crash is leased again.
    */
-  lease(worker: string): DocIngestJob | null {
+  lease(worker: string, topic?: string): DocIngestJob | null {
     const budgetUsd = this.deps.budgetUsd();
     if (budgetUsd <= 0) return null;
     const now = this.now();
-    const waiting = this.deps.records
-      .all()
-      .filter((one) => this.isLeasable(one, now.getTime()))
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    for (const record of waiting) {
+    for (const record of this.waiting(now, topic)) {
       const attempts = record.attempts + (record.lease ? 1 : 0);
       if (attempts >= DOC_INGEST_MAX_ATTEMPTS) {
         this.later(this.giveUp(record, 'the Mac lost the job too many times'));
@@ -131,6 +127,15 @@ export class DocIngestQueue {
       return this.jobOf(leased, budgetUsd);
     }
     return null;
+  }
+
+  /** Oldest first; `topic` keeps to one collection (the E2E fake Mac, as kb-publish's). */
+  private waiting(now: Date, topic?: string): DocumentUploadRecord[] {
+    return this.deps.records
+      .all()
+      .filter((one) => this.isLeasable(one, now.getTime()))
+      .filter((one) => topic === undefined || one.topic === topic)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
   private jobOf(record: DocumentUploadRecord, budgetUsd: number): DocIngestJob {

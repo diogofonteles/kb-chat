@@ -42,6 +42,7 @@ import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import { UiLibraryItem } from '@ui/library-item.js';
 import { UiMenu, UiMenuItem } from '@ui/menu.js';
+import { DocumentUploadDialog } from '@features/document-upload/document-upload-dialog.js';
 import { UiProgress } from '@ui/progress.js';
 import {
   collectionTree,
@@ -127,6 +128,7 @@ interface PinnedItem {
     RouterLink,
     RouterLinkActive,
     CollectionDialog,
+    DocumentUploadDialog,
     UnassignedNotice,
     UiAvatar,
     UiChip,
@@ -337,6 +339,21 @@ export class Sidebar {
     search: KIND_LABELS.search(),
     research: KIND_LABELS.research(),
   };
+  /**
+   * "Enviar documento ou link" (KBC-149 BR-1): who may send audio may send documents (the
+   * same permission), into the collection in use.
+   */
+  protected readonly canSendDocuments = computed(
+    () =>
+      this.session.me()?.media === true &&
+      this.session.can('media') &&
+      this.session.can('media-upload') &&
+      this.chat.topicSlug() !== null,
+  );
+  protected readonly currentTopicTitle = computed(() => {
+    const slug = this.chat.topicSlug();
+    return slug ? (this.titles().get(slug) ?? slug) : '';
+  });
   /** "Novo acervo" and "Editar acervo" (KBC-048 FR-6): only with "Criar acervos". */
   protected readonly canCreateCollections = computed(() =>
     this.session.can('collection-create'),
