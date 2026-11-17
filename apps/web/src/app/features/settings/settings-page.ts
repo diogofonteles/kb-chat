@@ -275,6 +275,7 @@ export class SettingsPage {
       untracked(() => this.focusPhoneScreen(slug, ready));
     });
     this.spyOnScroll();
+    this.keepPinnedInPlace();
     this.watchEdits();
     this.destroyRef.onDestroy(() => this.store.clearConnectOutcome());
   }
@@ -383,6 +384,14 @@ export class SettingsPage {
     this.scrolledTo = target;
     if (target === null) return;
     this.pinned = target;
+    this.align(target, els);
+  }
+
+  /** Brings a section's title just under the compact strip. */
+  private align(
+    target: SettingsSection,
+    els: readonly ElementRef<HTMLElement>[],
+  ): void {
     const el = els.find(
       (ref) => ref.nativeElement.dataset['section'] === target,
     );
@@ -393,6 +402,29 @@ export class SettingsPage {
       el.nativeElement.getBoundingClientRect().top -
       host.getBoundingClientRect().top;
     host.scrollTo({ top: host.scrollTop + offset - SECTION_GAP });
+  }
+
+  /**
+   * The sections above load their data after the first scroll and grow, which would push the
+   * section asked for off the screen: while it holds (BR-5), each change in a section's
+   * height brings it back under the strip. The person's own scroll lets it go.
+   */
+  private keepPinnedInPlace(): void {
+    const Observer = this.view?.ResizeObserver;
+    if (!Observer) return;
+    const observer = new Observer(() => {
+      const target = this.pinned;
+      if (target === null || this.phone()) return;
+      this.align(target, this.sectionEls());
+    });
+    afterRenderEffect(() => {
+      const els = this.sectionEls();
+      untracked(() => {
+        observer.disconnect();
+        for (const ref of els) observer.observe(ref.nativeElement);
+      });
+    });
+    this.destroyRef.onDestroy(() => observer.disconnect());
   }
 
   /**
