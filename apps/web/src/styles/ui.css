@@ -1007,6 +1007,17 @@ select.ui-input option {
   flex-direction: column;
 }
 
+/* A modal with a height of its own (tabs): the body takes the rest and scrolls. */
+@media (min-width: 1024px) {
+  .ui-dialog[style*='--ui-dialog-height'] {
+    height: min(var(--ui-dialog-height), calc(100dvh - 4rem));
+  }
+
+  .ui-dialog[style*='--ui-dialog-height'] .ui-dialog__body {
+    flex: 1;
+  }
+}
+
 .ui-dialog__head {
   display: flex;
   align-items: flex-start;

@@ -30,6 +30,7 @@ import { UiIcon } from './icon.js';
       class="ui-dialog"
       [class.ui-dialog--actions]="!!primaryLabel()"
       [style.--ui-dialog-width.px]="width()"
+      [style.--ui-dialog-height.px]="height() || null"
       [attr.aria-labelledby]="label() ? null : titleId()"
       [attr.aria-label]="label() || null"
       (close)="closed.emit()"
@@ -49,11 +50,15 @@ import { UiIcon } from './icon.js';
             Cancelar
           </button>
         }
+        <!-- [uiDialogLead]: a picture before the titles (a person's avatar). -->
+        <ng-content select="[uiDialogLead]" />
         <div class="ui-dialog__titles">
           @if (step()) {
             <p class="ui-dialog__step">{{ step() }}</p>
           }
           <h2 class="ui-dialog__title" [attr.id]="titleId()">{{ title() }}</h2>
+          <!-- [uiDialogSub]: a line under the title (an e-mail and a status). -->
+          <ng-content select="[uiDialogSub]" />
         </div>
         @if (primaryLabel() && phone()) {
           <button
@@ -90,6 +95,8 @@ export class UiDialog {
   /** The title's id (aria-labelledby); unique on the page. */
   readonly titleId = input.required<string>();
   readonly width = input(560);
+  /** A fixed height (the wide modals with tabs keep theirs from tab to tab); 0 fits. */
+  readonly height = input(0);
   /**
    * The dialog's name when the visible title would repeat a field's name inside it (the
    * invitation's "Convidar por e-mail"); empty names it by the title.

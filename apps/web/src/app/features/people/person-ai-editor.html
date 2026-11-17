@@ -1,6 +1,9 @@
 @let current = ai();
-<fieldset class="group" [disabled]="busy()">
-  <legend class="legend" i18n="@@personAi.legend">IA da aplicação</legend>
+<!-- v2 · IA e limites: each line a label at the left and its control at the right. -->
+<fieldset class="group ai-tab" [disabled]="busy()">
+  <legend class="visually-hidden" i18n="@@personAi.legend">
+    IA da aplicação
+  </legend>
   <label class="field">
     <span i18n="@@personAi.which">Qual IA atende esta pessoa</span>
     <select
@@ -61,6 +64,7 @@
   <label class="check">
     <input
       #enforcedBox
+      class="ui-switch"
       [disabled]="lentForOthers()"
       [attr.aria-describedby]="lentForOthers() ? 'lend-owner-only' : null"
       type="checkbox"
@@ -102,6 +106,7 @@
   <label class="check">
     <input
       #paidBox
+      class="ui-switch"
       [disabled]="lentForOthers()"
       [attr.aria-describedby]="lentForOthers() ? 'lend-owner-only' : null"
       type="checkbox"
@@ -142,25 +147,32 @@
   }
 </fieldset>
 @if (history().length > 0) {
-  <details class="history">
-    <summary i18n="@@personAi.history">Histórico da IA</summary>
+  <section class="history" aria-labelledby="person-ai-history">
+    <h3 id="person-ai-history" class="history-title" i18n="@@personAi.history">
+      Histórico da IA
+    </h3>
     <ul>
       @for (change of history(); track change.at + change.by) {
         <li>
-          {{ change.at | date: 'dd/MM/yyyy HH:mm' }} · {{ change.by }} ·
-          {{ change.label }}
-          @if (change.enforced) {
-            <ng-container i18n="@@personAi.historyEnforced"
-              >(sempre)</ng-container
-            >
-          }
-          @if (change.termsAccepted) {
-            <ng-container i18n="@@personAi.historyTerms"
-              >(termos confirmados)</ng-container
-            >
-          }
+          <span class="history-when">{{
+            change.at | date: 'dd/MM/yyyy HH:mm'
+          }}</span>
+          <span class="history-by">{{ change.by }}</span>
+          <ui-pill tone="ok" class="history-what"
+            >{{ change.label }}
+            @if (change.enforced) {
+              <ng-container i18n="@@personAi.historyEnforced"
+                >(sempre)</ng-container
+              >
+            }
+            @if (change.termsAccepted) {
+              <ng-container i18n="@@personAi.historyTerms"
+                >(termos confirmados)</ng-container
+              >
+            }
+          </ui-pill>
         </li>
       }
     </ul>
-  </details>
+  </section>
 }

@@ -43,17 +43,26 @@
   [hidden]="tab() !== 'access'"
 >
   @if (profiles().length > 0 && !who.isOwner) {
-    <fieldset class="group" [disabled]="busy()">
-      <legend class="legend" i18n="@@people.applyProfileLegend">
-        Aplicar perfil
-      </legend>
+    <!-- One line (stRow): "Aplicar perfil" at the left, the profile and the button at the right. -->
+    <div
+      class="group apply-group"
+      role="group"
+      [attr.aria-labelledby]="'apply-' + who.id"
+    >
+      <span
+        class="legend"
+        [id]="'apply-' + who.id"
+        i18n="@@people.applyProfileLegend"
+        >Aplicar perfil</span
+      >
       <div class="actions apply-row">
         <label class="field">
-          <span i18n="@@people.profile">Perfil</span>
+          <span class="visually-hidden" i18n="@@people.profile">Perfil</span>
           <select
             #profileSelect
             class="select"
             name="applyProfile"
+            [disabled]="busy()"
             (change)="chooseProfile(profileSelect.value)"
           >
             @for (profile of profiles(); track profile.id) {
@@ -71,6 +80,7 @@
             #applyButton
             type="button"
             class="secondary"
+            [disabled]="busy()"
             (click)="askApply()"
             i18n="@@people.applyProfile"
           >
@@ -100,6 +110,7 @@
             #applyConfirmButton
             type="button"
             class="secondary"
+            [disabled]="busy()"
             [attr.aria-describedby]="applyDescribedBy()"
             (click)="confirmApply()"
             i18n="@@people.applyConfirm"
@@ -109,6 +120,7 @@
           <button
             type="button"
             class="link"
+            [disabled]="busy()"
             (click)="cancelApply()"
             i18n="@@people.cancel"
           >
@@ -116,7 +128,7 @@
           </button>
         </div>
       }
-    </fieldset>
+    </div>
   }
 
   @if (isMaster()) {
@@ -125,7 +137,11 @@
     </p>
   }
 
-  <fieldset class="group" [disabled]="isMaster()" [attr.aria-busy]="saving()">
+  <fieldset
+    class="group inline"
+    [disabled]="isMaster()"
+    [attr.aria-busy]="saving()"
+  >
     <legend class="legend" i18n="@@people.collections">Acervos</legend>
     @for (topic of collections(); track topic.slug) {
       <label class="check" [class.child]="topic.parent !== null">

@@ -46,7 +46,7 @@ const REASON_MAX = 500;
           #reason
           id="act-as-reason"
           class="ui-input"
-          rows="3"
+          rows="1"
           [attr.maxlength]="reasonMax"
           [attr.aria-invalid]="invalid() ? 'true' : null"
           [attr.aria-describedby]="invalid() ? 'act-as-reason-error' : null"

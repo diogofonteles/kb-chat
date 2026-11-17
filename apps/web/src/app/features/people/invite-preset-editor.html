@@ -186,8 +186,11 @@
   [attr.aria-labelledby]="tabsId + '-ai'"
   [hidden]="tab() !== 'ai'"
 >
-  <fieldset class="group" [disabled]="busy()">
-    <legend class="legend" i18n="@@preset.ai">IA da aplicação</legend>
+  <!-- v2 · IA e limites: each line a label at the left and its control at the right. -->
+  <fieldset class="group ai-tab" [disabled]="busy()">
+    <legend class="visually-hidden" i18n="@@preset.ai">
+      IA da aplicação
+    </legend>
     <label class="field">
       <span i18n="@@preset.appAi">Qual IA atende a pessoa</span>
       <select
@@ -274,6 +277,7 @@
         <input
           #enforcedBox
           type="checkbox"
+          class="ui-switch"
           [checked]="current.ai.enforced"
           (change)="setEnforced(enforcedBox.checked)"
         />
@@ -307,6 +311,7 @@
         <input
           #paidBox
           type="checkbox"
+          class="ui-switch"
           [checked]="current.ai.paidFallback.enabled"
           (change)="setPaid(paidBox.checked)"
         />

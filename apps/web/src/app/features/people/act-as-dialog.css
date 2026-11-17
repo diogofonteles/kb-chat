@@ -41,7 +41,11 @@ h2 {
 }
 
 .field textarea {
+  min-height: 2.75rem;
   font-weight: 400;
+  /* One line as the frame's field; a longer reason grows it. */
+  field-sizing: content;
+  resize: none;
 }
 
 .error {

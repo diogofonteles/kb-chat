@@ -324,7 +324,22 @@
 }
 
 .editor {
-  padding: 0 var(--space-4) var(--space-4);
+  display: block;
+}
+
+/* The person's modal head (v2 · Pessoa): avatar 56, the name, e-mail · role · status. */
+.dialog-avatar {
+  align-self: center;
+}
+
+.dialog-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
 }
 
 .person > .notice {

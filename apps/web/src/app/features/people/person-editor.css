@@ -238,8 +238,36 @@ button:disabled {
   gap: var(--space-3);
   margin: 0 calc(-1 * var(--space-6)) calc(-1 * var(--space-5));
   padding: var(--space-4) var(--space-6);
-  background: var(--color-elevated);
-  box-shadow: inset 0 1px 0 var(--overlay-line);
+  /* The frame's footer band, a shade over the modal. */
+  background: color-mix(in srgb, var(--color-text) 3%, var(--color-elevated));
+}
+
+/* "Aplicar perfil": the legend at the left, the select and the button at the right. */
+.apply-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.group.apply-group > .legend {
+  margin: 0;
+  font-size: var(--text-item);
+  font-weight: 500;
+  line-height: 2.5rem;
+}
+
+.apply-group > .apply-row {
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.apply-group .select {
+  width: 10rem;
+  min-height: 2.5rem;
+  border: 0;
+  background: var(--color-surface-muted);
 }
 
 .foot-start,
@@ -446,4 +474,164 @@ input.input {
 .select option {
   background: var(--color-elevated);
   color: var(--color-text);
+}
+
+/* ---------- IA e limites (v2): label at the left, control at the right, switches ---------- */
+.ai-tab {
+  gap: 0;
+}
+
+.ai-tab {
+  justify-items: stretch;
+}
+
+.ai-tab > .field,
+.ai-tab .limits > .field {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  min-height: 3.25rem;
+  font-size: var(--text-item);
+  font-weight: 500;
+}
+
+.ai-tab > .field:first-of-type {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--overlay-line);
+}
+
+.ai-tab .field > .select {
+  flex: none;
+  width: 17.5rem;
+  border: 0;
+  background: var(--color-surface-muted);
+}
+
+.ai-tab .field > .number {
+  flex: none;
+  width: 6rem;
+}
+
+.ai-tab .check,
+.ai-tab .limits .check {
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  gap: var(--space-6);
+  min-height: 3.25rem;
+  font-size: var(--text-item);
+}
+
+.ai-tab .check .ui-switch {
+  width: 2.5rem;
+  height: 1.375rem;
+}
+
+.ai-tab .limits {
+  gap: 0;
+}
+
+.ai-tab > .hint,
+.ai-tab > .lend-confirm {
+  margin: var(--space-2) 0;
+}
+
+.history {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.history-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.history ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) 0.875rem;
+  padding: 0.625rem var(--space-3);
+  border-radius: 6px;
+  background: var(--overlay-1);
+  font-size: var(--text-meta);
+}
+
+.history-when {
+  font-weight: 700;
+}
+
+.history-by {
+  color: var(--color-text-muted);
+}
+
+.history-what {
+  margin-left: auto;
+}
+
+/* Confirming "Aplicar perfil": the question takes the whole line under it. */
+.apply-group > .actions:not(.apply-row) {
+  flex-basis: 100%;
+}
+
+.ai-tab .field > span {
+  flex: 1;
+}
+
+.ai-tab .hint {
+  font-size: var(--text-meta);
+}
+
+/* Lending a subscription (v2): an amber notice, "Ceder assim mesmo" white, Cancelar plain. */
+.lend-confirm {
+  gap: 0.625rem;
+  padding: var(--space-4);
+  border-color: color-mix(in srgb, var(--color-warn) 40%, transparent);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-warn) 10%, transparent);
+  font-size: var(--text-meta);
+}
+
+.lend-confirm .lend-title {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: var(--text-item);
+  font-weight: 700;
+}
+
+.lend-confirm .lend-title::before {
+  content: '⚠' / '';
+  color: var(--color-warn);
+  font-size: 1.125rem;
+}
+
+.lend-confirm .actions {
+  justify-content: flex-start;
+}
+
+.lend-confirm .actions > button {
+  flex: none;
+}
+
+.lend-confirm .actions > .danger {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.lend-confirm .actions > .secondary:not(.danger) {
+  border-color: transparent;
+  color: var(--color-text-muted);
 }

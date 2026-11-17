@@ -17,6 +17,7 @@
       i18n-label="@@people.inviteSetupTitle"
       label="Configurar o convite"
       [width]="800"
+      [height]="728"
       [closeOnBackdrop]="false"
       i18n-primaryLabel="@@people.invite"
       primaryLabel="Convidar"
@@ -407,6 +408,42 @@
     [width]="800"
     (closed)="closeEditor()"
   >
+    <!-- The frame's head: the avatar, the name, then the e-mail, the role and the status. -->
+    <ui-avatar
+      uiDialogLead
+      class="dialog-avatar"
+      [name]="person.name || person.email"
+      [size]="56"
+    />
+    <p uiDialogSub class="dialog-sub">
+      @if (person.name) {
+        <span>{{ person.email }}</span>
+      }
+      @if (person.role === 'master') {
+        <ui-pill tone="info" i18n="@@people.master">Master</ui-pill>
+      }
+      @if (person.isOwner) {
+        <ui-pill tone="warn" i18n="@@people.owner">Dono</ui-pill>
+      }
+      @switch (invitations().get(person.id)?.kind) {
+        @case ('active') {
+          <ui-pill tone="ok" i18n="@@people.active">Ativo</ui-pill>
+        }
+        @case ('sent') {
+          <ui-pill tone="info" i18n="@@people.invitationSent"
+            >Convite enviado</ui-pill
+          >
+        }
+        @case ('failed') {
+          <ui-pill tone="err" i18n="@@people.invitationFailed"
+            >Falha ao enviar o convite</ui-pill
+          >
+        }
+        @default {
+          <ui-pill i18n="@@people.neverSignedIn">Ainda não entrou</ui-pill>
+        }
+      }
+    </p>
     <app-person-editor
       [id]="'person-' + person.id"
       class="editor"

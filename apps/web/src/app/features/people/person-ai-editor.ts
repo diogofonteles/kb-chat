@@ -1,3 +1,4 @@
+import { UiPill } from '@ui/index.js';
 import { DatePipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
@@ -42,7 +43,7 @@ const isAssignment = (value: string): value is AppAiAssignment =>
  */
 @Component({
   selector: 'app-person-ai-editor',
-  imports: [DatePipe],
+  imports: [DatePipe, UiPill],
   templateUrl: './person-ai-editor.html',
   styleUrl: './person-editor.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
