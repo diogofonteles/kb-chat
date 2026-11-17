@@ -60,10 +60,10 @@ export const transcriptRoutes =
       Promise.resolve(
         service.current(actorOf(request), request.params.id, {
           withTermList: actorOf(request).isMaster,
-          // The voices are for whoever edits recordings (KBC-064 FR-4), who sees the names
-          // anyway; the names, for whoever may see who speaks (KBC-065 BR-4).
+          // The separation is for whoever edits recordings (KBC-064 FR-4, ADR 0032); who
+          // speaks, confirmed names only, for everyone who may listen (KBC-151 BR-0).
           withVoices: hasFeature(viewerOf(request).person, 'media-edit'),
-          withNames: hasFeature(viewerOf(request).person, 'media-speakers'),
+          withNames: true,
         }),
       ),
     );

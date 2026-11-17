@@ -1,5 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Locator, Page, TestInfo } from '@playwright/test';
+import type {
+  APIRequestContext,
+  Locator,
+  Page,
+  TestInfo,
+} from '@playwright/test';
 import { CSRF, expect, ownerApi, test } from './fixtures.js';
 import { audioState } from './media-helpers.js';
 import {
@@ -11,6 +16,7 @@ import {
   readingSheet,
   researcher,
 } from './research-tracks-helpers.js';
+import { separateVoices } from './voices-helpers.js';
 
 /*
  * KBC-150 (v2 · Pesquisa com IA — fonte de áudio): the audio source of an answer, every control
@@ -546,4 +552,136 @@ test('KBC-150: the audio source opens on the cited passage, every control works,
     else await phoneFlow(member);
     await member.context().close();
   }
+});
+
+/** Seeks the app's one player, as its bar or the phone's strip would (KBC-154). */
+const seekTo = (page: Page, seconds: number) =>
+  page.locator('[data-media-engine]').evaluate((element, at) => {
+    (element as HTMLMediaElement).currentTime = at;
+  }, seconds);
+
+test('KBC-154: while the track plays past the passage, the lines around and the full transcript follow what is heard', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const owner = await ownerApi();
+  const topic = await publishedTrack(owner, LONG_SPEECH);
+  await owner.dispose();
+  const member = await researcher(page, topic);
+  await answerWithTwoTracks(member);
+  await member
+    .getByRole('link', { name: `Fonte 2, faixa ${TITLE}, aos 41 segundos` })
+    .click();
+  const panel = audioSource(member);
+  await expect(panel.getByRole('heading', { name: TITLE })).toBeFocused();
+  const around = panel.getByRole('list', { name: 'Em volta do trecho' });
+  const heard = around.locator('.line[aria-current="true"]');
+
+  await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
+  await expect.poll(() => playing(member)).toBe(true);
+  await seekTo(member, 5.2);
+  await expect(heard).toContainText('Linha de preenchimento número 1', {
+    timeout: 10_000,
+  });
+  await expect(heard).toBeVisible();
+  await expect(around.locator('.line')).toHaveCount(3);
+  await expect(around).not.toContainText('O ritmo é a lei do pêndulo');
+  // It keeps following: the next line is marked once it is heard.
+  await expect(heard).toContainText('Linha de preenchimento número 2', {
+    timeout: 10_000,
+  });
+  await expect(heard).toBeVisible();
+
+  // The whole transcript marks the line heard and keeps it in view.
+  await panel.getByRole('button', { name: 'Transcrição completa' }).click();
+  const list = panel.getByRole('list', { name: 'Trechos da transcrição' });
+  await expect(list).toBeVisible();
+  await seekTo(member, 29.2);
+  const active = list.locator('.segment.active');
+  await expect(active).toContainText('Linha de preenchimento número 9', {
+    timeout: 10_000,
+  });
+  await expect(active).toBeInViewport();
+  await expect(active.locator('.time')).toHaveAttribute('aria-current', 'true');
+
+  // Paused: the lines around are the passage's again.
+  await panel.getByRole('button', { name: 'Em volta do trecho' }).click();
+  await panel.getByRole('button', { name: 'Pausar' }).first().click();
+  await expect.poll(() => playing(member)).toBe(false);
+  await expect(around.locator('.cited-line')).toContainText(
+    'O ritmo é a lei do pêndulo',
+  );
+});
+
+/**
+ * KBC-151 AC-1: the recording's voices, the one that says the passage at 0:41 named (and
+ * confirmed) in the collection, the one that asks at 0:02 left unnamed.
+ */
+const NAMED = 'Irmã Helena Prado';
+
+async function voicedRecording(
+  owner: APIRequestContext,
+  recordingId: string,
+  topic: string,
+): Promise<void> {
+  await separateVoices(owner, recordingId, {
+    turns: [
+      { start: 0, end: 30, voice: 'SPEAKER_01' },
+      { start: 30, end: 60, voice: 'SPEAKER_02' },
+      { start: 60, end: 90, voice: 'SPEAKER_03' },
+    ],
+  });
+  const read = await owner.get(`/api/v1/media/${recordingId}/transcript`);
+  const { segments } = (await read.json()) as {
+    segments: { startMs: number; voice?: number | null }[];
+  };
+  const voice = segments.find(({ startMs }) => startMs >= 41_000)?.voice;
+  expect(voice, 'the passage has a voice').toEqual(expect.any(Number));
+  const speaker = await owner.post(`/api/v1/topics/${topic}/speakers`, {
+    headers: CSRF,
+    data: { name: NAMED },
+  });
+  expect(speaker.status(), await speaker.text()).toBe(201);
+  const { id } = (await speaker.json()) as { id: string };
+  const named = await owner.put(
+    `/api/v1/media/${recordingId}/voices/${voice}`,
+    {
+      headers: CSRF,
+      data: { version: 1, speakerId: id, audience: false },
+    },
+  );
+  expect(named.status(), await named.text()).toBe(200);
+}
+
+test('KBC-151 AC-1: a researcher who only listens (no media-edit, no media-speakers) sees who speaks in the audio source', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const owner = await ownerApi();
+  const topic = await publishedTrack(owner, SPEECH, (id, collection) =>
+    voicedRecording(owner, id, collection),
+  );
+  await owner.dispose();
+  // The researcher's features: no `media-edit`, no `media-speakers` (KBC-151 BR-0).
+  const member = await researcher(page, topic);
+  await answerWithTwoTracks(member);
+  await member
+    .getByRole('link', { name: `Fonte 2, faixa ${TITLE}, aos 41 segundos` })
+    .click();
+  const panel = audioSource(member);
+  await expect(panel.getByRole('heading', { name: TITLE })).toBeFocused();
+  if (isDesktop(member)) {
+    const who = panel.getByRole('region', { name: /0:41–/ }).locator('.who');
+    await expect(who).toHaveText(NAMED);
+    await expect(who.locator('.dot')).toBeVisible();
+  }
+  const around = panel.getByRole('list', { name: 'Em volta do trecho' });
+  const cited = around.locator('.cited-line');
+  await expect(cited.locator('.who')).toHaveText(NAMED);
+  await expect(cited.locator('.who .dot')).toBeVisible();
+  await expect(around.locator('.line').first().locator('.who')).toHaveText(
+    'Falante não identificado',
+  );
+  await expect(panel).not.toContainText(/Voz \d/);
+  await shot(member, 'who-speaks');
 });

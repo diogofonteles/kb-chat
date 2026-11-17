@@ -279,11 +279,12 @@ export class MediaPlayerPage {
       ? $localize`:@@tracks.entry.appliedOne:1 faixa aplicada`
       : $localize`:@@tracks.entry.applied:${count}:count: faixas aplicadas`;
   });
-  /** Who speaks is for `media-speakers`, and for whoever names the voices (KBC-065 BR-4). */
+  /**
+   * Who speaks is for everyone who may listen (KBC-151 BR-0): the API sends confirmed names
+   * only, and the separation only to whoever names the voices (KBC-065 BR-3, ADR 0032).
+   */
   protected readonly canSeeSpeakers = computed(
-    () =>
-      this.session.me() !== null &&
-      (this.session.can('media-speakers') || this.session.can('media-edit')),
+    () => this.session.me() !== null,
   );
   /** "Mostrar quem fala" (FR-4): on by default. */
   protected readonly speakersOn = computed(
