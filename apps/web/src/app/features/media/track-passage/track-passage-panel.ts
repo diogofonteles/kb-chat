@@ -8,7 +8,9 @@ import {
   afterNextRender,
   afterRenderEffect,
   computed,
+  effect,
   inject,
+  signal,
   input,
   linkedSignal,
   output,
@@ -564,9 +566,23 @@ export class TrackPassagePanel {
 
   /** A bookmark at the passage's start (KBC-042, item 3), on this track. */
   protected mark(): void {
-    this.recue(playbackStartOf({ startMs: this.startMs() }));
-    if (this.ours()) this.bookmarks.markAt(this.startMs());
+    const at = this.startMs();
+    this.recue(playbackStartOf({ startMs: at }));
+    // The store follows the player a beat later: mark once it holds this track, never another.
+    if (this.bookmarks.mediaId() === this.mediaId()) this.bookmarks.markAt(at);
+    else this.pendingMark.set(at);
   }
+
+  /** A mark asked for while the player was still taking this track back. */
+  private readonly pendingMark = signal<number | null>(null);
+  private readonly markWhenLoaded = effect(() => {
+    const at = this.pendingMark();
+    if (at === null || this.bookmarks.mediaId() !== this.mediaId()) return;
+    untracked(() => {
+      this.pendingMark.set(null);
+      this.bookmarks.markAt(at);
+    });
+  });
 
   /** The track's page at the passage, as a link to share (`?t=`, KBC-038 FR-5). */
   protected share(): void {

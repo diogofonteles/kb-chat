@@ -276,6 +276,41 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
     expect(media.calls).toEqual([`load:${ITEM_URL}/stream`, 'play']);
   });
 
+  it('review 2: a mark with another media on the player waits for this track and never lands on the other', async () => {
+    const { http } = await openReady();
+    const engine = TestBed.inject(MediaEngine);
+    await vi.waitFor(() =>
+      http.expectOne(`${ITEM_URL}/bookmarks`).flush({ items: [] }),
+    );
+    engine.load({
+      id: 'other-track',
+      title: 'Outra faixa',
+      src: '/api/v1/media/other-track/stream',
+      durationMs: 600_000,
+    });
+    await vi.waitFor(() =>
+      http
+        .expectOne('/api/v1/media/other-track/bookmarks')
+        .flush({ items: [] }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar este trecho' }));
+    expect(engine.source()?.id).toBe(TRACK_ID);
+    http.expectNone(
+      (request) =>
+        request.method === 'POST' && request.url.includes('other-track'),
+    );
+    await vi.waitFor(() =>
+      http.expectOne(`${ITEM_URL}/bookmarks`).flush({ items: [] }),
+    );
+    const created = await vi.waitFor(() =>
+      http.expectOne(
+        (request) =>
+          request.method === 'POST' && request.url === `${ITEM_URL}/bookmarks`,
+      ),
+    );
+    expect(created.request.body).toMatchObject({ positionMs: 41_300 });
+  });
+
   it('playing: "Pausar", the "tocando" seal, the card in the cover’s colour, the words lit as they are spoken', async () => {
     const { media, http } = await openReady();
     http.expectOne(`${ITEM_URL}/transcript/words?from=1&count=1`).flush({
