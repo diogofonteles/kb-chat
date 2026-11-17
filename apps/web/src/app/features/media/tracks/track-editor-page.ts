@@ -305,6 +305,8 @@ export class TrackEditorPage {
   protected readonly notice = signal('');
   private readonly deletedNotice = signal<DeletedNotice | null>(null);
   protected readonly tab = signal<'tracks' | 'text'>('tracks');
+  /** A phone: the tools beyond "Nova faixa aqui" and the transcript, open (KBC-130). */
+  protected readonly toolsOpen = signal(false);
   private readonly textSpan = signal<TextSpan | null>(null);
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -401,8 +403,13 @@ export class TrackEditorPage {
     const notice = this.deletedNotice();
     return notice?.revision === this.draft.revision() ? notice : null;
   });
+  /** Off while the problems a press found are still there (prepare.js approveBar). */
   protected readonly canApprove = computed(
-    () => this.count() > 0 && !this.draft.busy() && !this.draft.running(),
+    () =>
+      this.count() > 0 &&
+      !this.draft.busy() &&
+      !this.draft.running() &&
+      !(this.showProblems() && this.problems().length > 0),
   );
   protected readonly conflicted = computed(() => {
     const phase = this.draft.phase();
@@ -892,6 +899,12 @@ export class TrackEditorPage {
     } else if (result.kind === 'invalid') this.showProblem(result.problems);
     else if (result.kind === 'stopped') this.say(notDoneText(result.result));
     else this.say(errorMessage(toUiErrorCode(result.error)));
+  }
+
+  protected toggleTools(): void {
+    const open = !this.toolsOpen();
+    this.toolsOpen.set(open);
+    if (!open) this.tab.set('tracks');
   }
 
   /** The list on top, and the focus where the first problem is fixed (FR-8, AC-11). */

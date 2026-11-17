@@ -224,6 +224,12 @@ a.primary,
     display: none;
   }
 
+  /* While the AI proposes, a phone shows its stage and the tracks arriving (prepare.js
+     "Faixas chegando"): the voices wait for the editor's "Nomes das vozes". */
+  .ai-at-work app-preparation-voices {
+    display: none;
+  }
+
   .result {
     gap: 10px;
   }

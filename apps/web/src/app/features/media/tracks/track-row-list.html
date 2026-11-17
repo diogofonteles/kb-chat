@@ -12,6 +12,8 @@
       class="row"
       [class.selected]="row.selected"
       [class.flawed]="row.warnings.length > 0"
+      [class.open]="row.open"
+      [class.editing]="row.selected && !readOnly()"
       [attr.data-hue]="row.hue"
     >
       <button
@@ -93,6 +95,11 @@
             <span class="field-name" i18n="@@tracks.field.asker"
               >Quem pergunta</span
             >
+            <span
+              class="dot"
+              aria-hidden="true"
+              [attr.data-voice]="row.askerTone"
+            ></span>
             <select (change)="choosePerson($event, row.track.id, 'asker')">
               <option value="" i18n="@@tracks.field.nobody">Ninguém</option>
               @for (person of people(); track person.value) {
@@ -109,6 +116,11 @@
             <span class="field-name" i18n="@@tracks.field.answerer"
               >Quem responde</span
             >
+            <span
+              class="dot"
+              aria-hidden="true"
+              [attr.data-voice]="row.answererTone"
+            ></span>
             <select (change)="choosePerson($event, row.track.id, 'answerer')">
               <option value="" i18n="@@tracks.field.nobody">Ninguém</option>
               @for (person of people(); track person.value) {
@@ -131,6 +143,8 @@
         >
           <ui-icon name="more" [size]="18" />
         </app-menu-button>
+      }
+      @if (row.open && !readOnly()) {
         <div class="fields">
           @if (row.closable) {
             <button
@@ -223,7 +237,7 @@
           </div>
         </div>
       }
-      @if (row.selected) {
+      @if (row.selected && (row.open || readOnly())) {
         <app-track-text
           class="text"
           [span]="row.track"

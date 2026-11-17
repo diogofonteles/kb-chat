@@ -303,7 +303,8 @@
 }
 
 @media (min-width: 1024px) {
-  .tabs {
+  .tabs,
+  .more-tools {
     display: none;
   }
 
@@ -515,6 +516,38 @@
 
   .proposals {
     margin-left: 0;
+  }
+
+  .more-tools {
+    margin-left: auto;
+  }
+
+  .more-tools ui-icon {
+    transition: transform 120ms ease;
+  }
+
+  .toolbar.open .more-tools ui-icon {
+    transform: rotate(-90deg);
+  }
+
+  /* The frame's order (mWave, then mTkList): the wave's card, the problems, the list. */
+  .main-column > .problems {
+    order: 1;
+  }
+
+  .main-column > .tabs,
+  .main-column > .column {
+    order: 2;
+  }
+
+  .body:not(.tools-open) .voice-names {
+    display: none;
+  }
+
+  .toolbar:not(.open) .tool:not(.more-tools),
+  .toolbar:not(.open) .nudges,
+  .toolbar:not(.open) + .tabs {
+    display: none;
   }
 
   .none {

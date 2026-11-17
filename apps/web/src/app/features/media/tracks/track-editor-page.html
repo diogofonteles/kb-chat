@@ -240,7 +240,7 @@
         </a>
       </div>
     } @else {
-      <div class="body">
+      <div class="body" [class.tools-open]="toolsOpen()">
         <div class="main-column">
           @if (offlineKept() === true) {
             <p class="banner" role="status" i18n="@@tracks.offline">
@@ -390,6 +390,7 @@
 
           <div
             class="toolbar"
+            [class.open]="toolsOpen()"
             role="group"
             aria-label="Edição"
             i18n-aria-label="@@tracks.tools"
@@ -497,6 +498,20 @@
                 </button>
               </span>
             }
+            <!-- A phone keeps "Nova faixa aqui" and "Propor com IA" in sight (prepare.js mWave):
+                 the other tools and the transcript open from this button. -->
+            <button
+              uiIconButton
+              type="button"
+              class="tool more-tools"
+              aria-label="Mais ferramentas, transcrição e vozes"
+              i18n-aria-label="@@tracks.moreTools"
+              aria-controls="track-tools-more"
+              [attr.aria-expanded]="toolsOpen()"
+              (click)="toggleTools()"
+            >
+              <ui-icon name="chevLeft" [size]="18" />
+            </button>
             @if (canPropose()) {
               <app-track-proposals
                 class="proposals"
@@ -511,6 +526,7 @@
             }
           </div>
           <div
+            id="track-tools-more"
             class="tabs"
             role="group"
             aria-label="Faixas e transcrição"

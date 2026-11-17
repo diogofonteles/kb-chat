@@ -1,7 +1,7 @@
 /* The tracks as a table (KBC-130, prepare.js tkHead / tkRow): number, title in its field,
    start – end, length, who asks and who answers in chips, ⋯. The selected row is lit and
    edits in place (its title, its people, its menu); what the frame has no column for
-   (type, level, the listening buttons) opens under it, with the track's text. */
+   (type, level, the listening buttons, the track's text) opens under it from ⋯. */
 :host {
   --cols: 24px minmax(0, 1fr) 130px 56px 200px 18px;
   display: block;
@@ -250,21 +250,72 @@
   min-width: 0;
 }
 
+/* Who asks and who answers: a chip with its voice's dot, as on the other rows (tkRow). */
 .person-field {
-  flex: 1;
+  position: relative;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
+.person-field .dot {
+  position: absolute;
+  top: 50%;
+  left: var(--space-3);
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-text-muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.person-field .dot[data-voice='1'] {
+  background: var(--color-voice-1);
+}
+
+.person-field .dot[data-voice='2'] {
+  background: var(--color-voice-2);
+}
+
+.person-field .dot[data-voice='3'] {
+  background: var(--color-voice-3);
+}
+
+.person-field .dot[data-voice='4'] {
+  background: var(--color-voice-4);
+}
+
+.person-field .dot[data-voice='5'] {
+  background: var(--color-voice-5);
+}
+
+/* The fields cover the row's own title and chips; those step aside under them. */
+.editing .people,
+.editing .name-box {
+  visibility: hidden;
+}
+
 .person-field select {
-  width: 100%;
+  width: auto;
+  max-width: 120px;
   min-height: 26px;
-  padding: 0 var(--space-2);
+  padding: 0 var(--space-3) 0 calc(var(--space-3) + 14px);
+  overflow: hidden;
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--color-surface-muted);
   color: var(--color-text);
   font: inherit;
   font-size: var(--text-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  appearance: none;
+}
+
+.person-field select:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
 }
 
 .more {
@@ -420,6 +471,7 @@
     min-height: 0;
     padding: 0;
     background: none;
+    line-height: 1.3;
     font-size: var(--text-item);
     font-weight: 700;
   }
@@ -431,6 +483,12 @@
   .range {
     grid-area: range;
     font-size: var(--text-xs);
+    line-height: 1.3;
+  }
+
+  /* On a card the title is read, not edited, until the details open. */
+  .editing:not(.open) .name-box {
+    visibility: visible;
   }
 
   .length {
@@ -449,6 +507,12 @@
     grid-area: more;
   }
 
+  /* The card stays one title and its times (mTkList): the fields wait in the details. */
+  .row:not(.open) .field.title.inline,
+  .row:not(.open) .people-fields {
+    display: none;
+  }
+
   .field.title.inline {
     grid-column: 1 / -1;
     grid-row: 2;
@@ -462,6 +526,10 @@
     grid-column: 1 / -1;
     grid-row: 3;
     padding-top: var(--space-2);
+  }
+
+  .person-field select {
+    max-width: none;
   }
 
   .person-field select,
