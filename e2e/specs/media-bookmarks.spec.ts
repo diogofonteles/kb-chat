@@ -212,7 +212,11 @@ test('FR-5: "Meus marcadores" opens the media playing from the bookmark', async 
 }) => {
   await seed(page, [30_000]);
   await page.goto('/midia');
-  await page.getByRole('link', { name: 'Meus marcadores' }).click();
+  // The media page's own link (Sua biblioteca pins one too, KBC-125).
+  await page
+    .getByRole('main')
+    .getByRole('link', { name: 'Meus marcadores' })
+    .click();
   await page
     .getByRole('link', {
       name: `${lecture.title} 0:30, tocar daqui`,

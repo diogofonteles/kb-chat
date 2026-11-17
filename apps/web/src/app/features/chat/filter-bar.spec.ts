@@ -5,7 +5,7 @@ import { aTopic } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
 import { ChatStore } from './chat-store.js';
 import { FilterBar } from './filter-bar.js';
-import { toFacetGroups } from './filter-model.js';
+import { draftResultCount, toFacetGroups } from './filter-model.js';
 
 const FACETS: ResultFacets = {
   concepts: Array.from({ length: 14 }, (_, i) => ({
@@ -170,7 +170,7 @@ describe('FilterBar focus', () => {
 });
 
 describe('FilterBar (mobile sheet)', () => {
-  it('collects choices in a draft and applies them only on Aplicar', async () => {
+  it('collects choices in a draft and applies them only on "Ver resultados"', async () => {
     const view = await renderBar();
     fireEvent.click(
       screen.getByText('Filtros').closest('button') as HTMLButtonElement,
@@ -182,7 +182,8 @@ describe('FilterBar (mobile sheet)', () => {
     );
     await view.fixture.whenStable();
     expect(view.filtersChange).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+    // A subject: a document has several, so the counts on screen cannot tell how many.
+    fireEvent.click(screen.getByRole('button', { name: 'Ver resultados' }));
     expect(view.filtersChange).toHaveBeenCalledWith({
       ...NO_FILTERS,
       concepts: ['Assunto 1'],
@@ -380,5 +381,59 @@ describe('FilterBar tracks per subject (KBC-070 BR-4)', () => {
     expect(withTracks(2, 0)).toBe('2 faixas');
     expect(withTracks(0)).toBe('12');
     expect(withTracks(undefined)).toBe('12');
+  });
+});
+
+describe('draftResultCount (KBC-126 FR-3)', () => {
+  const facets = {
+    concepts: [],
+    genres: [
+      { value: 'article_or_essay', count: 2 },
+      { value: 'talk_or_interview', count: 1 },
+    ],
+    depths: [],
+    relevances: [],
+    authorships: [],
+    topics: [],
+  } as unknown as ResultFacets;
+
+  it('is the total while unchanged and the sum of the chosen single-valued options', () => {
+    expect(
+      draftResultCount({
+        facets,
+        applied: NO_FILTERS,
+        draft: NO_FILTERS,
+        total: 3,
+      }),
+    ).toBe(3);
+    expect(
+      draftResultCount({
+        facets,
+        applied: NO_FILTERS,
+        draft: { ...NO_FILTERS, genres: ['article_or_essay'] },
+        total: 3,
+      }),
+    ).toBe(2);
+  });
+
+  it('cannot tell for subjects, for two facets at once or for an emptied facet', () => {
+    const args = { facets, applied: NO_FILTERS, total: 3 };
+    expect(
+      draftResultCount({ ...args, draft: { ...NO_FILTERS, concepts: ['x'] } }),
+    ).toBeNull();
+    expect(
+      draftResultCount({
+        ...args,
+        draft: { ...NO_FILTERS, genres: ['article_or_essay'], depths: [1] },
+      }),
+    ).toBeNull();
+    expect(
+      draftResultCount({
+        facets,
+        applied: { ...NO_FILTERS, genres: ['article_or_essay'] },
+        draft: NO_FILTERS,
+        total: 2,
+      }),
+    ).toBeNull();
   });
 });

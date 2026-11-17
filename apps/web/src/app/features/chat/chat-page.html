@@ -1,11 +1,22 @@
-<div class="shell">
+<div
+  class="app-shell"
+  [class.desktop]="desktop()"
+  [class.collapsed]="collapsed()"
+  [class.with-player]="playerShown()"
+>
   @if (desktop()) {
-    <aside
-      class="sidebar"
-      aria-label="Lateral"
-      i18n-aria-label="@@page.sidebar"
-    >
-      <app-sidebar (acted)="sidebarActed($event)" />
+    <app-top-bar
+      class="top"
+      (searched)="globalSearch($event)"
+      (researchRequested)="openResearch()"
+      (homeRequested)="goHome()"
+    />
+    <aside class="library" aria-labelledby="your-library-title">
+      <app-sidebar
+        [collapsed]="collapsed()"
+        (collapseToggled)="toggleCollapsed()"
+        (acted)="sidebarActed($event)"
+      />
     </aside>
   } @else {
     <!-- The backdrop click only adds a pointer way out: the modal <dialog> already closes on Escape. -->
@@ -20,47 +31,52 @@
     >
       <div class="drawer-body">
         <button
+          uiIconButton="circle"
+          [size]="36"
           type="button"
           class="drawer-close"
           aria-label="Fechar menu"
           i18n-aria-label="@@page.closeMenu"
           (click)="closeMenu()"
         >
-          ×
+          <ui-icon name="close" [size]="22" />
         </button>
-        <app-sidebar (acted)="sidebarActed($event)" />
+        <app-sidebar [mobile]="true" (acted)="sidebarActed($event)" />
       </div>
     </dialog>
   }
   <div
     class="layout"
-    [class.with-panel]="panelOpen()"
+    [class.with-panel]="panelOpen() || rightPanel.content() !== null"
     [class.wide-panel]="track() !== null"
   >
     <main
       class="conversation"
+      [style.--tint]="tint()"
       [class.covered]="panelOpen()"
       [class.media]="onMedia()"
       [class.empty]="isEmpty() && !onMedia()"
       [attr.inert]="covered() ? '' : null"
     >
       <p class="visually-hidden" aria-live="polite">{{ queue.said() }}</p>
-      <header class="topbar">
+      <header #pageHeader class="topbar">
         @if (!desktop()) {
           <button
             #menuButton
             type="button"
             class="menu"
             aria-haspopup="dialog"
+            aria-label="Menu"
+            i18n-aria-label="@@page.menuButton"
             (click)="openMenu()"
           >
-            <span aria-hidden="true">☰</span>&ngsp;<span
-              i18n="@@page.menuButton"
-              >Menu</span
-            >
+            <ui-avatar
+              [name]="me()?.name || me()?.email || ''"
+              [picture]="me()?.picture"
+              [size]="32"
+            />
           </button>
         }
-        <span class="brand" aria-hidden="true"></span>
         @if (topic(); as current) {
           <h1 class="topic">
             {{ current.title }}
@@ -94,140 +110,35 @@
             (changed)="changeView($event)"
           />
         }
-        <!-- A new tab: the shell would swap this conversation for the public page (KBC-032). -->
-        <a
-          class="help"
-          href="/tutorial"
-          target="_blank"
-          rel="noopener"
-          aria-label="Como usar a Nova Alexandria (abre em nova aba)"
-          i18n-aria-label="@@page.helpLabel"
-        >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-          >
-            <circle cx="12" cy="12" r="9.5" />
-            <path d="M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.8-.9 1.4v.6" />
-            <circle cx="12" cy="17" r="0.6" fill="currentColor" />
-          </svg>
-          <span class="help-text" i18n="@@page.help">Como usar</span>
-        </a>
       </header>
 
       <router-outlet />
       @if (!onMedia()) {
         <section
           class="thread"
+          [class.search-page]="searchPage()"
           aria-label="Conversa"
           i18n-aria-label="@@page.thread"
         >
           @if (isEmpty()) {
-            <div class="welcome">
-              @if (topicNotice()) {
-                <p class="topic-notice" role="status">{{ topicNotice() }}</p>
-              }
-              @if (master() && store.topicSlug(); as slug) {
-                <app-pending-transcriptions class="pending" [topic]="slug" />
-              }
-              @if (researching()) {
-                <p class="greeting" i18n="@@page.greetingResearch">
-                  O que você quer pesquisar no acervo?
-                </p>
-              } @else {
-                <p class="greeting" i18n="@@page.greeting">
-                  O que você quer estudar hoje?
-                </p>
-              }
-              @if (topicsError()) {
-                <div class="notice" role="alert">
-                  <p>{{ topicsError() }}</p>
-                  <button
-                    type="button"
-                    class="secondary"
-                    (click)="reloadTopics()"
-                    i18n="@@page.retry"
-                  >
-                    Tentar de novo
-                  </button>
-                </div>
-              } @else if (noTopics()) {
-                @if (!guest()) {
-                  <p class="notice" role="alert" i18n="@@page.noTopics">
-                    Nenhum acervo kb encontrado no vault configurado (KB_VAULT).
-                  </p>
-                } @else {
-                  <p class="notice" role="alert" i18n="@@page.noTopicsGranted">
-                    Nenhum acervo foi liberado para você ainda; peça a um
-                    master.
-                  </p>
-                }
-              } @else {
-                @if (emptyTopic()) {
-                  <!-- A collection created on the screen: its texts come from the vault later (ADR 0028). -->
-                  <p class="notice" i18n="@@page.emptyTopic">
-                    Este acervo ainda não tem textos para buscar. Eles aparecem
-                    aqui assim que forem adicionados.
-                  </p>
-                }
-                <p class="hint">
-                  @if (researching()) {
-                    <span i18n="@@page.hintResearch"
-                      >A IA busca, lê os documentos e responde com as
-                      fontes.</span
-                    >
-                  } @else {
-                    <span i18n="@@page.hint"
-                      >Pergunte em linguagem natural.</span
-                    >
-                  }
-                  <span class="hint-keyboard" i18n="@@page.hintKeyboard"
-                    >Dica: pressione / para escrever.</span
-                  >
-                </p>
-                @if (suggestions().length > 0) {
-                  <div
-                    class="suggestions"
-                    role="group"
-                    aria-labelledby="suggestions-title"
-                  >
-                    <p
-                      id="suggestions-title"
-                      class="suggestions-title"
-                      i18n="@@page.suggestions"
-                    >
-                      Comece por um assunto:
-                    </p>
-                    <ul>
-                      @for (
-                        suggestion of suggestions();
-                        track suggestion.concept
-                      ) {
-                        <li>
-                          <button
-                            type="button"
-                            class="suggestion"
-                            (click)="askAbout(suggestion.concept)"
-                          >
-                            {{ suggestion.concept }}
-                          </button>
-                        </li>
-                      }
-                    </ul>
-                  </div>
-                }
-              }
-            </div>
+            <app-conversation-home
+              [researching]="researching()"
+              [topicNotice]="topicNotice()"
+              [topicsError]="topicsError()"
+              [noTopics]="noTopics()"
+              [guest]="guest()"
+              [emptyTopic]="emptyTopic()"
+              [pendingTopic]="master() ? store.topicSlug() : null"
+              [subjects]="suggestions()"
+              (subjectChosen)="askAbout($event)"
+              (reloadTopics)="reloadTopics()"
+              (acted)="sidebarActed($event)"
+            />
           }
           @if (researching()) {
             <app-research-thread
               [turns]="research.turns()"
+              [openDocumentId]="openSourceId()"
               (opened)="openSource($event)"
               (trackOpened)="openTrack($event)"
               (stopped)="stopResearch()"
@@ -272,10 +183,6 @@
           />
         </div>
       }
-      <app-mini-player
-        [aboveComposer]="!onMedia()"
-        [shownElsewhere]="playerInPanel()"
-      />
     </main>
 
     @if (panel(); as doc) {
@@ -286,9 +193,14 @@
         [fallbackTitle]="doc.title"
         [highlight]="doc.question"
         [canGoBack]="store.canGoBack()"
+        [sources]="doc.sources ?? []"
+        [canAskAi]="views.researchAvailable()"
         (closed)="closeDocument()"
         (back)="store.back()"
         (navigated)="store.openWithin($event)"
+        (sourceChosen)="store.switchSource($event)"
+        (documentOpened)="store.leaveSources()"
+        (askedAi)="askAiAbout($event)"
         (trackOpened)="openTrack($event)"
         (conceptSelected)="filterByConcept($event)"
       />
@@ -308,6 +220,38 @@
         (closed)="closeDocument()"
         (back)="store.back()"
       />
+    } @else if (rightPanel.content(); as content) {
+      <aside
+        class="panel right-panel"
+        [class.source]="content.width === 'source'"
+        [attr.aria-label]="content.label"
+      >
+        <ng-container
+          *ngComponentOutlet="content.component; inputs: content.inputs ?? {}"
+        />
+      </aside>
     }
   </div>
+
+  <!--
+    With audio the mini player stays mounted even where the full player shows what plays
+    (no bar row then): its announcer speaks the skips and the sleep timer from any page.
+  -->
+  @if (audio.shown() || !desktop()) {
+    <div class="shell-foot" [class.bare]="fullScreenPlayer()">
+      <app-mini-player
+        class="player"
+        [shownElsewhere]="playerInPanel()"
+        [idle]="audio.collectionHasAudio() && !audio.playing()"
+        [idleLink]="libraryPath()"
+      />
+      @if (!desktop() && !fullScreenPlayer()) {
+        <app-bottom-nav
+          [tabs]="navTabs()"
+          [active]="navActive()"
+          (chosen)="navChosen($event)"
+        />
+      }
+    </div>
+  }
 </div>

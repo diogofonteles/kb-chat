@@ -12,6 +12,7 @@ import type { LibraryItem, LibraryTrack } from '@kb-chat/contracts';
 import { SessionStore } from '@core/auth/session-store.js';
 import { formatDuration } from '@kb-chat/player-core';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
+import { UiIcon } from '@ui/icon.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import { resumeTextOf, stateTextOf } from './library-labels.js';
 
@@ -21,7 +22,7 @@ import { resumeTextOf, stateTextOf } from './library-labels.js';
  */
 @Component({
   selector: 'app-track-group',
-  imports: [RouterLink, AuthorshipBadge, MenuButton],
+  imports: [RouterLink, AuthorshipBadge, MenuButton, UiIcon],
   templateUrl: './track-group.html',
   styleUrl: './track-group.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

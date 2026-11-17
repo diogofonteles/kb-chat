@@ -11,6 +11,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { openMediaFromLibrary } from './shell-helpers.js';
 import {
   aCollection,
   makeMp3,
@@ -24,7 +25,6 @@ import {
  * same file there is refused without a name. Each test makes its own collections (a scale
  * changes what everyone sees in one).
  */
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 const viewport = () => test.info().project.use.viewport ?? null;
 
 const shots = process.env['KBC_SHOTS'];
@@ -79,8 +79,8 @@ async function member(
 
 async function openMedia(page: Page, title: string): Promise<void> {
   await page.goto('/');
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('link', { name: 'Mídia' }).click();
+  // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
+  await openMediaFromLibrary(page);
   await expect(
     page.getByRole('heading', { name: `Mídia — ${title}` }),
   ).toBeVisible();
@@ -202,7 +202,9 @@ test('AC-9: moving her audio to another collection with levels asks for a level 
   });
 
   await ana.goto(`/midia/${audio.id}`);
-  await ana.getByRole('button', { name: 'Editar informações' }).click();
+  // v2 (KBC-129): the page's editing actions are at the top of the player's ⋯.
+  await ana.getByRole('button', { name: 'Mais opções' }).click();
+  await ana.getByRole('menuitem', { name: 'Editar informações' }).click();
   const editor = ana.getByRole('dialog', { name: 'Editar informações' });
   await expect(
     editor.getByRole('group', { name: 'Nível' }).getByRole('radio', {

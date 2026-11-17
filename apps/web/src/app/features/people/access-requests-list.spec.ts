@@ -122,26 +122,29 @@ describe('Solicitações pendentes (KBC-014 FR-4, T9)', () => {
 
   it('refuses after a confirmation that names the 24 hours, with focus on it', async () => {
     const { http, fixture } = await renderAsMaster([ana]);
+    const rowRefuse = () =>
+      within(requestRow('Ana Lima')).getByRole('button', { name: 'Recusar' });
+    const modal = () =>
+      screen.getByRole('dialog', {
+        name: 'Recusar a solicitação de Ana Lima?',
+      });
 
-    fireEvent.click(
-      within(requestRow('Ana Lima')).getByRole('button', { name: 'Recusar' }),
-    );
+    fireEvent.click(rowRefuse());
     await fixture.whenStable();
     expect(
-      screen.getByText(/só poderá pedir de novo em 24 horas/),
+      within(modal()).getByText(/só poderá pedir de novo em 24 horas/),
     ).toBeTruthy();
-    const confirm = screen.getByRole('button', { name: 'Recusar' });
+    const confirm = within(modal()).getByRole('button', { name: 'Recusar' });
     expect(document.activeElement).toBe(confirm);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    fireEvent.click(within(modal()).getByRole('button', { name: 'Cancelar' }));
     await fixture.whenStable();
-    expect(document.activeElement).toBe(
-      screen.getByRole('button', { name: 'Recusar' }),
-    );
+    expect(document.activeElement).toBe(rowRefuse());
+    http.expectNone(`/api/v1/access-requests/${ana.id}/refuse`);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Recusar' }));
+    fireEvent.click(rowRefuse());
     await fixture.whenStable();
-    fireEvent.click(screen.getByRole('button', { name: 'Recusar' }));
+    fireEvent.click(within(modal()).getByRole('button', { name: 'Recusar' }));
     http
       .expectOne(`/api/v1/access-requests/${ana.id}/refuse`)
       .flush(null, { status: 204, statusText: 'No Content' });

@@ -1,4 +1,4 @@
-import type { APIRequestContext } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 import { CSRF, expect } from './fixtures.js';
 import { uniqueTag, uploadReady } from './media-helpers.js';
 
@@ -105,4 +105,19 @@ export async function separateVoices(
     headers: CSRF,
   });
   expect(done.status(), await done.text()).toBe(204);
+}
+
+/**
+ * v2 player (KBC-129 FR-3): for who edits, the body is the transcript or the voices, chosen
+ * by the chips "Transcrição" and "Vozes" (the transcript by default on every visit).
+ */
+export async function showView(
+  page: Page,
+  name: 'Vozes' | 'Transcrição',
+): Promise<void> {
+  const chip = page
+    .getByRole('group', { name: 'Ver' })
+    .getByRole('button', { name, exact: true });
+  await chip.click();
+  await expect(chip).toHaveAttribute('aria-pressed', 'true');
 }

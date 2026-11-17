@@ -5,9 +5,9 @@
     [formGroup]="form"
     (submit)="continueToSources($event)"
   >
-    <h4 class="block-title" i18n="@@voiceProfiles.newTitle">
+    <h3 class="block-title" i18n="@@voiceProfiles.newTitle">
       Novo perfil de voz
-    </h4>
+    </h3>
     <div class="field">
       <label
         for="voice-consent-speaker"
@@ -45,13 +45,13 @@
     </fieldset>
 
     <section class="consent" aria-labelledby="consent-text-title">
-      <h5
+      <h4
         id="consent-text-title"
         class="consent-title"
         i18n="@@voiceConsent.textTitle"
       >
         Consentimento específico
-      </h5>
+      </h4>
       @for (paragraph of paragraphs(); track paragraph; let first = $first) {
         <p [class.consent-lead]="first">{{ paragraph }}</p>
       }
@@ -182,9 +182,9 @@
   </form>
 } @else {
   <div class="block">
-    <h4 class="block-title" i18n="@@voiceConsent.sourcesTitle">
+    <h3 class="block-title" i18n="@@voiceConsent.sourcesTitle">
       De quais vozes calcular
-    </h4>
+    </h3>
     <p class="hint" i18n="@@voiceConsent.sourcesHint">
       Só vozes que uma pessoa já nomeou. Prefira trechos limpos de pelo menos
       duas gravações, com 30 segundos de fala ou mais no total.

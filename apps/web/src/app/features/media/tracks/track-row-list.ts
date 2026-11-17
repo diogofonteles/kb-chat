@@ -10,6 +10,7 @@ import {
   output,
   viewChildren,
 } from '@angular/core';
+import { regionHue } from './track-timeline.js';
 import {
   TRACK_KINDS,
   TRACK_TITLE_MAX,
@@ -161,6 +162,7 @@ export class TrackRowList {
     const selectedId = this.selectedId();
     const plain = this.tracks().map(({ track }) => track);
     return this.tracks().map(({ track, ordinal }) => ({
+      hue: regionHue(ordinal),
       track,
       ordinal,
       selected: track.id === selectedId,
@@ -216,6 +218,17 @@ export class TrackRowList {
         target?.nativeElement.focus({ preventScroll: true });
         target?.nativeElement.scrollIntoView({ block: 'center' });
       },
+      { injector: this.injector },
+    );
+  }
+
+  /** The selected row comes into view, the focus left where it is (KBC-130 FR-2). */
+  showRow(): void {
+    afterNextRender(
+      () =>
+        this.rowButtons()
+          .find((one) => one.nativeElement.tabIndex === 0)
+          ?.nativeElement.scrollIntoView({ block: 'nearest' }),
       { injector: this.injector },
     );
   }

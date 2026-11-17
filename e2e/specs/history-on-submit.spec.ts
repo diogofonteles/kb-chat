@@ -12,9 +12,9 @@ const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 async function history(page: Page): Promise<Locator> {
   if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
   const panel = desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
+    ? page.getByRole('complementary', { name: 'Sua biblioteca' })
     : page.getByRole('dialog', { name: 'Menu' });
-  return panel.getByRole('navigation', { name: 'Histórico' });
+  return panel.getByRole('navigation', { name: 'Conversas' });
 }
 
 async function closeMenu(page: Page) {

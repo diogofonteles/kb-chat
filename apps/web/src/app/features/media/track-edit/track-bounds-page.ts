@@ -48,6 +48,7 @@ import {
   type Observable,
 } from 'rxjs';
 import { z } from 'zod';
+import { UiCover, UiIcon } from '@ui/index.js';
 import { MEDIA_POLL_MS } from '../media-polling.js';
 import {
   TrackAudition,
@@ -107,9 +108,13 @@ const timesOf = ({ startMs, endMs }: TrackBoundsRequest): string => {
  */
 @Component({
   selector: 'app-track-bounds-page',
-  imports: [RouterLink, TrackTimeline],
+  imports: [RouterLink, TrackTimeline, UiCover, UiIcon],
   templateUrl: './track-bounds-page.html',
-  styleUrls: ['./track-edit.css', './track-bounds-page.css'],
+  styleUrls: [
+    './track-edit.css',
+    '../preparation/prep-head.css',
+    './track-bounds-page.css',
+  ],
   providers: [TrackAudition],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -177,6 +182,8 @@ export class TrackBoundsPage {
    * version it came from, so a reload can never turn it into a save over someone else's (BR-10).
    */
   private readonly adjusted = signal<Adjustment | null>(null);
+  /** Each move's previous state, so "Desfazer" goes back one step (KBC-130 AC-5). */
+  private readonly history = signal<readonly (Adjustment | null)[]>([]);
   /** The bounds on screen, from the track's until a handle moves them. */
   protected readonly bounds = computed((): TrackBoundsRequest | null => {
     const track = this.current();
@@ -219,6 +226,21 @@ export class TrackBoundsPage {
   protected readonly cutFailed = computed(
     () => this.current()?.cut === 'failed' && !this.sending(),
   );
+  /** A move that is not saved yet: "Não salvo · Desfazer". */
+  protected readonly unsaved = computed(
+    () => this.adjusted() !== null && this.history().length > 0,
+  );
+  /** The start moved from the track's own: it shows in green. */
+  protected readonly startMoved = computed(() => {
+    const track = this.current();
+    const bounds = this.bounds();
+    return !!track && !!bounds && bounds.startMs !== track.startMs;
+  });
+  protected readonly endMoved = computed(() => {
+    const track = this.current();
+    const bounds = this.bounds();
+    return !!track && !!bounds && bounds.endMs !== track.endMs;
+  });
   protected readonly canSave = computed(() => {
     const track = this.current();
     const bounds = this.bounds();
@@ -262,10 +284,20 @@ export class TrackBoundsPage {
     const bounds = this.bounds();
     if (!track || !bounds) return;
     this.saved.set(false);
+    const before = this.adjusted();
+    this.history.update((steps) => [...steps, before]);
     this.adjusted.update((mine) => ({
       version: mine?.version ?? track.version,
       bounds: { ...bounds, [edge === 'start' ? 'startMs' : 'endMs']: ms },
     }));
+  }
+
+  /** Back to the bounds before the last move. */
+  protected undo(): void {
+    const steps = this.history();
+    if (steps.length === 0) return;
+    this.history.set(steps.slice(0, -1));
+    this.adjusted.set(steps[steps.length - 1] ?? null);
   }
 
   protected nudge(direction: 1 | -1): void {
@@ -303,6 +335,7 @@ export class TrackBoundsPage {
   protected useTheirs(theirs: TrackEditView): void {
     this.adopt(theirs);
     this.adjusted.set(null);
+    this.history.set([]);
   }
 
   protected saveOver(theirs: TrackEditView): void {
@@ -326,6 +359,7 @@ export class TrackBoundsPage {
         this.sending.set(false);
         this.saved.set(true);
         this.adjusted.set(null);
+        this.history.set([]);
         this.view.set(view);
       },
       error: (err: unknown) => this.refused(err),

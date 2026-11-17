@@ -1,35 +1,13 @@
-<main class="tutorial" aria-labelledby="tutorial-title">
+<app-reading-page
+  titleId="tutorial-title"
+  [heading]="title"
+  [meta]="intro"
+  path="/tutorial"
+  [sections]="sections"
+  [other]="other"
+  indexId="sumario"
+>
   <article class="guide">
-    <a class="brand" routerLink="/" i18n="@@tutorial.brand">Nova Alexandria</a>
-    <h1 id="tutorial-title" i18n="@@tutorial.title">
-      Como usar a Nova Alexandria
-    </h1>
-    <p class="lead" i18n="@@tutorial.intro">
-      Um passo a passo curto, com imagens das telas, de tudo o que dá para fazer
-      na Nova Alexandria: entrar, buscar nos documentos, pesquisar com ajuda da
-      inteligência artificial (IA) e ajustar o app do seu jeito. Leia na ordem
-      ou pule direto para o que precisa. Nas imagens, as letras (A, B, C…)
-      marcam o que a legenda logo abaixo explica.
-    </p>
-
-    <nav class="toc" aria-labelledby="sumario">
-      <h2 id="sumario" tabindex="-1" i18n="@@tutorial.tocTitle">
-        Nesta página
-      </h2>
-      <ol>
-        @for (section of sections; track section.id) {
-          <li>
-            <a
-              routerLink="/tutorial"
-              [fragment]="section.id"
-              (click)="showSection(section.id)"
-              >{{ section.title }}</a
-            >
-          </li>
-        }
-      </ol>
-    </nav>
-
     <!-- 1. O que é -->
     <section aria-labelledby="o-que-e">
       <h2 id="o-que-e" tabindex="-1" i18n="@@tutorial.about.title">
@@ -992,4 +970,4 @@
       <a routerLink="/privacidade" i18n="@@tutorial.privacy">Privacidade</a>
     </footer>
   </article>
-</main>
+</app-reading-page>

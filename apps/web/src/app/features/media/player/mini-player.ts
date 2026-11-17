@@ -12,6 +12,9 @@ import {
   toSignal,
 } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { UiButton, UiIconButton } from '@ui/button.js';
+import { UiCover } from '@ui/cover.js';
+import { UiIcon } from '@ui/icon.js';
 import { formatClock, positionToSecond } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
 import { MediaEngine } from '@core/media/media-engine.js';
@@ -22,6 +25,8 @@ import { ProgressSaver } from '@core/media/progress-saver.js';
 import { SleepTimerService } from '@core/media/sleep-timer.js';
 import { filter, map } from 'rxjs';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
+import { RightPanel } from '@features/shell/right-panel.js';
+import { NowPlayingPanel } from './now-playing-panel.js';
 import { PlayerShortcuts } from './player-shortcuts.js';
 
 /**
@@ -32,7 +37,7 @@ import { PlayerShortcuts } from './player-shortcuts.js';
  */
 @Component({
   selector: 'app-mini-player',
-  imports: [RouterLink],
+  imports: [RouterLink, UiButton, UiCover, UiIcon, UiIconButton],
   templateUrl: './mini-player.html',
   styleUrl: './mini-player.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -74,10 +79,24 @@ export class MiniPlayer {
 
   /** On phones, above the question box (screens.md T15); else at the foot. */
   readonly aboveComposer = input(false);
+  /**
+   * Nothing loaded but the collection in use has audio (the v2 audio rule, KBC-125 BR-2):
+   * the bar stays, saying so.
+   */
+  readonly idle = input(false);
+  /** Where "Escolha um áudio" leads (the library), when the person has it. */
+  readonly idleLink = input<string | null>(null);
+  /** The idle link names the page it opens: "Biblioteca", or "Mídia" without the library. */
+  protected readonly idleInMedia = computed(() => this.idleLink() === '/midia');
   /** A media the full player shows elsewhere on screen (the reading panel, KBC-039). */
   readonly shownElsewhere = input<string | null>(null);
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly rightPanel = inject(RightPanel);
+  /** "Tocando agora" is in the shell's right panel (KBC-129 FR-2). */
+  protected readonly nowPlayingOpen = computed(
+    () => this.rightPanel.content()?.component === NowPlayingPanel,
+  );
 
   protected readonly skipBack = computed(
     () => this.preferences.value().skipBackSec,
@@ -86,6 +105,18 @@ export class MiniPlayer {
     () =>
       $localize`:@@player.backBy:Voltar ${this.skipBack()}:seconds: segundos`,
   );
+
+  protected readonly skipForward = computed(
+    () => this.preferences.value().skipForwardSec,
+  );
+  protected readonly forwardLabel = computed(
+    () =>
+      $localize`:@@player.forwardBy:Avançar ${this.skipForward()}:seconds: segundos`,
+  );
+  protected readonly total = computed(() => {
+    const { durationMs } = this.engine.playback();
+    return durationMs ? formatClock(durationMs) : '';
+  });
 
   protected readonly source = this.engine.source;
   /** The track playing, under the recording's title (KBC-066 FR-9). */
@@ -147,8 +178,25 @@ export class MiniPlayer {
     this.engine.skip(-this.preferences.skipBackMs());
   }
 
+  protected forward(): void {
+    this.engine.skip(this.preferences.skipForwardMs());
+  }
+
   protected retry(): void {
     this.engine.retry();
+  }
+
+  /** The transcript button: opens "Tocando agora" beside any screen, or closes it. */
+  protected toggleNowPlaying(): void {
+    if (this.nowPlayingOpen()) {
+      this.rightPanel.close();
+      return;
+    }
+    this.rightPanel.open({
+      component: NowPlayingPanel,
+      width: 'narrow',
+      label: $localize`:@@mini.nowPlaying:Tocando agora`,
+    });
   }
 
   /**
@@ -159,7 +207,8 @@ export class MiniPlayer {
     this.engine.pause();
     if (!this.gone()) this.saver.saveNow();
     this.engine.unload();
-    const main = this.host.nativeElement.closest('main');
+    if (this.nowPlayingOpen()) this.rightPanel.close();
+    const main = this.host.nativeElement.ownerDocument.querySelector('main');
     if (main) {
       main.tabIndex = -1;
       main.focus();

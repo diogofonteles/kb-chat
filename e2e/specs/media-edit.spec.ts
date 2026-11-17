@@ -9,13 +9,13 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { openMediaFromLibrary } from './shell-helpers.js';
 import { uniqueTag, uploadReady, useTheme } from './media-helpers.js';
 
 /** KBC-050: "Editar informações" in the list (T14), the library (T16) and the page (T15). */
 
 const UPLOADER = ['search', 'media', 'media-upload'] as const;
 const SEEN = ['hermetismo', 'alquimia'];
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 const viewport = () => test.info().project.use.viewport ?? null;
 
 async function personPage(
@@ -31,8 +31,8 @@ async function personPage(
 
 async function openMedia(page: Page) {
   await page.goto('/');
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('link', { name: 'Mídia' }).click();
+  // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
+  await openMediaFromLibrary(page);
   await expect(
     page.getByRole('heading', { name: /Mídia — Hermetismo/ }),
   ).toBeVisible();
@@ -98,16 +98,16 @@ test('T15: the page edits too, and the mini-player follows the title while it pl
   await page.goto(`/midia/${id}`);
   await page.getByRole('button', { name: 'Tocar', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Pausar' })).toBeVisible();
-  await page.getByRole('button', { name: 'Editar informações' }).click();
+  // v2 (KBC-129): the page's editing actions are at the top of the player's ⋯.
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  await page.getByRole('menuitem', { name: 'Editar informações' }).click();
   const renamed = `Novo ${uniqueTag()}`;
   await titleField(page).fill(renamed);
   await saveButton(page).click();
   await expect(page.getByRole('heading', { name: renamed })).toBeVisible();
   await expect(page).toHaveTitle(new RegExp(renamed));
   await expect(page.getByRole('button', { name: 'Pausar' })).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: 'Editar informações' }),
-  ).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Mais opções' })).toBeFocused();
 });
 
 test('AC-2: moved, it leaves the list with the notice and the link, and keeps the position', async ({
@@ -154,6 +154,11 @@ test('AC-3: whoever did not send it sees no "Editar informações"', async ({
   await expect(other.getByRole('heading', { name: title })).toBeVisible();
   await expect(
     other.getByRole('button', { name: 'Editar informações' }),
+  ).toBeHidden();
+  await other.getByRole('button', { name: 'Mais opções' }).click();
+  await expect(other.getByRole('menuitem').first()).toBeVisible();
+  await expect(
+    other.getByRole('menuitem', { name: 'Editar informações' }),
   ).toBeHidden();
 });
 

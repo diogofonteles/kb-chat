@@ -11,6 +11,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { openMediaFromLibrary } from './shell-helpers.js';
 import {
   makeHeavyWav,
   makeLongMp3,
@@ -25,12 +26,10 @@ const EDITOR: Feature[] = ['search', 'media', 'media-upload', 'media-edit'];
 const PART_BYTES = 8 * 1024 ** 2;
 const UPLOAD_URL = '**/api/v1/media/*/upload';
 
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
-
 async function openPanel(page: Page): Promise<Locator> {
   await page.goto('/');
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('link', { name: 'Mídia' }).click();
+  // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
+  await openMediaFromLibrary(page);
   await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
   return page.getByRole('dialog', { name: 'Enviar áudio' });
 }

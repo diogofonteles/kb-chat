@@ -92,3 +92,13 @@ O player, o mini player, a Biblioteca de mídia, a Fila de processamento, os Meu
 - **D2:** "Escuro (revisado)" vira o tema padrão de quem não escolheu um tema. Claro, Escuro e Esotérico continuam como opções e recebem os mesmos componentes.
 - **D3:** os textos fora da captura listados em `figma-recreation/redesign/REPORT.md` entram como estão desenhados. O dono pode trocá-los na revisão de cada item.
 - **D4:** a página `v2 ★ Telas-chave redesenhadas` não é referência. Vale a `v2 · Telas-chave`.
+- **D5 (dono, 16/11/2026, a partir das capturas do trabalho em andamento; vale sobre o Figma onde conflitar):**
+  1. **Menus nunca cortados.** Todo menu, popover, dica e lista de seleção sobe para a camada de cima (top layer, API de popover) ancorado no seu gatilho. Ele vira para cima quando não cabe embaixo e se desloca para dentro da tela em 1440 e em 390. Nenhum contêiner (a lateral, um painel com rolagem, a folha do celular) pode cortá-lo ou cobri-lo. No celular, o menu continua virando folha de baixo. Exemplo: o "+ Criar" (Nova conversa, Novo acervo) da Sua biblioteca, que antes saía cortado pela lateral.
+  2. **Sua biblioteca em seções que não se misturam.** A lista tem seções separadas, cada uma com título, contagem e seta para recolher:
+     - **Fixados:** Biblioteca, Meus marcadores e Fila de processamento, só quando o acervo tem áudio (regra de áudio).
+     - **Acervos:** com as capas. Os sub-acervos aparecem como árvore visível, com recuo, linha-guia e seta no acervo pai.
+     - **Conversas:** linhas compactas de texto, sem capa, com o ícone do tipo (✦ para a Pesquisa com IA, lupa para a Busca) e o acervo como texto secundário. Ficam agrupadas por recência: Hoje, Últimos 7 dias, Mais antigas.
+     - **Documentos:** só com o chip Documentos ligado.
+
+     Os chips (Acervos, Áudios, Conversas, Documentos) filtram para uma só seção. Uma conversa nunca se parece com um acervo. Enquanto a pessoa digita na busca da biblioteca, as seções e os ramos recolhidos se abrem para mostrar o que bate. O que ela recolheu fica guardado só neste navegador.
+

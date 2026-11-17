@@ -1,230 +1,351 @@
 @let who = person();
-@if (isMaster()) {
-  <p class="note" i18n="@@people.masterNote">
-    Masters veem todos os acervos e usam todas as funcionalidades.
-  </p>
-}
+<div
+  class="tabs"
+  uiTablist
+  role="tablist"
+  aria-label="Partes do editor"
+  i18n-aria-label="@@people.editorTabs"
+>
+  <button
+    type="button"
+    role="tab"
+    class="tab"
+    [id]="'tab-access-' + who.id"
+    [attr.aria-selected]="tab() === 'access'"
+    [attr.aria-controls]="'panel-access-' + who.id"
+    [attr.tabindex]="tab() === 'access' ? 0 : -1"
+    (click)="tab.set('access')"
+    i18n="@@people.tabAccess"
+  >
+    Acessos
+  </button>
+  <button
+    type="button"
+    role="tab"
+    class="tab"
+    [id]="'tab-ai-' + who.id"
+    [attr.aria-selected]="tab() === 'ai'"
+    [attr.aria-controls]="'panel-ai-' + who.id"
+    [attr.tabindex]="tab() === 'ai' ? 0 : -1"
+    (click)="tab.set('ai')"
+    i18n="@@people.tabAi"
+  >
+    IA e limites
+  </button>
+</div>
 
-<fieldset class="group" [disabled]="isMaster()" [attr.aria-busy]="saving()">
-  <legend class="legend" i18n="@@people.collections">Acervos</legend>
-  @for (topic of collections(); track topic.slug) {
-    <label class="check" [class.child]="topic.parent !== null">
-      <input
-        #box
-        type="checkbox"
-        [checked]="topic.checked"
-        [disabled]="topic.inherited"
-        (change)="toggleTopic(topic.slug, box.checked)"
-      />
-      <span
-        >{{ topic.title }}
-        @if (topic.inherited) {
-          <span class="inherited" i18n="@@people.inheritedCollection"
-            >(incluído em {{ topic.parentTitle }})</span
+<!-- Both parts stay drawn (focus while a change saves); only the chosen tab shows. -->
+<div
+  class="panel"
+  role="tabpanel"
+  [id]="'panel-access-' + who.id"
+  [attr.aria-labelledby]="'tab-access-' + who.id"
+  [hidden]="tab() !== 'access'"
+>
+  @if (profiles().length > 0 && !who.isOwner) {
+    <fieldset class="group" [disabled]="busy()">
+      <legend class="legend" i18n="@@people.applyProfileLegend">
+        Aplicar perfil
+      </legend>
+      <div class="actions apply-row">
+        <label class="field">
+          <span i18n="@@people.profile">Perfil</span>
+          <select
+            #profileSelect
+            class="select"
+            name="applyProfile"
+            (change)="chooseProfile(profileSelect.value)"
           >
+            @for (profile of profiles(); track profile.id) {
+              <option
+                [value]="profile.id"
+                [selected]="profile.id === chosenProfile()?.id"
+              >
+                {{ profile.name }}
+              </option>
+            }
+          </select>
+        </label>
+        @if (!confirmingApply()) {
+          <button
+            #applyButton
+            type="button"
+            class="secondary"
+            (click)="askApply()"
+            i18n="@@people.applyProfile"
+          >
+            Aplicar perfil
+          </button>
         }
-      </span>
-    </label>
-    @if (levelRows().get(topic.slug); as scale) {
-      <div class="field level-field">
-        <label
-          [for]="'level-' + who.id + '-' + scale.collection"
-          i18n="@@people.levelIn"
-          >Nível em {{ scale.title }}</label
-        >
-        <select
-          #levelSelect
-          class="select"
-          [id]="'level-' + who.id + '-' + scale.collection"
-          [disabled]="busy()"
-          (change)="chooseLevel(scale.collection, levelSelect.value)"
-        >
-          @for (level of scale.choices; track level.id) {
-            <option [value]="level.id" [selected]="level.id === scale.current">
-              {{ level.code }}
-            </option>
-          }
-        </select>
       </div>
-    }
-  } @empty {
-    <p class="note" i18n="@@people.noCollections">Nenhum acervo no vault.</p>
+      @if (confirmingApply()) {
+        <div class="actions">
+          <p class="confirm" i18n="@@people.confirmApply">
+            Aplicar o perfil "{{ chosenProfile()?.name }}" a {{ who.email }}?
+            Papel, acervos, funcionalidades e IA mudam; as preferências que a
+            pessoa já salvou continuam.
+          </p>
+          @for (stale of staleOfChosen(); track stale.id) {
+            <p
+              class="confirm field-error"
+              [id]="stale.id"
+              i18n="@@people.applyStaleLevel"
+            >
+              <span aria-hidden="true">⚠</span> Em {{ stale.title }}, o nível
+              {{ stale.level }} não existe mais; quem tiver este perfil aplicado
+              fica no nível mais baixo.
+            </p>
+          }
+          <button
+            #applyConfirmButton
+            type="button"
+            class="secondary"
+            [attr.aria-describedby]="applyDescribedBy()"
+            (click)="confirmApply()"
+            i18n="@@people.applyConfirm"
+          >
+            Aplicar
+          </button>
+          <button
+            type="button"
+            class="link"
+            (click)="cancelApply()"
+            i18n="@@people.cancel"
+          >
+            Cancelar
+          </button>
+        </div>
+      }
+    </fieldset>
   }
-</fieldset>
 
-@if (scales().length > 0 && isMaster()) {
-  <p class="note" i18n="@@people.mastersAllLevels">
-    Masters veem todos os níveis.
-  </p>
-}
+  @if (isMaster()) {
+    <p class="note" i18n="@@people.masterNote">
+      Masters veem todos os acervos e usam todas as funcionalidades.
+    </p>
+  }
 
-<fieldset class="group" [disabled]="isMaster()" [attr.aria-busy]="saving()">
-  <legend class="legend" i18n="@@people.features">Funcionalidades</legend>
-  @for (feature of features(); track feature.id) {
-    <label class="check">
+  <fieldset class="group" [disabled]="isMaster()" [attr.aria-busy]="saving()">
+    <legend class="legend" i18n="@@people.collections">Acervos</legend>
+    @for (topic of collections(); track topic.slug) {
+      <label class="check" [class.child]="topic.parent !== null">
+        <input
+          #box
+          type="checkbox"
+          [checked]="topic.checked"
+          [disabled]="topic.inherited"
+          (change)="toggleTopic(topic.slug, box.checked)"
+        />
+        <span
+          >{{ topic.title }}
+          @if (topic.inherited) {
+            <span class="inherited" i18n="@@people.inheritedCollection"
+              >(incluído em {{ topic.parentTitle }})</span
+            >
+          }
+        </span>
+      </label>
+      @if (levelRows().get(topic.slug); as scale) {
+        <div class="field level-field">
+          <label
+            [for]="'level-' + who.id + '-' + scale.collection"
+            i18n="@@people.levelIn"
+            >Nível em {{ scale.title }}</label
+          >
+          <select
+            #levelSelect
+            class="select"
+            [id]="'level-' + who.id + '-' + scale.collection"
+            [disabled]="busy()"
+            (change)="chooseLevel(scale.collection, levelSelect.value)"
+          >
+            @for (level of scale.choices; track level.id) {
+              <option
+                [value]="level.id"
+                [selected]="level.id === scale.current"
+              >
+                {{ level.code }}
+              </option>
+            }
+          </select>
+        </div>
+      }
+    } @empty {
+      <p class="note" i18n="@@people.noCollections">Nenhum acervo no vault.</p>
+    }
+  </fieldset>
+
+  @if (scales().length > 0 && isMaster()) {
+    <p class="note" i18n="@@people.mastersAllLevels">
+      Masters veem todos os níveis.
+    </p>
+  }
+
+  <fieldset
+    class="group grid"
+    [disabled]="isMaster()"
+    [attr.aria-busy]="saving()"
+  >
+    <legend class="legend" i18n="@@people.features">Funcionalidades</legend>
+    @for (feature of features(); track feature.id) {
+      <label class="check">
+        <input
+          #box
+          type="checkbox"
+          [checked]="feature.checked"
+          (change)="toggleFeature(feature.id, box.checked)"
+        />
+        <span>{{ feature.label }}</span>
+      </label>
+    }
+  </fieldset>
+
+  @if (ownerView() && isMaster() && !who.isOwner) {
+    <label class="check grant">
       <input
-        #box
+        #grant
         type="checkbox"
-        [checked]="feature.checked"
-        (change)="toggleFeature(feature.id, box.checked)"
+        [checked]="who.canActAs"
+        [disabled]="busy()"
+        (change)="changed.emit({ canActAs: grant.checked })"
       />
-      <span>{{ feature.label }}</span>
+      <span i18n="@@people.canActAs">Pode ver como outra pessoa</span>
     </label>
   }
-</fieldset>
+</div>
+<div
+  class="panel"
+  role="tabpanel"
+  [id]="'panel-ai-' + who.id"
+  [attr.aria-labelledby]="'tab-ai-' + who.id"
+  [hidden]="tab() !== 'ai'"
+>
+  <app-person-ai-editor
+    [ai]="who.ai"
+    [defaultAppAi]="defaultAppAi()"
+    [lending]="lending()"
+    [busy]="busy()"
+    (changed)="changed.emit({ ai: $event })"
+  />
 
-<app-person-ai-editor
-  [ai]="who.ai"
-  [defaultAppAi]="defaultAppAi()"
-  [lending]="lending()"
-  [busy]="busy()"
-  (changed)="changed.emit({ ai: $event })"
-/>
-
-@if (profiles().length > 0 && !who.isOwner) {
-  <fieldset class="group" [disabled]="busy()">
-    <legend class="legend" i18n="@@people.applyProfileLegend">
-      Aplicar perfil
-    </legend>
-    <div class="actions apply-row">
-      <label class="field">
-        <span i18n="@@people.profile">Perfil</span>
-        <select
-          #profileSelect
-          class="select"
-          name="applyProfile"
-          (change)="chooseProfile(profileSelect.value)"
+  @if (hasQuota()) {
+    <div class="field">
+      <label for="media-quota" i18n="@@people.mediaQuota"
+        >Cota de mídia (GB)</label
+      >
+      <input
+        #quota
+        id="media-quota"
+        class="number"
+        type="text"
+        inputmode="decimal"
+        autocomplete="off"
+        [value]="quotaGb()"
+        [disabled]="busy()"
+        [attr.aria-invalid]="quotaProblem()"
+        aria-describedby="media-quota-hint"
+        (change)="changeQuota(quota.value)"
+      />
+      <span id="media-quota-hint" class="hint" i18n="@@people.mediaQuotaHint"
+        >Em branco, vale o padrão de {{ defaultQuotaGb }} GB.</span
+      >
+      @if (quotaProblem()) {
+        <span class="field-error" role="alert" i18n="@@people.mediaQuotaProblem"
+          ><span aria-hidden="true">⚠</span> Use um número maior que zero.</span
         >
-          @for (profile of profiles(); track profile.id) {
-            <option
-              [value]="profile.id"
-              [selected]="profile.id === chosenProfile()?.id"
-            >
-              {{ profile.name }}
-            </option>
-          }
-        </select>
-      </label>
-      @if (!confirmingApply()) {
-        <button
-          #applyButton
-          type="button"
-          class="secondary"
-          (click)="askApply()"
-          i18n="@@people.applyProfile"
-        >
-          Aplicar perfil
-        </button>
       }
     </div>
-    @if (confirmingApply()) {
-      <div class="actions">
-        <p class="confirm" i18n="@@people.confirmApply">
-          Aplicar o perfil "{{ chosenProfile()?.name }}" a {{ who.email }}?
-          Papel, acervos, funcionalidades e IA mudam; as preferências que a
-          pessoa já salvou continuam.
+  }
+</div>
+
+<!-- Destructive on the left, apart from the rest (KBC-132 BR-4). -->
+<div class="foot">
+  <div class="foot-start">
+    @if (isMaster()) {
+      <button
+        uiButton="outline"
+        size="sm"
+        type="button"
+        class="danger-outline"
+        [disabled]="busy()"
+        [attr.aria-describedby]="
+          dropsLevels() ? 'master-levels-' + who.id : null
+        "
+        (click)="toggleMaster()"
+        i18n="@@people.unmakeMaster"
+      >
+        Remover master
+      </button>
+    } @else if (!who.isOwner) {
+      @if (confirming()) {
+        <p class="confirm" i18n="@@people.confirmRevoke">
+          Revogar o acesso de {{ who.email }}? A pessoa sai na hora.
         </p>
-        @for (stale of staleOfChosen(); track stale.id) {
-          <p
-            class="confirm field-error"
-            [id]="stale.id"
-            i18n="@@people.applyStaleLevel"
-          >
-            <span aria-hidden="true">⚠</span> Em {{ stale.title }}, o nível
-            {{ stale.level }} não existe mais; quem tiver este perfil aplicado
-            fica no nível mais baixo.
-          </p>
-        }
         <button
-          #applyConfirmButton
+          #confirmButton
+          uiButton="danger"
+          size="sm"
           type="button"
-          class="secondary"
-          [attr.aria-describedby]="applyDescribedBy()"
-          (click)="confirmApply()"
-          i18n="@@people.applyConfirm"
+          [disabled]="busy()"
+          (click)="confirmRevoke()"
+          i18n="@@people.revokeConfirm"
         >
-          Aplicar
+          Revogar
         </button>
         <button
+          uiButton="ghost"
+          size="sm"
           type="button"
-          class="link"
-          (click)="cancelApply()"
+          (click)="cancelRevoke()"
           i18n="@@people.cancel"
         >
           Cancelar
         </button>
-      </div>
-    }
-  </fieldset>
-}
-
-@if (hasQuota()) {
-  <div class="field">
-    <label for="media-quota" i18n="@@people.mediaQuota"
-      >Cota de mídia (GB)</label
-    >
-    <input
-      #quota
-      id="media-quota"
-      class="number"
-      type="text"
-      inputmode="decimal"
-      autocomplete="off"
-      [value]="quotaGb()"
-      [disabled]="busy()"
-      [attr.aria-invalid]="quotaProblem()"
-      aria-describedby="media-quota-hint"
-      (change)="changeQuota(quota.value)"
-    />
-    <span id="media-quota-hint" class="hint" i18n="@@people.mediaQuotaHint"
-      >Em branco, vale o padrão de {{ defaultQuotaGb }} GB.</span
-    >
-    @if (quotaProblem()) {
-      <span class="field-error" role="alert" i18n="@@people.mediaQuotaProblem"
-        ><span aria-hidden="true">⚠</span> Use um número maior que zero.</span
-      >
+      } @else {
+        <button
+          #revokeButton
+          uiButton="outline"
+          size="sm"
+          type="button"
+          class="danger-outline"
+          [disabled]="busy()"
+          (click)="askRevoke()"
+          i18n="@@people.revoke"
+        >
+          Revogar acesso
+        </button>
+      }
     }
   </div>
-}
-
-@if (ownerView() && isMaster() && !who.isOwner) {
-  <label class="check grant">
-    <input
-      #grant
-      type="checkbox"
-      [checked]="who.canActAs"
-      [disabled]="busy()"
-      (change)="changed.emit({ canActAs: grant.checked })"
-    />
-    <span i18n="@@people.canActAs">Pode ver como outra pessoa</span>
-  </label>
-}
-
-<div class="actions">
-  @if (mayActAs()) {
-    <button
-      type="button"
-      class="secondary"
-      [disabled]="busy()"
-      (click)="actAs.emit()"
-      i18n="@@people.actAs"
-    >
-      Ver como
-    </button>
+  @if (!isMaster()) {
+    <div class="foot-end">
+      <button
+        uiButton="outline"
+        size="sm"
+        type="button"
+        [disabled]="busy()"
+        [attr.aria-describedby]="
+          dropsLevels() ? 'master-levels-' + who.id : null
+        "
+        (click)="toggleMaster()"
+        i18n="@@people.makeMaster"
+      >
+        Tornar master
+      </button>
+      @if (mayActAs()) {
+        <button
+          uiButton="white"
+          size="sm"
+          type="button"
+          [disabled]="busy()"
+          (click)="pressActAs($event)"
+        >
+          <ui-icon name="eye" [size]="16" />
+          <span i18n="@@people.actAs">Ver como</span>
+        </button>
+      }
+    </div>
   }
-  <button
-    type="button"
-    class="secondary"
-    [disabled]="busy()"
-    [attr.aria-describedby]="dropsLevels() ? 'master-levels-' + who.id : null"
-    (click)="toggleMaster()"
-  >
-    @if (isMaster()) {
-      <span i18n="@@people.unmakeMaster">Remover master</span>
-    } @else {
-      <span i18n="@@people.makeMaster">Tornar master</span>
-    }
-  </button>
   @if (dropsLevels()) {
     <p
       class="hint master-levels"
@@ -233,41 +354,5 @@
     >
       Masters veem todos os níveis; os níveis desta pessoa serão apagados.
     </p>
-  }
-  @if (!who.isOwner) {
-    @if (confirming()) {
-      <p class="confirm" i18n="@@people.confirmRevoke">
-        Revogar o acesso de {{ who.email }}? A pessoa sai na hora.
-      </p>
-      <button
-        #confirmButton
-        type="button"
-        class="danger"
-        [disabled]="busy()"
-        (click)="confirmRevoke()"
-        i18n="@@people.revokeConfirm"
-      >
-        Revogar
-      </button>
-      <button
-        type="button"
-        class="link"
-        (click)="cancelRevoke()"
-        i18n="@@people.cancel"
-      >
-        Cancelar
-      </button>
-    } @else {
-      <button
-        #revokeButton
-        type="button"
-        class="link danger-text"
-        [disabled]="busy()"
-        (click)="askRevoke()"
-        i18n="@@people.revoke"
-      >
-        Revogar acesso
-      </button>
-    }
   }
 </div>

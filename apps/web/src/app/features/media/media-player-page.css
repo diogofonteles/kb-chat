@@ -1,6 +1,8 @@
+/* v2 player page (KBC-129, v2 · Mídia — Player): the cover header over the panel's tint,
+   the action bar, the body (chips and the synced transcript, or the voices) and "Sobre"
+   beside it on a wide panel. On a phone the same order, stacked: the full-screen player. */
 :host {
   display: block;
-  /* The transcript goes beside the player when the main area is wide enough (T15). */
   container-type: inline-size;
   /* Its own row of the main area's grid (chat-page.css): it scrolls inside it, so the
      mini-player below never covers what has the focus (KBC-041 FR-11). */
@@ -10,101 +12,65 @@
 
 .page {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   width: 100%;
-  max-width: var(--column);
-  margin: 0 auto;
-  padding: var(--space-4) var(--space-4) var(--space-8);
+  padding: 0 var(--space-8) var(--space-8);
 }
 
-.main {
-  display: grid;
-  gap: var(--space-4);
-  align-content: start;
-  min-width: 0;
-}
-
-.toggle-transcript {
-  justify-self: start;
-}
-
-.head .low-confidence {
-  margin-top: var(--space-2);
-}
-
-/* Below the player on narrow screens: the list scrolls on its own (FR-3). */
-.side {
-  display: flex;
-  flex-direction: column;
-  height: min(70dvh, 40rem);
-  min-width: 0;
-}
-
-.side-skeleton {
-  flex: 1;
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-muted);
-}
-
-/* Beside the player, as tall as the screen, while the page scrolls (T15, desktop). */
-@container (min-width: 60rem) {
-  /* Tab order and phones: player, transcript, then bookmarks; on a wide screen the
-     bookmarks go under the player and the transcript spans both rows. */
-  .page.with-transcript {
-    grid-template-columns: minmax(0, 1fr) minmax(20rem, 27rem);
-    grid-template-areas:
-      'main side'
-      'bookmarks side'
-      'voices side';
-    grid-template-rows: auto auto 1fr;
-    align-items: start;
-    max-width: calc(var(--column) + 28rem);
-    /* The column's own notice is in view: no second one with the subtitles. */
-    --low-confidence-badge: none;
-  }
-
-  .with-transcript .main {
-    grid-area: main;
-  }
-
-  .with-transcript .bookmarks {
-    grid-area: bookmarks;
-  }
-
-  .with-transcript .voices {
-    grid-area: voices;
-  }
-
-  .with-transcript .side {
-    grid-area: side;
-  }
-
-  .with-transcript .side {
-    position: sticky;
-    top: var(--space-4);
-    height: calc(100dvh - 7rem);
-  }
+.top {
+  padding-top: var(--space-4);
 }
 
 .back {
-  justify-self: start;
   display: inline-flex;
   align-items: center;
   min-height: var(--target);
-  color: var(--color-accent-strong);
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  font-weight: 700;
   text-decoration: none;
-  font-weight: 600;
 }
 
 .back:hover {
-  text-decoration: underline;
+  color: var(--color-text);
 }
 
-.head h2 {
+/* The header: cover of 208, the kicker, the title of the page and the situation. */
+.hero {
+  display: flex;
+  gap: var(--space-6);
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.art {
+  flex: none;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+}
+
+.hero-text {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.kicker {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  line-height: 1.25;
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+.hero h2 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: clamp(2rem, 1rem + 3vw, 3.5rem);
+  font-weight: 800;
+  line-height: 1.1;
+  /* Whole pixels: the rows below (and an open menu) keep integer edges. */
+  line-height: round(1.05em, 1px);
+  letter-spacing: -0.04em;
   text-wrap: balance;
   overflow-wrap: anywhere;
 }
@@ -114,105 +80,16 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1) var(--space-3);
-  margin: var(--space-2) 0 0;
+  margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
-.not-ready,
-.notice {
-  display: grid;
+.status-line {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  margin: 0;
-  padding: var(--space-6);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
-}
-
-.notice p {
-  margin: 0;
-}
-
-.notice-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
-.secondary {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--target);
-  padding: 0 var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-weight: 600;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.status {
-  font-weight: 600;
-}
-
-/* "Continuar de" first: the main way back in (T15, Retomar). */
-.resume {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
-.primary {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--target);
-  padding: 0 var(--space-4);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-}
-
-/* The player's box is reserved from the first paint: nothing jumps when it arrives. */
-.skeleton {
-  display: grid;
-  gap: var(--space-3);
-}
-
-.bar,
-.player-box {
-  display: block;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
-}
-
-.bar {
-  height: 1rem;
-  width: 40%;
-}
-
-.title-bar {
-  height: 1.5rem;
-  width: 70%;
-}
-
-.player-box {
-  height: 9.5rem;
-  border-radius: var(--radius-lg);
-}
-
-.edit {
-  margin-top: var(--space-3);
-}
-
-/* The way into T20 (KBC-066). */
-.edit-entry {
   margin: 0;
 }
 
@@ -221,26 +98,241 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0 0.35em;
-  margin: 0 0 var(--space-1);
-  font-size: var(--text-sm);
+  margin: 0;
+  font-size: var(--text-meta);
+  font-weight: 700;
 }
 
 .part-of a {
   display: inline-flex;
   align-items: center;
   min-height: 1.5rem;
-  color: var(--color-accent-strong);
-  font-weight: 600;
+  color: var(--color-text);
 }
 
-.edit-entry a:not(.secondary) {
-  color: var(--color-accent-strong);
-  font-weight: 600;
+.notes {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  min-width: 0;
 }
 
-.edit-entry .secondary {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  text-decoration: none;
+.notes:empty {
+  display: none;
+}
+
+.notes > * {
+  max-width: 100%;
+}
+
+/* The action bar: "Continuar de", the player and the editing entries. */
+.action-bar {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.resume {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.resume-from {
+  font-variant-numeric: tabular-nums;
+}
+
+.edit-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.edit-tools:empty {
+  display: none;
+}
+
+.edit-entry {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.edit-entry a {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  min-width: 0;
+}
+
+.views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The transcript as the page's body: it scrolls on its own, the page keeps the player. */
+.side {
+  display: flex;
+  flex-direction: column;
+  height: min(70dvh, 40rem);
+  min-width: 0;
+}
+
+.side-skeleton {
+  flex: 1;
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
+}
+
+.hidden-note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* "Sobre este áudio": bookmarks here, the tracks of the recording, the removed tracks. */
+.about {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+.not-ready,
+.notice {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-8) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--overlay-1);
+  text-align: center;
+}
+
+.not-ready p,
+.notice p {
+  max-width: 30rem;
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.not-ready .status,
+.empty-title {
+  color: var(--color-text);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.notice .empty-title {
+  color: var(--color-text);
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
+  color: var(--color-text-muted);
+}
+
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.edit {
+  gap: var(--space-2);
+}
+
+/* The player's box is reserved from the first paint: nothing jumps when it arrives. */
+.skeleton {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-6);
+}
+
+.bar,
+.player-box {
+  display: block;
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
+}
+
+.bar {
+  height: 1rem;
+  width: 40%;
+}
+
+.title-bar {
+  height: 3rem;
+  width: 70%;
+}
+
+.player-box {
+  height: 9.5rem;
+}
+
+/* A wide panel: the body and "Sobre" side by side, the header and the bar over both. */
+@container (min-width: 60rem) {
+  .page.with-about {
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem);
+    column-gap: var(--space-8);
+    align-items: start;
+  }
+
+  .with-about > :not(.body, .about) {
+    grid-column: 1 / -1;
+  }
+
+  /* The column's own notice is in view: no second one with the subtitles. */
+  .page.with-transcript {
+    --low-confidence-badge: none;
+  }
+
+  .with-about .about {
+    position: sticky;
+    top: var(--space-4);
+  }
+
+  .with-about .side {
+    height: calc(100dvh - 12rem);
+    min-height: 24rem;
+  }
+}
+
+/* A phone: the cover centred over the title, like the full-screen player. */
+@media (max-width: 1023px) {
+  .page {
+    padding: 0 var(--space-4) calc(var(--space-8) + var(--shell-mobile-foot));
+  }
+
+  .hero {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4);
+  }
+
+  .art {
+    --ui-cover-size: min(72vw, 280px) !important;
+    align-self: center;
+  }
+
+  .hero h2 {
+    font-size: 1.5rem;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+  }
 }

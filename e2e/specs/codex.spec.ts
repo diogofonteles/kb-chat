@@ -9,6 +9,13 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import {
+  closeSettings,
+  openSection,
+  openSettings,
+  SETTINGS_AXE,
+  showTab,
+} from './settings-helpers.js';
 
 /**
  * KBC-027 against the E2E server's real Codex runner (with the fake Codex): a master turns
@@ -16,19 +23,9 @@ import {
  * the runner. Turning it on is idempotent (desktop and phone share the server); nothing turns
  * it off. The owner's own use is in the API tests: his settings are shared by every spec.
  */
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
-
-async function openSettings(page: Page) {
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await expect(dialog).toBeVisible();
-  return dialog;
-}
 
 async function ask(page: Page) {
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Fechar menu' }).click();
+  // Configurações is a page (KBC-131): the phone's menu closed when it opened.
   await page.getByLabel('Sua pergunta').fill('o que é o ritmo?');
   await page.getByRole('button', { name: 'Perguntar' }).click();
   return page.locator('app-research-message').last();
@@ -39,7 +36,7 @@ test('AC-4: a master turns Codex on, with its login on the server', async ({
 }) => {
   await page.goto('/');
   const dialog = await openSettings(page);
-  await dialog.getByRole('button', { name: 'IA da aplicação' }).click();
+  await openSection(dialog, 'IA da aplicação');
   const block = dialog.getByRole('region', {
     name: 'Assinatura do ChatGPT (Codex)',
   });
@@ -50,7 +47,7 @@ test('AC-4: a master turns Codex on, with its login on the server', async ({
   if (!(await toggle.isChecked())) await toggle.check();
   await expect(toggle).toBeChecked();
   await page.waitForFunction(() => document.getAnimations().length === 0);
-  const axe = await new AxeBuilder({ page }).include('dialog').analyze();
+  const axe = await new AxeBuilder({ page }).include(SETTINGS_AXE).analyze();
   expect(axe.violations).toEqual([]);
 });
 
@@ -70,8 +67,10 @@ test('AC-5: the owner lends the ChatGPT subscription to one person', async ({
   });
   await page.goto('/');
   const dialog = await openSettings(page);
-  await dialog.getByRole('button', { name: 'Pessoas e permissões' }).click();
+  await openSection(dialog, 'Pessoas e permissões');
   await dialog.getByRole('button', { name: new RegExp(email) }).click();
+  // The person's editor is a modal, the AI in its own tab (KBC-132).
+  await showTab(dialog, 'IA e limites');
   const fieldset = dialog.getByRole('group', { name: 'IA da aplicação' });
   await fieldset
     .getByLabel('Qual IA atende esta pessoa')
@@ -90,13 +89,13 @@ test('AC-5: the owner lends the ChatGPT subscription to one person', async ({
   await person.goto('/');
   await person.getByRole('button', { name: 'Pular' }).click();
   await expect(person.getByRole('dialog')).toHaveCount(0);
-  const settings = await openSettings(person);
+  const settings = await openSettings(person, 'Sua IA');
   await expect(
     settings.getByText(
       'Você está usando temporariamente a IA da aplicação (assinatura do ChatGPT do administrador).',
     ),
   ).toBeVisible();
-  await settings.getByRole('button', { name: 'Fechar configurações' }).click();
+  await closeSettings(settings);
   const answer = await ask(person);
   await expect(answer.getByText(/Tudo flui/)).toBeVisible();
   await expect(
@@ -122,7 +121,7 @@ test('KBC-031 AC-2: once on, the owner picks the ChatGPT card and tests it throu
   });
   await owner.dispose();
   await page.goto('/');
-  const dialog = await openSettings(page);
+  const dialog = await openSettings(page, 'Sua IA');
   const card = dialog.getByRole('radio', { name: /Assinatura do ChatGPT/ });
   await expect(card).toBeEnabled();
   await expect(dialog.getByText(/Instale o Codex CLI/)).toHaveCount(0);

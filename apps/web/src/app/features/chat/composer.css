@@ -1,11 +1,17 @@
+/* v2 · Conversa, "caixa de pergunta": a rounded box fixed at the main panel's foot, with
+   the modes (or the research profiles) as chips and the chosen one's help (KBC-126 FR-4). */
 .composer {
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-3);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-5);
+  border: 1px solid transparent;
+  border-radius: 1.75rem;
+  background: var(--color-surface-muted);
   box-shadow: var(--shadow);
+}
+
+.composer:focus-within {
+  border-color: color-mix(in srgb, var(--color-text) 35%, transparent);
 }
 
 .field {
@@ -14,97 +20,104 @@
 
 textarea {
   width: 100%;
-  min-height: 3rem;
+  min-height: 2.5rem;
   max-height: 12rem;
   resize: none;
   field-sizing: content;
-  padding: var(--space-2) 2.5rem var(--space-2) var(--space-2);
+  padding: var(--space-2) 2.5rem var(--space-1) 0;
   border: none;
   background: transparent;
+  color: var(--color-text);
+  font: inherit;
   font-size: var(--text-md);
   line-height: 1.5;
+}
+
+textarea::placeholder {
+  color: var(--color-text-muted);
 }
 
 textarea:focus-visible {
   outline: none;
 }
 
-.composer:focus-within {
-  border-color: var(--color-accent);
-  outline: 3px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
 .clear {
   position: absolute;
   top: 0;
   right: 0;
+  display: inline-grid;
+  place-items: center;
   width: var(--target);
   height: var(--target);
   border: none;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text-muted);
-  font-size: 1.5rem;
   cursor: pointer;
-  border-radius: var(--radius-sm);
+}
+
+.clear:hover {
+  background: var(--overlay-3);
+  color: var(--color-text);
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
+  min-width: 0;
   align-items: center;
   gap: var(--space-2) var(--space-3);
 }
 
-.mode {
+/* The modes and profiles: native radios drawn as v2 chips (white with black text when on). */
+.choices {
   display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-select {
-  min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
-  color: var(--color-text);
-}
-
-/* "Rápido | Profundo | Exaustivo": a radio group drawn as a segmented control (MA-19). */
-.profile {
-  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
   margin: 0;
   padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
+  border: 0;
 }
 
-.profile-option {
+/* A 32 chip on a 44 target (MA-03): the pill is drawn behind the label's text. */
+.choice {
   position: relative;
+  z-index: 0;
   display: inline-flex;
   align-items: center;
-  /* Each option is a full touch target (MA-03). */
   min-height: var(--target);
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
+  padding: 0 0.875rem;
+  border-radius: var(--radius-pill);
+  color: var(--color-text);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.profile-option.selected {
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-weight: 600;
-  box-shadow: 0 0 0 1px var(--color-border);
+.choice::before {
+  content: '';
+  position: absolute;
+  inset: 0.375rem 0;
+  z-index: -1;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
+}
+
+.choice:hover::before {
+  background: var(--overlay-4);
+}
+
+.choice.selected {
+  color: var(--color-bg);
+}
+
+.choice.selected::before {
+  background: var(--color-text);
 }
 
 /* The native radio stays for keyboard and screen readers, drawn by its label. */
-.profile-radio {
+.choice-radio {
   position: absolute;
   inset: 0;
   margin: 0;
@@ -112,32 +125,38 @@ select {
   cursor: pointer;
 }
 
-.profile-option:has(.profile-radio:focus-visible) {
+.choice:has(.choice-radio:focus-visible)::before {
   outline: 3px solid var(--color-focus);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 .help {
   flex: 1 1 12rem;
-  font-size: var(--text-sm);
+  min-width: 0;
   color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 .send {
-  min-height: var(--target);
-  min-width: 6rem;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.5rem;
   margin-left: auto;
-  padding: 0 var(--space-4);
+  padding: 0 1.125rem;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   background: var(--color-accent);
   color: var(--color-on-accent);
-  font-weight: 600;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
   cursor: pointer;
 }
 
 .send:disabled {
-  opacity: 0.55;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -146,21 +165,21 @@ select {
 }
 
 .limit {
-  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 @media (max-width: 1023px) {
   .composer {
-    padding: var(--space-2);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    border-radius: 1.625rem;
   }
 
   textarea {
     min-height: 2.75rem;
   }
 
-  /* One compact row on phones: mode selector and send; the help stays for screen readers. */
-  .mode-label,
+  /* The help stays for screen readers; a phone shows the chips and send. */
   .help {
     position: absolute;
     width: 1px;
@@ -170,26 +189,42 @@ select {
     white-space: nowrap;
   }
 
-  /*
-   * One compact row on phones when it fits; with the three research profiles (KBC-017)
-   * the segmented control may take its own row, never pushing the page sideways.
-   */
   .actions {
+    flex-wrap: nowrap;
+  }
+
+  .actions:has(.help.always) {
     flex-wrap: wrap;
   }
 
-  .profile {
+  .choices {
     flex: 1 1 auto;
+    flex-wrap: nowrap;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
-  .profile-option {
-    flex: 1 1 0;
-    justify-content: center;
-    padding: 0 var(--space-2);
+  .choice::before {
+    inset: 0;
   }
 
+  /* Send is a round 44 button with its icon; the word stays for screen readers. */
   .send {
-    padding: 0 var(--space-3);
+    flex: none;
+    justify-content: center;
+    width: var(--target);
+    min-height: var(--target);
+    padding: 0;
+  }
+
+  .send-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 
   /* The exhaustive profile's warning (it may take minutes) stays visible on phones. */

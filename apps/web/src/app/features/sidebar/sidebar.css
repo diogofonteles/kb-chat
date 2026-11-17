@@ -1,122 +1,334 @@
+/* "Sua biblioteca" (KBC-125): the 300 panel of the v2 shell, or the phone's Menu. */
 :host {
-  display: grid;
-  /* One column that never grows past the sidebar (wider fonts would push "Sair" out). */
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: var(--space-4);
-  height: 100%;
-  min-height: 0;
-  padding: var(--space-4) var(--space-3);
+  /* The containing block of its visually hidden texts: they scroll with the column, never
+     the page (an absolute text with no positioned ancestor grew the document). */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  color: var(--color-text);
 }
 
-.new {
-  min-height: var(--target);
-  padding: 0 var(--space-4);
-  border: 1px solid var(--color-text-muted);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
+.account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) 3.5rem var(--space-3) var(--space-4);
+}
+
+.person {
+  display: grid;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  font-size: var(--text-md);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.email {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-2);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.create ::ng-deep .create-trigger {
+  min-height: 2rem;
+  padding: 0 0.875rem 0 0.625rem;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.create ::ng-deep .create-trigger:hover {
+  background: var(--overlay-3);
+}
+
+.create-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* With "Áudios" the four chips pass the column's 300: they wrap to a second line instead of
+   scrolling out of sight with no scroll bar (a mouse could not reach "Documentos"). */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: var(--space-1) var(--space-4) var(--space-2);
+}
+
+.chips ::ng-deep .ui-chip {
+  padding: 0 0.75rem;
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-3) 0 var(--space-2);
+}
+
+.tools ::ng-deep .order-trigger {
+  min-height: 2rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.tools ::ng-deep .order-trigger:hover {
   color: var(--color-text);
+}
+
+.order-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.search {
+  margin: var(--space-1) var(--space-4) var(--space-2);
+}
+
+/* ---------- Sections (D5): Fixados · Acervos · Conversas · Documentos ---------- */
+.sections {
+  display: grid;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+}
+
+.section + .section {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--overlay-3);
+}
+
+.section-head {
+  margin: 0;
+  padding: 0 var(--space-2);
+  font-size: inherit;
+}
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 2rem;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-menu);
+  background: transparent;
+  color: var(--color-text-muted);
   font: inherit;
-  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   cursor: pointer;
 }
 
-.new:hover {
-  border-color: var(--color-accent);
+.section-toggle:hover {
+  background: var(--overlay-2);
+  color: var(--color-text);
 }
 
-.label {
+.section-count {
+  min-width: 1.25rem;
+  padding: 0 0.375rem;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-2);
+  font-size: 0.6875rem;
+  line-height: 1.25rem;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.section-caret {
+  margin-left: auto;
+}
+
+.items,
+.children,
+.conversations {
   margin: 0;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.heading {
-  display: grid;
-  gap: 2px;
-}
-
-.where {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-.history {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: var(--space-2);
-  min-height: 0;
-}
-
-.history ul {
-  display: grid;
-  align-content: start;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
+  padding: 0 var(--space-2);
   list-style: none;
-  overflow-y: auto;
+}
+
+/* Acervos: a tree, each sub-collection indented under its parent's caret. */
+.collection {
+  position: relative;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.caret,
+.caret-gap {
+  flex: none;
+  width: 1.5rem;
+}
+
+.caret {
+  min-width: 1.5rem;
+  height: 2rem;
+  padding: 0;
+  color: var(--color-text-muted);
+}
+
+.children {
+  padding: 0;
+}
+
+.child .row {
+  padding-left: 1.5rem;
+}
+
+/* The tree's guide: a thin line from the parent's caret down its sub-collections. */
+.branch-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0.75rem;
+  width: 1px;
+  background: var(--overlay-4);
+}
+
+.row .ui-libitem-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.child .ui-libitem-row {
+  min-height: 3.25rem;
+}
+
+.edit {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+}
+
+.notice:empty {
+  display: none;
+}
+
+.notice {
+  padding: var(--space-1) var(--space-2) var(--space-1) 2rem;
+}
+
+/* Conversas: compact text rows with the kind's icon, never a cover (D5). */
+.recency {
+  margin: 0;
+  padding: var(--space-2) var(--space-4) var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
 }
 
 .conversation {
-  display: grid;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
   width: 100%;
-  min-height: var(--target);
-  padding: var(--space-2) var(--space-3);
+  min-height: 2.75rem;
+  padding: var(--space-2);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-menu);
   background: transparent;
-  color: var(--color-text);
+  color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
 .conversation:hover {
-  background: var(--sidebar-active, var(--color-surface-muted));
+  background: var(--overlay-2);
 }
 
 .conversation[aria-current='true'] {
-  background: var(--sidebar-active, var(--color-surface-muted));
-  box-shadow: inset 3px 0 0 var(--color-accent);
+  background: var(--overlay-3);
 }
 
-.question {
+.conversation[aria-current='true'] .question {
+  color: var(--color-accent-text);
+}
+
+.conversation-icon {
+  flex: none;
+  margin-top: 0.125rem;
+  color: var(--color-text-muted);
+}
+
+.conversation-icon.research {
+  color: var(--color-accent-text);
+}
+
+.conversation-text {
+  display: grid;
+  flex: 1;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.question,
+.conversation .meta {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.meta {
+.question {
+  color: var(--color-text);
   font-size: var(--text-sm);
-  color: var(--color-text-muted);
+  font-weight: 500;
 }
 
-.kind {
-  padding: 0 var(--space-1);
-  border: 1px solid var(--color-text-muted);
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+.conversation .meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.note {
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
 }
 
 .kind.research {
-  border-color: var(--color-accent);
-  color: var(--color-accent-strong);
-}
-
-/* KBC-029: how a conversation stands, always in words, on a line of its own; the spinner only
-   adds motion. */
-.status {
-  display: block;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.status.pending {
-  color: var(--color-accent-strong);
+  color: var(--color-accent-text);
 }
 
 .status.failed {
@@ -125,14 +337,14 @@
 
 .spinner {
   display: inline-block;
-  width: 0.75em;
-  height: 0.75em;
-  margin-right: 0.25em;
+  width: 0.625rem;
+  height: 0.625rem;
+  margin: 0 0.125rem;
   border: 2px solid currentColor;
   border-right-color: transparent;
   border-radius: 50%;
-  vertical-align: -0.05em;
-  animation: spin 0.9s linear infinite;
+  animation: spin 0.8s linear infinite;
+  vertical-align: -1px;
 }
 
 @keyframes spin {
@@ -141,201 +353,149 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation: none;
-  }
-}
-
-.note {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-.settings {
-  display: grid;
-  gap: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border);
-}
-
-.field {
+.menu-actions {
   display: grid;
   gap: var(--space-1);
+  margin: var(--space-3) var(--space-4) 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--overlay-3);
 }
 
-select {
-  /* Fills its column and never widens it: a long option ("Automático (claro/escuro)") in
-     wider fonts would push the whole sidebar, "Sair" included, past its edge. */
+.action,
+.menu-actions ::ng-deep .settings-button {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
   width: 100%;
-  min-width: 0;
   min-height: var(--target);
-  padding: 0 var(--space-2);
-  /* Form controls need a 3:1 boundary (WCAG 1.4.11); the hairline border color is decorative. */
-  border: 1px solid var(--color-text-muted);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--color-text);
   font: inherit;
+  font-size: var(--text-item);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.count {
+  margin-left: auto;
+  padding: 0 0.375rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.25rem;
 }
 
 .spend {
-  display: grid;
-  gap: var(--space-1);
-  margin: 0;
-}
-
-.amount {
-  font-variant-numeric: tabular-nums;
-}
-
-.people-button {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.people-button:hover {
-  background: var(--sidebar-active, var(--color-surface-muted));
-}
-
-.people-button .icon {
+  gap: 0.625rem;
+  margin-top: auto;
+  padding: var(--space-3) var(--space-4) var(--space-4);
   color: var(--color-text-muted);
-  flex: none;
 }
 
-.account {
+.spend-body {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-2);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border);
-}
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.avatar.initial {
-  box-sizing: border-box;
-  border: 1px solid var(--color-border);
-  display: grid;
-  place-items: center;
-  background: var(--color-surface-muted);
-  color: var(--color-text);
-  font-weight: 600;
-}
-
-.person {
-  display: grid;
+  flex: 1;
+  gap: 0.375rem;
   min-width: 0;
 }
 
-.person .name,
-.person .email {
+.spend-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+.amount {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.spend-bar {
+  height: 3px;
+}
+
+/* Collapsed (desktop): only the covers, the names stay for screen readers. */
+:host(.collapsed) .title,
+:host(.collapsed) .create-text,
+:host(.collapsed) .chips,
+:host(.collapsed) .tools,
+:host(.collapsed) .search,
+:host(.collapsed) .edit,
+:host(.collapsed) .notice,
+:host(.collapsed) .note,
+:host(.collapsed) .section-head,
+:host(.collapsed) .recency,
+:host(.collapsed) .caret,
+:host(.collapsed) .caret-gap,
+:host(.collapsed) .branch-line,
+:host(.collapsed) .spend-body {
+  display: none;
+}
+
+:host(.collapsed) .head {
+  flex-direction: column;
+  padding: var(--space-3) var(--space-2);
+}
+
+:host(.collapsed) .ui-libitem-row,
+:host(.collapsed) .conversation {
+  justify-content: center;
+}
+
+:host(.collapsed) .child .row {
+  padding-left: 0;
+}
+
+:host(.collapsed) .conversation-text,
+:host(.collapsed) ::ng-deep .ui-libitem__text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  clip: rect(0 0 0 0);
   white-space: nowrap;
 }
 
-.person .name {
-  font-weight: 600;
+:host(.collapsed) .spend {
+  justify-content: center;
 }
 
-.person .email {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
+@media (max-width: 1023px) {
+  .head {
+    padding-top: var(--space-2);
+  }
 
-.sign-out {
-  min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text);
-  font: inherit;
-  cursor: pointer;
-}
+  .ui-libitem-row,
+  .conversation,
+  .section-toggle {
+    min-height: var(--target);
+  }
 
-.sign-out:hover {
-  border-color: var(--color-text-muted);
-}
+  /* 32 wide and 44 tall: a touch target that does not push every title to the right. */
+  .caret {
+    min-width: 2rem;
+    height: var(--target);
+  }
 
-.people-button .count,
-.media-link .count {
-  min-width: 1.5rem;
-  margin-inline-start: auto;
-  padding: 0 var(--space-2);
-  border-radius: 999px;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  line-height: 1.5rem;
-  text-align: center;
-}
+  .caret,
+  .caret-gap {
+    width: 2rem;
+  }
 
-/* "Mídia" (T14): a link, styled like the other sidebar actions; the current page is marked
-   by a bar and weight, not color alone (UP-20). */
-.media-link {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--target);
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-sm);
-  color: var(--color-text);
-  text-decoration: none;
-}
+  .child .row {
+    padding-left: 2rem;
+  }
 
-.media-link:hover {
-  background: var(--color-surface-muted);
-}
-
-.media-link.active {
-  background: var(--color-surface-muted);
-  box-shadow: inset 3px 0 0 var(--color-accent);
-  font-weight: 600;
-}
-
-/* "Novo acervo" and "Editar acervo" (KBC-048 FR-6): quiet text actions under the selector. */
-.collection-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-  margin-top: calc(-1 * var(--space-2));
-}
-
-.collection-action {
-  min-height: var(--target);
-  padding: 0 var(--space-1);
-  border: none;
-  background: transparent;
-  color: var(--color-accent-strong);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-  cursor: pointer;
-}
-
-.collection-action:hover {
-  text-decoration-thickness: 2px;
+  .branch-line {
+    left: 1rem;
+  }
 }

@@ -1,0 +1,84 @@
+import { placeOverlay, type OverlayBox } from './overlay.js';
+
+const viewport = { width: 390, height: 844 };
+const anchor = (at: {
+  left: number;
+  top: number;
+  width?: number;
+}): OverlayBox => ({
+  left: at.left,
+  top: at.top,
+  right: at.left + (at.width ?? 80),
+  bottom: at.top + 32,
+});
+
+describe('placeOverlay (D5: menus never clipped, always on screen)', () => {
+  it('opens under the trigger, its start under the trigger start, when it fits', () => {
+    expect(
+      placeOverlay({
+        anchor: anchor({ left: 40, top: 100 }),
+        size: { width: 200, height: 160 },
+        viewport,
+        align: 'start',
+        side: 'below',
+      }),
+    ).toMatchObject({ top: 138, left: 40, side: 'below' });
+  });
+
+  it('flips above when there is no room below and more above', () => {
+    const where = placeOverlay({
+      anchor: anchor({ left: 40, top: 760 }),
+      size: { width: 200, height: 300 },
+      viewport,
+      align: 'start',
+      side: 'below',
+    });
+    expect(where.side).toBe('above');
+    expect(where.top).toBe(760 - 6 - 300);
+  });
+
+  it('stays on its side and limits its height when the other side is smaller', () => {
+    const where = placeOverlay({
+      anchor: anchor({ left: 40, top: 300 }),
+      size: { width: 200, height: 900 },
+      viewport,
+      align: 'start',
+      side: 'below',
+    });
+    expect(where.side).toBe('below');
+    expect(where.maxHeight).toBe(844 - 332 - 6 - 8);
+  });
+
+  it('shifts left to end inside the viewport, and right past the left edge', () => {
+    const size = { width: 240, height: 100 };
+    expect(
+      placeOverlay({
+        anchor: anchor({ left: 300, top: 100 }),
+        size,
+        viewport,
+        align: 'start',
+        side: 'below',
+      }).left,
+    ).toBe(390 - 8 - 240);
+    expect(
+      placeOverlay({
+        anchor: anchor({ left: 0, top: 100, width: 40 }),
+        size,
+        viewport,
+        align: 'end',
+        side: 'below',
+      }).left,
+    ).toBe(8);
+  });
+
+  it('never gets wider than the viewport less its margins', () => {
+    const where = placeOverlay({
+      anchor: anchor({ left: 0, top: 100 }),
+      size: { width: 600, height: 100 },
+      viewport,
+      align: 'start',
+      side: 'below',
+    });
+    expect(where).toMatchObject({ left: 8, maxWidth: 374 });
+  });
+});

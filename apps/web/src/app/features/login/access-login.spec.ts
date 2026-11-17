@@ -76,8 +76,8 @@ describe('Entrar com código (KBC-014 FR-5, T10)', () => {
     expect(
       screen.getByText(/Se houver um acesso para ana@example.com/),
     ).toBeTruthy();
-    expect(document.activeElement).toBe(screen.getByLabelText('Código'));
-    type('Código', '12a3456');
+    expect(document.activeElement).toBe(screen.getByLabelText('Dígito 1 de 6'));
+    type('Dígito 1 de 6', '12a3456');
     fireEvent.click(button('Entrar'));
     const verify = http.expectOne('/api/v1/auth/code/verify');
     expect(verify.request.body).toEqual({
@@ -107,7 +107,7 @@ describe('Entrar com código (KBC-014 FR-5, T10)', () => {
     fireEvent.click(button('Enviar código'));
     http.expectOne('/api/v1/auth/code').flush({});
     await fixture.whenStable();
-    type('Código', '000000');
+    type('Dígito 1 de 6', '000000');
     fireEvent.click(button('Entrar'));
     http
       .expectOne('/api/v1/auth/code/verify')
@@ -157,7 +157,7 @@ describe('Entrar com código (KBC-014 FR-5, T10)', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'Muitos pedidos em pouco tempo',
     );
-    fireEvent.click(button('← Voltar'));
+    fireEvent.click(button('Voltar'));
     await fixture.whenStable();
     expect(button('Entrar com código')).toBeTruthy();
   });
@@ -172,7 +172,7 @@ describe('focus between the login forms (WCAG 2.4.3)', () => {
     expect(document.activeElement).toBe(
       screen.getByRole('heading', { name: 'Entrar com código' }),
     );
-    fireEvent.click(button('← Voltar'));
+    fireEvent.click(button('Voltar'));
     await fixture.whenStable();
     expect(document.activeElement).toBe(button('Entrar com código'));
 
@@ -181,7 +181,7 @@ describe('focus between the login forms (WCAG 2.4.3)', () => {
     expect(document.activeElement).toBe(
       screen.getByRole('heading', { name: 'Pedir acesso sem conta Google' }),
     );
-    fireEvent.click(button('← Voltar'));
+    fireEvent.click(button('Voltar'));
     await fixture.whenStable();
     expect(document.activeElement).toBe(
       button('Pedir acesso sem conta Google'),
@@ -233,7 +233,7 @@ describe('Pedir acesso sem conta Google (KBC-014 FR-1, FR-2, T10)', () => {
       screen.getByText(/Se o e-mail puder ser usado, enviamos um código/),
     ).toBeTruthy();
 
-    type('Código', '123456');
+    type('Dígito 1 de 6', '123456');
     fireEvent.click(button('Confirmar'));
     const confirm = http.expectOne('/api/v1/access-requests/signup/verify');
     expect(confirm.request.body).toEqual({
@@ -243,8 +243,9 @@ describe('Pedir acesso sem conta Google (KBC-014 FR-1, FR-2, T10)', () => {
     confirm.flush({ status: 'pending' });
     await fixture.whenStable();
 
+    expect(screen.getByText('Solicitação enviada.')).toBeTruthy();
     expect(
-      screen.getByText(/Solicitação enviada. Um master vai analisar/),
+      screen.getByText(/Um master vai analisar; você recebe um e-mail/),
     ).toBeTruthy();
   });
 
@@ -259,7 +260,7 @@ describe('Pedir acesso sem conta Google (KBC-014 FR-1, FR-2, T10)', () => {
     fireEvent.click(button('Enviar código'));
     http.expectOne('/api/v1/access-requests/signup').flush({});
     await fixture.whenStable();
-    type('Código', '123456');
+    type('Dígito 1 de 6', '123456');
     fireEvent.click(button('Confirmar'));
     http
       .expectOne('/api/v1/access-requests/signup/verify')
@@ -364,5 +365,26 @@ describe('Google sem convite (KBC-014 FR-3, T8)', () => {
     expect(
       screen.getByText(/recusada/).textContent?.replace(/\s+/g, ' '),
     ).toContain('a partir de 26/10 às 10:30 (horário de Brasília).');
+  });
+});
+
+describe('Pedir acesso: errors at each field (KBC-124 AC-5)', () => {
+  it('shows each error under its field and moves the focus to the first one', async () => {
+    const { http, fixture } = await renderLogin();
+    fireEvent.click(button('Pedir acesso sem conta Google'));
+    await fixture.whenStable();
+    type('Sobrenome', 'Lima');
+    fireEvent.click(button('Enviar código'));
+    await fixture.whenStable();
+
+    expect(document.activeElement).toBe(screen.getByLabelText('E-mail'));
+    for (const label of ['E-mail', 'Nome', 'Celular'])
+      expect(screen.getByLabelText(label).getAttribute('aria-invalid')).toBe(
+        'true',
+      );
+    expect(
+      screen.getByLabelText('Sobrenome').getAttribute('aria-invalid'),
+    ).toBeNull();
+    http.expectNone('/api/v1/access/sign-up');
   });
 });

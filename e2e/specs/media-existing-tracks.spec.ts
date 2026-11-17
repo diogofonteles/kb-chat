@@ -8,6 +8,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { openSection, openSettings } from './settings-helpers.js';
 import { aCollectionInVault, uniqueTag, uploadReady } from './media-helpers.js';
 import { approve, seedDraft } from './tracks-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
@@ -70,12 +71,9 @@ async function titleOf(owner: APIRequestContext, topic: string) {
 }
 
 async function openTranscribers(page: Page) {
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
+  const dialog = await openSettings(page);
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: 'Transcritores' }).click();
+  await openSection(dialog, 'Transcritores');
   const section = dialog.getByRole('region', {
     name: 'Faixas que já existem',
   });

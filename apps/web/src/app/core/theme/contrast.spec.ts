@@ -20,6 +20,15 @@ const PAIRS: readonly (readonly [ColorName, ColorName, number])[] = [
   ['focus', 'bg', 3],
   ['focus', 'surface', 3],
   ['danger', 'surface', 4.5],
+  // v2 (KBC-124): menus and modals, the status tones and the "Vendo como" band.
+  ['text', 'elevated', 4.5],
+  ['text-muted', 'elevated', 4.5],
+  ['warn', 'bg', 4.5],
+  ['warn', 'surface', 4.5],
+  ['info', 'bg', 4.5],
+  ['danger', 'bg', 4.5],
+  ['on-info', 'info', 4.5],
+  ['accent', 'shell', 4.5],
 ];
 
 describe('theme contrast (KBC-005 BR-4)', () => {

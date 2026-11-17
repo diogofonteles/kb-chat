@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { CSRF, expect, ownerApi, test } from './fixtures.js';
+import { chooseCollectionSlug } from './shell-helpers.js';
 
 /**
  * KBC-107 (ADR 0036 §5, screens.md T24 "Sem nível"): documents that arrive from kb without a
@@ -27,11 +28,7 @@ async function press(page: Page, target: Locator): Promise<void> {
 
 /** The sidebar with `slug` chosen (on the phone, choosing closes the drawer: reopened). */
 async function sidebarOn(page: Page, slug: string): Promise<Locator> {
-  await (
-    await sidebar(page)
-  )
-    .getByRole('combobox', { name: 'Acervo', exact: true })
-    .selectOption(slug);
+  await chooseCollectionSlug(page, slug);
   return sidebar(page);
 }
 
@@ -40,7 +37,7 @@ async function sidebar(page: Page): Promise<Locator> {
   if (!desktop(page) && !(await drawer.isVisible()))
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
   return desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
+    ? page.getByRole('complementary', { name: 'Sua biblioteca' })
     : drawer;
 }
 

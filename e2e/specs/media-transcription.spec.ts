@@ -9,26 +9,16 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { openMediaFromLibrary } from './shell-helpers.js';
+import { openSection, openSettings, SETTINGS_AXE } from './settings-helpers.js';
 import { uniqueTag, uploadReady, useTheme } from './media-helpers.js';
 
 // KBC-036: the transcription status of the media and the masters' "Transcritores".
 
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
-
-async function openSettings(page: Page) {
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await expect(dialog).toBeVisible();
-  return dialog;
-}
-
 async function openMedia(page: Page) {
   await page.goto('/');
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('link', { name: 'Mídia' }).click();
+  // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
+  await openMediaFromLibrary(page);
   await expect(
     page.getByRole('heading', { name: /Mídia — Hermetismo/ }),
   ).toBeVisible();
@@ -146,9 +136,11 @@ test('AC-7: a member sees no "Transcritores" and the API refuses them', async ({
   const page = await pageAs(browser, email, viewport);
   await page.goto('/');
   const dialog = await openSettings(page);
-  await expect(dialog.getByRole('button', { name: 'Sobre' })).toBeVisible();
   await expect(
-    dialog.getByRole('button', { name: 'Transcritores' }),
+    dialog.getByRole('link', { name: 'Sobre', exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole('link', { name: 'Transcritores', exact: true }),
   ).toHaveCount(0);
   const listed = await page.request.get('/api/v1/media/transcribers');
   expect(listed.status()).toBe(403);
@@ -174,9 +166,9 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
 
     const name = `Mac ${theme} ${uniqueTag()}`;
     const dialog = await openSettings(page);
-    await dialog.getByRole('button', { name: 'Transcritores' }).click();
+    await openSection(dialog, 'Transcritores');
     await expect(
-      dialog.getByRole('heading', { name: 'Transcritores', level: 3 }),
+      dialog.getByRole('heading', { name: 'Transcritores', exact: true }),
     ).toBeVisible();
     await dialog.getByRole('button', { name: 'Parear transcritor' }).click();
     await expect(dialog.getByText('Dê um nome ao transcritor.')).toBeVisible();
@@ -189,7 +181,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
       'uv run --project tools/transcriber transcriber pair --api-url http://localhost',
     );
     await page.waitForFunction(() => document.getAnimations().length === 0);
-    expect(await seriousViolations(page, 'dialog')).toEqual([]);
+    expect(await seriousViolations(page, SETTINGS_AXE)).toEqual([]);
     await box.getByRole('button', { name: 'Pronto, já copiei' }).click();
     await expect(box).toHaveCount(0);
 
@@ -197,9 +189,13 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await expect(item).toContainText('Desligado');
     await expect(item).toContainText('ainda não foi visto');
     await item.getByRole('button', { name: `Revogar ${name}` }).click();
-    await expect(item).toContainText(`Revogar "${name}"?`);
-    expect(await seriousViolations(page, 'dialog')).toEqual([]);
-    await item.getByRole('button', { name: 'Revogar', exact: true }).click();
+    // The question is a modal now (KBC-132 FR-4), named by it.
+    const question = page.getByRole('dialog', { name: `Revogar "${name}"?` });
+    await expect(question).toContainText(`Revogar "${name}"?`);
+    expect(await seriousViolations(page, SETTINGS_AXE)).toEqual([]);
+    await question
+      .getByRole('button', { name: 'Revogar', exact: true })
+      .click();
     await expect(
       dialog.getByRole('listitem').filter({ hasText: name }),
     ).toHaveCount(0);
@@ -211,7 +207,7 @@ test('AC-10: "Transcritores" works by keyboard, and the focus never falls to the
 }) => {
   await page.goto('/');
   const dialog = await openSettings(page);
-  await dialog.getByRole('button', { name: 'Transcritores' }).click();
+  await openSection(dialog, 'Transcritores');
   const name = `Mac teclado ${uniqueTag()}`;
   const field = dialog.getByLabel('Nome do transcritor');
   await field.focus();
@@ -228,14 +224,19 @@ test('AC-10: "Transcritores" works by keyboard, and the focus never falls to the
   const revoke = item.getByRole('button', { name: `Revogar ${name}` });
   await revoke.focus();
   await page.keyboard.press('Enter');
-  const cancel = item.getByRole('button', { name: 'Cancelar' });
+  // The question is a modal (KBC-132 FR-4): "Cancelar", then "Revogar" on its right.
+  const question = page.getByRole('dialog', { name: `Revogar "${name}"?` });
+  const cancel = question.getByRole('button', { name: 'Cancelar' });
   await expect(cancel).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(revoke).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(cancel).toBeFocused();
-  await page.keyboard.press('Shift+Tab');
-  const confirm = item.getByRole('button', { name: 'Revogar', exact: true });
+  await page.keyboard.press('Tab');
+  const confirm = question.getByRole('button', {
+    name: 'Revogar',
+    exact: true,
+  });
   await expect(confirm).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(dialog.getByRole('heading', { name: 'Pareados' })).toBeFocused();

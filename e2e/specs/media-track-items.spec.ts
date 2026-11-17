@@ -10,7 +10,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { aCollection, audioState } from './media-helpers.js';
+import { aCollection, audioState, chooseLibraryView } from './media-helpers.js';
 import { approve, audioWithTracks, openCollection } from './tracks-helpers.js';
 
 // KBC-068: approved tracks as items of their own, cut for real by the E2E's media worker.
@@ -84,7 +84,7 @@ test('AC-3, FR-5: in the grid, the tracks answer to the pointer and show their t
   await owner.dispose();
   const page = await pageAs(browser, email, viewport);
   await openCollection(page, media.topic);
-  await page.getByRole('button', { name: 'Ver em grade' }).click();
+  await chooseLibraryView(page, 'Grade');
 
   // Closed at first: the pointer opens it, closes it and opens it again.
   const toggle = page.getByRole('button', { name: '3 faixas' });

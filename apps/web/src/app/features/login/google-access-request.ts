@@ -14,6 +14,12 @@ import type { NotInvitedDetails } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { AccessApi } from '@core/auth/access-api.js';
 import { phoneError } from './login-fields.js';
+import { UiAvatar } from '@ui/avatar.js';
+import { UiBanner } from '@ui/banner.js';
+import { UiButton } from '@ui/button.js';
+import { UiIcon } from '@ui/icon.js';
+import { UiPill } from '@ui/pill.js';
+import type { GoogleProfile } from './google-profile.js';
 
 type Step = 'notice' | 'form' | 'sent';
 
@@ -23,7 +29,7 @@ type Step = 'notice' | 'form' | 'sent';
  */
 @Component({
   selector: 'app-google-access-request',
-  imports: [DatePipe],
+  imports: [DatePipe, UiAvatar, UiBanner, UiButton, UiIcon, UiPill],
   templateUrl: './google-access-request.html',
   styleUrl: './login-form.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -33,6 +39,8 @@ export class GoogleAccessRequest {
   private readonly destroyRef = inject(DestroyRef);
   /** Null when the API sent no ticket: only "peça a um master" is left. */
   readonly details = input.required<NotInvitedDetails | null>();
+  /** The Google account that signed in, when its token could be read (the account row). */
+  readonly account = input<GoogleProfile | null>(null);
   readonly left = output();
 
   /** The emails use Brasília time too (ADR 0011); Brazil keeps no daylight saving time. */

@@ -1,7 +1,12 @@
-<main class="privacy" aria-labelledby="privacy-title">
+<app-reading-page
+  titleId="privacy-title"
+  [heading]="title"
+  [meta]="updated"
+  path="/privacidade"
+  [sections]="sections"
+  [other]="other"
+>
   <article class="policy">
-    <a class="brand" routerLink="/" i18n="@@privacy.brand">Nova Alexandria</a>
-    <h1 id="privacy-title" i18n="@@privacy.title">Política de privacidade</h1>
     <p class="lead" i18n="@@privacy.intro">
       A Nova Alexandria é uma biblioteca de pesquisa de acesso restrito: só
       entra quem um administrador aprova. Esta página explica quais dados
@@ -11,7 +16,7 @@
     </p>
 
     <section aria-labelledby="privacy-data">
-      <h2 id="privacy-data" i18n="@@privacy.dataTitle">
+      <h2 id="privacy-data" tabindex="-1" i18n="@@privacy.dataTitle">
         Quais dados guardamos
       </h2>
       <ul>
@@ -70,7 +75,7 @@
     </section>
 
     <section aria-labelledby="privacy-purpose">
-      <h2 id="privacy-purpose" i18n="@@privacy.purposeTitle">
+      <h2 id="privacy-purpose" tabindex="-1" i18n="@@privacy.purposeTitle">
         Para que usamos
       </h2>
       <p i18n="@@privacy.purpose">
@@ -89,7 +94,7 @@
     </section>
 
     <section aria-labelledby="privacy-support">
-      <h2 id="privacy-support" i18n="@@privacy.supportTitle">
+      <h2 id="privacy-support" tabindex="-1" i18n="@@privacy.supportTitle">
         Quando um master ajuda você
       </h2>
       <p i18n="@@privacy.supportActAs">
@@ -108,7 +113,9 @@
     </section>
 
     <section aria-labelledby="privacy-parties">
-      <h2 id="privacy-parties" i18n="@@privacy.partiesTitle">Quem participa</h2>
+      <h2 id="privacy-parties" tabindex="-1" i18n="@@privacy.partiesTitle">
+        Quem participa
+      </h2>
       <p i18n="@@privacy.noSale">
         Não vendemos nem compartilhamos os seus dados para outros fins. Só estes
         serviços participam, cada um no seu papel:
@@ -134,7 +141,7 @@
     </section>
 
     <section aria-labelledby="privacy-retention">
-      <h2 id="privacy-retention" i18n="@@privacy.retentionTitle">
+      <h2 id="privacy-retention" tabindex="-1" i18n="@@privacy.retentionTitle">
         Por quanto tempo
       </h2>
       <ul>
@@ -167,7 +174,9 @@
     </section>
 
     <section aria-labelledby="privacy-rights">
-      <h2 id="privacy-rights" i18n="@@privacy.rightsTitle">Seus direitos</h2>
+      <h2 id="privacy-rights" tabindex="-1" i18n="@@privacy.rightsTitle">
+        Seus direitos
+      </h2>
       <p i18n="@@privacy.controller">
         O responsável pelos dados é o administrador da Nova Alexandria, que
         aprova os acessos.
@@ -192,9 +201,6 @@
       }
     </section>
 
-    <p class="updated" i18n="@@privacy.updated">
-      Última atualização: 4 de novembro de 2026.
-    </p>
     <p class="links">
       <a class="back" routerLink="/" i18n="@@privacy.back"
         >Voltar à Nova Alexandria</a
@@ -204,4 +210,4 @@
       >
     </p>
   </article>
-</main>
+</app-reading-page>

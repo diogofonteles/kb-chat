@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
 
 /** KBC-032: the public "how to use" guide with real screenshots, at 1440 and 390. */
@@ -121,18 +121,26 @@ test.describe('signed out', () => {
   });
 });
 
+/** "Como usar": the avatar menu's entry (desktop) or the phone Menu's link (KBC-125). */
+async function helpEntry(page: Page): Promise<Locator> {
+  const name = 'Como usar a Nova Alexandria (abre em nova aba)';
+  if ((page.viewportSize()?.width ?? 0) >= 1024) {
+    await page.getByRole('button', { name: /^Conta de / }).click();
+    return page.getByRole('menuitem', { name });
+  }
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  return page.getByRole('dialog', { name: 'Menu' }).getByRole('link', { name });
+}
+
 test('AC-4: the help in the app header opens the tutorial in a new tab and keeps the conversation', async ({
   page,
 }) => {
   await page.goto('/');
   await expect(page.getByLabel('Sua pergunta')).toBeVisible();
+  const help = await helpEntry(page);
   const [tutorial] = await Promise.all([
     page.context().waitForEvent('page'),
-    page
-      .getByRole('link', {
-        name: 'Como usar a Nova Alexandria (abre em nova aba)',
-      })
-      .click(),
+    help.click(),
   ]);
 
   await expect(
@@ -163,20 +171,21 @@ test('AC-4: with the document panel open on a narrow desktop, the help stays vis
       .first()
       .click();
     await expect(page.locator('app-document-panel')).toBeVisible();
-    const help = page.getByRole('link', {
-      name: 'Como usar a Nova Alexandria (abre em nova aba)',
-    });
+    // v2 (KBC-125): "Como usar" is in the avatar menu of the top bar.
+    const help = await helpEntry(page);
     await expect(help).toBeInViewport({ ratio: 1 });
     // Nothing covers it: the element at its center is the link itself.
     const box = await help.boundingBox();
     const onTop = await page.evaluate(
-      ({ x, y }) => document.elementFromPoint(x, y)?.closest('a')?.className,
+      ({ x, y }) =>
+        document.elementFromPoint(x, y)?.closest('a')?.getAttribute('href'),
       {
         x: (box?.x ?? 0) + (box?.width ?? 0) / 2,
         y: (box?.y ?? 0) + (box?.height ?? 0) / 2,
       },
     );
-    expect(onTop, `width ${width}`).toContain('help');
+    expect(onTop, `width ${width}`).toBe('/tutorial');
+    await page.keyboard.press('Escape');
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth - window.innerWidth,

@@ -1,6 +1,32 @@
 /* Generated from tokens.json by scripts/tokens.mjs — do not edit by hand. */
 :root,
-[data-theme='light'] {
+[data-theme='revised'] {
+  --color-bg: #121212;
+  --color-surface: #1f1f1f;
+  --color-surface-muted: #2a2a2a;
+  --color-text: #ffffff;
+  --color-text-muted: #b3b3b3;
+  --color-border: #4d4d4d;
+  --color-accent: #2bd46b;
+  --color-accent-strong: #24b85c;
+  --color-on-accent: #000000;
+  --color-mark: #1c4a2c;
+  --color-focus: #ffffff;
+  --color-danger: #f3727f;
+  --color-voice-1: #6ea8ff;
+  --color-voice-2: #ff9a5c;
+  --color-voice-3: #2bd46b;
+  --color-voice-4: #c38bff;
+  --color-voice-5: #ff7ab6;
+  --color-shell: #000000;
+  --color-elevated: #282828;
+  --color-warn: #ffb02e;
+  --color-info: #6ea8ff;
+  --color-on-info: #000000;
+}
+
+[data-theme='light'],
+[data-theme='system'] {
   --color-bg: #f7f5f0;
   --color-surface: #ffffff;
   --color-surface-muted: #efebe3;
@@ -18,10 +44,15 @@
   --color-voice-3: #2e7d32;
   --color-voice-4: #7b3fa0;
   --color-voice-5: #ad1457;
+  --color-shell: #ece7de;
+  --color-elevated: #ffffff;
+  --color-warn: #8a5300;
+  --color-info: #1f5fbf;
+  --color-on-info: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']):not([data-theme='esoteric']) {
+  [data-theme='system'] {
     --color-bg: #1f1e1c;
     --color-surface: #2a2926;
     --color-surface-muted: #34322e;
@@ -39,6 +70,11 @@
     --color-voice-3: #7fc98a;
     --color-voice-4: #c79bea;
     --color-voice-5: #f08cb5;
+    --color-shell: #161513;
+    --color-elevated: #34322e;
+    --color-warn: #f2b45a;
+    --color-info: #8ab4ff;
+    --color-on-info: #1f1e1c;
   }
 }
 
@@ -60,6 +96,11 @@
   --color-voice-3: #7fc98a;
   --color-voice-4: #c79bea;
   --color-voice-5: #f08cb5;
+  --color-shell: #161513;
+  --color-elevated: #34322e;
+  --color-warn: #f2b45a;
+  --color-info: #8ab4ff;
+  --color-on-info: #1f1e1c;
 }
 
 [data-theme='esoteric'] {
@@ -80,4 +121,9 @@
   --color-voice-3: #7fc98a;
   --color-voice-4: #c79bea;
   --color-voice-5: #f08cb5;
+  --color-shell: #0c0a15;
+  --color-elevated: #2a2640;
+  --color-warn: #e0c06a;
+  --color-info: #9fc1ff;
+  --color-on-info: #14121f;
 }

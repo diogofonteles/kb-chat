@@ -1,108 +1,164 @@
 <p class="visually-hidden" role="status">{{ announcer.message() }}</p>
 @if (visible() && source(); as current) {
-  <section
-    class="mini"
-    [class.above-composer]="aboveComposer()"
-    aria-label="Mini-player"
-    i18n-aria-label="@@mini.region"
-  >
-    <div
-      class="progress"
-      role="progressbar"
-      aria-label="Posição"
-      i18n-aria-label="@@mini.progress"
-      aria-valuemin="0"
-      aria-valuemax="100"
-      [attr.aria-valuenow]="roundedPercent()"
-      [attr.aria-valuetext]="positionText()"
-    >
-      <span class="played" [style.width.%]="percent()"></span>
+  <!-- The v2 player bar (KBC-125): 72 at the foot of the shell on desktop, the mini player
+       above the phone navigation. -->
+  <section class="bar" aria-label="Mini-player" i18n-aria-label="@@mini.region">
+    <div class="now">
+      <ui-cover class="cover" [title]="current.title" [size]="56" />
+      <div class="text">
+        @if (gone()) {
+          <p class="problem" role="alert" i18n="@@mini.gone">
+            Esta mídia não está mais no acervo ou você não tem acesso a ela.
+          </p>
+        } @else if (failed()) {
+          <p class="problem" role="alert">
+            <span i18n="@@mini.failed">Não consegui continuar o áudio.</span>
+            <button
+              uiButton="white"
+              size="sm"
+              type="button"
+              class="retry"
+              (click)="retry()"
+              i18n="@@player.retry"
+            >
+              Tentar de novo
+            </button>
+          </p>
+        } @else {
+          <a class="title" [routerLink]="['/midia', current.id]">{{
+            currentTrack()?.title ?? current.title
+          }}</a>
+          @if (currentTrack()) {
+            <span class="subtitle">{{ current.title }}</span>
+          }
+        }
+      </div>
     </div>
-    @if (gone()) {
-      <p class="problem" role="alert" i18n="@@mini.gone">
-        Esta mídia não está mais no acervo ou você não tem acesso a ela.
-      </p>
-    } @else if (failed()) {
-      <p class="problem" role="alert">
-        <span i18n="@@mini.failed">Não consegui continuar o áudio.</span>
+    <div class="controls">
+      <div class="buttons">
+        <button
+          uiIconButton
+          type="button"
+          class="skip"
+          [disabled]="gone()"
+          [attr.aria-label]="backLabel()"
+          aria-keyshortcuts="J"
+          (click)="back()"
+        >
+          <ui-icon name="rewind" [size]="20" />
+          <span class="skip-amount" aria-hidden="true">{{ skipBack() }}</span>
+        </button>
         <button
           type="button"
-          class="retry"
-          (click)="retry()"
-          i18n="@@player.retry"
+          class="play"
+          [disabled]="gone()"
+          [attr.aria-label]="playLabel()"
+          aria-keyshortcuts="K Space"
+          (click)="toggle()"
         >
-          Tentar de novo
+          @if (busy()) {
+            <span class="spinner" aria-hidden="true"></span>
+          } @else if (playing()) {
+            <ui-icon name="pause" [size]="18" />
+          } @else {
+            <ui-icon name="play" [size]="18" />
+          }
         </button>
-      </p>
-    } @else {
-      <a class="title" [routerLink]="['/midia', current.id]">{{
-        currentTrack()?.title ?? current.title
-      }}</a>
-    }
-    <span class="time"
-      >{{ elapsed() }}
-      @if (sleepShown(); as sleep) {
-        <span class="sleep"
-          ><span aria-hidden="true">☾ </span
-          ><span class="visually-hidden" i18n="@@mini.sleep.label"
-            >Timer para dormir: </span
-          >{{ sleep }}</span
+        <button
+          uiIconButton
+          type="button"
+          class="skip forward"
+          [disabled]="gone()"
+          [attr.aria-label]="forwardLabel()"
+          (click)="forward()"
         >
-      }
-    </span>
-    <div class="actions">
+          <ui-icon name="forward" [size]="20" />
+          <span class="skip-amount" aria-hidden="true">{{
+            skipForward()
+          }}</span>
+        </button>
+      </div>
+      <div class="timeline">
+        <span class="time"
+          >{{ elapsed() }}
+          @if (sleepShown(); as sleep) {
+            <span class="sleep"
+              ><span aria-hidden="true">☾ </span
+              ><span class="visually-hidden" i18n="@@mini.sleep.label"
+                >Timer para dormir: </span
+              >{{ sleep }}</span
+            >
+          }
+        </span>
+        <div
+          class="progress"
+          role="progressbar"
+          aria-label="Posição"
+          i18n-aria-label="@@mini.progress"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          [attr.aria-valuenow]="roundedPercent()"
+          [attr.aria-valuetext]="positionText()"
+        >
+          <span class="played" [style.width.%]="percent()"></span>
+        </div>
+        <span class="total" aria-hidden="true">{{ total() }}</span>
+      </div>
+    </div>
+    <div class="extras">
       <button
+        uiIconButton
         type="button"
-        class="icon"
-        [disabled]="gone()"
-        [attr.aria-label]="backLabel()"
-        aria-keyshortcuts="J"
-        (click)="back()"
+        class="now-playing"
+        [class.on]="nowPlayingOpen()"
+        aria-label="Tocando agora"
+        i18n-aria-label="@@mini.nowPlaying"
+        [attr.aria-pressed]="nowPlayingOpen()"
+        (click)="toggleNowPlaying()"
       >
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
-          <path
-            d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"
-            fill="currentColor"
-          />
-        </svg>
-        <span class="skip-amount" aria-hidden="true">{{ skipBack() }}</span>
+        <ui-icon name="cc" [size]="20" />
       </button>
       <button
+        uiIconButton
         type="button"
-        class="icon play"
-        [disabled]="gone()"
-        [attr.aria-label]="playLabel()"
-        aria-keyshortcuts="K Space"
-        (click)="toggle()"
-      >
-        @if (busy()) {
-          <span class="spinner" aria-hidden="true"></span>
-        } @else if (playing()) {
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
-            <path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor" />
-          </svg>
-        } @else {
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
-            <path d="M8 5v14l11-7z" fill="currentColor" />
-          </svg>
-        }
-      </button>
-      <button
-        type="button"
-        class="icon"
         aria-label="Fechar o player"
         i18n-aria-label="@@mini.close"
         (click)="close()"
       >
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
-          <path
-            d="M6 6l12 12M18 6L6 18"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          />
-        </svg>
+        <ui-icon name="close" [size]="20" />
       </button>
+    </div>
+  </section>
+} @else if (idle()) {
+  <section
+    class="bar idle"
+    aria-label="Player"
+    i18n-aria-label="@@mini.idleRegion"
+  >
+    <div class="now">
+      <ui-cover
+        class="cover"
+        icon="music"
+        from="#3a3a3a"
+        to="#1f1f1f"
+        [size]="56"
+      />
+      <div class="text">
+        <span class="title" i18n="@@mini.idle">Nada tocando agora</span>
+        @if (idleLink(); as link) {
+          <a class="subtitle link" [routerLink]="link">
+            @if (idleInMedia()) {
+              <ng-container i18n="@@mini.idleLinkMedia"
+                >Escolha um áudio em Mídia</ng-container
+              >
+            } @else {
+              <ng-container i18n="@@mini.idleLink"
+                >Escolha um áudio na Biblioteca</ng-container
+              >
+            }
+          </a>
+        }
+      </div>
     </div>
   </section>
 }

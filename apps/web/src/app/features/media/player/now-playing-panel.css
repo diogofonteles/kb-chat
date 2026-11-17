@@ -1,0 +1,139 @@
+/* "Tocando agora" in the right panel (340 wide): the cover fills the width, the transcript
+   card in the cover's tint, "Sobre a autora" under it. */
+:host {
+  display: block;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.now {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.label {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.art {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: var(--radius-card);
+}
+
+.head {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.names {
+  display: grid;
+  flex: 1;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.title {
+  color: var(--color-text);
+  font-size: var(--text-section);
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.title:hover {
+  text-decoration: underline;
+}
+
+.author,
+.person-meta,
+.idle {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.open {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--target);
+  height: var(--target);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+}
+
+.open:hover {
+  background: var(--overlay-2);
+  color: var(--color-text);
+}
+
+.card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: color-mix(
+    in srgb,
+    var(--color-accent) 18%,
+    var(--color-elevated)
+  );
+}
+
+.card p {
+  margin: 0;
+}
+
+.card-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.before,
+.line {
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.before {
+  color: var(--color-text-muted);
+}
+
+.about {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.about h3 {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.person {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.person-name {
+  margin: 0;
+  font-weight: 700;
+}

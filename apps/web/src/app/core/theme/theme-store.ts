@@ -1,14 +1,41 @@
 import { DOCUMENT } from '@angular/common';
 import { Injectable, effect, inject, signal } from '@angular/core';
-import { z } from 'zod';
+import { THEMES, themeSchema, type Theme } from '@kb-chat/contracts';
 
-export const THEMES = ['auto', 'light', 'dark', 'esoteric'] as const;
-const themeSchema = z.enum(THEMES);
-export type Theme = z.infer<typeof themeSchema>;
+export { THEMES, type Theme };
 
 const STORAGE_KEY = 'kb-chat.theme';
 
-/** Theme choice (KBC-005 BR-3): "auto" follows the system; the choice is remembered in this browser. */
+/**
+ * The themes a person picks from (KBC-124 BR-4): "auto" is not one of them, it is what
+ * nobody chose and shows as "Escuro (revisado)".
+ */
+export const THEME_CHOICES = [
+  'revised',
+  'system',
+  'light',
+  'dark',
+  'esoteric',
+] as const satisfies readonly Theme[];
+export type ThemeChoice = (typeof THEME_CHOICES)[number];
+
+export const THEME_LABELS: Record<ThemeChoice, () => string> = {
+  revised: () => $localize`:@@theme.revised:Escuro (revisado)`,
+  system: () => $localize`:@@theme.auto:Automático (claro/escuro)`,
+  light: () => $localize`:@@theme.light:Claro`,
+  dark: () => $localize`:@@theme.dark:Escuro`,
+  esoteric: () => $localize`:@@theme.esoteric:Esotérico`,
+};
+
+/** The choice a theme shows as: "auto" (not chosen) is the revised theme (D2). */
+export const shownTheme = (theme: Theme): ThemeChoice =>
+  theme === 'auto' ? 'revised' : theme;
+
+/**
+ * Theme choice (KBC-005 BR-3): remembered in this browser. With nothing chosen ("auto"), the
+ * page has no data-theme and shows the revised theme, the v2 default (KBC-124 D2); "system"
+ * follows the operating system between light and dark.
+ */
 @Injectable({ providedIn: 'root' })
 export class ThemeStore {
   private readonly document = inject(DOCUMENT);

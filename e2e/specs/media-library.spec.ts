@@ -9,6 +9,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { openMediaFromLibrary } from './shell-helpers.js';
 import {
   aCollection,
   makeMp3,
@@ -22,8 +23,8 @@ const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 /** "Mídia" in the sidebar, or in the phone's menu (T14). */
 async function openMedia(page: Page) {
   await page.goto('/');
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('link', { name: 'Mídia' }).click();
+  // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
+  await openMediaFromLibrary(page);
   await expect(
     page.getByRole('heading', { name: /Mídia — Hermetismo/ }),
   ).toBeVisible();

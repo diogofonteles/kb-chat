@@ -20,7 +20,9 @@ import { SessionStore } from '@core/auth/session-store.js';
 import { signal } from '@angular/core';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { SleepTimerService } from '@core/media/sleep-timer.js';
+import { RightPanel } from '@features/shell/right-panel.js';
 import { MiniPlayer } from './mini-player.js';
+import { NowPlayingPanel } from './now-playing-panel.js';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const SOURCE = {
@@ -103,6 +105,36 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     expect(screen.queryByRole('region', { name: 'Mini-player' })).toBeNull();
     await harness.navigateByUrl('/');
     expect(screen.getByRole('region', { name: 'Mini-player' })).toBeTruthy();
+  });
+
+  it('KBC-129 FR-2: the transcript button opens "Tocando agora" in the right panel and closes it', async () => {
+    const { harness } = await setup();
+    const panel = TestBed.inject(RightPanel);
+    const button = screen.getByRole('button', { name: 'Tocando agora' });
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(button);
+    await harness.fixture.whenStable();
+    expect(panel.content()).toMatchObject({
+      component: NowPlayingPanel,
+      width: 'narrow',
+      label: 'Tocando agora',
+    });
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(button);
+    await harness.fixture.whenStable();
+    expect(panel.content()).toBeNull();
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('KBC-129 FR-2: closing the player also closes "Tocando agora"', async () => {
+    const { harness } = await setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Tocando agora' }));
+    await harness.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar o player' }));
+    await harness.fixture.whenStable();
+    expect(TestBed.inject(RightPanel).content()).toBeNull();
   });
 
   it('pauses, goes back 15 s and plays from the bar', async () => {

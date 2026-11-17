@@ -190,7 +190,10 @@ test('AC-1, AC-7: only the tracks that say the words, first under the box, whate
 
   await expect(page.getByRole('region', { name: 'Todas' })).toHaveCount(0);
   await expect(page.getByText('Ouvidas recentemente')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /^Ordenar/ })).toHaveCount(0);
+  // The library page's own order (Sua biblioteca has its "Ordenar por", KBC-125).
+  await expect(
+    page.getByRole('main').getByRole('button', { name: /^Ordenar/ }),
+  ).toHaveCount(0);
   const under = await box(page).boundingBox();
   const first = await results(page).first().boundingBox();
   expect((first?.y ?? 0) - (under?.y ?? 0)).toBeLessThan(180);

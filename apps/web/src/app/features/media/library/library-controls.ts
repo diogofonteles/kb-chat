@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import {
   LIBRARY_SORTS,
+  LIBRARY_VIEWS,
   LISTENING_STATES,
   NO_AUTHOR,
   type LibraryFacets,
@@ -17,6 +18,8 @@ import {
   type Topic,
 } from '@kb-chat/contracts';
 import { treeTitle } from '@core/topics/topic-tree.js';
+import { UiButton, UiChip } from '@ui/button.js';
+import { UiIcon } from '@ui/icon.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import {
   SORT_LABELS,
@@ -24,6 +27,13 @@ import {
   activeFiltersOf,
   type FilterChange,
 } from './library-labels.js';
+
+/** A view's item in the menu carries this before its name. */
+const VIEW_PREFIX = 'view:';
+const VIEW_LABELS: Record<LibraryView, () => string> = {
+  list: () => $localize`:@@library.viewList:Lista`,
+  grid: () => $localize`:@@library.viewGrid:Grade`,
+};
 
 /** A chip: its value, its words and whether it is on. */
 interface Chip<T> {
@@ -39,7 +49,7 @@ interface Chip<T> {
  */
 @Component({
   selector: 'app-library-controls',
-  imports: [MenuButton],
+  imports: [MenuButton, UiButton, UiChip, UiIcon],
   templateUrl: './library-controls.html',
   styleUrl: './library-controls.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -138,13 +148,27 @@ export class LibraryControls {
       ? $localize`:@@library.hiddenFilter:1 filtro em uso`
       : $localize`:@@library.hiddenFilters:${count}:count: filtros em uso`;
   });
-  protected readonly sortOptions = computed<readonly MenuOption[]>(() =>
-    LIBRARY_SORTS.map((id) => ({
-      id,
-      label: SORT_LABELS[id](),
-      checked: id === this.sort(),
-    })),
-  );
+  /** "Ordenar por" and "Ver como" in one menu (KBC-128 FR-3): a sheet on a phone. */
+  protected readonly sortOptions = computed<readonly MenuOption[]>(() => {
+    const sortGroup = $localize`:@@library.sortGroup:Ordenar por`;
+    const viewGroup = $localize`:@@library.viewGroup:Ver como`;
+    return [
+      ...LIBRARY_SORTS.map((id) => ({
+        id,
+        label: SORT_LABELS[id](),
+        checked: id === this.sort(),
+        group: sortGroup,
+      })),
+      ...LIBRARY_VIEWS.map((view) => ({
+        id: `${VIEW_PREFIX}${view}`,
+        label: VIEW_LABELS[view](),
+        icon: view === 'grid' ? ('grid' as const) : ('list' as const),
+        checked: view === this.view(),
+        group: viewGroup,
+      })),
+    ];
+  });
+  protected readonly sortName = computed(() => SORT_LABELS[this.sort()]());
   protected readonly sortLabel = computed(
     () =>
       $localize`:@@library.sortBy:Ordenar: ${SORT_LABELS[this.sort()]()}:sort:`,
@@ -178,6 +202,11 @@ export class LibraryControls {
   }
 
   protected chooseSort(id: string): void {
+    const view = LIBRARY_VIEWS.find((one) => `${VIEW_PREFIX}${one}` === id);
+    if (view) {
+      if (view !== this.view()) this.viewChange.emit(view);
+      return;
+    }
     const sort = LIBRARY_SORTS.find((one) => one === id);
     if (sort) this.sortChange.emit(sort);
   }

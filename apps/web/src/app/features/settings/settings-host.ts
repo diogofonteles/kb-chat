@@ -7,30 +7,26 @@ import {
   inject,
   viewChild,
 } from '@angular/core';
+import { Router } from '@angular/router';
 import { Onboarding } from './onboarding.js';
-import { SettingsPanel } from './settings-panel.js';
 import { SettingsStore } from './settings-store.js';
 
 /**
- * The settings dialog over every screen (KBC-007 FR-6): Configurações or the first-run
- * wizard, as a modal <dialog> so the conversation underneath stays as it was.
+ * The first-run wizard over every screen (KBC-007 FR-1, KBC-131 FR-4): a full-screen modal
+ * <dialog>, so the app underneath stays as it was. Configurações itself is a page now.
  */
 @Component({
   selector: 'app-settings-host',
-  imports: [SettingsPanel, Onboarding],
+  imports: [Onboarding],
   template: `
     <dialog
       #dialog
       class="dialog"
-      [attr.aria-labelledby]="
-        panel() === 'onboarding' ? 'wizard-title' : 'settings-title'
-      "
+      aria-labelledby="wizard-title"
       (close)="closed()"
     >
-      @if (panel() === 'settings') {
-        <app-settings-panel (closed)="close()" />
-      } @else if (panel() === 'onboarding') {
-        <app-onboarding (finished)="close()" />
+      @if (panel() === 'onboarding') {
+        <app-onboarding (finished)="finish()" />
       }
     </dialog>
   `,
@@ -39,6 +35,7 @@ import { SettingsStore } from './settings-store.js';
 })
 export class SettingsHost {
   private readonly store = inject(SettingsStore);
+  private readonly router = inject(Router);
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
@@ -56,7 +53,7 @@ export class SettingsHost {
       if (open && !dialog.open) {
         dialog.showModal();
         // Start at the title, so a screen reader announces where the reader is.
-        dialog.querySelector<HTMLElement>('h2')?.focus();
+        dialog.querySelector<HTMLElement>('h1, h2')?.focus();
       }
       if (!open && dialog.open) {
         // Its "close" event is this host's echo, not the person's: `closed()` lets it go.
@@ -74,8 +71,11 @@ export class SettingsHost {
     location.replaceState(location.path().split('?')[0] ?? '/');
   }
 
-  protected close(): void {
+  /** Pular or Concluir (KBC-131 AC-6): reopened from Configurações, the app opens at home. */
+  protected finish(): void {
     this.store.close();
+    if (this.router.url.startsWith('/configuracoes'))
+      void this.router.navigateByUrl('/');
   }
 
   /**

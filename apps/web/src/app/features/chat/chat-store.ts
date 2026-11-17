@@ -25,6 +25,7 @@ import {
 import { toUiErrorCode } from '@core/api/api-error.js';
 import { HistoryStore } from '@core/history/history-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
+import { LibraryRecents } from '@features/shell/library-recents.js';
 import { KbApi, topicsUrl } from '@core/api/kb-api.js';
 import { withTopic } from '@core/topics/topic-tree.js';
 import {
@@ -64,6 +65,16 @@ export interface OpenDocument {
   readonly messageId: number | null;
   /** Its question, highlighted in the text. */
   readonly question: string | null;
+  /**
+   * The text sources of the AI answer that opened it, in their [n] order (KBC-127 FR-1):
+   * the panel steps between them with "Fonte ‹ ›". Absent for a search result.
+   */
+  readonly sources?: readonly CitedSource[];
+}
+
+/** A text source of an AI answer, by its citation number. */
+export interface CitedSource extends DocumentRef {
+  readonly n: number;
 }
 
 /** A cited track open in the reading panel on its passage (KBC-099, T22). */
@@ -175,6 +186,8 @@ export class ChatStore {
   private readonly storage = safeStorage(inject(DOCUMENT).defaultView);
   private readonly history = inject(HistoryStore);
   private readonly usage = inject(UsageLog);
+  /** "Documentos" in Sua biblioteca: the documents last opened (KBC-125). */
+  private readonly recents = inject(LibraryRecents);
   private readonly asks = new Subject<Ask>();
   private readonly mores = new Subject<ChatMessage>();
   private readonly resets = new Subject<ChatEvent>();
@@ -371,6 +384,11 @@ export class ChatStore {
     });
   }
 
+  /** The home's scope chips ("Tudo", "Documentos"): the reach of the next search, remembered. */
+  setKinds(kinds: readonly SearchKind[]): void {
+    this.kindsState.set(kinds);
+  }
+
   /** "Buscar em" changed on a message: remembered, and that message runs again. */
   chooseKinds(message: ChatMessage, kinds: readonly SearchKind[]): void {
     this.kindsState.set(kinds);
@@ -404,6 +422,50 @@ export class ChatStore {
       title: doc.title,
       messageId: from?.id ?? null,
       question: from?.question ?? null,
+    });
+    this.recents.noteDocument({ topic, id: doc.id, title: doc.title });
+  }
+
+  /**
+   * A source of an AI answer opens beside it (KBC-127 FR-1, BR-4): the answer's question is
+   * highlighted, and the other text sources stay at hand for "Fonte ‹ ›".
+   */
+  openSource(
+    topic: string,
+    doc: DocumentRef,
+    cited: {
+      readonly question: string;
+      readonly sources: readonly CitedSource[];
+    },
+  ): void {
+    this.open(topic, doc);
+    this.openState.update(
+      (current) =>
+        current && {
+          ...current,
+          question: cited.question,
+          sources: cited.sources,
+        },
+    );
+  }
+
+  /** "Fonte ‹ ›": another source of the same answer, in the same place (no way back). */
+  switchSource(doc: DocumentRef): void {
+    const current = this.openState();
+    if (!current?.sources) return;
+    this.openState.set({ ...current, id: doc.id, title: doc.title });
+  }
+
+  /** "Abrir documento": the source becomes the document page, without the answer's list. */
+  leaveSources(): void {
+    const current = this.openState();
+    if (!current?.sources) return;
+    this.openState.set({
+      topic: current.topic,
+      id: current.id,
+      title: current.title,
+      messageId: current.messageId,
+      question: current.question,
     });
   }
 
@@ -450,6 +512,11 @@ export class ChatStore {
     if (!current) return;
     this.historyState.update((history) => [...history, current]);
     this.openState.set({ ...current, id: doc.id, title: doc.title });
+    this.recents.noteDocument({
+      topic: current.topic,
+      id: doc.id,
+      title: doc.title,
+    });
   }
 
   back(): void {

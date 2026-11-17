@@ -1,11 +1,15 @@
-<button
-  type="button"
-  class="play"
-  [attr.aria-label]="playLabel()"
-  (click)="played.emit()"
->
-  <span aria-hidden="true">{{ playing() ? '❚❚' : '▶' }}</span>
-</button>
+<span class="art">
+  <ui-cover [title]="item().title" [size]="64" />
+  <button
+    type="button"
+    class="play"
+    [class.on]="playing()"
+    [attr.aria-label]="playLabel()"
+    (click)="played.emit()"
+  >
+    <ui-icon [name]="playing() ? 'pause' : 'play'" [size]="16" />
+  </button>
+</span>
 <div class="body">
   <a
     class="title"

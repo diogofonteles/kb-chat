@@ -41,11 +41,11 @@ test('AC-1: a question shows the matching card in the "Tudo" mode', async ({
 test('AC-2: the chosen mode is used and remembered after a reload', async ({
   page,
 }) => {
-  await page
-    .getByLabel('Como buscar')
-    .selectOption({ label: 'Palavras exatas' });
+  await page.getByRole('radio', { name: 'Palavras exatas' }).check();
   await page.reload();
-  await expect(page.getByLabel('Como buscar')).toHaveValue('exact');
+  await expect(
+    page.getByRole('radio', { name: 'Palavras exatas' }),
+  ).toBeChecked();
   const request = page.waitForRequest(
     (r) => r.url().endsWith('/searches') && r.method() === 'POST',
   );
@@ -76,15 +76,15 @@ test('AC-4: a card opens the document without frontmatter and Escape closes it',
 });
 
 test('AC-5: no results offers a semantic search', async ({ page }) => {
-  await page
-    .getByLabel('Como buscar')
-    .selectOption({ label: 'Palavras exatas' });
+  await page.getByRole('radio', { name: 'Palavras exatas' }).check();
   await ask(page, 'xyzzy plugh');
   await expect(
     page.getByText('Nada encontrado para "xyzzy plugh".'),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Buscar por significado' }).click();
-  await expect(page.getByLabel('Como buscar')).toHaveValue('semantic');
+  await expect(
+    page.getByRole('radio', { name: 'Por significado' }),
+  ).toBeChecked();
 });
 
 test('AC-6: a search failure keeps the question and retries', async ({

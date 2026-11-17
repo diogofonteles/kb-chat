@@ -12,6 +12,7 @@ import {
   Injector,
   LOCALE_ID,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   linkedSignal,
@@ -66,6 +67,7 @@ import { InviteProfilesStore } from './invite-profiles-store.js';
 import { plainPreset } from './preset-defaults.js';
 import { withPresetLevels } from './level-rows.js';
 import { PeopleLevelBar, type PeopleLevelRequest } from './people-level-bar.js';
+import { UiAvatar, UiButton, UiDialog, UiIcon, UiPill } from '@ui/index.js';
 
 /** "Nenhum" in the invitation's "Perfil": today's plain invitation. */
 const NO_PROFILE = 'none';
@@ -95,6 +97,11 @@ interface Outcome<T> {
     InviteProfilesPanel,
     DatePipe,
     NgTemplateOutlet,
+    UiAvatar,
+    UiButton,
+    UiDialog,
+    UiIcon,
+    UiPill,
   ],
   providers: [InviteProfilesStore],
   templateUrl: './people-panel.html',
@@ -115,6 +122,10 @@ export class PeoplePanel {
     viewChildren<ElementRef<HTMLButtonElement>>('resendButton');
 
   protected readonly people = rxResource({ stream: () => this.api.list() });
+  /** A person chosen (a row, an invitation, an approval): their modal opens once drawn. */
+  private readonly opensEditor = afterRenderEffect(() => {
+    if (this.openPerson()) this.personDialog()?.open();
+  });
   /** The collections with access levels (KBC-103), for "Nível em <acervo>". */
   private readonly levelScales = httpResource(() => levelScalesUrl(), {
     parse: (body) => levelScalesSchema.parse(body),
@@ -226,6 +237,16 @@ export class PeoplePanel {
   /** Why the last invite failed, shown under the e-mail field (MA-23). */
   protected readonly inviteError = signal('');
   protected readonly openId = signal<string | null>(null);
+  /** The person whose editor is open, in its modal (KBC-132 FR-2). */
+  protected readonly openPerson = computed(
+    () => this.list().find((person) => person.id === this.openId()) ?? null,
+  );
+  private readonly personDialog = viewChild<UiDialog>('personDialog');
+  private readonly inviteDialog = viewChild<UiDialog>('inviteDialog');
+  /** "Configurar agora": the configured invitation opens in its modal once drawn. */
+  private readonly opensInvite = afterRenderEffect(() => {
+    if (this.configuring()) this.inviteDialog()?.open();
+  });
   /** The panel's writes, one at a time, in the order they were made (KBC-062 FR-1). */
   protected readonly writes = new WriteQueue();
   protected readonly busy = this.writes.busy;
@@ -241,6 +262,19 @@ export class PeoplePanel {
   protected toggle(person: Person): void {
     this.openId.update((id) => (id === person.id ? null : person.id));
     this.notice.set(null);
+  }
+
+  /** The modal closed (✕, Esc, the backdrop): focus back on the person's row. */
+  protected closeEditor(): void {
+    const id = this.openId();
+    this.openId.set(null);
+    afterNextRender(
+      () =>
+        this.rows()
+          .find((row) => row.nativeElement.dataset['id'] === id)
+          ?.nativeElement.focus(),
+      { injector: this.injector },
+    );
   }
 
   protected select(person: Person, on: boolean): void {
@@ -313,6 +347,12 @@ export class PeoplePanel {
     this.configuring.update((open) => !open);
     this.presetInvalid.set(false);
     this.lendPending.set(false);
+  }
+
+  /** The configured invitation's modal closed (✕, Esc): the configuration is discarded. */
+  protected discardConfiguration(): void {
+    if (!this.configuring()) return;
+    this.toggleConfigure();
   }
 
   protected chooseSetup(value: string): void {
@@ -462,8 +502,9 @@ export class PeoplePanel {
   private readonly actAsDialog = viewChild(ActAsDialog);
   private actAsOpener: HTMLElement | null = null;
 
-  protected askActAs(person: Person): void {
-    const active = this.document.activeElement;
+  protected askActAs(person: Person, opener?: HTMLElement): void {
+    // The button pressed, not the focus: a click does not always move it (Safari, a modal).
+    const active = opener ?? this.document.activeElement;
     this.actAsOpener = active instanceof HTMLElement ? active : null;
     this.actingTarget.set(person);
     afterNextRender(() => this.actAsDialog()?.open(), {

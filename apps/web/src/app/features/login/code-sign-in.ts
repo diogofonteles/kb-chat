@@ -18,6 +18,10 @@ import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { AccessApi } from '@core/auth/access-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import type { Observable } from 'rxjs';
+import { UiBanner } from '@ui/banner.js';
+import { UiButton } from '@ui/button.js';
+import { UiCodeInput } from '@ui/code-input.js';
+import { UiIcon } from '@ui/icon.js';
 import {
   codeError,
   digitsOf,
@@ -34,6 +38,7 @@ type Step = 'identify' | 'code';
  */
 @Component({
   selector: 'app-code-sign-in',
+  imports: [UiBanner, UiButton, UiCodeInput, UiIcon],
   templateUrl: './code-sign-in.html',
   styleUrl: './login-form.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -46,8 +51,7 @@ export class CodeSignIn {
   readonly channels = input.required<readonly CodeChannel[]>();
   readonly back = output();
 
-  private readonly codeInput =
-    viewChild<ElementRef<HTMLInputElement>>('codeInput');
+  private readonly codeInput = viewChild(UiCodeInput);
   private readonly title = viewChild<ElementRef<HTMLElement>>('title');
 
   constructor() {
@@ -62,6 +66,10 @@ export class CodeSignIn {
   protected readonly fieldError = signal('');
   protected readonly failure = signal('');
   protected readonly busy = signal(false);
+  /** "Entrar" waits for the 6 digits (KBC-124 AC-4). */
+  protected readonly complete = computed(() => this.code().length === 6);
+  protected readonly emailPlaceholder = $localize`:@@login.emailPlaceholder:nome@exemplo.com`;
+  protected readonly phonePlaceholder = $localize`:@@login.phonePlaceholder:(81) 99999-0000`;
   protected readonly smsAvailable = computed(() =>
     this.channels().includes('sms'),
   );
@@ -94,7 +102,7 @@ export class CodeSignIn {
       () => {
         this.step.set('code');
         this.code.set('');
-        afterNextRender(() => this.codeInput()?.nativeElement.focus(), {
+        afterNextRender(() => this.codeInput()?.focus(), {
           injector: this.injector,
         });
       },

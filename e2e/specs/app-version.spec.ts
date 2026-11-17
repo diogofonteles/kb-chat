@@ -7,6 +7,8 @@ import {
   shipNewVersion,
 } from './app-version-helpers.js';
 import { expect, test } from './fixtures.js';
+import { startNewCollection } from './shell-helpers.js';
+import { openSettings } from './settings-helpers.js';
 
 async function shot(page: Page, testInfo: TestInfo, name: string) {
   await page.screenshot({
@@ -90,8 +92,9 @@ test('AC-2: a question typed and not sent only gets "Nova versão disponível", 
   await expect(shown.text).toHaveCount(0);
   await expect(question).toBeFocused();
   // A trial click fails while anything covers the control.
+  // v2 (KBC-125): on desktop the top bar is the shell's (app-top-bar), over the page's header.
   await page
-    .locator('.topbar')
+    .locator('app-top-bar, .topbar')
     .locator('button:visible, a:visible')
     .first()
     .click({ trial: true, timeout: 5_000 });
@@ -114,24 +117,24 @@ test('AC-2: "Atualizar" reloads into the new version and the question box keeps 
   await expect(notice(page).text).toHaveCount(0);
 });
 
-test('AC-2: work in a dialog (Configurações) holds the reload too, not only the question box', async ({
+test('AC-2: work in Configurações (a key typed, not saved) holds the reload too, not only the question box', async ({
   page,
 }) => {
   const deploy = await playDeploys(page);
   await page.goto('/');
-  if ((page.viewportSize()?.width ?? 0) < 1024)
-    await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
-  const settings = page.getByRole('dialog', { name: 'Configurações' });
-  await expect(settings).toBeVisible();
+  // Configurações is a page (KBC-131): what holds the reload is the unsaved key in Sua IA.
+  const settings = await openSettings(page, 'Sua IA');
+  await settings.getByRole('radio', { name: /OpenAI \(API\)/ }).check();
+  await settings.getByLabel(/Chave da API/).fill('sk-not-saved-yet');
 
   shipNewVersion(deploy);
   const asked = page.waitForResponse('**/version.json');
   await comeBack(page);
   await asked;
-  await page.keyboard.press('Escape');
-  await expect(settings).toBeHidden();
   await expect(notice(page).text).toBeVisible();
+  await expect(settings.getByLabel(/Chave da API/)).toHaveValue(
+    'sk-not-saved-yet',
+  );
   expect(deploy.loads).toBe(1);
 });
 
@@ -141,9 +144,8 @@ test('AC-1: a dialog typed in and closed with Esc no longer holds the reload ("N
   const deploy = await playDeploys(page);
   await page.goto('/');
   await expect(page.getByLabel('Sua pergunta')).toBeVisible();
-  if ((page.viewportSize()?.width ?? 0) < 1024)
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: '+ Novo acervo' }).click();
+  // v2 (KBC-125): "+ Criar" › "Novo acervo", in the phone's Menu too.
+  await startNewCollection(page);
   const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
   await dialog.getByRole('textbox', { name: 'Nome' }).fill('Alquimia');
   await page.keyboard.press('Escape');

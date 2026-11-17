@@ -1,10 +1,6 @@
-<button
-  type="button"
-  class="link back"
-  (click)="back.emit()"
-  i18n="@@login.back"
->
-  ← Voltar
+<button type="button" class="back" (click)="back.emit()">
+  <ui-icon name="chevLeft" [size]="18" />
+  <span i18n="@@login.back">Voltar</span>
 </button>
 <h2 #title tabindex="-1" class="title" i18n="@@login.codeTitle">
   Entrar com código
@@ -17,6 +13,7 @@
         <legend i18n="@@login.channel">Receber o código por</legend>
         <label class="choice">
           <input
+            class="ui-radio"
             type="radio"
             name="channel"
             [checked]="channel() === 'email'"
@@ -26,6 +23,7 @@
         </label>
         <label class="choice">
           <input
+            class="ui-radio"
             type="radio"
             name="channel"
             [checked]="channel() === 'sms'"
@@ -35,16 +33,23 @@
         </label>
       </fieldset>
     }
-    <label class="field">
-      @if (channel() === 'sms') {
-        <span class="label" i18n="@@login.yourPhone">Seu celular</span>
-      } @else {
-        <span class="label" i18n="@@login.yourEmail">Seu e-mail</span>
-      }
+    <div class="ui-field" [class.ui-field--invalid]="!!fieldError()">
+      <label class="ui-field__label" for="code-identifier">
+        @if (channel() === 'sms') {
+          <span i18n="@@login.yourPhone">Seu celular</span>
+        } @else {
+          <span i18n="@@login.yourEmail">Seu e-mail</span>
+        }
+      </label>
       <input
         #identifierInput
+        id="code-identifier"
+        class="ui-input ui-input--lg"
         [type]="channel() === 'sms' ? 'tel' : 'email'"
         name="identifier"
+        [attr.placeholder]="
+          channel() === 'sms' ? phonePlaceholder : emailPlaceholder
+        "
         [attr.inputmode]="channel() === 'sms' ? 'tel' : 'email'"
         [attr.autocomplete]="channel() === 'sms' ? 'tel' : 'email'"
         [value]="identifier()"
@@ -52,15 +57,17 @@
         [attr.aria-describedby]="fieldError() ? 'identifier-error' : null"
         (input)="typeIdentifier(identifierInput.value)"
       />
-    </label>
-    @if (fieldError()) {
-      <p id="identifier-error" class="field-error" role="alert">
-        <span aria-hidden="true">⚠</span>&ngsp;{{ fieldError() }}
-      </p>
-    }
+      @if (fieldError()) {
+        <p id="identifier-error" class="ui-field__error" role="alert">
+          <ui-icon name="warn" [size]="14" />{{ fieldError() }}
+        </p>
+      }
+    </div>
     <button
+      uiButton
+      size="lg"
+      [block]="true"
       type="submit"
-      class="primary"
       [disabled]="busy()"
       i18n="@@login.sendCode"
     >
@@ -73,31 +80,30 @@
     dígitos.
   </p>
   <form (submit)="verify($event)" novalidate>
-    <label class="field">
-      <span class="label" i18n="@@login.code">Código</span>
-      <input
+    <div class="ui-field" [class.ui-field--invalid]="!!fieldError()">
+      <span id="code-label" class="ui-field__label" i18n="@@login.code"
+        >Código</span
+      >
+      <ui-code-input
         #codeInput
-        type="text"
-        class="code-input"
-        name="code"
-        inputmode="numeric"
-        autocomplete="one-time-code"
-        maxlength="6"
+        labelledBy="code-label"
         [value]="code()"
-        [attr.aria-invalid]="fieldError() ? 'true' : null"
-        [attr.aria-describedby]="fieldError() ? 'code-error' : null"
-        (input)="typeCode(codeInput.value)"
+        (valueChange)="typeCode($event)"
+        [invalid]="!!fieldError()"
+        [describedBy]="fieldError() ? 'code-error' : null"
       />
-    </label>
-    @if (fieldError()) {
-      <p id="code-error" class="field-error" role="alert">
-        <span aria-hidden="true">⚠</span>&ngsp;{{ fieldError() }}
-      </p>
-    }
+      @if (fieldError()) {
+        <p id="code-error" class="ui-field__error" role="alert">
+          <ui-icon name="warn" [size]="14" />{{ fieldError() }}
+        </p>
+      }
+    </div>
     <button
+      uiButton
+      size="lg"
+      [block]="true"
       type="submit"
-      class="primary"
-      [disabled]="busy()"
+      [disabled]="busy() || !complete()"
       i18n="@@login.enter"
     >
       Entrar
@@ -105,14 +111,14 @@
     <div class="actions">
       <button
         type="button"
-        class="link"
+        class="text-link"
         [disabled]="busy()"
         (click)="send()"
         i18n="@@login.resend"
       >
         Reenviar código
       </button>
-      <button type="button" class="link" (click)="change()">
+      <button type="button" class="text-link" (click)="change()">
         @if (channel() === 'sms') {
           <ng-container i18n="@@login.changePhone">Trocar celular</ng-container>
         } @else {
@@ -132,5 +138,5 @@
   }
 </p>
 @if (failure()) {
-  <p class="error" role="alert">{{ failure() }}</p>
+  <ui-banner tone="err" role="alert" [title]="failure()" />
 }

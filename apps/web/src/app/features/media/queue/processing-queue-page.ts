@@ -27,6 +27,7 @@ import { PreparationApi } from '@core/media/preparation-api.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import type { Observable } from 'rxjs';
 import { ProcessingQueueStore } from './processing-queue-store.js';
+import { UiButton, UiCover, UiIcon } from '@ui/index.js';
 import { QueueRow, type QueueMove } from './queue-row.js';
 
 /** The sections of the queue: what needs the person first (UP-02). */
@@ -53,7 +54,7 @@ const SECTIONS: readonly {
  */
 @Component({
   selector: 'app-processing-queue-page',
-  imports: [RouterLink, QueueRow],
+  imports: [RouterLink, QueueRow, UiButton, UiCover, UiIcon],
   templateUrl: './processing-queue-page.html',
   styleUrls: [
     '../preparation/preparation-buttons.css',
@@ -103,6 +104,24 @@ export class ProcessingQueuePage {
           topicTitle: titles.get(item.topic) ?? item.topic,
         })),
     })).filter(({ rows }) => rows.length > 0);
+  });
+  /** The art's side: 208 on desktop, 120 on a phone. */
+  protected readonly artSize = 208;
+  /** "3 itens · 2 precisam de você", under the title. */
+  protected readonly summary = computed(() => {
+    const items = this.store.items();
+    if (this.store.queue() === null) return '';
+    if (items.length === 0)
+      return $localize`:@@queue.summaryNone:Nada sendo processado agora`;
+    const need = items.filter((one) => one.phase === 'attention').length;
+    const all =
+      items.length === 1
+        ? $localize`:@@queue.summaryOne:1 item`
+        : $localize`:@@queue.summaryMany:${items.length}:count: itens`;
+    if (need === 0) return all;
+    return need === 1
+      ? $localize`:@@queue.summaryNeedOne:${all}:all: · 1 precisa de você`
+      : $localize`:@@queue.summaryNeed:${all}:all: · ${need}:need: precisam de você`;
   });
   /** "Aguardando o transcritor": the usual reason nothing moves. */
   protected readonly transcriberText = computed(() => {

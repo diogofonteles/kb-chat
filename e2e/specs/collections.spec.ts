@@ -9,6 +9,13 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import {
+  activeCollection,
+  startNewCollection,
+  collectionBySlug,
+  collectionButtons,
+  collectionTitles,
+} from './shell-helpers.js';
 
 /** KBC-048: collections and sub-collections created on the screen (ADR 0028). */
 
@@ -19,7 +26,7 @@ async function sidebar(page: Page): Promise<Locator> {
   if (!desktop(page) && !(await drawer.isVisible()))
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
   return desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
+    ? page.getByRole('complementary', { name: 'Sua biblioteca' })
     : page.getByRole('dialog', { name: 'Menu' });
 }
 
@@ -59,8 +66,7 @@ async function create(
   name: string,
   inside?: string,
 ): Promise<number> {
-  const panel = await sidebar(page);
-  await panel.getByRole('button', { name: '+ Novo acervo' }).click();
+  await startNewCollection(page);
   const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
   await dialog.getByRole('textbox', { name: 'Nome' }).fill(name);
   if (inside)
@@ -70,11 +76,7 @@ async function create(
   const startedAt = Date.now();
   await dialog.getByRole('button', { name: 'Criar acervo' }).click();
   await expect(dialog).toBeHidden();
-  const select = (await sidebar(page)).getByRole('combobox', {
-    name: 'Acervo',
-    exact: true,
-  });
-  await expect(select.locator('option:checked')).toContainText(name);
+  await expect(activeCollection(await sidebar(page))).toContainText(name);
   const took = Date.now() - startedAt;
   if (!desktop(page)) await page.keyboard.press('Escape');
   return took;
@@ -89,14 +91,13 @@ test('AC-1, AC-2, NFR-1: a member creates a collection and a sub-collection and 
   expect(took).toBeLessThanOrEqual(2000);
   await expect(member.getByRole('heading', { level: 1 })).toContainText(parent);
   await create(member, 'Palavra do Mestre', parent);
-  const options = (await sidebar(member))
-    .getByRole('combobox', { name: 'Acervo', exact: true })
-    .locator('option');
-  const texts = await options.allTextContents();
-  const at = texts.findIndex((text) => text.trim().startsWith(parent));
+  const side = await sidebar(member);
+  const texts = await collectionTitles(side);
+  const at = texts.findIndex((text) => text.startsWith(parent));
   expect(at).toBeGreaterThanOrEqual(0);
-  // Indented under its parent with no-break spaces, the only indent a <select> keeps.
-  expect(texts[at + 1]).toMatch(/\u00a0{4}Palavra do Mestre \(0\)/);
+  // Right under its parent, indented as a sub-collection (v2: Sua biblioteca's list).
+  expect(texts[at + 1]).toBe('Palavra do Mestre');
+  await expect(side.locator('li.collection').nth(at + 1)).toHaveClass(/child/);
   await member.context().close();
 });
 
@@ -112,12 +113,9 @@ test('AC-6: renaming keeps the address and the selection', async ({ page }) => {
   await dialog.getByRole('textbox', { name: 'Nome' }).fill(renamed);
   await member.keyboard.press('Enter');
   await expect(dialog).toBeHidden();
-  const select = (await sidebar(member)).getByRole('combobox', {
-    name: 'Acervo',
-    exact: true,
-  });
-  await expect(select).toHaveValue(slugOf(name));
-  await expect(select.locator('option:checked')).toContainText(renamed);
+  const active = activeCollection(await sidebar(member));
+  await expect(active).toHaveAttribute('data-slug', slugOf(name));
+  await expect(active).toContainText(renamed);
   await member.context().close();
 });
 
@@ -127,8 +125,8 @@ test('AC-7: a name already taken is refused in the dialog', async ({
   const member = await aCreator(page);
   const name = uniqueName('Repetido');
   await create(member, name);
-  const panel = await sidebar(member);
-  await panel.getByRole('button', { name: '+ Novo acervo' }).click();
+  // v2 (KBC-125): "+ Criar" › "Novo acervo".
+  await startNewCollection(member);
   const dialog = member.getByRole('dialog', { name: 'Novo acervo' });
   await dialog.getByRole('textbox', { name: 'Nome' }).fill(name.toUpperCase());
   await dialog.getByRole('button', { name: 'Criar acervo' }).click();
@@ -153,12 +151,19 @@ test('AC-4: without "Criar acervos" there is no button and the API refuses', asy
   await member.goto('/');
   await expect(member.getByLabel('Sua pergunta')).toBeVisible();
   const panel = await sidebar(member);
-  await expect(
-    panel.getByRole('combobox', { name: 'Acervo', exact: true }),
-  ).toBeVisible();
+  await expect(collectionButtons(panel).first()).toBeVisible();
   await expect(
     panel.getByRole('button', { name: '+ Novo acervo' }),
   ).toHaveCount(0);
+  // "+ Criar" offers a conversation only.
+  await panel.getByRole('button', { name: 'Criar', exact: true }).click();
+  await expect(
+    member.getByRole('menuitem', { name: 'Nova conversa' }),
+  ).toBeVisible();
+  await expect(
+    member.getByRole('menuitem', { name: 'Novo acervo' }),
+  ).toHaveCount(0);
+  await member.keyboard.press('Escape');
   const refused = await member.request.post('/api/v1/topics', {
     headers: CSRF,
     data: { title: 'Proibido' },
@@ -192,14 +197,9 @@ test('AC-5: access to a sub-collection alone shows its parent as a closed group 
   await expect(member.getByRole('heading', { level: 1 })).toContainText(
     'Filho',
   );
-  const select = (await sidebar(member)).getByRole('combobox', {
-    name: 'Acervo',
-    exact: true,
-  });
-  await expect(
-    select.locator(`option[value="${slugOf(parent)}"]`),
-  ).toHaveAttribute('disabled', '');
-  await expect(select.locator('option:checked')).toContainText('Filho');
+  const side = await sidebar(member);
+  await expect(collectionBySlug(side, slugOf(parent))).toBeDisabled();
+  await expect(activeCollection(side)).toContainText('Filho');
   await member.context().close();
 });
 
@@ -213,9 +213,22 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     );
     await page.goto('/');
     const panel = await sidebar(page);
-    const opener = panel.getByRole('button', { name: '+ Novo acervo' });
+    // v2 (KBC-125): "+ Criar" › "Novo acervo" on desktop, the Menu's entry on a phone.
+    const opener = desktop(page)
+      ? panel.getByRole('button', { name: 'Criar', exact: true })
+      : panel.getByRole('button', { name: '+ Novo acervo' });
     await opener.focus();
     await page.keyboard.press('Enter');
+    if (desktop(page)) {
+      await expect(
+        page.getByRole('menuitem', { name: 'Nova conversa' }),
+      ).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await expect(
+        page.getByRole('menuitem', { name: 'Novo acervo' }),
+      ).toBeFocused();
+      await page.keyboard.press('Enter');
+    }
     const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
     await expect(dialog.getByRole('textbox', { name: 'Nome' })).toBeFocused();
     await page.keyboard.type('Teclado');

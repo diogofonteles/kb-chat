@@ -8,115 +8,138 @@
 >
   <form class="body" [formGroup]="form" (ngSubmit)="save()" novalidate>
     <header class="head">
-      <h2 id="edit-title">{{ heading }}</h2>
+      <div class="titles">
+        <h2 id="edit-title">{{ heading }}</h2>
+      </div>
+      <button
+        type="button"
+        uiIconButton
+        class="close"
+        aria-label="Fechar"
+        i18n-aria-label="@@ui.dialog.close"
+        [disabled]="saving()"
+        (click)="close()"
+      >
+        <ui-icon name="close" [size]="20" />
+      </button>
     </header>
 
-    <div class="field">
-      <label
-        class="label"
-        for="edit-title-field"
-        i18n="@@media.upload.titleLabel"
-        >Título</label
-      >
-      <input
-        #titleInput
-        id="edit-title-field"
-        type="text"
-        formControlName="title"
-        maxlength="200"
-        autocomplete="off"
-        [attr.aria-invalid]="submitted() && form.controls.title.invalid"
-        aria-describedby="edit-title-error"
-      />
-      @if (submitted() && form.controls.title.invalid) {
-        <span
-          id="edit-title-error"
-          class="error"
-          i18n="@@media.upload.titleMissing"
-          ><span aria-hidden="true">⚠</span> Dê um título ao áudio.</span
-        >
-      }
-    </div>
-
-    <div class="field">
-      <label class="label" for="edit-topic-field" i18n="@@media.upload.topic"
-        >Acervo</label
-      >
-      <select
-        id="edit-topic-field"
-        formControlName="topic"
-        aria-describedby="edit-move-note"
-        (change)="topicChosen()"
-      >
-        @for (option of choices(); track option.slug) {
-          <option [value]="option.slug">{{ treeTitle(option) }}</option>
-        }
-      </select>
-      <span id="edit-move-note" class="note">
-        @if (moving()) {
-          <ng-container i18n="@@media.edit.moveNote"
-            >Posições, marcadores e transcrição vão junto. Quem não vê este
-            acervo deixa de ver o áudio.</ng-container
+    <div class="columns">
+      <ui-cover class="edit-cover" [title]="item().title" [size]="180" />
+      <div class="column">
+        <div class="field">
+          <label
+            class="label"
+            for="edit-title-field"
+            i18n="@@media.upload.titleLabel"
+            >Título</label
           >
-        }
-      </span>
-    </div>
-
-    <app-author-combobox
-      [topic]="chosenTopic()"
-      [disabled]="saving()"
-      [(name)]="authorName"
-    />
-
-    @if (levels.shown()) {
-      <app-level-field
-        [choices]="levels.levels()"
-        [label]="levelLabel()"
-        [loading]="levels.loading()"
-        [failed]="levels.failed()"
-        [retrying]="levels.retrying()"
-        [invalid]="levelInvalid()"
-        [disabled]="saving()"
-        [(level)]="level"
-        (retried)="levels.reload()"
-      />
-    }
-
-    @if (confirmingRaise() && tracksRaised() > 0) {
-      <div class="confirm" role="group" aria-labelledby="media-raise-text">
-        <p id="media-raise-text">{{ raiseText() }}</p>
-        <div class="confirm-actions">
-          <button
-            #raiseCancel
-            type="button"
-            class="secondary"
-            (click)="cancelRaise()"
-            i18n="@@media.level.raiseOther"
-          >
-            Escolher outro nível
-          </button>
-          <button
-            type="button"
-            class="primary"
-            (click)="confirmRaise()"
-            i18n="@@media.level.raiseConfirm"
-          >
-            Salvar e subir as faixas
-          </button>
+          <input
+            #titleInput
+            id="edit-title-field"
+            type="text"
+            formControlName="title"
+            maxlength="200"
+            autocomplete="off"
+            [attr.aria-invalid]="submitted() && form.controls.title.invalid"
+            aria-describedby="edit-title-error"
+          />
+          @if (submitted() && form.controls.title.invalid) {
+            <span
+              id="edit-title-error"
+              class="error"
+              i18n="@@media.upload.titleMissing"
+              ><ui-icon name="warn" [size]="14" /> Dê um título ao áudio.</span
+            >
+          }
         </div>
+
+        <div class="field">
+          <label
+            class="label"
+            for="edit-topic-field"
+            i18n="@@media.upload.topic"
+            >Acervo</label
+          >
+          <select
+            id="edit-topic-field"
+            formControlName="topic"
+            aria-describedby="edit-move-note"
+            (change)="topicChosen()"
+          >
+            @for (option of choices(); track option.slug) {
+              <option [value]="option.slug">{{ treeTitle(option) }}</option>
+            }
+          </select>
+          <span id="edit-move-note" class="note">
+            @if (moving()) {
+              <ng-container i18n="@@media.edit.moveNote"
+                >Posições, marcadores e transcrição vão junto. Quem não vê este
+                acervo deixa de ver o áudio.</ng-container
+              >
+            }
+          </span>
+        </div>
+
+        <app-author-combobox
+          [topic]="chosenTopic()"
+          [disabled]="saving()"
+          [(name)]="authorName"
+        />
+
+        @if (levels.shown()) {
+          <app-level-field
+            [choices]="levels.levels()"
+            [label]="levelLabel()"
+            [loading]="levels.loading()"
+            [failed]="levels.failed()"
+            [retrying]="levels.retrying()"
+            [invalid]="levelInvalid()"
+            [disabled]="saving()"
+            [(level)]="level"
+            (retried)="levels.reload()"
+          />
+        }
+
+        @if (confirmingRaise() && tracksRaised() > 0) {
+          <div class="confirm" role="group" aria-labelledby="media-raise-text">
+            <p id="media-raise-text">{{ raiseText() }}</p>
+            <div class="confirm-actions">
+              <button
+                #raiseCancel
+                type="button"
+                uiButton="ghost"
+                size="sm"
+                (click)="cancelRaise()"
+                i18n="@@media.level.raiseOther"
+              >
+                Escolher outro nível
+              </button>
+              <button
+                type="button"
+                uiButton="white"
+                size="sm"
+                (click)="confirmRaise()"
+                i18n="@@media.level.raiseConfirm"
+              >
+                Salvar e subir as faixas
+              </button>
+            </div>
+          </div>
+        }
       </div>
-    }
+    </div>
 
     @if (failure()) {
       <p class="error" role="alert">
-        <span aria-hidden="true">⚠</span> {{ failure() }}
+        <ui-icon name="warn" [size]="16" /> {{ failure() }}
       </p>
     }
 
     <footer class="actions">
       <button
         type="button"
-        class="secondary"
+        uiButton="ghost"
         [disabled]="saving()"
         (click)="close()"
         i18n="@@media.upload.cancel"
@@ -125,7 +148,7 @@
       </button>
       <button
         type="submit"
-        class="primary"
+        uiButton="white"
         [disabled]="saving()"
         [attr.aria-disabled]="waitingForLevels() ? 'true' : null"
         [attr.aria-busy]="waitingForLevels() ? 'true' : null"

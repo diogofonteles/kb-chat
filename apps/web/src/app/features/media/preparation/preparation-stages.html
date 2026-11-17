@@ -7,6 +7,22 @@
       [class.failed]="line.stage.state === 'failed'"
       [class.current]="line.stage.state === 'running'"
     >
+      <span class="dot" aria-hidden="true">
+        @switch (line.stage.state) {
+          @case ('done') {
+            <ui-icon name="check" [size]="15" />
+          }
+          @case ('failed') {
+            <ui-icon name="close" [size]="15" />
+          }
+          @case ('running') {
+            <ui-icon name="refresh" [size]="15" />
+          }
+          @default {
+            <ui-icon name="clock" [size]="15" />
+          }
+        }
+      </span>
       <p class="line">
         <span class="name">{{ line.name }}</span>
         <span class="state">

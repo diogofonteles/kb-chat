@@ -13,9 +13,7 @@ async function openFirst(
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
     'Hermetismo',
   );
-  await page
-    .getByLabel('Como buscar')
-    .selectOption({ label: 'Por significado' });
+  await page.getByRole('radio', { name: 'Por significado' }).check();
   await page.getByLabel('Sua pergunta').fill(question);
   await page.getByRole('button', { name: 'Buscar' }).click();
   await page.getByRole('button', { name: title }).first().click();
@@ -47,7 +45,7 @@ test('AC-3/AC-6: "Veja também" opens the concept, which lists its examples, and
   await expect(panel.getByRole('heading', { level: 2 })).toHaveText('Cabala');
   await expect(panel.getByRole('heading', { name: 'Exemplos' })).toBeVisible();
   await expect(panel.getByText(/Sobre este assunto/)).toBeVisible();
-  await panel.getByRole('button', { name: '← Voltar' }).click();
+  await panel.getByRole('button', { name: 'Voltar', exact: true }).click();
   await expect(panel.getByRole('heading', { level: 2 })).toHaveText(
     'A Árvore da Vida',
   );
@@ -78,9 +76,7 @@ test('NFR-1: a 200 KB document opens with its highlight in under 500 ms', async 
   page,
 }) => {
   await page.goto('/');
-  await page
-    .getByLabel('Como buscar')
-    .selectOption({ label: 'Por significado' });
+  await page.getByRole('radio', { name: 'Por significado' }).check();
   await page.getByLabel('Sua pergunta').fill('quintessência');
   await page.getByRole('button', { name: 'Buscar' }).click();
   const card = page.getByRole('button', { name: /Tratado Longo/ });

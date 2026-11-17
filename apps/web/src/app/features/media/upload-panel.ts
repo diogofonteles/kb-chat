@@ -18,6 +18,8 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { UiButton, UiIconButton } from '@ui/button.js';
+import { UiIcon } from '@ui/icon.js';
 import {
   FormControl,
   FormGroup,
@@ -107,6 +109,9 @@ const FILES_AT_ONCE = 3;
     LevelField,
     PreparationOptions,
     PreparationSteps,
+    UiButton,
+    UiIcon,
+    UiIconButton,
     UploadFileRow,
   ],
   providers: [UploadEntries, PlanForm],

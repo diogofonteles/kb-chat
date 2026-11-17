@@ -10,12 +10,14 @@ import {
   inject,
   output,
   signal,
+  viewChild,
   viewChildren,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { AccessRequest, Person } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { AccessRequestsStore } from '@core/auth/access-requests-store.js';
+import { UiAvatar, UiButton, UiDialog, UiPill } from '@ui/index.js';
 
 /** "+55 81 99999-0000" for a Brazilian mobile; other numbers as stored (E.164). */
 export function displayPhone(phone: string): string {
@@ -34,7 +36,7 @@ interface RowError {
  */
 @Component({
   selector: 'app-access-requests-list',
-  imports: [DatePipe],
+  imports: [DatePipe, UiAvatar, UiButton, UiDialog, UiPill],
   templateUrl: './access-requests-list.html',
   styleUrl: './access-requests-list.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -61,6 +63,18 @@ export class AccessRequestsList {
   );
   protected readonly busyId = signal<string | null>(null);
   protected readonly confirmingId = signal<string | null>(null);
+  /** The request the refusal modal asks about (KBC-132 AC-2). */
+  protected readonly refusing = computed(
+    () =>
+      this.store.list().find((request) => request.id === this.confirmingId()) ??
+      null,
+  );
+  protected readonly refuseTitle = computed(() => {
+    const id = this.confirmingId();
+    const name = this.rows().find((row) => row.request.id === id)?.name ?? '';
+    return $localize`:@@requests.refuseTitle:Recusar a solicitação de ${name}:name:?`;
+  });
+  private readonly refuseDialog = viewChild.required<UiDialog>('refuseDialog');
   protected readonly error = signal<RowError | null>(null);
 
   constructor() {
@@ -85,11 +99,14 @@ export class AccessRequestsList {
   /** The confirmation replaces the button that had focus: focus follows it (WCAG 2.4.3). */
   protected askRefuse(request: AccessRequest): void {
     this.confirmingId.set(request.id);
+    this.refuseDialog().open();
     this.focusAfterRender(() => this.confirmButtons()[0]);
   }
 
+  /** The modal closed (Cancelar, ✕, Esc): nothing changes, focus back on its "Recusar". */
   protected cancelRefuse(): void {
     const id = this.confirmingId();
+    if (id === null) return;
     this.confirmingId.set(null);
     this.focusAfterRender(() =>
       this.refuseButtons().find((b) => b.nativeElement.dataset['id'] === id),
@@ -105,8 +122,12 @@ export class AccessRequestsList {
         next: () => {
           this.busyId.set(null);
           this.confirmingId.set(null);
+          this.refuseDialog().close();
         },
-        error: (err: unknown) => this.fail(request.id, err),
+        error: (err: unknown) => {
+          this.refuseDialog().close();
+          this.fail(request.id, err);
+        },
       });
   }
 

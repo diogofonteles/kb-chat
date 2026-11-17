@@ -1,15 +1,15 @@
 .bar {
   display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-muted);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
 }
 
 .title {
   margin: 0;
-  font-weight: 600;
+  font-size: var(--text-item);
+  font-weight: 700;
 }
 
 .field {
@@ -102,4 +102,91 @@
 .lend-confirm .actions > button {
   flex: 1 1 0;
   min-width: 0;
+}
+
+/* ---------- v2 look of the controls (KBC-132): pill buttons, inputs on the overlay tokens ---------- */
+.primary,
+.secondary,
+.danger,
+.link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.secondary {
+  border-color: var(--overlay-4);
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: var(--color-text);
+}
+
+.danger,
+.secondary.danger {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.link {
+  padding: 0 var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.link:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.danger-text {
+  color: var(--color-danger);
+}
+
+.primary:disabled,
+.secondary:disabled,
+.danger:disabled,
+.link:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.select,
+.number,
+textarea.input,
+input.input {
+  min-height: 2.5rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--overlay-line);
+  border-radius: 4px;
+  background: var(--overlay-2);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.select:focus-visible,
+.number:focus-visible {
+  border-color: var(--color-text);
+  outline: 1px solid var(--color-text);
+}
+
+.select option {
+  background: var(--color-elevated);
+  color: var(--color-text);
 }

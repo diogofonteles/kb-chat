@@ -1,0 +1,53 @@
+<div class="bar">
+  <a class="home" routerLink="/">
+    <ui-logo [size]="28" />
+    <span i18n="@@reading.brand">Nova Alexandria</span>
+  </a>
+  <a class="other" [routerLink]="other().path">{{ other().label }}</a>
+  <a uiButton="white" size="sm" routerLink="/">
+    @if (signedIn()) {
+      <ng-container i18n="@@reading.openApp">Abrir o app</ng-container>
+    } @else {
+      <ng-container i18n="@@reading.signIn">Entrar</ng-container>
+    }
+  </a>
+</div>
+
+<main [attr.aria-labelledby]="titleId()">
+  <header class="head">
+    <p class="kicker" i18n="@@reading.kicker">Nova Alexandria</p>
+    <h1 class="title" [id]="titleId()">{{ heading() }}</h1>
+    @if (meta()) {
+      <p class="meta">{{ meta() }}</p>
+    }
+  </header>
+
+  <div class="body">
+    <nav
+      class="index"
+      aria-label="Nesta página"
+      i18n-aria-label="@@reading.index"
+      [attr.id]="indexId()"
+      [attr.tabindex]="indexId() ? -1 : null"
+    >
+      <p class="index-title" aria-hidden="true" i18n="@@reading.index">
+        Nesta página
+      </p>
+      <ul>
+        @for (section of sections(); track section.id) {
+          <li>
+            <a
+              class="entry"
+              [routerLink]="path()"
+              [fragment]="section.id"
+              [attr.aria-current]="active() === section.id ? 'location' : null"
+              (click)="showSection(section.id)"
+              >{{ section.title }}</a
+            >
+          </li>
+        }
+      </ul>
+    </nav>
+    <div class="column"><ng-content /></div>
+  </div>
+</main>

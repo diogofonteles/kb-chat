@@ -1,4 +1,4 @@
-/* KBC-039: drawn like the "Autoria" segments of the filter bar (screens.md T2). */
+/* KBC-039: drawn like the "Autoria" chips of the filter bar (v2, KBC-126). */
 .kinds {
   display: inline-flex;
   flex-wrap: wrap;
@@ -9,8 +9,8 @@
 
 .kinds-title {
   margin-right: var(--space-1);
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: var(--text-meta);
+  font-weight: 700;
   color: var(--color-text-muted);
 }
 
@@ -19,17 +19,18 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-surface);
-  font-size: var(--text-sm);
+  min-height: 2rem;
+  padding: 0 0.875rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  font-size: var(--text-meta);
+  font-weight: 500;
   cursor: pointer;
 }
 
 .segment:hover:not(.off) {
-  border-color: var(--color-accent);
+  background: var(--overlay-4);
 }
 
 /* The native check box stays focusable and announced; the segment draws its state. */
@@ -55,10 +56,8 @@
 }
 
 .segment.on {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-weight: 600;
+  background: var(--color-text);
+  color: var(--color-bg);
 }
 
 /* The last kind chosen stays chosen: still drawn on, just not clickable. */
@@ -67,8 +66,7 @@
 }
 
 .segment.off:not(.on) {
-  border-style: dashed;
-  color: var(--color-text-muted);
+  opacity: 0.45;
 }
 
 .segment-count {
