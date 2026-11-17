@@ -17,7 +17,7 @@ Como dono, quando insiro um documento novo no Hermetismo, quero que ele entre no
 - `kb-map update <topic> --docs <paths>`, que faz em ordem:
   - as seções dos documentos novos ou mudados;
   - a atribuição à árvore, com os nós novos propostos para a revisão;
-  - os dossiês **só dos nós tocados**;
+  - os dossiês **só dos nós tocados**: os artigos do wiki que o `kb lint` marcou como `needs-compile` pelas relações `affects` (padrão de wiki compilado, análise §2a), mais a linha do `log.md` e do `index.md`;
   - o `check`;
 - o comando único para texto: `tools/kb-map add <topic> <file>`, que roda ingest, classify, link, update, index e sync;
 - o job `kb-publish` do transcritor (ADR 0035), que roda o `update` dos documentos do lote antes do sync;

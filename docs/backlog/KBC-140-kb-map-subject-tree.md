@@ -20,7 +20,8 @@ Como estudante que não conhece o acervo, quero que a pesquisa saiba que "fluxo 
   - a IA dá nome, descrição, sinônimos e critério a cada nó;
 - a atribuição de cada seção a um ou mais nós;
 - a revisão do dono: um arquivo legível com a árvore e o número de seções por nó, e um formato de correção (renomear, fundir, mover, apagar) aplicado pela ferramenta;
-- a fila de revisão para nós propostos.
+- a fila de revisão para nós propostos;
+- o `index.md` do acervo gerado da árvore (padrão LLM Wiki, análise §2a): um catálogo por categoria, com uma linha por página e o número de fontes, que a IA lê primeiro e o estudante usa como sumário.
 
 **Out:** a tela de revisão no app (a revisão é pelo arquivo, nesta versão); o dossiê (KBC-141).
 
