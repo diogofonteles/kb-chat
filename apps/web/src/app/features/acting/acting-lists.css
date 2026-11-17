@@ -208,3 +208,41 @@ code {
     font-size: var(--text-meta);
   }
 }
+
+/* v2 · Auditoria: one line a record, the rest ends in "…". */
+@media (min-width: 1024px) {
+  .row.audit-cols {
+    min-height: 2.5rem;
+  }
+
+  .audit-cols .who,
+  .audit-cols .detail,
+  .audit-cols .reason {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .audit-cols code {
+    font: inherit;
+  }
+}
+
+/* v2 · Acessos, vazio: the empty state in a soft card, the eye in a 64 circle. */
+:host ::ng-deep .ui-empty {
+  gap: var(--space-3);
+  padding: 2.5rem var(--space-4);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-text) 2.5%, transparent);
+}
+
+:host ::ng-deep .ui-empty__icon {
+  width: 4rem;
+  height: 4rem;
+}
+
+:host ::ng-deep .ui-empty__title {
+  font-size: 1.125rem;
+  letter-spacing: 0;
+}

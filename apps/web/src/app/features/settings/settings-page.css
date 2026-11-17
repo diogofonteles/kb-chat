@@ -195,6 +195,12 @@
   border-bottom: 0;
 }
 
+/* The last section can still come up under the strip, as the frames show "Sobre". */
+.layout .section:last-child {
+  min-height: calc(100dvh - 11rem);
+  align-content: start;
+}
+
 .section-title {
   margin: 0;
   font-size: 1.5rem;
