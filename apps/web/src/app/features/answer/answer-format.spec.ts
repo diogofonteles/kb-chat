@@ -70,11 +70,18 @@ describe('answer formatting', () => {
     expect(html).toContain('&lt;table&gt;');
   });
 
-  it('KBC-099 FR-7: a track citation shows [n], names the track and the minute, and keeps its time', () => {
+  it('KBC-099 FR-7, KBC-150 item 7: a track citation shows its number with "título · tempo", names the track and the minute, and keeps its time', () => {
     const host = document.createElement('div');
     host.innerHTML = renderAnswer('O ritmo [1@0:41] e [1].', [TRACK]);
     const [timed, plain] = [...host.querySelectorAll('a.cite')];
-    expect(timed?.textContent).toBe('[1]');
+    expect(timed?.classList.contains('cite-audio')).toBe(true);
+    expect(timed?.querySelector('.cite-n')?.textContent).toBe('1');
+    expect(timed?.querySelector('.cite-where')?.textContent).toBe(
+      'O que é o ritmo? · 0:41',
+    );
+    expect(plain?.querySelector('.cite-where')?.textContent).toBe(
+      'O que é o ritmo? · 1:10',
+    );
     expect(timed?.getAttribute('aria-label')).toBe(
       'Fonte 1, faixa O que é o ritmo?, aos 41 segundos',
     );

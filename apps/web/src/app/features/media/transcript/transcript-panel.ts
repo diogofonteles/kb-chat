@@ -141,6 +141,8 @@ export class TranscriptPanel {
    * soon as it shows, with no playback to follow, and marked with a side bar besides the paint.
    */
   readonly revealPassage = input(false);
+  /** Its own "Transcrição" title; off where the host already titles it (KBC-150). */
+  readonly showTitle = input(true);
   /** "Mostrar quem fala" (KBC-065 FR-4). */
   readonly showSpeakers = input(true);
   /** "Destacar palavra a palavra" (KBC-045 FR-4). */

@@ -824,39 +824,51 @@ Player (T15), só masters: **Transcrever de novo** abaixo de "Esconder transcri�
 
 *Emenda 2026-11-07 (KBC-101):* o T22 também abre do cartão da faixa na lista de documentos da busca (T2), no trecho do cartão; o comportamento é o mesmo da citação.
 
+*Emenda 2026-11-17 (KBC-150, v2 · Pesquisa com IA — fonte de áudio):* o painel da faixa vira a **fonte de áudio** da v2. O trecho citado vem primeiro; o painel não tem player próprio (saíram volume, velocidade e CC): **Ouvir o trecho** toca na barra do player (desktop) ou no mini player da folha (celular). O layout e o fluxo abaixo substituem os do KBC-099.
+
 ### Na resposta (emenda da T4)
-- A citação de uma faixa é `[n]` como a de um texto; o leitor de tela ouve "Fonte n, faixa <título>, aos 8 minutos e 15 segundos".
-- Em **Fontes**, o chip da faixa: **"♪ <título da faixa> · <gravação> · 8:15"**, no grupo de autoria dela (KBC-020), ao lado dos textos. O ♪ vem com texto ("Faixa de áudio" para leitores de tela), nunca só ícone (UP-20). Título longo trunca em 1 linha com o completo no `title`; no celular, a gravação vai para uma segunda linha do chip. Com mais de um trecho da mesma faixa citado, o chip mostra o primeiro minuto e "+2 trechos"; cada `[n]` no texto abre o seu.
+- A citação de uma faixa é uma pílula com o ícone de onda e o número, seguida de **"título · tempo"** ("O que é o ritmo? · 0:41"), para não se confundir com o `[n]` de um texto. O leitor de tela ouve "Fonte n, faixa <título>, aos 8 minutos e 15 segundos". A citação aberta fica preenchida em verde; de uma faixa citada duas vezes, só a citação aberta.
+- Em **Fontes**, o chip da faixa: **"♪ <título da faixa> · <gravação> · 8:15"**, no grupo de autoria dela (KBC-020), ao lado dos textos. O ♪ vem com texto ("Faixa de áudio" para leitores de tela), nunca só ícone (UP-20). Título longo trunca em 1 linha com o completo no `title`; no celular, a gravação vai para uma segunda linha do chip. Com mais de um trecho da mesma faixa citado, o chip mostra o primeiro minuto e "+2 trechos"; cada citação no texto abre o seu.
 - Fonte "atualizando" (KBC-100): o chip ganha "· atualizando" em texto discreto; o trecho é o que estava na pesquisa.
 
 ### Layout
 ```
-Desktop (≥ 1024 px), painel de leitura à direita (o da faixa usa 48rem em vez de 40rem, para o player caber ao lado):
-┌───────────────────────────── painel ─────────────────────────────┐
-│ ♪ Faixa de áudio · 8:15                               ✕ Fechar   │
-│ O que é o ritmo?                    (título, recebe o foco)      │
-│ Palestra de 12/03/2017 · faixa 3 de 12 · ✦ Mestre Laércio        │
-│ ⚠ transcrição automática de baixa confiança (só quando for)      │
-├──────────────── transcrição ───────────┬──────── player ──────────┤
-│ 7:58  … texto anterior …               │  [capa/onda]             │
-│ ▌8:15 texto do trecho citado, em       │  ▶ Tocar   8:13 / 9:28   │
-│ ▌     destaque (fundo + barra lateral) │  ━━━━━━━●━━━  velocidade │
-│ 8:40  … texto seguinte …               │  Abrir na página da faixa│
-│ (rola só a lista; "Voltar ao trecho")  │  (preso no alto)         │
-└────────────────────────────────────────┴──────────────────────────┘
-Celular (< 1024 px; 390 px): tela cheia, uma coluna: cabeçalho → player compacto preso
-no alto (▶, tempo, barra de busca, velocidade) → transcrição abaixo, rolando.
+Desktop (≥ 1024 px): painel de 460 à direita da resposta, com borda verde.
+┌──────────────────────────── fonte de áudio ─────────────────────────────┐
+│ ∿ FONTE 3 DE 3 · ÁUDIO                              ‹  ›  ⤢  ✕          │
+│ [capa] Entrevista sobre a Tábua de Esmeralda     (título, recebe o foco)│
+│        Irmã Helena Prado · Alquimia Prática · 1:00 · faixa 8 de 25      │
+│ ┌ trecho citado ──────────────────────────────────────────────────────┐ │
+│ │ (∿3) Citado na resposta · 0:22–0:31                      ∿ tocando  │ │
+│ │ ● Irmã Helena Prado                       (só quando há vozes)      │ │
+│ │ Isso não é uma imagem poética. É um método… (20/700)                │ │
+│ │ [▶ Ouvir o trecho] [Faixa toda]                         [🔖] [⇪]    │ │
+│ └─────────────────────────────────────────────────────────────────────┘ │
+│ ━━━━━━━━(3)▓▓▓━━━━━━━━━━(3)━━━━━━   0:22 · trecho citado 0:22–0:31 · 1:00 │
+│ Em volta do trecho                           🔍  Transcrição completa   │
+│  0:16  fala anterior                                                    │
+│ ▐0:22  o trecho citado (borda verde)                                    │
+│  0:31  fala seguinte                                                    │
+│ [♫ Abrir a faixa]   Outro trecho citado: (∿3) 0:45                      │
+└─────────────────────────────────────────────────────────────────────────┘
+Celular (< 1024 px; 390): folha de leitura de 85% sobre a resposta, com abas Fonte 1…N (a de
+áudio com a onda), ⤢ tela cheia e ✕; o mesmo conteúdo em uma coluna: o cartão diz
+"0:22–0:31 · Irmã Helena Prado", "Ouvir o trecho" ocupa a linha (sem "Faixa toda") e
+"Transcrição completa" vira "Completa". Tocando, a folha mostra embaixo a faixa do player
+("Tocando o trecho citado · 0:27", o título e ⏸) e "Abrir a faixa" sai da folha.
 ```
-- O player fica **ao lado** da transcrição no desktop (coluna de 16rem) e **acima** dela no celular, sempre visível enquanto a transcrição rola (o pedido do dono: "ao lado, mostre um player").
-- O trecho citado usa o destaque `transcript-passage` (o mesmo da busca "Na fala"), mais uma barra lateral de 3 px para não depender da cor (UP-20, `forced-colors` ok). A palavra falada usa o destaque do KBC-045.
-- A lista rola até o trecho no terço superior assim que abre (rolagem explícita; não depende do acompanhamento da fala). Com `prefers-reduced-motion`, a rolagem é instantânea.
+- **Topo:** "Fonte n de N · Áudio" conta todas as fontes citadas da resposta (textos e faixas); ‹ › vão à fonte anterior e à seguinte (uma de texto abre no painel de documento); ⤢ abre a página da faixa em `?t=` (2 s antes); ✕ fecha. Aberta de um resultado da busca (sem resposta), o topo diz "Faixa de áudio", sem ‹ ›, e o cartão "Trecho · início–fim".
+- **Cartão do trecho:** a pílula [n] com a onda, "Citado na resposta · início–fim" (os tempos exatos do media.db) e quem fala, com a cor da voz, quando a transcrição traz as vozes. O texto do trecho em 20/700. Tocando, o cartão assume a cor da capa (escurecida, texto claro em todos os temas), "Ouvir o trecho" vira **Pausar** (branco), aparece o selo "tocando" e as palavras acendem conforme são faladas (tempos das palavras do KBC-045; sem eles, o segmento acende inteiro). 🔖 marca o início do trecho (sem abrir nota); ⇪ copia o link da faixa no trecho ("Link do trecho copiado.").
+- **Linha do tempo:** uma marca [n] por citação desta faixa na resposta, a faixa do trecho aberto destacada em verde, a posição atual (com o ponto quando toca), os rótulos de tempo. Clicar numa marca vai para aquele trecho (e posiciona o player nele, tocando se tocava).
+- **Em volta do trecho:** só a fala anterior, o trecho (borda verde) e a fala seguinte, cada uma com o tempo clicável (toca dali) e quem fala. Tocando, a fala ouvida fica realçada (`aria-current`) e as já ouvidas esmaecem. 🔍 e **Transcrição completa** abrem a transcrição inteira no painel, com a busca dela e a rolagem própria; **Em volta do trecho** volta.
+- **Rodapé:** **Abrir a faixa** e, com a mesma faixa citada mais de uma vez, "Outro trecho citado: [n] 0:45" para cada outra citação.
 
 ### Fluxo
-1. Clique ou Enter numa citação ou chip de faixa → o painel abre (ou troca de conteúdo, com "← Voltar" se havia um documento) com o título focado (`preventScroll`).
-2. O player carrega a faixa em **trecho − 2 s, pausado**; **Tocar** é o primeiro controle depois do título na ordem de Tab. Nada toca sozinho.
-3. Tocar → o áudio sai de 2 s antes, a fala atual e a palavra falada se destacam e a lista acompanha; rolar à mão para de acompanhar até "Voltar ao trecho atual" (KBC-038).
-4. Clicar numa fala ou palavra toca dali (KBC-038).
-5. **Abrir na página da faixa** leva a `/midia/:id?t=<s>`; **✕** ou Esc fecha, a reprodução continua no mini-player e o foco volta à citação clicada.
+1. Clique ou Enter numa citação ou chip de faixa → a fonte abre (desktop: o painel, ou troca de conteúdo, com "← Voltar" se havia um documento; celular: a folha, na aba da faixa) com o título focado (`preventScroll`).
+2. A barra do player carrega a faixa em **trecho − 2 s, pausada**; **Ouvir o trecho** é o primeiro controle depois do título na ordem de Tab. Nada toca sozinho.
+3. Ouvir o trecho → o áudio sai de 2 s antes, no player do app; as palavras e a fala atual acompanham.
+4. Um tempo em "Em volta do trecho" toca dali; uma marca ou "Outro trecho citado" troca de trecho.
+5. **✕**, Esc ou arrastar a folha para baixo fecham; a reprodução continua na barra ou no mini player e o foco volta à citação clicada.
 
 ### Estados
 | Estado | Mostra | Ação |
@@ -882,9 +894,9 @@ Em ⚙ Configurações → **Transcritores**, depois da lista de pareados, junto
 - Estados: carregando; erro ("Não consegui carregar as faixas do acervo." + Tentar de novo); nada a publicar ("Todas as faixas publicadas já estão no acervo.", sem a ação; com fila, "As faixas que faltavam estão na fila para o Mac."); depois de publicar, o foco vai ao título do bloco (a ação pode sumir quando tudo entra na fila) e o aviso de fila some quando o andamento as mostra publicadas; teto gasto ("Teto mensal da mídia atingido: nada é publicado até o mês que vem.", confirmar desabilitado). 390 px: uma coluna, sem rolagem lateral.
 
 ### Acessibilidade e toque (WCAG 2.2 AA, MA-01 a MA-07)
-- O painel é `role="dialog"`, `aria-modal="false"` no desktop, rotulado pelo título; no celular, a conversa fica `inert` (como o T3).
-- Alvos ≥ 44 px no celular; a barra do player não depende de arrastar (setas ←/→ e os botões de pulo, KBC-041).
-- A lista de falas é um só ponto de Tab com setas (KBC-038); o trecho citado tem `aria-current="true"` até tocar outra fala.
+- O painel é `role="dialog"`, `aria-modal="false"` no desktop, rotulado pelo título; no celular, a folha é um `<dialog>` modal (foco preso, o resto inerte) e a fonte é o `tabpanel` da aba. Botões de ícone com `aria-label`; foco visível; contraste ≥ 4,5:1 nos quatro temas, também no cartão tocando; `prefers-reduced-motion` tira as transições do cartão e das palavras.
+- Alvos ≥ 44 px no celular; nada depende de arrastar: a folha também fecha no ✕ e no Esc, e as marcas da linha do tempo são botões.
+- Na transcrição completa, a lista de falas é um só ponto de Tab com setas (KBC-038); o trecho citado tem `aria-current="true"` até tocar outra fala.
 - 390 px: nenhuma rolagem lateral; texto da fala quebra; o tempo fica numa coluna de 3,5rem.
 
 ### Fora do escopo e perguntas em aberto

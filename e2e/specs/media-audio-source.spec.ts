@@ -1,0 +1,549 @@
+import AxeBuilder from '@axe-core/playwright';
+import type { Locator, Page, TestInfo } from '@playwright/test';
+import { CSRF, expect, ownerApi, test } from './fixtures.js';
+import { audioState } from './media-helpers.js';
+import {
+  SPEECH,
+  TITLE,
+  ask,
+  audioSource,
+  publishedTrack,
+  readingSheet,
+  researcher,
+} from './research-tracks-helpers.js';
+
+/*
+ * KBC-150 (v2 · Pesquisa com IA — fonte de áudio): the audio source of an answer, every control
+ * clicked, scrolled with the wheel and the keyboard, played on the app's own player, at 1440
+ * (beside the answer) and 390 (in the reading sheet), in Chrome and, with KBC_E2E_WEBKIT=1, in
+ * WebKit at both widths. The answer is a real research turn, then the same sources saved as a
+ * conversation citing the track twice and a second track once ([1] and [2@0:41], [2@0:50]).
+ * `KBC_SHOTS=<dir>` saves the screens for the comparison with the Figma frames (`KBC_SHOTS_PREFIX`).
+ */
+
+const shots = process.env['KBC_SHOTS'];
+/** `KBC_SHOTS_PREFIX` names a new round of screens without overwriting the last one. */
+const shotPrefix = process.env['KBC_SHOTS_PREFIX'] ?? 'after';
+const SECOND = 'E a polaridade?';
+/** Enough speech for the whole transcript to scroll in its own box. */
+const LONG_SPEECH = [
+  ...SPEECH,
+  ...Array.from({ length: 11 }, (_, at) => ({
+    at: 5 + at * 3,
+    text: `Linha de preenchimento número ${at + 1}`,
+  })),
+  ...Array.from({ length: 6 }, (_, at) => ({
+    at: 70 + at * 3,
+    text: `Fala final número ${at + 1}`,
+  })),
+].sort((a, b) => a.at - b.at);
+const QUESTION = 'ritmo e polaridade';
+
+interface Source {
+  readonly n: number;
+  readonly id: string;
+  readonly title: string;
+  readonly media?: { readonly mediaId: string };
+  readonly passages?: readonly {
+    readonly at: string;
+    readonly startMs: number;
+    readonly endMs: number;
+  }[];
+}
+
+interface Conversation {
+  readonly id: string;
+  readonly title: string;
+  readonly turns: readonly {
+    readonly question: string;
+    readonly sources: readonly Source[];
+  }[];
+}
+
+const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
+
+async function shot(page: Page, name: string): Promise<void> {
+  if (!shots) return;
+  const width = isDesktop(page) ? 1440 : 390;
+  const engine = test.info().project.name.includes('webkit') ? '-webkit' : '';
+  await page.screenshot({
+    path: `${shots}/${shotPrefix}-${name}-${width}${engine}.png`,
+  });
+}
+
+/**
+ * Two real research turns (the track, then the second track), saved again as one answer that
+ * cites the second track as [1] and the first one at two passages, as [2@0:41] and [2@0:50].
+ */
+async function answerWithTwoTracks(member: Page): Promise<void> {
+  await ask(member);
+  await member.getByLabel('Sua pergunta').fill('polaridade');
+  await member.getByRole('button', { name: 'Perguntar' }).click();
+  await expect(member.locator('app-research-message')).toHaveCount(2);
+  await expect(
+    member
+      .locator('app-research-message')
+      .last()
+      .getByText(/Resposta gerada por IA/),
+  ).toBeVisible({ timeout: 30_000 });
+  let saved: Conversation | undefined;
+  await expect
+    .poll(
+      async () => {
+        const list = await member.request.get(
+          '/api/v1/conversations?kind=research',
+        );
+        const { items } = (await list.json()) as { items: { id: string }[] };
+        const [first] = items;
+        if (!first) return 0;
+        const one = await member.request.get(
+          `/api/v1/conversations/${first.id}`,
+        );
+        saved = (await one.json()) as Conversation;
+        return saved.turns.filter((turn) => turn.sources.length > 0).length;
+      },
+      { timeout: 20_000 },
+    )
+    .toBe(2);
+  const [first, second] = saved?.turns ?? [];
+  const track = first?.sources[0];
+  const other = second?.sources[0];
+  if (!saved || !first || !track?.passages?.[0] || !other)
+    throw new Error('no sources');
+  expect(other.title).toBe(SECOND);
+  const now = new Date().toISOString();
+  const passage = track.passages[0];
+  const conversation = {
+    ...saved,
+    id: crypto.randomUUID(),
+    title: QUESTION,
+    createdAt: now,
+    updatedAt: now,
+    turns: [
+      {
+        ...first,
+        id: crypto.randomUUID(),
+        at: now,
+        question: QUESTION,
+        answer: `A polaridade aparece [1@${other.passages?.[0]?.at ?? ''}]. O pêndulo governa tudo [2@0:41] e tudo flui [2@0:50].`,
+        sources: [
+          { ...other, n: 1 },
+          {
+            ...track,
+            n: 2,
+            passages: [passage, { at: '0:50', startMs: 50_000, endMs: 53_000 }],
+          },
+        ],
+      },
+    ],
+  };
+  const put = await member.request.put(
+    `/api/v1/conversations/${conversation.id}`,
+    { data: conversation, headers: CSRF },
+  );
+  expect(put.status(), await put.text()).toBe(200);
+  await member.reload();
+  const skip = member.getByRole('button', { name: 'Pular' });
+  if (await skip.isVisible().catch(() => false)) await skip.click();
+  if (!isDesktop(member))
+    await member.getByRole('button', { name: 'Menu', exact: true }).click();
+  const side = isDesktop(member)
+    ? member.getByRole('complementary', { name: 'Sua biblioteca' })
+    : member.getByRole('dialog', { name: 'Menu' });
+  await side
+    .getByRole('navigation', { name: 'Conversas' })
+    .getByRole('button', { name: new RegExp(QUESTION) })
+    .first()
+    .click();
+  if (!isDesktop(member)) {
+    await expect(side).toBeHidden();
+    await expect(
+      member.getByRole('button', { name: 'Menu', exact: true }),
+    ).toBeFocused();
+  }
+  await expect(
+    member.getByRole('link', {
+      name: `Fonte 2, faixa ${TITLE}, aos 41 segundos`,
+    }),
+  ).toBeVisible();
+}
+
+/** The element scrolls with the wheel over it and with the keyboard from inside it. */
+async function scrolls(
+  page: Page,
+  scroller: Locator,
+  focusInside: Locator,
+): Promise<void> {
+  const room = await scroller.evaluate(
+    (el) => el.scrollHeight - el.clientHeight,
+  );
+  expect(room, 'something to scroll').toBeGreaterThan(20);
+  const top = () => scroller.evaluate((el) => el.scrollTop);
+  await scroller.evaluate((el) => el.scrollTo({ top: 0 }));
+  await scroller.hover();
+  await page.mouse.wheel(0, 400);
+  await expect
+    .poll(top, { message: 'the wheel scrolls it' })
+    .toBeGreaterThan(0);
+  await scroller.evaluate((el) => el.scrollTo({ top: 0 }));
+  await focusInside.focus();
+  await page.keyboard.press('PageDown');
+  await expect.poll(top, { message: 'PageDown scrolls it' }).toBeGreaterThan(0);
+  await scroller.evaluate((el) => el.scrollTo({ top: 0 }));
+}
+
+/**
+ * The panel's own scroll: with the whole transcript open it is longer than the screen (a
+ * resized window is no proof: WebKit keeps the sheet's 85dvh of the first size).
+ */
+async function panelScrolls(
+  page: Page,
+  panel: Locator,
+  scroller: Locator,
+): Promise<void> {
+  await panel.getByRole('button', { name: 'Transcrição completa' }).click();
+  await expect(
+    panel.getByRole('list', { name: 'Trechos da transcrição' }),
+  ).toBeVisible();
+  await scrolls(page, scroller, panel.getByRole('heading', { name: TITLE }));
+  await panel.getByRole('button', { name: 'Em volta do trecho' }).click();
+  await expect(
+    panel.getByRole('list', { name: 'Em volta do trecho' }),
+  ).toBeVisible();
+}
+
+const playing = async (page: Page) => !(await audioState(page)).paused;
+
+async function seriousAxe(page: Page): Promise<unknown[]> {
+  const axe = await new AxeBuilder({ page })
+    .include('app-track-passage-panel')
+    .analyze();
+  return axe.violations
+    .filter((one) => ['serious', 'critical'].includes(one.impact ?? ''))
+    .map((one) => ({
+      id: one.id,
+      nodes: one.nodes.map(
+        (node) => `${node.target.join(' ')}: ${node.failureSummary ?? ''}`,
+      ),
+    }));
+}
+
+/** The viewports a project walks: its own, and in WebKit the phone width too. */
+function viewports(page: Page, info: TestInfo) {
+  const own = page.viewportSize() ?? { width: 1440, height: 900 };
+  return info.project.name === 'media-webkit'
+    ? [own, { width: 390, height: 844 }]
+    : [own];
+}
+
+/** The controls every width shares: the passage, the marks, the times, the transcript. */
+async function walkTheControls(member: Page, panel: Locator): Promise<void> {
+  const card = panel.getByRole('region', { name: /0:41–/ });
+  // Ouvir o trecho → it plays on the app's player; Pausar stops it.
+  await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
+  await expect.poll(() => playing(member)).toBe(true);
+  await expect
+    .poll(async () => (await audioState(member)).currentTime, {
+      timeout: 15_000,
+    })
+    .toBeGreaterThan(39.2);
+  await expect(card.getByText('tocando')).toBeVisible();
+  await expect(
+    panel.getByRole('button', { name: 'Pausar' }).first(),
+  ).toBeVisible();
+  await expect(card.locator('.quote span.lit').first()).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(panel.locator('.line[aria-current="true"]')).toHaveCount(1);
+  await shot(member, 'playing');
+  await panel.getByRole('button', { name: 'Pausar' }).first().click();
+  await expect.poll(() => playing(member)).toBe(false);
+  await expect(
+    panel.getByRole('button', { name: 'Ouvir o trecho' }),
+  ).toBeVisible();
+
+  // The timeline's marks and "Outro trecho citado".
+  await panel
+    .getByRole('button', { name: 'Trecho citado aos 50 segundos' })
+    .click();
+  await expect(panel.getByRole('region', { name: /0:50–0:53/ })).toBeVisible();
+  await expect
+    .poll(async () => (await audioState(member)).currentTime)
+    .toBeCloseTo(48, 0);
+  await panel
+    .getByRole('button', { name: 'Outro trecho citado, em 0:41' })
+    .click();
+  await expect(card).toBeVisible();
+  await panel
+    .getByRole('button', { name: 'Trecho citado aos 41 segundos' })
+    .click();
+  await expect(card).toBeVisible();
+
+  // A time around the passage plays from there.
+  const around = panel.getByRole('list', { name: 'Em volta do trecho' });
+  const first = around
+    .getByRole('button', { name: /^Ouvir a partir de/ })
+    .first();
+  await first.click();
+  await expect.poll(() => playing(member)).toBe(true);
+  await expect
+    .poll(async () => (await audioState(member)).currentTime)
+    .toBeGreaterThan(35);
+  await panel.getByRole('button', { name: 'Pausar' }).first().click();
+  await expect.poll(() => playing(member)).toBe(false);
+
+  // The bookmark at the passage, saved.
+  const saved = member.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      /\/bookmarks$/.test(new URL(response.url()).pathname),
+  );
+  await panel.getByRole('button', { name: 'Marcar este trecho' }).click();
+  expect((await saved).status()).toBe(201);
+
+  // Share: the link of the track page at the passage.
+  await member.evaluate(() => {
+    const copied: string[] = [];
+    (window as unknown as { copied: string[] }).copied = copied;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (text: string) => {
+          copied.push(text);
+          return Promise.resolve();
+        },
+      },
+    });
+  });
+  await panel.getByRole('button', { name: 'Copiar o link do trecho' }).click();
+  const copied = await member.evaluate(
+    () => (window as unknown as { copied: string[] }).copied,
+  );
+  expect(copied).toHaveLength(1);
+  expect(copied[0]).toMatch(/\/midia\/[0-9a-f-]+\?t=4[01]$/);
+
+  // The whole transcript, its own scroll, its search; back to the lines around.
+  await panel.getByRole('button', { name: 'Transcrição completa' }).click();
+  const list = panel.getByRole('list', { name: 'Trechos da transcrição' });
+  await expect(list).toBeVisible();
+  await scrolls(member, list, list.getByRole('button').first());
+  await panel.getByRole('button', { name: 'Em volta do trecho' }).click();
+  await expect(around).toBeVisible();
+  await panel.getByRole('button', { name: 'Buscar na transcrição' }).click();
+  const search = panel.getByRole('searchbox');
+  await expect(search).toBeFocused();
+  await search.fill('pêndulo');
+  await expect(list.locator('.segment').first()).toBeVisible();
+  await shot(member, 'full-transcript');
+  await panel.getByRole('button', { name: 'Em volta do trecho' }).click();
+  await expect(around).toBeVisible();
+}
+
+/** QA BUG-1: the passage and its row of actions stay inside the card's padding. */
+async function cardHoldsItsRow(panel: Locator): Promise<void> {
+  const card = panel.locator('section.cited');
+  const box = await card.boundingBox();
+  const padding = 18;
+  for (const inner of [
+    panel.getByRole('button', { name: 'Copiar o link do trecho' }),
+    card.locator('blockquote'),
+  ]) {
+    const own = await inner.boundingBox();
+    if (!box || !own)
+      throw new Error('the card or its content is not laid out');
+    expect(own.x).toBeGreaterThanOrEqual(box.x + padding - 1);
+    expect(own.x + own.width).toBeLessThanOrEqual(
+      box.x + box.width - padding + 1,
+    );
+  }
+}
+
+async function desktopFlow(member: Page): Promise<void> {
+  const citation = member.getByRole('link', {
+    name: `Fonte 2, faixa ${TITLE}, aos 41 segundos`,
+  });
+  await expect(citation).toHaveText(`2${TITLE} · 0:41`);
+  await citation.click();
+  const panel = audioSource(member);
+  await expect(panel).toBeVisible();
+  await expect(panel).toHaveAccessibleName(
+    `Trecho da faixa ${TITLE}, aos 41 segundos`,
+  );
+  await expect(panel.getByText('Fonte 2 de 2 · Áudio')).toBeVisible();
+  await expect(panel.getByRole('heading', { name: TITLE })).toBeFocused();
+  await expect(citation).toHaveClass(/active/);
+  // No player of its own: it is the bar's, already holding the track, paused at 0:39.
+  await expect(panel.getByRole('slider')).toHaveCount(0);
+  const bar = member.getByRole('region', { name: 'Mini-player' });
+  await expect(bar).toBeVisible();
+  await expect(bar).toContainText(TITLE);
+  await expect
+    .poll(async () => (await audioState(member)).currentTime, {
+      timeout: 15_000,
+    })
+    .toBeCloseTo(39, 0);
+  expect(await playing(member)).toBe(false);
+  await cardHoldsItsRow(panel);
+  await shot(member, 'stopped');
+  expect(await seriousAxe(member)).toEqual([]);
+
+  // The panel scrolls (wheel and keyboard) once the whole transcript makes it long.
+  await panelScrolls(member, panel, panel.locator('.scroller'));
+
+  await walkTheControls(member, panel);
+
+  // "Faixa toda" plays from the start, on the bar.
+  await panel.getByRole('button', { name: 'Faixa toda' }).click();
+  await expect.poll(() => playing(member)).toBe(true);
+  expect((await audioState(member)).currentTime).toBeLessThan(5);
+  await expect(bar.getByRole('button', { name: /Pausar/ })).toBeVisible();
+  await panel.getByRole('button', { name: 'Pausar' }).click();
+  await expect.poll(() => playing(member)).toBe(false);
+
+  // The bar closed: "Ouvir o trecho" puts the track back on it and plays the passage.
+  await bar.getByRole('button', { name: 'Fechar o player' }).click();
+  await expect(bar).toBeHidden();
+  await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
+  await expect.poll(() => playing(member)).toBe(true);
+  await expect(bar).toContainText(TITLE);
+  await panel.getByRole('button', { name: 'Pausar' }).click();
+  await expect.poll(() => playing(member)).toBe(false);
+
+  for (const theme of ['light', 'dark', 'esoteric', 'revised']) {
+    await member.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme,
+    );
+    // The colours ease into the theme: axe reads them once they settled.
+    await expect
+      .poll(() => member.evaluate(() => document.getAnimations().length))
+      .toBe(0);
+    expect(await seriousAxe(member), theme).toEqual([]);
+  }
+
+  // ‹ › between the answer's sources.
+  await expect(
+    panel.getByRole('button', { name: 'Próxima fonte' }),
+  ).toBeDisabled();
+  await panel.getByRole('button', { name: 'Fonte anterior' }).click();
+  await expect(panel).toHaveAccessibleName(
+    new RegExp(`Trecho da faixa ${SECOND}`),
+  );
+  await expect(panel.getByText('Fonte 1 de 2 · Áudio')).toBeVisible();
+  await expect(
+    panel.getByRole('button', { name: 'Fonte anterior' }),
+  ).toBeDisabled();
+  await panel.getByRole('button', { name: 'Próxima fonte' }).click();
+  await expect(panel).toHaveAccessibleName(
+    new RegExp(`Trecho da faixa ${TITLE}`),
+  );
+
+  // ✕ closes and gives the focus back to the citation.
+  await panel.getByRole('button', { name: 'Fechar', exact: true }).click();
+  await expect(panel).toBeHidden();
+  await expect(citation).toBeFocused();
+
+  // ⤢ opens the track page at the passage.
+  await citation.click();
+  await expect(panel).toBeVisible();
+  await panel.getByRole('link', { name: 'Abrir a página da faixa' }).click();
+  await expect(member).toHaveURL(/\/midia\/[0-9a-f-]+\?t=39$/);
+}
+
+async function phoneFlow(member: Page): Promise<void> {
+  const citation = member.getByRole('link', {
+    name: `Fonte 2, faixa ${TITLE}, aos 41 segundos`,
+  });
+  await citation.click();
+  const sheet = readingSheet(member);
+  await expect(sheet).toBeVisible();
+  const panel = audioSource(member);
+  const tabs = sheet.getByRole('tab');
+  await expect(tabs).toHaveText(['Fonte 1', 'Fonte 2']);
+  await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect(tabs.nth(1).locator('ui-icon')).toHaveCount(1);
+  await expect(panel.getByRole('heading', { name: TITLE })).toBeFocused();
+  // 85% of the screen, over the answer.
+  const box = await sheet.boundingBox();
+  const height = member.viewportSize()?.height ?? 0;
+  expect(
+    Math.round(((box?.height ?? 0) / height) * 100),
+  ).toBeGreaterThanOrEqual(84);
+  await expect
+    .poll(async () => (await audioState(member)).currentTime, {
+      timeout: 15_000,
+    })
+    .toBeCloseTo(39, 0);
+  await shot(member, 'stopped');
+  expect(await seriousAxe(member)).toEqual([]);
+
+  // The sheet's content scrolls (wheel and keyboard) once the whole transcript makes it long.
+  await panelScrolls(member, panel, panel);
+
+  // Playing: the sheet's strip says it, "Abrir a faixa" leaves the sheet.
+  await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
+  await expect.poll(() => playing(member)).toBe(true);
+  await expect(
+    panel.getByText(/Tocando o trecho citado · 0:\d\d/),
+  ).toBeVisible();
+  await expect(panel.getByRole('link', { name: 'Abrir a faixa' })).toHaveCount(
+    0,
+  );
+  await panel
+    .locator('.sheet-player')
+    .getByRole('button', { name: 'Pausar' })
+    .click();
+  await expect.poll(() => playing(member)).toBe(false);
+  await expect(
+    panel.getByRole('link', { name: 'Abrir a faixa' }),
+  ).toBeVisible();
+
+  await walkTheControls(member, panel);
+
+  // The other tab: the second track, in the same sheet.
+  await tabs.nth(0).click();
+  await expect(panel.getByRole('heading', { name: SECOND })).toBeVisible();
+  await tabs.nth(1).click();
+  await expect(panel.getByRole('heading', { name: TITLE })).toBeVisible();
+
+  // Dragging the head down closes it; the focus goes back to the citation.
+  const head = sheet.locator('.sheet-head');
+  const handle = await head.boundingBox();
+  if (!handle) throw new Error('no sheet head');
+  const x = handle.x + handle.width / 2;
+  const y = handle.y + 6;
+  await member.mouse.move(x, y);
+  await member.mouse.down();
+  await member.mouse.move(x, y + 60, { steps: 4 });
+  await member.mouse.move(x, y + 200, { steps: 6 });
+  await member.mouse.up();
+  await expect(sheet).toBeHidden();
+  await expect(citation).toBeFocused();
+
+  // ✕ closes it too; then the mini player holds the track, and plays it.
+  await citation.click();
+  await expect(sheet).toBeVisible();
+  await sheet.getByRole('button', { name: 'Fechar', exact: true }).click();
+  await expect(sheet).toBeHidden();
+  const mini = member.getByRole('region', { name: 'Mini-player' });
+  await expect(mini).toBeVisible();
+  await expect(mini).toContainText(TITLE);
+  await mini.getByRole('button', { name: /^Tocar/ }).click();
+  await expect.poll(() => playing(member)).toBe(true);
+}
+
+test('KBC-150: the audio source opens on the cited passage, every control works, it plays on the app’s player and closes', async ({
+  page,
+}, info) => {
+  test.setTimeout(240_000);
+  const owner = await ownerApi();
+  const topic = await publishedTrack(owner, LONG_SPEECH);
+  await owner.dispose();
+  for (const viewport of viewports(page, info)) {
+    const member = await researcher(page, topic, { viewport });
+    await answerWithTwoTracks(member);
+    if (isDesktop(member)) await desktopFlow(member);
+    else await phoneFlow(member);
+    await member.context().close();
+  }
+});

@@ -153,20 +153,33 @@ export class BookmarksStore {
    * its note opens. Nothing while no media is loaded.
    */
   mark(): void {
+    this.add(bookmarkPosition(this.engine.playback().currentMs), true);
+  }
+
+  /**
+   * A bookmark at an exact time of the loaded media, the start of a cited passage (KBC-150):
+   * said, with no note to write (no player is there to hold it). Nothing while no media is
+   * loaded.
+   */
+  markAt(positionMs: number): void {
+    this.add(positionMs, false);
+  }
+
+  private add(positionMs: number, withNote: boolean): void {
     const mediaId = this.loadedFor();
     if (!mediaId) return;
     const now = new Date().toISOString();
     const bookmark: MediaBookmark = {
       id: this.newId(),
       mediaId,
-      positionMs: bookmarkPosition(this.engine.playback().currentMs),
+      positionMs: Math.max(0, Math.round(positionMs)),
       note: null,
       createdAt: now,
       updatedAt: now,
     };
     this.list.update((list) => [...list, bookmark]);
     this.track(bookmark, { created: false, noteToSend: false, failed: false });
-    this.editingId.set(bookmark.id);
+    if (withNote) this.editingId.set(bookmark.id);
     this.announcer.say(
       $localize`:@@bookmarks.marked:Marcador em ${formatClock(bookmark.positionMs)}:time:`,
     );

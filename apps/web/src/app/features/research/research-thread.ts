@@ -13,9 +13,10 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
-import type { DocumentRef } from '@kb-chat/contracts';
+import type { AnswerSource, DocumentRef } from '@kb-chat/contracts';
 import { ChatStore, type CitedSource } from '@features/chat/chat-store.js';
 import { DocumentPanel } from '@features/document/document-panel.js';
+import { TrackPassagePanel } from '@features/media/track-passage/track-passage-panel.js';
 import { UiIcon } from '@ui/icon.js';
 import { ResearchMessage, type OpenedSource } from './research-message.js';
 import type { TrackOpening } from './track-opening.js';
@@ -55,10 +56,17 @@ export function tabTarget(
   return move ? move(at, count) : null;
 }
 
-/** What the reading sheet shows: the answer's sources and the one open. */
+/**
+ * What the reading sheet shows: the answer's cited sources (texts and tracks, a tab each), the
+ * one open and, for a track, the time its citation wrote (KBC-127 FR-2, KBC-150 item 8).
+ */
 interface Reading {
-  readonly opening: SourceOpening;
-  readonly current: CitedSource;
+  readonly question: string;
+  readonly tabs: readonly AnswerSource[];
+  readonly current: AnswerSource;
+  readonly at: string;
+  /** The citation or chip that opened it: the focus goes back there. */
+  readonly trigger: HTMLElement | null;
 }
 
 /**
@@ -68,15 +76,16 @@ interface Reading {
  */
 @Component({
   selector: 'app-research-thread',
-  imports: [ResearchMessage, DocumentPanel, UiIcon],
+  imports: [ResearchMessage, DocumentPanel, TrackPassagePanel, UiIcon],
   template: `
     @for (turn of turns(); track turn.id) {
       <app-research-message
         [turn]="turn"
         [last]="$last"
         [activeSource]="activeSources().get(turn.id) ?? null"
+        [activeAt]="activeAt()"
         (opened)="openSource(turn, $event)"
-        (trackOpened)="trackOpened.emit($event)"
+        (trackOpened)="openTrack($event)"
         (stopped)="stopped.emit()"
         (retried)="retried.emit()"
         (continued)="continued.emit()"
@@ -112,7 +121,7 @@ interface Reading {
               aria-label="Fontes"
               i18n-aria-label="@@source.tabs"
             >
-              @for (source of open.opening.sources; track source.n) {
+              @for (source of open.tabs; track source.n) {
                 <!-- The APG tabs: only the selected tab is a Tab stop; arrows, Home and End move. -->
                 <button
                   #tab
@@ -123,11 +132,14 @@ interface Reading {
                   [attr.aria-selected]="source.n === open.current.n"
                   [attr.tabindex]="source.n === open.current.n ? 0 : -1"
                   aria-controls="reading-source"
+                  [class.audio]="!!source.media"
                   (click)="choose(source)"
                   (keydown)="tabKey($event)"
-                  i18n="@@source.tab"
                 >
-                  Fonte {{ source.n }}
+                  @if (source.media) {
+                    <ui-icon name="wave" [size]="12" />
+                  }
+                  <span i18n="@@source.tab">Fonte {{ source.n }}</span>
                 </button>
               }
             </div>
@@ -152,23 +164,39 @@ interface Reading {
             </button>
           </div>
         </div>
-        <app-document-panel
-          id="reading-source"
-          role="tabpanel"
-          class="sheet-reader"
-          [labelledBy]="tabId(open.current)"
-          [focusTitle]="!fromTab()"
-          [topic]="topic()"
-          [documentId]="open.current.id"
-          [fallbackTitle]="open.current.title"
-          [highlight]="open.opening.question"
-          [inSheet]="true"
-          [sourceMode]="true"
-          (closed)="closeSheet()"
-          (documentOpened)="openDocument(open.current)"
-          (navigated)="openDocument($event)"
-          (trackOpened)="trackOpened.emit($event)"
-        />
+        @if (open.current.media) {
+          <app-track-passage-panel
+            id="reading-source"
+            class="sheet-reader"
+            [labelledBy]="tabId(open.current)"
+            [focusTitle]="!fromTab()"
+            [inSheet]="true"
+            [source]="open.current"
+            [at]="open.at"
+            [sources]="open.tabs"
+            [topic]="topic()"
+            [topics]="chat.topicList()"
+            (closed)="closeSheet()"
+          />
+        } @else {
+          <app-document-panel
+            id="reading-source"
+            role="tabpanel"
+            class="sheet-reader"
+            [labelledBy]="tabId(open.current)"
+            [focusTitle]="!fromTab()"
+            [topic]="topic()"
+            [documentId]="open.current.id"
+            [fallbackTitle]="open.current.title"
+            [highlight]="open.question"
+            [inSheet]="true"
+            [sourceMode]="true"
+            (closed)="closeSheet()"
+            (documentOpened)="openDocument(open.current)"
+            (navigated)="openDocument($event)"
+            (trackOpened)="openTrack($event)"
+          />
+        }
       }
     </dialog>
   `,
@@ -178,7 +206,7 @@ interface Reading {
 export class ResearchThread {
   private readonly view = inject(DOCUMENT).defaultView;
   private readonly injector = inject(Injector);
-  private readonly chat = inject(ChatStore);
+  protected readonly chat = inject(ChatStore);
   private readonly sheet =
     viewChild.required<ElementRef<HTMLDialogElement>>('sheet');
   private readonly tabs = viewChildren<ElementRef<HTMLButtonElement>>('tab');
@@ -216,23 +244,37 @@ export class ResearchThread {
     return ready ? $localize`:@@ai.ready:Resposta da IA pronta.` : '';
   });
 
-  /** The source marked in each answer: the one open in the sheet or in the page's panel. */
+  /**
+   * The source marked in each answer: the one open in the sheet, in the page's document panel
+   * or, a track, in the page's audio source (KBC-150 item 7).
+   */
   protected readonly activeSources = computed(() => {
     const reading = this.reading();
     const id = this.openDocumentId();
+    const track = this.chat.openTrack();
     return new Map(
       this.turns().map((turn) => {
         if (reading)
           return [
             turn.id,
-            reading.opening.question === turn.question
-              ? reading.current.n
-              : null,
+            reading.question === turn.question ? reading.current.n : null,
+          ];
+        if (track?.question !== undefined)
+          return [
+            turn.id,
+            track.question === turn.question ? track.source.n : null,
           ];
         const open = turn.sources.find((source) => source.id === id);
         return [turn.id, open?.n ?? null];
       }),
     );
+  });
+
+  /** The time of the open track's citation: only that one is filled (KBC-150 item 7). */
+  protected readonly activeAt = computed(() => {
+    const reading = this.reading();
+    if (reading) return reading.current.media ? reading.at : null;
+    return this.chat.openTrack()?.at ?? null;
   });
 
   protected openSource(turn: ResearchTurn, opened: OpenedSource): void {
@@ -245,12 +287,47 @@ export class ResearchThread {
       sources,
       trigger: opened.trigger,
     };
-    const current = sources.find((source) => source.id === opened.id);
+    const tabs = citedSources(turn);
+    const current = tabs.find((source) => source.id === opened.id);
     if (!current || !this.isPhone()) {
       this.opened.emit(opening);
       return;
     }
-    this.reading.set({ opening, current });
+    this.showSheet({
+      question: turn.question,
+      tabs,
+      current,
+      at: '',
+      trigger: opened.trigger,
+    });
+  }
+
+  /**
+   * A track: beside the answer on a desktop (the page's audio source); on a phone, in the
+   * reading sheet with a tab per source (KBC-150 item 8).
+   */
+  protected openTrack(opening: TrackOpening): void {
+    const tabs = opening.sources ?? [];
+    if (!this.isPhone() || !tabs.some((one) => one.n === opening.source.n)) {
+      this.trackOpened.emit(opening);
+      return;
+    }
+    const reading = this.reading();
+    if (reading) {
+      this.reading.set({ ...reading, current: opening.source, at: opening.at });
+      return;
+    }
+    this.showSheet({
+      question: opening.question ?? '',
+      tabs,
+      current: opening.source,
+      at: opening.at,
+      trigger: opening.trigger,
+    });
+  }
+
+  private showSheet(reading: Reading): void {
+    this.reading.set(reading);
     this.fromTab.set(false);
     this.full.set(false);
     afterNextRender(() => this.sheet().nativeElement.showModal(), {
@@ -258,12 +335,19 @@ export class ResearchThread {
     });
   }
 
-  protected choose(source: CitedSource): void {
+  protected choose(source: AnswerSource): void {
     this.fromTab.set(true);
-    this.reading.update((open) => open && { ...open, current: source });
+    this.reading.update(
+      (open) =>
+        open && {
+          ...open,
+          current: source,
+          at: source.passages?.[0]?.at ?? '',
+        },
+    );
   }
 
-  protected tabId(source: CitedSource): string {
+  protected tabId(source: AnswerSource): string {
     return `reading-tab-${source.n}`;
   }
 
@@ -271,7 +355,7 @@ export class ResearchThread {
   protected tabKey(event: KeyboardEvent): void {
     const reading = this.reading();
     if (!reading) return;
-    const sources = reading.opening.sources;
+    const sources = reading.tabs;
     const at = sources.findIndex((source) => source.n === reading.current.n);
     const target = tabTarget(event.key, at, sources.length);
     if (target === null) return;
@@ -289,7 +373,7 @@ export class ResearchThread {
     this.closeSheet();
     if (!reading) return;
     this.chat.openSource(this.topic(), doc, {
-      question: reading.opening.question,
+      question: reading.question,
       sources: [],
     });
     this.chat.leaveSources();
@@ -303,7 +387,7 @@ export class ResearchThread {
   protected sheetClosed(): void {
     const trigger = this.leftToDocument
       ? null
-      : (this.reading()?.opening.trigger ?? null);
+      : (this.reading()?.trigger ?? null);
     this.leftToDocument = false;
     this.reading.set(null);
     this.drag.set(null);

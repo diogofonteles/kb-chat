@@ -40,6 +40,7 @@ Pedido do dono: levar o app inteiro para a UI/UX v2 desenhada no Figma ("Nova Al
 | [KBC-137](KBC-137-subject-pages.md) | Página do assunto com prateleiras | ui-v2-features | ready | KBC-127 |
 | [KBC-136](KBC-136-share-links.md) | Compartilhar link de documento, de áudio no tempo e de trecho, só para quem tem acesso | ui-v2-features | ready | KBC-127, KBC-129 |
 | [KBC-135](KBC-135-follow-authors.md) | Seguir autor, com novidades na home e no sino (revê o "Out" do KBC-059; o dono confirma) | ui-v2-features | ready | KBC-059, KBC-133, KBC-129 |
+| [KBC-151](KBC-151-who-speaks-in-the-audio-source.md) | Quem fala na fonte de áudio para quem só ouve (pendência do KBC-150) | ui-v2-areas | draft | KBC-150 |
 
 Itens que já existiam e que a v2 desenhou (sobem de prioridade junto, na ordem: KBC-052, KBC-053, KBC-054, KBC-055, KBC-059): ver a seção "Fase 2" abaixo. Cada um ganhou a nota "Redesign v2" com o ponto de entrada na casca nova.
 

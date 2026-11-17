@@ -17,7 +17,12 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import type { SearchFilters, SearchKind, SearchMode } from '@kb-chat/contracts';
+import type {
+  AnswerSource,
+  SearchFilters,
+  SearchKind,
+  SearchMode,
+} from '@kb-chat/contracts';
 import { httpResource } from '@angular/common/http';
 import {
   takeUntilDestroyed,
@@ -294,10 +299,9 @@ export class ChatPage {
     const hit = this.passage();
     return hit ? passageKey(hit) : null;
   });
-  /** The panel's full player shows this media: no mini-player for it meanwhile. */
+  /** A spoken passage's full player shows this media: no mini-player for it meanwhile. */
   protected readonly playerInPanel = computed(
-    () =>
-      this.passage()?.mediaId ?? this.track()?.source.media?.mediaId ?? null,
+    () => this.passage()?.mediaId ?? null,
   );
   protected readonly panelOpen = computed(
     () =>
@@ -554,10 +558,52 @@ export class ChatPage {
   }
 
   /** A cited track opens on its passage, paused, in the reading panel (KBC-099 FR-8). */
-  protected openTrack({ source, at, trigger }: TrackOpening): void {
+  protected openTrack({
+    source,
+    at,
+    trigger,
+    sources,
+    question,
+  }: TrackOpening): void {
     this.trackTrigger = trigger;
     this.triggerPlace = placeOf(trigger, this.host);
-    this.store.openTrackPassage({ source, at });
+    this.store.openTrackPassage({
+      source,
+      at,
+      ...(sources ? { sources } : {}),
+      ...(question === undefined ? {} : { question }),
+    });
+  }
+
+  /**
+   * ‹ › on the audio source (KBC-150): another source of the same answer in the same place, a
+   * track on its first cited passage, a text in the document panel with the answer's texts.
+   */
+  protected chooseSource(source: AnswerSource): void {
+    const open = this.track();
+    const sources = open?.sources ?? [];
+    const question = open?.question ?? '';
+    if (source.media) {
+      this.store.openTrackPassage({
+        source,
+        at: source.passages?.[0]?.at ?? '',
+        sources,
+        question,
+      });
+      return;
+    }
+    const topic = this.store.topicSlug();
+    if (!topic) return;
+    this.store.openSource(
+      topic,
+      { id: source.id, title: source.title },
+      {
+        question,
+        sources: sources
+          .filter((one) => !one.media)
+          .map(({ n, id, title }) => ({ n, id, title })),
+      },
+    );
   }
 
   /** "Parar" disappears with the answer in flight: focus moves to the question box. */

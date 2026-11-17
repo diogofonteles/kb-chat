@@ -82,6 +82,10 @@ export interface OpenTrack {
   readonly source: AnswerSource;
   /** The time the citation wrote ("" for a plain [n] or the chip). */
   readonly at: string;
+  /** The answer's cited sources, for "Fonte n de N" and ‹ › (KBC-150); absent for a search. */
+  readonly sources?: readonly AnswerSource[];
+  /** The answer's question. */
+  readonly question?: string;
 }
 
 /** A spoken passage open in the reading panel (KBC-039 FR-6). */

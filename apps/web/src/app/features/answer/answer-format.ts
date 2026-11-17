@@ -1,5 +1,6 @@
 import {
   SOURCE_CITATION,
+  formatTrackClock,
   type AnswerSource,
   type TrackPassage,
 } from '@kb-chat/contracts';
@@ -62,6 +63,23 @@ function restrictedCitation(n: string): string {
 }
 
 /**
+ * A track's citation (KBC-150 item 7): a pill with the wave and its number, then "título ·
+ * tempo", so it reads apart from a text's "[n]". The link's name says it all for a screen
+ * reader; the wave is drawn by CSS (the sanitizer keeps no SVG).
+ */
+function audioCitation(source: AnswerSource, at: string): string {
+  const label = escapeHtml(trackLabel(source, at));
+  const time = at ? `@${at}` : '';
+  const passage = passageOf(source, at);
+  const where = escapeHtml(
+    passage
+      ? `${source.title} · ${formatTrackClock(passage.startMs)}`
+      : source.title,
+  );
+  return `<a class="cite cite-audio" href="#fonte-${source.n}${time}" aria-label="${label}" title="${label}"><span class="cite-n">${source.n}</span><span class="cite-where">${where}</span></a>`;
+}
+
+/**
  * "[2]" → a link to source 2 named after it; the panel opens on click. A track's "[2@8:15]"
  * shows as "[2]" too (T22), and its link keeps the time it cites.
  */
@@ -87,6 +105,7 @@ export function renderAnswer(
       );
       // The time rides in the href: Angular's sanitizer keeps it, not a data attribute.
       const time = source.media && at ? `@${at}` : '';
+      if (source.media) return audioCitation(source, at ?? '');
       return `<a class="cite" href="#fonte-${n}${time}" aria-label="${label}" title="${label}">[${n}]</a>`;
     },
   );
