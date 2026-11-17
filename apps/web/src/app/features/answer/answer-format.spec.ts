@@ -93,6 +93,74 @@ describe('answer formatting', () => {
     expect(citedSource(timed ?? null)).toBe(1);
   });
 
+  it('KBC-155 AC-6: consecutive citations of the same track are one pill with the times inside, each its own link', () => {
+    const three: AnswerSource = {
+      ...TRACK,
+      passages: [
+        { at: '1:16', startMs: 76_000, endMs: 80_000 },
+        { at: '1:21', startMs: 81_000, endMs: 85_000 },
+        { at: '0:48', startMs: 48_000, endMs: 52_000 },
+      ],
+    };
+    const host = document.createElement('div');
+    host.innerHTML = renderAnswer(
+      'Na infância [1@1:16][1@1:21], [1@0:48]; [1@1:21].',
+      [three],
+    );
+    const groups = host.querySelectorAll('.cite-group');
+    expect(groups).toHaveLength(1);
+    const group = groups[0] as HTMLElement;
+    expect(group.textContent).toBe('1O que é o ritmo? · 1:16, 1:21, 0:48');
+    const times = [...group.querySelectorAll('a.cite')];
+    expect(times.map((one) => one.textContent)).toEqual([
+      '1:16',
+      '1:21',
+      '0:48',
+    ]);
+    expect(times.map((one) => one.getAttribute('aria-label'))).toEqual([
+      'Ouvir O que é o ritmo? aos 1 minuto e 16 segundos',
+      'Ouvir O que é o ritmo? aos 1 minuto e 21 segundos',
+      'Ouvir O que é o ritmo? aos 48 segundos',
+    ]);
+    expect(times.map((one) => citedAt(one))).toEqual(['1:16', '1:21', '0:48']);
+    expect(times.map((one) => citedSource(one))).toEqual([1, 1, 1]);
+    // Only the pill's own parts: the sentence around it is untouched.
+    expect(host.textContent?.trim()).toBe(
+      'Na infância 1O que é o ritmo? · 1:16, 1:21, 0:48.',
+    );
+  });
+
+  it('KBC-155 AC-7: a lone track citation, a text, another track or words in between are not grouped', () => {
+    const other: AnswerSource = { ...TRACK, n: 2, title: 'Outra faixa' };
+    const text: AnswerSource = { n: 3, id: 'leis.md', title: 'As leis' };
+    const host = document.createElement('div');
+    host.innerHTML = renderAnswer(
+      'Um [1@0:41] [2@0:41] dois [1@0:41] e [1] três [3][3].',
+      [TRACK, other, text],
+    );
+    expect(host.querySelectorAll('.cite-group')).toHaveLength(0);
+    expect(host.querySelectorAll('a.cite-audio')).toHaveLength(4);
+    expect(
+      [...host.querySelectorAll('a.cite:not(.cite-audio)')].map(
+        (one) => one.textContent,
+      ),
+    ).toEqual(['[3]', '[3]']);
+    // The same passage twice in a row is one citation, not a pill of one time.
+    host.innerHTML = renderAnswer('Um [1@0:41], [1@0:41].', [TRACK]);
+    expect(host.querySelectorAll('.cite-group')).toHaveLength(0);
+    expect(host.querySelectorAll('a.cite-audio')).toHaveLength(1);
+    // A track saved without passages is not grouped either.
+    const old: AnswerSource = {
+      n: TRACK.n,
+      id: TRACK.id,
+      title: TRACK.title,
+      ...(TRACK.media && { media: TRACK.media }),
+    };
+    host.innerHTML = renderAnswer('Um [1@0:41][1@1:10].', [old]);
+    expect(host.querySelectorAll('.cite-group')).toHaveLength(0);
+    expect(host.querySelectorAll('a.cite-audio')).toHaveLength(2);
+  });
+
   it('a track citation of an answer without passages still opens the track', () => {
     const old: AnswerSource = {
       n: TRACK.n,
