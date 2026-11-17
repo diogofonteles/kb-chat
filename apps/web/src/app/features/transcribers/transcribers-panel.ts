@@ -23,7 +23,7 @@ import {
 } from '@kb-chat/contracts';
 import { seenAtFormat } from '@core/i18n/date-formats.js';
 import { TranscriberStatus } from './transcriber-status.js';
-import { UiButton, UiDialog } from '@ui/index.js';
+import { UiButton, UiDialog, UiIcon } from '@ui/index.js';
 import { TranscriberStatusStore } from './transcriber-status-store.js';
 import {
   TranscribersApi,
@@ -71,7 +71,7 @@ const isTranscriberKind = (kind: string): kind is Kind =>
  */
 @Component({
   selector: 'app-transcribers-panel',
-  imports: [DatePipe, TranscriberStatus, UiButton, UiDialog],
+  imports: [DatePipe, TranscriberStatus, UiButton, UiDialog, UiIcon],
   providers: [TranscriberStatusStore],
   templateUrl: './transcribers-panel.html',
   styleUrls: ['../settings/settings-form.css', './transcribers-panel.css'],

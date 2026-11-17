@@ -54,9 +54,14 @@
     }
     @if (noTranscriber()) {
       <ui-banner tone="warn">
-        <p i18n="@@voiceProfiles.noTranscriber">
-          Nenhum transcritor ligado trata perfis de voz; o cálculo espera até
-          que um seja marcado em Transcritores.
+        <!-- v2: the fact in bold, what happens on the line under it. -->
+        <p class="banner-text">
+          <strong i18n="@@voiceProfiles.noTranscriberTitle"
+            >Nenhum transcritor ligado trata perfis de voz</strong
+          ><span class="visually-hidden">;</span>
+          <span i18n="@@voiceProfiles.noTranscriberText"
+            >O cálculo espera até que um seja marcado em Transcritores.</span
+          >
         </p>
       </ui-banner>
     }
@@ -69,11 +74,16 @@
       Perfis deste acervo
     </h3>
     @if (items().length === 0) {
+      <!-- Empty: "Cadastrar perfil" inside the card (v2). -->
       <ui-empty-state
         icon="mic"
         i18n-title="@@voiceProfiles.empty"
         title="Nenhum perfil neste acervo."
-      />
+      >
+        @if (!printsStopped()) {
+          <ng-container *ngTemplateOutlet="addButton" />
+        }
+      </ui-empty-state>
     }
     <ul class="profiles">
       @for (profile of items(); track profile.id) {
@@ -147,25 +157,27 @@
       }
     </ul>
 
-    @if (!printsStopped()) {
+    @if (!printsStopped() && items().length > 0) {
+      <ng-container *ngTemplateOutlet="addButton" />
+    }
+    <ng-template #addButton>
       <button
         type="button"
-        class="primary add"
+        class="secondary white empty-add"
         (click)="adding.set(true)"
-        i18n="@@voiceProfiles.add"
       >
-        Cadastrar perfil
+        <ui-icon name="plus" [size]="16" />
+        <span i18n="@@voiceProfiles.add">Cadastrar perfil</span>
       </button>
-    }
+    </ng-template>
     <!-- The consent and the recordings in a wide modal; a tall sheet on a phone (KBC-132). -->
     @if (adding()) {
       <ui-dialog
         #formDialog
         titleId="voice-profile-dialog-title"
-        i18n-step="@@voiceProfiles.dialogStep"
-        step="Perfis de voz"
-        i18n-title="@@voiceProfiles.dialogTitle"
-        title="Cadastrar perfil"
+        [step]="dialogStep()"
+        i18n-title="@@voiceProfiles.newTitle"
+        title="Novo perfil de voz"
         [width]="800"
         (closed)="adding.set(false)"
       >

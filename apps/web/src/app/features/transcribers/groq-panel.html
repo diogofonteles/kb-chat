@@ -44,22 +44,16 @@
         >
       </p>
     }
-    <div class="field">
-      <label class="label" for="groq-key">
-        @if (current.connected) {
-          <ng-container i18n="@@groq.newKeyLabel"
-            >Trocar a chave da API do Groq</ng-container
-          >
-        } @else {
-          <ng-container i18n="@@groq.keyLabel"
-            >Chave da API do Groq</ng-container
-          >
-        }
-      </label>
-      <span class="hint" id="groq-key-hint" i18n="@@groq.keyHint"
-        >Crie em console.groq.com, em "API Keys", e cole aqui.</span
-      >
-    </div>
+    <!-- v2: the label, the field, the hint under it, then "Testar conexão". -->
+    <label class="label" for="groq-key">
+      @if (current.connected) {
+        <ng-container i18n="@@groq.newKeyLabel"
+          >Trocar a chave da API do Groq</ng-container
+        >
+      } @else {
+        <ng-container i18n="@@groq.keyLabel">Chave da API do Groq</ng-container>
+      }
+    </label>
     <input
       #keyInput
       id="groq-key"
@@ -72,10 +66,13 @@
       [value]="key()"
       (input)="editKey($event)"
     />
+    <p class="hint" id="groq-key-hint" i18n="@@groq.keyHint">
+      Crie em console.groq.com, em "API Keys", e cole aqui.
+    </p>
     <div class="row">
       <button
         type="submit"
-        class="primary"
+        class="secondary"
         [attr.aria-disabled]="busy() !== null ? 'true' : null"
         i18n="@@groq.test"
       >
@@ -203,11 +200,22 @@
     <h3 class="block-title" i18n="@@groq.monthTitle">
       Gasto com mídia neste mês
     </h3>
-    <p class="spent">{{ spentText() }}</p>
-    <p class="hint" i18n="@@groq.monthHint">
-      Inclui o Groq e a IA que propõe faixas e assuntos. Nada é enviado se
-      passar do teto.
-    </p>
+    @if (spentParts(); as parts) {
+      <div class="month">
+        <p class="spent">
+          <span class="spent-amount">{{ parts.spent }}</span>&ngsp;<span
+            class="spent-cap"
+            i18n="@@groq.spentOf"
+            >de {{ parts.cap }}</span
+          >
+        </p>
+        <ui-progress [value]="parts.share" />
+        <p class="hint" i18n="@@groq.monthHint">
+          Inclui o Groq e a IA que propõe faixas e assuntos. Nada é enviado se
+          passar do teto.
+        </p>
+      </div>
+    }
     @if (current.canEditCap) {
       <label class="field" for="groq-cap">
         <span class="label" i18n="@@groq.capLabel">Teto mensal (US$)</span>

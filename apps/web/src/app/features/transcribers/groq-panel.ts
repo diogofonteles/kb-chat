@@ -25,7 +25,7 @@ import {
 } from '@kb-chat/contracts';
 import { GroqApi, groqUrl } from '@core/media/groq-api.js';
 import type { Observable } from 'rxjs';
-import { UiBanner, UiChoiceCard } from '@ui/index.js';
+import { UiBanner, UiChoiceCard, UiProgress } from '@ui/index.js';
 
 /** What a status line says after an action (UP-01), in words, never by color alone. */
 interface Notice {
@@ -93,7 +93,7 @@ export const GROQ_MODE_OPTIONS: readonly {
  */
 @Component({
   selector: 'app-groq-panel',
-  imports: [UiBanner, UiChoiceCard],
+  imports: [UiBanner, UiChoiceCard, UiProgress],
   templateUrl: './groq-panel.html',
   styleUrls: [
     '../settings/settings-form.css',
@@ -133,10 +133,15 @@ export class GroqPanel {
   protected readonly capInvalid = signal(false);
   protected readonly busy = signal<Section | null>(null);
   protected readonly notices = signal<Partial<Record<Section, Notice>>>({});
-  protected readonly spentText = computed(() => {
+  /** The month's spend in its parts (v2: the amount big, "de US$ 10,00" small, a bar). */
+  protected readonly spentParts = computed(() => {
     const month = this.settings()?.month;
-    if (!month) return '';
-    return $localize`:@@groq.spent:${this.usd(month.spentUsd)}:spent: de ${this.usd(month.capUsd)}:cap:`;
+    if (!month) return null;
+    return {
+      spent: this.usd(month.spentUsd),
+      cap: this.usd(month.capUsd),
+      share: month.capUsd > 0 ? month.spentUsd / month.capUsd : 0,
+    };
   });
   protected readonly hoursValid = computed(() => {
     const hours = this.idleHours();

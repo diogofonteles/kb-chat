@@ -23,3 +23,44 @@ button[aria-disabled='true'] {
   cursor: default;
   opacity: 0.6;
 }
+
+/* ---------- v2 · Groq: the month's spend in a card, the amount big ---------- */
+.month {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--overlay-1);
+}
+
+.spent {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.spent-amount {
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.spent-cap {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  font-weight: 400;
+}
+
+.month .hint {
+  font-size: var(--text-xs);
+}
+
+.label {
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+/* Each card as tall as its own words (v2 · Quando usar o Groq). */
+.choices.three {
+  align-items: start;
+}

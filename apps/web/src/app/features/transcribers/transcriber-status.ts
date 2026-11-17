@@ -168,6 +168,7 @@ export function chipText(item: TranscriberStatusItem | null): string {
   selector: 'app-transcriber-status',
   templateUrl: './transcriber-status.html',
   styleUrl: './transcriber-status.css',
+  host: { '[class.pill]': 'pill()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TranscriberStatus {
@@ -182,6 +183,11 @@ export class TranscriberStatus {
 
   /** One transcriber (a row of Transcritores); none: the one that publishes. */
   readonly transcriberId = input<string | null>(null);
+  /**
+   * In a table row (v2 · Transcritores, column "Estado"): a small pill with the state word;
+   * the chip's full words stay as its name.
+   */
+  readonly pill = input(false);
 
   protected readonly item = computed(() => {
     const id = this.transcriberId();
@@ -236,6 +242,12 @@ export class TranscriberStatus {
   protected readonly report = computed<Report | null>(
     () => this.item()?.report ?? null,
   );
+  /** The pill's words: "Desligado" for "Transcritor: Desligado". */
+  protected readonly shortText = computed(() => {
+    const full = this.text();
+    const cut = full.indexOf(': ');
+    return cut === -1 ? full : full.slice(cut + 2);
+  });
   protected readonly stateWord = computed(() => {
     const item = this.item();
     return item ? STATE_WORD[item.state]() : '';

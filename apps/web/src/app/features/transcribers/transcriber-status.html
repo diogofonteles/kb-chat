@@ -4,11 +4,12 @@
   class="chip"
   [attr.data-state]="state()"
   aria-haspopup="dialog"
+  [attr.aria-label]="pill() ? text() : null"
   [disabled]="!loaded() && !unavailable()"
   (click)="open()"
 >
   <span class="sign" aria-hidden="true">{{ icon() }}</span>
-  <span class="words">{{ text() }}</span>
+  <span class="words">{{ pill() ? shortText() : text() }}</span>
 </button>
 
 <dialog

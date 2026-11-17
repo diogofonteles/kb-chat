@@ -5,9 +5,12 @@
     [formGroup]="form"
     (submit)="continueToSources($event)"
   >
-    <h3 class="block-title" i18n="@@voiceProfiles.newTitle">
+    <!-- The modal's title says it; the heading stays for readers. -->
+    <h3 class="visually-hidden" i18n="@@voiceProfiles.newTitle">
       Novo perfil de voz
     </h3>
+    <!-- v2: Pessoa and "Quem é" on one line. -->
+    <div class="top-row">
     <div class="field">
       <label
         for="voice-consent-speaker"
@@ -43,6 +46,7 @@
         <span i18n="@@voiceConsent.deceased">Pessoa falecida</span>
       </label>
     </fieldset>
+    </div>
 
     <section class="consent" aria-labelledby="consent-text-title">
       <h4
@@ -52,13 +56,18 @@
       >
         Consentimento específico
       </h4>
-      @for (paragraph of paragraphs(); track paragraph; let first = $first) {
-        <p [class.consent-lead]="first">{{ paragraph }}</p>
-      }
+      <!-- The text in a box of its own that scrolls (v2). -->
+      <div class="consent-box" tabindex="0" aria-labelledby="consent-text-title">
+        @for (paragraph of paragraphs(); track paragraph; let first = $first) {
+          <p [class.consent-lead]="first">{{ paragraph }}</p>
+        }
+      </div>
+      <div class="consent-foot">
       <p class="consent-note" i18n="@@voiceConsent.signatureNote">
         Colha a assinatura neste texto, com o nome da pessoa, a data e o local.
       </p>
-      <button type="button" class="secondary" (click)="copyText()">
+      <button type="button" class="secondary copy" (click)="copyText()">
+        <ui-icon name="copy" [size]="16" />
         @if (copied()) {
           <ng-container i18n="@@voiceConsent.copied"
             >Texto copiado</ng-container
@@ -67,8 +76,11 @@
           <ng-container i18n="@@voiceConsent.copy">Copiar texto</ng-container>
         }
       </button>
+      </div>
     </section>
 
+    <!-- Quem autorizou · Data · Por qual meio, side by side. -->
+    <div class="facts-row">
     <label class="field">
       <span class="label">
         @if (deceased()) {
@@ -125,8 +137,9 @@
         }
       </select>
     </div>
+    </div>
 
-    <fieldset class="group">
+    <fieldset class="group proof">
       <legend class="label" i18n="@@voiceConsent.proof">Prova do aceite</legend>
       <label class="check">
         <input type="radio" formControlName="evidenceKind" value="attachment" />
@@ -138,11 +151,16 @@
       </label>
     </fieldset>
     @if (evidenceKind() === 'attachment') {
-      <label class="field">
+      <!-- A dashed drop area; the native file field inside it opens the picker. -->
+      <label class="field drop">
+        <ui-icon name="upload" [size]="20" />
         <span class="label" i18n="@@voiceConsent.file"
           >Documento (PDF, JPEG ou PNG, até 5 MB)</span
         >
         <input type="file" [accept]="accepted" (change)="chooseFile($event)" />
+        @if (attachment(); as chosen) {
+          <span class="drop-file">{{ chosen.fileName }}</span>
+        }
       </label>
     } @else {
       <label class="field">
@@ -166,17 +184,18 @@
     @if (problem()) {
       <p class="field-error" role="alert">{{ problem() }}</p>
     }
-    <div class="row">
-      <button type="submit" class="primary" i18n="@@voiceConsent.continue">
-        Continuar
-      </button>
+    <!-- The modal's foot: Cancelar · Continuar at the right. -->
+    <div class="row form-foot">
       <button
         type="button"
-        class="secondary"
+        class="link"
         (click)="cancelled.emit()"
         i18n="@@voiceConsent.cancel"
       >
         Cancelar
+      </button>
+      <button type="submit" class="primary" i18n="@@voiceConsent.continue">
+        Continuar
       </button>
     </div>
   </form>

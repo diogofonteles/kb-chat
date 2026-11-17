@@ -185,3 +185,24 @@ h3 {
   margin: 0 0 var(--space-2);
   font-weight: 600;
 }
+
+/* In a table row (v2 · Transcritores): a small pill with the state word, still a button. */
+:host(.pill) .chip {
+  min-height: 1.5rem;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+:host(.pill) .chip[data-state='working'],
+:host(.pill) .chip[data-state='idle'] {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: var(--color-accent);
+}
+
+:host(.pill) .sign {
+  display: none;
+}

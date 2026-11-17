@@ -1,3 +1,4 @@
+import { UiIcon } from '@ui/index.js';
 import { DOCUMENT } from '@angular/common';
 import { HttpErrorResponse, httpResource } from '@angular/common/http';
 import {
@@ -72,7 +73,7 @@ const today = (): string => {
  */
 @Component({
   selector: 'app-voice-profile-form',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, UiIcon],
   templateUrl: './voice-profile-form.html',
   styleUrls: ['../settings/settings-form.css', './voice-profiles.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,

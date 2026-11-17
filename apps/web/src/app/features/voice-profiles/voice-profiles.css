@@ -232,3 +232,286 @@
     margin-bottom: var(--space-1);
   }
 }
+
+/* ---------- v2 · Perfis de voz: the collection row, the empty card, the consent modal ---------- */
+.panel > .field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.panel > .field .label {
+  font-size: var(--text-item);
+  font-weight: 500;
+}
+
+.panel > .field .input {
+  width: 13.75rem;
+}
+
+.empty-add {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.top-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-6);
+}
+
+.top-row .group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-4);
+}
+
+.top-row .group > legend {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--space-1);
+}
+
+.consent {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.consent-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.consent-box {
+  display: grid;
+  gap: var(--space-2);
+  max-height: 8.25rem;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+  border-radius: 6px;
+  background: var(--overlay-1);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.consent-box p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.consent-box .consent-lead {
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.consent-box:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.consent-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.consent-foot .consent-note {
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+.copy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.facts-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--space-2);
+}
+
+.facts-row .label,
+.top-row .label {
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+/* Prova do aceite: two chips; the radios stay in the tab order. */
+.proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.proof > legend {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.proof .check {
+  position: relative;
+  min-height: 2rem;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-meta);
+}
+
+.proof .check input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.proof .check:has(input:checked) {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.proof .check:has(input:focus-visible) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.drop {
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
+  border: 1px dashed var(--overlay-4);
+  border-radius: var(--radius-card);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.drop .label {
+  font-size: var(--text-meta);
+  font-weight: 400;
+}
+
+.form-foot {
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+@media (max-width: 1023px) {
+  .top-row,
+  .facts-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel > .field {
+    display: grid;
+  }
+
+  .panel > .field .input {
+    width: 100%;
+  }
+}
+
+.white {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.banner-text {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.banner-text span:not(.visually-hidden) {
+  font-size: var(--text-xs);
+}
+
+/* The empty state in a soft card, as Acessos (v2). */
+:host ::ng-deep .ui-empty {
+  gap: var(--space-3);
+  padding: 2rem var(--space-4);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-text) 2.5%, transparent);
+}
+
+:host ::ng-deep .ui-empty__icon {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+:host ::ng-deep .ui-empty__title {
+  font-size: var(--text-md);
+  letter-spacing: 0;
+}
+
+:host ::ng-deep .ui-empty__actions {
+  padding-top: 0;
+}
+
+.white {
+  border-radius: var(--radius-pill);
+}
+
+.top-row > .field {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.top-row > .hint {
+  grid-column: 1;
+  grid-row: 2;
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+.top-row > .group {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+/* The native file field covers the drop area, unseen: the area is the target. */
+.drop {
+  position: relative;
+  cursor: pointer;
+}
+
+.drop input[type='file'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.drop:has(input:focus-visible) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.drop-file {
+  color: var(--color-text);
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+@media (max-width: 1023px) {
+  .top-row > .group {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}

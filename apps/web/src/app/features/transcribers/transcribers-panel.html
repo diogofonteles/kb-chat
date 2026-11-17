@@ -4,15 +4,11 @@
   computador fica aberto para a internet.
 </p>
 
+<!-- v2: the name above its field, "Parear transcritor" beside it, the hint under it. -->
 <form class="block pair" (submit)="pair($event)" novalidate>
-  <label class="field" for="transcriber-name">
-    <span class="label" i18n="@@transcribers.nameLabel"
-      >Nome do transcritor</span
-    >
-    <span class="hint" id="transcriber-name-hint" i18n="@@transcribers.nameHint"
-      >Para reconhecer o computador na lista, como "Mac do escritório".</span
-    >
-  </label>
+  <label class="label" for="transcriber-name" i18n="@@transcribers.nameLabel"
+    >Nome do transcritor</label
+  >
   <div class="row">
     <input
       #nameInput
@@ -21,6 +17,8 @@
       type="text"
       maxlength="60"
       autocomplete="off"
+      placeholder="Mac do escritório"
+      i18n-placeholder="@@transcribers.namePlaceholder"
       [value]="name()"
       [attr.aria-invalid]="nameProblem() ? 'true' : null"
       [attr.aria-describedby]="
@@ -35,11 +33,14 @@
       type="submit"
       class="primary"
       [disabled]="busy()"
-      i18n="@@transcribers.pair"
     >
-      Parear transcritor
+      <ui-icon name="link" [size]="18" />
+      <span i18n="@@transcribers.pair">Parear transcritor</span>
     </button>
   </div>
+  <p class="hint" id="transcriber-name-hint" i18n="@@transcribers.nameHint">
+    Para reconhecer o computador na lista, como "Mac do escritório".
+  </p>
   @if (nameProblem(); as problem) {
     <p class="field-error" id="transcriber-name-error">
       <span aria-hidden="true">⚠</span>
@@ -74,12 +75,18 @@
     tabindex="-1"
     aria-labelledby="paired-title"
   >
-    <h3 id="paired-title" class="block-title" i18n="@@transcribers.pairedTitle">
-      "{{ current.transcriber.name }}" pareado
+    <h3 id="paired-title" class="block-title paired-title">
+      <ui-icon name="checkcircle" [size]="22" class="ok-icon" />
+      <span i18n="@@transcribers.pairedTitle"
+        >"{{ current.transcriber.name }}" pareado</span
+      >
     </h3>
-    <p class="once" i18n="@@transcribers.tokenOnce">
-      Copie o token agora: ele aparece só esta vez. Se perder, revogue e pareie
-      de novo.
+    <p class="once">
+      <ui-icon name="warn" [size]="16" />
+      <span i18n="@@transcribers.tokenOnce"
+        >Copie o token agora: ele aparece só esta vez. Se perder, revogue e
+        pareie de novo.</span
+      >
     </p>
     <ol class="steps">
       <li>
@@ -88,7 +95,8 @@
         >
         <div class="copy-row">
           <code class="code">{{ command() }}</code>
-          <button type="button" class="secondary" (click)="copy('command')">
+          <button type="button" class="secondary copy" (click)="copy('command')">
+            <ui-icon name="copy" [size]="16" />
             @switch (copyLabelOf('command')) {
               @case ('copied') {
                 <ng-container i18n="@@transcribers.copied"
@@ -115,7 +123,8 @@
         >
         <div class="copy-row">
           <code class="code token">{{ current.token }}</code>
-          <button type="button" class="secondary" (click)="copy('token')">
+          <button type="button" class="secondary copy" (click)="copy('token')">
+            <ui-icon name="copy" [size]="16" />
             @switch (copyLabelOf('token')) {
               @case ('copied') {
                 <ng-container i18n="@@transcribers.copied"
@@ -143,7 +152,7 @@
     </ol>
     <button
       type="button"
-      class="secondary"
+      class="secondary white done"
       (click)="closePaired()"
       i18n="@@transcribers.done"
     >
@@ -184,12 +193,26 @@
       transcrição.
     </p>
   } @else {
+    <!-- v2: a table — Transcritor · Estado · Separa vozes · Perfis de voz · Publica no acervo. -->
+    <div class="table-head" aria-hidden="true">
+      <span i18n="@@transcribers.colName">Transcritor</span>
+      <span i18n="@@transcribers.colState">Estado</span>
+      <span i18n="@@transcribers.diarize">Separa vozes</span>
+      <span i18n="@@transcribers.voicePrint">Perfis de voz</span>
+      <span i18n="@@transcribers.publish">Publica no acervo</span>
+      <span></span>
+    </div>
     <ul class="list">
       @for (item of items(); track item.id) {
         <li class="item">
-          <div class="item-main">
+          <span class="item-who">
+            <span class="item-cover" aria-hidden="true">
+              <ui-icon name="settings" [size]="20" />
+            </span>
             <span class="item-name">{{ item.name }}</span>
-            <app-transcriber-status [transcriberId]="item.id" />
+          </span>
+          <span class="item-state">
+            <app-transcriber-status [transcriberId]="item.id" [pill]="true" />
             <span class="item-meta">
               @if (item.lastSeenAt; as seen) {
                 <span i18n="@@transcribers.lastSeen"
@@ -214,40 +237,49 @@
                 }
               }
             </span>
-            <label class="check">
-              <input
-                type="checkbox"
-                [checked]="separatesVoices(item)"
-                [disabled]="busy()"
-                [attr.aria-label]="diarizeLabelOf(item)"
-                (change)="toggleDiarize(item, $event)"
-              />
-              <span i18n="@@transcribers.diarize">Separa vozes</span>
-            </label>
-            <label class="check">
-              <input
-                type="checkbox"
-                [checked]="calculatesPrints(item)"
-                [disabled]="busy()"
-                [attr.aria-label]="voicePrintLabelOf(item)"
-                (change)="toggleVoicePrints(item, $event)"
-              />
-              <span i18n="@@transcribers.voicePrint">Perfis de voz</span>
-            </label>
-            <label class="check">
-              <input
-                type="checkbox"
-                [checked]="publishes(item)"
-                [disabled]="busy()"
-                [attr.aria-label]="publishLabelOf(item)"
-                (change)="togglePublish(item, $event)"
-              />
-              <span i18n="@@transcribers.publish">Publica no acervo</span>
-            </label>
-          </div>
+          </span>
+          <label class="check">
+            <input
+              type="checkbox"
+              class="ui-switch"
+              [checked]="separatesVoices(item)"
+              [disabled]="busy()"
+              [attr.aria-label]="diarizeLabelOf(item)"
+              (change)="toggleDiarize(item, $event)"
+            />
+            <span class="check-word" i18n="@@transcribers.diarize"
+              >Separa vozes</span
+            >
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              class="ui-switch"
+              [checked]="calculatesPrints(item)"
+              [disabled]="busy()"
+              [attr.aria-label]="voicePrintLabelOf(item)"
+              (change)="toggleVoicePrints(item, $event)"
+            />
+            <span class="check-word" i18n="@@transcribers.voicePrint"
+              >Perfis de voz</span
+            >
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              class="ui-switch"
+              [checked]="publishes(item)"
+              [disabled]="busy()"
+              [attr.aria-label]="publishLabelOf(item)"
+              (change)="togglePublish(item, $event)"
+            />
+            <span class="check-word" i18n="@@transcribers.publish"
+              >Publica no acervo</span
+            >
+          </label>
           <button
             type="button"
-            class="secondary"
+            class="secondary revoke"
             [attr.data-revoke]="item.id"
             [attr.aria-label]="revokeLabelOf(item)"
             (click)="askRevoke(item.id)"

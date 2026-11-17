@@ -374,10 +374,14 @@
     <h3 id="house-codex" class="block-title" i18n="@@house.codex">
       Assinatura do ChatGPT (Codex)
     </h3>
-    <label class="switch-row">
+    <!-- The switch's name is its label alone; the hint describes it. -->
+    <div class="switch-row">
       <span class="switch-text">
-        <span class="switch-label" i18n="@@house.codexToggle"
-          >Ligar a assinatura do ChatGPT (Codex)</span
+        <label
+          class="switch-label"
+          for="house-codex-switch"
+          i18n="@@house.codexToggle"
+          >Ligar a assinatura do ChatGPT (Codex)</label
         >
         <span id="house-codex-hint" class="hint" i18n="@@house.codexHint">
           Ligada, você usa o ChatGPT em ⚙ Sua IA e pode cedê-lo em Pessoas e
@@ -396,6 +400,7 @@
       }
       <input
         #codexBox
+        id="house-codex-switch"
         type="checkbox"
         class="ui-switch"
         [checked]="current.codex.enabled"
@@ -403,7 +408,7 @@
         aria-describedby="house-codex-status house-codex-hint"
         (change)="setCodex(codexBox.checked)"
       />
-    </label>
+    </div>
     <p id="house-codex-status" class="codex-status hint">
       <span class="visually-hidden"
         >@if (current.codex.enabled) {<ng-container i18n="@@house.codexOn"
