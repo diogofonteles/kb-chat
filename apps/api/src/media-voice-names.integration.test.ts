@@ -17,7 +17,9 @@ import {
   transcribedItem,
   turnsOf,
 } from '../test/diarization-harness.js';
+import { memberOf, setPersonLevel } from '../test/levels-world.js';
 import { member, startMedia, type Media } from '../test/media-harness.js';
+import { mediaOf, scene, setTrackLevel } from '../test/track-levels-world.js';
 import {
   leaseTranscription,
   sendTranscript,
@@ -173,7 +175,10 @@ describe('Naming the voices (KBC-065 AC-1, FR-2, FR-4)', () => {
     const read = await transcriptOf(call, mediaId);
     expect(read.version).toBe(2);
     expect(read.segments.map((one) => one.voice)).toEqual([2]);
-    expect(read.voiceNames?.[1]).toMatchObject({ name: 'Mestre Gabriel' });
+    // Only the voice still heard comes with its name (KBC-151 BR-0).
+    expect(read.voiceNames).toEqual([
+      expect.objectContaining({ voice: 2, name: 'Mestre Gabriel' }),
+    ]);
   });
 
   it('takes a name away and refuses a speaker of another collection or an unknown voice', async () => {
@@ -509,6 +514,53 @@ describe('Who speaks for whoever may listen (KBC-151 BR-0, FR-1)', () => {
     expect(read.statusCode).toBe(403);
     expect(read.body).not.toContain('voiceNames');
   });
+
+  it('a voice that speaks only in a part above their level does not reach them, nor its name', async () => {
+    const { world, recording, tracks } = await scene();
+    const media = mediaOf(world);
+    const { token } = await pairDiarizer(media, ['diarize']);
+    await separate(media, {
+      token,
+      mediaId: recording.id,
+      turns: [
+        { start: 0, end: 60, voice: 'SPEAKER_00' },
+        { start: 60, end: 120, voice: 'SPEAKER_01' },
+        { start: 120, end: 180, voice: 'SPEAKER_00' },
+      ],
+    });
+    const whole = await transcriptOf(world.owner, recording.id);
+    const hiddenVoice = whole.segments.find(
+      ({ startMs }) => startMs >= 60_000 && startMs < 120_000,
+    )?.voice;
+    expect(hiddenVoice).toEqual(expect.any(Number));
+    const secret = await aSpeaker(media, 'Irmão Velado');
+    expect(
+      (
+        await nameVoice(media, [recording.id, Number(hiddenVoice)], {
+          speakerId: secret.id,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (await setTrackLevel(world, String(tracks[1]?.id), 'cdc')).statusCode,
+    ).toBe(200);
+    const bia = await memberOf(world, 'bia@example.com', {
+      topics: ['hermetismo'],
+      features: ['media', 'media-research'],
+    });
+    await setPersonLevel(world, bia.id, { hermetismo: 'ci' });
+
+    const read = await bia.call(
+      'GET',
+      `/api/v1/media/${recording.id}/transcript`,
+    );
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.body).not.toContain('Irmão Velado');
+    expect(read.body).not.toContain(secret.id);
+    const names = read.json<MediaTranscript>().voiceNames ?? [];
+    expect(names.map(({ voice }) => voice)).not.toContain(hiddenVoice);
+    expect(names.length).toBeGreaterThan(0);
+  }, 60_000);
 });
 
 describe('A new separation (KBC-065 AC-6, FR-5, BR-5)', () => {
