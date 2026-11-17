@@ -103,6 +103,8 @@ import type { SearchIndexPort } from './ports/search-index.js';
 import type { SpendLedgerPort } from './ports/spend-ledger.js';
 import type { UsageLogPort } from './ports/usage-log.js';
 import type { VaultReaderPort } from './ports/vault-reader.js';
+import { registerDocumentUploads } from './document-uploads-factory.js';
+import type { DocIngestQueue } from './modules/document-uploads/index.js';
 import { MemoryUsageLog } from './adapters/memory-usage-log.js';
 import { MemoryConversationStore } from './adapters/memory-conversation-store.js';
 import type { ConversationStorePort } from './ports/conversation-store.js';
@@ -685,6 +687,8 @@ interface WorkerWiring {
   readonly corrections: TranscriptCorrectionService;
   readonly statusBoard: TranscriberStatusBoard;
   readonly learning: LearningService;
+  /** Documents and links sent from the app (KBC-149, ADR 0040). */
+  readonly docIngest: DocIngestQueue;
 }
 
 async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
@@ -694,15 +698,13 @@ async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
     workerRoutes({
       groq,
       service: workerService(wiring.media, {
-        voicePrints,
-        groq,
-        documents,
-        learning: wiring.learning,
+        ...{ voicePrints, groq, documents, learning: wiring.learning },
+        docIngest: wiring.docIngest,
       }),
+      docIngest: wiring.docIngest,
       transcribers: wiring.transcribers,
       transcription: transcriptionService(wiring.media, {
-        publisher,
-        corrections: wiring.corrections,
+        ...{ publisher, corrections: wiring.corrections },
         learning: wiring.learning,
       }),
       cuts: publisher,
@@ -725,11 +727,13 @@ function workerService(
     groq,
     documents,
     learning,
+    docIngest,
   }: {
     voicePrints: VoicePrintService;
     groq: GroqService;
     documents: MediaDocuments;
     learning: LearningService;
+    docIngest: DocIngestQueue;
   },
 ): WorkerService {
   return new WorkerService({
@@ -741,6 +745,7 @@ function workerService(
     voiceJobOf: (job) => voicePrints.jobOf(job),
     groqWaits: () => groq.waits(),
     kb: documents.kb,
+    docs: docIngest,
   });
 }
 
@@ -1018,6 +1023,7 @@ async function registerTranscribers(
     wiring: MediaWiring;
     documents: MediaDocuments;
     learning: LearningService;
+    docIngest: DocIngestQueue;
   },
 ): Promise<TranscriberStatusBoard> {
   const { transcribers, media, wiring, learning } = input;
@@ -1074,9 +1080,10 @@ async function registerTranscriberStatus(
     transcribers: TranscriberService;
     documents: MediaDocuments;
     wiring: MediaWiring;
+    docIngest: DocIngestQueue;
   },
 ): Promise<TranscriberStatusBoard> {
-  const { transcribers, documents, wiring } = input;
+  const { transcribers, documents, wiring, docIngest } = input;
   const local = wiring.media.localTranscriber;
   const kbWaiting = () => documents.status.queue().waiting;
   // The waker reads the board and the board says what the waker sees: built in this order.
@@ -1091,11 +1098,19 @@ async function registerTranscriberStatus(
   const startingNow = () => isStarting(waker, board);
   await app.register(transcriberStatusRoutes({ board, local, startingNow }));
   waker = transcriberWaker(app, {
-    ...{ local, board, kbWaiting, wiring, documents },
+    ...{ local, board, kbWaiting, wiring, documents, docIngest },
   });
   watchForTranscriberWork(app, waker);
   return board;
 }
+
+const publishingBacklog = (
+  documents: MediaDocuments,
+  docIngest: DocIngestQueue,
+) => ({
+  kind: 'kb-publish' as const,
+  ready: documents.kb.leasableJobs() + docIngest.leasableJobs(),
+});
 
 /** KBC-114 AC-15: the owner never starts the transcriber by hand, and only for work it takes. */
 function transcriberWaker(
@@ -1106,14 +1121,16 @@ function transcriberWaker(
     kbWaiting: () => number;
     wiring: MediaWiring;
     documents: MediaDocuments;
+    docIngest: DocIngestQueue;
   },
 ): TranscriberWaker {
-  const { local, board, kbWaiting, wiring, documents } = input;
+  const { local, board, kbWaiting, wiring, documents, docIngest } = input;
   return new TranscriberWaker({
     local,
     backlog: () => [
       ...wiring.media.store.transcriberBacklog(),
-      { kind: 'kb-publish', ready: documents.kb.leasableJobs() },
+      // Sent documents go to the Mac that publishes (KBC-149): they wake it the same way.
+      publishingBacklog(documents, docIngest),
     ],
     whyNot: (kind) => board.whyNot(kind),
     // Documents the ceiling holds back: no lease gives them out, so they start nothing.
@@ -1270,10 +1287,12 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const groq = createGroq({ media: wiring.media, transcribers, log: app.log });
   const documents = await startDocuments(app, { ...wiring, transcribers });
   const media = mediaService({ ...wiring, transcribers, groq, documents });
+  const uploads = { wiring, media, documents };
+  const docIngest = await startDocumentUploads(app, uploads);
   const publisher = trackPublisher(wiring, documents);
   const withDocuments = { ...wiring, documents };
   await registerPublication(app, { documents, media });
-  const setup = { transcribers, media, wiring, documents, learning };
+  const setup = { transcribers, media, wiring, documents, learning, docIngest };
   const statusBoard = await registerTranscribers(app, setup);
   await app.register(groqRoutes({ groq, media }));
   const listeners = { media, transcribers, publisher };
@@ -1281,18 +1300,36 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const measures = await registerMeasures(app, { deps: wiring.media, media });
   await registerLibrary(app, { ...wiring, transcribers });
   await registerVoiceProfiles(app, { ...wiring, transcribers });
-  const edited = await registerEditing(app, {
-    ...withDocuments,
-    service: media,
-    transcribers,
-    publisher,
-  });
+  const editing = { ...withDocuments, service: media, transcribers, publisher };
+  const edited = await registerEditing(app, editing);
   const worker = { ...measures, ...wiring, transcribers, groq, learning };
-  await registerWorker(app, {
-    ...{ ...worker, publisher, documents, ...edited, statusBoard },
-  });
+  const done = { publisher, documents, ...edited, statusBoard, docIngest };
+  await registerWorker(app, { ...worker, ...done });
   await registerMediaRoutes(app, { wiring, media, publisher, edited });
   startJanitor(app, { ...measures, ...edited, media: wiring.media, groq });
+}
+
+/** Documents and links sent from the app (KBC-149, ADR 0040): people's routes, the queue. */
+function startDocumentUploads(
+  app: FastifyInstance,
+  input: {
+    wiring: MediaWiring;
+    media: MediaService;
+    documents: MediaDocuments;
+  },
+): Promise<DocIngestQueue> {
+  const { wiring, media, documents } = input;
+  return registerDocumentUploads(app, {
+    ...wiring,
+    mediaService: media,
+    documents,
+    people: wiring.auth.people,
+    levels: {
+      documents: wiring.levels.documents,
+      scaleOf: mediaLevelsOf(wiring).scaleOf,
+    },
+    createPerMinute: wiring.media.createPerMinute,
+  });
 }
 
 /** People's routes over their media: details, the guided flow's plans, tracks. */

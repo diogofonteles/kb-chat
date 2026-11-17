@@ -34,3 +34,4 @@ export * from './track-citations.js';
 export * from './transcript-corrections.js';
 export * from './transcript-learning.js';
 export * from './access-levels.js';
+export * from './document-uploads.js';

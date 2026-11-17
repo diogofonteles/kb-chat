@@ -1,0 +1,459 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { CreateDocumentUploadResponse } from '@kb-chat/contracts';
+import { afterEach, describe, expect, it } from 'vitest';
+import { LOCAL, closeApp } from '../test/ai-app-harness.js';
+import {
+  DOCUMENTS,
+  PDF,
+  PDF_SHA,
+  UPLOADS,
+  announce,
+  asMac,
+  docMac,
+  docResult,
+  docState,
+  leaseDoc,
+  localHeaders,
+  sendPart,
+  sentFile,
+  uploadsOf,
+  writeConverted,
+} from '../test/document-uploads-harness.js';
+import { leaseAs, publisherMac } from '../test/kb-publish-harness.js';
+import {
+  member,
+  startMedia,
+  vaultWithUdv,
+  type Media,
+} from '../test/media-harness.js';
+
+afterEach(closeApp);
+
+async function world() {
+  const vault = await vaultWithUdv();
+  const media = await startMedia({ vault });
+  const ana = await member(media, {
+    email: 'ana@example.com',
+    topics: ['hermetismo'],
+    features: ['search', 'media', 'media-upload'],
+  });
+  return { vault, media, ana };
+}
+
+const created = (body: string) => {
+  const answer = JSON.parse(body) as CreateDocumentUploadResponse;
+  if (answer.outcome !== 'created') throw new Error(body);
+  return answer.upload;
+};
+
+describe('Sending documents and links from the app (KBC-149)', () => {
+  it('AC-1: a PDF goes through every state to "pronto" and reaches the catalog', async () => {
+    const { vault, media, ana } = await world();
+    const announced = await announce(ana.call);
+    expect(announced.statusCode, announced.body).toBe(201);
+    const upload = created(announced.body);
+    expect(upload).toMatchObject({
+      kind: 'file',
+      state: 'receiving',
+      name: 'O Caibalion.pdf',
+      uploadUrl: `${UPLOADS}/${upload.id}/upload`,
+      received: 0,
+    });
+    // Resumable (tus): half, a HEAD that says where it stopped, then the rest.
+    const half = Math.floor(PDF.length / 2);
+    const first = await sendPart(media, {
+      id: upload.id,
+      body: PDF.subarray(0, half),
+      offset: 0,
+      headers: ana.headers,
+    });
+    expect(first.headers['upload-offset']).toBe(String(half));
+    const head = await media.started.app.inject({
+      method: 'HEAD',
+      url: `${UPLOADS}/${upload.id}/upload`,
+      headers: ana.headers,
+    });
+    expect(head.headers['upload-offset']).toBe(String(half));
+    expect(head.headers['upload-length']).toBe(String(PDF.length));
+    const wrongOffset = await sendPart(media, {
+      id: upload.id,
+      body: PDF.subarray(half),
+      offset: 0,
+      headers: ana.headers,
+    });
+    expect(wrongOffset.statusCode).toBe(409);
+    const rest = await sendPart(media, {
+      id: upload.id,
+      body: PDF.subarray(half),
+      offset: half,
+      headers: ana.headers,
+    });
+    expect(rest.headers['upload-offset']).toBe(String(PDF.length));
+    expect((await uploadsOf(ana.call))[0]?.state).toBe('received');
+
+    const mac = await docMac(media);
+    const job = await leaseDoc(media, mac.token);
+    expect(job).toMatchObject({
+      topic: 'hermetismo',
+      source: {
+        kind: 'file',
+        name: 'O Caibalion.pdf',
+        sha256: PDF_SHA,
+        bytes: PDF.length,
+        filePath: `/api/v1/media-worker/jobs/${job.id}/document`,
+      },
+    });
+    expect(job.budgetUsd).toBeGreaterThan(0);
+    const file = await media.started.app.inject({
+      method: 'GET',
+      url: `${job.source.kind === 'file' ? job.source.filePath : ''}?leaseId=${job.leaseId}`,
+      headers: localHeaders(mac.token),
+    });
+    expect(file.statusCode).toBe(200);
+    expect(file.rawPayload.equals(PDF)).toBe(true);
+    expect((await uploadsOf(ana.call))[0]?.state).toBe('converting');
+    for (const state of ['classifying', 'mapping']) {
+      const step = await docState(media, { token: mac.token, job, state });
+      expect(step.statusCode, step.body).toBe(204);
+      expect((await uploadsOf(ana.call))[0]?.state).toBe(state);
+    }
+    const document = {
+      id: 'raw/articles/o-caibalion.md',
+      title: 'O Caibalion',
+    };
+    const done = await docResult(media, {
+      token: mac.token,
+      job,
+      outcome: { state: 'ready', document },
+      spendUsd: 0.002,
+    });
+    expect(done.statusCode, done.body).toBe(204);
+    // Done on the Mac, not in the app yet: "no mapa", and no link to a document not there.
+    expect((await uploadsOf(ana.call))[0]).toMatchObject({
+      state: 'mapped',
+      document: null,
+    });
+    await writeConverted(media, { vault, ...document, sha256: PDF_SHA });
+    expect((await uploadsOf(ana.call))[0]).toMatchObject({
+      state: 'ready',
+      document,
+      failure: null,
+    });
+    const found = await ana.call(
+      'GET',
+      `${DOCUMENTS}/${encodeURIComponent(document.id)}`,
+    );
+    expect(found.statusCode).toBe(200);
+    // The file is kept only until the job ends; nothing left for the Mac.
+    expect((await leaseAs(media, mac.token, ['doc-ingest'])).statusCode).toBe(
+      204,
+    );
+  });
+
+  it('AC-2: Beto without the upload permission gets 403, and outside the collection 404', async () => {
+    const { media } = await world();
+    const beto = await member(media, {
+      email: 'beto@example.com',
+      topics: ['hermetismo'],
+      features: ['search', 'media'],
+    });
+    const refused = await announce(beto.call);
+    expect(refused.statusCode).toBe(403);
+    expect((await beto.call('GET', UPLOADS)).statusCode).toBe(403);
+    const caio = await member(media, {
+      email: 'caio@example.com',
+      topics: ['alquimia'],
+      features: ['media', 'media-upload'],
+    });
+    const outside = await announce(caio.call);
+    expect([403, 404]).toContain(outside.statusCode);
+    const anonymous = await media.started.app.inject({
+      method: 'POST',
+      url: DOCUMENTS,
+      headers: LOCAL,
+      payload: { kind: 'url', url: 'https://example.org' },
+    });
+    expect(anonymous.statusCode).toBe(401);
+  });
+
+  it('AC-3: a PDF already in the collection answers with the document, not a new upload', async () => {
+    const { vault, media, ana } = await world();
+    const document = {
+      id: 'raw/articles/o-caibalion.md',
+      title: 'O Caibalion',
+    };
+    await writeConverted(media, { vault, ...document, sha256: PDF_SHA });
+
+    const again = await announce(ana.call, { name: 'copia.pdf' });
+
+    expect(again.statusCode).toBe(200);
+    expect(again.json()).toEqual({
+      outcome: 'duplicate',
+      document,
+      upload: null,
+    });
+    expect(await uploadsOf(ana.call)).toEqual([]);
+  });
+
+  it('BR-3: the same file on its way, or the same link, is not sent twice', async () => {
+    const { media, ana } = await world();
+    const first = await sentFile(media, ana);
+    const second = await announce(ana.call);
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({
+      outcome: 'duplicate',
+      document: null,
+      upload: { id: first.id, state: 'received' },
+    });
+    const link = { kind: 'url', url: 'https://example.org/artigo' };
+    expect((await ana.call('POST', DOCUMENTS, link)).statusCode).toBe(201);
+    expect((await ana.call('POST', DOCUMENTS, link)).json().outcome).toBe(
+      'duplicate',
+    );
+  });
+
+  it('AC-4: a link that does not convert fails with why, and nothing enters', async () => {
+    const { media, ana } = await world();
+    const sent = await ana.call('POST', DOCUMENTS, {
+      kind: 'url',
+      url: 'https://example.org/quebrado',
+    });
+    expect(created(sent.body)).toMatchObject({
+      kind: 'url',
+      state: 'received',
+    });
+    const mac = await docMac(media);
+    const job = await leaseDoc(media, mac.token);
+    expect(job.source).toEqual({
+      kind: 'url',
+      url: 'https://example.org/quebrado',
+    });
+
+    await docResult(media, {
+      token: mac.token,
+      job,
+      outcome: {
+        state: 'failed',
+        failure: 'conversion-failed',
+        detail: 'firecrawl: HTTP 404; jina: HTTP 404',
+      },
+    });
+
+    const [mine] = await uploadsOf(ana.call);
+    expect(mine).toMatchObject({
+      state: 'failed',
+      failure: 'conversion-failed',
+      detail: null,
+      document: null,
+    });
+    const [asOwner] = await uploadsOf(media.owner);
+    expect(asOwner?.detail).toBe('firecrawl: HTTP 404; jina: HTTP 404');
+    // A failed one can be sent again.
+    expect(
+      (
+        await ana.call('POST', DOCUMENTS, {
+          kind: 'url',
+          url: 'https://example.org/quebrado',
+        })
+      ).statusCode,
+    ).toBe(201);
+  });
+
+  it('a Mac without "Publica no acervo" never gets doc-ingest, nor its routes', async () => {
+    const { media, ana } = await world();
+    const upload = await sentFile(media, ana);
+    const plain = await publisherMac(media, ['transcribe']);
+    expect((await leaseAs(media, plain.token, ['doc-ingest'])).statusCode).toBe(
+      403,
+    );
+    expect((await leaseAs(media, plain.token, ['transcribe'])).statusCode).toBe(
+      204,
+    );
+    const sneaky = await asMac(media, plain.token, {
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${upload.id}/doc-state`,
+      payload: {
+        worker: 'mac',
+        leaseId: '00000000-0000-4000-8000-000000000000',
+        state: 'converting',
+      },
+    });
+    expect(sneaky.statusCode).toBe(404);
+  });
+
+  it('a lost lease answers 409, a crash goes back to the queue, three of them give up', async () => {
+    const { media, ana } = await world();
+    await sentFile(media, ana);
+    const mac = await docMac(media);
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const job = await leaseDoc(media, mac.token);
+      expect(job.attempt).toBe(attempt);
+      const stale = await docState(media, {
+        token: mac.token,
+        job: { ...job, leaseId: '00000000-0000-4000-8000-000000000000' },
+        state: 'classifying',
+      });
+      expect(stale.statusCode).toBe(409);
+      const crashed = await asMac(media, mac.token, {
+        method: 'POST',
+        url: `/api/v1/media-worker/jobs/${job.id}/fail`,
+        payload: {
+          worker: 'mac',
+          leaseId: job.leaseId,
+          failure: 'conversion-failed',
+          detail: 'RuntimeError: boom',
+        },
+      });
+      expect(crashed.statusCode, crashed.body).toBe(204);
+    }
+    expect((await uploadsOf(ana.call))[0]).toMatchObject({
+      state: 'failed',
+      failure: 'gave-up',
+    });
+    expect((await leaseAs(media, mac.token, ['doc-ingest'])).statusCode).toBe(
+      204,
+    );
+  });
+
+  it('a different file than announced starts over; a part past the size is refused', async () => {
+    const { media, ana } = await world();
+    const upload = created((await announce(ana.call)).body);
+    const other = Buffer.alloc(PDF.length, 1);
+    const sent = await sendPart(media, {
+      id: upload.id,
+      body: other,
+      offset: 0,
+      headers: ana.headers,
+    });
+    expect(sent.headers['upload-offset']).toBe('0');
+    const big = await sendPart(media, {
+      id: upload.id,
+      body: Buffer.concat([PDF, PDF]),
+      offset: 0,
+      headers: ana.headers,
+    });
+    expect(big.statusCode).toBe(413);
+    expect((await uploadsOf(ana.call))[0]?.state).toBe('receiving');
+    // Someone else's upload does not exist for them.
+    const other2 = await member(media, {
+      email: 'bia@example.com',
+      topics: ['hermetismo'],
+      features: ['media', 'media-upload'],
+    });
+    const foreign = await sendPart(media, {
+      id: upload.id,
+      body: PDF,
+      offset: 0,
+      headers: other2.headers,
+    });
+    expect(foreign.statusCode).toBe(404);
+    expect(await uploadsOf(other2.call)).toEqual([]);
+  });
+
+  it('refuses what is not a document or not a web link', async () => {
+    const { ana } = await world();
+    for (const body of [
+      { kind: 'file', name: 'aula.mp3', bytes: 10, sha256: PDF_SHA },
+      { kind: 'url', url: 'file:///etc/passwd' },
+      { kind: 'url', url: 'https://user:pw@example.org/x' },
+      { kind: 'url', url: 'javascript:alert(1)' },
+    ])
+      expect((await ana.call('POST', DOCUMENTS, body)).statusCode).toBe(400);
+  });
+
+  it('keeps the uploads across a restart', async () => {
+    const { media, ana } = await world();
+    const upload = await sentFile(media, ana);
+    const stored = JSON.parse(
+      await readFile(
+        join(media.started.state, 'document-uploads.json'),
+        'utf8',
+      ),
+    );
+    expect(stored.uploads.map((one: { id: string }) => one.id)).toEqual([
+      upload.id,
+    ]);
+    expect(stored.uploads[0].owner.email).toBe('ana@example.com');
+  });
+});
+
+describe('A YouTube link goes through the transcriber (KBC-142 BR-5)', () => {
+  it("the Mac gives its audio back and it becomes the sender's recording", async () => {
+    const { media, ana } = await world();
+    const sent = await ana.call('POST', DOCUMENTS, {
+      kind: 'url',
+      url: 'https://www.youtube.com/watch?v=abc123',
+    });
+    expect(created(sent.body).kind).toBe('youtube');
+    const mac = await docMac(media);
+    const job = await leaseDoc(media, mac.token);
+    expect(job.source).toEqual({
+      kind: 'youtube',
+      url: 'https://www.youtube.com/watch?v=abc123',
+      audioPath: `/api/v1/media-worker/jobs/${job.id}/youtube-audio`,
+    });
+    const audio = Buffer.from('ID3 fake m4a audio from youtube');
+    const given = await media.started.app.inject({
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${job.id}/youtube-audio?leaseId=${job.leaseId}&name=abc123.m4a`,
+      headers: {
+        ...localHeaders(mac.token),
+        'content-type': 'application/octet-stream',
+      },
+      payload: audio,
+    });
+    expect(given.statusCode, given.body).toBe(200);
+    const { mediaId } = given.json<{ mediaId: string }>();
+    const [mine] = await uploadsOf(ana.call);
+    expect(mine).toMatchObject({ state: 'transcribing', mediaId });
+    const item = await ana.call('GET', `/api/v1/media/${mediaId}`);
+    expect(item.statusCode, item.body).toBe(200);
+    expect(item.json()).toMatchObject({ title: 'YouTube abc123' });
+  });
+});
+
+describe('Levels (ADR 0036 §5)', () => {
+  it('in a collection with levels a level is required, and the document is born at it', async () => {
+    const { vault, media, ana } = await world();
+    for (const code of ['QS', 'CI']) {
+      const made = await media.owner(
+        'POST',
+        '/api/v1/topics/hermetismo/levels',
+        {
+          code,
+        },
+      );
+      expect(made.statusCode, made.body).toBe(201);
+    }
+    const missing = await announce(ana.call);
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json().error.code).toBe('LEVEL_REQUIRED');
+    const above = await announce(ana.call, { level: 'ci' });
+    expect(above.statusCode).toBe(403);
+    await sentFile(media, ana, { level: 'qs' });
+    const mac = await docMac(media);
+    const job = await leaseDoc(media, mac.token);
+    const document = { id: 'raw/articles/nivel.md', title: 'Nível' };
+    await docResult(media, {
+      token: mac.token,
+      job,
+      outcome: { state: 'ready', document },
+    });
+
+    const placed = JSON.parse(
+      await readFile(join(media.started.state, 'document-levels.json'), 'utf8'),
+    );
+    expect(placed.collections.hermetismo[document.id]).toMatchObject({
+      level: 'qs',
+      setBy: 'ana@example.com',
+    });
+    await writeConverted(media, { vault, ...document, sha256: PDF_SHA });
+    expect((await uploadsOf(ana.call))[0]).toMatchObject({
+      state: 'ready',
+      document,
+    });
+  });
+});
+
+export type { Media };

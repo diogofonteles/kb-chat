@@ -525,6 +525,11 @@ export const MEDIA_JOB_KINDS = [
   'cut',
   /** A collection's track documents to write and pass through kb on the Mac (KBC-099). */
   'kb-publish',
+  /**
+   * A document or link sent from the app, converted and ingested on the Mac (KBC-149,
+   * ADR 0040). Leased by a transcriber marked "Publica no acervo", like kb-publish.
+   */
+  'doc-ingest',
 ] as const;
 export const mediaJobKindSchema = z.enum(MEDIA_JOB_KINDS);
 export type MediaJobKind = z.infer<typeof mediaJobKindSchema>;

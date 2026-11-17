@@ -15,7 +15,7 @@ import {
   heartbeatRequestSchema,
   heartbeatResponseSchema,
   leaseRequestSchema,
-  leasedJobSchema,
+  workerLeasedJobSchema,
   type MediaJobKind,
   mediaJobIdSchema,
   mediaIdSchema,
@@ -50,6 +50,10 @@ import type { TranscriptionService } from './transcription-service.js';
 import type { WaveformService } from './waveform-service.js';
 import type { VoicePrintService } from './voice-print-service.js';
 import type { WorkerService } from './worker-service.js';
+import {
+  docIngestWorkerRoutes,
+  type DocIngestQueue,
+} from '../document-uploads/index.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -82,6 +86,8 @@ export interface WorkerRoutesDeps {
   readonly vaultSyncs?: VaultSyncReceiver;
   /** Each paired transcriber's own status (KBC-114 FR-8). */
   readonly statusBoard?: TranscriberStatusBoard;
+  /** Documents and links sent from the app (KBC-149, ADR 0040). */
+  readonly docIngest?: DocIngestQueue;
 }
 
 /** Who keeps the Mac's sync reports: the track documents' side, outside this module. */
@@ -159,8 +165,21 @@ function assertJobKind(
 ): void {
   const kind = input.service.kindOf(input.jobId);
   if (!kind) return;
-  const allowed = identityOf(request).kinds.includes(kind);
+  const allowed = mayLease(identityOf(request), kind);
   if (!allowed || (input.only && kind !== input.only)) throw notThisWorkers();
+}
+
+/**
+ * Whether the token may lease `kind`. "Publica no acervo" (kb-publish) also takes the
+ * documents sent from the app (KBC-149 FR-2): the same Mac, kb and vault, no new marking.
+ */
+function mayLease(identity: WorkerIdentity, kind: MediaJobKind): boolean {
+  if (identity.kinds.includes(kind)) return true;
+  return (
+    kind === 'doc-ingest' &&
+    identity.leaseName !== null &&
+    identity.kinds.includes('kb-publish')
+  );
 }
 
 /** The routes below are the transcriber's only (ADR 0023): other tokens get 404. */
@@ -188,7 +207,7 @@ function allowedKinds(
   identity: WorkerIdentity,
   asked: readonly WorkerIdentity['kinds'][number][],
 ) {
-  const kinds = asked.filter((kind) => identity.kinds.includes(kind));
+  const kinds = asked.filter((kind) => mayLease(identity, kind));
   if (kinds.length === 0)
     throw new AppError('FORBIDDEN', 'This worker may not lease these jobs');
   return kinds;
@@ -204,7 +223,7 @@ const OPTIONS = {
     config: { access: PUBLIC },
     schema: {
       body: leaseRequestSchema,
-      response: { 200: leasedJobSchema, 204: z.undefined() },
+      response: { 200: workerLeasedJobSchema, 204: z.undefined() },
     },
   },
   terms: {
@@ -281,18 +300,34 @@ export const workerRoutes =
     registerVoicePrints(app, deps);
     registerVoicePrintResult(app, deps.voicePrints);
     registerVoiceComparison(app, deps.voicePrints);
+    if (deps.docIngest)
+      await app.register(docRoutes(deps.service, deps.docIngest));
     if (deps.groq)
-      await app.register(
-        groqWorkerRoutes({
-          groq: deps.groq,
-          transcription: deps.transcription,
-          ownerOf: (request, body) => {
-            if (identityOf(request).leaseName !== null) throw notThisWorkers();
-            return ownerOf(request, body);
-          },
-        }),
-      );
+      await app.register(groqRoutes(deps.groq, deps.transcription));
   };
+
+/** The VM's side of the Groq fallback (KBC-037): never a paired transcriber's. */
+const groqRoutes = (groq: GroqService, transcription: TranscriptionService) =>
+  groqWorkerRoutes({
+    groq,
+    transcription,
+    ownerOf: (request, body) => {
+      if (identityOf(request).leaseName !== null) throw notThisWorkers();
+      return ownerOf(request, body);
+    },
+  });
+
+/** Documents sent from the app (KBC-149): only a Mac that publishes touches their jobs. */
+const docRoutes = (service: WorkerService, queue: DocIngestQueue) =>
+  docIngestWorkerRoutes({
+    queue,
+    ownerOf,
+    assertDocWorker: (request, jobId) => {
+      const ours = service.kindOf(jobId) === 'doc-ingest';
+      if (!ours || !mayLease(identityOf(request), 'doc-ingest'))
+        throw notThisWorkers();
+    },
+  });
 
 function registerLease(app: FastifyInstance, service: WorkerService): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();

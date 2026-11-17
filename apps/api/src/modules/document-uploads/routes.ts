@@ -1,0 +1,149 @@
+import {
+  createDocumentUploadRequestSchema,
+  createDocumentUploadResponseSchema,
+  documentUploadListSchema,
+  topicSlugSchema,
+} from '@kb-chat/contracts';
+import type {
+  FastifyInstance,
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+} from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { Readable } from 'node:stream';
+import { z } from 'zod';
+import { AppError } from '../../app-error.js';
+import type { RouteAccess } from '../auth/index.js';
+import type {
+  DocumentUploadService,
+  UploadActor,
+} from './document-upload-service.js';
+
+/** The tus 1.0 core, as the media library speaks it (ADR 0033). */
+const TUS_VERSION = '1.0.0';
+const PART_TYPE = 'application/offset+octet-stream';
+/** BR-1: who may send audio may send documents (the same permission). */
+const UPLOAD: RouteAccess = { feature: 'media-upload' };
+
+const uploadParams = z.object({ id: z.uuid() });
+const offsetSchema = z
+  .string()
+  .regex(/^\d{1,13}$/)
+  .transform(Number);
+
+const tusReply = (reply: FastifyReply, offset: number) =>
+  reply
+    .code(204)
+    .header('tus-resumable', TUS_VERSION)
+    .header('upload-offset', offset)
+    .header('cache-control', 'no-store');
+
+export interface DocumentUploadRouteDeps {
+  readonly service: DocumentUploadService;
+  readonly actorOf: (request: FastifyRequest) => UploadActor;
+  /** Uploads per person per minute (the media library's own limit). */
+  readonly createPerMinute?: number;
+}
+
+/** Sending documents and links from the app (KBC-149 FR-1), and what is on its way. */
+export const documentUploadRoutes =
+  (deps: DocumentUploadRouteDeps): FastifyPluginAsync =>
+  async (app) => {
+    app.addContentTypeParser(PART_TYPE, (_request, payload, done) =>
+      done(null, payload),
+    );
+    registerCreate(app, deps);
+    registerList(app, deps);
+    registerParts(app, deps);
+  };
+
+function registerCreate(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
+  app.withTypeProvider<ZodTypeProvider>().post(
+    '/api/v1/topics/:topic/documents',
+    {
+      config: {
+        access: { ...UPLOAD, topicParam: 'topic' },
+        ...(deps.createPerMinute && {
+          rateLimit: { max: deps.createPerMinute, timeWindow: '1 minute' },
+        }),
+      },
+      schema: {
+        params: z.object({ topic: topicSlugSchema }),
+        body: createDocumentUploadRequestSchema,
+        response: {
+          200: createDocumentUploadResponseSchema,
+          201: createDocumentUploadResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const answer = await deps.service.create(
+        deps.actorOf(request),
+        request.params.topic,
+        request.body,
+      );
+      return reply.code(answer.outcome === 'created' ? 201 : 200).send(answer);
+    },
+  );
+}
+
+function registerList(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
+  app.withTypeProvider<ZodTypeProvider>().get(
+    '/api/v1/document-uploads',
+    {
+      config: { access: UPLOAD },
+      schema: { response: { 200: documentUploadListSchema } },
+    },
+    async (request) => ({
+      items: await deps.service.list(deps.actorOf(request)),
+    }),
+  );
+}
+
+const PART_OPTIONS = {
+  config: { access: UPLOAD },
+  schema: { params: uploadParams, response: { 204: z.undefined() } },
+};
+
+/** tus HEAD and PATCH on the upload (ADR 0033): the creation is the POST above. */
+function registerParts(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.head(
+    '/api/v1/document-uploads/:id/upload',
+    PART_OPTIONS,
+    async (request, reply) => {
+      const status = await deps.service.uploadStatus(
+        deps.actorOf(request),
+        request.params.id,
+      );
+      return tusReply(reply, status.offset)
+        .header('upload-length', status.length)
+        .send();
+    },
+  );
+  typed.patch(
+    '/api/v1/document-uploads/:id/upload',
+    PART_OPTIONS,
+    async (request, reply) => {
+      const next = await deps.service.receivePart(
+        deps.actorOf(request),
+        request.params.id,
+        partOf(request),
+      );
+      return tusReply(reply, next).send();
+    },
+  );
+}
+
+/** A PATCH's body and its Upload-Offset, as tus sends them. */
+function partOf(request: FastifyRequest): { body: Readable; offset: number } {
+  const offset = offsetSchema.safeParse(request.headers['upload-offset']);
+  if (!offset.success)
+    throw new AppError('VALIDATION_FAILED', 'Upload-Offset is required', {
+      details: { field: 'offset' },
+    });
+  if (!(request.body instanceof Readable))
+    throw new AppError('UNSUPPORTED_MEDIA_TYPE', `Send a part as ${PART_TYPE}`);
+  return { body: request.body, offset: offset.data };
+}
