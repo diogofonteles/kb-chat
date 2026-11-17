@@ -70,11 +70,6 @@
   grid-template-columns: minmax(0, 1fr) minmax(24rem, var(--shell-source));
 }
 
-/* A track's passage (T22): 48rem, so its player fits beside the transcript. */
-.layout.with-panel.wide-panel {
-  grid-template-columns: minmax(0, 1fr) minmax(24rem, 48rem);
-}
-
 /* The areas' right panel: 340 (now playing, the queue) or 460 (a source open). */
 .layout.with-panel:has(> .right-panel) {
   grid-template-columns: minmax(0, 1fr) var(--shell-right);
@@ -416,8 +411,7 @@
     border-radius: 0;
   }
 
-  .layout.with-panel,
-  .layout.with-panel.wide-panel {
+  .layout.with-panel {
     grid-template-columns: minmax(0, 1fr);
   }
 

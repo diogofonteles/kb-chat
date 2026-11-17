@@ -8,6 +8,13 @@ export interface TrackOpening {
   readonly at: string;
   /** What gets the focus back when the panel closes (AC-12). */
   readonly trigger: HTMLElement | null;
+  /**
+   * The answer's cited sources, texts and tracks in [n] order, for "Fonte n de N" and ‹ ›
+   * (KBC-150); absent for a search result.
+   */
+  readonly sources?: readonly AnswerSource[];
+  /** The answer's question: a text source opened from ‹ › highlights it. */
+  readonly question?: string;
 }
 
 /** "Palestra de 12/03/2017 · 0:41 · +2 trechos": what a track's chip says after its title. */
