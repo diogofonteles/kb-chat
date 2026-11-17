@@ -296,10 +296,14 @@ describe('ResearchMessage', () => {
       /O que é o ritmo\?\s*Palestra de 12\/03\/2017\s*·\s*0:41\s*\+1 trecho/,
     );
     fireEvent.click(chip);
+    // KBC-150: the answer's cited sources and question ride along, for "Fonte n de N" and ‹ ›.
+    const cited = [SOURCES[0], TRACK];
     expect(trackOpened).toHaveBeenLastCalledWith({
       source: TRACK,
       at: '0:41',
       trigger: chip,
+      sources: cited,
+      question: expect.any(String),
     });
     const second = screen.getByRole('link', {
       name: 'Fonte 4, faixa O que é o ritmo?, aos 1 minuto e 10 segundos',
@@ -309,8 +313,36 @@ describe('ResearchMessage', () => {
       source: TRACK,
       at: '1:10',
       trigger: second,
+      sources: cited,
+      question: expect.any(String),
     });
     expect(opened).not.toHaveBeenCalled();
+  });
+
+  it('KBC-150 item 7: a track’s citation has the wave and "título · tempo"; the open one is filled', async () => {
+    const view = await renderMessage(
+      aTurn({
+        text: 'O ritmo [4@0:41] e o pêndulo [4@1:10]. São sete [1].',
+        sources: [...SOURCES, TRACK],
+      }),
+    );
+    const audio = screen.getByRole('link', {
+      name: 'Fonte 4, faixa O que é o ritmo?, aos 41 segundos',
+    });
+    expect(audio.classList).toContain('cite-audio');
+    expect(audio.textContent).toBe('4O que é o ritmo? · 0:41');
+    const text = screen.getByRole('link', { name: /^Fonte 1:/ });
+    expect(text.classList).not.toContain('cite-audio');
+    const again = screen.getByRole('link', {
+      name: 'Fonte 4, faixa O que é o ritmo?, aos 1 minuto e 10 segundos',
+    });
+    view.fixture.componentRef.setInput('activeSource', 4);
+    view.fixture.componentRef.setInput('activeAt', '0:41');
+    await view.fixture.whenStable();
+    // Only the citation open is filled, not the track's other one nor the text.
+    expect(audio.classList).toContain('active');
+    expect(again.classList).not.toContain('active');
+    expect(text.classList).not.toContain('active');
   });
 
   it('KBC-099 AC-15: an answer saved before the tracks keeps its sources as they were', async () => {

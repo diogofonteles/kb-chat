@@ -48,7 +48,6 @@
   <div
     class="layout"
     [class.with-panel]="panelOpen() || rightPanel.content() !== null"
-    [class.wide-panel]="track() !== null"
   >
     <main
       class="conversation"
@@ -216,9 +215,12 @@
         [source]="cited.source"
         [at]="cited.at"
         [topic]="store.topicSlug() ?? ''"
+        [topics]="topicList()"
+        [sources]="cited.sources ?? []"
         [canGoBack]="store.canGoBack()"
         (closed)="closeDocument()"
         (back)="store.back()"
+        (sourceChosen)="chooseSource($event)"
       />
     } @else if (rightPanel.content(); as content) {
       <aside
