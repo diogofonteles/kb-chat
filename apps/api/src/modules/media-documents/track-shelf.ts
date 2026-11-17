@@ -27,6 +27,11 @@ export interface MediaTrackShelfDeps {
   readonly desiredOf?: (mediaId: string) => string | null;
   /** Every media of a collection at once (see SHELF_BULK_AFTER); without it, one by one. */
   readonly rowsOf?: (topic: string) => ReadonlyMap<string, ShelfRow>;
+  /**
+   * Who speaks each segment of the current transcript, by position (the listeners' source,
+   * TranscriptService); null without a separation. Without it, no segment has a voice.
+   */
+  readonly voicesOf?: (mediaId: string) => readonly (number | null)[] | null;
 }
 
 /**
@@ -122,10 +127,17 @@ export class MediaTrackShelf implements TrackShelf {
     const known = this.segments.get(mediaId);
     if (known) return known;
     const [current] = this.deps.transcripts.transcripts(mediaId);
+    const voices = current ? (this.deps.voicesOf?.(mediaId) ?? null) : null;
+    // A passage never runs across a change of voice (KBC-156 BR-4).
     const segments = current
       ? this.deps.transcripts
           .segments(current.id)
-          .map(({ startMs, endMs }) => ({ startMs, endMs }))
+          .map(({ startMs, endMs, text }, index) => ({
+            startMs,
+            endMs,
+            text,
+            voice: voices?.[index] ?? null,
+          }))
       : [];
     this.segments.set(mediaId, segments);
     return segments;

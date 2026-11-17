@@ -585,30 +585,32 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
       const now = document.querySelector('.context .line[aria-current="true"]');
       expect(now?.textContent).toContain('Fala 5.');
       expect(now?.classList).toContain('now');
-      // Paused: back on the cited lines, the cited one with its border.
+      // Paused: back on the cited lines, the cited one with its border; the 1 s citation is
+      // whole sentences now (KBC-156): "Fala 1." alone is under 8 s and 12 words.
       media.setPaused(true);
       media.emit('pause');
       await vi.waitFor(() =>
         expect(aroundTexts()).toEqual([
-          '0:00 Trecho citado: Fala 1.',
-          '0:05 Fala 2.',
+          '0:00 Trecho citado: Fala 1. Fala 2.',
+          '0:10 Fala 3.',
         ]),
       );
       expect(document.querySelector('.context .cited-line')).toBeTruthy();
     });
 
     it('the line right after the passage is heard on the lines already shown, the cited one with its border', async () => {
-      await heardAt(7);
+      // The passage is 0:00–0:10 (KBC-156): 0:12 is the line right after it.
+      await heardAt(12);
       await vi.waitFor(() =>
         expect(
           document.querySelector('.context .line[aria-current="true"]')
             ?.textContent,
-        ).toContain('Fala 2.'),
+        ).toContain('Fala 3.'),
       );
       // Already in view as the line after: the list does not move (KBC-154 review).
       expect(aroundTexts()).toEqual([
-        '0:00 Trecho citado: Fala 1.',
-        '0:05 Fala 2.',
+        '0:00 Trecho citado: Fala 1. Fala 2.',
+        '0:10 Fala 3.',
       ]);
       expect(
         document.querySelector('.context .cited-line')?.textContent,
@@ -897,5 +899,114 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
         'Transcrição automática de baixa confiança: pode haver trechos errados.',
       ),
     ).toBeTruthy();
+  });
+});
+
+describe('TrackPassagePanel: the cited passage is whole sentences (KBC-156)', () => {
+  afterEach(() => TestBed.inject(MediaEngine).unload());
+
+  /** An answer saved before KBC-156: its passage is the lone 1 s segment it cited. */
+  const FRAGMENT: AnswerSource = {
+    ...SOURCE,
+    passages: [{ at: '0:00', startMs: 0, endMs: 1_000 }],
+  };
+  const SPOKEN = {
+    ...TRANSCRIPT,
+    segments: [
+      { startMs: 0, endMs: 1_000, text: 'É, italiano, tá.' },
+      {
+        startMs: 1_200,
+        endMs: 6_000,
+        text: 'Meu pai veio da Itália com a família,',
+      },
+      {
+        startMs: 6_100,
+        endMs: 12_000,
+        text: 'e eu cresci na roça ouvindo as histórias.',
+      },
+      { startMs: 12_500, endMs: 21_000, text: 'Depois fomos para Manaus.' },
+    ],
+  };
+
+  it('AC-7: a saved 1 s passage shows the fragment and the whole sentence after it', async () => {
+    await openReady(
+      { source: FRAGMENT, at: '0:00', sources: [FRAGMENT] },
+      SPOKEN,
+    );
+    const card = await screen.findByRole('region', {
+      name: 'Citado na resposta · 0:00–0:12',
+    });
+    expect(card.textContent).toContain('É, italiano, tá.');
+    expect(card.textContent).toContain('Meu pai veio da Itália com a família,');
+    expect(card.textContent).toContain(
+      'e eu cresci na roça ouvindo as histórias.',
+    );
+    expect(card.textContent).not.toContain('Depois fomos para Manaus.');
+  });
+
+  it('AC-4: a neighbour this person may not hear is never part of the passage, nor its text', async () => {
+    const [first, , third, fourth] = SPOKEN.segments;
+    const hidden = {
+      ...SPOKEN,
+      segments: [
+        first,
+        { startMs: 1_200, endMs: 6_000, text: '', restricted: true },
+        third,
+        fourth,
+      ],
+    };
+    await openReady(
+      { source: FRAGMENT, at: '0:00', sources: [FRAGMENT] },
+      hidden,
+    );
+    const card = await screen.findByRole('region', {
+      name: 'Citado na resposta · 0:00–0:01',
+    });
+    expect(card.textContent).toContain('É, italiano, tá.');
+    expect(card.textContent).not.toContain('cresci na roça');
+  });
+
+  it('BR-4: a saved span that already runs across a part this person may not hear is cut there, around the cited time', async () => {
+    const [first, , third, fourth] = SPOKEN.segments;
+    const hidden = {
+      ...SPOKEN,
+      segments: [
+        first,
+        { startMs: 1_200, endMs: 6_000, text: '', restricted: true },
+        third,
+        fourth,
+      ],
+    };
+    const ACROSS: AnswerSource = {
+      ...SOURCE,
+      passages: [{ at: '0:00', startMs: 0, endMs: 12_000 }],
+    };
+    await openReady({ source: ACROSS, at: '0:00', sources: [ACROSS] }, hidden);
+    const card = await screen.findByRole('region', {
+      name: 'Citado na resposta · 0:00–0:01',
+    });
+    expect(card.textContent).toContain('É, italiano, tá.');
+    expect(card.textContent).not.toContain('cresci na roça');
+  });
+
+  it('BR-4: a saved span across a change of voice is cut at it, around the cited time', async () => {
+    const [first, second, third] = SPOKEN.segments;
+    const voiced = {
+      ...SPOKEN,
+      segments: [
+        { ...first, voice: 1 },
+        { ...second, voice: 2 },
+        { ...third, voice: 2 },
+      ],
+    };
+    const ACROSS: AnswerSource = {
+      ...SOURCE,
+      passages: [{ at: '0:00', startMs: 0, endMs: 12_000 }],
+    };
+    await openReady({ source: ACROSS, at: '0:00', sources: [ACROSS] }, voiced);
+    const card = await screen.findByRole('region', {
+      name: 'Citado na resposta · 0:00–0:01',
+    });
+    expect(card.textContent).not.toContain('Meu pai veio da Itália');
   });
 });

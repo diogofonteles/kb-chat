@@ -206,6 +206,7 @@ import { houseAiRoutes } from './modules/house-ai/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
 import {
   MediaTrackShelf,
+  type MediaTrackShelfDeps,
   existingTracksRoutes,
   publicationRoutes,
 } from './modules/media-documents/index.js';
@@ -375,24 +376,38 @@ async function registerResearch(
       hasTopic,
       ratePerMinute: deps.config.RESEARCH_RATE_LIMIT,
       ...recording,
-      ...shelfOf(deps.media),
+      ...shelfOf(deps),
     }),
   );
 }
 
 /** The tracks of media.db one request may see as documents (ADR 0035 §5). */
-const trackShelf = (media: MediaDeps) => () =>
-  new MediaTrackShelf({
-    store: media.store,
-    transcripts: media.transcripts,
-    hasTracks: (recordingId) => media.documents.hasTracks(recordingId),
-    desiredOf: (mediaId) => media.documents.desiredFingerprint(mediaId),
-    rowsOf: (topic) => media.documents.shelfRows(topic),
-  });
+const trackShelf =
+  (media: MediaDeps, voicesOf?: MediaTrackShelfDeps['voicesOf']) => () =>
+    new MediaTrackShelf({
+      store: media.store,
+      transcripts: media.transcripts,
+      hasTracks: (recordingId) => media.documents.hasTracks(recordingId),
+      desiredOf: (mediaId) => media.documents.desiredFingerprint(mediaId),
+      rowsOf: (topic) => media.documents.shelfRows(topic),
+      ...(voicesOf && { voicesOf }),
+    });
 
-/** The tracks a research turn may see (KBC-099), with the media library on. */
-const shelfOf = (media: MediaDeps | undefined) =>
-  media ? { shelf: trackShelf(media) } : {};
+/**
+ * The tracks a research turn may see (KBC-099), with the media library on, and who speaks
+ * each segment as listeners read it: a cited passage stops at a change of voice (KBC-156 BR-4).
+ */
+function shelfOf({ media, authors }: Pick<FullDeps, 'media' | 'authors'>) {
+  if (!media) return {};
+  const reader = transcriptReader({
+    media,
+    authors,
+    transcribers: transcriberService(media),
+  });
+  return {
+    shelf: trackShelf(media, (mediaId) => reader.segmentVoices(mediaId)),
+  };
+}
 
 /** The research routes that run the person's AI. */
 const RESEARCH_TURNS = new Set(['/api/v1/topics/:topic/research']);
@@ -1234,9 +1249,11 @@ const SYSTEM_READER: MediaActor = {
 };
 
 /** The transcripts with who speaks, as listeners get them, for any media. */
-function transcriptReader(
-  wiring: MediaWiring & { transcribers: TranscriberService },
-): TranscriptService {
+function transcriptReader(wiring: {
+  media: MediaDeps;
+  authors: AuthorsService;
+  transcribers: TranscriberService;
+}): TranscriptService {
   const diarization = diarizationService(wiring);
   return new TranscriptService({
     transcripts: wiring.media.transcripts,
