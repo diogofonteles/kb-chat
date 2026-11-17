@@ -1066,7 +1066,8 @@ select.ui-input option {
 }
 
 .ui-dialog__cancel,
-.ui-dialog__primary {
+.ui-dialog__primary,
+.ui-dialog__handle {
   display: none;
 }
 
@@ -1100,9 +1101,10 @@ select.ui-input option {
     border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   }
 
+  /* The words sit 25 px under the sheet's top, as the frame; the targets keep 44 px. */
   .ui-dialog--actions .ui-dialog__head {
     align-items: center;
-    padding: var(--space-4) var(--space-4) var(--space-3);
+    padding: var(--space-1) var(--space-4) 0;
   }
 
   .ui-dialog--actions .ui-dialog__titles {
@@ -1113,9 +1115,20 @@ select.ui-input option {
     font-size: var(--text-md);
   }
 
+  /* The sheet's header is the title alone: the kicker, a picture and a sub-line go (the
+     content repeats what matters, as the person's row does). */
   .ui-dialog--actions .ui-dialog__close,
-  .ui-dialog--actions .ui-dialog__footer {
+  .ui-dialog--actions .ui-dialog__footer,
+  .ui-dialog--actions .ui-dialog__step,
+  .ui-dialog--actions .ui-dialog__head > [uidialoglead],
+  .ui-dialog--actions .ui-dialog__titles > [uidialogsub] {
     display: none;
+  }
+
+  .ui-dialog--actions .ui-dialog__title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .ui-dialog--actions .ui-dialog__cancel,
@@ -1155,6 +1168,59 @@ select.ui-input option {
 
   .ui-dialog__footer {
     padding: 0 var(--space-4) var(--space-6);
+  }
+
+  /* A confirmation: a low sheet, the action full width above Cancelar (smConfirm). */
+  /* fit-content, not auto: a modal <dialog> is fixed with inset 0, so auto stretches it. */
+  .ui-dialog--confirm {
+    height: fit-content;
+    min-height: 20rem;
+  }
+
+  .ui-dialog--confirm .ui-dialog__handle {
+    display: block;
+    flex: none;
+    width: 2.25rem;
+    height: 0.25rem;
+    margin: 0.625rem auto 0;
+    border-radius: var(--radius-pill);
+    background: var(--overlay-4);
+  }
+
+  .ui-dialog--confirm .ui-dialog__close {
+    display: none;
+  }
+
+  .ui-dialog--confirm .ui-dialog__head {
+    padding: var(--space-5) var(--space-5) 0;
+  }
+
+  .ui-dialog--confirm .ui-dialog__title {
+    font-size: 1.25rem;
+  }
+
+  .ui-dialog--confirm .ui-dialog__body {
+    padding: 0.875rem var(--space-5);
+  }
+
+  .ui-dialog--confirm .ui-dialog__footer > div {
+    display: flex;
+  }
+
+  .ui-dialog--confirm .ui-dialog__footer,
+  .ui-dialog--confirm .ui-dialog__footer > div {
+    flex-direction: column-reverse;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 0.875rem;
+  }
+
+  .ui-dialog--confirm .ui-dialog__footer {
+    padding: 0 var(--space-5) var(--space-8);
+  }
+
+  .ui-dialog--confirm .ui-dialog__footer button {
+    width: 100%;
   }
 }
 

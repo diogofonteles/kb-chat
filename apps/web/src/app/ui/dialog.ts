@@ -4,6 +4,7 @@ import {
   DOCUMENT,
   DestroyRef,
   ElementRef,
+  computed,
   inject,
   input,
   output,
@@ -16,7 +17,8 @@ import { UiIcon } from './icon.js';
  * A v2 modal (v2 · Componentes › Modal), on a native `<dialog>` (focus trap, Escape, the
  * top layer): dark, centred, 22 title with an optional step above it, ✕ in the corner and
  * the actions (`[uiDialogFooter]`) on the right. Below 1024 px it is a tall sheet with
- * "Cancelar · título · ação" when `primaryLabel` is set (the footer then hides).
+ * "Cancelar · título · ação" when `primaryLabel` is set (the footer then hides), or a
+ * low sheet with a handle for a `confirm`ation.
  * Open and close with `open()` / `close()`; `closed` fires however it closed.
  */
 @Component({
@@ -28,7 +30,8 @@ import { UiIcon } from './icon.js';
     <dialog
       #dialog
       class="ui-dialog"
-      [class.ui-dialog--actions]="!!primaryLabel()"
+      [class.ui-dialog--actions]="sheetHead()"
+      [class.ui-dialog--confirm]="confirm()"
       [style.--ui-dialog-width.px]="width()"
       [style.--ui-dialog-height.px]="height() || null"
       [attr.aria-labelledby]="label() ? null : titleId()"
@@ -37,17 +40,17 @@ import { UiIcon } from './icon.js';
       (pointerdown)="pressedOnBackdrop = $event.target === $event.currentTarget"
       (click)="backdropClick($event)"
     >
+      <span class="ui-dialog__handle" aria-hidden="true"></span>
       <header class="ui-dialog__head">
         <!-- The sheet's own Cancelar and action exist on phones only: on a desktop the
              footer holds them, and two of each would read twice. -->
-        @if (primaryLabel() && phone()) {
-          <button
-            type="button"
-            class="ui-dialog__cancel"
-            (click)="close()"
-            i18n="@@ui.dialog.cancel"
-          >
-            Cancelar
+        @if (sheetHead() && phone()) {
+          <button type="button" class="ui-dialog__cancel" (click)="close()">
+            @if (cancelLabel()) {
+              {{ cancelLabel() }}
+            } @else {
+              <ng-container i18n="@@ui.dialog.cancel">Cancelar</ng-container>
+            }
           </button>
         }
         <!-- [uiDialogLead]: a picture before the titles (a person's avatar). -->
@@ -56,7 +59,9 @@ import { UiIcon } from './icon.js';
           @if (step()) {
             <p class="ui-dialog__step">{{ step() }}</p>
           }
-          <h2 class="ui-dialog__title" [attr.id]="titleId()">{{ title() }}</h2>
+          <h2 class="ui-dialog__title" [attr.id]="titleId()">
+            {{ phone() && phoneTitle() ? phoneTitle() : title() }}
+          </h2>
           <!-- [uiDialogSub]: a line under the title (an e-mail and a status). -->
           <ng-content select="[uiDialogSub]" />
         </div>
@@ -65,6 +70,7 @@ import { UiIcon } from './icon.js';
             type="button"
             class="ui-dialog__primary"
             [disabled]="primaryDisabled()"
+            [attr.aria-describedby]="primaryDescribedBy() || null"
             (click)="primary.emit()"
           >
             {{ primaryLabel() }}
@@ -105,6 +111,20 @@ export class UiDialog {
   /** The phone header's action ("Criar", "Salvar"); empty keeps the footer on phones. */
   readonly primaryLabel = input('');
   readonly primaryDisabled = input(false);
+  /** The id of what says why the phone header's action waits (a hint in the content). */
+  readonly primaryDescribedBy = input('');
+  /**
+   * The phone sheet's left word when it is not "Cancelar" ("Fechar" on an editor that saves
+   * as it goes); set alone, it gives the sheet its header without an action at the right.
+   */
+  readonly cancelLabel = input('');
+  /** The phone header's shorter title ("Convite"); empty keeps `title`. */
+  readonly phoneTitle = input('');
+  /**
+   * A confirmation ("Revogar …?"): below 1024 px a low sheet with a handle, no ✕, and the
+   * footer's actions full width, the action above Cancelar (smConfirm).
+   */
+  readonly confirm = input(false);
   /**
    * A click on the backdrop closes the dialog; false where closing loses work the person
    * set up (a configured invitation): only ✕, Cancelar and Escape close it then.
@@ -114,6 +134,11 @@ export class UiDialog {
   readonly closed = output();
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+
+  /** The phone sheet's "Cancelar · título · ação" header (or "Fechar · título"). */
+  protected readonly sheetHead = computed(
+    () => !!this.primaryLabel() || !!this.cancelLabel(),
+  );
 
   /** Below 1024 px: the tall sheet with "Cancelar · título · ação". */
   protected readonly phone = signal(false);

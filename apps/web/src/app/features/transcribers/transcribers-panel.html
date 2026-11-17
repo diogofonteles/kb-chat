@@ -28,12 +28,7 @@
       "
       (input)="editName($event)"
     />
-    <button
-      #pairButton
-      type="submit"
-      class="primary"
-      [disabled]="busy()"
-    >
+    <button #pairButton type="submit" class="primary" [disabled]="busy()">
       <ui-icon name="link" [size]="18" />
       <span i18n="@@transcribers.pair">Parear transcritor</span>
     </button>
@@ -95,7 +90,11 @@
         >
         <div class="copy-row">
           <code class="code">{{ command() }}</code>
-          <button type="button" class="secondary copy" (click)="copy('command')">
+          <button
+            type="button"
+            class="secondary copy"
+            (click)="copy('command')"
+          >
             <ui-icon name="copy" [size]="16" />
             @switch (copyLabelOf('command')) {
               @case ('copied') {
@@ -299,6 +298,7 @@
   titleId="revoke-transcriber-title"
   [title]="revokeTitle()"
   [width]="480"
+  [confirm]="true"
   (closed)="revokeDialogClosed()"
 >
   @if (revoking(); as item) {

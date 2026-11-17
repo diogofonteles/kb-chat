@@ -1,11 +1,7 @@
 @if (store.count() > 0) {
   <section class="requests" aria-labelledby="requests-title">
     <!-- "Solicitações pendentes" and the count in a green badge (v2 · Pessoas). -->
-    <h3
-      id="requests-title"
-      class="title"
-      [attr.aria-label]="titleLabel()"
-    >
+    <h3 id="requests-title" class="title" [attr.aria-label]="titleLabel()">
       <span i18n="@@requests.titleWord">Solicitações pendentes</span>
       <span class="badge" aria-hidden="true">{{ store.count() }}</span>
     </h3>
@@ -85,6 +81,7 @@
   titleId="refuse-dialog-title"
   [title]="refuseTitle()"
   [width]="480"
+  [confirm]="true"
   (closed)="cancelRefuse()"
 >
   <p class="confirm-text" i18n="@@requests.refuseText">
