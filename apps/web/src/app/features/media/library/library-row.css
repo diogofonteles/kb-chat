@@ -4,7 +4,9 @@
 :host {
   position: relative;
   display: grid;
-  grid-template-columns: 1.5rem 2.5rem minmax(0, 1fr) 11.25rem 13.75rem 2.75rem 2rem;
+  grid-template-columns:
+    1.5rem 2.5rem minmax(0, 1fr)
+    11.25rem 13.75rem 2.75rem 2rem;
   grid-template-rows: auto auto;
   grid-template-areas:
     'lead art title topic status duration actions'
@@ -100,7 +102,8 @@
   grid-area: 1 / 1;
 }
 
-/* ▶ over the cover: shown under the pointer and the focus, and while this one plays. */
+/* ▶ over the cover: shown under the pointer and the focus. The one playing keeps a bare cover,
+   with the wave in its lead and its title in the accent (media-library frames). */
 .play {
   /* Above the cover, which is positioned and would otherwise paint over it. */
   position: relative;
@@ -119,8 +122,7 @@
 }
 
 :host(:hover) .play,
-.play:focus-visible,
-.play.on {
+.play:focus-visible {
   opacity: 1;
 }
 
@@ -312,7 +314,9 @@ app-menu-button {
 @container library-table (max-width: 36rem) {
   :host {
     /* The cover's column holds its 12 px to the title (mRow: cover 52, gap 12). */
-    grid-template-columns: 0 calc(3.25rem + var(--space-3)) minmax(0, 1fr) 1.5rem;
+    grid-template-columns:
+      0 calc(3.25rem + var(--space-3)) minmax(0, 1fr)
+      1.5rem;
     grid-template-areas:
       'lead art title actions'
       'lead art cells actions';
@@ -373,20 +377,13 @@ app-menu-button {
     display: none;
   }
 
-  /* The frame's cover is bare (media-library@mobile): ▶ covers it whole, unseen, and a tap
-     on the cover plays at once (MA-02); the one playing shows it. */
+  /* The frame's cover is bare (media-library@mobile), the one playing too: ▶ covers it
+     whole, unseen, and a tap on the cover plays or pauses at once (MA-02). */
   .play {
     width: 3.25rem;
     height: 3.25rem;
     border-radius: var(--radius-cover);
     opacity: 0;
-  }
-
-  .play.on {
-    width: 2rem;
-    height: 2rem;
-    border-radius: var(--radius-pill);
-    opacity: 1;
   }
 
   .title {

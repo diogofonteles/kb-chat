@@ -595,7 +595,9 @@ describe('LibraryPage (T16, KBC-051)', () => {
       screen.getByRole('button', { name: 'Mais ações da Biblioteca' }),
     );
     await settle();
-    expect(screen.queryByRole('menuitem', { name: 'Limpar recentes' })).toBeNull();
+    expect(
+      screen.queryByRole('menuitem', { name: 'Limpar recentes' }),
+    ).toBeNull();
   });
 
   it('switches to the grid and keeps the choice in the account (AC-10)', async () => {
@@ -1070,7 +1072,9 @@ describe('LibraryPage (T16, KBC-051)', () => {
       await found({ features: SPEAKER }, anAnswer([aHit(1)]));
 
       expect(
-        screen.getByRole('heading', { name: '1 resultado para “padre orlando”' }),
+        screen.getByRole('heading', {
+          name: '1 resultado para “padre orlando”',
+        }),
       ).toBeTruthy();
       const row = screen.getByRole('listitem');
       expect(row.querySelector('mark')?.textContent).toBe('Orlando');
@@ -1100,10 +1104,13 @@ describe('LibraryPage (T16, KBC-051)', () => {
           aHit(2, { trackCount: 23, match: 'title', passage: null }),
         ]),
       );
+      // One muted line each: the place first, then the author and the length.
       expect(
-        screen.getByText('Entrevista de 1985 · faixa 3 de 23'),
+        screen.getByText(/^Entrevista de 1985 · faixa 3 de 23 · .+$/),
       ).toBeTruthy();
-      expect(screen.getByText('Gravação completa · 23 faixas')).toBeTruthy();
+      expect(
+        screen.getByText(/^Gravação completa · 23 faixas · .+$/),
+      ).toBeTruthy();
     });
 
     it('AC-8: ▶ plays 2 s before the passage, and the title opens there', async () => {

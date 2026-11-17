@@ -264,7 +264,8 @@ export class MediaListPage {
   });
   protected readonly emptyText = computed(() => {
     const topic = this.topic();
-    return topic && this.canUpload()
+    // The phone's empty state is the title and the button (media-list-empty@mobile).
+    return topic && this.canUpload() && !this.phone()
       ? $localize`:@@media.emptyText:Envie a primeira gravação de ${topic.title}:title:.`
       : '';
   });
@@ -413,10 +414,13 @@ export class MediaListPage {
     const phone = this.phone();
     if (item.status === 'failed')
       return {
-        text: phone ? $localize`:@@media.status.failedWord:Falhou` : this.statusOf(item),
+        text: phone
+          ? $localize`:@@media.status.failedWord:Falhou`
+          : this.statusOf(item),
         tone: 'err',
       };
-    if (item.status !== 'ready') return { text: this.statusOf(item), tone: 'info' };
+    if (item.status !== 'ready')
+      return { text: this.statusOf(item), tone: 'info' };
     const { status } = item.transcription;
     if (status === 'waiting')
       return {
@@ -448,7 +452,11 @@ export class MediaListPage {
 
   /** The words the pill leaves out, for a screen reader (UP-20). */
   protected detailOf(item: MediaItem): string {
-    return [this.transcriptionOf(item), this.lowNoticeOf(item), this.resumeTextOf(item)]
+    return [
+      this.transcriptionOf(item),
+      this.lowNoticeOf(item),
+      this.resumeTextOf(item),
+    ]
       .filter((words) => words !== '')
       .join(' · ');
   }
@@ -476,7 +484,8 @@ export class MediaListPage {
 
   protected headerAction(id: string): void {
     if (id === 'reload') this.reload();
-    else if (id === 'copy-link') this.copy(['/midia'], this.topic()?.title ?? '');
+    else if (id === 'copy-link')
+      this.copy(['/midia'], this.topic()?.title ?? '');
   }
 
   protected copyLink(item: MediaItem): void {
@@ -506,7 +515,8 @@ export class MediaListPage {
     nav.clipboard
       .writeText(url)
       .then(
-        () => this.announcement.set($localize`:@@library.linkCopied:Link copiado.`),
+        () =>
+          this.announcement.set($localize`:@@library.linkCopied:Link copiado.`),
         failed,
       );
   }
@@ -537,11 +547,16 @@ export class MediaListPage {
 
   private followLayout(): void {
     const query =
-      this.host.nativeElement.ownerDocument.defaultView?.matchMedia?.(PHONE_QUERY);
+      this.host.nativeElement.ownerDocument.defaultView?.matchMedia?.(
+        PHONE_QUERY,
+      );
     if (!query) return;
-    const onChange = (event: MediaQueryListEvent) => this.phone.set(event.matches);
+    const onChange = (event: MediaQueryListEvent) =>
+      this.phone.set(event.matches);
     query.addEventListener('change', onChange);
-    this.destroyRef.onDestroy(() => query.removeEventListener('change', onChange));
+    this.destroyRef.onDestroy(() =>
+      query.removeEventListener('change', onChange),
+    );
   }
 
   protected menuLabelOf(item: MediaItem): string {

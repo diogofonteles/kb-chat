@@ -60,12 +60,12 @@
         aria-haspopup="dialog"
         (click)="openUpload()"
       >
-        <ui-icon name="upload" [size]="16" />
+        <ui-icon name="upload" [size]="18" />
         <span i18n="@@media.upload.open">Enviar áudio</span>
       </button>
     }
     <a uiButton="dark" size="sm" routerLink="/midia/marcadores">
-      <ui-icon name="bookmark" [size]="16" />
+      <ui-icon name="bookmark" [size]="18" />
       <span i18n="@@bookmarks.mine">Meus marcadores</span>
     </a>
     <app-menu-button
@@ -177,8 +177,8 @@
     }
 
     <!-- The phone's rows over the list (media-list@mobile): the filter (from 🔍), the chips,
-         the order and the view. -->
-    @if (phone() && items().length > 0) {
+         the order and the view; the chips stay over an empty collection (media-list-empty). -->
+    @if (phone() && list.hasValue() && !loadError()) {
       <div class="phone-tools">
         @if (filterOpen() || query() !== '') {
           <label class="ui-search filter phone-filter">
@@ -255,7 +255,10 @@
               [attr.aria-label]="viewToggleLabel()"
               (click)="view.set(view() === 'grid' ? 'list' : 'grid')"
             >
-              <ui-icon [name]="view() === 'grid' ? 'list' : 'grid'" [size]="18" />
+              <ui-icon
+                [name]="view() === 'grid' ? 'list' : 'grid'"
+                [size]="18"
+              />
             </button>
           </div>
         }
@@ -320,11 +323,7 @@
       <ul class="grid">
         @for (item of visible(); track item.id) {
           <li class="card">
-            <ui-cover
-              [title]="item.title"
-              [size]="171"
-              class="card-art"
-            />
+            <ui-cover [title]="item.title" [size]="171" class="card-art" />
             @if (item.status === 'ready') {
               <a class="card-title" [routerLink]="['/midia', item.id]">{{
                 item.title
@@ -342,9 +341,7 @@
         <span class="col-title" i18n="@@library.col.title">Título</span>
         <span class="col-date" i18n="@@media.col.sent">Enviado em</span>
         <span class="col-status" i18n="@@library.col.status">Situação</span>
-        <span class="col-duration"
-          ><ui-icon name="clock" [size]="16"
-        /></span>
+        <span class="col-duration"><ui-icon name="clock" [size]="16" /></span>
       </div>
       <ul class="rows">
         @for (item of visible(); track item.id; let index = $index) {
@@ -421,19 +418,19 @@
                 </button>
               }
               @if (item.status === 'ready' || item.canEdit || isMaster()) {
-              <app-row-menu
-                [label]="menuLabelOf(item)"
-                [canPlay]="item.status === 'ready'"
-                [canEdit]="item.canEdit"
-                [canRemove]="isMaster()"
-                [phone]="phone()"
-                [sheetTitle]="item.title"
-                [sheetMeta]="authorOf(item) + ' · ' + (topic()?.title ?? '')"
-                (playChosen)="play(item)"
-                (linkChosen)="copyLink(item)"
-                (editChosen)="openEdit(item)"
-                (removeChosen)="askRemove(item)"
-              />
+                <app-row-menu
+                  [label]="menuLabelOf(item)"
+                  [canPlay]="item.status === 'ready'"
+                  [canEdit]="item.canEdit"
+                  [canRemove]="isMaster()"
+                  [phone]="phone()"
+                  [sheetTitle]="item.title"
+                  [sheetMeta]="authorOf(item) + ' · ' + (topic()?.title ?? '')"
+                  (playChosen)="play(item)"
+                  (linkChosen)="copyLink(item)"
+                  (editChosen)="openEdit(item)"
+                  (removeChosen)="askRemove(item)"
+                />
               }
             </span>
           </li>

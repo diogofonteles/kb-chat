@@ -55,8 +55,7 @@
 }
 
 :host(:hover) .play,
-:host(:focus-within) .play,
-.play.on {
+:host(:focus-within) .play {
   opacity: 1;
   translate: 0 0;
 }

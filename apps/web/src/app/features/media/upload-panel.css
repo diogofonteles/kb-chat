@@ -17,6 +17,13 @@
   width: min(55rem, calc(100vw - 2rem));
 }
 
+/* At a desktop the modal hangs 70 px from the top, whatever it holds (media-upload*). */
+@media (min-width: 1024px) {
+  .panel.wide {
+    margin-top: 4.375rem;
+  }
+}
+
 .panel::backdrop {
   background: var(--scrim);
 }
@@ -65,7 +72,25 @@
 }
 
 .panel.wide .columns:has(> .options) {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 22.5rem);
+}
+
+/* While sending: the file and its data wider, the next steps' note beside (media-upload-sending). */
+.panel.wide .columns:has(> .next) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 18.75rem);
+}
+
+.next {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+/* Under "Acervo" and "Autor", as wide as both (media-upload). */
+.author-help {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 /* Editing: the cover beside the fields (media-library-edit). */
@@ -146,6 +171,49 @@
   border-color: var(--color-danger);
 }
 
+/* Files chosen: their cards stand in the zone's place, with no dashes (media-upload-chosen). */
+.drop.filled {
+  justify-items: stretch;
+  gap: var(--space-3);
+  padding: 0;
+  border: none;
+  text-align: start;
+}
+
+.drop.filled.dragging {
+  outline: 1px dashed var(--color-accent);
+  outline-offset: var(--space-1);
+  background: none;
+}
+
+.drop .choose {
+  min-height: 2.25rem;
+  padding: 0 var(--space-5);
+  font-size: var(--text-sm);
+}
+
+.add-more {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-1);
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-meta);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.add-more:hover {
+  background: var(--overlay-2);
+  color: var(--color-text);
+}
+
 .drop p {
   margin: 0;
 }
@@ -187,6 +255,7 @@
 
 .field {
   display: grid;
+  align-content: start;
   gap: var(--space-1);
   margin: 0;
   padding: 0;
@@ -195,7 +264,7 @@
 
 .field input[type='text'],
 .field select {
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   padding: 0 var(--space-3);
   border: 1px solid transparent;
   border-radius: var(--radius-menu);
@@ -285,6 +354,7 @@ button[type='submit']:disabled {
   }
 
   .panel.wide .columns:has(> .options),
+  .panel.wide .columns:has(> .next),
   .columns:has(> .edit-cover),
   .panel.wide .column:has(> app-author-combobox) {
     grid-template-columns: minmax(0, 1fr);

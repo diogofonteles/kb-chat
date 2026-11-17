@@ -30,6 +30,7 @@ type Refusable = 'speakers' | 'manual' | 'ai' | 'subjects';
   templateUrl: './preparation-options.html',
   styleUrl: './preparation-options.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.compact]': 'compact()' },
 })
 export class PreparationOptions {
   private readonly locale = inject(LOCALE_ID);
@@ -38,6 +39,11 @@ export class PreparationOptions {
   readonly locked = input(false);
   /** The choices are for several files at once: the estimates add them up. */
   readonly several = input(false);
+  /**
+   * The upload panel's column (media-upload): smaller words, the division as one card with
+   * a plain list of choices, only the one that cannot be chosen saying why.
+   */
+  readonly compact = input(false);
 
   protected readonly choices = this.form.choices;
   protected readonly offer = this.form.offer;

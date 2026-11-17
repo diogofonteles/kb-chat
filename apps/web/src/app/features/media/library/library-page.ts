@@ -480,13 +480,15 @@ export class LibraryPage {
   /** The phone's search row, opened by the top row's 🔍 (media-library-search@mobile). */
   protected readonly searchOpen = signal(false);
   /**
-   * "Continuar ouvindo" (media-library-sort): the plain list only — no filter, no search —
-   * and, on a narrow main panel, not at all (media-library: the right panel open; CSS).
+   * "Continuar ouvindo" (media-library-sort): the plain list only — no filter, no search, no
+   * selection (media-library-selection) — and, on a narrow main panel, not at all
+   * (media-library: the right panel open; CSS).
    */
   protected readonly showContinue = computed(
     () =>
       this.continueItems().length > 0 &&
       !this.searching() &&
+      !this.selecting() &&
       !this.filtered() &&
       !this.libraryEmpty(),
   );
@@ -685,9 +687,11 @@ export class LibraryPage {
 
   /** The shell's breakpoint: below it, the phone's layout (the rows' ⋯ changes). */
   private followLayout(): void {
-    const query = this.host.ownerDocument.defaultView?.matchMedia?.(PHONE_QUERY);
+    const query =
+      this.host.ownerDocument.defaultView?.matchMedia?.(PHONE_QUERY);
     if (!query) return;
-    const onChange = (event: MediaQueryListEvent) => this.phone.set(event.matches);
+    const onChange = (event: MediaQueryListEvent) =>
+      this.phone.set(event.matches);
     query.addEventListener('change', onChange);
     this.destroyRef.onDestroy(() =>
       query.removeEventListener('change', onChange),

@@ -208,11 +208,7 @@
 
     <!-- "Limpar recentes" asks here, from the section's link or the header's ⋯. -->
     @if (confirmingClear()) {
-      <div
-        class="confirm-inline"
-        role="group"
-        aria-labelledby="clear-text"
-      >
+      <div class="confirm-inline" role="group" aria-labelledby="clear-text">
         <p id="clear-text" i18n="@@library.clearRecentsQuestion">
           Limpar as mídias ouvidas recentemente? Suas posições, favoritas e
           marcadores continuam.
@@ -300,7 +296,8 @@
         }
       </div>
 
-      @if (showQueue() && phone()) {
+      <!-- On a phone the selection takes the attention card's place (media-library-selection@mobile). -->
+      @if (showQueue() && phone() && !selecting()) {
         <app-queue-summary class="phone-queue" />
       }
 

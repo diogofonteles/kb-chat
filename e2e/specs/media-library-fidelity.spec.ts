@@ -246,7 +246,11 @@ async function seed(): Promise<Seeded> {
     headers: CSRF,
   });
   expect(renamed.status(), await renamed.text()).toBe(200);
-  const person = async (label: string, topics: string[], features: string[]) => {
+  const person = async (
+    label: string,
+    topics: string[],
+    features: string[],
+  ) => {
     const email = uniqueEmail(label);
     await invite(owner, email, { topics, features });
     return email;
@@ -254,17 +258,16 @@ async function seed(): Promise<Seeded> {
   const listing = ['search', 'media', 'media-upload', 'media-edit'];
   const lister = await person('lista', [topic], listing);
   const emptyLister = await person('lista-vazia', [empty], listing);
-  const emptyReader = await person('leitor-vazio', [empty], [
-    'search',
-    'media',
-    'media-library',
-  ]);
-  const emptyUploader = await person('envia-vazio', [empty], [
-    'search',
-    'media',
-    'media-library',
-    'media-upload',
-  ]);
+  const emptyReader = await person(
+    'leitor-vazio',
+    [empty],
+    ['search', 'media', 'media-library'],
+  );
+  const emptyUploader = await person(
+    'envia-vazio',
+    [empty],
+    ['search', 'media', 'media-library', 'media-upload'],
+  );
   for (const id of Object.values(ids)) await settled(owner, id);
   await owner.dispose();
   seeded = {
@@ -427,10 +430,13 @@ async function expectScrolls(
 ): Promise<void> {
   const box = await scroller.boundingBox();
   if (!box) throw new Error('scroller not on screen');
-  const reachable = await scroller.evaluate(
-    (node) => node.scrollHeight - node.clientHeight,
-  );
-  expect(reachable, 'the content is longer than its box').toBeGreaterThan(100);
+  // The list may still be filling in (its covers, the next page): wait for its length.
+  await expect
+    .poll(
+      () => scroller.evaluate((node) => node.scrollHeight - node.clientHeight),
+      { message: 'the content is longer than its box' },
+    )
+    .toBeGreaterThan(100);
   const x = box.x + box.width / 2;
   const y = box.y + Math.min(box.height / 2, 300);
 
@@ -499,10 +505,13 @@ async function expectWholeOnTop(page: Page, overlay: Locator): Promise<void> {
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(view.width + 0.5);
   expect(box.y + box.height).toBeLessThanOrEqual(view.height + 0.5);
-  const own = await overlay.evaluate((node, at) => {
-    const top = document.elementFromPoint(at.x, at.y);
-    return !!top && node.contains(top);
-  }, { x: box.x + box.width / 2, y: box.y + Math.min(box.height / 2, 40) });
+  const own = await overlay.evaluate(
+    (node, at) => {
+      const top = document.elementFromPoint(at.x, at.y);
+      return !!top && node.contains(top);
+    },
+    { x: box.x + box.width / 2, y: box.y + Math.min(box.height / 2, 40) },
+  );
   expect(own).toBe(true);
 }
 
@@ -526,7 +535,9 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
     // The frame's regions, in its order.
     if (phone) {
       await expect(
-        page.locator('header.topbar').getByRole('heading', { name: 'Biblioteca' }),
+        page
+          .locator('header.topbar')
+          .getByRole('heading', { name: 'Biblioteca' }),
       ).toBeVisible();
       await expect(
         page.getByRole('link', { name: /itens precisam de atenção/ }),
@@ -546,11 +557,17 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
         'Mais ações da Biblioteca',
         'Ir para a busca',
       ])
-        await expect(page.getByRole('button', { name }).or(page.getByRole('link', { name }))).toBeVisible();
+        await expect(
+          page
+            .getByRole('button', { name })
+            .or(page.getByRole('link', { name })),
+        ).toBeVisible();
     }
     for (const name of ['Todas', 'Não ouvidas', 'Em andamento'])
       await expect(
-        page.getByRole('group', { name: 'Filtros' }).getByRole('button', { name, exact: true }),
+        page
+          .getByRole('group', { name: 'Filtros' })
+          .getByRole('button', { name, exact: true }),
       ).toBeVisible();
 
     if (phone) await expectNoSideScroll(page);
@@ -562,9 +579,13 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
     await shoot(page, 'media-library', width);
     if (!phone) {
       // The right panel narrows the list: no "Continuar ouvindo", no Acervo column.
-      await expect(page.getByRole('heading', { name: 'Continuar ouvindo' })).toBeHidden();
+      await expect(
+        page.getByRole('heading', { name: 'Continuar ouvindo' }),
+      ).toBeHidden();
       await page.getByRole('button', { name: 'Tocando agora' }).first().click();
-      await expect(page.getByRole('heading', { name: 'Continuar ouvindo' })).toBeVisible();
+      await expect(
+        page.getByRole('heading', { name: 'Continuar ouvindo' }),
+      ).toBeVisible();
     }
 
     // "Ordenar e ver como": opens whole, a sheet on a phone; Escape closes it.
@@ -576,20 +597,28 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
     await expect(sort).toHaveCount(0);
     await expect(rows(page).first()).toContainText('Arquivo corrompido');
     await page.getByRole('button', { name: /^Ordenar:/ }).click();
-    await page.getByRole('menuitemradio', { name: 'Ouvidas recentemente' }).click();
+    await page
+      .getByRole('menuitemradio', { name: 'Ouvidas recentemente' })
+      .click();
     await expect(rows(page).first()).toContainText(TITLES[0]);
 
     // The grid, and back.
-    if (phone) await page.getByRole('button', { name: 'Ver como grade' }).click();
+    if (phone)
+      await page.getByRole('button', { name: 'Ver como grade' }).click();
     else {
       await page.getByRole('button', { name: /^Ordenar:/ }).click();
       await page.getByRole('menuitemradio', { name: 'Grade' }).click();
     }
-    await expect(page.locator('app-library-card:not(.tile)').first()).toBeVisible();
-    if (!phone) await page.getByRole('button', { name: 'Tocando agora' }).first().click();
+    await expect(
+      page.locator('app-library-card:not(.tile)').first(),
+    ).toBeVisible();
+    if (!phone)
+      await page.getByRole('button', { name: 'Tocando agora' }).first().click();
     await shoot(page, 'media-library-grid', width);
-    if (!phone) await page.getByRole('button', { name: 'Tocando agora' }).first().click();
-    if (phone) await page.getByRole('button', { name: 'Ver como lista' }).click();
+    if (!phone)
+      await page.getByRole('button', { name: 'Tocando agora' }).first().click();
+    if (phone)
+      await page.getByRole('button', { name: 'Ver como lista' }).click();
     else {
       await page.getByRole('button', { name: /^Ordenar:/ }).click();
       await page.getByRole('menuitemradio', { name: 'Lista' }).click();
@@ -608,10 +637,14 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
     await filters.getByRole('button', { name: 'Autoria' }).click();
     const authors = page.getByRole('menu', { name: 'Autoria' });
     await expectWholeOnTop(page, authors);
-    await authors.getByRole('menuitemradio', { name: /Irmã Helena Prado/ }).click();
+    await authors
+      .getByRole('menuitemradio', { name: /Irmã Helena Prado/ })
+      .click();
     await expect(rows(page)).toHaveCount(HELENA.size);
     await shoot(page, 'media-library-author', width);
-    await filters.getByRole('button', { name: /Tirar o filtro de autoria/ }).click();
+    await filters
+      .getByRole('button', { name: /Tirar o filtro de autoria/ })
+      .click();
     await expect(rows(page)).toHaveCount(TITLES.length + 2);
     await context.close();
   }
@@ -628,15 +661,29 @@ test('the ⋯ of a row, the selection and the dialogs (row-menu, selection, edit
     await openLibrary(page, data);
     const phone = width === 'phone';
     const row = rowNamed(page, TITLES[1]);
-    const more = row.getByRole('button', { name: `Mais ações para ${TITLES[1]}` });
+    const more = row.getByRole('button', {
+      name: `Mais ações para ${TITLES[1]}`,
+    });
     await row.hover();
     await more.click();
     const menu = page.getByRole('menu');
     await expectWholeOnTop(page, menu);
     await expect(menu.getByRole('menuitem')).toHaveText(
       phone
-        ? ['Marcar como ouvida', 'Selecionar', 'Editar informações', 'Compartilhar', 'Remover']
-        : ['Tocar agora', 'Marcar como ouvida', 'Editar informações', 'Copiar link', 'Remover'],
+        ? [
+            'Marcar como ouvida',
+            'Selecionar',
+            'Editar informações',
+            'Compartilhar',
+            'Remover',
+          ]
+        : [
+            'Tocar agora',
+            'Marcar como ouvida',
+            'Editar informações',
+            'Copiar link',
+            'Remover',
+          ],
     );
     await shoot(page, 'media-library-row-menu', width);
     await page.keyboard.press('Escape');
@@ -649,7 +696,9 @@ test('the ⋯ of a row, the selection and the dialogs (row-menu, selection, edit
       await page.getByRole('menuitem', { name: 'Selecionar' }).click();
     } else {
       await row.hover();
-      await row.getByRole('checkbox', { name: `Selecionar ${TITLES[1]}` }).check();
+      await row
+        .getByRole('checkbox', { name: `Selecionar ${TITLES[1]}` })
+        .check();
     }
     await rowNamed(page, TITLES[2])
       .getByRole('checkbox', { name: `Selecionar ${TITLES[2]}` })
@@ -681,7 +730,9 @@ test('the ⋯ of a row, the selection and the dialogs (row-menu, selection, edit
     await row.hover();
     await more.click();
     await page.getByRole('menuitem', { name: 'Remover' }).click();
-    const remove = page.getByRole('dialog', { name: `Remover "${TITLES[1]}"?` });
+    const remove = page.getByRole('dialog', {
+      name: `Remover "${TITLES[1]}"?`,
+    });
     await expectWholeOnTop(page, remove);
     await shoot(page, 'media-library-remove', width);
     await remove.getByRole('button', { name: 'Cancelar' }).click();
@@ -700,19 +751,24 @@ test('the search, with and without results, and the empty library (search, searc
     const { context, page } = await contextAt(browser, width);
     await openLibrary(page, data);
     const phone = width === 'phone';
-    if (phone) await page.getByRole('button', { name: 'Abrir a busca' }).click();
+    if (phone)
+      await page.getByRole('button', { name: 'Abrir a busca' }).click();
     else await page.getByRole('button', { name: 'Ir para a busca' }).click();
     const search = page.getByLabel('Buscar na biblioteca');
     await expect(search).toBeFocused();
     await search.pressSequentially('Tábua', { delay: 20 });
-    await expect(page.getByRole('heading', { name: /resultados? para “Tábua”/ })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /resultados? para “Tábua”/ }),
+    ).toBeVisible();
     await expect(
       page.locator('app-library-search-results').getByRole('listitem'),
     ).not.toHaveCount(0);
     if (phone) await expectNoSideScroll(page);
     await shoot(page, 'media-library-search', width);
     await search.fill('xilofone');
-    await expect(page.getByText('Nada encontrado para “xilofone”')).toBeVisible();
+    await expect(
+      page.getByText('Nada encontrado para “xilofone”'),
+    ).toBeVisible();
     await shoot(page, 'media-library-search-empty', width);
     await page.getByRole('button', { name: 'Limpar busca' }).last().click();
     await expect(rows(page).first()).toBeVisible();
@@ -738,7 +794,9 @@ test('a recording opens its tracks, and removing it names them (tracks, remove-t
     const { context, page } = await contextAt(browser, width);
     await openLibrary(page, data);
     // Its tracks are rows of their own too, naming it: the recording is the row of its ⋯.
-    const more = page.getByRole('button', { name: `Mais ações para ${RECORDING}` });
+    const more = page.getByRole('button', {
+      name: `Mais ações para ${RECORDING}`,
+    });
     const recording = more.locator('xpath=ancestor::app-library-row[1]');
     const toggle = page.getByRole('button', { name: '3 faixas' });
     await toggle.scrollIntoViewIfNeeded();
@@ -753,7 +811,9 @@ test('a recording opens its tracks, and removing it names them (tracks, remove-t
     await recording.hover();
     await more.click();
     await page.getByRole('menuitem', { name: 'Remover' }).click();
-    const remove = page.getByRole('dialog', { name: `Remover "${RECORDING}"?` });
+    const remove = page.getByRole('dialog', {
+      name: `Remover "${RECORDING}"?`,
+    });
     await remove.getByRole('button', { name: 'Remover' }).click();
     await expect(remove.getByRole('alert')).toContainText(
       'Também remove 3 faixas: Primeira pergunta, Segunda pergunta, Terceira pergunta',
@@ -787,18 +847,29 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
     let dialog = await open();
     const input = dialog.locator('input[type="file"]');
     const send = dialog.getByRole('button', { name: 'Enviar', exact: true });
-    await expect(dialog.getByText(/mp3, m4a, wav, flac, ogg ou opus/)).toBeVisible();
+    await expect(
+      dialog.getByText(/mp3, m4a, wav, flac, ogg ou opus/),
+    ).toBeVisible();
     await shoot(page, 'media-upload', width);
     // Nothing chosen: "Enviar" says what is missing, and the panel stays.
     await send.click();
-    await expect(dialog.getByRole('alert')).toContainText('Escolha um arquivo de áudio.');
+    await expect(dialog.getByRole('alert')).toContainText(
+      'Escolha um arquivo de áudio.',
+    );
 
-    await input.setInputFiles(makeMp3(`Palestra sobre o mercúrio dos sábios ${uniqueTag()}`, 4));
+    await input.setInputFiles(
+      makeMp3(`Palestra sobre o mercúrio dos sábios ${uniqueTag()}`, 4),
+    );
     await expect(dialog.getByRole('textbox', { name: 'Título' })).toBeVisible();
     await expect(send).toBeEnabled();
     await shoot(page, 'media-upload-chosen', width);
-    await dialog.getByRole('button', { name: /^Tirar/ }).first().click();
-    await expect(dialog.getByRole('textbox', { name: 'Título' })).toHaveCount(0);
+    await dialog
+      .getByRole('button', { name: /^Tirar/ })
+      .first()
+      .click();
+    await expect(dialog.getByRole('textbox', { name: 'Título' })).toHaveCount(
+      0,
+    );
 
     await input.setInputFiles({
       name: 'Conversa sobre os sete princípios.mp3',
@@ -810,7 +881,10 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
       .selectOption(data.topic);
     await expect(dialog.getByText('Já está no acervo:')).toBeVisible();
     await shoot(page, 'media-upload-duplicate', width);
-    await dialog.getByRole('button', { name: /^Tirar/ }).first().click();
+    await dialog
+      .getByRole('button', { name: /^Tirar/ })
+      .first()
+      .click();
 
     await input.setInputFiles({
       name: 'apostila.pdf',
@@ -821,7 +895,10 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
       dialog.getByRole('alert').filter({ hasText: 'não é um áudio aceito' }),
     ).toBeVisible();
     await shoot(page, 'media-upload-bad-type', width);
-    await dialog.getByRole('button', { name: /^Tirar/ }).first().click();
+    await dialog
+      .getByRole('button', { name: /^Tirar/ })
+      .first()
+      .click();
 
     // Sending: the file's parts wait on the network, so it stays at 0 %.
     await page.route('**/api/v1/media/*/upload', (route) =>
@@ -832,9 +909,15 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
     await expect(dialog.getByText(/Enviando/).first()).toBeVisible();
     await shoot(page, 'media-upload-sending', width);
     await page.unroute('**/api/v1/media/*/upload');
-    await dialog.getByRole('button', { name: /Cancelar envio/ }).first().click();
+    await dialog
+      .getByRole('button', { name: /Cancelar envio/ })
+      .first()
+      .click();
     if (await dialog.isVisible())
-      await dialog.getByRole('button', { name: /^Cancelar|Fechar/ }).first().click();
+      await dialog
+        .getByRole('button', { name: /^Cancelar|Fechar/ })
+        .first()
+        .click();
     await expect(dialog).toHaveCount(0);
 
     // Escape closes it, and the focus goes back to where it came from.
@@ -842,7 +925,9 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     if (!phone)
-      await expect(page.getByRole('button', { name: 'Enviar mídia' }).first()).toBeFocused();
+      await expect(
+        page.getByRole('button', { name: 'Enviar mídia' }).first(),
+      ).toBeFocused();
     await context.close();
   }
 });
@@ -854,22 +939,38 @@ test('an empty library, for who reads and for who sends (media-library-empty-*)'
   const data = await seed();
   for (const width of WIDTHS) {
     for (const [email, id, title] of [
-      [data.emptyReader, 'media-library-empty-reader', 'Ainda não há mídias para você'],
-      [data.emptyUploader, 'media-library-empty-uploader', 'Comece enviando um áudio'],
+      [
+        data.emptyReader,
+        'media-library-empty-reader',
+        'Ainda não há mídias para você',
+      ],
+      [
+        data.emptyUploader,
+        'media-library-empty-uploader',
+        'Comece enviando um áudio',
+      ],
     ] as const) {
       const { context, page } = await contextAt(browser, width, email);
       await page.goto('/biblioteca');
       await expect(page.getByText(title, { exact: true })).toBeVisible();
-      await expect(page.getByRole('region', { name: 'Precisa da sua atenção' })).toHaveCount(0);
+      await expect(
+        page.getByRole('region', { name: 'Precisa da sua atenção' }),
+      ).toHaveCount(0);
       await shoot(page, id, width);
       if (id === 'media-library-empty-uploader') {
-        await page.getByRole('main').getByRole('button', { name: 'Enviar mídia' }).last().click();
+        await page
+          .getByRole('main')
+          .getByRole('button', { name: 'Enviar mídia' })
+          .last()
+          .click();
         const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
         await expectWholeOnTop(page, dialog);
         await page.keyboard.press('Escape');
         await expect(dialog).toHaveCount(0);
       } else {
-        await expect(page.getByRole('button', { name: 'Enviar mídia' })).toHaveCount(0);
+        await expect(
+          page.getByRole('button', { name: 'Enviar mídia' }),
+        ).toHaveCount(0);
       }
       await context.close();
     }
@@ -888,29 +989,47 @@ test('/midia is the collection as an album, for who has no library (media-list-*
     await page.goto('/midia');
     const first = page.getByRole('link', { name: TITLES[0] });
     await expect(first).toBeVisible();
-    await expect(page.getByRole('heading', { name: `Acervo — ${data.topicTitle}` })).toBeAttached();
+    await expect(
+      page.getByRole('heading', { name: `Acervo — ${data.topicTitle}` }),
+    ).toBeAttached();
     if (phone) {
       await expect(
-        page.locator('header.topbar').getByRole('heading', { name: data.topicTitle }),
+        page
+          .locator('header.topbar')
+          .getByRole('heading', { name: data.topicTitle }),
       ).toBeVisible();
       for (const name of ['Todas', 'Em andamento', 'Não ouvidas'])
         await expect(
-          page.getByRole('group', { name: 'Filtros' }).getByRole('button', { name, exact: true }),
+          page
+            .getByRole('group', { name: 'Filtros' })
+            .getByRole('button', { name, exact: true }),
         ).toBeVisible();
     } else {
-      for (const name of ['Tocar a primeira da lista', 'Tocar em ordem aleatória', 'Enviar áudio', 'Mais ações do acervo'])
+      for (const name of [
+        'Tocar a primeira da lista',
+        'Tocar em ordem aleatória',
+        'Enviar áudio',
+        'Mais ações do acervo',
+      ])
         await expect(page.getByRole('button', { name }).first()).toBeVisible();
-      await expect(page.getByRole('link', { name: 'Meus marcadores' }).first()).toBeVisible();
-      await expect(page.getByRole('searchbox', { name: 'Filtrar por título' })).toBeVisible();
+      await expect(
+        page.getByRole('link', { name: 'Meus marcadores' }).first(),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('searchbox', { name: 'Filtrar por título' }),
+      ).toBeVisible();
     }
     if (phone) await expectNoSideScroll(page);
+    // The frame is the top of the page, before any finger's fling.
+    await shoot(page, 'media-list', width);
     // It scrolls, with the wheel, the keyboard and a finger.
     const scroller = await scrollerOf(first);
     await expectScrolls(page, scroller, width, browserName);
-    await shoot(page, 'media-list', width);
 
     // The ⋯ of an audio: whole on the screen, Escape closes it.
-    const more = page.getByRole('button', { name: `Mais ações para ${TITLES[3]}` });
+    const more = page.getByRole('button', {
+      name: `Mais ações para ${TITLES[3]}`,
+    });
     await more.scrollIntoViewIfNeeded();
     await more.click();
     const menu = page.getByRole('menu');
@@ -928,11 +1047,14 @@ test('/midia is the collection as an album, for who has no library (media-list-*
     }
 
     // The title filter, with nothing found: "Limpar filtro" brings the list back.
-    if (phone) await page.getByRole('button', { name: 'Filtrar por título' }).click();
+    if (phone)
+      await page.getByRole('button', { name: 'Filtrar por título' }).click();
     const filter = page.getByRole('searchbox', { name: 'Filtrar por título' });
     await expect(filter).toBeVisible();
     await filter.fill('xilofone');
-    await expect(page.getByText('Nenhum áudio com “xilofone” no título')).toBeVisible();
+    await expect(
+      page.getByText('Nenhum áudio com “xilofone” no título'),
+    ).toBeVisible();
     await shoot(page, 'media-list-filter-empty', width);
     await page.getByRole('button', { name: 'Limpar filtro' }).click();
     await expect(first).toBeVisible();
@@ -947,14 +1069,21 @@ test('/midia is the collection as an album, for who has no library (media-list-*
     await page.getByRole('button', { name: 'Autoria' }).first().click();
     const authors = page.getByRole('menu', { name: 'Autoria' });
     await expectWholeOnTop(page, authors);
-    await authors.getByRole('menuitemradio', { name: /Irmã Helena Prado/ }).click();
+    await authors
+      .getByRole('menuitemradio', { name: /Irmã Helena Prado/ })
+      .click();
     await expect(page.locator('li.row')).toHaveCount(HELENA.size);
-    await page.getByRole('button', { name: /Tirar o filtro de autoria/ }).first().click();
+    await page
+      .getByRole('button', { name: /Tirar o filtro de autoria/ })
+      .first()
+      .click();
     await expect(page.locator('li.row')).toHaveCount(TITLES.length + 2);
 
     // "Enviar áudio" opens the panel, Escape closes it.
-    if (phone) await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
-    else await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
+    if (phone)
+      await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
+    else
+      await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
     const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
     await expectWholeOnTop(page, dialog);
     await shoot(page, 'media-list-upload', width);
@@ -965,10 +1094,18 @@ test('/midia is the collection as an album, for who has no library (media-list-*
     // A collection with nothing yet.
     const empty = await contextAt(browser, width, data.emptyLister);
     await empty.page.goto('/midia');
-    await expect(empty.page.getByText('Ainda não há áudios neste acervo')).toBeVisible();
+    await expect(
+      empty.page.getByText('Ainda não há áudios neste acervo'),
+    ).toBeVisible();
     await shoot(empty.page, 'media-list-empty', width);
-    await empty.page.getByRole('main').getByRole('button', { name: 'Enviar áudio' }).last().click();
-    await expect(empty.page.getByRole('dialog', { name: 'Enviar áudio' })).toBeVisible();
+    await empty.page
+      .getByRole('main')
+      .getByRole('button', { name: 'Enviar áudio' })
+      .last()
+      .click();
+    await expect(
+      empty.page.getByRole('dialog', { name: 'Enviar áudio' }),
+    ).toBeVisible();
     await empty.context.close();
   }
 });

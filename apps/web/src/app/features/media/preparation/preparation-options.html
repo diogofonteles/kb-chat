@@ -26,8 +26,8 @@
       </label>
       <p class="hint" id="prep-transcribe-hint">
         <ng-container i18n="@@prep.option.transcribeHint"
-          >Gera o texto com o tempo de cada palavra, para ler junto, buscar e
-          criar legendas. Grátis, no computador do transcritor.</ng-container
+          >Texto com o tempo de cada palavra, para ler junto, buscar e criar
+          legendas. Grátis, no computador do transcritor.</ng-container
         >
         @if (transcribeMinutes(); as minutes) {
           &ngsp;<ng-container i18n="@@prep.option.minutes"
@@ -67,9 +67,8 @@
           {{ reason }}
         } @else {
           <ng-container i18n="@@prep.option.speakersHint"
-            >Separa as vozes (Voz 1, Voz 2…) e sugere os nomes pelo que já
-            sabemos do acervo, como o autor da gravação. Você confirma os nomes.
-            Grátis.</ng-container
+            >Separa as vozes e sugere os nomes pelo que já sabemos do acervo.
+            Você confirma. Grátis.</ng-container
           >
           @if (speakersMinutes(); as minutes) {
             &ngsp;<ng-container i18n="@@prep.option.minutes"
@@ -164,24 +163,24 @@
         }
       </p>
     </div>
-
-    <div class="option row subjects" [class.off]="isOff('subjects')">
-      <label class="choice">
-        <input
-          class="ui-switch"
-          type="checkbox"
-          [checked]="false"
-          aria-disabled="true"
-          aria-describedby="prep-subjects-hint"
-          (click)="$event.preventDefault()"
-        />
-        <span i18n="@@prep.option.subjects"
-          >Sugerir os assuntos de cada faixa</span
-        >
-      </label>
-      <p class="hint" id="prep-subjects-hint">{{ refusal('subjects') }}</p>
-    </div>
   </fieldset>
+
+  <div class="option row subjects" [class.off]="isOff('subjects')">
+    <label class="choice">
+      <input
+        class="ui-switch"
+        type="checkbox"
+        [checked]="false"
+        aria-disabled="true"
+        aria-describedby="prep-subjects-hint"
+        (click)="$event.preventDefault()"
+      />
+      <span class="name" i18n="@@prep.option.subjects"
+        >Sugerir os assuntos de cada faixa</span
+      >
+    </label>
+    <p class="hint" id="prep-subjects-hint">{{ refusal('subjects') }}</p>
+  </div>
 
   @if (droppedText(); as text) {
     <p class="note" role="status">{{ text }}</p>

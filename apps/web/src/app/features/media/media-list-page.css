@@ -76,6 +76,13 @@
   color: var(--color-text-muted);
 }
 
+/* The bar's two text buttons are 36 px tall, 24 px in (media-list). */
+.actions-bar .ui-btn--sm {
+  min-height: 2.25rem;
+  padding: 0 var(--space-6);
+  font-size: var(--text-sm);
+}
+
 .bar-icon:hover:not(:disabled) {
   color: var(--color-text);
 }
@@ -502,6 +509,16 @@ ui-empty-state {
 /* ---------- Phone (media-list@mobile: the library's rows) ---------- */
 
 @media (max-width: 1023px) {
+  /* The phone's tint is a short band under the top row (260 px from the frame's top). */
+  .media {
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--media-tint) 70%, transparent) 0,
+        transparent 13.5rem
+      )
+      no-repeat;
+  }
+
   /* The phone's header is the shell's top row (PageHeader): "← Alquimia Prática 🔍 ⬆". The
      hero stays for a screen reader (its heading), out of sight; the action bar has no place
      in the frame. */

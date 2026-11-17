@@ -9,7 +9,9 @@
 
 .label {
   display: block;
-  font-weight: 600;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-meta);
+  font-weight: 700;
 }
 
 .help {
@@ -18,16 +20,41 @@
   font-size: var(--text-sm);
 }
 
+.field {
+  position: relative;
+}
+
+.caret {
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  color: var(--color-text-muted);
+  translate: 0 -50%;
+  pointer-events: none;
+}
+
 input {
   box-sizing: border-box;
   width: 100%;
-  min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
+  min-height: 2.75rem;
+  padding: 0 calc(var(--space-3) * 2 + 18px) 0 var(--space-3);
+  /* The v2 field (media-upload): a tinted box with no line, like the select beside it. */
+  border: 1px solid transparent;
+  border-radius: var(--radius-menu);
+  background: var(--overlay-2);
   color: var(--color-text);
   font: inherit;
+  font-size: var(--text-sm);
+}
+
+input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+input:focus {
+  border-color: var(--color-text);
+  outline: none;
 }
 
 /* In the panel's flow, under the field: it pushes the rest down, never covers it. */

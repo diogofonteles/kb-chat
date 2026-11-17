@@ -3,7 +3,9 @@
   aria-labelledby="results-title"
   [attr.aria-busy]="pending()"
 >
-  <div class="head">
+  <!-- Nothing found: the empty state says it all (media-library-search-empty); the title stays
+       for the screen reader and the focus. -->
+  <div class="head" [class.visually-hidden]="nothingFound()">
     <div class="title">
       <h3 id="results-title" #title tabindex="-1">
         @if (lastPage() && !failed()) {
@@ -61,8 +63,8 @@
       </p>
       @if (searchesSpeech()) {
         <p class="hint" i18n="@@library.searchEmptyHint">
-          Procuramos na fala, no título, no autor e nos assuntos. Na fala a busca
-          é por palavra inteira: confira a escrita ou tente outra palavra.
+          Procuramos na fala, no título, no autor e nos assuntos. Na fala a
+          busca é por palavra inteira: confira a escrita ou tente outra palavra.
         </p>
       } @else {
         <p class="hint" i18n="@@library.searchEmptyTitles">

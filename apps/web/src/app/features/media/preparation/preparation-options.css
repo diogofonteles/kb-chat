@@ -165,3 +165,105 @@ legend {
   color: var(--color-text-muted);
   font-size: var(--text-meta);
 }
+
+/* ---------- In the upload panel (media-upload, KBC-128) ---------- */
+
+:host(.compact) {
+  gap: var(--space-3);
+}
+
+:host(.compact) .options {
+  gap: var(--space-3);
+}
+
+:host(.compact) legend {
+  margin-bottom: var(--space-3);
+  color: var(--color-text);
+  font-size: var(--text-item, 0.9375rem);
+}
+
+:host(.compact) .option.row {
+  gap: var(--space-1);
+  padding: 0.875rem;
+  border-radius: var(--radius-cover);
+}
+
+:host(.compact) .choice {
+  min-height: 1.5rem;
+}
+
+:host(.compact) .name,
+:host(.compact) .tracks legend {
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+:host(.compact) .hint,
+:host(.compact) .note {
+  font-size: var(--text-xs);
+}
+
+:host(.compact) .note {
+  color: var(--color-warn);
+}
+
+/* The division: one tinted card, its legend inside, the choices a plain list. */
+:host(.compact) .tracks {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  margin-top: 0;
+  padding: 0.875rem;
+  border-radius: var(--radius-cover);
+  background: var(--overlay-1);
+}
+
+:host(.compact) .tracks legend {
+  float: left;
+  width: 100%;
+  margin: 0 0 var(--space-1);
+  letter-spacing: 0;
+}
+
+:host(.compact) .option.card,
+:host(.compact) .option.card:has(input:checked) {
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+:host(.compact) .option.card .choice {
+  gap: var(--space-2);
+  min-height: 1.75rem;
+  font-size: var(--text-meta);
+  font-weight: 400;
+}
+
+:host(.compact) .option.card .choice input {
+  width: 18px;
+  height: 18px;
+}
+
+/* The free choices say nothing more here; the one that cannot be chosen says why. */
+:host(.compact) .option.card:not(.off) .hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+:host(.compact) .option.card .hint {
+  padding-left: calc(18px + var(--space-2));
+  font-size: 0.6875rem;
+}
+
+:host(.compact) .option.card.off {
+  opacity: 1;
+}
+
+:host(.compact) .summary {
+  font-size: var(--text-xs);
+}
