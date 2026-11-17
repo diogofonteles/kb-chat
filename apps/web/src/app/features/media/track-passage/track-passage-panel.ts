@@ -23,6 +23,7 @@ import {
   mediaItemSchema,
   mediaTranscriptSchema,
   mediaTranscriptWordsSchema,
+  clockSeconds,
   wholeSentences,
   type AnswerSource,
   type MediaItem,
@@ -362,12 +363,21 @@ export class TrackPassagePanel {
   /**
    * The passage grown to whole sentences over what this person may hear (KBC-156): answers
    * saved before it keep a lone segment, maybe a 1 s fragment; the voices and the parts they
-   * may not hear are this person's own transcript's.
+   * may not hear are this person's own transcript's. A saved span that already runs across
+   * either is cut back there, around the time the answer cited (BR-4).
    */
   private wholeOf(passage: TrackPassage | null): TrackPassage | null {
     if (!passage || !this.transcript.hasValue()) return passage;
     const { segments } = this.transcript.value();
-    return { ...passage, ...wholeSentences(segments, passage) };
+    const cited = passage.at ? clockSeconds(passage.at) : null;
+    return {
+      ...passage,
+      ...wholeSentences(
+        segments,
+        passage,
+        cited === null ? passage.startMs : cited * 1000,
+      ),
+    };
   }
 
   /* ---------- The cited passage, word by word ---------- */

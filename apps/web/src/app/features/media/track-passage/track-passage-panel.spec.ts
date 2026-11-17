@@ -965,4 +965,48 @@ describe('TrackPassagePanel: the cited passage is whole sentences (KBC-156)', ()
     expect(card.textContent).toContain('É, italiano, tá.');
     expect(card.textContent).not.toContain('cresci na roça');
   });
+
+  it('BR-4: a saved span that already runs across a part this person may not hear is cut there, around the cited time', async () => {
+    const [first, , third, fourth] = SPOKEN.segments;
+    const hidden = {
+      ...SPOKEN,
+      segments: [
+        first,
+        { startMs: 1_200, endMs: 6_000, text: '', restricted: true },
+        third,
+        fourth,
+      ],
+    };
+    const ACROSS: AnswerSource = {
+      ...SOURCE,
+      passages: [{ at: '0:00', startMs: 0, endMs: 12_000 }],
+    };
+    await openReady({ source: ACROSS, at: '0:00', sources: [ACROSS] }, hidden);
+    const card = await screen.findByRole('region', {
+      name: 'Citado na resposta · 0:00–0:01',
+    });
+    expect(card.textContent).toContain('É, italiano, tá.');
+    expect(card.textContent).not.toContain('cresci na roça');
+  });
+
+  it('BR-4: a saved span across a change of voice is cut at it, around the cited time', async () => {
+    const [first, second, third] = SPOKEN.segments;
+    const voiced = {
+      ...SPOKEN,
+      segments: [
+        { ...first, voice: 1 },
+        { ...second, voice: 2 },
+        { ...third, voice: 2 },
+      ],
+    };
+    const ACROSS: AnswerSource = {
+      ...SOURCE,
+      passages: [{ at: '0:00', startMs: 0, endMs: 12_000 }],
+    };
+    await openReady({ source: ACROSS, at: '0:00', sources: [ACROSS] }, voiced);
+    const card = await screen.findByRole('region', {
+      name: 'Citado na resposta · 0:00–0:01',
+    });
+    expect(card.textContent).not.toContain('Meu pai veio da Itália');
+  });
 });
