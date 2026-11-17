@@ -223,10 +223,17 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
       lines.map((one) => one.textContent?.replace(/\s+/g, ' ').trim()),
     ).toEqual([
       '0:00 Pergunta sobre o ritmo.',
-      '0:41 O ritmo é a lei do pêndulo.',
+      '0:41 Trecho citado: O ritmo é a lei do pêndulo.',
       '1:10 Tudo flui.',
     ]);
     expect(lines[1]?.classList).toContain('cited-line');
+    // Not by colour alone (WCAG 1.3.1): a screen reader hears which speech is the passage.
+    expect(
+      within(lines[1] as HTMLElement).getByText('Trecho citado:').classList,
+    ).toContain('visually-hidden');
+    expect(
+      within(lines[0] as HTMLElement).queryByText('Trecho citado:'),
+    ).toBeNull();
     fireEvent.click(
       screen.getByRole('button', {
         name: 'Ouvir a partir de 1 minuto e 10 segundos',
@@ -236,6 +243,37 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
       expect(TestBed.inject(MediaEngine).playback().currentMs).toBe(70_000),
     );
     expect(media.calls).toContain('play');
+  });
+
+  it('review: with the bar closed or another media on the player, the panel puts its own track back and plays it', async () => {
+    const { media } = await openReady();
+    const engine = TestBed.inject(MediaEngine);
+    const button = (name: string) =>
+      screen.getByRole('button', { name }) as HTMLButtonElement;
+
+    // The bar's ✕ released the player: the buttons stay usable and play this track.
+    engine.unload();
+    // A render goes by: the buttons as they show once the player let the track go.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(button('Ouvir o trecho').disabled).toBe(false);
+    expect(button('Faixa toda').disabled).toBe(false);
+    expect(button('Marcar este trecho').disabled).toBe(false);
+    media.calls.length = 0;
+    fireEvent.click(button('Ouvir o trecho'));
+    expect(engine.source()?.id).toBe(TRACK_ID);
+    expect(media.calls).toEqual([`load:${ITEM_URL}/stream`, 'play']);
+
+    // Another media took the player: a time around the passage never seeks in it.
+    engine.load({
+      id: 'other-track',
+      title: 'Outra faixa',
+      src: '/api/v1/media/other-track/stream',
+      durationMs: 600_000,
+    });
+    media.calls.length = 0;
+    fireEvent.click(button('Ouvir a partir de 1 minuto e 10 segundos'));
+    expect(engine.source()?.id).toBe(TRACK_ID);
+    expect(media.calls).toEqual([`load:${ITEM_URL}/stream`, 'play']);
   });
 
   it('playing: "Pausar", the "tocando" seal, the card in the cover’s colour, the words lit as they are spoken', async () => {
@@ -323,6 +361,11 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
       screen.queryByRole('list', { name: 'Em volta do trecho' }),
     ).toBeNull();
     expect(screen.getByRole('searchbox')).toBeTruthy();
+    // One title: the panel's "Transcrição completa", not the transcript's own "Transcrição" too.
+    expect(
+      screen.getByRole('heading', { name: 'Transcrição completa' }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Transcrição' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Em volta do trecho' }));
     expect(
       await screen.findByRole('list', { name: 'Em volta do trecho' }),

@@ -455,22 +455,27 @@ export class TrackPassagePanel {
     () => this.full() || this.lines().length === 0,
   );
 
+  /** The track and where to cue it, once it is ready and the transcript settled. */
+  private readonly target = computed((): Target | null => {
+    const media = this.media();
+    // A cited passage waits for the transcript: it says whether the passage still falls
+    // on the track, so the player is cued once, on the right place (T22 "Faixa editada").
+    const settling = this.opened() !== null && this.transcript.isLoading();
+    if (media?.status !== 'ready' || media.id !== this.mediaId() || settling)
+      return null;
+    const opened = this.opened();
+    const moved =
+      opened !== null &&
+      this.transcript.hasValue() &&
+      citedRange(this.transcript.value().segments, opened) === null;
+    return { media, startMs: opened && !moved ? opened.startMs : 0 };
+  });
+
+  /** The buttons that play wait only for the track to be ready, never for the player. */
+  protected readonly playable = computed(() => this.target() !== null);
+
   constructor() {
-    const target = computed((): Target | null => {
-      const media = this.media();
-      // A cited passage waits for the transcript: it says whether the passage still falls
-      // on the track, so the player is cued once, on the right place (T22 "Faixa editada").
-      const settling = this.opened() !== null && this.transcript.isLoading();
-      if (media?.status !== 'ready' || media.id !== this.mediaId() || settling)
-        return null;
-      const opened = this.opened();
-      const moved =
-        opened !== null &&
-        this.transcript.hasValue() &&
-        citedRange(this.transcript.value().segments, opened) === null;
-      return { media, startMs: opened && !moved ? opened.startMs : 0 };
-    });
-    toObservable(target)
+    toObservable(this.target)
       .pipe(
         filter((one): one is Target => one !== null),
         distinctUntilChanged(sameTarget),
@@ -530,22 +535,22 @@ export class TrackPassagePanel {
       return;
     }
     const passage = this.passage();
+    const from = passage ? playbackStartOf(passage) : 0;
     const now = this.nowMs();
-    if (passage && !(now >= playbackStartOf(passage) && now < passage.endMs))
-      this.engine.seek(playbackStartOf(passage));
-    this.engine.play();
+    if (!this.recue(from) && passage && !(now >= from && now < passage.endMs))
+      this.engine.seek(from);
+    this.play();
   }
 
   /** "Faixa toda": the track from its start. */
   protected playWhole(): void {
-    this.engine.seek(0);
-    this.engine.play();
+    this.playFrom(0);
   }
 
-  /** A time in "Em volta do trecho": plays from there. */
+  /** A time in "Em volta do trecho": plays from there, on this track only. */
   protected playFrom(ms: number): void {
-    this.engine.seek(ms);
-    this.engine.play();
+    if (!this.recue(ms)) this.engine.seek(ms);
+    this.play();
   }
 
   /** A mark or "Outro trecho citado": that passage, cued, playing on if it was. */
@@ -553,12 +558,14 @@ export class TrackPassagePanel {
     const passage = this.passages()[index];
     if (!passage) return;
     this.chosen.set(index);
-    if (this.ours()) this.engine.seek(playbackStartOf(passage));
+    const at = playbackStartOf(passage);
+    if (!this.recue(at)) this.engine.seek(at);
   }
 
-  /** A bookmark at the passage's start (KBC-042, item 3). */
+  /** A bookmark at the passage's start (KBC-042, item 3), on this track. */
   protected mark(): void {
-    this.bookmarks.markAt(this.startMs());
+    this.recue(playbackStartOf({ startMs: this.startMs() }));
+    if (this.ours()) this.bookmarks.markAt(this.startMs());
   }
 
   /** The track's page at the passage, as a link to share (`?t=`, KBC-038 FR-5). */
@@ -596,22 +603,42 @@ export class TrackPassagePanel {
   private cue({ media, startMs }: Target): void {
     const at = playbackStartOf({ startMs });
     if (this.engine.source()?.id !== media.id) {
-      this.saver.startFrom(media);
-      this.engine.load(
-        {
-          id: media.id,
-          title: media.title,
-          src: mediaStreamUrl(media.id, media.parent?.fileVersion),
-          durationMs: media.durationMs,
-          artist: media.author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
-          ...(media.parent ? { fileVersion: media.parent.fileVersion } : {}),
-          ...(media.hidden ? { hidden: media.hidden } : {}),
-        },
-        at,
-      );
+      this.load(media, at);
       return;
     }
     this.engine.pause();
     this.engine.seek(at);
+  }
+
+  /**
+   * The bar was closed or another media took the app's player: this track goes back on it,
+   * paused at `atMs`, so the panel never acts on another media. True when it was loaded.
+   */
+  private recue(atMs: number): boolean {
+    const target = this.target();
+    if (this.ours() || !target) return false;
+    this.load(target.media, atMs);
+    return true;
+  }
+
+  /** Plays only this track: nothing when it could not be put back on the player. */
+  private play(): void {
+    if (this.ours()) this.engine.play();
+  }
+
+  private load(media: MediaItem, at: number): void {
+    this.saver.startFrom(media);
+    this.engine.load(
+      {
+        id: media.id,
+        title: media.title,
+        src: mediaStreamUrl(media.id, media.parent?.fileVersion),
+        durationMs: media.durationMs,
+        artist: media.author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
+        ...(media.parent ? { fileVersion: media.parent.fileVersion } : {}),
+        ...(media.hidden ? { hidden: media.hidden } : {}),
+      },
+      at,
+    );
   }
 }

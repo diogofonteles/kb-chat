@@ -175,7 +175,7 @@
             type="button"
             class="listen"
             [uiButton]="playing() ? 'white' : 'primary'"
-            [disabled]="!ours()"
+            [disabled]="!playable()"
             (click)="listen()"
           >
             <ui-icon [name]="playing() ? 'pause' : 'play'" [size]="18" />
@@ -189,7 +189,8 @@
             <button
               type="button"
               uiButton="dark"
-              [disabled]="!ours()"
+              class="whole"
+              [disabled]="!playable()"
               (click)="playWhole()"
               i18n="@@trackPassage.whole"
             >
@@ -202,7 +203,7 @@
             uiIconButton="circle"
             class="on-card"
             [size]="inSheet() ? 44 : 40"
-            [disabled]="!ours()"
+            [disabled]="!playable()"
             aria-label="Marcar este trecho"
             i18n-aria-label="@@trackPassage.mark"
             (click)="mark()"
@@ -228,7 +229,7 @@
           type="button"
           class="listen"
           [uiButton]="playing() ? 'white' : 'primary'"
-          [disabled]="!ours()"
+          [disabled]="!playable()"
           (click)="listen()"
         >
           <ui-icon [name]="playing() ? 'pause' : 'play'" [size]="18" />
@@ -311,6 +312,7 @@
             [title]="source().title"
             [passage]="focus()"
             [revealPassage]="true"
+            [showTitle]="false"
           />
         } @else {
           <div class="skeleton" aria-hidden="true"></div>
@@ -375,7 +377,14 @@
                   {{ who.name }}
                 </span>
               }
-              <span class="text">{{ line.text }}</span>
+              <span class="text">
+                @if (line.kind === 'cited') {
+                  <span class="visually-hidden" i18n="@@trackPassage.citedLine"
+                    >Trecho citado:
+                  </span>
+                }
+                {{ line.text }}</span
+              >
             </div>
           </li>
         }
