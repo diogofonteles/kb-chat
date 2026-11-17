@@ -214,10 +214,13 @@ test('AC-8: shows today’s AI spend against the cap', async ({ page }) => {
   // The server starts the day at the seeded US$ 0.03 (e2e/server.ts) and a cap of US$ 1.
   expect(usd).toBeGreaterThanOrEqual(0.03);
   expect(capUsd).toBe(1);
+  // v2 · Casca: "US$ 0,03 de 1,00", the cap without its currency again.
+  const cap = new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(capUsd);
   await expect(
-    (await sidebar(page)).getByText(
-      new RegExp(`^${dollars(usd)} de ${dollars(capUsd)}$`),
-    ),
+    (await sidebar(page)).getByText(new RegExp(`^${dollars(usd)} de ${cap}$`)),
   ).toBeVisible();
 });
 
