@@ -1623,8 +1623,8 @@ export const mediaTranscriptSchema = z.object({
   /** The current separation (KBC-064 FR-4): only for `media-edit`, once there is one. */
   speakers: transcriptSpeakersSchema.optional(),
   /**
-   * Who each voice is, for `media-speakers` or `media-edit` once voices are separated
-   * (KBC-065 FR-4); for whoever only listens, names waiting for confirmation read as unnamed.
+   * Who each voice is, for everyone who may listen once voices are separated (KBC-065 FR-4,
+   * KBC-151 BR-0); for whoever only listens, names waiting for confirmation read as unnamed.
    */
   voiceNames: z.array(voiceLabelSchema).optional(),
   /** The term list it was made with: for masters only (KBC-040 FR-4). */

@@ -2,6 +2,7 @@ import {
   SOURCE_CITATION,
   clockSeconds,
   snapToSegment,
+  wholeSentences,
   type AnswerSource,
   type TrackPassage,
 } from '@kb-chat/contracts';
@@ -43,7 +44,7 @@ export interface PassageInput {
 
 /**
  * Every "[n@m:ss]" and "[n]" of a track source becomes a passage with the exact times of its
- * media.db segment, once each, in the answer's order (ADR 0035 §6 a, b). Texts, uncited
+ * media.db segments (the cited one, grown to whole sentences: KBC-156), once each, in the answer's order (ADR 0035 §6 a, b). Texts, uncited
  * tracks and sources of older answers are left as they are.
  */
 export function resolvePassages(input: PassageInput): AnswerSource[] {
@@ -57,7 +58,11 @@ export function resolvePassages(input: PassageInput): AnswerSource[] {
     const passages: TrackPassage[] = [];
     for (const citation of cited) {
       if (passages.some((one) => one.at === citation.at)) continue;
-      const span = snapToSegment(segments, secondsOf(citation, shown));
+      // The cited segment grown to whole sentences, never a lone 1 s fragment (KBC-156).
+      const span = wholeSentences(
+        segments,
+        snapToSegment(segments, secondsOf(citation, shown)),
+      );
       passages.push({ at: citation.at, ...span });
     }
     return { ...source, passages };
