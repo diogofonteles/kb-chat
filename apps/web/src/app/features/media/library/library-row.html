@@ -47,7 +47,13 @@
         tracksLabel()
       }}</ui-pill>
     }
-    <span class="author">{{ authorName() }}</span>
+    <!-- Plain and muted (media-library); the collection's main author keeps its ✦. -->
+    <span class="author">
+      @if (item().author?.main) {
+        <span class="main-mark" aria-hidden="true">✦ </span>
+      }
+      {{ authorName() }}</span
+    >
     <app-media-level-badge [level]="item().level" [shown]="master()" />
   </span>
   <span class="topic">{{ topicTitle() }}</span>

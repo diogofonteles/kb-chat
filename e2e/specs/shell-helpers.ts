@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import { expect } from './fixtures.js';
 
 /**
  * The v2 shell (KBC-125) as the specs reach it, at 1440 and 390: on desktop "Sua biblioteca"
@@ -13,8 +14,14 @@ export async function library(page: Page): Promise<Locator> {
   if (desktop(page))
     return page.getByRole('complementary', { name: 'Sua biblioteca' });
   const menu = page.getByRole('dialog', { name: 'Menu' });
-  if (!(await menu.isVisible()))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  if (await menu.isVisible()) return menu;
+  const button = page.getByRole('button', { name: 'Menu', exact: true });
+  // A page under another (the album page, media-list@mobile) has "←" where the avatar is:
+  // the menu is one step back.
+  const back = page.getByRole('link', { name: 'Voltar', exact: true });
+  await expect(button.or(back)).toBeVisible();
+  if (!(await button.isVisible())) await back.click();
+  await button.click();
   return menu;
 }
 

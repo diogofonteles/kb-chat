@@ -330,11 +330,14 @@ test('AC-4: three selected — the bar takes the foot of the phone, and the mark
   if (!desktop(page)) {
     const box = await bar.boundingBox();
     const view = page.viewportSize();
-    // Full width at the foot, at least as tall as the bottom navigation it replaces.
-    expect(box?.x).toBe(0);
-    expect(box?.width).toBe(view?.width);
-    expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(view?.height);
-    expect(box?.height ?? 0).toBeGreaterThanOrEqual(68);
+    // A card 8 px in from the sides, 24 px over the foot, over the bottom navigation
+    // (media-library-selection@mobile: 374×56 at y 764).
+    expect(box?.x).toBe(8);
+    expect(box?.width).toBe((view?.width ?? 0) - 16);
+    expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(
+      (view?.height ?? 0) - 24,
+    );
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(56);
   }
   await shoot(page, 'media-library-selection');
   await bar.getByRole('button', { name: 'Marcar como ouvida' }).click();

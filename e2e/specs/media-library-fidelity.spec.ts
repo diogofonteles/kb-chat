@@ -499,6 +499,7 @@ async function expectScrolls(
   // The end may bring the next page in: the keys go to the list's box again.
   await scroller.evaluate((node) => node.focus());
   await page.keyboard.press('Home');
+  for (let i = 0; i < 6; i++) { console.log('DBG', i, await scrollTopOf(scroller), await scroller.evaluate((n) => [n.scrollHeight, n.clientHeight, document.activeElement?.tagName, document.activeElement?.className].join(' '))); await page.waitForTimeout(300); } // DBGPROBE
   await expect.poll(() => scrollTopOf(scroller)).toBeLessThan(5);
   await scroller.evaluate((node) => node.focus());
   await page.keyboard.press('PageDown');

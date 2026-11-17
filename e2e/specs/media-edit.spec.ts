@@ -149,7 +149,13 @@ test('AC-3: whoever did not send it sees no "Editar informações"', async ({
   const other = await personPage(browser);
   await openMedia(other);
   await expect(other.getByRole('link', { name: title })).toBeVisible();
-  await expect(menuOf(other, title)).toBeHidden();
+  // v2 (media-list-menu): everyone's ⋯ plays and shares; editing is not in it.
+  await menuOf(other, title).click();
+  await expect(other.getByRole('menuitem').first()).toBeVisible();
+  await expect(
+    other.getByRole('menuitem', { name: 'Editar informações' }),
+  ).toHaveCount(0);
+  await other.keyboard.press('Escape');
   await other.goto(`/midia/${id}`);
   await expect(other.getByRole('heading', { name: title })).toBeVisible();
   await expect(
@@ -193,9 +199,15 @@ test('AC-7: works by keyboard, and Escape gives the focus back to the menu', asy
   const trigger = menuOf(page, title);
   await trigger.focus();
   await page.keyboard.press('Enter');
-  await expect(
-    page.getByRole('menuitem', { name: 'Editar informações' }),
-  ).toBeFocused();
+  // The menu opens on its first item ("Tocar agora" on a desktop, media-list-menu); the
+  // arrows reach "Editar informações".
+  const edit = page.getByRole('menuitem', { name: 'Editar informações' });
+  await expect(page.getByRole('menuitem').first()).toBeFocused();
+  for (let step = 0; step < 3; step++) {
+    if (await edit.evaluate((item) => item === document.activeElement)) break;
+    await page.keyboard.press('ArrowDown');
+  }
+  await expect(edit).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(titleField(page)).toBeFocused();
   await page.keyboard.press('Escape');

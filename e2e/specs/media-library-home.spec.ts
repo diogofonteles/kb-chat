@@ -190,6 +190,8 @@ test('AC-3, AC-4: "Continuar ouvindo" lists the latest first, and ▶ resumes at
     // A phone has no "Continuar ouvindo" (media-library@mobile): the list in "Ouvidas
     // recentemente" order is it — the latest first, each with its bar and where it stopped.
     await expect(strip(page)).toHaveCount(0);
+    await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
+    await expect(all(page).locator('app-library-row')).toHaveCount(4);
     const titles = await all(page)
       .locator('app-library-row .title')
       .allTextContents();

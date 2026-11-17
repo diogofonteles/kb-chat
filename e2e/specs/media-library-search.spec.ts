@@ -191,8 +191,11 @@ test('AC-1, AC-7: only the tracks that say the words, first under the box, whate
   });
   expect(saved.status()).toBe(200);
   await openLibrary(page);
+  // "Continuar ouvindo" is a desktop's (no phone frame has it); the search hides it.
   const strip = page.getByRole('region', { name: 'Continuar ouvindo' });
-  await expect(strip).toBeVisible();
+  const phone = (page.viewportSize()?.width ?? 0) < 1024;
+  if (phone) await expect(strip).toHaveCount(0);
+  else await expect(strip).toBeVisible();
 
   for (const words of [
     `padre ${word}`,
@@ -211,10 +214,11 @@ test('AC-1, AC-7: only the tracks that say the words, first under the box, whate
   await expect(
     page.getByRole('region', { name: 'Ouvidas recentemente' }),
   ).toHaveCount(0);
-  // The order stays in the action bar while searching (media-library-search keeps it).
+  // A desktop keeps the order in the action bar while searching (media-library-search); a
+  // phone's results have no order line (media-library-search@mobile).
   await expect(
     page.getByRole('main').getByRole('button', { name: /^Ordenar/ }),
-  ).toHaveCount(1);
+  ).toHaveCount(phone ? 0 : 1);
   const under = await box(page).boundingBox();
   const first = await results(page).first().boundingBox();
   expect((first?.y ?? 0) - (under?.y ?? 0)).toBeLessThan(180);

@@ -240,14 +240,18 @@ test('AC-7: "Assunto" in the library lists only the linked tracks, and comes bac
   await choice.click();
   await page.getByRole('menuitemradio', { name: seed.subject }).click();
   await expect(chosen).toBeVisible();
-  await expect(page.getByText(/^1 mídia/)).toBeVisible();
+  // Announced; a phone also shows it in the order's place (media-library-chip@mobile).
+  await expect(page.getByText(/^1 mídia/).first()).toBeVisible();
   await expect(page.getByRole('link', { name: seed.title })).toBeVisible();
 
   // The account keeps it: the library comes back with it.
   await expect
     .poll(async () => {
       await page.goto('/biblioteca');
-      return chosen.isVisible();
+      return chosen
+        .waitFor({ timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false);
     })
     .toBe(true);
   await expect(page.getByRole('link', { name: seed.title })).toBeVisible();
