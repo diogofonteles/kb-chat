@@ -625,11 +625,25 @@ test('KBC-155 AC-6: citations of the same track side by side are one pill, each 
   }
 });
 
-/** Seeks the app's one player, as its bar or the phone's strip would (KBC-154). */
-const seekTo = (page: Page, seconds: number) =>
-  page.locator('[data-media-engine]').evaluate((element, at) => {
+/**
+ * Seeks the app's one player, as its bar or the phone's strip would (KBC-154). Only once the
+ * element has its metadata and no seek in flight: before that the engine still moves it to
+ * where it was asked to start, and WebKit, which loads later, would undo this seek.
+ */
+async function seekTo(page: Page, seconds: number): Promise<void> {
+  const engine = page.locator('[data-media-engine]');
+  await expect
+    .poll(() =>
+      engine.evaluate((element) => {
+        const media = element as HTMLMediaElement;
+        return media.readyState >= media.HAVE_METADATA && !media.seeking;
+      }),
+    )
+    .toBe(true);
+  await engine.evaluate((element, at) => {
     (element as HTMLMediaElement).currentTime = at;
   }, seconds);
+}
 
 test('KBC-154: while the track plays past the passage, the lines around and the full transcript follow what is heard', async ({
   page,
@@ -650,6 +664,9 @@ test('KBC-154: while the track plays past the passage, the lines around and the 
 
   await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
   await expect.poll(() => playing(member)).toBe(true);
+  // The player really plays the passage (its `playing` came, after the metadata's move to
+  // 0:39): a seek before that is overridden by the start the panel asked for.
+  await expect(panel.getByText('tocando no player')).toBeVisible();
   await seekTo(member, 5.2);
   await expect(heard).toContainText('Linha de preenchimento número 1', {
     timeout: 10_000,
