@@ -225,6 +225,12 @@ export class PeoplePanel {
   protected readonly draftStaleLevels = computed(
     () => this.profiles.find(this.setupChoice())?.staleLevels ?? {},
   );
+  /** The chosen profile's name, or "Nenhum" (the invitation bar's select). */
+  protected readonly profileFace = computed(
+    () =>
+      this.profiles.find(this.setupChoice())?.name ??
+      $localize`:@@people.noProfile:Nenhum`,
+  );
   /** What the invitation starts the person with, for the hint; '' is the plain invite. */
   protected readonly setupLabel = computed(() => {
     if (this.configuring())
@@ -361,8 +367,17 @@ export class PeoplePanel {
     this.lendPending.set(false);
   }
 
-  protected invite(event: Event): void {
-    event.preventDefault();
+  /** Convidar waits for an e-mail, and for a configuration without errors. */
+  protected readonly inviteBlocked = computed(
+    () =>
+      this.busy() ||
+      !this.email().trim() ||
+      (this.configuring() && this.presetInvalid()),
+  );
+
+  /** The form's submit, or the phone sheet's "Convidar" (no event then). */
+  protected invite(event?: Event): void {
+    event?.preventDefault();
     const email = this.email().trim();
     if (!email) return;
     const sendEmail = !this.skipEmail();
@@ -639,6 +654,12 @@ export class PeoplePanel {
     return person.ai.enforced
       ? $localize`:@@people.aiEnforced:IA: ${label}:label: (sempre)`
       : $localize`:@@people.ai:IA: ${label}:label:`;
+  }
+
+  /** "US$ 0,50", the column "Hoje" (the owner sees it); '' for anyone else. */
+  protected spendAmount(person: Person): string {
+    const usd = this.spendByEmail().get(person.email);
+    return usd === undefined ? '' : formatSpend(usd, this.locale);
   }
 
   /** "Gasto de IA hoje: US$ 0,50" for the owner; '' for anyone else. */

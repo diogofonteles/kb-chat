@@ -7,9 +7,16 @@
     [attr.aria-expanded]="expanded()"
     (click)="expanded.set(!expanded())"
   >
-    <span aria-hidden="true" class="chevron">{{ expanded() ? '▾' : '▸' }}</span>
+    <ui-icon
+      class="chevron"
+      [name]="expanded() ? 'chevDown' : 'chevRight'"
+      [size]="18"
+    />
     <span i18n="@@profiles.title">Perfis de convite</span>&ngsp;
-    <span class="count">({{ store.list().length }})</span>
+    <ui-pill class="count"
+      ><span class="visually-hidden">(</span>{{ store.list().length
+      }}<span class="visually-hidden">)</span></ui-pill
+    >
   </button>
   @if (expanded()) {
     <div id="profiles-body" class="body">
@@ -40,10 +47,13 @@
         >
           @for (profile of store.list(); track profile.id) {
             <li class="profile">
+              <span class="profile-cover" aria-hidden="true">
+                <ui-icon name="people" [size]="20" />
+              </span>
               <span class="name">
                 {{ profile.name }}
                 @if (profile.isDefault) {
-                  <span class="badge" i18n="@@profiles.default">Padrão</span>
+                  <ui-pill tone="ok" i18n="@@profiles.default">Padrão</ui-pill>
                 }
               </span>
               @if (confirmingDelete() === profile.id) {
@@ -83,7 +93,7 @@
                 <div class="actions">
                   <button
                     type="button"
-                    class="secondary"
+                    class="link"
                     [attr.data-edit]="profile.id"
                     [disabled]="busy()"
                     (click)="edit(profile)"
@@ -96,7 +106,7 @@
                   @if (!profile.isDefault) {
                     <button
                       type="button"
-                      class="secondary"
+                      class="link"
                       [disabled]="busy()"
                       (click)="makeDefault(profile)"
                       i18n="@@profiles.makeDefault"
@@ -131,131 +141,140 @@
       }
 
       @if (draft(); as current) {
+        <!-- The profile in a wide modal with tabs (v2 · Perfil de convite); a tall sheet on a
+             phone, "Cancelar · título · Salvar perfil". -->
         <form
           class="draft"
           novalidate
           aria-labelledby="profile-draft-title"
           (submit)="save($event)"
         >
-          <p id="profile-draft-title" class="draft-title">
-            @if (current.id) {
-              <ng-container i18n="@@profiles.editTitle"
-                >Editar o perfil "{{ editingName() }}"</ng-container
-              >
-            } @else {
-              <ng-container i18n="@@profiles.newTitle"
-                >Novo perfil</ng-container
-              >
-            }
-          </p>
-          <label class="field">
-            <span i18n="@@profiles.name">Nome do perfil</span>
-            <input
-              #nameInput
-              class="text"
-              type="text"
-              name="name"
-              maxlength="60"
-              autocomplete="off"
-              required
-              [attr.aria-invalid]="nameError() ? 'true' : null"
-              [attr.aria-describedby]="
-                nameError() ? 'profile-name-error' : null
-              "
-              [value]="current.name"
-              (input)="rename(nameInput.value)"
-            />
-          </label>
-          @if (nameError()) {
-            <p id="profile-name-error" class="field-error" role="alert">
-              <span aria-hidden="true">⚠</span> {{ nameError() }}
-            </p>
-          }
-          <label class="check">
-            <input
-              #defaultBox
-              type="checkbox"
-              [checked]="current.isDefault"
-              (change)="markDefault(defaultBox.checked)"
-            />
-            <span i18n="@@profiles.isDefault"
-              >Usar como padrão nos próximos convites</span
-            >
-          </label>
-          <!-- Another profile starts the editor over, its notices included. -->
-          @for (round of [opened()]; track round) {
-            <app-invite-preset-editor
-              [preset]="current.preset"
-              [topics]="topics()"
-              [defaultAppAi]="defaultAppAi()"
-              [scales]="scales()"
-              mode="profile"
-              [busy]="busy()"
-              (changed)="changePreset($event)"
-              (invalidChange)="presetInvalid.set($event)"
-            />
-          }
-          @if (scalesFailed()) {
-            <div class="levels-failed" role="alert">
-              <p class="field-error" i18n="@@profiles.levelsFailed">
-                <span aria-hidden="true">⚠</span> Não consegui carregar os
-                níveis dos acervos. Para salvar o perfil sem perder os níveis
-                dele, carregue os níveis de novo.
+          <ui-dialog
+            #draftDialog
+            titleId="profile-draft-title"
+            i18n-step="@@profiles.kicker"
+            step="Perfil de convite"
+            [title]="draftTitle()"
+            [width]="800"
+            [closeOnBackdrop]="false"
+            i18n-primaryLabel="@@profiles.save"
+            primaryLabel="Salvar perfil"
+            [primaryDisabled]="saveBlocked()"
+            (primary)="save()"
+            (closed)="dialogClosed()"
+          >
+            <div class="draft-top">
+              <label class="field draft-name">
+                <span class="field-label" i18n="@@profiles.name"
+                  >Nome do perfil</span
+                >
+                <input
+                  #nameInput
+                  class="text"
+                  type="text"
+                  name="name"
+                  maxlength="60"
+                  autocomplete="off"
+                  required
+                  [attr.aria-invalid]="nameError() ? 'true' : null"
+                  [attr.aria-describedby]="
+                    nameError() ? 'profile-name-error' : null
+                  "
+                  [value]="current.name"
+                  (input)="rename(nameInput.value)"
+                />
+              </label>
+              <label class="draft-default">
+                <span i18n="@@profiles.isDefault"
+                  >Usar como padrão nos próximos convites</span
+                >
+                <input
+                  #defaultBox
+                  type="checkbox"
+                  class="ui-switch"
+                  [checked]="current.isDefault"
+                  (change)="markDefault(defaultBox.checked)"
+                />
+              </label>
+            </div>
+            @if (nameError()) {
+              <p id="profile-name-error" class="field-error" role="alert">
+                <span aria-hidden="true">⚠</span> {{ nameError() }}
               </p>
+            }
+            <!-- Another profile starts the editor over, its notices included. -->
+            @for (round of [opened()]; track round) {
+              <app-invite-preset-editor
+                [preset]="current.preset"
+                [topics]="topics()"
+                [defaultAppAi]="defaultAppAi()"
+                [scales]="scales()"
+                mode="profile"
+                [busy]="busy()"
+                (changed)="changePreset($event)"
+                (invalidChange)="presetInvalid.set($event)"
+              />
+            }
+            @if (scalesFailed()) {
+              <div class="levels-failed" role="alert">
+                <p class="field-error" i18n="@@profiles.levelsFailed">
+                  <span aria-hidden="true">⚠</span> Não consegui carregar os
+                  níveis dos acervos. Para salvar o perfil sem perder os níveis
+                  dele, carregue os níveis de novo.
+                </p>
+                <button
+                  type="button"
+                  class="secondary"
+                  (click)="reloadScales.emit()"
+                  i18n="@@profiles.reloadLevels"
+                >
+                  Carregar níveis de novo
+                </button>
+              </div>
+            }
+            @if (levelsPending()) {
+              <p
+                id="profile-levels-pending"
+                class="field-error"
+                i18n="@@profiles.levelsPending"
+              >
+                <span aria-hidden="true">⚠</span> Escolha o nível de cada acervo
+                cujo nível não existe mais para salvar o perfil.
+              </p>
+            }
+            <div uiDialogFooter class="draft-foot">
               <button
                 type="button"
-                class="secondary"
-                (click)="reloadScales.emit()"
-                i18n="@@profiles.reloadLevels"
+                uiButton="ghost"
+                (click)="cancel()"
+                i18n="@@people.cancel"
               >
-                Carregar níveis de novo
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                uiButton="primary"
+                [disabled]="saveBlocked()"
+                [attr.aria-describedby]="
+                  levelsPending() ? 'profile-levels-pending' : null
+                "
+                i18n="@@profiles.save"
+              >
+                Salvar perfil
               </button>
             </div>
-          }
-          @if (levelsPending()) {
-            <p
-              id="profile-levels-pending"
-              class="field-error"
-              i18n="@@profiles.levelsPending"
-            >
-              <span aria-hidden="true">⚠</span> Escolha o nível de cada acervo
-              cujo nível não existe mais para salvar o perfil.
-            </p>
-          }
-          <div class="actions">
-            <button
-              type="submit"
-              class="primary"
-              [disabled]="
-                busy() || presetInvalid() || scalesFailed() || levelsPending()
-              "
-              [attr.aria-describedby]="
-                levelsPending() ? 'profile-levels-pending' : null
-              "
-              i18n="@@profiles.save"
-            >
-              Salvar perfil
-            </button>
-            <button
-              type="button"
-              class="link"
-              (click)="cancel()"
-              i18n="@@people.cancel"
-            >
-              Cancelar
-            </button>
-          </div>
+          </ui-dialog>
         </form>
       } @else {
         <button
           #newButton
           type="button"
-          class="secondary"
+          class="secondary new"
           [disabled]="busy()"
           (click)="startNew()"
-          i18n="@@profiles.new"
         >
-          Novo perfil
+          <ui-icon name="plus" [size]="16" />
+          <span i18n="@@profiles.new">Novo perfil</span>
         </button>
       }
 

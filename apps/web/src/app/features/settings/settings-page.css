@@ -1,9 +1,25 @@
 /* Configurações as a page (KBC-131): it scrolls inside the main panel, whatever its width. */
 :host {
+  /* The frame's tint: grey into the background over the panel's top 280 px (220 on a phone),
+     fixed while the page scrolls; the strip and the phone header carry their slice of it. */
+  --settings-tint: color-mix(in srgb, var(--color-text) 16%, var(--color-bg));
+  --settings-tint-height: 17.5rem;
   display: block;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  background: linear-gradient(
+    180deg,
+    var(--settings-tint) 0,
+    var(--color-bg) var(--settings-tint-height)
+  );
+}
+
+@media (max-width: 1023px) {
+  :host {
+    --settings-tint: color-mix(in srgb, var(--color-text) 10%, var(--color-bg));
+    --settings-tint-height: 13.75rem;
+  }
 }
 
 .layout {
@@ -96,11 +112,17 @@
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  height: 3.25rem;
-  margin-bottom: -3.25rem;
-  border-bottom: 1px solid var(--overlay-line);
-  background: var(--color-surface);
+  justify-content: space-between;
+  gap: var(--space-4);
+  height: 4.75rem;
+  margin-bottom: -4.75rem;
+  padding-top: var(--space-3);
+  /* Its 76 px of the tint (27 % of 280). */
+  background: linear-gradient(
+    180deg,
+    var(--settings-tint) 0,
+    color-mix(in srgb, var(--settings-tint) 73%, var(--color-bg)) 100%
+  );
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   font-weight: 700;
@@ -114,15 +136,29 @@
   opacity: 1;
 }
 
+.strip-path {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 .strip-section {
   color: var(--color-text);
 }
 
+.search-toggle {
+  flex: none;
+  margin-right: -0.5625rem;
+  color: var(--color-text-muted);
+}
+
 .head {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--space-6);
-  padding: 2.25rem 0 var(--space-2);
+  min-height: 5.875rem;
+  padding-top: 2.25rem;
 }
 
 .title {
@@ -131,7 +167,12 @@
   font-size: 3rem;
   font-weight: 800;
   letter-spacing: -0.03em;
-  line-height: 1.05;
+  line-height: 1.2;
+}
+
+.head .search-toggle {
+  align-self: center;
+  margin-top: 2.25rem;
 }
 
 .search {
@@ -140,10 +181,14 @@
 
 .section {
   display: grid;
-  gap: var(--space-4);
-  padding: var(--space-6) 0;
+  gap: 0.875rem;
+  padding: var(--space-4) 0 var(--space-6);
   border-bottom: 1px solid var(--overlay-line);
-  scroll-margin-top: 3.25rem;
+  scroll-margin-top: 4.75rem;
+}
+
+.section[data-section='account'] {
+  padding-bottom: var(--space-2);
 }
 
 .section:last-child {
@@ -152,7 +197,8 @@
 
 .section-title {
   margin: 0;
-  font-size: var(--text-section);
+  font-size: 1.5rem;
+  line-height: 1.2;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
@@ -204,7 +250,20 @@
 .account {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-6);
+  padding: var(--space-2) 0;
+}
+
+/* The frame's outline button: 36 high, 14 px. */
+.sign-out {
+  min-height: 2.25rem;
+  padding: 0 var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.save {
+  min-height: 2.5rem;
+  font-size: var(--text-sm);
 }
 
 .account-who {
@@ -216,6 +275,7 @@
 
 .account-name {
   margin: 0;
+  line-height: 1.2;
   font-size: var(--text-item);
   font-weight: 500;
   overflow-wrap: anywhere;
@@ -252,11 +312,13 @@
 .root,
 .screen {
   display: grid;
+  align-content: start;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-4)
+  padding: 0 var(--space-4)
     calc(var(--space-8) + var(--shell-mobile-foot, 0px));
 }
 
+/* The pushed screen's header (celular): ‹ · title · search, over the panel's own colour. */
 .screen-head {
   position: sticky;
   top: 0;
@@ -265,8 +327,18 @@
   align-items: center;
   gap: var(--space-3);
   margin: 0 calc(-1 * var(--space-4));
-  padding: var(--space-2) var(--space-4);
-  background: var(--color-surface);
+  /* The frame's header: 56 above the 26 px chevron, so the 44 px button centres at 69. */
+  padding: 2.9375rem var(--space-2) 0;
+  /* Its 91 px of the tint (41 % of 220). */
+  background: linear-gradient(
+    180deg,
+    var(--settings-tint) 0,
+    color-mix(in srgb, var(--settings-tint) 59%, var(--color-bg)) 100%
+  );
+}
+
+.screen-head [uiIconButton] {
+  color: var(--color-text);
 }
 
 .screen-title {
@@ -281,18 +353,11 @@
   width: 2.75rem;
 }
 
-.root-title {
-  padding: var(--space-4) 0 var(--space-1);
-  font-size: 2rem;
-  font-weight: 800;
-  text-align: left;
-}
-
 .root-profile {
   display: flex;
   align-items: center;
   gap: 0.875rem;
-  padding: var(--space-2) 0 var(--space-3);
+  padding: 0 0 var(--space-2);
   color: inherit;
   text-decoration: none;
 }
@@ -321,7 +386,7 @@
 }
 
 .root-group {
-  margin: var(--space-4) 0 0.125rem;
+  margin: var(--space-2) 0 0.125rem;
   font-size: 1.125rem;
   font-weight: 700;
 }
@@ -330,16 +395,27 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: var(--target);
-  padding: 0.625rem 0;
+  min-height: 3.375rem;
+  padding: 0.375rem 0;
   color: inherit;
   text-decoration: none;
 }
 
-.root-label {
+.root-text {
+  display: grid;
   flex: 1;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.root-label {
   font-size: var(--text-item);
   font-weight: 500;
+}
+
+.root-summary {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 .root-item ui-icon,
@@ -369,13 +445,20 @@
     bottom: var(--shell-mobile-foot, 0px);
     min-height: 0;
     margin: 0 calc(-1 * var(--space-4));
-    padding: var(--space-3) var(--space-4) var(--space-4);
+    padding: var(--space-6) var(--space-4) var(--space-4);
+    border-top: 0;
+    background: linear-gradient(transparent, var(--color-surface) 45%);
     flex-direction: column-reverse;
     align-items: stretch;
   }
 
+  /* The phone's Salvar: a white pill across the screen (celular). */
   .save-bar .save {
+    --ui-btn-bg: var(--color-text);
+    --ui-btn-fg: var(--color-bg);
     width: 100%;
+    min-height: 2.75rem;
+    font-size: var(--text-item);
   }
 
   .save-bar .save-status {

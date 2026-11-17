@@ -33,14 +33,22 @@
       </nav>
 
       <div class="content">
-        <div class="strip" [class.shown]="scrolled()" aria-hidden="true">
-          <span class="strip-root" i18n="@@settings.title">Configurações</span>
-          <ui-icon name="chevRight" [size]="16" />
-          <span class="strip-section">{{ activeLabel() }}</span>
+        <!-- Mid-page: the compact "Configurações › Seção" strip, the search at its corner. -->
+        <div class="strip" [class.shown]="scrolled()">
+          <span class="strip-path" aria-hidden="true">
+            <span class="strip-root" i18n="@@settings.title">Configurações</span>
+            <ui-icon name="chevRight" [size]="16" />
+            <span class="strip-section">{{ activeLabel() }}</span>
+          </span>
+          @if (scrolled()) {
+            <ng-container *ngTemplateOutlet="search" />
+          }
         </div>
         <header #headEl class="head">
           <h1 class="title" i18n="@@settings.title">Configurações</h1>
-          <ng-container *ngTemplateOutlet="search" />
+          @if (!scrolled()) {
+            <ng-container *ngTemplateOutlet="search" />
+          }
         </header>
         @if (loadFailed()) {
           <ng-container *ngTemplateOutlet="failed" />
@@ -87,7 +95,16 @@
         <h2 class="screen-title" tabindex="-1" [id]="'settings-' + current.id">
           {{ current.label }}
         </h2>
-        <span class="screen-spacer" aria-hidden="true"></span>
+        <button
+          uiIconButton
+          [size]="44"
+          type="button"
+          aria-label="Buscar nas configurações"
+          i18n-aria-label="@@settings.searchLabel"
+          (click)="searchFromScreen()"
+        >
+          <ui-icon name="search" [size]="22" />
+        </button>
       </header>
       @if (loadFailed()) {
         <ng-container *ngTemplateOutlet="failed" />
@@ -108,10 +125,27 @@
   } @else {
     <!-- A phone at the root: who is signed in and the groups, each section with "›". -->
     <div class="root">
-      <h1 class="screen-title root-title" i18n="@@settings.title">
-        Configurações
-      </h1>
-      <ng-container *ngTemplateOutlet="search" />
+      <header class="screen-head">
+        <button
+          uiIconButton
+          [size]="44"
+          type="button"
+          aria-label="Sair das configurações"
+          i18n-aria-label="@@settings.leave"
+          (click)="leave()"
+        >
+          <ui-icon name="chevLeft" [size]="26" />
+        </button>
+        <h1 class="screen-title" i18n="@@settings.title">Configurações</h1>
+        @if (!searchOpen() && !query()) {
+          <ng-container *ngTemplateOutlet="search" />
+        } @else {
+          <span class="screen-spacer" aria-hidden="true"></span>
+        }
+      </header>
+      @if (searchOpen() || query()) {
+        <ng-container *ngTemplateOutlet="search" />
+      }
       @if (me(); as person) {
         <a class="root-profile" [routerLink]="['/configuracoes', 'conta']">
           <ui-avatar
@@ -122,7 +156,7 @@
           <span class="root-who">
             <span class="root-name">{{ person.name || person.email }}</span>
             <span class="root-email"
-              >{{ roleLabel() }} · {{ person.email }}</span
+              >{{ roleWord() }} · {{ person.email }}</span
             >
           </span>
           <ui-icon name="chevRight" [size]="20" />
@@ -140,14 +174,22 @@
             <hr class="index-rule" />
           }
           @for (item of group.items; track item.id) {
+            <!-- Conta is the profile row above (v2 · Índice). -->
+            @if (item.id !== 'account') {
             <a
               class="root-item"
               [attr.data-slug]="item.slug"
               [routerLink]="['/configuracoes', item.slug]"
             >
-              <span class="root-label">{{ item.label }}</span>
+              <span class="root-text">
+                <span class="root-label">{{ item.label }}</span>
+                @if (summaries()[item.id]; as summary) {
+                  <span class="root-summary">{{ summary }}</span>
+                }
+              </span>
               <ui-icon name="chevRight" [size]="20" />
             </a>
+            }
           }
         } @empty {
           <p class="index-none" role="status" i18n="@@settings.searchNone">
@@ -160,6 +202,20 @@
 </section>
 
 <ng-template #search>
+  @if (!searchOpen() && !query()) {
+    <!-- The frame's corner search: an icon that opens the field. -->
+    <button
+      uiIconButton
+      class="search-toggle"
+      [size]="40"
+      type="button"
+      aria-label="Buscar nas configurações"
+      i18n-aria-label="@@settings.searchLabel"
+      (click)="openSearch()"
+    >
+      <ui-icon name="search" [size]="22" />
+    </button>
+  } @else {
   <form class="search" role="search" (submit)="goToFirst($event)">
     <label class="ui-search">
       <ui-icon name="search" [size]="18" />
@@ -174,9 +230,12 @@
         i18n-placeholder="@@settings.searchLabel"
         [value]="query()"
         (input)="setQuery(searchInput.value)"
+        (keydown.escape)="closeSearch()"
+        (blur)="leaveSearch()"
       />
     </label>
   </form>
+  }
 </ng-template>
 
 <ng-template #failed>
@@ -208,11 +267,6 @@
     @case ('account') {
       @if (me(); as person) {
         <div class="account">
-          <ui-avatar
-            [name]="person.name || person.email"
-            [picture]="person.picture"
-            [size]="48"
-          />
           <div class="account-who">
             <p class="account-name">
               {{ person.name || person.email }}
@@ -224,7 +278,7 @@
           </div>
           <button
             uiButton="outline"
-            size="sm"
+            class="sign-out"
             type="button"
             (click)="signOut()"
             i18n="@@sidebar.signOut"

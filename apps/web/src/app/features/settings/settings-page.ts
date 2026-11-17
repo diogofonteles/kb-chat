@@ -4,6 +4,8 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  Injector,
+  afterNextRender,
   afterRenderEffect,
   computed,
   inject,
@@ -44,6 +46,8 @@ import {
   type AiDraft,
 } from './ai-draft.js';
 import { AiStatusCard } from './ai-status-card.js';
+import { PROFILE_COPY } from '@features/research/profile-copy.js';
+import { PROVIDER_COPY, VIEW_COPY } from './provider-copy.js';
 import { PreferencesForm } from './preferences-form.js';
 import {
   GROUP_LABELS,
@@ -171,6 +175,9 @@ export class SettingsPage {
   );
 
   protected readonly query = signal('');
+  /** The corner search's field is open (the frame shows only its icon until then). */
+  protected readonly searchOpen = signal(false);
+  private readonly injector = inject(Injector);
   /** The corner search narrows the index (by name and a few words of each section). */
   protected readonly shownItems = computed(() => {
     const words = folded(this.query().trim());
@@ -241,6 +248,32 @@ export class SettingsPage {
       : role;
   });
 
+  /** The phone root's profile line: the role in one word (v2 · Índice). */
+  protected readonly roleWord = computed(() =>
+    this.session.me()?.role === 'master'
+      ? $localize`:@@settings.roleWordMaster:master`
+      : $localize`:@@settings.roleWordMember:membro`,
+  );
+
+  /**
+   * The phone root's line under a section (v2 · Índice): what the page already knows, the
+   * AI that answers and the default view and profile. The other sections load their own
+   * data only when opened, so their rows carry just the name.
+   */
+  protected readonly summaries = computed<Partial<Record<SettingsSection, string>>>(
+    () => {
+      const view = this.store.settings();
+      if (!view) return {};
+      const { preferences } = view;
+      const provider = view.ai.provider;
+      const lines: Partial<Record<SettingsSection, string>> = {
+        preferences: `${VIEW_COPY[preferences.defaultView]()} · ${PROFILE_COPY[preferences.researchProfile].label()}`,
+      };
+      if (provider !== null) lines.ai = PROVIDER_COPY[provider].name();
+      return lines;
+    },
+  );
+
   /** The section scrolled to last; the scroll spy's own address changes do not scroll. */
   private scrolledTo: SettingsSection | null = null;
   /**
@@ -282,6 +315,47 @@ export class SettingsPage {
 
   protected setQuery(value: string): void {
     this.query.set(value);
+  }
+
+  /** The search icon: the field opens in its place, focused. */
+  protected openSearch(): void {
+    this.searchOpen.set(true);
+    afterNextRender(
+      () =>
+        this.host.nativeElement
+          .querySelector<HTMLInputElement>('.search input')
+          ?.focus(),
+      { injector: this.injector },
+    );
+  }
+
+  /** A section's search icon on a phone: to the root, where the search lists sections. */
+  protected searchFromScreen(): void {
+    void this.router.navigate(['/configuracoes']);
+    this.openSearch();
+  }
+
+  /** Escape: the field closes and the index shows everything again. */
+  protected closeSearch(): void {
+    this.query.set('');
+    this.searchOpen.set(false);
+    afterNextRender(
+      () =>
+        this.host.nativeElement
+          .querySelector<HTMLButtonElement>('.search-toggle')
+          ?.focus(),
+      { injector: this.injector },
+    );
+  }
+
+  /** Leaving an empty field folds it back into the icon. */
+  protected leaveSearch(): void {
+    if (!this.query()) this.searchOpen.set(false);
+  }
+
+  /** The phone root's "‹": out of Configurações, to the conversation (FR-6). */
+  protected leave(): void {
+    void this.router.navigateByUrl('/');
   }
 
   /** Enter in the corner search: the first section found. */

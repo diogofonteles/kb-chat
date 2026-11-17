@@ -144,6 +144,15 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
+/* Configurações brings its own title (and its own "‹" on a phone): no title row over it. */
+.conversation.media.bare {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.conversation.bare > .topbar {
+  display: none;
+}
+
 /* The routed page fills the row under the top bar and scrolls in it, whether or not its own
    host says so: the conversation clips, so a page without a scroller could never move. */
 .conversation.media > router-outlet + ::ng-deep * {

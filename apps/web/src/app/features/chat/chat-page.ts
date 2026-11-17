@@ -73,6 +73,9 @@ const DESKTOP_QUERY = '(min-width: 1024px)';
 
 /** The media pages: the list and player (T14, T15) and the library (T16, KBC-051). */
 /** A page that renders in place of the conversation: media pages and T24 (KBC-103). */
+const isSettingsUrl = (url: string): boolean =>
+  /^\/configuracoes(\/|\?|#|$)/.test(url);
+
 const isMediaUrl = (url: string): boolean =>
   /^\/(midia|biblioteca|fila|acervos|configuracoes|catalogo-ui)(\/|\?|#|$)/.test(
     url,
@@ -256,6 +259,17 @@ export class ChatPage {
       map(() => isMediaUrl(this.router.url)),
     ),
     { initialValue: isMediaUrl(this.router.url) },
+  );
+  /**
+   * Configurações is a page with its own title and, on a phone, pushed screens with their
+   * own "‹" (v2 · Configurações): no shell title row over it, no tab bar under it.
+   */
+  protected readonly onSettings = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => isSettingsUrl(this.router.url)),
+    ),
+    { initialValue: isSettingsUrl(this.router.url) },
   );
   /** The document panel belongs to the conversation: hidden on the media pages. */
   protected readonly panel = computed(() =>

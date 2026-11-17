@@ -119,5 +119,92 @@ code {
 
   .reason {
     display: block;
+    font-size: var(--text-sm);
+  }
+
+  /*
+   * A phone's access (celular): the avatar at the left of the name and the time, the
+   * changes pill at the right, the reason under them.
+   */
+  .access {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'avatar name writes'
+      'avatar when writes'
+      'reason reason reason';
+    column-gap: var(--space-3);
+    row-gap: 0.125rem;
+  }
+
+  .access .who {
+    display: contents;
+  }
+
+  .access .who ui-avatar {
+    --ui-avatar-size: 40px !important;
+    grid-area: avatar;
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .access .who strong {
+    grid-area: name;
+    align-self: end;
+    font-size: var(--text-item);
+  }
+
+  .access .when {
+    grid-area: when;
+    align-self: start;
+  }
+
+  .access .writes {
+    grid-area: writes;
+  }
+
+  .access .reason {
+    grid-area: reason;
+    margin-top: var(--space-2);
+  }
+
+  /* A phone's audit entry: the event and who on one line, when and the detail under. */
+  .audit-cols {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'event who'
+      'when when'
+      'detail detail'
+      'reason reason';
+    gap: 0.375rem var(--space-2);
+    padding: 0.875rem;
+  }
+
+  .audit-cols .event {
+    grid-area: event;
+  }
+
+  .audit-cols .who {
+    grid-area: who;
+    font-size: var(--text-sm);
+    font-weight: 700;
+  }
+
+  .audit-cols .when {
+    grid-area: when;
+    font-size: var(--text-xs);
+  }
+
+  .audit-cols .detail {
+    grid-area: detail;
+    font-size: var(--text-xs);
+  }
+
+  .audit-cols .detail:has([aria-hidden='true']) {
+    display: none;
+  }
+
+  .audit-cols .reason {
+    grid-area: reason;
+    font-size: var(--text-meta);
   }
 }

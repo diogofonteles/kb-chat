@@ -1,9 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DOCUMENT,
+  DestroyRef,
   ElementRef,
+  inject,
   input,
   output,
+  signal,
   viewChild,
 } from '@angular/core';
 import { UiIcon } from './icon.js';
@@ -26,13 +30,16 @@ import { UiIcon } from './icon.js';
       class="ui-dialog"
       [class.ui-dialog--actions]="!!primaryLabel()"
       [style.--ui-dialog-width.px]="width()"
-      [attr.aria-labelledby]="titleId()"
+      [attr.aria-labelledby]="label() ? null : titleId()"
+      [attr.aria-label]="label() || null"
       (close)="closed.emit()"
       (pointerdown)="pressedOnBackdrop = $event.target === $event.currentTarget"
       (click)="backdropClick($event)"
     >
       <header class="ui-dialog__head">
-        @if (primaryLabel()) {
+        <!-- The sheet's own Cancelar and action exist on phones only: on a desktop the
+             footer holds them, and two of each would read twice. -->
+        @if (primaryLabel() && phone()) {
           <button
             type="button"
             class="ui-dialog__cancel"
@@ -48,7 +55,7 @@ import { UiIcon } from './icon.js';
           }
           <h2 class="ui-dialog__title" [attr.id]="titleId()">{{ title() }}</h2>
         </div>
-        @if (primaryLabel()) {
+        @if (primaryLabel() && phone()) {
           <button
             type="button"
             class="ui-dialog__primary"
@@ -83,6 +90,11 @@ export class UiDialog {
   /** The title's id (aria-labelledby); unique on the page. */
   readonly titleId = input.required<string>();
   readonly width = input(560);
+  /**
+   * The dialog's name when the visible title would repeat a field's name inside it (the
+   * invitation's "Convidar por e-mail"); empty names it by the title.
+   */
+  readonly label = input('');
   /** The phone header's action ("Criar", "Salvar"); empty keeps the footer on phones. */
   readonly primaryLabel = input('');
   readonly primaryDisabled = input(false);
@@ -95,6 +107,23 @@ export class UiDialog {
   readonly closed = output();
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+
+  /** Below 1024 px: the tall sheet with "Cancelar · título · ação". */
+  protected readonly phone = signal(false);
+
+  constructor() {
+    const query = inject(DOCUMENT).defaultView?.matchMedia?.(
+      '(max-width: 1023px)',
+    );
+    if (!query) return;
+    this.phone.set(query.matches);
+    const onChange = (event: MediaQueryListEvent) =>
+      this.phone.set(event.matches);
+    query.addEventListener('change', onChange);
+    inject(DestroyRef).onDestroy(() =>
+      query.removeEventListener('change', onChange),
+    );
+  }
 
   get isOpen(): boolean {
     return this.dialog().nativeElement.open;

@@ -42,6 +42,12 @@ interface RowError {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AccessRequestsList {
+  /** The heading as it reads: "Solicitações pendentes (2)" (the badge is the count). */
+  protected readonly titleLabel = computed(
+    () =>
+      $localize`:@@requests.title:Solicitações pendentes (${this.store.count()}:count:)`,
+  );
+
   protected readonly store = inject(AccessRequestsStore);
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);

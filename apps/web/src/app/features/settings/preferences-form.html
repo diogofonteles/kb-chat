@@ -137,7 +137,9 @@
       </div>
     </fieldset>
   } @else {
+    <hr class="rule" />
     <ui-setting-row
+      class="select-row"
       i18n-label="@@prefs.topic"
       label="Acervo padrão"
       for="pref-topic"
@@ -164,12 +166,14 @@
           </option>
         }
       </select>
+      <ui-icon class="select-chevron" name="chevRight" [size]="20" />
     </ui-setting-row>
   }
 }
 
 @if (shows('mode')) {
   <ui-setting-row
+    class="select-row"
     i18n-label="@@prefs.mode"
     label="Como buscar, por padrão"
     for="pref-mode"
@@ -185,10 +189,11 @@
           [value]="mode.value"
           [selected]="mode.value === preferences().searchMode"
         >
-          {{ mode.label }} — {{ mode.help }}
+          {{ mode.short }}
         </option>
       }
     </select>
+    <ui-icon class="select-chevron" name="chevRight" [size]="20" />
   </ui-setting-row>
 }
 
@@ -232,7 +237,12 @@
       </div>
     </fieldset>
   } @else {
-    <ui-setting-row i18n-label="@@prefs.theme" label="Tema" for="pref-theme">
+    <ui-setting-row
+      class="select-row"
+      i18n-label="@@prefs.theme"
+      label="Tema"
+      for="pref-theme"
+    >
       <select
         id="pref-theme"
         class="ui-input select"
@@ -248,6 +258,7 @@
           </option>
         }
       </select>
+      <ui-icon class="select-chevron" name="chevRight" [size]="20" />
     </ui-setting-row>
   }
 }

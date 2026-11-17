@@ -8,7 +8,7 @@
   gap: var(--space-3);
   padding: var(--space-5);
   border-radius: var(--radius-card);
-  background: var(--overlay-2);
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
 }
 
 .invite-title {
@@ -17,41 +17,258 @@
   font-weight: 700;
 }
 
-/* The invitation bar: e-mail · Perfil · Configurar agora · Convidar (v2 · Pessoas). */
+/* The invitation bar (v2 · Pessoas): e-mail · Perfil · Configurar agora · Convidar. */
 .invite-fields {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: var(--space-3);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 10.625rem auto auto;
+  grid-template-areas:
+    'email setup configure send'
+    'skip skip skip skip';
+  align-items: center;
+  gap: var(--space-3) 0.625rem;
+}
+
+/* In the modal: e-mail · Perfil · Descartar, then the profile hint and the box. */
+.invite-fields.in-dialog {
+  grid-template-columns: minmax(0, 1fr) 11.25rem auto;
+  grid-template-areas:
+    'email setup configure'
+    'hint hint skip';
 }
 
 .email-field {
-  order: 0;
+  grid-area: email;
 }
 
-.setup {
-  order: 1;
+.setup-field {
+  position: relative;
+  grid-area: setup;
+}
+
+.configure {
+  grid-area: configure;
+  min-height: 2.75rem;
+  font-size: var(--text-sm);
 }
 
 .invite-send {
-  order: 2;
+  grid-area: send;
+  min-height: 2.75rem;
+  font-size: var(--text-sm);
+}
+
+.skip {
+  grid-area: skip;
+}
+
+.setup-hint {
+  grid-area: hint;
+  font-size: var(--text-xs);
+}
+
+.email-label,
+.setup-field .label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.email-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.email-box ui-icon {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.email-box .ui-input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding-left: 2.5rem;
+}
+
+.setup-field .select {
+  width: 100%;
   min-height: 2.75rem;
 }
 
-.invite-fields > .check {
-  order: 3;
+.select-chevron {
+  display: none;
 }
 
-.invite-fields > .hint {
-  order: 4;
-  flex-basis: 100%;
+/* Desktop: the face shows "Perfil: Aluno" ⌄; the native select stays on top, unseen. */
+.select-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border-radius: 4px;
+  background: var(--color-surface-muted);
+  font-size: var(--text-sm);
+  pointer-events: none;
+}
+
+.select-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-face ui-icon {
+  color: var(--color-text-muted);
+}
+
+.setup-field .select {
+  opacity: 0;
+}
+
+.setup-field:focus-within .select-face {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.invite-notes {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.invite-notes .hint {
+  font-size: var(--text-xs);
+}
+
+/* The modal's foot: the hint at the left, Convidar at the right. */
+.invite-foot {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: 0 calc(-1 * var(--space-6)) calc(-1 * var(--space-6));
+  padding: var(--space-5) var(--space-6);
+  background: var(--overlay-1);
+}
+
+.invite-foot .invite-notes {
+  max-width: 26rem;
 }
 
 .field {
   display: grid;
   gap: var(--space-1);
-  flex: 1 1 16rem;
   min-width: 0;
+}
+
+@media (max-width: 1023px) {
+  .invite-fields,
+  .invite-fields.in-dialog {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'email email'
+      'setup setup'
+      'send configure'
+      'skip skip';
+  }
+
+  .invite-fields.in-dialog {
+    grid-template-areas:
+      'email email'
+      'setup setup'
+      'skip skip';
+  }
+
+  .invite-fields.in-dialog .configure,
+  .invite-fields.in-dialog .setup-hint {
+    display: none;
+  }
+
+  .invite-fields .configure {
+    justify-self: start;
+  }
+
+  .in-dialog .email-label {
+    position: static;
+    width: auto;
+    height: auto;
+    margin-bottom: var(--space-1);
+    overflow: visible;
+    clip-path: none;
+    font-size: var(--text-meta);
+    font-weight: 700;
+  }
+
+  /* The phone's Perfil row (selRow): label, the profile under it, a chevron; the native
+     select covers the row and opens the list. */
+  .setup-field {
+    min-height: 3.5rem;
+    padding: 0.625rem 2rem 0.625rem 0;
+  }
+
+  .setup-field .label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    font-size: var(--text-item);
+    font-weight: 500;
+  }
+
+  .setup-field .select {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    padding: 2.125rem 2rem 0.625rem 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: var(--text-meta);
+    appearance: none;
+    cursor: pointer;
+  }
+
+  .select-face {
+    display: none;
+  }
+
+  .setup-field .select {
+    opacity: 1;
+  }
+
+  .select-chevron {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    display: block;
+    color: var(--color-text-muted);
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+
+  /* The sheet's header holds Convidar: its foot keeps only the hint and any error. */
+  :host ::ng-deep .ui-dialog--actions .ui-dialog__footer:has(.invite-foot) {
+    display: flex;
+    padding: 0;
+  }
+
+  .invite-foot {
+    margin: 0;
+    padding: var(--space-3) var(--space-4) var(--space-4);
+  }
+
+  .invite-foot .invite-send {
+    display: none;
+  }
 }
 
 .label {
@@ -126,7 +343,6 @@ input[aria-invalid='true'] {
 /* KBC-026: the invitation e-mail. */
 .check {
   display: flex;
-  flex-basis: 100%;
   align-items: center;
   gap: var(--space-2);
   min-height: var(--target);
@@ -191,18 +407,18 @@ input[aria-invalid='true'] {
   flex-basis: 100%;
 }
 
-/* ---------- The people as a table (KBC-132 FR-1): ☐ · pessoa · acervos e IA · hoje · situação ---------- */
+/* ---------- The people as a table (KBC-132 FR-1): ☐ · pessoa · acervos e IA · hoje · situação · ⋯ ---------- */
 .table-head,
 .row {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 7.5rem 10rem 1.25rem;
+  grid-template-columns: minmax(0, 1fr) 13.75rem 4rem 9.375rem 1.25rem;
   align-items: center;
   gap: var(--space-3);
 }
 
 .table-head {
   min-height: 2.25rem;
-  padding: 0 var(--space-3) 0 calc(var(--target) + var(--space-3));
+  padding: 0 var(--space-3) 0 calc(var(--space-3) * 2 + 1.125rem);
   border-bottom: 1px solid var(--overlay-line);
   color: var(--color-text-muted);
   font-size: var(--text-xs);
@@ -222,8 +438,10 @@ input[aria-invalid='true'] {
 
 .person {
   display: grid;
-  grid-template-columns: var(--target) minmax(0, 1fr);
+  grid-template-columns: 1.125rem minmax(0, 1fr);
   align-items: center;
+  gap: var(--space-3);
+  padding-left: var(--space-3);
   border-radius: 4px;
 }
 
@@ -238,8 +456,8 @@ input[aria-invalid='true'] {
 
 .row {
   width: 100%;
-  min-height: 3.5rem;
-  padding: var(--space-2) var(--space-3) var(--space-2) 0;
+  min-height: 3.375rem;
+  padding: 0.5625rem var(--space-3) 0.5625rem 0;
   border: 0;
   background: transparent;
   color: var(--color-text);
@@ -270,16 +488,27 @@ input[aria-invalid='true'] {
 
 .name-line {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.375rem;
   min-width: 0;
 }
 
 .name {
+  overflow: hidden;
   font-size: var(--text-sm);
   font-weight: 700;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* One line each, as the frame's cells: the rest ends in "…" (the editor shows it whole). */
+.email,
+.ai,
+.when,
+.topics {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .email,
@@ -287,12 +516,14 @@ input[aria-invalid='true'] {
 .when {
   color: var(--color-text-muted);
   font-size: var(--text-xs);
-  overflow-wrap: anywhere;
+}
+
+.when {
+  font-size: 0.6875rem;
 }
 
 .topics {
   font-size: var(--text-meta);
-  overflow-wrap: anywhere;
 }
 
 .spent {
@@ -305,6 +536,12 @@ input[aria-invalid='true'] {
   display: grid;
   justify-items: start;
   gap: 0.125rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.last .when {
+  max-width: 100%;
 }
 
 .more {
@@ -366,6 +603,11 @@ input[aria-invalid='true'] {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.select-all {
+  gap: 0.625rem;
+  padding: var(--space-1) var(--space-3) var(--space-2);
   min-height: var(--target);
   font-size: var(--text-sm);
   cursor: pointer;

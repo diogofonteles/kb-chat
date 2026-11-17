@@ -54,22 +54,24 @@
   [attr.aria-labelledby]="tabsId + '-access'"
   [hidden]="tab() !== 'access'"
 >
-  <fieldset class="group" [disabled]="busy()">
-    <legend class="legend" i18n="@@preset.role">Papel</legend>
-    <label class="check">
+  <!-- Papel as a setting row (v2 · Pessoas): the title, what master means, a switch. -->
+  <fieldset class="group role-row" [disabled]="busy()">
+    <legend class="role-legend" i18n="@@preset.role">Papel</legend>
+    <label class="role-check">
+      <span class="role-desc" i18n="@@preset.master"
+        >Master (vê todos os acervos e usa todas as funcionalidades)</span
+      >
       <input
         #masterBox
         type="checkbox"
+        class="ui-switch"
         [checked]="isMaster()"
         (change)="setMaster(masterBox.checked)"
       />
-      <span i18n="@@preset.master"
-        >Master (vê todos os acervos e usa todas as funcionalidades)</span
-      >
     </label>
   </fieldset>
 
-  <fieldset class="group" [disabled]="busy() || isMaster()">
+  <fieldset class="group inline" [disabled]="busy() || isMaster()">
     <legend class="legend" i18n="@@preset.collections">Acervos</legend>
     @for (topic of collections(); track topic.slug) {
       <label class="check" [class.child]="topic.parent !== null">
@@ -162,7 +164,7 @@
     }
   </fieldset>
 
-  <fieldset class="group" [disabled]="busy() || isMaster()">
+  <fieldset class="group grid" [disabled]="busy() || isMaster()">
     <legend class="legend" i18n="@@preset.features">Funcionalidades</legend>
     @for (feature of features(); track feature.id) {
       <label class="check">

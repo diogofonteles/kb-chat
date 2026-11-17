@@ -2,8 +2,10 @@
   <p id="assign-title" class="title" i18n="@@assign.title">
     IA da aplicação para várias pessoas
   </p>
+  <!-- The frame's one line: the AI · Aplicar às selecionadas · Aplicar a todos. -->
+  <div class="line">
   <label class="field">
-    <span i18n="@@assign.which">IA</span>
+    <span class="visually-hidden" i18n="@@assign.which">IA</span>
     <select
       #which
       class="select"
@@ -19,9 +21,6 @@
       }
     </select>
   </label>
-  @if (unavailableNote(); as note) {
-    <p id="lend-unavailable-bulk" class="note">{{ note }}</p>
-  }
   <div class="actions">
     <button
       #selectedButton
@@ -46,6 +45,10 @@
       </button>
     }
   </div>
+  </div>
+  @if (unavailableNote(); as note) {
+    <p id="lend-unavailable-bulk" class="note">{{ note }}</p>
+  }
   @if (confirmingAll()) {
     <div class="confirm" role="alert">
       <p i18n="@@assign.confirm">
@@ -109,6 +112,7 @@
     <input
       #defaultBox
       type="checkbox"
+      class="ui-check"
       [checked]="alsoDefault() && canSetDefault()"
       [disabled]="!canSetDefault()"
       [attr.aria-describedby]="noDefaultNote() ? 'lend-no-default' : null"

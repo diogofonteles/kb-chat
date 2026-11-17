@@ -26,6 +26,7 @@ import { THEME_COPY, VIEW_COPY } from './provider-copy.js';
 import {
   UiChoiceCard,
   UiCover,
+  UiIcon,
   UiSettingRow,
   type IconName,
 } from '@ui/index.js';
@@ -49,7 +50,7 @@ const ALL_FIELDS: readonly PreferenceField[] = [
  */
 @Component({
   selector: 'app-preferences-form',
-  imports: [DecimalPipe, UiChoiceCard, UiCover, UiSettingRow],
+  imports: [DecimalPipe, UiChoiceCard, UiCover, UiIcon, UiSettingRow],
   templateUrl: './preferences-form.html',
   styleUrl: './settings-form.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -87,7 +88,14 @@ export class PreferencesForm {
     label: PROFILE_COPY[value].label(),
     help: PROFILE_COPY[value].help(),
   }));
-  protected readonly modes = MODE_OPTIONS;
+  /** The frame's short names: "Tudo" reads as "As duas formas" in a setting. */
+  protected readonly modes = MODE_OPTIONS.map((mode) => ({
+    ...mode,
+    short:
+      mode.value === 'all'
+        ? $localize`:@@prefs.modeAll:As duas formas`
+        : mode.label,
+  }));
   protected readonly themes = THEME_CHOICES.map((value) => ({
     value,
     label: THEME_COPY[value](),

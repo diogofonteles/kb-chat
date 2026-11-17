@@ -65,6 +65,19 @@
   --shell-mobile-foot: 0px;
   /* The shell's top bar (its min-height): what floats under it starts from here (KBC-123). */
   --topbar-height: calc(var(--shell-topbar) + var(--shell-gap));
+  /* The AI options' covers (v2 · Configurações, PROV): the option's colour to the dark. */
+  --cover-provider-dark: #141414;
+  --cover-provider-app: #1f6b3c;
+  --cover-provider-app-dark: #0b3d22;
+  --cover-provider-openrouter: #3f4fa0;
+  --cover-provider-gemini: #2d5a8a;
+  --cover-provider-anthropic: #a64d29;
+  --cover-provider-openai: #1f7a6b;
+  --cover-provider-claude: #8a3a6a;
+  --cover-provider-chatgpt: #5a6a7a;
+  --cover-provider-none: #3a3a3a;
+  /* An invitation profile's cover (v2 · Perfis de convite): the blue into its dark. */
+  --cover-people-dark: #101533;
 }
 
 @media (max-width: 1023px) {

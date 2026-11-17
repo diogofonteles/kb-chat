@@ -5,12 +5,14 @@ import {
   input,
 } from '@angular/core';
 import type { AiProvider } from '@kb-chat/contracts';
+import { UiIcon } from '@ui/index.js';
 import { PROVIDER_COPY } from './provider-copy.js';
 import { PROVIDER_GUIDES } from './provider-guides.js';
 
 /** The step-by-step guide of one AI option (KBC-023 FR-5). Presentational. */
 @Component({
   selector: 'app-provider-guide',
+  imports: [UiIcon],
   template: `
     @if (guide(); as current) {
       <section class="guide" [attr.aria-label]="label()">
@@ -47,7 +49,8 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
         </dl>
         @if (current.note) {
           <p class="note">
-            <span aria-hidden="true">ⓘ</span> {{ current.note() }}
+            <ui-icon name="info" [size]="18" />
+            <span>{{ current.note() }}</span>
           </p>
         }
       </section>
@@ -116,14 +119,22 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
       color: var(--color-text-muted);
       line-height: 1.4;
     }
+    /* The frame's info banner: blue tint, icon in blue, the text in 600. */
     .note {
       display: flex;
-      gap: var(--space-2);
+      align-items: flex-start;
+      gap: var(--space-3);
       margin: 0;
       padding: var(--space-3) var(--space-4);
       border-radius: var(--radius-card);
-      background: var(--overlay-2);
+      background: color-mix(in srgb, var(--color-info) 12%, transparent);
       font-size: var(--text-sm);
+      font-weight: 600;
+      line-height: 1.45;
+    }
+    .note ui-icon {
+      flex: none;
+      color: var(--color-info);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -55,11 +55,12 @@
       [style.--tint]="tint()"
       [class.covered]="panelOpen()"
       [class.media]="onMedia()"
+      [class.bare]="onSettings()"
       [class.empty]="isEmpty() && !onMedia()"
       [attr.inert]="covered() ? '' : null"
     >
       <p class="visually-hidden" aria-live="polite">{{ queue.said() }}</p>
-      <header #pageHeader class="topbar">
+      <header #pageHeader class="topbar" [hidden]="onSettings()">
         @if (!desktop()) {
           <button
             #menuButton
@@ -238,14 +239,17 @@
     (no bar row then): its announcer speaks the skips and the sleep timer from any page.
   -->
   @if (audio.shown() || !desktop()) {
-    <div class="shell-foot" [class.bare]="fullScreenPlayer()">
+    <div
+      class="shell-foot"
+      [class.bare]="fullScreenPlayer() || (onSettings() && !audio.shown())"
+    >
       <app-mini-player
         class="player"
         [shownElsewhere]="playerInPanel()"
         [idle]="audio.collectionHasAudio() && !audio.playing()"
         [idleLink]="libraryPath()"
       />
-      @if (!desktop() && !fullScreenPlayer()) {
+      @if (!desktop() && !fullScreenPlayer() && !onSettings()) {
         <app-bottom-nav
           [tabs]="navTabs()"
           [active]="navActive()"

@@ -1,9 +1,31 @@
 .bar {
   display: grid;
-  gap: var(--space-3);
+  gap: 0.625rem;
   padding: var(--space-4);
   border-radius: var(--radius-card);
-  background: var(--overlay-2);
+  background: var(--overlay-1);
+}
+
+/* The AI and the two buttons on one line (v2 · Pessoas); stacked on a phone. */
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.line .select {
+  width: 15.625rem;
+  border: 0;
+  background: var(--color-surface-muted);
+}
+
+@media (max-width: 1023px) {
+  .line,
+  .line .field,
+  .line .select {
+    width: 100%;
+  }
 }
 
 .title {

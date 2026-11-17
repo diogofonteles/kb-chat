@@ -36,8 +36,8 @@ fieldset {
 .card {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  gap: 0.875rem;
+  padding: var(--space-3) 0.875rem;
   border: 1px solid transparent;
   border-radius: var(--radius-card);
   cursor: pointer;
@@ -65,7 +65,7 @@ fieldset {
 }
 
 .card .ui-radio {
-  margin-top: 0.625rem;
+  margin-top: 0;
 }
 
 .card-body {
@@ -101,14 +101,14 @@ fieldset {
 }
 
 .unavailable {
-  font-weight: 700;
+  font-weight: inherit;
 }
 
 .details {
   display: grid;
   gap: var(--space-4);
   margin-top: calc(-1 * var(--space-1));
-  padding: var(--space-1) var(--space-4) var(--space-5);
+  padding: var(--space-1) var(--space-4) 1.125rem;
   border: 1px solid var(--overlay-4);
   border-top: 0;
   border-radius: 0 0 var(--radius-card) var(--radius-card);
@@ -175,6 +175,64 @@ fieldset {
 
 .connect {
   justify-self: start;
+  flex: none;
+}
+
+/* "Conectar OpenRouter" and what it does, on one line (v2 frame). */
+.connect-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.connect-hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  line-height: 1.4;
+}
+
+/* A group's title inside an option, 17/700 ("Quais modelos usar"). */
+.group-legend {
+  margin-bottom: var(--space-3);
+  padding: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.chip-option {
+  position: relative;
+  gap: 0.375rem;
+  cursor: pointer;
+}
+
+.chip-option:has(:focus-visible) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* The radio stays for the keyboard and readers; the chip shows the choice. */
+.chip-radio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* The fast and deep models and the daily cap in one row (v2 frame). */
+.model-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--space-3);
 }
 
 .plans {
@@ -196,7 +254,7 @@ fieldset {
 }
 
 .ui-input.cap {
-  max-width: 10rem;
+  width: 100%;
 }
 
 .saved-key {
@@ -269,14 +327,48 @@ fieldset {
 }
 
 .choice-label ui-choice-card {
-  position: relative;
-  padding-right: 3rem;
+  /* The frame's choice: icon, title and radio on one line, the help under them. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.375rem 0.625rem;
+  padding: 0.875rem var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+}
+
+.choice-label ui-choice-card.ui-choice--chosen {
+  border: 2px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+
+.choice-label ui-choice-card ::ng-deep .ui-choice__icon {
+  grid-column: 1;
+  color: var(--color-text);
+}
+
+.choice-label ui-choice-card.ui-choice--chosen ::ng-deep .ui-choice__icon {
+  color: var(--color-accent);
+}
+
+.choice-label ui-choice-card ::ng-deep .ui-choice__title {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: var(--text-item);
+}
+
+.choice-label ui-choice-card:not(:has(.ui-choice__icon)) ::ng-deep .ui-choice__title {
+  grid-column: 1 / 3;
+}
+
+.choice-label ui-choice-card ::ng-deep .ui-choice__help {
+  grid-column: 1 / -1;
+  font-size: var(--text-meta);
+  line-height: 1.4;
 }
 
 .choice-radio {
-  position: absolute;
-  top: var(--space-4);
-  right: var(--space-4);
+  grid-column: 3;
+  grid-row: 1;
 }
 
 .choice-label:has(:focus-visible) ui-choice-card {
@@ -285,7 +377,24 @@ fieldset {
 }
 
 .select {
-  width: 15rem;
+  width: 13.75rem;
+  min-height: 2.5rem;
+}
+
+.rule {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--overlay-line);
+}
+
+/* The frame's rows: 8 px above and below, the control on the right. */
+.select-row {
+  padding: var(--space-2) 0;
+}
+
+.select-chevron {
+  display: none;
 }
 
 /* The wizard's collections and themes: large cards in a row. */
@@ -399,6 +508,19 @@ fieldset {
     padding: var(--space-1) var(--space-3) var(--space-4);
   }
 
+  .card-art {
+    --ui-cover-size: 40px !important;
+  }
+
+  .connect-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .model-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .providers.grid,
   .choices.two,
   .choices.three,
@@ -426,8 +548,49 @@ fieldset {
     height: 6rem;
   }
 
+  /* A phone: the toggle stays on the right of its text (the frame's row). */
+  :host ::ng-deep .ui-setting:has(.ui-switch) {
+    flex-wrap: nowrap;
+    gap: var(--space-3);
+  }
+
+  /*
+   * A phone's select row (selRow, celular): the label, the value under it in grey and a
+   * chevron on the right; the native select covers the row, so it still opens the list.
+   */
+  .select-row {
+    position: relative;
+    flex-wrap: nowrap;
+    min-height: 3.5rem;
+    padding: 0.625rem 2rem 0.625rem 0;
+  }
+
+  .select-row ::ng-deep .ui-setting__control {
+    position: static;
+  }
+
   .select {
+    position: absolute;
+    inset: 0;
     width: 100%;
+    min-height: 0;
+    padding: 2.125rem 2rem 0.625rem 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: var(--text-meta);
+    appearance: none;
+    cursor: pointer;
+  }
+
+  .select-chevron {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    display: block;
+    color: var(--color-text-muted);
+    transform: translateY(-50%);
+    pointer-events: none;
   }
 }
 
