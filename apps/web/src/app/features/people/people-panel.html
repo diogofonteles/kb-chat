@@ -16,12 +16,15 @@
       title="Convidar por e-mail"
       i18n-label="@@people.inviteSetupTitle"
       label="Configurar o convite"
+      i18n-phoneTitle="@@people.inviteKicker"
+      phoneTitle="Convite"
       [width]="800"
       [height]="728"
       [closeOnBackdrop]="false"
       i18n-primaryLabel="@@people.invite"
       primaryLabel="Convidar"
       [primaryDisabled]="inviteBlocked()"
+      [primaryDescribedBy]="waitsForLend() ? 'invite-lend-wait' : ''"
       (primary)="invite($event)"
       (closed)="discardConfiguration()"
     >
@@ -58,35 +61,35 @@
 <ng-template #inviteFields>
   <div class="invite-fields" [class.in-dialog]="configuring()">
     <div class="field email-field">
-    <!-- The sheet's visible "E-mail" (celular); the field's name stays "Convidar por e-mail". -->
-    <span class="email-label" aria-hidden="true" i18n="@@people.inviteEmail"
-      >E-mail</span
-    >
-    <label class="email-box-label">
-      <span class="visually-hidden" i18n="@@people.inviteLabel"
-        >Convidar por e-mail</span
+      <!-- The sheet's visible "E-mail" (celular); the field's name stays "Convidar por e-mail". -->
+      <span class="email-label" aria-hidden="true" i18n="@@people.inviteEmail"
+        >E-mail</span
       >
-      <span class="email-box">
-        <ui-icon name="mail" [size]="18" />
-        <input
-          #emailInput
-          type="email"
-          class="ui-input"
-          placeholder="nome@exemplo.test"
-          name="email"
-          autocomplete="off"
-          inputmode="email"
-          required
-          [attr.aria-describedby]="
-            inviteError() ? 'invite-error invite-hint' : 'invite-hint'
-          "
-          [attr.aria-invalid]="inviteError() ? 'true' : null"
-          [attr.aria-errormessage]="inviteError() ? 'invite-error' : null"
-          [value]="email()"
-          (input)="typeEmail(emailInput.value)"
-        />
-      </span>
-    </label>
+      <label class="email-box-label">
+        <span class="visually-hidden" i18n="@@people.inviteLabel"
+          >Convidar por e-mail</span
+        >
+        <span class="email-box">
+          <ui-icon name="mail" [size]="18" />
+          <input
+            #emailInput
+            type="email"
+            class="ui-input"
+            placeholder="nome@exemplo.test"
+            name="email"
+            autocomplete="off"
+            inputmode="email"
+            required
+            [attr.aria-describedby]="
+              inviteError() ? 'invite-error invite-hint' : 'invite-hint'
+            "
+            [attr.aria-invalid]="inviteError() ? 'true' : null"
+            [attr.aria-errormessage]="inviteError() ? 'invite-error' : null"
+            [value]="email()"
+            (input)="typeEmail(emailInput.value)"
+          />
+        </span>
+      </label>
     </div>
     @if (profiles.list().length > 0) {
       <div class="field setup-field">
@@ -365,7 +368,9 @@
                   >Convite enviado</ui-pill
                 >
                 <span class="when"
-                  ><span class="visually-hidden" i18n="@@people.invitationSentWord"
+                  ><span
+                    class="visually-hidden"
+                    i18n="@@people.invitationSentWord"
                     >Convite enviado&ngsp;</span
                   ><ng-container i18n="@@people.invitationSentOn"
                     >em
@@ -406,44 +411,42 @@
     step="Pessoa"
     [title]="person.name || person.email"
     [width]="800"
+    i18n-cancelLabel="@@people.close"
+    cancelLabel="Fechar"
     (closed)="closeEditor()"
   >
     <!-- The frame's head: the avatar, the name, then the e-mail, the role and the status. -->
-    <ui-avatar
-      uiDialogLead
-      class="dialog-avatar"
-      [name]="person.name || person.email"
-      [size]="56"
-    />
-    <p uiDialogSub class="dialog-sub">
-      @if (person.name) {
-        <span>{{ person.email }}</span>
-      }
-      @if (person.role === 'master') {
-        <ui-pill tone="info" i18n="@@people.master">Master</ui-pill>
-      }
-      @if (person.isOwner) {
-        <ui-pill tone="warn" i18n="@@people.owner">Dono</ui-pill>
-      }
-      @switch (invitations().get(person.id)?.kind) {
-        @case ('active') {
-          <ui-pill tone="ok" i18n="@@people.active">Ativo</ui-pill>
-        }
-        @case ('sent') {
-          <ui-pill tone="info" i18n="@@people.invitationSent"
-            >Convite enviado</ui-pill
-          >
-        }
-        @case ('failed') {
-          <ui-pill tone="err" i18n="@@people.invitationFailed"
-            >Falha ao enviar o convite</ui-pill
-          >
-        }
-        @default {
-          <ui-pill i18n="@@people.neverSignedIn">Ainda não entrou</ui-pill>
-        }
-      }
-    </p>
+    <!-- One element per @if: each block is projected into its own slot. -->
+    @if (!phone()) {
+      <ui-avatar
+        uiDialogLead
+        class="dialog-avatar"
+        [name]="person.name || person.email"
+        [size]="56"
+      />
+    }
+    @if (!phone()) {
+      <p uiDialogSub class="dialog-sub">
+        <ng-container
+          *ngTemplateOutlet="personSub; context: { $implicit: person }"
+        />
+      </p>
+    }
+    <!-- A phone's sheet header holds the name alone: the person's row opens the content
+         (v2 · Pessoas, celular: avatar 48, the name, the e-mail, role and status). -->
+    @if (phone()) {
+      <div class="phone-person">
+        <ui-avatar [name]="person.name || person.email" [size]="48" />
+        <div class="phone-person-text">
+          <p class="phone-person-name">{{ person.name || person.email }}</p>
+          <p class="dialog-sub">
+            <ng-container
+              *ngTemplateOutlet="personSub; context: { $implicit: person }"
+            />
+          </p>
+        </div>
+      </div>
+    }
     <app-person-editor
       [id]="'person-' + person.id"
       class="editor"
@@ -486,6 +489,37 @@
     <ng-container *ngTemplateOutlet="status" />
   </ui-dialog>
 }
+
+<!-- The person's e-mail, role and status: under the modal's title, in the phone's row. -->
+<ng-template #personSub let-person>
+  @if (person.name) {
+    <span>{{ person.email }}</span>
+  }
+  @if (person.role === 'master') {
+    <ui-pill tone="info" i18n="@@people.master">Master</ui-pill>
+  }
+  @if (person.isOwner) {
+    <ui-pill tone="warn" i18n="@@people.owner">Dono</ui-pill>
+  }
+  @switch (invitations().get(person.id)?.kind) {
+    @case ('active') {
+      <ui-pill tone="ok" i18n="@@people.active">Ativo</ui-pill>
+    }
+    @case ('sent') {
+      <ui-pill tone="info" i18n="@@people.invitationSent"
+        >Convite enviado</ui-pill
+      >
+    }
+    @case ('failed') {
+      <ui-pill tone="err" i18n="@@people.invitationFailed"
+        >Falha ao enviar o convite</ui-pill
+      >
+    }
+    @default {
+      <ui-pill i18n="@@people.neverSignedIn">Ainda não entrou</ui-pill>
+    }
+  }
+</ng-template>
 
 <!-- The outcome of the last change, next to the person it changed (MA-23). -->
 <ng-template #status>

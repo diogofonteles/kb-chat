@@ -105,6 +105,12 @@ export class InviteProfilesPanel {
       ? $localize`:@@profiles.editTitle:Editar o perfil "${this.editingName()}:name:"`
       : $localize`:@@profiles.newTitle:Novo perfil`,
   );
+  /** The phone sheet's shorter title (v2 · Editar perfil, celular). */
+  protected readonly draftPhoneTitle = computed(() =>
+    this.draft()?.id
+      ? $localize`:@@profiles.phoneTitle:Perfil "${this.editingName()}:name:"`
+      : $localize`:@@profiles.newTitle:Novo perfil`,
+  );
   /** "Salvar perfil" waits for the preset's numbers and the collections' levels. */
   protected readonly saveBlocked = computed(
     () =>

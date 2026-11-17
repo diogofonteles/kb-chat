@@ -10,6 +10,7 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import {
+  desktop,
   openSection,
   openSettings,
   SETTINGS_AXE,
@@ -133,9 +134,13 @@ test('AC-1: inviting with a profile sets up access, AI and the first Settings', 
   // The new person's editor opened as a modal (KBC-132), the AI in its own tab.
   await showTab(dialog, 'IA e limites');
   await dialog.getByText('Histórico da IA').click();
+  // The history as the v2 rows: when, who, and what as a pill (KBC-132).
   await expect(
-    dialog.getByText(/owner@kb-chat\.test · Plano da casa/),
-  ).toBeVisible();
+    dialog
+      .getByRole('region', { name: 'Histórico da IA' })
+      .getByRole('listitem')
+      .filter({ hasText: 'owner@kb-chat.test' }),
+  ).toContainText('Plano da casa');
   await shoot(page, 'invite-with-profile', page.getByRole('dialog'));
   await page.keyboard.press('Escape');
 
@@ -174,9 +179,15 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
     .locator('select[name="profile"]')
     .selectOption({ label: name });
   await dialog.getByRole('button', { name: 'Configurar agora' }).click();
-  await expect(
-    dialog.getByRole('button', { name: 'Descartar configuração' }),
-  ).toHaveAttribute('aria-expanded', 'true');
+  // Desktop: the modal's "Descartar configuração"; a phone's sheet discards with "Cancelar".
+  if (desktop(page))
+    await expect(
+      dialog.getByRole('button', { name: 'Descartar configuração' }),
+    ).toHaveAttribute('aria-expanded', 'true');
+  else
+    await expect(
+      page.getByRole('dialog', { name: 'Configurar o convite' }),
+    ).toBeVisible();
   const preset = dialog.locator('#invite-preset');
   await showTab(preset, 'IA e limites');
   await expect(

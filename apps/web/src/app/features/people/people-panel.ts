@@ -8,6 +8,7 @@ import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   LOCALE_ID,
@@ -17,6 +18,7 @@ import {
   inject,
   linkedSignal,
   signal,
+  type Signal,
   viewChild,
   viewChildren,
 } from '@angular/core';
@@ -115,6 +117,11 @@ export class PeoplePanel {
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
+  /**
+   * Below 1024 px the person's sheet shows their row at its top (mPerson); on a desktop the
+   * modal's head already does, so the row is not drawn twice.
+   */
+  protected readonly phone = phoneWidth(this.document);
   /** The invitation profiles (KBC-028), shared with the profiles section. */
   protected readonly profiles = inject(InviteProfilesStore);
   private readonly rows = viewChildren<ElementRef<HTMLButtonElement>>('row');
@@ -779,4 +786,17 @@ function inviteNotice(
       ? $localize`:@@people.invitedRecently:Convite criado sem e-mail: ${invited.email}:email: já recebeu um convite há pouco.`
       : $localize`:@@people.invited:Convite criado sem e-mail. ${invited.email}:email: já pode entrar com o Google ou com um código por e-mail.`,
   };
+}
+
+/** Whether the window is a phone's (below 1024 px), following it as it changes. */
+function phoneWidth(document: Document): Signal<boolean> {
+  const query = document.defaultView?.matchMedia?.('(max-width: 1023px)');
+  const phone = signal(query?.matches ?? false);
+  if (!query) return phone.asReadonly();
+  const onChange = (event: MediaQueryListEvent) => phone.set(event.matches);
+  query.addEventListener('change', onChange);
+  inject(DestroyRef).onDestroy(() =>
+    query.removeEventListener('change', onChange),
+  );
+  return phone.asReadonly();
 }
