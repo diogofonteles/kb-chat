@@ -625,6 +625,13 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
       await expect(
         page.getByRole('link', { name: /itens precisam de atenção/ }),
       ).toBeVisible();
+      // The top row holds 🔍 and ⬆ only (media-library@mobile): no ⋯ of the page.
+      await expectControls(page, ['Abrir a busca', 'Enviar mídia']);
+      await expect(
+        page
+          .getByRole('button', { name: 'Mais ações da Biblioteca' })
+          .and(page.locator(':visible')),
+      ).toHaveCount(0);
     } else {
       await expect(page.getByText('Tudo para ouvir')).toBeVisible();
       await expect(
@@ -703,6 +710,21 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
     }
     await expect(rows(page).first()).toBeVisible();
 
+    // "Compacta" (Ver como): the list without covers, and back to "Lista".
+    await page.getByRole('button', { name: /^Ordenar:/ }).click();
+    await page.getByRole('menuitemradio', { name: 'Compacta' }).click();
+    await expect(page.locator('.table.compact')).toHaveCount(1);
+    await expect(rows(page).first().locator('.art ui-cover')).toHaveCSS(
+      'visibility',
+      'hidden',
+    );
+    await page.getByRole('button', { name: /^Ordenar:/ }).click();
+    await expect(
+      page.getByRole('menuitemradio', { name: 'Compacta' }),
+    ).toHaveAttribute('aria-checked', 'true');
+    await page.getByRole('menuitemradio', { name: 'Lista' }).click();
+    await expect(page.locator('.table.compact')).toHaveCount(0);
+
     // "Em andamento": only the three heard in part; "Todas" brings the rest back.
     const filters = page.getByRole('group', { name: 'Filtros' });
     await filters.getByRole('button', { name: 'Em andamento' }).click();
@@ -754,7 +776,9 @@ test('the ⋯ of a row, the selection and the dialogs (row-menu, selection, edit
     await expect(menu.getByRole('menuitem')).toHaveText(
       phone
         ? [
+            'Tocar em seguida',
             'Marcar como ouvida',
+            'Ver marcadores',
             'Selecionar',
             'Editar informações',
             'Compartilhar',
@@ -762,7 +786,9 @@ test('the ⋯ of a row, the selection and the dialogs (row-menu, selection, edit
           ]
         : [
             'Tocar agora',
+            'Tocar em seguida',
             'Marcar como ouvida',
+            'Ver marcadores',
             'Editar informações',
             'Copiar link',
             'Remover',
@@ -803,8 +829,19 @@ test('the ⋯ of a row, the selection and the dialogs (row-menu, selection, edit
     await expect(title).toHaveValue(TITLES[1]);
     await shoot(page, 'media-library-edit', width);
     await title.fill('');
-    await edit.getByRole('button', { name: 'Salvar' }).click();
+    // Emptied, the title says so at once and "Salvar" looks off (media-library-edit-errors).
     await expect(edit.getByText('Dê um título ao áudio.')).toBeVisible();
+    const save = edit.getByRole('button', { name: 'Salvar' });
+    await expect(save).toHaveAttribute('aria-disabled', 'true');
+    await edit
+      .getByRole('combobox', { name: 'Acervo' })
+      .selectOption(data.empty);
+    await expect(
+      edit.getByText(/^Posições, marcadores e transcrição vão junto/),
+    ).toBeVisible();
+    // aria-disabled keeps it pressable (a press says why): Playwright counts it as off.
+    await save.click({ force: true });
+    await expect(edit).toBeVisible();
     await shoot(page, 'media-library-edit-errors', width);
     await edit.getByRole('button', { name: 'Cancelar' }).click();
     await expect(edit).toHaveCount(0);
@@ -821,6 +858,39 @@ test('the ⋯ of a row, the selection and the dialogs (row-menu, selection, edit
     await remove.getByRole('button', { name: 'Cancelar' }).click();
     await expect(remove).toHaveCount(0);
     await expect(row).toHaveCount(1);
+    // On a desktop the ✕ beside the title closes it too (a phone's sheet has its handle).
+    if (!phone) {
+      await row.hover();
+      await more.click();
+      await page.getByRole('menuitem', { name: 'Remover' }).click();
+      await remove.getByRole('button', { name: 'Fechar' }).click();
+      await expect(remove).toHaveCount(0);
+    }
+
+    // "Tocar em seguida": plays now with nothing playing, waits its turn after one that is.
+    await row.hover();
+    await more.click();
+    await page.getByRole('menuitem', { name: 'Tocar em seguida' }).click();
+    await expect(
+      page.getByRole('button', { name: /^Pausar/ }).first(),
+    ).toBeVisible();
+    const third = rowNamed(page, TITLES[2]);
+    await third.hover();
+    await third
+      .getByRole('button', { name: `Mais ações para ${TITLES[2]}` })
+      .click();
+    await page.getByRole('menuitem', { name: 'Tocar em seguida' }).click();
+    await expect(
+      page.locator('app-library-page [role="status"]').last(),
+    ).toHaveText(`“${TITLES[2]}” toca em seguida.`);
+
+    // "Ver marcadores": the media's page, its bookmarks in view and focused.
+    await row.hover();
+    await more.click();
+    await page.getByRole('menuitem', { name: 'Ver marcadores' }).click();
+    await expect(page).toHaveURL(/\/midia\/[^/#]+#marcadores$/);
+    if (!phone)
+      await expect(page.locator('app-bookmark-list h3')).toBeFocused();
     await context.close();
   }
 });
@@ -897,6 +967,11 @@ test('a recording opens its tracks, and removing it names them (tracks, remove-t
     await expect(
       tracks.getByRole('link', { name: 'Segunda pergunta' }),
     ).toBeVisible();
+    // Open tracks make the list the page: no attention, no "Continuar ouvindo" over it.
+    await expect(page.locator('app-queue-summary')).toHaveCount(0);
+    await expect(
+      page.getByRole('heading', { name: 'Continuar ouvindo' }),
+    ).toHaveCount(0);
     await shoot(page, 'media-library-tracks', width);
 
     // The first "Remover" is refused while tracks hang on it (KBC-068): the dialog comes
@@ -955,8 +1030,10 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
       dialog.getByText(/mp3, m4a, wav, flac, ogg ou opus/),
     ).toBeVisible();
     await shoot(page, 'media-upload', width);
-    // Nothing chosen: "Enviar" says what is missing, and the panel stays.
-    await send.click();
+    // Nothing chosen: "Enviar" looks off (media-upload), says what is missing, the panel stays.
+    await expect(send).toHaveAttribute('aria-disabled', 'true');
+    // aria-disabled keeps it pressable (a press says why): Playwright counts it as off.
+    await send.click({ force: true });
     await expect(dialog.getByRole('alert')).toContainText(
       'Escolha um arquivo de áudio.',
     );
@@ -966,7 +1043,27 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
     );
     await expect(dialog.getByRole('textbox', { name: 'Título' })).toBeVisible();
     await expect(send).toBeEnabled();
+    await expect(send).not.toHaveAttribute('aria-disabled', 'true');
     await shoot(page, 'media-upload-chosen', width);
+    // A phone's list (media-upload-chosen@mobile): "Dividir em faixas ›" opens its choices.
+    if (phone) {
+      const division = dialog.getByRole('button', {
+        name: /^Dividir em faixas/,
+      });
+      await expect(division).toContainText('Não dividir agora');
+      await expect(
+        dialog.getByRole('radio', { name: 'Vou marcar as faixas eu mesmo' }),
+      ).toBeHidden();
+      await division.click();
+      await expect(division).toHaveAttribute('aria-expanded', 'true');
+      await dialog
+        .getByRole('radio', { name: 'Vou marcar as faixas eu mesmo' })
+        .check();
+      await expect(division).toContainText('Vou marcar as faixas eu mesmo');
+      await dialog.getByRole('radio', { name: 'Não dividir agora' }).check();
+      await division.click();
+      await expect(division).toHaveAttribute('aria-expanded', 'false');
+    }
     await dialog
       .getByRole('button', { name: /^Tirar/ })
       .first()
@@ -1047,6 +1144,16 @@ test('an empty library, for who reads and for who sends (media-library-empty-*)'
       await expect(
         page.getByRole('region', { name: 'Precisa da sua atenção' }),
       ).toHaveCount(0);
+      // "Autoria" stays among the chips with nothing to tell apart yet (-empty-*).
+      const authorship = page
+        .getByRole('group', { name: 'Filtros' })
+        .getByRole('button', { name: 'Autoria' });
+      await expect(authorship).toBeVisible();
+      await authorship.click();
+      await expect(
+        page.getByRole('menuitemradio', { name: 'Todas as autorias' }),
+      ).toHaveAttribute('aria-checked', 'true');
+      await page.keyboard.press('Escape');
       await shoot(page, id, width);
       await expectUploadEntry(page, id === 'media-library-empty-uploader');
       await context.close();
@@ -1106,7 +1213,9 @@ test('/midia is the collection as an album, for who has no library (media-list-*
     const menu = page.getByRole('menu');
     await expectWholeOnTop(page, menu);
     await expect(menu.getByRole('menuitem')).toHaveText(
-      phone ? ['Compartilhar'] : ['Tocar agora', 'Copiar link'],
+      phone
+        ? ['Tocar em seguida', 'Compartilhar']
+        : ['Tocar agora', 'Tocar em seguida', 'Copiar link'],
     );
     await shoot(page, 'media-list-menu', width);
     await page.keyboard.press('Escape');
@@ -1168,6 +1277,16 @@ test('/midia is the collection as an album, for who has no library (media-list-*
     await expect(
       empty.page.getByText('Ainda não há áudios neste acervo'),
     ).toBeVisible();
+    // The phone's top row keeps 🔍 and the chips keep "Autoria" (media-list-empty@mobile).
+    if (phone) {
+      await expectControls(empty.page, ['Filtrar por título']);
+      await expectChips(empty.page, ['Todas', 'Em andamento', 'Não ouvidas']);
+      await expect(
+        empty.page
+          .getByRole('group', { name: 'Filtros' })
+          .getByRole('button', { name: 'Autoria' }),
+      ).toBeVisible();
+    }
     await shoot(empty.page, 'media-list-empty', width);
     await empty.page
       .getByRole('main')

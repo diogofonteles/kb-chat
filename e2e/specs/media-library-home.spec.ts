@@ -84,6 +84,17 @@ const libraryMore = (page: Page) =>
     .getByRole('button', { name: 'Mais ações da Biblioteca' })
     .and(page.locator(':visible'));
 
+/**
+ * Where "Limpar recentes" is: the page's ⋯ on a desktop; on a phone (no ⋯ in its top row,
+ * media-library@mobile), the end of the order's sheet while the order is the recent plays.
+ */
+const recentsMenu = (page: Page) =>
+  desktop(page)
+    ? libraryMore(page)
+    : page
+        .getByRole('button', { name: /^Ordenar: / })
+        .and(page.locator(':visible'));
+
 /** The person's player saved this position (as the player does while playing). */
 async function savePosition(page: Page, media: UploadedMedia, ms: number) {
   const saved = await page.request.put(`/api/v1/media/${media.id}/progress`, {
@@ -419,7 +430,7 @@ test('AC-9: "Limpar recentes" empties the recents and keeps "Continuar ouvindo"'
       }
     ).recentlyPlayed.map((item) => item.id);
   expect(await recentIds()).toHaveLength(4);
-  await libraryMore(page).click();
+  await recentsMenu(page).click();
   await page.getByRole('menuitem', { name: 'Limpar recentes' }).click();
   const ask = page.getByRole('group', { name: /^Limpar as mídias/ });
   await expect(ask).toContainText(
@@ -436,11 +447,11 @@ test('AC-9: "Limpar recentes" empties the recents and keeps "Continuar ouvindo"'
   ).toBeFocused();
   await expect.poll(recentIds).toEqual([]);
   // Nothing left to clear; the positions stay ("Continuar ouvindo" keeps its four).
-  await libraryMore(page).click();
+  await recentsMenu(page).click();
   await expect(
     page
-      .getByRole('menuitem', { name: 'Tocar em ordem aleatória' })
-      .or(page.getByRole('menuitem', { name: 'Meus marcadores' }))
+      .getByRole('menuitem', { name: 'Meus marcadores' })
+      .or(page.getByRole('menuitemradio', { name: 'Ouvidas recentemente' }))
       .first(),
   ).toBeVisible();
   await expect(
@@ -706,13 +717,21 @@ test('FR-3: "Selecionar todas" marks more than the API takes at once, in batches
   await scrollToTheEnd(page, 5);
   const loaded = await all(page).getByRole('listitem').count();
   expect(loaded).toBeGreaterThan(200);
-  // The table head's box on a desktop; a phone has no table head: the page's ⋯ offers it.
+  // The table head's box on a desktop; a phone has no table head: once a selection is
+  // on, a row's ⋯ offers it (the top row has no ⋯, media-library@mobile).
   if (desktop(page))
     await all(page)
       .getByRole('checkbox', { name: `Selecionar todas as ${loaded}` })
       .check();
   else {
-    await libraryMore(page).click();
+    const rowMore = all(page)
+      .getByRole('button', { name: /^Mais ações para / })
+      .first();
+    await rowMore.click();
+    await page
+      .getByRole('menuitem', { name: 'Selecionar', exact: true })
+      .click();
+    await rowMore.click();
     await page
       .getByRole('menuitem', { name: `Selecionar todas as ${loaded}` })
       .click();

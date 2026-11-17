@@ -175,7 +175,10 @@ test('AC-5, FR-4: a blank title is said at the field; a server error keeps what 
   await openDialog(page, title);
   const field = titleField(page);
   await field.fill('   ');
-  await saveButton(page).click();
+  // Said at once, "Salvar" looks off; a press (aria-disabled keeps it pressable) says it too.
+  await expect(page.getByText('Dê um título ao áudio.')).toBeVisible();
+  await expect(saveButton(page)).toHaveAttribute('aria-disabled', 'true');
+  await saveButton(page).click({ force: true });
   await expect(page.getByText('Dê um título ao áudio.')).toBeVisible();
   await expect(field).toHaveAttribute('aria-invalid', 'true');
   await field.fill('Título que fica');
@@ -227,7 +230,8 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await openDialog(page, title);
     await topicField(page).selectOption('alquimia');
     await titleField(page).fill('');
-    await saveButton(page).click();
+    await expect(saveButton(page)).toHaveAttribute('aria-disabled', 'true');
+    await saveButton(page).click({ force: true });
     await expect(page.getByText('Dê um título ao áudio.')).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
     await titleField(page).fill(title);

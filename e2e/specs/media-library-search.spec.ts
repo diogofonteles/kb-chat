@@ -347,7 +347,7 @@ test('AC-6: a recording found by title is one row, and the Acervo stays in reach
   await page.context().close();
 });
 
-test('KBC-091 QA I-10: nothing found in one collection, "Buscar em todos os acervos" finds it in another', async ({
+test('KBC-091 QA I-10: nothing found in one collection, its chip finds it in another', async ({
   browser,
 }) => {
   const owner = await ownerApi();
@@ -372,9 +372,12 @@ test('KBC-091 QA I-10: nothing found in one collection, "Buscar em todos os acer
     page.getByRole('button', { name: 'Limpar filtros' }),
   ).toHaveCount(0);
 
-  await page
-    .getByRole('button', { name: 'Buscar em todos os acervos' })
-    .click();
+  // Only "Limpar busca" under the words (media-library-search-empty): the collection's
+  // chip over the results is the way to every collection.
+  await expect(
+    page.getByRole('button', { name: 'Buscar em todos os acervos' }),
+  ).toHaveCount(0);
+  await topicChip(page).click();
 
   await expect(results(page)).toHaveCount(1);
   await expect(results(page).first()).toContainText(elsewhere);

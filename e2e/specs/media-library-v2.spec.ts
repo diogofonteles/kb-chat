@@ -276,7 +276,11 @@ test('AC-6: the grid, the search with and without results, and the dialogs rende
   await expectWholeOnTop(page, edit);
   await shoot(page, 'media-library-edit');
   await edit.getByRole('textbox', { name: 'Título' }).fill('');
-  await edit.getByRole('button', { name: 'Salvar' }).click();
+  await expect(edit.getByRole('button', { name: 'Salvar' })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  await edit.getByRole('button', { name: 'Salvar' }).click({ force: true });
   await expect(edit.getByText('Dê um título ao áudio.')).toBeVisible();
   await shoot(page, 'media-library-edit-errors');
   await edit.getByRole('button', { name: 'Cancelar' }).click();
