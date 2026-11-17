@@ -138,6 +138,12 @@
   color: var(--color-text);
 }
 
+.phone-more {
+  --menu-trigger-min: var(--target);
+  --menu-trigger-height: var(--target);
+  --menu-trigger-color: var(--color-text);
+}
+
 .phone-action.on {
   color: var(--color-accent-text);
 }
@@ -309,6 +315,12 @@
   grid-area: 1 / 1;
 }
 
+/* Over the box in the same cell, "#" only shows: a press there is the box's (WebKit paints a
+   grid's items in source order and took the press on "#"). */
+.number-head {
+  pointer-events: none;
+}
+
 /* "#" gives way to "select all" under the pointer, the focus or a selection, like a row's. */
 .select-all:not(:checked) {
   border-color: transparent;
@@ -353,10 +365,6 @@
   list-style: none;
 }
 
-.row-tracks {
-  padding-left: 5.5rem;
-}
-
 .grid {
   display: grid;
   /* The frame's cards keep their size (a 156 px cover in 12 px of padding) and the row
@@ -386,10 +394,6 @@
 @container library-table (max-width: 36rem) {
   .table-head {
     display: none;
-  }
-
-  .row-tracks {
-    padding-left: 3.5rem;
   }
 }
 

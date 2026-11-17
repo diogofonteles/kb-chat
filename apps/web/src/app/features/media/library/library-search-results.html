@@ -63,8 +63,11 @@
       </p>
       @if (searchesSpeech()) {
         <p class="hint" i18n="@@library.searchEmptyHint">
-          Procuramos na fala, no título, no autor e nos assuntos. Na fala a
-          busca é por palavra inteira: confira a escrita ou tente outra palavra.
+          <span class="hint-where"
+            >Procuramos na fala, no título, no autor e nos assuntos.
+          </span>
+          Na fala a busca é por palavra inteira: confira a escrita ou tente
+          outra palavra.
         </p>
       } @else {
         <p class="hint" i18n="@@library.searchEmptyTitles">

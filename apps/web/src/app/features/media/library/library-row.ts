@@ -5,6 +5,7 @@ import {
   input,
   output,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import {
@@ -45,6 +46,7 @@ export type RowAction =
   // The host is the list item (role), so the list holds only items (axe "list").
   selector: 'app-library-row',
   imports: [
+    NgTemplateOutlet,
     RouterLink,
     MediaLevelBadge,
     MenuButton,
@@ -63,6 +65,7 @@ export type RowAction =
     '[class.selected]': 'selected()',
     '[class.failed]': "item().status === 'failed'",
     '[class.playing]': 'playing()',
+    '[class.has-tracks]': 'tracksLabel() !== ""',
   },
 })
 export class LibraryRow {
@@ -78,7 +81,10 @@ export class LibraryRow {
   readonly phone = input(false);
   /** Where this media's preparation stopped (KBC-072 FR-6). */
   readonly paused = input<PreparationStep | null>(null);
+  /** Its tracks show under it (media-library-tracks): the chevron at the row's end turns. */
+  readonly tracksOpen = input(false);
   readonly played = output();
+  readonly tracksToggled = output();
   readonly selectedChange = output<boolean>();
   readonly acted = output<RowAction>();
 
@@ -88,6 +94,15 @@ export class LibraryRow {
       this.item().author?.name ??
       $localize`:@@authorship.others:Outros autores`,
   );
+  /** "3 faixas" (pill and the chevron's name); empty for a media with no tracks. */
+  protected readonly tracksLabel = computed(() => {
+    const count = this.item().tracks.length;
+    if (count === 0) return '';
+    return count === 1
+      ? $localize`:@@library.tracksOne:1 faixa`
+      : $localize`:@@library.tracks:${count}:count: faixas`;
+  });
+  protected readonly tracksId = computed(() => `tracks-${this.item().id}`);
   protected readonly ready = computed(() => this.item().status === 'ready');
   protected readonly duration = computed(() => {
     const ms = this.item().durationMs;

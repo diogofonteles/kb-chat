@@ -1150,9 +1150,13 @@ describe('LibraryPage (T16, KBC-051)', () => {
       expect(
         screen.getByText('Nada encontrado para “conselheira”'),
       ).toBeTruthy();
+      // One sentence lives in a span the phone hides (media-library-search-empty@mobile).
       expect(
         screen.getByText(
-          'Procuramos na fala, no título, no autor e nos assuntos. Na fala a busca é por palavra inteira: confira a escrita ou tente outra palavra.',
+          (_, node) =>
+            node?.classList.contains('hint') === true &&
+            node.textContent?.replace(/\s+/g, ' ').trim() ===
+              'Procuramos na fala, no título, no autor e nos assuntos. Na fala a busca é por palavra inteira: confira a escrita ou tente outra palavra.',
         ),
       ).toBeTruthy();
       expect(

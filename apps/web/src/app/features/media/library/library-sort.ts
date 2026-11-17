@@ -45,7 +45,7 @@ const VIEW_LABELS: Record<LibraryView, () => string> = {
       @if (phone()) {
         <ui-icon name="sort" [size]="16" />
       }
-      <span class="words">{{ sortName() }}</span>
+      <span class="words">{{ (phone() && summary()) || sortName() }}</span>
       @if (!phone()) {
         <ui-icon [name]="view() === 'grid' ? 'grid' : 'list'" [size]="18" />
       }
@@ -83,6 +83,11 @@ export class LibrarySortMenu {
   /** The phone's line above the list: the order's icon first, the view has its own button. */
   readonly phone = input(false);
   readonly align = input<'start' | 'end'>('end');
+  /**
+   * A phone with a filter on says how much is left in the order's place, "5 mídias · 3 min"
+   * (media-library-chip@mobile, -author@mobile); the menu keeps its name ("Ordenar: …").
+   */
+  readonly summary = input('');
   readonly sortChange = output<LibrarySort>();
   readonly viewChange = output<LibraryView>();
 

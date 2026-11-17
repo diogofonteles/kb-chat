@@ -46,4 +46,22 @@ describe('LibrarySortMenu ("Ordenar e ver como", KBC-128 FR-3)', () => {
     expect(views).toEqual([]);
     expect(sorts).toEqual([]);
   });
+
+  it('on a phone with a filter on, shows how much is left; the menu keeps its name', async () => {
+    const { fixture } = await render(LibrarySortMenu, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        sort: 'recently-played',
+        view: 'list',
+        phone: true,
+        summary: '5 mídias · 3 min',
+      },
+    });
+    await fixture.whenStable();
+    const trigger = screen.getByRole('button', {
+      name: 'Ordenar: Ouvidas recentemente',
+    });
+    expect(trigger.textContent).toContain('5 mídias · 3 min');
+    expect(trigger.textContent).not.toContain('Ouvidas recentemente');
+  });
 });

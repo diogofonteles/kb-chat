@@ -179,4 +179,20 @@
   .empty-title {
     font-size: 1.25rem;
   }
+
+  /* The phone's empty state keeps the advice only (media-library-search-empty@mobile). */
+  .hint-where {
+    display: none;
+  }
+
+  /* The phone's head is the count alone (media-library-search@mobile); where it looked stays
+     for a screen reader. */
+  .where {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }

@@ -42,6 +42,11 @@
 }
 <span class="cells">
   <span class="byline">
+    @if (tracksLabel()) {
+      <ui-pill class="tracks-pill" tone="muted" aria-hidden="true">{{
+        tracksLabel()
+      }}</ui-pill>
+    }
     <span class="author">{{ authorName() }}</span>
     <app-media-level-badge [level]="item().level" [shown]="master()" />
   </span>
@@ -67,16 +72,43 @@
   </span>
   <span class="duration">{{ duration() }}</span>
 </span>
-<span class="actions">
-  @if (options().length > 0) {
-    <app-menu-button
-      [label]="menuLabel()"
-      [options]="options()"
-      [sheetTitle]="item().title"
-      [sheetMeta]="sheetMeta()"
-      (chosen)="choose($event)"
-    >
-      <ui-icon name="more" [size]="18" />
-    </app-menu-button>
-  }
-</span>
+<ng-template #menu>
+  <app-menu-button
+    [label]="menuLabel()"
+    [options]="options()"
+    [sheetTitle]="item().title"
+    [sheetMeta]="sheetMeta()"
+    (chosen)="choose($event)"
+  >
+    <ui-icon name="more" [size]="18" />
+  </app-menu-button>
+</ng-template>
+@if (tracksLabel()) {
+  <!-- A recording (media-library-tracks): the chevron takes the ⋯'s place at the row's end;
+       its ⋯ comes out where the length is, under the pointer or the focus (a phone: beside). -->
+  <span class="end">
+    @if (options().length > 0) {
+      <span class="more">
+        <ng-container [ngTemplateOutlet]="menu" />
+      </span>
+    }
+    <span class="actions">
+      <button
+        type="button"
+        class="tracks-toggle"
+        [attr.aria-label]="tracksLabel()"
+        [attr.aria-expanded]="tracksOpen()"
+        [attr.aria-controls]="tracksOpen() ? tracksId() : null"
+        (click)="tracksToggled.emit()"
+      >
+        <ui-icon [name]="tracksOpen() ? 'chevDown' : 'chevRight'" [size]="18" />
+      </button>
+    </span>
+  </span>
+} @else {
+  <span class="actions">
+    @if (options().length > 0) {
+      <ng-container [ngTemplateOutlet]="menu" />
+    }
+  </span>
+}

@@ -129,4 +129,18 @@ describe('TrackGroup (KBC-068 FR-5)', () => {
       ?.click();
     expect(played).toHaveBeenCalledWith(recording.tracks[1]);
   });
+
+  it('in the table: no button of its own, each track says its place, its length apart', async () => {
+    const fixture = setup();
+    fixture.componentRef.setInput('toggle', false);
+    fixture.componentRef.setInput('open', true);
+    await fixture.whenStable();
+    const root: HTMLElement = fixture.nativeElement;
+    expect(root.classList).toContain('in-table');
+    expect(root.querySelector('.toggle')).toBeNull();
+    const first = root.querySelector('li');
+    expect(first?.querySelector('.place')?.textContent).toBe('faixa 1 de 2');
+    expect(first?.querySelector('.duration')?.textContent).toBe('1:05');
+    expect(first?.querySelector('.meta')?.textContent).not.toContain('1:05');
+  });
 });

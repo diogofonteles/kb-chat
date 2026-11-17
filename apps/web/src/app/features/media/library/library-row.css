@@ -295,6 +295,60 @@ app-menu-button {
   --menu-trigger-height: 2rem;
 }
 
+/* A recording (media-library-tracks): the "3 faixas" pill leads its byline, the chevron
+   holds the row's end, and its ⋯ comes out over the length under the pointer or the focus. */
+.tracks-pill {
+  flex: none;
+}
+
+.end {
+  display: contents;
+}
+
+.more {
+  grid-area: duration;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  opacity: 0;
+}
+
+:host(:hover) .more,
+:host(:focus-within) .more,
+.more:has([aria-expanded='true']) {
+  opacity: 1;
+}
+
+:host(.has-tracks:hover) .duration,
+:host(.has-tracks:focus-within) .duration,
+:host(.has-tracks:has(.more [aria-expanded='true'])) .duration {
+  visibility: hidden;
+}
+
+.tracks-toggle {
+  /* Above the row's link, as the box and ▶ are. */
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.tracks-toggle:hover {
+  background: var(--overlay-2);
+}
+
+.tracks-toggle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
 /* A narrow table (the right panel open, a small window): the collection gives way first. */
 @container library-table (max-width: 52rem) {
   :host {
@@ -316,7 +370,7 @@ app-menu-button {
     /* The cover's column holds its 12 px to the title (mRow: cover 52, gap 12). */
     grid-template-columns:
       0 calc(3.25rem + var(--space-3)) minmax(0, 1fr)
-      1.5rem;
+      var(--row-end, 1.5rem);
     grid-template-areas:
       'lead art title actions'
       'lead art cells actions';
@@ -329,13 +383,39 @@ app-menu-button {
     justify-self: start;
   }
 
+  /* A recording: its ⋯ and the chevron side by side at the row's end. */
+  :host(.has-tracks) {
+    --row-end: 3.5rem;
+  }
+
+  .end {
+    grid-area: actions;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .more {
+    opacity: 1;
+  }
+
+  :host(.has-tracks:hover) .duration,
+  :host(.has-tracks:focus-within) .duration {
+    visibility: visible;
+  }
+
+  .tracks-toggle {
+    width: 1.5rem;
+    height: 2.75rem;
+  }
+
   /* No box until a selection starts (from the ⋯): then it leads every row (selection@mobile). */
   .lead {
     visibility: hidden;
   }
 
   :host-context(.selecting) {
-    grid-template-columns: 1.5rem 3.25rem minmax(0, 1fr) 1.5rem;
+    grid-template-columns: 1.5rem 3.25rem minmax(0, 1fr) var(--row-end, 1.5rem);
     column-gap: var(--space-3);
   }
 

@@ -513,6 +513,40 @@ export class LibraryPage {
       ? $localize`:@@library.showList:Ver como lista`
       : $localize`:@@library.showGrid:Ver como grade`,
   );
+  /** The phone's ⋯: the action bar's icons that have no place in its top row, then the ⋯'s. */
+  protected readonly phoneHeaderOptions = computed<readonly MenuOption[]>(
+    () => [
+      ...(this.firstPlayable()
+        ? [
+            {
+              id: 'shuffle',
+              label: $localize`:@@library.shuffle:Tocar em ordem aleatória`,
+              icon: 'shuffle' as const,
+            },
+          ]
+        : []),
+      ...(this.isMaster()
+        ? [
+            {
+              id: 'invite',
+              label: $localize`:@@library.invite:Convidar pessoas`,
+              icon: 'personAdd' as const,
+            },
+          ]
+        : []),
+      ...this.headerOptions(),
+      // The table's "Selecionar todas" box has no place on a phone (no table head).
+      ...(this.selectable().length > 0 && !this.allSelected()
+        ? [
+            {
+              id: 'select-all',
+              label: this.selectAllText(),
+              icon: 'checkcircle' as const,
+            },
+          ]
+        : []),
+    ],
+  );
   /** The header's ⋯ (media-library): what has no icon of its own in the action bar. */
   protected readonly headerOptions = computed<readonly MenuOption[]>(() => [
     {
@@ -539,6 +573,17 @@ export class LibraryPage {
         ]
       : []),
   ]);
+
+  /** The recordings whose tracks show under their row (media-library-tracks). */
+  protected readonly openTracks = signal<ReadonlySet<string>>(new Set());
+
+  protected toggleTracks(id: string): void {
+    this.openTracks.update((open) => {
+      const next = new Set(open);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
 
   /** Selected media for "Marcar como ouvida/não ouvida" (only those on screen). */
   protected readonly selected = linkedSignal<
@@ -952,8 +997,14 @@ export class LibraryPage {
   }
 
   protected headerAction(id: string): void {
-    if (id === 'bookmarks') void this.router.navigate(['/midia/marcadores']);
+    if (id === 'shuffle') this.playAny();
+    else if (id === 'invite')
+      void this.router.navigate(['/configuracoes/pessoas']);
+    else if (id === 'bookmarks')
+      void this.router.navigate(['/midia/marcadores']);
     else if (id === 'select') this.startSelection();
+    else if (id === 'select-all')
+      this.selected.set(new Set(this.selectable().map((item) => item.id)));
     else if (id === 'clear-recents') this.askClearRecents();
   }
 
@@ -1033,7 +1084,8 @@ export class LibraryPage {
 
   protected cancelSelection(): void {
     this.selected.set(new Set());
-    this.focusAfterRender(this.selectAllBox);
+    // A phone has no table head (media-library@mobile): the list's heading takes the focus.
+    this.focusAfterRender(this.phone() ? this.allTitle : this.selectAllBox);
   }
 
   protected markSelected(played: boolean): void {

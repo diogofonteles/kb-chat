@@ -89,7 +89,9 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Autoria' }));
     await fixture.whenStable();
     expect(
-      screen.getAllByRole('menuitemradio').map((item) => item.textContent?.trim()),
+      screen
+        .getAllByRole('menuitemradio')
+        .map((item) => item.textContent?.trim()),
     ).toEqual(['Mestre Laércio, principal', 'Outros autores']);
     fireEvent.click(
       screen.getByRole('menuitemradio', { name: /Mestre Laércio, principal/ }),

@@ -139,6 +139,20 @@
         <ui-icon name="upload" [size]="24" />
       </button>
     }
+    <!-- The action bar has no place on a phone (media-library@mobile): what it holds beyond
+         ▶ (a tap on a cover plays) stays a ⋯ away — shuffle, Meus marcadores, Selecionar
+         mídias, Limpar recentes, Convidar pessoas. -->
+    <app-menu-button
+      class="phone-more"
+      label="Mais ações da Biblioteca"
+      i18n-label="@@library.moreActions"
+      [options]="phoneHeaderOptions()"
+      sheetTitle="Biblioteca"
+      i18n-sheetTitle="@@library.title"
+      (chosen)="headerAction($event)"
+    >
+      <ui-icon name="more" [size]="24" />
+    </app-menu-button>
   </ng-template>
 
   <div class="sections">
@@ -383,6 +397,7 @@
             <app-library-sort
               [phone]="true"
               align="start"
+              [summary]="phone() && filtered() ? countText() : ''"
               [sort]="current.sort"
               [view]="current.view"
               (sortChange)="changeSort($event)"
@@ -465,16 +480,19 @@
                     [master]="isMaster()"
                     [phone]="phone()"
                     [paused]="preparations.steps().get(item.id) ?? null"
+                    [tracksOpen]="openTracks().has(item.id)"
+                    (tracksToggled)="toggleTracks(item.id)"
                     (played)="play(item)"
                     (selectedChange)="select(item, $event)"
                     (acted)="rowAction(item, $event)"
                   />
-                  @if (item.tracks.length > 0) {
+                  @if (item.tracks.length > 0 && openTracks().has(item.id)) {
                     <app-track-group
                       class="row-tracks"
                       role="listitem"
                       [item]="item"
-                      [openByDefault]="query() !== ''"
+                      [toggle]="false"
+                      [open]="true"
                       [playingId]="playingId()"
                       (played)="play($event)"
                     />

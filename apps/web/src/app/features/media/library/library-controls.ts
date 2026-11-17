@@ -136,7 +136,8 @@ export class LibraryControls {
   protected readonly authorshipName = computed(() => {
     const chosen = this.authorship();
     if (!chosen) return '';
-    if (chosen === NO_AUTHOR) return $localize`:@@authorship.others:Outros autores`;
+    if (chosen === NO_AUTHOR)
+      return $localize`:@@authorship.others:Outros autores`;
     const named = this.facets().authors.find((one) => one.slug === chosen);
     return named?.name ?? chosen;
   });
