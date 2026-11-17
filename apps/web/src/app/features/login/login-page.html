@@ -62,7 +62,12 @@
           }
           @if (loading()) {
             <p class="pending" role="status">
-              <span class="spinner" aria-hidden="true"></span>
+              <ui-icon
+                class="spinner"
+                name="refresh"
+                [size]="18"
+                aria-hidden="true"
+              />
               <span i18n="@@login.loading">Carregando…</span>
             </p>
           }
@@ -80,7 +85,12 @@
           >
             <span class="google-face" aria-hidden="true">
               @if (signingIn()) {
-                <span class="spinner" aria-hidden="true"></span>
+                <ui-icon
+                  class="spinner"
+                  name="refresh"
+                  [size]="18"
+                  aria-hidden="true"
+                />
                 <span i18n="@@login.signingIn">Entrando…</span>
               } @else {
                 <ui-icon name="google" [size]="20" />

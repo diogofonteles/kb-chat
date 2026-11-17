@@ -141,17 +141,26 @@
   opacity: 0.6;
 }
 
+@media (max-width: 1023px) {
+  .pending {
+    min-height: 3.25rem;
+  }
+}
+
 .status:empty {
   display: none;
 }
 
+/* v2 · Auth: the refresh glyph (18), turning; still under reduced motion. */
 .spinner {
-  width: 1rem;
-  height: 1rem;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  display: inline-flex;
+  animation: spin 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
 }
 
 @keyframes spin {
