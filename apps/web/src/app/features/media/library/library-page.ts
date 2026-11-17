@@ -1001,8 +1001,11 @@ export class LibraryPage {
     const view: LibraryView = display === 'compact' ? 'list' : display;
     this.compact.set(display === 'compact');
     keepCompact(display === 'compact');
-    if (view !== this.choices()?.view)
+    if (view !== this.choices()?.view) {
+      // Each view opens its recordings anew, as the grid's cards do.
+      this.openTracks.set(new Set());
       this.choose({ view }, { libraryView: view });
+    }
   }
 
   private choose(

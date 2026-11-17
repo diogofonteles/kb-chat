@@ -13,9 +13,9 @@ import { desktop } from './shell-helpers.js';
  */
 
 /** A short window where the fixture's text would otherwise fit on one screen. */
-async function shortWindow(page: Page): Promise<void> {
+async function shortWindow(page: Page, height = 560): Promise<void> {
   const width = page.viewportSize()?.width ?? 1440;
-  await page.setViewportSize({ width, height: 560 });
+  await page.setViewportSize({ width, height });
 }
 
 /** The middle of the part of `region` that is on screen. */
@@ -211,7 +211,9 @@ test.describe('pages in the main panel', () => {
   });
 
   test('Biblioteca scrolls', async ({ page }) => {
-    await shortWindow(page);
+    // The fixture's collection has no media: on a phone its empty state (top row, chips,
+    // media-library-empty-uploader@mobile) fits in 560 px, so a shorter window.
+    await shortWindow(page, 420);
     await page.goto('/biblioteca');
     await expect(
       page.getByRole('heading', { name: 'Biblioteca', level: 2 }),

@@ -411,6 +411,13 @@ button[type='submit']:disabled {
     --ui-cover-size: 160px !important;
   }
 
+  /* The sheet's cover sits close under its top row, the fields close under it
+     (media-library-edit@mobile: 30 px over the cover, 24 px to "Título"). */
+  .columns:has(> .edit-cover) {
+    gap: var(--space-4);
+    margin-top: calc(-1 * var(--space-3));
+  }
+
   .author-help .wide,
   .actions .wide {
     display: none;

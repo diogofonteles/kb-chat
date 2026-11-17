@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { CSRF, expect, ownerApi } from './fixtures.js';
+import { desktop, library } from './shell-helpers.js';
 import {
   audioState,
   listenerTest as test,
@@ -212,11 +213,19 @@ test('FR-5: "Meus marcadores" opens the media playing from the bookmark', async 
 }) => {
   await seed(page, [30_000]);
   await page.goto('/midia');
-  // The media page's own link (Sua biblioteca pins one too, KBC-125).
-  await page
-    .getByRole('main')
-    .getByRole('link', { name: 'Meus marcadores' })
-    .click();
+  // The media page's own link on a desktop (media-list); a phone's album has none
+  // (media-list@mobile), and Sua biblioteca pins one (KBC-125).
+  if (desktop(page))
+    await page
+      .getByRole('main')
+      .getByRole('link', { name: 'Meus marcadores' })
+      .click();
+  else
+    await (
+      await library(page)
+    )
+      .getByRole('link', { name: /^Meus marcadores/ })
+      .click();
   await page
     .getByRole('link', {
       name: `${lecture.title} 0:30, tocar daqui`,

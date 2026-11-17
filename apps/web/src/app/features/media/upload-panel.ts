@@ -132,6 +132,8 @@ export class UploadPanel implements OnInit {
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private readonly levelField = viewChild(LevelField);
+  private readonly sendButton =
+    viewChild<ElementRef<HTMLButtonElement>>('sendButton');
   private readonly injector = inject(Injector);
   private readonly fileInput =
     viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
@@ -324,6 +326,8 @@ export class UploadPanel implements OnInit {
   /** True while the levels are asked for: the send waits for them, then goes on its own. */
   private holdForLevels(): boolean {
     this.waitingForLevels.set(this.levels.loading());
+    // The waiting button has the focus, also where a press does not give it (Safari).
+    if (this.waitingForLevels()) this.sendButton()?.nativeElement.focus();
     return this.waitingForLevels();
   }
 
