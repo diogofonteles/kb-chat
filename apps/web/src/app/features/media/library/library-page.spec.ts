@@ -1208,7 +1208,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       ).toBeGreaterThan(0);
     });
 
-    it('KBC-091 QA I-10: nothing found in one collection offers every collection, and the focus follows', async () => {
+    it('KBC-091 QA I-10: nothing found in one collection, its chip leads to every collection, and the focus follows', async () => {
       const library = await renderLibrary({ features: SPEAKER });
       await library.open(aPage([anItem(1)]), aHome(), {
         ...PREFERENCES,
@@ -1228,8 +1228,13 @@ describe('LibraryPage (T16, KBC-051)', () => {
         screen.queryByRole('button', { name: 'Limpar filtros' }),
       ).toBeNull();
 
+      // The frame has only "Limpar busca" (media-library-search-empty): the way out is the
+      // collection's chip, still over the results.
+      expect(
+        screen.queryByRole('button', { name: 'Buscar em todos os acervos' }),
+      ).toBeNull();
       fireEvent.click(
-        screen.getByRole('button', { name: 'Buscar em todos os acervos' }),
+        screen.getByRole('button', { name: /^Ver todos os acervos \(tirar / }),
       );
       await library.tick();
 
@@ -1258,7 +1263,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
     it('KBC-091 QA I-10: across every collection, nothing found has no such way out', async () => {
       await found({ features: SPEAKER }, anAnswer([]), 'conselheira');
       expect(
-        screen.queryByRole('button', { name: 'Buscar em todos os acervos' }),
+        screen.queryByRole('button', { name: /^Ver todos os acervos/ }),
       ).toBeNull();
     });
 

@@ -103,7 +103,8 @@
 
   <!-- The phone's top row holds these (PageHeader): the filter and the upload. -->
   <ng-template #phoneActions>
-    @if (showFilter()) {
+    <!-- Always on a phone, an empty collection included (media-list-empty@mobile). -->
+    @if (showFilter() || phone()) {
       <button
         type="button"
         uiIconButton
@@ -223,9 +224,7 @@
             }
             <span i18n="@@library.state.inProgressChip">Em andamento</span>
           </button>
-          @if (showAuthorFilter()) {
-            <ng-container [ngTemplateOutlet]="authorChip" />
-          }
+          <ng-container [ngTemplateOutlet]="authorChip" />
           <button
             type="button"
             uiChip
@@ -427,6 +426,7 @@
                   [sheetTitle]="item.title"
                   [sheetMeta]="authorOf(item) + ' · ' + (topic()?.title ?? '')"
                   (playChosen)="play(item)"
+                  (nextChosen)="playNext(item)"
                   (linkChosen)="copyLink(item)"
                   (editChosen)="openEdit(item)"
                   (removeChosen)="askRemove(item)"
@@ -469,9 +469,23 @@
     aria-describedby="remove-text"
     (close)="removeClosed()"
   >
-    <h2 id="remove-title" i18n="@@media.removeTitle">
-      Remover "{{ item.title }}"?
-    </h2>
+    <!-- The sheet's handle on a phone; the ✕ beside the title on a desktop (media-library-remove). -->
+    <span class="handle" aria-hidden="true"></span>
+    <div class="confirm-head">
+      <h2 id="remove-title" i18n="@@media.removeTitle">
+        Remover "{{ item.title }}"?
+      </h2>
+      <button
+        type="button"
+        uiIconButton
+        class="confirm-close"
+        aria-label="Fechar"
+        i18n-aria-label="@@ui.dialog.close"
+        (click)="cancelRemove()"
+      >
+        <ui-icon name="close" [size]="20" />
+      </button>
+    </div>
     <p id="remove-text" i18n="@@media.removeText">
       O áudio e a transcrição serão apagados e não podem ser recuperados.
     </p>

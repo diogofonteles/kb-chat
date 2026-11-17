@@ -28,9 +28,12 @@ import { percentOf, stateTextOf, stoppedAtTextOf } from './library-labels.js';
 /** What the row's "⋯" can do. */
 export type RowAction =
   | 'play'
+  | 'play-next'
+  | 'bookmarks'
   | 'mark-played'
   | 'mark-unplayed'
   | 'select'
+  | 'select-all'
   | 'edit'
   | 'copy-link'
   | 'retry'
@@ -79,6 +82,11 @@ export class LibraryRow {
   readonly master = input(false);
   /** The phone's row (media-library@mobile): its ⋯ starts a selection, "Compartilhar". */
   readonly phone = input(false);
+  /**
+   * During a selection on a phone, "Selecionar todas as N" (the table's box has no place
+   * there): its words, or '' when there is nothing more to select.
+   */
+  readonly selectAll = input('');
   /** Where this media's preparation stopped (KBC-072 FR-6). */
   readonly paused = input<PreparationStep | null>(null);
   /** Its tracks show under it (media-library-tracks): the chevron at the row's end turns. */
@@ -153,6 +161,12 @@ export class LibraryRow {
     const ready = this.ready();
     const phone = this.phone();
     const options = listenOptions(this.item(), ready, phone);
+    const all = this.selectAll();
+    if (phone && all) {
+      const at = options.findIndex((one) => one.id === 'select');
+      if (at >= 0)
+        options[at] = { id: 'select-all', label: all, icon: 'checkcircle' };
+    }
     options.push(
       ...shareOptions(this.item(), { ready, phone }, options.length),
     );
@@ -173,37 +187,51 @@ export class LibraryRow {
 
 const ACTIONS: readonly RowAction[] = [
   'play',
+  'play-next',
+  'bookmarks',
   'mark-played',
   'mark-unplayed',
   'select',
+  'select-all',
   'edit',
   'copy-link',
   'retry',
   'remove',
 ];
 
-/** Play (not on a phone: a tap on the cover plays), mark heard or not, select (phone). */
+/**
+ * Play (not on a phone: a tap on the cover plays), play next, mark heard or not, its
+ * bookmarks, then "Selecionar" on a phone (where the table has no boxes to start one).
+ */
 function listenOptions(
   item: LibraryItem,
   ready: boolean,
   phone: boolean,
 ): MenuOption[] {
   if (!ready) return [];
-  const options: MenuOption[] = [];
-  if (!phone)
-    options.push({
-      id: 'play',
-      label: $localize`:@@library.playNow:Tocar agora`,
-      icon: 'play',
-    });
-  options.push(markOption(item));
-  if (phone)
-    options.push({
-      id: 'select',
-      label: $localize`:@@library.selectRow:Selecionar`,
-      icon: 'check',
-    });
-  return options;
+  const play: MenuOption = {
+    id: 'play',
+    label: $localize`:@@library.playNow:Tocar agora`,
+    icon: 'play',
+  };
+  const next: MenuOption = {
+    id: 'play-next',
+    label: $localize`:@@library.playNext:Tocar em seguida`,
+    icon: 'queue',
+  };
+  const bookmarks: MenuOption = {
+    id: 'bookmarks',
+    label: $localize`:@@library.seeBookmarks:Ver marcadores`,
+    icon: 'bookmark',
+  };
+  const select: MenuOption = {
+    id: 'select',
+    label: $localize`:@@library.selectRow:Selecionar`,
+    icon: 'check',
+  };
+  return phone
+    ? [next, markOption(item), bookmarks, select]
+    : [play, next, markOption(item), bookmarks];
 }
 
 /** "Marcar como ouvida", or "não ouvida" once heard. */

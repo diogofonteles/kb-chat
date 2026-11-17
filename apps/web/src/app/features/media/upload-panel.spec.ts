@@ -521,7 +521,15 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     });
     expect(author.value).toBe('');
     expect(author.getAttribute('aria-describedby')).toBeTruthy();
-    expect(screen.getByText(/Em branco, o áudio fica em/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Escolha um autor do acervo .*Em branco, o áudio fica em/,
+      ),
+    ).toBeTruthy();
+    // A phone says only the blank's part, under the field (media-upload@mobile).
+    expect(
+      screen.getByText(/^Em branco, o áudio fica em "Outros autores"\.$/),
+    ).toBeTruthy();
   });
 
   it('creates the item, sends the file with real progress, then hands it over (AC-1)', async () => {

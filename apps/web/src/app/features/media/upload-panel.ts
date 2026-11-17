@@ -193,6 +193,14 @@ export class UploadPanel implements OnInit {
   );
   /** Said beside the files: none chosen, or none that can go. */
   protected readonly fileProblem = signal<string | null>(null);
+  /**
+   * No file that "Enviar" takes yet (media-upload, -duplicate, -bad-type): it looks off
+   * (aria-disabled), and a press still says why.
+   */
+  protected readonly nothingToPick = computed(
+    () => !this.uploads.checking() && this.uploads.sendable().length === 0,
+  );
+  protected readonly cancelSendingLabel = $localize`:@@media.upload.cancelSending:Cancelar envio`;
   protected readonly stage = signal<Stage>('choosing');
   protected readonly submitted = signal(false);
   protected readonly dragging = signal(false);

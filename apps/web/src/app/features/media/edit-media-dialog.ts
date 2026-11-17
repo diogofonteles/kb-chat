@@ -18,7 +18,11 @@ import {
 import { UiButton, UiIconButton } from '@ui/button.js';
 import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
-import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import {
+  takeUntilDestroyed,
+  toObservable,
+  toSignal,
+} from '@angular/core/rxjs-interop';
 import {
   FormControl,
   FormGroup,
@@ -128,6 +132,17 @@ export class EditMediaDialog implements OnInit {
       validators: Validators.required,
     }),
   });
+  /**
+   * The title emptied: said under the field at once and "Salvar" looks off (aria-disabled,
+   * a press still says why), as in media-library-edit-errors.
+   */
+  private readonly titleStatus = toSignal(
+    this.form.controls.title.statusChanges,
+    { initialValue: this.form.controls.title.status },
+  );
+  protected readonly titleMissing = computed(
+    () => this.titleStatus() === 'INVALID' && this.form.controls.title.dirty,
+  );
   /** The "Acervo" field as a signal: the author suggestions and the note follow it. */
   protected readonly chosenTopic = signal('');
   protected readonly moving = computed(

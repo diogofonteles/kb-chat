@@ -197,14 +197,6 @@ export class LibrarySearchResults {
   protected readonly filtered = computed(
     () => activeFiltersOf(this.filters()) > 0,
   );
-  /**
-   * The search ran in one collection and the person sees others (KBC-091, QA I-10): the
-   * collection is no filter, so "Limpar filtros" does not leave it; this does.
-   */
-  protected readonly otherCollections = computed(() => {
-    const { topic } = this.filters();
-    return topic !== null && this.topics().some(({ slug }) => slug !== topic);
-  });
   /** The speech is said only to who searches in it (R4). */
   protected readonly searchesSpeech = computed(() =>
     this.session.can('search'),
@@ -234,9 +226,11 @@ export class LibrarySearchResults {
     });
   }
 
-  /** The button leaves with the empty answer: the focus goes to the results' title. */
-  protected searchEverywhere(): void {
-    this.filtersChange.emit({ kind: 'topic', topic: null });
+  /**
+   * The collection's chip left (the way out of nothing found in one collection, KBC-091
+   * QA I-10): the focus goes to the results' title once they are in.
+   */
+  focusTitle(): void {
     afterNextRender(() => this.title()?.nativeElement.focus(), {
       injector: this.injector,
     });

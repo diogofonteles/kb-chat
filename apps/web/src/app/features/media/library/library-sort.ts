@@ -15,9 +15,33 @@ import { UiIcon } from '@ui/icon.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import { SORT_LABELS } from './library-labels.js';
 
+/**
+ * How the list shows (media-library-sort, "Ver como"): the account's two views and
+ * "Compacta", the list without covers, kept in this browser (a density of the list).
+ */
+export type LibraryDisplay = LibraryView | 'compact';
+const DISPLAYS: readonly LibraryDisplay[] = ['compact', ...LIBRARY_VIEWS];
+const DISPLAY_ICONS = {
+  compact: 'drag',
+  list: 'list',
+  grid: 'grid',
+} as const satisfies Record<LibraryDisplay, string>;
+
+const CLEAR_RECENTS = 'clear-recents';
+
+/** The phone's last item: an action among the choices, set apart. */
+const clearRecentsOption = (): MenuOption => ({
+  id: CLEAR_RECENTS,
+  label: $localize`:@@library.clearRecents:Limpar recentes`,
+  icon: 'close',
+  divider: true,
+  action: true,
+});
+
 /** A view's item in the menu carries this before its name. */
 const VIEW_PREFIX = 'view:';
-const VIEW_LABELS: Record<LibraryView, () => string> = {
+const VIEW_LABELS: Record<LibraryDisplay, () => string> = {
+  compact: () => $localize`:@@library.viewCompact:Compacta`,
   list: () => $localize`:@@library.viewList:Lista`,
   grid: () => $localize`:@@library.viewGrid:Grade`,
 };
@@ -47,7 +71,7 @@ const VIEW_LABELS: Record<LibraryView, () => string> = {
       }
       <span class="words">{{ (phone() && summary()) || sortName() }}</span>
       @if (!phone()) {
-        <ui-icon [name]="view() === 'grid' ? 'grid' : 'list'" [size]="18" />
+        <ui-icon [name]="icons[view()]" [size]="18" />
       }
     </app-menu-button>
   `,
@@ -79,7 +103,7 @@ const VIEW_LABELS: Record<LibraryView, () => string> = {
 })
 export class LibrarySortMenu {
   readonly sort = input.required<LibrarySort>();
-  readonly view = input.required<LibraryView>();
+  readonly view = input.required<LibraryDisplay>();
   /** The phone's line above the list: the order's icon first, the view has its own button. */
   readonly phone = input(false);
   readonly align = input<'start' | 'end'>('end');
@@ -89,7 +113,11 @@ export class LibrarySortMenu {
    */
   readonly summary = input('');
   readonly sortChange = output<LibrarySort>();
-  readonly viewChange = output<LibraryView>();
+  readonly viewChange = output<LibraryDisplay>();
+  /** On a phone, "Limpar recentes" under the choices (the header's ⋯ has no place there). */
+  readonly clearRecents = input(false);
+  readonly recentsCleared = output();
+  protected readonly icons = DISPLAY_ICONS;
 
   protected readonly sortOptions = computed<readonly MenuOption[]>(() => {
     const sortGroup = $localize`:@@library.sortGroup:Ordenar por`;
@@ -101,13 +129,16 @@ export class LibrarySortMenu {
         checked: id === this.sort(),
         group: sortGroup,
       })),
-      ...LIBRARY_VIEWS.map((view) => ({
+      ...DISPLAYS.map((view) => ({
         id: `${VIEW_PREFIX}${view}`,
         label: VIEW_LABELS[view](),
-        icon: view === 'grid' ? ('grid' as const) : ('list' as const),
+        icon: DISPLAY_ICONS[view],
         checked: view === this.view(),
         group: viewGroup,
+        // On a phone's sheet the three are pills in one row (media-library-sort@mobile).
+        pill: true,
       })),
+      ...(this.clearRecents() ? [clearRecentsOption()] : []),
     ];
   });
   protected readonly sortName = computed(() => SORT_LABELS[this.sort()]());
@@ -117,7 +148,11 @@ export class LibrarySortMenu {
   );
 
   protected choose(id: string): void {
-    const view = LIBRARY_VIEWS.find((one) => `${VIEW_PREFIX}${one}` === id);
+    if (id === CLEAR_RECENTS) {
+      this.recentsCleared.emit();
+      return;
+    }
+    const view = DISPLAYS.find((one) => `${VIEW_PREFIX}${one}` === id);
     if (view) {
       if (view !== this.view()) this.viewChange.emit(view);
       return;

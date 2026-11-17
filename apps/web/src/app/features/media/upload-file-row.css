@@ -87,6 +87,30 @@
   background: var(--overlay-2);
 }
 
+/* A ✕ on a phone (media-upload-chosen@mobile), the words on a desktop; the name is the
+   button's aria-label either way. */
+.remove .x {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .remove {
+    display: grid;
+    place-items: center;
+    min-width: var(--target);
+    padding: 0;
+    color: var(--color-text-muted);
+  }
+
+  .remove .words {
+    display: none;
+  }
+
+  .remove .x {
+    display: block;
+  }
+}
+
 .field {
   display: grid;
   gap: var(--space-2);

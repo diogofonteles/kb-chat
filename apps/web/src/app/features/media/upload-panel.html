@@ -128,11 +128,14 @@
 
         <label class="field">
           <span class="label" i18n="@@media.upload.topic">Acervo</span>
-          <select formControlName="topic" (change)="topicChosen()">
-            @for (option of choices(); track option.slug) {
-              <option [value]="option.slug">{{ treeTitle(option) }}</option>
-            }
-          </select>
+          <span class="select-box">
+            <select formControlName="topic" (change)="topicChosen()">
+              @for (option of choices(); track option.slug) {
+                <option [value]="option.slug">{{ treeTitle(option) }}</option>
+              }
+            </select>
+            <ui-icon class="caret" name="chevDown" [size]="18" />
+          </span>
         </label>
 
         <app-author-combobox
@@ -142,13 +145,13 @@
           [(name)]="authorName"
         />
         <!-- Under both fields, as wide as they are (media-upload). -->
-        <p
-          class="author-help"
-          id="upload-author-help"
-          i18n="@@media.upload.authorHelp"
-        >
-          Escolha um autor do acervo ou digite um novo. Em branco, o áudio fica
-          em "Outros autores".
+        <p class="author-help" id="upload-author-help">
+          <span class="wide" i18n="@@media.upload.authorHelp"
+            >Escolha um autor do acervo ou digite um novo. Em branco, o áudio
+            fica em "Outros autores".</span
+          ><span class="narrow" i18n="@@media.upload.authorHelpShort"
+            >Em branco, o áudio fica em "Outros autores".</span
+          >
         </p>
 
         @if (levels.shown()) {
@@ -186,13 +189,16 @@
 
     <footer class="actions">
       @if (stage() === 'sending') {
+        <!-- "Cancelar" in the phone's top row (media-upload-sending@mobile). -->
         <button
           type="button"
           uiButton="ghost"
+          [attr.aria-label]="cancelSendingLabel"
           (click)="cancelUpload()"
-          i18n="@@media.upload.cancelSending"
         >
-          Cancelar envio
+          <span class="wide" i18n="@@media.upload.cancelSending"
+            >Cancelar envio</span
+          ><span class="narrow" i18n="@@media.upload.cancel">Cancelar</span>
         </button>
       } @else {
         <button
@@ -207,7 +213,9 @@
           type="submit"
           uiButton="primary"
           [disabled]="uploads.checking()"
-          [attr.aria-disabled]="waitingForLevels() ? 'true' : null"
+          [attr.aria-disabled]="
+            waitingForLevels() || nothingToPick() ? 'true' : null
+          "
           [attr.aria-busy]="waitingForLevels() ? 'true' : null"
         >
           @if (waitingForLevels()) {

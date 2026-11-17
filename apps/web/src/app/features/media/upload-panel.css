@@ -127,8 +127,23 @@
 /* No tint of its own: each choice inside is already a tinted row or card (KBC-130), and two
    tints over the modal take the muted hints under 4.5:1 in the dark theme. */
 .options {
-  padding: var(--space-4);
   border-radius: var(--radius-card);
+}
+
+/* The upload's modal is as tight as the frame (media-upload: 24 between the columns and
+   between the blocks, the footer close under them). */
+.panel.wide .body {
+  gap: var(--space-4);
+}
+
+.panel.wide .columns:has(> .options) {
+  column-gap: var(--space-6);
+}
+
+@media (min-width: 1024px) {
+  .panel.wide .actions {
+    padding-top: var(--space-2);
+  }
 }
 
 .kept {
@@ -274,6 +289,32 @@
   font-size: var(--text-sm);
 }
 
+/* The collection's select with the v2 ▾ of the other fields, not the browser's. */
+.select-box {
+  position: relative;
+  display: grid;
+}
+
+.select-box select {
+  appearance: none;
+  width: 100%;
+  padding-right: calc(var(--space-3) * 2 + 18px);
+}
+
+.select-box .caret {
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  color: var(--color-text-muted);
+  translate: 0 -50%;
+  pointer-events: none;
+}
+
+.author-help .narrow,
+.actions .narrow {
+  display: none;
+}
+
 .field select option {
   background: var(--color-elevated);
   color: var(--color-text);
@@ -367,6 +408,26 @@ button[type='submit']:disabled {
 
   .edit-cover {
     justify-self: center;
+    --ui-cover-size: 160px !important;
+  }
+
+  .author-help .wide,
+  .actions .wide {
+    display: none;
+  }
+
+  .author-help .narrow,
+  .actions .narrow {
+    display: inline;
+  }
+
+  .panel.wide .columns:has(> .options) {
+    row-gap: var(--space-4);
+  }
+
+  /* No note beside the file while sending (media-upload-sending@mobile). */
+  .next {
+    display: none;
   }
 
   /* The sheet's top row (mFull, media-upload@mobile, media-library-edit@mobile):

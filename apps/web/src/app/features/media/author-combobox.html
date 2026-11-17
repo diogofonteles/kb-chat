@@ -2,12 +2,6 @@
   <label class="label" [for]="inputId" i18n="@@media.upload.author"
     >Autor</label
   >
-  @if (!helpId()) {
-    <p class="help" [id]="ownHelpId" i18n="@@media.upload.authorHelp">
-      Escolha um autor do acervo ou digite um novo. Em branco, o áudio fica em
-      "Outros autores".
-    </p>
-  }
   <!-- Looks like the "Acervo" select beside it: blank reads "Outros autores", ▾ at the end. -->
   <div class="field">
     <input
@@ -62,6 +56,17 @@
       </li>
     }
   </ul>
+  <!-- Small, under the field (media-library-edit); a phone says only the blank's part. -->
+  @if (!helpId()) {
+    <p class="help" [id]="ownHelpId">
+      <span class="wide" i18n="@@media.upload.authorHelp"
+        >Escolha um autor do acervo ou digite um novo. Em branco, o áudio fica
+        em "Outros autores".</span
+      ><span class="narrow" i18n="@@media.upload.authorHelpShort"
+        >Em branco, o áudio fica em "Outros autores".</span
+      >
+    </p>
+  }
   <div class="status" aria-live="polite" [id]="statusId">
     @if (invalid()) {
       <p class="error" i18n="@@media.author.invalid">

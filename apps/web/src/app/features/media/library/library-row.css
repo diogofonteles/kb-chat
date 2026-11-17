@@ -562,3 +562,17 @@ app-menu-button {
     border: 1px solid ButtonText;
   }
 }
+
+/* "Compacta" (media-library-sort's "Ver como"): no cover, the ▶ alone in its place under
+   the pointer, and shorter rows. */
+:host-context(.compact) {
+  min-height: 2.75rem;
+}
+
+:host-context(.compact) .art ui-cover {
+  visibility: hidden;
+}
+
+:host-context(.compact) .art {
+  height: 2rem;
+}

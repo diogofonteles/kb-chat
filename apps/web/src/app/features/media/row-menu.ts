@@ -9,9 +9,9 @@ import { editDetailsLabel } from './edit-labels.js';
 import { MenuButton, type MenuOption } from './menu-button.js';
 
 /**
- * The "⋯" menu of a media row (T14; v2 media-list-menu): "Tocar agora", then "Editar
- * informações" and "Copiar link" ("Compartilhar" on a phone, where the row plays on a tap),
- * then "Remover" for masters, set apart.
+ * The "⋯" menu of a media row (T14; v2 media-list-menu): "Tocar agora" (not on a phone, where
+ * the row plays on a tap) and "Tocar em seguida", then "Editar informações" and "Copiar link"
+ * ("Compartilhar" on a phone), then "Remover" for masters.
  */
 @Component({
   selector: 'app-row-menu',
@@ -43,19 +43,14 @@ export class RowMenu {
   readonly sheetTitle = input('');
   readonly sheetMeta = input('');
   readonly playChosen = output();
+  readonly nextChosen = output();
   readonly linkChosen = output();
   readonly editChosen = output();
   readonly removeChosen = output();
 
   protected readonly options = computed<readonly MenuOption[]>(() => {
     const phone = this.phone();
-    const options: MenuOption[] = [];
-    if (this.canPlay() && !phone)
-      options.push({
-        id: 'play',
-        label: $localize`:@@library.playNow:Tocar agora`,
-        icon: 'play',
-      });
+    const options: MenuOption[] = this.canPlay() ? playOptions(phone) : [];
     const second = options.length > 0;
     if (this.canEdit())
       options.push({
@@ -78,10 +73,29 @@ export class RowMenu {
 
   protected choose(id: string): void {
     if (id === 'play') this.playChosen.emit();
+    else if (id === 'next') this.nextChosen.emit();
     else if (id === 'link') this.linkChosen.emit();
     else if (id === 'edit') this.editChosen.emit();
     else this.removeChosen.emit();
   }
+}
+
+/** "Tocar agora" (not on a phone: the row plays on a tap) and "Tocar em seguida". */
+function playOptions(phone: boolean): MenuOption[] {
+  const next: MenuOption = {
+    id: 'next',
+    label: $localize`:@@library.playNext:Tocar em seguida`,
+    icon: 'queue',
+  };
+  if (phone) return [next];
+  return [
+    {
+      id: 'play',
+      label: $localize`:@@library.playNow:Tocar agora`,
+      icon: 'play',
+    },
+    next,
+  ];
 }
 
 /** "Copiar link", or "Compartilhar" through the phone's own sheet. */

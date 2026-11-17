@@ -623,7 +623,7 @@ describe('MediaListPage: "Editar informações" (KBC-050)', () => {
     // A ready audio's ⋯ plays it and copies its link (media-list-menu); nothing more.
     expect(
       screen.getAllByRole('menuitem').map((one) => one.textContent?.trim()),
-    ).toEqual(['Tocar agora', 'Copiar link']);
+    ).toEqual(['Tocar agora', 'Tocar em seguida', 'Copiar link']);
   });
 
   it('FR-2: shows no menu on an audio not ready to who may not edit', async () => {
@@ -643,7 +643,12 @@ describe('MediaListPage: "Editar informações" (KBC-050)', () => {
     await fixture.whenStable();
     expect(
       screen.getAllByRole('menuitem').map((one) => one.textContent?.trim()),
-    ).toEqual(['Tocar agora', 'Editar informações', 'Copiar link']);
+    ).toEqual([
+      'Tocar agora',
+      'Tocar em seguida',
+      'Editar informações',
+      'Copiar link',
+    ]);
   });
 
   it('AC-1: saving closes the dialog, reloads and says so', async () => {

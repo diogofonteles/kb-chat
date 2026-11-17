@@ -408,6 +408,14 @@ ui-empty-state {
   padding-block: var(--space-8);
 }
 
+/* A phone's empty list sits lower, nearer the middle of what is left (emptyM: 24 + 48 over
+   the icon, @mobile). */
+@media (max-width: 1023px) {
+  ui-empty-state {
+    padding-block: 4.25rem 0;
+  }
+}
+
 .sent-elsewhere {
   margin: 0;
   font-weight: 600;
@@ -454,6 +462,26 @@ ui-empty-state {
 
 .confirm::backdrop {
   background: var(--scrim);
+}
+
+.confirm-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.confirm-head h2 {
+  flex: 1;
+}
+
+.confirm-close {
+  flex: none;
+  margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2)) 0 0;
+  color: var(--color-text-muted);
+}
+
+.confirm .handle {
+  display: none;
 }
 
 .confirm h2 {
@@ -669,6 +697,39 @@ ui-empty-state {
 
   .confirm-actions {
     flex-direction: column-reverse;
+  }
+
+  /* The sheet: its handle, no ✕ (Cancelar is there), the tracks in plain words
+     (media-library-remove-tracks@mobile). */
+  .confirm {
+    padding-top: var(--space-3);
+  }
+
+  .confirm .handle {
+    display: block;
+    width: 2.25rem;
+    height: 0.25rem;
+    margin: 0 auto var(--space-3);
+    border-radius: var(--radius-pill);
+    background: var(--overlay-line);
+  }
+
+  .confirm-close {
+    display: none;
+  }
+
+  .confirm h2 {
+    margin-bottom: var(--space-2);
+  }
+
+  .confirm-actions {
+    margin-top: var(--space-3);
+  }
+
+  .confirm .remove-tracks {
+    padding: 0;
+    background: none;
+    color: var(--color-text-muted);
   }
 
   .confirm-actions button {

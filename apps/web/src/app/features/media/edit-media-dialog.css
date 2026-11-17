@@ -1,6 +1,6 @@
 .note {
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
 }
 
 .note:empty {

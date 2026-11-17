@@ -274,13 +274,23 @@ export class MediaListPage {
       ? $localize`:@@media.filterEmpty:Nenhum áudio com “${this.query()}:query:” no título`
       : $localize`:@@media.authorFilterEmpty:Nenhum áudio com estes filtros`,
   );
-  protected readonly authorMenu = computed<readonly MenuOption[]>(() =>
-    this.authorOptions().map((one) => ({
+  protected readonly authorMenu = computed<readonly MenuOption[]>(() => {
+    const options = this.authorOptions().map((one) => ({
       id: one.value,
       label: `${one.label} (${one.count})`,
       checked: one.value === this.author(),
-    })),
-  );
+    }));
+    // An empty collection still has the chip (media-list-empty@mobile): every authorship.
+    return options.length > 0
+      ? options
+      : [
+          {
+            id: ANY_AUTHOR,
+            label: $localize`:@@library.allAuthorships:Todas as autorias`,
+            checked: true,
+          },
+        ];
+  });
   protected readonly authorName = computed(() => {
     const chosen = this.author();
     if (chosen === ANY_AUTHOR) return '';
@@ -470,6 +480,14 @@ export class MediaListPage {
 
   protected authorOf(item: MediaItem): string {
     return item.author?.name ?? AUTHORSHIP_LABELS['outros-autores'];
+  }
+
+  /** "Tocar em seguida": after the one playing, said aloud (or it plays now). */
+  protected playNext(item: MediaItem): void {
+    if (this.playNow.playNext(item))
+      this.announcement.set(
+        $localize`:@@library.playsNext:“${item.title}:title:” toca em seguida.`,
+      );
   }
 
   protected play(item: MediaItem): void {

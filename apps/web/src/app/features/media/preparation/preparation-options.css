@@ -184,7 +184,7 @@ legend {
 
 :host(.compact) .option.row {
   gap: var(--space-1);
-  padding: 0.875rem;
+  padding: 0.625rem 0.75rem;
   border-radius: var(--radius-cover);
 }
 
@@ -194,13 +194,13 @@ legend {
 
 :host(.compact) .name,
 :host(.compact) .tracks legend {
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
   font-weight: 700;
 }
 
 :host(.compact) .hint,
 :host(.compact) .note {
-  font-size: var(--text-xs);
+  font-size: 0.6875rem;
 }
 
 :host(.compact) .note {
@@ -210,9 +210,9 @@ legend {
 /* The division: one tinted card, its legend inside, the choices a plain list. */
 :host(.compact) .tracks {
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-2);
+  gap: var(--space-1);
   margin-top: 0;
-  padding: 0.875rem;
+  padding: 0.625rem 0.75rem;
   border-radius: var(--radius-cover);
   background: var(--overlay-1);
 }
@@ -266,4 +266,137 @@ legend {
 
 :host(.compact) .summary {
   font-size: var(--text-xs);
+}
+
+/* The AI's cost is said once it is chosen (DS-19), under its choice; the summary line under
+   the card has no place in the frame (media-upload) and stays for a screen reader. */
+:host(.compact) .option.card.ai:has(input:checked) .hint {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+:host(.compact) .summary {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.tracks-row,
+.name .narrow {
+  display: none;
+}
+
+/* ---------- A phone's upload (media-upload@mobile): a plain list ---------- */
+
+@media (max-width: 1023px) {
+  :host(.compact) .options {
+    gap: 0;
+  }
+
+  :host(.compact) legend {
+    margin-bottom: var(--space-2);
+    font-size: var(--text-item);
+  }
+
+  :host(.compact) .option.row {
+    order: 0;
+    padding: var(--space-1) 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  :host(.compact) .option.subjects {
+    order: 1;
+  }
+
+  :host(.compact) .tracks-row {
+    order: 2;
+  }
+
+  :host(.compact) .tracks {
+    order: 3;
+  }
+
+  :host(.compact) .choice {
+    min-height: var(--target);
+  }
+
+  :host(.compact) .option.row .name {
+    font-size: var(--text-item);
+    font-weight: 400;
+  }
+
+  :host(.compact) .option.off .name {
+    color: var(--color-text-muted);
+  }
+
+  :host(.compact) .name .wide {
+    display: none;
+  }
+
+  :host(.compact) .name .narrow {
+    display: inline;
+  }
+
+  /* The hints stay for a screen reader (aria-describedby); the note of the transcriber
+     off stays in sight. */
+  :host(.compact) .option.row .hint,
+  :host(.compact) .option.card:not(.ai) .hint {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  :host(.compact) .tracks-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: var(--target);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--text-item);
+    text-align: start;
+    cursor: pointer;
+  }
+
+  :host(.compact) .tracks-row .name {
+    flex: 1;
+    font-size: var(--text-item);
+    font-weight: 400;
+  }
+
+  :host(.compact) .tracks-row .value,
+  :host(.compact) .tracks-row ui-icon {
+    color: var(--color-text-muted);
+  }
+
+  :host(.compact) .tracks-row .value {
+    font-size: var(--text-sm);
+  }
+
+  :host(.compact) .tracks:not(.open) {
+    display: none;
+  }
+
+  :host(.compact) .tracks legend {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
 }

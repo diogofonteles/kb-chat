@@ -34,7 +34,7 @@
       uiIconButton="play"
       class="play-all"
       [size]="56"
-      [disabled]="!firstPlayable()"
+      [attr.aria-disabled]="!firstPlayable() || null"
       [attr.aria-label]="playAllLabel()"
       (click)="playAll()"
     >
@@ -45,7 +45,7 @@
       uiIconButton
       class="bar-icon"
       [size]="40"
-      [disabled]="!firstPlayable()"
+      [attr.aria-disabled]="!firstPlayable() || null"
       aria-label="Tocar em ordem aleatória"
       i18n-aria-label="@@library.shuffle"
       (click)="playAny()"
@@ -104,7 +104,7 @@
     @if (choices(); as current) {
       <app-library-sort
         [sort]="current.sort"
-        [view]="current.view"
+        [view]="display()"
         (sortChange)="changeSort($event)"
         (viewChange)="changeView($event)"
       />
@@ -139,20 +139,6 @@
         <ui-icon name="upload" [size]="24" />
       </button>
     }
-    <!-- The action bar has no place on a phone (media-library@mobile): what it holds beyond
-         ▶ (a tap on a cover plays) stays a ⋯ away — shuffle, Meus marcadores, Selecionar
-         mídias, Limpar recentes, Convidar pessoas. -->
-    <app-menu-button
-      class="phone-more"
-      label="Mais ações da Biblioteca"
-      i18n-label="@@library.moreActions"
-      [options]="phoneHeaderOptions()"
-      sheetTitle="Biblioteca"
-      i18n-sheetTitle="@@library.title"
-      (chosen)="headerAction($event)"
-    >
-      <ui-icon name="more" [size]="24" />
-    </app-menu-button>
   </ng-template>
 
   <div class="sections">
@@ -399,9 +385,11 @@
               align="start"
               [summary]="phone() && filtered() ? countText() : ''"
               [sort]="current.sort"
-              [view]="current.view"
+              [view]="display()"
+              [clearRecents]="phoneClearRecents()"
               (sortChange)="changeSort($event)"
               (viewChange)="changeView($event)"
+              (recentsCleared)="askClearRecents()"
             />
             <button
               type="button"
@@ -435,7 +423,7 @@
               }
             </div>
           } @else {
-            <div class="table">
+            <div class="table" [class.compact]="display() === 'compact'">
               <div class="table-head">
                 <span class="col-lead">
                   <span class="number-head" aria-hidden="true">#</span>
@@ -479,6 +467,9 @@
                     [playing]="playingId() === item.id"
                     [master]="isMaster()"
                     [phone]="phone()"
+                    [selectAll]="
+                      selecting() && !allSelected() ? selectAllText() : ''
+                    "
                     [paused]="preparations.steps().get(item.id) ?? null"
                     [tracksOpen]="openTracks().has(item.id)"
                     (tracksToggled)="toggleTracks(item.id)"
@@ -587,9 +578,23 @@
     aria-describedby="remove-text"
     (close)="removeClosed()"
   >
-    <h2 id="remove-title" i18n="@@media.removeTitle">
-      Remover "{{ item.title }}"?
-    </h2>
+    <!-- The sheet's handle on a phone; the ✕ beside the title on a desktop (media-library-remove). -->
+    <span class="handle" aria-hidden="true"></span>
+    <div class="confirm-head">
+      <h2 id="remove-title" i18n="@@media.removeTitle">
+        Remover "{{ item.title }}"?
+      </h2>
+      <button
+        type="button"
+        uiIconButton
+        class="confirm-close"
+        aria-label="Fechar"
+        i18n-aria-label="@@ui.dialog.close"
+        (click)="cancelRemove()"
+      >
+        <ui-icon name="close" [size]="20" />
+      </button>
+    </div>
     <p id="remove-text" i18n="@@media.removeText">
       O áudio e a transcrição serão apagados e não podem ser recuperados.
     </p>

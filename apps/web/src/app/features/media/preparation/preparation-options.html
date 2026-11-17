@@ -80,7 +80,24 @@
     </div>
   }
 
-  <fieldset class="tracks">
+  <!-- A phone's upload (media-upload@mobile): one row with the choice, the three under it. -->
+  @if (compact()) {
+    <button
+      type="button"
+      class="tracks-row"
+      aria-controls="prep-tracks"
+      [attr.aria-expanded]="tracksOpen()"
+      (click)="tracksOpen.set(!tracksOpen())"
+    >
+      <span class="name" i18n="@@prep.option.tracksShort"
+        >Dividir em faixas</span
+      >
+      <span class="value">{{ tracksChoice() }}</span>
+      <ui-icon [name]="tracksOpen() ? 'chevDown' : 'chevRight'" [size]="18" />
+    </button>
+  }
+
+  <fieldset class="tracks" id="prep-tracks" [class.open]="tracksOpen()">
     <legend i18n="@@prep.option.tracks">
       Dividir em faixas de pergunta e resposta
     </legend>
@@ -124,7 +141,7 @@
       </p>
     </div>
 
-    <div class="option card" [class.off]="isOff('ai')">
+    <div class="option card ai" [class.off]="isOff('ai')">
       <label class="choice">
         <input
           type="radio"
@@ -175,8 +192,12 @@
         aria-describedby="prep-subjects-hint"
         (click)="$event.preventDefault()"
       />
-      <span class="name" i18n="@@prep.option.subjects"
-        >Sugerir os assuntos de cada faixa</span
+      <span class="name"
+        ><span class="wide" i18n="@@prep.option.subjects"
+          >Sugerir os assuntos de cada faixa</span
+        ><span class="narrow" i18n="@@prep.option.subjectsSoon"
+          >Sugerir os assuntos (em breve)</span
+        ></span
       >
     </label>
     <p class="hint" id="prep-subjects-hint">{{ refusal('subjects') }}</p>

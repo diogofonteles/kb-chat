@@ -64,4 +64,49 @@ describe('LibrarySortMenu ("Ordenar e ver como", KBC-128 FR-3)', () => {
     expect(trigger.textContent).toContain('5 mídias · 3 min');
     expect(trigger.textContent).not.toContain('Ouvidas recentemente');
   });
+
+  it('offers "Compacta", "Lista" and "Grade" in that order, "Compacta" checked when on', async () => {
+    const views: string[] = [];
+    const { fixture } = await render(LibrarySortMenu, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { sort: 'recently-played', view: 'compact' },
+      on: { viewChange: (value: string) => views.push(value) },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ordenar: Ouvidas recentemente' }),
+    );
+    await fixture.whenStable();
+    const group = screen.getByRole('group', { name: 'Ver como' });
+    const items = Array.from(
+      group.querySelectorAll<HTMLElement>('[role="menuitemradio"]'),
+    );
+    expect(
+      items.map((item) => item.textContent?.replace('✓', '').trim()),
+    ).toEqual(['Compacta', 'Lista', 'Grade']);
+    expect(items[0]?.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Lista/ }));
+    expect(views).toEqual(['list']);
+  });
+
+  it('ends a phone\'s sheet with "Limpar recentes", an action among the choices', async () => {
+    let cleared = 0;
+    const { fixture } = await render(LibrarySortMenu, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        sort: 'recently-played',
+        view: 'list',
+        phone: true,
+        clearRecents: true,
+      },
+      on: { recentsCleared: () => (cleared += 1) },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ordenar: Ouvidas recentemente' }),
+    );
+    await fixture.whenStable();
+    const clear = screen.getByRole('menuitem', { name: 'Limpar recentes' });
+    expect(clear.getAttribute('aria-checked')).toBeNull();
+    fireEvent.click(clear);
+    expect(cleared).toBe(1);
+  });
 });

@@ -98,7 +98,7 @@ import {
   type FilterChange,
 } from './library-labels.js';
 import { LibraryRow, type RowAction } from './library-row.js';
-import { LibrarySortMenu } from './library-sort.js';
+import { LibrarySortMenu, type LibraryDisplay } from './library-sort.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import { PageHeader } from '@features/shell/page-header.js';
 import { LibrarySearchResults } from './library-search-results.js';
@@ -115,6 +115,24 @@ const LIBRARY_TINT = '#7a3d22';
 
 /** The shell's phone layout (chat-page: desktop from 1024 px). */
 const PHONE_QUERY = '(max-width: 1023px)';
+/** "Compacta" (media-library-sort): a density of the list, kept in this browser only. */
+const COMPACT_KEY = 'kb-chat.library.compact';
+function readCompact(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(COMPACT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+function keepCompact(on: boolean): void {
+  try {
+    if (on) globalThis.localStorage?.setItem(COMPACT_KEY, '1');
+    else globalThis.localStorage?.removeItem(COMPACT_KEY);
+  } catch {
+    // No storage (a private window): the choice lasts while the page is open.
+  }
+}
+
 const phoneNow = (): boolean =>
   typeof matchMedia === 'function' && matchMedia(PHONE_QUERY).matches;
 
@@ -215,6 +233,7 @@ export class LibraryPage {
     viewChild<TemplateRef<unknown>>('phoneActions');
   private readonly searchBox = viewChild<ElementRef<HTMLElement>>('searchBox');
   private readonly allTitle = viewChild<ElementRef<HTMLElement>>('allTitle');
+  private readonly searchResults = viewChild(LibrarySearchResults);
   private readonly clearRecentsButton =
     viewChild<ElementRef<HTMLElement>>('clearRecentsButton');
   private readonly keepRecentsButton =
@@ -441,7 +460,11 @@ export class LibraryPage {
    * -empty-*); the queue stays a tap away in the sidebar's "Fila de processamento".
    */
   protected readonly showQueue = computed(
-    () => !this.searching() && !this.nothingFound() && !this.libraryEmpty(),
+    () =>
+      !this.searching() &&
+      !this.nothingFound() &&
+      !this.libraryEmpty() &&
+      !this.tracksOpen(),
   );
   protected readonly showSkeleton = computed(
     () =>
@@ -490,7 +513,24 @@ export class LibraryPage {
       !this.searching() &&
       !this.selecting() &&
       !this.filtered() &&
-      !this.libraryEmpty(),
+      !this.libraryEmpty() &&
+      !this.tracksOpen(),
+  );
+  /** "Compacta": the list without covers (media-library-sort's "Ver como"). */
+  private readonly compact = signal(readCompact());
+  protected readonly display = computed<LibraryDisplay>(() => {
+    const view = this.choices()?.view ?? 'list';
+    return view === 'list' && this.compact() ? 'compact' : view;
+  });
+  /**
+   * The phone's sort sheet ends with "Limpar recentes" while the order is "Ouvidas
+   * recentemente" (the header's ⋯ of the desktop has no place in media-library@mobile).
+   */
+  protected readonly phoneClearRecents = computed(
+    () =>
+      this.phone() &&
+      this.canClearRecents() &&
+      this.choices()?.sort === 'recently-played',
   );
   protected readonly titleHead = $localize`:@@library.col.title:Título`;
   protected readonly searchPlaceholder = computed(() =>
@@ -512,40 +552,6 @@ export class LibraryPage {
     this.choices()?.view === 'grid'
       ? $localize`:@@library.showList:Ver como lista`
       : $localize`:@@library.showGrid:Ver como grade`,
-  );
-  /** The phone's ⋯: the action bar's icons that have no place in its top row, then the ⋯'s. */
-  protected readonly phoneHeaderOptions = computed<readonly MenuOption[]>(
-    () => [
-      ...(this.firstPlayable()
-        ? [
-            {
-              id: 'shuffle',
-              label: $localize`:@@library.shuffle:Tocar em ordem aleatória`,
-              icon: 'shuffle' as const,
-            },
-          ]
-        : []),
-      ...(this.isMaster()
-        ? [
-            {
-              id: 'invite',
-              label: $localize`:@@library.invite:Convidar pessoas`,
-              icon: 'personAdd' as const,
-            },
-          ]
-        : []),
-      ...this.headerOptions(),
-      // The table's "Selecionar todas" box has no place on a phone (no table head).
-      ...(this.selectable().length > 0 && !this.allSelected()
-        ? [
-            {
-              id: 'select-all',
-              label: this.selectAllText(),
-              icon: 'checkcircle' as const,
-            },
-          ]
-        : []),
-    ],
   );
   /** The header's ⋯ (media-library): what has no icon of its own in the action bar. */
   protected readonly headerOptions = computed<readonly MenuOption[]>(() => [
@@ -576,6 +582,11 @@ export class LibraryPage {
 
   /** The recordings whose tracks show under their row (media-library-tracks). */
   protected readonly openTracks = signal<ReadonlySet<string>>(new Set());
+  /**
+   * A recording's tracks are open: the list is the page, without the attention cards and
+   * "Continuar ouvindo" over it (media-library-tracks, both widths).
+   */
+  private readonly tracksOpen = computed(() => this.openTracks().size > 0);
 
   protected toggleTracks(id: string): void {
     this.openTracks.update((open) => {
@@ -693,7 +704,8 @@ export class LibraryPage {
       : $localize`:@@library.collectionEmpty:Nenhuma mídia neste acervo`,
   );
   protected readonly nothingFoundText = computed(() => {
-    if (this.filtered()) return '';
+    // The phone's empty collection is its title and the way out (-collection-empty@mobile).
+    if (this.filtered() || this.phone()) return '';
     const topic = this.choices()?.filters.topic ?? null;
     const name = topic ? (this.titles().get(topic) ?? null) : null;
     return name
@@ -911,6 +923,9 @@ export class LibraryPage {
     if (change.kind === 'topic') this.chooseCollection(change.topic, filters);
     else this.saveFilters(filters);
     if (change.kind === 'clear') this.focusAfterRender(this.allTitle);
+    // The collection's chip went with the focus: during a search, to the results' title.
+    else if (change.kind === 'topic' && change.topic === null)
+      this.searchResults()?.focusTitle();
   }
 
   /** Only this replaces the kept collection; choosing one selects it everywhere (KBC-091). */
@@ -959,8 +974,12 @@ export class LibraryPage {
     this.choose({ sort }, { librarySort: sort });
   }
 
-  protected changeView(view: LibraryView): void {
-    this.choose({ view }, { libraryView: view });
+  protected changeView(display: LibraryDisplay): void {
+    const view: LibraryView = display === 'compact' ? 'list' : display;
+    this.compact.set(display === 'compact');
+    keepCompact(display === 'compact');
+    if (view !== this.choices()?.view)
+      this.choose({ view }, { libraryView: view });
   }
 
   private choose(
@@ -997,11 +1016,7 @@ export class LibraryPage {
   }
 
   protected headerAction(id: string): void {
-    if (id === 'shuffle') this.playAny();
-    else if (id === 'invite')
-      void this.router.navigate(['/configuracoes/pessoas']);
-    else if (id === 'bookmarks')
-      void this.router.navigate(['/midia/marcadores']);
+    if (id === 'bookmarks') void this.router.navigate(['/midia/marcadores']);
     else if (id === 'select') this.startSelection();
     else if (id === 'select-all')
       this.selected.set(new Set(this.selectable().map((item) => item.id)));
@@ -1097,9 +1112,23 @@ export class LibraryPage {
     else if (action === 'edit') this.openEdit(item);
     else if (action === 'play') this.play(item);
     else if (action === 'select') this.startSelection(item);
+    else if (action === 'select-all') this.headerAction('select-all');
+    else if (action === 'play-next') this.playNextOf(item);
+    else if (action === 'bookmarks')
+      void this.router.navigate(['/midia', item.id], {
+        fragment: 'marcadores',
+      });
     else if (action === 'retry') this.retry(item);
     else if (action === 'copy-link') this.copyLink(item);
     else this.mark([item.id], action === 'mark-played');
+  }
+
+  /** "Tocar em seguida": after the one playing, said aloud (or it plays now). */
+  private playNextOf(item: LibraryItem): void {
+    if (this.playNow.playNext(item))
+      this.announcement.set(
+        $localize`:@@library.playsNext:“${item.title}:title:” toca em seguida.`,
+      );
   }
 
   private mark(ids: readonly string[], played: boolean): void {

@@ -117,6 +117,34 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
   });
 });
 
+describe('LibraryControls "Autoria" with nothing to tell apart (v2 media-library-empty-*)', () => {
+  it('keeps the chip, its one choice every authorship', async () => {
+    const changes: FilterChange[] = [];
+    const { fixture } = await render(LibraryControls, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        facets: {
+          states: [],
+          authors: [],
+          otherAuthors: false,
+          topics: [],
+          subjects: [],
+        },
+        filters: NONE,
+      },
+      on: { filtersChange: (value: FilterChange) => changes.push(value) },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Autoria' }));
+    await fixture.whenStable();
+    const all = screen.getByRole('menuitemradio', {
+      name: /Todas as autorias/,
+    });
+    expect(all.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(all);
+    expect(changes).toEqual([{ kind: 'author', author: null }]);
+  });
+});
+
 describe('LibraryControls "Assunto" (KBC-070 FR-4)', () => {
   const CABALA = { key: 'concept:cabala', name: 'Cabala' };
 

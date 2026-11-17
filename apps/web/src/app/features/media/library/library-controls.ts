@@ -88,11 +88,8 @@ export class LibraryControls {
         ]
       : named;
   });
-  protected readonly showAuthorship = computed(
-    () =>
-      !this.compact() &&
-      (this.authors().length > 1 || this.filters().authors.length > 0),
-  );
+  /** Always beside the states, as in every v2 frame (an empty library's included). */
+  protected readonly showAuthorship = computed(() => !this.compact());
   protected readonly authorship = computed(
     () => this.filters().authors[0] ?? '',
   );
@@ -126,13 +123,24 @@ export class LibraryControls {
       this.filters().states.length === 0 && this.filters().authors.length === 0,
   );
   /** "Autoria ▾"'s menu: every author, the main one first, then "Outros autores". */
-  protected readonly authorOptions = computed<readonly MenuOption[]>(() =>
-    this.authors().map((one) => ({
+  protected readonly authorOptions = computed<readonly MenuOption[]>(() => {
+    const options = this.authors().map((one) => ({
       id: one.value,
       label: one.label,
       checked: one.value === this.authorship(),
-    })),
-  );
+    }));
+    // Nothing to tell apart yet (an empty library): the one choice is every authorship.
+    return options.length > 0
+      ? options
+      : [
+          {
+            id: '',
+            label: $localize`:@@library.allAuthorships:Todas as autorias`,
+            checked: true,
+          },
+        ];
+  });
+
   protected readonly authorshipName = computed(() => {
     const chosen = this.authorship();
     if (!chosen) return '';
