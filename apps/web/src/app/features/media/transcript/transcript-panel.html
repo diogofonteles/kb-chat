@@ -1,7 +1,12 @@
-<section class="panel" aria-labelledby="transcript-title">
-  <h3 id="transcript-title" class="title" i18n="@@transcript.title">
-    Transcrição
-  </h3>
+<section
+  class="panel"
+  [attr.aria-labelledby]="showTitle() ? 'transcript-title' : null"
+>
+  @if (showTitle()) {
+    <h3 id="transcript-title" class="title" i18n="@@transcript.title">
+      Transcrição
+    </h3>
+  }
 
   @if (termList(); as list) {
     <p class="made-with" i18n="@@transcript.termList">

@@ -1,54 +1,90 @@
-<header class="head">
-  <div class="head-actions">
-    @if (canGoBack()) {
-      <button
-        type="button"
-        class="nav"
-        (click)="back.emit()"
-        i18n="@@panel.backDoc"
-      >
-        ← Voltar
-      </button>
-    }
-    <p class="kind">
-      <span aria-hidden="true">♪</span>
-      <span i18n="@@trackPassage.kind">Faixa de áudio</span>
-      @if (focus()) {
-        <span aria-hidden="true">· {{ clock() }}</span>
-        <span class="visually-hidden" i18n="@@trackPassage.at"
-          >aos {{ spokenClock() }}</span
+<!-- Its own scroll box: the shell's .panel clips the host (overflow: hidden). -->
+<div class="scroller" #scroller>
+  <header class="head">
+    @if (!inSheet()) {
+      <div class="bar">
+        @if (canGoBack()) {
+          <button
+            type="button"
+            class="nav"
+            (click)="back.emit()"
+            i18n="@@panel.backDoc"
+          >
+            ← Voltar
+          </button>
+        }
+        <p class="kind">
+          <ui-icon name="wave" [size]="14" />
+          <span>{{ kindLabel() }}</span>
+        </p>
+        @if (navigable()) {
+          <button
+            type="button"
+            uiIconButton="surface"
+            aria-label="Fonte anterior"
+            i18n-aria-label="@@source.previous"
+            [disabled]="!previous()"
+            (click)="choose(previous())"
+          >
+            <ui-icon name="chevLeft" [size]="18" />
+          </button>
+          <button
+            type="button"
+            uiIconButton="surface"
+            aria-label="Próxima fonte"
+            i18n-aria-label="@@source.next"
+            [disabled]="!next()"
+            (click)="choose(next())"
+          >
+            <ui-icon name="chevRight" [size]="18" />
+          </button>
+        }
+        @if (ready()) {
+          <a
+            uiIconButton="surface"
+            [routerLink]="['/midia', mediaId()]"
+            [queryParams]="pageQuery()"
+            aria-label="Abrir a página da faixa"
+            i18n-aria-label="@@trackPassage.openPage"
+          >
+            <ui-icon name="expand" [size]="16" />
+          </a>
+        }
+        <button
+          type="button"
+          uiIconButton
+          aria-label="Fechar"
+          i18n-aria-label="@@panel.closeLabel"
+          (click)="closed.emit()"
         >
-      }
-    </p>
-    <button type="button" class="close" (click)="closed.emit()">
-      <span class="close-label" i18n="@@panel.closeLabel">Fechar</span>
-      <span aria-hidden="true">×</span>
-    </button>
-  </div>
-  <h2 id="track-passage-title" #heading tabindex="-1">{{ source().title }}</h2>
-  <div class="meta">
-    <span class="recording">{{ recordingLine() }}</span>
-    @if (item.hasValue()) {
-      <app-authorship-badge [mediaAuthor]="item.value().author" />
-    } @else {
-      <app-authorship-badge [authorship]="source().authorship" />
+          <ui-icon name="close" [size]="20" />
+        </button>
+      </div>
     }
-  </div>
-  @if (low()) {
-    <p class="low-confidence" i18n="@@trackPassage.low">
-      Transcrição automática de baixa confiança: pode haver trechos errados.
-    </p>
-  }
-</header>
+    <div class="track">
+      <ui-cover [title]="source().title" [size]="56" [label]="false" />
+      <div class="track-text">
+        <h2 id="track-passage-title" #heading tabindex="-1">
+          {{ source().title }}
+        </h2>
+        <p class="meta">{{ metaLine() }}</p>
+      </div>
+    </div>
+    @if (low()) {
+      <p class="low-confidence" i18n="@@trackPassage.low">
+        Transcrição automática de baixa confiança: pode haver trechos errados.
+      </p>
+    }
+  </header>
 
-@if (loadError()) {
-  <div class="body single">
+  @if (loadError()) {
     <div class="notice" role="alert">
       <p>{{ loadError() }}</p>
       @if (gone()) {
         <button
           type="button"
-          class="secondary"
+          uiButton="outline"
+          size="sm"
           (click)="closed.emit()"
           i18n="@@panel.closeLabel"
         >
@@ -57,7 +93,8 @@
       } @else {
         <button
           type="button"
-          class="secondary"
+          uiButton="outline"
+          size="sm"
           (click)="reload()"
           i18n="@@media.reload"
         >
@@ -65,47 +102,362 @@
         </button>
       }
     </div>
-  </div>
-} @else {
-  <div class="body">
-    <div class="player">
-      @if (ready()) {
-        <app-media-player [lowConfidence]="low()" />
-        <a
-          class="page-link"
-          [routerLink]="['/midia', mediaId()]"
-          [queryParams]="pageQuery()"
-          i18n="@@trackPassage.openPage"
-          >Abrir na página da faixa</a
-        >
-      } @else if (loaded()) {
-        <p class="notice" role="status" i18n="@@passage.notReady">
-          Este áudio ainda não está pronto para ouvir.
-        </p>
-      } @else {
-        <div class="player-skeleton" aria-busy="true">
-          <span class="visually-hidden" i18n="@@passage.loading"
-            >Carregando o áudio…</span
-          >
+  } @else if (!loaded()) {
+    <div class="skeleton" aria-busy="true">
+      <span class="visually-hidden" i18n="@@passage.loading"
+        >Carregando o áudio…</span
+      >
+    </div>
+  } @else if (!ready()) {
+    <p class="notice" role="status" i18n="@@passage.notReady">
+      Este áudio ainda não está pronto para ouvir.
+    </p>
+  } @else {
+    @if (passageMoved()) {
+      <p class="moved" role="status" i18n="@@trackPassage.moved">
+        O trecho citado mudou desde a resposta. Mostrando o começo da faixa.
+      </p>
+    }
+
+    @if (passage()) {
+      <section
+        class="cited"
+        [class.playing]="playing()"
+        [style.--cover-tint]="coverTint()"
+        aria-labelledby="track-passage-cited"
+      >
+        <div class="cited-head">
+          <span class="cite-pill" aria-hidden="true">
+            <ui-icon name="wave" [size]="12" />{{ source().n }}
+          </span>
+          <h3 id="track-passage-cited" class="cited-when">
+            @if (inSheet()) {
+              {{ span() }}
+              @if (speaker(); as who) {
+                · {{ who.name }}
+              }
+            } @else if (place() >= 0) {
+              <ng-container i18n="@@trackPassage.citedIn"
+                >Citado na resposta · {{ span() }}</ng-container
+              >
+            } @else {
+              <ng-container i18n="@@trackPassage.passage"
+                >Trecho · {{ span() }}</ng-container
+              >
+            }
+          </h3>
+          @if (playing()) {
+            <span class="now-playing">
+              <ui-icon name="wave" [size]="14" />
+              <span i18n="@@trackPassage.playing">tocando</span>
+            </span>
+          }
         </div>
-      }
+        @if (!inSheet() && speaker(); as who) {
+          <p class="who">
+            <span
+              class="dot"
+              aria-hidden="true"
+              [style.background]="voiceColor(who)"
+            ></span>
+            {{ who.name }}
+          </p>
+        }
+        <blockquote class="quote">
+          @for (word of citedWords(); track word.key) {
+            <span [class.lit]="$index < spokenCount()">{{ word.text }} </span>
+          } @empty {
+            <span>…</span>
+          }
+        </blockquote>
+        <div class="actions">
+          <button
+            type="button"
+            class="listen"
+            [uiButton]="playing() ? 'white' : 'primary'"
+            [disabled]="!playable()"
+            (click)="listen()"
+          >
+            <ui-icon [name]="playing() ? 'pause' : 'play'" [size]="18" />
+            @if (playing()) {
+              <span i18n="@@trackPassage.pause">Pausar</span>
+            } @else {
+              <span i18n="@@trackPassage.listen">Ouvir o trecho</span>
+            }
+          </button>
+          @if (!inSheet()) {
+            <button
+              type="button"
+              uiButton="dark"
+              class="whole"
+              [disabled]="!playable()"
+              (click)="playWhole()"
+              i18n="@@trackPassage.whole"
+            >
+              Faixa toda
+            </button>
+          }
+          <span class="spacer"></span>
+          <button
+            type="button"
+            uiIconButton="circle"
+            class="on-card"
+            [size]="inSheet() ? 44 : 40"
+            [disabled]="!playable()"
+            aria-label="Marcar este trecho"
+            i18n-aria-label="@@trackPassage.mark"
+            (click)="mark()"
+          >
+            <ui-icon name="bookmark" [size]="20" />
+          </button>
+          <button
+            type="button"
+            uiIconButton="circle"
+            class="on-card"
+            [size]="inSheet() ? 44 : 40"
+            aria-label="Copiar o link do trecho"
+            i18n-aria-label="@@trackPassage.share"
+            (click)="share()"
+          >
+            <ui-icon name="share" [size]="20" />
+          </button>
+        </div>
+      </section>
+    } @else {
+      <div class="actions plain">
+        <button
+          type="button"
+          class="listen"
+          [uiButton]="playing() ? 'white' : 'primary'"
+          [disabled]="!playable()"
+          (click)="listen()"
+        >
+          <ui-icon [name]="playing() ? 'pause' : 'play'" [size]="18" />
+          @if (playing()) {
+            <span i18n="@@trackPassage.pause">Pausar</span>
+          } @else {
+            <span i18n="@@trackPassage.listenTrack">Ouvir a faixa</span>
+          }
+        </button>
+      </div>
+    }
+
+    <div class="timeline">
+      <div class="rail">
+        <span class="track-line" aria-hidden="true"></span>
+        <span
+          class="played"
+          [class.on]="playing()"
+          aria-hidden="true"
+          [style.width.%]="playedPercent()"
+        ></span>
+        @for (mark of marks(); track mark.index) {
+          @if (mark.index === chosenIndex() && passage()) {
+            <span
+              class="band"
+              aria-hidden="true"
+              [style.left.%]="mark.left"
+              [style.width.%]="mark.width"
+            ></span>
+          }
+          <button
+            type="button"
+            class="mark"
+            [class.on]="mark.index === chosenIndex() && passage()"
+            [style.left.%]="mark.left"
+            [attr.aria-current]="mark.index === chosenIndex() ? 'true' : null"
+            [attr.aria-label]="markLabel(mark.startMs)"
+            (click)="goTo(mark.index)"
+          >
+            {{ source().n }}
+          </button>
+        }
+        @if (playing()) {
+          <span
+            class="head-dot"
+            aria-hidden="true"
+            [style.left.%]="playedPercent()"
+          ></span>
+        }
+      </div>
+      <p class="labels">
+        <span class="now">{{ nowClock() }}</span>
+        @if (passage()) {
+          <span class="span" i18n="@@trackPassage.citedSpan"
+            >trecho citado {{ span() }}</span
+          >
+        }
+        <span>{{ total() }}</span>
+      </p>
     </div>
-    <div class="transcript">
-      @if (passageMoved()) {
-        <p class="moved" role="status" i18n="@@trackPassage.moved">
-          O trecho citado mudou desde a resposta. Mostrando o começo da faixa.
+
+    @if (showFull()) {
+      <div class="section-head">
+        <h3 i18n="@@trackPassage.fullTitle">Transcrição completa</h3>
+        @if (lines().length > 0) {
+          <button
+            type="button"
+            class="link"
+            (click)="full.set(false)"
+            i18n="@@trackPassage.around"
+          >
+            Em volta do trecho
+          </button>
+        }
+      </div>
+      <div class="full">
+        @if (transcript.hasValue()) {
+          <app-transcript-panel
+            [transcript]="transcript.value()"
+            [title]="source().title"
+            [passage]="focus()"
+            [revealPassage]="true"
+            [showTitle]="false"
+          />
+        } @else {
+          <div class="skeleton" aria-hidden="true"></div>
+        }
+      </div>
+    } @else {
+      <div class="section-head">
+        <h3 i18n="@@trackPassage.around">Em volta do trecho</h3>
+        <span class="tools">
+          <button
+            type="button"
+            uiIconButton
+            aria-label="Buscar na transcrição"
+            i18n-aria-label="@@trackPassage.search"
+            (click)="openFull(true)"
+          >
+            <ui-icon name="search" [size]="18" />
+          </button>
+          <button type="button" class="link" (click)="openFull(false)">
+            @if (inSheet()) {
+              <span aria-hidden="true" i18n="@@trackPassage.fullShort"
+                >Completa</span
+              >
+              <span class="visually-hidden" i18n="@@trackPassage.full"
+                >Transcrição completa</span
+              >
+            } @else {
+              <span i18n="@@trackPassage.full">Transcrição completa</span>
+            }
+          </button>
+        </span>
+      </div>
+      <ol
+        class="context"
+        aria-label="Em volta do trecho"
+        i18n-aria-label="@@trackPassage.around"
+      >
+        @for (line of lines(); track line.startMs) {
+          <li
+            class="line"
+            [class.cited-line]="line.kind === 'cited'"
+            [class.now]="lineState(line) === 'now'"
+            [class.past]="lineState(line) === 'past'"
+            [attr.aria-current]="lineState(line) === 'now' ? 'true' : null"
+          >
+            <button
+              type="button"
+              class="time"
+              [attr.aria-label]="playFromLabel(line.startMs)"
+              (click)="playFrom(line.startMs)"
+            >
+              {{ clockOf(line.startMs) }}
+            </button>
+            <div class="speech">
+              @if (line.speaker; as who) {
+                <span class="who">
+                  <span
+                    class="dot"
+                    aria-hidden="true"
+                    [style.background]="voiceColor(who)"
+                  ></span>
+                  {{ who.name }}
+                </span>
+              }
+              <span class="text">
+                @if (line.kind === 'cited') {
+                  <span class="visually-hidden" i18n="@@trackPassage.citedLine"
+                    >Trecho citado:
+                  </span>
+                }
+                {{ line.text }}</span
+              >
+            </div>
+          </li>
+        }
+      </ol>
+    }
+
+    @if (!(inSheet() && playing()) || others().length > 0) {
+      <footer class="foot">
+        @if (!(inSheet() && playing())) {
+          <a
+            uiButton="white"
+            size="sm"
+            class="open-track"
+            [block]="inSheet()"
+            [routerLink]="['/midia', mediaId()]"
+            [queryParams]="pageQuery()"
+          >
+            <ui-icon name="music" [size]="16" />
+            <span i18n="@@trackPassage.openTrack">Abrir a faixa</span>
+          </a>
+        }
+        @if (others().length > 0) {
+          <span class="others">
+            <span class="others-label" i18n="@@trackPassage.other"
+              >Outro trecho citado:</span
+            >
+            @for (other of others(); track other.index) {
+              <button
+                type="button"
+                class="other"
+                [attr.aria-label]="otherLabel(other.clock)"
+                (click)="goTo(other.index)"
+              >
+                <span class="cite-pill soft" aria-hidden="true">
+                  <ui-icon name="wave" [size]="12" />{{ source().n }}
+                </span>
+                <span aria-hidden="true">{{ other.clock }}</span>
+              </button>
+            }
+          </span>
+        }
+      </footer>
+    }
+
+    @if (inSheet() && playing()) {
+      <div class="sheet-player" [style.--cover-tint]="coverTint()">
+        <ui-cover [title]="source().title" [size]="40" [label]="false" />
+        <p class="sheet-player-text">
+          <span class="sheet-player-what">
+            @if (inPassage()) {
+              <ng-container i18n="@@trackPassage.playingPassage"
+                >Tocando o trecho citado · {{ nowClock() }}</ng-container
+              >
+            } @else {
+              <ng-container i18n="@@trackPassage.playingTrack"
+                >Tocando a faixa · {{ nowClock() }}</ng-container
+              >
+            }
+          </span>
+          <span class="sheet-player-title">{{ source().title }}</span>
         </p>
-      }
-      @if (transcript.hasValue()) {
-        <app-transcript-panel
-          [transcript]="transcript.value()"
-          [title]="source().title"
-          [passage]="focus()"
-          [revealPassage]="true"
-        />
-      } @else {
-        <div class="transcript-skeleton" aria-hidden="true"></div>
-      }
-    </div>
-  </div>
-}
+        <button
+          type="button"
+          uiIconButton
+          class="on-card"
+          [size]="44"
+          aria-label="Pausar"
+          i18n-aria-label="@@trackPassage.pause"
+          (click)="listen()"
+        >
+          <ui-icon name="pause" [size]="24" />
+        </button>
+      </div>
+    }
+  }
+</div>
