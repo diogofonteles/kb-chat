@@ -473,13 +473,11 @@ describe('Who speaks for whoever may listen (KBC-151 BR-0, FR-1)', () => {
     expect(read.segments.map((segment) => segment.voice)).toEqual([
       1, 2, 1, 2, 3, 2,
     ]);
-    expect(read.voiceNames?.map(({ kind, name }) => ({ kind, name }))).toEqual(
-      [
-        { kind: 'person', name: 'Irmã Helena Prado' },
-        { kind: 'unnamed', name: null },
-        { kind: 'unnamed', name: null },
-      ],
-    );
+    expect(read.voiceNames?.map(({ kind, name }) => ({ kind, name }))).toEqual([
+      { kind: 'person', name: 'Irmã Helena Prado' },
+      { kind: 'unnamed', name: null },
+      { kind: 'unnamed', name: null },
+    ]);
   });
 
   it('AC-2: neither the separation nor a name waiting for confirmation leaves for them', async () => {

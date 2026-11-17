@@ -283,7 +283,9 @@ export class MediaPlayerPage {
    * Who speaks is for everyone who may listen (KBC-151 BR-0): the API sends confirmed names
    * only, and the separation only to whoever names the voices (KBC-065 BR-3, ADR 0032).
    */
-  protected readonly canSeeSpeakers = computed(() => this.session.me() !== null);
+  protected readonly canSeeSpeakers = computed(
+    () => this.session.me() !== null,
+  );
   /** "Mostrar quem fala" (FR-4): on by default. */
   protected readonly speakersOn = computed(
     () => this.canSeeSpeakers() && this.preferences.speakersOn(),
