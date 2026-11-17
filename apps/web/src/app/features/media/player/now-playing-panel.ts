@@ -20,7 +20,17 @@ import {
   mediaUrl,
 } from '@core/media/media-api.js';
 import { RightPanel } from '@features/shell/right-panel.js';
-import { UiCover, UiIcon, UiIconButton } from '@ui/index.js';
+import { BookmarksStore } from '@core/media/bookmarks-store.js';
+import { ChatStore } from '@features/chat/chat-store.js';
+import {
+  UiAvatar,
+  UiCover,
+  UiIcon,
+  UiIconButton,
+  coverGradient,
+} from '@ui/index.js';
+import { MenuButton, type MenuOption } from '../menu-button.js';
+import { ClosePlayer } from './close-player.js';
 
 /** The line heard at `ms` and the one before it: what the transcript card shows. */
 export function linesAt(
@@ -53,22 +63,35 @@ export function linesAt(
  */
 @Component({
   selector: 'app-now-playing-panel',
-  imports: [RouterLink, UiCover, UiIcon, UiIconButton],
+  imports: [MenuButton, RouterLink, UiAvatar, UiCover, UiIcon, UiIconButton],
   template: `
     <section class="now" aria-labelledby="now-playing-title">
+      <!-- v2 · Tocando agora: the collection's name, ⋯ and ⤢ (the player page). -->
       <div class="bar">
-        <h2 id="now-playing-title" class="label" i18n="@@nowPlaying.title">
+        <h2 id="now-playing-title" class="visually-hidden" i18n="@@nowPlaying.title">
           Tocando agora
         </h2>
-        <button
-          uiIconButton
-          type="button"
-          aria-label="Fechar Tocando agora"
-          i18n-aria-label="@@nowPlaying.close"
-          (click)="panel.close()"
+        <p class="label" aria-hidden="true">{{ collectionTitle() }}</p>
+        <app-menu-button
+          class="more"
+          label="Mais opções de Tocando agora"
+          i18n-label="@@nowPlaying.more"
+          [options]="moreOptions()"
+          (chosen)="chooseMore($event)"
         >
-          <ui-icon name="close" [size]="18" />
-        </button>
+          <ui-icon name="more" [size]="20" />
+        </app-menu-button>
+        @if (source()) {
+          <a
+            uiIconButton
+            class="open"
+            [routerLink]="pagePath()"
+            aria-label="Abrir o player"
+            i18n-aria-label="@@nowPlaying.open"
+          >
+            <ui-icon name="expand" [size]="18" />
+          </a>
+        }
       </div>
       @if (source(); as playing) {
         <ui-cover class="art" [title]="playing.title" [size]="308" />
@@ -77,18 +100,38 @@ export function linesAt(
             <a class="title" [routerLink]="pagePath()">{{ playing.title }}</a>
             <p class="author">{{ authorName() }}</p>
           </div>
-          <a
-            class="open"
-            [routerLink]="pagePath()"
-            aria-label="Abrir o player"
-            i18n-aria-label="@@nowPlaying.open"
+          <button
+            uiIconButton
+            type="button"
+            class="mark"
+            [class.on]="marked()"
+            aria-label="Marcar este trecho"
+            i18n-aria-label="@@player.mark"
+            [disabled]="!canMark()"
+            (click)="mark()"
           >
-            <ui-icon name="expand" [size]="18" />
-          </a>
+            <ui-icon
+              [name]="marked() ? 'bookmarkFill' : 'bookmark'"
+              [size]="22"
+            />
+          </button>
         </div>
         @if (lines(); as shown) {
-          <div class="card">
-            <p class="card-title" i18n="@@nowPlaying.transcript">Transcrição</p>
+          <div class="card" [style.--card-tint]="tint()">
+            <div class="card-head">
+              <p class="card-title" i18n="@@nowPlaying.transcript">
+                Transcrição
+              </p>
+              <a
+                uiIconButton
+                class="card-open"
+                [routerLink]="pagePath()"
+                aria-label="Abrir a transcrição no player"
+                i18n-aria-label="@@nowPlaying.openTranscript"
+              >
+                <ui-icon name="expand" [size]="16" />
+              </a>
+            </div>
             @if (shown.now) {
               @if (shown.before) {
                 <p class="before">{{ shown.before }}</p>
@@ -107,7 +150,7 @@ export function linesAt(
               Sobre a autora
             </h3>
             <div class="person">
-              <ui-cover [title]="person.name" [size]="48" />
+              <ui-avatar [name]="person.name" [size]="48" />
               <div>
                 <p class="person-name">{{ person.name }}</p>
                 @if (authorCount(); as count) {
@@ -128,7 +171,60 @@ export function linesAt(
 export class NowPlayingPanel {
   private readonly engine = inject(MediaEngine);
   protected readonly panel = inject(RightPanel);
+  private readonly closer = inject(ClosePlayer);
+  private readonly bookmarks = inject(BookmarksStore);
+  /** The layout's store, for the collection's name (absent in a bare test host). */
+  private readonly chat = inject(ChatStore, { optional: true });
   protected readonly source = this.engine.source;
+  protected readonly canMark = computed(
+    () => this.bookmarks.mediaId() === this.source()?.id,
+  );
+  protected readonly marked = computed(
+    () => this.canMark() && this.bookmarks.bookmarks().length > 0,
+  );
+  /** The transcript card in the cover's colour (v2 · Tocando agora). */
+  protected readonly tint = computed(() => {
+    const playing = this.source();
+    return playing ? coverGradient(playing.title)[0] : null;
+  });
+  /** The header names the collection of what plays, as v2 draws it. */
+  private readonly collectionName = computed(() => {
+    const slug = this.media()?.topic;
+    const found = slug
+      ? this.chat?.topicList().find((topic) => topic.slug === slug)
+      : undefined;
+    return found?.title ?? null;
+  });
+  protected readonly collectionTitle = computed(
+    () => this.collectionName() ?? $localize`:@@nowPlaying.title:Tocando agora`,
+  );
+  protected readonly moreOptions = computed<readonly MenuOption[]>(() => [
+    {
+      id: 'close-panel',
+      icon: 'close',
+      label: $localize`:@@nowPlaying.close:Fechar Tocando agora`,
+    },
+    ...(this.source()
+      ? [
+          {
+            id: 'close-player',
+            icon: 'xcircle' as const,
+            label: $localize`:@@mini.close:Fechar o player`,
+            divider: true,
+          },
+        ]
+      : []),
+  ]);
+
+  protected chooseMore(id: string): void {
+    if (id === 'close-panel') this.panel.close();
+    if (id === 'close-player') this.closer.run(true);
+  }
+
+  protected mark(): void {
+    this.bookmarks.mark();
+    this.bookmarks.editNote(null);
+  }
   protected readonly pagePath = computed(() => {
     const playing = this.source();
     return playing ? mediaPagePath(playing.id) : '/';
@@ -172,9 +268,15 @@ export class NowPlayingPanel {
     const count = this.collection
       .value()
       .filter((one) => one.author?.slug === author.slug).length;
+    // v2 · Tocando agora: "5 áudios em Alquimia Prática" (the collection by name).
+    const where = this.collectionName();
+    if (!where)
+      return count === 1
+        ? $localize`:@@nowPlaying.oneAudio:1 áudio neste acervo`
+        : $localize`:@@nowPlaying.audios:${count}:count: áudios neste acervo`;
     return count === 1
-      ? $localize`:@@nowPlaying.oneAudio:1 áudio neste acervo`
-      : $localize`:@@nowPlaying.audios:${count}:count: áudios neste acervo`;
+      ? $localize`:@@nowPlaying.oneAudioIn:1 áudio em ${where}:collection:`
+      : $localize`:@@nowPlaying.audiosIn:${count}:count: áudios em ${where}:collection:`;
   });
   /** The card shows once there is a transcript; the line follows the playback. */
   protected readonly lines = computed(() => {

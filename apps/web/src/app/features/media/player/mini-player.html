@@ -2,7 +2,12 @@
 @if (visible() && source(); as current) {
   <!-- The v2 player bar (KBC-125): 72 at the foot of the shell on desktop, the mini player
        above the phone navigation. -->
-  <section class="bar" aria-label="Mini-player" i18n-aria-label="@@mini.region">
+  <section
+    class="bar"
+    aria-label="Mini-player"
+    i18n-aria-label="@@mini.region"
+    [style.--mini-tint]="tint()"
+  >
     <div class="now">
       <ui-cover class="cover" [title]="current.title" [size]="56" />
       <div class="text">
@@ -30,12 +35,38 @@
           }}</a>
           @if (currentTrack()) {
             <span class="subtitle">{{ current.title }}</span>
+          } @else if (current.artist) {
+            <span class="subtitle">{{ current.artist }}</span>
           }
         }
       </div>
+      <button
+        uiIconButton
+        type="button"
+        class="mark"
+        [class.on]="marked()"
+        aria-label="Marcar este trecho"
+        i18n-aria-label="@@player.mark"
+        [disabled]="!canMark()"
+        (click)="mark()"
+      >
+        <ui-icon [name]="marked() ? 'bookmarkFill' : 'bookmark'" [size]="20" />
+      </button>
     </div>
     <div class="controls">
       <div class="buttons">
+        <app-menu-button
+          class="speed"
+          [class.on]="speedChanged()"
+          kind="choice"
+          [label]="speedLabel()"
+          menuLabel="Velocidade"
+          i18n-menuLabel="@@player.speedMenu"
+          [options]="speedOptions()"
+          (chosen)="chooseSpeed($event)"
+        >
+          {{ speedShown() }}
+        </app-menu-button>
         <button
           uiIconButton
           type="button"
@@ -46,7 +77,6 @@
           (click)="back()"
         >
           <ui-icon name="rewind" [size]="20" />
-          <span class="skip-amount" aria-hidden="true">{{ skipBack() }}</span>
         </button>
         <button
           type="button"
@@ -73,9 +103,16 @@
           (click)="forward()"
         >
           <ui-icon name="forward" [size]="20" />
-          <span class="skip-amount" aria-hidden="true">{{
-            skipForward()
-          }}</span>
+        </button>
+        <button
+          uiIconButton
+          type="button"
+          class="sleep-button"
+          [class.on]="sleepShown() !== ''"
+          [attr.aria-label]="sleepButtonLabel()"
+          (click)="sleepDialog.open()"
+        >
+          <ui-icon name="moon" [size]="20" />
         </button>
       </div>
       <div class="timeline">
@@ -118,9 +155,49 @@
       >
         <ui-icon name="cc" [size]="20" />
       </button>
+      @if (volumeSupported()) {
+        <span class="volume">
+          <button
+            uiIconButton
+            type="button"
+            class="mute"
+            aria-label="Silenciar"
+            i18n-aria-label="@@player.mute"
+            [attr.aria-pressed]="muted()"
+            (click)="toggleMute()"
+          >
+            <ui-icon [name]="muted() ? 'volumeOff' : 'volume'" [size]="20" />
+          </button>
+          <input
+            type="range"
+            class="volume-slider"
+            min="0"
+            max="100"
+            step="5"
+            aria-label="Volume"
+            i18n-aria-label="@@player.volume"
+            [style.--volume.%]="volumePercent()"
+            [value]="volumePercent()"
+            [attr.aria-valuetext]="volumePercent() + '%'"
+            (input)="setVolume($event)"
+          />
+        </span>
+      }
+      <a
+        uiIconButton
+        class="expand"
+        [routerLink]="['/midia', current.id]"
+        aria-label="Abrir o player"
+        i18n-aria-label="@@mini.expand"
+      >
+        <ui-icon name="expand" [size]="20" />
+      </a>
+      <!-- Not drawn in v2: on a phone it stays on the card; on desktop "Tocando agora" ⋯
+           has it too. -->
       <button
         uiIconButton
         type="button"
+        class="close"
         aria-label="Fechar o player"
         i18n-aria-label="@@mini.close"
         (click)="close()"
@@ -128,6 +205,7 @@
         <ui-icon name="close" [size]="20" />
       </button>
     </div>
+    <app-sleep-timer-dialog #sleepDialog />
   </section>
 } @else if (idle()) {
   <section

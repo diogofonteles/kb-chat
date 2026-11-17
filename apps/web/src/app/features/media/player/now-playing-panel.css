@@ -17,12 +17,33 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
+  /* v2: a 24 row (16/700 and two bare icons); the 32 targets overflow it evenly. */
+  height: 1.5rem;
 }
 
 .label {
+  flex: 1;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   font-size: var(--text-md);
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more {
+  --menu-trigger-min: 2rem;
+  --menu-trigger-height: 2rem;
+}
+
+.mark {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.mark.on {
+  color: var(--color-accent);
 }
 
 .art {
@@ -67,18 +88,8 @@
 }
 
 .open {
-  display: grid;
   flex: none;
-  place-items: center;
-  width: var(--target);
-  height: var(--target);
-  border-radius: var(--radius-pill);
   color: var(--color-text-muted);
-}
-
-.open:hover {
-  background: var(--overlay-2);
-  color: var(--color-text);
 }
 
 .card {
@@ -88,9 +99,20 @@
   border-radius: var(--radius-card);
   background: color-mix(
     in srgb,
-    var(--color-accent) 18%,
-    var(--color-elevated)
+    var(--card-tint, var(--color-accent)) 75%,
+    var(--color-bg)
   );
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-open {
+  margin: -0.5rem -0.5rem -0.5rem 0;
+  color: var(--color-text);
 }
 
 .card p {
@@ -111,7 +133,8 @@
 }
 
 .before {
-  color: var(--color-text-muted);
+  /* The line already heard, dimmed on the card (v2: white at 65%, ≥ 4.5:1 there). */
+  color: color-mix(in srgb, var(--color-text) 80%, transparent);
 }
 
 .about {

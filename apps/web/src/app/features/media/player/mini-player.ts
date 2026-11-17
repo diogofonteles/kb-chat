@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   computed,
   inject,
   input,
@@ -13,9 +12,14 @@ import {
 } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { UiButton, UiIconButton } from '@ui/button.js';
-import { UiCover } from '@ui/cover.js';
+import { UiCover, coverGradient } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
-import { formatClock, positionToSecond } from '@kb-chat/player-core';
+import {
+  SPEEDS,
+  formatClock,
+  isSpeed,
+  positionToSecond,
+} from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { RestrictedSkipper } from '@core/media/restricted-skipper.js';
@@ -23,11 +27,20 @@ import { TracksStore } from '@core/media/tracks-store.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 import { ProgressSaver } from '@core/media/progress-saver.js';
 import { SleepTimerService } from '@core/media/sleep-timer.js';
-import { filter, map } from 'rxjs';
+import { filter, from, map } from 'rxjs';
+import { BookmarksStore } from '@core/media/bookmarks-store.js';
+import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
+import { MenuButton, type MenuOption } from '../menu-button.js';
+import { PlayerVolume } from './player-volume.js';
+import { SleepTimerDialog } from './sleep-timer-dialog.js';
+import { ClosePlayer } from './close-player.js';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { RightPanel } from '@features/shell/right-panel.js';
 import { NowPlayingPanel } from './now-playing-panel.js';
 import { PlayerShortcuts } from './player-shortcuts.js';
+
+const DECIMAL = new Intl.NumberFormat('pt-BR');
+const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
 
 /**
  * The persistent mini-player (screens.md T15, KBC-041 FR-8): while a media plays and the
@@ -37,7 +50,15 @@ import { PlayerShortcuts } from './player-shortcuts.js';
  */
 @Component({
   selector: 'app-mini-player',
-  imports: [RouterLink, UiButton, UiCover, UiIcon, UiIconButton],
+  imports: [
+    RouterLink,
+    MenuButton,
+    SleepTimerDialog,
+    UiButton,
+    UiCover,
+    UiIcon,
+    UiIconButton,
+  ],
   templateUrl: './mini-player.html',
   styleUrl: './mini-player.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -91,7 +112,6 @@ export class MiniPlayer {
   /** A media the full player shows elsewhere on screen (the reading panel, KBC-039). */
   readonly shownElsewhere = input<string | null>(null);
 
-  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly rightPanel = inject(RightPanel);
   /** "Tocando agora" is in the shell's right panel (KBC-129 FR-2). */
   protected readonly nowPlayingOpen = computed(
@@ -170,8 +190,76 @@ export class MiniPlayer {
       .subscribe(() => this.engine.pause());
   }
 
+  private readonly bookmarks = inject(BookmarksStore);
+  private readonly closer = inject(ClosePlayer);
+  private readonly volumeMemory = inject(PlayerVolume);
+  /** Marking needs the loaded media's bookmarks (KBC-042 FR-2). */
+  protected readonly canMark = computed(
+    () => !this.gone() && this.bookmarks.mediaId() === this.source()?.id,
+  );
+  /** The mark in green when this media has bookmarks (v2 player bar). */
+  protected readonly marked = computed(
+    () => this.canMark() && this.bookmarks.bookmarks().length > 0,
+  );
+  /** The cover's own colour behind the phone's mini player (v2 · celular). */
+  protected readonly tint = computed(() => {
+    const source = this.source();
+    return source ? coverGradient(source.title)[0] : null;
+  });
+  protected readonly speedShown = computed(() =>
+    speedText(this.engine.speed()),
+  );
+  /** Another speed than 1× shows in green (v2 player bar). */
+  protected readonly speedChanged = computed(() => this.engine.speed() !== 1);
+  protected readonly speedLabel = computed(
+    () =>
+      $localize`:@@player.speedLabel:Velocidade: ${DECIMAL.format(this.engine.speed())}:speed: vezes`,
+  );
+  protected readonly speedOptions = computed<MenuOption[]>(() =>
+    SPEEDS.map((speed) => ({
+      id: String(speed),
+      label: speedText(speed),
+      checked: speed === this.engine.speed(),
+    })),
+  );
+  protected readonly sleepButtonLabel = computed(() => {
+    const shown = this.sleepShown();
+    return shown
+      ? $localize`:@@mini.sleep.on:Timer para dormir: ${shown}:time:`
+      : $localize`:@@player.sleep.open:Timer para dormir`;
+  });
+  private readonly volumeAnswer = toSignal(from(inject(VOLUME_SUPPORT)));
+  /** Some browsers (iOS) fix the volume: no slider there (KBC-041 FR-9). */
+  protected readonly volumeSupported = computed(
+    () => this.volumeAnswer() === true,
+  );
+  protected readonly muted = this.engine.muted;
+  protected readonly volumePercent = computed(() =>
+    Math.round((this.muted() ? 0 : this.engine.volume()) * 100),
+  );
+
   protected toggle(): void {
     this.engine.toggle();
+  }
+
+  /** A bookmark 2 s before now, without its note (the player page edits notes). */
+  protected mark(): void {
+    this.bookmarks.mark();
+    this.bookmarks.editNote(null);
+  }
+
+  protected chooseSpeed(id: string): void {
+    const speed = Number(id);
+    if (isSpeed(speed)) this.preferences.setSpeed(speed);
+  }
+
+  protected toggleMute(): void {
+    this.engine.toggleMute();
+  }
+
+  protected setVolume(event: Event): void {
+    if (event.target instanceof HTMLInputElement)
+      this.volumeMemory.set(Number(event.target.value) / 100);
   }
 
   protected back(): void {
@@ -199,19 +287,9 @@ export class MiniPlayer {
     });
   }
 
-  /**
-   * "Fechar o player": stops, saves where it stopped and goes away (AC-11). The focus,
-   * which was on the button that goes, moves to the main area (WCAG 2.4.3).
-   */
+  /** "Fechar o player" (AC-11): on the phone's card; on desktop in "Tocando agora" ⋯. */
   protected close(): void {
-    this.engine.pause();
-    if (!this.gone()) this.saver.saveNow();
-    this.engine.unload();
-    if (this.nowPlayingOpen()) this.rightPanel.close();
-    const main = this.host.nativeElement.ownerDocument.querySelector('main');
-    if (main) {
-      main.tabIndex = -1;
-      main.focus();
-    }
+    this.closer.run(this.nowPlayingOpen());
   }
+
 }

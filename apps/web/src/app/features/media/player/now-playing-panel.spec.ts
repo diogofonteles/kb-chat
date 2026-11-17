@@ -80,6 +80,9 @@ async function setup(atSeconds = 7) {
       aMediaItem({ id: mediaId(3), author: null }),
     ],
   });
+  // The mark of v2 · Tocando agora reads the person's bookmarks of what plays.
+  for (const request of http.match(`/api/v1/media/${ITEM.id}/bookmarks`))
+    request.flush({ items: [] });
   await fixture.whenStable();
   return { fixture, http, media };
 }
@@ -106,8 +109,13 @@ describe('NowPlayingPanel (KBC-129 FR-2, BR-4)', () => {
     const { fixture } = await setup();
     const panel = TestBed.inject(RightPanel);
     panel.open({ component: NowPlayingPanel, width: 'narrow', label: 'x' });
+    // v2 · Tocando agora: the panel's ⋯ holds "Fechar Tocando agora".
     fireEvent.click(
-      screen.getByRole('button', { name: 'Fechar Tocando agora' }),
+      screen.getByRole('button', { name: 'Mais opções de Tocando agora' }),
+    );
+    await fixture.whenStable();
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Fechar Tocando agora' }),
     );
     await fixture.whenStable();
     expect(panel.content()).toBeNull();

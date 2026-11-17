@@ -132,7 +132,10 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     const { harness } = await setup();
     fireEvent.click(screen.getByRole('button', { name: 'Tocando agora' }));
     await harness.fixture.whenStable();
-    fireEvent.click(screen.getByRole('button', { name: 'Fechar o player' }));
+    // The card's × (a phone's; on desktop v2 puts it in "Tocando agora" ⋯, hidden here).
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Fechar o player', hidden: true }),
+    );
     await harness.fixture.whenStable();
     expect(TestBed.inject(RightPanel).content()).toBeNull();
   });
@@ -151,7 +154,10 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
 
   it('closes: stops, saves the position and goes away (AC-11)', async () => {
     const { media, http, harness, engine } = await setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Fechar o player' }));
+    // The card's × (a phone's; on desktop v2 puts it in "Tocando agora" ⋯, hidden here).
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Fechar o player', hidden: true }),
+    );
     await harness.fixture.whenStable();
     expect(media.calls).toContain('pause');
     expect(
@@ -225,7 +231,8 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
   it('shows when a sleep timer will stop the audio, and nothing once it is off (KBC-046 FR-1)', async () => {
     const { harness } = await setup();
     const bar = screen.getByRole('region', { name: 'Mini-player' });
-    expect(bar.textContent).not.toContain('Timer para dormir');
+    // The bar holds the timer's button and dialog (v2 moon); the time left shows only on.
+    expect(bar.querySelector('.time .sleep')).toBeNull();
     const timer = TestBed.inject(SleepTimerService);
     timer.start(15);
     await harness.fixture.whenStable();
@@ -239,6 +246,6 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     expect(bar.textContent).toContain('☾ Timer para dormir: No fim');
     timer.off();
     await harness.fixture.whenStable();
-    expect(bar.textContent).not.toContain('Timer para dormir');
+    expect(bar.querySelector('.time .sleep')).toBeNull();
   });
 });
