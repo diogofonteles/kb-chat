@@ -559,7 +559,7 @@ h2:focus-visible {
   white-space: nowrap;
 }
 
-:is(button, a):focus-visible {
+:is(button, a, .on-player):focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }

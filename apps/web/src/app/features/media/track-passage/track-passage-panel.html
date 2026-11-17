@@ -167,7 +167,7 @@
         <!-- One control (KBC-155): the card starts the app's player; the bar pauses it. -->
         <div class="actions">
           @if (playing()) {
-            <span class="on-player" role="status">
+            <span class="on-player" role="status" tabindex="-1">
               <ui-icon name="wave" [size]="18" />
               <span i18n="@@trackPassage.onPlayer">tocando no player</span>
             </span>
@@ -225,7 +225,7 @@
     } @else {
       <div class="actions plain">
         @if (playing()) {
-          <span class="on-player" role="status">
+          <span class="on-player" role="status" tabindex="-1">
             <ui-icon name="wave" [size]="18" />
             <span i18n="@@trackPassage.onPlayer">tocando no player</span>
           </span>

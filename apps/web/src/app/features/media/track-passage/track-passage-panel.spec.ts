@@ -369,6 +369,24 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
     expect(media.calls).not.toContain('pause');
   });
 
+  it('KBC-155 review: "Ouvir o trecho" leaves once the passage plays, and the focus goes to "tocando no player", not the page', async () => {
+    const { media } = await openReady();
+    const listen = screen.getByRole('button', { name: 'Ouvir o trecho' });
+    listen.focus();
+    fireEvent.click(listen);
+    media.setCurrentTime(43.5);
+    media.emit('playing');
+    media.emit('timeupdate');
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Ouvir o trecho' }),
+      ).toBeNull(),
+    );
+    const status = screen.getByText('tocando no player').closest('.on-player');
+    await vi.waitFor(() => expect(document.activeElement).toBe(status));
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
   it('KBC-155 AC-4: several citations of the same track: "Outros trechos citados" go to each passage, with no timeline marks', async () => {
     const twice: AnswerSource = {
       ...SOURCE,

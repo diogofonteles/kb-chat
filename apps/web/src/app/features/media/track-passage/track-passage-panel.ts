@@ -136,6 +136,8 @@ export class TrackPassagePanel {
   private readonly injector = inject(Injector);
   private readonly host =
     inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  /** "Ouvir o trecho" was pressed: once it leaves, its focus goes to "tocando no player". */
+  private focusOnPlayer = false;
 
   readonly source = input.required<AnswerSource>();
   /** The time the citation wrote ("" for a plain [n] or the chip). */
@@ -496,6 +498,18 @@ export class TrackPassagePanel {
         takeUntilDestroyed(),
       )
       .subscribe((one) => this.cue(one));
+    // "Ouvir o trecho" leaves once the passage plays: the focus it held goes to "tocando no
+    // player" in its place, never to the page (a keyboard or a screen reader, the phone's sheet).
+    afterRenderEffect(() => {
+      this.playing();
+      this.offersListen();
+      if (!this.focusOnPlayer || this.host.querySelector('.listen')) return;
+      const status = this.host.querySelector<HTMLElement>('.on-player');
+      if (!status) return;
+      this.focusOnPlayer = false;
+      const focused = this.document.activeElement;
+      if (!focused || focused === this.document.body) status.focus();
+    });
     // A new source brings the reader to the top, on its title (T22 flow 1); again once the
     // track arrives, after the phone's sheet opened and took the focus to its first control.
     afterRenderEffect(() => {
@@ -542,6 +556,7 @@ export class TrackPassagePanel {
    * the passage, never pauses (the bar does, KBC-155).
    */
   protected listen(): void {
+    this.focusOnPlayer = true;
     const passage = this.passage();
     const from = passage ? playbackStartOf(passage) : 0;
     const now = this.nowMs();
