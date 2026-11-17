@@ -18,10 +18,12 @@ import {
  * (beside the answer) and 390 (in the reading sheet), in Chrome and, with KBC_E2E_WEBKIT=1, in
  * WebKit at both widths. The answer is a real research turn, then the same sources saved as a
  * conversation citing the track twice and a second track once ([1] and [2@0:41], [2@0:50]).
- * `KBC_SHOTS=<dir>` saves the screens for the comparison with the Figma frames.
+ * `KBC_SHOTS=<dir>` saves the screens for the comparison with the Figma frames (`KBC_SHOTS_PREFIX`).
  */
 
 const shots = process.env['KBC_SHOTS'];
+/** `KBC_SHOTS_PREFIX` names a new round of screens without overwriting the last one. */
+const shotPrefix = process.env['KBC_SHOTS_PREFIX'] ?? 'after';
 const SECOND = 'E a polaridade?';
 /** Enough speech for the whole transcript to scroll in its own box. */
 const LONG_SPEECH = [
@@ -65,7 +67,7 @@ async function shot(page: Page, name: string): Promise<void> {
   const width = isDesktop(page) ? 1440 : 390;
   const engine = test.info().project.name.includes('webkit') ? '-webkit' : '';
   await page.screenshot({
-    path: `${shots}/after-${name}-${width}${engine}.png`,
+    path: `${shots}/${shotPrefix}-${name}-${width}${engine}.png`,
   });
 }
 
@@ -337,6 +339,25 @@ async function walkTheControls(member: Page, panel: Locator): Promise<void> {
   await expect(around).toBeVisible();
 }
 
+/** QA BUG-1: the passage and its row of actions stay inside the card's padding. */
+async function cardHoldsItsRow(panel: Locator): Promise<void> {
+  const card = panel.locator('section.cited');
+  const box = await card.boundingBox();
+  const padding = 18;
+  for (const inner of [
+    panel.getByRole('button', { name: 'Copiar o link do trecho' }),
+    card.locator('blockquote'),
+  ]) {
+    const own = await inner.boundingBox();
+    if (!box || !own)
+      throw new Error('the card or its content is not laid out');
+    expect(own.x).toBeGreaterThanOrEqual(box.x + padding - 1);
+    expect(own.x + own.width).toBeLessThanOrEqual(
+      box.x + box.width - padding + 1,
+    );
+  }
+}
+
 async function desktopFlow(member: Page): Promise<void> {
   const citation = member.getByRole('link', {
     name: `Fonte 2, faixa ${TITLE}, aos 41 segundos`,
@@ -362,6 +383,7 @@ async function desktopFlow(member: Page): Promise<void> {
     })
     .toBeCloseTo(39, 0);
   expect(await playing(member)).toBe(false);
+  await cardHoldsItsRow(panel);
   await shot(member, 'stopped');
   expect(await seriousAxe(member)).toEqual([]);
 
@@ -375,6 +397,15 @@ async function desktopFlow(member: Page): Promise<void> {
   await expect.poll(() => playing(member)).toBe(true);
   expect((await audioState(member)).currentTime).toBeLessThan(5);
   await expect(bar.getByRole('button', { name: /Pausar/ })).toBeVisible();
+  await panel.getByRole('button', { name: 'Pausar' }).click();
+  await expect.poll(() => playing(member)).toBe(false);
+
+  // The bar closed: "Ouvir o trecho" puts the track back on it and plays the passage.
+  await bar.getByRole('button', { name: 'Fechar o player' }).click();
+  await expect(bar).toBeHidden();
+  await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
+  await expect.poll(() => playing(member)).toBe(true);
+  await expect(bar).toContainText(TITLE);
   await panel.getByRole('button', { name: 'Pausar' }).click();
   await expect.poll(() => playing(member)).toBe(false);
 

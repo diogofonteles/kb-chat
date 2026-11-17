@@ -166,6 +166,8 @@ h2:focus-visible {
 
 .cited {
   display: grid;
+  /* One column no wider than the card: a long passage wraps instead of pushing it out. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
   padding: 1.125rem;
   border-radius: 0.75rem;
@@ -187,7 +189,7 @@ h2:focus-visible {
   background: color-mix(
     in srgb,
     var(--cover-tint) var(--cover-card-share),
-    black
+    var(--color-cover-ink)
   );
   color: var(--color-on-cover);
 }
@@ -287,6 +289,18 @@ h2:focus-visible {
 
 .actions .listen {
   gap: var(--space-2);
+  padding-inline: 1.25rem;
+}
+
+/* The row fits the card's padding as in the Figma frame ("Ouvir o trecho" ~174 px,
+   "Faixa toda" ~98 px); a narrower card shrinks the buttons, their labels wrapping last. */
+.actions > button {
+  min-width: 0;
+}
+
+.actions .whole {
+  padding-inline: var(--space-4);
+  font-size: 0.875rem;
 }
 
 :host(.in-sheet) .actions .listen {
@@ -303,7 +317,7 @@ h2:focus-visible {
 
 /* The bookmark and share sit on the card: a dark wash of it, white icons (Figma #0000002e). */
 .on-card {
-  background: color-mix(in srgb, black 18%, transparent);
+  background: color-mix(in srgb, var(--color-cover-ink) 18%, transparent);
   color: var(--color-text);
 }
 
@@ -590,7 +604,7 @@ h2:focus-visible {
   background: color-mix(
     in srgb,
     var(--cover-tint) var(--cover-card-share),
-    black
+    var(--color-cover-ink)
   );
   color: var(--color-on-cover);
 }
