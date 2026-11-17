@@ -78,6 +78,37 @@ async function shot(page: Page, name: string): Promise<void> {
   });
 }
 
+/** Saves the conversation as the member's own and opens it from "Conversas", as a reader does. */
+async function openConversation(
+  member: Page,
+  conversation: { readonly id: string },
+): Promise<void> {
+  const put = await member.request.put(
+    `/api/v1/conversations/${conversation.id}`,
+    { data: conversation, headers: CSRF },
+  );
+  expect(put.status(), await put.text()).toBe(200);
+  await member.reload();
+  const skip = member.getByRole('button', { name: 'Pular' });
+  if (await skip.isVisible().catch(() => false)) await skip.click();
+  if (!isDesktop(member))
+    await member.getByRole('button', { name: 'Menu', exact: true }).click();
+  const side = isDesktop(member)
+    ? member.getByRole('complementary', { name: 'Sua biblioteca' })
+    : member.getByRole('dialog', { name: 'Menu' });
+  await side
+    .getByRole('navigation', { name: 'Conversas' })
+    .getByRole('button', { name: new RegExp(QUESTION) })
+    .first()
+    .click();
+  if (!isDesktop(member)) {
+    await expect(side).toBeHidden();
+    await expect(
+      member.getByRole('button', { name: 'Menu', exact: true }),
+    ).toBeFocused();
+  }
+}
+
 /**
  * Two real research turns (the track, then the second track), saved again as one answer that
  * cites the second track as [1] and the first one at two passages, as [2@0:41] and [2@0:50].
@@ -144,30 +175,7 @@ async function answerWithTwoTracks(member: Page): Promise<void> {
       },
     ],
   };
-  const put = await member.request.put(
-    `/api/v1/conversations/${conversation.id}`,
-    { data: conversation, headers: CSRF },
-  );
-  expect(put.status(), await put.text()).toBe(200);
-  await member.reload();
-  const skip = member.getByRole('button', { name: 'Pular' });
-  if (await skip.isVisible().catch(() => false)) await skip.click();
-  if (!isDesktop(member))
-    await member.getByRole('button', { name: 'Menu', exact: true }).click();
-  const side = isDesktop(member)
-    ? member.getByRole('complementary', { name: 'Sua biblioteca' })
-    : member.getByRole('dialog', { name: 'Menu' });
-  await side
-    .getByRole('navigation', { name: 'Conversas' })
-    .getByRole('button', { name: new RegExp(QUESTION) })
-    .first()
-    .click();
-  if (!isDesktop(member)) {
-    await expect(side).toBeHidden();
-    await expect(
-      member.getByRole('button', { name: 'Menu', exact: true }),
-    ).toBeFocused();
-  }
+  await openConversation(member, conversation);
   await expect(
     member.getByRole('link', {
       name: `Fonte 2, faixa ${TITLE}, aos 41 segundos`,
@@ -787,4 +795,99 @@ test('KBC-151 AC-1: a researcher who only listens (no media-edit, no media-speak
   );
   await expect(panel).not.toContainText(/Voz \d/);
   await shot(member, 'who-speaks');
+});
+
+/** The owner's case (KBC-156): a 1 s utterance at the track's start, speech right after it. */
+const FRAGMENT_SPEECH = [
+  { at: 0, text: 'É, italiano, tá.' },
+  { at: 1, text: 'Meu pai veio da Itália com a família inteira,' },
+  { at: 4, text: 'e eu cresci na roça ouvindo as histórias dele.' },
+  ...SPEECH.filter(({ at }) => at > 30),
+];
+
+/**
+ * A real research turn, saved again as an answer from before KBC-156: it cites the track at
+ * 0:00 with the lone 1 s segment as its passage.
+ */
+async function answerCitingTheFragment(member: Page): Promise<void> {
+  await ask(member);
+  let saved: Conversation | undefined;
+  await expect
+    .poll(
+      async () => {
+        const list = await member.request.get(
+          '/api/v1/conversations?kind=research',
+        );
+        const { items } = (await list.json()) as { items: { id: string }[] };
+        const [first] = items;
+        if (!first) return 0;
+        const one = await member.request.get(
+          `/api/v1/conversations/${first.id}`,
+        );
+        saved = (await one.json()) as Conversation;
+        return saved.turns[0]?.sources.length ?? 0;
+      },
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThan(0);
+  const turn = saved?.turns[0];
+  const track = turn?.sources.find((one) => one.media);
+  if (!saved || !turn || !track) throw new Error('no track cited');
+  const now = new Date().toISOString();
+  const conversation = {
+    ...saved,
+    id: crypto.randomUUID(),
+    title: QUESTION,
+    createdAt: now,
+    updatedAt: now,
+    turns: [
+      {
+        ...turn,
+        id: crypto.randomUUID(),
+        at: now,
+        question: QUESTION,
+        answer: 'Ele conta lembranças da infância [1@0:00].',
+        sources: [
+          {
+            ...track,
+            n: 1,
+            passages: [{ at: '0:00', startMs: 0, endMs: 1_000 }],
+          },
+        ],
+      },
+    ],
+  };
+  await openConversation(member, conversation);
+}
+
+test('KBC-156 AC-7: a citation saved on a 1 s fragment opens the whole sentences around it', async ({
+  page,
+}, info) => {
+  test.setTimeout(180_000);
+  const owner = await ownerApi();
+  const topic = await publishedTrack(owner, FRAGMENT_SPEECH);
+  await owner.dispose();
+  for (const viewport of viewports(page, info)) {
+    const member = await researcher(page, topic, { viewport });
+    await answerCitingTheFragment(member);
+    await member
+      .getByRole('link', { name: `Fonte 1, faixa ${TITLE}` })
+      .first()
+      .click();
+    const panel = audioSource(member);
+    await expect(panel).toBeVisible();
+    // On a desktop "Citado na resposta · 0:00–0:07"; in the phone's sheet the span alone.
+    const card = panel.getByRole('region', { name: /0:00–0:0[2-9]/ });
+    await expect(card).toBeVisible();
+    await expect(panel.getByRole('region', { name: /0:00–0:01$/ })).toHaveCount(
+      0,
+    );
+    const quote = card.locator('blockquote');
+    await expect(quote).toContainText('italiano');
+    await expect(quote).toContainText('Meu pai veio da Itália');
+    await expect(quote).toContainText('cresci na roça ouvindo as histórias');
+    await expect(quote).not.toContainText('pêndulo');
+    await shot(member, 'kbc156-whole-sentence');
+    await member.context().close();
+  }
 });
