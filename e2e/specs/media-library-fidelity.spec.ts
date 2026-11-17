@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { request } from '@playwright/test';
 import type {
   APIRequestContext,
   Browser,
@@ -21,6 +22,7 @@ import {
 } from './fixtures.js';
 import { makeMp3, uniqueTag } from './media-helpers.js';
 import { approve, audioWithTracks } from './tracks-helpers.js';
+import { longPressToSelect } from './v2-media-helpers.js';
 
 /**
  * KBC-128 fidelity: the library and a collection's album page put in the states of the
@@ -127,6 +129,8 @@ const TITLES = [
   'Leitura da Tábua em voz alta',
 ] as const;
 const HELENA = new Set([0, 1, 2, 4, 8, 11]);
+/** The title the lister sends himself (media-list-menu: his ⋯ edits it). */
+const LISTER_SENT = 3;
 
 interface Upload {
   readonly topic: string;
@@ -282,6 +286,21 @@ async function seed(): Promise<Seeded> {
   );
   expect(author.status(), await author.text()).toBeLessThan(300);
   const helena = ((await author.json()) as { slug: string }).slug;
+  const person = async (
+    label: string,
+    topics: string[],
+    features: string[],
+  ) => {
+    const email = uniqueEmail(label);
+    await invite(owner, email, { topics, features });
+    return email;
+  };
+  const listing = ['search', 'media', 'media-upload', 'media-edit'];
+  const lister = await person('lista', [topic], listing);
+  // The lister sends "Relato da Rita…" himself: on /midia its ⋯ offers "Editar informações"
+  // (who sent it may edit it, KBC-050 FR-2; media-list-menu).
+  const listerApi = await request.newContext({ baseURL: WEB_ORIGIN });
+  await signIn(listerApi, lister);
   const ids: Record<string, string> = {};
   const repeated = makeMp3(`repetida-${tag}`, 20);
   ids['Arquivo corrompido da reunião'] = await upload(owner, {
@@ -294,7 +313,7 @@ async function seed(): Promise<Seeded> {
   // Oldest first: "Adicionadas recentemente" puts the first title on top.
   for (const [index, title] of [...TITLES].reverse().entries()) {
     const n = TITLES.length - 1 - index;
-    ids[title] = await upload(owner, {
+    ids[title] = await upload(n === LISTER_SENT ? listerApi : owner, {
       topic,
       title,
       author: HELENA.has(n) ? helena : null,
@@ -321,17 +340,6 @@ async function seed(): Promise<Seeded> {
     headers: CSRF,
   });
   expect(renamed.status(), await renamed.text()).toBe(200);
-  const person = async (
-    label: string,
-    topics: string[],
-    features: string[],
-  ) => {
-    const email = uniqueEmail(label);
-    await invite(owner, email, { topics, features });
-    return email;
-  };
-  const listing = ['search', 'media', 'media-upload', 'media-edit'];
-  const lister = await person('lista', [topic], listing);
   const emptyLister = await person('lista-vazia', [empty], listing);
   const emptyReader = await person(
     'leitor-vazio',
@@ -345,6 +353,7 @@ async function seed(): Promise<Seeded> {
   );
   for (const id of Object.values(ids)) await settled(owner, id);
   await owner.dispose();
+  await listerApi.dispose();
   seeded = {
     topic,
     topicTitle,
@@ -522,6 +531,27 @@ async function expectScrolls(
   await page.mouse.move(x, y);
   await page.mouse.wheel(0, 600);
   await expect.poll(() => scrollTopOf(scroller)).toBeGreaterThan(100);
+
+  // The keyboard right after the page opens, nothing clicked, nothing focused (verify-2):
+  // PageDown and Space move the page, Home brings it back.
+  await scroller.evaluate((node) => node.scrollTo({ top: 0 }));
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement)
+      document.activeElement.blur();
+  });
+  await page.keyboard.press('PageDown');
+  await expect.poll(() => scrollTopOf(scroller)).toBeGreaterThan(100);
+  const afterPageDown = await scrollTopOf(scroller);
+  const bottom = await scroller.evaluate(
+    (node) => node.scrollHeight - node.clientHeight,
+  );
+  await page.keyboard.press('Space');
+  // Space goes on down, unless PageDown already reached the end.
+  await expect
+    .poll(() => scrollTopOf(scroller))
+    .toBeGreaterThanOrEqual(Math.min(afterPageDown + 50, bottom - 5));
+  await page.keyboard.press('Home');
+  await expect.poll(() => scrollTopOf(scroller)).toBeLessThan(5);
 
   // The keyboard: End and Home on the scroller itself (focus on its content).
   await scroller.evaluate((node) => node.scrollTo({ top: 0 }));
@@ -779,7 +809,6 @@ test('the ⋯ of a row, the selection and the dialogs (row-menu, selection, edit
             'Tocar em seguida',
             'Marcar como ouvida',
             'Ver marcadores',
-            'Selecionar',
             'Editar informações',
             'Compartilhar',
             'Remover',
@@ -799,10 +828,13 @@ test('the ⋯ of a row, the selection and the dialogs (row-menu, selection, edit
     await expect(menu).toHaveCount(0);
     await expect(more).toBeFocused();
 
-    // A selection of two: the box on a desktop, "Selecionar" in the ⋯ on a phone.
+    // A selection of two: the box on a desktop, a long press on the row on a phone.
     if (phone) {
-      await more.click();
-      await page.getByRole('menuitem', { name: 'Selecionar' }).click();
+      await longPressToSelect(
+        page,
+        row,
+        row.getByRole('checkbox', { name: `Selecionar ${TITLES[1]}` }),
+      );
     } else {
       await row.hover();
       await row
@@ -1144,6 +1176,8 @@ test('an empty library, for who reads and for who sends (media-library-empty-*)'
       await expect(
         page.getByRole('region', { name: 'Precisa da sua atenção' }),
       ).toHaveCount(0);
+      // The frame first, before its chip is used (and keeps the focus).
+      await shoot(page, id, width);
       // "Autoria" stays among the chips with nothing to tell apart yet (-empty-*).
       const authorship = page
         .getByRole('group', { name: 'Filtros' })
@@ -1154,7 +1188,7 @@ test('an empty library, for who reads and for who sends (media-library-empty-*)'
         page.getByRole('menuitemradio', { name: 'Todas as autorias' }),
       ).toHaveAttribute('aria-checked', 'true');
       await page.keyboard.press('Escape');
-      await shoot(page, id, width);
+      await expect(authorship).toBeFocused();
       await expectUploadEntry(page, id === 'media-library-empty-uploader');
       await context.close();
     }
@@ -1212,10 +1246,17 @@ test('/midia is the collection as an album, for who has no library (media-list-*
     await more.click();
     const menu = page.getByRole('menu');
     await expectWholeOnTop(page, menu);
+    // He sent it: "Editar informações" too. "Remover" is a master's, and a master has the
+    // library, never /midia (KBC-051 FR-7) — the frame's "Remover" has no one to show it to.
     await expect(menu.getByRole('menuitem')).toHaveText(
       phone
-        ? ['Tocar em seguida', 'Compartilhar']
-        : ['Tocar agora', 'Tocar em seguida', 'Copiar link'],
+        ? ['Tocar em seguida', 'Editar informações', 'Compartilhar']
+        : [
+            'Tocar agora',
+            'Tocar em seguida',
+            'Editar informações',
+            'Copiar link',
+          ],
     );
     await shoot(page, 'media-list-menu', width);
     await page.keyboard.press('Escape');

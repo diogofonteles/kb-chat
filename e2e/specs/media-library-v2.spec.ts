@@ -18,6 +18,7 @@ import {
   useTheme,
   type UploadedMedia,
 } from './media-helpers.js';
+import { longPressToSelect } from './v2-media-helpers.js';
 
 /**
  * KBC-128: the media library in v2 — the header with its cover, the track table, "Precisa
@@ -215,7 +216,6 @@ test('FR-3, D5: Ordenar e ver como and the ⋯ open whole on the screen, a sheet
           'Tocar em seguida',
           'Marcar como ouvida',
           'Ver marcadores',
-          'Selecionar',
           'Editar informações',
           'Compartilhar',
           'Remover',
@@ -315,17 +315,12 @@ test('AC-4: three selected — the bar takes the foot of the phone, and the mark
       name: `Selecionar ${lecture(n).title}`,
     });
   if (!desktop(page)) {
-    // A phone shows no box until a selection starts from a row's ⋯ "Selecionar"
-    // (media-library-selection@mobile); then, with no hover, each unchecked box shows its
-    // edge, or a tap on the blank lead column would select a row never seen as a target.
+    // A phone shows no box until a long press on a row starts a selection (its ⋯ has no
+    // "Selecionar": media-library-row-menu@mobile); then, with no hover, each unchecked box
+    // shows its edge, or a tap on the blank lead column would select a row never seen as a
+    // target (media-library-selection@mobile).
     await expect(boxOf(2)).toBeHidden();
-    await rowOf(page, lecture(1))
-      .getByRole('button', { name: `Mais ações para ${lecture(1).title}` })
-      .click();
-    await page
-      .getByRole('menuitem', { name: 'Selecionar', exact: true })
-      .click();
-    await expect(boxOf(1)).toBeChecked();
+    await longPressToSelect(page, rowOf(page, lecture(1)), boxOf(1));
     for (const n of [2, 3])
       await expect(boxOf(n)).not.toHaveCSS(
         'border-top-color',
@@ -381,7 +376,6 @@ test('AC-5: a member who may not edit sees neither Editar nor Remover in the ⋯
           'Tocar em seguida',
           'Marcar como ouvida',
           'Ver marcadores',
-          'Selecionar',
           'Compartilhar',
         ],
   );

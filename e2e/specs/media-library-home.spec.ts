@@ -21,6 +21,7 @@ import {
   type UploadedMedia,
 } from './media-helpers.js';
 import { library } from './shell-helpers.js';
+import { longPressToSelect } from './v2-media-helpers.js';
 
 /** KBC-051 (screens.md T16): the media library home. */
 
@@ -62,8 +63,9 @@ const strip = (page: Page) =>
 const mini = (page: Page) => page.getByRole('region', { name: 'Mini-player' });
 
 /**
- * Selects a row: its box on a desktop. A phone shows no box until a selection starts, from
- * the row's ⋯ "Selecionar" (media-library-selection@mobile); then the boxes lead every row.
+ * Selects a row: its box on a desktop. A phone shows no box until a selection starts, with a
+ * long press on a row (its ⋯ has no "Selecionar": media-library-row-menu@mobile); then the
+ * boxes lead every row (media-library-selection@mobile).
  */
 async function selectRow(page: Page, title: string) {
   const box = all(page).getByRole('checkbox', { name: `Selecionar ${title}` });
@@ -71,11 +73,11 @@ async function selectRow(page: Page, title: string) {
     await box.check();
     return;
   }
-  await all(page)
-    .getByRole('button', { name: `Mais ações para ${title}` })
-    .click();
-  await page.getByRole('menuitem', { name: 'Selecionar', exact: true }).click();
-  await expect(box).toBeChecked();
+  await longPressToSelect(
+    page,
+    all(page).getByRole('listitem').filter({ hasText: title }).first(),
+    box,
+  );
 }
 
 /** The page's ⋯: in the action bar on a desktop, in the top row on a phone. */
@@ -528,7 +530,7 @@ test('AC-14: chips, order, selection and opening work by keyboard, and the count
   const box = all(page).getByRole('checkbox', {
     name: `Selecionar ${lecture(3).title}`,
   });
-  // A desktop's box takes Space; a phone starts from the row's ⋯ "Selecionar".
+  // A desktop's box takes Space; a phone's row takes the context-menu key (Shift+F10).
   const selectByKeyboard = async () => {
     if (desktop(page)) {
       await box.focus();
@@ -536,15 +538,9 @@ test('AC-14: chips, order, selection and opening work by keyboard, and the count
       return;
     }
     await all(page)
-      .getByRole('button', { name: `Mais ações para ${lecture(3).title}` })
+      .getByRole('link', { name: lecture(3).title, exact: true })
       .focus();
-    await page.keyboard.press('Enter');
-    const item = page.getByRole('menuitem', {
-      name: 'Selecionar',
-      exact: true,
-    });
-    await item.focus();
-    await page.keyboard.press('Enter');
+    await page.keyboard.press('Shift+F10');
   };
   await selectByKeyboard();
   await expect(page.getByRole('region', { name: 'Seleção' })).toContainText(
@@ -717,20 +713,22 @@ test('FR-3: "Selecionar todas" marks more than the API takes at once, in batches
   await scrollToTheEnd(page, 5);
   const loaded = await all(page).getByRole('listitem').count();
   expect(loaded).toBeGreaterThan(200);
-  // The table head's box on a desktop; a phone has no table head: once a selection is
-  // on, a row's ⋯ offers it (the top row has no ⋯, media-library@mobile).
+  // The table head's box on a desktop; a phone has no table head: a long press starts the
+  // selection, then a row's ⋯ offers it (the top row has no ⋯, media-library@mobile).
   if (desktop(page))
     await all(page)
       .getByRole('checkbox', { name: `Selecionar todas as ${loaded}` })
       .check();
   else {
+    const firstRow = all(page).getByRole('listitem').first();
+    await longPressToSelect(
+      page,
+      firstRow,
+      firstRow.getByRole('checkbox', { name: /^Selecionar / }),
+    );
     const rowMore = all(page)
       .getByRole('button', { name: /^Mais ações para / })
       .first();
-    await rowMore.click();
-    await page
-      .getByRole('menuitem', { name: 'Selecionar', exact: true })
-      .click();
     await rowMore.click();
     await page
       .getByRole('menuitem', { name: `Selecionar todas as ${loaded}` })
