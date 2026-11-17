@@ -14,7 +14,8 @@ Como estudante, quando pergunto sobre um assunto, quero que a resposta parta de 
 
 ## Scope
 **In:**
-- um dossiê por nó em `<topic>/map/dossiers/<node>.json`, mais a página de conceito do kb preenchida com a versão legível;
+- um dossiê por nó, **escrito como artigo do wiki do kb** (padrão LLM Wiki, análise §2a): os 39 stubs de `wiki/concepts/` ganham o texto compilado, e os subassuntos e as **entidades** (Mestre Laércio e os outros autores, Hermes Trismegisto, o Caibalion, cada obra) ganham páginas próprias. Ao lado de cada artigo, um arquivo de máquina (`<topic>/map/dossiers/<node>.json`) guarda o conjunto exato de seções para a checagem;
+- as relações `affects` do `kb link` de cada fonte para os artigos que ela sustenta, para o `kb lint` marcar `needs-compile` quando a fonte mudar;
 - o conteúdo do dossiê:
   - os aspectos do assunto;
   - para cada aspecto, todas as seções que o tratam, com as centrais marcadas;
@@ -56,7 +57,7 @@ Como estudante, quando pergunto sobre um assunto, quero que a resposta parta de 
 `docs/research/2026-11-16-complete-answers-deep.md` §3 e §4 · ADR 0004, 0015 · KBC-137 (a Página do assunto usa o dossiê)
 
 ## Decisões assumidas (o dono pode mudar)
-- A versão legível do dossiê entra na página de conceito do kb, que hoje é um stub.
+- O artigo do wiki é a versão legível e é escrito pela ferramenta, como o padrão pede; o kb continua dono das suas chaves de frontmatter.
 
 ## Definition of ready
 - [x] Story, scope and outcome stated

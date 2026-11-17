@@ -15,7 +15,7 @@ Como estudante, quando pergunto sobre um assunto tratado num capítulo de um liv
 ## Scope
 **In:**
 - a ferramenta `tools/kb-map` (Python com uv, no Mac);
-- a divisão em seções de cada documento, respeitando títulos e capítulos;
+- a divisão em seções de cada documento, respeitando títulos e capítulos (que vêm do Markdown estruturado do KBC-148; sem ele, a divisão cai para parágrafos e tamanho);
 - por seção: uma linha de contexto, as proposições (os ensinamentos afirmados), as entidades, o autor da afirmação (Mestre Laércio ou outro, ADR 0015) e a posição no corpo (a mesma contagem do `read_document`);
 - a gravação em `<topic>/map/sections/<doc>.json`, ao lado do vault, sem mudar o documento;
 - o provedor plugável: o CLI do Claude ou do Codex (assinatura) ou o modelo do kb (OpenRouter).
@@ -53,7 +53,7 @@ Como estudante, quando pergunto sobre um assunto tratado num capítulo de um liv
 `docs/research/2026-11-16-complete-answers-deep.md` §3 e §5 · ADR 0003, 0015, 0035 · `tools/transcriber` (modelo de ferramenta)
 
 ## Decisões assumidas (o dono pode mudar)
-- O mapa vive em `<topic>/map/`, ao lado do vault, e vai para a produção pelo `sync-vault.sh`. Uma ADR nova registra isso.
+- Segue o padrão LLM Wiki (análise §2a): as seções de cada fonte são o "resumo por fonte" do ingest. A parte de máquina vive em `<topic>/map/` (só leitura para o kb), o que é para ler vai para as páginas do wiki do kb (KBC-141), e tudo vai para a produção pelo `sync-vault.sh`. Uma ADR nova registra isso.
 
 ## Definition of ready
 - [x] Story, scope and outcome stated
