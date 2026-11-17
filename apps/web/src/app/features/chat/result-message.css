@@ -207,8 +207,41 @@
   }
 }
 
+/* cmResults: the search pill above says what was searched; the head keeps only the count
+   and, for a search by meaning, its pill. The question stays for screen readers. */
 @media (max-width: 1023px) {
-  .question {
-    font-size: 1.5rem;
+  .exchange {
+    gap: var(--space-2);
+  }
+
+  .titles {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .results-head {
+    order: 1;
+  }
+
+  .answer {
+    display: contents;
+  }
+
+  .answer > :not(app-filter-bar, app-kinds-choice) {
+    order: 2;
+  }
+
+  .summary {
+    font-size: var(--text-meta);
+  }
+
+  .summary .took,
+  .summary .sep,
+  .summary ui-pill.muted-mode {
+    display: none;
   }
 }

@@ -1,4 +1,3 @@
-import { DecimalPipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -13,7 +12,6 @@ import type {
   Conversation,
   ConversationKind,
   ConversationStatus,
-  SearchKind,
 } from '@kb-chat/contracts';
 import { HistoryStore } from '@core/history/history-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
@@ -22,15 +20,10 @@ import { PendingTranscriptions } from '@features/transcribers/pending-transcript
 import {
   UiBanner,
   UiButton,
-  UiChip,
   UiCover,
   UiEmptyState,
-  UiIcon,
-  UiMenu,
-  UiMenuItem,
 } from '@ui/index.js';
 import { ChatStore } from '../chat-store.js';
-import { ALL_KINDS } from '../search-kinds.js';
 import { ViewStore } from '../view-store.js';
 import { homeTiles, type HomeTile } from './home-tiles.js';
 
@@ -38,9 +31,6 @@ import { homeTiles, type HomeTile } from './home-tiles.js';
 export interface HomeSubject {
   readonly concept: string;
 }
-
-/** The reach the scope chips pick: every kind, only the texts, or the AI research. */
-type Scope = 'all' | 'documents' | 'research';
 
 const KIND_LABELS: Record<ConversationKind, () => string> = {
   search: () => $localize`:@@home.kindSearch:Busca`,
@@ -61,17 +51,12 @@ const STATUS_LABELS: Record<ConversationStatus, () => string> = {
 @Component({
   selector: 'app-conversation-home',
   imports: [
-    DecimalPipe,
     PendingTranscriptions,
     UiBanner,
     UiButton,
-    UiChip,
     UiCover,
     UiEmptyState,
-    UiIcon,
-    UiMenu,
-    UiMenuItem,
-  ],
+    ],
   templateUrl: './conversation-home.html',
   styleUrl: './conversation-home.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -98,15 +83,6 @@ export class ConversationHome {
   /** The same actions as the library's: the page moves the focus after them. */
   readonly acted = output<SidebarAction>();
 
-  protected readonly topic = this.store.topic;
-  protected readonly collections = computed(() =>
-    this.store.topicList().filter((topic) => topic.canOpen),
-  );
-  protected readonly scope = computed((): Scope => {
-    if (this.researching()) return 'research';
-    const kinds = this.store.kinds();
-    return kinds.length === 1 && kinds[0] === 'text' ? 'documents' : 'all';
-  });
   protected readonly showContent = computed(
     () => !this.topicsError() && !this.noTopics(),
   );
@@ -133,17 +109,6 @@ export class ConversationHome {
         takeUntilDestroyed(),
       )
       .subscribe((conversation) => this.restoreLoaded(conversation));
-  }
-
-  protected chooseScope(scope: Scope): void {
-    if (scope === 'research') {
-      this.views.select('research');
-      return;
-    }
-    const kinds: readonly SearchKind[] =
-      scope === 'documents' ? ['text'] : ALL_KINDS;
-    this.store.setKinds(kinds);
-    this.views.select('search');
   }
 
   protected chooseCollection(slug: string): void {

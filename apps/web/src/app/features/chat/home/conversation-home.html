@@ -1,79 +1,3 @@
-<div
-  class="scope"
-  role="group"
-  aria-label="Onde buscar"
-  i18n-aria-label="@@home.scope"
->
-  @if (views.searchAllowed()) {
-    <button
-      uiChip
-      type="button"
-      [selected]="scope() === 'all'"
-      (click)="chooseScope('all')"
-      i18n="@@home.scopeAll"
-    >
-      Tudo
-    </button>
-    <button
-      uiChip
-      type="button"
-      [selected]="scope() === 'documents'"
-      (click)="chooseScope('documents')"
-      i18n="@@home.scopeDocuments"
-    >
-      Documentos
-    </button>
-  }
-  @if (views.researchAllowed()) {
-    <button
-      uiChip
-      type="button"
-      [selected]="scope() === 'research'"
-      [disabled]="!views.researchAvailable()"
-      (click)="chooseScope('research')"
-    >
-      <ui-icon name="sparkleFill" [size]="14" />
-      <span i18n="@@home.scopeResearch">Pesquisa com IA</span>
-    </button>
-  }
-  @if (topic(); as current) {
-    <span class="in">
-      <span class="in-label" i18n="@@home.in">Em:</span>
-      <ui-menu
-        label="Trocar de acervo"
-        i18n-label="@@home.collectionMenu"
-        menuId="home-collection-menu"
-        triggerClass="ui-chip collection-chip"
-        align="end"
-      >
-        <span uiMenuTrigger class="collection-trigger">
-          <span class="collection-name">{{ current.title }}</span>
-          <span class="collection-count" i18n="@@home.collectionCount"
-            >·
-            {current.documentCount, plural,
-              =1 {1 documento}
-              other {{{ current.documentCount | number }} documentos}
-            }</span
-          >
-          <ui-icon name="chevDown" [size]="14" />
-        </span>
-        @for (one of collections(); track one.slug) {
-          <button
-            uiMenuItem
-            type="button"
-            [attr.aria-current]="one.slug === current.slug ? 'true' : null"
-            (click)="chooseCollection(one.slug)"
-          >
-            <ui-cover [title]="one.title" [size]="24" />
-            <span class="menu-title">{{ one.title }}</span>
-            <span class="ui-menu__meta">{{ one.documentCount | number }}</span>
-          </button>
-        }
-      </ui-menu>
-    </span>
-  }
-</div>
-
 <div class="greeting-block">
   @if (topicNotice()) {
     <p class="topic-notice" role="status">{{ topicNotice() }}</p>
@@ -184,7 +108,7 @@
               }
               <span class="tile-text">
                 <span class="tile-title">{{ item.title }}</span>
-                <span class="tile-meta">{{ item.meta }}</span>
+                <span class="tile-meta visually-hidden">{{ item.meta }}</span>
               </span>
             </button>
           </li>

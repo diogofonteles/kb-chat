@@ -56,10 +56,21 @@
       [class.covered]="panelOpen()"
       [class.media]="onMedia()"
       [class.empty]="isEmpty() && !onMedia()"
+      [class.research]="researching()"
       [attr.inert]="covered() ? '' : null"
     >
       <p class="visually-hidden" aria-live="polite">{{ queue.said() }}</p>
-      <header #pageHeader class="topbar">
+      <!--
+        v2 · Conversa: no title row on desktop, the scope row at the top (escopo) or, on a
+        search page, the results' own head; on a phone the avatar (Menu) and the page's name
+        (Conversas, Buscar, Pesquisa com IA). The collection stays the page's h1, for
+        assistive technology.
+      -->
+      <header
+        #pageHeader
+        class="topbar"
+        [class.bare]="desktop() && searchPage() && !onMedia()"
+      >
         @if (!desktop()) {
           <button
             #menuButton
@@ -76,9 +87,26 @@
               [size]="32"
             />
           </button>
+          @if (!onMedia()) {
+            <p class="page-title" aria-hidden="true">{{ pageTitle() }}</p>
+            @if (researching()) {
+              <button
+                uiIconButton
+                [size]="40"
+                type="button"
+                class="new-research"
+                aria-label="Nova conversa"
+                i18n-aria-label="@@sidebar.new"
+                (click)="startNewResearch()"
+              >
+                <ui-icon name="plus" [size]="24" />
+              </button>
+            }
+          }
         }
         @if (topic(); as current) {
-          <h1 class="topic">
+          <h1 class="topic"
+            [class.visually-hidden]="!onMedia()">
             {{ current.title }}
             <span class="count"
               ><span i18n="@@page.count">{current.documentCount, plural,
@@ -98,17 +126,44 @@
             </span>
           </h1>
         } @else if (allCollections()) {
-          <h1 class="topic" i18n="@@page.allCollections">Todos os acervos</h1>
+          <h1 class="topic"
+            [class.visually-hidden]="!onMedia()" i18n="@@page.allCollections">
+            Todos os acervos
+          </h1>
         } @else {
-          <h1 class="topic" i18n="@@page.title">Nova Alexandria</h1>
+          <h1 class="topic"
+            [class.visually-hidden]="!onMedia()" i18n="@@page.title">
+            Nova Alexandria
+          </h1>
         }
-        @if (views.bothAllowed() && !onMedia()) {
-          <app-view-switch
-            class="view-switch"
-            [view]="currentView()"
-            [researchAvailable]="views.researchAvailable()"
-            (changed)="changeView($event)"
+        @if (showScope()) {
+          <app-scope-bar
+            class="scope-bar"
+            [researching]="researching()"
+            [compact]="!desktop()"
+            (collectionChosen)="sidebarActed('topic')"
           />
+        } @else if (showProfiles()) {
+          <div
+            class="profiles"
+            role="group"
+            aria-label="Perfil da pesquisa"
+            i18n-aria-label="@@page.profiles"
+          >
+            @for (option of profileOptions; track option.value) {
+              <button
+                uiChip
+                type="button"
+                [selected]="option.value === research.profile()"
+                (click)="research.chooseProfile(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            }
+          </div>
+          @if (research.profile() === 'exhaustive') {
+            <p class="profile-help">{{ exhaustiveHelp }}</p>
+          }
         }
       </header>
 
@@ -179,6 +234,9 @@
             [profile]="research.profile()"
             (profileChange)="research.chooseProfile($event)"
             [disabled]="!topic()"
+            [compact]="!desktop()"
+            [searchPill]="searchPage()"
+            [value]="pillQuestion()"
             (submitted)="ask($event)"
           />
         </div>

@@ -6,9 +6,9 @@ import {
   computed,
   inject,
   input,
+  linkedSignal,
   model,
   output,
-  signal,
   viewChild,
 } from '@angular/core';
 import {
@@ -57,11 +57,26 @@ export class Composer {
   private readonly field =
     viewChild.required<ElementRef<HTMLTextAreaElement>>('field');
   /** Same limits as the API contracts (searchRequestSchema, researchRequestSchema). */
+  /** A phone: the box is the floating pill of v2 · Conversa (celular), cmComposer. */
+  readonly compact = input(false);
+  /** A phone's search page: the box is the search pill under "Buscar" (cmResults). */
+  readonly searchPill = input(false);
   protected readonly maxLength = computed(() => (this.research() ? 2000 : 500));
   /** A question typed before the app reloaded into a new version comes back (KBC-123). */
-  protected readonly text = signal(
-    takeKeptDraft(this.view, COMPOSER_DRAFT_KEY, this.draftOwner()),
-  );
+  /**
+   * A question the page shows in the box: the phone's search pill holds the search on screen
+   * (cmResults). Back to null (a new conversation), the box empties.
+   */
+  readonly value = input<string | null>(null);
+  protected readonly text = linkedSignal<string | null, string>({
+    source: this.value,
+    computation: (value, previous) => {
+      if (value !== null) return value;
+      return previous
+        ? ''
+        : takeKeptDraft(this.view, COMPOSER_DRAFT_KEY, this.draftOwner());
+    },
+  });
   /** The question box keeps its own draft: the app-wide edit rule leaves it out. */
   protected readonly draftKept = DRAFT_KEPT_ATTRIBUTE;
   protected readonly nearLimit = computed(
@@ -83,11 +98,13 @@ export class Composer {
       ? $localize`:@@composer.sendHintNoTopic:Nenhum acervo disponível para buscar.`
       : $localize`:@@composer.sendHint:Escreva uma pergunta para buscar.`,
   );
-  protected readonly placeholder = computed(() =>
-    this.research()
-      ? $localize`:@@composer.placeholderResearch:Pergunte qualquer coisa sobre o acervo…`
-      : $localize`:@@composer.placeholder:ex.: o que é a natureza sétupla?`,
-  );
+  protected readonly placeholder = computed(() => {
+    if (this.research())
+      return $localize`:@@composer.placeholderResearch:Pergunte qualquer coisa sobre o acervo…`;
+    return this.compact()
+      ? $localize`:@@composer.placeholderPhone:Pergunte em linguagem natural…`
+      : $localize`:@@composer.placeholder:ex.: o que é a natureza sétupla?`;
+  });
   protected readonly modeHelp = computed(
     () => MODE_OPTIONS.find((o) => o.value === this.mode())?.help ?? '',
   );
@@ -149,7 +166,8 @@ export class Composer {
   protected send(): void {
     if (!this.canSend()) return;
     this.submitted.emit(this.text().trim());
-    this.clear();
+    // The phone's search pill keeps what it searched for, as a search field does (cmResults).
+    if (!this.searchPill()) this.clear();
   }
 
   protected clear(): void {

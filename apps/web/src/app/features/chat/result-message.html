@@ -18,9 +18,11 @@
         } @else {
           <span class="found">{{ found() }}</span>
           <span class="sep" aria-hidden="true"> · </span>
-          <ui-pill [tone]="message().mode === 'semantic' ? 'info' : 'muted'">{{
-            modeName()
-          }}</ui-pill>
+          <ui-pill
+            [class.muted-mode]="message().mode !== 'semantic'"
+            [tone]="message().mode === 'semantic' ? 'info' : 'muted'"
+            >{{ modeName() }}</ui-pill
+          >
           <span class="sep" aria-hidden="true"> · </span>
           <span class="took">{{ seconds() | number: '1.1-1' }} s</span>
         }

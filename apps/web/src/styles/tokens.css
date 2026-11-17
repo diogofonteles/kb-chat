@@ -47,6 +47,10 @@
   --overlay-4: color-mix(in srgb, var(--color-text) 20%, transparent);
   --overlay-line: color-mix(in srgb, var(--color-text) 12%, transparent);
   --scrim: rgb(0 0 0 / 70%);
+  /* The main panel's gradient by page (v2 · Conversa): a search page is neutral, the AI
+     research green; a home takes its collection's cover colour. */
+  --tint-search: #3a3a3a;
+  --tint-research: #1f4d33;
   /* The accent as text over a tint (a pill, the active item of a list). */
   --color-accent-text: var(--color-accent);
   /* The v2 shell (KBC-125): panels with an 8 gap over the shell backdrop. */

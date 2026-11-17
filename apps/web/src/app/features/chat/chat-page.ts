@@ -51,8 +51,11 @@ import {
   ResearchThread,
   type SourceOpening,
 } from '@features/research/research-thread.js';
-import { ViewStore, type ChatView } from './view-store.js';
-import { ViewSwitch } from './view-switch.js';
+import { ViewStore } from './view-store.js';
+import { ScopeBar } from './scope/scope-bar.js';
+import { RESEARCH_PROFILES } from '@kb-chat/contracts';
+import { PROFILE_COPY } from '@features/research/profile-copy.js';
+import { UiChip } from '@ui/button.js';
 import { MiniPlayer } from '@features/media/player/mini-player.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { AudioPresence } from '@features/shell/audio-presence.js';
@@ -88,7 +91,8 @@ const isMediaUrl = (url: string): boolean =>
     Composer,
     ResultMessage,
     ResearchThread,
-    ViewSwitch,
+    ScopeBar,
+    UiChip,
     DocumentPanel,
     PassagePanel,
     TrackPassagePanel,
@@ -185,6 +189,8 @@ export class ChatPage {
   );
   /** The main panel's gradient: the colour of the collection's cover (v2 pageHeader tint). */
   protected readonly tint = computed(() => {
+    if (!this.onMedia() && this.researching()) return 'var(--tint-research)';
+    if (!this.onMedia() && this.searchPage()) return 'var(--tint-search)';
     const title = this.topic()?.title;
     return title ? coverGradient(title)[0] : null;
   });
@@ -245,6 +251,39 @@ export class ChatPage {
   protected readonly searchPage = computed(
     () => !this.researching() && !this.isEmpty(),
   );
+  /** The scope row (escopo): desktop everywhere but a search page; a phone on the home. */
+  protected readonly showScope = computed(() => {
+    if (this.onMedia()) return false;
+    if (this.desktop()) return !this.searchPage();
+    return this.isEmpty() && !this.researching() && !this.noTopics();
+  });
+  /** A phone's research home: the profiles at the top (cmHome, mode 'ia'). */
+  protected readonly showProfiles = computed(
+    () =>
+      !this.desktop() &&
+      !this.onMedia() &&
+      this.researching() &&
+      this.isEmpty() &&
+      !this.noTopics(),
+  );
+  protected readonly profileOptions = RESEARCH_PROFILES.map((value) => ({
+    value,
+    label: PROFILE_COPY[value].label(),
+  }));
+  protected readonly exhaustiveHelp = PROFILE_COPY.exhaustive.help();
+  /** The phone's search pill shows the search on screen (cmResults); null elsewhere. */
+  protected readonly pillQuestion = computed(() =>
+    !this.desktop() && this.searchPage()
+      ? (this.messages().at(-1)?.question ?? null)
+      : null,
+  );
+  /** The phone's page name (cmHead): Conversas, Buscar or Pesquisa com IA. */
+  protected readonly pageTitle = computed(() => {
+    if (this.researching())
+      return $localize`:@@page.titleResearch:Pesquisa com IA`;
+    if (this.searchPage()) return $localize`:@@page.titleSearch:Buscar`;
+    return $localize`:@@page.titleConversations:Conversas`;
+  });
   /** On phones the panel covers the conversation: make it inert so Tab stays in the panel. */
   private readonly router = inject(Router);
   /** The questions typed in the top bar's search, in order. */
@@ -475,8 +514,10 @@ export class ChatPage {
     this.store.setMode(mode);
   }
 
-  protected changeView(view: ChatView): void {
-    this.views.select(view);
+  /** "+" of the phone's Pesquisa com IA: a new research, ready to type into. */
+  protected startNewResearch(): void {
+    this.research.newConversation();
+    this.sidebarActed('new');
   }
 
   protected ask(question: string): void {

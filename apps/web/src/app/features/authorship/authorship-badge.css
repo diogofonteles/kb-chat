@@ -40,3 +40,18 @@
   color: var(--color-text-muted);
   font-weight: 500;
 }
+
+/* A row of a table: the name in text, the main author in the accent (docRow, cmRow). */
+:host(.plain) .authorship-badge {
+  gap: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  font-weight: 400;
+}
+
+:host(.plain) [data-authorship='mestre-laercio'] {
+  color: var(--color-accent-text);
+}

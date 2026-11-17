@@ -1,5 +1,8 @@
 <form
   class="composer"
+  [class.pill]="compact() && !searchPill()"
+  [class.search]="compact() && searchPill()"
+  [class.has-text]="text().length > 0"
   [attr.data-draft-kept]="''"
   (submit)="$event.preventDefault(); send()"
 >
@@ -44,9 +47,10 @@
               class="choice-radio"
               [value]="option.value"
               [checked]="option.value === mode()"
+              [attr.aria-label]="option.label"
               (change)="selectMode($event)"
             />
-            <span>{{ option.label }}</span>
+            <span aria-hidden="true">{{ option.short }}</span>
           </label>
         }
       </fieldset>
