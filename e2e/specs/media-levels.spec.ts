@@ -82,7 +82,7 @@ async function openMedia(page: Page, title: string): Promise<void> {
   // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
   await openMediaFromLibrary(page);
   await expect(
-    page.getByRole('heading', { name: `Mídia — ${title}` }),
+    page.getByRole('heading', { name: `Acervo — ${title}` }),
   ).toBeVisible();
 }
 
@@ -150,7 +150,11 @@ test('AC-1, AC-2, AC-6, AC-7, AC-11: the member chooses her level, never sees ab
   await expect(dialog).toBeHidden();
   const row = ana.getByRole('listitem').filter({ hasText: own });
   await expect(row).toBeVisible();
-  await expect(row.getByText('Pronta')).toBeVisible({ timeout: 30_000 });
+  // Ready: the album's pill says where its transcription stands (media-list), which only a
+  // ready audio says.
+  await expect(row.locator('ui-pill', { hasText: /^Aguardando/ })).toBeVisible({
+    timeout: 30_000,
+  });
   // Members see no badge (ADR 0036 §9).
   await expect(ana.getByText(/Nível:/)).toHaveCount(0);
   await shoot(ana, 'list-member');

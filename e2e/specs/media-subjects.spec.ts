@@ -230,20 +230,30 @@ test('AC-7: "Assunto" in the library lists only the linked tracks, and comes bac
   const seed = await seeded();
   const page = await reader(browser, viewport);
   await page.goto('/biblioteca');
-  const choice = page.getByRole('combobox', { name: 'Assunto' });
-  await choice.selectOption({ label: seed.subject });
+  // v2 (media-library): "Assunto ▾" is a chip with a menu; once chosen, the chip names it
+  // with its ✕.
+  const filters = page.getByRole('group', { name: 'Filtros' });
+  const choice = filters.getByRole('button', { name: 'Assunto', exact: true });
+  const chosen = filters.getByRole('button', {
+    name: `Tirar o filtro de assunto: ${seed.subject}`,
+  });
+  await choice.click();
+  await page.getByRole('menuitemradio', { name: seed.subject }).click();
+  await expect(chosen).toBeVisible();
   await expect(page.getByText(/^1 mídia/)).toBeVisible();
   await expect(page.getByRole('link', { name: seed.title })).toBeVisible();
 
+  // The account keeps it: the library comes back with it.
   await expect
     .poll(async () => {
       await page.goto('/biblioteca');
-      return page.getByRole('combobox', { name: 'Assunto' }).inputValue();
+      return chosen.isVisible();
     })
-    .toMatch(/^free:/);
+    .toBe(true);
   await expect(page.getByRole('link', { name: seed.title })).toBeVisible();
   await page.getByRole('button', { name: 'Limpar filtros' }).click();
-  await expect(choice).toHaveValue('');
+  await expect(chosen).toHaveCount(0);
+  await expect(choice).toBeVisible();
   await page.context().close();
 });
 
@@ -272,9 +282,19 @@ test('AC-6: without `media-subjects` nothing of a subject shows', async ({
   });
   expect(saved.ok()).toBe(true);
   await page.goto('/biblioteca');
-  // The library's own search (the v2 top bar has the global one, KBC-125).
-  await expect(page.getByRole('main').getByRole('searchbox')).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'Assunto' })).toHaveCount(0);
+  // The library's own search (the v2 top bar has the global one, KBC-125); a phone's opens
+  // from its top row's 🔍 (media-library-search@mobile).
+  await expect(
+    page
+      .getByRole('main')
+      .getByRole('searchbox')
+      .or(page.getByRole('button', { name: 'Abrir a busca' })),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('group', { name: 'Filtros' }).getByRole('button', {
+      name: /assunto/i,
+    }),
+  ).toHaveCount(0);
   await expect(
     page.getByRole('button', { name: 'Limpar filtros' }),
   ).toHaveCount(0);
@@ -298,7 +318,11 @@ for (const theme of ['light', 'dark', 'esoteric'] as const)
     ).toBeVisible();
     await expectClean(page);
     await page.goto('/biblioteca');
-    await expect(page.getByRole('combobox', { name: 'Assunto' })).toBeVisible();
+    await expect(
+      page
+        .getByRole('group', { name: 'Filtros' })
+        .getByRole('button', { name: 'Assunto', exact: true }),
+    ).toBeVisible();
     await expectClean(page);
     await page.context().close();
   });

@@ -39,14 +39,6 @@ const PHONE = { width: 390, height: 844 } as const;
 type Width = 'desktop' | 'phone';
 const WIDTHS: readonly Width[] = ['desktop', 'phone'];
 
-const LIBRARY_FEATURES = [
-  'search',
-  'media',
-  'media-library',
-  'media-upload',
-  'media-edit',
-];
-
 /** Runs in the two Chrome-or-WebKit projects only once: the phone project would repeat it. */
 const skipRepeats = () =>
   test.skip(
@@ -136,13 +128,17 @@ const TITLES = [
 ] as const;
 const HELENA = new Set([0, 1, 2, 4, 8, 11]);
 
+interface Upload {
+  readonly topic: string;
+  readonly title: string;
+  readonly author: string | null;
+  readonly seconds: number;
+  readonly bytes?: Buffer;
+}
+
 async function upload(
   api: APIRequestContext,
-  topic: string,
-  title: string,
-  author: string | null,
-  seconds: number,
-  bytes?: Buffer,
+  { topic, title, author, seconds, bytes }: Upload,
 ): Promise<string> {
   const body =
     bytes ?? readFileSync(makeMp3(title.replace(/\W+/g, '-'), seconds));
@@ -165,6 +161,52 @@ async function upload(
   });
   expect(sent.status(), await sent.text()).toBe(200);
   return id;
+}
+
+/** Each of these controls is in sight, a button or a link by its name. */
+async function expectControls(
+  page: Page,
+  names: readonly string[],
+): Promise<void> {
+  for (const name of names)
+    await expect(
+      page
+        .getByRole('button', { name })
+        .or(page.getByRole('link', { name }))
+        .first(),
+    ).toBeVisible();
+}
+
+/** Each chip of the filters' row, by its exact name. */
+async function expectChips(
+  page: Page,
+  names: readonly string[],
+): Promise<void> {
+  for (const name of names)
+    await expect(
+      page
+        .getByRole('group', { name: 'Filtros' })
+        .getByRole('button', { name, exact: true }),
+    ).toBeVisible();
+}
+
+/** Who sends gets "Enviar mídia", and its dialog opens whole; who only listens, none. */
+async function expectUploadEntry(page: Page, sends: boolean): Promise<void> {
+  if (!sends) {
+    await expect(
+      page.getByRole('button', { name: 'Enviar mídia' }),
+    ).toHaveCount(0);
+    return;
+  }
+  await page
+    .getByRole('main')
+    .getByRole('button', { name: 'Enviar mídia' })
+    .last()
+    .click();
+  const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
+  await expectWholeOnTop(page, dialog);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
 }
 
 async function settled(api: APIRequestContext, id: string): Promise<void> {
@@ -207,25 +249,23 @@ async function seed(): Promise<Seeded> {
   const helena = ((await author.json()) as { slug: string }).slug;
   const ids: Record<string, string> = {};
   const repeated = makeMp3(`repetida-${tag}`, 20);
-  ids['Arquivo corrompido da reunião'] = await upload(
-    owner,
+  ids['Arquivo corrompido da reunião'] = await upload(owner, {
     topic,
-    'Arquivo corrompido da reunião',
-    null,
-    0,
-    Buffer.from('not an audio file at all, only words'.repeat(40)),
-  );
+    title: 'Arquivo corrompido da reunião',
+    author: null,
+    seconds: 0,
+    bytes: Buffer.from('not an audio file at all, only words'.repeat(40)),
+  });
   // Oldest first: "Adicionadas recentemente" puts the first title on top.
   for (const [index, title] of [...TITLES].reverse().entries()) {
     const n = TITLES.length - 1 - index;
-    ids[title] = await upload(
-      owner,
+    ids[title] = await upload(owner, {
       topic,
       title,
-      HELENA.has(n) ? helena : null,
-      [60, 28, 20, 16, 20, 4, 4, 12, 5, 3, 3, 2][n] ?? 3,
-      n === 2 ? readFileSync(repeated) : undefined,
-    );
+      author: HELENA.has(n) ? helena : null,
+      seconds: [60, 28, 20, 16, 20, 4, 4, 12, 5, 3, 3, 2][n] ?? 3,
+      bytes: n === 2 ? readFileSync(repeated) : undefined,
+    });
   }
   // A recording cut in three tracks, approved and published (KBC-068).
   const cut = await audioWithTracks(owner, undefined, topic);
@@ -425,8 +465,10 @@ const scrollTopOf = (scroller: Locator) =>
 async function expectScrolls(
   page: Page,
   scroller: Locator,
-  width: Width,
-  browserName: string,
+  {
+    width,
+    browserName,
+  }: { readonly width: Width; readonly browserName: string },
 ): Promise<void> {
   const box = await scroller.boundingBox();
   if (!box) throw new Error('scroller not on screen');
@@ -550,18 +592,13 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
       await expect(
         page.getByRole('heading', { name: 'Continuar ouvindo' }),
       ).toBeVisible();
-      for (const name of [
+      await expectControls(page, [
         'Tocar em ordem aleatória',
         'Enviar mídia',
         'Convidar pessoas',
         'Mais ações da Biblioteca',
         'Ir para a busca',
-      ])
-        await expect(
-          page
-            .getByRole('button', { name })
-            .or(page.getByRole('link', { name })),
-        ).toBeVisible();
+      ]);
     }
     for (const name of ['Todas', 'Não ouvidas', 'Em andamento'])
       await expect(
@@ -573,7 +610,7 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
     if (phone) await expectNoSideScroll(page);
     // It scrolls.
     const scroller = await scrollerOf(rows(page).first());
-    await expectScrolls(page, scroller, width, browserName);
+    await expectScrolls(page, scroller, { width, browserName });
 
     await playFirst(page, width);
     await shoot(page, 'media-library', width);
@@ -629,6 +666,11 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
     const filters = page.getByRole('group', { name: 'Filtros' });
     await filters.getByRole('button', { name: 'Em andamento' }).click();
     await expect(rows(page)).toHaveCount(3);
+    // A phone says how much the filter left where the order was (media-library-chip@mobile).
+    if (phone)
+      await expect(
+        page.getByRole('button', { name: /^Ordenar:/ }),
+      ).toContainText(/^3 mídias · \d+ min$/);
     await shoot(page, 'media-library-chip', width);
     await filters.getByRole('button', { name: 'Todas', exact: true }).click();
     await expect(rows(page)).not.toHaveCount(3);
@@ -804,6 +846,16 @@ test('a recording opens its tracks, and removing it names them (tracks, remove-t
     const tracks = page.getByRole('list', { name: `Faixas de ${RECORDING}` });
     await expect(tracks.getByRole('listitem')).toHaveCount(3);
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    // The frame's recording row: a "3 faixas" pill and the chevron at its end (⌄ once open);
+    // each track says its place ("faixa 2 de 3") and opens its own page.
+    await expect(recording.locator('.tracks-pill')).toHaveText('3 faixas');
+    await expect(
+      recording.getByRole('button', { name: '3 faixas' }),
+    ).toBeVisible();
+    await expect(tracks.getByText('faixa 2 de 3')).toBeVisible();
+    await expect(
+      tracks.getByRole('link', { name: 'Segunda pergunta' }),
+    ).toBeVisible();
     await shoot(page, 'media-library-tracks', width);
 
     // The first "Remover" is refused while tracks hang on it (KBC-068): the dialog comes
@@ -957,21 +1009,7 @@ test('an empty library, for who reads and for who sends (media-library-empty-*)'
         page.getByRole('region', { name: 'Precisa da sua atenção' }),
       ).toHaveCount(0);
       await shoot(page, id, width);
-      if (id === 'media-library-empty-uploader') {
-        await page
-          .getByRole('main')
-          .getByRole('button', { name: 'Enviar mídia' })
-          .last()
-          .click();
-        const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
-        await expectWholeOnTop(page, dialog);
-        await page.keyboard.press('Escape');
-        await expect(dialog).toHaveCount(0);
-      } else {
-        await expect(
-          page.getByRole('button', { name: 'Enviar mídia' }),
-        ).toHaveCount(0);
-      }
+      await expectUploadEntry(page, id === 'media-library-empty-uploader');
       await context.close();
     }
   }
@@ -998,20 +1036,14 @@ test('/midia is the collection as an album, for who has no library (media-list-*
           .locator('header.topbar')
           .getByRole('heading', { name: data.topicTitle }),
       ).toBeVisible();
-      for (const name of ['Todas', 'Em andamento', 'Não ouvidas'])
-        await expect(
-          page
-            .getByRole('group', { name: 'Filtros' })
-            .getByRole('button', { name, exact: true }),
-        ).toBeVisible();
+      await expectChips(page, ['Todas', 'Em andamento', 'Não ouvidas']);
     } else {
-      for (const name of [
+      await expectControls(page, [
         'Tocar a primeira da lista',
         'Tocar em ordem aleatória',
         'Enviar áudio',
         'Mais ações do acervo',
-      ])
-        await expect(page.getByRole('button', { name }).first()).toBeVisible();
+      ]);
       await expect(
         page.getByRole('link', { name: 'Meus marcadores' }).first(),
       ).toBeVisible();
@@ -1024,7 +1056,7 @@ test('/midia is the collection as an album, for who has no library (media-list-*
     await shoot(page, 'media-list', width);
     // It scrolls, with the wheel, the keyboard and a finger.
     const scroller = await scrollerOf(first);
-    await expectScrolls(page, scroller, width, browserName);
+    await expectScrolls(page, scroller, { width, browserName });
 
     // The ⋯ of an audio: whole on the screen, Escape closes it.
     const more = page.getByRole('button', {

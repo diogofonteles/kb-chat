@@ -187,7 +187,7 @@ test('FR-8: leaving the player paused closes it, with no mini-player', async ({
   await page.goto(`/midia/${lecture.id}`);
   await expect(page.getByRole('button', { name: 'Tocar' })).toBeEnabled();
   await page.getByRole('link', { name: '← Mídia' }).click();
-  await expect(page.getByRole('heading', { name: /Mídia — / })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Acervo — / })).toBeVisible();
   await expect(mini(page)).toHaveCount(0);
 });
 
@@ -214,9 +214,9 @@ test('AC-16: on the media list too, nothing focused hides behind the mini-player
 }) => {
   await playLecture(page);
   await page.getByRole('link', { name: '← Mídia' }).click();
-  await expect(page.getByRole('heading', { name: /Mídia — / })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Acervo — / })).toBeVisible();
   const bar = await mini(page).boundingBox();
-  await page.getByRole('heading', { name: /Mídia — / }).click();
+  await page.getByRole('heading', { name: /Acervo — / }).click();
   for (let i = 0; i < 40; i++) {
     await page.keyboard.press('Tab');
     const focused = await page.evaluate(() => {

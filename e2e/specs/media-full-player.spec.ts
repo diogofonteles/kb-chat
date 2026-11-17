@@ -166,7 +166,9 @@ test('AC-3: leaving the page never brings back an older position over another de
   await laptop.getByRole('button', { name: 'Pausar' }).click();
   // Away from the page: the laptop keeps nothing that could override later saves.
   await laptop.getByRole('link', { name: '← Mídia' }).click();
-  await expect(laptop.getByRole('heading', { name: /Mídia — / })).toBeVisible();
+  await expect(
+    laptop.getByRole('heading', { name: /Acervo — / }),
+  ).toBeVisible();
 
   const phone = await pageAs(browser, email, null);
   await openPlayer(phone, lecture);

@@ -61,7 +61,7 @@ async function memberOnMedia(
   // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
   await openMediaFromLibrary(member);
   await expect(
-    member.getByRole('heading', { name: new RegExp(`Mídia — ${udv.name}`) }),
+    member.getByRole('heading', { name: new RegExp(`Acervo — ${udv.name}`) }),
   ).toBeVisible();
   return member;
 }

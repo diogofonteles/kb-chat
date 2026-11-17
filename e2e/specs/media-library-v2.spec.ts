@@ -136,12 +136,23 @@ test('AC-1: the library is a playlist — cover, green ▶, the table, the one p
     'Tudo para ouvir',
   );
   await expect(all(page).getByRole('listitem')).toHaveCount(3);
-  const playAll = page.getByRole('button', {
-    name: 'Tocar a primeira da lista',
-  });
+  // A desktop's header has ▶ for the list; a phone's has none (media-library@mobile): a tap
+  // on a cover plays that one.
+  const first = all(page).locator('app-library-row').first();
+  const firstTitle =
+    (await first.locator('.title').textContent())?.trim() ?? '';
+  const playAll = desktop(page)
+    ? page.getByRole('button', { name: 'Tocar a primeira da lista' })
+    : first.getByRole('button', { name: `Tocar ${firstTitle}` });
+  if (!desktop(page))
+    await expect(
+      page.getByRole('button', { name: 'Tocar a primeira da lista' }),
+    ).toBeHidden();
   await shoot(page, 'media-library');
   await playAll.click();
-  const pauseAll = page.getByRole('button', { name: 'Pausar a lista' });
+  const pauseAll = desktop(page)
+    ? page.getByRole('button', { name: 'Pausar a lista' })
+    : first.getByRole('button', { name: `Pausar ${firstTitle}` });
   await expect(pauseAll).toBeVisible();
   const playing = all(page).locator('app-library-row.playing');
   await expect(playing).toHaveCount(1);
@@ -186,11 +197,25 @@ test('FR-3, D5: Ordenar e ver como and the ⋯ open whole on the screen, a sheet
     .click();
   const menu = page.getByRole('menu');
   await expectWholeOnTop(page, menu);
-  await expect(menu.getByRole('menuitem')).toHaveText([
-    'Marcar como ouvida',
-    'Editar informações',
-    'Remover',
-  ]);
+  // The frame's ⋯ (media-library-row-menu): play and copy the link on a desktop; a phone's
+  // sheet starts a selection and shares instead (a tap on the cover plays there).
+  await expect(menu.getByRole('menuitem')).toHaveText(
+    desktop(page)
+      ? [
+          'Tocar agora',
+          'Marcar como ouvida',
+          'Editar informações',
+          'Copiar link',
+          'Remover',
+        ]
+      : [
+          'Marcar como ouvida',
+          'Selecionar',
+          'Editar informações',
+          'Compartilhar',
+          'Remover',
+        ],
+  );
   await shoot(page, 'media-library-row-menu');
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
@@ -209,6 +234,9 @@ test('AC-6: the grid, the search with and without results, and the dialogs rende
   await chooseLibraryView(page, 'Lista');
   await expect(all(page).locator('app-library-row')).toHaveCount(3);
 
+  // A phone's box opens from the 🔍 of its top row (media-library-search@mobile).
+  if (!desktop(page))
+    await page.getByRole('button', { name: 'Abrir a busca' }).click();
   const search = page.getByLabel('Buscar na biblioteca');
   // Only lecture 2 has the word, whatever the tag is.
   await search.fill('dois');
@@ -277,14 +305,24 @@ test('AC-4: three selected — the bar takes the foot of the phone, and the mark
     all(page).getByRole('checkbox', {
       name: `Selecionar ${lecture(n).title}`,
     });
-  if (!desktop(page))
-    // No hover on a phone: the unchecked box shows its edge, or a tap on the blank lead
-    // column would select a row the person never saw a target for (KBC-128).
-    for (const n of [1, 2, 3])
+  if (!desktop(page)) {
+    // A phone shows no box until a selection starts from a row's ⋯ "Selecionar"
+    // (media-library-selection@mobile); then, with no hover, each unchecked box shows its
+    // edge, or a tap on the blank lead column would select a row never seen as a target.
+    await expect(boxOf(2)).toBeHidden();
+    await rowOf(page, lecture(1))
+      .getByRole('button', { name: `Mais ações para ${lecture(1).title}` })
+      .click();
+    await page
+      .getByRole('menuitem', { name: 'Selecionar', exact: true })
+      .click();
+    await expect(boxOf(1)).toBeChecked();
+    for (const n of [2, 3])
       await expect(boxOf(n)).not.toHaveCSS(
         'border-top-color',
         'rgba(0, 0, 0, 0)',
       );
+  }
   for (const n of [1, 2, 3]) await boxOf(n).check();
   const bar = page.getByRole('region', { name: 'Seleção' });
   await expect(bar).toContainText('3 selecionadas');
@@ -318,7 +356,11 @@ test('AC-5: a member who may not edit sees neither Editar nor Remover in the ⋯
     .getByRole('button', { name: `Mais ações para ${lecture(2).title}` })
     .click();
   const menu = page.getByRole('menu');
-  await expect(menu.getByRole('menuitem')).toHaveText(['Marcar como ouvida']);
+  await expect(menu.getByRole('menuitem')).toHaveText(
+    desktop(page)
+      ? ['Tocar agora', 'Marcar como ouvida', 'Copiar link']
+      : ['Marcar como ouvida', 'Selecionar', 'Compartilhar'],
+  );
   await expect(
     menu.getByRole('menuitem', { name: 'Editar informações' }),
   ).toHaveCount(0);
@@ -500,9 +542,7 @@ test('AC-6: an empty library says so, for who reads and for who sends', async ({
     const sends = features.includes('media-upload');
     await expect(
       page.getByText(
-        sends
-          ? 'Ainda não há mídias nos seus acervos.'
-          : 'Ainda não há mídias nos acervos liberados para você.',
+        sends ? 'Comece enviando um áudio' : 'Ainda não há mídias para você',
       ),
     ).toBeVisible();
     if (sends)
@@ -525,7 +565,7 @@ test('/midia without the library is the collection as an album, with its table',
   await page.goto('/');
   await page.goto('/midia');
   // The collection chosen in the sidebar is this one (the only one the person sees).
-  await expect(page.getByRole('heading', { name: /^Mídia/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Acervo — / })).toBeVisible();
   for (const n of [1, 2, 3])
     await expect(
       page.getByRole('link', { name: lecture(n).title }),

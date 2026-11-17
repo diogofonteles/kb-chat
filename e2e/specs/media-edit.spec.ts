@@ -34,7 +34,7 @@ async function openMedia(page: Page) {
   // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
   await openMediaFromLibrary(page);
   await expect(
-    page.getByRole('heading', { name: /Mídia — Hermetismo/ }),
+    page.getByRole('heading', { name: /Acervo — Hermetismo/ }),
   ).toBeVisible();
 }
 
@@ -131,7 +131,7 @@ test('AC-2: moved, it leaves the list with the notice and the link, and keeps th
   await expect(page.getByRole('link', { name: title })).toBeHidden();
   await page.getByRole('link', { name: 'Ver o acervo' }).click();
   await expect(
-    page.getByRole('heading', { name: /Mídia — Alquimia Prática/ }),
+    page.getByRole('heading', { name: /Acervo — Alquimia Prática/ }),
   ).toBeVisible();
   await expect(page.getByRole('link', { name: title })).toBeVisible();
   const read = await page.request.get(`/api/v1/media/${id}`);

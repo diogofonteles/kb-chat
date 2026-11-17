@@ -152,23 +152,31 @@ test('KBC-091: the library follows the collection, and the header never lies', a
     topic: 'alquimia',
   });
   await page.goto('/biblioteca');
-  const heading = page.getByRole('heading', { level: 1 });
-  await expect(heading).toContainText('Hermetismo');
+  // v2 (media-library): the header's line names the scope, and "Acervo: <nome> ✕" says one
+  // collection is in force; its ✕ goes back to every one.
+  const scope = page.locator('app-library-page .hero .ui-page-header__meta');
+  const topicChip = page
+    .locator('app-library-controls')
+    .getByRole('button', { name: /^Ver todos os acervos/ });
+  await expect(scope).toContainText('Hermetismo');
+  await expect(topicChip).toHaveAccessibleName(/Hermetismo/);
+  // A phone's box opens from the 🔍 of its top row (media-library-search@mobile).
+  if ((page.viewportSize()?.width ?? 0) < 1024)
+    await page.getByRole('button', { name: 'Abrir a busca' }).click();
   const search = page.getByLabel('Buscar na biblioteca');
   await search.fill(tag);
   await expect(page.getByRole('link', { name: here.title })).toBeVisible();
   await expect(page.getByRole('link', { name: there.title })).toHaveCount(0);
 
-  await page
-    .getByLabel('Acervo')
-    .last()
-    .selectOption({ label: 'Todos os acervos' });
-  await expect(heading).toHaveText('Todos os acervos');
+  await topicChip.click();
+  await expect(scope).toContainText('Todos os acervos');
+  await expect(topicChip).toHaveCount(0);
   await expect(page.getByRole('link', { name: there.title })).toBeVisible();
 
   await page.reload();
-  await expect(heading).toHaveText('Todos os acervos');
+  await expect(scope).toContainText('Todos os acervos');
 
+  const heading = page.getByRole('heading', { level: 1 });
   await page.goto(`/midia/${there.id}`);
   await expect(heading).toContainText('Alquimia');
   await owner.dispose();
