@@ -74,7 +74,10 @@
 }
 
 .tab {
+  display: inline-flex;
   flex: none;
+  align-items: center;
+  gap: var(--space-1);
   min-height: var(--target);
   padding: 0 var(--space-3);
   border: 0;

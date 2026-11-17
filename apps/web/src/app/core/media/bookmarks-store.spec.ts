@@ -128,6 +128,18 @@ describe('BookmarksStore (KBC-042)', () => {
     expect(work.busy()).toBe(false);
   });
 
+  it('KBC-150: marks a cited passage at its exact start, said, with no note to open', () => {
+    const { store, http, at, announcer } = setup();
+    at(760);
+    store.markAt(41_300);
+    const id = '00000000-0000-4000-8000-000000000001';
+    expect(store.bookmarks()).toMatchObject([{ id, positionMs: 41_300 }]);
+    expect(store.editing()).toBeNull();
+    expect(announcer.message()).toBe('Marcador em 0:41');
+    const post = http.expectOne({ method: 'POST', url: URL });
+    expect(post.request.body).toEqual({ id, positionMs: 41_300 });
+  });
+
   it('never marks before the start (AC-7)', () => {
     const { store, http, at } = setup();
     at(1);

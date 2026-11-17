@@ -171,7 +171,7 @@ test('AC-10, AC-15, AC-19: the track is one card among the documents; Enter open
   });
   await expect(panel).toBeVisible();
   await expect(panel.getByRole('heading', { name: TITLE })).toBeFocused();
-  const cited = panel.locator('.segment.cited');
+  const cited = panel.locator('.line.cited-line');
   await expect(cited).toHaveCount(1);
   await expect(cited).toContainText('O ritmo é a lei do pêndulo');
   await expect
