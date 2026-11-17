@@ -329,14 +329,7 @@ export class TranscriptPanel {
     const destroyRef = inject(DestroyRef);
     this.clock.follow(() => true, destroyRef);
     this.listenPassively(destroyRef);
-    // A skip or a jump in the player brings the list back to what is heard (FR-3).
-    toObservable(this.engine.seeksLanded)
-      .pipe(skip(1), takeUntilDestroyed())
-      .subscribe(() => this.resumeTracking());
-    // So does a new play of this media, from here or from the app's bar (KBC-154).
-    toObservable(this.playingThis)
-      .pipe(skip(1), filter(Boolean), takeUntilDestroyed())
-      .subscribe(() => this.resumeTracking());
+    this.followAgain();
     // Measure, then scroll: one layout per change, never a read after a write.
     afterRenderEffect({
       earlyRead: () => {
@@ -360,6 +353,19 @@ export class TranscriptPanel {
     this.paintWord(destroyRef);
     this.loadNeededWords(destroyRef);
     this.landOnPendingWord();
+  }
+
+  /**
+   * A skip or a jump in the player brings the list back to what is heard (FR-3); so does a
+   * new play of this media, from here or from the app's bar (KBC-154).
+   */
+  private followAgain(): void {
+    toObservable(this.engine.seeksLanded)
+      .pipe(skip(1), takeUntilDestroyed())
+      .subscribe(() => this.resumeTracking());
+    toObservable(this.playingThis)
+      .pipe(skip(1), filter(Boolean), takeUntilDestroyed())
+      .subscribe(() => this.resumeTracking());
   }
 
   /** Once this media plays, the cited passage no longer holds `aria-current` (T22). */

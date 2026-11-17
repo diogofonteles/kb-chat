@@ -159,11 +159,29 @@ export function aroundHeard(
   const heard = readable(segments, lastStartedAt(segments, nowMs), -1);
   if (heard < 0 || (range && heard >= range.first && heard <= range.last))
     return null;
+  const at = heardLineOf(transcript, passage, range);
+  const before = readable(segments, heard - 1, -1);
+  const after = readable(segments, heard + 1, 1);
+  return [
+    ...(before < 0 ? [] : at(before, 'before')),
+    ...at(heard, 'heard'),
+    ...(after < 0 ? [] : at(after, 'after')),
+  ];
+}
+
+/** A segment as a line around what is heard: a cited one keeps its kind (BR-2). */
+function heardLineOf(
+  transcript: MediaTranscript,
+  passage: Pick<TrackPassage, 'startMs' | 'endMs'>,
+  range: { readonly first: number; readonly last: number } | null,
+) {
+  const { segments } = transcript;
   const speakers = speakersBySegment(transcript);
-  const isCited = (index: number): boolean =>
-    range !== null && index >= range.first && index <= range.last;
-  const at = (index: number, kind: Exclude<ContextLine['kind'], 'cited'>) =>
-    isCited(index)
+  return (
+    index: number,
+    kind: Exclude<ContextLine['kind'], 'cited'>,
+  ): ContextLine[] =>
+    range !== null && index >= range.first && index <= range.last
       ? [
           citedLine(
             segments.slice(index, index + 1),
@@ -172,13 +190,6 @@ export function aroundHeard(
           ),
         ]
       : lineOf(segments[index], speakers[index], kind);
-  const before = readable(segments, heard - 1, -1);
-  const after = readable(segments, heard + 1, 1);
-  return [
-    ...(before < 0 ? [] : at(before, 'before')),
-    ...at(heard, 'heard'),
-    ...(after < 0 ? [] : at(after, 'after')),
-  ];
 }
 
 /** A cited passage on the track's timeline, in percent of its length (KBC-150 item 4). */
