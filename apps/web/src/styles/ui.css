@@ -875,6 +875,11 @@ select.ui-input option {
   cursor: pointer;
 }
 
+.ui-menu__panel:focus {
+  /* Focused only when it has no item (an empty list): its own edge already shows it. */
+  outline: none;
+}
+
 .ui-menu__panel {
   display: flex;
   flex-direction: column;
