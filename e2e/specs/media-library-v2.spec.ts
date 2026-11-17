@@ -197,19 +197,24 @@ test('FR-3, D5: Ordenar e ver como and the ⋯ open whole on the screen, a sheet
     .click();
   const menu = page.getByRole('menu');
   await expectWholeOnTop(page, menu);
-  // The frame's ⋯ (media-library-row-menu): play and copy the link on a desktop; a phone's
-  // sheet starts a selection and shares instead (a tap on the cover plays there).
+  // The frame's ⋯ (media-library-row-menu): play, play next, mark, the bookmarks, edit and
+  // copy the link on a desktop; a phone's sheet also starts a selection and shares instead
+  // of copying (a tap on the cover plays there).
   await expect(menu.getByRole('menuitem')).toHaveText(
     desktop(page)
       ? [
           'Tocar agora',
+          'Tocar em seguida',
           'Marcar como ouvida',
+          'Ver marcadores',
           'Editar informações',
           'Copiar link',
           'Remover',
         ]
       : [
+          'Tocar em seguida',
           'Marcar como ouvida',
+          'Ver marcadores',
           'Selecionar',
           'Editar informações',
           'Compartilhar',
@@ -365,8 +370,20 @@ test('AC-5: a member who may not edit sees neither Editar nor Remover in the ⋯
   const menu = page.getByRole('menu');
   await expect(menu.getByRole('menuitem')).toHaveText(
     desktop(page)
-      ? ['Tocar agora', 'Marcar como ouvida', 'Copiar link']
-      : ['Marcar como ouvida', 'Selecionar', 'Compartilhar'],
+      ? [
+          'Tocar agora',
+          'Tocar em seguida',
+          'Marcar como ouvida',
+          'Ver marcadores',
+          'Copiar link',
+        ]
+      : [
+          'Tocar em seguida',
+          'Marcar como ouvida',
+          'Ver marcadores',
+          'Selecionar',
+          'Compartilhar',
+        ],
   );
   await expect(
     menu.getByRole('menuitem', { name: 'Editar informações' }),
