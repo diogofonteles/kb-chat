@@ -177,7 +177,8 @@ test.describe('the shell', () => {
       // the column once the audio presence answers).
       const atFoot = () =>
         side.evaluate((column) => {
-          const foot = column.querySelector('.spend')!.getBoundingClientRect();
+          const foot = column.querySelector('.spend')?.getBoundingClientRect();
+          if (!foot) return null;
           return Math.round(
             column.getBoundingClientRect().bottom - foot.bottom,
           );
