@@ -3,14 +3,18 @@ import type {
   TrackPassage,
   TranscriptSegment,
 } from '@kb-chat/contracts';
+import { lastStartedAt } from '@kb-chat/player-core';
 import { speakerChanges, type SpeakerShown } from '../voices/speaker-names.js';
 
 /** Who speaks a line: the name and the voice, for its colour (KBC-065). */
 export type LineSpeaker = SpeakerShown & { readonly voice: number };
 
-/** One line of "Em volta do trecho" (KBC-150): the speech before, the passage, the next one. */
+/**
+ * One line of "Em volta do trecho" (KBC-150): the speech before, the passage, the next one;
+ * while playback is past the passage, the speech heard between them (KBC-154).
+ */
 export interface ContextLine {
-  readonly kind: 'before' | 'cited' | 'after';
+  readonly kind: 'before' | 'cited' | 'heard' | 'after';
   readonly startMs: number;
   readonly endMs: number;
   readonly text: string;
@@ -38,6 +42,22 @@ export function citedRange(
  * KBC-064/065): the last change of speaker at or before it. Empty without voices.
  */
 export function speakersBySegment(
+  transcript: MediaTranscript,
+): readonly (LineSpeaker | null)[] {
+  const known = SPEAKERS.get(transcript);
+  if (known) return known;
+  const found = findSpeakers(transcript);
+  SPEAKERS.set(transcript, found);
+  return found;
+}
+
+/** Once per transcript: the lines around follow playback and ask on every tick (KBC-154). */
+const SPEAKERS = new WeakMap<
+  MediaTranscript,
+  readonly (LineSpeaker | null)[]
+>();
+
+function findSpeakers(
   transcript: MediaTranscript,
 ): readonly (LineSpeaker | null)[] {
   const voiced = transcript.segments.some(
@@ -69,7 +89,7 @@ function readable(
 const lineOf = (
   one: TranscriptSegment | undefined,
   speaker: LineSpeaker | null | undefined,
-  kind: 'before' | 'after',
+  kind: Exclude<ContextLine['kind'], 'cited'>,
 ): ContextLine[] =>
   one
     ? [
@@ -121,6 +141,43 @@ export function aroundPassage(
       speakers[range.first] ?? null,
     ),
     ...lineOf(segments[after], speakers[after], 'after'),
+  ];
+}
+
+/**
+ * While the track plays outside the cited passage (KBC-154): the line heard at `nowMs` with
+ * the one before and the one after, a cited segment among them still marked as cited. Null
+ * when what is heard is the passage itself (or nothing readable): the lines around it stay.
+ */
+export function aroundHeard(
+  transcript: MediaTranscript,
+  passage: Pick<TrackPassage, 'startMs' | 'endMs'>,
+  nowMs: number,
+): ContextLine[] | null {
+  const { segments } = transcript;
+  const range = citedRange(segments, passage);
+  const heard = readable(segments, lastStartedAt(segments, nowMs), -1);
+  if (heard < 0 || (range && heard >= range.first && heard <= range.last))
+    return null;
+  const speakers = speakersBySegment(transcript);
+  const isCited = (index: number): boolean =>
+    range !== null && index >= range.first && index <= range.last;
+  const at = (index: number, kind: Exclude<ContextLine['kind'], 'cited'>) =>
+    isCited(index)
+      ? [
+          citedLine(
+            segments.slice(index, index + 1),
+            passage,
+            speakers[index] ?? null,
+          ),
+        ]
+      : lineOf(segments[index], speakers[index], kind);
+  const before = readable(segments, heard - 1, -1);
+  const after = readable(segments, heard + 1, 1);
+  return [
+    ...(before < 0 ? [] : at(before, 'before')),
+    ...at(heard, 'heard'),
+    ...(after < 0 ? [] : at(after, 'after')),
   ];
 }
 

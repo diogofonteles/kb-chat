@@ -484,6 +484,149 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
     expect(screen.queryByText(/^Voz \d/)).toBeNull();
   });
 
+  describe('KBC-154: follows the speech being heard', () => {
+    /** Owner's case: [8] 0:00–0:01, and the track heard on to 0:23. */
+    const OPENING: AnswerSource = {
+      ...SOURCE,
+      passages: [{ at: '0:00', startMs: 0, endMs: 1_000 }],
+    };
+    const EVERY_FIVE = {
+      ...TRANSCRIPT,
+      segments: Array.from({ length: 12 }, (_, index) => ({
+        startMs: index * 5_000,
+        endMs: (index + 1) * 5_000,
+        text: `Fala ${index + 1}.`,
+      })),
+    };
+    const aroundTexts = () =>
+      within(screen.getByRole('list', { name: 'Em volta do trecho' }))
+        .getAllByRole('listitem')
+        .map((one) => one.textContent?.replace(/\s+/g, ' ').trim());
+
+    async function heardAt(seconds: number, playing = true) {
+      const opened = await openReady(
+        { source: OPENING, at: '0:00' },
+        EVERY_FIVE,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Ouvir o trecho' }));
+      opened.media.setCurrentTime(seconds);
+      opened.media.emit(playing ? 'playing' : 'pause');
+      opened.media.emit('timeupdate');
+      return opened;
+    }
+
+    it('past the cited span, "Em volta do trecho" shows the line heard, with the one before and after, and marks it', async () => {
+      const { media } = await heardAt(23);
+      await vi.waitFor(() =>
+        expect(aroundTexts()).toEqual([
+          '0:15 Fala 4.',
+          '0:20 Fala 5.',
+          '0:25 Fala 6.',
+        ]),
+      );
+      const now = document.querySelector('.context .line[aria-current="true"]');
+      expect(now?.textContent).toContain('Fala 5.');
+      expect(now?.classList).toContain('now');
+      // Paused: back on the cited lines, the cited one with its border.
+      media.setPaused(true);
+      media.emit('pause');
+      await vi.waitFor(() =>
+        expect(aroundTexts()).toEqual([
+          '0:00 Trecho citado: Fala 1.',
+          '0:05 Fala 2.',
+        ]),
+      );
+      expect(document.querySelector('.context .cited-line')).toBeTruthy();
+    });
+
+    it('a cited line next to the one heard keeps its border', async () => {
+      await heardAt(7);
+      await vi.waitFor(() =>
+        expect(aroundTexts()).toEqual([
+          '0:00 Trecho citado: Fala 1.',
+          '0:05 Fala 2.',
+          '0:10 Fala 3.',
+        ]),
+      );
+      expect(
+        document.querySelector('.context .cited-line')?.textContent,
+      ).toContain('Fala 1.');
+      expect(
+        document.querySelector('.context .line[aria-current="true"]')
+          ?.textContent,
+      ).toContain('Fala 2.');
+    });
+
+    it('with "Transcrição completa" open, the line heard is current and scrolled into view', async () => {
+      const scrolled = vi.fn();
+      const restore = [
+        vi
+          .spyOn(HTMLElement.prototype, 'offsetTop', 'get')
+          .mockImplementation(function (this: HTMLElement) {
+            return Number(this.dataset['startMs'] ?? 0) / 50;
+          }),
+        vi
+          .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+          .mockReturnValue(40),
+        vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(200),
+      ];
+      const original = Element.prototype.scrollTo;
+      Element.prototype.scrollTo =
+        scrolled as typeof Element.prototype.scrollTo;
+      try {
+        const { media } = await heardAt(0.5);
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Transcrição completa' }),
+        );
+        await screen.findByRole('list', { name: 'Trechos da transcrição' });
+        scrolled.mockClear();
+        media.setCurrentTime(23);
+        media.emit('timeupdate');
+        await vi.waitFor(() =>
+          expect(
+            document.querySelector('.segment.active')?.textContent,
+          ).toContain('Fala 5.'),
+        );
+        expect(
+          document
+            .querySelector('.segment.active .time')
+            ?.getAttribute('aria-current'),
+        ).toBe('true');
+        await vi.waitFor(() =>
+          expect(scrolled).toHaveBeenCalledWith(
+            expect.objectContaining({ top: expect.any(Number) }),
+          ),
+        );
+        // Scrolled by hand: the list stops following; a new play follows again.
+        const list = screen.getByRole('list', {
+          name: 'Trechos da transcrição',
+        });
+        fireEvent.wheel(list);
+        scrolled.mockClear();
+        media.setCurrentTime(41);
+        media.emit('timeupdate');
+        await vi.waitFor(() =>
+          expect(
+            document.querySelector('.segment.active')?.textContent,
+          ).toContain('Fala 9.'),
+        );
+        expect(scrolled).not.toHaveBeenCalled();
+        media.setPaused(true);
+        media.emit('pause');
+        await vi.waitFor(() =>
+          expect(TestBed.inject(MediaEngine).playing()).toBe(false),
+        );
+        await new Promise((resolve) => setTimeout(resolve));
+        media.setPaused(false);
+        media.emit('playing');
+        await vi.waitFor(() => expect(scrolled).toHaveBeenCalled());
+      } finally {
+        Element.prototype.scrollTo = original;
+        restore.forEach((one) => one.mockRestore());
+      }
+    });
+  });
+
   it('copies the track page at the passage, and marks it', async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, 'clipboard', {

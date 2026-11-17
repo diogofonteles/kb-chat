@@ -547,3 +547,62 @@ test('KBC-150: the audio source opens on the cited passage, every control works,
     await member.context().close();
   }
 });
+
+/** Seeks the app's one player, as its bar or the phone's strip would (KBC-154). */
+const seekTo = (page: Page, seconds: number) =>
+  page.locator('[data-media-engine]').evaluate((element, at) => {
+    (element as HTMLMediaElement).currentTime = at;
+  }, seconds);
+
+test('KBC-154: while the track plays past the passage, the lines around and the full transcript follow what is heard', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const owner = await ownerApi();
+  const topic = await publishedTrack(owner, LONG_SPEECH);
+  await owner.dispose();
+  const member = await researcher(page, topic);
+  await answerWithTwoTracks(member);
+  await member
+    .getByRole('link', { name: `Fonte 2, faixa ${TITLE}, aos 41 segundos` })
+    .click();
+  const panel = audioSource(member);
+  await expect(panel.getByRole('heading', { name: TITLE })).toBeFocused();
+  const around = panel.getByRole('list', { name: 'Em volta do trecho' });
+  const heard = around.locator('.line[aria-current="true"]');
+
+  await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
+  await expect.poll(() => playing(member)).toBe(true);
+  await seekTo(member, 5.2);
+  await expect(heard).toContainText('Linha de preenchimento número 1', {
+    timeout: 10_000,
+  });
+  await expect(heard).toBeVisible();
+  await expect(around.locator('.line')).toHaveCount(3);
+  await expect(around).not.toContainText('O ritmo é a lei do pêndulo');
+  // It keeps following: the next line is marked once it is heard.
+  await expect(heard).toContainText('Linha de preenchimento número 2', {
+    timeout: 10_000,
+  });
+  await expect(heard).toBeVisible();
+
+  // The whole transcript marks the line heard and keeps it in view.
+  await panel.getByRole('button', { name: 'Transcrição completa' }).click();
+  const list = panel.getByRole('list', { name: 'Trechos da transcrição' });
+  await expect(list).toBeVisible();
+  await seekTo(member, 29.2);
+  const active = list.locator('.segment.active');
+  await expect(active).toContainText('Linha de preenchimento número 9', {
+    timeout: 10_000,
+  });
+  await expect(active).toBeInViewport();
+  await expect(active.locator('.time')).toHaveAttribute('aria-current', 'true');
+
+  // Paused: the lines around are the passage's again.
+  await panel.getByRole('button', { name: 'Em volta do trecho' }).click();
+  await panel.getByRole('button', { name: 'Pausar' }).first().click();
+  await expect.poll(() => playing(member)).toBe(false);
+  await expect(around.locator('.cited-line')).toContainText(
+    'O ritmo é a lei do pêndulo',
+  );
+});
