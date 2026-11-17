@@ -4,7 +4,7 @@
 :host {
   position: relative;
   display: grid;
-  grid-template-columns: 2rem 2.5rem minmax(0, 1fr) 11rem 14rem 3.5rem 2.5rem;
+  grid-template-columns: 1.5rem 2.5rem minmax(0, 1fr) 11.25rem 13.75rem 2.75rem 2rem;
   grid-template-rows: auto auto;
   grid-template-areas:
     'lead art title topic status duration actions'
@@ -264,6 +264,30 @@ a.main ~ .cells .duration {
   justify-content: flex-end;
 }
 
+/* The ⋯ shows on the row under the pointer or the focus, and while its menu is open
+   (media-library-row-menu); it stays focusable all along. */
+.actions app-menu-button {
+  opacity: 0;
+}
+
+:host(:hover) .actions app-menu-button,
+:host(:focus-within) .actions app-menu-button,
+.actions app-menu-button:has([aria-expanded='true']) {
+  opacity: 1;
+}
+
+.author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 app-menu-button {
   --menu-trigger-min: 2rem;
   --menu-trigger-height: 2rem;
@@ -272,7 +296,7 @@ app-menu-button {
 /* A narrow table (the right panel open, a small window): the collection gives way first. */
 @container library-table (max-width: 52rem) {
   :host {
-    grid-template-columns: 2rem 2.5rem minmax(0, 1fr) 11rem 3.5rem 2.5rem;
+    grid-template-columns: 1.5rem 2.5rem minmax(0, 1fr) 10.625rem 2.75rem 2rem;
     grid-template-areas:
       'lead art title status duration actions'
       'lead art byline status duration actions';
@@ -287,18 +311,44 @@ app-menu-button {
    author and the length (media-library@mobile). The box stays in reach, with no hover. */
 @container library-table (max-width: 36rem) {
   :host {
-    grid-template-columns: 1.75rem 3.25rem minmax(0, 1fr) var(--target);
+    grid-template-columns: 0 3.25rem minmax(0, 1fr) 1.5rem;
     grid-template-areas:
       'lead art title actions'
       'lead art cells actions';
-    column-gap: var(--space-3);
+    column-gap: 0;
     min-height: 4rem;
-    padding: 0 var(--space-2);
+    padding: 0;
+  }
+
+  .art {
+    margin-inline-end: var(--space-3);
+  }
+
+  /* No box until a selection starts (from the ⋯): then it leads every row (selection@mobile). */
+  .lead {
+    visibility: hidden;
+  }
+
+  :host-context(.selecting) {
+    grid-template-columns: 1.5rem 3.25rem minmax(0, 1fr) 1.5rem;
+    column-gap: var(--space-3);
+  }
+
+  :host-context(.selecting) .art {
+    margin-inline-end: 0;
+  }
+
+  :host-context(.selecting) .lead {
+    visibility: visible;
+  }
+
+  .actions app-menu-button {
+    opacity: 1;
   }
 
   a.main {
-    margin-inline-start: calc(-1 * var(--space-2));
-    padding-inline-start: var(--space-2);
+    margin-inline-start: 0;
+    padding-inline-start: 0;
   }
 
   .art {
@@ -310,9 +360,9 @@ app-menu-button {
     --ui-cover-size: 52px !important;
   }
 
-  /* With no hover to bring it out, the unchecked box shows its edge all along: an invisible
-     box in the lead column would take a tap on what looks like blank space. Still the edge,
-     not opacity, as above (NFR-2). */
+  /* With no hover to bring it out, the unchecked box shows its edge once it is there: an
+     invisible box would take a tap on what looks like blank space. Still the edge, not
+     opacity, as above (NFR-2). */
   .select:not(:checked) {
     border-color: var(--color-text-muted);
   }
@@ -322,18 +372,20 @@ app-menu-button {
     display: none;
   }
 
-  /* ▶ sits on the cover, always in reach of a thumb (MA-02). */
+  /* The frame's cover is bare (media-library@mobile): ▶ covers it whole, unseen, and a tap
+     on the cover plays at once (MA-02); the one playing shows it. */
   .play {
-    width: 2rem;
-    height: 2rem;
-    opacity: 1;
-    background: rgb(0 0 0 / 55%);
-    color: #fff;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: var(--radius-cover);
+    opacity: 0;
   }
 
   .play.on {
-    background: var(--color-accent);
-    color: var(--color-on-accent);
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--radius-pill);
+    opacity: 1;
   }
 
   .title {
@@ -389,12 +441,9 @@ app-menu-button {
     display: inline;
   }
 
-  /* The last to give way: cut at the end, never pushed out of the row. */
+  /* The phone's line has no collection (media-library@mobile). */
   .topic {
-    flex: 0 100 auto;
-    display: inline;
-    min-width: 0;
-    order: 1;
+    display: none;
   }
 
   /* The frame's 48 px bar says how far; the words stay for a screen reader. */
@@ -411,8 +460,7 @@ app-menu-button {
     white-space: nowrap;
   }
 
-  .duration::before,
-  .topic::before {
+  .duration::before {
     content: '·';
     margin-right: var(--space-2);
   }

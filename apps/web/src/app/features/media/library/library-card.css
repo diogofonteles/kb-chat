@@ -188,3 +188,8 @@ a.title:focus-visible::after {
     border: 1px solid ButtonText;
   }
 }
+
+/* The shortcut has the title and how far (media-library-sort "Continuar ouvindo"). */
+:host(.tile) .meta {
+  display: none;
+}

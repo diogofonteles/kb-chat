@@ -6,8 +6,8 @@ import {
   DestroyRef,
   ElementRef,
   Injector,
-  LOCALE_ID,
   type Signal,
+  type TemplateRef,
   afterNextRender,
   computed,
   inject,
@@ -93,10 +93,12 @@ import {
   activeFiltersOf,
   applyFilterChange,
   countTextOf,
-  playedAgoOf,
   type FilterChange,
 } from './library-labels.js';
 import { LibraryRow, type RowAction } from './library-row.js';
+import { LibrarySortMenu } from './library-sort.js';
+import { MenuButton, type MenuOption } from '../menu-button.js';
+import { PageHeader } from '@features/shell/page-header.js';
 import { LibrarySearchResults } from './library-search-results.js';
 import { NearEnd } from './near-end.js';
 import { PlayNow } from './play-now.js';
@@ -105,6 +107,11 @@ import { UiButton, UiIconButton } from '@ui/button.js';
 import { UiCover } from '@ui/cover.js';
 import { UiEmptyState } from '@ui/empty-state.js';
 import { UiIcon } from '@ui/icon.js';
+
+/** The shell's phone layout (chat-page: desktop from 1024 px). */
+const PHONE_QUERY = '(max-width: 1023px)';
+const phoneNow = (): boolean =>
+  typeof matchMedia === 'function' && matchMedia(PHONE_QUERY).matches;
 
 /** "Buscar na biblioteca" waits this long after the last key (T16). */
 export const SEARCH_DEBOUNCE_MS = 200;
@@ -163,6 +170,8 @@ interface MorePages {
     LibraryControls,
     LibraryRow,
     LibrarySearchResults,
+    LibrarySortMenu,
+    MenuButton,
     MovedNotice,
     NearEnd,
     QueueSummary,
@@ -188,19 +197,19 @@ export class LibraryPage {
   private readonly collectionHeading = inject(CollectionHeading);
   private readonly engine = inject(MediaEngine);
   private readonly playNow = inject(PlayNow);
-  private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
+  private readonly host =
+    inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly heading =
     viewChild.required<ElementRef<HTMLElement>>('heading');
-  private readonly strip = viewChild<ElementRef<HTMLElement>>('strip');
+  private readonly phoneActions =
+    viewChild<TemplateRef<unknown>>('phoneActions');
   private readonly searchBox = viewChild<ElementRef<HTMLElement>>('searchBox');
   private readonly allTitle = viewChild<ElementRef<HTMLElement>>('allTitle');
-  private readonly recentsToggle =
-    viewChild<ElementRef<HTMLElement>>('recentsToggle');
   private readonly clearRecentsButton =
     viewChild<ElementRef<HTMLElement>>('clearRecentsButton');
   private readonly keepRecentsButton =
@@ -449,29 +458,72 @@ export class LibraryPage {
   private readonly recentItems = computed(() =>
     this.home.hasValue() ? this.home.value().recentlyPlayed : [],
   );
-  /** Each recent play with "há 2 dias", worked out once per answer. */
-  protected readonly recents = computed(() => {
-    const now = new Date();
-    return this.recentItems().map((item) => ({
-      item,
-      ago: item.lastPlayedAt
-        ? playedAgoOf(item.lastPlayedAt, now, this.locale)
-        : '',
-    }));
-  });
-  protected readonly recentsCleared = computed(
-    () => this.home.hasValue() && this.home.value().recentsClearedAt !== null,
-  );
-  protected readonly showRecents = computed(
-    () =>
-      this.home.hasValue() &&
-      (this.recents().length > 0 || this.recentsCleared()),
-  );
-  protected readonly recentsOpen = signal(true);
   protected readonly confirmingClear = signal(false);
   protected readonly canClearRecents = computed(
-    () => this.recents().length > 0 && !this.confirmingClear(),
+    () => this.recentItems().length > 0 && !this.confirmingClear(),
   );
+  /** A phone (the shell's layout below 1024 px): the rows' ⋯ offers "Selecionar". */
+  protected readonly phone = signal(phoneNow());
+  /** The phone's search row, opened by the top row's 🔍 (media-library-search@mobile). */
+  protected readonly searchOpen = signal(false);
+  /**
+   * "Continuar ouvindo" (media-library-sort): the plain list only — no filter, no search —
+   * and, on a narrow main panel, not at all (media-library: the right panel open; CSS).
+   */
+  protected readonly showContinue = computed(
+    () =>
+      this.continueItems().length > 0 &&
+      !this.searching() &&
+      !this.filtered() &&
+      !this.libraryEmpty(),
+  );
+  protected readonly titleHead = $localize`:@@library.col.title:Título`;
+  protected readonly searchPlaceholder = computed(() =>
+    this.phone()
+      ? $localize`:@@library.searchPlaceholderPhone:Buscar na fala, título, autor`
+      : $localize`:@@library.searchPlaceholder:Buscar na biblioteca (fala, título, autor)`,
+  );
+  protected readonly emptyUploaderText = computed(() =>
+    this.phone()
+      ? $localize`:@@library.emptyUploaderTextPhone:Aulas e palestras viram mídia com transcrição, busca na fala e marcadores.`
+      : $localize`:@@library.emptyUploaderText:Aulas, palestras e conversas viram mídia com transcrição, busca na fala e marcadores.`,
+  );
+  protected readonly emptyReaderText = computed(() =>
+    this.phone()
+      ? $localize`:@@library.emptyReaderTextPhone:Os áudios dos acervos liberados para você aparecem aqui.`
+      : $localize`:@@library.emptyReaderText:Os áudios dos acervos liberados para você aparecem aqui assim que forem enviados.`,
+  );
+  protected readonly otherViewLabel = computed(() =>
+    this.choices()?.view === 'grid'
+      ? $localize`:@@library.showList:Ver como lista`
+      : $localize`:@@library.showGrid:Ver como grade`,
+  );
+  /** The header's ⋯ (media-library): what has no icon of its own in the action bar. */
+  protected readonly headerOptions = computed<readonly MenuOption[]>(() => [
+    {
+      id: 'bookmarks',
+      label: $localize`:@@bookmarks.mine:Meus marcadores`,
+      icon: 'bookmark',
+    },
+    ...(this.selectable().length > 0
+      ? [
+          {
+            id: 'select',
+            label: $localize`:@@library.selectMany:Selecionar mídias`,
+            icon: 'checkcircle' as const,
+          },
+        ]
+      : []),
+    ...(this.canClearRecents()
+      ? [
+          {
+            id: 'clear-recents',
+            label: $localize`:@@library.clearRecents:Limpar recentes`,
+            icon: 'close' as const,
+          },
+        ]
+      : []),
+  ]);
 
   /** Selected media for "Marcar como ouvida/não ouvida" (only those on screen). */
   protected readonly selected = linkedSignal<
@@ -541,6 +593,8 @@ export class LibraryPage {
     const where = topic
       ? (this.titles().get(topic) ?? topic)
       : $localize`:@@library.allCollections:Todos os acervos`;
+    if (this.libraryEmpty())
+      return $localize`:@@library.nothingYet:Nenhuma mídia por enquanto`;
     const count = this.countText();
     return count ? `${where} · ${count}` : where;
   });
@@ -574,6 +628,14 @@ export class LibraryPage {
 
   constructor() {
     this.followCollection();
+    inject(PageHeader).own(
+      computed(() => ({
+        title: $localize`:@@library.title:Biblioteca`,
+        back: null,
+        actions: this.phoneActions() ?? null,
+      })),
+    );
+    this.followLayout();
     this.saves
       .pipe(
         concatMap((update) =>
@@ -590,6 +652,17 @@ export class LibraryPage {
       )
       .subscribe();
     this.followAddress();
+  }
+
+  /** The shell's breakpoint: below it, the phone's layout (the rows' ⋯ changes). */
+  private followLayout(): void {
+    const query = this.host.ownerDocument.defaultView?.matchMedia?.(PHONE_QUERY);
+    if (!query) return;
+    const onChange = (event: MediaQueryListEvent) => this.phone.set(event.matches);
+    query.addEventListener('change', onChange);
+    this.destroyRef.onDestroy(() =>
+      query.removeEventListener('change', onChange),
+    );
   }
 
   /** The header, the sidebar and the account say the collection the list shows (KBC-091). */
@@ -804,11 +877,6 @@ export class LibraryPage {
     this.focusAfterRender(this.allTitle);
   }
 
-  /** "Ver tudo" of "Continuar ouvindo": "Todas" with only what is in progress. */
-  protected showInProgress(): void {
-    this.saveFilters({ ...NO_FILTERS, states: ['in-progress'] });
-  }
-
   protected changeSort(sort: LibrarySort): void {
     this.choose({ sort }, { librarySort: sort });
   }
@@ -841,19 +909,38 @@ export class LibraryPage {
     this.home.reload();
   }
 
-  /* ---------- "Continuar ouvindo" strip ---------- */
+  /* ---------- Header actions (media-library actionBar) ---------- */
 
-  /** ◂ ▸: one card width at a time (also by keyboard, UP-09). */
-  protected scrollStrip(direction: 1 | -1): void {
-    const strip = this.strip()?.nativeElement;
-    strip?.scrollBy({ left: direction * strip.clientWidth * 0.8 });
+  /** 🔀: one ready media of the list, at random (there is no play queue to shuffle). */
+  protected playAny(): void {
+    const ready = this.items().filter((item) => item.status === 'ready');
+    const item = ready[Math.floor(Math.random() * ready.length)];
+    if (item) this.playNow.play(item);
+  }
+
+  protected headerAction(id: string): void {
+    if (id === 'bookmarks') void this.router.navigate(['/midia/marcadores']);
+    else if (id === 'select') this.startSelection();
+    else if (id === 'clear-recents') this.askClearRecents();
+  }
+
+  /** The action bar's 🔍: the search field of the filters' row. */
+  protected focusSearch(): void {
+    this.searchBox()?.nativeElement.focus();
+  }
+
+  /** The phone's 🔍 opens the search row and puts the cursor in it; again, closes it. */
+  protected toggleSearch(): void {
+    if (this.searchOpen() || this.searching()) {
+      this.searchOpen.set(false);
+      if (this.query()) this.query.set('');
+      return;
+    }
+    this.searchOpen.set(true);
+    this.focusAfterRender(this.searchBox);
   }
 
   /* ---------- Recents (BR-4) ---------- */
-
-  protected toggleRecents(): void {
-    this.recentsOpen.update((open) => !open);
-  }
 
   protected askClearRecents(): void {
     this.confirmingClear.set(true);
@@ -867,7 +954,7 @@ export class LibraryPage {
 
   protected clearRecents(): void {
     this.confirmingClear.set(false);
-    this.focusAfterRender(this.recentsToggle);
+    this.focusAfterRender(this.allTitle);
     this.api
       .clearRecents()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -896,6 +983,13 @@ export class LibraryPage {
     });
   }
 
+  /** "Selecionar mídias" (header ⋯, a row's ⋯ on a phone): the selection starts with one. */
+  protected startSelection(item?: LibraryItem): void {
+    const first = item ?? this.selectable()[0];
+    if (first) this.select(first, true);
+    this.focusAfterRender(this.selectAllBox);
+  }
+
   protected toggleAll(event: Event): void {
     const on = event.target instanceof HTMLInputElement && event.target.checked;
     this.selected.set(
@@ -915,6 +1009,10 @@ export class LibraryPage {
   protected rowAction(item: LibraryItem, action: RowAction): void {
     if (action === 'remove') this.askRemove(item);
     else if (action === 'edit') this.openEdit(item);
+    else if (action === 'play') this.play(item);
+    else if (action === 'select') this.startSelection(item);
+    else if (action === 'retry') this.retry(item);
+    else if (action === 'copy-link') this.copyLink(item);
     else this.mark([item.id], action === 'mark-played');
   }
 
@@ -1023,6 +1121,31 @@ export class LibraryPage {
     const shown = this.choices()?.filters.topic ?? null;
     const parent = this.topics().find((one) => one.slug === topic)?.parent;
     return shown !== null && topic !== shown && parent !== shown;
+  }
+
+  /** "Copiar link" (desktop) / "Compartilhar" (phone, the system's sheet when it has one). */
+  private copyLink(item: LibraryItem): void {
+    const view = this.host.ownerDocument.defaultView;
+    const url = new URL(
+      this.router.serializeUrl(this.router.createUrlTree(['/midia', item.id])),
+      view?.location.origin ?? 'http://localhost',
+    ).toString();
+    const nav = view?.navigator;
+    const done = () =>
+      this.announcement.set($localize`:@@library.linkCopied:Link copiado.`);
+    const failed = () =>
+      this.actionError.set(
+        $localize`:@@library.linkFailed:Não consegui copiar o link. Abra a mídia e copie o endereço.`,
+      );
+    if (this.phone() && nav?.share) {
+      nav.share({ title: item.title, url }).catch(() => undefined);
+      return;
+    }
+    if (!nav?.clipboard) {
+      failed();
+      return;
+    }
+    nav.clipboard.writeText(url).then(done, failed);
   }
 
   protected retry(item: LibraryItem): void {

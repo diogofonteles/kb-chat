@@ -12,8 +12,6 @@ import {
   type PreparationStep,
 } from '@kb-chat/contracts';
 import { formatDuration } from '@kb-chat/player-core';
-import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
-import { UiButton } from '@ui/button.js';
 import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import { UiPill } from '@ui/pill.js';
@@ -23,10 +21,22 @@ import { MediaLevelBadge } from '../media-level-badge.js';
 import { statusTextOf } from '../media-labels.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import { PreparationEntry } from '../preparation/preparation-entry.js';
-import { percentOf, resumeTextOf, stateTextOf } from './library-labels.js';
+import {
+  percentOf,
+  stateTextOf,
+  stoppedAtTextOf,
+} from './library-labels.js';
 
 /** What the row's "⋯" can do. */
-export type RowAction = 'mark-played' | 'mark-unplayed' | 'edit' | 'remove';
+export type RowAction =
+  | 'play'
+  | 'mark-played'
+  | 'mark-unplayed'
+  | 'select'
+  | 'edit'
+  | 'copy-link'
+  | 'retry'
+  | 'remove';
 
 /**
  * One media in "Todas" as a row of the v2 track table (KBC-128): # · cover and title ·
@@ -39,11 +49,9 @@ export type RowAction = 'mark-played' | 'mark-unplayed' | 'edit' | 'remove';
   selector: 'app-library-row',
   imports: [
     RouterLink,
-    AuthorshipBadge,
     MediaLevelBadge,
     MenuButton,
     PreparationEntry,
-    UiButton,
     UiCover,
     UiIcon,
     UiPill,
@@ -69,24 +77,40 @@ export class LibraryRow {
   readonly selected = input(false);
   readonly playing = input(false);
   readonly master = input(false);
+  /** The phone's row (media-library@mobile): its ⋯ starts a selection, "Compartilhar". */
+  readonly phone = input(false);
   /** Where this media's preparation stopped (KBC-072 FR-6). */
   readonly paused = input<PreparationStep | null>(null);
   readonly played = output();
   readonly selectedChange = output<boolean>();
   readonly acted = output<RowAction>();
-  readonly retried = output();
 
+  /** The author by name, "Outros autores" with none (media-library: plain, muted). */
+  protected readonly authorName = computed(
+    () =>
+      this.item().author?.name ??
+      $localize`:@@authorship.others:Outros autores`,
+  );
   protected readonly ready = computed(() => this.item().status === 'ready');
   protected readonly duration = computed(() => {
     const ms = this.item().durationMs;
     return ms === null ? '' : formatDuration(ms);
   });
   protected readonly state = computed(() => stateTextOf(this.item()));
-  protected readonly resume = computed(() => resumeTextOf(this.item()));
+  protected readonly resume = computed(() => stoppedAtTextOf(this.item()));
   protected readonly percent = computed(() => percentOf(this.item()));
   /** "Na fila", "Convertendo… 40%", "Falhou: …" for a media not ready (BR-2). */
   protected readonly status = computed(() =>
     this.ready() ? '' : statusTextOf(this.item()),
+  );
+  /** The table's pill says it in a word (media-library: "Falhou"); the reason follows. */
+  protected readonly statusWord = computed(() =>
+    this.item().status === 'failed'
+      ? $localize`:@@media.status.failedWord:Falhou`
+      : this.status(),
+  );
+  protected readonly statusRest = computed(() =>
+    this.status().slice(this.statusWord().length),
   );
   protected readonly playLabel = computed(() =>
     this.playing()
@@ -100,9 +124,20 @@ export class LibraryRow {
     () =>
       $localize`:@@media.moreActions:Mais ações para ${this.item().title}:title:`,
   );
+  /**
+   * The ⋯ (media-library-row-menu; a sheet on a phone, @mobile): play, mark, select (phone),
+   * edit and copy the link, then "Tentar de novo" and "Remover" for masters.
+   */
   protected readonly options = computed<readonly MenuOption[]>(() => {
     const options: MenuOption[] = [];
-    if (this.ready())
+    const ready = this.ready();
+    if (ready && !this.phone())
+      options.push({
+        id: 'play',
+        label: $localize`:@@library.playNow:Tocar agora`,
+        icon: 'play',
+      });
+    if (ready)
       options.push(
         listeningStateOf(this.item()) === 'heard'
           ? {
@@ -116,15 +151,43 @@ export class LibraryRow {
               icon: 'checkcircle',
             },
       );
+    if (ready && this.phone())
+      options.push({
+        id: 'select',
+        label: $localize`:@@library.selectRow:Selecionar`,
+        icon: 'check',
+      });
+    const second = options.length;
     if (this.item().canEdit)
-      options.push({ id: 'edit', label: editDetailsLabel(), icon: 'edit' });
+      options.push({
+        id: 'edit',
+        label: editDetailsLabel(),
+        icon: 'edit',
+        divider: second > 0,
+      });
+    if (ready)
+      options.push({
+        id: 'copy-link',
+        label: this.phone()
+          ? $localize`:@@library.share:Compartilhar`
+          : $localize`:@@library.copyLink:Copiar link`,
+        icon: this.phone() ? 'share' : 'link',
+        divider: second > 0 && options.length === second,
+      });
+    if (this.master() && this.item().canRetry)
+      options.push({
+        id: 'retry',
+        label: $localize`:@@media.retry:Tentar de novo`,
+        icon: 'refresh',
+        divider: options.length > 0,
+      });
     if (this.master())
       options.push({
         id: 'remove',
         label: $localize`:@@media.remove:Remover`,
         danger: true,
         icon: 'trash',
-        divider: options.length > 0,
+        divider: options.length > 0 && options.at(-1)?.id !== 'retry',
       });
     return options;
   });
@@ -141,8 +204,12 @@ export class LibraryRow {
 }
 
 const ACTIONS: readonly RowAction[] = [
+  'play',
   'mark-played',
   'mark-unplayed',
+  'select',
   'edit',
+  'copy-link',
+  'retry',
   'remove',
 ];

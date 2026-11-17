@@ -24,9 +24,15 @@
   gap: var(--space-3);
 }
 
+.where {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
 .head h3 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--text-section);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }

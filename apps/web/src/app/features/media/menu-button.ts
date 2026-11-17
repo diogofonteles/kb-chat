@@ -55,6 +55,7 @@ const SHEET_BELOW_PX = 1024;
       #trigger
       type="button"
       class="trigger"
+      [class.chip]="look() === 'chip'"
       aria-haspopup="menu"
       [attr.aria-expanded]="open()"
       [attr.aria-label]="label()"
@@ -142,6 +143,8 @@ export class MenuButton {
   readonly disabled = input(false);
   /** Which edge of the button the list lines up with. */
   readonly align = input<OverlayAlign>('end');
+  /** A chip that opens a menu (v2 · Componentes › Chip with ▾), as in a row of filters. */
+  readonly look = input<'plain' | 'chip'>('plain');
   readonly chosen = output<string>();
 
   protected readonly sheetBelow = SHEET_BELOW_PX;

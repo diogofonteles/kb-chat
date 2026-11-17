@@ -36,7 +36,6 @@ import { MediaEngine } from '@core/media/media-engine.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { of } from 'rxjs';
 import { playbackStartOf } from '../search-hit/passage-focus.js';
-import { LibraryControls } from './library-controls.js';
 import { LibraryHit } from './library-hit.js';
 import {
   activeFiltersOf,
@@ -65,7 +64,7 @@ interface MorePages {
  */
 @Component({
   selector: 'app-library-search-results',
-  imports: [LibraryControls, LibraryHit, NearEnd, UiButton, UiIcon],
+  imports: [LibraryHit, NearEnd, UiButton, UiIcon],
   templateUrl: './library-search-results.html',
   styleUrl: './library-search-results.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

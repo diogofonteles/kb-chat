@@ -54,6 +54,13 @@ const SHOWN = 3;
         <ul class="cards">
           @for (line of lines(); track line.id) {
             <li class="card">
+              @if (!line.groq && !line.hasAction) {
+                <a
+                  class="card-link"
+                  [routerLink]="line.link"
+                  [attr.aria-label]="line.actionLabel"
+                ></a>
+              }
               <ui-cover [title]="line.title" [size]="48" />
               <span class="body">
                 <span class="name">{{ line.title }}</span>
@@ -72,7 +79,7 @@ const SHOWN = 3;
                   (sent)="refresh()"
                   (capped)="refresh()"
                 />
-              } @else {
+              } @else if (line.hasAction) {
                 <a
                   class="action"
                   [class.strong]="line.strong"
@@ -84,13 +91,15 @@ const SHOWN = 3;
             </li>
           }
         </ul>
-        @if (hiddenCount() > 0) {
-          <p class="more" i18n="@@queue.more">e mais {{ hiddenCount() }}</p>
-        }
       </section>
     }
   `,
   styles: `
+    :host {
+      display: block;
+      container: queue-summary / inline-size;
+    }
+
     .summary {
       display: grid;
       gap: var(--space-3);
@@ -133,7 +142,7 @@ const SHOWN = 3;
 
     h3 {
       margin: 0;
-      font-size: 1.25rem;
+      font-size: var(--text-section);
       font-weight: 700;
       letter-spacing: -0.01em;
     }
@@ -153,9 +162,10 @@ const SHOWN = 3;
       text-decoration: underline;
     }
 
+    /* Three cards side by side; two on a narrow panel (media-library, the right panel open). */
     .cards {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       align-items: start;
       gap: var(--space-3);
       margin: 0;
@@ -164,7 +174,34 @@ const SHOWN = 3;
     }
 
     /* "Precisa da sua atenção": cover, title, status in a word and the direct action. */
+    @container queue-summary (max-width: 52rem) {
+      .cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .card:nth-child(n + 3) {
+        display: none;
+      }
+    }
+
+    /* A card with nothing to do here is its own way to the details. */
+    .card-link {
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+    }
+
+    .card-link:hover {
+      background: var(--overlay-1);
+    }
+
+    .card-link:focus-visible {
+      outline: 2px solid var(--color-focus);
+      outline-offset: 2px;
+    }
+
     .card {
+      position: relative;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -192,19 +229,20 @@ const SHOWN = 3;
 
     .line {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       align-items: center;
       gap: var(--space-1) var(--space-2);
       min-width: 0;
     }
 
-    .state,
-    .more {
+    .state {
       min-width: 0;
       margin: 0;
+      overflow: hidden;
       color: var(--color-text-muted);
       font-size: var(--text-xs);
-      overflow-wrap: anywhere;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     app-transcribe-with-groq {
@@ -217,10 +255,11 @@ const SHOWN = 3;
     }
 
     .action {
+      position: relative;
       flex: none;
       display: inline-flex;
       align-items: center;
-      min-height: var(--target-desktop);
+      min-height: 2rem;
       padding: 0 var(--space-4);
       border-radius: var(--radius-pill);
       background: var(--overlay-3);
@@ -245,8 +284,7 @@ const SHOWN = 3;
       }
 
       .top,
-      .cards,
-      .more {
+      .cards {
         display: none;
       }
 
@@ -288,12 +326,10 @@ export class QueueSummary {
           action,
           actionLabel: `${action}: ${item.title}`,
           strong: item.action === 'validate' || item.action === 'conclude',
+          hasAction: item.action !== null,
           groq: groqOf(item),
         };
       }),
-  );
-  protected readonly hiddenCount = computed(() =>
-    Math.max(0, this.shown().length - SHOWN),
   );
   /** The phone's card: how many, then what each needs (media-library@mobile). */
   protected readonly compactTitle = computed(() => {

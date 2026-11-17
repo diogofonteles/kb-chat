@@ -40,58 +40,106 @@
     >
       <ui-icon [name]="listPlaying() ? 'pause' : 'play'" [size]="24" />
     </button>
+    <button
+      type="button"
+      uiIconButton
+      class="bar-icon"
+      [size]="40"
+      [disabled]="!firstPlayable()"
+      aria-label="Tocar em ordem aleatória"
+      i18n-aria-label="@@library.shuffle"
+      (click)="playAny()"
+    >
+      <ui-icon name="shuffle" [size]="28" />
+    </button>
     @if (canUpload()) {
       <button
         type="button"
-        uiButton="outline"
-        size="sm"
+        uiIconButton
+        class="bar-icon"
+        [size]="40"
         aria-haspopup="dialog"
+        aria-label="Enviar mídia"
+        i18n-aria-label="@@library.upload"
         (click)="openUpload()"
       >
-        <ui-icon name="upload" [size]="16" />
-        <span i18n="@@library.upload">Enviar mídia</span>
+        <ui-icon name="upload" [size]="28" />
       </button>
     }
-    <a uiButton="dark" size="sm" routerLink="/midia/marcadores">
-      <ui-icon name="bookmark" [size]="16" />
-      <span class="phone-hidden" i18n="@@bookmarks.mine">Meus marcadores</span>
-    </a>
-    @if (!libraryEmpty()) {
-      <div class="search">
-        <label
-          class="visually-hidden"
-          for="library-search"
-          i18n="@@library.search"
-          >Buscar na biblioteca</label
-        >
-        <div class="ui-search search-box">
-          <ui-icon name="search" [size]="18" />
-          <input
-            #searchBox
-            id="library-search"
-            type="search"
-            autocomplete="off"
-            maxlength="200"
-            placeholder="Fala, título, autor"
-            i18n-placeholder="@@library.searchPlaceholder"
-            [value]="query()"
-            (input)="search($event)"
-          />
-          @if (query()) {
-            <button
-              type="button"
-              class="clear-search"
-              aria-label="Limpar busca"
-              i18n-aria-label="@@library.clearSearch"
-              (click)="clearSearch()"
-            >
-              <ui-icon name="close" [size]="16" />
-            </button>
-          }
-        </div>
-      </div>
+    @if (isMaster()) {
+      <a
+        uiIconButton
+        class="bar-icon"
+        [size]="40"
+        routerLink="/configuracoes/pessoas"
+        aria-label="Convidar pessoas"
+        i18n-aria-label="@@library.invite"
+      >
+        <ui-icon name="personAdd" [size]="28" />
+      </a>
+    }
+    <app-menu-button
+      class="bar-more"
+      align="start"
+      label="Mais ações da Biblioteca"
+      i18n-label="@@library.moreActions"
+      [options]="headerOptions()"
+      (chosen)="headerAction($event)"
+    >
+      <ui-icon name="more" [size]="28" />
+    </app-menu-button>
+    <span class="bar-space"></span>
+    <button
+      type="button"
+      uiIconButton
+      class="bar-search"
+      [size]="32"
+      aria-label="Ir para a busca"
+      i18n-aria-label="@@library.goToSearch"
+      aria-controls="library-search"
+      (click)="focusSearch()"
+    >
+      <ui-icon name="search" [size]="20" />
+    </button>
+    @if (choices(); as current) {
+      <app-library-sort
+        [sort]="current.sort"
+        [view]="current.view"
+        (sortChange)="changeSort($event)"
+        (viewChange)="changeView($event)"
+      />
     }
   </div>
+
+  <!-- The phone's top row holds these (PageHeader): the search and the upload. -->
+  <ng-template #phoneActions>
+    <button
+      type="button"
+      uiIconButton
+      class="phone-action"
+      [class.on]="searchOpen() || searching()"
+      [attr.aria-expanded]="searchOpen() || searching()"
+      aria-controls="library-search"
+      aria-label="Abrir a busca"
+      i18n-aria-label="@@library.openSearch"
+      (click)="toggleSearch()"
+    >
+      <ui-icon name="search" [size]="24" />
+    </button>
+    @if (canUpload()) {
+      <button
+        type="button"
+        uiIconButton
+        class="phone-action"
+        aria-haspopup="dialog"
+        aria-label="Enviar mídia"
+        i18n-aria-label="@@library.upload"
+        (click)="openUpload()"
+      >
+        <ui-icon name="upload" [size]="24" />
+      </button>
+    }
+  </ng-template>
 
   <div class="sections">
     @if (!searching()) {
@@ -126,256 +174,224 @@
       </ui-banner>
     }
 
-    @if (searching()) {
-      @if (choices(); as current) {
-        <app-library-search-results
-          [query]="askedQuery()"
-          [typed]="trimmedQuery()"
-          [filters]="current.filters"
-          [facets]="facets()"
-          [topics]="topics()"
-          [sort]="current.sort"
-          [view]="current.view"
-          (filtersChange)="changeFilter($event)"
-          (clearedSearch)="clearSearch()"
-          (clearedFilters)="clearFilters()"
-        />
-      }
-    } @else {
-      @if (homeLoading()) {
-        <div class="skeleton-strip" aria-hidden="true">
-          @for (n of [1, 2, 3]; track n) {
-            <span class="skeleton-tile"></span>
+    @if (showContinue()) {
+      <section class="continue" aria-labelledby="continue-title">
+        <div class="section-head">
+          <h3 id="continue-title" class="title" i18n="@@library.continue">
+            Continuar ouvindo
+          </h3>
+          @if (canClearRecents()) {
+            <button
+              #clearRecentsButton
+              type="button"
+              class="link"
+              (click)="askClearRecents()"
+              i18n="@@library.clearRecents"
+            >
+              Limpar recentes
+            </button>
           }
         </div>
-      } @else if (continueItems().length > 0) {
-        <section class="continue" aria-labelledby="continue-title">
-          <div class="section-head">
-            <h3 id="continue-title" class="title" i18n="@@library.continue">
-              Continuar ouvindo
-            </h3>
-            <div class="strip-tools">
-              <button
-                type="button"
-                uiIconButton="circle"
-                class="arrow"
-                aria-label="Rolar para trás"
-                i18n-aria-label="@@library.scrollBack"
-                (click)="scrollStrip(-1)"
-              >
-                <ui-icon name="chevLeft" [size]="18" />
-              </button>
-              <button
-                type="button"
-                uiIconButton="circle"
-                class="arrow"
-                aria-label="Rolar para frente"
-                i18n-aria-label="@@library.scrollForward"
-                (click)="scrollStrip(1)"
-              >
-                <ui-icon name="chevRight" [size]="18" />
-              </button>
-              <button
-                type="button"
-                class="link"
-                (click)="showInProgress()"
-                i18n="@@library.seeAll"
-              >
-                Ver tudo
-              </button>
-            </div>
-          </div>
-          <div class="strip" role="list" #strip>
-            @for (item of continueItems(); track item.id) {
-              <app-library-card
-                [item]="item"
-                [tile]="true"
-                [playing]="playingId() === item.id"
-                (played)="play(item)"
-              />
-            }
-          </div>
-        </section>
-      }
-
-      @if (showRecents()) {
-        <section class="recents" aria-labelledby="recents-title">
-          <div class="section-head">
-            <h3 id="recents-title" class="title">
-              <button
-                #recentsToggle
-                type="button"
-                class="disclosure"
-                [attr.aria-expanded]="recentsOpen()"
-                aria-controls="recents-list"
-                (click)="toggleRecents()"
-              >
-                <ui-icon
-                  [name]="recentsOpen() ? 'chevDown' : 'chevRight'"
-                  [size]="18"
-                />
-                <ng-container i18n="@@library.recents"
-                  >Ouvidas recentemente</ng-container
-                >
-              </button>
-            </h3>
-            @if (canClearRecents()) {
-              <button
-                #clearRecentsButton
-                type="button"
-                class="link"
-                (click)="askClearRecents()"
-                i18n="@@library.clearRecents"
-              >
-                Limpar recentes
-              </button>
-            }
-          </div>
-          @if (confirmingClear()) {
-            <div
-              class="confirm-inline"
-              role="group"
-              aria-labelledby="clear-text"
+        @if (confirmingClear()) {
+          <div
+            class="confirm-inline"
+            role="group"
+            aria-labelledby="clear-text"
+          >
+            <p id="clear-text" i18n="@@library.clearRecentsQuestion">
+              Limpar as mídias ouvidas recentemente? Suas posições, favoritas e
+              marcadores continuam.
+            </p>
+            <button
+              type="button"
+              uiButton="white"
+              size="sm"
+              (click)="clearRecents()"
+              i18n="@@library.clearRecentsConfirm"
             >
-              <p id="clear-text" i18n="@@library.clearRecentsQuestion">
-                Limpar as mídias ouvidas recentemente? Suas posições, favoritas
-                e marcadores continuam.
-              </p>
+              Limpar
+            </button>
+            <button
+              #keepRecentsButton
+              type="button"
+              uiButton="ghost"
+              size="sm"
+              (click)="cancelClearRecents()"
+              i18n="@@library.clearRecentsCancel"
+            >
+              Cancelar
+            </button>
+          </div>
+        }
+        <div class="strip" role="list" #strip>
+          @for (item of continueItems(); track item.id) {
+            <app-library-card
+              [item]="item"
+              [tile]="true"
+              [playing]="playingId() === item.id"
+              (played)="play(item)"
+            />
+          }
+        </div>
+      </section>
+    }
+
+    <section class="all" aria-labelledby="all-title">
+      <h3
+        id="all-title"
+        class="visually-hidden"
+        #allTitle
+        tabindex="-1"
+        i18n="@@library.all"
+      >
+        Todas
+      </h3>
+      <p class="visually-hidden" aria-live="polite">{{ countText() }}</p>
+
+      <div class="toolbar" [class.searching]="searchOpen() || searching()">
+        <div class="search">
+          <label
+            class="visually-hidden"
+            for="library-search"
+            i18n="@@library.search"
+            >Buscar na biblioteca</label
+          >
+          <div class="ui-search search-box">
+            <ui-icon name="search" [size]="18" />
+            <input
+              #searchBox
+              id="library-search"
+              type="search"
+              autocomplete="off"
+              maxlength="200"
+              [placeholder]="searchPlaceholder()"
+              [value]="query()"
+              (input)="search($event)"
+            />
+            @if (query()) {
+              <button
+                type="button"
+                class="clear-search"
+                aria-label="Limpar busca"
+                i18n-aria-label="@@library.clearSearch"
+                (click)="clearSearch()"
+              >
+                <ui-icon name="close" [size]="16" />
+              </button>
+            }
+          </div>
+        </div>
+        @if (choices(); as current) {
+          <app-library-controls
+            [facets]="facets()"
+            [filters]="current.filters"
+            [topics]="topics()"
+            (filtersChange)="changeFilter($event)"
+          />
+        }
+      </div>
+
+      @if (searching()) {
+        @if (choices(); as current) {
+          <app-library-search-results
+            [query]="askedQuery()"
+            [typed]="trimmedQuery()"
+            [filters]="current.filters"
+            [facets]="facets()"
+            [topics]="topics()"
+            [sort]="current.sort"
+            [view]="current.view"
+            (filtersChange)="changeFilter($event)"
+            (clearedSearch)="clearSearch()"
+            (clearedFilters)="clearFilters()"
+          />
+        }
+      } @else if (showSkeleton()) {
+        <ul
+          class="rows skeleton"
+          aria-busy="true"
+          aria-label="Carregando…"
+          i18n-aria-label="@@app.loading"
+        >
+          @for (n of [1, 2, 3, 4, 5, 6, 7, 8]; track n) {
+            <li class="skeleton-row">
+              <span class="skeleton-cover"></span><span class="bar"></span>
+            </li>
+          }
+        </ul>
+      } @else if (choices(); as current) {
+        @if (libraryEmpty()) {
+          @if (canUpload()) {
+            <ui-empty-state
+              icon="upload"
+              title="Comece enviando um áudio"
+              i18n-title="@@library.emptyUploader"
+              [text]="emptyUploaderText()"
+            >
+              <button type="button" uiButton="primary" (click)="openUpload()">
+                <ui-icon name="upload" [size]="18" />
+                <span i18n="@@library.upload">Enviar mídia</span>
+              </button>
+            </ui-empty-state>
+          } @else {
+            <ui-empty-state
+              icon="library"
+              title="Ainda não há mídias para você"
+              i18n-title="@@library.emptyReader"
+              [text]="emptyReaderText()"
+            />
+          }
+        } @else if (nothingFound()) {
+          <ui-empty-state
+            [icon]="filtered() ? 'filter' : 'music'"
+            [title]="nothingFoundTitle()"
+            [text]="nothingFoundText()"
+          >
+            @if (canSeeAll()) {
               <button
                 type="button"
                 uiButton="white"
-                size="sm"
-                (click)="clearRecents()"
-                i18n="@@library.clearRecentsConfirm"
+                (click)="showAllCollections()"
+                i18n="@@library.seeAllCollections"
               >
-                Limpar
+                Ver todos os acervos
               </button>
+            }
+            @if (filtered()) {
               <button
-                #keepRecentsButton
                 type="button"
-                uiButton="ghost"
-                size="sm"
-                (click)="cancelClearRecents()"
-                i18n="@@library.clearRecentsCancel"
+                uiButton="outline"
+                (click)="clearFilters()"
+                i18n="@@library.clearFilters"
               >
-                Cancelar
+                Limpar filtros
               </button>
-            </div>
-          }
-          <div id="recents-list" [hidden]="!recentsOpen()">
-            @if (recents().length === 0) {
-              <p class="quiet" i18n="@@library.recentsEmpty">
-                Nada ouvido desde que você limpou.
-              </p>
-            } @else {
-              <ol class="recent-list">
-                @for (recent of recents(); track recent.item.id) {
-                  <li>
-                    <ui-cover [title]="recent.item.title" [size]="32" />
-                    <a [routerLink]="['/midia', recent.item.id]">{{
-                      recent.item.title
-                    }}</a>
-                    <span class="quiet">{{ recent.ago }}</span>
-                  </li>
-                }
-              </ol>
             }
-          </div>
-        </section>
-      }
-
-      <section class="all" aria-labelledby="all-title">
-        <div class="section-head">
-          <h3
-            id="all-title"
-            class="title"
-            #allTitle
-            tabindex="-1"
-            i18n="@@library.all"
-          >
-            Todas
-          </h3>
-          <p class="count" aria-live="polite">{{ countText() }}</p>
-        </div>
-
-        @if (showSkeleton()) {
-          <ul
-            class="rows skeleton"
-            aria-busy="true"
-            aria-label="Carregando…"
-            i18n-aria-label="@@app.loading"
-          >
-            @for (n of [1, 2, 3, 4, 5, 6, 7, 8]; track n) {
-              <li class="skeleton-row">
-                <span class="skeleton-cover"></span><span class="bar"></span>
-              </li>
-            }
-          </ul>
-        } @else if (choices(); as current) {
-          @if (!libraryEmpty()) {
-            <app-library-controls
-              [facets]="facets()"
-              [filters]="current.filters"
+          </ui-empty-state>
+        } @else {
+          <div class="phone-sort">
+            <app-library-sort
+              [phone]="true"
+              align="start"
               [sort]="current.sort"
               [view]="current.view"
-              [topics]="topics()"
-              (filtersChange)="changeFilter($event)"
               (sortChange)="changeSort($event)"
               (viewChange)="changeView($event)"
             />
-          }
-
-          @if (libraryEmpty()) {
-            @if (canUpload()) {
-              <ui-empty-state
-                icon="upload"
-                title="Ainda não há mídias nos seus acervos."
-                i18n-title="@@library.emptyUploader"
-                text="Aulas, palestras e conversas viram mídia com transcrição, busca na fala e marcadores."
-                i18n-text="@@library.emptyUploaderText"
-              >
-                <button type="button" uiButton="primary" (click)="openUpload()">
-                  <ui-icon name="upload" [size]="18" />
-                  <span i18n="@@library.upload">Enviar mídia</span>
-                </button>
-              </ui-empty-state>
-            } @else {
-              <ui-empty-state
-                icon="library"
-                title="Ainda não há mídias nos acervos liberados para você."
-                i18n-title="@@library.emptyReader"
-                text="Os áudios dos acervos liberados para você aparecem aqui assim que forem enviados."
-                i18n-text="@@library.emptyReaderText"
-              />
-            }
-          } @else if (nothingFound()) {
-            <ui-empty-state
-              [icon]="filtered() ? 'filter' : 'music'"
-              [title]="nothingFoundTitle()"
-              [text]="nothingFoundText()"
+            <button
+              type="button"
+              uiIconButton
+              class="phone-view"
+              [attr.aria-label]="otherViewLabel()"
+              (click)="changeView(current.view === 'grid' ? 'list' : 'grid')"
             >
-              @if (canSeeAll()) {
-                <button
-                  type="button"
-                  uiButton="white"
-                  (click)="showAllCollections()"
-                  i18n="@@library.seeAllCollections"
-                >
-                  Ver todos os acervos
-                </button>
-              }
-              @if (filtered()) {
-                <button
-                  type="button"
-                  uiButton="outline"
-                  (click)="clearFilters()"
-                  i18n="@@library.clearFilters"
-                >
-                  Limpar filtros
-                </button>
-              }
-            </ui-empty-state>
-          } @else if (current.view === 'grid') {
+              <ui-icon
+                [name]="current.view === 'grid' ? 'list' : 'grid'"
+                [size]="18"
+              />
+            </button>
+          </div>
+          @if (current.view === 'grid') {
             <div class="grid" role="list">
               @for (item of items(); track item.id) {
                 <app-library-card
@@ -395,29 +411,39 @@
             </div>
           } @else {
             <div class="table">
-              <div class="table-head" aria-hidden="true">
-                <span class="col-lead">#</span>
-                <span class="col-title" i18n="@@library.col.title">Título</span>
-                <span class="col-topic" i18n="@@library.col.topic">Acervo</span>
-                <span class="col-status" i18n="@@library.col.status"
+              <div class="table-head">
+                <span class="col-lead">
+                  <span class="number-head" aria-hidden="true">#</span>
+                  @if (selectable().length > 0) {
+                    <input
+                      #selectAllBox
+                      type="checkbox"
+                      class="ui-check select-all"
+                      [checked]="allSelected()"
+                      [attr.aria-label]="selectAllText()"
+                      (change)="toggleAll($event)"
+                    />
+                  }
+                </span>
+                <span class="col-title" aria-hidden="true">{{
+                  selecting() ? selectedText() : titleHead
+                }}</span>
+                <span
+                  class="col-topic"
+                  aria-hidden="true"
+                  i18n="@@library.col.topic"
+                  >Acervo</span
+                >
+                <span
+                  class="col-status"
+                  aria-hidden="true"
+                  i18n="@@library.col.status"
                   >Situação</span
                 >
-                <span class="col-duration"
+                <span class="col-duration" aria-hidden="true"
                   ><ui-icon name="clock" [size]="16"
                 /></span>
               </div>
-              @if (selectable().length > 0) {
-                <label class="select-all">
-                  <input
-                    #selectAllBox
-                    type="checkbox"
-                    class="ui-check"
-                    [checked]="allSelected()"
-                    (change)="toggleAll($event)"
-                  />
-                  {{ selectAllText() }}
-                </label>
-              }
               <div class="rows" role="list">
                 @for (item of items(); track item.id; let index = $index) {
                   <app-library-row
@@ -427,11 +453,11 @@
                     [selected]="selected().has(item.id)"
                     [playing]="playingId() === item.id"
                     [master]="isMaster()"
+                    [phone]="phone()"
                     [paused]="preparations.steps().get(item.id) ?? null"
                     (played)="play(item)"
                     (selectedChange)="select(item, $event)"
                     (acted)="rowAction(item, $event)"
-                    (retried)="retry(item)"
                   />
                   @if (item.tracks.length > 0) {
                     <app-track-group
@@ -463,8 +489,8 @@
             </button>
           }
         }
-      </section>
-    }
+      }
+    </section>
   </div>
 
   @if (selecting()) {

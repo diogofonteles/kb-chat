@@ -42,15 +42,18 @@
 }
 <span class="cells">
   <span class="byline">
-    <app-authorship-badge [mediaAuthor]="item().author" />
+    <span class="author">{{ authorName() }}</span>
     <app-media-level-badge [level]="item().level" [shown]="master()" />
   </span>
   <span class="topic">{{ topicTitle() }}</span>
   <span class="status">
     @if (status()) {
-      <ui-pill [tone]="item().status === 'failed' ? 'err' : 'info'">{{
-        status()
-      }}</ui-pill>
+      <ui-pill
+        [tone]="item().status === 'failed' ? 'err' : 'info'"
+        [attr.title]="status()"
+        >{{ statusWord()
+        }}<span class="visually-hidden">{{ statusRest() }}</span></ui-pill
+      >
     }
     @if (resume()) {
       <ui-progress class="position" [value]="percent() / 100" />
@@ -60,17 +63,6 @@
     }
     @if (paused(); as step) {
       <app-preparation-entry [mediaId]="item().id" [step]="step" />
-    }
-    @if (master() && item().canRetry) {
-      <button
-        type="button"
-        uiButton="outline"
-        size="sm"
-        (click)="retried.emit()"
-        i18n="@@media.retry"
-      >
-        Tentar de novo
-      </button>
     }
   </span>
   <span class="duration">{{ duration() }}</span>

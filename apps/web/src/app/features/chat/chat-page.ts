@@ -1,4 +1,9 @@
-import { DOCUMENT, DecimalPipe, NgComponentOutlet } from '@angular/common';
+import {
+  DOCUMENT,
+  DecimalPipe,
+  NgComponentOutlet,
+  NgTemplateOutlet,
+} from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -19,7 +24,12 @@ import {
   toObservable,
   toSignal,
 } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import {
+  NavigationEnd,
+  Router,
+  RouterLink,
+  RouterOutlet,
+} from '@angular/router';
 import { Subject, filter, from, map, of, switchMap, take } from 'rxjs';
 import { suggestionListSchema } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
@@ -58,6 +68,7 @@ import { MediaEngine } from '@core/media/media-engine.js';
 import { AudioPresence } from '@features/shell/audio-presence.js';
 import { BottomNav, navTabs, type NavTab } from '@features/shell/bottom-nav.js';
 import { RightPanel } from '@features/shell/right-panel.js';
+import { PageHeader } from '@features/shell/page-header.js';
 import { TopBar } from '@features/shell/top-bar.js';
 import { hasLibrary } from '@features/media/library/library-access.js';
 import { UiAvatar } from '@ui/avatar.js';
@@ -99,6 +110,8 @@ const isMediaUrl = (url: string): boolean =>
     TopBar,
     BottomNav,
     NgComponentOutlet,
+    NgTemplateOutlet,
+    RouterLink,
     UiAvatar,
     UiIcon,
     UiIconButton,
@@ -141,6 +154,8 @@ export class ChatPage {
   protected readonly desktop = signal(this.matchesDesktop());
 
   private readonly collectionHeading = inject(CollectionHeading);
+  /** A page with its own header (the library, a collection's album page): see PageHeader. */
+  protected readonly ownHeader = inject(PageHeader).current;
   /** Spoken from here: the page and the sidebar come and go, the layout stays. */
   protected readonly queue = inject(ProcessingQueueStore);
   /** The v2 audio rule (KBC-125 BR-2). */

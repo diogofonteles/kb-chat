@@ -59,8 +59,22 @@
       [attr.inert]="covered() ? '' : null"
     >
       <p class="visually-hidden" aria-live="polite">{{ queue.said() }}</p>
-      <header #pageHeader class="topbar">
-        @if (!desktop()) {
+      <header
+        #pageHeader
+        class="topbar"
+        [class.own]="ownHeader() !== null"
+        [hidden]="desktop() && ownHeader() !== null"
+      >
+        @if (!desktop() && ownHeader()?.back; as back) {
+          <a
+            class="menu back"
+            [routerLink]="back"
+            aria-label="Voltar"
+            i18n-aria-label="@@page.back"
+          >
+            <ui-icon name="chevLeft" [size]="26" />
+          </a>
+        } @else if (!desktop()) {
           <button
             #menuButton
             type="button"
@@ -77,7 +91,14 @@
             />
           </button>
         }
-        @if (topic(); as current) {
+        @if (ownHeader(); as own) {
+          <h1 class="topic own-title">{{ own.title }}</h1>
+          @if (own.actions; as actions) {
+            <div class="own-actions">
+              <ng-container [ngTemplateOutlet]="actions" />
+            </div>
+          }
+        } @else if (topic(); as current) {
           <h1 class="topic">
             {{ current.title }}
             <span class="count"
