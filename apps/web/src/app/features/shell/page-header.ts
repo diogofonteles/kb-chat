@@ -16,6 +16,8 @@ export interface OwnPageHeader {
   readonly back: string | null;
   /** The page's icon buttons at the end of the phone's top row (search, upload). */
   readonly actions: TemplateRef<unknown> | null;
+  /** The colour its own gradient starts from: the phone's top row takes it (no seam). */
+  readonly tint?: string | null;
 }
 
 /**

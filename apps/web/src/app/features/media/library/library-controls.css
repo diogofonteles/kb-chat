@@ -28,6 +28,11 @@
 }
 
 @media (max-width: 1023px) {
+  /* The row never widens the page: it scrolls inside the screen's width. */
+  :host {
+    min-width: 0;
+  }
+
   /* One row that runs on past the screen's edge, as in media-library@mobile: what is off
      the edge comes in with a swipe, and the focus brings a chip into view (keyboard). */
   .chips {

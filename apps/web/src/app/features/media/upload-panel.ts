@@ -78,7 +78,6 @@ import { planShare, sameChoices } from './preparation/plan-choices.js';
 import { PlanForm } from './preparation/plan-form.js';
 import { usdUpText } from './preparation/preparation-labels.js';
 import { PreparationOptions } from './preparation/preparation-options.js';
-import { PreparationSteps } from './preparation/preparation-steps.js';
 import {
   UploadEntries,
   type PlannedLength,
@@ -108,7 +107,6 @@ const FILES_AT_ONCE = 3;
     AuthorCombobox,
     LevelField,
     PreparationOptions,
-    PreparationSteps,
     UiButton,
     UiIcon,
     UiIconButton,

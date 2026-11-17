@@ -22,6 +22,7 @@ import {
 } from '../transcribe-with-groq.js';
 import { ProcessingQueueStore } from './processing-queue-store.js';
 import { queueStateText } from './queue-labels.js';
+import { STAGE_NAMES } from '../preparation/preparation-labels.js';
 
 /** How many audios the block shows; the page has the rest. */
 const SHOWN = 3;
@@ -319,7 +320,7 @@ export class QueueSummary {
         return {
           id: item.mediaId,
           title: item.title,
-          state: queueStateText(item),
+          state: cardStateOf(item, this.store.queue()?.transcriber ?? null),
           pill,
           tone,
           link: linkOf(item, this.canEdit()),
@@ -393,6 +394,26 @@ function partsOf(items: readonly ProcessingQueueItem[]): string[] {
   ].filter((part): part is string => typeof part === 'string');
 }
 
+/**
+ * The card's second line, short (media-library "Precisa da sua atenção": "Falta validar as
+ * faixas", "Falhou · conversão", "Aguardando · transcritor desligado"); the queue page keeps
+ * the long words (queueStateText).
+ */
+function cardStateOf(
+  item: ProcessingQueueItem,
+  transcriber: string | null,
+): string {
+  if (item.state === 'failed' && item.stage)
+    return STAGE_NAMES[item.stage]().toLocaleLowerCase('pt-BR');
+  if (item.waitsForTranscriber)
+    return transcriber === 'off'
+      ? $localize`:@@queue.card.transcriberOff:transcritor desligado`
+      : $localize`:@@queue.card.transcriberQueue:na fila do transcritor`;
+  if (item.action === 'validate')
+    return $localize`:@@queue.card.validate:Falta validar as faixas`;
+  return queueStateText(item);
+}
+
 /** The state in a word, its tone backing it (never the colour alone). */
 function pillOf(item: ProcessingQueueItem): {
   readonly pill: string;
@@ -402,11 +423,6 @@ function pillOf(item: ProcessingQueueItem): {
     return { pill: $localize`:@@queue.pill.failed:Falhou`, tone: 'err' };
   if (item.waitsForTranscriber)
     return { pill: $localize`:@@queue.pill.waiting:Aguardando`, tone: 'warn' };
-  if (item.action === 'validate')
-    return {
-      pill: $localize`:@@queue.pill.validate:Para validar`,
-      tone: 'info',
-    };
   if (item.phase === 'running')
     return {
       pill: $localize`:@@queue.pill.running:Em processamento`,

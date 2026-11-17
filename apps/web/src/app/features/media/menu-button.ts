@@ -12,6 +12,7 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
+import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import type { IconName } from '@ui/icons.js';
 import { UiOverlay, outsideBox, type OverlayAlign } from '@ui/overlay.js';
@@ -49,7 +50,7 @@ const SHEET_BELOW_PX = 1024;
  */
 @Component({
   selector: 'app-menu-button',
-  imports: [UiIcon, UiOverlay],
+  imports: [UiCover, UiIcon, UiOverlay],
   template: `
     <button
       #trigger
@@ -79,6 +80,19 @@ const SHEET_BELOW_PX = 1024;
         (keydown)="onMenuKey($event)"
         (focusout)="onFocusOut($event)"
       >
+        <!-- The sheet's handle and, for a media, what it is (media-library-row-menu@mobile). -->
+        <span class="handle" aria-hidden="true"></span>
+        @if (sheetTitle(); as title) {
+          <div class="sheet-head" aria-hidden="true">
+            <ui-cover [title]="title" [size]="48" />
+            <span class="sheet-words">
+              <span class="sheet-title">{{ title }}</span>
+              @if (sheetMeta(); as meta) {
+                <span class="sheet-meta">{{ meta }}</span>
+              }
+            </span>
+          </div>
+        }
         @for (group of groups(); track $index) {
           <div
             class="group"
@@ -145,6 +159,10 @@ export class MenuButton {
   readonly align = input<OverlayAlign>('end');
   /** A chip that opens a menu (v2 · Componentes › Chip with ▾), as in a row of filters. */
   readonly look = input<'plain' | 'chip'>('plain');
+  /** On a phone's sheet, the item it is about: its cover and title over the items. */
+  readonly sheetTitle = input('');
+  /** Under that title ("Irmã Helena Prado · Alquimia Prática"). */
+  readonly sheetMeta = input('');
   readonly chosen = output<string>();
 
   protected readonly sheetBelow = SHEET_BELOW_PX;

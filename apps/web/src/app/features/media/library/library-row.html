@@ -72,6 +72,8 @@
     <app-menu-button
       [label]="menuLabel()"
       [options]="options()"
+      [sheetTitle]="item().title"
+      [sheetMeta]="sheetMeta()"
       (chosen)="choose($event)"
     >
       <ui-icon name="more" [size]="18" />

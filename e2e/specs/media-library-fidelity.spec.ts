@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import type {
   APIRequestContext,
@@ -12,11 +13,14 @@ import {
   WEB_ORIGIN,
   expect,
   fakeGoogle,
+  invite,
   ownerApi,
   signIn,
   test,
+  uniqueEmail,
 } from './fixtures.js';
 import { makeMp3, uniqueTag } from './media-helpers.js';
+import { approve, audioWithTracks } from './tracks-helpers.js';
 
 /**
  * KBC-128 fidelity: the library and a collection's album page put in the states of the
@@ -78,12 +82,15 @@ async function shoot(page: Page, id: string, width: Width): Promise<void> {
     content:
       '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}',
   });
-  // The frames show the top of the page.
-  await page.evaluate(() =>
-    document.querySelectorAll('*').forEach((node) => {
-      if (node.scrollTop > 0) node.scrollTop = 0;
-    }),
-  );
+  // The frames show the top of the page (twice: a finger's fling may still be moving it).
+  for (let i = 0; i < 2; i += 1) {
+    await page.evaluate(() =>
+      document.querySelectorAll('*').forEach((node) => {
+        if (node.scrollTop > 0) node.scrollTop = 0;
+      }),
+    );
+    await page.waitForTimeout(400);
+  }
   await page.mouse.move(1, 1);
   await page.waitForTimeout(150);
   await page.screenshot({
@@ -98,7 +105,20 @@ interface Seeded {
   readonly topicTitle: string;
   readonly empty: string;
   readonly ids: Record<string, string>;
+  /** The bytes of "Conversa sobre os sete princípios": sent again, it is a repeated file. */
+  readonly repeated: string;
+  /** The recording cut in three tracks (media-library-tracks, -remove-tracks). */
+  readonly recording: string;
+  /** Who has "Ouvir mídia" without the library: /midia is their album page (media-list). */
+  readonly lister: string;
+  /** The same, on the empty collection (media-list-empty). */
+  readonly emptyLister: string;
+  /** The library on the empty collection only, reading / sending (media-library-empty-*). */
+  readonly emptyReader: string;
+  readonly emptyUploader: string;
 }
+
+const RECORDING = 'Perguntas e respostas de 2019';
 
 const TITLES = [
   'Entrevista sobre a Tábua de Esmeralda',
@@ -109,7 +129,7 @@ const TITLES = [
   'Aula para preparar',
   'Roda de perguntas para validar',
   'Gravação ruidosa do encontro',
-  'Perguntas e respostas de 2019',
+  'Perguntas sobre o vegetal',
   'Aula sobre o mercúrio dos sábios',
   'Conversa sobre a Lei do Ritmo',
   'Leitura da Tábua em voz alta',
@@ -127,7 +147,14 @@ async function upload(
   const body =
     bytes ?? readFileSync(makeMp3(title.replace(/\W+/g, '-'), seconds));
   const created = await api.post(`/api/v1/topics/${topic}/media`, {
-    data: { title, author, fileName: 'aula.mp3', bytes: body.length },
+    data: {
+      title,
+      author,
+      fileName: 'aula.mp3',
+      bytes: body.length,
+      // Its hash, as the browser sends it: the same file again is a repeated one (BR-2).
+      sha256: createHash('sha256').update(body).digest('hex'),
+    },
     headers: CSRF,
   });
   expect(created.status(), await created.text()).toBe(201);
@@ -179,6 +206,7 @@ async function seed(): Promise<Seeded> {
   expect(author.status(), await author.text()).toBeLessThan(300);
   const helena = ((await author.json()) as { slug: string }).slug;
   const ids: Record<string, string> = {};
+  const repeated = makeMp3(`repetida-${tag}`, 20);
   ids['Arquivo corrompido da reunião'] = await upload(
     owner,
     topic,
@@ -195,21 +223,75 @@ async function seed(): Promise<Seeded> {
       topic,
       title,
       HELENA.has(n) ? helena : null,
-      [6, 3, 2, 2, 2, 4, 4, 2, 5, 3, 3, 2][n] ?? 3,
+      [60, 28, 20, 16, 20, 4, 4, 12, 5, 3, 3, 2][n] ?? 3,
+      n === 2 ? readFileSync(repeated) : undefined,
     );
   }
+  // A recording cut in three tracks, approved and published (KBC-068).
+  const cut = await audioWithTracks(owner, undefined, topic);
+  await approve(owner, cut.id);
+  await expect
+    .poll(
+      async () =>
+        (
+          (await (await owner.get(`/api/v1/media/${cut.id}/edit`)).json()) as {
+            preparation: unknown;
+          }
+        ).preparation,
+      { timeout: 60_000 },
+    )
+    .toBeNull();
+  const renamed = await owner.patch(`/api/v1/media/${cut.id}`, {
+    data: { title: RECORDING },
+    headers: CSRF,
+  });
+  expect(renamed.status(), await renamed.text()).toBe(200);
+  const person = async (label: string, topics: string[], features: string[]) => {
+    const email = uniqueEmail(label);
+    await invite(owner, email, { topics, features });
+    return email;
+  };
+  const listing = ['search', 'media', 'media-upload', 'media-edit'];
+  const lister = await person('lista', [topic], listing);
+  const emptyLister = await person('lista-vazia', [empty], listing);
+  const emptyReader = await person('leitor-vazio', [empty], [
+    'search',
+    'media',
+    'media-library',
+  ]);
+  const emptyUploader = await person('envia-vazio', [empty], [
+    'search',
+    'media',
+    'media-library',
+    'media-upload',
+  ]);
   for (const id of Object.values(ids)) await settled(owner, id);
   await owner.dispose();
-  seeded = { topic, topicTitle, empty, ids };
+  seeded = {
+    topic,
+    topicTitle,
+    empty,
+    ids,
+    repeated,
+    recording: cut.id,
+    lister,
+    emptyLister,
+    emptyReader,
+    emptyUploader,
+  };
   return seeded;
 }
 
 /** Where each of the first three stopped, as the player saves it (Continuar ouvindo). */
+const progressed = new Set<string>();
 async function inProgress(page: Page, data: Seeded): Promise<void> {
+  // Once per seed: a second save based on nothing is "another device" (409).
+  if (progressed.has(data.topic)) return;
+  progressed.add(data.topic);
   for (const [title, ms] of [
-    [TITLES[2], 900],
-    [TITLES[1], 1_300],
-    [TITLES[0], 2_200],
+    [TITLES[2], 9_000],
+    [TITLES[1], 12_000],
+    [TITLES[0], 22_000],
   ] as const) {
     const saved = await page.request.put(
       `/api/v1/media/${data.ids[title]}/progress`,
@@ -307,12 +389,7 @@ async function playFirst(page: Page, width: Width): Promise<void> {
       page.getByRole('complementary', { name: 'Tocando agora' }),
     ).toBeVisible();
   }
-  // Paused, so the frame stays still; the source and the panel stay.
-  await page.evaluate(() =>
-    document.querySelectorAll('audio,video').forEach((media) => {
-      (media as HTMLMediaElement).pause();
-    }),
-  );
+  // It keeps playing (muted), as in the frame: the row green, ⏸ in the mini-player.
 }
 
 /* ------------------------------------------------- scrolling, for real */
@@ -371,8 +448,11 @@ async function expectScrolls(
   });
   await page.keyboard.press('End');
   await expect.poll(() => scrollTopOf(scroller)).toBeGreaterThan(100);
+  // The end may bring the next page in: the keys go to the list's box again.
+  await scroller.evaluate((node) => node.focus());
   await page.keyboard.press('Home');
   await expect.poll(() => scrollTopOf(scroller)).toBeLessThan(5);
+  await scroller.evaluate((node) => node.focus());
   await page.keyboard.press('PageDown');
   await expect.poll(() => scrollTopOf(scroller)).toBeGreaterThan(100);
   await scroller.evaluate((node) => node.removeAttribute('tabindex'));
@@ -392,6 +472,21 @@ async function expectScrolls(
     await cdp.detach();
   }
   await scroller.evaluate((node) => node.scrollTo({ top: 0 }));
+}
+
+/** Nothing runs past the screen's side: the page scrolls only up and down (phone). */
+async function expectNoSideScroll(page: Page): Promise<void> {
+  const wide = await page.evaluate(() =>
+    ['app-library-page', 'app-media-list-page', 'main']
+      .map((selector) => document.querySelector(selector))
+      .filter((node): node is Element => node !== null)
+      .filter((node) => node.scrollWidth > node.clientWidth + 1)
+      .map((node) => `${node.tagName} ${node.scrollWidth}>${node.clientWidth}`),
+  );
+  expect(wide, 'no horizontal overflow').toEqual([]);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
 }
 
 /** The box whole on the screen and on top at its centre (owner rule 1: never clipped). */
@@ -458,6 +553,7 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
         page.getByRole('group', { name: 'Filtros' }).getByRole('button', { name, exact: true }),
       ).toBeVisible();
 
+    if (phone) await expectNoSideScroll(page);
     // It scrolls.
     const scroller = await scrollerOf(rows(page).first());
     await expectScrolls(page, scroller, width, browserName);
@@ -516,7 +612,7 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
     await expect(rows(page)).toHaveCount(HELENA.size);
     await shoot(page, 'media-library-author', width);
     await filters.getByRole('button', { name: /Tirar o filtro de autoria/ }).click();
-    await expect(rows(page)).toHaveCount(TITLES.length + 1);
+    await expect(rows(page)).toHaveCount(TITLES.length + 2);
     await context.close();
   }
 });
@@ -528,6 +624,7 @@ test('the ⋯ of a row, the selection and the dialogs (row-menu, selection, edit
   const data = await seed();
   for (const width of WIDTHS) {
     const { context, page } = await contextAt(browser, width);
+    await attention(page, data);
     await openLibrary(page, data);
     const phone = width === 'phone';
     const row = rowNamed(page, TITLES[1]);
@@ -612,6 +709,7 @@ test('the search, with and without results, and the empty library (search, searc
     await expect(
       page.locator('app-library-search-results').getByRole('listitem'),
     ).not.toHaveCount(0);
+    if (phone) await expectNoSideScroll(page);
     await shoot(page, 'media-library-search', width);
     await search.fill('xilofone');
     await expect(page.getByText('Nada encontrado para “xilofone”')).toBeVisible();
@@ -623,31 +721,255 @@ test('the search, with and without results, and the empty library (search, searc
     await page.goto(`/biblioteca?acervo=${data.empty}`);
     await expect(page.getByText('Nenhuma mídia neste acervo')).toBeVisible();
     await shoot(page, 'media-library-collection-empty', width);
-    await page.getByRole('button', { name: 'Ver todos os acervos' }).click();
+    await page
+      .getByRole('button', { name: 'Ver todos os acervos', exact: true })
+      .click();
     await expect(rows(page).first()).toBeVisible();
     await context.close();
   }
 });
 
-test('/midia is the collection as an album (media-list)', async ({ browser }) => {
+test('a recording opens its tracks, and removing it names them (tracks, remove-tracks)', async ({
+  browser,
+}) => {
   skipRepeats();
   const data = await seed();
   for (const width of WIDTHS) {
     const { context, page } = await contextAt(browser, width);
-    await page.goto(`/biblioteca?acervo=${data.topic}`);
-    await expect(rows(page).first()).toBeVisible();
-    await page.goto('/midia');
-    await expect(page.getByRole('link', { name: TITLES[0] }).first()).toBeVisible();
-    const scroller = await scrollerOf(page.getByRole('link', { name: TITLES[0] }).first());
-    await expect
-      .poll(() => scroller.evaluate((node) => node.scrollHeight > node.clientHeight))
-      .toBe(true);
-    await page.mouse.move(700, 600);
-    await page.mouse.wheel(0, 500);
-    await expect.poll(() => scrollTopOf(scroller)).toBeGreaterThan(50);
-    await scroller.evaluate((node) => node.scrollTo({ top: 0 }));
-    await shoot(page, 'media-list', width);
+    await openLibrary(page, data);
+    // Its tracks are rows of their own too, naming it: the recording is the row of its ⋯.
+    const more = page.getByRole('button', { name: `Mais ações para ${RECORDING}` });
+    const recording = more.locator('xpath=ancestor::app-library-row[1]');
+    const toggle = page.getByRole('button', { name: '3 faixas' });
+    await toggle.scrollIntoViewIfNeeded();
+    await toggle.click();
+    const tracks = page.getByRole('list', { name: `Faixas de ${RECORDING}` });
+    await expect(tracks.getByRole('listitem')).toHaveCount(3);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await shoot(page, 'media-library-tracks', width);
+
+    // The first "Remover" is refused while tracks hang on it (KBC-068): the dialog comes
+    // back naming them; Cancelar keeps everything.
+    await recording.hover();
+    await more.click();
+    await page.getByRole('menuitem', { name: 'Remover' }).click();
+    const remove = page.getByRole('dialog', { name: `Remover "${RECORDING}"?` });
+    await remove.getByRole('button', { name: 'Remover' }).click();
+    await expect(remove.getByRole('alert')).toContainText(
+      'Também remove 3 faixas: Primeira pergunta, Segunda pergunta, Terceira pergunta',
+    );
+    await expectWholeOnTop(page, remove);
+    await shoot(page, 'media-library-remove-tracks', width);
+    await remove.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(remove).toHaveCount(0);
+    await expect(recording).toHaveCount(1);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await context.close();
+  }
+});
+
+test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sending (media-upload-*)', async ({
+  browser,
+}) => {
+  skipRepeats();
+  const data = await seed();
+  for (const width of WIDTHS) {
+    const { context, page } = await contextAt(browser, width);
+    await openLibrary(page, data);
+    const phone = width === 'phone';
+    const open = async () => {
+      await page.getByRole('button', { name: 'Enviar mídia' }).first().click();
+      const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
+      await expectWholeOnTop(page, dialog);
+      return dialog;
+    };
+    let dialog = await open();
+    const input = dialog.locator('input[type="file"]');
+    const send = dialog.getByRole('button', { name: 'Enviar', exact: true });
+    await expect(dialog.getByText(/mp3, m4a, wav, flac, ogg ou opus/)).toBeVisible();
+    await shoot(page, 'media-upload', width);
+    // Nothing chosen: "Enviar" says what is missing, and the panel stays.
+    await send.click();
+    await expect(dialog.getByRole('alert')).toContainText('Escolha um arquivo de áudio.');
+
+    await input.setInputFiles(makeMp3(`Palestra sobre o mercúrio dos sábios ${uniqueTag()}`, 4));
+    await expect(dialog.getByRole('textbox', { name: 'Título' })).toBeVisible();
+    await expect(send).toBeEnabled();
+    await shoot(page, 'media-upload-chosen', width);
+    await dialog.getByRole('button', { name: /^Tirar/ }).first().click();
+    await expect(dialog.getByRole('textbox', { name: 'Título' })).toHaveCount(0);
+
+    await input.setInputFiles({
+      name: 'Conversa sobre os sete princípios.mp3',
+      mimeType: 'audio/mpeg',
+      buffer: readFileSync(data.repeated),
+    });
+    await dialog
+      .getByRole('combobox', { name: 'Acervo' })
+      .selectOption(data.topic);
+    await expect(dialog.getByText('Já está no acervo:')).toBeVisible();
+    await shoot(page, 'media-upload-duplicate', width);
+    await dialog.getByRole('button', { name: /^Tirar/ }).first().click();
+
+    await input.setInputFiles({
+      name: 'apostila.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4'),
+    });
+    await expect(
+      dialog.getByRole('alert').filter({ hasText: 'não é um áudio aceito' }),
+    ).toBeVisible();
+    await shoot(page, 'media-upload-bad-type', width);
+    await dialog.getByRole('button', { name: /^Tirar/ }).first().click();
+
+    // Sending: the file's parts wait on the network, so it stays at 0 %.
+    await page.route('**/api/v1/media/*/upload', (route) =>
+      route.request().method() === 'PATCH' ? undefined : route.continue(),
+    );
+    await input.setInputFiles(makeMp3(`Envio parado ${uniqueTag()}`, 4));
+    await send.click();
+    await expect(dialog.getByText(/Enviando/).first()).toBeVisible();
+    await shoot(page, 'media-upload-sending', width);
+    await page.unroute('**/api/v1/media/*/upload');
+    await dialog.getByRole('button', { name: /Cancelar envio/ }).first().click();
+    if (await dialog.isVisible())
+      await dialog.getByRole('button', { name: /^Cancelar|Fechar/ }).first().click();
+    await expect(dialog).toHaveCount(0);
+
+    // Escape closes it, and the focus goes back to where it came from.
+    dialog = await open();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    if (!phone)
+      await expect(page.getByRole('button', { name: 'Enviar mídia' }).first()).toBeFocused();
+    await context.close();
+  }
+});
+
+test('an empty library, for who reads and for who sends (media-library-empty-*)', async ({
+  browser,
+}) => {
+  skipRepeats();
+  const data = await seed();
+  for (const width of WIDTHS) {
+    for (const [email, id, title] of [
+      [data.emptyReader, 'media-library-empty-reader', 'Ainda não há mídias para você'],
+      [data.emptyUploader, 'media-library-empty-uploader', 'Comece enviando um áudio'],
+    ] as const) {
+      const { context, page } = await contextAt(browser, width, email);
+      await page.goto('/biblioteca');
+      await expect(page.getByText(title, { exact: true })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Precisa da sua atenção' })).toHaveCount(0);
+      await shoot(page, id, width);
+      if (id === 'media-library-empty-uploader') {
+        await page.getByRole('main').getByRole('button', { name: 'Enviar mídia' }).last().click();
+        const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
+        await expectWholeOnTop(page, dialog);
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+      } else {
+        await expect(page.getByRole('button', { name: 'Enviar mídia' })).toHaveCount(0);
+      }
+      await context.close();
+    }
+  }
+});
+
+test('/midia is the collection as an album, for who has no library (media-list-*)', async ({
+  browser,
+  browserName,
+}) => {
+  skipRepeats();
+  const data = await seed();
+  for (const width of WIDTHS) {
+    const phone = width === 'phone';
+    const { context, page } = await contextAt(browser, width, data.lister);
+    await page.goto('/midia');
+    const first = page.getByRole('link', { name: TITLES[0] });
+    await expect(first).toBeVisible();
+    await expect(page.getByRole('heading', { name: `Acervo — ${data.topicTitle}` })).toBeAttached();
+    if (phone) {
+      await expect(
+        page.locator('header.topbar').getByRole('heading', { name: data.topicTitle }),
+      ).toBeVisible();
+      for (const name of ['Todas', 'Em andamento', 'Não ouvidas'])
+        await expect(
+          page.getByRole('group', { name: 'Filtros' }).getByRole('button', { name, exact: true }),
+        ).toBeVisible();
+    } else {
+      for (const name of ['Tocar a primeira da lista', 'Tocar em ordem aleatória', 'Enviar áudio', 'Mais ações do acervo'])
+        await expect(page.getByRole('button', { name }).first()).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Meus marcadores' }).first()).toBeVisible();
+      await expect(page.getByRole('searchbox', { name: 'Filtrar por título' })).toBeVisible();
+    }
+    if (phone) await expectNoSideScroll(page);
+    // It scrolls, with the wheel, the keyboard and a finger.
+    const scroller = await scrollerOf(first);
+    await expectScrolls(page, scroller, width, browserName);
+    await shoot(page, 'media-list', width);
+
+    // The ⋯ of an audio: whole on the screen, Escape closes it.
+    const more = page.getByRole('button', { name: `Mais ações para ${TITLES[3]}` });
+    await more.scrollIntoViewIfNeeded();
+    await more.click();
+    const menu = page.getByRole('menu');
+    await expectWholeOnTop(page, menu);
+    await expect(menu.getByRole('menuitem')).toHaveText(
+      phone ? ['Compartilhar'] : ['Tocar agora', 'Copiar link'],
+    );
+    await shoot(page, 'media-list-menu', width);
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    if (!phone) {
+      await more.click();
+      await page.getByRole('menuitem', { name: 'Tocar agora' }).click();
+      await expect(page.locator('li.row.playing')).toContainText(TITLES[3]);
+    }
+
+    // The title filter, with nothing found: "Limpar filtro" brings the list back.
+    if (phone) await page.getByRole('button', { name: 'Filtrar por título' }).click();
+    const filter = page.getByRole('searchbox', { name: 'Filtrar por título' });
+    await expect(filter).toBeVisible();
+    await filter.fill('xilofone');
+    await expect(page.getByText('Nenhum áudio com “xilofone” no título')).toBeVisible();
+    await shoot(page, 'media-list-filter-empty', width);
+    await page.getByRole('button', { name: 'Limpar filtro' }).click();
+    await expect(first).toBeVisible();
+
+    // "Em andamento" on a phone; "Autoria" everywhere.
+    if (phone) {
+      const chips = page.getByRole('group', { name: 'Filtros' });
+      await chips.getByRole('button', { name: 'Não ouvidas' }).click();
+      await expect(page.getByRole('link', { name: TITLES[0] })).toHaveCount(1);
+      await chips.getByRole('button', { name: 'Todas', exact: true }).click();
+    }
+    await page.getByRole('button', { name: 'Autoria' }).first().click();
+    const authors = page.getByRole('menu', { name: 'Autoria' });
+    await expectWholeOnTop(page, authors);
+    await authors.getByRole('menuitemradio', { name: /Irmã Helena Prado/ }).click();
+    await expect(page.locator('li.row')).toHaveCount(HELENA.size);
+    await page.getByRole('button', { name: /Tirar o filtro de autoria/ }).first().click();
+    await expect(page.locator('li.row')).toHaveCount(TITLES.length + 2);
+
+    // "Enviar áudio" opens the panel, Escape closes it.
+    if (phone) await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
+    else await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
+    await expectWholeOnTop(page, dialog);
+    await shoot(page, 'media-list-upload', width);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await context.close();
+
+    // A collection with nothing yet.
+    const empty = await contextAt(browser, width, data.emptyLister);
+    await empty.page.goto('/midia');
+    await expect(empty.page.getByText('Ainda não há áudios neste acervo')).toBeVisible();
+    await shoot(empty.page, 'media-list-empty', width);
+    await empty.page.getByRole('main').getByRole('button', { name: 'Enviar áudio' }).last().click();
+    await expect(empty.page.getByRole('dialog', { name: 'Enviar áudio' })).toBeVisible();
+    await empty.context.close();
   }
 });
 

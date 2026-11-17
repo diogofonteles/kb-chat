@@ -207,6 +207,16 @@
   margin-left: auto;
 }
 
+/* A page with its own header and colour (the library, a collection's album page) paints its
+   own gradient from the top: on a phone the top row is its first band, with no seam. */
+.conversation.own-header {
+  background: var(--color-bg);
+}
+
+.conversation.own-header .topbar.own {
+  background: color-mix(in srgb, var(--own-tint) 70%, transparent);
+}
+
 .menu.back {
   color: var(--color-text);
 }

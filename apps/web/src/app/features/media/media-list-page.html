@@ -13,20 +13,45 @@
         tabindex="-1"
         [attr.aria-label]="headingText()"
       >
-        <span class="ui-page-header__kicker kicker" i18n="@@media.title"
-          >Mídia</span
+        <span class="ui-page-header__kicker kicker" i18n="@@media.kicker"
+          >Acervo</span
         >
         @if (topic(); as current) {
           <span class="ui-page-header__title name">{{ current.title }}</span>
         }
       </h2>
-      @if (list.hasValue() && items().length > 0) {
-        <p class="ui-page-header__meta summary">{{ summary() }}</p>
+      @if (list.hasValue()) {
+        <p class="ui-page-header__meta summary">{{ headerMeta() }}</p>
       }
     </div>
   </header>
 
+  <!-- The frame's action bar (media-list): ▶, shuffle, "Enviar áudio", "Meus marcadores", ⋯,
+       then the title filter and "Autoria ▾" at the end. -->
   <div class="ui-action-bar actions-bar">
+    <button
+      type="button"
+      uiIconButton="play"
+      class="play-all"
+      [size]="56"
+      [disabled]="!firstPlayable()"
+      [attr.aria-label]="playAllLabel()"
+      (click)="playAll()"
+    >
+      <ui-icon [name]="listPlaying() ? 'pause' : 'play'" [size]="24" />
+    </button>
+    <button
+      type="button"
+      uiIconButton
+      class="bar-icon"
+      [size]="40"
+      [disabled]="!firstPlayable()"
+      aria-label="Tocar em ordem aleatória"
+      i18n-aria-label="@@library.shuffle"
+      (click)="playAny()"
+    >
+      <ui-icon name="shuffle" [size]="28" />
+    </button>
     @if (canUpload() && topic()) {
       <button
         type="button"
@@ -43,50 +68,99 @@
       <ui-icon name="bookmark" [size]="16" />
       <span i18n="@@bookmarks.mine">Meus marcadores</span>
     </a>
-    @if (showFilter() || showAuthorFilter()) {
-      <div class="filters">
-        @if (showFilter()) {
-          <label class="ui-search filter">
-            <ui-icon name="search" [size]="18" />
-            <span class="visually-hidden" i18n="@@media.filter"
-              >Filtrar por título</span
-            >
-            <input
-              type="search"
-              autocomplete="off"
-              placeholder="Filtrar por título"
-              i18n-placeholder="@@media.filter"
-              [value]="query()"
-              (input)="filterBy($event)"
-            />
-          </label>
-        }
-        @if (showAuthorFilter()) {
-          <label class="choice" [class.on]="author() !== ''">
-            <span class="label" i18n="@@media.authorFilter">Autoria</span>
-            <select (change)="filterByAuthor($event)">
-              <option
-                value=""
-                [selected]="author() === ''"
-                i18n="@@authorship.all"
-              >
-                Todos
-              </option>
-              @for (option of authorOptions(); track option.value) {
-                <option
-                  [value]="option.value"
-                  [selected]="author() === option.value"
-                >
-                  {{ option.label }} ({{ option.count }})
-                </option>
-              }
-            </select>
-            <ui-icon class="caret" name="chevDown" [size]="16" />
-          </label>
-        }
-      </div>
+    <app-menu-button
+      class="bar-more"
+      align="start"
+      label="Mais ações do acervo"
+      i18n-label="@@media.moreActionsCollection"
+      [options]="headerOptions()"
+      (chosen)="headerAction($event)"
+    >
+      <ui-icon name="more" [size]="28" />
+    </app-menu-button>
+    <span class="bar-space"></span>
+    @if (showFilter()) {
+      <label class="ui-search filter">
+        <ui-icon name="search" [size]="18" />
+        <span class="visually-hidden" i18n="@@media.filter"
+          >Filtrar por título</span
+        >
+        <input
+          #filterBox
+          type="search"
+          autocomplete="off"
+          placeholder="Filtrar por título"
+          i18n-placeholder="@@media.filter"
+          [value]="query()"
+          (input)="filterBy($event)"
+        />
+      </label>
+    }
+    @if (showAuthorFilter()) {
+      <ng-container [ngTemplateOutlet]="authorChip" />
     }
   </div>
+
+  <!-- The phone's top row holds these (PageHeader): the filter and the upload. -->
+  <ng-template #phoneActions>
+    @if (showFilter()) {
+      <button
+        type="button"
+        uiIconButton
+        class="phone-action"
+        [class.on]="filterOpen() || query() !== ''"
+        [attr.aria-expanded]="filterOpen() || query() !== ''"
+        aria-label="Filtrar por título"
+        i18n-aria-label="@@media.filter"
+        (click)="toggleFilter()"
+      >
+        <ui-icon name="search" [size]="24" />
+      </button>
+    }
+    @if (canUpload() && topic()) {
+      <button
+        type="button"
+        uiIconButton
+        class="phone-action"
+        aria-haspopup="dialog"
+        aria-label="Enviar áudio"
+        i18n-aria-label="@@media.upload.open"
+        (click)="openUpload()"
+      >
+        <ui-icon name="upload" [size]="24" />
+      </button>
+    }
+  </ng-template>
+
+  <ng-template #authorChip>
+    @if (authorName(); as name) {
+      <button
+        type="button"
+        uiChip
+        class="authorship"
+        [selected]="true"
+        [attr.aria-label]="clearAuthorLabel()"
+        (click)="chooseAuthor('')"
+      >
+        {{ name }}
+        <ui-icon name="close" [size]="14" />
+      </button>
+    } @else {
+      <app-menu-button
+        look="chip"
+        kind="choice"
+        align="end"
+        class="authorship"
+        label="Autoria"
+        i18n-label="@@library.authorship"
+        [options]="authorMenu()"
+        (chosen)="chooseAuthor($event)"
+      >
+        <span i18n="@@library.authorship">Autoria</span>
+        <ui-icon name="chevDown" [size]="14" />
+      </app-menu-button>
+    }
+  </ng-template>
 
   <div class="content">
     <p class="sent-elsewhere" role="status">{{ sentElsewhere() }}</p>
@@ -100,6 +174,92 @@
       <p class="error" role="alert">
         <ui-icon name="warn" [size]="16" /> {{ actionError() }}
       </p>
+    }
+
+    <!-- The phone's rows over the list (media-list@mobile): the filter (from 🔍), the chips,
+         the order and the view. -->
+    @if (phone() && items().length > 0) {
+      <div class="phone-tools">
+        @if (filterOpen() || query() !== '') {
+          <label class="ui-search filter phone-filter">
+            <ui-icon name="search" [size]="18" />
+            <span class="visually-hidden" i18n="@@media.filter"
+              >Filtrar por título</span
+            >
+            <input
+              #phoneFilterBox
+              type="search"
+              autocomplete="off"
+              placeholder="Filtrar por título"
+              i18n-placeholder="@@media.filter"
+              [value]="query()"
+              (input)="filterBy($event)"
+            />
+          </label>
+        }
+        <div
+          class="chips"
+          role="group"
+          aria-label="Filtros"
+          i18n-aria-label="@@library.filters"
+        >
+          <button
+            type="button"
+            uiChip
+            [selected]="listening() === null && author() === ''"
+            (click)="showAll()"
+            i18n="@@library.allChip"
+          >
+            Todas
+          </button>
+          <button
+            type="button"
+            uiChip
+            [selected]="listening() === 'in-progress'"
+            (click)="toggleListening('in-progress')"
+          >
+            @if (listening() === 'in-progress') {
+              <ui-icon name="check" [size]="16" />
+            }
+            <span i18n="@@library.state.inProgressChip">Em andamento</span>
+          </button>
+          @if (showAuthorFilter()) {
+            <ng-container [ngTemplateOutlet]="authorChip" />
+          }
+          <button
+            type="button"
+            uiChip
+            [selected]="listening() === 'unheard'"
+            (click)="toggleListening('unheard')"
+          >
+            @if (listening() === 'unheard') {
+              <ui-icon name="check" [size]="16" />
+            }
+            <span i18n="@@library.state.unheardChip">Não ouvidas</span>
+          </button>
+        </div>
+        @if (visible().length > 0) {
+          <div class="phone-sort">
+            <app-library-sort
+              [phone]="true"
+              align="start"
+              [sort]="sort()"
+              [view]="view()"
+              (sortChange)="sort.set($event)"
+              (viewChange)="view.set($event)"
+            />
+            <button
+              type="button"
+              uiIconButton
+              class="phone-view"
+              [attr.aria-label]="viewToggleLabel()"
+              (click)="view.set(view() === 'grid' ? 'list' : 'grid')"
+            >
+              <ui-icon [name]="view() === 'grid' ? 'list' : 'grid'" [size]="18" />
+            </button>
+          </div>
+        }
+      </div>
     }
 
     @if (loadError()) {
@@ -134,8 +294,9 @@
     } @else if (items().length === 0) {
       <ui-empty-state
         icon="upload"
-        title="Ainda não há áudios neste acervo."
+        title="Ainda não há áudios neste acervo"
         i18n-title="@@media.empty"
+        [text]="emptyText()"
       >
         @if (canUpload()) {
           <button type="button" uiButton="primary" (click)="openUpload()">
@@ -145,17 +306,7 @@
         }
       </ui-empty-state>
     } @else if (visible().length === 0) {
-      <div class="empty">
-        <span class="empty-icon"><ui-icon name="search" [size]="32" /></span>
-        @if (query()) {
-          <p class="empty-title" i18n="@@media.filterEmpty">
-            Nenhum áudio com "{{ query() }}" no título.
-          </p>
-        } @else {
-          <p class="empty-title" i18n="@@media.authorFilterEmpty">
-            Nenhum áudio desta autoria.
-          </p>
-        }
+      <ui-empty-state icon="search" [title]="filterEmptyTitle()">
         <button
           type="button"
           uiButton="white"
@@ -164,17 +315,44 @@
         >
           Limpar filtro
         </button>
-      </div>
+      </ui-empty-state>
+    } @else if (phone() && view() === 'grid') {
+      <ul class="grid">
+        @for (item of visible(); track item.id) {
+          <li class="card">
+            <ui-cover
+              [title]="item.title"
+              [size]="171"
+              class="card-art"
+            />
+            @if (item.status === 'ready') {
+              <a class="card-title" [routerLink]="['/midia', item.id]">{{
+                item.title
+              }}</a>
+            } @else {
+              <span class="card-title">{{ item.title }}</span>
+            }
+            <span class="card-meta">{{ authorOf(item) }}</span>
+          </li>
+        }
+      </ul>
     } @else {
       <div class="table-head" aria-hidden="true">
         <span class="col-lead">#</span>
         <span class="col-title" i18n="@@library.col.title">Título</span>
         <span class="col-date" i18n="@@media.col.sent">Enviado em</span>
         <span class="col-status" i18n="@@library.col.status">Situação</span>
+        <span class="col-duration"
+          ><ui-icon name="clock" [size]="16"
+        /></span>
       </div>
       <ul class="rows">
         @for (item of visible(); track item.id; let index = $index) {
-          <li class="row" [class.failed]="item.status === 'failed'">
+          <li
+            class="row"
+            [class.failed]="item.status === 'failed'"
+            [class.playing]="playingId() === item.id"
+          >
             <span class="lead" aria-hidden="true">{{ index + 1 }}</span>
             <ui-cover class="art" [title]="item.title" [size]="52" />
             @if (item.status === 'ready') {
@@ -198,7 +376,7 @@
             }
             <span class="meta">
               <span class="byline">
-                <app-authorship-badge [mediaAuthor]="item.author" />
+                <span class="author">{{ authorOf(item) }}</span>
                 <app-media-level-badge
                   [level]="item.level"
                   [shown]="isMaster()"
@@ -208,56 +386,56 @@
                 item.createdAt | date: 'dd/MM/yyyy'
               }}</span>
               <span class="states">
-                <ui-pill [tone]="statusToneOf(item)" class="status">{{
-                  statusOf(item)
-                }}</ui-pill>
-                @if (transcriptionOf(item); as transcription) {
-                  <span
-                    class="transcription"
-                    [class.low]="
-                      item.transcription.status === 'done' && isLow(item)
-                    "
-                    >{{ transcription }}</span
-                  >
-                }
-                @if (lowNoticeOf(item); as notice) {
-                  <span class="transcription low">{{ notice }}</span>
-                }
-                @if (resumeTextOf(item); as resume) {
-                  <ui-progress
-                    class="position"
-                    [value]="percentOf(item) / 100"
-                  />
-                  <span class="resume">{{ resume }}</span>
-                }
                 @if (preparations.steps().get(item.id); as step) {
                   <app-preparation-entry [mediaId]="item.id" [step]="step" />
+                } @else {
+                  @if (phone() && percentOf(item) > 0) {
+                    <ui-progress
+                      class="position"
+                      [value]="percentOf(item) / 100"
+                    />
+                  }
+                  @if (pillOf(item); as pill) {
+                    <ui-pill [tone]="pill.tone" class="status">{{
+                      pill.text
+                    }}</ui-pill>
+                  }
+                }
+                <!-- The whole of it for a screen reader: the pill says it in a few words. -->
+                @if (detailOf(item); as detail) {
+                  <span class="visually-hidden">{{ detail }}</span>
                 }
               </span>
-              <span class="duration">{{ durationOf(item) }}</span>
+              <span class="duration">{{ durationOf(item) || '—' }}</span>
             </span>
-            @if (isMaster() || item.canEdit) {
-              <span class="actions">
-                @if (item.canRetry) {
-                  <button
-                    type="button"
-                    uiButton="outline"
-                    size="sm"
-                    (click)="retry(item)"
-                    i18n="@@media.retry"
-                  >
-                    Tentar de novo
-                  </button>
-                }
-                <app-row-menu
-                  [label]="menuLabelOf(item)"
-                  [canEdit]="item.canEdit"
-                  [canRemove]="isMaster()"
-                  (editChosen)="openEdit(item)"
-                  (removeChosen)="askRemove(item)"
-                />
-              </span>
-            }
+            <span class="actions">
+              @if (item.canRetry && isMaster()) {
+                <button
+                  type="button"
+                  uiButton="outline"
+                  size="sm"
+                  (click)="retry(item)"
+                  i18n="@@media.retry"
+                >
+                  Tentar de novo
+                </button>
+              }
+              @if (item.status === 'ready' || item.canEdit || isMaster()) {
+              <app-row-menu
+                [label]="menuLabelOf(item)"
+                [canPlay]="item.status === 'ready'"
+                [canEdit]="item.canEdit"
+                [canRemove]="isMaster()"
+                [phone]="phone()"
+                [sheetTitle]="item.title"
+                [sheetMeta]="authorOf(item) + ' · ' + (topic()?.title ?? '')"
+                (playChosen)="play(item)"
+                (linkChosen)="copyLink(item)"
+                (editChosen)="openEdit(item)"
+                (removeChosen)="askRemove(item)"
+              />
+              }
+            </span>
           </li>
         }
       </ul>

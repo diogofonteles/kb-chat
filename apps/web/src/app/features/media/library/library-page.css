@@ -45,6 +45,16 @@
   min-width: 0;
 }
 
+/* The frame's title is 64 at 1440 (pageHeader size 64); the shared hero token reaches 72. */
+.hero .ui-page-header__title {
+  font-size: clamp(2.25rem, 1rem + 3.4vw, 4rem);
+  /* One line, as in the frame; the descenders keep their room under the clip. */
+  padding-bottom: 0.12em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .hero-text h2:focus {
   outline: none;
 }
@@ -588,11 +598,20 @@ ui-empty-state {
     padding: 0 var(--space-4);
   }
 
+  /* No wrap: a wrapping column sizes its line by its widest item (the chips' row), and the
+     search would run past the screen's side. */
   .toolbar {
     flex-direction: column;
+    flex-wrap: nowrap;
     align-items: stretch;
     gap: var(--space-3);
+    min-width: 0;
     padding: 0;
+  }
+
+  /* The chips' row scrolls inside the screen; it never widens the search above it. */
+  .toolbar > * {
+    min-width: 0;
   }
 
   /* The search row opens from the top row's 🔍 (media-library-search@mobile). */

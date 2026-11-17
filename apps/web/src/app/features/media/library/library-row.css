@@ -311,7 +311,8 @@ app-menu-button {
    author and the length (media-library@mobile). The box stays in reach, with no hover. */
 @container library-table (max-width: 36rem) {
   :host {
-    grid-template-columns: 0 3.25rem minmax(0, 1fr) 1.5rem;
+    /* The cover's column holds its 12 px to the title (mRow: cover 52, gap 12). */
+    grid-template-columns: 0 calc(3.25rem + var(--space-3)) minmax(0, 1fr) 1.5rem;
     grid-template-areas:
       'lead art title actions'
       'lead art cells actions';
@@ -321,7 +322,7 @@ app-menu-button {
   }
 
   .art {
-    margin-inline-end: var(--space-3);
+    justify-self: start;
   }
 
   /* No box until a selection starts (from the ⋯): then it leads every row (selection@mobile). */
@@ -335,7 +336,7 @@ app-menu-button {
   }
 
   :host-context(.selecting) .art {
-    margin-inline-end: 0;
+    justify-self: stretch;
   }
 
   :host-context(.selecting) .lead {
@@ -460,9 +461,13 @@ app-menu-button {
     white-space: nowrap;
   }
 
+  /* "Irmã Helena Prado · 1:00": one space each side of the dot, as in the frame. */
+  .duration {
+    margin-inline-start: calc(-1 * var(--space-1));
+  }
+
   .duration::before {
-    content: '·';
-    margin-right: var(--space-2);
+    content: '·\00a0';
   }
 
   .topic:empty {

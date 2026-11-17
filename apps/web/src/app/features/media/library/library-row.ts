@@ -6,6 +6,7 @@ import {
   output,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import {
   listeningStateOf,
   type LibraryItem,
@@ -119,6 +120,15 @@ export class LibraryRow {
   );
   protected readonly selectLabel = computed(
     () => $localize`:@@library.select:Selecionar ${this.item().title}:title:`,
+  );
+  /** The phone's sheet under the title: "Irmã Helena Prado · Alquimia Prática" (mSheetHead). */
+  protected readonly sheetMeta = computed(() =>
+    [
+      this.item().author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
+      this.topicTitle(),
+    ]
+      .filter((part) => part !== '')
+      .join(' · '),
   );
   protected readonly menuLabel = computed(
     () =>

@@ -142,7 +142,8 @@
   </ng-template>
 
   <div class="sections">
-    @if (!searching()) {
+    <!-- On a phone the chips come first, the queue's card under them (media-library@mobile). -->
+    @if (showQueue() && !phone()) {
       <app-queue-summary />
     }
 
@@ -192,37 +193,6 @@
             </button>
           }
         </div>
-        @if (confirmingClear()) {
-          <div
-            class="confirm-inline"
-            role="group"
-            aria-labelledby="clear-text"
-          >
-            <p id="clear-text" i18n="@@library.clearRecentsQuestion">
-              Limpar as mídias ouvidas recentemente? Suas posições, favoritas e
-              marcadores continuam.
-            </p>
-            <button
-              type="button"
-              uiButton="white"
-              size="sm"
-              (click)="clearRecents()"
-              i18n="@@library.clearRecentsConfirm"
-            >
-              Limpar
-            </button>
-            <button
-              #keepRecentsButton
-              type="button"
-              uiButton="ghost"
-              size="sm"
-              (click)="cancelClearRecents()"
-              i18n="@@library.clearRecentsCancel"
-            >
-              Cancelar
-            </button>
-          </div>
-        }
         <div class="strip" role="list" #strip>
           @for (item of continueItems(); track item.id) {
             <app-library-card
@@ -236,16 +206,55 @@
       </section>
     }
 
-    <section class="all" aria-labelledby="all-title">
-      <h3
-        id="all-title"
-        class="visually-hidden"
-        #allTitle
-        tabindex="-1"
-        i18n="@@library.all"
+    <!-- "Limpar recentes" asks here, from the section's link or the header's ⋯. -->
+    @if (confirmingClear()) {
+      <div
+        class="confirm-inline"
+        role="group"
+        aria-labelledby="clear-text"
       >
-        Todas
-      </h3>
+        <p id="clear-text" i18n="@@library.clearRecentsQuestion">
+          Limpar as mídias ouvidas recentemente? Suas posições, favoritas e
+          marcadores continuam.
+        </p>
+        <button
+          type="button"
+          uiButton="white"
+          size="sm"
+          (click)="clearRecents()"
+          i18n="@@library.clearRecentsConfirm"
+        >
+          Limpar
+        </button>
+        <button
+          #keepRecentsButton
+          type="button"
+          uiButton="ghost"
+          size="sm"
+          (click)="cancelClearRecents()"
+          i18n="@@library.clearRecentsCancel"
+        >
+          Cancelar
+        </button>
+      </div>
+    }
+
+    <!-- While searching the results are the section's content and name (KBC-096 AC-7). -->
+    <section
+      class="all"
+      [attr.aria-labelledby]="searching() ? null : 'all-title'"
+    >
+      @if (!searching()) {
+        <h3
+          id="all-title"
+          class="visually-hidden"
+          #allTitle
+          tabindex="-1"
+          i18n="@@library.all"
+        >
+          Todas
+        </h3>
+      }
       <p class="visually-hidden" aria-live="polite">{{ countText() }}</p>
 
       <div class="toolbar" [class.searching]="searchOpen() || searching()">
@@ -290,6 +299,10 @@
           />
         }
       </div>
+
+      @if (showQueue() && phone()) {
+        <app-queue-summary class="phone-queue" />
+      }
 
       @if (searching()) {
         @if (choices(); as current) {

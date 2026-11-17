@@ -33,6 +33,7 @@ import {
 import {
   DEFAULT_LIBRARY_PREFERENCES,
   LIBRARY_QUERY_MAX,
+  NO_AUTHOR,
   libraryHomeSchema,
   libraryPageSchema,
   listeningPreferencesSchema,
@@ -90,6 +91,7 @@ import { LibraryCard } from './library-card.js';
 import { LibraryControls } from './library-controls.js';
 import {
   NO_FILTERS,
+  STATE_CHIP_LABELS,
   activeFiltersOf,
   applyFilterChange,
   countTextOf,
@@ -107,6 +109,9 @@ import { UiButton, UiIconButton } from '@ui/button.js';
 import { UiCover } from '@ui/cover.js';
 import { UiEmptyState } from '@ui/empty-state.js';
 import { UiIcon } from '@ui/icon.js';
+
+/** The library's own colour, its cover's (v2 media-library LIB_TINT; library-page.css). */
+const LIBRARY_TINT = '#7a3d22';
 
 /** The shell's phone layout (chat-page: desktop from 1024 px). */
 const PHONE_QUERY = '(max-width: 1023px)';
@@ -430,6 +435,14 @@ export class LibraryPage {
   protected readonly nothingFound = computed(
     () => this.lastPage() !== null && this.items().length === 0,
   );
+  /**
+   * "Precisa da sua atenção" over a list with something in it: the search, an empty
+   * collection and an empty library leave it out (media-library-search, -collection-empty,
+   * -empty-*); the queue stays a tap away in the sidebar's "Fila de processamento".
+   */
+  protected readonly showQueue = computed(
+    () => !this.searching() && !this.nothingFound() && !this.libraryEmpty(),
+  );
   protected readonly showSkeleton = computed(
     () =>
       !this.choices() ||
@@ -589,10 +602,22 @@ export class LibraryPage {
   );
   /** The header's line: where the list is and what it holds (v2 media-library). */
   protected readonly headerMeta = computed(() => {
-    const topic = this.choices()?.filters.topic ?? null;
-    const where = topic
-      ? (this.titles().get(topic) ?? topic)
-      : $localize`:@@library.allCollections:Todos os acervos`;
+    const filters = this.choices()?.filters ?? null;
+    const topic = filters?.topic ?? null;
+    // A filter of one state or one author names what the list is (media-library-chip,
+    // -author: "Em andamento · 3 mídias", "Irmã Helena Prado · 5 mídias").
+    const state = filters?.states.length === 1 ? filters.states[0] : null;
+    const author = filters?.authors.length === 1 ? filters.authors[0] : null;
+    const where = state
+      ? STATE_CHIP_LABELS[state]()
+      : author
+        ? author === NO_AUTHOR
+          ? $localize`:@@authorship.others:Outros autores`
+          : (this.facets().authors.find((one) => one.slug === author)?.name ??
+            author)
+        : topic
+          ? (this.titles().get(topic) ?? topic)
+          : $localize`:@@library.allCollections:Todos os acervos`;
     if (this.libraryEmpty())
       return $localize`:@@library.nothingYet:Nenhuma mídia por enquanto`;
     const count = this.countText();
@@ -617,14 +642,17 @@ export class LibraryPage {
   );
   protected readonly nothingFoundTitle = computed(() =>
     this.filtered()
-      ? $localize`:@@library.filtersEmpty:Nenhuma mídia com estes filtros.`
-      : $localize`:@@library.collectionEmpty:Nenhuma mídia neste acervo.`,
+      ? $localize`:@@library.filtersEmpty:Nenhuma mídia com estes filtros`
+      : $localize`:@@library.collectionEmpty:Nenhuma mídia neste acervo`,
   );
-  protected readonly nothingFoundText = computed(() =>
-    this.filtered()
-      ? ''
-      : $localize`:@@library.collectionEmptyText:Quando alguém enviar um áudio para este acervo, ele aparece aqui.`,
-  );
+  protected readonly nothingFoundText = computed(() => {
+    if (this.filtered()) return '';
+    const topic = this.choices()?.filters.topic ?? null;
+    const name = topic ? (this.titles().get(topic) ?? null) : null;
+    return name
+      ? $localize`:@@library.collectionEmptyNamed:Quando alguém enviar um áudio para ${name}:name:, ele aparece aqui.`
+      : $localize`:@@library.collectionEmptyText:Quando alguém enviar um áudio para este acervo, ele aparece aqui.`;
+  });
 
   constructor() {
     this.followCollection();
@@ -633,6 +661,7 @@ export class LibraryPage {
         title: $localize`:@@library.title:Biblioteca`,
         back: null,
         actions: this.phoneActions() ?? null,
+        tint: LIBRARY_TINT,
       })),
     );
     this.followLayout();
@@ -947,6 +976,7 @@ export class LibraryPage {
     this.focusAfterRender(this.keepRecentsButton);
   }
 
+  /** Back to the link that asked, or to the list when the ⋯ asked (no link in sight). */
   protected cancelClearRecents(): void {
     this.confirmingClear.set(false);
     this.focusAfterRender(this.clearRecentsButton);
