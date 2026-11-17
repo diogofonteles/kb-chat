@@ -369,6 +369,30 @@ describe('ResearchMessage', () => {
     expect(first.classList).not.toContain('active');
   });
 
+  it('KBC-155 AC-6: the track open with no time fills none of the grouped times', async () => {
+    const view = await renderMessage(
+      aTurn({
+        text: 'O ritmo [4@0:41], [4@1:10]. São sete [1].',
+        sources: [...SOURCES, TRACK],
+      }),
+    );
+    view.fixture.componentRef.setInput('activeSource', 4);
+    view.fixture.componentRef.setInput('activeAt', null);
+    await view.fixture.whenStable();
+    const times = [
+      screen.getByRole('link', {
+        name: 'Ouvir O que é o ritmo? aos 41 segundos',
+      }),
+      screen.getByRole('link', {
+        name: 'Ouvir O que é o ritmo? aos 1 minuto e 10 segundos',
+      }),
+    ];
+    expect(times.map((one) => one.classList.contains('active'))).toEqual([
+      false,
+      false,
+    ]);
+  });
+
   it('KBC-099 AC-15: an answer saved before the tracks keeps its sources as they were', async () => {
     const { opened, trackOpened } = await renderMessage(aTurn());
     fireEvent.click(screen.getByRole('button', { name: /Os Princípios/ }));
