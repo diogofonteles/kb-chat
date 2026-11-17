@@ -369,7 +369,7 @@ describe('Joining two voices (KBC-065 AC-3, FR-2)', () => {
 });
 
 describe('Who may see and change names (KBC-065 AC-4, AC-5, BR-4, BR-6)', () => {
-  it('AC-4: without `media-speakers` the transcript is as before; without `media-edit`, 403', async () => {
+  it('AC-4: without `media-speakers` names still show (KBC-151 BR-0); without `media-edit`, 403', async () => {
     const media = await startMedia();
     const { mediaId } = await separated(media);
     const gabriel = await aSpeaker(media, 'Mestre Gabriel');
@@ -380,8 +380,8 @@ describe('Who may see and change names (KBC-065 AC-4, AC-5, BR-4, BR-6)', () => 
       features: ['media'],
     });
     const plain = await transcriptOf(call, mediaId);
-    expect(plain).not.toHaveProperty('voiceNames');
-    expect(plain.segments[0]).not.toHaveProperty('voice');
+    expect(plain.voiceNames?.[1]?.name).toBe('Mestre Gabriel');
+    expect(plain).not.toHaveProperty('speakers');
     const body = { version: 1, speakerId: null, audience: false };
     expect(
       (await call('PUT', `/api/v1/media/${mediaId}/voices/1`, body)).statusCode,
@@ -452,6 +452,64 @@ describe('Who may see and change names (KBC-065 AC-4, AC-5, BR-4, BR-6)', () => 
       audience: false,
     });
     expect(put.statusCode).toBe(404);
+  });
+});
+
+describe('Who speaks for whoever may listen (KBC-151 BR-0, FR-1)', () => {
+  const researcher = (media: Media) =>
+    member(media, {
+      email: 'pesquisa@example.com',
+      topics: ['hermetismo'],
+      features: ['media', 'media-research'],
+    });
+
+  it('AC-1: a confirmed name and an unnamed voice reach someone with only `media` and `media-research`', async () => {
+    const media = await startMedia();
+    const { mediaId } = await separated(media);
+    const helena = await aSpeaker(media, 'Irmã Helena Prado');
+    await nameVoice(media, [mediaId, 1], { speakerId: helena.id });
+    const { call } = await researcher(media);
+    const read = await transcriptOf(call, mediaId);
+    expect(read.segments.map((segment) => segment.voice)).toEqual([
+      1, 2, 1, 2, 3, 2,
+    ]);
+    expect(read.voiceNames?.map(({ kind, name }) => ({ kind, name }))).toEqual(
+      [
+        { kind: 'person', name: 'Irmã Helena Prado' },
+        { kind: 'unnamed', name: null },
+        { kind: 'unnamed', name: null },
+      ],
+    );
+  });
+
+  it('AC-2: neither the separation nor a name waiting for confirmation leaves for them', async () => {
+    const media = await startMedia();
+    const { token, mediaId } = await separated(media);
+    const helena = await aSpeaker(media, 'Irmã Helena Prado');
+    await nameVoice(media, [mediaId, 2], { speakerId: helena.id });
+    await nameVoice(media, [mediaId, 3], { audience: true });
+    const again = await separate(media, { token, mediaId });
+    expect(again.diarization?.namesPending).toBe(true);
+    const { call } = await researcher(media);
+    const read = await transcriptOf(call, mediaId);
+    expect(read).not.toHaveProperty('speakers');
+    expect(JSON.stringify(read)).not.toContain('Irmã Helena Prado');
+    expect(read.voiceNames?.every(({ kind }) => kind === 'unnamed')).toBe(true);
+    const speakers = await call('GET', `/api/v1/media/${mediaId}/speakers`);
+    expect(speakers.statusCode).toBe(403);
+  });
+
+  it('a listener on a track they may not hear gets nothing of who speaks', async () => {
+    const media = await startMedia();
+    const { mediaId } = await separated(media);
+    const { call } = await member(media, {
+      email: 'sem-midia@example.com',
+      topics: ['hermetismo'],
+      features: ['research', 'media-research'],
+    });
+    const read = await call('GET', `/api/v1/media/${mediaId}/transcript`);
+    expect(read.statusCode).toBe(403);
+    expect(read.body).not.toContain('voiceNames');
   });
 });
 

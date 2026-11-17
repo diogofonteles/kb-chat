@@ -446,6 +446,44 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
     expect(screen.getByText('Pergunta da plateia')).toBeTruthy();
   });
 
+  it('KBC-151 AC-1: for whoever only listens, "● Irmã Helena Prado" in the voice colour and "Falante não identificado" on the next line', async () => {
+    await openReady(
+      { source: SOURCE, at: '0:41' },
+      {
+        ...TRANSCRIPT,
+        segments: TRANSCRIPT.segments.map((one, index) => ({
+          ...one,
+          voice: index === 1 ? 1 : 2,
+        })),
+        // No `speakers`: the API sends a listener only who speaks, confirmed names only.
+        voiceNames: [
+          {
+            voice: 1,
+            kind: 'person',
+            name: 'Irmã Helena Prado',
+            main: false,
+            speakerId: '22222222-2222-4222-8222-222222222222',
+          },
+          {
+            voice: 2,
+            kind: 'unnamed',
+            name: null,
+            main: false,
+            speakerId: null,
+          },
+        ],
+      },
+    );
+    const card = screen.getByRole('region', { name: /Citado|Trecho/ });
+    const name = within(card).getByText('Irmã Helena Prado');
+    const dot = name.parentElement?.querySelector<HTMLElement>(
+      '[style*="--color-voice-"]',
+    );
+    expect(dot?.getAttribute('style')).toContain('--color-voice-');
+    expect(screen.getAllByText('Falante não identificado').length).toBe(2);
+    expect(screen.queryByText(/^Voz \d/)).toBeNull();
+  });
+
   it('copies the track page at the passage, and marks it', async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, 'clipboard', {

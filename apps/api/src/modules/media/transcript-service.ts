@@ -199,7 +199,7 @@ export class TranscriptService {
 
   /**
    * The transcript; with `withVoices` (`media-edit`, KBC-064 FR-4) its separation and names,
-   * with `withNames` (`media-speakers`, KBC-065 FR-4) only who speaks in each segment.
+   * with `withNames` (anyone who may listen, KBC-151 BR-0) only who speaks in each segment.
    */
   current(
     actor: MediaActor,
