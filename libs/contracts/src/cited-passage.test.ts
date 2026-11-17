@@ -135,3 +135,46 @@ describe('wholeSentences (KBC-156)', () => {
     expect(wholeSentences(ITALIANO, span(0, 0))).toEqual(span(0, 12));
   });
 });
+
+describe('wholeSentences: an empty segment (KBC-156)', () => {
+  const EMPTY_FIRST = [seg(0, 0, ''), ...ITALIANO.slice(1)];
+
+  it('a cited 0 s segment with no text grows into the speech after it, never 0:00–0:00', () => {
+    expect(wholeSentences(EMPTY_FIRST, span(0, 0))).toEqual(span(0, 12));
+  });
+});
+
+describe('wholeSentences: a saved span across what may not play (KBC-156 BR-4)', () => {
+  const RESTRICTED_INSIDE = [
+    seg(0, 1, 'É, italiano, tá.'),
+    { ...seg(1.2, 6, ''), restricted: true as const },
+    seg(6.1, 12, 'E eu cresci na roça ouvindo as histórias dele.'),
+  ];
+  const OTHER_VOICE_INSIDE = [
+    { ...seg(0, 1, 'É, italiano, tá.'), voice: 0 },
+    { ...seg(1.2, 9, 'Meu pai veio da Itália com a família.'), voice: 1 },
+  ];
+
+  it('cuts a saved span at a part the reader may not hear, keeping the cited time', () => {
+    expect(wholeSentences(RESTRICTED_INSIDE, span(0, 12))).toEqual(span(0, 1));
+  });
+
+  it('cuts it on the side away from the cited time, which stays inside', () => {
+    expect(wholeSentences(RESTRICTED_INSIDE, span(0, 12), 6_500)).toEqual(
+      span(6.1, 12),
+    );
+  });
+
+  it('cuts a saved span at a change of voice, keeping the cited time', () => {
+    expect(wholeSentences(OTHER_VOICE_INSIDE, span(0, 9))).toEqual(span(0, 1));
+    expect(wholeSentences(OTHER_VOICE_INSIDE, span(0, 9), 1_200)).toEqual(
+      span(1.2, 9),
+    );
+  });
+
+  it('keeps the time past its segments on a side with nothing to cut', () => {
+    expect(wholeSentences(OTHER_VOICE_INSIDE, span(0.5, 9.5), 1_200)).toEqual(
+      span(1.2, 9.5),
+    );
+  });
+});

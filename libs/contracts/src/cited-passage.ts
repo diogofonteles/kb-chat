@@ -121,38 +121,96 @@ class Sentences {
   }
 }
 
-/** The segments a span falls on (an empty span: the one it starts in); null when none. */
+/**
+ * The segments a span falls on (an empty span: the one it starts in; else a zero-length one
+ * at its time, which then grows into the speech beside it); null when none.
+ */
 function boundsOf(
   segments: readonly SpokenSegment[],
   span: SegmentSpan,
 ): Bounds | null {
   const until = Math.max(span.endMs, span.startMs + 1);
-  const first = segments.findIndex(
+  const overlapping = segments.findIndex(
     (one) => one.startMs < until && one.endMs > span.startMs,
   );
+  const first =
+    overlapping >= 0
+      ? overlapping
+      : segments.findIndex(
+          (one) => one.startMs === one.endMs && one.startMs === span.startMs,
+        );
   if (first < 0) return null;
   let last = first;
   while ((segments[last + 1]?.startMs ?? Infinity) < until) last += 1;
   return { first, last };
 }
 
+/** The segment of `at` the citation stands on: the one starting in its second, else holding it. */
+function anchorIn(
+  segments: readonly SpokenSegment[],
+  { first, last }: Bounds,
+  citedMs: number,
+): number {
+  const second = Math.floor(citedMs / 1000);
+  const inside = segments.slice(first, last + 1);
+  const at = inside.findIndex(
+    (one) => Math.floor(one.startMs / 1000) === second,
+  );
+  const found =
+    at >= 0
+      ? at
+      : inside.findIndex(
+          (one) => one.startMs <= citedMs && citedMs < one.endMs,
+        );
+  return first + Math.max(found, 0);
+}
+
+/**
+ * A saved span cut back at a part the person may not hear or a change of voice, around the
+ * cited segment (BR-4): the one case a passage shrinks. Sides with nothing to cut keep their
+ * time; null when the cited segment itself may not be heard.
+ */
+function clipped(
+  segments: readonly SpokenSegment[],
+  span: SegmentSpan,
+  { found, citedMs }: { readonly found: Bounds; readonly citedMs: number },
+): { readonly span: SegmentSpan; readonly bounds: Bounds } | null {
+  const sentences = new Sentences(segments);
+  const anchor = anchorIn(segments, found, citedMs);
+  if (segments[anchor]?.restricted) return null;
+  let first = anchor;
+  while (first > found.first && sentences.joins(first, first - 1)) first -= 1;
+  let last = anchor;
+  while (last < found.last && sentences.joins(last, last + 1)) last += 1;
+  return {
+    bounds: { first, last },
+    span: {
+      startMs:
+        first === found.first ? span.startMs : (segments[first]?.startMs ?? 0),
+      endMs: last === found.last ? span.endMs : (segments[last]?.endMs ?? 0),
+    },
+  };
+}
+
 /**
  * A cited passage grown to whole sentences with minimal context (KBC-156): from the start of
  * the cited segment's sentence to its end; then, under PASSAGE_MIN_MS and PASSAGE_MIN_WORDS,
  * the next whole sentence, else the previous; never past PASSAGE_MAX_MS, a change of voice, a
- * silence over PASSAGE_MAX_PAUSE_MS or a part the person may not hear. Only grows, so the
- * cited time stays inside; a span on no segment, or on a restricted one, is left as it is.
+ * silence over PASSAGE_MAX_PAUSE_MS or a part the person may not hear. A saved span that
+ * already runs across a change of voice or a part the person may not hear is first cut back
+ * there, around the cited time (`citedMs`, default its start); otherwise it only grows, so the
+ * cited time stays inside. A span on no segment, or cited on a restricted one, is left as it is.
  */
 export function wholeSentences(
   segments: readonly SpokenSegment[],
   span: SegmentSpan,
+  citedMs: number = span.startMs,
 ): SegmentSpan {
   const found = boundsOf(segments, span);
-  const cited = found && segments.slice(found.first, found.last + 1);
-  if (!found || !cited || cited.some((one) => one.restricted))
-    return { startMs: span.startMs, endMs: span.endMs };
+  const cut = found && clipped(segments, span, { found, citedMs });
+  if (!cut) return { startMs: span.startMs, endMs: span.endMs };
   const sentences = new Sentences(segments);
-  let bounds: Bounds = found;
+  let bounds: Bounds = cut.bounds;
   for (let step = sentences.completeStep(bounds); step;) {
     bounds = step;
     step = sentences.completeStep(bounds);
@@ -163,10 +221,11 @@ export function wholeSentences(
     if (!grown) break;
     bounds = grown;
   }
-  // Only grows: a span wider than its segments (an answer saved with other times) keeps it.
+  // Only grows past the cut: a span wider than its segments (an answer saved with other
+  // times) keeps it.
   const grown = sentences.span(bounds);
   return {
-    startMs: Math.min(span.startMs, grown.startMs),
-    endMs: Math.max(span.endMs, grown.endMs),
+    startMs: Math.min(cut.span.startMs, grown.startMs),
+    endMs: Math.max(cut.span.endMs, grown.endMs),
   };
 }
