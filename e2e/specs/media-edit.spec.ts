@@ -212,6 +212,14 @@ test('AC-7: works by keyboard, and Escape gives the focus back to the menu', asy
   }
   await expect(edit).toBeFocused();
   await page.keyboard.press('Enter');
+  // A phone's sheet opens on its heading, with no keyboard over it (media-library-edit@mobile);
+  // Tab reaches the title.
+  if ((page.viewportSize()?.width ?? 0) < 1024) {
+    await expect(
+      editor(page).getByRole('heading', { name: 'Editar informações' }),
+    ).toBeFocused();
+    await page.keyboard.press('Tab');
+  }
   await expect(titleField(page)).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(editor(page)).toBeHidden();

@@ -591,6 +591,9 @@ async function expectScrolls(
     await cdp.detach();
   }
   await scroller.evaluate((node) => node.scrollTo({ top: 0 }));
+  // Back to the pointer, as a person who reaches for the mouse or the screen again: a tap on
+  // the header's blank corner, so what opens next shows no keyboard focus ring.
+  await page.mouse.click(box.x + 2, box.y + 2);
 }
 
 /** Nothing runs past the screen's side: the page scrolls only up and down (phone). */
