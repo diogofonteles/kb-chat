@@ -600,6 +600,11 @@ test('KBC-155 AC-6: citations of the same track side by side are one pill, each 
       name: `Ouvir ${TITLE} aos 41 segundos`,
     });
     await shot(member, 'grouped-pill');
+    // Each time is a target of at least 24 px (WCAG 2.5.8): a tap 12 px above or below its
+    // middle still lands on it.
+    await pill.scrollIntoViewIfNeeded();
+    for (const time of [at50, at41])
+      await expect.poll(() => tappedAround(time)).toEqual([true, true]);
     await at50.click();
     const panel = audioSource(member);
     await expect(
@@ -624,6 +629,17 @@ test('KBC-155 AC-6: citations of the same track side by side are one pill, each 
     await member.context().close();
   }
 });
+
+/** Whether a tap 12 px above and 12 px below the link's middle still lands on it. */
+const tappedAround = (link: Locator) =>
+  link.evaluate((element) => {
+    const { left, width, top, height } = element.getBoundingClientRect();
+    const x = left + width / 2;
+    const middle = top + height / 2;
+    return [middle - 11.5, middle + 11.5].map((y) =>
+      element.contains(document.elementFromPoint(x, y)),
+    );
+  });
 
 /**
  * Seeks the app's one player, as its bar or the phone's strip would (KBC-154). Only once the
