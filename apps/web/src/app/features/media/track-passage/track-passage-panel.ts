@@ -54,6 +54,7 @@ import {
 import { TranscriptPanel } from '../transcript/transcript-panel.js';
 import { voiceLookOf } from '../voices/voice-changes.js';
 import {
+  aroundHeard,
   aroundPassage,
   citedRange,
   lineStateAt,
@@ -379,15 +380,32 @@ export class TrackPassagePanel {
     },
     { parse: (body) => mediaTranscriptWordsSchema.parse(body) },
   );
-  protected readonly lines = computed((): ContextLine[] => {
-    const passage = this.passage();
-    return passage && this.transcript.hasValue()
-      ? aroundPassage(this.transcript.value(), passage)
-      : [];
-  });
-  protected readonly cited = computed(
-    () => this.lines().find((one) => one.kind === 'cited') ?? null,
+  protected readonly lines = computed(
+    (): ContextLine[] => {
+      const passage = this.passage();
+      if (!passage || !this.transcript.hasValue()) return [];
+      const transcript = this.transcript.value();
+      // While this track plays past the passage, the lines follow what is heard (KBC-154);
+      // paused, or back in the passage, they are the passage's again.
+      const range = this.range();
+      const heard = this.playing()
+        ? aroundHeard(transcript, passage, { nowMs: this.nowMs(), range })
+        : null;
+      return heard ?? aroundPassage(transcript, passage, range);
+    },
+    // A tick inside the same line changes nothing on screen.
+    { equal: sameLines },
   );
+  /** The passage's own line, for the card's speaker: whatever the lines around show now. */
+  protected readonly cited = computed(() => {
+    const passage = this.passage();
+    if (!passage || !this.transcript.hasValue()) return null;
+    return (
+      aroundPassage(this.transcript.value(), passage, this.range()).find(
+        (one) => one.kind === 'cited',
+      ) ?? null
+    );
+  });
   /**
    * The passage as words with their times; a segment without word times is one "word" at its
    * start (it lights whole).
@@ -665,4 +683,20 @@ export class TrackPassagePanel {
       at,
     );
   }
+}
+
+function sameLines(
+  a: readonly ContextLine[],
+  b: readonly ContextLine[],
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (one, index) =>
+        one.startMs === b[index]?.startMs &&
+        one.kind === b[index]?.kind &&
+        one.text === b[index]?.text &&
+        one.speaker === b[index]?.speaker,
+    )
+  );
 }

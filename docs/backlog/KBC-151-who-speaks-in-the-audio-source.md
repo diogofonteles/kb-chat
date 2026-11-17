@@ -1,7 +1,7 @@
 ---
 id: KBC-151
 title: "Quem fala na fonte de áudio da Pesquisa com IA para quem só ouve"
-status: draft
+status: ready
 slice: ui-v2-areas
 outcome: quem abre uma citação de áudio vê, no trecho citado e nas falas em volta, quem está falando, com a cor da voz
 depends_on: [KBC-150]
@@ -19,17 +19,17 @@ O desenho v2 ("v2 · Pesquisa com IA — fonte de áudio") mostra, no cartão do
 
 ## Scope
 **In:**
-- decidir se quem pode ver a faixa na pesquisa vê também quem fala nela (os nomes já confirmados; voz sem nome como "Falante não identificado");
-- se sim, a API passa a entregar a voz de cada segmento e os nomes confirmados a esse público, sem a separação nem as impressões de voz (ADR 0032).
+- a API passa a entregar a voz de cada segmento e os nomes confirmados a todos que podem ouvir a faixa (BR-0), sem a separação nem as impressões de voz (ADR 0032).
 
 **Out:** nomes à espera de confirmação; as impressões de voz; mudar o painel (o KBC-150 já mostra quando os dados vêm).
 
 ## Business rules
+- BR-0 (decisão do dono, 2026-11-17): **todos** que podem ver a faixa veem quem fala no trecho citado e nas falas em volta — só nomes confirmados; voz sem nome como "Falante não identificado". A separação (`speakers`) e as impressões de voz nunca saem para quem não tem `media-edit` (ADR 0032, KBC-065 BR-3). Vale também para a transcrição da página do player (somente leitura).
 - BR-1: só nomes confirmados aparecem para quem não edita (KBC-065 BR-3).
 - BR-2: a impressão de voz e a separação nunca saem para quem não tem `media-edit` (ADR 0032).
 
 ## Functional requirements
-- FR-1: a API deve incluir `voice` em cada segmento e `voiceNames` (só confirmados) para o público decidido. (BR-1, BR-2)
+- FR-1: a API deve incluir `voice` em cada segmento e `voiceNames` (só confirmados) para todos que podem ouvir a faixa. (BR-0, BR-1, BR-2)
 
 ## Non-functional requirements
 - NFR-1: a transcrição de 2 h segue em p95 ≤ o limite de hoje (KBC-038 NFR-2) com as vozes.
@@ -54,5 +54,5 @@ KBC-150 (`work/KBC-150/spec.md`, pendências) · KBC-064, KBC-065 · ADR 0032 ·
 - [x] NFRs measurable
 - [x] Test level chosen for every AC
 - [x] UI and architecture references linked
-- [ ] Dependencies done or scheduled; no open questions — **decisão do dono:** quem só ouve vê quem fala?
+- [x] Dependencies done or scheduled; no open questions — decidido pelo dono em 2026-11-17 (BR-0)
 - [x] Fits one goal

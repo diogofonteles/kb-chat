@@ -642,7 +642,7 @@ describe('Voices on the transcript (KBC-064 FR-4, AC-2)', () => {
     expect(body.speakers).not.toHaveProperty('segments');
   });
 
-  it('keeps the transcript unchanged for a person with only `media`', async () => {
+  it('gives a person with only `media` who speaks, never the separation (KBC-151 BR-0)', async () => {
     const media = await startMedia();
     const { token, mediaId } = await ready(media);
     await separate(media, { token, mediaId });
@@ -656,8 +656,15 @@ describe('Voices on the transcript (KBC-064 FR-4, AC-2)', () => {
     const body = response.json();
     expect(body).not.toHaveProperty('speakers');
     expect(body.segments).toHaveLength(6);
-    for (const segment of body.segments)
-      expect(segment).not.toHaveProperty('voice');
+    expect(body.segments.map((one: { voice: number }) => one.voice)).toEqual([
+      1, 2, 1, 2, 3, 2,
+    ]);
+    expect(
+      body.voiceNames.every(
+        (label: { kind: string; name: string | null }) =>
+          label.kind === 'unnamed' && label.name === null,
+      ),
+    ).toBe(true);
   });
 
   it('has no voices for an editor before any separation', async () => {
