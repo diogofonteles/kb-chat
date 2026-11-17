@@ -5,16 +5,10 @@ import {
   type SpokenSegment,
 } from './cited-passage.js';
 
-const seg = (
-  startS: number,
-  endS: number,
-  text: string,
-  more: Partial<SpokenSegment> = {},
-): SpokenSegment => ({
+const seg = (startS: number, endS: number, text: string): SpokenSegment => ({
   startMs: startS * 1000,
   endMs: endS * 1000,
   text,
-  ...more,
 });
 
 /** The owner's case: a 1 s utterance at the track's start, speech right after it. */
@@ -72,9 +66,12 @@ describe('wholeSentences (KBC-156)', () => {
 
   it('AC-4: the next sentence by another voice stays out; the previous one by the same voice comes in', () => {
     const voiced = [
-      seg(0, 6, 'Então ele contou de novo a história toda.', { voice: 0 }),
-      seg(6.5, 7.5, 'É, italiano, tá.', { voice: 1 }),
-      seg(8, 15, 'Pois é, meu pai veio da Itália com a família.', { voice: 2 }),
+      { ...seg(0, 6, 'Então ele contou de novo a história toda.'), voice: 0 },
+      { ...seg(6.5, 7.5, 'É, italiano, tá.'), voice: 1 },
+      {
+        ...seg(8, 15, 'Pois é, meu pai veio da Itália com a família.'),
+        voice: 2,
+      },
     ];
     expect(wholeSentences(voiced, span(6.5, 7.5))).toEqual(span(6.5, 7.5));
     const sameBefore = voiced.map((one, at) =>
