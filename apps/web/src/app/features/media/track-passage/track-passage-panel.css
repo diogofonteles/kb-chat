@@ -517,6 +517,8 @@ h2:focus-visible {
     var(--cover-tint) var(--cover-card-share),
     var(--color-cover-ink)
   );
+  /* What scrolls under the player is cut clean above it, not shown as a sliver. */
+  box-shadow: 0 calc(-1 * var(--space-3)) 0 var(--color-surface);
   color: var(--color-on-cover);
 }
 
