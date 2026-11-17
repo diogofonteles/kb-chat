@@ -306,20 +306,31 @@ test('D5: "+ Criar", "Recentes" and the avatar menu open whole, over the sidebar
 }) => {
   await page.goto('/');
   const side = await library(page);
-  await side.getByRole('button', { name: 'Criar', exact: true }).click();
-  await expectWholeOnTop(page, 'Criar');
-  await expect(
-    page.getByRole('menuitem', { name: 'Nova conversa' }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('menuitem', { name: 'Novo acervo' }),
-  ).toBeVisible();
-  await shoot(page, 'shell-create-menu');
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('menu', { name: 'Criar' })).toBeHidden();
-  await expect(
-    side.getByRole('button', { name: 'Criar', exact: true }),
-  ).toBeFocused();
+  if (desktop(page)) {
+    await side.getByRole('button', { name: 'Criar', exact: true }).click();
+    await expectWholeOnTop(page, 'Criar');
+    await expect(
+      page.getByRole('menuitem', { name: 'Nova conversa' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('menuitem', { name: 'Novo acervo' }),
+    ).toBeVisible();
+    await shoot(page, 'shell-create-menu');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu', { name: 'Criar' })).toBeHidden();
+    await expect(
+      side.getByRole('button', { name: 'Criar', exact: true }),
+    ).toBeFocused();
+  } else {
+    // v2 "Menu lateral aberto": what "+ Criar" offered is in the Menu's own rows.
+    await expect(
+      side.getByRole('button', { name: 'Criar', exact: true }),
+    ).toHaveCount(0);
+    for (const name of ['Nova conversa', 'Novo acervo'])
+      await expect(
+        side.getByRole('button', { name, exact: true }),
+      ).toBeVisible();
+  }
 
   const order = side.getByRole('button', { name: /Ordenar por/ });
   await order.click();
