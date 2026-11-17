@@ -230,11 +230,13 @@ h2:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-.now-playing {
+/* Playing: the card says the app's player has it, where "Ouvir o trecho" was (KBC-155). */
+.on-player {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-xs);
+  gap: var(--space-2);
+  min-height: var(--target);
+  font-size: 0.9375rem;
   font-weight: 700;
 }
 
@@ -321,107 +323,49 @@ h2:focus-visible {
   color: var(--color-text);
 }
 
-/* ---------- Timeline (item 4) ---------- */
+/* ---------- Other passages of the track (KBC-155, the timeline's marks before) ---------- */
 
-.timeline {
+.others {
   display: grid;
-  gap: var(--space-1);
-  padding-top: var(--space-2);
-}
-
-.rail {
-  position: relative;
-  height: 1.75rem;
-}
-
-.track-line,
-.played {
-  position: absolute;
-  top: 0.75rem;
-  left: 0;
-  height: 0.25rem;
-  border-radius: var(--radius-pill);
-}
-
-.track-line {
-  right: 0;
-  background: var(--overlay-4);
-}
-
-.played {
-  background: color-mix(in srgb, var(--color-text) 40%, transparent);
-}
-
-.played.on {
-  background: var(--color-text);
-}
-
-.band {
-  position: absolute;
-  top: 0.5625rem;
-  height: 0.625rem;
-  min-width: 0.375rem;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--color-accent) 35%, transparent);
-}
-
-.mark {
-  position: absolute;
-  top: -0.375rem;
-  display: inline-grid;
-  place-items: center;
-  min-width: 1.375rem;
-  height: 1.125rem;
-  padding: 0 0.25rem;
-  translate: -50% 0;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-accent) 25%, transparent);
-  color: var(--color-accent-text);
-  font: inherit;
-  font-size: 0.625rem;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-/* A bigger hit area than the 18 px pill, without moving it (2.5.8 target size). */
-.mark::after {
-  content: '';
-  position: absolute;
-  inset: -0.375rem -0.25rem;
-}
-
-.mark.on {
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-}
-
-.head-dot {
-  position: absolute;
-  top: 0.5rem;
-  width: 0.75rem;
-  height: 0.75rem;
-  translate: -50% 0;
-  border-radius: 50%;
-  background: var(--color-text);
-}
-
-.labels {
-  display: flex;
-  justify-content: space-between;
   gap: var(--space-2);
+}
+
+.others h3 {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 0.6875rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.labels .span {
-  color: var(--color-accent-text);
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
-/* ---------- Around the passage (item 5) ---------- */
+.others ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.other {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  padding: 0 0.75rem 0 0.375rem;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-elevated);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.other:hover {
+  background: var(--overlay-3);
+}
 
 .section-head {
   display: flex;
@@ -556,39 +500,6 @@ h2:focus-visible {
   gap: var(--space-2);
 }
 
-.others {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.others-label {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-}
-
-.other {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 1.75rem;
-  padding: 0 0.625rem 0 0.1875rem;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-elevated);
-  color: var(--color-text);
-  font: inherit;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-}
-
-.other:hover {
-  background: var(--overlay-3);
-}
-
 .sheet-player {
   --color-text: var(--color-on-cover);
   --color-bg: var(--color-cover-ink);
@@ -606,7 +517,27 @@ h2:focus-visible {
     var(--cover-tint) var(--cover-card-share),
     var(--color-cover-ink)
   );
+  /* Its rounded corners show the surface, not what scrolls under them. */
+  box-shadow: 0 0 0 var(--space-2) var(--color-surface);
   color: var(--color-on-cover);
+}
+
+/* What scrolls under the player fades out above it instead of showing a hard sliver (a
+   button's top edge read as a border on the player). It spans the scroller's padding. */
+.sheet-player::before {
+  position: absolute;
+  right: calc(-1 * var(--space-4));
+  bottom: 100%;
+  left: calc(-1 * var(--space-4));
+  height: var(--space-6);
+  background: linear-gradient(to bottom, transparent, var(--color-surface) 60%);
+  content: '';
+  pointer-events: none;
+}
+
+/* Room for that fade: at the end of the scroll the foot rests above it, never under it. */
+:host(.in-sheet) .foot {
+  padding-bottom: var(--space-3);
 }
 
 .sheet-player-text {
@@ -630,7 +561,7 @@ h2:focus-visible {
   white-space: nowrap;
 }
 
-:is(button, a):focus-visible {
+:is(button, a, .on-player):focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }

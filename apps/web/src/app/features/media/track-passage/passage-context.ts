@@ -209,34 +209,6 @@ function heardLineOf(
       : lineOf(segments[index], speakers[index], kind);
 }
 
-/** A cited passage on the track's timeline, in percent of its length (KBC-150 item 4). */
-export interface TimelineMark {
-  readonly index: number;
-  readonly startMs: number;
-  readonly endMs: number;
-  readonly left: number;
-  readonly width: number;
-}
-
-const percentOf = (ms: number, durationMs: number): number =>
-  durationMs > 0 ? Math.min(100, Math.max(0, (ms / durationMs) * 100)) : 0;
-
-export function timelineMarks(
-  passages: readonly TrackPassage[],
-  durationMs: number,
-): TimelineMark[] {
-  return passages.map((one, index) => {
-    const left = percentOf(one.startMs, durationMs);
-    return {
-      index,
-      startMs: one.startMs,
-      endMs: one.endMs,
-      left,
-      width: Math.max(0, percentOf(one.endMs, durationMs) - left),
-    };
-  });
-}
-
 /** Where the line heard now is, for "Em volta do trecho" while it plays (item 5). */
 export function lineStateAt(
   line: Pick<ContextLine, 'startMs' | 'endMs'>,

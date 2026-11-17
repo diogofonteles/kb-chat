@@ -277,6 +277,76 @@ app-research-message .answer a.cite-audio.active .cite-n {
   color: var(--color-on-accent);
 }
 
+/* The same track cited side by side (KBC-155): one pill, "título · 1:16, 1:21", each time a
+   link of its own; the open one filled in the accent. */
+app-research-message .answer .cite-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+  color: var(--color-accent-text);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.6;
+  vertical-align: baseline;
+}
+
+app-research-message .answer .cite-group .cite-n {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.375rem;
+  padding: 0 0.4375rem;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
+
+app-research-message .answer .cite-group .cite-n::before {
+  content: '';
+  width: 0.75rem;
+  height: 0.75rem;
+  background: currentcolor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+app-research-message .answer .cite-group .cite-where {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* No inline padding: the comma and the period sit right after the time ("0:50, 0:41."). */
+app-research-message .answer .cite-group a.cite.cite-time {
+  position: relative;
+  min-width: 0;
+  padding: 0;
+  font-size: 1em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  vertical-align: baseline;
+}
+
+/* A target of 24 px at least (WCAG 2.5.8) around a time that reads at the line's height. */
+app-research-message .answer .cite-group a.cite.cite-time::after {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1.5rem;
+  translate: 0 -50%;
+  content: '';
+}
+
+app-research-message .answer .cite-group a.cite.cite-time:hover {
+  text-decoration: underline;
+}
+
 /* A citation of a restricted source (KBC-110): the number as plain text, no link. */
 app-research-message .answer .cite-restricted {
   color: var(--color-text-muted);

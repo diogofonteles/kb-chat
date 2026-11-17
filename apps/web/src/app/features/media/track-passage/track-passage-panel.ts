@@ -58,7 +58,6 @@ import {
   aroundPassage,
   citedRange,
   lineStateAt,
-  timelineMarks,
   type ContextLine,
   type LineSpeaker,
 } from './passage-context.js';
@@ -100,10 +99,11 @@ const LINK_NOT_COPIED = (): string =>
 /**
  * The audio source of a research answer (KBC-150, v2 · Pesquisa com IA — fonte de áudio; it
  * began as KBC-099's "Trecho da faixa", T22). The cited passage comes first, with "Ouvir o
- * trecho" playing it on the app's own player (the bar on a desktop, the sheet's strip on a
- * phone): the panel has no player of its own. Below, the track's timeline with the answer's
- * citations of it, and only the speech around the passage, followed as it plays. Nothing
- * plays by itself (FR-8); the vault's Markdown is never shown (ADR 0035 §7).
+ * trecho" starting it on the app's own player, the one control of what plays (KBC-155): the
+ * bar on a desktop, the mini player at the sheet's foot on a phone. The card only says it is
+ * "tocando no player". Below, the answer's other citations of the track and the speech
+ * around the passage, followed as it plays. Nothing plays by itself (FR-8); the vault's
+ * Markdown is never shown (ADR 0035 §7).
  */
 @Component({
   selector: 'app-track-passage-panel',
@@ -136,6 +136,8 @@ export class TrackPassagePanel {
   private readonly injector = inject(Injector);
   private readonly host =
     inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  /** "Ouvir o trecho" was pressed: once it leaves, its focus goes to "tocando no player". */
+  private focusOnPlayer = false;
 
   readonly source = input.required<AnswerSource>();
   /** The time the citation wrote ("" for a plain [n] or the chip). */
@@ -343,18 +345,16 @@ export class TrackPassagePanel {
       passage !== null && now >= playbackStartOf(passage) && now < passage.endMs
     );
   });
-  protected readonly durationMs = computed(
-    () =>
-      this.media()?.durationMs ??
-      this.source().media?.durationMs ??
-      this.engine.playback().durationMs ??
-      0,
+  /** "Ouvir o trecho" while stopped, or while the track plays away from the passage. */
+  protected readonly offersListen = computed(
+    () => !this.playing() || !this.inPassage(),
   );
-  protected readonly total = computed(() => formatClock(this.durationMs()));
-  protected readonly playedPercent = computed(() => {
-    const total = this.durationMs();
-    return total > 0 ? Math.min(100, (this.nowMs() / total) * 100) : 0;
-  });
+  /** The sheet's player: "Tocar" or "Pausar", as the bar's own button says. */
+  protected readonly toggleLabel = computed(() =>
+    this.playing()
+      ? $localize`:@@player.pause:Pausar`
+      : $localize`:@@player.play:Tocar`,
+  );
 
   /* ---------- The cited passage, word by word ---------- */
 
@@ -447,13 +447,9 @@ export class TrackPassagePanel {
   });
   protected readonly speaker = computed(() => this.cited()?.speaker ?? null);
 
-  /* ---------- Timeline and other passages ---------- */
+  /* ---------- Other passages ---------- */
 
-  protected readonly marks = computed(() =>
-    timelineMarks(this.passages(), this.durationMs()),
-  );
-  protected readonly chosenIndex = this.chosen.asReadonly();
-  /** "Outro trecho citado: [n] 0:45": the answer's other citations of this track (item 6). */
+  /** "Outros trechos citados: [n] 0:45": the answer's other citations of this track (KBC-155). */
   protected readonly others = computed(() =>
     this.passage()
       ? this.passages()
@@ -502,6 +498,18 @@ export class TrackPassagePanel {
         takeUntilDestroyed(),
       )
       .subscribe((one) => this.cue(one));
+    // "Ouvir o trecho" leaves once the passage plays: the focus it held goes to "tocando no
+    // player" in its place, never to the page (a keyboard or a screen reader, the phone's sheet).
+    afterRenderEffect(() => {
+      this.playing();
+      this.offersListen();
+      if (!this.focusOnPlayer || this.host.querySelector('.listen')) return;
+      const status = this.host.querySelector<HTMLElement>('.on-player');
+      if (!status) return;
+      this.focusOnPlayer = false;
+      const focused = this.document.activeElement;
+      if (!focused || focused === this.document.body) status.focus();
+    });
     // A new source brings the reader to the top, on its title (T22 flow 1); again once the
     // track arrives, after the phone's sheet opened and took the focus to its first control.
     afterRenderEffect(() => {
@@ -525,11 +533,6 @@ export class TrackPassagePanel {
     return formatClock(ms);
   }
 
-  /** "Trecho citado aos 45 segundos": a mark on the timeline. */
-  protected markLabel(ms: number): string {
-    return $localize`:@@trackPassage.markAt:Trecho citado aos ${speak(ms)}:clock:`;
-  }
-
   /** "Ouvir de 16 segundos": a time in "Em volta do trecho". */
   protected playFromLabel(ms: number): string {
     return $localize`:@@trackPassage.playFrom:Ouvir a partir de ${speak(ms)}:clock:`;
@@ -548,17 +551,29 @@ export class TrackPassagePanel {
     if (source) this.sourceChosen.emit(source);
   }
 
-  /** "Ouvir o trecho": from 2 s before it, on the app's player; "Pausar" while it plays. */
+  /**
+   * "Ouvir o trecho": from 2 s before it, on the app's player; it only starts or leads back to
+   * the passage, never pauses (the bar does, KBC-155).
+   */
   protected listen(): void {
-    if (this.playing()) {
-      this.engine.pause();
-      return;
-    }
+    this.focusOnPlayer = true;
     const passage = this.passage();
     const from = passage ? playbackStartOf(passage) : 0;
     const now = this.nowMs();
     if (!this.recue(from) && passage && !(now >= from && now < passage.endMs))
       this.engine.seek(from);
+    this.play();
+  }
+
+  /** The sheet's player (a phone): plays on from where it is, or pauses. */
+  protected toggle(): void {
+    if (this.playing()) {
+      this.engine.pause();
+      return;
+    }
+    // Taken by another media meanwhile: this track goes back on the player at the passage.
+    const passage = this.passage();
+    this.recue(passage ? playbackStartOf(passage) : 0);
     this.play();
   }
 
@@ -573,7 +588,7 @@ export class TrackPassagePanel {
     this.play();
   }
 
-  /** A mark or "Outro trecho citado": that passage, cued, playing on if it was. */
+  /** "Outro trecho citado": that passage, cued, playing on if it was. */
   protected goTo(index: number): void {
     const passage = this.passages()[index];
     if (!passage) return;
