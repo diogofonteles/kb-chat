@@ -320,9 +320,10 @@ app-research-message .answer .cite-group .cite-where {
   overflow-wrap: anywhere;
 }
 
+/* No inline padding: the comma and the period sit right after the time ("0:50, 0:41."). */
 app-research-message .answer .cite-group a.cite.cite-time {
   min-width: 0;
-  padding: 0 0.25rem;
+  padding: 0;
   font-size: 1em;
   font-weight: 700;
   font-variant-numeric: tabular-nums;

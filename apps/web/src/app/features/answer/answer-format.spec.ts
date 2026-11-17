@@ -130,6 +130,24 @@ describe('answer formatting', () => {
     );
   });
 
+  it('KBC-155 AC-7: the grouped times read "0:50, 0:41": the comma right after the time, no space before it', () => {
+    const host = document.createElement('div');
+    host.innerHTML = renderAnswer('Tudo vibra [1@0:50], [1@0:41].', [
+      {
+        ...TRACK,
+        passages: [
+          { at: '0:50', startMs: 50_000, endMs: 53_000 },
+          { at: '0:41', startMs: 41_000, endMs: 44_000 },
+        ],
+      },
+    ]);
+    const where = host.querySelector('.cite-group .cite-where') as HTMLElement;
+    expect(where.textContent?.endsWith('0:50, 0:41')).toBe(true);
+    const first = where.querySelector('a.cite.cite-time') as HTMLElement;
+    expect(first.nextSibling?.textContent).toBe(', ');
+    expect(host.textContent?.trim()).toMatch(/0:50, 0:41\.$/);
+  });
+
   it('KBC-155 AC-7: a lone track citation, a text, another track or words in between are not grouped', () => {
     const other: AnswerSource = { ...TRACK, n: 2, title: 'Outra faixa' };
     const text: AnswerSource = { n: 3, id: 'leis.md', title: 'As leis' };
