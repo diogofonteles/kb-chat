@@ -67,6 +67,17 @@ export const documentSchema = documentFacetsSchema.extend({
   body: z.string(),
   /** Its level, for whoever manages levels in a collection with a scale (KBC-103, T3). */
   level: contentLevelSchema.optional(),
+  /**
+   * The kept original it was converted from (KBC-148 FR-3): "Ver original", served by
+   * `GET …/documents/:id/original` under the document's own level. Absent: none.
+   */
+  original: z
+    .object({
+      name: z.string().min(1).max(255),
+      /** The body holds a model's description of an image, marked as such (BR-4). */
+      generatedDescription: z.boolean(),
+    })
+    .optional(),
 });
 export type KbDocument = z.infer<typeof documentSchema>;
 

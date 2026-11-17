@@ -22,6 +22,7 @@ import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.j
 import type { CitedSource } from '@features/chat/chat-store.js';
 import {
   UiAvatar,
+  UiBanner,
   UiButton,
   UiChip,
   UiCover,
@@ -84,6 +85,7 @@ let nextPanel = 0;
     AuthorshipBadge,
     DocumentLevel,
     UiAvatar,
+    UiBanner,
     UiButton,
     UiChip,
     UiCover,
@@ -146,6 +148,10 @@ export class DocumentPanel {
     {
       parse: (body) => documentSchema.parse(body),
     },
+  );
+  /** "Ver original" (KBC-148): the API streams it with the session cookie. */
+  protected readonly originalUrl = computed(
+    () => `${documentUrl(this.topic(), this.documentId())}/original`,
   );
   // A resource in error throws on value(); every read goes through this guard.
   protected readonly loaded = computed(() =>

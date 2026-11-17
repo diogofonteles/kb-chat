@@ -20,4 +20,18 @@ export interface VaultReaderPort {
   listDocuments(topic: string): Promise<readonly string[]>;
   /** File text, or null when the document does not exist inside the topic. */
   readDocument(topic: string, id: string): Promise<string | null>;
+  /**
+   * A kept original (KBC-148): `<topic>/raw/_originals/<sha256>.<extension>`, or null when it
+   * is not there. Optional: a reader without originals serves none.
+   */
+  findOriginal?(
+    topic: string,
+    original: { readonly sha256: string; readonly extension: string },
+  ): Promise<OriginalFile | null>;
+}
+
+/** A kept original on disk, as the route streams it. */
+export interface OriginalFile {
+  readonly path: string;
+  readonly size: number;
 }

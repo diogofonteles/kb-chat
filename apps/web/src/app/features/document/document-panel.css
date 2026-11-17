@@ -445,3 +445,8 @@ h2:focus-visible {
     animation: none;
   }
 }
+
+/* KBC-148 BR-4: the note above a body that holds a generated description. */
+ui-banner.generated {
+  margin-block: var(--space-3);
+}

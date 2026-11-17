@@ -1,4 +1,8 @@
-import type { TopicFolder, VaultReaderPort } from '../../ports/vault-reader.js';
+import type {
+  OriginalFile,
+  TopicFolder,
+  VaultReaderPort,
+} from '../../ports/vault-reader.js';
 import type { CollectionRegistry } from './collection-registry.js';
 
 /**
@@ -41,5 +45,12 @@ export class CollectionsVault implements VaultReaderPort {
 
   readDocument(topic: string, id: string): Promise<string | null> {
     return this.vault.readDocument(topic, id);
+  }
+
+  findOriginal(
+    topic: string,
+    original: { readonly sha256: string; readonly extension: string },
+  ): Promise<OriginalFile | null> {
+    return this.vault.findOriginal?.(topic, original) ?? Promise.resolve(null);
   }
 }
