@@ -19,8 +19,11 @@ export async function library(page: Page): Promise<Locator> {
   // A page under another (the album page, media-list@mobile) has "←" where the avatar is:
   // the menu is one step back.
   const back = page.getByRole('link', { name: 'Voltar', exact: true });
-  await expect(button.or(back)).toBeVisible();
-  if (!(await button.isVisible())) await back.click();
+  await expect(button.or(back).first()).toBeVisible();
+  if (await back.isVisible()) {
+    await back.click();
+    await expect(back).toHaveCount(0);
+  }
   await button.click();
   return menu;
 }
