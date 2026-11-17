@@ -13,6 +13,10 @@
 #                      what the transcriber runs by itself after a publication (KBC-100).
 #                      Refused, with nothing sent, when the VM's install-index.sh has none
 #   --dry-run          list the changes, send nothing
+# The collection map (ADR 0039, KBC-141 FR-3): every topic with a map/ folder runs
+# `kb-map check` first; when it fails, the paths kb-map owns in that topic (`kb-map paths`) are
+# held back, so production keeps its previous map, and the rest of the vault is sent.
+# KB_MAP overrides the kb-map command (default: uv run --project tools/kb-map kb-map).
 # Safeguards: the source must be a kb vault with at least one topic; deletions on the VM are
 # capped; the vault is written under the VM's deploy lock (deploy.sh's), so never during a
 # deploy; the index is copied as a consistent SQLite snapshot and swapped in atomically by
@@ -43,7 +47,7 @@ while [ $# -gt 0 ]; do
     --with-models) WITH_MODELS=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --hot) HOT=1; shift ;;
-    -h | --help) sed -n '2,19p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,23p' "$0"; exit 0 ;;
     *) die "unknown option $1" ;;
   esac
 done
@@ -88,6 +92,31 @@ if [ "$HOT" -eq 1 ]; then
   esac
 fi
 
+# The collection map: a topic whose `kb-map check` fails keeps production's map (KBC-141 FR-3).
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+if [ -n "${KB_MAP:-}" ]; then
+  KB_MAP_CMD=("$KB_MAP")
+else
+  KB_MAP_CMD=(uv run --quiet --project "$REPO_ROOT/tools/kb-map" kb-map)
+fi
+MAP_EXCLUDES=()
+for topic_dir in "$VAULT"/*/; do
+  topic="$(basename "$topic_dir")"
+  case "$topic" in _* | .*) continue ;; esac
+  [ -f "$topic_dir/topic.yaml" ] && [ -d "$topic_dir/map" ] || continue
+  if check="$("${KB_MAP_CMD[@]}" --vault "$VAULT" check "$topic" 2>&1)"; then
+    echo "sync-vault: kb-map check $topic: ok"
+    continue
+  fi
+  echo "sync-vault: kb-map check failed for $topic; its map is not sent and production keeps the previous one:" >&2
+  tail -n 20 <<<"$check" | sed 's/^/  /' >&2
+  owned="$("${KB_MAP_CMD[@]}" --vault "$VAULT" paths "$topic")" ||
+    die "could not list the paths kb-map owns in $topic; nothing was sent"
+  while IFS= read -r path; do
+    [ -n "$path" ] && MAP_EXCLUDES+=("--exclude=/$topic/$path")
+  done <<<"$owned"
+done
+
 RSYNC=(rsync -az --human-readable --itemize-changes --partial)
 # The VM's rsync runs holding the deploy lock: a deploy and a sync never run together.
 LOCKED=(--rsync-path="flock -w $LOCK_WAIT_S $REMOTE_ROOT/deploy/.lock rsync")
@@ -97,6 +126,9 @@ LOCKED=(--rsync-path="flock -w $LOCK_WAIT_S $REMOTE_ROOT/deploy/.lock rsync")
 APP_UID=10001
 MODELS_OWNER=(--rsync-path="sudo setpriv --reuid=$APP_UID --regid=$APP_UID --clear-groups rsync")
 VAULT_FILTERS=(--exclude='/_*/' --exclude='/.*' --exclude='/*.sh' --exclude='.DS_Store')
+# Excluded paths are neither sent nor deleted on the VM (no --delete-excluded): the old map stays.
+# The expansion guard keeps an empty list working under `set -u` in macOS's bash 3.2.
+VAULT_FILTERS+=(${MAP_EXCLUDES[@]+"${MAP_EXCLUDES[@]}"})
 
 # Count the deletions with a dry run first and refuse before touching the VM: rsync's own
 # --max-delete only stops after deleting that many files.
