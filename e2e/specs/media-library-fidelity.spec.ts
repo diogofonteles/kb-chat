@@ -190,6 +190,41 @@ async function expectChips(
     ).toBeVisible();
 }
 
+/** A send held at 0 % says so, and "Cancelar envio" stops it (media-upload-sending). */
+async function expectHeldSend(
+  page: Page,
+  {
+    dialog,
+    input,
+    send,
+    width,
+  }: {
+    readonly dialog: Locator;
+    readonly input: Locator;
+    readonly send: Locator;
+    readonly width: Width;
+  },
+): Promise<void> {
+  await page.route('**/api/v1/media/*/upload', (route) =>
+    route.request().method() === 'PATCH' ? undefined : route.continue(),
+  );
+  await input.setInputFiles(makeMp3(`Envio parado ${uniqueTag()}`, 4));
+  await send.click();
+  await expect(dialog.getByText(/Enviando/).first()).toBeVisible();
+  await shoot(page, 'media-upload-sending', width);
+  await page.unroute('**/api/v1/media/*/upload');
+  await dialog
+    .getByRole('button', { name: /Cancelar envio/ })
+    .first()
+    .click();
+  if (await dialog.isVisible())
+    await dialog
+      .getByRole('button', { name: /^Cancelar|Fechar/ })
+      .first()
+      .click();
+  await expect(dialog).toHaveCount(0);
+}
+
 /** Who sends gets "Enviar mídia", and its dialog opens whole; who only listens, none. */
 async function expectUploadEntry(page: Page, sends: boolean): Promise<void> {
   if (!sends) {
@@ -499,7 +534,12 @@ async function expectScrolls(
   // The end may bring the next page in: the keys go to the list's box again.
   await scroller.evaluate((node) => node.focus());
   await page.keyboard.press('Home');
-  for (let i = 0; i < 6; i++) { console.log('DBG', i, await scrollTopOf(scroller), await scroller.evaluate((n) => [n.scrollHeight, n.clientHeight, document.activeElement?.tagName, document.activeElement?.className].join(' '))); await page.waitForTimeout(300); } // DBGPROBE
+  // WebKit animates the keys' scroll and can stop short of the top when the list grew
+  // under it (the end brought the next page): a second Home finishes it, as a person would.
+  await expect
+    .poll(() => scrollTopOf(scroller), { timeout: 1_500 })
+    .toBeLessThan(5)
+    .catch(() => page.keyboard.press('Home'));
   await expect.poll(() => scrollTopOf(scroller)).toBeLessThan(5);
   await scroller.evaluate((node) => node.focus());
   await page.keyboard.press('PageDown');
@@ -884,8 +924,19 @@ test('a recording opens its tracks, and removing it names them (tracks, remove-t
 
 test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sending (media-upload-*)', async ({
   browser,
+  browserName,
 }) => {
   skipRepeats();
+  // Playwright's WebKit lets tus's requests past a route, so the send cannot be held at 0 %
+  // there; and WebKit gives a pressed button no focus, so none comes back to it. Chromium
+  // proves both, at both widths.
+  const chromium = browserName === 'chromium';
+  if (!chromium)
+    test.info().annotations.push({
+      type: 'WebKit',
+      description:
+        'the held send and the focus back to the trigger: Chromium only',
+    });
   const data = await seed();
   for (const width of WIDTHS) {
     const { context, page } = await contextAt(browser, width);
@@ -954,30 +1005,17 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
       .click();
 
     // Sending: the file's parts wait on the network, so it stays at 0 %.
-    await page.route('**/api/v1/media/*/upload', (route) =>
-      route.request().method() === 'PATCH' ? undefined : route.continue(),
-    );
-    await input.setInputFiles(makeMp3(`Envio parado ${uniqueTag()}`, 4));
-    await send.click();
-    await expect(dialog.getByText(/Enviando/).first()).toBeVisible();
-    await shoot(page, 'media-upload-sending', width);
-    await page.unroute('**/api/v1/media/*/upload');
-    await dialog
-      .getByRole('button', { name: /Cancelar envio/ })
-      .first()
-      .click();
-    if (await dialog.isVisible())
-      await dialog
-        .getByRole('button', { name: /^Cancelar|Fechar/ })
-        .first()
-        .click();
-    await expect(dialog).toHaveCount(0);
+    if (chromium) await expectHeldSend(page, { dialog, input, send, width });
+    else {
+      await page.keyboard.press('Escape');
+      await expect(dialog).toHaveCount(0);
+    }
 
     // Escape closes it, and the focus goes back to where it came from.
     dialog = await open();
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
-    if (!phone)
+    if (!phone && chromium)
       await expect(
         page.getByRole('button', { name: 'Enviar mídia' }).first(),
       ).toBeFocused();
