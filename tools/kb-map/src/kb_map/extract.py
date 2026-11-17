@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .authorship import default_speaker, group_of
+from .convert.converters import GENERATED_HEADING
 from .layout import FORMAT_VERSION, MapLayout, ReviewQueue, now, read_json, write_json
 from .providers import Ledger, ProviderError, Request
 from .splitter import Block, Window, blocks_of, windows_of
@@ -21,6 +22,8 @@ EXTRACTOR_VERSION = 1
 STATUS_OK = "ok"
 STATUS_OUT = "fora-do-mapa"
 STATUSES = (STATUS_OK, STATUS_OUT)
+# KBC-148 BR-4: a model's description of an image is never the author's teaching.
+GENERATED_REASON = "descrição gerada por modelo, não é texto do autor"
 ATTEMPTS = 2
 
 SYSTEM = (
@@ -172,12 +175,22 @@ def _decorate(sections: list[dict[str, Any]], blocks: list[Block]) -> list[dict[
         before = [b for b in blocks if b.u16_start <= section["start"] and b.heading is not None]
         heading = before[-1].heading if before else None
         at = next((block.at for block in inside if block.at), None)
+        kept = _out_of_map(section, GENERATED_REASON) if heading == GENERATED_HEADING else section
         out.append(
-            {"id": f"s{number:03d}", **section}
+            {"id": f"s{number:03d}", **kept}
             | ({"heading": heading} if heading else {})
             | ({"at": at} if at else {})
         )
     return out
+
+
+def _out_of_map(section: dict[str, Any], reason: str) -> dict[str, Any]:
+    return {
+        "start": section["start"],
+        "end": section["end"],
+        "status": STATUS_OUT,
+        "reason": reason,
+    }
 
 
 def extract_document(

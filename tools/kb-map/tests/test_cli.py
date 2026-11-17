@@ -28,7 +28,16 @@ def test_every_subcommand_is_registered_by_discovery():
     import argparse
 
     sub = argparse.ArgumentParser().add_subparsers()
-    assert register_all(sub) == ["check", "dossier", "index", "paths", "sections", "tree"]
+    assert register_all(sub) == [
+        "check",
+        "convert",
+        "dossier",
+        "index",
+        "paths",
+        "reconvert",
+        "sections",
+        "tree",
+    ]
 
 
 def test_the_whole_map_through_the_cli(vault, model, capsys):

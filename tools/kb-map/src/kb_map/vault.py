@@ -21,6 +21,8 @@ from .textutil import sha256_text
 
 FRONTMATTER = re.compile(r"^---\r?\n([\s\S]*?)\r?\n---\r?\n?")
 EXCLUDED_SEGMENT = "_quarantine"
+# Kept originals (KBC-148) are never sources, whatever their extension.
+ORIGINALS_SEGMENT = "_originals"
 
 
 class VaultError(Exception):
@@ -91,7 +93,11 @@ class Topic:
         ids = []
         for path in raw.rglob("*.md"):
             relative = path.relative_to(self.dir)
-            if EXCLUDED_SEGMENT in relative.parts or path.is_symlink():
+            if (
+                EXCLUDED_SEGMENT in relative.parts
+                or ORIGINALS_SEGMENT in relative.parts
+                or path.is_symlink()
+            ):
                 continue
             ids.append(relative.as_posix())
         return sorted(ids)

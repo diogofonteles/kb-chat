@@ -6,6 +6,7 @@ from collections.abc import Sequence
 
 from . import __version__
 from .commands import register_all
+from .convert.factory import KbMissing
 from .providers import BudgetExceeded, ProviderError
 from .providers.keys import KeyMissing
 from .vault import VaultError
@@ -36,6 +37,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     except BudgetExceeded as err:
         print(f"kb-map: {err}", file=sys.stderr)
         return EXIT_BUDGET
-    except (VaultError, ProviderError, KeyMissing) as err:
+    except (VaultError, ProviderError, KeyMissing, KbMissing) as err:
         print(f"kb-map: {err}", file=sys.stderr)
         return EXIT_FAILED

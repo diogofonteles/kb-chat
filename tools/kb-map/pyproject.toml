@@ -6,6 +6,11 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = ["pyyaml>=6.0.2"]
 
+[project.optional-dependencies]
+# The converters of `kb-map convert`/`reconvert` (KBC-148): local and free, heavy (Docling
+# brings torch), so only the owner's Mac installs them: `uv sync --extra convert`.
+convert = ["docling>=2.30", "markitdown[all]>=0.1.2"]
+
 [project.scripts]
 kb-map = "kb_map.cli:main"
 
