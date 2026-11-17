@@ -517,6 +517,8 @@ h2:focus-visible {
     var(--cover-tint) var(--cover-card-share),
     var(--color-cover-ink)
   );
+  /* Its rounded corners show the surface, not what scrolls under them. */
+  box-shadow: 0 0 0 var(--space-2) var(--color-surface);
   color: var(--color-on-cover);
 }
 
