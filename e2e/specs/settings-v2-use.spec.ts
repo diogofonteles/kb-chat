@@ -27,6 +27,12 @@ async function swipeUp(
   point: { x: number; y: number },
   distance: number,
 ): Promise<void> {
+  // WebKit has no CDP touch gesture: the wheel over the same point moves the same scroller.
+  if (page.context().browser()?.browserType().name() !== 'chromium') {
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.wheel(0, distance);
+    return;
+  }
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Input.synthesizeScrollGesture', {
     x: point.x,
@@ -112,8 +118,15 @@ test.describe('the page scrolls', () => {
       await open(page, slug);
       await expect(settingsSection(page, label)).toBeVisible();
       const before = await scrollTop(page);
+      // A short section (few people on a fresh server) moves to its end, not 100 px.
+      const room = await scroller(page).evaluate(
+        (element) => element.scrollHeight - element.clientHeight,
+      );
+      expect(room).toBeGreaterThan(40);
       await scrollDown(page, 500);
-      await expect.poll(() => scrollTop(page)).toBeGreaterThan(before + 100);
+      await expect
+        .poll(() => scrollTop(page))
+        .toBeGreaterThanOrEqual(Math.min(before + 100, room - 1));
     });
   }
 });
@@ -151,9 +164,9 @@ test.describe('the corner search and the phone screens', () => {
   }) => {
     test.skip(desktop(page), 'phone only');
     const settings = await open(page);
-    await expect(page.getByRole('navigation', { name: /Navegação/ })).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByRole('navigation', { name: /Navegação/ }),
+    ).toHaveCount(0);
     await openSection(page, 'Preferências');
     await expect(
       settings.getByRole('heading', { name: 'Preferências', level: 2 }),
@@ -199,16 +212,12 @@ test.describe('Pessoas e permissões', () => {
   }) => {
     await open(page, 'pessoas');
     const section = settingsSection(page, 'Pessoas e permissões');
-    await section
-      .getByRole('button', { name: /owner@kb-chat\.test/ })
-      .click();
+    await section.getByRole('button', { name: /owner@kb-chat\.test/ }).click();
     const editor = page.getByRole('dialog').filter({ hasText: 'Pessoa' });
     await expect(editor).toBeVisible();
     await expect(editor.getByText('owner@kb-chat.test')).toBeVisible();
     await editor.getByRole('tab', { name: 'IA e limites' }).click();
-    await expect(
-      editor.getByLabel('Qual IA atende esta pessoa'),
-    ).toBeVisible();
+    await expect(editor.getByLabel('Qual IA atende esta pessoa')).toBeVisible();
     await editor.getByRole('tab', { name: 'Acessos' }).click();
     await expect(
       editor.getByRole('group', { name: 'Funcionalidades' }),
@@ -223,11 +232,15 @@ test.describe('Pessoas e permissões', () => {
     await open(page, 'pessoas');
     const section = settingsSection(page, 'Pessoas e permissões');
     const invite = section.locator('form.invite');
-    await expect(invite.getByRole('button', { name: 'Convidar' })).toBeDisabled();
+    await expect(
+      invite.getByRole('button', { name: 'Convidar' }),
+    ).toBeDisabled();
     await invite
       .getByLabel('Convidar por e-mail')
       .fill('alguem.novo@exemplo.test');
-    await expect(invite.getByRole('button', { name: 'Convidar' })).toBeEnabled();
+    await expect(
+      invite.getByRole('button', { name: 'Convidar' }),
+    ).toBeEnabled();
     await invite.getByRole('button', { name: 'Configurar agora' }).click();
     const modal = page.getByRole('dialog', { name: 'Configurar o convite' });
     await expect(modal).toBeVisible();
@@ -236,7 +249,11 @@ test.describe('Pessoas e permissões', () => {
     );
     await modal.getByRole('tab', { name: 'Preferências iniciais' }).click();
     await expect(modal.getByLabel('Acervo padrão')).toBeVisible();
-    await modal.getByRole('button', { name: 'Fechar' }).first().click();
+    // ✕ on a desktop; the phone sheet's header "Cancelar" discards it.
+    await modal
+      .getByRole('button', { name: desktop(page) ? 'Fechar' : 'Cancelar' })
+      .first()
+      .click();
     await expect(modal).toBeHidden();
     await expect(
       invite.getByRole('button', { name: 'Configurar agora' }),
@@ -254,7 +271,9 @@ test.describe('Pessoas e permissões', () => {
     await expect(
       bar.getByRole('button', { name: /Aplicar às selecionadas/ }),
     ).toBeDisabled();
-    await bar.getByRole('button', { name: 'Aplicar a todos os usuários' }).click();
+    await bar
+      .getByRole('button', { name: 'Aplicar a todos os usuários' })
+      .click();
     await expect(bar.getByRole('alert')).toContainText('Aplicar');
     await bar.getByRole('button', { name: 'Cancelar' }).click();
     await expect(bar.getByRole('alert')).toHaveCount(0);
@@ -262,7 +281,7 @@ test.describe('Pessoas e permissões', () => {
 });
 
 test.describe('the media sections', () => {
-  test("Groq: the cards are radios; choosing one marks it, without saving", async ({
+  test('Groq: the cards are radios; choosing one marks it, without saving', async ({
     page,
   }) => {
     await open(page, 'groq');

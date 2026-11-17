@@ -36,7 +36,9 @@
         <!-- Mid-page: the compact "Configurações › Seção" strip, the search at its corner. -->
         <div class="strip" [class.shown]="scrolled()">
           <span class="strip-path" aria-hidden="true">
-            <span class="strip-root" i18n="@@settings.title">Configurações</span>
+            <span class="strip-root" i18n="@@settings.title"
+              >Configurações</span
+            >
             <ui-icon name="chevRight" [size]="16" />
             <span class="strip-section">{{ activeLabel() }}</span>
           </span>
@@ -176,19 +178,28 @@
           @for (item of group.items; track item.id) {
             <!-- Conta is the profile row above (v2 · Índice). -->
             @if (item.id !== 'account') {
-            <a
-              class="root-item"
-              [attr.data-slug]="item.slug"
-              [routerLink]="['/configuracoes', item.slug]"
-            >
-              <span class="root-text">
-                <span class="root-label">{{ item.label }}</span>
-                @if (summaries()[item.id]; as summary) {
-                  <span class="root-summary">{{ summary }}</span>
-                }
-              </span>
-              <ui-icon name="chevRight" [size]="20" />
-            </a>
+              <a
+                class="root-item"
+                [attr.data-slug]="item.slug"
+                [routerLink]="['/configuracoes', item.slug]"
+                [attr.aria-describedby]="
+                  summaries()[item.id] ? 'root-summary-' + item.id : null
+                "
+              >
+                <!-- The row's name is the section's; its state is the description. -->
+                <span class="root-text">
+                  <span class="root-label">{{ item.label }}</span>
+                  @if (summaries()[item.id]; as summary) {
+                    <span
+                      class="root-summary"
+                      aria-hidden="true"
+                      [id]="'root-summary-' + item.id"
+                      >{{ summary }}</span
+                    >
+                  }
+                </span>
+                <ui-icon name="chevRight" [size]="20" />
+              </a>
             }
           }
         } @empty {
@@ -216,25 +227,25 @@
       <ui-icon name="search" [size]="22" />
     </button>
   } @else {
-  <form class="search" role="search" (submit)="goToFirst($event)">
-    <label class="ui-search">
-      <ui-icon name="search" [size]="18" />
-      <span class="visually-hidden" i18n="@@settings.searchLabel"
-        >Buscar nas configurações</span
-      >
-      <input
-        #searchInput
-        type="search"
-        autocomplete="off"
-        placeholder="Buscar nas configurações"
-        i18n-placeholder="@@settings.searchLabel"
-        [value]="query()"
-        (input)="setQuery(searchInput.value)"
-        (keydown.escape)="closeSearch()"
-        (blur)="leaveSearch()"
-      />
-    </label>
-  </form>
+    <form class="search" role="search" (submit)="goToFirst($event)">
+      <label class="ui-search">
+        <ui-icon name="search" [size]="18" />
+        <span class="visually-hidden" i18n="@@settings.searchLabel"
+          >Buscar nas configurações</span
+        >
+        <input
+          #searchInput
+          type="search"
+          autocomplete="off"
+          placeholder="Buscar nas configurações"
+          i18n-placeholder="@@settings.searchLabel"
+          [value]="query()"
+          (input)="setQuery(searchInput.value)"
+          (keydown.escape)="closeSearch()"
+          (blur)="leaveSearch()"
+        />
+      </label>
+    </form>
   }
 </ng-template>
 

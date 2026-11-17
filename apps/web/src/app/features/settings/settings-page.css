@@ -100,10 +100,11 @@
 }
 
 /* ---------- Content ---------- */
+/* The last section's own height lets it reach the top, where the index reads it; no room
+   below that, or the end of the page shows nothing ("End" hid "Sobre" under the strip). */
 .content {
   min-width: 0;
-  /* The last section can still reach the top, where the index reads it. */
-  padding-bottom: 40vh;
+  padding-bottom: var(--space-8);
 }
 
 .strip {
@@ -320,8 +321,7 @@
   display: grid;
   align-content: start;
   gap: var(--space-3);
-  padding: 0 var(--space-4)
-    calc(var(--space-8) + var(--shell-mobile-foot, 0px));
+  padding: 0 var(--space-4) calc(var(--space-8) + var(--shell-mobile-foot, 0px));
 }
 
 /* The pushed screen's header (celular): ‹ · title · search, over the panel's own colour. */
