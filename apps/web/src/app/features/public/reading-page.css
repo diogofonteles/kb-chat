@@ -6,7 +6,7 @@
   background:
     linear-gradient(
         180deg,
-        color-mix(in srgb, var(--color-accent) 22%, var(--color-bg)) 0,
+        var(--color-reading-glow) 0,
         var(--color-bg) 27.5rem
       )
       no-repeat,
@@ -47,6 +47,20 @@
   color: var(--color-text);
 }
 
+/* v2 · Públicas: "Entrar" is a 36 white pill, 14/700. */
+.enter {
+  min-height: 2.25rem;
+  font-size: var(--text-sm);
+}
+
+.aside {
+  min-width: 0;
+}
+
+.aside:empty {
+  display: none;
+}
+
 .head {
   display: grid;
   gap: 0.625rem;
@@ -81,7 +95,7 @@
 
 .body {
   display: grid;
-  grid-template-columns: 15rem minmax(0, 45rem);
+  grid-template-columns: 15rem minmax(0, 45rem) minmax(0, 1fr);
   gap: 4rem;
   align-items: start;
   padding: 0.5rem 2.5rem 2.5rem;
@@ -171,12 +185,21 @@
   }
 
   /* The index as a row of chips that scrolls sideways (v2 · Públicas, mobile). */
+  /* Right under the header (v2: 0 above, 8 below). Stuck at the top it keeps the page's
+     gradient as it stands on screen, so it reads as the same backdrop, never a band. */
   .index {
     position: sticky;
     top: 0;
     z-index: 2;
-    padding: var(--space-2) 0;
-    background: var(--color-bg);
+    padding: 0 0 var(--space-2);
+    background:
+      linear-gradient(
+          180deg,
+          var(--color-reading-glow) 0,
+          var(--color-bg) 27.5rem
+        )
+        fixed no-repeat,
+      var(--color-bg);
   }
 
   .index-title {
@@ -213,5 +236,10 @@
 
   .column {
     padding: var(--space-3) var(--space-4) 0;
+  }
+
+  /* The phone has no room beside the text; the same contact closes "Seus direitos". */
+  .aside {
+    display: none;
   }
 }

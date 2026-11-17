@@ -73,9 +73,17 @@ describe('Entrar com código (KBC-014 FR-5, T10)', () => {
     send.flush({}, { status: 202, statusText: 'Accepted' });
     await fixture.whenStable();
 
+    // The address is in bold (v2 · Auth): the sentence spans the <strong>.
     expect(
-      screen.getByText(/Se houver um acesso para ana@example.com/),
+      screen.getByText(
+        (_, node) =>
+          node?.tagName === 'P' &&
+          /Se houver um acesso para ana@example\.com, enviamos/.test(
+            node.textContent?.replace(/\s+/g, ' ') ?? '',
+          ),
+      ),
     ).toBeTruthy();
+    expect(screen.getByText('ana@example.com').tagName).toBe('STRONG');
     expect(document.activeElement).toBe(screen.getByLabelText('Dígito 1 de 6'));
     type('Dígito 1 de 6', '12a3456');
     fireEvent.click(button('Entrar'));

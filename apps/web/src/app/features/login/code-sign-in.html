@@ -76,8 +76,8 @@
   </form>
 } @else {
   <p class="sent" role="status" i18n="@@login.codeSent">
-    Se houver um acesso para {{ identifier() }}, enviamos um código de 6
-    dígitos.
+    Se houver um acesso para <strong>{{ identifier() }}</strong>, enviamos um
+    código de 6 dígitos.
   </p>
   <form (submit)="verify($event)" novalidate>
     <div class="ui-field" [class.ui-field--invalid]="!!fieldError()">

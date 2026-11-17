@@ -6,8 +6,8 @@
   background:
     linear-gradient(
         180deg,
-        color-mix(in srgb, var(--color-accent) 38%, var(--color-shell)) 0,
-        var(--color-shell) 34.5rem
+        var(--color-entry-glow) 0,
+        transparent 35rem
       )
       no-repeat,
     var(--color-shell);
@@ -19,6 +19,9 @@
   place-items: center;
   min-height: 100dvh;
   padding: var(--space-8) var(--space-4);
+  /* v2 · Auth sets its texts at their font's own height (15 → 20, 12 → 16), not the
+     reading pages' 1.5. */
+  line-height: 1.3;
 }
 
 .column {
@@ -47,7 +50,6 @@
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-item);
-  text-wrap: balance;
 }
 
 .card {
@@ -131,7 +133,8 @@
 
 .link {
   justify-self: center;
-  min-height: var(--target);
+  /* v2 · Auth: 14/700 with 4 above and below (26); still a target (WCAG 2.5.8). */
+  min-height: 1.625rem;
   padding: 0 var(--space-2);
   border: 0;
   background: transparent;
@@ -147,7 +150,7 @@
 .foot {
   display: grid;
   justify-items: center;
-  gap: var(--space-1);
+  gap: 0.625rem;
   text-align: center;
 }
 
@@ -160,7 +163,7 @@
 .links {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
   margin: 0;
   color: var(--color-text-muted);
 }
@@ -168,7 +171,8 @@
 .footer-link {
   display: inline-flex;
   align-items: center;
-  min-height: var(--target);
+  /* 13/700 on one line, 10 under the note (v2 · Auth); 24 keeps it a target. */
+  min-height: 1.5rem;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
   font-weight: 700;
@@ -181,10 +185,40 @@
 }
 
 @media (max-width: 1023px) {
-  /* The same stack without the card, 16 margins and 52 buttons (v2 · Auth, mobile). */
+  /* The same stack without the card, 16 margins and 52 buttons (v2 · Auth, mobile); the
+     footer at the foot of the screen. */
+  :host {
+    background:
+      linear-gradient(180deg, var(--color-entry-glow) 0, transparent 26.25rem)
+        no-repeat,
+      var(--color-shell);
+  }
+
   .entry {
-    align-items: start;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
     padding: 5.5rem var(--space-4) var(--space-8);
+  }
+
+  .column {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .foot {
+    margin-top: auto;
+  }
+
+  .logo {
+    --ui-logo-size: 56px !important;
+  }
+
+  .tagline {
+    max-width: 18.75rem;
+    justify-self: center;
   }
 
   .name {
