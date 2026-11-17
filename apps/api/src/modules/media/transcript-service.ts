@@ -92,6 +92,20 @@ const namesForListeners = ({ labels, namesPending }: TranscriptSpeakers) =>
       }))
     : labels;
 
+/**
+ * KBC-151 BR-0: whoever only listens learns of the voices they hear and nothing more — a voice
+ * that speaks only in a part hidden from them leaves no trace, nor its name. `speakerId`
+ * stays: it is how the screen tells two voices of one person apart from two people.
+ */
+function heardVoicesOnly(transcript: MediaTranscript): MediaTranscript {
+  if (!transcript.voiceNames) return transcript;
+  const heard = new Set(transcript.segments.map(({ voice }) => voice));
+  return {
+    ...transcript,
+    voiceNames: transcript.voiceNames.filter(({ voice }) => heard.has(voice)),
+  };
+}
+
 /** A media's subtitles and the tag that names their version (transcript, filter, rules). */
 export interface Subtitles {
   readonly etag: string;
@@ -199,7 +213,7 @@ export class TranscriptService {
 
   /**
    * The transcript; with `withVoices` (`media-edit`, KBC-064 FR-4) its separation and names,
-   * with `withNames` (`media-speakers`, KBC-065 FR-4) only who speaks in each segment.
+   * with `withNames` (anyone who may listen, KBC-151 BR-0) only who speaks in each segment.
    */
   current(
     actor: MediaActor,
@@ -221,12 +235,12 @@ export class TranscriptService {
       segments,
       ...(options.withTermList ? this.termListOf(summary) : {}),
     };
-    return foldRestricted(
-      restrictedIn(
-        this.withSpeakers(transcript, summary, { ...options, withVoices }),
-        hidden,
-      ),
+    const visible = restrictedIn(
+      this.withSpeakers(transcript, summary, { ...options, withVoices }),
+      hidden,
     );
+    // The names follow what is left to hear, never the whole separation (KBC-151 BR-0).
+    return foldRestricted(withVoices ? visible : heardVoicesOnly(visible));
   }
 
   /**

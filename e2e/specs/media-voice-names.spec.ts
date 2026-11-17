@@ -211,7 +211,7 @@ test('AC-6: a new separation keeps the names and asks to confirm them', async ({
   await expect(transcriptList(listener)).toContainText('Mestre Laércio');
 });
 
-test('AC-4, AC-5: without the permission nothing changes; "Mostrar quem fala" is remembered', async ({
+test('AC-4, AC-5: whoever only listens sees who speaks but names nothing (KBC-151 BR-0); "Mostrar quem fala" is remembered', async ({
   browser,
   viewport,
 }) => {
@@ -220,9 +220,8 @@ test('AC-4, AC-5: without the permission nothing changes; "Mostrar quem fala" is
   const plain = await listenerPage(browser, viewport, ['media']);
   await plain.goto(`/midia/${media.id}`);
   await expect(transcriptList(plain)).toContainText('Mestre, o senhor');
-  await expect(transcriptList(plain)).not.toContainText(
-    'Falante não identificado',
-  );
+  await expect(transcriptList(plain)).toContainText('Falante não identificado');
+  await expect(plain.getByRole('button', { name: 'Vozes' })).toHaveCount(0);
   const refused = await plain.request.put(
     `/api/v1/media/${media.id}/voices/1`,
     {
