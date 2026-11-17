@@ -48,10 +48,17 @@ const skipRepeats = () =>
     'Each test drives both widths itself (media-desktop and media-webkit).',
   );
 
+/**
+ * Who drives the library: a master of this run's own, not the owner — the library's filters
+ * and view are kept in the account, and other specs running beside this one as the owner
+ * would open a library filtered here.
+ */
+let driver = OWNER_EMAIL;
+
 async function contextAt(
   browser: Browser,
   width: Width,
-  email = OWNER_EMAIL,
+  email = driver,
 ): Promise<{ context: BrowserContext; page: Page }> {
   const phone = width === 'phone';
   const isWebkit = browser.browserType().name() === 'webkit';
@@ -295,6 +302,18 @@ async function seed(): Promise<Seeded> {
     await invite(owner, email, { topics, features });
     return email;
   };
+  const master = uniqueEmail('mestre-biblioteca');
+  await invite(owner, master, { role: 'master' });
+  // Past the first-run wizard, as "Pular" leaves it (settings saved with nothing in them).
+  const masterApi = await request.newContext({ baseURL: WEB_ORIGIN });
+  await signIn(masterApi, master);
+  const skipped = await masterApi.put('/api/v1/settings', {
+    data: {},
+    headers: CSRF,
+  });
+  expect(skipped.status(), await skipped.text()).toBe(200);
+  await masterApi.dispose();
+  driver = master;
   const listing = ['search', 'media', 'media-upload', 'media-edit'];
   const lister = await person('lista', [topic], listing);
   // The lister sends "Relato da Rita…" himself: on /midia its ⋯ offers "Editar informações"
