@@ -1,5 +1,6 @@
 import type { MediaTranscript } from '@kb-chat/contracts';
 import {
+  aroundHeard,
   aroundPassage,
   citedRange,
   lineStateAt,
@@ -103,5 +104,51 @@ describe('passage context (KBC-150)', () => {
     expect(lineStateAt(line, 5_000, true)).toBe('idle');
     expect(lineStateAt(line, 15_000, true)).toBe('now');
     expect(lineStateAt(line, 20_000, true)).toBe('past');
+  });
+
+  describe('aroundHeard (KBC-154)', () => {
+    const kinds = (lines: ReturnType<typeof aroundHeard>) =>
+      lines?.map(({ kind, text }) => [kind, text]) ?? null;
+
+    it(`keeps the passage's lines through the 2 s lead-in of "Ouvir o trecho"`, () => {
+      // The passage starts at 20 s; playback starts at 18 s, on the line before it.
+      const passage = { startMs: 20_000, endMs: 30_000 };
+      expect(aroundHeard(transcript(), passage, { nowMs: 18_500 })).toBeNull();
+      expect(aroundHeard(transcript(), passage, { nowMs: 25_000 })).toBeNull();
+    });
+
+    it("keeps the passage's lines while the line heard is next to it, past what is restricted", () => {
+      const passage = { startMs: 20_000, endMs: 30_000 };
+      expect(aroundHeard(transcript(), passage, { nowMs: 12_000 })).toBeNull();
+      expect(aroundHeard(transcript(), passage, { nowMs: 45_000 })).toBeNull();
+    });
+
+    it('follows the line heard once it is beyond the lines around the passage', () => {
+      expect(
+        kinds(
+          aroundHeard(
+            transcript(),
+            { startMs: 0, endMs: 5_000 },
+            { nowMs: 25_000 },
+          ),
+        ),
+      ).toEqual([
+        ['before', 'Dois.'],
+        ['heard', 'Três.'],
+        ['after', 'Cinco.'],
+      ]);
+      expect(
+        kinds(
+          aroundHeard(
+            transcript(),
+            { startMs: 40_000, endMs: 50_000 },
+            { nowMs: 5_000 },
+          ),
+        ),
+      ).toEqual([
+        ['heard', 'Um.'],
+        ['after', 'Dois.'],
+      ]);
+    });
   });
 });

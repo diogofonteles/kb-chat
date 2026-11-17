@@ -539,22 +539,22 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
       expect(document.querySelector('.context .cited-line')).toBeTruthy();
     });
 
-    it('a cited line next to the one heard keeps its border', async () => {
+    it('the line right after the passage is heard on the lines already shown, the cited one with its border', async () => {
       await heardAt(7);
       await vi.waitFor(() =>
-        expect(aroundTexts()).toEqual([
-          '0:00 Trecho citado: Fala 1.',
-          '0:05 Fala 2.',
-          '0:10 Fala 3.',
-        ]),
+        expect(
+          document.querySelector('.context .line[aria-current="true"]')
+            ?.textContent,
+        ).toContain('Fala 2.'),
       );
+      // Already in view as the line after: the list does not move (KBC-154 review).
+      expect(aroundTexts()).toEqual([
+        '0:00 Trecho citado: Fala 1.',
+        '0:05 Fala 2.',
+      ]);
       expect(
         document.querySelector('.context .cited-line')?.textContent,
       ).toContain('Fala 1.');
-      expect(
-        document.querySelector('.context .line[aria-current="true"]')
-          ?.textContent,
-      ).toContain('Fala 2.');
     });
 
     it('with "Transcrição completa" open, the line heard is current and scrolled into view', async () => {

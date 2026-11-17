@@ -4,6 +4,7 @@ import type {
   TranscriptSegment,
 } from '@kb-chat/contracts';
 import { lastStartedAt } from '@kb-chat/player-core';
+import { playbackStartOf } from '../search-hit/passage-focus.js';
 import { speakerChanges, type SpeakerShown } from '../voices/speaker-names.js';
 
 /** Who speaks a line: the name and the voice, for its colour (KBC-065). */
@@ -38,8 +39,8 @@ export function citedRange(
 }
 
 /**
- * Who speaks each segment, when the transcript says it (only for who may see the voices,
- * KBC-064/065): the last change of speaker at or before it. Empty without voices.
+ * Who speaks each segment, when the transcript says it (whoever may listen gets the voices
+ * they hear, KBC-151 BR-0): the last change of speaker at or before it. Empty without voices.
  */
 export function speakersBySegment(
   transcript: MediaTranscript,
@@ -126,9 +127,9 @@ const citedLine = (
 export function aroundPassage(
   transcript: MediaTranscript,
   passage: Pick<TrackPassage, 'startMs' | 'endMs'>,
+  range: CitedRange | null = citedRange(transcript.segments, passage),
 ): ContextLine[] {
   const { segments } = transcript;
-  const range = citedRange(segments, passage);
   if (!range) return [];
   const speakers = speakersBySegment(transcript);
   const before = readable(segments, range.first - 1, -1);
@@ -144,21 +145,27 @@ export function aroundPassage(
   ];
 }
 
+/** The segments a passage falls on (first and last), as `citedRange` finds them. */
+export type CitedRange = NonNullable<ReturnType<typeof citedRange>>;
+
 /**
  * While the track plays outside the cited passage (KBC-154): the line heard at `nowMs` with
  * the one before and the one after, a cited segment among them still marked as cited. Null
- * when what is heard is the passage itself (or nothing readable): the lines around it stay.
+ * while the passage's own lines already show what is heard: the passage itself, its 2 s
+ * lead-in, or the line right before or after it; and when nothing readable is heard.
  */
 export function aroundHeard(
   transcript: MediaTranscript,
   passage: Pick<TrackPassage, 'startMs' | 'endMs'>,
-  nowMs: number,
+  {
+    nowMs,
+    range = citedRange(transcript.segments, passage),
+  }: { readonly nowMs: number; readonly range?: CitedRange | null },
 ): ContextLine[] | null {
+  if (nowMs >= playbackStartOf(passage) && nowMs < passage.endMs) return null;
   const { segments } = transcript;
-  const range = citedRange(segments, passage);
   const heard = readable(segments, lastStartedAt(segments, nowMs), -1);
-  if (heard < 0 || (range && heard >= range.first && heard <= range.last))
-    return null;
+  if (heard < 0 || (range && aroundCited(segments, range, heard))) return null;
   const at = heardLineOf(transcript, passage, range);
   const before = readable(segments, heard - 1, -1);
   const after = readable(segments, heard + 1, 1);
@@ -169,11 +176,21 @@ export function aroundHeard(
   ];
 }
 
+/** Whether `index` is among the passage's own lines: a cited segment or its readable neighbour. */
+const aroundCited = (
+  segments: readonly TranscriptSegment[],
+  range: CitedRange,
+  index: number,
+): boolean =>
+  (index >= range.first && index <= range.last) ||
+  index === readable(segments, range.first - 1, -1) ||
+  index === readable(segments, range.last + 1, 1);
+
 /** A segment as a line around what is heard: a cited one keeps its kind (BR-2). */
 function heardLineOf(
   transcript: MediaTranscript,
   passage: Pick<TrackPassage, 'startMs' | 'endMs'>,
-  range: { readonly first: number; readonly last: number } | null,
+  range: CitedRange | null,
 ) {
   const { segments } = transcript;
   const speakers = speakersBySegment(transcript);

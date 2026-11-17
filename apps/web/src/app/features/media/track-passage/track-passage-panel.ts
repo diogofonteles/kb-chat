@@ -387,10 +387,11 @@ export class TrackPassagePanel {
       const transcript = this.transcript.value();
       // While this track plays past the passage, the lines follow what is heard (KBC-154);
       // paused, or back in the passage, they are the passage's again.
+      const range = this.range();
       const heard = this.playing()
-        ? aroundHeard(transcript, passage, this.nowMs())
+        ? aroundHeard(transcript, passage, { nowMs: this.nowMs(), range })
         : null;
-      return heard ?? aroundPassage(transcript, passage);
+      return heard ?? aroundPassage(transcript, passage, range);
     },
     // A tick inside the same line changes nothing on screen.
     { equal: sameLines },
@@ -400,7 +401,7 @@ export class TrackPassagePanel {
     const passage = this.passage();
     if (!passage || !this.transcript.hasValue()) return null;
     return (
-      aroundPassage(this.transcript.value(), passage).find(
+      aroundPassage(this.transcript.value(), passage, this.range()).find(
         (one) => one.kind === 'cited',
       ) ?? null
     );
