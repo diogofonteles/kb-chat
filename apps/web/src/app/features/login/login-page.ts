@@ -119,6 +119,9 @@ export class LoginPage {
     });
   }
 
+  /** Google's button is in place: the drawn pill shows over it. */
+  protected readonly rendered = signal(false);
+
   /** Google warns when initialize runs twice: once per client id, then only the button. */
   private initializedFor: string | null = null;
 
@@ -136,6 +139,7 @@ export class LoginPage {
       });
       this.initializedFor = clientId;
     }
+    this.rendered.set(true);
     accounts.renderButton(host, {
       type: 'standard',
       theme: 'outline',

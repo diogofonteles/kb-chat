@@ -66,16 +66,36 @@
               <span i18n="@@login.loading">Carregando…</span>
             </p>
           }
+          <!--
+            v2 · Auth: the white 48 pill (52 on a phone) with the G, in the page's type. Google's
+            own button (an iframe that takes no styling) lies over it, transparent, and takes
+            the click and the focus; the pill shows its focus. While signing in the pill turns
+            grey and says "Entrando…", as drawn.
+          -->
           <div
-            #button
-            class="google-button"
+            class="google-slot"
             [class.hidden]="loading()"
             [class.busy]="signingIn()"
-            [attr.aria-busy]="signingIn()"
-          ></div>
-          <p class="status" role="status">
+            [class.ready]="rendered() || signingIn()"
+          >
+            <span class="google-face" aria-hidden="true">
+              @if (signingIn()) {
+                <span class="spinner" aria-hidden="true"></span>
+                <span i18n="@@login.signingIn">Entrando…</span>
+              } @else {
+                <ui-icon name="google" [size]="20" />
+                <span i18n="@@login.google">Fazer login com o Google</span>
+              }
+            </span>
+            <div
+              #button
+              class="google-button"
+              [attr.aria-busy]="signingIn()"
+              [attr.inert]="signingIn() ? '' : null"
+            ></div>
+          </div>
+          <p class="visually-hidden" role="status">
             @if (signingIn()) {
-              <span class="spinner" aria-hidden="true"></span>
               <span i18n="@@login.signingIn">Entrando…</span>
             }
           </p>

@@ -56,28 +56,68 @@
   background: var(--overlay-1);
 }
 
-.google-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* v2 · Auth draws a 48 button (52 on a phone); Google's own (an iframe, 40 or 44) sits
-     centred in a slot that tall, so everything under it keeps the frame's place. */
+.google-slot {
+  position: relative;
+  /* v2 · Auth: 48 (52 on a phone), the frame's place even before Google answers. */
   min-height: 3rem;
   width: 100%;
 }
 
 @media (max-width: 1023px) {
-  .google-button {
+  .google-slot {
     min-height: 3.25rem;
   }
 }
 
-.google-button.hidden {
+.google-slot.hidden {
   display: none;
 }
 
-.google-button.busy {
+.google-face {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-size: var(--text-item);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.google-slot.ready .google-face {
+  display: flex;
+}
+
+.google-slot.busy .google-face {
   opacity: 0.6;
+}
+
+.google-slot:hover .google-face {
+  transform: scale(1.02);
+}
+
+.google-slot:focus-within .google-face {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Google's button over the pill: it takes the click and the focus, never shows. */
+.google-button {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scaleY(1.2);
+}
+
+.google-slot.busy .google-button {
+  pointer-events: none;
 }
 
 .pending,
@@ -235,4 +275,21 @@
     padding: 0;
     background: transparent;
   }
+}
+
+/* v2 · Auth, desktop: the pill buttons are 48 (52 on a phone) and the text links of a form
+   ("Reenviar código", "Trocar e-mail") a 20 row; 24 stays their target (WCAG 2.5.8). */
+@media (min-width: 1024px) {
+  :host ::ng-deep .ui-btn--lg {
+    min-height: 3rem;
+  }
+
+  :host ::ng-deep .actions .text-link {
+    min-height: 1.5rem;
+    margin-block: -0.1875rem;
+  }
+}
+
+:host ::ng-deep .ui-btn--lg {
+  font-size: var(--text-item);
 }

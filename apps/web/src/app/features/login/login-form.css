@@ -247,3 +247,10 @@ form {
 .leave {
   justify-self: center;
 }
+
+/* v2 · Auth: a field's error and hint are 12 lines of 14.4 (the frames' auto height), so the
+   stack under them keeps the drawn rhythm. */
+:host ::ng-deep .ui-field__error,
+:host ::ng-deep .ui-field__hint {
+  line-height: 1.2;
+}
