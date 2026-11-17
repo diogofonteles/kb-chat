@@ -75,6 +75,7 @@
     role="group"
     aria-label="Mostrar"
     i18n-aria-label="@@library.show"
+    (wheel)="scrollChips($event)"
   >
     @for (chip of chips(); track chip.kind) {
       <button
@@ -197,7 +198,7 @@
                       [icon]="item.icon"
                       [from]="item.colors[0]"
                       [to]="item.colors[1]"
-                      [size]="40"
+                      [size]="48"
                     />
                   </ui-library-item>
                 </a>
@@ -359,7 +360,10 @@
               }
             } @else {
               @for (group of conversationGroups(); track group.group) {
-                <p class="recency" [id]="'library-recency-' + group.group">
+                <p
+                  class="recency visually-hidden"
+                  [id]="'library-recency-' + group.group"
+                >
                   {{ group.label }}
                 </p>
                 <ul
@@ -370,62 +374,66 @@
                     <li>
                       <button
                         type="button"
-                        class="conversation"
+                        class="conversation ui-libitem-row"
                         [attr.aria-current]="
                           conversation.id === currentId() ? 'true' : null
                         "
                         (click)="open(conversation)"
                       >
-                        <ui-icon
-                          class="conversation-icon"
-                          [class.research]="conversation.kind === 'research'"
-                          [name]="
-                            conversation.kind === 'research'
-                              ? 'sparkle'
-                              : 'search'
-                          "
-                          [size]="16"
+                        <!-- v2 · Sua biblioteca: a conversation's row is a library item
+                             with the chat cover; the kind leads its meta line. -->
+                        <ui-cover
+                          class="conversation-cover"
+                          icon="chat"
+                          from="#3a3a3a"
+                          to="#1f1f1f"
+                          [size]="48"
                         />
-                        <span class="conversation-text">
-                          <span class="question" [title]="conversation.title">{{
-                            conversation.title
-                          }}</span
-                          >&ngsp;<span class="meta">
+                        <span class="conversation-text ui-libitem__text">
+                          <span
+                            class="question ui-libitem__title"
+                            [title]="conversation.title"
+                            >{{ conversation.title }}</span
+                          >&ngsp;<span class="meta ui-libitem__meta">
                             <span
-                              class="kind"
-                              [class.research]="
-                                conversation.kind === 'research'
-                              "
-                              >{{ kindLabels[conversation.kind] }}</span
-                            >
-                            ·
-                            {{
-                              titles().get(conversation.topic) ??
-                                conversation.topic
-                            }}
-                            @if (conversation.count > 1) {
-                              <span i18n="@@sidebar.questions"
-                                >·
-                                {conversation.count, plural,
-                                  other {{{ conversation.count }} perguntas}
-                                }</span
+                              class="meta-line"
+                              ><span
+                                class="kind"
+                                [class.research]="
+                                  conversation.kind === 'research'
+                                "
+                                >{{ kindLabels[conversation.kind] }}</span
                               >
-                            }
-                            @if (conversation.status; as status) {
-                              <span
-                                class="status"
-                                [class.pending]="status === 'pending'"
-                                [class.failed]="status === 'failed'"
-                              >
-                                @if (status === 'pending') {
-                                  <span
-                                    class="spinner"
-                                    aria-hidden="true"
-                                  ></span>
+                              ·
+                              @if (conversation.status; as status) {
+                                <span
+                                  class="status"
+                                  [class.pending]="status === 'pending'"
+                                  [class.failed]="status === 'failed'"
+                                >
+                                  @if (status === 'pending') {
+                                    <span
+                                      class="spinner"
+                                      aria-hidden="true"
+                                    ></span>
+                                  }
+                                  {{ statusLabels[status] }}</span
+                                >
+                              } @else {
+                                {{
+                                  titles().get(conversation.topic) ??
+                                    conversation.topic
+                                }}
+                                @if (conversation.count > 1) {
+                                  <span i18n="@@sidebar.questions"
+                                    >·
+                                    {conversation.count, plural,
+                                      other {{{ conversation.count }} perguntas}
+                                    }</span
+                                  >
                                 }
-                                · {{ statusLabels[status] }}</span
-                              >
-                            }
+                              }</span
+                            >
                           </span>
                         </span>
                       </button>
@@ -472,7 +480,7 @@
                       icon="doc"
                       from="#3a3a3a"
                       to="#1f1f1f"
-                      [size]="40"
+                      [size]="48"
                     />
                   </ui-library-item>
                 </button>

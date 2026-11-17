@@ -141,7 +141,7 @@ interface PinnedItem {
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.collapsed]': 'collapsed()' },
+  host: { '[class.collapsed]': 'collapsed()', '[class.mobile]': 'mobile()' },
 })
 export class Sidebar {
   protected readonly chat = inject(ChatStore);
@@ -374,6 +374,19 @@ export class Sidebar {
     this.writeFolded(next);
   }
 
+  /**
+   * The chips sit on one line, as v2 draws them (the last one under the column's edge): a
+   * vertical wheel over them scrolls the line sideways, so a mouse reaches every chip.
+   */
+  protected scrollChips(event: WheelEvent): void {
+    const row = event.currentTarget;
+    if (!(row instanceof HTMLElement) || row.scrollWidth <= row.clientWidth)
+      return;
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    event.preventDefault();
+    row.scrollLeft += event.deltaY;
+  }
+
   protected toggleSearch(): void {
     this.searching.update((on) => !on);
     if (!this.searching()) this.query.set('');
@@ -512,12 +525,21 @@ export class Sidebar {
   private queueItem(): PinnedItem | null {
     if (!this.queue.allowed()) return null;
     const active = this.queue.active();
+    // v2 · Sua biblioteca: what needs the person comes first ("3 precisam de atenção").
+    const attention = this.queue
+      .items()
+      .filter(({ phase }) => phase === 'attention').length;
     return {
       key: 'queue',
       title: $localize`:@@library.queue:Fila de processamento`,
-      meta: active
-        ? $localize`:@@library.queueActive:${active}:count: em processamento`
-        : $localize`:@@library.queueIdle:Nada em processamento`,
+      meta:
+        attention === 1
+          ? $localize`:@@library.queueAttentionOne:1 precisa de atenção`
+          : attention > 1
+            ? $localize`:@@library.queueAttention:${attention}:count: precisam de atenção`
+            : active
+              ? $localize`:@@library.queueActive:${active}:count: em processamento`
+              : $localize`:@@library.queueIdle:Nada em processamento`,
       path: '/fila',
       icon: 'upload',
       colors: ['#1f9c56', '#0b3d22'],

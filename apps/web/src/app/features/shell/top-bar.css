@@ -26,6 +26,15 @@
   gap: var(--space-2);
 }
 
+/* v2: "Avançar" is the quieter of the two arrows (#ffffff59 until hovered). */
+.forward {
+  color: var(--color-icon-faint);
+}
+
+.forward:hover {
+  color: var(--color-text);
+}
+
 .home {
   color: var(--color-text-muted);
 }

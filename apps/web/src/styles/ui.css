@@ -390,8 +390,8 @@
   height: var(--ui-avatar-size);
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-warn);
-  color: var(--color-bg);
+  background: var(--ui-avatar-bg, var(--avatar-5-bg));
+  color: var(--ui-avatar-fg, var(--avatar-5-fg));
   font-size: calc(var(--ui-avatar-size) * 0.42);
   font-weight: 700;
 }
@@ -1228,10 +1228,17 @@ select.ui-input option {
   border: 2px solid var(--color-text-muted);
 }
 
+/* v2 · Auth: the box in focus has a 2 px white border, nothing around it; white on the dark
+   box is the focus indicator (contrast far above 3:1, WCAG 2.4.7/1.4.11). */
 .ui-code__digit:focus-visible {
   border: 2px solid var(--color-text);
-  outline: 2px solid var(--color-focus);
-  outline-offset: 1px;
+  outline: none;
+}
+
+@media (forced-colors: active) {
+  .ui-code__digit:focus-visible {
+    outline: 2px solid Highlight;
+  }
 }
 
 .ui-code__digit[aria-invalid='true'] {

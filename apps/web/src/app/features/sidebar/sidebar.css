@@ -77,17 +77,24 @@
   min-height: 0;
 }
 
-/* With "Áudios" the four chips pass the column's 300: they wrap to a second line instead of
-   scrolling out of sight with no scroll bar (a mouse could not reach "Documentos"). */
+/* v2: the chips on one line; with "Áudios" the last passes the column's 300 and is cut at
+   its edge, as drawn. The line scrolls sideways (a touch, Tab, the wheel: scrollChips). */
 .chips {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
+  flex-wrap: nowrap;
+  gap: var(--space-2);
   padding: var(--space-1) var(--space-4) var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
 }
 
 .chips ::ng-deep .ui-chip {
-  padding: 0 0.75rem;
+  flex: none;
+  padding: 0 0.875rem;
 }
 
 .tools {
@@ -120,8 +127,23 @@
 /* ---------- Sections (D5): Fixados · Acervos · Conversas · Documentos ---------- */
 .sections {
   display: grid;
+  align-content: start;
   gap: var(--space-2);
   padding-bottom: var(--space-3);
+}
+
+/* Desktop: the column is one screen tall; only the rows scroll, between the chips and the
+   day's spend, which stays at the foot (v2 · Casca: "gasto ia" under the list). */
+:host(:not(.mobile)) {
+  height: 100%;
+  min-height: 0;
+}
+
+:host(:not(.mobile)) .sections {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .section + .section {
@@ -240,6 +262,19 @@
   transform: translateY(-50%);
 }
 
+/* v2 draws the rows bare: "Editar acervo" shows on the row under the pointer or with the
+   focus in it (a touch screen, with no hover, keeps it on). */
+@media (hover: hover) {
+  .edit:not(:focus-visible) {
+    opacity: 0;
+  }
+
+  .collection:hover .edit,
+  .collection:focus-within .edit {
+    opacity: 1;
+  }
+}
+
 .notice:empty {
   display: none;
 }
@@ -248,76 +283,24 @@
   padding: var(--space-1) var(--space-2) var(--space-1) 2rem;
 }
 
-/* Conversas: compact text rows with the kind's icon, never a cover (D5). */
+/* Conversas: library items like the others (v2 · Sua biblioteca): the chat cover, the
+   question and "kind · topic" (or the state) under it. */
 .recency {
   margin: 0;
-  padding: var(--space-2) var(--space-4) var(--space-1);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: 700;
 }
 
 .conversation {
-  display: flex;
-  align-items: flex-start;
   gap: var(--space-3);
-  width: 100%;
-  min-height: 2.75rem;
-  padding: var(--space-2);
-  border: 0;
-  border-radius: var(--radius-menu);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.conversation:hover {
-  background: var(--overlay-2);
-}
-
-.conversation[aria-current='true'] {
-  background: var(--overlay-3);
 }
 
 .conversation[aria-current='true'] .question {
   color: var(--color-accent-text);
 }
 
-.conversation-icon {
-  flex: none;
-  margin-top: 0.125rem;
-  color: var(--color-text-muted);
-}
-
-.conversation-icon.research {
-  color: var(--color-accent-text);
-}
-
-.conversation-text {
-  display: grid;
-  flex: 1;
-  gap: 0.125rem;
-  min-width: 0;
-}
-
-.question,
-.conversation .meta {
+.meta-line {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.question {
-  color: var(--color-text);
-  font-size: var(--text-sm);
-  font-weight: 500;
-}
-
-.conversation .meta {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
 }
 
 .note {
@@ -455,7 +438,6 @@
   padding-left: 0;
 }
 
-:host(.collapsed) .conversation-text,
 :host(.collapsed) ::ng-deep .ui-libitem__text {
   position: absolute;
   width: 1px;

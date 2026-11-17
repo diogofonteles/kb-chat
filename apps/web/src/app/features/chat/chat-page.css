@@ -19,7 +19,9 @@
     'foot foot';
   gap: var(--shell-gap);
   height: 100%;
-  padding: 0 var(--shell-gap) var(--shell-gap);
+  /* v2 · Casca: 8 around every panel, the top bar included (its row starts at 8, the panels
+     at 72). */
+  padding: var(--shell-gap);
   background: var(--color-shell);
 }
 
@@ -38,7 +40,8 @@
 .library {
   grid-area: library;
   min-height: 0;
-  overflow-y: auto;
+  /* The sidebar scrolls its own rows and keeps its foot (the AI spend) in place. */
+  overflow: hidden;
   border-radius: var(--radius-card);
   background: var(--color-bg);
 }
@@ -138,6 +141,33 @@
 /* The media pages (T14, T15) take the conversation's place under the top bar and scroll. */
 .conversation > router-outlet {
   display: none;
+}
+
+/* v2: a media page starts with its own header (art, title) at the top of the main panel;
+   the shell's band with the collection only keeps its heading for screen readers. On a
+   phone the band is the page's header row: the avatar (Menu) and the page's name. */
+.conversation.media > .topbar {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.page-name {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation.media {
@@ -396,10 +426,42 @@
     border-radius: 0;
   }
 
+  /* v2 · celular: the header row of a page, 56 from the top (the status bar's room), the
+     avatar 32, 12 apart from the page's name (24/700). */
+  .conversation.media > .topbar {
+    position: static;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    gap: var(--space-3);
+    padding: 3.5rem var(--space-4) var(--space-3);
+    overflow: visible;
+    clip-path: none;
+  }
+
+  /* On the page's colour when it gives one: its own gradient goes on from 70% below. */
+  .conversation.media > .topbar.tinted {
+    background: color-mix(in srgb, var(--page-tint) 70%, var(--color-bg));
+  }
+
+  /* The 44 target around the 32 avatar overflows the row evenly: the avatar sits at 16. */
+  .conversation.media > .topbar .menu {
+    margin: calc((2rem - var(--target)) / 2);
+  }
+
+  .conversation.media > .topbar .topic {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  /* v2 · celular: the mini player right on top of the navigation, 8 from the sides. */
   .shell-foot {
     display: grid;
-    gap: var(--space-1);
-    padding: var(--space-1) var(--space-2) 0;
+    gap: 0;
+    padding: 0 var(--space-2);
     background: color-mix(in srgb, var(--color-bg) 95%, transparent);
     box-shadow: 0 -24px 24px -8px
       color-mix(in srgb, var(--color-bg) 85%, transparent);
