@@ -72,6 +72,7 @@ import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
 import { MovedNotice, mediaMoveOf, type MediaMove } from './moved-notice.js';
 import { injectOpenPreparations } from './preparation/open-preparations.js';
 import { PreparationEntry } from './preparation/preparation-entry.js';
+import { scrollPageByKey } from './page-keys.js';
 import { RowMenu } from './row-menu.js';
 import { UploadPanel } from './upload-panel.js';
 import { UiBanner } from '@ui/banner.js';
@@ -154,6 +155,7 @@ function sortedBy(items: readonly MediaItem[], sort: LibrarySort): MediaItem[] {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(focusin)': 'keepInView($event)',
+    '(document:keydown)': 'pageKey($event)',
     '[style.--media-tint]': 'tint()',
   },
 })
@@ -387,6 +389,11 @@ export class MediaListPage {
     this.pollWhileInFlight();
     this.announceReady();
     afterRenderEffect(() => this.focusPending(this.rows()));
+  }
+
+  /** The scrolling keys with nothing focused move the album (its own scroller). */
+  protected pageKey(event: KeyboardEvent): void {
+    scrollPageByKey(this.host.nativeElement, event);
   }
 
   protected keepInView(event: FocusEvent): void {

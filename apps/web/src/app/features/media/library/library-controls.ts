@@ -51,6 +51,8 @@ export class LibraryControls {
   readonly topics = input<readonly Topic[]>([]);
   /** A search is on (KBC-096): only the collection, the rest out of the results' way. */
   readonly compact = input(false);
+  /** A search is on: the collection's chip is the way out, no "Limpar filtros" for it alone. */
+  readonly searching = input(false);
   readonly filtersChange = output<FilterChange>();
 
   protected readonly stateChips = computed<Chip<ListeningState>[]>(() => {

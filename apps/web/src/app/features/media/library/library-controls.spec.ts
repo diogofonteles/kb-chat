@@ -174,6 +174,12 @@ describe('LibraryControls "Assunto" (KBC-070 FR-4)', () => {
     expect(screen.getByRole('button', { name: 'Limpar filtros' })).toBeTruthy();
   });
 
+  it('"Limpar filtros" with the collection alone takes it out (media-library-collection-empty)', async () => {
+    const { changes } = await renderControls({ ...NONE, topic: 'alquimia' });
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros' }));
+    expect(changes).toEqual([{ kind: 'topic', topic: null }]);
+  });
+
   it('keeps the collection in force on the list, even with no media (KBC-091)', async () => {
     await render(LibraryControls, {
       providers: [provideZonelessChangeDetection()],

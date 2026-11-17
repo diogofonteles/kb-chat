@@ -290,6 +290,7 @@
           <app-library-controls
             [facets]="facets()"
             [filters]="current.filters"
+            [searching]="searching()"
             [topics]="topics()"
             (filtersChange)="changeFilter($event)"
           />
@@ -599,9 +600,23 @@
       O áudio e a transcrição serão apagados e não podem ser recuperados.
     </p>
     @if (removingTracks(); as tracks) {
-      <p class="remove-tracks" role="alert">
-        {{ removingTracksText() }}
-      </p>
+      <!-- The frame lists each track under its count (media-library-remove-tracks); the
+           phone's sheet says it in one sentence (…-remove-tracks@mobile). Readers hear the
+           sentence either way. -->
+      <div class="remove-tracks" role="alert">
+        <p class="remove-tracks-text">{{ removingTracksText() }}</p>
+        <div class="remove-tracks-list" aria-hidden="true">
+          <p class="remove-tracks-count">{{ removingTracksCount() }}</p>
+          <ul>
+            @for (track of removingTracksShown(); track $index) {
+              <li>
+                <ui-cover [title]="item.title" [size]="24" />
+                <span>{{ track }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      </div>
     }
     <div class="confirm-actions">
       <button

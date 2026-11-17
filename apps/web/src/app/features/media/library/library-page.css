@@ -587,10 +587,50 @@ ui-empty-state {
 }
 
 .confirm .remove-tracks {
+  margin-top: var(--space-2);
   padding: var(--space-3);
   border-radius: var(--radius-menu);
-  background: var(--overlay-2);
+  background: var(--overlay-1);
+}
+
+/* Desktop: the count, then one row per track with its cover (media-library-remove-tracks). */
+.confirm .remove-tracks-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.confirm .remove-tracks-count {
+  margin: 0 0 var(--space-2);
   color: var(--color-text);
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+.confirm .remove-tracks-list ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.confirm .remove-tracks-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.confirm .remove-tracks-list li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .confirm-actions {
@@ -795,9 +835,22 @@ ui-empty-state {
   }
 
   .confirm .remove-tracks {
+    margin-top: 0;
     padding: 0;
     background: none;
-    color: var(--color-text-muted);
+  }
+
+  .confirm .remove-tracks-text {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+
+  .confirm .remove-tracks-list {
+    display: none;
   }
 
   .confirm-actions button {

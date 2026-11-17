@@ -97,20 +97,29 @@
       [attr.aria-label]="clearTopicLabel()"
       (click)="clearTopic()"
     >
-      <span i18n="@@library.topicChip">Acervo: {{ name }}</span>
+      <!-- "Acervo: Hermetismo" on a desktop; a phone's chip is the name alone
+           (media-library-collection-empty@mobile). -->
+      <span
+        ><span class="topic-prefix" i18n="@@library.topicChipPrefix"
+          >Acervo: </span
+        >{{ name }}</span
+      >
       <ui-icon name="close" [size]="14" />
     </button>
   }
   @if (compact() && hiddenActive() > 0) {
     <span class="hidden-filters">{{ hiddenText() }}</span>
   }
-  @if (active() > 0) {
+  <!-- With the collection alone in force too (media-library-collection-empty): then it takes
+       the collection out, as its chip's ✕ does. Not over a search: there the chip is the way
+       out (media-library-search-empty). -->
+  @if (active() > 0 || (topicName() && !searching())) {
     <button
       type="button"
       uiButton="ghost"
       size="sm"
       class="clear"
-      (click)="clear()"
+      (click)="active() > 0 ? clear() : clearTopic()"
       i18n="@@library.clearFilters"
     >
       Limpar filtros

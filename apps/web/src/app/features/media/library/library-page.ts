@@ -50,7 +50,13 @@ import {
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { TrackGroup } from './track-group.js';
-import { alsoRemovesText, tracksInTheWay } from '../track-removal.js';
+import { scrollPageByKey } from '../page-keys.js';
+import {
+  alsoRemovesCount,
+  alsoRemovesText,
+  trackListRows,
+  tracksInTheWay,
+} from '../track-removal.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import {
   LibraryApi,
@@ -210,7 +216,10 @@ interface MorePages {
   templateUrl: './library-page.html',
   styleUrl: './library-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(focusin)': 'keepInView($event)' },
+  host: {
+    '(focusin)': 'keepInView($event)',
+    '(document:keydown)': 'pageKey($event)',
+  },
 })
 export class LibraryPage {
   private readonly api = inject(LibraryApi);
@@ -636,6 +645,12 @@ export class LibraryPage {
   protected readonly removingTracksText = computed(() =>
     alsoRemovesText(this.removingTracks() ?? []),
   );
+  protected readonly removingTracksCount = computed(() =>
+    alsoRemovesCount(this.removingTracks()?.length ?? 0),
+  );
+  protected readonly removingTracksShown = computed(() =>
+    trackListRows(this.removingTracks() ?? []),
+  );
   protected readonly editing = signal<LibraryItem | null>(null);
   /** The last audio moved from here (KBC-050 FR-3). */
   protected readonly moved = signal<MediaMove | null>(null);
@@ -885,6 +900,11 @@ export class LibraryPage {
     return this.chat.topicSlug();
   }
 
+  /** The scrolling keys with nothing focused move the library (its own scroller). */
+  protected pageKey(event: KeyboardEvent): void {
+    scrollPageByKey(this.host, event);
+  }
+
   protected keepInView(event: FocusEvent): void {
     keepFocusedInView(event);
   }
@@ -924,8 +944,11 @@ export class LibraryPage {
     else this.saveFilters(filters);
     if (change.kind === 'clear') this.focusAfterRender(this.allTitle);
     // The collection's chip went with the focus: during a search, to the results' title.
-    else if (change.kind === 'topic' && change.topic === null)
-      this.searchResults()?.focusTitle();
+    else if (change.kind === 'topic' && change.topic === null) {
+      const results = this.searchResults();
+      if (results) results.focusTitle();
+      else this.focusAfterRender(this.allTitle);
+    }
   }
 
   /** Only this replaces the kept collection; choosing one selects it everywhere (KBC-091). */

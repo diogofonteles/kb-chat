@@ -9,7 +9,7 @@
   <form class="body" [formGroup]="form" (ngSubmit)="save()" novalidate>
     <header class="head">
       <div class="titles">
-        <h2 id="edit-title">{{ heading }}</h2>
+        <h2 #headingElement id="edit-title" tabindex="-1">{{ heading }}</h2>
       </div>
       <button
         type="button"

@@ -1,7 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
+  ElementRef,
   computed,
+  inject,
   input,
   output,
 } from '@angular/core';
@@ -69,6 +72,12 @@ export type RowAction =
     '[class.failed]': "item().status === 'failed'",
     '[class.playing]': 'playing()',
     '[class.has-tracks]': 'tracksLabel() !== ""',
+    '(pointerdown)': 'pressStarted($event)',
+    '(pointermove)': 'pressMoved($event)',
+    '(pointerup)': 'pressEnded()',
+    '(pointercancel)': 'pressEnded()',
+    '(contextmenu)': 'contextMenu($event)',
+    '(keydown)': 'keyPressed($event)',
   },
 })
 export class LibraryRow {
@@ -80,7 +89,11 @@ export class LibraryRow {
   readonly selected = input(false);
   readonly playing = input(false);
   readonly master = input(false);
-  /** The phone's row (media-library@mobile): its ⋯ starts a selection, "Compartilhar". */
+  /**
+   * The phone's row (media-library@mobile): a long press (or the context menu: the menu key,
+   * Android's long press) starts a selection — its ⋯ has no "Selecionar"
+   * (media-library-row-menu@mobile) — and the ⋯ says "Compartilhar".
+   */
   readonly phone = input(false);
   /**
    * During a selection on a phone, "Selecionar todas as N" (the table's box has no place
@@ -95,6 +108,31 @@ export class LibraryRow {
   readonly tracksToggled = output();
   readonly selectedChange = output<boolean>();
   readonly acted = output<RowAction>();
+
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  /** The long press under way: where it started and its timer. */
+  private press: {
+    readonly x: number;
+    readonly y: number;
+    readonly timer: ReturnType<typeof setTimeout>;
+  } | null = null;
+  /** A long press just selected: the click that ends it opens nothing. */
+  private pressedLong = false;
+
+  constructor() {
+    const swallow = (event: MouseEvent): void => {
+      if (!this.pressedLong) return;
+      this.pressedLong = false;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const element = this.host.nativeElement;
+    element.addEventListener('click', swallow, { capture: true });
+    inject(DestroyRef).onDestroy(() => {
+      element.removeEventListener('click', swallow, { capture: true });
+      this.pressEnded();
+    });
+  }
 
   /** The author by name, "Outros autores" with none (media-library: plain, muted). */
   protected readonly authorName = computed(
@@ -154,7 +192,8 @@ export class LibraryRow {
       $localize`:@@media.moreActions:Mais ações para ${this.item().title}:title:`,
   );
   /**
-   * The ⋯ (media-library-row-menu; a sheet on a phone, @mobile): play, mark, select (phone),
+   * The ⋯ (media-library-row-menu; a sheet on a phone, @mobile): play, mark, "Selecionar todas"
+   * during a phone's selection,
    * edit and copy the link, then "Tentar de novo" and "Remover" for masters.
    */
   protected readonly options = computed<readonly MenuOption[]>(() => {
@@ -162,11 +201,8 @@ export class LibraryRow {
     const phone = this.phone();
     const options = listenOptions(this.item(), ready, phone);
     const all = this.selectAll();
-    if (phone && all) {
-      const at = options.findIndex((one) => one.id === 'select');
-      if (at >= 0)
-        options[at] = { id: 'select-all', label: all, icon: 'checkcircle' };
-    }
+    if (phone && all && ready)
+      options.push({ id: 'select-all', label: all, icon: 'checkcircle' });
     options.push(
       ...shareOptions(this.item(), { ready, phone }, options.length),
     );
@@ -179,11 +215,73 @@ export class LibraryRow {
     if (action) this.acted.emit(action);
   }
 
+  protected pressStarted(event: PointerEvent): void {
+    this.pressEnded();
+    this.pressedLong = false;
+    if (!this.phone() || !this.ready() || event.button !== 0) return;
+    // Not from the row's own controls: the ⋯, ▶, the box and the chevron keep their tap.
+    if (onControl(event)) return;
+    this.press = {
+      x: event.clientX,
+      y: event.clientY,
+      timer: setTimeout(() => {
+        this.press = null;
+        this.pressedLong = true;
+        this.acted.emit('select');
+      }, LONG_PRESS_MS),
+    };
+  }
+
+  /** A finger that scrolls is not pressing. */
+  protected pressMoved(event: PointerEvent): void {
+    if (!this.press) return;
+    const moved = Math.hypot(
+      event.clientX - this.press.x,
+      event.clientY - this.press.y,
+    );
+    if (moved > PRESS_SLOP_PX) this.pressEnded();
+  }
+
+  protected pressEnded(): void {
+    if (this.press) clearTimeout(this.press.timer);
+    this.press = null;
+  }
+
+  /** The context menu on a phone's row selects it (no browser menu over the row). */
+  protected contextMenu(event: MouseEvent): void {
+    if (!this.phone() || !this.ready() || onControl(event)) return;
+    event.preventDefault();
+    if (this.pressedLong) return;
+    this.pressEnded();
+    this.acted.emit('select');
+  }
+
+  /** The keyboard's context menu (the menu key, Shift+F10) selects it too, on a phone. */
+  protected keyPressed(event: KeyboardEvent): void {
+    const menuKey =
+      event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10');
+    if (!menuKey || !this.phone() || !this.ready() || onControl(event)) return;
+    event.preventDefault();
+    this.acted.emit('select');
+  }
+
   protected toggleSelected(event: Event): void {
     if (event.target instanceof HTMLInputElement)
       this.selectedChange.emit(event.target.checked);
   }
 }
+
+/** On one of the row's own controls (⋯, ▶, the box, the chevron), which keep their own use. */
+function onControl(event: Event): boolean {
+  return (
+    event.target instanceof Element &&
+    event.target.closest('button, input, app-menu-button') !== null
+  );
+}
+
+/** How long a finger stays on a phone's row to select it, and how far it may drift. */
+const LONG_PRESS_MS = 500;
+const PRESS_SLOP_PX = 10;
 
 const ACTIONS: readonly RowAction[] = [
   'play',
@@ -201,7 +299,7 @@ const ACTIONS: readonly RowAction[] = [
 
 /**
  * Play (not on a phone: a tap on the cover plays), play next, mark heard or not, its
- * bookmarks, then "Selecionar" on a phone (where the table has no boxes to start one).
+ * bookmarks (a phone starts a selection with a long press: media-library-row-menu@mobile).
  */
 function listenOptions(
   item: LibraryItem,
@@ -224,13 +322,8 @@ function listenOptions(
     label: $localize`:@@library.seeBookmarks:Ver marcadores`,
     icon: 'bookmark',
   };
-  const select: MenuOption = {
-    id: 'select',
-    label: $localize`:@@library.selectRow:Selecionar`,
-    icon: 'check',
-  };
   return phone
-    ? [next, markOption(item), bookmarks, select]
+    ? [next, markOption(item), bookmarks]
     : [play, next, markOption(item), bookmarks];
 }
 

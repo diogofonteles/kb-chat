@@ -1586,9 +1586,11 @@ describe('LibraryPage (T16, KBC-051)', () => {
         kind: 'topic',
         slug: 'hermetismo',
       });
+      // The collection is not a filter (KBC-091), but the frame's "Limpar filtros" sits by its
+      // chip (media-library-collection-empty), and takes the collection out like its ✕.
       expect(
-        screen.queryByRole('button', { name: 'Limpar filtros' }),
-      ).toBeNull();
+        screen.getByRole('button', { name: 'Limpar filtros' }),
+      ).toBeTruthy();
     });
 
     it('"Todos os acervos" is a choice kept in the account, and the header drops the name', async () => {

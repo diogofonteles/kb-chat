@@ -82,6 +82,9 @@ interface Draft {
  * says who the author is there. Only what changed is sent, and a failure keeps what was
  * typed (FR-4). Whoever opens it closes it when `closed` arrives.
  */
+/** The shell's phone layout (chat-page: desktop from 1024 px). */
+const PHONE_QUERY = '(max-width: 1023px)';
+
 @Component({
   selector: 'app-edit-media-dialog',
   imports: [
@@ -109,6 +112,8 @@ export class EditMediaDialog implements OnInit {
   private readonly injector = inject(Injector);
   private readonly titleInput =
     viewChild.required<ElementRef<HTMLInputElement>>('titleInput');
+  private readonly headingElement =
+    viewChild.required<ElementRef<HTMLHeadingElement>>('headingElement');
   private readonly raiseCancel =
     viewChild<ElementRef<HTMLButtonElement>>('raiseCancel');
 
@@ -218,7 +223,13 @@ export class EditMediaDialog implements OnInit {
       .subscribe(() => this.save());
     afterNextRender(() => {
       this.dialog().nativeElement.showModal();
-      this.titleInput().nativeElement.focus();
+      // A phone's sheet opens on its heading: a field in focus would raise the keyboard over
+      // the sheet before anything is chosen (media-library-edit@mobile).
+      const phone =
+        this.dialog().nativeElement.ownerDocument.defaultView?.matchMedia?.(
+          PHONE_QUERY,
+        ).matches ?? false;
+      (phone ? this.headingElement() : this.titleInput()).nativeElement.focus();
     });
   }
 

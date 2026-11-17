@@ -409,7 +409,13 @@ app-menu-button {
     height: 2.75rem;
   }
 
-  /* No box until a selection starts (from the ⋯): then it leads every row (selection@mobile). */
+  /* A long press selects the row: no text selection or link preview under the finger. */
+  :host {
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+
+  /* No box until a selection starts (a long press): then it leads every row (selection@mobile). */
   .lead {
     visibility: hidden;
   }

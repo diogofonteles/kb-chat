@@ -25,3 +25,8 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+/* The phone's sheet opens on its heading (a target of the focus, not a control). */
+.head h2:focus {
+  outline: none;
+}
