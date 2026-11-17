@@ -184,6 +184,17 @@ test.describe('the shell', () => {
         });
       await expect(spend).toBeInViewport();
       await expect.poll(atFoot).toBe(0);
+      // The column ends 8 above the player bar, or 8 above the window's foot without one
+      // (v2 · a collection of texts: no empty foot row).
+      const gapBelow = () =>
+        side.evaluate((column) => {
+          const bar = document.querySelector('app-mini-player section.bar');
+          const below = bar
+            ? bar.getBoundingClientRect().top
+            : window.innerHeight;
+          return Math.round(below - column.getBoundingClientRect().bottom);
+        });
+      await expect.poll(gapBelow).toBe(8);
       await expectScrolls(page, await rows(page), 300);
       await expect(spend).toBeInViewport();
       expect(await atFoot()).toBe(0);
