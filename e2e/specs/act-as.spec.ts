@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import {
   expect,
   invite,
@@ -13,6 +13,16 @@ import { openSection, openSettings } from './settings-helpers.js';
 /** KBC-060: a master acts as a person, audited (ADR 0027). */
 
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
+
+/**
+ * The dialog's start button: "Ver como esta pessoa" in the desktop modal's footer, the
+ * header's "Ver como" on a phone's tall sheet (v2 · Configurações › Ver como, celular).
+ */
+const startButton = (page: Page, dialog: Locator): Locator =>
+  dialog.getByRole('button', {
+    name: desktop(page) ? 'Ver como esta pessoa' : 'Ver como',
+    exact: true,
+  });
 
 /** A member who saw only "hermetismo", already signed in once (their name is known). */
 async function aMember(page: Page) {
@@ -46,7 +56,7 @@ async function startActingAs(page: Page, email: string, reason: string) {
   await settings.getByRole('button', { name: 'Ver como', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: /^Ver como / });
   await dialog.getByRole('textbox', { name: 'Motivo' }).fill(reason);
-  await dialog.getByRole('button', { name: 'Ver como esta pessoa' }).click();
+  await startButton(page, dialog).click();
 }
 
 test('AC-1, AC-2, AC-6, AC-8: the owner sees the app as a member, changes a setting for her and goes back; both see it recorded', async ({
@@ -122,7 +132,7 @@ test('AC-9: the dialog needs a reason, and Esc gives the focus back', async ({
   const actAs = settings.getByRole('button', { name: 'Ver como', exact: true });
   await actAs.click();
   const dialog = page.getByRole('dialog', { name: /^Ver como / });
-  await dialog.getByRole('button', { name: 'Ver como esta pessoa' }).click();
+  await startButton(page, dialog).click();
   await expect(dialog.getByText(/Escreva o motivo/)).toBeVisible();
   await expect(dialog.getByRole('textbox', { name: 'Motivo' })).toBeFocused();
   await page.keyboard.press('Escape');
@@ -154,7 +164,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     expect(await serious()).toEqual([]);
     const dialog = page.getByRole('dialog', { name: /^Ver como / });
     await dialog.getByRole('textbox', { name: 'Motivo' }).fill('axe');
-    await dialog.getByRole('button', { name: 'Ver como esta pessoa' }).click();
+    await startButton(page, dialog).click();
     await expect(page.getByText(/Você está vendo como/).first()).toBeVisible();
     await skipWizard(page);
     expect(await serious()).toEqual([]);

@@ -1,31 +1,4 @@
-/* "Ver como" as a v2 modal (KBC-132 AC-7): the reason is required before anything starts. */
-.dialog {
-  width: min(32.5rem, calc(100vw - 2rem));
-  max-height: calc(100dvh - 4rem);
-  padding: var(--space-6);
-  border: 0;
-  border-radius: var(--radius-card);
-  background: var(--color-elevated);
-  color: var(--color-text);
-  box-shadow: var(--shadow);
-}
-
-.dialog[open] {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.dialog::backdrop {
-  background: var(--scrim);
-}
-
-h2 {
-  margin: 0;
-  font-size: var(--text-section);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
+/* "Ver como" in the v2 modal (KBC-132 AC-7): the reason is required before anything starts. */
 .hint {
   margin: 0;
   color: var(--color-text-muted);
@@ -58,23 +31,5 @@ h2 {
 }
 
 .actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--space-3);
-}
-
-/* A phone: a sheet from the bottom, the actions full width. */
-@media (max-width: 1023px) {
-  .dialog {
-    width: 100vw;
-    max-width: 100vw;
-    margin: auto 0 0;
-    border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
-    padding: var(--space-5) var(--space-4) var(--space-6);
-  }
-
-  .actions > * {
-    flex: 1 1 100%;
-  }
+  display: contents;
 }
