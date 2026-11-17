@@ -106,6 +106,13 @@
   color: var(--color-accent-text);
 }
 
+/* On the lighter row of the pointer or the focus the accent falls under 4.5:1 in the dark
+   themes: the words (and the check) take the text colour there. */
+.menu button.checked:hover,
+.menu button.checked:focus-visible {
+  color: var(--color-text);
+}
+
 .check {
   display: inline-block;
   width: 1em;

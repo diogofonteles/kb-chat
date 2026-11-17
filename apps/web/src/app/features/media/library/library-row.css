@@ -16,10 +16,6 @@
   border-radius: var(--radius-menu);
   /* 2 000 rows (NFR-2): a change in one row does not lay out or paint the others. */
   contain: content;
-  /* Off screen, a row is not styled or laid out: entering or leaving the selection restyles
-     only the rows in view, not the 2 000 (NFR-2). */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 3.5rem;
 }
 
 :host(:hover),
@@ -39,6 +35,10 @@
 
 .lead {
   grid-area: lead;
+  /* Above the row's link (a.main, later in the source): WebKit paints a grid's items in
+     source order, not by `order`, so the box and ▶ would sit under the link there. A grid
+     item takes z-index without a position. */
+  z-index: 1;
   display: grid;
   place-items: center end;
   color: var(--color-text-muted);
@@ -50,20 +50,29 @@
   grid-area: 1 / 1;
 }
 
+/* Over the box in the same cell, they only show: a press there is the box's (WebKit can
+   test the press before the hover hides them). */
+.number,
+.wave {
+  pointer-events: none;
+}
+
 .wave {
   color: var(--color-accent-text);
 }
 
-/* The number gives way to the box under the pointer, the focus or a selection (Spotify 02). */
-.select {
-  opacity: 0;
+/* The number gives way to the box under the pointer, the focus or a selection (Spotify 02).
+   An unchecked box is hidden by its edge, not by opacity: going from 0 to 1 on 2 000 boxes
+   when the selection starts changed every row's paint layers (NFR-2). A checked box is in a
+   selected row, shown anyway. It stays focusable all along. */
+.select:not(:checked) {
+  border-color: transparent;
 }
 
-:host(:hover) .select,
-:host(:focus-within) .select,
-:host(.selected) .select,
-:host-context(.selecting) .select {
-  opacity: 1;
+:host(:hover) .select:not(:checked),
+:host(:focus-within) .select:not(:checked),
+:host-context(.selecting) .select:not(:checked) {
+  border-color: var(--color-text-muted);
 }
 
 :host(:hover) .number,
@@ -80,6 +89,7 @@
 .art {
   grid-area: art;
   position: relative;
+  z-index: 1;
   display: grid;
   place-items: center;
   width: 2.5rem;
