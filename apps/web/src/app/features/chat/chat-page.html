@@ -53,7 +53,7 @@
       class="conversation"
       [style.--tint]="tint()"
       [style.--own-tint]="ownHeader()?.tint ?? null"
-      [class.own-header]="ownHeader()?.tint != null"
+      [class.own-header]="!!ownHeader()?.tint"
       [class.covered]="panelOpen()"
       [class.media]="onMedia()"
       [class.empty]="isEmpty() && !onMedia()"

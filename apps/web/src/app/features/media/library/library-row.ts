@@ -22,11 +22,7 @@ import { MediaLevelBadge } from '../media-level-badge.js';
 import { statusTextOf } from '../media-labels.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import { PreparationEntry } from '../preparation/preparation-entry.js';
-import {
-  percentOf,
-  stateTextOf,
-  stoppedAtTextOf,
-} from './library-labels.js';
+import { percentOf, stateTextOf, stoppedAtTextOf } from './library-labels.js';
 
 /** What the row's "⋯" can do. */
 export type RowAction =
@@ -139,66 +135,13 @@ export class LibraryRow {
    * edit and copy the link, then "Tentar de novo" and "Remover" for masters.
    */
   protected readonly options = computed<readonly MenuOption[]>(() => {
-    const options: MenuOption[] = [];
     const ready = this.ready();
-    if (ready && !this.phone())
-      options.push({
-        id: 'play',
-        label: $localize`:@@library.playNow:Tocar agora`,
-        icon: 'play',
-      });
-    if (ready)
-      options.push(
-        listeningStateOf(this.item()) === 'heard'
-          ? {
-              id: 'mark-unplayed',
-              label: $localize`:@@library.markUnplayed:Marcar como não ouvida`,
-              icon: 'eyeOff',
-            }
-          : {
-              id: 'mark-played',
-              label: $localize`:@@library.markPlayed:Marcar como ouvida`,
-              icon: 'checkcircle',
-            },
-      );
-    if (ready && this.phone())
-      options.push({
-        id: 'select',
-        label: $localize`:@@library.selectRow:Selecionar`,
-        icon: 'check',
-      });
-    const second = options.length;
-    if (this.item().canEdit)
-      options.push({
-        id: 'edit',
-        label: editDetailsLabel(),
-        icon: 'edit',
-        divider: second > 0,
-      });
-    if (ready)
-      options.push({
-        id: 'copy-link',
-        label: this.phone()
-          ? $localize`:@@library.share:Compartilhar`
-          : $localize`:@@library.copyLink:Copiar link`,
-        icon: this.phone() ? 'share' : 'link',
-        divider: second > 0 && options.length === second,
-      });
-    if (this.master() && this.item().canRetry)
-      options.push({
-        id: 'retry',
-        label: $localize`:@@media.retry:Tentar de novo`,
-        icon: 'refresh',
-        divider: options.length > 0,
-      });
-    if (this.master())
-      options.push({
-        id: 'remove',
-        label: $localize`:@@media.remove:Remover`,
-        danger: true,
-        icon: 'trash',
-        divider: options.length > 0 && options.at(-1)?.id !== 'retry',
-      });
+    const phone = this.phone();
+    const options = listenOptions(this.item(), ready, phone);
+    options.push(
+      ...shareOptions(this.item(), { ready, phone }, options.length),
+    );
+    if (this.master()) options.push(...masterOptions(this.item(), options));
     return options;
   });
 
@@ -223,3 +166,91 @@ const ACTIONS: readonly RowAction[] = [
   'retry',
   'remove',
 ];
+
+/** Play (not on a phone: a tap on the cover plays), mark heard or not, select (phone). */
+function listenOptions(
+  item: LibraryItem,
+  ready: boolean,
+  phone: boolean,
+): MenuOption[] {
+  if (!ready) return [];
+  const options: MenuOption[] = [];
+  if (!phone)
+    options.push({
+      id: 'play',
+      label: $localize`:@@library.playNow:Tocar agora`,
+      icon: 'play',
+    });
+  options.push(markOption(item));
+  if (phone)
+    options.push({
+      id: 'select',
+      label: $localize`:@@library.selectRow:Selecionar`,
+      icon: 'check',
+    });
+  return options;
+}
+
+/** "Marcar como ouvida", or "não ouvida" once heard. */
+function markOption(item: LibraryItem): MenuOption {
+  return listeningStateOf(item) === 'heard'
+    ? {
+        id: 'mark-unplayed',
+        label: $localize`:@@library.markUnplayed:Marcar como não ouvida`,
+        icon: 'eyeOff',
+      }
+    : {
+        id: 'mark-played',
+        label: $localize`:@@library.markPlayed:Marcar como ouvida`,
+        icon: 'checkcircle',
+      };
+}
+
+/** Edit and copy the link (share on a phone), a group of their own after the first. */
+function shareOptions(
+  item: LibraryItem,
+  { ready, phone }: { readonly ready: boolean; readonly phone: boolean },
+  before: number,
+): MenuOption[] {
+  const options: MenuOption[] = [];
+  if (item.canEdit)
+    options.push({
+      id: 'edit',
+      label: editDetailsLabel(),
+      icon: 'edit',
+      divider: before > 0,
+    });
+  if (ready)
+    options.push({
+      id: 'copy-link',
+      label: phone
+        ? $localize`:@@library.share:Compartilhar`
+        : $localize`:@@library.copyLink:Copiar link`,
+      icon: phone ? 'share' : 'link',
+      divider: before > 0 && options.length === 0,
+    });
+  return options;
+}
+
+/** A master's: "Tentar de novo" for a failed one, then "Remover". */
+function masterOptions(
+  item: LibraryItem,
+  before: readonly MenuOption[],
+): MenuOption[] {
+  const options: MenuOption[] = [];
+  if (item.canRetry)
+    options.push({
+      id: 'retry',
+      label: $localize`:@@media.retry:Tentar de novo`,
+      icon: 'refresh',
+      divider: before.length > 0,
+    });
+  options.push({
+    id: 'remove',
+    label: $localize`:@@media.remove:Remover`,
+    danger: true,
+    icon: 'trash',
+    divider: before.length > 0 && options.length === 0,
+  });
+  return options;
+}

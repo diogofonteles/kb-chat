@@ -421,6 +421,17 @@ export class MediaListPage {
       };
     if (item.status !== 'ready')
       return { text: this.statusOf(item), tone: 'info' };
+    return this.transcriptionPillOf(item, phone);
+  }
+
+  /**
+   * A ready audio: where its transcription stands. The phone's line says nothing of a plain
+   * ready audio (media-list@mobile).
+   */
+  private transcriptionPillOf(
+    item: MediaItem,
+    phone: boolean,
+  ): { text: string; tone: Tone } | null {
     const { status } = item.transcription;
     if (status === 'waiting')
       return {
@@ -430,10 +441,7 @@ export class MediaListPage {
         tone: 'warn',
       };
     if (status === 'failed')
-      return {
-        text: $localize`:@@media.transcription.failed:A transcrição falhou`,
-        tone: 'err',
-      };
+      return { text: transcriptionFailed(), tone: 'err' };
     if (status === 'transcribing')
       return { text: this.transcriptionOf(item), tone: 'info' };
     if (isLowConfidence(item))
@@ -443,7 +451,6 @@ export class MediaListPage {
           : $localize`:@@media.pill.low:Transcrição de baixa confiança`,
         tone: 'warn',
       };
-    // The phone's line says nothing of a plain ready audio (media-list@mobile).
     if (phone) return null;
     return status === 'done'
       ? { text: $localize`:@@media.pill.transcribed:Transcrita`, tone: 'ok' }
@@ -766,3 +773,6 @@ export class MediaListPage {
     row.nativeElement.focus();
   }
 }
+
+const transcriptionFailed = (): string =>
+  $localize`:@@media.transcription.failed:A transcrição falhou`;

@@ -2,7 +2,7 @@
   <label class="label" [for]="inputId" i18n="@@media.upload.author"
     >Autor</label
   >
-  @if (!externalHelp()) {
+  @if (!helpId()) {
     <p class="help" [id]="ownHelpId" i18n="@@media.upload.authorHelp">
       Escolha um autor do acervo ou digite um novo. Em branco, o áudio fica em
       "Outros autores".

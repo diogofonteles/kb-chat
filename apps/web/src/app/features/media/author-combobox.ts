@@ -48,7 +48,7 @@ export class AuthorCombobox {
    * The id of a help the host shows itself (the upload panel puts it under both fields,
    * media-upload); without it the help sits under the label.
    */
-  readonly externalHelp = input<string | null>(null, { alias: 'helpId' });
+  readonly helpId = input<string | null>(null);
   /** The author's name as typed or chosen. */
   readonly name = model('');
 
@@ -57,7 +57,7 @@ export class AuthorCombobox {
   protected readonly listId = `${this.id}-list`;
   protected readonly ownHelpId = `${this.id}-help`;
   protected readonly describedBy = computed(
-    () => `${this.externalHelp() ?? this.ownHelpId} ${this.statusId}`,
+    () => `${this.helpId() ?? this.ownHelpId} ${this.statusId}`,
   );
   protected readonly statusId = `${this.id}-status`;
   /** The API's limit (the shared contract): the field never takes more. */

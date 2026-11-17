@@ -48,8 +48,9 @@ export class RowMenu {
   readonly removeChosen = output();
 
   protected readonly options = computed<readonly MenuOption[]>(() => {
+    const phone = this.phone();
     const options: MenuOption[] = [];
-    if (this.canPlay() && !this.phone())
+    if (this.canPlay() && !phone)
       options.push({
         id: 'play',
         label: $localize`:@@library.playNow:Tocar agora`,
@@ -64,14 +65,7 @@ export class RowMenu {
         divider: second,
       });
     if (this.canPlay())
-      options.push({
-        id: 'link',
-        label: this.phone()
-          ? $localize`:@@library.share:Compartilhar`
-          : $localize`:@@library.copyLink:Copiar link`,
-        icon: this.phone() ? 'share' : 'link',
-        divider: second && !this.canEdit(),
-      });
+      options.push(linkOption(phone, second && !this.canEdit()));
     if (this.canRemove())
       options.push({
         id: 'remove',
@@ -88,4 +82,16 @@ export class RowMenu {
     else if (id === 'edit') this.editChosen.emit();
     else this.removeChosen.emit();
   }
+}
+
+/** "Copiar link", or "Compartilhar" through the phone's own sheet. */
+function linkOption(phone: boolean, divider: boolean): MenuOption {
+  return {
+    id: 'link',
+    label: phone
+      ? $localize`:@@library.share:Compartilhar`
+      : $localize`:@@library.copyLink:Copiar link`,
+    icon: phone ? 'share' : 'link',
+    divider,
+  };
 }
