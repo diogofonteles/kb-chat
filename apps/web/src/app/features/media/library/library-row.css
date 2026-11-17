@@ -16,6 +16,10 @@
   border-radius: var(--radius-menu);
   /* 2 000 rows (NFR-2): a change in one row does not lay out or paint the others. */
   contain: content;
+  /* Off screen, a row is not styled or laid out: entering or leaving the selection restyles
+     only the rows in view, not the 2 000 (NFR-2). */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 3.5rem;
 }
 
 :host(:hover),
