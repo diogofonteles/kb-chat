@@ -86,13 +86,11 @@
 
 .panel {
   min-height: 0;
-  overflow: hidden;
+  /* The panel is its own scroller: a host's overflow-y (the document, a passage, a track's
+     passage) loses to this rule's specificity, so it must scroll here or nothing does. */
+  overflow: hidden auto;
   border-radius: var(--radius-card);
   background: var(--color-bg);
-}
-
-.right-panel {
-  overflow-y: auto;
 }
 
 .conversation {
@@ -131,6 +129,13 @@
 
 .conversation.media {
   grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+/* The routed page fills the row under the top bar and scrolls in it, whether or not its own
+   host says so: the conversation clips, so a page without a scroller could never move. */
+.conversation.media > router-outlet + ::ng-deep * {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* v2 · Conversa: the scope row (or the results' head), the page, the question box at the
