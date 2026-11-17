@@ -746,3 +746,29 @@ select.input option {
 .danger {
   justify-self: start;
 }
+
+/* The wizard (v2 · Assistente): the price under the name, one line of description,
+   the collections four to a row and the themes three. */
+@media (min-width: 1024px) {
+  .providers.grid .card-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+  }
+
+  .providers.grid .card-hint,
+  .providers.grid .card-install {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .choices.covers {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .choices.themes {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
