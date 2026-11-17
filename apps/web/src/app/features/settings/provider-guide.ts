@@ -16,21 +16,26 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
   template: `
     @if (guide(); as current) {
       <section class="guide" [attr.aria-label]="label()">
-        <ol class="steps">
-          @for (step of current.steps; track $index) {
-            <li>
-              {{ step.text() }}
-              @if (step.link; as link) {
-                <a [href]="link.href" target="_blank" rel="noopener noreferrer"
-                  >{{ link.label()
-                  }}<span class="visually-hidden" i18n="@@guide.newTab">
-                    (abre em nova aba)</span
-                  ></a
-                >
-              }
-            </li>
-          }
-        </ol>
+        @if (!factsOnly()) {
+          <ol class="steps">
+            @for (step of current.steps; track $index) {
+              <li>
+                {{ step.text() }}
+                @if (step.link; as link) {
+                  <a
+                    [href]="link.href"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >{{ link.label()
+                    }}<span class="visually-hidden" i18n="@@guide.newTab">
+                      (abre em nova aba)</span
+                    ></a
+                  >
+                }
+              </li>
+            }
+          </ol>
+        }
         <dl class="facts">
           <div class="fact">
             <dt i18n="@@guide.cost">Quanto custa</dt>
@@ -47,7 +52,7 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
             </div>
           }
         </dl>
-        @if (current.note) {
+        @if (current.note && !factsOnly()) {
           <p class="note">
             <ui-icon name="info" [size]="18" />
             <span>{{ current.note() }}</span>
@@ -141,6 +146,8 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
 })
 export class ProviderGuideCard {
   readonly provider = input.required<AiProvider>();
+  /** Only cost, privacy and limits: an option with nothing to set up (the wizard's house AI). */
+  readonly factsOnly = input(false);
   protected readonly guide = computed(
     () => PROVIDER_GUIDES[this.provider()] ?? null,
   );

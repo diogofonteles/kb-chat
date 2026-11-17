@@ -51,7 +51,7 @@
         (change)="choose(option.info.id)"
       />
     </label>
-    @if (option.info.id === draft().provider) {
+    @if (!compact() && option.info.id === draft().provider) {
       <div class="details">
         <ng-container
           [ngTemplateOutlet]="detailsOf"
@@ -60,10 +60,27 @@
       </div>
     }
   }
+  <!-- The wizard (v2 · Assistente): every card first, the chosen one's details under the
+       grid; the application's AI needs no setup, so only its facts show, without a panel. -->
+  @if (compact()) {
+    @for (option of options(); track option.info.id) {
+      @if (option.info.id === draft().provider) {
+        <div class="details" [class.bare]="option.info.id === 'house'">
+          <ng-container
+            [ngTemplateOutlet]="detailsOf"
+            [ngTemplateOutletContext]="{ $implicit: option }"
+          />
+        </div>
+      }
+    }
+  }
 </fieldset>
 
 <ng-template #detailsOf let-current>
-  <app-provider-guide [provider]="current.info.id" />
+  <app-provider-guide
+    [provider]="current.info.id"
+    [factsOnly]="compact() && current.info.id === 'house'"
+  />
 
   @if (current.info.id === 'openrouter') {
     <div class="field">
@@ -269,7 +286,9 @@
       @if (showModels()) {
         @for (field of modelFields(); track field.key) {
           <div class="field">
-            <label class="field-label" [for]="field.id">{{ field.label }}</label>
+            <label class="field-label" [for]="field.id">{{
+              field.label
+            }}</label>
             @if (current.info.freeModel) {
               <input
                 class="ui-input"
