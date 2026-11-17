@@ -41,6 +41,8 @@ async function published(owner: APIRequestContext, mediaId: string) {
 export async function publishedTrack(
   owner: APIRequestContext,
   speech: readonly { at: number; text: string }[] = SPEECH,
+  /** What else the recording gets once transcribed (its voices, KBC-151), by its id. */
+  transcribed?: (recordingId: string, topic: string) => Promise<void>,
 ): Promise<string> {
   const topic = await aCollectionInVault(owner);
   const media = await uploadReady(owner, {
@@ -49,6 +51,7 @@ export async function publishedTrack(
     topic,
   });
   await seedTranscript(owner, { id: media.id, raw: rawOf(speech) });
+  await transcribed?.(media.id, topic);
   await seedDraft(owner, media.id, [
     { startMs: 0, endMs: 60_000, title: TITLE },
     { startMs: 60_000, endMs: 89_000, title: 'E a polaridade?' },
