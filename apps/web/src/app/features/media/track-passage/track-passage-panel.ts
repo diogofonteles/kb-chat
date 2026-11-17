@@ -570,17 +570,25 @@ export class TrackPassagePanel {
     this.recue(playbackStartOf({ startMs: at }));
     // The store follows the player a beat later: mark once it holds this track, never another.
     if (this.bookmarks.mediaId() === this.mediaId()) this.bookmarks.markAt(at);
-    else this.pendingMark.set(at);
+    else this.pendingMark.set({ mediaId: this.mediaId(), at });
   }
 
   /** A mark asked for while the player was still taking this track back. */
-  private readonly pendingMark = signal<number | null>(null);
+  private readonly pendingMark = signal<{ mediaId: string; at: number } | null>(
+    null,
+  );
   private readonly markWhenLoaded = effect(() => {
-    const at = this.pendingMark();
-    if (at === null || this.bookmarks.mediaId() !== this.mediaId()) return;
+    const pending = this.pendingMark();
+    if (!pending) return;
+    // The panel moved to another track before this one loaded: that mark is dropped.
+    if (pending.mediaId !== this.mediaId()) {
+      untracked(() => this.pendingMark.set(null));
+      return;
+    }
+    if (this.bookmarks.mediaId() !== pending.mediaId) return;
     untracked(() => {
       this.pendingMark.set(null);
-      this.bookmarks.markAt(at);
+      this.bookmarks.markAt(pending.at);
     });
   });
 
