@@ -376,10 +376,16 @@ test('D5: Sua biblioteca keeps Fixados, Acervos and Conversas apart, each with i
   });
   await expect(collections).toBeVisible();
   await expect(conversations).toBeVisible();
-  // Conversations are text rows under a recency label, never covers like the collections.
+  // Conversations are rows under a recency label with the neutral chat cover (v2 · Sua
+  // biblioteca), never a collection's cover with its initials.
   const history = side.getByRole('navigation', { name: 'Conversas' });
   await expect(history.getByText('Hoje', { exact: true })).toBeVisible();
-  await expect(history.locator('ui-cover')).toHaveCount(0);
+  await expect(
+    history.locator('ui-cover:not(.conversation-cover)'),
+  ).toHaveCount(0);
+  await expect(
+    history.locator('ui-cover.conversation-cover').first(),
+  ).toBeVisible();
   await expect(history.getByRole('button').first()).toContainText('IA');
   await expect(
     side.locator('#library-collections ui-cover').first(),

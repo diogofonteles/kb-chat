@@ -173,15 +173,17 @@ test.describe('the shell', () => {
     const spend = side.getByText('Gasto com IA hoje');
     if (desktop(page)) {
       // At the column's foot before and after the rows scroll.
-      const atFoot = async () => {
-        const foot = await side.locator('.spend').boundingBox();
-        const column = await side.boundingBox();
-        return Math.round(
-          (column?.y ?? 0) + (column?.height ?? 0) - (foot?.y ?? 0) - (foot?.height ?? 0),
-        );
-      };
+      // Both boxes in one frame: the player bar may still be coming in (it takes 72 off
+      // the column once the audio presence answers).
+      const atFoot = () =>
+        side.evaluate((column) => {
+          const foot = column.querySelector('.spend')!.getBoundingClientRect();
+          return Math.round(
+            column.getBoundingClientRect().bottom - foot.bottom,
+          );
+        });
       await expect(spend).toBeInViewport();
-      expect(await atFoot()).toBe(0);
+      await expect.poll(atFoot).toBe(0);
       await expectScrolls(page, await rows(page), 300);
       await expect(spend).toBeInViewport();
       expect(await atFoot()).toBe(0);
@@ -231,9 +233,7 @@ test.describe('the shell', () => {
     // The chips show one section at a time and come back to all.
     const chips = side.getByRole('group', { name: 'Mostrar' });
     await chips.getByRole('button', { name: 'Conversas' }).click();
-    await expect(
-      side.getByRole('group', { name: /^Acervos/ }),
-    ).toHaveCount(0);
+    await expect(side.getByRole('group', { name: /^Acervos/ })).toHaveCount(0);
     await chips.getByRole('button', { name: 'Conversas' }).click();
     await expect(side.getByRole('group', { name: /^Acervos/ })).toBeVisible();
   });
@@ -245,11 +245,30 @@ test.describe('the shell', () => {
     await page.goto('/');
     await expect(page.getByLabel('Sua pergunta')).toBeVisible();
     const nav = page.getByRole('navigation', { name: 'Navegação' });
-    await nav.getByRole('button', { name: 'Acervos' }).click();
     const menu = page.getByRole('dialog', { name: 'Menu' });
+    // The header's avatar opens the Menu on every page.
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
     await expect(menu).toBeVisible();
     await menu.getByRole('button', { name: 'Fechar menu' }).click();
     await expect(menu).toBeHidden();
+    // The tabs follow the audio rule (BR-2): Acervos opens the Menu in a collection of
+    // texts; with audio, Biblioteca and Fila (or Acervos) are pages of their own.
+    const tabs = nav.locator('.tab:visible');
+    const labels = (await tabs.allInnerTexts()).map((t) => t.trim());
+    expect(labels.slice(0, 2)).toEqual(['Conversas', 'Buscar']);
+    expect(labels.length).toBeGreaterThanOrEqual(3);
+    for (const label of labels.slice(2)) {
+      const tab = tabs.filter({ hasText: label });
+      if ((await tab.evaluate((e) => e.tagName)) === 'BUTTON') {
+        await tab.click();
+        await expect(menu).toBeVisible();
+        await menu.getByRole('button', { name: 'Fechar menu' }).click();
+        await expect(menu).toBeHidden();
+      } else {
+        await tab.click();
+        await expect(tab).toHaveAttribute('aria-current', 'page');
+      }
+    }
     await nav.getByRole('link', { name: 'Buscar' }).click();
     await expect(page.getByLabel('Sua pergunta')).toBeVisible();
     await nav.getByRole('link', { name: 'Conversas' }).click();

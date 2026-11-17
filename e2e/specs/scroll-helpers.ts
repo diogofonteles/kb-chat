@@ -58,7 +58,8 @@ export async function scrollOver(
   point: { x: number; y: number },
   dy: number,
 ): Promise<void> {
-  const chromium = page.context().browser()?.browserType().name() === 'chromium';
+  const chromium =
+    page.context().browser()?.browserType().name() === 'chromium';
   if (desktop(page) || !chromium) {
     await page.mouse.move(point.x, point.y);
     await page.mouse.wheel(0, dy);
@@ -114,7 +115,7 @@ export async function expectKeyboardScrolls(
 export async function scrollSettled(page: Page): Promise<void> {
   const positions = () =>
     page.evaluate(() =>
-      [document.scrollingElement, ...document.querySelectorAll('*')]
+      [document.scrollingElement, ...Array.from(document.querySelectorAll('*'))]
         .filter((element): element is Element => element !== null)
         .map((element) => element.scrollTop)
         .join(','),

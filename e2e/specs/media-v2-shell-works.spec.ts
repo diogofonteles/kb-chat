@@ -1,6 +1,11 @@
 import type { Page } from '@playwright/test';
 import { expect, ownerApi, test } from './fixtures.js';
-import { audioState, closePlayer, uniqueTag, uploadReady } from './media-helpers.js';
+import {
+  audioState,
+  closePlayer,
+  uniqueTag,
+  uploadReady,
+} from './media-helpers.js';
 import { expectScrolls, shortWindow } from './scroll-helpers.js';
 import { desktop } from './shell-helpers.js';
 
@@ -45,7 +50,9 @@ test('every control of the player bar answers, and "Tocando agora" scrolls and c
   const band = await bar.boundingBox();
   const viewport = page.viewportSize();
   expect(band?.height).toBe(72);
-  expect((band?.y ?? 0) + (band?.height ?? 0)).toBe((viewport?.height ?? 0) - 8);
+  expect((band?.y ?? 0) + (band?.height ?? 0)).toBe(
+    (viewport?.height ?? 0) - 8,
+  );
 
   const pause = bar.getByRole('button', { name: /^Pausar/ });
   await pause.click();
@@ -65,7 +72,9 @@ test('every control of the player bar answers, and "Tocando agora" scrolls and c
 
   // The speed is a menu: it opens, takes a choice and closes.
   await bar.getByRole('button', { name: /Velocidade/ }).click();
-  await page.getByRole('menuitemradio', { name: /^1,5×$|Velocidade 1,5 vezes/ }).click();
+  await page
+    .getByRole('menuitemradio', { name: /^1,5×$|Velocidade 1,5 vezes/ })
+    .click();
   await expect
     .poll(() =>
       page
@@ -75,7 +84,9 @@ test('every control of the player bar answers, and "Tocando agora" scrolls and c
     .toBe(1.5);
   // Back to 1× (the speed is the person's preference, shared with the other specs).
   await bar.getByRole('button', { name: /Velocidade/ }).click();
-  await page.getByRole('menuitemradio', { name: /^1×$|^Velocidade normal$/ }).click();
+  await page
+    .getByRole('menuitemradio', { name: /^1×$|^Velocidade normal$/ })
+    .click();
   await expect
     .poll(() =>
       page
@@ -101,10 +112,14 @@ test('every control of the player bar answers, and "Tocando agora" scrolls and c
   // "Tocando agora": the panel opens, its text scrolls on a short window, ⋯ opens and closes.
   await bar.getByRole('button', { name: 'Tocando agora' }).click();
   const panel = page.getByRole('complementary', { name: 'Tocando agora' });
-  await expect(panel.getByRole('link', { name: /Aula da casca/ })).toBeVisible();
+  await expect(
+    panel.getByRole('link', { name: /Aula da casca/ }),
+  ).toBeVisible();
   await shortWindow(page, 420);
   await expectScrolls(page, panel, 300);
-  const more = panel.getByRole('button', { name: 'Mais opções de Tocando agora' });
+  const more = panel.getByRole('button', {
+    name: 'Mais opções de Tocando agora',
+  });
   await more.click();
   await expect(
     page.getByRole('menuitem', { name: 'Fechar Tocando agora' }),
