@@ -517,9 +517,25 @@ h2:focus-visible {
     var(--cover-tint) var(--cover-card-share),
     var(--color-cover-ink)
   );
-  /* What scrolls under the player is cut clean above it, not shown as a sliver. */
-  box-shadow: 0 calc(-1 * var(--space-3)) 0 var(--color-surface);
   color: var(--color-on-cover);
+}
+
+/* What scrolls under the player fades out above it instead of showing a hard sliver (a
+   button's top edge read as a border on the player). It spans the scroller's padding. */
+.sheet-player::before {
+  position: absolute;
+  right: calc(-1 * var(--space-4));
+  bottom: 100%;
+  left: calc(-1 * var(--space-4));
+  height: var(--space-6);
+  background: linear-gradient(to bottom, transparent, var(--color-surface) 60%);
+  content: '';
+  pointer-events: none;
+}
+
+/* Room for that fade: at the end of the scroll the foot rests above it, never under it. */
+:host(.in-sheet) .foot {
+  padding-bottom: var(--space-3);
 }
 
 .sheet-player-text {
