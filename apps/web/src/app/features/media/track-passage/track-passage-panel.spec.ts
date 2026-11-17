@@ -311,7 +311,7 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
     expect(created.request.body).toMatchObject({ positionMs: 41_300 });
   });
 
-  it('playing: "Pausar", the "tocando" seal, the card in the cover’s colour, the words lit as they are spoken', async () => {
+  it('KBC-155 AC-1/AC-2/AC-3: playing, one control only: "tocando no player", no "Pausar", no progress, the words lit as they are spoken', async () => {
     const { media, http } = await openReady();
     http.expectOne(`${ITEM_URL}/transcript/words?from=1&count=1`).flush({
       mediaId: TRACK_ID,
@@ -323,15 +323,28 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
         { segment: 1, startMs: 50_000, endMs: 51_000, text: 'pêndulo.' },
       ],
     });
+    // Stopped: the progress of a player of its own is nowhere (no "0:39 … 8:28" timeline).
+    expect(screen.queryByText(/^trecho citado /)).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /^Trecho citado aos/ }),
+    ).toBeNull();
+    expect(screen.getByRole('button', { name: 'Faixa toda' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Ouvir o trecho' }));
     media.setCurrentTime(43.5);
     media.emit('playing');
     media.emit('timeupdate');
-    const pause = await screen.findByRole('button', { name: 'Pausar' });
     // Opened from a search (no answer around it): "Trecho", not "Citado na resposta".
-    const card = screen.getByRole('region', { name: 'Trecho · 0:41–1:10' });
-    expect(card.classList).toContain('playing');
-    expect(within(card).getByText('tocando')).toBeTruthy();
+    const card = await screen.findByRole('region', {
+      name: 'Trecho · 0:41–1:10',
+    });
+    await vi.waitFor(() => expect(card.classList).toContain('playing'));
+    expect(within(card).getByText('tocando no player')).toBeTruthy();
+    // The bar is the one control: nothing in the panel pauses, restarts or seeks it.
+    expect(screen.queryByRole('button', { name: 'Pausar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Ouvir o trecho' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Faixa toda' })).toBeNull();
+    expect(screen.queryByRole('slider')).toBeNull();
+    expect(screen.queryByRole('progressbar')).toBeNull();
     expect(
       [...card.querySelectorAll('.quote span.lit')].map((one) =>
         one.textContent?.trim(),
@@ -341,11 +354,22 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
     expect(
       document.querySelector('.line[aria-current="true"]')?.textContent,
     ).toContain('O ritmo é a lei do pêndulo.');
-    fireEvent.click(pause);
-    expect(media.calls.at(-1)).toBe('pause');
+
+    // Past the passage (KBC-154), "Ouvir o trecho" comes back and leads to it again.
+    media.setCurrentTime(80);
+    media.emit('timeupdate');
+    const listen = await screen.findByRole('button', {
+      name: 'Ouvir o trecho',
+    });
+    expect(within(card).getByText('tocando no player')).toBeTruthy();
+    fireEvent.click(listen);
+    await vi.waitFor(() =>
+      expect(TestBed.inject(MediaEngine).playback().currentMs).toBe(39_300),
+    );
+    expect(media.calls).not.toContain('pause');
   });
 
-  it('several citations of the same track: a mark each on the timeline, "Outro trecho citado" goes to the other one', async () => {
+  it('KBC-155 AC-4: several citations of the same track: "Outros trechos citados" go to each passage, with no timeline marks', async () => {
     const twice: AnswerSource = {
       ...SOURCE,
       passages: [
@@ -354,13 +378,20 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
       ],
     };
     await openReady({ source: twice, at: '0:41', sources: [twice] });
-    const marks = screen.getAllByRole('button', { name: /^Trecho citado aos/ });
-    expect(marks).toHaveLength(2);
-    expect(marks[0]?.getAttribute('aria-current')).toBe('true');
+    expect(
+      screen.queryByRole('button', { name: /^Trecho citado aos/ }),
+    ).toBeNull();
+    const others = screen.getByRole('list', { name: 'Outros trechos citados' });
+    expect(
+      screen.getByRole('heading', { name: 'Outros trechos citados' }),
+    ).toBeTruthy();
+    expect(within(others).getAllByRole('button')).toHaveLength(1);
     // One source alone: no ‹ ›.
     expect(screen.queryByRole('button', { name: 'Próxima fonte' })).toBeNull();
     fireEvent.click(
-      screen.getByRole('button', { name: 'Outro trecho citado, em 1:10' }),
+      within(others).getByRole('button', {
+        name: 'Outro trecho citado, em 1:10',
+      }),
     );
     expect(
       await screen.findByRole('region', {
@@ -370,15 +401,24 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
     await vi.waitFor(() =>
       expect(TestBed.inject(MediaEngine).playback().currentMs).toBe(68_000),
     );
-    expect(
+    fireEvent.click(
       screen.getByRole('button', { name: 'Outro trecho citado, em 0:41' }),
-    ).toBeTruthy();
-    fireEvent.click(marks[0] as HTMLElement);
+    );
     expect(
       await screen.findByRole('region', {
         name: 'Citado na resposta · 0:41–1:10',
       }),
     ).toBeTruthy();
+  });
+
+  it('KBC-155 AC-4: one citation of the track: no "Outros trechos citados"', async () => {
+    await openReady({ source: SOURCE, at: '0:41', sources: [SOURCE] });
+    expect(
+      screen.queryByRole('heading', { name: 'Outros trechos citados' }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /^Outro trecho citado/ }),
+    ).toBeNull();
   });
 
   it('the full transcript opens in the panel, with its search, and goes back to the lines around', async () => {
@@ -653,7 +693,7 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
     expect(created.request.body).toMatchObject({ positionMs: 41_300 });
   });
 
-  it('in the phone sheet: the tab names it, the time and the voice share a line, "Abrir a faixa" leaves while it plays and the sheet’s strip says what plays', async () => {
+  it('KBC-155 AC-5: in the phone sheet, the mini player sits at its foot, paused and playing, and the card has no "Pausar"', async () => {
     const { media } = await openReady({
       source: SOURCE,
       at: '0:41',
@@ -665,14 +705,26 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
     expect(screen.queryByRole('button', { name: 'Fechar' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Faixa toda' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Abrir a faixa' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Ouvir o trecho' }));
+    // Paused, the sheet's player is there already: the app's player behind the sheet is out of reach.
+    const player = await screen.findByRole('group', { name: 'Player' });
+    expect(within(player).getByText('Pausado · 0:39')).toBeTruthy();
+    fireEvent.click(within(player).getByRole('button', { name: 'Tocar' }));
+    expect(media.calls.at(-1)).toBe('play');
     media.setCurrentTime(42);
     media.emit('playing');
     media.emit('timeupdate');
     expect(
-      await screen.findByText('Tocando o trecho citado · 0:42'),
+      await within(player).findByText('Tocando o trecho citado · 0:42'),
     ).toBeTruthy();
-    expect(screen.queryByRole('link', { name: 'Abrir a faixa' })).toBeNull();
+    const card = screen.getByRole('region', { name: /0:41–1:10/ });
+    expect(within(card).queryByRole('button', { name: 'Pausar' })).toBeNull();
+    expect(within(card).getByText('tocando no player')).toBeTruthy();
+    fireEvent.click(within(player).getByRole('button', { name: 'Pausar' }));
+    expect(media.calls.at(-1)).toBe('pause');
+    media.emit('pause');
+    expect(
+      await within(player).findByRole('button', { name: 'Tocar' }),
+    ).toBeTruthy();
   });
 
   it('AC-15: an answer saved before KBC-099 opens the track at its start, the whole transcript in view', async () => {

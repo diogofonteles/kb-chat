@@ -5,7 +5,6 @@ import {
   citedRange,
   lineStateAt,
   speakersBySegment,
-  timelineMarks,
 } from './passage-context.js';
 
 const transcript = (
@@ -78,24 +77,6 @@ describe('passage context (KBC-150)', () => {
     expect(speakers[1]?.name).toBe('Irmã Helena');
     expect(speakers[2]?.name).toBe('Falante não identificado');
     expect(speakers[2]?.voice).toBe(2);
-  });
-
-  it('places the cited passages on the track as percentages', () => {
-    expect(
-      timelineMarks(
-        [
-          { at: '0:10', startMs: 10_000, endMs: 20_000 },
-          { at: '9:00', startMs: 540_000, endMs: 600_000 },
-        ],
-        100_000,
-      ),
-    ).toEqual([
-      { index: 0, startMs: 10_000, endMs: 20_000, left: 10, width: 10 },
-      { index: 1, startMs: 540_000, endMs: 600_000, left: 100, width: 0 },
-    ]);
-    expect(timelineMarks([{ at: '', startMs: 5, endMs: 9 }], 0)[0]?.left).toBe(
-      0,
-    );
   });
 
   it('marks the line heard now and the ones already heard, only while it plays', () => {
