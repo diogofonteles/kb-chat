@@ -23,6 +23,7 @@ import {
   mediaItemSchema,
   mediaTranscriptSchema,
   mediaTranscriptWordsSchema,
+  wholeSentences,
   type AnswerSource,
   type MediaItem,
   type Topic,
@@ -210,7 +211,9 @@ export class TrackPassagePanel {
     (): TrackPassage | null => this.passages()[this.chosen()] ?? null,
   );
   /** The passage the citation opened on: the player is cued there once (FR-8). */
-  private readonly opened = computed(() => passageOf(this.source(), this.at()));
+  private readonly opened = computed(() =>
+    this.wholeOf(passageOf(this.source(), this.at())),
+  );
   /**
    * The stored passage no longer falls on any segment of the current transcript (the track
    * was edited after the answer): T22 says so and starts the track from the beginning.
@@ -221,7 +224,7 @@ export class TrackPassagePanel {
     return citedRange(this.transcript.value().segments, passage) === null;
   });
   protected readonly passage = computed(() =>
-    this.passageMoved() ? null : this.stored(),
+    this.passageMoved() ? null : this.wholeOf(this.stored()),
   );
   /** What the full transcript paints and scrolls to; none without a resolved passage. */
   protected readonly focus = computed((): PassageFocus | null => {
@@ -355,6 +358,17 @@ export class TrackPassagePanel {
       ? $localize`:@@player.pause:Pausar`
       : $localize`:@@player.play:Tocar`,
   );
+
+  /**
+   * The passage grown to whole sentences over what this person may hear (KBC-156): answers
+   * saved before it keep a lone segment, maybe a 1 s fragment; the voices and the parts they
+   * may not hear are this person's own transcript's.
+   */
+  private wholeOf(passage: TrackPassage | null): TrackPassage | null {
+    if (!passage || !this.transcript.hasValue()) return passage;
+    const { segments } = this.transcript.value();
+    return { ...passage, ...wholeSentences(segments, passage) };
+  }
 
   /* ---------- The cited passage, word by word ---------- */
 
