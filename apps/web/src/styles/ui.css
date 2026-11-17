@@ -248,7 +248,8 @@
 .ui-banner {
   --ui-banner-tone: var(--color-info);
   display: flex;
-  align-items: flex-start;
+  /* v2 · Componentes › Banner: the icon, the text and the action centred on one row. */
+  align-items: center;
   gap: var(--space-3);
   padding: 0.875rem var(--space-4);
   border-radius: var(--radius-card);
@@ -269,7 +270,7 @@
 }
 
 .ui-banner__icon {
-  margin-top: 0.0625rem;
+  flex: none;
   color: var(--ui-banner-tone);
 }
 
@@ -278,6 +279,8 @@
   flex: 1;
   gap: 0.125rem;
   min-width: 0;
+  /* v2: the title and its line on tight lines (Figma's auto height). */
+  line-height: 1.2;
 }
 
 .ui-banner__title {
@@ -302,6 +305,11 @@
 .ui-banner > [uiBannerAction] {
   flex: none;
   align-self: center;
+}
+
+/* v2: the banner's button keeps the 24 sides of every filled button, at 32 tall. */
+.ui-banner > .ui-btn--sm[uiBannerAction] {
+  padding: 0 var(--space-6);
 }
 
 /* ---------- Empty state ---------- */

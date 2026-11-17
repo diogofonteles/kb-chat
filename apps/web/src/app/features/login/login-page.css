@@ -58,9 +58,18 @@
 
 .google-button {
   display: flex;
+  align-items: center;
   justify-content: center;
-  min-height: 2.75rem;
+  /* v2 · Auth draws a 48 button (52 on a phone); Google's own (an iframe, 40 or 44) sits
+     centred in a slot that tall, so everything under it keeps the frame's place. */
+  min-height: 3rem;
   width: 100%;
+}
+
+@media (max-width: 1023px) {
+  .google-button {
+    min-height: 3.25rem;
+  }
 }
 
 .google-button.hidden {

@@ -33,6 +33,14 @@
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+/* Without the bar (v2 · a collection of texts) the panels reach 8 from the foot: no empty
+   foot row, and so no gap for it. */
+.app-shell.desktop:not(.with-player) {
+  grid-template-areas:
+    'top top'
+    'library main';
+}
+
 .top {
   grid-area: top;
 }
