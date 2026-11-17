@@ -31,7 +31,8 @@
 }
 
 .dot {
-  grid-row: 1 / span 4;
+  grid-row: 1;
+  align-self: start;
   display: grid;
   place-items: center;
   width: 1.75rem;
@@ -105,4 +106,74 @@
   display: block;
   height: 100%;
   background: var(--color-accent);
+}
+
+.stages {
+  gap: 0;
+}
+
+.stages li {
+  padding: var(--space-3) 0;
+  gap: 6px 14px;
+}
+
+.cost {
+  justify-self: start;
+}
+
+/* A failed stage (prepare.js): a red card with what was left, its cost and the two ways on. */
+.failure {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+
+.failure-title {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.failure-title ui-icon {
+  color: var(--color-danger);
+}
+
+.failure .detail {
+  font-size: var(--text-meta);
+}
+
+.failure-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.failure-actions .ui-btn {
+  min-height: 36px;
+  gap: var(--space-2);
+}
+
+/* A phone: while the AI proposes, only its stage stays; a failure keeps its card, without
+   the buttons (they are in the foot bar). */
+@media (max-width: 1023px) {
+  .stages.ai-active li:not(.current),
+  .stages.has-failure {
+    display: none;
+  }
+
+  .failure {
+    gap: var(--space-2);
+    padding: 14px;
+  }
+
+  .failure-title ui-icon,
+  .failure-actions {
+    display: none;
+  }
 }

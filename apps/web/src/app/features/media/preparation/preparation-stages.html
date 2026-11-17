@@ -1,4 +1,10 @@
-<ol class="stages" aria-label="Etapas" i18n-aria-label="@@prep.stages">
+<ol
+  class="stages"
+  aria-label="Etapas"
+  i18n-aria-label="@@prep.stages"
+  [class.ai-active]="aiActive()"
+  [class.has-failure]="failures().length > 0"
+>
   @for (line of lines(); track line.stage.stage) {
     <li
       #row
@@ -25,12 +31,7 @@
       </span>
       <p class="line">
         <span class="name">{{ line.name }}</span>
-        <span class="state">
-          @if (line.stage.state === 'done') {
-            <span aria-hidden="true">✓</span>
-          }
-          {{ line.state }}
-        </span>
+        <span class="state">{{ line.state }}</span>
       </p>
       @if (line.stage.state === 'running' && line.stage.percent !== null) {
         <div
@@ -46,26 +47,7 @@
         </div>
       }
       @if (costText(line.stage); as cost) {
-        <p class="detail">{{ cost }}</p>
-      }
-      @if (line.stage.state === 'failed') {
-        @if (leftText(line.stage); as left) {
-          <p class="detail">{{ left }}</p>
-        }
-        @if (line.stage.canRetry) {
-          @if (retryCost(line.stage); as cost) {
-            <p class="detail">{{ cost }}</p>
-          }
-          <button
-            type="button"
-            class="secondary"
-            [disabled]="busy()"
-            (click)="retry(line.stage)"
-            i18n="@@prep.retry"
-          >
-            Tentar de novo
-          </button>
-        }
+        <ui-pill class="cost">{{ cost }}</ui-pill>
       }
     </li>
   }
@@ -76,10 +58,54 @@
     {{ preparation().transcriberOffSince | date: 'dd/MM HH:mm' }}
   </p>
 }
-@if (preparation().canSwitchToManual) {
+<!-- A failed stage: what was left and the two ways on, in a card under the list (prepare.js). -->
+@for (line of failures(); track line.stage.stage) {
+  <section class="failure" role="group" [attr.aria-label]="line.state">
+    <p class="failure-title">
+      <ui-icon name="xcircle" [size]="20" />
+      <span>{{ line.state }}</span>
+    </p>
+    @if (leftText(line.stage); as left) {
+      <p class="detail">{{ left }}</p>
+    }
+    @if (line.stage.canRetry) {
+      @if (retryCost(line.stage); as cost) {
+        <p class="detail">{{ cost }}</p>
+      }
+    }
+    <div class="failure-actions">
+      @if (line.stage.canRetry) {
+        <button
+          uiButton="white"
+          size="sm"
+          type="button"
+          [disabled]="busy()"
+          (click)="retry(line.stage)"
+        >
+          <ui-icon name="refresh" [size]="16" />
+          <ng-container i18n="@@prep.retry">Tentar de novo</ng-container>
+        </button>
+      }
+      @if (preparation().canSwitchToManual) {
+        <button
+          uiButton="outline"
+          size="sm"
+          type="button"
+          [disabled]="busy()"
+          (click)="markedByHand.emit()"
+          i18n="@@prep.markByHand"
+        >
+          Marcar as faixas eu mesmo
+        </button>
+      }
+    </div>
+  </section>
+}
+@if (preparation().canSwitchToManual && failures().length === 0) {
   <button
+    uiButton="outline"
+    size="sm"
     type="button"
-    class="secondary"
     [disabled]="busy()"
     (click)="markedByHand.emit()"
     i18n="@@prep.markByHand"

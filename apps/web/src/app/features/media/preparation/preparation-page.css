@@ -1,3 +1,6 @@
+/* "Preparar áudio", steps 1 and 2 (KBC-130, v2 · Mídia — Preparar): the guided flow in the
+   main panel, under a gradient of the recording's own colour. The page scrolls in its host
+   (the shell's row under it never does), the head and the stepper with it. */
 :host {
   display: block;
   container-type: inline-size;
@@ -7,12 +10,32 @@
 
 .page {
   display: grid;
+  align-content: start;
   gap: var(--space-4);
-  padding: var(--space-8) var(--space-8) var(--space-6);
+  min-height: 100%;
+  padding: 0 var(--space-8) var(--space-6);
+  background:
+    linear-gradient(
+        180deg,
+        color-mix(
+            in srgb,
+            var(--flow-tint, var(--color-surface-muted)) 45%,
+            var(--color-bg)
+          )
+          0,
+        var(--color-bg) 20rem
+      )
+      no-repeat,
+    var(--color-bg);
+}
+
+.top {
+  padding-top: 2.125rem;
 }
 
 .progress {
   min-width: 0;
+  padding-bottom: var(--space-1);
 }
 
 a.secondary,
@@ -33,32 +56,23 @@ a.primary,
   background: color-mix(in srgb, var(--color-danger) 14%, transparent);
 }
 
-/* "Sem permissão" and "nada a preparar": an empty state, not a line. */
-.empty {
-  display: grid;
-  justify-items: center;
-  gap: var(--space-3);
-  padding: var(--space-8) var(--space-4);
+/* "Nada a preparar": the empty state in a quiet card; "Sem permissão": alone, centred. */
+.nothing {
   border-radius: var(--radius-card);
-  background: var(--overlay-1);
-  text-align: center;
+  background: color-mix(in srgb, var(--color-text) 2%, transparent);
 }
 
-.empty-icon {
-  display: grid;
-  place-items: center;
-  width: 4rem;
-  height: 4rem;
-  border-radius: var(--radius-pill);
-  background: var(--overlay-3);
-  color: var(--color-text-muted);
+.bare {
+  grid-template-rows: minmax(0, 1fr);
 }
 
-.empty-title {
-  max-width: 28rem;
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: 700;
+.bare .v2-head {
+  display: none;
+}
+
+.lone {
+  align-self: center;
+  padding-bottom: 6rem;
 }
 
 .choose {
@@ -69,43 +83,69 @@ a.primary,
 .actions {
   display: flex;
   gap: var(--space-3);
-  justify-content: flex-end;
-}
-
-.columns,
-.side {
-  display: grid;
-  gap: var(--space-6);
-  min-width: 0;
-}
-
-.columns section {
-  min-width: 0;
-}
-
-/* The way on stays in sight however long the list is. */
-.end {
-  position: sticky;
-  bottom: var(--space-2);
-  z-index: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-3);
   align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-card);
-  background: color-mix(
-    in srgb,
-    var(--color-accent) 14%,
-    var(--color-elevated)
-  );
-  box-shadow: var(--shadow);
+  padding-top: var(--space-2);
 }
 
-.end p {
+.why {
   margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.actions .why {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Step 2: the stages on the left (460), the voices and the tracks on the right. */
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 28.75rem) minmax(0, 1fr);
+  gap: var(--space-8);
+  align-items: start;
+}
+
+.side,
+.result {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.result {
+  gap: 14px;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 1.25rem;
   font-weight: 700;
+}
+
+.side app-preparation-stage-list {
+  padding-top: var(--space-2);
+}
+
+.end {
+  align-items: center;
+  margin-top: var(--space-3);
+}
+
+.end-count {
+  display: none;
+}
+
+.end-action {
+  gap: var(--space-2);
+}
+
+.main {
+  gap: var(--space-2);
+}
+
+.phone-only {
+  display: none;
 }
 
 .skeleton {
@@ -114,17 +154,131 @@ a.primary,
   background: var(--overlay-2);
 }
 
-@container (min-width: 60rem) {
+.page[aria-busy] .skeleton:first-of-type {
+  margin-top: var(--space-8);
+}
+
+@container (max-width: 52rem) {
   .columns {
-    grid-template-columns: minmax(18rem, 2fr) minmax(0, 3fr);
-    gap: var(--space-8);
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
+/* A phone (prepare.js, prMobile): the flow takes the screen, its way on fixed at the foot. */
 @media (max-width: 1023px) {
   .page {
-    padding: var(--space-4) var(--space-4)
-      calc(var(--space-6) + var(--shell-mobile-foot));
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 var(--space-4);
+    background:
+      linear-gradient(
+          180deg,
+          color-mix(
+              in srgb,
+              var(--flow-tint, var(--color-surface-muted)) 45%,
+              var(--color-bg)
+            )
+            0,
+          var(--color-bg) 15rem
+        )
+        no-repeat,
+      var(--color-bg);
+  }
+
+  .top {
+    padding-top: 3.25rem;
+  }
+
+  .bare .v2-head {
+    display: grid;
+  }
+
+  .lone {
+    align-self: start;
+    padding: var(--space-8) var(--space-6);
+  }
+
+  .nothing {
+    background: none;
+  }
+
+  .columns {
+    gap: var(--space-2);
+  }
+
+  .side > .section-title {
+    display: none;
+  }
+
+  /* Why the next step is closed stays in words on a phone too (AC-5). */
+  .side > .why {
+    order: -1;
+  }
+
+  .side app-preparation-stage-list {
+    padding-top: 0;
+  }
+
+  .none-yet .result {
+    display: none;
+  }
+
+  .result {
+    gap: 10px;
+  }
+
+  /* Step 2 ends: the banner says what came out; its button goes to the foot bar. */
+  .end {
+    margin-top: var(--space-2);
+  }
+
+  .end-count {
+    display: inline;
+  }
+
+  .end-action {
+    display: none;
+  }
+
+  .phone-only {
+    display: flex;
+  }
+
+  /* The way on: one bar at the foot of the screen, over whatever scrolls under it. */
+  .flow-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin: auto calc(-1 * var(--space-4)) 0;
+    margin-top: auto;
+    padding: var(--space-3) var(--space-4)
+      calc(1.75rem + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--overlay-2);
+    background: color-mix(in srgb, var(--color-bg) 95%, transparent);
+  }
+
+  .flow-bar .why {
+    display: none;
+  }
+
+  .flow-bar .main {
+    flex: 1;
+  }
+
+  .choose {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page {
+    scroll-behavior: auto;
   }
 }

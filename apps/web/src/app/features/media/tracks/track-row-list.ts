@@ -1,3 +1,4 @@
+import { UiIcon } from '@ui/index.js';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -94,6 +95,10 @@ export function problemLabel(
   return $localize`:@@tracks.problem.overlapBy:Sobreposta à anterior em ${size}:size:`;
 }
 
+/** The colour of a voice's chip, as on "Nomes das vozes" (1 to 5; none for a name only). */
+const voiceTone = (voice: number | null): number | null =>
+  voice === null ? null : ((voice - 1) % 5) + 1;
+
 export const personValue = (
   voice: number | null,
   speakerId: string | null,
@@ -109,7 +114,7 @@ export const personValue = (
  */
 @Component({
   selector: 'app-track-row-list',
-  imports: [MenuButton, TrackText],
+  imports: [MenuButton, TrackText, UiIcon],
   templateUrl: './track-row-list.html',
   styleUrl: './track-row-list.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -162,6 +167,7 @@ export class TrackRowList {
     const selectedId = this.selectedId();
     const plain = this.tracks().map(({ track }) => track);
     return this.tracks().map(({ track, ordinal }) => ({
+      ...this.peopleOf(track),
       hue: regionHue(ordinal),
       track,
       ordinal,
@@ -169,8 +175,6 @@ export class TrackRowList {
       range: `${formatBoundary(track.startMs)} – ${formatBoundary(track.endMs)}`,
       length: formatDuration(track.endMs - track.startMs),
       title: track.title ?? '',
-      asker: personValue(track.askerVoice, track.askerSpeakerId),
-      answerer: personValue(track.answererVoice, track.answererSpeakerId),
       proposal: track.source === 'ai' && !track.edited,
       levelCode: this.levelCodeOf(track.level),
       levelOutside: this.outsideOf(track.level),
@@ -184,6 +188,22 @@ export class TrackRowList {
         ) && closeOverlap(plain, track.id) !== null,
     }));
   });
+  /** Who asks and who answers on a row: the stored value, its label and its voice tone. */
+  private peopleOf(track: NumberedTrack['track']) {
+    const people = this.people();
+    const labelOf = (value: string): string =>
+      value ? (people.find((one) => one.value === value)?.label ?? '') : '';
+    const asker = personValue(track.askerVoice, track.askerSpeakerId);
+    const answerer = personValue(track.answererVoice, track.answererSpeakerId);
+    return {
+      asker,
+      answerer,
+      askerLabel: labelOf(asker),
+      answererLabel: labelOf(answerer),
+      askerTone: voiceTone(track.askerVoice),
+      answererTone: voiceTone(track.answererVoice),
+    };
+  }
   protected readonly listenButtons = computed(() =>
     LISTEN_BUTTONS.map(({ kind, shortcut, idle, stop }) => ({
       kind,

@@ -43,6 +43,15 @@ const voiceLine = (voice: PreparationVoice): string => {
   return $localize`:@@prep.voice.line:${who}:who: — ${long}:length:`;
 };
 
+/** "Mestre Álvaro Nunes" → MÁ, "Pergunta da plateia" → Pd (prepare.js, voiceFound). */
+const initialsOf = (who: string): string =>
+  who
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word.charAt(0))
+    .join('');
+
 const nameOf = (suggestion: VoiceSuggestion): string =>
   personText({ ...suggestion, voice: suggestion.voice });
 
@@ -75,6 +84,13 @@ function authorSuggestion({
 interface VoiceRow {
   readonly voice: number;
   readonly line: string;
+  /** Who it is ("Mestre Álvaro Nunes", "Voz 2"), and its initials for the avatar. */
+  readonly who: string;
+  readonly initials: string;
+  /** "41 s" of speech. */
+  readonly long: string;
+  /** The voice's colour on the avatar or the dot: the audience keeps the third one. */
+  readonly tone: number;
   /** There is a name to correct: given, or suggested. */
   readonly hasName: boolean;
   readonly suggestion: VoiceSuggestion | null;
@@ -95,6 +111,7 @@ interface VoiceRow {
   templateUrl: './preparation-voices.html',
   styleUrls: ['./preparation-buttons.css', './preparation-voices.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[attr.data-look]': 'look()' },
 })
 export class PreparationVoices {
   private readonly api = inject(SpeakersApi);
@@ -105,6 +122,11 @@ export class PreparationVoices {
   private readonly field = viewChild(SpeakerCombobox);
 
   readonly preparation = input.required<MediaPreparation>();
+  /**
+   * How the list looks (KBC-130): "found" on step 2 (an avatar, the time of speech under the
+   * name, buttons), "names" in the side column of step 3 (a dot, the line, links).
+   */
+  readonly look = input<'found' | 'names'>('found');
   /** Runs before a name goes in: step 3 saves what is on screen first. */
   readonly beforeNaming = input<() => Observable<unknown>>(() => of(null));
   /** A name went in, or was refused: the screen reads the plan again. */
@@ -156,6 +178,10 @@ export class PreparationVoices {
       return {
         voice: voice.voice,
         line: voiceLine(voice),
+        who: personText({ ...voice }),
+        initials: initialsOf(personText({ ...voice })),
+        long: spanText(voice.speakingMs),
+        tone: voice.audience ? 3 : ((voice.voice - 1) % 5) + 1,
         hasName: given !== '' || suggestion !== null,
         suggestion,
         filled: given || (suggestion ? nameOf(suggestion) : ''),

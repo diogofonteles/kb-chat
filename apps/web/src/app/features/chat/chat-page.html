@@ -55,6 +55,7 @@
       [style.--tint]="tint()"
       [class.covered]="panelOpen()"
       [class.media]="onMedia()"
+      [class.guided]="guidedFlow()"
       [class.empty]="isEmpty() && !onMedia()"
       [attr.inert]="covered() ? '' : null"
     >
@@ -238,14 +239,16 @@
     (no bar row then): its announcer speaks the skips and the sleep timer from any page.
   -->
   @if (audio.shown() || !desktop()) {
-    <div class="shell-foot" [class.bare]="fullScreenPlayer()">
+    <div class="shell-foot" [class.bare]="fullScreenPlayer() || phoneFlow()">
       <app-mini-player
         class="player"
-        [shownElsewhere]="playerInPanel()"
-        [idle]="audio.collectionHasAudio() && !audio.playing()"
+        [shownElsewhere]="
+          phoneFlow() ? (engineSource()?.id ?? null) : playerInPanel()
+        "
+        [idle]="!phoneFlow() && audio.collectionHasAudio() && !audio.playing()"
         [idleLink]="libraryPath()"
       />
-      @if (!desktop() && !fullScreenPlayer()) {
+      @if (!desktop() && !fullScreenPlayer() && !phoneFlow()) {
         <app-bottom-nav
           [tabs]="navTabs()"
           [active]="navActive()"

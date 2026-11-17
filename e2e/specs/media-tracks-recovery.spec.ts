@@ -401,7 +401,7 @@ test('F-2: "Confirmar e propor" waits for an approval on hold', async ({
   await stubProposals(page, media.id);
   const sent = pressesSent(page, media.id);
   await open(page, media.id);
-  await page.getByRole('button', { name: 'Propor faixas com IA' }).click();
+  await page.getByRole('button', { name: 'Propor com IA' }).click();
   const confirm = page.getByRole('button', { name: 'Confirmar e propor' });
   await expect(confirm).toBeEnabled();
   const release = await holdSaves(page, media.id);
@@ -422,7 +422,7 @@ test('F-2: "Aprovar faixas" waits for a paid run on hold', async ({ page }) => {
   await stubProposals(page, media.id);
   const sent = pressesSent(page, media.id);
   await open(page, media.id);
-  await page.getByRole('button', { name: 'Propor faixas com IA' }).click();
+  await page.getByRole('button', { name: 'Propor com IA' }).click();
   const confirm = page.getByRole('button', { name: 'Confirmar e propor' });
   await expect(confirm).toBeEnabled();
   const release = await holdSaves(page, media.id);

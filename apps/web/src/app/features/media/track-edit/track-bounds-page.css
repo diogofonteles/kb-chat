@@ -1,9 +1,33 @@
-/* v2 "/limites" (KBC-130): back, the assistant head, the big waveform, the start and end in
-   a pill (the moved one in green), the tools in pills and "Não salvo · Desfazer" by save. */
+/* v2 "/limites" (KBC-130, prepare.js boundsMain): "Voltar à faixa", the head without tools,
+   the big waveform with the track's words under it, the start and end in pills (the moved
+   one in green), the nudges as chips, the two "Ouvir", then "Não salvo · Desfazer" by save.
+   On a phone (bm): the wave, two boxes, the chips, the two buttons and a foot bar. */
+:host {
+  display: block;
+  container-type: inline-size;
+  height: 100%;
+  overflow-y: auto;
+}
+
 .page {
   display: grid;
+  align-content: start;
   gap: var(--space-4);
-  padding: var(--space-6) var(--space-8);
+  min-height: 100%;
+  padding: var(--space-5) var(--space-8) var(--space-6);
+  background:
+    linear-gradient(
+        180deg,
+        color-mix(
+            in srgb,
+            var(--flow-tint, var(--color-surface-muted)) 45%,
+            var(--color-bg)
+          )
+          0,
+        var(--color-bg) 20rem
+      )
+      no-repeat,
+    var(--color-bg);
 }
 
 h2 {
@@ -12,10 +36,10 @@ h2 {
 
 .back {
   display: inline-flex;
-  gap: var(--space-1);
+  gap: 6px;
   align-items: center;
   justify-self: start;
-  min-height: var(--target);
+  min-height: var(--target-desktop);
   color: var(--color-text-muted);
   font-size: var(--text-meta);
   font-weight: 700;
@@ -26,21 +50,91 @@ h2 {
   color: var(--color-text);
 }
 
-.times {
-  justify-self: start;
+.v2-head {
+  padding-top: var(--space-2);
+}
+
+.v2-head .sub {
   margin: 0;
-  padding: var(--space-1) var(--space-4);
-  border-radius: var(--radius-pill);
-  background: var(--overlay-3);
+  color: var(--color-text-muted);
   font-size: var(--text-sm);
-  font-weight: 700;
+}
+
+/* The wave's card: the timeline draws itself without its own card here. */
+.wave-card {
+  display: grid;
+  gap: 14px;
+  padding: 1.75rem var(--space-6) var(--space-4);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+}
+
+.wave-card app-track-timeline {
+  padding: 0;
+  background: none;
+}
+
+.spoken {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Início and Fim, each in its pill; the moved one in green (BR: never by colour alone, the
+   value itself changed). */
+.times {
+  display: flex;
+  gap: var(--space-3);
+  margin: 0;
   font-variant-numeric: tabular-nums;
 }
 
-.times.start-moved,
-.times.end-moved {
-  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+.time {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-2);
+  font-size: var(--text-sm);
+}
+
+.time-name {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.time strong {
+  font-weight: 700;
+}
+
+.sep {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.start-moved .time.start,
+.end-moved .time.end {
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+}
+
+.start-moved .time.start strong,
+.end-moved .time.end strong {
   color: var(--color-accent-text);
+}
+
+.divider {
+  width: 1px;
+  height: 24px;
+  background: var(--overlay-4);
 }
 
 .note {
@@ -61,6 +155,22 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: var(--space-3);
+}
+
+.nudges,
+.listens {
+  display: inline-flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.listens {
+  margin-left: auto;
+}
+
+.listens .ui-btn {
+  min-height: 36px;
   gap: var(--space-2);
 }
 
@@ -72,19 +182,21 @@ h2 {
   gap: var(--space-2) var(--space-3);
 }
 
+.save-bar {
+  padding-top: var(--space-2);
+}
+
 .unsaved {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-3);
   margin: 0 auto 0 0;
-  color: var(--color-warn);
-  font-size: var(--text-sm);
-  font-weight: 700;
+  font-size: var(--text-meta);
 }
 
 .link {
-  min-height: var(--target);
-  padding: 0 var(--space-1);
+  min-height: var(--target-desktop);
+  padding: 0;
   border: 0;
   background: none;
   color: var(--color-text);
@@ -108,7 +220,122 @@ h2 {
 
 @media (max-width: 1023px) {
   .page {
-    padding: var(--space-4) var(--space-4)
-      calc(var(--space-6) + var(--shell-mobile-foot));
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 0 var(--space-4);
+    background:
+      linear-gradient(
+          180deg,
+          color-mix(
+              in srgb,
+              var(--flow-tint, var(--color-surface-muted)) 45%,
+              var(--color-bg)
+            )
+            0,
+          var(--color-bg) 15rem
+        )
+        no-repeat,
+      var(--color-bg);
+  }
+
+  /* The head's "‹" goes back on a phone. */
+  .back {
+    display: none;
+  }
+
+  .v2-head {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding-top: 3.25rem;
+  }
+
+  .v2-head .head-text {
+    gap: 2px;
+  }
+
+  .v2-head .kicker {
+    font-size: var(--text-xs);
+  }
+
+  .wave-card {
+    padding: var(--space-5) var(--space-3) var(--space-3);
+  }
+
+  .wave-card app-track-timeline {
+    --wave-h: 140px;
+  }
+
+  .spoken {
+    display: none;
+  }
+
+  .times {
+    flex: 1 1 100%;
+    gap: var(--space-2);
+  }
+
+  .time {
+    flex: 1;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-card);
+  }
+
+  .time strong {
+    font-size: var(--text-item);
+  }
+
+  .divider {
+    display: none;
+  }
+
+  .line {
+    gap: var(--space-2);
+  }
+
+  .line > .note {
+    flex: 1;
+  }
+
+  .nudges {
+    gap: var(--space-2);
+  }
+
+  .nudges .ui-chip {
+    min-height: 40px;
+  }
+
+  .listens {
+    flex: 1 1 100%;
+    gap: var(--space-2);
+    margin-left: 0;
+  }
+
+  .listens .ui-btn {
+    flex: 1;
+    min-height: var(--target);
+  }
+
+  .page > .note {
+    font-size: var(--text-xs);
+  }
+
+  /* Save, cancel and "Não salvo" in one bar at the foot of the screen. */
+  .save-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    flex-wrap: nowrap;
+    gap: 10px;
+    margin: auto calc(-1 * var(--space-4)) 0;
+    padding: var(--space-3) var(--space-4)
+      calc(1.75rem + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--overlay-2);
+    background: color-mix(in srgb, var(--color-bg) 95%, transparent);
+  }
+
+  .save-bar .ui-btn {
+    min-height: var(--target);
   }
 }

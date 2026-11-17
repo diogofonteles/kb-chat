@@ -254,7 +254,7 @@ test('AC-14: on a phone, a finger moves the handle and "+0,5 s" too, and the tar
   const page = await pageAs(browser, email, viewport);
   await open(page, media.id);
   await expect(page.getByTestId('step-text')).toContainText(
-    '3/4 Validar faixas',
+    'Passo 3 de 4 · Validar faixas',
   );
   const start = handle(page, 'Início da faixa 1');
   const box = await start.boundingBox();
@@ -335,7 +335,9 @@ test('AC-18: the whole step by keyboard, from an empty draft to the approval', a
   const owner = await ownerApi();
   const media = await transcribedAudio(owner);
   await page.goto(`/midia/${media.id}/faixas`);
-  await expect(page.getByText('Nenhuma faixa ainda.')).toBeVisible();
+  await expect(
+    page.getByText('Nenhuma faixa ainda', { exact: true }),
+  ).toBeVisible();
   const newTrack = page.getByRole('button', { name: 'Nova faixa aqui' });
   await newTrack.focus();
   await page.keyboard.press('Enter');

@@ -1,5 +1,6 @@
 import {
   ChangeDetectionStrategy,
+  booleanAttribute,
   Component,
   DestroyRef,
   ElementRef,
@@ -169,6 +170,7 @@ export function chipText(item: TranscriberStatusItem | null): string {
   templateUrl: './transcriber-status.html',
   styleUrl: './transcriber-status.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.compact]': 'compact()' },
 })
 export class TranscriberStatus {
   private readonly store = inject(TranscriberStatusStore);
@@ -182,6 +184,8 @@ export class TranscriberStatus {
 
   /** One transcriber (a row of Transcritores); none: the one that publishes. */
   readonly transcriberId = input<string | null>(null);
+  /** The small pill of the guided flow's head (KBC-130, prepare.js transcriberPill). */
+  readonly compact = input(false, { transform: booleanAttribute });
 
   protected readonly item = computed(() => {
     const id = this.transcriberId();

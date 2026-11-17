@@ -1,95 +1,148 @@
 @if (watch.forbidden()) {
-  <div class="page">
-    <div class="empty" role="alert">
-      <ui-icon class="empty-icon" name="lock" [size]="28" />
-      <p class="empty-title" i18n="@@tracks.forbidden">
+  <div class="page flow bare" [style.--flow-tint]="tint()">
+    <header class="top v2-head">
+      <a
+        class="head-back"
+        [routerLink]="mediaLink()"
+        aria-label="Voltar ao áudio"
+        i18n-aria-label="@@tracks.backToAudio"
+        ><ui-icon name="chevLeft" [size]="26"
+      /></a>
+      <div class="head-text">
+        <p class="kicker" i18n="@@prep.kicker">Preparar áudio</p>
+        <h1 class="heading">{{ itemTitle() }}</h1>
+      </div>
+      @if (itemTitle()) {
+        <ui-cover class="head-cover-sm" [title]="itemTitle()" [size]="40" />
+      }
+    </header>
+    <div class="ui-empty lone" role="alert">
+      <span class="ui-empty__icon"><ui-icon name="lock" [size]="32" /></span>
+      <p class="ui-empty__title" i18n="@@tracks.forbiddenTitle">
+        Sem permissão
+      </p>
+      <p class="ui-empty__text" i18n="@@tracks.forbidden">
         Você não tem permissão para editar esta gravação.
       </p>
-      <a uiButton="white" [routerLink]="mediaLink()" i18n="@@tracks.backToAudio"
-        >Voltar ao áudio</a
-      >
+      <div class="ui-empty__actions">
+        <a
+          uiButton="white"
+          [routerLink]="mediaLink()"
+          i18n="@@tracks.backToAudio"
+          >Voltar ao áudio</a
+        >
+      </div>
     </div>
   </div>
 } @else if (watch.loadError(); as error) {
-  <div class="page">
+  <div class="page flow">
     <p class="banner" role="alert">{{ error }}</p>
     <a class="secondary" [routerLink]="mediaLink()" i18n="@@tracks.backToAudio"
       >Voltar ao áudio</a
     >
   </div>
 } @else if (preparation(); as prep) {
-  <div class="page">
+  <div class="page flow" [style.--flow-tint]="tint()">
     <header class="top v2-head">
+      <a
+        class="head-back"
+        [routerLink]="mediaLink()"
+        aria-label="Voltar ao áudio"
+        i18n-aria-label="@@tracks.backToAudio"
+        ><ui-icon name="chevLeft" [size]="26"
+      /></a>
       <ui-cover class="head-cover" [title]="prep.title" [size]="112" />
       <div class="head-text">
-        <p class="kicker" i18n="@@prep.kicker">Preparar áudio</p>
-        <h2 #heading class="heading" tabindex="-1">{{ prep.title }}</h2>
+        <p class="kicker">
+          <span i18n="@@prep.kicker">Preparar áudio</span>
+          @if (kickerStep(); as step) {
+            <span class="kicker-step"> · {{ step }}</span>
+          }
+        </p>
+        <h1 #heading class="heading" tabindex="-1">{{ prep.title }}</h1>
       </div>
+      <ui-cover class="head-cover-sm" [title]="prep.title" [size]="40" />
       <div class="head-tools">
         @if (master()) {
-          <app-transcriber-status class="transcriber" />
+          <app-transcriber-status class="transcriber" compact />
         }
-        @if (!choosing()) {
-          <a
-            uiButton="outline"
-            size="sm"
-            class="leave"
-            [routerLink]="mediaLink()"
-            i18n="@@tracks.leave"
-            >Sair e continuar depois</a
-          >
-        }
+        <a
+          uiButton="outline"
+          size="sm"
+          class="leave"
+          [routerLink]="mediaLink()"
+          i18n="@@tracks.leave"
+          >Sair e continuar depois</a
+        >
       </div>
     </header>
     <app-preparation-steps
       class="progress"
+      flow
       [step]="step()"
       [skipped]="prep.skipped && !choosing()"
       [processed]="prep.next !== null"
+      [allDone]="choosing() && form.nothingLeft()"
       [mediaId]="id()"
     />
 
     <p class="visually-hidden" aria-live="polite">{{ watch.said() }}</p>
     @if (watch.offline()) {
-      <p class="banner" role="status" i18n="@@prep.offline">
-        Sem conexão: o trabalho continua no servidor; atualizo quando a rede
-        voltar.
-      </p>
+      <ui-banner tone="info" role="status">
+        <ng-container i18n="@@prep.offline"
+          >Sem conexão: o trabalho continua no servidor; atualizo quando a rede
+          voltar.</ng-container
+        >
+      </ui-banner>
     }
     @if (watch.stale()) {
-      <p class="banner" role="status" i18n="@@prep.readFailed">
-        Sem atualizar agora: esta tela pode estar atrasada. Tento de novo em
-        instantes.
-      </p>
+      <ui-banner tone="warn" role="status">
+        <ng-container i18n="@@prep.readFailed"
+          >Sem atualizar agora: esta tela pode estar atrasada. Tento de novo em
+          instantes.</ng-container
+        >
+      </ui-banner>
     }
     @if (actionError(); as error) {
-      <p class="banner" role="alert">{{ error }}</p>
+      <ui-banner tone="err" role="alert">{{ error }}</ui-banner>
     }
     @if (audition.failed()) {
-      <p class="banner" role="alert" i18n="@@tracks.listenFailed">
-        Não consegui tocar este trecho. Tente de novo.
-      </p>
+      <ui-banner tone="err" role="alert">
+        <ng-container i18n="@@tracks.listenFailed"
+          >Não consegui tocar este trecho. Tente de novo.</ng-container
+        >
+      </ui-banner>
     }
 
     @if (choosing()) {
-      <section class="choose">
-        @if (form.nothingLeft()) {
-          <div class="empty">
-            <ui-icon class="empty-icon" name="checkcircle" [size]="28" />
-            <p class="empty-title" i18n="@@prep.nothingLeft">
+      @if (form.nothingLeft()) {
+        <div class="nothing">
+          <div class="ui-empty">
+            <span class="ui-empty__icon"
+              ><ui-icon name="checkcircle" [size]="32"
+            /></span>
+            <p class="ui-empty__title" i18n="@@prep.nothingLeftTitle">
+              Nada a preparar
+            </p>
+            <p class="ui-empty__text" i18n="@@prep.nothingLeft">
               Este áudio já está transcrito, com as vozes separadas e as faixas
               aprovadas.
             </p>
-            <a
-              uiButton="white"
-              [routerLink]="mediaLink()"
-              i18n="@@tracks.backToAudio"
-              >Voltar ao áudio</a
-            >
+            <div class="ui-empty__actions">
+              <a
+                uiButton="white"
+                [routerLink]="mediaLink()"
+                i18n="@@tracks.backToAudio"
+                >Voltar ao áudio</a
+              >
+            </div>
           </div>
-        } @else {
-          <app-preparation-options [locked]="busy()" />
-          <div class="actions">
+        </div>
+      } @else {
+        <section class="choose">
+          <app-preparation-options flow [locked]="busy()" />
+          <div class="actions flow-bar">
+            <p class="why">{{ why() }} {{ summary() }}</p>
             <a
               uiButton="ghost"
               [routerLink]="mediaLink()"
@@ -98,60 +151,75 @@
             >
             <button
               uiButton="primary"
+              class="main"
               type="button"
               [disabled]="busy() || !canStart()"
               (click)="start()"
-              i18n="@@prep.start"
             >
-              Preparar
+              <ui-icon name="arrowRight" [size]="18" />
+              <ng-container i18n="@@prep.start">Preparar</ng-container>
             </button>
           </div>
-        }
-      </section>
+        </section>
+      }
     } @else {
       @if (ready()) {
         <audio #audio hidden preload="metadata" [src]="streamUrl()"></audio>
       }
-      <div class="columns">
-        <div class="side">
-          <section>
-            <app-preparation-stage-list
-              [preparation]="prep"
-              [busy]="busy()"
-              (retried)="retry($event)"
-              (markedByHand)="markByHand()"
-            />
-          </section>
-          @if (prep.voices.length > 0) {
-            <section>
-              <app-preparation-voices [preparation]="prep" (named)="named()" />
-            </section>
+      <div
+        class="columns"
+        [class.ai-at-work]="aiAtWork()"
+        [class.none-yet]="concluded() !== '' && prep.tracks.length === 0"
+      >
+        <section class="side">
+          <h2 class="section-title" i18n="@@prep.processing">Processamento</h2>
+          @if (why(); as text) {
+            <p class="why">{{ text }}</p>
           }
-        </div>
-        @if (prep.plan?.tracks !== 'none' || prep.tracks.length > 0) {
-          <section class="list">
-            <app-preparation-tracks [tracks]="prep.tracks" />
-          </section>
-        }
+          <app-preparation-stage-list
+            [preparation]="prep"
+            [busy]="busy()"
+            (retried)="retry($event)"
+            (markedByHand)="markByHand()"
+          />
+          @if (concluded(); as text) {
+            <ui-banner class="end" tone="ok" role="status" [title]="text">
+              <span class="end-count">{{ soFar() }}</span>
+              <button
+                uiButton="white"
+                size="sm"
+                uiBannerAction
+                type="button"
+                class="end-action"
+                [disabled]="busy()"
+                (click)="moveOn()"
+              >
+                <ui-icon name="arrowRight" [size]="18" />
+                @if (prep.next === 'validate') {
+                  <ng-container i18n="@@prep.validate"
+                    >Validar faixas</ng-container
+                  >
+                } @else {
+                  <ng-container i18n="@@prep.conclude">Concluir</ng-container>
+                }
+              </button>
+            </ui-banner>
+          }
+        </section>
+        <section class="result">
+          @if (prep.voices.length > 0) {
+            <app-preparation-voices [preparation]="prep" (named)="named()" />
+          }
+          @if (prep.plan?.tracks !== 'none' || prep.tracks.length > 0) {
+            <app-preparation-tracks
+              [class.no-bones-on-phone]="aiAtWork()"
+              [tracks]="prep.tracks"
+              [arriving]="arriving()"
+              [none]="concluded() !== ''"
+            />
+          }
+        </section>
       </div>
-      @if (concluded(); as text) {
-        <footer class="end">
-          <p role="status">{{ text }}</p>
-          <button
-            uiButton="white"
-            size="sm"
-            type="button"
-            [disabled]="busy()"
-            (click)="moveOn()"
-          >
-            @if (prep.next === 'validate') {
-              <ng-container i18n="@@prep.validate">Validar faixas</ng-container>
-            } @else {
-              <ng-container i18n="@@prep.conclude">Concluir</ng-container>
-            }
-          </button>
-        </footer>
-      }
       @if (prep.step === 3) {
         <a
           uiButton="primary"
@@ -161,10 +229,61 @@
           >Continuar validando</a
         >
       }
+      <!-- A phone keeps the way on in reach, fixed at the foot (prepare.js, prmBar). -->
+      <div class="flow-bar phone-only">
+        @if (concluded()) {
+          <button
+            uiButton="primary"
+            class="main"
+            type="button"
+            [disabled]="busy()"
+            (click)="moveOn()"
+          >
+            <ui-icon name="arrowRight" [size]="18" />
+            @if (prep.next === 'validate') {
+              <ng-container i18n="@@prep.validate">Validar faixas</ng-container>
+            } @else {
+              <ng-container i18n="@@prep.conclude">Concluir</ng-container>
+            }
+          </button>
+        } @else if (failedStage(); as stage) {
+          @if (prep.canSwitchToManual) {
+            <button
+              uiButton="outline"
+              type="button"
+              [disabled]="busy()"
+              (click)="markByHand()"
+              i18n="@@prep.markByHandShort"
+            >
+              Marcar eu mesmo
+            </button>
+          }
+          @if (stage.canRetry) {
+            <button
+              uiButton="white"
+              class="main"
+              type="button"
+              [disabled]="busy()"
+              (click)="retryFailed(stage)"
+            >
+              <ui-icon name="refresh" [size]="18" />
+              <ng-container i18n="@@prep.retry">Tentar de novo</ng-container>
+            </button>
+          }
+        } @else {
+          <a
+            uiButton="outline"
+            class="main"
+            [routerLink]="mediaLink()"
+            i18n="@@tracks.leave"
+            >Sair e continuar depois</a
+          >
+        }
+      </div>
     }
   </div>
 } @else {
-  <div class="page" aria-busy="true">
+  <div class="page flow" aria-busy="true">
     <span class="visually-hidden" i18n="@@prep.loading">Carregando…</span>
     <div class="skeleton"></div>
     <div class="skeleton"></div>

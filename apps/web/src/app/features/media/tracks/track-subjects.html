@@ -1,5 +1,9 @@
 <section class="subjects" aria-labelledby="subjects-heading">
   <h3 id="subjects-heading" i18n="@@subjects.heading">Assuntos</h3>
+  <p class="intro" i18n="@@tracks.subjectsSaveThemselves">
+    Os assuntos abaixo são salvos sozinhos, a cada escolha: não há o que aprovar
+    neles.
+  </p>
   <div class="ai" role="status">
     @if (running()) {
       <p i18n="@@subjects.ai.running">Sugerindo assuntos…</p>
@@ -47,10 +51,11 @@
       @if (canSuggest()) {
         <button
           type="button"
-          class="secondary"
+          class="secondary suggest"
           [disabled]="waiting()"
           (click)="askEstimate()"
         >
+          <ui-icon name="sparkle" [size]="18" />
           @if (failureText()) {
             <ng-container i18n="@@subjects.ai.retry"
               >Tentar de novo</ng-container
@@ -108,9 +113,14 @@
         </li>
       }
     </ol>
-    <p class="hint" i18n="@@subjects.savedAlone">
-      Cada escolha já fica salva. Não há botão para aprovar: pode sair quando
-      quiser.
+    <p class="hint saved-alone">
+      <span class="long" i18n="@@subjects.savedAlone"
+        >Cada escolha já fica salva. Não há botão para aprovar: pode sair quando
+        quiser.</span
+      >
+      <span class="short" aria-hidden="true" i18n="@@subjects.savedAloneShort"
+        >Cada escolha já fica salva. Pode sair quando quiser.</span
+      >
     </p>
   }
 </section>

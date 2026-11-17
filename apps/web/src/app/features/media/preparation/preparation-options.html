@@ -13,6 +13,9 @@
 
   @if (!done('transcribe')) {
     <div class="option row">
+      @if (flow()) {
+        <ui-icon class="row-icon" name="doc" [size]="22" />
+      }
       <label class="choice">
         <input
           class="ui-switch"
@@ -49,6 +52,9 @@
 
   @if (!done('speakers')) {
     <div class="option row" [class.off]="isOff('speakers')">
+      @if (flow()) {
+        <ui-icon class="row-icon" name="people" [size]="22" />
+      }
       <label class="choice">
         <input
           class="ui-switch"
@@ -82,10 +88,25 @@
   }
 
   <fieldset class="tracks">
-    <legend i18n="@@prep.option.tracks">
-      Dividir em faixas de pergunta e resposta
+    <legend>
+      <span class="long" i18n="@@prep.option.tracks"
+        >Dividir em faixas de pergunta e resposta</span
+      >
+      @if (flow()) {
+        <span class="short" aria-hidden="true" i18n="@@prep.option.tracksShort"
+          >Dividir em faixas</span
+        >
+      }
     </legend>
     <div class="option card">
+      @if (flow()) {
+        <span class="card-top" aria-hidden="true">
+          <span class="card-icon"><ui-icon name="clock" [size]="22" /></span>
+          @if (choices().tracks === 'none') {
+            <ui-icon class="card-check" name="checkcircle" [size]="22" />
+          }
+        </span>
+      }
       <label class="choice">
         <input
           type="radio"
@@ -96,12 +117,32 @@
         />
         <span i18n="@@prep.option.none">Não dividir agora</span>
       </label>
-      <p class="hint" id="prep-none-hint" i18n="@@prep.option.noneHint">
-        Fica como uma gravação só. Dá para dividir depois.
+      <p class="hint" id="prep-none-hint">
+        <span class="long" i18n="@@prep.option.noneHint"
+          >Fica como uma gravação só. Dá para dividir depois.</span
+        >
+        @if (flow()) {
+          <span
+            class="short"
+            aria-hidden="true"
+            i18n="@@prep.option.noneHintShort"
+            >Fica como uma gravação só.</span
+          >
+        }
       </p>
     </div>
 
     <div class="option card" [class.off]="isOff('manual')">
+      @if (flow()) {
+        <span class="card-top" aria-hidden="true">
+          <span class="card-icon"><ui-icon name="scissors" [size]="22" /></span>
+          @if (choices().tracks === 'manual') {
+            <ui-icon class="card-check" name="checkcircle" [size]="22" />
+          } @else if (refusalPill('manual'); as pill) {
+            <ui-pill class="card-pill">{{ pill }}</ui-pill>
+          }
+        </span>
+      }
       <label class="choice">
         <input
           type="radio"
@@ -117,15 +158,33 @@
         @if (refusal('manual'); as reason) {
           {{ reason }}
         } @else {
-          <ng-container i18n="@@prep.option.manualHint"
+          <span class="long" i18n="@@prep.option.manualHint"
             >Cada pergunta com a sua resposta vira uma faixa com título. Você
-            confere e aprova antes de aplicar.</ng-container
+            confere e aprova antes de aplicar.</span
           >
+          @if (flow()) {
+            <span
+              class="short"
+              aria-hidden="true"
+              i18n="@@prep.option.manualHintShort"
+              >Você confere e aprova antes de aplicar.</span
+            >
+          }
         }
       </p>
     </div>
 
     <div class="option card" [class.off]="isOff('ai')">
+      @if (flow()) {
+        <span class="card-top" aria-hidden="true">
+          <span class="card-icon"><ui-icon name="sparkle" [size]="22" /></span>
+          @if (choices().tracks === 'ai') {
+            <ui-icon class="card-check" name="checkcircle" [size]="22" />
+          } @else if (refusalPill('ai'); as pill) {
+            <ui-pill class="card-pill">{{ pill }}</ui-pill>
+          }
+        </span>
+      }
       <label class="choice">
         <input
           type="radio"
@@ -166,6 +225,9 @@
     </div>
 
     <div class="option row subjects" [class.off]="isOff('subjects')">
+      @if (flow()) {
+        <ui-icon class="row-icon" name="list" [size]="22" />
+      }
       <label class="choice">
         <input
           class="ui-switch"

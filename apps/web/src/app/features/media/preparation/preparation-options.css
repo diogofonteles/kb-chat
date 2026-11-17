@@ -165,3 +165,267 @@ legend {
   color: var(--color-text-muted);
   font-size: var(--text-meta);
 }
+
+/* ---------- The guided flow (KBC-130, prepare.js chooseMain / mChoice) ---------- */
+.short {
+  display: none;
+}
+
+:host(.flow) {
+  gap: var(--space-4);
+}
+
+:host(.flow) .options > legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:host(.flow) .options {
+  gap: var(--space-4);
+}
+
+:host(.flow) .tracks {
+  gap: var(--space-3);
+  margin-top: 0;
+}
+
+:host(.flow) .tracks legend {
+  margin-bottom: var(--space-4);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* A free stage: icon, name over its help, the switch on the right. */
+:host(.flow) .option.row {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 2px 14px;
+  align-items: center;
+  padding: var(--space-4);
+  background: var(--overlay-1);
+}
+
+:host(.flow) .row-icon {
+  grid-row: 1 / span 2;
+  color: var(--color-text-muted);
+}
+
+:host(.flow) .option.row .choice {
+  display: contents;
+}
+
+:host(.flow) .option.row .choice input {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}
+
+:host(.flow) .option.row .name,
+:host(.flow) .option.row .choice > span {
+  grid-column: 2;
+  font-size: var(--text-item);
+  font-weight: 700;
+}
+
+:host(.flow) .option.row .hint,
+:host(.flow) .option.row .note {
+  grid-column: 2;
+  padding-right: 0;
+}
+
+:host(.flow) .option.subjects {
+  background: color-mix(in srgb, var(--color-text) 2%, transparent);
+}
+
+/* What cannot be chosen fades, as in the frame; its reason keeps the contrast (MA-23). */
+:host(.flow) .option.off .row-icon,
+:host(.flow) .option.off .choice > *,
+:host(.flow) .option.card.off .card-top {
+  opacity: 0.55;
+}
+
+/* The division: three big cards, the radio only for the keyboard and the screen reader. */
+:host(.flow) .option.card {
+  align-content: start;
+  gap: 10px;
+  min-height: 12.25rem;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent);
+  background: var(--overlay-1);
+}
+
+:host(.flow) .option.card:has(input:checked) {
+  padding: 17px;
+  border: 2px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+:host(.flow) .option.card.off {
+  border-style: solid;
+}
+
+:host(.flow) .option.card .choice {
+  min-height: 0;
+  font-size: var(--text-md);
+}
+
+:host(.flow) .option.card .choice input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+:host(.flow) .option.card .hint {
+  padding-left: 0;
+  line-height: 18px;
+}
+
+:host(.flow) .card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+
+:host(.flow) .card-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-2);
+  color: var(--color-text);
+}
+
+:host(.flow) .option.card:has(input:checked) .card-icon {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+:host(.flow) .card-check {
+  color: var(--color-accent);
+}
+
+:host(.flow) .summary {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  :host(.flow) .long {
+    display: none;
+  }
+
+  :host(.flow) .short {
+    display: inline;
+  }
+
+  :host(.flow) .options,
+  :host(.flow) .tracks {
+    gap: 10px;
+  }
+
+  :host(.flow) .tracks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :host(.flow) .tracks legend {
+    margin-bottom: 10px;
+    font-size: 1.0625rem;
+  }
+
+  :host(.flow) .option.row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 14px;
+  }
+
+  :host(.flow) .row-icon {
+    display: none;
+  }
+
+  :host(.flow) .option.row .choice input {
+    grid-column: 2;
+  }
+
+  :host(.flow) .option.row .name,
+  :host(.flow) .option.row .choice > span,
+  :host(.flow) .option.row .hint,
+  :host(.flow) .option.row .note {
+    grid-column: 1;
+  }
+
+  /* The speakers' help goes on a phone (the frame keeps the name and the switch). */
+  :host(.flow) .option.row:not(.subjects) .hint {
+    display: none;
+  }
+
+  :host(.flow) .option.row .hint {
+    font-size: var(--text-xs);
+  }
+
+  /* The cards become rows: icon, name over the help, the check on the right. */
+  :host(.flow) .option.card {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 2px var(--space-3);
+    min-height: 0;
+    padding: 14px;
+  }
+
+  :host(.flow) .option.card:has(input:checked) {
+    padding: 13px;
+  }
+
+  :host(.flow) .card-top {
+    display: contents;
+  }
+
+  :host(.flow) .card-icon {
+    grid-row: 1 / span 2;
+    align-self: start;
+    width: 36px;
+    height: 36px;
+  }
+
+  :host(.flow) .card-icon ::ng-deep svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  :host(.flow) .card-check,
+  :host(.flow) .card-pill {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  :host(.flow) .card-pill {
+    display: none;
+  }
+
+  :host(.flow) .option.card .choice,
+  :host(.flow) .option.card .hint {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  :host(.flow) .option.card .hint {
+    grid-row: 2;
+  }
+
+  :host(.flow) .card-icon {
+    grid-column: 1;
+  }
+
+  :host(.flow) .option.card .choice {
+    font-size: var(--text-item);
+  }
+
+  :host(.flow) .option.card .hint {
+    font-size: var(--text-xs);
+    line-height: 1.35;
+  }
+}

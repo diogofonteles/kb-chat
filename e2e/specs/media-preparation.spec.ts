@@ -493,7 +493,10 @@ test('AC-11: a failure keeps the work and offers both ways out', async ({
   await page.goto(`/midia/${media.id}/preparar`);
   await expect(page.getByText(/1 de 3 janelas prontas/)).toBeVisible();
   await expect(
-    page.getByText('Falhou: o provedor de IA não respondeu.'),
+    // The failure's card, under the stages (v2), says it again with the ways on.
+    page.getByRole('group', {
+      name: 'Falhou: o provedor de IA não respondeu.',
+    }),
   ).toBeVisible();
   await expect(page.getByText('Pergunta 1')).toBeVisible();
   await expect(page.getByText(/Tentar de novo custa cerca de/)).toBeVisible();

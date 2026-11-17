@@ -132,7 +132,7 @@ async function script(page: Page, mediaId: string, end: 'done' | 'failed') {
 }
 
 const startRun = async (page: Page) => {
-  await page.getByRole('button', { name: 'Propor faixas com IA' }).click();
+  await page.getByRole('button', { name: 'Propor com IA' }).click();
   await expect(page.getByText('Custa até')).toContainText('0,020');
   await expect(page.getByText(/Este mês:/)).toBeVisible();
   await page.getByRole('button', { name: 'Confirmar e propor' }).click();
@@ -164,11 +164,13 @@ test('KBC-067 AC-1, AC-2: estimate, windows, read-only, proposals, cost and sugg
     timeout: 20_000,
   });
   await expect(page.getByText(/Nada é aplicado antes de você/)).toBeVisible();
+  // A proposal's region on the waveform has a dashed edge (never by colour alone, UP-20).
   expect(
     await page
-      .getByTestId('overview-block')
+      .getByTestId('track-detail')
+      .locator('[data-track]')
       .first()
-      .evaluate((block) => getComputedStyle(block).borderStyle),
+      .evaluate((region) => getComputedStyle(region).borderLeftStyle),
   ).toBe('dashed');
   await expect(page.getByText('Voz 1 parece ser')).toBeVisible();
   await expect(
@@ -246,7 +248,7 @@ test('KBC-097: a retry says what it costs, also after a reload, and a dearer one
   );
   await page.goto(`/midia/${media.id}/faixas`);
   await page.reload();
-  await page.getByRole('button', { name: 'Propor faixas com IA' }).click();
+  await page.getByRole('button', { name: 'Propor com IA' }).click();
   await expect(page.getByText('Custa até')).toContainText('0,020');
   await expect(page.getByText(/recomeça do início/)).toBeHidden();
   await page.getByRole('button', { name: 'Confirmar e propor' }).click();
@@ -416,7 +418,7 @@ test('R-5: a read that fails does not leave the editor stuck', async ({
   await script(page, media.id, 'done');
   await page.goto(`/midia/${media.id}/faixas`);
   await expect(
-    page.getByRole('button', { name: 'Propor faixas com IA' }),
+    page.getByRole('button', { name: 'Propor com IA' }),
   ).toBeVisible();
   let refused = false;
   await page.route(
@@ -472,9 +474,9 @@ test('R-5: without `media-edit-ai` the screen says why it is read-only, and come
     page.getByText(/Uma análise com IA está propondo/),
   ).toBeVisible();
   await expect(page.getByRole('slider')).toHaveCount(0);
-  await expect(
-    page.getByRole('button', { name: 'Propor faixas com IA' }),
-  ).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Propor com IA' })).toHaveCount(
+    0,
+  );
   await expect(handle(page, 'Início da faixa 1')).toBeVisible({
     timeout: 25_000,
   });

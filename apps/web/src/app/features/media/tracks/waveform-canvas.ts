@@ -1,5 +1,6 @@
-/** One bar of the wave per this many CSS pixels. */
-const BAR_PX = 2;
+/** One bar of the wave per this many CSS pixels, 3 px wide with rounded ends (v2 frames). */
+const BAR_PX = 5;
+const BAR_WIDTH_PX = 3;
 
 export interface PeakWindow {
   readonly peaks: Uint8Array;
@@ -38,8 +39,14 @@ export function drawPeaks(canvas: HTMLCanvasElement, input: PeakWindow): void {
   for (let bar = 0; bar < bars; bar += 1) {
     const from = Math.floor(firstPeak + bar * peaksPerBar);
     const to = Math.floor(firstPeak + (bar + 1) * peaksPerBar);
-    const barH = Math.max(1, barHeight(input.peaks, { from, to }) * height);
-    context.fillRect(bar * BAR_PX, (height - barH) / 2, BAR_PX - 1, barH);
+    const barH = Math.max(4, barHeight(input.peaks, { from, to }) * height);
+    const x = bar * BAR_PX;
+    const y = (height - barH) / 2;
+    if (typeof context.roundRect === 'function') {
+      context.beginPath();
+      context.roundRect(x, y, BAR_WIDTH_PX, barH, 1);
+      context.fill();
+    } else context.fillRect(x, y, BAR_WIDTH_PX, barH);
   }
 }
 

@@ -79,6 +79,13 @@ const isMediaUrl = (url: string): boolean =>
   );
 
 /**
+ * "Preparar áudio", the tracks editor and the bounds (KBC-130): a guided flow with its own
+ * head, so the main panel shows no collection header; on a phone it takes the whole screen.
+ */
+const isGuidedFlowPath = (path: string): boolean =>
+  /^\/midia\/[^/]+\/(preparar|faixas|limites)$/.test(path);
+
+/**
  * Chat page (screens.md): two views over one question box and document panel, the free
  * search engine and the research agent (KBC-008), each with its own conversation.
  */
@@ -152,7 +159,7 @@ export class ChatPage {
   /** The main panel's header (title, view switch): floating notices start under it. */
   private readonly pageHeader =
     viewChild<ElementRef<HTMLElement>>('pageHeader');
-  private readonly engineSource = inject(MediaEngine).source;
+  protected readonly engineSource = inject(MediaEngine).source;
   /** The address without query or fragment, as the router last settled on it. */
   private readonly path = toSignal(
     inject(Router).events.pipe(
@@ -210,6 +217,12 @@ export class ChatPage {
       this.path() === `/midia/${encodeURIComponent(source.id)}`
     );
   });
+  /** The guided flow of KBC-130 (v2 · Mídia — Preparar, Faixas e Limites). */
+  protected readonly guidedFlow = computed(() => isGuidedFlowPath(this.path()));
+  /** On a phone the guided flow covers the screen: no navigation and no mini player under it. */
+  protected readonly phoneFlow = computed(
+    () => !this.desktop() && this.guidedFlow(),
+  );
   /** The collection in the header: on a media page, the one that page shows (KBC-091). */
   protected readonly topic = computed(() => {
     if (!this.onMedia()) return this.store.topic();
