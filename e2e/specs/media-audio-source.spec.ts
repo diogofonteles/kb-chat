@@ -23,7 +23,8 @@ import { separateVoices } from './voices-helpers.js';
  * clicked, scrolled with the wheel and the keyboard, played on the app's own player, at 1440
  * (beside the answer) and 390 (in the reading sheet), in Chrome and, with KBC_E2E_WEBKIT=1, in
  * WebKit at both widths. The answer is a real research turn, then the same sources saved as a
- * conversation citing the track twice and a second track once ([1] and [2@0:41], [2@0:50]).
+ * conversation citing the track twice and a second track once ([1] and [2@0:41], [2@0:50]), then
+ * both passages again side by side, as one pill with two times (KBC-155).
  * `KBC_SHOTS=<dir>` saves the screens for the comparison with the Figma frames (`KBC_SHOTS_PREFIX`).
  */
 
@@ -131,7 +132,7 @@ async function answerWithTwoTracks(member: Page): Promise<void> {
         id: crypto.randomUUID(),
         at: now,
         question: QUESTION,
-        answer: `A polaridade aparece [1@${other.passages?.[0]?.at ?? ''}]. O pêndulo governa tudo [2@0:41] e tudo flui [2@0:50].`,
+        answer: `A polaridade aparece [1@${other.passages?.[0]?.at ?? ''}]. O pêndulo governa tudo [2@0:41] e tudo flui [2@0:50]. Tudo vibra [2@0:50], [2@0:41].`,
         sources: [
           { ...other, n: 1 },
           {
@@ -220,6 +221,28 @@ async function panelScrolls(
 
 const playing = async (page: Page) => !(await audioState(page)).paused;
 
+/**
+ * The one control of what plays (KBC-155 BR-1): the bar on a desktop; on a phone, with the
+ * reading sheet open over the page, the player at the sheet's foot.
+ */
+const theControl = (page: Page): Locator =>
+  isDesktop(page)
+    ? page.getByRole('region', { name: 'Mini-player' })
+    : audioSource(page).getByRole('group', { name: 'Player' });
+
+/** Pauses on the one control, and the panel has no "Pausar" of its own. */
+async function pauseOnTheControl(page: Page, panel: Locator): Promise<void> {
+  await expect(
+    panel
+      .getByRole('region', { name: /–/ })
+      .getByRole('button', { name: /Pausar/ }),
+  ).toHaveCount(0);
+  await theControl(page)
+    .getByRole('button', { name: /^Pausar/ })
+    .click();
+  await expect.poll(() => playing(page)).toBe(false);
+}
+
 async function seriousAxe(page: Page): Promise<unknown[]> {
   const axe = await new AxeBuilder({ page })
     .include('app-track-passage-panel')
@@ -245,7 +268,7 @@ function viewports(page: Page, info: TestInfo) {
 /** The controls every width shares: the passage, the marks, the times, the transcript. */
 async function walkTheControls(member: Page, panel: Locator): Promise<void> {
   const card = panel.getByRole('region', { name: /0:41–/ });
-  // Ouvir o trecho → it plays on the app's player; Pausar stops it.
+  // Ouvir o trecho → it plays on the app's player; the card only says so (KBC-155).
   await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
   await expect.poll(() => playing(member)).toBe(true);
   await expect
@@ -253,35 +276,40 @@ async function walkTheControls(member: Page, panel: Locator): Promise<void> {
       timeout: 15_000,
     })
     .toBeGreaterThan(39.2);
-  await expect(card.getByText('tocando')).toBeVisible();
+  await expect(card.getByText('tocando no player')).toBeVisible();
+  // On a desktop the panel has no "Pausar" at all; on a phone only the sheet's player has one.
   await expect(
-    panel.getByRole('button', { name: 'Pausar' }).first(),
-  ).toBeVisible();
+    (isDesktop(member) ? panel : card).getByRole('button', { name: 'Pausar' }),
+  ).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Faixa toda' })).toHaveCount(
+    0,
+  );
+  await expect(panel.getByText(/^trecho citado /)).toHaveCount(0);
+  await expect(
+    panel.getByRole('button', { name: /^Trecho citado aos/ }),
+  ).toHaveCount(0);
   await expect(card.locator('.quote span.lit').first()).toBeVisible({
     timeout: 15_000,
   });
   await expect(panel.locator('.line[aria-current="true"]')).toHaveCount(1);
+  await expect(theControl(member)).toBeInViewport();
   await shot(member, 'playing');
-  await panel.getByRole('button', { name: 'Pausar' }).first().click();
-  await expect.poll(() => playing(member)).toBe(false);
+  await pauseOnTheControl(member, panel);
   await expect(
     panel.getByRole('button', { name: 'Ouvir o trecho' }),
   ).toBeVisible();
 
-  // The timeline's marks and "Outro trecho citado".
-  await panel
-    .getByRole('button', { name: 'Trecho citado aos 50 segundos' })
+  // "Outros trechos citados" (KBC-155 AC-4): each goes to its passage.
+  const others = panel.getByRole('list', { name: 'Outros trechos citados' });
+  await others
+    .getByRole('button', { name: 'Outro trecho citado, em 0:50' })
     .click();
   await expect(panel.getByRole('region', { name: /0:50–0:53/ })).toBeVisible();
   await expect
     .poll(async () => (await audioState(member)).currentTime)
     .toBeCloseTo(48, 0);
-  await panel
+  await others
     .getByRole('button', { name: 'Outro trecho citado, em 0:41' })
-    .click();
-  await expect(card).toBeVisible();
-  await panel
-    .getByRole('button', { name: 'Trecho citado aos 41 segundos' })
     .click();
   await expect(card).toBeVisible();
 
@@ -295,8 +323,7 @@ async function walkTheControls(member: Page, panel: Locator): Promise<void> {
   await expect
     .poll(async () => (await audioState(member)).currentTime)
     .toBeGreaterThan(35);
-  await panel.getByRole('button', { name: 'Pausar' }).first().click();
-  await expect.poll(() => playing(member)).toBe(false);
+  await pauseOnTheControl(member, panel);
 
   // The bookmark at the passage, saved.
   const saved = member.waitForResponse(
@@ -402,9 +429,11 @@ async function desktopFlow(member: Page): Promise<void> {
   await panel.getByRole('button', { name: 'Faixa toda' }).click();
   await expect.poll(() => playing(member)).toBe(true);
   expect((await audioState(member)).currentTime).toBeLessThan(5);
-  await expect(bar.getByRole('button', { name: /Pausar/ })).toBeVisible();
-  await panel.getByRole('button', { name: 'Pausar' }).click();
-  await expect.poll(() => playing(member)).toBe(false);
+  await expect(panel.getByRole('button', { name: 'Faixa toda' })).toHaveCount(
+    0,
+  );
+  await pauseOnTheControl(member, panel);
+  await expect(panel.getByRole('button', { name: 'Faixa toda' })).toBeVisible();
 
   // The bar closed: "Ouvir o trecho" puts the track back on it and plays the passage.
   await bar.getByRole('button', { name: 'Fechar o player' }).click();
@@ -412,8 +441,7 @@ async function desktopFlow(member: Page): Promise<void> {
   await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
   await expect.poll(() => playing(member)).toBe(true);
   await expect(bar).toContainText(TITLE);
-  await panel.getByRole('button', { name: 'Pausar' }).click();
-  await expect.poll(() => playing(member)).toBe(false);
+  await pauseOnTheControl(member, panel);
 
   for (const theme of ['light', 'dark', 'esoteric', 'revised']) {
     await member.evaluate(
@@ -486,20 +514,18 @@ async function phoneFlow(member: Page): Promise<void> {
   // The sheet's content scrolls (wheel and keyboard) once the whole transcript makes it long.
   await panelScrolls(member, panel, panel);
 
-  // Playing: the sheet's strip says it, "Abrir a faixa" leaves the sheet.
-  await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
+  // The sheet's player (KBC-155 AC-5): at its foot, in view and clickable, paused and playing.
+  const control = theControl(member);
+  await expect(control).toBeInViewport();
+  await expect(control.getByText(/^Pausado · 0:\d\d/)).toBeVisible();
+  await control.getByRole('button', { name: 'Tocar' }).click();
   await expect.poll(() => playing(member)).toBe(true);
   await expect(
-    panel.getByText(/Tocando o trecho citado · 0:\d\d/),
+    control.getByText(/Tocando o trecho citado · 0:\d\d/),
   ).toBeVisible();
-  await expect(panel.getByRole('link', { name: 'Abrir a faixa' })).toHaveCount(
-    0,
-  );
-  await panel
-    .locator('.sheet-player')
-    .getByRole('button', { name: 'Pausar' })
-    .click();
-  await expect.poll(() => playing(member)).toBe(false);
+  await expect(control).toBeInViewport();
+  await pauseOnTheControl(member, panel);
+  await expect(control.getByRole('button', { name: 'Tocar' })).toBeInViewport();
   await expect(
     panel.getByRole('link', { name: 'Abrir a faixa' }),
   ).toBeVisible();
@@ -554,11 +580,86 @@ test('KBC-150: the audio source opens on the cited passage, every control works,
   }
 });
 
-/** Seeks the app's one player, as its bar or the phone's strip would (KBC-154). */
-const seekTo = (page: Page, seconds: number) =>
-  page.locator('[data-media-engine]').evaluate((element, at) => {
+test('KBC-155 AC-6: citations of the same track side by side are one pill, each time opens its passage and is the one filled', async ({
+  page,
+}, info) => {
+  test.setTimeout(180_000);
+  const owner = await ownerApi();
+  const topic = await publishedTrack(owner, LONG_SPEECH);
+  await owner.dispose();
+  for (const viewport of viewports(page, info)) {
+    const member = await researcher(page, topic, { viewport });
+    await answerWithTwoTracks(member);
+    const pill = member.locator('app-research-message .cite-group');
+    await expect(pill).toHaveCount(1);
+    await expect(pill).toHaveText(`2${TITLE} · 0:50, 0:41`);
+    const at50 = pill.getByRole('link', {
+      name: `Ouvir ${TITLE} aos 50 segundos`,
+    });
+    const at41 = pill.getByRole('link', {
+      name: `Ouvir ${TITLE} aos 41 segundos`,
+    });
+    await shot(member, 'grouped-pill');
+    // Each time is a target of at least 24 px (WCAG 2.5.8): a tap 12 px above or below its
+    // middle still lands on it.
+    await pill.scrollIntoViewIfNeeded();
+    for (const time of [at50, at41])
+      await expect.poll(() => tappedAround(time)).toEqual([true, true]);
+    await at50.click();
+    const panel = audioSource(member);
+    await expect(
+      panel.getByRole('region', { name: /0:50–0:53/ }),
+    ).toBeVisible();
+    if (isDesktop(member)) {
+      await expect(at50).toHaveClass(/active/);
+      await expect(at41).not.toHaveClass(/active/);
+      await at41.click();
+      await expect(panel.getByRole('region', { name: /0:41–/ })).toBeVisible();
+      await expect(at41).toHaveClass(/active/);
+      await expect(at50).not.toHaveClass(/active/);
+    } else {
+      await readingSheet(member)
+        .getByRole('button', { name: 'Fechar', exact: true })
+        .click();
+      await expect(readingSheet(member)).toBeHidden();
+      await expect(at50).toBeFocused();
+      await at41.click();
+      await expect(panel.getByRole('region', { name: /0:41–/ })).toBeVisible();
+    }
+    await member.context().close();
+  }
+});
+
+/** Whether a tap 12 px above and 12 px below the link's middle still lands on it. */
+const tappedAround = (link: Locator) =>
+  link.evaluate((element) => {
+    const { left, width, top, height } = element.getBoundingClientRect();
+    const x = left + width / 2;
+    const middle = top + height / 2;
+    return [middle - 11.5, middle + 11.5].map((y) =>
+      element.contains(document.elementFromPoint(x, y)),
+    );
+  });
+
+/**
+ * Seeks the app's one player, as its bar or the phone's strip would (KBC-154). Only once the
+ * element has its metadata and no seek in flight: before that the engine still moves it to
+ * where it was asked to start, and WebKit, which loads later, would undo this seek.
+ */
+async function seekTo(page: Page, seconds: number): Promise<void> {
+  const engine = page.locator('[data-media-engine]');
+  await expect
+    .poll(() =>
+      engine.evaluate((element) => {
+        const media = element as HTMLMediaElement;
+        return media.readyState >= media.HAVE_METADATA && !media.seeking;
+      }),
+    )
+    .toBe(true);
+  await engine.evaluate((element, at) => {
     (element as HTMLMediaElement).currentTime = at;
   }, seconds);
+}
 
 test('KBC-154: while the track plays past the passage, the lines around and the full transcript follow what is heard', async ({
   page,
@@ -579,6 +680,9 @@ test('KBC-154: while the track plays past the passage, the lines around and the 
 
   await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
   await expect.poll(() => playing(member)).toBe(true);
+  // The player really plays the passage (its `playing` came, after the metadata's move to
+  // 0:39): a seek before that is overridden by the start the panel asked for.
+  await expect(panel.getByText('tocando no player')).toBeVisible();
   await seekTo(member, 5.2);
   await expect(heard).toContainText('Linha de preenchimento número 1', {
     timeout: 10_000,
@@ -606,8 +710,7 @@ test('KBC-154: while the track plays past the passage, the lines around and the 
 
   // Paused: the lines around are the passage's again.
   await panel.getByRole('button', { name: 'Em volta do trecho' }).click();
-  await panel.getByRole('button', { name: 'Pausar' }).first().click();
-  await expect.poll(() => playing(member)).toBe(false);
+  await pauseOnTheControl(member, panel);
   await expect(around.locator('.cited-line')).toContainText(
     'O ritmo é a lei do pêndulo',
   );

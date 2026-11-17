@@ -302,10 +302,11 @@ export class ResearchMessage {
         '.answer a.cite',
       )) {
         const n = citedSource(link);
-        const here =
-          at === null ||
-          !link.classList.contains('cite-audio') ||
-          citedAt(link) === at;
+        // A track's citation, alone or a time of its grouped pill (KBC-155): only the open one.
+        // With no time open, a lone track pill is filled, but no time of a grouped one.
+        const here = link.matches('.cite-time')
+          ? citedAt(link) === at
+          : at === null || !link.matches('.cite-audio') || citedAt(link) === at;
         link.classList.toggle('active', n !== null && n === active && here);
       }
     });

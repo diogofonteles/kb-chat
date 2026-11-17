@@ -146,12 +146,6 @@
               >
             }
           </h3>
-          @if (playing()) {
-            <span class="now-playing">
-              <ui-icon name="wave" [size]="14" />
-              <span i18n="@@trackPassage.playing">tocando</span>
-            </span>
-          }
         </div>
         @if (!inSheet() && speaker(); as who) {
           <p class="who">
@@ -170,22 +164,27 @@
             <span>…</span>
           }
         </blockquote>
+        <!-- One control (KBC-155): the card starts the app's player; the bar pauses it. -->
         <div class="actions">
-          <button
-            type="button"
-            class="listen"
-            [uiButton]="playing() ? 'white' : 'primary'"
-            [disabled]="!playable()"
-            (click)="listen()"
-          >
-            <ui-icon [name]="playing() ? 'pause' : 'play'" [size]="18" />
-            @if (playing()) {
-              <span i18n="@@trackPassage.pause">Pausar</span>
-            } @else {
+          @if (playing()) {
+            <span class="on-player" role="status" tabindex="-1">
+              <ui-icon name="wave" [size]="18" />
+              <span i18n="@@trackPassage.onPlayer">tocando no player</span>
+            </span>
+          }
+          @if (offersListen()) {
+            <button
+              type="button"
+              class="listen"
+              [uiButton]="playing() ? 'white' : 'primary'"
+              [disabled]="!playable()"
+              (click)="listen()"
+            >
+              <ui-icon name="play" [size]="18" />
               <span i18n="@@trackPassage.listen">Ouvir o trecho</span>
-            }
-          </button>
-          @if (!inSheet()) {
+            </button>
+          }
+          @if (!inSheet() && !playing()) {
             <button
               type="button"
               uiButton="dark"
@@ -225,71 +224,53 @@
       </section>
     } @else {
       <div class="actions plain">
-        <button
-          type="button"
-          class="listen"
-          [uiButton]="playing() ? 'white' : 'primary'"
-          [disabled]="!playable()"
-          (click)="listen()"
-        >
-          <ui-icon [name]="playing() ? 'pause' : 'play'" [size]="18" />
-          @if (playing()) {
-            <span i18n="@@trackPassage.pause">Pausar</span>
-          } @else {
+        @if (playing()) {
+          <span class="on-player" role="status" tabindex="-1">
+            <ui-icon name="wave" [size]="18" />
+            <span i18n="@@trackPassage.onPlayer">tocando no player</span>
+          </span>
+        } @else {
+          <button
+            type="button"
+            class="listen"
+            uiButton="primary"
+            [disabled]="!playable()"
+            (click)="listen()"
+          >
+            <ui-icon name="play" [size]="18" />
             <span i18n="@@trackPassage.listenTrack">Ouvir a faixa</span>
-          }
-        </button>
+          </button>
+        }
       </div>
     }
 
-    <div class="timeline">
-      <div class="rail">
-        <span class="track-line" aria-hidden="true"></span>
-        <span
-          class="played"
-          [class.on]="playing()"
-          aria-hidden="true"
-          [style.width.%]="playedPercent()"
-        ></span>
-        @for (mark of marks(); track mark.index) {
-          @if (mark.index === chosenIndex() && passage()) {
-            <span
-              class="band"
-              aria-hidden="true"
-              [style.left.%]="mark.left"
-              [style.width.%]="mark.width"
-            ></span>
+    @if (others().length > 0) {
+      <section class="others" aria-labelledby="track-passage-others">
+        <h3 id="track-passage-others" i18n="@@trackPassage.others">
+          Outros trechos citados
+        </h3>
+        <ul
+          aria-label="Outros trechos citados"
+          i18n-aria-label="@@trackPassage.others"
+        >
+          @for (other of others(); track other.index) {
+            <li>
+              <button
+                type="button"
+                class="other"
+                [attr.aria-label]="otherLabel(other.clock)"
+                (click)="goTo(other.index)"
+              >
+                <span class="cite-pill soft" aria-hidden="true">
+                  <ui-icon name="wave" [size]="12" />{{ source().n }}
+                </span>
+                <span aria-hidden="true">{{ other.clock }}</span>
+              </button>
+            </li>
           }
-          <button
-            type="button"
-            class="mark"
-            [class.on]="mark.index === chosenIndex() && passage()"
-            [style.left.%]="mark.left"
-            [attr.aria-current]="mark.index === chosenIndex() ? 'true' : null"
-            [attr.aria-label]="markLabel(mark.startMs)"
-            (click)="goTo(mark.index)"
-          >
-            {{ source().n }}
-          </button>
-        }
-        @if (playing()) {
-          <span
-            class="head-dot"
-            aria-hidden="true"
-            [style.left.%]="playedPercent()"
-          ></span>
-        }
-      </div>
-      <p class="labels">
-        <span class="now">{{ nowClock() }}</span>
-        @if (passage()) {
-          <span class="span" i18n="@@trackPassage.citedSpan"
-            >trecho citado {{ span() }}</span
-          >
-        }
-        <span>{{ total() }}</span>
-      </p>
-    </div>
+        </ul>
+      </section>
+    }
 
     @if (showFull()) {
       <div class="section-head">
@@ -391,50 +372,40 @@
       </ol>
     }
 
-    @if (!(inSheet() && playing()) || others().length > 0) {
-      <footer class="foot">
-        @if (!(inSheet() && playing())) {
-          <a
-            uiButton="white"
-            size="sm"
-            class="open-track"
-            [block]="inSheet()"
-            [routerLink]="['/midia', mediaId()]"
-            [queryParams]="pageQuery()"
-          >
-            <ui-icon name="music" [size]="16" />
-            <span i18n="@@trackPassage.openTrack">Abrir a faixa</span>
-          </a>
-        }
-        @if (others().length > 0) {
-          <span class="others">
-            <span class="others-label" i18n="@@trackPassage.other"
-              >Outro trecho citado:</span
-            >
-            @for (other of others(); track other.index) {
-              <button
-                type="button"
-                class="other"
-                [attr.aria-label]="otherLabel(other.clock)"
-                (click)="goTo(other.index)"
-              >
-                <span class="cite-pill soft" aria-hidden="true">
-                  <ui-icon name="wave" [size]="12" />{{ source().n }}
-                </span>
-                <span aria-hidden="true">{{ other.clock }}</span>
-              </button>
-            }
-          </span>
-        }
-      </footer>
-    }
+    <footer class="foot">
+      <a
+        uiButton="white"
+        size="sm"
+        class="open-track"
+        [block]="inSheet()"
+        [routerLink]="['/midia', mediaId()]"
+        [queryParams]="pageQuery()"
+      >
+        <ui-icon name="music" [size]="16" />
+        <span i18n="@@trackPassage.openTrack">Abrir a faixa</span>
+      </a>
+    </footer>
 
-    @if (inSheet() && playing()) {
-      <div class="sheet-player" [style.--cover-tint]="coverTint()">
+    <!--
+      The sheet is modal: the app's mini player behind it is out of reach, so the sheet keeps
+      it at its foot, paused or playing (KBC-155 AC-5). The same player, not a second one.
+    -->
+    @if (inSheet()) {
+      <div
+        class="sheet-player"
+        role="group"
+        aria-label="Player"
+        i18n-aria-label="@@trackPassage.player"
+        [style.--cover-tint]="coverTint()"
+      >
         <ui-cover [title]="source().title" [size]="40" [label]="false" />
         <p class="sheet-player-text">
           <span class="sheet-player-what">
-            @if (inPassage()) {
+            @if (!playing()) {
+              <ng-container i18n="@@trackPassage.paused"
+                >Pausado · {{ nowClock() }}</ng-container
+              >
+            } @else if (inPassage()) {
               <ng-container i18n="@@trackPassage.playingPassage"
                 >Tocando o trecho citado · {{ nowClock() }}</ng-container
               >
@@ -451,11 +422,11 @@
           uiIconButton
           class="on-card"
           [size]="44"
-          aria-label="Pausar"
-          i18n-aria-label="@@trackPassage.pause"
-          (click)="listen()"
+          [disabled]="!playable()"
+          [attr.aria-label]="toggleLabel()"
+          (click)="toggle()"
         >
-          <ui-icon name="pause" [size]="24" />
+          <ui-icon [name]="playing() ? 'pause' : 'play'" [size]="24" />
         </button>
       </div>
     }
