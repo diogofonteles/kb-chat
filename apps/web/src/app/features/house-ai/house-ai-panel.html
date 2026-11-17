@@ -83,6 +83,7 @@
         [disabled]="busy()"
         (click)="connect()"
       >
+        <ui-icon name="link" [size]="18" />
         @if (current.connection) {
           <span i18n="@@house.reconnect">Conectar outra conta</span>
         } @else {
@@ -357,7 +358,9 @@
         step="1"
         [attr.aria-invalid]="dailyError() ? true : null"
         [attr.aria-describedby]="
-          dailyError() ? 'house-daily-error house-daily-hint' : 'house-daily-hint'
+          dailyError()
+            ? 'house-daily-error house-daily-hint'
+            : 'house-daily-hint'
         "
         [value]="defaultDaily()"
         (change)="setDefaultDaily(dailyInput.value)"
@@ -410,12 +413,13 @@
       />
     </div>
     <p id="house-codex-status" class="codex-status hint">
-      <span class="visually-hidden"
-        >@if (current.codex.enabled) {<ng-container i18n="@@house.codexOn"
-            >Ligada</ng-container
-          >} @else {<ng-container i18n="@@house.codexOff"
-            >Desligada</ng-container
-          >}&ngsp;·&ngsp;</span
+      <span class="visually-hidden">
+        @if (current.codex.enabled) {
+          <ng-container i18n="@@house.codexOn">Ligada</ng-container>
+        } @else {
+          <ng-container i18n="@@house.codexOff">Desligada</ng-container>
+        }
+        &ngsp;·&ngsp;</span
       >
       @if (!current.codex.configured) {
         <span i18n="@@house.codexNotConfigured"

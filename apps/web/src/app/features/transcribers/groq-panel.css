@@ -64,3 +64,39 @@ button[aria-disabled='true'] {
 .choices.three {
   align-items: start;
 }
+
+/* A card is a box: the label stretched over it picks the radio; the hours sit above it. */
+.choice-label ui-choice-card {
+  position: relative;
+  /* Its raised radio and hours stay inside the card, never over a sticky header. */
+  isolation: isolate;
+}
+
+.choice-hit {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  cursor: pointer;
+}
+
+.choice-label .choice-radio {
+  position: relative;
+  z-index: 1;
+}
+
+.hours {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 0.375rem;
+  margin-top: var(--space-1);
+}
+
+.hours .input {
+  width: 100%;
+}
+
+.choice-label:has(.hours :focus-visible) ui-choice-card {
+  outline: none;
+}
