@@ -310,8 +310,11 @@ app-menu-button {
     --ui-cover-size: 52px !important;
   }
 
-  .select {
-    opacity: 1;
+  /* With no hover to bring it out, the unchecked box shows its edge all along: an invisible
+     box in the lead column would take a tap on what looks like blank space. Still the edge,
+     not opacity, as above (NFR-2). */
+  .select:not(:checked) {
+    border-color: var(--color-text-muted);
   }
 
   .number,

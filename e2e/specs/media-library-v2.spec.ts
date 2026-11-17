@@ -273,10 +273,19 @@ test('AC-4: three selected — the bar takes the foot of the phone, and the mark
 }) => {
   const page = await listener(browser, [collection]);
   await openLibrary(page, collection);
-  for (const n of [1, 2, 3])
-    await all(page)
-      .getByRole('checkbox', { name: `Selecionar ${lecture(n).title}` })
-      .check();
+  const boxOf = (n: number) =>
+    all(page).getByRole('checkbox', {
+      name: `Selecionar ${lecture(n).title}`,
+    });
+  if (!desktop(page))
+    // No hover on a phone: the unchecked box shows its edge, or a tap on the blank lead
+    // column would select a row the person never saw a target for (KBC-128).
+    for (const n of [1, 2, 3])
+      await expect(boxOf(n)).not.toHaveCSS(
+        'border-top-color',
+        'rgba(0, 0, 0, 0)',
+      );
+  for (const n of [1, 2, 3]) await boxOf(n).check();
   const bar = page.getByRole('region', { name: 'Seleção' });
   await expect(bar).toContainText('3 selecionadas');
   await expectWholeOnTop(page, bar);
