@@ -200,6 +200,11 @@ form {
   line-height: 1.2;
 }
 
+/* v2 · Auth after a Google request (enviada, em análise, recusada): a 22 headline. */
+.outcome .headline.large {
+  font-size: 1.375rem;
+}
+
 /* v2 · Auth "Pedir acesso · enviado": the headline is 24 there (22 after a Google request). */
 :host(app-sign-up-form) .done .headline {
   font-size: 1.5rem;
