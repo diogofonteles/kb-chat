@@ -148,6 +148,26 @@ describe('answer formatting', () => {
     expect(host.textContent?.trim()).toMatch(/0:50, 0:41\.$/);
   });
 
+  it('KBC-155: a time that names no passage links to the passage it shows, grouped or alone', () => {
+    const two: AnswerSource = {
+      ...TRACK,
+      passages: [
+        { at: '0:41', startMs: 41_000, endMs: 44_000 },
+        { at: '0:50', startMs: 50_000, endMs: 53_000 },
+      ],
+    };
+    const host = document.createElement('div');
+    host.innerHTML = renderAnswer('Junto [1@9:99], [1@0:50]. Só [1@9:99].', [
+      two,
+    ]);
+    const grouped = [...host.querySelectorAll('.cite-group a.cite-time')];
+    expect(grouped.map((one) => one.textContent)).toEqual(['0:41', '0:50']);
+    expect(grouped.map((one) => citedAt(one))).toEqual(['0:41', '0:50']);
+    const alone = host.querySelector('a.cite-audio') as HTMLElement;
+    expect(alone.textContent).toContain('0:41');
+    expect(citedAt(alone)).toBe('0:41');
+  });
+
   it('KBC-155 AC-7: a lone track citation, a text, another track or words in between are not grouped', () => {
     const other: AnswerSource = { ...TRACK, n: 2, title: 'Outra faixa' };
     const text: AnswerSource = { n: 3, id: 'leis.md', title: 'As leis' };

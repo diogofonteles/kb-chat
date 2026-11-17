@@ -69,14 +69,23 @@ function restrictedCitation(n: string): string {
  */
 function audioCitation(source: AnswerSource, at: string): string {
   const label = escapeHtml(trackLabel(source, at));
-  const time = at ? `@${at}` : '';
   const passage = passageOf(source, at);
+  const time = hrefTime(at, passage);
   const where = escapeHtml(
     passage
       ? `${source.title} · ${formatTrackClock(passage.startMs)}`
       : source.title,
   );
   return `<a class="cite cite-audio" href="#fonte-${source.n}${time}" aria-label="${label}" title="${label}"><span class="cite-n">${source.n}</span><span class="cite-where">${where}</span></a>`;
+}
+
+/**
+ * The link's "@tempo": the passage shown, so the open citation can be told by it. A time that
+ * names no passage shows the first one, and links to it too; no time stays none.
+ */
+function hrefTime(at: string, passage: TrackPassage | null): string {
+  const shown = at && passage ? passage.at : at;
+  return shown ? `@${shown}` : '';
 }
 
 /** "Ouvir Lembranças da infância aos 1 minuto e 16 segundos": a time in a grouped pill. */
@@ -96,7 +105,7 @@ function groupedCitation(
     .flatMap(({ at, passage }) => (passage ? [{ at, passage }] : []))
     .map(({ at, passage }) => {
       const label = escapeHtml(timeLabel(source, passage.startMs));
-      const time = at ? `@${at}` : '';
+      const time = hrefTime(at, passage);
       return `<a class="cite cite-time" href="#fonte-${source.n}${time}" aria-label="${label}" title="${label}">${formatTrackClock(passage.startMs)}</a>`;
     })
     .join(', ');
