@@ -100,6 +100,9 @@ JOB = {
 }
 
 
+MEDIA_ID = "66666666-6666-4666-8666-666666666666"
+
+
 class FakeApi:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, dict | None, dict]] = []
@@ -109,11 +112,16 @@ class FakeApi:
         self.token = TOKEN
         self.profiles: list[dict] = []
         self.revoked: set[str] = set()
+        # A doc-ingest job's file as the app kept it (KBC-149).
+        self.document = b"%PDF-1.4 fake"
 
     def answer(self, handler: BaseHTTPRequestHandler, method: str) -> None:
         url = urlparse(handler.path)
         length = int(handler.headers.get("content-length") or 0)
-        body = json.loads(handler.rfile.read(length)) if length else None
+        raw = handler.rfile.read(length) if length else b""
+        is_json = (handler.headers.get("content-type") or "").startswith("application/json")
+        # A file sent as bytes (KBC-149: a YouTube link's audio) is recorded by its size.
+        body = (json.loads(raw) if is_json else {"bytes": len(raw)}) if raw else None
         self.calls.append((method, url.path, body, dict(handler.headers)))
         if handler.headers.get("authorization") != f"Bearer {self.token}":
             return self._send(handler, 401, b'{"error":{"code":"UNAUTHENTICATED"}}')
@@ -135,6 +143,10 @@ class FakeApi:
             return self._send(handler, 200, json.dumps({"profiles": self.profiles}).encode())
         if action == "audio" or "/audio/" in url.path:
             return self._send(handler, 200, b"fake-flac", "audio/flac")
+        if action == "document":
+            return self._send(handler, 200, self.document, "application/octet-stream")
+        if action == "youtube-audio":
+            return self._send(handler, 200, json.dumps({"mediaId": MEDIA_ID}).encode())
         return self._send(handler, 204, b"")
 
     @staticmethod

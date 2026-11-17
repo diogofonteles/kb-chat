@@ -5,6 +5,7 @@ import getpass
 import json
 import logging
 import os
+import shutil
 import signal
 import socket
 import sys
@@ -141,6 +142,8 @@ def run(args: argparse.Namespace) -> int:
         # KBC-099: with a vault and kb on this Mac; the API gives track documents only to a
         # transcriber marked "Publica no acervo" in Transcritores, and kb spends on its key.
         publisher=publisher,
+        # KBC-149: documents and links sent from the app, with kb-map next to this tool.
+        docs=docs_of(publisher, env),
         # KBC-114: what this Mac is doing, shown to masters in the app.
         status=status,
         reporter=reporter,
@@ -185,6 +188,20 @@ def publisher_of(args: argparse.Namespace, vault: str | None, env: dict | None =
 
     kb = None if args.no_kb_publish else kb_or_none(vault, env)
     return KbPublisher(kb.vault, kb) if kb else None
+
+
+def docs_of(publisher, env: dict | None = None):
+    """Sent documents (KBC-149) go with kb-publish: the same vault, kb and lock, plus kb-map
+    (tools/kb-map, through uv) and, for YouTube links, yt-dlp when it is on PATH."""
+    if publisher is None:
+        return None
+    from .doc_ingest import DocIngester, YtDlp, kb_map_or_none
+
+    kb_map = kb_map_or_none(publisher.vault, env)
+    if kb_map is None:
+        return None
+    youtube = YtDlp(shutil.which("yt-dlp")) if shutil.which("yt-dlp") else None
+    return DocIngester(publisher, kb_map, youtube)
 
 
 def vault_sync_of(args: argparse.Namespace, config: dict, kb, state_file: Path | None = None):

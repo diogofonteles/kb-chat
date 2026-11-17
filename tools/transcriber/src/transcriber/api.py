@@ -74,7 +74,7 @@ class ApiClient:
         if status == 204:
             return None
         if status != 200:
-            raise ApiError(f"lease answered {status}")
+            raise ApiError(f"lease answered {status}", status)
         job = json.loads(body)
         if job.get("kind") not in kinds:
             raise ApiError(f"leased a job of another kind: {job.get('kind')}")
@@ -162,6 +162,59 @@ class ApiClient:
         """What kb did to a kb-publish job's documents (KBC-099 FR-2)."""
         return self._on_job(job, "kb-result", result)
 
+    def download_document(self, job: dict, directory: Path) -> Path | None:
+        """A doc-ingest job's file as sent (KBC-149); None when it is not ours (404)."""
+        query = urllib.parse.urlencode({"leaseId": job["leaseId"]})
+        name = Path(job["source"]["name"]).name
+        suffix = "".join(Path(name).suffixes[-1:]) or ".bin"
+        request = self._build("GET", f"{job['source']['filePath']}?{query}")
+        try:
+            with (
+                self._opener.open(request, timeout=self._timeout) as response,
+                tempfile.NamedTemporaryFile(dir=directory, suffix=suffix, delete=False) as out,
+            ):
+                shutil.copyfileobj(response, out, length=1024 * 1024)
+                return Path(out.name)
+        except urllib.error.HTTPError as err:
+            if err.code == 401:
+                self._forget_token()
+                raise Unauthorized from err
+            if err.code == 404:
+                return None
+            raise ApiError(f"document answered {err.code}", err.code) from err
+        except (urllib.error.URLError, TimeoutError, OSError) as err:
+            raise ApiError(f"document download failed: {err}") from err
+
+    def doc_state(self, job: dict, state: str) -> bool:
+        """The step a doc-ingest job is on (converting, classifying, mapping)."""
+        return self._on_job(job, "doc-state", {"state": state})
+
+    def doc_result(self, job: dict, outcome: dict, spend_usd: float = 0.0) -> bool:
+        """How a doc-ingest job ended: ready, duplicate, or failed with why (AC-4)."""
+        body = {"outcome": outcome, "spendUsd": round(min(spend_usd, 0.5), 6)}
+        return self._on_job(job, "doc-result", body)
+
+    def upload_youtube_audio(self, job: dict, audio: Path) -> str | None:
+        """A YouTube link's audio, back to the API as the sender's recording (KBC-142 BR-5)."""
+        query = urllib.parse.urlencode({"leaseId": job["leaseId"], "name": audio.name})
+        size = audio.stat().st_size
+        with audio.open("rb") as body:
+            request = self._build("POST", f"{job['source']['audioPath']}?{query}", body)
+            request.add_header("content-type", "application/octet-stream")
+            request.add_header("content-length", str(size))
+            try:
+                with self._opener.open(request, timeout=max(self._timeout, 600)) as response:
+                    return json.loads(response.read())["mediaId"]
+            except urllib.error.HTTPError as err:
+                if err.code == 401:
+                    self._forget_token()
+                    raise Unauthorized from err
+                if err.code == 409:
+                    return None
+                raise ApiError(f"youtube audio answered {err.code}", err.code) from err
+            except (urllib.error.URLError, TimeoutError, OSError) as err:
+                raise ApiError(f"youtube audio upload failed: {err}") from err
+
     def report_sync(self, report: dict) -> None:
         """What the last automatic sync with production did (KBC-100 FR-4)."""
         status, _ = self._post("/api/v1/media-worker/vault-sync", report)
@@ -206,7 +259,7 @@ class ApiClient:
         if forget is not None:
             forget()
 
-    def _build(self, method: str, path: str, data: bytes | None = None) -> urllib.request.Request:
+    def _build(self, method: str, path: str, data=None) -> urllib.request.Request:
         headers = {"authorization": f"Bearer {self._token()}"}
         if method == "POST":
             headers["content-type"] = "application/json"
