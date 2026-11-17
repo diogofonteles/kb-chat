@@ -85,7 +85,13 @@ a {
 @media (max-width: 1023px) {
   .policy {
     font-size: var(--text-item);
-    line-height: 1.55;
+    /* v2 · Públicas celular: 15/23. */
+    line-height: calc(23 / 15);
+  }
+
+  /* v2 · celular: 8 + 12 + 8 between the intro and the first title. */
+  .lead {
+    margin-bottom: 1.75rem;
   }
 
   h2 {

@@ -385,8 +385,8 @@
                         <ui-cover
                           class="conversation-cover"
                           icon="chat"
-                          from="#3a3a3a"
-                          to="#1f1f1f"
+                          from="var(--cover-neutral-from)"
+                          to="var(--cover-neutral-to)"
                           [size]="48"
                         />
                         <span class="conversation-text ui-libitem__text">
@@ -395,8 +395,7 @@
                             [title]="conversation.title"
                             >{{ conversation.title }}</span
                           >&ngsp;<span class="meta ui-libitem__meta">
-                            <span
-                              class="meta-line"
+                            <span class="meta-line"
                               ><span
                                 class="kind"
                                 [class.research]="
@@ -432,8 +431,8 @@
                                     }</span
                                   >
                                 }
-                              }</span
-                            >
+                              }
+                            </span>
                           </span>
                         </span>
                       </button>
@@ -478,8 +477,8 @@
                   <ui-library-item [title]="doc.title" [meta]="doc.meta">
                     <ui-cover
                       icon="doc"
-                      from="#3a3a3a"
-                      to="#1f1f1f"
+                      from="var(--cover-neutral-from)"
+                      to="var(--cover-neutral-to)"
                       [size]="48"
                     />
                   </ui-library-item>

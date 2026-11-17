@@ -50,8 +50,16 @@
   --color-icon-faint: color-mix(in srgb, var(--color-text) 35%, transparent);
   /* The green glow at the top of the entry screen (v2 · Auth: #1f6b3c into black) and of
      the public pages (v2 · Públicas: #1f4d33 into the background). */
-  --color-entry-glow: color-mix(in srgb, var(--color-accent) 46%, var(--color-bg));
-  --color-reading-glow: color-mix(in srgb, var(--color-accent) 30%, var(--color-bg));
+  --color-entry-glow: color-mix(
+    in srgb,
+    var(--color-accent) 46%,
+    var(--color-bg)
+  );
+  --color-reading-glow: color-mix(
+    in srgb,
+    var(--color-accent) 30%,
+    var(--color-bg)
+  );
   --overlay-line: color-mix(in srgb, var(--color-text) 12%, transparent);
   /* A person's avatar without a picture (v2: "D" #b8862b, "BL" #2d5a8a, "IH" #6b3fa0, "H"
      #6ea8ff), picked by the name; each pair keeps its initials above 4.5:1. */
@@ -67,6 +75,10 @@
   --avatar-4-fg: #ffffff;
   --avatar-5-bg: #b8862b;
   --avatar-5-fg: #000000;
+  /* The neutral cover of a conversation or a document row in Sua biblioteca (v2: #3a3a3a
+     into #1f1f1f). */
+  --cover-neutral-from: #3a3a3a;
+  --cover-neutral-to: #1f1f1f;
   --scrim: rgb(0 0 0 / 70%);
   /* Text over a cover's own colour (the cited passage while it plays, KBC-150): always light,
      the cover being dark in every theme; the unspoken words keep 4.5:1 over the darkest. */

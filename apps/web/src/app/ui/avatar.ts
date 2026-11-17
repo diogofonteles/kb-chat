@@ -22,7 +22,8 @@ export function initialsOf(name: string): string {
 /** The same name, the same colour, on every screen. */
 export function avatarColorOf(name: string): number {
   let hash = 7;
-  for (const char of name) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
+  for (const char of name)
+    hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
   return hash % AVATAR_COLORS;
 }
 

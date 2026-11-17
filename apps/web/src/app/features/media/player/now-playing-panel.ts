@@ -68,7 +68,11 @@ export function linesAt(
     <section class="now" aria-labelledby="now-playing-title">
       <!-- v2 · Tocando agora: the collection's name, ⋯ and ⤢ (the player page). -->
       <div class="bar">
-        <h2 id="now-playing-title" class="visually-hidden" i18n="@@nowPlaying.title">
+        <h2
+          id="now-playing-title"
+          class="visually-hidden"
+          i18n="@@nowPlaying.title"
+        >
           Tocando agora
         </h2>
         <p class="label" aria-hidden="true">{{ collectionTitle() }}</p>

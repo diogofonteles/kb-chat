@@ -4,11 +4,7 @@
   display: block;
   min-height: 100dvh;
   background:
-    linear-gradient(
-        180deg,
-        var(--color-entry-glow) 0,
-        transparent 35rem
-      )
+    linear-gradient(180deg, var(--color-entry-glow) 0, transparent 35rem)
       no-repeat,
     var(--color-shell);
   color: var(--color-text);
@@ -164,7 +160,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  margin: 0;
+  /* The 24 targets overflow the drawn 16 line evenly. */
+  margin: -0.25rem 0;
   color: var(--color-text-muted);
 }
 

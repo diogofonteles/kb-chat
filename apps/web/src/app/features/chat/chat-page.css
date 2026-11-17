@@ -453,6 +453,12 @@
   }
 
   /* v2 · celular: the mini player right on top of the navigation, 8 from the sides. */
+  /* Without the mini player (a collection of texts, nothing played yet) the navigation
+     band is 84 tall (v2 · celular "Conversa vazia"). */
+  .shell-foot:not(:has(app-mini-player .bar)) {
+    --nav-foot: 2.125rem;
+  }
+
   .shell-foot {
     display: grid;
     gap: 0;

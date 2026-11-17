@@ -134,7 +134,7 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     await harness.fixture.whenStable();
     // The card's × (a phone's; on desktop v2 puts it in "Tocando agora" ⋯, hidden here).
     fireEvent.click(
-      screen.getByRole('button', { name: 'Fechar o player', hidden: true }),
+      screen.getByLabelText('Fechar o player', { selector: 'button' }),
     );
     await harness.fixture.whenStable();
     expect(TestBed.inject(RightPanel).content()).toBeNull();
@@ -156,7 +156,7 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     const { media, http, harness, engine } = await setup();
     // The card's × (a phone's; on desktop v2 puts it in "Tocando agora" ⋯, hidden here).
     fireEvent.click(
-      screen.getByRole('button', { name: 'Fechar o player', hidden: true }),
+      screen.getByLabelText('Fechar o player', { selector: 'button' }),
     );
     await harness.fixture.whenStable();
     expect(media.calls).toContain('pause');

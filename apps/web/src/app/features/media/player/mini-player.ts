@@ -291,5 +291,4 @@ export class MiniPlayer {
   protected close(): void {
     this.closer.run(this.nowPlayingOpen());
   }
-
 }

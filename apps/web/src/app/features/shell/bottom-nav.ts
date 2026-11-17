@@ -72,8 +72,10 @@ export interface NavTabItem {
       display: flex;
       justify-content: space-around;
       margin: 0;
-      /* v2 · celular: the tabs end 42 above the screen's foot (the home indicator's room). */
-      padding: 0 var(--space-2) max(2.625rem, env(safe-area-inset-bottom));
+      /* v2 · celular: the tabs end 42 above the screen's foot under the mini player, 34
+         without it (the home indicator's room); the shell sets which. */
+      padding: 0 var(--space-2)
+        max(var(--nav-foot, 2.625rem), env(safe-area-inset-bottom));
       list-style: none;
     }
     li {

@@ -617,6 +617,8 @@
 .ui-field__label {
   font-size: var(--text-meta);
   font-weight: 700;
+  /* v2: the 13 label, the 12 hint and error sit on tight lines (6 apart from the box). */
+  line-height: 1.2;
 }
 
 .ui-field__hint {
@@ -632,6 +634,7 @@
   margin: 0;
   color: var(--color-danger);
   font-size: var(--text-xs);
+  line-height: 1.25;
 }
 
 .ui-input {

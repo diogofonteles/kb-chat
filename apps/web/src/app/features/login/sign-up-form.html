@@ -2,7 +2,14 @@
   <ui-icon name="chevLeft" [size]="18" />
   <span i18n="@@login.back">Voltar</span>
 </button>
-<h2 #title tabindex="-1" class="title" i18n="@@signUp.title">
+<!-- v2 · Auth "enviado": no title over the done mark; it stays for screen readers. -->
+<h2
+  #title
+  tabindex="-1"
+  class="title"
+  [class.visually-hidden]="step() === 'done'"
+  i18n="@@signUp.title"
+>
   Pedir acesso sem conta Google
 </h2>
 

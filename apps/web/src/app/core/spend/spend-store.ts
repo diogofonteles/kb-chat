@@ -10,6 +10,13 @@ export const formatSpend = (value: number, locale = 'pt-BR'): string =>
     maximumFractionDigits: 2,
   }).format(value);
 
+/** A dollar amount without the currency ("1,00"), after one that names it. */
+const formatAmount = (value: number, locale: string): string =>
+  new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+
 /** Today's AI spend for the side panel (KBC-005 FR-5); refreshed after every answer. */
 @Injectable({ providedIn: 'root' })
 export class SpendStore {
@@ -30,11 +37,12 @@ export class SpendStore {
       ? Math.min(1, spend.usd / spend.capUsd)
       : null;
   });
-  /** "US$ 0,03 de US$ 1,00", or '' while loading or on error. */
+  /** "US$ 0,03 de 1,00" (v2 · Sua biblioteca: the currency once), or '' while loading or on
+   *  error. */
   readonly label = computed(() => {
     const spend = this.value();
     return spend
-      ? $localize`:@@spend.amount:${formatSpend(spend.usd, this.locale)}:spent: de ${formatSpend(spend.capUsd, this.locale)}:cap:`
+      ? $localize`:@@spend.amount:${formatSpend(spend.usd, this.locale)}:spent: de ${formatAmount(spend.capUsd, this.locale)}:cap:`
       : '';
   });
 
