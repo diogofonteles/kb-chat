@@ -2,6 +2,7 @@
   class="app-shell"
   [class.desktop]="desktop()"
   [class.collapsed]="collapsed()"
+  [class.expanded]="desktop() && expanded()"
   [class.with-player]="playerShown()"
 >
   @if (desktop()) {
@@ -14,10 +15,21 @@
     <aside class="library" aria-labelledby="your-library-title">
       <app-sidebar
         [collapsed]="collapsed()"
+        [wide]="expanded()"
         (collapseToggled)="toggleCollapsed()"
+        (expandToggled)="expanded.set(!expanded())"
         (acted)="sidebarActed($event)"
       />
     </aside>
+    @if (expanded()) {
+      <section
+        class="library-wide"
+        aria-label="Sua biblioteca"
+        i18n-aria-label="@@library.title"
+      >
+        <app-sidebar [expanded]="true" (acted)="sidebarActed($event)" />
+      </section>
+    }
   } @else {
     <!-- The backdrop click only adds a pointer way out: the modal <dialog> already closes on Escape. -->
     <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
@@ -31,7 +43,7 @@
     >
       <div class="drawer-body">
         <button
-          uiIconButton="circle"
+          uiIconButton
           [size]="36"
           type="button"
           class="drawer-close"

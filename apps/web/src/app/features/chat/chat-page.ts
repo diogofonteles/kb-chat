@@ -182,6 +182,8 @@ export class ChatPage {
   });
   /** Sua biblioteca collapsed to its covers (desktop, FR-1). */
   protected readonly collapsed = signal(this.readCollapsed());
+  /** Sua biblioteca over the main panel ("Biblioteca expandida", ⤢), until an item opens. */
+  protected readonly expanded = signal(false);
   /** The media library's page, for who has it (Biblioteca, else Mídia). */
   protected readonly libraryPath = computed(() => {
     if (hasLibrary(this.session)) return '/biblioteca';
@@ -471,6 +473,8 @@ export class ChatPage {
   }
 
   protected sidebarActed(action: SidebarAction): void {
+    // What opens from "Biblioteca expandida" shows in the main panel again.
+    this.expanded.set(false);
     // A conversation started or restored from the media pages shows the conversation.
     if (
       (action === 'new' || action === 'restore' || action === 'document') &&
@@ -742,17 +746,20 @@ export class ChatPage {
 
   /** Enter in the global search: the free search of the collection in use (FR-2). */
   protected globalSearch(query: string): void {
+    this.expanded.set(false);
     this.views.select('search');
     this.globalSearches.next(query);
   }
 
   /** ✦ in the top bar: the research view, ready to type into. */
   protected openResearch(): void {
+    this.expanded.set(false);
     if (this.views.researchAvailable()) this.views.select('research');
     this.showConversation();
   }
 
   protected goHome(): void {
+    this.expanded.set(false);
     this.showConversation();
   }
 

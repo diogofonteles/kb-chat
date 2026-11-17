@@ -3,7 +3,9 @@ import { DOCUMENT, NgTemplateOutlet, formatNumber } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  Injector,
   LOCALE_ID,
+  afterNextRender,
   computed,
   inject,
   input,
@@ -37,7 +39,7 @@ import { AudioPresence } from '@features/shell/audio-presence.js';
 import { LibraryRecents } from '@features/shell/library-recents.js';
 import { SignOut } from '@features/shell/sign-out.js';
 import { UiAvatar } from '@ui/avatar.js';
-import { UiChip, UiIconButton } from '@ui/button.js';
+import { UiButton, UiChip, UiIconButton } from '@ui/button.js';
 import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import { UiLibraryItem } from '@ui/library-item.js';
@@ -129,6 +131,7 @@ interface PinnedItem {
     CollectionDialog,
     UnassignedNotice,
     UiAvatar,
+    UiButton,
     UiChip,
     UiCover,
     UiIcon,
@@ -141,7 +144,11 @@ interface PinnedItem {
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.collapsed]': 'collapsed()', '[class.mobile]': 'mobile()' },
+  host: {
+    '[class.collapsed]': 'collapsed()',
+    '[class.mobile]': 'mobile()',
+    '[class.expanded]': 'expanded()',
+  },
 })
 export class Sidebar {
   protected readonly chat = inject(ChatStore);
@@ -159,6 +166,7 @@ export class Sidebar {
   private readonly settings = inject(SettingsStore);
   private readonly signOutAction = inject(SignOut);
   private readonly locale = inject(LOCALE_ID);
+  private readonly injector = inject(Injector);
   /** Research conversations go to the research view (KBC-008 FR-6), shown as saved. */
   private readonly restorer = inject(RESEARCH_RESTORER);
   /** A newer click cancels the load of the previous one. */
@@ -168,13 +176,23 @@ export class Sidebar {
   readonly mobile = input(false);
   /** Collapsed to its covers (desktop, FR-1). */
   readonly collapsed = input(false);
+  /** In the main panel, "Biblioteca expandida" (desktop, ⤢): a second instance. */
+  readonly expanded = input(false);
+  /** Its ids' prefix: the column and the expanded view are on screen together. */
+  /** The column's ⤢ is on while "Biblioteca expandida" shows. */
+  readonly wide = input(false);
+  protected readonly ns = computed(() =>
+    this.expanded() ? 'library-wide' : 'library',
+  );
   /** The parent closes the drawer and moves focus after each action. */
   readonly acted = output<SidebarAction>();
   readonly collapseToggled = output();
+  readonly expandToggled = output();
 
   protected readonly createLabel = $localize`:@@library.create:Criar`;
   protected readonly collapseLabel = $localize`:@@library.collapse:Recolher Sua biblioteca`;
   protected readonly expandLabel = $localize`:@@library.expand:Expandir Sua biblioteca`;
+  protected readonly widenLabel = $localize`:@@library.widen:Ampliar Sua biblioteca`;
   protected readonly pinnedLabel = $localize`:@@library.pinned:Fixados`;
   protected readonly collectionsLabel = $localize`:@@library.chipCollections:Acervos`;
   protected readonly conversationsLabel = $localize`:@@library.chipConversations:Conversas`;
@@ -389,7 +407,15 @@ export class Sidebar {
 
   protected toggleSearch(): void {
     this.searching.update((on) => !on);
-    if (!this.searching()) this.query.set('');
+    if (!this.searching()) {
+      this.query.set('');
+      return;
+    }
+    // The field opens above the Menu's rows on a phone: take the focus there.
+    afterNextRender(
+      () => this.document.getElementById(`${this.ns()}-search`)?.focus(),
+      { injector: this.injector },
+    );
   }
 
   /** "Nova conversa" starts over in the current view; the other one keeps its conversation. */

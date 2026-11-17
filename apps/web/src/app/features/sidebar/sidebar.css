@@ -46,9 +46,34 @@
 
 .title {
   flex: 1;
+  min-width: 0;
+  min-height: 2rem;
   margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
   font-size: var(--text-md);
   font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.title:hover:not(:disabled) {
+  color: var(--color-text-muted);
+}
+
+.title:disabled {
+  cursor: default;
+}
+
+.widen {
+  color: var(--color-text-muted);
+}
+
+.widen:hover {
+  color: var(--color-text);
 }
 
 .create ::ng-deep .create-trigger {
@@ -79,7 +104,15 @@
 
 /* v2: the chips on one line; with "Áudios" the last passes the column's 300 and is cut at
    its edge, as drawn. The line scrolls sideways (a touch, Tab, the wheel: scrollChips). */
+.chip-line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .chips {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-wrap: nowrap;
   gap: var(--space-2);
@@ -480,4 +513,153 @@
   .branch-line {
     left: 1rem;
   }
+}
+
+/* ---------- Biblioteca expandida (desktop, ⤢): the library over the main panel ---------- */
+:host(.expanded) .head {
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-8) var(--space-3);
+}
+
+:host(.expanded) .title {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 2.25rem;
+  letter-spacing: -0.06em;
+}
+
+:host(.expanded) .spend {
+  display: none;
+}
+
+:host(.expanded) .items,
+:host(.expanded) .conversations,
+:host(.expanded) .section-head {
+  padding: 0;
+}
+
+:host(.expanded) .wide-action {
+  min-height: 2.25rem;
+  font-size: var(--text-sm);
+}
+
+:host(.expanded) .chip-line {
+  gap: var(--space-2);
+  padding: 0 var(--space-8) var(--space-4);
+}
+
+:host(.expanded) .chips {
+  padding: 0;
+}
+
+.wide-search {
+  flex: none;
+  width: 15rem;
+  min-height: 2.25rem;
+  margin: 0;
+}
+
+.wide-head {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  min-height: 2rem;
+  margin: 0 var(--space-8);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--overlay-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.wide-head > span:first-child {
+  flex: 1;
+}
+
+.type-col {
+  flex: none;
+  width: 10rem;
+  /* Where the drawn rows keep their ⋯ (18 and a 14 gap). */
+  margin-right: 2rem;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wide-head .type-col {
+  font-size: var(--text-xs);
+}
+
+:host(.expanded) .sections {
+  padding: 0 var(--space-8) var(--space-3);
+}
+
+:host(.expanded) .ui-libitem-row {
+  gap: 0.875rem;
+  padding: 0 var(--space-3);
+}
+
+/* ---------- The phone's Menu (Menu lateral aberto · celular) ---------- */
+:host(.mobile) .account {
+  padding: 3.5rem 4rem 0.9375rem var(--space-4);
+}
+
+:host(.mobile) .name {
+  line-height: 1.1875rem;
+}
+
+:host(.mobile) .email {
+  line-height: 0.875rem;
+}
+
+:host(.mobile) .chip-line {
+  padding-bottom: var(--space-1);
+}
+
+:host(.mobile) .chips {
+  padding: 0 var(--space-4) var(--space-3);
+}
+
+:host(.mobile) .items,
+:host(.mobile) .conversations {
+  padding: 0;
+}
+
+/* The drawn rows run edge to edge: 48 covers, 6 above and below, 16 at the sides. */
+:host(.mobile) .ui-libitem-row {
+  gap: var(--space-3);
+  padding: 0.375rem var(--space-4);
+  border-radius: 0;
+}
+
+:host(.mobile) .section-head {
+  padding: 0 var(--space-2);
+}
+
+:host(.mobile) .menu-actions {
+  gap: 0;
+  margin: var(--space-3) var(--space-4) 0;
+}
+
+:host(.mobile) .menu-actions ::ng-deep .order-trigger {
+  display: flex;
+  width: 100%;
+  min-height: var(--target);
+  padding: 0;
+  color: var(--color-text);
+  font-size: var(--text-item);
+}
+
+:host(.mobile) .order-content {
+  gap: 0.875rem;
+}
+
+:host(.mobile) .spend {
+  margin-top: 0;
+  padding: var(--space-2) var(--space-4) var(--space-6);
+}
+
+:host(.mobile) .spend-bar {
+  display: none;
 }

@@ -289,4 +289,134 @@ test.describe('the shell', () => {
       'page',
     );
   });
+
+  test('Início is on at home, the bell opens and ⤢ shows Sua biblioteca expandida (desktop)', async ({
+    page,
+  }) => {
+    test.skip(
+      !desktop(page),
+      'The top bar and the column are the desktop ones.',
+    );
+    await page.goto('/');
+    await expect(page.getByLabel('Sua pergunta')).toBeVisible();
+    const bar = page.locator('app-top-bar');
+    // v2 · Conversa vazia: Início filled on the conversation's home.
+    await expect(bar.getByRole('button', { name: 'Início' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+
+    // The bell lists what needs the person (or says nothing is new), and closes.
+    await bar.getByRole('button', { name: /^Notificações/ }).click();
+    const bell = page.getByRole('menu', { name: 'Notificações' });
+    await expect(bell).toBeVisible();
+    await expect(
+      bell
+        .getByText(/pedidos? de acesso|precisam? de atenção|Nada novo por aqui/)
+        .first(),
+    ).toBeVisible();
+    const box = await bell.boundingBox();
+    expect(box && box.x + box.width).toBeLessThanOrEqual(1440);
+    await page.keyboard.press('Escape');
+    await expect(bell).toBeHidden();
+
+    // ⤢: the library in the main panel, its own search filters it, a row opens it.
+    const side = await library(page);
+    const widen = side.getByRole('button', { name: 'Ampliar Sua biblioteca' });
+    await widen.click();
+    await expect(widen).toHaveAttribute('aria-pressed', 'true');
+    const wide = page.getByRole('region', { name: 'Sua biblioteca' });
+    await expect(wide).toBeVisible();
+    await expect(page.getByLabel('Sua pergunta')).toBeHidden();
+    await expect(wide.getByText('Tipo', { exact: true })).toBeVisible();
+    const filter = wide.getByRole('searchbox', {
+      name: 'Filtrar Sua biblioteca',
+    });
+    await filter.fill('hermetismo');
+    await expect(filter).toHaveValue('hermetismo');
+    const rowsShown = wide.locator(
+      'li.collection > .row > button.ui-libitem-row',
+    );
+    await expect(rowsShown).toHaveCount(1);
+    // The list scrolls inside the panel, not the page.
+    await filter.fill('');
+    const list = wide.locator('.sections');
+    await list.hover();
+    await page.mouse.wheel(0, 600);
+    await expect
+      .poll(() => list.evaluate((e) => e.scrollTop))
+      .toBeGreaterThan(0);
+    expect(
+      await page.evaluate(() => document.scrollingElement?.scrollTop),
+    ).toBe(0);
+    await rowsShown.first().click();
+    await expect(wide).toBeHidden();
+    await expect(widen).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByLabel('Sua pergunta')).toBeVisible();
+
+    // ⤢ again closes it; so does Início.
+    await widen.click();
+    await expect(wide).toBeVisible();
+    await widen.click();
+    await expect(wide).toBeHidden();
+    await widen.click();
+    await bar.getByRole('button', { name: 'Início' }).click();
+    await expect(wide).toBeHidden();
+  });
+
+  test('the phone Menu is the drawn list: chips, rows, then its action rows', async ({
+    page,
+  }) => {
+    test.skip(desktop(page), 'The Menu is the phone one.');
+    await page.goto('/');
+    await expect(page.getByLabel('Sua pergunta')).toBeVisible();
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await expect(menu).toBeVisible();
+    // v2 "Menu lateral aberto": no "Sua biblioteca · + Criar" row and no search row on top.
+    await expect(
+      menu.getByRole('button', { name: 'Criar', exact: true }),
+    ).toHaveCount(0);
+    await expect(menu.getByRole('group', { name: 'Mostrar' })).toBeVisible();
+    for (const name of [
+      'Novo acervo',
+      'Configurações',
+      'Nova conversa',
+      'Filtrar Sua biblioteca',
+    ]) {
+      await expect(
+        menu.getByRole('button', { name, exact: true }),
+      ).toBeVisible();
+    }
+    // The filter row opens the field, which takes the focus and what is typed.
+    await menu
+      .getByRole('button', { name: 'Filtrar Sua biblioteca', exact: true })
+      .click();
+    const field = menu.getByRole('searchbox', {
+      name: 'Filtrar Sua biblioteca',
+    });
+    await expect(field).toBeFocused();
+    await field.fill('hermetismo');
+    await expect(
+      menu.locator('li.collection > .row > button.ui-libitem-row'),
+    ).toHaveCount(1);
+    await field.fill('');
+    // The order row opens its menu, whole on screen.
+    await menu.getByRole('button', { name: /^Ordenar/ }).click();
+    const order = page.getByRole('menu', { name: 'Ordenar' });
+    await expect(order).toBeVisible();
+    const box = await order.boundingBox();
+    expect(box && box.y + box.height).toBeLessThanOrEqual(844);
+    await order
+      .getByRole('menuitemradio', { name: 'Ordem alfabética' })
+      .or(order.getByRole('menuitem', { name: 'Ordem alfabética' }))
+      .click();
+    await expect(order).toBeHidden();
+    // "Nova conversa" closes the Menu, ready to type.
+    await menu
+      .getByRole('button', { name: 'Nova conversa', exact: true })
+      .click();
+    await expect(menu).toBeHidden();
+    await expect(page.getByLabel('Sua pergunta')).toBeVisible();
+  });
 });

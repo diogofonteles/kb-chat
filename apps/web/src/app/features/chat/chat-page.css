@@ -29,6 +29,21 @@
   grid-template-columns: var(--shell-sidebar-collapsed) minmax(0, 1fr);
 }
 
+/* Biblioteca expandida (⤢): Sua biblioteca, wide, in the main panel's place. */
+.library-wide {
+  grid-area: main;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(to bottom, var(--overlay-2), transparent 20rem),
+    var(--color-bg);
+}
+
+.app-shell.expanded > .layout {
+  display: none;
+}
+
 .app-shell:not(.with-player) {
   grid-template-rows: auto minmax(0, 1fr);
 }
@@ -381,7 +396,8 @@
 
 .drawer-close {
   position: absolute;
-  top: var(--space-3);
+  /* Beside the account, as drawn: its row starts 56 down. */
+  top: 3.5rem;
   right: var(--space-4);
   z-index: 1;
 }
