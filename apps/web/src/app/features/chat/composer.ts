@@ -130,6 +130,12 @@ export class Composer {
     return target === field && field.value === '';
   }
 
+  /** A pointer press on the modes or profiles leaves the focus where it is. */
+  protected keepFocus(event: MouseEvent): void {
+    if (this.field().nativeElement === this.view?.document.activeElement)
+      event.preventDefault();
+  }
+
   focus(): void {
     this.field().nativeElement.focus();
   }
