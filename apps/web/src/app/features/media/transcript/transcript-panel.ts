@@ -331,8 +331,7 @@ export class TranscriptPanel {
     this.searchOpen.set(open);
     if (open)
       afterNextRender(
-        () =>
-          this.document.getElementById('transcript-search')?.focus(),
+        () => this.document.getElementById('transcript-search')?.focus(),
         { injector: this.injector },
       );
   }

@@ -102,7 +102,7 @@
         } @else {
           <p class="kicker">{{ kicker() }}</p>
         }
-        <h2 id="media-item-title">{{ current.title }}</h2>
+        <h1 id="media-item-title">{{ current.title }}</h1>
         <p class="meta">
           @if (current.author; as author) {
             <span
@@ -232,11 +232,7 @@
         </div>
         @if (resumeAt() !== null) {
           <div class="resume" resume>
-            <button
-              type="button"
-              class="resume-from"
-              (click)="resume()"
-            >
+            <button type="button" class="resume-from" (click)="resume()">
               {{ resumeLabel() }}
             </button>
             <button

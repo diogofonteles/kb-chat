@@ -314,11 +314,13 @@
     gap: var(--space-3);
     padding: var(--space-4);
     border-radius: 0.75rem;
+    /* On the cover's colour darkened, in every theme: the text is the cover's light ink. */
     background: color-mix(
       in srgb,
       var(--page-tint, var(--tint, #8a4a2e)) 70%,
-      var(--color-surface)
+      var(--color-cover-ink)
     );
+    color: var(--color-on-cover);
   }
 
   :host(.in-player) .card-head {
@@ -336,7 +338,7 @@
     position: relative;
     margin: -0.375rem;
     background: transparent;
-    color: var(--color-text);
+    color: var(--color-on-cover);
   }
 
   :host(.in-player) .card-button::before {
@@ -426,7 +428,7 @@
 
   :host(.in-player) .text,
   :host(.in-player) .segment.active .text {
-    color: rgb(255 255 255 / 72%);
+    color: var(--color-on-cover-dim);
     font-size: 1.3125rem;
     font-weight: 700;
     line-height: 1.6875rem;
@@ -434,12 +436,12 @@
   }
 
   :host(.in-player) .segment.active .text {
-    color: var(--color-text);
+    color: var(--color-on-cover);
   }
 
   /* The frame dims the next line to black 60%: kept light, for 4.5:1 on the card. */
   :host(.in-player) .segment.active ~ .segment .text {
-    color: rgb(255 255 255 / 72%);
+    color: var(--color-on-cover-dim);
   }
 }
 

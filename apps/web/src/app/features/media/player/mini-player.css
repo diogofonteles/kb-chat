@@ -195,7 +195,10 @@ a.title:hover {
    (1× · ⟲ · ▶ 36 · ⟳ · ☾ over the seek line), the right 340 (Tocando agora, volume 96,
    expand). */
 .bar {
-  grid-template-columns: minmax(0, 21.25rem) minmax(0, 38.75rem) minmax(0, 21.25rem);
+  grid-template-columns: minmax(0, 21.25rem) minmax(0, 38.75rem) minmax(
+      0,
+      21.25rem
+    );
   justify-content: space-between;
 }
 
@@ -304,11 +307,13 @@ a.title:hover {
     min-height: var(--shell-mini-player);
     padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
     border-radius: var(--radius-card);
+    /* The cover's tint darkened in every theme, with the cover's light ink on it. */
     background: color-mix(
       in srgb,
       var(--mini-tint, #a64d29) 45%,
-      var(--color-surface)
+      var(--color-cover-ink)
     );
+    color: var(--color-on-cover);
     overflow: hidden;
   }
 
@@ -348,7 +353,12 @@ a.title:hover {
   }
 
   .subtitle {
-    color: rgb(255 255 255 / 70%);
+    color: var(--color-on-cover-dim);
+  }
+
+  .bar .title,
+  .subtitle.link:hover {
+    color: var(--color-on-cover);
   }
 
   /* A tap anywhere on the mini player opens the full-screen player (KBC-129 FR-2, AC-3):
@@ -401,7 +411,7 @@ a.title:hover {
     width: var(--target);
     height: var(--target);
     background: transparent;
-    color: var(--color-text);
+    color: var(--color-on-cover);
   }
 }
 

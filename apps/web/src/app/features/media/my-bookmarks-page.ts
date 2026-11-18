@@ -64,13 +64,13 @@ export interface PlayFromState {
         />
         <div class="head-text">
           <p class="ui-page-header__kicker" i18n="@@bookmarks.kicker">Lista</p>
-          <h2
+          <h1
             id="my-bookmarks-title"
             class="ui-page-header__title"
             i18n="@@bookmarks.mine"
           >
             Meus marcadores
-          </h2>
+          </h1>
           @if (summary(); as text) {
             <p class="ui-page-header__meta">{{ text }}</p>
           }
@@ -407,8 +407,5 @@ const SORT_LABELS: Record<BookmarkSort, () => string> = {
 
 /** Lower case without accents, so "sessao" finds "sessão". */
 function fold(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase();
+  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 }

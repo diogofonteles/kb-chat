@@ -91,11 +91,15 @@ export async function scrollOver(
     return;
   }
   // A finger dragged over the text (Chromium's compositor gesture, as a real touch).
+  // The finger stays on the screen: a swipe up from the middle goes at most to the top.
+  const height = page.viewportSize()?.height ?? 844;
+  const room = dy > 0 ? point.y - 8 : height - point.y - 8;
+  const distance = Math.sign(dy) * Math.min(Math.abs(dy), Math.max(room, 0));
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Input.synthesizeScrollGesture', {
     x: point.x,
     y: point.y,
-    yDistance: -dy,
+    yDistance: -distance,
     gestureSourceType: 'touch',
   });
   await cdp.detach();
@@ -105,7 +109,10 @@ export async function scrollOver(
  * Scrolls down over `region` and expects the text to move up; text that opened already at
  * its end (a document scrolled to the highlighted term) must move back down instead.
  */
-export async function expectScrolls(page: Page, region: Locator): Promise<void> {
+export async function expectScrolls(
+  page: Page,
+  region: Locator,
+): Promise<void> {
   await expect(region).toBeVisible();
   const point = await middleOf(page, region);
   const { top, atEnd } = await probeAt(page, point);
@@ -116,7 +123,10 @@ export async function expectScrolls(page: Page, region: Locator): Promise<void> 
 }
 
 /** Desktop: a click on the text, then Page Down and Space (Page Up and ⇧Space at its end). */
-export async function expectKeyboardScrolls(page: Page, text: Locator): Promise<void> {
+export async function expectKeyboardScrolls(
+  page: Page,
+  text: Locator,
+): Promise<void> {
   if (!desktop(page)) return;
   await text.click();
   const point = await middleOf(page, text);
@@ -127,4 +137,3 @@ export async function expectKeyboardScrolls(page: Page, text: Locator): Promise<
   if (atEnd) await expect.poll(top).toBeGreaterThan(before + OVERFLOW);
   else await expect.poll(top).toBeLessThan(before - OVERFLOW);
 }
-

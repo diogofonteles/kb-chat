@@ -6,8 +6,10 @@ import {
   uniqueTag,
   uploadReady,
   type UploadedMedia,
+  leaveToMediaList,
+  closePlayer,
 } from './media-helpers.js';
-import { startNewConversation } from './shell-helpers.js';
+import { desktop, startNewConversation } from './shell-helpers.js';
 
 let lecture: UploadedMedia;
 
@@ -121,7 +123,7 @@ test('AC-10, NFR-1: the audio goes on while the person searches, in the mini-pla
 }) => {
   await playLecture(page);
   const stop = await sampleClock(page);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   await toConversation(page);
   await search(page, 'ritmo');
   const samples = await stop();
@@ -146,14 +148,17 @@ test('AC-10, NFR-1: the audio goes on while the person searches, in the mini-pla
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pausar' })).toBeVisible();
   expect((await audioState(page)).currentTime).toBeGreaterThanOrEqual(before);
-  await expect(mini(page)).toHaveCount(0);
+  // Back on its page: a phone shows the full-screen player alone; a desktop keeps the
+  // player bar under the page (v2 · Mídia — Player), its controls an echo of the page's.
+  if (desktop(page)) await expect(mini(page)).toBeVisible();
+  else await expect(mini(page)).toHaveCount(0);
 });
 
 test('AC-7: typing in the question box never drives the mini-player', async ({
   page,
 }) => {
   await playLecture(page);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   await toConversation(page);
   const question = page.getByLabel('Sua pergunta');
   await question.click();
@@ -166,13 +171,13 @@ test('AC-11: "Fechar o player" stops, saves the position and closes', async ({
   page,
 }) => {
   await playLecture(page);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   await expect(mini(page)).toBeVisible();
   const saved = page.waitForRequest(
     (request) =>
       request.method() === 'PUT' && request.url().endsWith('/progress'),
   );
-  await mini(page).getByRole('button', { name: 'Fechar o player' }).click();
+  await closePlayer(page);
   const body = (await saved).postDataJSON() as { positionMs: number };
   expect(body.positionMs).toBeGreaterThan(0);
   await expect(mini(page)).toHaveCount(0);
@@ -186,7 +191,7 @@ test('FR-8: leaving the player paused closes it, with no mini-player', async ({
 }) => {
   await page.goto(`/midia/${lecture.id}`);
   await expect(page.getByRole('button', { name: 'Tocar' })).toBeEnabled();
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   await expect(page.getByRole('heading', { name: /Mídia — / })).toBeVisible();
   await expect(mini(page)).toHaveCount(0);
 });
@@ -195,7 +200,7 @@ test('AC-16: nothing focused hides behind the mini-player', async ({
   page,
 }) => {
   await playLecture(page);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   await toConversation(page);
   await search(page, 'ritmo');
   const bar = await mini(page).boundingBox();
@@ -213,7 +218,7 @@ test('AC-16: on the media list too, nothing focused hides behind the mini-player
   page,
 }) => {
   await playLecture(page);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   await expect(page.getByRole('heading', { name: /Mídia — / })).toBeVisible();
   const bar = await mini(page).boundingBox();
   await page.getByRole('heading', { name: /Mídia — / }).click();
@@ -256,7 +261,7 @@ test('a media removed while it plays in the mini-player stops and says why', asy
   await expect
     .poll(async () => (await audioState(page)).currentTime)
     .toBeGreaterThan(0.5);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   await expect(mini(page)).toBeVisible();
   expect(
     (

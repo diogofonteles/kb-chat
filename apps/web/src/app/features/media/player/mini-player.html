@@ -18,7 +18,8 @@
           <p class="problem" role="alert" i18n="@@mini.gone">
             Esta mídia não está mais no acervo ou você não tem acesso a ela.
           </p>
-        } @else if (failed()) {
+        } @else if (failed() && !echo()) {
+          <!-- Beside the page's own player the page says it, with its retry (one alert). -->
           <p class="problem" role="alert">
             <span i18n="@@mini.failed">Não consegui continuar o áudio.</span>
             <button

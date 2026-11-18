@@ -58,9 +58,11 @@ async function bookmark(
 async function openPlayer(page: Page): Promise<void> {
   await page.goto(`/midia/${lecture.id}`);
   await expect(
-    page.getByRole('heading', { name: lecture.title, level: 2 }),
+    page.getByRole('heading', { name: lecture.title, level: 1 }),
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Tocar', exact: true })).toBeEnabled();
+  await expect(
+    page.getByRole('button', { name: 'Tocar', exact: true }),
+  ).toBeEnabled();
   await expect(
     page.getByRole('list', { name: 'Trechos da transcrição' }),
   ).toBeVisible();
@@ -77,7 +79,7 @@ test('the player page scrolls its transcript and itself with the wheel, a finger
     await expectScrolls(page, page.getByRole('main'));
     await expectKeyboardScrolls(
       page,
-      page.getByRole('heading', { name: lecture.title, level: 2 }),
+      page.getByRole('heading', { name: lecture.title, level: 1 }),
     );
     // A whole one: the transcript scrolls in its own column.
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -127,15 +129,18 @@ test('the player controls work: play, skips, speed, mark with a note, search, vi
     .toBeLessThan(later - 10);
 
   // The speed pill opens its menu (a sheet on a phone), whole on screen, and sets 1,5×.
-  await page.getByRole('button', { name: /Velocidade/ }).first().click();
+  await page
+    .getByRole('button', { name: /Velocidade/ })
+    .first()
+    .click();
   const speeds = page.getByRole('menu');
   await expect(speeds).toBeVisible();
   await expectInsideViewport(page, speeds);
   await speeds.getByRole('menuitemradio', { name: /1,5/ }).click();
   await expect(speeds).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Velocidade/ }).first()).toHaveAccessibleName(
-    /1,5/,
-  );
+  await expect(
+    page.getByRole('button', { name: /Velocidade/ }).first(),
+  ).toHaveAccessibleName(/1,5/);
 
   // Mark: the note opens beside 🔖 (a sheet on a phone), saves, and the list says so.
   await page.getByRole('button', { name: 'Marcar este trecho' }).click();
@@ -164,14 +169,18 @@ test('the player controls work: play, skips, speed, mark with a note, search, vi
       name: 'Buscar na transcrição',
     });
     await search.fill('Linha 33');
-    await expect(page.getByRole('status').filter({ hasText: /1 de/ })).toBeVisible();
+    await expect(
+      page.getByRole('status').filter({ hasText: /1 de/ }),
+    ).toBeVisible();
     await search.fill('');
     // The views: Vozes and back to Transcrição.
     await page.getByRole('button', { name: 'Vozes', exact: true }).click();
     await expect(
       page.getByRole('heading', { name: 'Vozes', level: 3 }).first(),
     ).toBeVisible();
-    await page.getByRole('button', { name: 'Transcrição', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Transcrição', exact: true })
+      .click();
     await expect(
       page.getByRole('list', { name: 'Trechos da transcrição' }),
     ).toBeVisible();
@@ -188,7 +197,9 @@ test('the player controls work: play, skips, speed, mark with a note, search, vi
     await expect(
       page.getByRole('heading', { name: 'Vozes', level: 3 }).first(),
     ).toBeVisible();
-    await page.getByRole('button', { name: 'Transcrição', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Transcrição', exact: true })
+      .click();
     await expect(
       page.getByRole('list', { name: 'Trechos da transcrição' }),
     ).toBeVisible();
@@ -241,12 +252,10 @@ test('"Meus marcadores" scrolls, plays the first, searches, orders and deletes f
   }
 
   // ⋯ of a row deletes that bookmark (by its note: other projects add bookmarks too).
-  const first = page.getByRole('main').getByRole('listitem').first();
+  const first = rows.filter({ hasText: `marca ${tag} ` }).first();
   const gone = (await first.getByRole('paragraph').textContent())?.trim() ?? '';
-  expect(gone).toMatch(/^marca /);
-  await first
-    .getByRole('button', { name: /^Mais opções do marcador/ })
-    .click();
+  expect(gone).toMatch(new RegExp(`^marca ${tag} `));
+  await first.getByRole('button', { name: /^Mais opções do marcador/ }).click();
   const menu = page.getByRole('menu');
   await expectInsideViewport(page, menu);
   await menu.getByRole('menuitem', { name: 'Apagar marcador' }).click();
@@ -255,9 +264,7 @@ test('"Meus marcadores" scrolls, plays the first, searches, orders and deletes f
   // The green play opens the first one, playing from its time.
   await page.getByRole('button', { name: /^Tocar .* de \d+:\d\d$/ }).click();
   await expect(page).toHaveURL(new RegExp(`/midia/[0-9a-f-]{36}$`));
-  await expect
-    .poll(async () => (await audioState(page)).paused)
-    .toBe(false);
+  await expect.poll(async () => (await audioState(page)).paused).toBe(false);
 });
 
 test('the Fila scrolls and leads to the library', async ({ page }) => {

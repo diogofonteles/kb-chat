@@ -21,12 +21,7 @@
   } @else {
     <!-- In the player's action row (pActions o.trackActions); "Editar", "Apagar faixa"
          and "Histórico" wait at the top of ⋯ (the page asks for them). -->
-    <a
-      uiButton="outline"
-      size="sm"
-      class="bounds"
-      [routerLink]="boundsLink()"
-    >
+    <a uiButton="outline" size="sm" class="bounds" [routerLink]="boundsLink()">
       <ui-icon name="scissors" [size]="16" />
       <span i18n="@@trackEdit.bounds">Ajustar início e fim</span>
     </a>

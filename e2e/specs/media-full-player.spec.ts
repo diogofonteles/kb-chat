@@ -16,6 +16,7 @@ import {
   uploadReady,
   useTheme,
   type UploadedMedia,
+  leaveToMediaList,
 } from './media-helpers.js';
 
 let lecture: UploadedMedia;
@@ -165,7 +166,7 @@ test('AC-3: leaving the page never brings back an older position over another de
   await playPast(laptop, 1.5);
   await laptop.getByRole('button', { name: 'Pausar' }).click();
   // Away from the page: the laptop keeps nothing that could override later saves.
-  await laptop.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(laptop);
   await expect(laptop.getByRole('heading', { name: /Mídia — / })).toBeVisible();
 
   const phone = await pageAs(browser, email, null);
@@ -522,8 +523,11 @@ test('AC-13: no volume control where the volume is read-only (iPhone, simulated)
     });
   });
   await openPlayer(page, lecture);
-  // The player tells once it knows (`data-volume`): only then is "no control" an answer.
-  await expect(page.locator('.options')).toHaveAttribute('data-volume', 'off');
+  // Each player tells once it knows (`data-volume`): only then is "no control" an answer.
+  await expect(page.locator('[data-volume="off"]').first()).toBeAttached();
+  await expect(
+    page.locator('[data-volume]:not([data-volume="off"])'),
+  ).toHaveCount(0);
   await expect(page.getByRole('slider', { name: 'Volume' })).toHaveCount(0);
 });
 

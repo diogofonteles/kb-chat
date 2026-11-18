@@ -11,6 +11,7 @@ import {
   inject,
   input,
   output,
+  signal,
   untracked,
   viewChild,
 } from '@angular/core';
@@ -34,6 +35,7 @@ import { MediaEngine } from '@core/media/media-engine.js';
 import { TracksStore } from '@core/media/tracks-store.js';
 import { mediaPagePath } from '@core/media/media-api.js';
 import { PlaybackClock } from '@core/media/playback-clock.js';
+import { ProgressSaver } from '@core/media/progress-saver.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
 import { RouterLink } from '@angular/router';
@@ -41,6 +43,9 @@ import { UiIcon } from '@ui/icon.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import { PlayerShortcuts } from './player-shortcuts.js';
 import { PlayerVolume } from './player-volume.js';
+import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { from } from 'rxjs';
 import { SeekSlider } from './seek-slider.js';
 import { ShortcutsDialog } from './shortcuts-dialog.js';
 import { SkipsDialog } from './skips-dialog.js';
@@ -89,6 +94,7 @@ const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
   templateUrl: './media-player.html',
   styleUrl: './media-player.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[attr.data-volume]': 'volumeState()' },
 })
 export class MediaPlayer {
   /** The subtitles of the current transcript (KBC-038); empty while none is loaded. */
@@ -126,6 +132,21 @@ export class MediaPlayer {
   private readonly preferences = inject(ListeningPreferences);
   private readonly shortcuts = inject(PlayerShortcuts);
   private readonly volumeMemory = inject(PlayerVolume);
+  /**
+   * The volume lives in the app's player bar (v2 · Mídia — Player), never here: once the
+   * browser answered whether the page may set it, this player says it has no control of its
+   * own (`data-volume`, for tests and tools, as the bar does).
+   */
+  private readonly saver = inject(ProgressSaver);
+  /**
+   * A phone (below 1024 px): no player bar under the full-screen player, so "Fechar o
+   * player", the bar's ✕ on a desktop, is at the foot of ⋯ (v2 · Mídia — Player, celular).
+   */
+  private readonly phone = signal(false);
+  private readonly volumeAnswer = toSignal(from(inject(VOLUME_SUPPORT)));
+  protected readonly volumeState = computed(() =>
+    this.volumeAnswer() === undefined ? 'pending' : 'off',
+  );
   private readonly shortcutsDialog = viewChild.required(ShortcutsDialog);
   private readonly skipsDialog = viewChild.required(SkipsDialog);
   private readonly sleepDialog = viewChild.required(SleepTimerDialog);
@@ -218,14 +239,26 @@ export class MediaPlayer {
   /** ⋯ as in the v2 frame: the page's actions, a line, the listening ones, a line, keys. */
   protected readonly moreOptions = computed<readonly MenuOption[]>(() => {
     const page = this.pageOptions();
+    // The bar's ✕ where there is no bar (a phone), first of the player's own options.
+    const close = this.phone() && this.engine.source() !== null;
     const on = $localize`:@@player.state.on:ligado`;
     const off = $localize`:@@player.state.off:desligado`;
     return [
       ...page,
+      ...(close
+        ? [
+            {
+              id: 'close',
+              icon: 'close' as const,
+              divider: page.length > 0,
+              label: $localize`:@@mini.close:Fechar o player`,
+            },
+          ]
+        : []),
       {
         id: 'link',
         icon: 'link',
-        divider: page.length > 0,
+        divider: page.length > 0 && !close,
         label: $localize`:@@player.copyMinuteLink:Copiar link deste minuto`,
       },
       {
@@ -335,6 +368,7 @@ export class MediaPlayer {
     );
     this.preferences.load();
     this.volumeMemory.restore();
+    this.followPhone(inject(DestroyRef));
     // "?" anywhere the shortcuts act opens the list; only new requests count.
     const asked = this.shortcuts.helpAsked();
     effect(() => {
@@ -400,6 +434,18 @@ export class MediaPlayer {
     );
   }
 
+  private followPhone(destroyRef: DestroyRef): void {
+    const query = this.document.defaultView?.matchMedia?.(
+      '(max-width: 1023px)',
+    );
+    if (!query) return;
+    this.phone.set(query.matches);
+    const changed = (event: MediaQueryListEvent) =>
+      this.phone.set(event.matches);
+    query.addEventListener('change', changed);
+    destroyRef.onDestroy(() => query.removeEventListener('change', changed));
+  }
+
   /** After a page action's dialog closes, the focus goes back to ⋯ (WCAG 2.4.3). */
   focusMore(): void {
     this.more().focus();
@@ -418,6 +464,16 @@ export class MediaPlayer {
     if (id === 'skips') this.skipsDialog().open();
     if (id === 'sleep') this.sleepDialog().open();
     if (id === 'silences') this.silencesDialog().open();
+    if (id === 'close') this.closePlayer();
+  }
+
+  /** As the bar's ✕: stops, keeps the position and lets the media go (KBC-041 AC-11). */
+  private closePlayer(): void {
+    const source = this.engine.source();
+    this.engine.pause();
+    if (source && this.saver.gone() !== source.id) this.saver.saveNow();
+    this.engine.unload();
+    this.focusMore();
   }
 
   protected chooseSleep(id: string): void {

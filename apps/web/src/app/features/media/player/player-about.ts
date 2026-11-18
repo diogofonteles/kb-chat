@@ -20,12 +20,7 @@ import { speakersUrl } from '@core/media/speakers-api.js';
 import { TracksStore } from '@core/media/tracks-store.js';
 import { RightPanel } from '@features/shell/right-panel.js';
 import { ChatStore } from '@features/chat/chat-store.js';
-import {
-  coverCode,
-  coverGradient,
-  UiIcon,
-  UiIconButton,
-} from '@ui/index.js';
+import { coverCode, coverGradient, UiIcon, UiIconButton } from '@ui/index.js';
 import { BookmarkList } from '../bookmark-list.js';
 import { ArchivedTracks } from '../track-edit/archived-tracks.js';
 import { TrackPreparationStatus } from '../tracks/track-preparation.js';
@@ -90,7 +85,8 @@ import { VoiceTag } from '../voices/voice-tag.js';
       </div>
     }
     @if (canEdit()) {
-      <section class="card" aria-labelledby="about-voices-title">
+      <!-- Cards, not regions: the Vozes view is the region of that name. -->
+      <div class="card">
         <h3 id="about-voices-title" i18n="@@voices.title">Vozes</h3>
         @if (voices().length) {
           <p class="quiet" i18n="@@player.about.voicesFound">
@@ -129,11 +125,11 @@ import { VoiceTag } from '../voices/voice-tag.js';
             Dá para separar as vozes quando a transcrição estiver pronta.
           </p>
         }
-      </section>
+      </div>
       <app-archived-tracks class="archived" [recordingId]="media().id" />
     }
     @if (media().author; as person) {
-      <section class="card" aria-labelledby="about-author-title">
+      <div class="card">
         <h3 id="about-author-title" i18n="@@nowPlaying.aboutAuthor">
           Sobre a autora
         </h3>
@@ -151,7 +147,7 @@ import { VoiceTag } from '../voices/voice-tag.js';
             }
           </div>
         </div>
-      </section>
+      </div>
     }
   `,
   styleUrl: './player-about.css',

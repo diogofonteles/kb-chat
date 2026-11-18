@@ -1,3 +1,4 @@
+import { desktop } from './shell-helpers.js';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { CSRF, expect } from './fixtures.js';
 import { uniqueTag, uploadReady } from './media-helpers.js';
@@ -118,6 +119,23 @@ export async function showView(
   const chip = page
     .getByRole('group', { name: 'Ver' })
     .getByRole('button', { name, exact: true });
-  await chip.click();
+  // The full-screen player (phone) shows no chips over its transcript card: "Ver vozes"
+  // waits in ⋯ there (pMobile); the Vozes view has its chips to go back.
+  if (name === 'Vozes' && !desktop(page)) {
+    await page.getByRole('button', { name: 'Mais opções' }).click();
+    await page
+      .getByRole('menu')
+      .getByRole('menuitem', { name: 'Ver vozes' })
+      .click();
+  } else if (name === 'Transcrição' && !desktop(page)) {
+    // Its chips show only over the other views: from Vozes a tap goes back; then the
+    // card stands alone, with no chips over it.
+    if (await chip.isVisible()) await chip.click();
+    await expect(page.locator('app-transcript-panel')).toBeVisible();
+    await expect(chip).toBeHidden();
+    return;
+  } else {
+    await chip.click();
+  }
   await expect(chip).toHaveAttribute('aria-pressed', 'true');
 }

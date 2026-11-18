@@ -8,6 +8,8 @@ import {
   uploadReady,
   useTheme,
   type UploadedMedia,
+  leaveToMediaList,
+  closePlayer,
 } from './media-helpers.js';
 
 let lecture: UploadedMedia;
@@ -135,7 +137,7 @@ test('AC-4: "No fim desta mídia" stops at the end, and nothing else plays', asy
 }) => {
   await openPlayer(page, short);
   await chooseTimer(page, 'No fim desta mídia');
-  await expect(moon(page)).toContainText('No fim');
+  await expect(moon(page)).toContainText('Para no fim');
   await play(page);
   await expect
     .poll(async () => (await audioState(page)).ended, {
@@ -160,7 +162,11 @@ test('AC-5: where the volume is read-only, it pauses with no fade', async ({
     Object.assign(window, { volumeSets: sets });
   });
   await openPlayer(page);
-  await expect(page.locator('.options')).toHaveAttribute('data-volume', 'off');
+  // Each player tells once it knows (`data-volume`): only then is "no control" an answer.
+  await expect(page.locator('[data-volume="off"]').first()).toBeAttached();
+  await expect(
+    page.locator('[data-volume]:not([data-volume="off"])'),
+  ).toHaveCount(0);
   await chooseTimer(page, '5 min');
   await play(page);
   await page.clock.fastForward('04:55');
@@ -177,10 +183,10 @@ test('AC-6: closing the player turns the timer off', async ({ page }) => {
   await openPlayer(page);
   await chooseTimer(page, '15 min');
   await play(page);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   const mini = page.getByRole('region', { name: 'Mini-player' });
   await expect(mini).toContainText(/Timer para dormir: 1[45]:\d\d/);
-  await mini.getByRole('button', { name: 'Fechar o player' }).click();
+  await closePlayer(page);
   await expect(mini).toHaveCount(0);
   await page.goto(`/midia/${lecture.id}`);
   await expect(
@@ -298,7 +304,7 @@ test('BR-2: opening another media in the app turns the timer off, silently', asy
   await openPlayer(page);
   await chooseTimer(page, '15 min');
   await expect(moon(page)).toBeVisible();
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   await page.locator(`a[href="/midia/${short.id}"]`).click();
   await expect(page.getByRole('heading', { name: short.title })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Tocar' })).toBeEnabled();

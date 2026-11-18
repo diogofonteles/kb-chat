@@ -76,7 +76,7 @@
   text-decoration: underline;
 }
 
-.hero h2 {
+.hero h1 {
   margin: 0;
   font-size: 3.5rem;
   font-weight: 800;
@@ -211,7 +211,8 @@
   gap: var(--space-3);
   min-width: 0;
   min-height: 22rem;
-  padding: var(--space-2) var(--space-8) var(--space-8) calc(var(--space-8) + 28px);
+  padding: var(--space-2) var(--space-8) var(--space-8)
+    calc(var(--space-8) + 28px);
 }
 
 .views {
@@ -368,7 +369,10 @@
       var(--color-bg) 52.75rem
     );
     /* Where the mark sits, beside the title (head 60 + 8 + cover + gap). */
-    --mark-top: calc(3.75rem + var(--space-2) + min(calc(100vw - 3rem), 342px) + var(--space-6) + 2px);
+    --mark-top: calc(
+      3.75rem + var(--space-2) + min(calc(100vw - 3rem), 342px) +
+        var(--space-6) + 2px
+    );
     padding-bottom: calc(var(--space-8) + var(--shell-mobile-foot, 0px));
   }
 
@@ -461,7 +465,7 @@
     display: none;
   }
 
-  .hero h2 {
+  .hero h1 {
     overflow: hidden;
     font-size: 1.375rem;
     font-weight: 700;
@@ -558,7 +562,7 @@
     padding-right: 0;
   }
 
-  .waiting .hero h2 {
+  .waiting .hero h1 {
     white-space: normal;
   }
 
@@ -572,14 +576,19 @@
     gap: var(--space-3);
     padding: var(--space-4);
     border-radius: 0.75rem;
-    background: color-mix(in srgb, var(--page-tint, #8a4a2e) 70%, var(--color-surface));
+    background: color-mix(
+      in srgb,
+      var(--page-tint, #8a4a2e) 70%,
+      var(--color-cover-ink)
+    );
+    color: var(--color-on-cover);
     text-align: left;
   }
 
   .waiting-card .card-title {
     display: block;
     margin: 0 0 var(--space-2);
-    color: var(--color-text);
+    color: var(--color-on-cover);
     font-size: var(--text-sm);
     font-weight: 700;
   }
@@ -589,12 +598,13 @@
   }
 
   .waiting-card .empty-title {
+    color: var(--color-on-cover) !important;
     font-size: 1.3125rem !important;
     line-height: 1.6875rem;
   }
 
   .waiting-card p:not(.card-title, .empty-title) {
-    color: rgb(255 255 255 / 72%);
+    color: var(--color-on-cover-dim);
     font-size: 0.9375rem;
   }
 

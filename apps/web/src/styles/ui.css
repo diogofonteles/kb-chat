@@ -182,7 +182,13 @@
   cursor: pointer;
 }
 
-.ui-chip:hover:not(:disabled) {
+/* Only an off chip lightens: an on one keeps its ink on hover (4.5:1). */
+.ui-chip:hover:not(
+    :disabled,
+    [aria-pressed='true'],
+    [aria-current='page'],
+    .ui-chip--on
+  ) {
   background: color-mix(
     in srgb,
     var(--color-surface-muted) 80%,
