@@ -372,9 +372,12 @@ test('AC-7, AC-14: "?" opens the shortcuts, which can be turned off; Esc gives t
   await page.keyboard.press('Shift+Slash');
   const dialog = page.getByRole('dialog', { name: 'Atalhos de teclado' });
   await expect(dialog).toBeVisible();
-  await dialog
-    .getByRole('checkbox', { name: 'Usar atalhos de uma tecla' })
-    .uncheck();
+  const onOff = dialog.getByRole('switch', {
+    name: 'Usar atalhos de uma tecla',
+  });
+  await expect(onOff).toBeChecked();
+  await onOff.click();
+  await expect(onOff).not.toBeChecked();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await focusPage(page);

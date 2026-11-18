@@ -120,8 +120,42 @@ const activeSegment = (page: Page) =>
 const backToCurrent = (page: Page) =>
   page.getByRole('button', { name: 'Voltar ao trecho atual' });
 
-const captionsButton = (page: Page) =>
-  page.getByRole('button', { name: 'Legendas' });
+/**
+ * The transcript's search field: beside the views on a desktop; on a phone behind the
+ * card's search button (pMobile: search and expand as round buttons on the card).
+ */
+async function searchField(page: Page): Promise<Locator> {
+  const field = page.getByLabel('Buscar na transcrição');
+  if (!desktop(page) && !(await field.isVisible()))
+    await page
+      .getByRole('button', { name: 'Mostrar a busca na transcrição' })
+      .click();
+  await expect(field).toBeVisible();
+  return field;
+}
+
+/**
+ * "Legendas" (KBC-038): in ⋯ on the v2 player (the frames' rows have no subtitles
+ * button), its state in words beside it ("ligado" / "desligado").
+ */
+async function toggleCaptions(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  await page.getByRole('menuitem', { name: /^Legendas/ }).click();
+  await expect(page.getByRole('menu')).toHaveCount(0);
+}
+
+/** Whether "Legendas" says it is on, read in ⋯ and closed again. */
+async function captionsOn(page: Page): Promise<boolean> {
+  const more = page.getByRole('button', { name: 'Mais opções' });
+  await more.click();
+  const item = page.getByRole('menuitem', { name: /^Legendas/ });
+  const words = (await item.textContent()) ?? '';
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  if (/desligado/.test(words)) return false;
+  expect(words).toMatch(/ligado/);
+  return true;
+}
 
 /** The element's events worth seeing when frames of playback are not measured. */
 const MEDIA_EVENTS = [
@@ -231,10 +265,9 @@ test('AC-1, AC-4: subtitles follow the audio within 84 characters, stay on for a
   page,
 }) => {
   await openPlayer(page, lecture);
-  const cc = captionsButton(page);
-  await expect(cc).toHaveAttribute('aria-pressed', 'false');
-  await cc.click();
-  await expect(cc).toHaveAttribute('aria-pressed', 'true');
+  expect(await captionsOn(page)).toBe(false);
+  await toggleCaptions(page);
+  expect(await captionsOn(page)).toBe(true);
   await recordCaptions(page);
   await playFromText(page, 'O rei Salomão falou.');
   await expect
@@ -248,9 +281,9 @@ test('AC-1, AC-4: subtitles follow the audio within 84 characters, stay on for a
   await page.getByRole('button', { name: 'Pausar' }).click();
 
   await openPlayer(page, other);
-  await expect(captionsButton(page)).toHaveAttribute('aria-pressed', 'true');
+  expect(await captionsOn(page)).toBe(true);
   await page.locator('body').press('c');
-  await expect(captionsButton(page)).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => captionsOn(page)).toBe(false);
   await expect(page.locator('app-media-player .caption-area')).toHaveCount(0);
 });
 
@@ -258,7 +291,7 @@ test('AC-1: a full two-line subtitle is never clipped, at 390 px either', async 
   page,
 }, testInfo) => {
   await openPlayer(page, lecture);
-  await captionsButton(page).click();
+  await toggleCaptions(page);
   const line = segmentsList(page).getByText(DENSE_LINE);
   await line.scrollIntoViewIfNeeded();
   await playFromText(page, DENSE_LINE);
@@ -349,7 +382,7 @@ test('AC-8, AC-7: one Tab stop; ↓ twice and Enter plays the third segment; Tab
   page,
 }) => {
   await openPlayer(page, lecture);
-  await page.getByLabel('Buscar na transcrição').focus();
+  await (await searchField(page)).focus();
   await page.keyboard.press('Tab');
   const first = segmentsList(page).getByRole('button', {
     name: 'Tocar de 0 segundos',
@@ -384,7 +417,7 @@ test('AC-9: "salomao" finds Salomão three times, Enter goes to the 2nd and "Toc
   page,
 }) => {
   await openPlayer(page, lecture);
-  const field = page.getByLabel('Buscar na transcrição');
+  const field = await searchField(page);
   await field.fill('salomao');
   const status = page.locator('app-transcript-panel [role="status"]');
   await expect(status).toHaveText('1 de 3');
@@ -511,11 +544,15 @@ test('AC-6: a low-confidence transcript says so above the text', async ({
   page,
 }) => {
   await openPlayer(page, noisy);
-  const notice = page
-    .locator('app-transcript-panel')
-    .getByText(
-      'Transcrição automática de baixa confiança: pode haver trechos errados.',
-    );
+  // The v2 banner (lib.js banner 'warn'): its title and its line, over the text; on a
+  // phone the full-screen player shows it above the transcript card.
+  const lowBanner = (scope: Page) =>
+    scope
+      .locator('ui-banner')
+      .filter({ hasText: 'Transcrição automática de baixa confiança' })
+      .filter({ hasText: 'Pode haver trechos errados.' })
+      .locator('visible=true');
+  const notice = lowBanner(page).first();
   await expect(notice).toBeVisible();
   const [noticeBox, listBox] = await Promise.all([
     notice.boundingBox(),
@@ -523,22 +560,18 @@ test('AC-6: a low-confidence transcript says so above the text', async ({
   ]);
   expect((noticeBox?.y ?? 0) < (listBox?.y ?? 0)).toBe(true);
   // Subtitles on: a phone stacks the column far below, so a short notice goes with them.
-  await captionsButton(page).click();
+  await toggleCaptions(page);
   const badge = page.getByText(
     'Legendas de baixa confiança: podem ter trechos errados.',
   );
   if (desktop(page)) await expect(badge).toBeHidden();
   else await expect(badge).toBeInViewport();
-  await captionsButton(page).click();
+  await toggleCaptions(page);
   // Hidden column, subtitles on: the header keeps the notice in view (KBC-036 BR-5).
   await page.getByRole('button', { name: 'Mais opções' }).click();
   await page.getByRole('menuitem', { name: 'Esconder transcrição' }).click();
-  await captionsButton(page).click();
-  await expect(
-    page.getByText(
-      'Transcrição automática de baixa confiança: pode haver trechos errados.',
-    ),
-  ).toBeVisible();
+  await toggleCaptions(page);
+  await expect(lowBanner(page).first()).toBeVisible();
 });
 
 test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
@@ -735,9 +768,7 @@ test('NFR-2: a 2 h transcript (~20 000 words) opens and answers clicks and keys 
   for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowUp');
   await page.keyboard.press('Home');
   await step('search');
-  await page
-    .getByLabel('Buscar na transcrição')
-    .pressSequentially('assunto 14');
+  await (await searchField(page)).pressSequentially('assunto 14');
   const status = page.locator('app-transcript-panel [role="status"]');
   // "assunto 14": 14, 140–149 and 1 400–1 499, searched once typing pauses.
   await expect(status).toHaveText('1 de 111');
@@ -775,11 +806,11 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
   }, testInfo) => {
     await useTheme(page, theme);
     await openPlayer(page, lecture);
-    await captionsButton(page).click();
+    await toggleCaptions(page);
     await playFromText(page, 'O rei Salomão falou.');
     await expect(page.locator('app-media-player .caption')).toBeVisible();
     await page.getByRole('button', { name: 'Pausar' }).click();
-    await page.getByLabel('Buscar na transcrição').fill('salomao');
+    await (await searchField(page)).fill('salomao');
     await page.waitForFunction(() => document.getAnimations().length === 0);
     expect(await seriousViolations(page)).toEqual([]);
     await saveEvidence(page, `${testInfo.project.name}-${theme}-normal`);

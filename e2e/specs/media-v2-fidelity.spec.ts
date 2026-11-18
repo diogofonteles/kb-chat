@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { CSRF, expect, ownerApi, test } from './fixtures.js';
 import {
   audioState,
@@ -186,9 +186,9 @@ test('the player controls work: play, skips, speed, mark with a note, search, vi
     await expect(
       page.getByRole('list', { name: 'Trechos da transcrição' }),
     ).toBeVisible();
-    // "Sobre" closes with its ✕.
+    // The panel (Sobre | Fila | Ouvidas) closes with its ✕.
     const about = page.getByRole('button', {
-      name: 'Fechar Sobre este áudio',
+      name: 'Fechar o painel',
     });
     await about.click();
     await expect(about).toHaveCount(0);
@@ -290,4 +290,139 @@ test('the Fila scrolls and leads to the library', async ({ page }) => {
     await page.getByRole('link', { name: '← Biblioteca' }).click();
     await expect(page).toHaveURL(/\/biblioteca$/);
   }
+});
+
+/** A menu or sheet shown whole: on screen, every item reached without scrolling inside it. */
+async function expectWhole(page: Page, box: Locator): Promise<void> {
+  await expectInsideViewport(page, box);
+  const inner = await box.evaluate((el) => el.scrollHeight - el.clientHeight);
+  expect(inner, 'no scrolling inside').toBeLessThanOrEqual(1);
+  await expectInsideViewport(page, box.locator('[role^="menuitem"]').last());
+}
+
+test('the panel tabs, the queue button, the titled speed menu, ⋯ whole, the dialogs and the search say what they do', async ({
+  page,
+}) => {
+  await openPlayer(page);
+
+  // The transcript card scrolls under the finger on a phone, the list on a desktop.
+  const transcript = page.getByRole('list', { name: 'Trechos da transcrição' });
+  await transcript.scrollIntoViewIfNeeded();
+  await expectScrolls(page, transcript);
+
+  // Velocidade: its name over the choices, the current one checked.
+  await page
+    .getByRole('button', { name: /Velocidade/ })
+    .first()
+    .click();
+  const speeds = page.getByRole('menu', { name: 'Velocidade' });
+  await expect(speeds.getByText('Velocidade', { exact: true })).toBeVisible();
+  // The one in use (the account's speed: an earlier test may have changed it), only it.
+  await expect(
+    speeds.locator('[role="menuitemradio"][aria-checked="true"]'),
+  ).toHaveCount(1);
+  await expectWhole(page, speeds);
+  await page.keyboard.press('Escape');
+  await expect(speeds).toHaveCount(0);
+
+  // ⋯ whole on screen, its last item ("Atalhos de teclado") in view with no inner scroll.
+  const more = page.getByRole('button', { name: 'Mais opções' });
+  await more.click();
+  const menu = page.getByRole('menu');
+  await expect(
+    menu.getByRole('menuitem', { name: /Atalhos de teclado/ }),
+  ).toBeVisible();
+  await expectWhole(page, menu);
+
+  // Timer para dormir: ✕ and "Fechar"; a choice starts it and the moon turns green.
+  await menu.getByRole('menuitem', { name: 'Timer para dormir' }).click();
+  const sleep = page.getByRole('dialog', { name: 'Timer para dormir' });
+  // ✕ and "Fechar" on a desktop; the phone's sheet has its "Fechar" (mOver: no ✕).
+  await expect(sleep.getByRole('button', { name: 'Fechar' })).toHaveCount(
+    desktop(page) ? 2 : 1,
+  );
+  await expectInsideViewport(page, sleep);
+  await sleep.getByRole('button', { name: 'No fim desta mídia' }).click();
+  await expect(sleep).toBeHidden();
+  const moon = page
+    .locator('app-media-player')
+    .getByRole('button', { name: 'Timer para dormir', exact: true });
+  if (desktop(page)) {
+    await expect(
+      page.locator('app-media-player').getByRole('button', {
+        name: 'Timer para dormir: no fim desta mídia',
+      }),
+    ).toHaveText(/Para no fim/);
+  } else {
+    // The phone keeps the moon in its row, green, and the chip in the row below.
+    await expect(moon).toBeVisible();
+    await expect(moon).toHaveClass(/\bon\b/);
+  }
+
+  // Atalhos de teclado: a switch, ✕ and "Fechar".
+  await more.click();
+  await page.getByRole('menuitem', { name: /Atalhos de teclado/ }).click();
+  const keys = page.getByRole('dialog', { name: 'Atalhos de teclado' });
+  const onOff = keys.getByRole('switch', { name: /Usar atalhos de uma tecla/ });
+  await expect(onOff).toBeChecked();
+  await onOff.click();
+  await expect(onOff).not.toBeChecked();
+  await onOff.click();
+  await expect(onOff).toBeChecked();
+  await expectInsideViewport(page, keys);
+  await keys.getByRole('button', { name: 'Fechar' }).first().click();
+  await expect(keys).toBeHidden();
+
+  if (!desktop(page)) return;
+
+  // Nothing found in the transcript is said in words under the search.
+  const search = page.getByRole('searchbox', { name: 'Buscar na transcrição' });
+  await search.fill('zzzz');
+  await expect(
+    page.getByText("Nenhum trecho com 'zzzz'.").first(),
+  ).toBeVisible();
+  await search.fill('');
+
+  // The right panel's tabs: Sobre (the bookmarks), Fila (what plays, A seguir), Ouvidas.
+  const tabs = page.getByRole('tablist', { name: 'Painel do player' });
+  await expect(tabs.getByRole('tab')).toHaveText(['Sobre', 'Fila', 'Ouvidas']);
+  await expect(tabs.getByRole('tab', { name: 'Sobre' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await tabs.getByRole('tab', { name: 'Fila' }).click();
+  const panel = page.getByRole('tabpanel', { name: 'Fila' });
+  await expect(
+    panel.getByRole('heading', { name: 'Tocando agora' }),
+  ).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'A seguir' })).toBeVisible();
+  await expect(panel.getByText(lecture.title)).toBeVisible();
+  // ← and → walk the tabs (APG).
+  await page.keyboard.press('ArrowRight');
+  await expect(
+    page
+      .getByRole('tabpanel', { name: 'Ouvidas' })
+      .getByRole('heading', { name: 'Ouvidas recentemente' }),
+  ).toBeVisible();
+
+  // The bar's queue button: green on Fila, back to Sobre on this page.
+  const bar = page.getByRole('region', { name: 'Mini-player' });
+  const queue = bar.getByRole('button', { name: 'Fila', exact: true });
+  await queue.click();
+  await expect(queue).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('tab', { name: 'Fila' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await queue.click();
+  await expect(queue).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('tab', { name: 'Sobre' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  // "Abrir o player" on its own page brings its head back.
+  await bar.getByRole('button', { name: 'Abrir o player' }).click();
+  await expect(
+    page.getByRole('heading', { name: lecture.title, level: 1 }),
+  ).toBeInViewport();
 });
