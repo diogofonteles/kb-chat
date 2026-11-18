@@ -520,7 +520,9 @@ export class CollectionDialog {
     this.busy.set(false);
   }
 
+  /** The name takes the focus, not ✕ (the first control of the head). */
   private show(): void {
     this.dialog().nativeElement.showModal();
+    this.nameInput().nativeElement.focus();
   }
 }

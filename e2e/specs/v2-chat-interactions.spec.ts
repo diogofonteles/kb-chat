@@ -181,6 +181,10 @@ test.describe('the results', () => {
     await expect(genres).toHaveAttribute('open', '');
     const first = genres.getByRole('checkbox').first();
     await first.check();
+    // A narrower choice is counted on the results already there (filterSections).
+    await expect(
+      sheet.getByRole('button', { name: /^Ver \d+ resultados?$/ }),
+    ).toBeVisible();
     await sheet.getByRole('button', { name: 'Limpar' }).click();
     await expect(first).not.toBeChecked();
     // filterSections: "Autoria" radios and the first facet open, no Cancelar (Escape).
@@ -215,7 +219,8 @@ test.describe('the document page', () => {
   test('its tools: the occurrences step, Compartilhar shares, a subject opens', async ({
     page,
   }) => {
-    await searchByMeaning(page, 'natureza setupla');
+    // Two words apart in the text: two occurrences ("NATUREZA SÉTUPLA" side by side is one).
+    await searchByMeaning(page, 'setupla setuplicidade');
     await page
       .locator('app-result-card')
       .filter({ hasText: /A Natureza Sétupla/i })
@@ -265,6 +270,87 @@ test.describe('the document page', () => {
     await expect(doc.getByRole('heading', { level: 2 })).toHaveText(
       /NATUREZA/i,
     );
+  });
+});
+
+test.describe('the document page menu', () => {
+  test.beforeEach(startInSearchView);
+
+  test('Escape with its ⋯ open closes the menu only, then a second one the page', async ({
+    page,
+  }) => {
+    await searchByMeaning(page, 'natureza setupla');
+    await page
+      .locator('app-result-card')
+      .filter({ hasText: /A Natureza Sétupla/i })
+      .first()
+      .locator('button.card')
+      .click();
+    const doc = page.locator('app-document-panel');
+    await expect(doc.getByRole('heading', { level: 2 })).toBeVisible();
+    await doc.getByRole('button', { name: 'Mais opções' }).first().click();
+    const menu = page.getByRole('menu', { name: 'Mais opções do documento' });
+    await expectOnScreen(page, menu);
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(doc.getByRole('heading', { level: 2 })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(doc).toBeHidden();
+  });
+});
+
+test.describe('the phone tabs', () => {
+  test.beforeEach(startInSearchView);
+
+  test('Conversas lists the conversations, a row reopens one, Buscar keeps its tab on', async ({
+    page,
+  }) => {
+    test.skip(desktop(page), 'The tabs are the phone navigation.');
+    await searchByMeaning(page, 'lei do ritmo');
+    await page.goto('/');
+    const nav = page.locator('app-bottom-nav');
+    await nav.getByRole('link', { name: 'Conversas' }).click();
+    const list = page.getByRole('list', { name: 'Conversas' });
+    await expect(list).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Tudo' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    // The newest first: the search just made (earlier runs may have left more).
+    const rows = list.getByRole('listitem').filter({ hasText: 'lei do ritmo' });
+    const row = rows.first();
+    await expect(row.getByText(/^Busca · /)).toBeVisible();
+    // Pesquisa com IA hides the searches; Tudo brings them back.
+    await page.getByRole('radio', { name: 'Pesquisa com IA' }).click();
+    await expect(rows).toHaveCount(0);
+    await page.getByRole('radio', { name: 'Tudo' }).click();
+    // ⋯ holds Abrir and Apagar conversa, on screen.
+    await row
+      .first()
+      .getByRole('button', { name: /^Mais opções/ })
+      .click();
+    const menu = page.getByRole('menu', { name: 'Opções da conversa' });
+    await expectOnScreen(page, menu);
+    await expect(
+      menu.getByRole('menuitem', { name: 'Apagar conversa' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await row
+      .first()
+      .getByRole('button', { name: /lei do ritmo/ })
+      .first()
+      .click();
+    await expect(page.locator('app-result-card').first()).toBeVisible();
+    await expect(list).toBeHidden();
+
+    await page.goto('/');
+    const buscar = nav.getByRole('link', { name: 'Buscar' });
+    await buscar.click();
+    await expect(buscar).toHaveAttribute('aria-current', 'page');
+    await expect(
+      nav.getByRole('link', { name: 'Conversas' }),
+    ).not.toHaveAttribute('aria-current', 'page');
   });
 });
 
@@ -322,8 +408,14 @@ test.describe('the collection dialog', () => {
     const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
     await expect(dialog).toBeVisible();
     const create = dialog.getByRole('button', { name: 'Criar acervo' });
-    // The cover waits for the collection ("Capa pela sigla").
-    await expect(dialog.getByText('Capa pela sigla')).toBeVisible();
+    // The cover waits for the collection: "Capa pela sigla" on desktop, the folder alone on
+    // a phone (cmCollection).
+    if (desktop(page))
+      await expect(dialog.getByText('Capa pela sigla')).toBeVisible();
+    else {
+      await expect(dialog.locator('.cover-empty')).toBeVisible();
+      await expect(dialog.getByText('Capa pela sigla')).toBeHidden();
+    }
     await dialog.getByLabel('Nome').fill('!!!');
     await create.click();
     await expect(
@@ -367,5 +459,25 @@ test.describe('the AI research', () => {
     await page.keyboard.press('Escape');
     await expect(source).toBeHidden();
     await expect(answer).toBeVisible();
+
+    // Fontes: a desktop row's ⋯ (Abrir, Copiar referência); a phone's FONTE n card.
+    const row = answer.locator('button.source').first();
+    if (desktop(page)) {
+      await answer
+        .getByRole('button', { name: /^Mais opções da fonte \d+$/ })
+        .first()
+        .click();
+      const menu = page.getByRole('menu', { name: 'Mais opções da fonte' });
+      await expectOnScreen(page, menu);
+      await menu.getByRole('menuitem', { name: 'Abrir' }).click();
+      await expect(source.getByRole('heading', { level: 2 })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(source).toBeHidden();
+    } else {
+      await expect(row.locator('.source-kicker')).toHaveText(/^FONTE \d+$/);
+      await expect(answer.locator('.source-more')).toBeHidden();
+      await row.click();
+      await expect(source.getByRole('heading', { level: 2 })).toBeVisible();
+    }
   });
 });

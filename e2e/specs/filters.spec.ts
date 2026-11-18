@@ -47,8 +47,11 @@ test.describe('desktop filters', () => {
     page,
   }) => {
     await askSemantic(page, 'sétupla');
+    // One result for the document: its copy is no card of its own.
     await expect(
-      page.getByRole('button', { name: /A Natureza Sétupla/ }),
+      page
+        .locator('app-result-card')
+        .filter({ hasText: /A Natureza Sétupla/i }),
     ).toHaveCount(1);
     // A lone best result: its copy in "Cópia deste documento" beside it, "+1 cópia" a pill.
     await expect(page.getByText('+1 cópia')).toBeVisible();

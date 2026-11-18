@@ -132,7 +132,7 @@ async function expectKeyboardScrolls(page: Page, text: Locator): Promise<void> {
 async function openedDocument(page: Page): Promise<Locator> {
   const panel = page.getByRole('dialog');
   await expect(panel.getByRole('heading', { level: 2 })).toBeVisible();
-  await expect(panel.getByText(/1 de \d+ ocorrências/)).toBeVisible();
+  await expect(panel.getByText(/1 de \d+ ocorrências?/)).toBeVisible();
   await expect(panel.locator('mark').first()).toBeInViewport();
   return panel;
 }

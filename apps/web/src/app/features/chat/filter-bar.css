@@ -282,6 +282,17 @@
   max-height: 85dvh;
 }
 
+/* Its options a 15 px line with 12 px above and below (46 px rows), Aplicar 32 above the
+   sheet's foot. */
+.sheet.one-facet .option {
+  min-height: 2.875rem;
+  font-size: 0.9375rem;
+}
+
+.sheet.one-facet .sheet-foot {
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+}
+
 .sheet-head h2 {
   margin: 0;
   font-size: 1.125rem;
