@@ -1,0 +1,116 @@
+/* "Sobre este áudio" (v2 · Mídia — Player): the 340 column's cards, #1f1f1f with 16 inside. */
+:host {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  min-width: 0;
+}
+
+:host(.in-panel) {
+  padding: var(--space-4);
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  min-height: 2.5rem;
+}
+
+.tab {
+  margin: 0 auto 0 0;
+  padding-bottom: 0.375rem;
+  border-bottom: 2px solid var(--color-accent);
+  font-size: var(--text-item);
+  font-weight: 700;
+}
+
+.card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.card[hidden] {
+  display: none;
+}
+
+h3 {
+  margin: 0;
+  font-size: var(--text-item);
+  font-weight: 700;
+}
+
+.quiet {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  line-height: 1.45;
+}
+
+.voices {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.voices li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.voices app-voice-tag {
+  flex: 1;
+  min-width: 0;
+}
+
+.spoken {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.applied {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.applied a {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.person-name {
+  margin: 0;
+  font-size: var(--text-item);
+  font-weight: 700;
+}
+
+.archived:empty {
+  display: none;
+}

@@ -19,31 +19,17 @@
       >
     </p>
   } @else {
-    <div class="line">
-      <button
-        #editButton
-        type="button"
-        class="primary"
-        aria-haspopup="dialog"
-        (click)="open.set('edit')"
-        i18n="@@trackEdit.edit"
-      >
-        Editar
-      </button>
-      <a class="secondary" [routerLink]="boundsLink()" i18n="@@trackEdit.bounds"
-        >Ajustar início e fim</a
-      >
-      <button
-        type="button"
-        class="danger"
-        aria-haspopup="dialog"
-        [disabled]="cutting()"
-        (click)="open.set('delete')"
-        i18n="@@trackEdit.delete"
-      >
-        Apagar faixa
-      </button>
-    </div>
+    <!-- In the player's action row (pActions o.trackActions); "Editar", "Apagar faixa"
+         and "Histórico" wait at the top of ⋯ (the page asks for them). -->
+    <a
+      uiButton="outline"
+      size="sm"
+      class="bounds"
+      [routerLink]="boundsLink()"
+    >
+      <ui-icon name="scissors" [size]="16" />
+      <span i18n="@@trackEdit.bounds">Ajustar início e fim</span>
+    </a>
   }
   <p class="status" role="status">
     @if (cutting()) {
@@ -65,12 +51,17 @@
       </button>
     </div>
   }
-  <details class="history" (toggle)="toggleHistory($event)">
-    <summary i18n="@@trackEdit.history">Histórico</summary>
-    @if (historyOpen()) {
+  @if (historyShown()) {
+    <ui-dialog
+      #historyDialog
+      title="Histórico da faixa"
+      i18n-title="@@trackEdit.historyTitle"
+      titleId="track-history-title"
+      (closed)="historyClosed()"
+    >
       <app-track-history [mediaId]="media().id" />
-    }
-  </details>
+    </ui-dialog>
+  }
 } @else if (view.error()) {
   <div class="line" role="alert">
     <span i18n="@@trackEdit.readFailed">Não consegui ler esta faixa.</span>

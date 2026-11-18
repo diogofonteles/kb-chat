@@ -15,6 +15,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { MediaItem } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { MediaApi } from '@core/media/media-api.js';
+import { UiButton, UiDialog, UiIcon } from '@ui/index.js';
 
 /**
  * "Transcrever de novo" (KBC-040 FR-3; masters): always a person's click, confirmed, because
@@ -23,39 +24,32 @@ import { MediaApi } from '@core/media/media-api.js';
  */
 @Component({
   selector: 'app-transcribe-again',
+  imports: [UiButton, UiDialog, UiIcon],
   templateUrl: './transcribe-again.html',
   styleUrl: './transcribe-again.css',
-  // Where the focus lands when the buttons go away (WCAG 2.4.3).
-  host: { tabindex: '-1' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TranscribeAgain {
   private readonly api = inject(MediaApi);
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
-  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly openButton =
-    viewChild<ElementRef<HTMLButtonElement>>('openButton');
+  private readonly dialog = viewChild.required(UiDialog);
   private readonly cancelButton =
     viewChild<ElementRef<HTMLButtonElement>>('cancelButton');
 
   readonly media = input.required<MediaItem>();
   readonly queued = output<MediaItem>();
+  /** The question closed, however: the page gives the focus back to ⋯ (WCAG 2.4.3). */
+  readonly closed = output();
 
-  protected readonly confirming = signal(false);
   protected readonly busy = signal(false);
   protected readonly error = signal('');
 
   /** The question opens on its safe answer. */
-  protected ask(): void {
-    this.confirming.set(true);
+  ask(): void {
     this.error.set('');
+    this.dialog().open();
     this.focusAfterRender(() => this.cancelButton()?.nativeElement);
-  }
-
-  protected cancel(): void {
-    this.confirming.set(false);
-    this.focusAfterRender(() => this.openButton()?.nativeElement);
   }
 
   protected confirm(): void {
@@ -67,11 +61,8 @@ export class TranscribeAgain {
       .subscribe({
         next: (item) => {
           this.busy.set(false);
-          this.confirming.set(false);
           this.queued.emit(item);
-          this.focusAfterRender(
-            () => this.openButton()?.nativeElement ?? this.host.nativeElement,
-          );
+          this.dialog().close();
         },
         error: (err: unknown) => {
           this.busy.set(false);

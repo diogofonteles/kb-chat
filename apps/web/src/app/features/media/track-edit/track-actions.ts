@@ -3,7 +3,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
-  ElementRef,
+  Injector,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -37,6 +38,7 @@ import {
   pairwise,
   switchMap,
 } from 'rxjs';
+import { UiButton, UiDialog, UiIcon } from '@ui/index.js';
 import { MEDIA_POLL_MS } from '../media-polling.js';
 import { TrackDeleteDialog } from './track-delete-dialog.js';
 import { TrackEditDialog } from './track-edit-dialog.js';
@@ -59,7 +61,15 @@ const dialogOf = (action: string | null): Dialog | null => {
  */
 @Component({
   selector: 'app-track-actions',
-  imports: [RouterLink, TrackEditDialog, TrackDeleteDialog, TrackHistory],
+  imports: [
+    RouterLink,
+    TrackEditDialog,
+    TrackDeleteDialog,
+    TrackHistory,
+    UiButton,
+    UiDialog,
+    UiIcon,
+  ],
   templateUrl: './track-actions.html',
   styleUrls: ['./track-edit.css', './track-actions.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,12 +81,19 @@ export class TrackActions {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly pollMs = inject(MEDIA_POLL_MS);
-  private readonly editButton =
-    viewChild<ElementRef<HTMLButtonElement>>('editButton');
+  private readonly injector = inject(Injector);
+  private readonly historyDialog = viewChild<UiDialog>('historyDialog');
 
   readonly media = input.required<MediaItem>();
   /** The item changed: the page reads it again; `null` says to read it from the server. */
   readonly changed = output<MediaItem | null>();
+  /** A dialog opened from ⋯ closed: the page gives the focus back to ⋯ (WCAG 2.4.3). */
+  readonly closed = output();
+  /** What ⋯ offers for the track, once it can be edited (not locked, not removed). */
+  readonly editable = computed(() => {
+    const track = this.current();
+    return !this.media().archived && !!track && !track.locked;
+  });
 
   protected readonly canClassify = computed(() =>
     this.session.can('media-classify'),
@@ -115,7 +132,7 @@ export class TrackActions {
     source: this.askedDialog,
     computation: (asked, previous) => asked ?? previous?.value ?? null,
   });
-  protected readonly historyOpen = signal(false);
+  protected readonly historyShown = signal(false);
   protected readonly failure = signal('');
   protected readonly restoring = signal(false);
   protected readonly boundsLink = computed(() =>
@@ -157,9 +174,27 @@ export class TrackActions {
       .subscribe(() => this.changed.emit(null));
   }
 
-  protected toggleHistory(event: Event): void {
-    const details = event.target as HTMLDetailsElement;
-    this.historyOpen.set(details.open);
+  /** "Editar faixa" from ⋯. */
+  openEdit(): void {
+    this.open.set('edit');
+  }
+
+  /** "Apagar faixa" from ⋯. */
+  openDelete(): void {
+    if (!this.cutting()) this.open.set('delete');
+  }
+
+  /** "Histórico da faixa" from ⋯: its revisions in a dialog. */
+  openHistory(): void {
+    this.historyShown.set(true);
+    afterNextRender(() => this.historyDialog()?.open(), {
+      injector: this.injector,
+    });
+  }
+
+  protected historyClosed(): void {
+    this.historyShown.set(false);
+    this.closed.emit();
   }
 
   protected saved(item: MediaItem): void {
@@ -170,7 +205,7 @@ export class TrackActions {
 
   protected closeDialog(): void {
     this.open.set(null);
-    this.editButton()?.nativeElement.focus();
+    this.closed.emit();
   }
 
   protected deleted(): void {

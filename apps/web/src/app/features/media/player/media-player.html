@@ -1,3 +1,6 @@
+<!-- v2 action bar (KBC-129, v2 · Mídia — Player): the green play, "Continuar de", the skips,
+     the speed pill, mark, share and ⋯ in one row on a desktop, where the seek line is the
+     player bar's; on a phone, the full-screen player's seek line and centred controls. -->
 <section class="player" aria-label="Player" i18n-aria-label="@@player.region">
   @if (errorMessage()) {
     <div class="alert" role="alert">
@@ -13,13 +16,13 @@
     </div>
   }
 
-  @if (captionsOn() && lowConfidence()) {
+  @if (captionsShown() && lowConfidence()) {
     <p class="warning-notice low-badge" i18n="@@player.captions.lowBadge">
       Legendas de baixa confiança: podem ter trechos errados.
     </p>
   }
-  @if (captionsOn()) {
-    <!-- Hidden from screen readers: the transcript beside it is the accessible text. -->
+  @if (captionsShown()) {
+    <!-- Hidden from screen readers: the transcript is the accessible text. -->
     <div class="caption-area" aria-hidden="true">
       @if (caption()) {
         <p class="caption">{{ caption() }}</p>
@@ -27,82 +30,33 @@
     </div>
   }
 
-  <app-seek-slider
-    [marks]="bookmarks.positions()"
-    [trackMarks]="trackStarts()"
-    [restricted]="restricted.spans()"
-    [currentMs]="playback().currentMs"
-    [durationMs]="playback().durationMs"
-    [bufferedEndMs]="playback().bufferedEndMs"
-    [disabled]="!operable()"
-    (seekRequested)="seekTo($event)"
-    (stepRequested)="stepBy($event)"
-  />
-
-  <div class="times">
-    <span class="elapsed">{{ elapsed() }}</span>
-    <button
-      type="button"
-      class="right-time"
-      [attr.aria-label]="rightTimeLabel()"
-      [disabled]="playback().durationMs === null"
-      (click)="toggleTimeDisplay()"
-    >
-      {{ rightTime() }}
-    </button>
-  </div>
-
-  @if (tracks.tracks().length) {
-    <div class="track-nav">
+  <div class="seek">
+    <app-seek-slider
+      [marks]="bookmarks.positions()"
+      [trackMarks]="trackStarts()"
+      [restricted]="restricted.spans()"
+      [currentMs]="playback().currentMs"
+      [durationMs]="playback().durationMs"
+      [bufferedEndMs]="playback().bufferedEndMs"
+      [disabled]="!operable()"
+      (seekRequested)="seekTo($event)"
+      (stepRequested)="stepBy($event)"
+    />
+    <div class="times">
+      <span class="elapsed">{{ elapsed() }}</span>
       <button
         type="button"
-        class="track-step"
-        aria-keyshortcuts="Shift+ArrowLeft"
-        [disabled]="!tracks.hasPrevious()"
-        (click)="tracks.step(-1)"
-        i18n="@@tracks.previous"
+        class="right-time"
+        [attr.aria-label]="rightTimeLabel()"
+        [disabled]="playback().durationMs === null"
+        (click)="toggleTimeDisplay()"
       >
-        Faixa anterior
-      </button>
-      <p class="track-now" aria-live="off">
-        @if (tracks.current(); as current) {
-          <span class="track-number" i18n="@@tracks.number"
-            >Faixa {{ current.ordinal }}</span
-          >
-          {{ current.title }}
-        }
-      </p>
-      <button
-        type="button"
-        class="track-step"
-        aria-keyshortcuts="Shift+ArrowRight"
-        [disabled]="!tracks.hasNext()"
-        (click)="tracks.step(1)"
-        i18n="@@tracks.next"
-      >
-        Próxima faixa
+        {{ rightTime() }}
       </button>
     </div>
-  }
+  </div>
 
-  <div class="controls">
-    <button
-      type="button"
-      class="skip"
-      [attr.aria-label]="backLabel()"
-      aria-keyshortcuts="J"
-      [disabled]="!operable()"
-      (click)="back()"
-    >
-      <svg aria-hidden="true" viewBox="0 0 24 24" width="28" height="28">
-        <path
-          d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"
-          fill="currentColor"
-        />
-      </svg>
-      <span class="skip-amount" aria-hidden="true">{{ skipBack() }}</span>
-    </button>
-
+  <div class="row">
     <button
       type="button"
       class="play"
@@ -114,106 +68,49 @@
       @if (busy()) {
         <span class="spinner" aria-hidden="true"></span>
       } @else if (playing()) {
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="28" height="28">
-          <path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor" />
-        </svg>
+        <ui-icon name="pause" [size]="24" />
       } @else {
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="28" height="28">
-          <path d="M8 5v14l11-7z" fill="currentColor" />
-        </svg>
+        <ui-icon name="play" [size]="24" />
       }
+    </button>
+
+    <ng-content select="[resume]" />
+
+    <button
+      type="button"
+      class="icon skip back"
+      [attr.aria-label]="backLabel()"
+      aria-keyshortcuts="J"
+      [disabled]="!operable()"
+      (click)="back()"
+    >
+      <ui-icon name="rewind" [size]="24" />
     </button>
 
     <button
       type="button"
-      class="skip"
+      class="icon skip forward"
       [attr.aria-label]="forwardLabel()"
       aria-keyshortcuts="L"
       [disabled]="!operable()"
       (click)="forward()"
     >
-      <svg aria-hidden="true" viewBox="0 0 24 24" width="28" height="28">
-        <path
-          d="M12 5V2l5 4-5 4V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z"
-          fill="currentColor"
-        />
-      </svg>
-      <span class="skip-amount" aria-hidden="true">{{ skipForward() }}</span>
+      <ui-icon name="forward" [size]="24" />
     </button>
-  </div>
 
-  <div class="options" [attr.data-volume]="volumeState()">
     <app-menu-button
       class="speed"
       kind="choice"
       [label]="speedLabel()"
       menuLabel="Velocidade"
       i18n-menuLabel="@@player.speedMenu"
+      align="start"
       [options]="speedOptions()"
       keyshortcuts="Shift+. Shift+,"
       (chosen)="chooseSpeed($event)"
     >
       {{ speedShown() }}
     </app-menu-button>
-
-    <button
-      type="button"
-      class="cc"
-      aria-label="CC, legendas"
-      i18n-aria-label="@@player.captions"
-      aria-keyshortcuts="C"
-      [attr.aria-pressed]="captionsPressed()"
-      [disabled]="!captionsAvailable()"
-      (click)="toggleCaptions()"
-    >
-      <span aria-hidden="true">CC</span>
-    </button>
-
-    @if (volumeSupported()) {
-      <div class="volume">
-        <button
-          type="button"
-          class="mute"
-          aria-label="Silenciar"
-          i18n-aria-label="@@player.mute"
-          [attr.aria-pressed]="muted()"
-          aria-keyshortcuts="M"
-          (click)="toggleMute()"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
-            <path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor" />
-            @if (muted()) {
-              <path
-                d="M16 9l5 6M21 9l-5 6"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              />
-            } @else {
-              <path
-                d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                fill="none"
-              />
-            }
-          </svg>
-        </button>
-        <input
-          type="range"
-          class="volume-slider"
-          min="0"
-          max="100"
-          step="5"
-          aria-label="Volume"
-          i18n-aria-label="@@player.volume"
-          [value]="volumePercent()"
-          [attr.aria-valuetext]="volumeText()"
-          (input)="setVolume($event)"
-        />
-      </div>
-    }
 
     @if (sleepOn()) {
       <app-menu-button
@@ -223,31 +120,69 @@
         (chosen)="chooseSleep($event)"
       >
         <span class="sleep-face"
-          ><span aria-hidden="true">☾</span> {{ sleepShown() }}</span
+          ><ui-icon name="moon" [size]="14" />{{ sleepShown() }}</span
         >
       </app-menu-button>
+    } @else {
+      <button
+        type="button"
+        class="icon moon"
+        aria-label="Timer para dormir"
+        i18n-aria-label="@@player.sleep.open"
+        (click)="openSleep()"
+      >
+        <ui-icon name="moon" [size]="24" />
+      </button>
     }
 
     <button
       #markButton
       type="button"
-      class="bookmark"
+      class="icon bookmark"
+      [class.marked]="marked()"
       aria-label="Marcar este trecho"
       i18n-aria-label="@@player.mark"
       aria-keyshortcuts="B"
       [disabled]="!canMark()"
       (click)="mark()"
     >
-      <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
-        <path
-          d="M6 3h12v18l-6-4.5L6 21z"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linejoin="round"
-        />
-      </svg>
+      <!-- The desktop row keeps the outline (pActions); the phone fills it in green. -->
+      <ui-icon class="when-off" name="bookmark" [size]="24" />
+      @if (marked()) {
+        <ui-icon class="when-on" name="bookmarkFill" [size]="24" />
+      }
     </button>
+
+    <button
+      type="button"
+      class="icon share"
+      aria-label="Compartilhar: copiar o link deste minuto"
+      i18n-aria-label="@@player.share"
+      (click)="share()"
+    >
+      <ui-icon name="share" [size]="22" />
+    </button>
+
+    <a
+      class="icon marks-link"
+      routerLink="/midia/marcadores"
+      aria-label="Meus marcadores"
+      i18n-aria-label="@@player.myBookmarks"
+    >
+      <ui-icon name="bookmark" [size]="22" />
+    </a>
+
+    <button
+      type="button"
+      class="icon about-link"
+      aria-label="Sobre este áudio"
+      i18n-aria-label="@@player.about"
+      (click)="aboutAsked.emit()"
+    >
+      <ui-icon name="queue" [size]="22" />
+    </button>
+
+    <ng-content select="[trackActions]" />
 
     <app-menu-button
       #more
@@ -258,11 +193,57 @@
       [options]="moreOptions()"
       (chosen)="chooseMore($event)"
     >
-      <span aria-hidden="true">⋯</span>
+      <ui-icon name="more" [size]="24" />
+      <ng-container ngProjectAs="[sheetHead]"
+        ><ng-content select="[sheetHead]"
+      /></ng-container>
     </app-menu-button>
   </div>
 
-  <app-bookmark-note (closed)="noteClosed()" />
+  @if (tracks.tracks().length) {
+    <div class="track-nav">
+      <button
+        type="button"
+        class="track-step"
+        aria-label="Faixa anterior"
+        i18n-aria-label="@@tracks.previous"
+        aria-keyshortcuts="Shift+ArrowLeft"
+        [disabled]="!tracks.hasPrevious()"
+        (click)="tracks.step(-1)"
+      >
+        <ui-icon name="chevLeft" [size]="16" />
+      </button>
+      <p class="track-now" aria-live="off">
+        @if (tracks.current(); as current) {
+          <span class="track-number" i18n="@@tracks.numberOf"
+            >Faixa {{ current.ordinal }} de {{ tracks.tracks().length }}</span
+          >
+          <span class="track-title">{{ current.title }}</span>
+        }
+      </p>
+      <button
+        type="button"
+        class="track-step"
+        aria-label="Próxima faixa"
+        i18n-aria-label="@@tracks.next"
+        aria-keyshortcuts="Shift+ArrowRight"
+        [disabled]="!tracks.hasNext()"
+        (click)="tracks.step(1)"
+      >
+        <ui-icon name="chevRight" [size]="16" />
+      </button>
+      <span class="segments" aria-hidden="true">
+        @for (track of tracks.tracks(); track track.id) {
+          <span
+            class="segment"
+            [class.on]="track.id === tracks.current()?.id"
+          ></span>
+        }
+      </span>
+    </div>
+  }
+
+  <app-bookmark-note [anchor]="markButton" (closed)="noteClosed()" />
 
   @if (ended()) {
     <button

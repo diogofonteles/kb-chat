@@ -1,5 +1,11 @@
 <div class="item">
-  <ui-cover class="cover" [title]="item().title" [size]="48" />
+  <ui-cover
+    class="cover"
+    [title]="item().title"
+    [size]="48"
+    [from]="failed() ? neutral[0] : null"
+    [to]="failed() ? neutral[1] : null"
+  />
   <div class="names">
     <a #title class="title" [routerLink]="link()">{{ item().title }}</a>
     <p class="topic">{{ topicTitle() }}</p>

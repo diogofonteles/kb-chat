@@ -86,7 +86,6 @@ h3 {
   gap: var(--space-1);
 }
 
-.actions button,
 .edit button,
 .undo button {
   min-height: var(--target);
@@ -101,7 +100,6 @@ h3 {
   cursor: pointer;
 }
 
-.actions button:hover,
 .edit button:hover,
 .undo button:hover {
   background: var(--overlay-2);
@@ -113,7 +111,6 @@ h3 {
     min-height: 1.75rem;
   }
 
-  .actions button,
   .edit button,
   .undo button {
     min-height: 2rem;
@@ -154,13 +151,35 @@ h3 {
   color: var(--color-text);
 }
 
-@media (max-width: 599px) {
-  .item {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
+/* v2 row (Figma: pill 44×24, the note on one line, ✎ and 🗑 as 16 icons). */
+.item {
+  gap: var(--space-3);
+  padding: 0;
+}
 
-  .actions {
-    grid-column: 1 / -1;
-    justify-content: flex-end;
+.time {
+  min-width: 2.75rem;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note.none {
+  font-style: normal;
+}
+
+.actions {
+  gap: 0;
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 1024px) {
+  .time {
+    min-height: 1.5rem;
   }
 }

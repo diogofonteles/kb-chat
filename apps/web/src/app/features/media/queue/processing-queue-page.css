@@ -4,12 +4,25 @@
   display: block;
   min-height: 0;
   overflow-y: auto;
+  /* The art's green fading into the panel (desktop tint, 420 high). */
+  --page-tint: color-mix(in srgb, #1f9c56 70%, #000);
 }
 
 .queue {
   display: grid;
+  align-content: start;
   width: 100%;
+  min-height: 100%;
   padding-bottom: var(--space-8);
+  background: linear-gradient(var(--page-tint), transparent 26.25rem);
+}
+
+.phone-back {
+  display: none;
+}
+
+.ui-page-header__title {
+  font-size: 4rem;
 }
 
 .art {
@@ -44,6 +57,21 @@
   background: var(--overlay-2);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
+}
+
+.banner-text {
+  display: grid;
+  gap: 0.125rem;
+  margin: 0;
+}
+
+.banner-text strong {
+  font-weight: 700;
+}
+
+.banner-text span {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
 }
 
 .banner.warn {
@@ -103,10 +131,9 @@
   display: grid;
   justify-items: center;
   gap: var(--space-3);
-  padding: var(--space-8) var(--space-4);
-  border-radius: var(--radius-card);
-  background: var(--overlay-1);
+  padding: 4.5rem var(--space-8);
   color: var(--color-text-muted);
+  font-size: var(--text-item);
   text-align: center;
 }
 
@@ -114,18 +141,23 @@
   margin: 0;
 }
 
+.empty a {
+  margin-top: var(--space-3);
+}
+
+/* emptyState: a 72 circle with the icon, 24/700, 15 muted. */
 .empty-icon {
   display: grid;
   place-items: center;
-  width: 4rem;
-  height: 4rem;
+  width: 4.5rem;
+  height: 4.5rem;
   border-radius: var(--radius-pill);
   background: var(--overlay-3);
 }
 
 .empty-title {
   color: var(--color-text);
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   font-weight: 700;
 }
 
@@ -137,8 +169,65 @@
 }
 
 @media (max-width: 1023px) {
-  .art {
-    --ui-cover-size: 120px !important;
+  .queue {
+    background: linear-gradient(
+      color-mix(in srgb, #1f9c56 58%, #000),
+      transparent 16.25rem
+    );
+  }
+
+  /* ‹ and the title, 24/700 (qmHead); no art, no kicker, no count. */
+  .head {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .phone-back {
+    display: grid;
+    place-items: center;
+    width: var(--target);
+    height: var(--target);
+    margin: 0 calc(-1 * var(--space-2));
+    color: var(--color-text);
+  }
+
+  .art,
+  .ui-page-header__kicker,
+  .ui-page-header__meta {
+    display: none;
+  }
+
+  .ui-page-header__title {
+    overflow: hidden;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .body {
+    gap: var(--space-3);
+  }
+
+  .group h3 {
+    font-size: 1.125rem;
+  }
+
+  .empty {
+    padding: 3rem var(--space-6);
+    font-size: var(--text-sm);
+  }
+
+  .empty-icon {
+    width: 4rem;
+    height: 4rem;
+  }
+
+  .empty-title {
+    font-size: 1.25rem;
   }
 
   .body {

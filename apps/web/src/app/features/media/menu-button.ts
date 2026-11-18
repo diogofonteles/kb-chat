@@ -28,6 +28,11 @@ export interface MenuOption {
   readonly group?: string;
   /** A line above it, to set it apart (a destructive action goes last, after one). */
   readonly divider?: boolean;
+  /**
+   * A short state after the words, at the right ("ligado", "?"); read as "<label>: <trail>"
+   * (a hidden colon), so the item's name says the state in words (UP-20).
+   */
+  readonly trail?: string;
 }
 
 /** Items under the name of their group, in the order given. */
@@ -78,6 +83,8 @@ const SHEET_BELOW_PX = 1024;
         (keydown)="onMenuKey($event)"
         (focusout)="onFocusOut($event)"
       >
+        <!-- What the sheet is about, on a phone (player.js mOver: the cover and title). -->
+        <div class="sheet-head"><ng-content select="[sheetHead]" /></div>
         @for (group of groups(); track $index) {
           <div
             class="group"
@@ -107,6 +114,10 @@ const SHEET_BELOW_PX = 1024;
                   <ui-icon [name]="icon" [size]="18" />
                 }
                 <span class="words">{{ entry.option.label }}</span>
+                @if (entry.option.trail; as trail) {
+                  <span class="visually-hidden">: </span
+                  ><span class="trail">{{ trail }}</span>
+                }
                 @if (kind() === 'choice') {
                   <span class="check" aria-hidden="true">{{
                     entry.option.checked ? '✓' : ''

@@ -151,6 +151,15 @@
   overflow-y: auto;
 }
 
+/* The player page names its collection in its own header (v2 · Mídia — Player). */
+.conversation.player-page {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.conversation.player-page > .topbar {
+  display: none;
+}
+
 .conversation.empty {
   grid-template-rows:
     auto minmax(0, 1fr) minmax(0, max-content) auto

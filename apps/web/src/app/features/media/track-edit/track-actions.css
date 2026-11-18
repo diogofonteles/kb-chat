@@ -1,7 +1,12 @@
 :host {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
-  margin-top: var(--space-3);
+}
+
+.bounds {
+  gap: var(--space-2);
 }
 
 .line {
@@ -17,12 +22,6 @@
 
 .status:empty {
   display: none;
-}
-
-.history summary {
-  min-height: var(--target);
-  padding: var(--space-2) 0;
-  cursor: pointer;
 }
 
 .note a {

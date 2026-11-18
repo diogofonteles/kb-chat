@@ -1,8 +1,16 @@
 <p class="visually-hidden" role="status">{{ announcer.message() }}</p>
 @if (visible() && source(); as current) {
-  <!-- The v2 player bar (KBC-125): 72 at the foot of the shell on desktop, the mini player
-       above the phone navigation. -->
-  <section class="bar" aria-label="Mini-player" i18n-aria-label="@@mini.region">
+  <!-- The v2 player bar (lib.js playerBar): cover, title, author and the mark; 1× · ⟲ · ▶ ·
+       ⟳ · ☾ over the seek line; Tocando agora, the volume and "Abrir o player". Below
+       1024 px the mini player above the phone navigation. On the player's own page the
+       controls the page already has are an echo, hidden from assistive tech. -->
+  <section
+    class="bar"
+    [class.echo]="echo()"
+    [style.--mini-tint]="tintOf(current.title)"
+    aria-label="Mini-player"
+    i18n-aria-label="@@mini.region"
+  >
     <div class="now">
       <ui-cover class="cover" [title]="current.title" [size]="56" />
       <div class="text">
@@ -28,29 +36,52 @@
           <a class="title" [routerLink]="['/midia', current.id]">{{
             currentTrack()?.title ?? current.title
           }}</a>
-          @if (currentTrack()) {
-            <span class="subtitle">{{ current.title }}</span>
-          }
+          <span class="subtitle">{{
+            currentTrack() ? current.title : (current.artist ?? '')
+          }}</span>
         }
       </div>
+      <button
+        type="button"
+        class="icon mark"
+        [class.marked]="marked()"
+        [attr.aria-hidden]="echo() ? 'true' : null"
+        [attr.tabindex]="echo() ? -1 : null"
+        [disabled]="gone() || !canMark()"
+        aria-label="Marcar este trecho"
+        i18n-aria-label="@@player.mark"
+        (click)="mark()"
+      >
+        <ui-icon [name]="marked() ? 'bookmarkFill' : 'bookmark'" [size]="20" />
+      </button>
     </div>
     <div class="controls">
-      <div class="buttons">
+      <div class="buttons" [attr.aria-hidden]="echo() ? 'true' : null">
         <button
-          uiIconButton
           type="button"
-          class="skip"
+          class="icon speed"
+          [attr.tabindex]="echo() ? -1 : null"
+          [disabled]="gone()"
+          [attr.aria-label]="speedLabel()"
+          (click)="nextSpeed()"
+        >
+          {{ speedShown() }}
+        </button>
+        <button
+          type="button"
+          class="icon skip"
+          [attr.tabindex]="echo() ? -1 : null"
           [disabled]="gone()"
           [attr.aria-label]="backLabel()"
           aria-keyshortcuts="J"
           (click)="back()"
         >
           <ui-icon name="rewind" [size]="20" />
-          <span class="skip-amount" aria-hidden="true">{{ skipBack() }}</span>
         </button>
         <button
           type="button"
           class="play"
+          [attr.tabindex]="echo() ? -1 : null"
           [disabled]="gone()"
           [attr.aria-label]="playLabel()"
           aria-keyshortcuts="K Space"
@@ -65,17 +96,24 @@
           }
         </button>
         <button
-          uiIconButton
           type="button"
-          class="skip forward"
+          class="icon skip forward"
+          [attr.tabindex]="echo() ? -1 : null"
           [disabled]="gone()"
           [attr.aria-label]="forwardLabel()"
           (click)="forward()"
         >
           <ui-icon name="forward" [size]="20" />
-          <span class="skip-amount" aria-hidden="true">{{
-            skipForward()
-          }}</span>
+        </button>
+        <button
+          type="button"
+          class="icon moon"
+          [class.on]="sleepShown() !== ''"
+          [attr.tabindex]="echo() ? -1 : null"
+          [attr.aria-label]="sleepLabel()"
+          (click)="openSleep()"
+        >
+          <ui-icon name="moon" [size]="20" />
         </button>
       </div>
       <div class="timeline">
@@ -90,22 +128,37 @@
             >
           }
         </span>
-        <div
-          class="progress"
-          role="progressbar"
-          aria-label="Posição"
-          i18n-aria-label="@@mini.progress"
-          aria-valuemin="0"
-          aria-valuemax="100"
-          [attr.aria-valuenow]="roundedPercent()"
-          [attr.aria-valuetext]="positionText()"
-        >
-          <span class="played" [style.width.%]="percent()"></span>
-        </div>
+        @if (seekable()) {
+          <app-seek-slider
+            class="seek"
+            [marks]="bookmarks.positions()"
+            [trackMarks]="trackStarts()"
+            [restricted]="restricted.spans()"
+            [currentMs]="engine.playback().currentMs"
+            [durationMs]="engine.playback().durationMs"
+            [bufferedEndMs]="engine.playback().bufferedEndMs"
+            [disabled]="!engine.operable()"
+            (seekRequested)="engine.seek($event)"
+            (stepRequested)="engine.skip($event)"
+          />
+        } @else {
+          <div
+            class="progress"
+            role="progressbar"
+            aria-label="Posição"
+            i18n-aria-label="@@mini.progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            [attr.aria-valuenow]="roundedPercent()"
+            [attr.aria-valuetext]="positionText()"
+          >
+            <span class="played" [style.width.%]="percent()"></span>
+          </div>
+        }
         <span class="total" aria-hidden="true">{{ total() }}</span>
       </div>
     </div>
-    <div class="extras">
+    <div class="extras" [attr.data-volume]="volumeState()">
       <button
         uiIconButton
         type="button"
@@ -118,17 +171,61 @@
       >
         <ui-icon name="cc" [size]="20" />
       </button>
-      <button
-        uiIconButton
-        type="button"
-        aria-label="Fechar o player"
-        i18n-aria-label="@@mini.close"
-        (click)="close()"
-      >
-        <ui-icon name="close" [size]="20" />
-      </button>
+      @if (volumeSupported()) {
+        <div class="volume">
+          <button
+            uiIconButton
+            type="button"
+            class="mute"
+            aria-label="Silenciar"
+            i18n-aria-label="@@player.mute"
+            [attr.aria-pressed]="muted()"
+            aria-keyshortcuts="M"
+            (click)="toggleMute()"
+          >
+            <ui-icon name="volume" [size]="20" />
+          </button>
+          <input
+            type="range"
+            class="volume-slider"
+            min="0"
+            max="100"
+            step="5"
+            aria-label="Volume"
+            i18n-aria-label="@@player.volume"
+            [value]="volumePercent()"
+            [style.--volume.%]="volumePercent()"
+            [attr.aria-valuetext]="volumeText()"
+            (input)="setVolume($event)"
+          />
+        </div>
+      }
+      @if (!echo()) {
+        <a
+          uiIconButton
+          class="open"
+          [routerLink]="['/midia', current.id]"
+          aria-label="Abrir o player"
+          i18n-aria-label="@@nowPlaying.open"
+        >
+          <ui-icon name="expand" [size]="20" />
+        </a>
+        <button
+          uiIconButton
+          type="button"
+          class="close"
+          aria-label="Fechar o player"
+          i18n-aria-label="@@mini.close"
+          (click)="close()"
+        >
+          <ui-icon name="close" [size]="20" />
+        </button>
+      }
     </div>
   </section>
+  @if (!echo()) {
+    <app-sleep-timer-dialog />
+  }
 } @else if (idle()) {
   <section
     class="bar idle"

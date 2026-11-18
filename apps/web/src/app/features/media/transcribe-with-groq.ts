@@ -20,6 +20,7 @@ import {
   type MediaItem,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import { UiButton, UiDialog } from '@ui/index.js';
 import { GroqApi } from '@core/media/groq-api.js';
 
 const HOUR_MS = 3_600_000;
@@ -36,9 +37,14 @@ export type GroqCandidate = Pick<MediaItem, 'id' | 'durationMs' | 'canUseGroq'>;
 @Component({
   selector: 'app-transcribe-with-groq',
   templateUrl: './transcribe-with-groq.html',
-  styleUrl: './transcribe-again.css',
+  imports: [UiButton, UiDialog],
+  styleUrl: './transcribe-with-groq.css',
   // Where the focus lands when the buttons go away (WCAG 2.4.3).
-  host: { tabindex: '-1', '[class.compact]': 'compact()' },
+  host: {
+    tabindex: '-1',
+    '[class.compact]': 'compact()',
+    '[class.in-menu]': 'inMenu()',
+  },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TranscribeWithGroq {
@@ -57,6 +63,13 @@ export class TranscribeWithGroq {
   readonly subject = input('');
   /** A card's action (the library's "Precisa da sua atenção"): a pill, small type. */
   readonly compact = input(false);
+  /**
+   * Asked from the player's ⋯ (v2, KBC-129): no button of its own; the question is a modal
+   * (a sheet on a phone), and `closed` hands the focus back to ⋯.
+   */
+  readonly inMenu = input(false);
+  readonly closed = output();
+  private readonly dialog = viewChild(UiDialog);
   readonly sent = output<MediaItem>();
   /** The cap refused it: the item is now held, and the page reads it again. */
   readonly capped = output();
@@ -83,14 +96,22 @@ export class TranscribeWithGroq {
     }).format(Math.max(0.01, (ms / HOUR_MS) * GROQ_USD_PER_HOUR));
   });
 
-  protected ask(): void {
+  ask(): void {
     this.confirming.set(true);
     this.error.set('');
+    if (this.inMenu()) this.dialog()?.open();
     this.focusAfterRender(() => this.cancelButton()?.nativeElement);
+  }
+
+  /** The modal closed, however (✕, Cancelar, Escape). */
+  protected dialogClosed(): void {
+    this.confirming.set(false);
+    this.closed.emit();
   }
 
   protected cancel(): void {
     this.confirming.set(false);
+    this.dialog()?.close();
     this.focusAfterRender(() => this.openButton()?.nativeElement);
   }
 
@@ -104,6 +125,7 @@ export class TranscribeWithGroq {
         next: (item) => {
           this.busy.set(false);
           this.confirming.set(false);
+          this.dialog()?.close();
           this.sent.emit(item);
           // The button goes with the job sent: the focus stays on this place.
           this.focusAfterRender(() => this.host.nativeElement);
@@ -124,6 +146,7 @@ export class TranscribeWithGroq {
     );
     // Asking again would meet the same cap: the question closes, the focus stays here.
     this.confirming.set(false);
+    this.dialog()?.close();
     this.capped.emit();
     this.focusAfterRender(() => this.host.nativeElement);
   }

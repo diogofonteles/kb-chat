@@ -1,4 +1,4 @@
-import { DOCUMENT, DatePipe } from '@angular/common';
+import { DOCUMENT, DatePipe, NgTemplateOutlet } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -60,9 +60,7 @@ import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
 import { TracksStore } from '@core/media/tracks-store.js';
 import { editPagePath, mediaEditUrl } from '@core/media/media-edit-api.js';
 import { TrackPublicationStatus } from './track-publication/track-publication-status.js';
-import { TrackPreparationStatus } from './tracks/track-preparation.js';
 import { preparationPagePath } from '@core/media/preparation-api.js';
-import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import {
   EMPTY,
   distinctUntilChanged,
@@ -88,7 +86,6 @@ import { detailsSavedText, editDetailsLabel } from './edit-labels.js';
 import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
 import { hasLibrary } from './library/library-access.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
-import { BookmarkList } from './bookmark-list.js';
 import { MediaPlayer } from './player/media-player.js';
 import { cuesWithSpeakers } from './voices/speaker-names.js';
 import { VoicesPanel } from './voices/voices-panel.js';
@@ -99,18 +96,27 @@ import { TranscriptPanel } from './transcript/transcript-panel.js';
 import { TrackNavList } from './tracks/track-nav-list.js';
 import { TrackAboutView } from './track-about-view.js';
 import { TrackSubjectsView } from './track-subjects-view.js';
-import { ArchivedTracks } from './track-edit/archived-tracks.js';
 import { MovedBookmarksNotice } from './track-edit/moved-bookmarks-notice.js';
 import { TrackActions } from './track-edit/track-actions.js';
 import type { MenuOption } from './menu-button.js';
 import {
+  UiBanner,
   UiButton,
+  coverCode,
+  coverGradient,
+  NEUTRAL_COVER,
   UiChip,
   UiCover,
   UiIcon,
   UiPill,
   type Tone,
 } from '@ui/index.js';
+import { RightPanel } from '@features/shell/right-panel.js';
+import { BookmarksStore } from '@core/media/bookmarks-store.js';
+import { PlayerAbout } from './player/player-about.js';
+
+/** The v2 shell's desktop width (chat-page.ts): "Sobre" goes to the right panel there. */
+const DESKTOP_QUERY = '(min-width: 1024px)';
 
 /**
  * The body of the v2 player (KBC-129 FR-3): the transcript, the recording's tracks when it
@@ -130,10 +136,9 @@ export type PlayerView = 'transcript' | 'tracks' | 'voices';
     PreparationEntry,
     RouterLink,
     DatePipe,
-    TrackPreparationStatus,
-    AuthorshipBadge,
+    NgTemplateOutlet,
     MediaPlayer,
-    BookmarkList,
+    PlayerAbout,
     EditMediaDialog,
     TranscribeAgain,
     TranscribeWithGroq,
@@ -143,9 +148,9 @@ export type PlayerView = 'transcript' | 'tracks' | 'voices';
     TrackAboutView,
     TrackSubjectsView,
     TrackActions,
-    ArchivedTracks,
     MovedBookmarksNotice,
     TrackPublicationStatus,
+    UiBanner,
     UiButton,
     UiChip,
     UiCover,
@@ -181,7 +186,7 @@ export class MediaPlayerPage {
   protected readonly editing = signal(false);
   protected readonly announcement = signal('');
   private readonly tracks = inject(TracksStore);
-  private readonly id = toSignal(
+  protected readonly id = toSignal(
     this.route.paramMap.pipe(map((params) => params.get('id') ?? '')),
     { initialValue: '' },
   );
@@ -375,20 +380,149 @@ export class MediaPlayerPage {
     if (status === 'failed') return 'err';
     return status === 'none' || status === undefined ? 'muted' : 'warn';
   });
+  /** The header's tint is the cover's colour (player.js P_TINT), not the collection's. */
+  protected readonly pageTint = computed(() => {
+    const title = this.media()?.title;
+    if (this.failedMedia()) return NEUTRAL_COVER[0];
+    return title ? coverGradient(title)[0] : null;
+  });
+  /** A media that failed is grey: its cover and the header (player.js AC, "Falhou"). */
+  protected readonly failedMedia = computed(
+    () => this.media()?.status === 'failed',
+  );
+  protected readonly neutralCover = NEUTRAL_COVER;
+  /** The author's avatar (pageHeader o.by): the initials on the name's own colour. */
+  protected readonly authorInitials = computed(() =>
+    coverCode(this.media()?.author?.name ?? ''),
+  );
+  protected readonly authorTint = computed(() => {
+    const name = this.media()?.author?.name;
+    return name ? coverGradient(name)[0] : null;
+  });
+  /** Under the title in the phone's ⋯ sheet: "Irmã Helena Prado · Alquimia Prática". */
+  protected readonly sheetWhere = computed(() =>
+    [this.media()?.author?.name, this.collectionTitle()]
+      .filter(Boolean)
+      .join(' · '),
+  );
+  /** "Áudio · Alquimia Prática": the kind and the collection it is in (v2 header). */
+  protected readonly kicker = computed(() => {
+    const collection = this.collectionTitle();
+    const kind = $localize`:@@media.kicker:Áudio`;
+    return collection ? `${kind} · ${collection}` : kind;
+  });
+  private readonly collectionTitle = computed(() => {
+    const slug = this.media()?.topic;
+    return this.topics().find((topic) => topic.slug === slug)?.title ?? '';
+  });
+  /** The full-screen player's head (phone): "Tocando do acervo · Alquimia Prática". */
+  protected readonly playingFrom = computed(() => {
+    const parent = this.media()?.parent;
+    if (!parent) return $localize`:@@player.playingFrom:Tocando do acervo`;
+    const place = this.trackPlace();
+    const partOf = $localize`:@@player.playingFromTrack:Parte de`;
+    return place ? `${partOf} · ${place}` : partOf;
+  });
+  protected readonly playingWhere = computed(
+    () => this.media()?.parent?.title ?? this.collectionTitle(),
+  );
+  /** The media has bookmarks of the person: the mark is filled (v2 player). */
+  private readonly bookmarksStore = inject(BookmarksStore);
+  protected readonly bookmarked = computed(
+    () => this.bookmarksStore.bookmarks().length > 0,
+  );
+  /** A new transcription waits or runs while the current text stays (T21, "na fila"). */
+  protected readonly queuedNotice = computed(() => {
+    const media = this.media();
+    if (!media || media.status !== 'ready') return '';
+    const { status, version } = media.transcription;
+    const pending = status === 'waiting' || status === 'transcribing';
+    return pending && version !== null ? this.transcription() : '';
+  });
+  /** The empty transcript's title: where the transcription is ("Aguardando o transcritor"). */
+  protected readonly waitingTitle = computed(
+    () =>
+      this.transcription() ||
+      $localize`:@@transcript.none:Ainda sem transcrição`,
+  );
+  /** On a phone a banner or the track bar shares the screen: the cover gets smaller. */
+  protected readonly compactCover = computed(
+    () =>
+      this.hasTracks() ||
+      this.lowConfidence() ||
+      this.lowCaptions() ||
+      !!this.queuedNotice(),
+  );
+  private readonly desktopQuery =
+    inject(DOCUMENT).defaultView?.matchMedia?.(DESKTOP_QUERY) ?? null;
+  protected readonly desktop = signal(this.desktopQuery?.matches ?? true);
+  private readonly rightPanel = inject(RightPanel);
+  private readonly again = viewChild(TranscribeAgain);
+  private readonly trackActions = viewChild(TrackActions);
+  private readonly groq = viewChild(TranscribeWithGroq);
   /** The page's actions at the top of the player's ⋯ (v2: they were loose buttons). */
   protected readonly pageOptions = computed<readonly MenuOption[]>(() => {
     const media = this.media();
     if (!media) return [];
     const options: MenuOption[] = [];
-    if (media.canEdit) options.push({ id: 'edit', label: this.editLabel });
+    // A track's own editing (KBC-073): "Ajustar início e fim" is in the row, the rest here.
+    if (this.trackActions()?.editable()) {
+      options.push(
+        {
+          id: 'track-edit',
+          icon: 'edit',
+          label: $localize`:@@trackEdit.editItem:Editar faixa`,
+        },
+        {
+          id: 'track-history',
+          icon: 'clock',
+          label: $localize`:@@trackEdit.historyItem:Histórico da faixa`,
+        },
+        {
+          id: 'track-delete',
+          icon: 'trash',
+          label: $localize`:@@trackEdit.delete:Apagar faixa`,
+          danger: true,
+        },
+      );
+    }
+    if (media.canEdit)
+      options.push({ id: 'edit', icon: 'edit', label: this.editLabel });
     if (this.editEntry()?.state === 'new')
       options.push({
         id: 'prepare',
+        icon: 'scissors',
         label: $localize`:@@prep.entry.new:Preparar áudio`,
+      });
+    if (media.canTranscribeAgain)
+      options.push({
+        id: 'again',
+        icon: 'refresh',
+        label: $localize`:@@transcribeAgain.open:Transcrever de novo`,
+      });
+    if (media.canUseGroq)
+      options.push({
+        id: 'groq',
+        icon: 'cpu',
+        label: $localize`:@@groqItem.open:Transcrever com Groq`,
+      });
+    // The full-screen player has no view chips (pMobile): its views wait in ⋯.
+    if (!this.desktop() && this.hasTracks() && this.view() !== 'tracks')
+      options.push({
+        id: 'view-tracks',
+        icon: 'list',
+        label: $localize`:@@player.view.tracksItem:Ver faixas`,
+      });
+    if (!this.desktop() && this.canEdit() && this.view() !== 'voices')
+      options.push({
+        id: 'view-voices',
+        icon: 'people',
+        label: $localize`:@@player.view.voicesItem:Ver vozes`,
       });
     if (this.hasTranscript())
       options.push({
         id: 'transcript',
+        icon: this.collapsed() ? 'eye' : 'eyeOff',
         label: this.collapsed()
           ? $localize`:@@transcript.show:Mostrar transcrição`
           : $localize`:@@transcript.hide:Esconder transcrição`,
@@ -485,6 +619,7 @@ export class MediaPlayerPage {
     inject(MediaSessionAdapter);
     inject(PlayerAnnouncer);
     this.followPlayback();
+    this.showAbout();
     this.destroyRef.onDestroy(() => {
       // Playing, it goes on in the mini-player; paused, leaving closes it (FR-8).
       if (!this.engine.playingOrAsked() && !this.engine.busy())
@@ -520,6 +655,27 @@ export class MediaPlayerPage {
     }
     if (id === 'prepare') void this.router.navigateByUrl(this.prepareLink());
     if (id === 'transcript') this.toggleTranscript();
+    if (id === 'view-tracks') this.chosenView.set('tracks');
+    if (id === 'track-edit') this.trackActions()?.openEdit();
+    if (id === 'track-history') this.trackActions()?.openHistory();
+    if (id === 'track-delete') this.trackActions()?.openDelete();
+    if (id === 'view-voices') this.chosenView.set('voices');
+    if (id === 'again') this.again()?.ask();
+    if (id === 'groq') this.groq()?.ask();
+  }
+
+  private readonly aboutPart = viewChild('about', { read: ElementRef });
+
+  /** The phone's "Sobre este áudio" button: that part of the page comes into view. */
+  protected scrollToAbout(): void {
+    const about = this.aboutPart()?.nativeElement as HTMLElement | undefined;
+    about?.scrollIntoView({ block: 'start' });
+    about?.querySelector<HTMLElement>('h3')?.focus();
+  }
+
+  /** A dialog opened from ⋯ closed: the focus goes back there (WCAG 2.4.3). */
+  protected focusMore(): void {
+    this.player()?.focusMore();
   }
 
   /** "Continuar de 23:10": plays from where the person stopped. */
@@ -557,6 +713,47 @@ export class MediaPlayerPage {
     this.answered.set(true);
     this.engine.seek(0);
     this.engine.play();
+  }
+
+  /**
+   * "Sobre este áudio" (bookmarks, tracks, voices, the author) is the shell's right panel on
+   * a desktop, beside the page, as in the v2 frame; on a phone it follows the page inline.
+   * It goes with the page.
+   */
+  private showAbout(): void {
+    const query = this.desktopQuery;
+    if (query) {
+      const onChange = (event: MediaQueryListEvent) =>
+        this.desktop.set(event.matches);
+      query.addEventListener('change', onChange);
+      this.destroyRef.onDestroy(() =>
+        query.removeEventListener('change', onChange),
+      );
+    }
+    const about = computed(() => {
+      const media = this.media();
+      return this.desktop() && media && this.ready()
+        ? { media, canEdit: this.canEdit() }
+        : null;
+    });
+    toObservable(about)
+      .pipe(takeUntilDestroyed())
+      .subscribe((inputs) => {
+        if (inputs)
+          this.rightPanel.open({
+            component: PlayerAbout,
+            inputs,
+            width: 'narrow',
+            label: $localize`:@@player.about:Sobre este áudio`,
+          });
+        else this.closeAbout();
+      });
+    this.destroyRef.onDestroy(() => this.closeAbout());
+  }
+
+  private closeAbout(): void {
+    if (this.rightPanel.content()?.component === PlayerAbout)
+      this.rightPanel.close();
   }
 
   /** The tab's title says it plays ("▶ "), and the choice goes once playback starts. */

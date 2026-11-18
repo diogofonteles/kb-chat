@@ -14,7 +14,6 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
 import {
   SPEEDS,
   cueAt,
@@ -37,8 +36,8 @@ import { mediaPagePath } from '@core/media/media-api.js';
 import { PlaybackClock } from '@core/media/playback-clock.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
-import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
-import { from } from 'rxjs';
+import { RouterLink } from '@angular/router';
+import { UiIcon } from '@ui/icon.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import { PlayerShortcuts } from './player-shortcuts.js';
 import { PlayerVolume } from './player-volume.js';
@@ -77,6 +76,8 @@ const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
 @Component({
   selector: 'app-media-player',
   imports: [
+    RouterLink,
+    UiIcon,
     SeekSlider,
     MenuButton,
     ShortcutsDialog,
@@ -107,6 +108,15 @@ export class MediaPlayer {
    */
   readonly pageOptions = input<readonly MenuOption[]>([]);
   readonly pageChosen = output<string>();
+  /** The person has bookmarks in this media: the mark is filled, in green (v2). */
+  readonly marked = input(false);
+  /**
+   * The synced transcript is in view (the page's body): it is the text of what plays, so
+   * the subtitles only show when it is hidden or not there (v2 · Mídia — Player).
+   */
+  readonly transcriptInView = input(false);
+  /** The phone's "Sobre este áudio" button: the page brings that part into view. */
+  readonly aboutAsked = output();
 
   protected readonly engine = inject(MediaEngine);
   private readonly transcriptPreferences = inject(TranscriptPreferences);
@@ -140,17 +150,6 @@ export class MediaPlayer {
   protected readonly trackStarts = computed(() =>
     this.tracks.tracks().map((track) => track.startMs),
   );
-  /** The volume control exists only where the page may set the volume (FR-9). */
-  private readonly volumeAnswer = toSignal(from(inject(VOLUME_SUPPORT)));
-  protected readonly volumeSupported = computed(
-    () => this.volumeAnswer() === true,
-  );
-  /** Whether the volume question was answered yet (`data-volume`, for tests and tools). */
-  protected readonly volumeState = computed(() => {
-    const answer = this.volumeAnswer();
-    return answer === undefined ? 'pending' : answer ? 'on' : 'off';
-  });
-
   protected readonly operable = this.engine.operable;
   protected readonly canPlay = this.engine.canPlay;
   protected readonly ended = computed(() => this.playback().phase === 'ended');
@@ -206,37 +205,84 @@ export class MediaPlayer {
   protected readonly captionsOn = computed(
     () => this.captionsAvailable() && this.transcriptPreferences.captionsOn(),
   );
-  protected readonly captionsPressed = this.transcriptPreferences.captionsOn;
+  /** Shown under the bar only while the transcript is not in view. */
+  protected readonly captionsShown = computed(
+    () => this.captionsOn() && !this.transcriptInView(),
+  );
   /** The cue on screen now (two lines at most), following the smoothed clock. */
   protected readonly caption = computed(() =>
-    this.captionsOn()
+    this.captionsShown()
       ? (cueAt(this.cues(), this.clock.positionMs())?.text ?? '')
       : '',
   );
-  protected readonly moreOptions = computed<readonly MenuOption[]>(() => [
-    ...this.pageOptions(),
-    {
-      id: 'link',
-      label: $localize`:@@player.copyMinuteLink:Copiar link deste minuto`,
-    },
-    { id: 'skips', label: $localize`:@@player.skips.open:Pulos` },
-    {
-      id: 'silences',
-      label: this.silences.enabled()
-        ? $localize`:@@player.silences.openOn:Encurtar silêncios: ligado`
-        : $localize`:@@player.silences.open:Encurtar silêncios`,
-    },
-    ...this.wordHighlightOption(),
-    {
-      id: 'sleep',
-      label: $localize`:@@player.sleep.open:Timer para dormir`,
-    },
-    ...this.speakersOption(),
-    {
-      id: 'shortcuts',
-      label: $localize`:@@player.shortcuts.open:Atalhos de teclado`,
-    },
-  ]);
+  /** ⋯ as in the v2 frame: the page's actions, a line, the listening ones, a line, keys. */
+  protected readonly moreOptions = computed<readonly MenuOption[]>(() => {
+    const page = this.pageOptions();
+    const on = $localize`:@@player.state.on:ligado`;
+    const off = $localize`:@@player.state.off:desligado`;
+    return [
+      ...page,
+      {
+        id: 'link',
+        icon: 'link',
+        divider: page.length > 0,
+        label: $localize`:@@player.copyMinuteLink:Copiar link deste minuto`,
+      },
+      {
+        id: 'skips',
+        icon: 'forward',
+        label: $localize`:@@player.skips.open:Pulos`,
+      },
+      {
+        id: 'silences',
+        icon: 'wave',
+        label: $localize`:@@player.silences.open:Encurtar silêncios`,
+        ...(this.silences.enabled() ? { trail: on } : {}),
+      },
+      ...(this.captionsAvailable()
+        ? [
+            {
+              id: 'word-highlight',
+              icon: 'type' as const,
+              label: $localize`:@@player.wordHighlight.label:Destacar palavra a palavra`,
+              trail: this.preferences.value().wordHighlight ? on : off,
+            },
+          ]
+        : []),
+      {
+        id: 'sleep',
+        icon: 'moon',
+        label: $localize`:@@player.sleep.open:Timer para dormir`,
+      },
+      ...(this.speakersAvailable()
+        ? [
+            {
+              id: 'speakers',
+              icon: 'people' as const,
+              label: $localize`:@@player.speakers.label:Mostrar quem fala`,
+              trail: this.transcriptPreferences.speakersOn() ? on : off,
+            },
+          ]
+        : []),
+      ...(this.captionsAvailable()
+        ? [
+            {
+              id: 'captions',
+              icon: 'cc' as const,
+              label: $localize`:@@player.captions.label:Legendas`,
+              trail: this.transcriptPreferences.captionsOn() ? on : off,
+            },
+          ]
+        : []),
+      {
+        id: 'shortcuts',
+        icon: 'keyboard',
+        divider: true,
+        label: $localize`:@@player.shortcuts.open:Atalhos de teclado`,
+        trail: '?',
+      },
+    ];
+  });
   /** The ☾ button, only while a sleep timer runs (KBC-046). */
   protected readonly sleepOn = computed(
     () => this.sleepTimer.timer().kind !== 'off',
@@ -244,7 +290,7 @@ export class MediaPlayer {
   protected readonly sleepShown = computed(() => {
     const remaining = this.sleepTimer.remainingMs();
     return remaining === null
-      ? $localize`:@@player.sleep.atEnd:No fim`
+      ? $localize`:@@player.sleep.atEndChip:Para no fim`
       : $localize`:@@player.sleep.stopsAt:Para em ${formatClock(Math.ceil(remaining / 1000) * 1000)}:time:`;
   });
   protected readonly sleepLabel = computed(() => {
@@ -281,16 +327,10 @@ export class MediaPlayer {
       $localize`:@@player.forwardBy:Avançar ${this.skipForward()}:seconds: segundos`,
   );
 
-  protected readonly muted = this.engine.muted;
-  protected readonly volumePercent = computed(() =>
-    Math.round((this.muted() ? 0 : this.engine.volume()) * 100),
-  );
-  protected readonly volumeText = computed(() => `${this.volumePercent()}%`);
-
   constructor() {
     // Frames only while subtitles show cues here (never for the mini-player).
     this.clock.follow(
-      () => this.captionsOn() && this.cues().length > 0,
+      () => this.captionsShown() && this.cues().length > 0,
       inject(DestroyRef),
     );
     this.preferences.load();
@@ -300,6 +340,11 @@ export class MediaPlayer {
     effect(() => {
       if (this.shortcuts.helpAsked() > asked)
         untracked(() => this.shortcutsDialog().open());
+    });
+    const sleepAsked = this.shortcuts.sleepAsked();
+    effect(() => {
+      if (this.shortcuts.sleepAsked() > sleepAsked)
+        untracked(() => this.sleepDialog().open());
     });
   }
 
@@ -345,24 +390,6 @@ export class MediaPlayer {
     this.transcriptPreferences.toggleCaptions();
   }
 
-  /** The choice says its state in words, as "Encurtar silêncios: ligado". */
-  private speakersOption(): readonly MenuOption[] {
-    if (!this.speakersAvailable()) return [];
-    const label = this.transcriptPreferences.speakersOn()
-      ? $localize`:@@player.speakers.on:Mostrar quem fala: ligado`
-      : $localize`:@@player.speakers.off:Mostrar quem fala: desligado`;
-    return [{ id: 'speakers', label }];
-  }
-
-  /** "Destacar palavra a palavra" (KBC-045), with a transcript to highlight. */
-  private wordHighlightOption(): readonly MenuOption[] {
-    if (!this.captionsAvailable()) return [];
-    const label = this.preferences.value().wordHighlight
-      ? $localize`:@@player.wordHighlight.on:Destacar palavra a palavra: ligado`
-      : $localize`:@@player.wordHighlight.off:Destacar palavra a palavra: desligado`;
-    return [{ id: 'word-highlight', label }];
-  }
-
   private toggleWordHighlight(): void {
     const on = !this.preferences.value().wordHighlight;
     this.preferences.setWordHighlight(on);
@@ -386,6 +413,7 @@ export class MediaPlayer {
     if (id === 'link') this.copyMinuteLink();
     if (id === 'word-highlight') this.toggleWordHighlight();
     if (id === 'speakers') this.transcriptPreferences.toggleSpeakers();
+    if (id === 'captions') this.toggleCaptions();
     if (id === 'shortcuts') this.shortcutsDialog().open();
     if (id === 'skips') this.skipsDialog().open();
     if (id === 'sleep') this.sleepDialog().open();
@@ -420,6 +448,15 @@ export class MediaPlayer {
     );
   }
 
+  /** The share button (v2): the link of this minute, as "Copiar link deste minuto". */
+  protected share(): void {
+    this.copyMinuteLink();
+  }
+
+  protected openSleep(): void {
+    this.sleepDialog().open();
+  }
+
   protected mark(): void {
     this.bookmarks.mark();
   }
@@ -427,14 +464,5 @@ export class MediaPlayer {
   /** The note closed: the focus goes back to "Marcar este trecho" (NG-30). */
   protected noteClosed(): void {
     this.markButton().nativeElement.focus();
-  }
-
-  protected toggleMute(): void {
-    this.engine.toggleMute();
-  }
-
-  protected setVolume(event: Event): void {
-    if (event.target instanceof HTMLInputElement)
-      this.volumeMemory.set(Number(event.target.value) / 100);
   }
 }

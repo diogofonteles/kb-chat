@@ -55,6 +55,7 @@
       [style.--tint]="tint()"
       [class.covered]="panelOpen()"
       [class.media]="onMedia()"
+      [class.player-page]="playerPage()"
       [class.empty]="isEmpty() && !onMedia()"
       [attr.inert]="covered() ? '' : null"
     >
@@ -242,6 +243,7 @@
       <app-mini-player
         class="player"
         [shownElsewhere]="playerInPanel()"
+        [desktop]="desktop()"
         [idle]="audio.collectionHasAudio() && !audio.playing()"
         [idleLink]="libraryPath()"
       />

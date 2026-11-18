@@ -7,6 +7,7 @@ import {
   computed,
   effect,
   inject,
+  input,
   output,
   untracked,
   viewChild,
@@ -15,14 +16,16 @@ import { MEDIA_BOOKMARK_NOTE_MAX } from '@kb-chat/contracts';
 import { formatClock } from '@kb-chat/player-core';
 import { errorMessage } from '@core/api/api-error.js';
 import { BookmarksStore } from '@core/media/bookmarks-store.js';
+import { UiOverlay } from '@ui/overlay.js';
 
 /**
- * The note of a bookmark just made (KBC-042 FR-2), under the player: the field takes the
+ * The note of a bookmark just made (KBC-042 FR-2), in a popover under 🔖 (a sheet on a phone): the field takes the
  * focus, Enter saves, Esc closes without a note. When the server fails, the alert offers
  * "Tentar de novo" and the note stays in the field (NFR-1).
  */
 @Component({
   selector: 'app-bookmark-note',
+  imports: [UiOverlay],
   template: `
     @if (failure(); as failed) {
       <div class="alert" role="alert">
@@ -47,35 +50,36 @@ import { BookmarksStore } from '@core/media/bookmarks-store.js';
       </div>
     }
     @if (bookmark(); as current) {
-      <!-- No <form>: an Enter that opened the note (on 🔖) must not submit it too. -->
+      <!-- A popover under 🔖 (player.js noteBox), a sheet on a phone. No <form>: an Enter
+           that opened the note (on 🔖) must not submit it too. -->
       <div
         class="note"
         role="group"
         aria-labelledby="bookmark-note-label"
         data-edit-scope
+        [uiOverlay]="anchor()"
+        overlayAlign="start"
+        [overlaySheetBelow]="sheetBelow"
       >
-        <label id="bookmark-note-label" for="bookmark-note" class="label">{{
-          label()
-        }}</label>
+        <div class="head">
+          <span class="time" aria-hidden="true">{{ clock() }}</span>
+          <label id="bookmark-note-label" for="bookmark-note" class="label">{{
+            label()
+          }}</label>
+        </div>
+        <input
+          #field
+          id="bookmark-note"
+          type="text"
+          autocomplete="off"
+          placeholder="Nota (opcional)"
+          i18n-placeholder="@@bookmarks.notePlaceholder"
+          [maxLength]="noteMax"
+          [value]="current.note ?? ''"
+          (keydown.escape)="close($event)"
+          (keydown.enter)="save($event, field.value)"
+        />
         <div class="row">
-          <input
-            #field
-            id="bookmark-note"
-            type="text"
-            autocomplete="off"
-            [maxLength]="noteMax"
-            [value]="current.note ?? ''"
-            (keydown.escape)="close($event)"
-            (keydown.enter)="save($event, field.value)"
-          />
-          <button
-            type="button"
-            class="save"
-            (click)="save($event, field.value)"
-            i18n="@@bookmarks.save"
-          >
-            Salvar
-          </button>
           <button
             type="button"
             class="dismiss"
@@ -83,6 +87,14 @@ import { BookmarksStore } from '@core/media/bookmarks-store.js';
             i18n="@@bookmarks.close"
           >
             Fechar
+          </button>
+          <button
+            type="button"
+            class="save"
+            (click)="save($event, field.value)"
+            i18n="@@bookmarks.save"
+          >
+            Salvar
           </button>
         </div>
       </div>
@@ -98,6 +110,9 @@ export class BookmarkNote {
 
   /** The note closed (saved or not): the focus goes back to "Marcar este trecho". */
   readonly closed = output();
+  /** "Marcar este trecho": the popover opens under it. */
+  readonly anchor = input.required<HTMLElement>();
+  protected readonly sheetBelow = 1024;
 
   protected readonly noteMax = MEDIA_BOOKMARK_NOTE_MAX;
   protected readonly bookmark = computed(() => {
@@ -110,6 +125,9 @@ export class BookmarkNote {
     const at = this.bookmark()?.positionMs ?? 0;
     return $localize`:@@bookmarks.noteLabel:Nota do marcador em ${formatClock(at)}:time:`;
   });
+  protected readonly clock = computed(() =>
+    formatClock(this.bookmark()?.positionMs ?? 0),
+  );
   protected readonly failure = this.store.failed;
   protected readonly failureText = computed(() => {
     const failed = this.failure();

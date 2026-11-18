@@ -60,6 +60,7 @@ import type { SpeakerChoice } from './speaker-suggestions.js';
 import { voiceChangeOf, type VoiceChange } from './voice-change.js';
 import { sampleOf } from './voice-changes.js';
 import { VoiceSample } from './voice-sample.js';
+import { UiIcon } from '@ui/index.js';
 import { VoiceTag } from './voice-tag.js';
 
 type Label = (speakers: MediaSpeakers, locale: string) => string;
@@ -125,7 +126,7 @@ function fieldTextOf(label: VoiceLabel | undefined): string {
  */
 @Component({
   selector: 'app-voices-panel',
-  imports: [CollectionSpeakers, SpeakerCombobox, VoiceTag],
+  imports: [CollectionSpeakers, SpeakerCombobox, UiIcon, VoiceTag],
   providers: [VoiceSample],
   templateUrl: './voices-panel.html',
   styleUrl: './voices-panel.css',

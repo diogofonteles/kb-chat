@@ -1,3 +1,6 @@
+/* v2 transcript (player.js pBody, tLine): the chips and the search pill on one row, the
+   term list, who speaks, then the lines — time 12/700, the voice with its dot, the text
+   18/500 dimmed, the line heard now in a card at 26/700. The list scrolls on its own. */
 :host {
   display: flex;
   flex-direction: column;
@@ -8,20 +11,101 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 0.125rem;
   min-height: 0;
 }
 
-/* v2 (KBC-129 FR-1): the transcript is the page's body; the chips already name it. */
+.card-head {
+  display: none;
+}
+
 .title {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--text-sm);
   font-weight: 700;
-  letter-spacing: -0.01em;
+}
+
+.head-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-1);
+}
+
+.head-row:empty {
+  display: none;
+}
+
+.search {
+  display: grid;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.search-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 13.75rem;
+  height: 2.25rem;
+  padding: 0 0.875rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
+  color: var(--color-text-muted);
+}
+
+.search-pill:focus-within {
+  border-color: var(--color-text);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  outline: none;
+}
+
+.search input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.count {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.count:empty {
+  display: none;
+}
+
+.search-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1) var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+.search-results:empty {
+  display: none;
 }
 
 .made-with {
-  margin: 0;
+  margin: 0 0 0.625rem;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
 }
@@ -31,61 +115,55 @@
   color: var(--color-text-muted);
 }
 
-.search {
-  display: grid;
-  gap: var(--space-1);
-}
-
-.search label {
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.search-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.search input {
-  flex: 1;
-  min-width: 0;
-  min-height: var(--target);
-  padding: 0 var(--space-4);
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
-  background: var(--overlay-3);
-  color: var(--color-text);
-  font: inherit;
-}
-
-.search input:focus-visible {
-  border-color: var(--color-text);
-  outline: none;
-}
-
-.count {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.search-actions {
+/* Who speaks: a chip each, with its dot, and the hint (player.js pBody). */
+.legend {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
+  align-items: center;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+}
+
+.voices {
+  display: contents;
+  list-style: none;
+}
+
+.voice-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 2rem;
+  padding: 0 0.875rem 0 0.75rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  font-size: var(--text-meta);
+  font-weight: 500;
+}
+
+.legend-hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.low-confidence {
+  margin-bottom: var(--space-3);
+}
+
+:host ::ng-deep [banner] {
+  display: block;
+  margin-bottom: var(--space-3);
 }
 
 .ghost {
-  min-height: var(--target);
+  min-height: 2rem;
   padding: 0 var(--space-4);
   border: 1px solid var(--overlay-4);
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
   cursor: pointer;
 }
 
@@ -100,15 +178,16 @@
 
 .copy {
   align-self: flex-start;
+  margin-top: var(--space-2);
 }
 
 /* The list scrolls on its own: following the audio never scrolls the page (FR-3). */
 .list-box {
   position: relative;
   display: flex;
-  flex: 1;
+  flex: 1 1 0;
   flex-direction: column;
-  min-height: 12rem;
+  min-height: 9rem;
 }
 
 .segments {
@@ -116,89 +195,252 @@
   flex: 1;
   min-height: 0;
   margin: 0;
-  padding: 0;
+  /* Room for the bookmark mark, left of the time (tLine: x −26). */
+  margin-left: -1.75rem;
+  padding: 0 0 0 1.75rem;
   overflow-y: auto;
   overscroll-behavior: contain;
   list-style: none;
-  font-family: var(--font-reading);
-  font-size: 1.125rem;
-  line-height: 1.5;
+  font-family: var(--font-ui);
 }
 
 .segment {
+  position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-2);
-  align-items: baseline;
-  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
-  border-left: 3px solid transparent;
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+  padding: 0.375rem 0;
+  border-radius: var(--radius-card);
   cursor: pointer;
   /* A change inside one segment never lays out the other ~1,500 (NFR-2). */
   contain: layout style;
 }
 
-.segment:hover {
-  background: var(--overlay-1);
+.segment + .segment {
+  margin-top: 0.125rem;
 }
 
-/* The segment heard now: large and bold with a side bar, never colour alone (UP-20); what
-   comes after it is muted, as in the v2 frame. Only colours change on the others. */
-.segment.active {
-  border-left-color: var(--color-accent);
-  /* Opaque, so the text and the voices keep their measured contrast over it. */
-  background: var(--color-surface-muted);
+.mark {
+  position: absolute;
+  top: 0.625rem;
+  left: -1.625rem;
+  color: var(--color-accent-text);
 }
 
-.segment.active .text {
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-}
-
-.segment.active ~ .segment .text {
-  color: var(--color-text-muted);
+.segment.active .mark {
+  top: 1.125rem;
 }
 
 .time {
-  min-width: var(--target);
-  min-height: var(--target);
-  padding: 0 var(--space-1);
+  min-height: 1.5rem;
+  padding: 0;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-accent-text);
+  color: var(--color-text-muted);
   font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+  text-align: left;
   cursor: pointer;
 }
 
-.segment.active .time {
+.time:hover {
+  color: var(--color-text);
   text-decoration: underline;
-  text-underline-offset: 0.2em;
 }
 
 .body {
+  display: grid;
+  gap: var(--space-1);
   min-width: 0;
 }
 
-/* "Voz N" heads its segment, level with the time; the text follows right below (KBC-064 FR-5). */
+/* "Voz N" (or the name) with its dot, 12/700 muted, over the line (KBC-064 FR-5). */
 .voice {
   display: flex;
   width: fit-content;
-  margin-bottom: var(--space-1);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
   user-select: none;
 }
 
 .text {
   display: block;
-  max-width: 70ch;
+  color: var(--color-text-muted);
+  font-size: 1.125rem;
+  font-weight: 500;
+  line-height: 1.5rem;
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
+}
+
+.segment:hover .text {
+  color: var(--color-text);
+}
+
+/* The line heard now: a card, 26/700, the time in green; the next ones fainter, so the
+   size and the card say it, never colour alone (UP-20). */
+.segment.active {
+  padding: 0.875rem var(--space-4);
+  /* Opaque, so the text and the voices keep their measured contrast over it. */
+  background: var(--color-surface-muted);
+}
+
+.segment.active .time {
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.segment.active .text {
+  color: var(--color-text);
+  font-size: 1.625rem;
+  font-weight: 700;
+  line-height: 2.1875rem;
+}
+
+.segment.active ~ .segment .text {
+  color: color-mix(in srgb, var(--color-text-muted) 80%, transparent);
+}
+
+/* The full-screen player's card (player.js pMobile): the line before, the one heard and
+   the next one at 21/700 on the cover's colour; search and expand as round buttons. */
+@media (max-width: 1023px) {
+  :host(.in-player) .panel {
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border-radius: 0.75rem;
+    background: color-mix(
+      in srgb,
+      var(--page-tint, var(--tint, #8a4a2e)) 70%,
+      var(--color-surface)
+    );
+  }
+
+  :host(.in-player) .card-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  :host(.in-player) .title {
+    flex: 1;
+  }
+
+  /* 32 circles on black 20% (pMobile), inside the 44 touch target. */
+  :host(.in-player) .card-button {
+    position: relative;
+    margin: -0.375rem;
+    background: transparent;
+    color: var(--color-text);
+  }
+
+  :host(.in-player) .card-button::before {
+    position: absolute;
+    inset: 0.375rem;
+    z-index: -1;
+    border-radius: 50%;
+    background: rgb(0 0 0 / 20%);
+    content: '';
+  }
+
+  :host(.in-player) .card-head {
+    isolation: isolate;
+  }
+
+  :host(.in-player) .head-row,
+  :host(.in-player) .made-with,
+  :host(.in-player) .legend,
+  :host(.in-player) .low-confidence,
+  :host(.in-player) ::ng-deep [banner] {
+    display: none;
+  }
+
+  :host(.in-player) .search {
+    display: none;
+    margin: 0;
+  }
+
+  :host(.in-player) .search.open {
+    display: grid;
+  }
+
+  :host(.in-player) .head-row:has(.search.open) {
+    display: flex;
+  }
+
+  :host(.in-player) .head-row:has(.search.open) > :not(.search) {
+    display: none;
+  }
+
+  :host(.in-player) .search-pill {
+    width: 100%;
+    background: rgb(0 0 0 / 20%);
+  }
+
+  :host(.in-player) .list-box {
+    flex: none;
+    height: 7.5rem;
+    min-height: 0;
+  }
+
+  :host(.in-player.expanded) .list-box {
+    height: 60dvh;
+  }
+
+  :host(.in-player) .segments {
+    margin-left: 0;
+    padding-left: 0;
+  }
+
+  :host(.in-player) .segment {
+    display: block;
+    padding: 0;
+  }
+
+  :host(.in-player) .segment.active {
+    background: none;
+  }
+
+  :host(.in-player) .time,
+  :host(.in-player) .voice,
+  :host(.in-player) .mark {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  :host(.in-player) .time:focus-visible {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+  }
+
+  :host(.in-player) .text,
+  :host(.in-player) .segment.active .text {
+    color: rgb(255 255 255 / 72%);
+    font-size: 1.3125rem;
+    font-weight: 700;
+    line-height: 1.6875rem;
+    letter-spacing: 0;
+  }
+
+  :host(.in-player) .segment.active .text {
+    color: var(--color-text);
+  }
+
+  /* The frame dims the next line to black 60%: kept light, for 4.5:1 on the card. */
+  :host(.in-player) .segment.active ~ .segment .text {
+    color: rgb(255 255 255 / 72%);
+  }
 }
 
 /* A passage cited by the research (KBC-099, T22): a side bar besides its paint, so the

@@ -7,7 +7,7 @@
     9rem;
   gap: var(--space-3) var(--space-5);
   align-items: center;
-  padding: var(--space-3) var(--space-4);
+  padding: 0.625rem var(--space-4);
   border-radius: var(--radius-menu);
 }
 
@@ -119,9 +119,6 @@
   min-width: 0;
 }
 
-:host(.failed) .state {
-  color: var(--color-danger);
-}
 
 .detail {
   display: flex;
@@ -163,5 +160,28 @@
 
   .action {
     justify-self: stretch;
+  }
+
+  /* qmCard: cover 44, the title 15/700, the pill beside its detail. */
+  .cover {
+    --ui-cover-size: 44px !important;
+  }
+
+  .title {
+    font-weight: 700;
+  }
+
+  .topic {
+    font-size: var(--text-xs);
+  }
+
+  .main {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-2);
+  }
+
+  .main > :not(.pill, .state) {
+    grid-column: 1 / -1;
   }
 }

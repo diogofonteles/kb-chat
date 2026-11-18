@@ -102,6 +102,11 @@
   flex: 1;
 }
 
+.trail {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
 .menu button.checked {
   color: var(--color-accent-text);
 }
@@ -133,6 +138,27 @@
   padding: var(--space-3) var(--space-2)
     calc(var(--space-4) + env(safe-area-inset-bottom));
   border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+}
+
+.sheet-head,
+.sheet-head:empty {
+  display: none;
+}
+
+.menu.ui-overlay--sheet .sheet-head:not(:empty) {
+  display: block;
+  padding: var(--space-1) var(--space-3) var(--space-3);
+}
+
+/* The sheet's grip (decorative). */
+.menu.ui-overlay--sheet::before {
+  display: block;
+  width: 2.25rem;
+  height: 0.25rem;
+  margin: 0 auto var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-4);
+  content: '';
 }
 
 .menu.ui-overlay--sheet::backdrop {

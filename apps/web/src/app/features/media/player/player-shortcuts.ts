@@ -87,10 +87,18 @@ export class PlayerShortcuts {
   private readonly tracks = inject(TracksStore);
   private readonly on = signal(storedEnabled());
   private readonly help = signal(0);
+  private readonly sleep = signal(0);
 
   readonly enabled = this.on.asReadonly();
   /** Grows each time "?" asks for the shortcuts list. */
   readonly helpAsked = this.help.asReadonly();
+  /** "Timer para dormir" asked from the player bar on the player's own page (v2). */
+  readonly sleepAsked = this.sleep.asReadonly();
+
+  /** The player bar's ☾ on the player's page: the page's player opens its dialog. */
+  askSleep(): void {
+    this.sleep.update((count) => count + 1);
+  }
 
   setEnabled(enabled: boolean): void {
     this.on.set(enabled);

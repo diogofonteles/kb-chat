@@ -5,6 +5,7 @@ import {
   computed,
   inject,
   input,
+  viewChild,
 } from '@angular/core';
 import {
   takeUntilDestroyed,
@@ -13,9 +14,20 @@ import {
 } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { UiButton, UiIconButton } from '@ui/button.js';
-import { UiCover } from '@ui/cover.js';
+import { UiCover, coverGradient } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
-import { formatClock, positionToSecond } from '@kb-chat/player-core';
+import {
+  SPEEDS,
+  formatClock,
+  isSpeed,
+  positionToSecond,
+} from '@kb-chat/player-core';
+import { BookmarksStore } from '@core/media/bookmarks-store.js';
+import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
+import { from } from 'rxjs';
+import { PlayerVolume } from './player-volume.js';
+import { SeekSlider } from './seek-slider.js';
+import { SleepTimerDialog } from './sleep-timer-dialog.js';
 import { speak } from '@core/i18n/spoken-time.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { RestrictedSkipper } from '@core/media/restricted-skipper.js';
@@ -37,7 +49,15 @@ import { PlayerShortcuts } from './player-shortcuts.js';
  */
 @Component({
   selector: 'app-mini-player',
-  imports: [RouterLink, UiButton, UiCover, UiIcon, UiIconButton],
+  imports: [
+    RouterLink,
+    SeekSlider,
+    SleepTimerDialog,
+    UiButton,
+    UiCover,
+    UiIcon,
+    UiIconButton,
+  ],
   templateUrl: './mini-player.html',
   styleUrl: './mini-player.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -48,9 +68,17 @@ import { PlayerShortcuts } from './player-shortcuts.js';
   },
 })
 export class MiniPlayer {
-  private readonly engine = inject(MediaEngine);
+  protected readonly engine = inject(MediaEngine);
   /** Skips the parts above the person's level wherever it plays (KBC-106). */
-  private readonly restricted = inject(RestrictedSkipper);
+  protected readonly restricted = inject(RestrictedSkipper);
+  protected readonly bookmarks = inject(BookmarksStore);
+  private readonly volumeMemory = inject(PlayerVolume);
+  private readonly sleepDialog = viewChild(SleepTimerDialog);
+  /**
+   * The desktop player bar (v2, KBC-129): the seek line, and the bar stays on the page of
+   * what plays (lib.js playerBar), where the page's own controls are echoed.
+   */
+  readonly desktop = input(false);
   private readonly saver = inject(ProgressSaver);
   private readonly preferences = inject(ListeningPreferences);
   private readonly sleepTimer = inject(SleepTimerService);
@@ -132,13 +160,62 @@ export class MiniPlayer {
   );
   protected readonly playing = this.engine.playing;
   protected readonly busy = this.engine.busy;
-  /** On its own page the full player shows it: no mini-player there. */
+  /** The page of what plays is open. */
+  private readonly onItsPage = computed(() => {
+    const source = this.source();
+    const path = this.url().split(/[?#]/)[0];
+    return !!source && path === `/midia/${encodeURIComponent(source.id)}`;
+  });
+  /** On its own page a phone shows the full-screen player: no mini player there. */
   protected readonly visible = computed(() => {
     const source = this.source();
     if (!source || source.id === this.shownElsewhere()) return false;
-    const path = this.url().split(/[?#]/)[0];
-    return path !== `/midia/${encodeURIComponent(source.id)}`;
+    return this.desktop() || !this.onItsPage();
   });
+  /** The bar beside the page's own player: its transport is an echo (one control each). */
+  protected readonly echo = computed(() => this.desktop() && this.onItsPage());
+  protected readonly seekable = this.desktop;
+  protected readonly marked = computed(
+    () =>
+      this.bookmarks.mediaId() === this.source()?.id &&
+      this.bookmarks.bookmarks().length > 0,
+  );
+  protected readonly canMark = computed(
+    () => this.engine.operable() && this.bookmarks.mediaId() !== null,
+  );
+  protected readonly trackStarts = computed(() =>
+    this.currentTrackList().map((track) => track.startMs),
+  );
+  private readonly currentTrackList = inject(TracksStore).tracks;
+  private readonly speedText = new Intl.NumberFormat('pt-BR');
+  protected readonly speedShown = computed(
+    () => `${this.speedText.format(this.engine.speed())}×`,
+  );
+  protected readonly speedLabel = computed(
+    () =>
+      $localize`:@@mini.speedLabel:Velocidade: ${this.speedText.format(this.engine.speed())}:speed: vezes. Trocar`,
+  );
+  protected readonly sleepLabel = computed(() =>
+    this.sleepShown()
+      ? $localize`:@@mini.sleepOn:Timer para dormir: ${this.sleepShown()}:time:`
+      : $localize`:@@player.sleep.open:Timer para dormir`,
+  );
+  /** The volume control exists only where the page may set the volume (FR-9). */
+  private readonly volumeAnswer = toSignal(from(inject(VOLUME_SUPPORT)));
+  protected readonly volumeSupported = computed(
+    () => this.volumeAnswer() === true && this.desktop(),
+  );
+  /** Whether the volume question was answered yet (`data-volume`, for tests and tools). */
+  protected readonly volumeState = computed(() => {
+    const answer = this.volumeAnswer();
+    if (answer === undefined) return 'pending';
+    return answer && this.desktop() ? 'on' : 'off';
+  });
+  protected readonly muted = this.engine.muted;
+  protected readonly volumePercent = computed(() =>
+    Math.round((this.muted() ? 0 : this.engine.volume()) * 100),
+  );
+  protected readonly volumeText = computed(() => `${this.volumePercent()}%`);
   protected readonly percent = computed(() => {
     const { currentMs, durationMs } = this.engine.playback();
     return durationMs ? Math.min(100, (currentMs / durationMs) * 100) : 0;
@@ -172,6 +249,37 @@ export class MiniPlayer {
 
   protected toggle(): void {
     this.engine.toggle();
+  }
+
+  /** The phone card takes the cover's colour (lib.js miniPlayer). */
+  protected tintOf(title: string): string {
+    return coverGradient(title)[0];
+  }
+
+  protected mark(): void {
+    this.bookmarks.mark();
+  }
+
+  /** "1×" in the bar steps to the next speed (the page's pill has the whole menu). */
+  protected nextSpeed(): void {
+    const at = SPEEDS.indexOf(this.engine.speed() as (typeof SPEEDS)[number]);
+    const next = SPEEDS[(at + 1) % SPEEDS.length] ?? 1;
+    if (isSpeed(next)) this.preferences.setSpeed(next);
+  }
+
+  /** ☾: the timer's dialog; on the player's page, the page's own one (one dialog). */
+  protected openSleep(): void {
+    if (this.echo()) this.shortcuts.askSleep();
+    else this.sleepDialog()?.open();
+  }
+
+  protected toggleMute(): void {
+    this.engine.toggleMute();
+  }
+
+  protected setVolume(event: Event): void {
+    if (event.target instanceof HTMLInputElement)
+      this.volumeMemory.set(Number(event.target.value) / 100);
   }
 
   protected back(): void {

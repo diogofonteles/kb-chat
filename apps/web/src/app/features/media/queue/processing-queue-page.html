@@ -1,5 +1,14 @@
 <section class="queue" aria-labelledby="queue-title">
   <header class="ui-page-header head">
+    <!-- The phone's head (queue.js qmHead): ‹ and the title. -->
+    <a
+      class="phone-back"
+      routerLink="/biblioteca"
+      aria-label="← Biblioteca"
+      i18n-aria-label="@@library.back"
+    >
+      <ui-icon name="chevLeft" [size]="26" />
+    </a>
     <ui-cover
       class="art"
       icon="upload"
@@ -24,11 +33,14 @@
     </div>
   </header>
   <div class="body">
-    @if (transcriberText(); as text) {
-      <p class="banner warn" role="status">
+    @if (transcriberText(); as banner) {
+      <div class="banner warn" role="status">
         <ui-icon name="clock" [size]="20" />
-        <span>{{ text }}</span>
-      </p>
+        <p class="banner-text">
+          <strong>{{ banner.title }}</strong>
+          <span>{{ banner.text }}</span>
+        </p>
+      </div>
     }
     @if (stale()) {
       <p class="banner" role="status" i18n="@@prep.readFailed">
