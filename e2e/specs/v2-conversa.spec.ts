@@ -219,13 +219,24 @@ test('AC-4: a subject in the popover filters, shows its chip, and Escape returns
   await expectWholeOnScreen(page, popover);
   await shot(page, 'chat-results-filter-popover');
   await popover.getByRole('checkbox', { name: /Cabala/ }).check();
+  // subjectsPopover: the tick waits for "Aplicar"; Escape leaves the filters as they were.
+  await expect(page.getByText(/3 documentos ·/)).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Remover Assuntos: Cabala' }),
+  ).toHaveCount(0);
+  await popover.getByRole('checkbox', { name: /Cabala/ }).press('Escape');
+  await expect(popover).toBeHidden();
+  await expect(chip).toBeFocused();
+  await expect(page.getByText(/3 documentos ·/)).toBeVisible();
+  await chip.click();
+  await popover.getByRole('checkbox', { name: /Cabala/ }).check();
+  await popover.getByRole('button', { name: 'Aplicar' }).click();
+  await expect(popover).toBeHidden();
+  await expect(chip).toBeFocused();
   await expect(
     page.getByRole('button', { name: 'Remover Assuntos: Cabala' }),
   ).toBeVisible();
   await expect(page.getByText(/2 documentos ·/)).toBeVisible();
-  await popover.getByRole('checkbox', { name: /Cabala/ }).press('Escape');
-  await expect(popover).toBeHidden();
-  await expect(chip).toBeFocused();
   await shot(page, 'chat-results-filtered');
   await page.getByRole('button', { name: 'Limpar filtros' }).click();
   await expect(

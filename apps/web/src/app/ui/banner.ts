@@ -41,5 +41,9 @@ const ICON_OF: Record<BannerTone, IconName> = {
 export class UiBanner {
   readonly tone = input<BannerTone>('info');
   readonly title = input('');
-  protected readonly icon = computed(() => ICON_OF[this.tone()]);
+  /** Another icon than the tone's (the hidden off-topic results' eye-off). */
+  readonly iconName = input<IconName | null>(null);
+  protected readonly icon = computed(
+    () => this.iconName() ?? ICON_OF[this.tone()],
+  );
 }

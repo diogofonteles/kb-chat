@@ -83,6 +83,18 @@
               part
             }}</ui-pill>
           }
+          @if (copiesBeside()) {
+            <!-- bestCard: "+1 cópia" among its pills; the copy is in the card beside. -->
+            <ui-pill
+              class="facet copies-pill"
+              tone="warn"
+              i18n="@@card.copies"
+              >{hit().copies.length, plural,
+                =1 {+1 cópia}
+                other {+{{ hit().copies.length }} cópias}
+              }</ui-pill
+            >
+          }
         </span>
       }
       @if (concepts()) {
@@ -106,15 +118,17 @@
         }
       }
     </span>
-    <span class="cols" aria-hidden="true">
-      @if (depth(); as level) {
-        <span class="col-depth">{{ level }}</span>
-      }
-      @if (relevance(); as link) {
-        <ui-pill [tone]="link === central ? 'ok' : 'info'">{{ link }}</ui-pill>
-      }
-    </span>
   </button>
+  <!-- docRow: the depth and the link after the copies' pill, before ⋯ (the card's
+       click covers them). -->
+  <span class="cols" aria-hidden="true">
+    @if (depth(); as level) {
+      <span class="col-depth">{{ level }}</span>
+    }
+    @if (relevance(); as link) {
+      <ui-pill [tone]="link === central ? 'ok' : 'info'">{{ link }}</ui-pill>
+    }
+  </span>
   <ui-menu
     class="more"
     [label]="moreLabel()"
@@ -138,7 +152,7 @@
       </button>
     }
   </ui-menu>
-  @if (hit().copies.length > 0) {
+  @if (hit().copies.length > 0 && !copiesBeside()) {
     <div class="copies-area">
       <button
         type="button"

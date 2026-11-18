@@ -97,7 +97,10 @@ const readTracks = (count: number): string =>
     : $localize`:@@sweep.covReadTracks: (${n(count)}:count: faixas)`;
 
 /** The coverage line the app measured (KBC-030): never the model's. */
-export function coverageText(coverage: SweepCoverage): string {
+export function coverageText(
+  coverage: SweepCoverage,
+  options: { readonly titled?: boolean } = {},
+): string {
   const { tracks } = coverage;
   const set = tracks ? setTracks(tracks.documents) : '';
   const read = tracks ? readTracks(tracks.read) : '';
@@ -120,6 +123,9 @@ export function coverageText(coverage: SweepCoverage): string {
   const total = coverage.continued
     ? $localize`:@@sweep.covContinued: (somando as varreduras anteriores)`
     : '';
+  // Under the card's own "Cobertura (medida pelo aplicativo)" head the line drops the title.
+  if (options.titled === false)
+    return $localize`:@@sweep.coverageBare:${parts.join(' · ')}:parts:${total}:total:.`;
   return $localize`:@@sweep.coverage:Cobertura (medida pelo aplicativo): ${parts.join(' · ')}:parts:${total}:total:.`;
 }
 

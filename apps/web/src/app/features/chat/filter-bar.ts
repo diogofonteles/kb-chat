@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import { UiBanner } from '@ui/banner.js';
 import { UiButton } from '@ui/button.js';
@@ -57,11 +58,15 @@ let nextBarId = 0;
  */
 @Component({
   selector: 'app-filter-bar',
-  imports: [UiBanner, UiButton, UiIcon, UiOverlay],
+  imports: [NgTemplateOutlet, UiBanner, UiButton, UiIcon, UiOverlay],
   templateUrl: './filter-bar.html',
   styleUrl: './filter-bar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(document:click)': 'closeOnOutsideClick($event)' },
+  host: {
+    '(document:click)': 'closeOnOutsideClick($event)',
+    // Safari leaves the focus on the page when a checkbox is clicked: Escape still closes.
+    '(document:keydown.escape)': 'closeOnEscape()',
+  },
 })
 export class FilterBar {
   private readonly host =
@@ -124,6 +129,10 @@ export class FilterBar {
   protected readonly authorships = computed(() =>
     authorshipOptions(this.facets(), this.filters(), this.labels()),
   );
+  /** The sheet's "Autoria" (filterSections): the draft's choice, applied with the rest. */
+  protected readonly draftAuthorships = computed(() =>
+    authorshipOptions(this.facets(), this.draft(), this.labels()),
+  );
   protected readonly barId = `filters-${nextBarId++}`;
   protected readonly activeCount = computed(() => countActive(this.filters()));
   protected readonly draftCount = computed(() =>
@@ -157,7 +166,22 @@ export class FilterBar {
       this.openSheet(key, chip);
       return;
     }
+    // subjectsPopover: the ticks wait for "Aplicar" (the list behind does not change yet).
+    this.draft.set(this.filters());
     this.openKey.update((open) => (open === key ? null : key));
+  }
+
+  /** The popover's group as the draft has it (its ticks before "Aplicar"). */
+  protected draftGroup(key: FacetKey): FacetGroup | undefined {
+    return this.draftGroups().find((group) => group.key === key);
+  }
+
+  /** "Aplicar" in a facet's popover: its ticks apply, and the popover closes. */
+  protected applyPopover(chip: HTMLElement): void {
+    const draft = this.draft();
+    if (JSON.stringify(draft) !== JSON.stringify(this.filters()))
+      this.filtersChange.emit(draft);
+    this.closePopover(chip);
   }
 
   protected toggle(key: FacetKey, value: FacetValue): void {
@@ -182,10 +206,15 @@ export class FilterBar {
     target.focus();
   }
 
-  /** "Limpar" in a facet's popover: that facet's choices go, the popover stays. */
+  /** "Limpar" in a facet's popover: that facet's ticks go (applied with "Aplicar"). */
   protected clearFacet(key: FacetKey, chip: HTMLElement): void {
-    this.filtersChange.emit({ ...this.filters(), [key]: [] });
+    this.draft.update((filters) => ({ ...filters, [key]: [] }));
     chip.focus();
+  }
+
+  /** The sheet's "Autoria" radios: one group, or "Todos", in the draft. */
+  protected chooseDraftAuthorship(value: Authorship | null): void {
+    this.draft.update((filters) => withAuthorship(filters, value));
   }
 
   /** "Limpar filtros": every filter goes; the focus stays on the first facet's chip. */
@@ -276,6 +305,14 @@ export class FilterBar {
   protected closeOnFocusOut(event: FocusEvent, facet: HTMLElement): void {
     const next = event.relatedTarget as Node | null;
     if (next && !facet.contains(next)) this.openKey.set(null);
+  }
+
+  protected closeOnEscape(): void {
+    const key = this.openKey();
+    if (!key) return;
+    const chip = this.host.querySelector<HTMLElement>(`[data-facet="${key}"]`);
+    this.openKey.set(null);
+    chip?.focus();
   }
 
   protected closeOnOutsideClick(event: MouseEvent): void {

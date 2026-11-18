@@ -74,6 +74,8 @@ export class ResultCard {
   readonly active = input(false);
   /** The first result as the "Melhor resultado" card; the others are rows of the table. */
   readonly best = input(false);
+  /** Its copies have their own card beside it (a lone best result): the pill only says so. */
+  readonly copiesBeside = input(false);
   /** The sub-collection the hit is in, when searching its parent (ADR 0028). */
   readonly place = input<string | null>(null);
   readonly opened = output<OpenedHit>();

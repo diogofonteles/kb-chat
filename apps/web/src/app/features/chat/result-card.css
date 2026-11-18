@@ -2,8 +2,10 @@
    "✦ Mestre Laércio · Texto/apostila", the depth, the link as a pill and ⋯) or, for the first
    result where the results have two columns, the "Melhor resultado" card (bestCard). */
 .frame {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* docRow: the card, "+1 cópia", the depth and link, ⋯. */
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   border-radius: var(--radius-menu);
   /* The track line breaks by the card's own width, not the window's (the panel narrows it). */
@@ -88,7 +90,31 @@
   font-size: var(--text-xs);
 }
 
+.card {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+/* The card's click covers the whole row; the pill and ⋯ stay over it. */
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.copies-toggle,
+.copies,
+.more {
+  position: relative;
+  z-index: 1;
+}
+
 .cols {
+  grid-column: 3;
+  grid-row: 1;
+  padding-inline-start: 0.875rem;
+  pointer-events: none;
   display: flex;
   align-items: center;
   gap: 0.875rem;
@@ -101,6 +127,8 @@
 }
 
 .more {
+  grid-column: 4;
+  grid-row: 1;
   padding-inline: var(--space-2) var(--space-3);
 }
 
@@ -212,7 +240,18 @@
   }
 
   .best .copies-area {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: var(--space-1);
     padding: 0 var(--space-5) var(--space-4);
+  }
+
+  .best .copies-toggle,
+  .best .copies {
+    grid-column: auto;
+    grid-row: auto;
+    margin: 0;
+    padding: 0;
   }
 
   /* The card's own tint would stack under the pills' and drop their text under 4.5:1 (light
@@ -228,10 +267,21 @@
     display: none;
   }
 }
+/* A row: the pill in its own column, the opened copies on a line under the row. */
 .copies-area {
+  display: contents;
+}
+
+.copies-toggle {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  margin-inline-start: 0.875rem;
+}
+
+.frame:not(.best) .copies {
   grid-column: 1 / -1;
-  display: grid;
-  gap: var(--space-1);
+  grid-row: 2;
   padding: 0 var(--space-3) var(--space-2)
     calc(44px + 0.875rem + var(--space-3));
 }

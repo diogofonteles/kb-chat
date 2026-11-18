@@ -46,6 +46,8 @@ export interface ActiveFilter {
   readonly value: FacetValue;
   readonly label: string;
   readonly removeLabel: string;
+  /** A phone's shorter "Remover o filtro de tipo" (cmEmpty, chat-results-none-filtered). */
+  readonly removeShort: string;
 }
 
 const tracksText = (tracks: number): string =>
@@ -125,6 +127,15 @@ const shown = (group: FacetGroup): boolean =>
     ? group.options.length > 1 || group.selectedCount > 0
     : group.options.length > 0;
 
+const REMOVE_SHORT: Record<FacetKey, string> = {
+  concepts: $localize`:@@filters.removeShort.concepts:Remover o filtro de assunto`,
+  genres: $localize`:@@filters.removeShort.genres:Remover o filtro de tipo`,
+  depths: $localize`:@@filters.removeShort.depths:Remover o filtro de profundidade`,
+  relevances: $localize`:@@filters.removeShort.relevances:Remover o filtro de ligação`,
+  authorships: $localize`:@@filters.removeShort.authorships:Remover o filtro de autoria`,
+  topics: $localize`:@@filters.removeShort.topics:Remover o filtro de sub-acervo`,
+};
+
 /**
  * Active filters as removable chips; with an application order ("facet:value" keys,
  * newest last), the most recently applied comes first (KBC-002 AC-11).
@@ -142,6 +153,7 @@ export function activeFilters(
         value,
         label,
         removeLabel: $localize`:@@filters.remove:Remover ${label}:label:`,
+        removeShort: REMOVE_SHORT[key],
       };
     }),
   );

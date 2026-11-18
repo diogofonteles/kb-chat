@@ -380,6 +380,9 @@ describe('ChatPage refining', () => {
     await view.fixture.whenStable();
     fireEvent.click(screen.getByRole('checkbox', { name: /Texto\/apostila/ }));
     await view.fixture.whenStable();
+    // The popover's ticks apply with "Aplicar" (subjectsPopover).
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+    await view.fixture.whenStable();
     // Chip changes are debounced (250 ms) so rapid clicks send one search.
     await new Promise((resolve) => setTimeout(resolve, 300));
     const refined = view.http.expectOne(SEARCH_URL);
@@ -422,8 +425,10 @@ describe('ChatPage refining', () => {
       ]),
     );
     await view.fixture.whenStable();
-    fireEvent.click(screen.getByRole('button', { name: '+1 cópia' }));
-    await view.fixture.whenStable();
+    // A lone result: its copy waits in "Cópia deste documento" beside it.
+    expect(
+      screen.getByRole('heading', { name: 'Cópia deste documento' }),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', { name: /a-lei-do-ritmo-2\.md/ }),
     );

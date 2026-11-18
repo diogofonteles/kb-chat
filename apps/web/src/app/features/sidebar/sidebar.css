@@ -366,6 +366,7 @@
   display: flex;
   align-items: center;
   gap: 0.875rem;
+  min-width: 0;
   width: 100%;
   min-height: var(--target);
   padding: 0;
@@ -498,4 +499,17 @@
   .branch-line {
     left: 1rem;
   }
+}
+
+/* cmDrawer: Configurações aligned with the other rows (its icon at 20, no inset). */
+.menu-actions ::ng-deep .settings-button .icon {
+  color: var(--color-text);
+}
+
+.action ui-icon {
+  flex: none;
+}
+
+.action.no-icon {
+  padding-inline-start: calc(20px + 0.875rem);
 }

@@ -784,8 +784,12 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
       await renderMessage(aTurn({ coverage }));
       expect(
         screen.getByText(
-          'Cobertura (medida pelo aplicativo): 2.555 documentos no conjunto · 2.555 conferidos pelas expressões · 412 com ocorrências · 412 analisados pela IA.',
+          '2.555 documentos no conjunto · 2.555 conferidos pelas expressões · 412 com ocorrências · 412 analisados pela IA.',
         ),
+      ).toBeTruthy();
+      // The card's head carries the title once (cobertura), not the line again.
+      expect(
+        screen.getByText('Cobertura (medida pelo aplicativo)'),
       ).toBeTruthy();
       expect(
         screen.getByText(/autoria Mestre Laércio; expressões: livro, obra/),

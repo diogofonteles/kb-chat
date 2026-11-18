@@ -38,6 +38,40 @@
         </button>
       }
       <span class="spacer"></span>
+      @if (heroOccurrences()) {
+        <!-- cmDoc: a phone's "1 de 2 ⌃ ⌄" sits at the top right of the hero, clear of ✦. -->
+        <div class="occurrences in-hero">
+          <ng-container [ngTemplateOutlet]="occurrences" />
+        </div>
+      }
+      @if (subject() && !inSheet() && !inSource() && loaded(); as doc) {
+        <!-- A phone's subject page (cmDoc subject) has no tools row: its tools wait in ⋯. -->
+        <ui-menu
+          class="hero-more"
+          label="Mais opções do assunto"
+          i18n-label="@@panel.subjectMoreMenu"
+          triggerLabel="Mais opções"
+          i18n-triggerLabel="@@panel.more"
+          [menuId]="titleId + '-hero-more'"
+          triggerClass="ui-icon-button"
+        >
+          <ui-icon uiMenuTrigger name="more" [size]="22" />
+          @if (canAskAi()) {
+            <button uiMenuItem type="button" (click)="askedAi.emit(doc.title)">
+              <ui-icon name="sparkleFill" [size]="18" />
+              <span i18n="@@panel.askAi">Perguntar à IA</span>
+            </button>
+          }
+          <a uiMenuItem [href]="doc.obsidianUrl">
+            <ui-icon name="external" [size]="18" />
+            <span i18n="@@panel.obsidian">Abrir no Obsidian</span>
+          </a>
+          <button uiMenuItem type="button" (click)="share(doc)">
+            <ui-icon name="share" [size]="18" />
+            <span>{{ shareLabel() }}</span>
+          </button>
+        </ui-menu>
+      }
       @if (!inSheet()) {
         <button
           uiIconButton
@@ -64,7 +98,12 @@
     </div>
 
     <!-- A document that fails shows only its empty state under ✕ (chat-document-error). -->
-    <div class="page-head" [hidden]="!!document.error()">
+    <!-- Loading draws a skeleton in its place; the title stays there for the reader's ear. -->
+    <div
+      class="page-head"
+      [hidden]="!!document.error()"
+      [class.visually-hidden]="!loaded()"
+    >
       <ui-cover
         class="art"
         [title]="title()"
@@ -176,10 +215,11 @@
         </button>
         <!-- ⋯ (actionBar): "Tela cheia" on a desktop page (the panel's own button has no
              place there) and the document's sections, the v1 index ("Seções"). -->
-        @if (page() || sections().length > 0) {
+        <!-- …and, beside a panel or on a phone, "Sobre este documento" under the text. -->
+        @if (page() || sections().length > 0 || !document.error()) {
           <ui-menu
             class="more"
-            [class.no-sections]="sections().length === 0"
+            [class.no-sections]="sections().length === 0 && page()"
             label="Mais opções do documento"
             i18n-label="@@panel.moreMenu"
             triggerLabel="Mais opções"
@@ -203,6 +243,12 @@
                 }
               </button>
             }
+            @if (!page() && (!subject() || loaded()?.level !== undefined)) {
+              <button uiMenuItem type="button" (click)="goToAbout()">
+                <ui-icon name="info" [size]="18" />
+                <span i18n="@@panel.goToAbout">Sobre este documento</span>
+              </button>
+            }
             @for (section of sections(); track $index) {
               <button uiMenuItem type="button" (click)="goToSection(section)">
                 {{ section.title }}
@@ -211,45 +257,9 @@
           </ui-menu>
         }
       }
-      @if (matches() > 0) {
-        <div class="occurrences">
-          <span class="counter" aria-live="polite">
-            @if (sourceNav(); as nav) {
-              <span class="cited" aria-hidden="true">[{{ nav.n }}]</span>
-            }
-            <!-- "1 de 2 ocorrências"; a phone keeps "1 de 2" (cmDoc) and says the rest aloud. -->
-            <span i18n="@@panel.matchesCount"
-              >{{ current() + 1 }} de {{ matches() }}</span
-            >&ngsp;<span
-              class="occ-word"
-              i18n="@@panel.matchesWord"
-              >{matches(), plural, =1 {ocorrência} other {ocorrências}}</span
-            >
-            @if (totalMatches() > matches()) {
-              <span i18n="@@panel.totalMatches"
-                >({{ totalMatches() }} no documento)</span
-              >
-            }
-          </span>
-          <button
-            uiIconButton
-            type="button"
-            [size]="28"
-            (click)="step(-1)"
-            aria-label="Ocorrência anterior"
-            i18n-aria-label="@@panel.prev"
-          >
-            <ui-icon name="chevUp" [size]="16" />
-          </button>
-          <button
-            uiIconButton
-            type="button"
-            [size]="28"
-            (click)="step(1)"
-            [attr.aria-label]="nextLabel()"
-          >
-            <ui-icon name="chevDown" [size]="16" />
-          </button>
+      @if (matches() > 0 && !heroOccurrences()) {
+        <div class="occurrences in-tools">
+          <ng-container [ngTemplateOutlet]="occurrences" />
         </div>
       } @else if (passageNotFound()) {
         <!-- The source is marked by the question's words (KBC-127 BR-4): none in this text. -->
@@ -280,8 +290,16 @@
       <span class="visually-hidden" i18n="@@panel.loading"
         >Carregando documento…</span
       >
+      <!-- docMain / cmDoc loading: the cover, the title and the tools drawn as skeletons. -->
+      <div class="page-head skeleton" aria-hidden="true">
+        <span class="skeleton-art"></span>
+        <span class="skeleton-lines"
+          ><span></span><span></span><span></span
+        ></span>
+      </div>
+      <span class="skeleton-pill" aria-hidden="true"></span>
       <div class="skeleton-text" aria-hidden="true">
-        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span>
       </div>
     </div>
   } @else if (document.error()) {
@@ -418,7 +436,12 @@
   @if (!subject() || doc.level !== undefined) {
     <aside class="about" [attr.aria-labelledby]="titleId + '-about'">
       <div class="about-head">
-        <h3 class="about-title" [id]="titleId + '-about'" i18n="@@panel.about">
+        <h3
+          class="about-title"
+          [id]="titleId + '-about'"
+          tabindex="-1"
+          i18n="@@panel.about"
+        >
           Sobre este documento
         </h3>
         @if (page()) {
@@ -507,6 +530,72 @@
         (opened)="navigated.emit($event)"
         (trackOpened)="trackOpened.emit($event)"
       />
+      @if (copies().length > 0) {
+        <!-- docRight "Cópias": the near-identical documents the search grouped with it. -->
+        <section class="about-section copies">
+          <h4 i18n="@@panel.copies">Cópias</h4>
+          <ul>
+            @for (copy of copies(); track copy.id) {
+              <li>
+                <button
+                  type="button"
+                  class="copy"
+                  (click)="navigated.emit(copy)"
+                >
+                  <ui-cover
+                    [title]="copy.title"
+                    [size]="40"
+                    aria-hidden="true"
+                  />
+                  <span class="copy-text">
+                    <span class="copy-title">{{ copy.title }}</span>
+                    <span class="copy-path">{{ copy.id }}</span>
+                  </span>
+                </button>
+              </li>
+            }
+          </ul>
+        </section>
+      }
     </aside>
   }
 }
+
+<ng-template #occurrences>
+  <span class="counter" aria-live="polite">
+    @if (sourceNav(); as nav) {
+      <span class="cited" aria-hidden="true">[{{ nav.n }}]</span>
+    }
+    <!-- "1 de 2 ocorrências"; a phone keeps "1 de 2" (cmDoc) and says the rest aloud. -->
+    <span i18n="@@panel.matchesCount"
+      >{{ current() + 1 }} de {{ matches() }}</span
+    >&ngsp;<span class="occ-word" i18n="@@panel.matchesWord">{matches(), plural,
+      =1 {ocorrência}
+      other {ocorrências}
+    }</span>
+    @if (totalMatches() > matches()) {
+      <span i18n="@@panel.totalMatches"
+        >({{ totalMatches() }} no documento)</span
+      >
+    }
+  </span>
+  <button
+    uiIconButton
+    type="button"
+    [size]="28"
+    (click)="step(-1)"
+    aria-label="Ocorrência anterior"
+    i18n-aria-label="@@panel.prev"
+  >
+    <ui-icon name="chevUp" [size]="16" />
+  </button>
+  <button
+    uiIconButton
+    type="button"
+    [size]="28"
+    (click)="step(1)"
+    [attr.aria-label]="nextLabel()"
+  >
+    <ui-icon name="chevDown" [size]="16" />
+  </button>
+</ng-template>

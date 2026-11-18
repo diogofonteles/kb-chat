@@ -1,12 +1,14 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { UiIcon } from '@ui/icon.js';
 import { SettingsStore } from './settings-store.js';
 
 /** The fixed ⚙ "Configurações" entry (KBC-007 FR-6), in the side panel and the phone menu. */
 @Component({
   selector: 'app-settings-button',
+  imports: [UiIcon],
   template: `
     <button type="button" class="settings-button" (click)="open()">
-      <span class="icon" aria-hidden="true">⚙</span>
+      <ui-icon class="icon" name="settings" [size]="20" />
       <span i18n="@@settings.open">Configurações</span>
     </button>
   `,
@@ -30,7 +32,7 @@ import { SettingsStore } from './settings-store.js';
       background: var(--sidebar-active, var(--color-surface-muted));
     }
     .icon {
-      font-size: 1.125rem;
+      flex: none;
       color: var(--color-text-muted);
     }
   `,

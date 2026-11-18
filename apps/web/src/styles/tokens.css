@@ -45,6 +45,7 @@
   --overlay-2: color-mix(in srgb, var(--color-text) 7%, transparent);
   --overlay-3: color-mix(in srgb, var(--color-text) 10%, transparent);
   --overlay-4: color-mix(in srgb, var(--color-text) 20%, transparent);
+  --overlay-5: color-mix(in srgb, var(--color-text) 35%, transparent);
   --overlay-line: color-mix(in srgb, var(--color-text) 12%, transparent);
   --scrim: rgb(0 0 0 / 70%);
   /* The main panel's gradient by page (v2 · Conversa): a search page is neutral, the AI

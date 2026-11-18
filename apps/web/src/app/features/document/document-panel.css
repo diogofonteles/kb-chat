@@ -353,10 +353,14 @@ h2:focus-visible {
   align-items: flex-end;
 }
 
+.loading .page-head.skeleton {
+  padding: 0 0 var(--space-6);
+}
+
 .skeleton-art {
   flex: none;
-  width: 64px;
-  height: 64px;
+  width: 208px;
+  height: 208px;
   border-radius: 6px;
   background: var(--overlay-3);
 }
@@ -396,6 +400,28 @@ h2:focus-visible {
 
 .skeleton-text span:nth-child(even) {
   width: 80%;
+}
+
+.skeleton-pill {
+  display: block;
+  width: 6rem;
+  height: 2rem;
+  margin-bottom: var(--space-6);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
+}
+
+.loading .skeleton-text {
+  max-width: 24rem;
+}
+
+/* A document that failed to open: its empty state on the flat page, no cover tint. */
+@media (min-width: 1024px) {
+  :host(.failed-doc),
+  :host(.failed-doc) .reader,
+  :host(.failed-doc) .head {
+    background: var(--color-bg) !important;
+  }
 }
 
 @keyframes pulse {
@@ -580,6 +606,33 @@ h2:focus-visible {
     padding-inline: var(--space-4);
   }
 
+  /* cmDoc loading: the 200 cover centred, the title's bar and the lines under it. */
+  :host(:not(.in-sheet)) .loading .page-head.skeleton {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-5);
+    padding-bottom: var(--space-3);
+  }
+
+  :host(:not(.in-sheet)) .skeleton-art {
+    align-self: center;
+    width: 200px;
+    height: 200px;
+  }
+
+  :host(:not(.in-sheet)) .skeleton-lines span:nth-child(1) {
+    order: 2;
+  }
+
+  :host(:not(.in-sheet)) .skeleton-lines span:nth-child(2) {
+    order: 1;
+    width: 75%;
+  }
+
+  :host(:not(.in-sheet)) .skeleton-pill {
+    display: none;
+  }
+
   :host(:not(.page-mode):not(.full)) .about {
     padding-inline: var(--space-4);
   }
@@ -587,10 +640,6 @@ h2:focus-visible {
   /* cmDoc: ✕ round at the left of the top row, the occurrences' pill at its right, the
      facets under the author, the tools as icons and "Perguntar à IA" the round ✦ at the
      end. */
-  :host(:not(.in-sheet):not(.source-mode)) {
-    position: relative;
-  }
-
   :host(:not(.in-sheet):not(.source-mode)) .top-row .close {
     order: -1;
     width: 2.25rem;
@@ -603,10 +652,8 @@ h2:focus-visible {
     min-height: 2.75rem;
   }
 
-  :host(:not(.in-sheet):not(.source-mode)) .occurrences {
-    position: absolute;
-    top: var(--space-3);
-    right: var(--space-4);
+  :host(:not(.in-sheet):not(.source-mode)) .occurrences.in-hero {
+    display: flex;
     min-height: 2.25rem;
     background: var(--overlay-dark);
   }
@@ -684,6 +731,16 @@ h2:focus-visible {
   }
 
   :host(:not(.in-sheet):not(.source-mode)) .byline {
+    color: var(--color-text);
+    font-weight: 700;
+  }
+
+  /* cmDoc: "Outros autores" at 13/700 in the text colour, not the badge's muted one. */
+  :host(:not(.in-sheet):not(.source-mode))
+    .byline
+    app-authorship-badge
+    ::ng-deep
+    .authorship-badge:not([data-authorship='mestre-laercio']) {
     color: var(--color-text);
     font-weight: 700;
   }
@@ -847,5 +904,91 @@ h2:focus-visible {
 @media (max-width: 1023px) {
   .failed-close {
     display: none;
+  }
+}
+
+/* docRight "Cópias": a 40 cover, the title and the copy's path under it. */
+.copies ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.copy {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--target);
+  padding: var(--space-1) 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.copy:hover {
+  background: var(--color-surface-muted);
+}
+
+.copy ui-cover {
+  flex: none;
+  border-radius: 4px;
+}
+
+.copy-text {
+  display: grid;
+  min-width: 0;
+}
+
+.copy-title {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-path {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The subject's ⋯ in the hero exists on a phone only, where its tools row is gone. */
+.hero-more {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  :host(.subject:not(.in-sheet):not(.source-mode)) .hero-more {
+    display: block;
+  }
+
+  :host(.subject:not(.in-sheet):not(.source-mode))
+    .hero-more
+    ::ng-deep
+    .ui-menu__trigger {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    background: var(--overlay-dark);
+    color: var(--color-text);
+  }
+
+  :host(.subject:not(.in-sheet):not(.source-mode)) .actions {
+    display: none;
+  }
+
+  /* cmDoc error: the empty state under ✕, from the top (not centred in the page). */
+  :host(:not(.in-sheet)) .failed {
+    place-items: start center;
+    padding-top: 3rem;
   }
 }

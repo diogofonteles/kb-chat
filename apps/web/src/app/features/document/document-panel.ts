@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -21,7 +22,6 @@ import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import type { CitedSource } from '@features/chat/chat-store.js';
 import {
-  UiAvatar,
   UiButton,
   UiChip,
   UiCover,
@@ -90,10 +90,10 @@ let nextPanel = 0;
 @Component({
   selector: 'app-document-panel',
   imports: [
+    NgTemplateOutlet,
     SeeAlsoSection,
     AuthorshipBadge,
     DocumentLevel,
-    UiAvatar,
     UiButton,
     UiChip,
     UiCover,
@@ -115,6 +115,8 @@ let nextPanel = 0;
     '[class.page-mode]': 'page()',
     '[class.source-mode]': 'inSource()',
     '[class.subject]': 'subject()',
+    '[class.failed-doc]': '!!document.error()',
+    '[class.phone]': 'phone()',
     '[class.tools-stuck]': 'toolsStuck()',
     '(scroll)': 'readerScrolled($event)',
     '[style.--doc-tint]': 'tint()',
@@ -139,8 +141,12 @@ export class DocumentPanel {
   readonly canGoBack = input(false);
   /** The text sources of the AI answer that opened it, for "Fonte ‹ ›" (KBC-127 FR-1). */
   readonly sources = input<readonly CitedSource[]>([]);
+  /** The near-identical copies the search grouped with this document ("Cópias"). */
+  readonly copies = input<readonly DocumentRef[]>([]);
   /** Inside the phone's reading sheet: its tabs and handle replace "Fonte ‹ ›" and ✕. */
   readonly inSheet = input(false);
+  /** A phone's screen (cmDoc): "1 de 2 ⌃ ⌄" sits in the hero, not among the tools. */
+  readonly phone = input(false);
   /** The element that names it instead of its title (the selected tab of a reading sheet). */
   readonly labelledBy = input<string | null>(null);
   /** False while the reader moves between a sheet's tabs: the focus stays on the tab. */
@@ -202,6 +208,10 @@ export class DocumentPanel {
     if (this.inSheet() || !source) return null;
     return { position: at + 1, total: sources.length, n: source.n };
   });
+  protected readonly heroOccurrences = computed(
+    () =>
+      this.phone() && this.matches() > 0 && !this.inSheet() && !this.inSource(),
+  );
   protected readonly nextLabel = computed(() =>
     this.inSource()
       ? $localize`:@@source.nextPassage:Próximo trecho`
@@ -370,6 +380,13 @@ export class DocumentPanel {
     }));
     // A new object every time, so picking the same section again scrolls again.
     this.pendingSection.set({ id: headingId(section.title) });
+  }
+
+  /** ⋯ "Sobre este documento": where the text ends, its authorship, subjects and copies. */
+  protected goToAbout(): void {
+    const about = this.host.querySelector<HTMLElement>('.about');
+    about?.scrollIntoView({ block: 'start' });
+    about?.querySelector<HTMLElement>('.about-title')?.focus();
   }
 
   protected async copyPassage(): Promise<void> {

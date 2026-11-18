@@ -47,7 +47,6 @@
 
 .state.empty {
   border-radius: var(--radius-card);
-  background: var(--overlay-1);
 }
 
 /* Recentes: tiles of 56, radius 4, #ffffff14, the title only (14/700). */

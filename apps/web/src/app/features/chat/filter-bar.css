@@ -264,6 +264,9 @@
 
 .clear-draft {
   color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  font-weight: 700;
+  text-decoration: none;
 }
 
 /* One facet's sheet (chat-results-filter-popover@mobile): as tall as its options, the
@@ -271,10 +274,6 @@
 .sheet.one-facet {
   height: auto;
   max-height: 85dvh;
-}
-
-.sheet.one-facet .sheet-foot {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .sheet-head h2 {
@@ -318,12 +317,24 @@ legend {
   background: transparent;
 }
 
+/* filterSections: "Ver N resultados" across, right under the facets (not pinned). */
 .sheet-foot {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4)
-    calc(var(--space-4) + env(safe-area-inset-bottom));
+  grid-template-columns: minmax(0, 1fr);
+  padding: var(--space-2) 0 calc(var(--space-4) + env(safe-area-inset-bottom));
+}
+
+/* filterSections: "Autoria" and the first facet under their plain 15/700 names. */
+.sheet-section-title {
+  font-size: 0.9375rem;
+}
+
+.sheet .option .mark {
+  color: var(--color-accent-text);
+}
+
+.sheet .option.off {
+  opacity: 0.5;
 }
 
 @media (max-width: 1023px) {
@@ -403,4 +414,11 @@ legend {
 
 .sheet-facet[open] summary:not(.visually-hidden) + fieldset {
   padding-top: 0;
+}
+
+/* cmResults: a phone has no strip of applied filters; "Filtros (n)" and the chips say it. */
+@media (max-width: 1023px) {
+  .active-row {
+    display: none;
+  }
 }

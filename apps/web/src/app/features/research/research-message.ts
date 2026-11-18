@@ -109,7 +109,7 @@ export class ResearchMessage {
   /** Only the last turn offers "Tentar de novo" (asking again in its place). */
   readonly last = input(false);
   /** A wide screen: the latest answer shows its steps open (v2 · Conversa, chat-research-answer). */
-  private readonly wide =
+  protected readonly wide =
     inject(DOCUMENT).defaultView?.matchMedia?.('(min-width: 1024px)').matches ??
     true;
   /** The steps of the latest answer, once written, open on desktop; the others closed. */
@@ -262,11 +262,18 @@ export class ResearchMessage {
     };
   });
   /** The coverage the app measured, and what was left, after the turn (KBC-030). */
+  /** The interrupted banner's bold line (chat-research-interrupted). */
+  protected readonly interruptedTitle = computed(() =>
+    this.turn().text
+      ? $localize`:@@ai.interruptedTitle:A resposta foi interrompida.`
+      : $localize`:@@ai.interruptedEarly:Resposta interrompida antes de começar.`,
+  );
   protected readonly coverage = computed(() => {
     const coverage = this.turn().coverage;
     if (!coverage || this.turn().phase === 'streaming') return null;
+    const titled = coverage.needed === 0;
     return {
-      line: coverageText(coverage),
+      line: coverageText(coverage, { titled }),
       target: targetText(coverage.target, coverage.phrases, this.labels()),
       missing: leftText(coverage),
       // "10 de 22" with its bar: of the documents to analyze, those the AI analyzed.

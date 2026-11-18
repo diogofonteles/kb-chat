@@ -106,11 +106,26 @@ p.steps {
 .steps ol {
   display: grid;
   gap: 0.375rem;
-  margin: var(--space-2) 0 var(--space-2) 0.7rem;
-  padding-left: var(--space-5);
-  border-left: 2px solid var(--overlay-3);
+  margin: var(--space-1) 0;
+  padding-left: var(--space-8);
   font-weight: 400;
   list-style: none;
+}
+
+/* steps: each one after a 6 px round. */
+.steps > ol > li {
+  position: relative;
+}
+
+.steps > ol > li::before {
+  content: '';
+  position: absolute;
+  top: 0.5em;
+  left: -0.875rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--overlay-5);
 }
 
 /* A sub-researcher's steps (KBC-018): a nested list under its delegation, quieter. */
@@ -131,19 +146,39 @@ p.steps {
   overflow-wrap: anywhere;
 }
 
-.working-row {
+/* The steps' line and, while the agent works, "Parar" beside it (pending). */
+.lead {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-2) 0.625rem;
+  min-width: 0;
 }
 
-.stop::before {
-  content: '';
-  display: inline-block;
-  width: 0.6em;
-  height: 0.6em;
-  border-radius: 2px;
-  background: currentColor;
+.lead:empty {
+  display: none;
+}
+
+.lead > .steps {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.stop {
+  min-height: 2rem;
+  padding-inline: 0.875rem;
+}
+
+/* pending: "Pesquisando no acervo…" at 15/700 in the text colour, a 28 white round. */
+.steps.working,
+.working summary {
+  color: var(--color-text);
+  font-size: 0.9375rem;
+}
+
+.working .steps-icon {
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 /* The answer's place while the agent works, a cursor at the end (chat-research-streaming). */
@@ -322,7 +357,7 @@ ui-banner .note {
   width: 100%;
   min-height: 3.5rem;
   padding: var(--space-2) var(--space-3);
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
   border-radius: var(--radius-menu);
   background: transparent;
   color: var(--color-text);
@@ -331,8 +366,12 @@ ui-banner .note {
   cursor: pointer;
 }
 
-.source:hover {
+.source {
   background: var(--overlay-2);
+}
+
+.source:hover {
+  background: var(--overlay-3);
 }
 
 .source.active {
@@ -504,5 +543,46 @@ span.source-art {
   .working .steps-icon,
   .pending span {
     animation: none;
+  }
+}
+
+/* chat-research-interrupted: the "interrompida" pill on the answer's last line. */
+.answer-block.with-pill {
+  display: block;
+}
+
+.answer-block.with-pill .answer,
+.answer-block.with-pill .answer ::ng-deep > :last-child {
+  display: inline;
+}
+
+.answer-block.with-pill .interrupted {
+  margin-inline-start: var(--space-2);
+  vertical-align: 0.15em;
+}
+
+.retry-below {
+  justify-self: start;
+}
+
+@media (max-width: 1023px) {
+  /* mAnswer: Copiar and Refazer as 36 rounds, the label said aloud only. */
+  .answer-actions button {
+    width: 2.25rem;
+    min-width: 2.25rem;
+    height: 2.25rem;
+    min-height: 2.25rem;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+  }
+
+  .answer-actions .action-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 }

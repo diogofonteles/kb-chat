@@ -153,7 +153,7 @@ test('AC-4: without "Criar acervos" there is no button and the API refuses', asy
   const panel = await sidebar(member);
   await expect(collectionButtons(panel).first()).toBeVisible();
   await expect(
-    panel.getByRole('button', { name: '+ Novo acervo' }),
+    panel.getByRole('button', { name: 'Novo acervo', exact: true }),
   ).toHaveCount(0);
   // "+ Criar" offers a conversation only.
   await panel.getByRole('button', { name: 'Criar', exact: true }).click();
@@ -216,7 +216,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     // v2 (KBC-125): "+ Criar" › "Novo acervo" on desktop, the Menu's entry on a phone.
     const opener = desktop(page)
       ? panel.getByRole('button', { name: 'Criar', exact: true })
-      : panel.getByRole('button', { name: '+ Novo acervo' });
+      : panel.getByRole('button', { name: 'Novo acervo', exact: true });
     await opener.focus();
     await page.keyboard.press('Enter');
     if (desktop(page)) {

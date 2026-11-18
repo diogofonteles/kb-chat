@@ -391,8 +391,13 @@
     visibility: hidden;
   }
 
+  /* Over the conversation, above the bottom navigation (cmDoc keeps the tabs). */
+  .layout {
+    position: relative;
+  }
+
   .panel {
-    position: fixed;
+    position: absolute;
     inset: 0;
     z-index: 10;
   }

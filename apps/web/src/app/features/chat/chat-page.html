@@ -270,6 +270,8 @@
         [highlight]="doc.question"
         [canGoBack]="store.canGoBack()"
         [sources]="doc.sources ?? []"
+        [copies]="doc.copies ?? []"
+        [phone]="!desktop()"
         [canAskAi]="views.researchAvailable()"
         [page]="docPage()"
         (closed)="closeDocument()"

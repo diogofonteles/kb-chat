@@ -6,7 +6,7 @@ import {
   startInSearchView,
   viewRadio,
 } from './search-view.js';
-import { desktop } from './shell-helpers.js';
+import { desktop, startNewCollection } from './shell-helpers.js';
 
 /**
  * v2 · Conversa as it is used (KBC-126/KBC-127, the fidelity pass): every control of the
@@ -143,7 +143,28 @@ test.describe('the results', () => {
     await expect(chip).toContainText('(1)');
   });
 
-  test('the Filtros sheet folds its facets, clears and cancels (phone)', async ({
+  test('a popover keeps its ticks until Aplicar; Escape after a tick leaves the filters (desktop)', async ({
+    page,
+  }) => {
+    test.skip(!desktop(page), 'Phones filter in sheets.');
+    await searchByMeaning(page, 'natureza');
+    const before = await page.locator('app-result-card').count();
+    const chip = page.getByRole('button', { name: /^Assuntos/ });
+    await chip.click();
+    const popover = page.getByRole('group', { name: 'Assuntos' });
+    // A click (Safari keeps the focus on the page), then Escape: closed, nothing applied.
+    await popover.locator('label', { hasText: /Cabala/ }).click();
+    await expect(
+      popover.getByRole('checkbox', { name: /Cabala/ }),
+    ).toBeChecked();
+    await expect(page.locator('app-result-card')).toHaveCount(before);
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden();
+    await expect(chip).not.toContainText('(1)');
+    await expect(page.locator('app-result-card')).toHaveCount(before);
+  });
+
+  test('the Filtros sheet folds its facets, clears and is dismissed (phone)', async ({
     page,
   }) => {
     test.skip(desktop(page), 'Desktop filters in popovers.');
@@ -162,7 +183,13 @@ test.describe('the results', () => {
     await first.check();
     await sheet.getByRole('button', { name: 'Limpar' }).click();
     await expect(first).not.toBeChecked();
-    await sheet.getByRole('button', { name: 'Cancelar' }).click();
+    // filterSections: "Autoria" radios and the first facet open, no Cancelar (Escape).
+    await expect(sheet.getByRole('group', { name: 'Autoria' })).toBeVisible();
+    await expect(sheet.getByRole('radio', { name: /^Todos/ })).toBeChecked();
+    await expect(sheet.getByRole('button', { name: 'Cancelar' })).toHaveCount(
+      0,
+    );
+    await page.keyboard.press('Escape');
     await expect(sheet).toBeHidden();
     await expect(page.locator('app-result-card')).toHaveCount(before);
   });
@@ -199,14 +226,22 @@ test.describe('the document page', () => {
     const tools = doc.getByRole('toolbar', {
       name: 'Ferramentas do documento',
     });
-    await expect(tools.getByText(/^1 de 2/)).toBeVisible();
-    await tools
+    // "1 de 2 ⌃ ⌄": among the tools on desktop, at the hero's top right on a phone (cmDoc).
+    const occurrences = doc.locator('.occurrences');
+    await expect(occurrences).toHaveCount(1);
+    await expect(occurrences).toHaveClass(
+      desktop(page) ? /in-tools/ : /in-hero/,
+    );
+    await expect(occurrences.getByText(/^1 de 2/)).toBeVisible();
+    await occurrences
       .getByRole('button', { name: /Próxima ocorrência|ocorrência/ })
       .last()
       .click();
-    await expect(tools.getByText(/^2 de 2/)).toBeVisible();
-    await tools.getByRole('button', { name: 'Ocorrência anterior' }).click();
-    await expect(tools.getByText(/^1 de 2/)).toBeVisible();
+    await expect(occurrences.getByText(/^2 de 2/)).toBeVisible();
+    await occurrences
+      .getByRole('button', { name: 'Ocorrência anterior' })
+      .click();
+    await expect(occurrences.getByText(/^1 de 2/)).toBeVisible();
 
     await tools.getByRole('button', { name: 'Compartilhar' }).click();
     await expect
@@ -230,6 +265,83 @@ test.describe('the document page', () => {
     await expect(doc.getByRole('heading', { level: 2 })).toHaveText(
       /NATUREZA/i,
     );
+  });
+});
+
+test.describe('the document page on a phone', () => {
+  test.beforeEach(startInSearchView);
+
+  test('✦ is tapped at its centre, ⋯ reaches "Sobre este documento", and the tabs stay', async ({
+    page,
+  }) => {
+    test.skip(desktop(page), 'cmDoc is the phone layout.');
+    await searchByMeaning(page, 'natureza setupla');
+    await page
+      .locator('app-result-card')
+      .filter({ hasText: /A Natureza Sétupla/i })
+      .first()
+      .locator('button.card')
+      .click();
+    const doc = page.locator('app-document-panel');
+    await expect(doc.getByRole('heading', { level: 2 })).toBeVisible();
+    // The bottom navigation stays under the page (cmDoc nav: 1), not covered by it.
+    await expect(page.getByRole('navigation').last()).toBeInViewport();
+    const ask = doc.getByRole('button', { name: 'Perguntar à IA' });
+    if (await ask.count()) {
+      const box = await ask.boundingBox();
+      expect(box).toBeTruthy();
+      if (box) {
+        const hit = await page.evaluate(
+          ([x, y]) =>
+            document
+              .elementFromPoint(x ?? 0, y ?? 0)
+              ?.closest('button')
+              ?.textContent?.trim() ?? '',
+          [box.x + box.width / 2, box.y + box.height / 2],
+        );
+        expect(hit).toContain('Perguntar à IA');
+      }
+    }
+    await doc.getByRole('button', { name: 'Mais opções' }).click();
+    const menu = page.getByRole('menu', { name: 'Mais opções do documento' });
+    await expectOnScreen(page, menu);
+    await menu.getByRole('menuitem', { name: 'Sobre este documento' }).click();
+    await expect(menu).toBeHidden();
+    await expect(
+      doc.getByRole('heading', { name: 'Sobre este documento' }),
+    ).toBeInViewport();
+  });
+});
+
+test.describe('the collection dialog', () => {
+  test('a name with no letter keeps Criar off until it is fixed; ✕ or Cancelar closes', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await startNewCollection(page);
+    const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
+    await expect(dialog).toBeVisible();
+    const create = dialog.getByRole('button', { name: 'Criar acervo' });
+    // The cover waits for the collection ("Capa pela sigla").
+    await expect(dialog.getByText('Capa pela sigla')).toBeVisible();
+    await dialog.getByLabel('Nome').fill('!!!');
+    await create.click();
+    await expect(
+      dialog.getByText('Escreva um nome com pelo menos uma letra ou número.'),
+    ).toBeVisible();
+    await expect(create).toBeDisabled();
+    await dialog.getByLabel('Nome').fill('Rosacruz');
+    await expect(create).toBeEnabled();
+    await expect(
+      dialog.getByRole('combobox', { name: 'Dentro de' }),
+    ).toHaveValue('');
+    await expect(
+      dialog.getByRole('option', { name: 'Nenhum acervo (no topo)' }),
+    ).toHaveCount(1);
+    await dialog
+      .getByRole('button', { name: desktop(page) ? 'Fechar' : 'Cancelar' })
+      .click();
+    await expect(dialog).toBeHidden();
   });
 });
 

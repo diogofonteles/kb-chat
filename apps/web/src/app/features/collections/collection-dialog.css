@@ -17,8 +17,44 @@
   background: var(--scrim);
 }
 
-h2 {
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   margin: 0 0 var(--space-5);
+}
+
+.head-close {
+  margin-inline-start: auto;
+}
+
+/* cmSheetForm's head: "Cancelar" (15/500 muted) and "Criar" (15/700 accent) as text. */
+.head-text {
+  min-height: var(--target);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.head-primary {
+  color: var(--color-accent-text);
+  font-weight: 700;
+}
+
+.head-primary:disabled {
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  cursor: default;
+}
+
+h2 {
+  flex: 1 1 auto;
+  margin: 0;
   font-size: var(--text-section);
   font-weight: 700;
   overflow-wrap: anywhere;
@@ -78,8 +114,29 @@ h2 {
 }
 
 .hint code {
-  font-family: var(--font-mono, monospace);
+  font-family: inherit;
   overflow-wrap: anywhere;
+}
+
+/* The select's own chevron (modal field "caret"): the same in Safari and Chrome. */
+.select-wrap {
+  position: relative;
+  display: grid;
+}
+
+.select-wrap select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: 2.5rem;
+}
+
+.select-chev {
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  color: var(--color-text-muted);
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 #collection-address {
@@ -120,9 +177,16 @@ input[aria-invalid='true'] {
 }
 
 .error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   margin: var(--space-1) 0 0;
   color: var(--color-danger);
   font-size: var(--text-meta);
+}
+
+#collection-main-author-hint .error {
+  display: block;
 }
 
 .actions {
@@ -189,7 +253,12 @@ select:disabled {
   }
 
   h2 {
+    font-size: 1rem;
     text-align: center;
+  }
+
+  .head {
+    margin-bottom: var(--space-4);
   }
 
   .columns {

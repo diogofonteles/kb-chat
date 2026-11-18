@@ -2,6 +2,7 @@ import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DOCUMENT,
   ElementRef,
   computed,
   inject,
@@ -25,7 +26,7 @@ import { authorsUrl } from '@core/media/authors-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { levelsPagePath, topicLevelsUrl } from '@core/levels/levels-api.js';
 import { RouterLink } from '@angular/router';
-import { UiButton, UiCover, UiIcon } from '@ui/index.js';
+import { UiButton, UiCover, UiIcon, UiIconButton } from '@ui/index.js';
 import type { Observable } from 'rxjs';
 
 /** No parent: a top-level collection. */
@@ -44,7 +45,7 @@ const NO_AUTHOR = '';
  */
 @Component({
   selector: 'app-collection-dialog',
-  imports: [RouterLink, UiButton, UiCover, UiIcon],
+  imports: [RouterLink, UiButton, UiCover, UiIcon, UiIconButton],
   template: `
     <dialog
       #dialog
@@ -52,21 +53,66 @@ const NO_AUTHOR = '';
       aria-labelledby="collection-title"
       (close)="closed.emit()"
     >
-      <h2 id="collection-title">
-        @if (editing()) {
-          <ng-container i18n="@@collection.editTitle"
-            >Editar acervo</ng-container
+      <!-- modal: the title and ✕; cmSheetForm: "Cancelar | title | Criar" on a phone. -->
+      <header class="head">
+        @if (phone) {
+          <button
+            type="button"
+            class="head-text"
+            (click)="close()"
+            i18n="@@collection.cancel"
           >
-        } @else {
-          <ng-container i18n="@@collection.newTitle">Novo acervo</ng-container>
+            Cancelar
+          </button>
         }
-      </h2>
+        <h2 id="collection-title">
+          @if (editing()) {
+            <ng-container i18n="@@collection.editTitle"
+              >Editar acervo</ng-container
+            >
+          } @else {
+            <ng-container i18n="@@collection.newTitle"
+              >Novo acervo</ng-container
+            >
+          }
+        </h2>
+        @if (phone) {
+          <button
+            type="submit"
+            form="collection-form"
+            class="head-text head-primary"
+            [attr.aria-label]="editing() || busy() ? null : createLabel"
+            [disabled]="busy() || invalid()"
+            [attr.aria-busy]="busy()"
+          >
+            @if (busy()) {
+              <ng-container i18n="@@collection.saving">Salvando…</ng-container>
+            } @else if (editing()) {
+              <ng-container i18n="@@collection.save">Salvar</ng-container>
+            } @else {
+              <ng-container i18n="@@collection.createShort">Criar</ng-container>
+            }
+          </button>
+        } @else {
+          <button
+            uiIconButton
+            type="button"
+            class="head-close"
+            aria-label="Fechar"
+            i18n-aria-label="@@collection.close"
+            (click)="close()"
+          >
+            <ui-icon name="close" [size]="20" />
+          </button>
+        }
+      </header>
       <!-- A form: Enter in the name creates (or saves), like any form. -->
-      <form (submit)="$event.preventDefault(); save()">
+      <form id="collection-form" (submit)="$event.preventDefault(); save()">
         <div class="columns">
           <!-- The cover is the collection's initials over its colour (v2 · Capa): decorative. -->
           <div class="cover-slot" aria-hidden="true">
-            @if (name().trim()) {
+            <!-- A new collection shows the empty slot until it exists (modal "Capa pela sigla"). -->
+            @if (editing() && name().trim()) {
               <ui-cover [title]="name()" [size]="180" />
             } @else {
               <span class="cover-empty">
@@ -93,12 +139,11 @@ const NO_AUTHOR = '';
               />
             </label>
             @if (invalid()) {
-              <p
-                id="collection-name-error"
-                class="error"
-                i18n="@@collection.nameRequired"
-              >
-                Escreva um nome com pelo menos uma letra ou número.
+              <p id="collection-name-error" class="error">
+                <ui-icon name="warn" [size]="14" />
+                <span i18n="@@collection.nameRequired"
+                  >Escreva um nome com pelo menos uma letra ou número.</span
+                >
               </p>
             }
             <p id="collection-address" class="hint">
@@ -123,36 +168,39 @@ const NO_AUTHOR = '';
             @if (choosesMainAuthor()) {
               <label class="field" for="collection-main-author">
                 <span i18n="@@collection.mainAuthor">Autor principal</span>
-                <select
-                  #mainAuthorSelect
-                  id="collection-main-author"
-                  aria-describedby="collection-main-author-hint"
-                  [disabled]="!authorList.hasValue()"
-                  (change)="mainAuthor.set(mainAuthorSelect.value)"
-                >
-                  @if (authorList.hasValue()) {
-                    <option
-                      [value]="noAuthor"
-                      [selected]="mainAuthor() === noAuthor"
-                      i18n="@@collection.noMainAuthor"
-                    >
-                      Nenhum
-                    </option>
-                    @for (author of authors(); track author.slug) {
+                <span class="select-wrap">
+                  <select
+                    #mainAuthorSelect
+                    id="collection-main-author"
+                    aria-describedby="collection-main-author-hint"
+                    [disabled]="!authorList.hasValue()"
+                    (change)="mainAuthor.set(mainAuthorSelect.value)"
+                  >
+                    @if (authorList.hasValue()) {
                       <option
-                        [value]="author.slug"
-                        [selected]="mainAuthor() === author.slug"
+                        [value]="noAuthor"
+                        [selected]="mainAuthor() === noAuthor"
+                        i18n="@@collection.noMainAuthor"
                       >
-                        {{ author.name }}
+                        Nenhum
+                      </option>
+                      @for (author of authors(); track author.slug) {
+                        <option
+                          [value]="author.slug"
+                          [selected]="mainAuthor() === author.slug"
+                        >
+                          {{ author.name }}
+                        </option>
+                      }
+                    } @else {
+                      <!-- Until the list arrives, what the collection has now, never a false "Nenhum". -->
+                      <option [value]="mainAuthor()" selected>
+                        {{ currentMainName() }}
                       </option>
                     }
-                  } @else {
-                    <!-- Until the list arrives, what the collection has now, never a false "Nenhum". -->
-                    <option [value]="mainAuthor()" selected>
-                      {{ currentMainName() }}
-                    </option>
-                  }
-                </select>
+                  </select>
+                  <ui-icon class="select-chev" name="chevDown" [size]="18" />
+                </span>
               </label>
               <div id="collection-main-author-hint" class="hint">
                 @if (authorList.error()) {
@@ -210,27 +258,30 @@ const NO_AUTHOR = '';
             @if (!editing()) {
               <label class="field" for="collection-parent">
                 <span i18n="@@collection.parent">Dentro de</span>
-                <select
-                  #parentSelect
-                  id="collection-parent"
-                  (change)="parent.set(parentSelect.value)"
-                >
-                  <option
-                    [value]="topLevel"
-                    [selected]="parent() === topLevel"
-                    i18n="@@collection.noParent"
+                <span class="select-wrap">
+                  <select
+                    #parentSelect
+                    id="collection-parent"
+                    (change)="parent.set(parentSelect.value)"
                   >
-                    Nenhum (acervo principal)
-                  </option>
-                  @for (option of parents(); track option.slug) {
                     <option
-                      [value]="option.slug"
-                      [selected]="parent() === option.slug"
+                      [value]="topLevel"
+                      [selected]="parent() === topLevel"
+                      i18n="@@collection.noParent"
                     >
-                      {{ option.title }}
+                      Nenhum acervo (no topo)
                     </option>
-                  }
-                </select>
+                    @for (option of parents(); track option.slug) {
+                      <option
+                        [value]="option.slug"
+                        [selected]="parent() === option.slug"
+                      >
+                        {{ option.title }}
+                      </option>
+                    }
+                  </select>
+                  <ui-icon class="select-chev" name="chevDown" [size]="18" />
+                </span>
               </label>
             }
           </div>
@@ -238,34 +289,38 @@ const NO_AUTHOR = '';
         @if (failure(); as message) {
           <p class="error" role="alert">{{ message }}</p>
         }
-        <div class="actions">
-          <button
-            uiButton="ghost"
-            type="button"
-            class="secondary"
-            (click)="close()"
-            i18n="@@collection.cancel"
-          >
-            Cancelar
-          </button>
-          <button
-            uiButton="white"
-            type="submit"
-            class="primary"
-            [disabled]="busy()"
-            [attr.aria-busy]="busy()"
-          >
-            @if (busy()) {
-              <ng-container i18n="@@collection.saving">Salvando…</ng-container>
-            } @else if (editing()) {
-              <ng-container i18n="@@collection.save">Salvar</ng-container>
-            } @else {
-              <ng-container i18n="@@collection.create"
-                >Criar acervo</ng-container
-              >
-            }
-          </button>
-        </div>
+        @if (!phone) {
+          <div class="actions">
+            <button
+              uiButton="ghost"
+              type="button"
+              class="secondary"
+              (click)="close()"
+              i18n="@@collection.cancel"
+            >
+              Cancelar
+            </button>
+            <button
+              uiButton="white"
+              type="submit"
+              class="primary"
+              [disabled]="busy() || invalid()"
+              [attr.aria-busy]="busy()"
+            >
+              @if (busy()) {
+                <ng-container i18n="@@collection.saving"
+                  >Salvando…</ng-container
+                >
+              } @else if (editing()) {
+                <ng-container i18n="@@collection.save">Salvar</ng-container>
+              } @else {
+                <ng-container i18n="@@collection.create"
+                  >Criar acervo</ng-container
+                >
+              }
+            </button>
+          </div>
+        }
       </form>
     </dialog>
   `,
@@ -274,6 +329,10 @@ const NO_AUTHOR = '';
 })
 export class CollectionDialog {
   private readonly api = inject(KbApi);
+  /** A phone's sheet (cmSheetForm): its actions in the head, none at the foot. */
+  protected readonly phone =
+    inject(DOCUMENT).defaultView?.matchMedia?.('(max-width: 1023px)').matches ??
+    false;
   private readonly session = inject(SessionStore);
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
@@ -285,6 +344,8 @@ export class CollectionDialog {
   readonly saved = output<Topic>();
   readonly closed = output();
 
+  /** The phone's "Criar" says the whole action aloud (its visible word first). */
+  protected readonly createLabel = $localize`:@@collection.create:Criar acervo`;
   protected readonly titleMax = TOPIC_TITLE_MAX;
   protected readonly descriptionMax = TOPIC_DESCRIPTION_MAX;
   protected readonly topLevel = TOP_LEVEL;

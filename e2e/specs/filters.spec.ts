@@ -32,9 +32,11 @@ test.describe('desktop filters', () => {
     await page.getByRole('button', { name: /^Assuntos/ }).click();
     await expect(page.getByRole('checkbox', { name: /Cabala/ })).toBeVisible();
     await page.getByRole('checkbox', { name: /Cabala/ }).check();
+    // The tick waits for "Aplicar" (subjectsPopover).
+    await expectSummary(page, /3 documentos/, 'Por significado');
+    await page.getByRole('button', { name: 'Aplicar' }).click();
     await expectSummary(page, /2 documentos/, 'Por significado');
     await expect(page.locator('app-result-message')).toHaveCount(1);
-    await page.keyboard.press('Escape');
     await page
       .getByRole('button', { name: 'Remover Assuntos: Cabala' })
       .click();
@@ -48,7 +50,11 @@ test.describe('desktop filters', () => {
     await expect(
       page.getByRole('button', { name: /A Natureza Sétupla/ }),
     ).toHaveCount(1);
-    await page.getByRole('button', { name: '+1 cópia' }).click();
+    // A lone best result: its copy in "Cópia deste documento" beside it, "+1 cópia" a pill.
+    await expect(page.getByText('+1 cópia')).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Cópia deste documento' }),
+    ).toBeVisible();
     await page
       .getByRole('button', { name: /a-natureza-s-tupla-5\.md/ })
       .click();
@@ -67,6 +73,7 @@ test.describe('desktop filters', () => {
     ).toHaveCount(0);
     await page.getByRole('button', { name: /^Ligação com o tema/ }).click();
     await page.getByRole('checkbox', { name: /Fora do tema/ }).check();
+    await page.getByRole('button', { name: 'Aplicar' }).click();
     await expect(
       page.getByRole('button', { name: /Torta de pêssego/ }),
     ).toBeVisible();
@@ -79,7 +86,7 @@ test.describe('mobile filter sheet', () => {
     'the sheet is the mobile layout',
   );
 
-  test('AC-10: Cancelar keeps the filters and "Ver resultados" applies them', async ({
+  test('AC-10: dismissing the sheet keeps the filters and "Ver resultados" applies them', async ({
     page,
   }) => {
     await askSemantic(page, 'natureza');
@@ -87,7 +94,9 @@ test.describe('mobile filter sheet', () => {
     await page.getByRole('button', { name: 'Filtros', exact: true }).click();
     const sheet = page.getByRole('dialog', { name: 'Filtros' });
     await sheet.getByRole('checkbox', { name: /Cabala/ }).check();
-    await sheet.getByRole('button', { name: 'Cancelar' }).click();
+    // filterSections has no Cancelar: Escape (or the backdrop) leaves the filters as they were.
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
     await expect(page.getByText(/3 documentos ·/)).toBeVisible();
     await page.getByRole('button', { name: 'Filtros', exact: true }).click();
     await sheet.getByRole('checkbox', { name: /Cabala/ }).check();
@@ -140,12 +149,17 @@ test.describe('paging and empty filters', () => {
     // "Tipo de texto": its popover on desktop, its own sheet on a phone (cmResults).
     await page.getByRole('button', { name: /^Tipo de texto/ }).click();
     await page.getByRole('checkbox', { name: /Texto\/apostila/ }).check();
-    if (phone) await page.getByRole('button', { name: 'Aplicar' }).click();
+    await page.getByRole('button', { name: 'Aplicar' }).click();
     await expect(
       page.getByText('Nada encontrado para "ritmo" com estes filtros.'),
     ).toBeVisible();
+    // cmEmpty: a phone's shorter "Remover o filtro de tipo".
     await page
-      .getByRole('button', { name: 'Remover Tipo de texto: Texto/apostila' })
+      .getByRole('button', {
+        name: phone
+          ? 'Remover o filtro de tipo'
+          : 'Remover Tipo de texto: Texto/apostila',
+      })
       .last()
       .click();
     await expect(page.locator('app-result-card').first()).toBeVisible();
@@ -172,10 +186,14 @@ test.describe('paging and empty filters', () => {
     await page
       .getByRole('checkbox', { name: /Cosmologia Espiritual e Metafísica/ })
       .check();
-    if (phone) await page.getByRole('button', { name: VIEW_RESULTS }).click();
-    await expect(
-      page.getByRole('button', { name: /Remover Assuntos/ }),
-    ).toBeVisible();
+    await page
+      .getByRole('button', { name: phone ? VIEW_RESULTS : 'Aplicar' })
+      .click();
+    // A phone has no strip of applied filters (cmResults): "Filtros (1)" says it.
+    if (!phone)
+      await expect(
+        page.getByRole('button', { name: /Remover Assuntos/ }),
+      ).toBeVisible();
     expect(await overflow()).toBeLessThanOrEqual(0);
     if (phone)
       await expect(

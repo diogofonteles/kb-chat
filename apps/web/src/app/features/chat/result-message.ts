@@ -2,7 +2,9 @@ import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  DOCUMENT,
   computed,
+  inject,
   input,
   output,
 } from '@angular/core';
@@ -31,6 +33,7 @@ import { ResultCard, type OpenedHit } from './result-card.js';
 import { describeMediaCount, describeResultCount } from './result-count.js';
 import { SearchLevelChange } from './search-level-change.js';
 import { UiButton } from '@ui/button.js';
+import { UiCover } from '@ui/cover.js';
 import { UiEmptyState } from '@ui/empty-state.js';
 import { UiPill } from '@ui/pill.js';
 import { UiMenu, UiMenuItem } from '@ui/menu.js';
@@ -61,6 +64,7 @@ export interface OpenedPassage {
     NgTemplateOutlet,
     SearchLevelChange,
     UiButton,
+    UiCover,
     UiEmptyState,
     UiPill,
     UiMenu,
@@ -71,6 +75,10 @@ export interface OpenedPassage {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ResultMessage {
+  /** A phone's screen (cmResults): its shorter labels. */
+  protected readonly phone =
+    inject(DOCUMENT).defaultView?.matchMedia?.('(max-width: 1023px)').matches ??
+    false;
   readonly message = input.required<ChatMessage>();
   readonly topicTitle = input('');
   readonly activeId = input<string | null>(null);
@@ -148,9 +156,15 @@ export class ResultMessage {
   protected readonly seconds = computed(
     () => (this.response()?.tookMs ?? 0) / 1000,
   );
+  /** The empty state's line under the error (chat-results-error). */
+  protected readonly errorAgain = $localize`:@@message.errorText:Tente de novo.`;
+  /** The error's title, without the "Tente de novo." its line already says. */
   protected readonly error = computed(() => {
     const code = this.message().error;
-    return code ? errorMessage(code) : '';
+    const text = code ? errorMessage(code) : '';
+    return text.endsWith(` ${this.errorAgain}`)
+      ? text.slice(0, -this.errorAgain.length - 1)
+      : text;
   });
   protected readonly filtered = computed(() =>
     hasFilters(this.message().filters),
@@ -173,6 +187,12 @@ export class ResultMessage {
   /** The first of the search's own order (BR-4) and the rest, for the table. */
   protected readonly best = computed(() => this.references()[0] ?? null);
   protected readonly rest = computed(() => this.references().slice(1));
+  /** A lone best result's copies, beside it ("Cópia deste documento", chat-results-off-topic). */
+  protected readonly bestCopies = computed(() => {
+    const first = this.best();
+    if (!first || first.kind !== 'text' || this.rest().length > 0) return null;
+    return first.hit.copies.length > 0 ? first.hit : null;
+  });
   private readonly messageId = nextMessage++;
   protected readonly headingId = (part: string) =>
     `results-${this.messageId}-${part}`;

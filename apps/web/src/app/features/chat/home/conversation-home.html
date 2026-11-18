@@ -12,24 +12,27 @@
   } @else {
     <p class="greeting" i18n="@@page.greeting">O que você quer estudar hoje?</p>
   }
-  @if (showContent()) {
-    <p class="hint">
-      @if (researching()) {
-        <span i18n="@@page.hintResearch"
-          >A IA busca, lê os documentos e responde com as fontes.</span
-        >
-      } @else {
-        <span i18n="@@page.hint">Pergunte em linguagem natural.</span>
-      }
-      <span class="hint-keyboard" i18n="@@page.hintKeyboard"
-        >Dica: pressione / para escrever.</span
+  <!-- homeMain keeps its line under the greeting in every state (chat-topics-error). -->
+  <p class="hint">
+    @if (researching()) {
+      <span i18n="@@page.hintResearch"
+        >A IA busca, lê os documentos e responde com as fontes.</span
       >
-    </p>
-  }
+    } @else {
+      <span i18n="@@page.hint">Pergunte em linguagem natural.</span>
+    }
+    <span class="hint-keyboard" i18n="@@page.hintKeyboard"
+      >Dica: pressione / para escrever.</span
+    >
+  </p>
 </div>
 
 @if (topicsError()) {
-  <ui-banner class="state" tone="err" [title]="topicsError()" role="alert">
+  <!-- The reason in bold, "Tente de novo." muted under it (chat-topics-error). -->
+  <ui-banner class="state" tone="err" [title]="topicsErrorTitle()" role="alert">
+    @if (topicsErrorTitle() !== topicsError()) {
+      <p>{{ errorAgain }}</p>
+    }
     <button
       uiBannerAction
       uiButton="white"

@@ -561,7 +561,7 @@
           (click)="collectionDialog.openNew()"
         >
           <ui-icon name="plus" [size]="20" />
-          <span i18n="@@sidebar.newCollection">+ Novo acervo</span>
+          <span i18n="@@sidebar.newCollection">Novo acervo</span>
         </button>
         @if (chat.topic(); as current) {
           @if (current.canRename) {
@@ -605,13 +605,9 @@
         <ui-icon name="help" [size]="20" />
         <span i18n="@@page.help">Como usar</span>
       </a>
-      <button
-        type="button"
-        class="action"
-        (click)="signOut()"
-        i18n="@@sidebar.signOut"
-      >
-        Sair
+      <!-- Como usar and Sair have no row in cmDrawer; a phone has no other place for them. -->
+      <button type="button" class="action no-icon" (click)="signOut()">
+        <span i18n="@@sidebar.signOut">Sair</span>
       </button>
     </div>
   }

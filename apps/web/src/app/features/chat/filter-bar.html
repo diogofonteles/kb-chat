@@ -77,13 +77,14 @@
               (keydown.escape)="closePopover(chip)"
             >
               <p class="popover-title" aria-hidden="true">{{ group.title }}</p>
-              @for (option of visibleOptions(group); track option.value) {
+              @let ticks = draftGroup(group.key) ?? group;
+              @for (option of visibleOptions(ticks); track option.value) {
                 <label class="option" [class.on]="option.selected">
                   <input
                     type="checkbox"
                     class="ui-check"
                     [checked]="option.selected"
-                    (change)="toggle(group.key, option.value)"
+                    (change)="toggleDraft(group.key, option.value)"
                   />
                   <span class="option-label">{{ option.label }}</span>
                   <span class="option-count">{{ option.countText }}</span>
@@ -99,10 +100,10 @@
                   Ver todos ({{ group.options.length }})
                 </button>
               }
-              <!-- subjectsPopover's foot: "Limpar" and "Aplicar" (the choices apply as they
-                   are ticked; "Aplicar" closes). -->
+              <!-- subjectsPopover's foot: "Limpar" and "Aplicar" (the ticks apply with
+                   "Aplicar"; Escape or a click outside leaves the filters as they were). -->
               <div class="popover-foot">
-                @if (group.selectedCount > 0) {
+                @if (ticks.selectedCount > 0) {
                   <button
                     uiButton="ghost"
                     size="sm"
@@ -117,7 +118,7 @@
                   uiButton="white"
                   size="sm"
                   type="button"
-                  (click)="closePopover(chip)"
+                  (click)="applyPopover(chip)"
                   i18n="@@filters.apply"
                 >
                   Aplicar
@@ -178,7 +179,7 @@
 }
 
 @if (hiddenOffTopic() > 0) {
-  <ui-banner class="hidden-banner" tone="info">
+  <ui-banner class="hidden-banner" tone="info" iconName="eyeOff">
     <span
       class="hidden-note"
       i18n="@@filters.hiddenOffTopic"
@@ -238,71 +239,108 @@
       }
     </header>
     <div class="sheet-body">
-      @for (group of sheetGroups(); track group.key; let first = $first) {
-        <!-- chat-filters-sheet-mobile: the first facet open, the others folded under their
-             name with ˅ (one with a filter on opens with the sheet). -->
-        <details class="sheet-facet" [open]="first || sheetFacet() !== null">
-          <summary [class.visually-hidden]="sheetFacet() !== null">
-            <span>{{ group.title }}</span>
-            <ui-icon class="fold" name="chevDown" [size]="18" />
-          </summary>
-          <fieldset [attr.data-sheet-facet]="group.key">
-            <legend class="visually-hidden">{{ group.title }}</legend>
-            @for (option of visibleOptions(group); track option.value) {
-              <label class="option">
-                <input
-                  type="checkbox"
-                  class="ui-check"
-                  [checked]="option.selected"
-                  (change)="toggleDraft(group.key, option.value)"
-                />
-                <span class="option-label">{{ option.label }}</span>
-                <span class="option-count">{{ option.countText }}</span>
-              </label>
-            }
-            @if (hiddenOptions(group) > 0) {
-              <button
-                type="button"
-                class="link"
-                (click)="expand(group.key)"
-                i18n="@@filters.showAll"
+      @if (sheetFacet() === null && draftAuthorships().length > 0) {
+        <!-- filterSections: "Autoria" first, its radios with their counts. -->
+        <fieldset class="sheet-section sheet-authorship">
+          <legend class="sheet-section-title" i18n="@@filters.authorship">
+            Autoria
+          </legend>
+          @for (option of draftAuthorships(); track option.value) {
+            <label
+              class="option"
+              [class.off]="option.count === 0 && !option.selected"
+            >
+              <input
+                type="radio"
+                class="ui-radio"
+                [name]="barId + '-sheet-authorship'"
+                [checked]="option.selected"
+                [disabled]="option.count === 0 && !option.selected"
+                (change)="chooseDraftAuthorship(option.value)"
+              />
+              <span class="option-label">
+                @if (option.mestre) {
+                  <span class="mark" aria-hidden="true">✦</span>
+                }
+                {{ option.label }}</span
               >
-                Ver todos ({{ group.options.length }})
-              </button>
-            }
+              <span class="option-count">{{ option.count }}</span>
+            </label>
+          }
+        </fieldset>
+      }
+      @for (group of sheetGroups(); track group.key; let first = $first) {
+        @if (first && sheetFacet() === null) {
+          <!-- filterSections: the first facet open under its plain name. -->
+          <fieldset class="sheet-section" [attr.data-sheet-facet]="group.key">
+            <legend class="sheet-section-title">{{ group.title }}</legend>
+            <ng-container
+              [ngTemplateOutlet]="sheetOptions"
+              [ngTemplateOutletContext]="{ $implicit: group }"
+            />
           </fieldset>
-        </details>
-      }
-    </div>
-    <footer class="sheet-foot">
-      @if (sheetFacet() === null) {
-        <button
-          uiButton="ghost"
-          type="button"
-          class="cancel"
-          (click)="cancelSheet()"
-          i18n="@@filters.cancel"
-        >
-          Cancelar
-        </button>
-      }
-      <button
-        uiButton="white"
-        type="button"
-        class="apply"
-        (click)="applySheet()"
-      >
-        @if (sheetFacet() !== null) {
-          <span i18n="@@filters.apply">Aplicar</span>
-        } @else if (draftCount(); as count) {
-          <span i18n="@@filters.applyCount">{count, plural,
-            =1 {Ver 1 resultado}
-            other {Ver {{ count }} resultados}
-          }</span>
         } @else {
-          <span i18n="@@filters.applyResults">Ver resultados</span>
+          <!-- …the others folded under their name with ˅ (one with a filter on opens with the
+               sheet); a chip's own sheet shows its facet open. -->
+          <details class="sheet-facet" [open]="sheetFacet() !== null">
+            <summary [class.visually-hidden]="sheetFacet() !== null">
+              <span>{{ group.title }}</span>
+              <ui-icon class="fold" name="chevDown" [size]="18" />
+            </summary>
+            <fieldset [attr.data-sheet-facet]="group.key">
+              <legend class="visually-hidden">{{ group.title }}</legend>
+              <ng-container
+                [ngTemplateOutlet]="sheetOptions"
+                [ngTemplateOutletContext]="{ $implicit: group }"
+              />
+            </fieldset>
+          </details>
         }
-      </button>
-    </footer>
+      }
+      <footer class="sheet-foot">
+        <button
+          uiButton="white"
+          type="button"
+          class="apply"
+          (click)="applySheet()"
+        >
+          @if (sheetFacet() !== null) {
+            <span i18n="@@filters.apply">Aplicar</span>
+          } @else if (draftCount(); as count) {
+            <span i18n="@@filters.applyCount">{count, plural,
+              =1 {Ver 1 resultado}
+              other {Ver {{ count }} resultados}
+            }</span>
+          } @else {
+            <span i18n="@@filters.applyResults">Ver resultados</span>
+          }
+        </button>
+      </footer>
+    </div>
   </dialog>
 }
+
+<ng-template #sheetOptions let-group>
+  @for (option of visibleOptions(group); track option.value) {
+    <label class="option">
+      <input
+        type="checkbox"
+        class="ui-check"
+        [checked]="option.selected"
+        (change)="toggleDraft(group.key, option.value)"
+      />
+      <span class="option-label">{{ option.label }}</span>
+      <span class="option-count">{{ option.countText }}</span>
+    </label>
+  }
+  @if (hiddenOptions(group) > 0) {
+    <button
+      type="button"
+      class="link"
+      (click)="expand(group.key)"
+      i18n="@@filters.showAll"
+    >
+      Ver todos ({{ group.options.length }})
+    </button>
+  }
+</ng-template>

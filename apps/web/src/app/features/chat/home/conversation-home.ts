@@ -72,9 +72,14 @@ export class ConversationHome {
   /** The same actions as the library's: the page moves the focus after them. */
   readonly acted = output<SidebarAction>();
 
-  protected readonly showContent = computed(
-    () => !this.topicsError() && !this.noTopics(),
-  );
+  protected readonly errorAgain = $localize`:@@message.errorText:Tente de novo.`;
+  /** The topics' error without its "Tente de novo.", which goes on the line under it. */
+  protected readonly topicsErrorTitle = computed(() => {
+    const text = this.topicsError();
+    return text.endsWith(` ${this.errorAgain}`)
+      ? text.slice(0, -this.errorAgain.length - 1)
+      : text;
+  });
   /** The shortcuts with what each one says under its title. */
   protected readonly tiles = computed(() =>
     homeTiles(this.history.conversations(), this.store.topicList()).map(
