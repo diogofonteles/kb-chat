@@ -313,7 +313,8 @@
     flex-direction: row;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-3) var(--space-4);
+    /* The frames' head sits 56 from the top (the status bar's room). */
+    padding: 3rem var(--space-4) var(--space-3);
   }
 
   .phone-back {

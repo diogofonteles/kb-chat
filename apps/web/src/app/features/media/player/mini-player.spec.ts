@@ -24,6 +24,8 @@ import { SleepTimerService } from '@core/media/sleep-timer.js';
 import { RightPanel } from '@features/shell/right-panel.js';
 import { MiniPlayer } from './mini-player.js';
 import { NowPlayingPanel } from './now-playing-panel.js';
+import { PlayerPanel } from './player-panel.js';
+import { PlayerPanelTabs } from './player-panel-tab.js';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const SOURCE = {
@@ -138,6 +140,36 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     expect(button.getAttribute('aria-pressed')).toBe('false');
   });
 
+  it('KBC-129: the queue button opens the player panel on Fila and closes it', async () => {
+    const { harness } = await setup();
+    const panel = TestBed.inject(RightPanel);
+    const tabs = TestBed.inject(PlayerPanelTabs);
+    const queue = screen.getByRole('button', { name: 'Fila' });
+    expect(queue.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(queue);
+    await harness.fixture.whenStable();
+    expect(panel.content()).toMatchObject({
+      component: PlayerPanel,
+      width: 'narrow',
+      label: 'Fila',
+    });
+    expect(tabs.tab()).toBe('queue');
+    expect(queue.getAttribute('aria-pressed')).toBe('true');
+
+    // The transcript button moves the same panel to Sobre, the queue one is off then.
+    fireEvent.click(screen.getByRole('button', { name: 'Tocando agora' }));
+    await harness.fixture.whenStable();
+    expect(tabs.tab()).toBe('about');
+    expect(queue.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(queue);
+    await harness.fixture.whenStable();
+    fireEvent.click(queue);
+    await harness.fixture.whenStable();
+    expect(panel.content()).toBeNull();
+  });
+
   it('KBC-129 FR-2: closing the player also closes "Tocando agora"', async () => {
     const { harness } = await setup();
     fireEvent.click(screen.getByRole('button', { name: 'Tocando agora' }));
@@ -232,24 +264,31 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     expect(media.calls.at(-1)).toBe('seek:140');
   });
 
-  it('shows when a sleep timer will stop the audio, and nothing once it is off (KBC-046 FR-1)', async () => {
-    const { harness } = await setup();
+  it('says when a sleep timer will stop the audio on its green moon, and nothing once it is off (KBC-046 FR-1)', async () => {
+    const { harness } = await setup('/barra');
     const bar = screen.getByRole('region', { name: 'Mini-player' });
-    expect(bar.textContent).not.toContain('Timer para dormir');
+    const moon = () => bar.querySelector<HTMLButtonElement>('button.moon');
+    expect(moon()?.getAttribute('aria-label')).toBe('Timer para dormir');
+    expect(moon()?.classList.contains('on')).toBe(false);
     const timer = TestBed.inject(SleepTimerService);
     timer.start(15);
     await harness.fixture.whenStable();
-    // Seen as "☾ 15:00"; what it is gets read, not shown.
-    expect(bar.textContent).toContain('☾ Timer para dormir: 15:00');
-    expect(bar.querySelector('.sleep .visually-hidden')?.textContent).toBe(
-      'Timer para dormir: ',
+    // The bar's line stays plain (lib.js playerBar): the moon turns green and says it.
+    expect(moon()?.getAttribute('aria-label')).toBe('Timer para dormir: 15:00');
+    expect(moon()?.classList.contains('on')).toBe(true);
+    // The phone's mini player says it beside the clock (CSS shows it below 1024 px only).
+    expect(bar.querySelector('.sleep')?.textContent).toContain(
+      'Timer para dormir: 15:00',
     );
     timer.start('end-of-media');
     await harness.fixture.whenStable();
-    expect(bar.textContent).toContain('☾ Timer para dormir: No fim');
+    expect(moon()?.getAttribute('aria-label')).toBe(
+      'Timer para dormir: No fim',
+    );
     timer.off();
     await harness.fixture.whenStable();
-    expect(bar.textContent).not.toContain('Timer para dormir');
+    expect(moon()?.getAttribute('aria-label')).toBe('Timer para dormir');
+    expect(bar.querySelector('.sleep')).toBeNull();
   });
 
   it('offers mute and volume in percent on the desktop bar where the browser allows it (KBC-041 AC-13)', async () => {

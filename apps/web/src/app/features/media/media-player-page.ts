@@ -1,4 +1,10 @@
-import { DOCUMENT, DatePipe, NgTemplateOutlet } from '@angular/common';
+import {
+  DOCUMENT,
+  DatePipe,
+  NgTemplateOutlet,
+  formatDate,
+} from '@angular/common';
+import { seenAtFormat } from '@core/i18n/date-formats.js';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -114,6 +120,8 @@ import {
 import { RightPanel } from '@features/shell/right-panel.js';
 import { BookmarksStore } from '@core/media/bookmarks-store.js';
 import { PlayerAbout } from './player/player-about.js';
+import { PlayerPanel } from './player/player-panel.js';
+import { PlayerPanelTabs } from './player/player-panel-tab.js';
 
 /** The v2 shell's desktop width (chat-page.ts): "Sobre" goes to the right panel there. */
 const DESKTOP_QUERY = '(min-width: 1024px)';
@@ -130,6 +138,62 @@ export type PlayerView = 'transcript' | 'tracks' | 'voices';
  * "Continuar de" and "Começar do início". Leaving it while it plays keeps it playing in
  * the mini-player (FR-8); leaving it paused stops it.
  */
+/** What the page says while a transcription waits for the transcriber (pBody o.waiting). */
+interface WaitingWords {
+  /** The empty state's and the banner's title. */
+  readonly title: string;
+  /** Since when it is off, or that none is paired, as a sentence; '' when it is on. */
+  readonly off: string;
+  /** The header's short pill (pHeader waitStatus, T21's 'Retranscrevendo'). */
+  readonly pill: string;
+  /** Beside the pill, in words, while there is no transcript yet. */
+  readonly why: string;
+}
+
+/** Since when the transcriber is off, or that none is paired: a sentence and short words. */
+function whyItWaits(
+  transcription: MediaItem['transcription'],
+  locale: string,
+): { readonly off: string; readonly short: string } {
+  const since = transcription.transcriberOffSince;
+  if (transcription.transcriber === 'off' && since) {
+    const date = formatDate(since, seenAtFormat(), locale);
+    return {
+      off: $localize`:@@player.transcriberOffSince:Desligado desde ${date}:date:.`,
+      short: $localize`:@@player.offSinceShort:desligado desde ${date}:date:`,
+    };
+  }
+  if (transcription.transcriber === 'none')
+    return {
+      off: $localize`:@@player.noTranscriber:Nenhum transcritor pareado.`,
+      short: $localize`:@@player.noTranscriberShort:nenhum transcritor pareado`,
+    };
+  return { off: '', short: '' };
+}
+
+function waitingWordsOf(media: MediaItem, locale: string): WaitingWords | null {
+  const transcription = media.transcription;
+  if (
+    media.status !== 'ready' ||
+    transcription.status !== 'waiting' ||
+    transcription.route !== 'transcriber'
+  )
+    return null;
+  const first = transcription.version === null;
+  const title = first
+    ? $localize`:@@media.transcription.waiting:Aguardando o transcritor`
+    : $localize`:@@player.retranscribingWaiting:Retranscrevendo: aguardando o transcritor`;
+  const { off, short } = whyItWaits(transcription, locale);
+  return {
+    title,
+    off,
+    pill: first
+      ? title
+      : $localize`:@@player.retranscribingPill:Retranscrevendo`,
+    why: first ? short : '',
+  };
+}
+
 @Component({
   selector: 'app-media-player-page',
   imports: [
@@ -376,6 +440,8 @@ export class MediaPlayerPage {
   );
   /** The situation's pill: done in green, a failure in red, the rest in waiting. */
   protected readonly transcriptionTone = computed((): Tone => {
+    // Transcribing again keeps a transcript: blue, as its banner (pill 'Retranscrevendo').
+    if (this.waitingFor() && this.hasTranscript()) return 'info';
     const status = this.media()?.transcription.status;
     if (status === 'done') return 'ok';
     if (status === 'failed') return 'err';
@@ -383,7 +449,8 @@ export class MediaPlayerPage {
   });
   /** The header's tint is the cover's colour (player.js P_TINT), not the collection's. */
   protected readonly pageTint = computed(() => {
-    const title = this.media()?.title;
+    // Not found: the panel keeps the colour of what plays (pScreen o.notFound).
+    const title = this.media()?.title ?? this.engine.source()?.title;
     if (this.failedMedia()) return NEUTRAL_COVER[0];
     return title ? coverGradient(title)[0] : null;
   });
@@ -440,12 +507,43 @@ export class MediaPlayerPage {
     const pending = status === 'waiting' || status === 'transcribing';
     return pending && version !== null ? this.transcription() : '';
   });
+  /**
+   * Waiting for the transcriber (pBody o.waiting, the queued banner): the title, and since
+   * when it is off, or that none is paired, as a sentence under it. Null otherwise.
+   */
+  private readonly waitingFor = computed(() => {
+    const media = this.media();
+    return media ? waitingWordsOf(media, this.locale) : null;
+  });
+  /** The header's pill: where the transcription is, short while it waits. */
+  protected readonly pillText = computed(
+    () => this.waitingFor()?.pill ?? this.transcription(),
+  );
+  protected readonly pillWhy = computed(() => this.waitingFor()?.why ?? '');
   /** The empty transcript's title: where the transcription is ("Aguardando o transcritor"). */
   protected readonly waitingTitle = computed(
     () =>
+      this.waitingFor()?.title ||
       this.transcription() ||
       $localize`:@@transcript.none:Ainda sem transcrição`,
   );
+  /** Under it: since when the transcriber is off, and when the text comes. */
+  protected readonly waitingText = computed(() => {
+    const waiting = this.waitingFor();
+    const later = $localize`:@@transcript.notYet:A transcrição aparece aqui quando ficar pronta.`;
+    if (!waiting?.off) return later;
+    const offline = this.media()?.transcription.transcriber === 'off';
+    return `${waiting.off} ${offline ? $localize`:@@player.transcriptWhenBack:A transcrição aparece aqui quando ele voltar.` : later}`;
+  });
+  /** The queued banner (T21): its title, and what stays meanwhile. */
+  protected readonly queuedTitle = computed(
+    () => this.waitingFor()?.title || this.queuedNotice(),
+  );
+  protected readonly queuedText = computed(() => {
+    const off = this.waitingFor()?.off;
+    const keep = $localize`:@@media.transcribing.keep:O texto atual continua até a nova versão ficar pronta.`;
+    return off ? `${off} ${keep}` : keep;
+  });
   /** On a phone a banner or the track bar shares the screen: the cover gets smaller. */
   protected readonly compactCover = computed(
     () =>
@@ -458,6 +556,7 @@ export class MediaPlayerPage {
     inject(DOCUMENT).defaultView?.matchMedia?.(DESKTOP_QUERY) ?? null;
   protected readonly desktop = signal(this.desktopQuery?.matches ?? true);
   private readonly rightPanel = inject(RightPanel);
+  private readonly panelTabs = inject(PlayerPanelTabs);
   private readonly again = viewChild(TranscribeAgain);
   private readonly trackActions = viewChild(TrackActions);
   private readonly groq = viewChild(TranscribeWithGroq);
@@ -759,21 +858,31 @@ export class MediaPlayerPage {
     });
     toObservable(about)
       .pipe(takeUntilDestroyed())
-      .subscribe((inputs) => {
-        if (inputs)
-          this.rightPanel.open({
-            component: PlayerAbout,
-            inputs,
-            width: 'narrow',
-            label: $localize`:@@player.about:Sobre este áudio`,
-          });
-        else this.closeAbout();
-      });
+      .subscribe((inputs) => this.openAbout(inputs));
     this.destroyRef.onDestroy(() => this.closeAbout());
   }
 
+  /** The media whose Sobre the panel shows; a new one opens on Sobre. */
+  private aboutShown: string | null = null;
+
+  private openAbout(
+    inputs: { media: MediaItem; canEdit: boolean } | null,
+  ): void {
+    // A reload of the same media keeps the tab chosen.
+    if (inputs && inputs.media.id !== this.aboutShown)
+      this.panelTabs.tab.set('about');
+    this.aboutShown = inputs?.media.id ?? null;
+    if (!inputs) return this.closeAbout();
+    this.rightPanel.open({
+      component: PlayerPanel,
+      inputs,
+      width: 'narrow',
+      label: $localize`:@@player.about:Sobre este áudio`,
+    });
+  }
+
   private closeAbout(): void {
-    if (this.rightPanel.content()?.component === PlayerAbout)
+    if (this.rightPanel.content()?.component === PlayerPanel)
       this.rightPanel.close();
   }
 
@@ -818,7 +927,9 @@ export class MediaPlayerPage {
     toObservable(this.notFound)
       .pipe(filter(Boolean), takeUntilDestroyed())
       .subscribe(() => {
-        this.engine.unload();
+        // Only what is gone stops: another media playing goes on in the bar (pScreen
+        // o.notFound keeps the player bar).
+        if (this.engine.source()?.id === this.id()) this.engine.unload();
         this.keepFocusOnPage();
       });
   }

@@ -121,6 +121,8 @@
         <span class="time"
           >{{ elapsed() }}
           @if (sleepShown(); as sleep) {
+            <!-- The phone's mini player says it (KBC-046 FR-1); the desktop bar's green
+                 moon does, by its name (lib.js playerBar has no label). -->
             <span class="sleep"
               ><span aria-hidden="true">☾ </span
               ><span class="visually-hidden" i18n="@@mini.sleep.label"
@@ -130,6 +132,7 @@
           }
         </span>
         @if (seekable()) {
+          <!-- The bookmarks and track starts stay on the line (KBC-042 FR-3, KBC-066 FR-9). -->
           <app-seek-slider
             class="seek"
             [marks]="bookmarks.positions()"
@@ -172,6 +175,18 @@
       >
         <ui-icon name="cc" [size]="20" />
       </button>
+      <button
+        uiIconButton
+        type="button"
+        class="queue"
+        [class.on]="queueOpen()"
+        aria-label="Fila"
+        i18n-aria-label="@@mini.queue"
+        [attr.aria-pressed]="queueOpen()"
+        (click)="toggleQueue()"
+      >
+        <ui-icon name="queue" [size]="20" />
+      </button>
       @if (volumeSupported()) {
         <div class="volume">
           <button
@@ -201,7 +216,19 @@
           />
         </div>
       }
-      @if (!echo()) {
+      @if (echo()) {
+        <!-- On the player's own page: back to its head (cover, title, controls). -->
+        <button
+          uiIconButton
+          type="button"
+          class="open"
+          aria-label="Abrir o player"
+          i18n-aria-label="@@nowPlaying.open"
+          (click)="showPlayerHead()"
+        >
+          <ui-icon name="expand" [size]="20" />
+        </button>
+      } @else {
         <a
           uiIconButton
           class="open"
@@ -211,6 +238,8 @@
         >
           <ui-icon name="expand" [size]="20" />
         </a>
+        <!-- Not in the frame (lib.js playerBar), kept for KBC-041 AC-11: with a document
+             open on the right, the Fila cannot show, so the bar keeps its own way out. -->
         <button
           uiIconButton
           type="button"

@@ -87,6 +87,10 @@ const SHEET_BELOW_PX = 1024;
       >
         <!-- What the sheet is about, on a phone (player.js mOver: the cover and title). -->
         <div class="sheet-head"><ng-content select="[sheetHead]" /></div>
+        @if (titled()) {
+          <!-- The menu's name over its items (speedMenu, mTitle): read as its label. -->
+          <p class="title" aria-hidden="true">{{ menuLabel() || label() }}</p>
+        }
         @for (group of groups(); track $index) {
           <div
             class="group"
@@ -125,9 +129,11 @@ const SHEET_BELOW_PX = 1024;
                   <span class="trail" aria-hidden="true">{{ key }}</span>
                 }
                 @if (kind() === 'choice') {
-                  <span class="check" aria-hidden="true">{{
-                    entry.option.checked ? '✓' : ''
-                  }}</span>
+                  <span class="check" aria-hidden="true">
+                    @if (entry.option.checked) {
+                      <ui-icon name="check" [size]="16" />
+                    }
+                  </span>
                 }
               </button>
             }
@@ -159,6 +165,8 @@ export class MenuButton {
   readonly disabled = input(false);
   /** Which edge of the button the list lines up with. */
   readonly align = input<OverlayAlign>('end');
+  /** The menu's name shown over its items (the speed menu of the v2 player). */
+  readonly titled = input(false);
   readonly chosen = output<string>();
 
   protected readonly sheetBelow = SHEET_BELOW_PX;

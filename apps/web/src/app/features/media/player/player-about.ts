@@ -2,12 +2,16 @@ import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   inject,
   input,
+  signal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import {
+  MAX_VOICES,
   mediaEditSchema,
   mediaListSchema,
   mediaSpeakersSchema,
@@ -16,11 +20,16 @@ import {
 import { formatClock } from '@kb-chat/player-core';
 import { mediaListUrl, mediaStreamUrl } from '@core/media/media-api.js';
 import { editPagePath, mediaEditUrl } from '@core/media/media-edit-api.js';
-import { speakersUrl } from '@core/media/speakers-api.js';
+import { SpeakersApi, speakersUrl } from '@core/media/speakers-api.js';
 import { TracksStore } from '@core/media/tracks-store.js';
-import { RightPanel } from '@features/shell/right-panel.js';
 import { ChatStore } from '@features/chat/chat-store.js';
-import { coverCode, coverGradient, UiIcon, UiIconButton } from '@ui/index.js';
+import {
+  coverCode,
+  coverGradient,
+  UiButton,
+  UiIcon,
+  UiIconButton,
+} from '@ui/index.js';
 import { BookmarkList } from '../bookmark-list.js';
 import { ArchivedTracks } from '../track-edit/archived-tracks.js';
 import { TrackPreparationStatus } from '../tracks/track-preparation.js';
@@ -28,13 +37,14 @@ import { TrackNavList } from '../tracks/track-nav-list.js';
 import { sampleOf } from '../voices/voice-changes.js';
 import { VoiceSample } from '../voices/voice-sample.js';
 import { VoiceTag } from '../voices/voice-tag.js';
+import { parseVoices } from '../voices/voices-panel.js';
 
 /**
  * "Sobre este áudio" (KBC-129, v2 · Mídia — Player): the cards beside the player — "Seus
  * marcadores aqui", "Faixas desta gravação", the voices found (for who edits), the removed
- * tracks and "Sobre a autora". The shell's right panel on a desktop (with its tab and ✕),
- * inline under the full-screen player on a phone. Only data that exists (BR-4): no "Seguir"
- * (KBC-135) and no Fila/Ouvidas tabs (the app keeps no listening queue).
+ * tracks and "Sobre a autora". The Sobre tab of the player's right panel on a desktop
+ * (PlayerPanel), inline under the full-screen player on a phone. Only data that exists
+ * (BR-4): no "Seguir" (KBC-135).
  */
 @Component({
   selector: 'app-player-about',
@@ -44,26 +54,13 @@ import { VoiceTag } from '../voices/voice-tag.js';
     ArchivedTracks,
     TrackNavList,
     TrackPreparationStatus,
+    UiButton,
     UiIcon,
     UiIconButton,
     VoiceTag,
   ],
   providers: [VoiceSample],
   template: `
-    @if (inPanel()) {
-      <div class="tabs">
-        <p class="tab" aria-current="true" i18n="@@player.about.tab">Sobre</p>
-        <button
-          uiIconButton
-          type="button"
-          aria-label="Fechar Sobre este áudio"
-          i18n-aria-label="@@player.about.close"
-          (click)="panel.close()"
-        >
-          <ui-icon name="close" [size]="18" />
-        </button>
-      </div>
-    }
     <div class="card">
       <app-bookmark-list />
     </div>
@@ -117,9 +114,55 @@ import { VoiceTag } from '../voices/voice-tag.js';
           </ul>
         } @else if (transcribed()) {
           <p class="quiet" i18n="@@player.about.voicesNone">
-            Marca onde muda a voz que fala. Vale só para esta gravação. Separe
-            as vozes no chip Vozes.
+            Marca onde muda a voz que fala. Vale só para esta gravação.
           </p>
+          @if (waitingText(); as text) {
+            <p class="quiet" role="status">{{ text }}</p>
+          } @else if (canRequest()) {
+            <!-- pRight voicesCard 'none': the count and "Separar vozes" in the card. -->
+            <form class="separate" novalidate (submit)="separate($event)">
+              <div class="count">
+                <label for="about-voices-count" i18n="@@voices.countLabel"
+                  >Número de vozes (opcional)</label
+                >
+                <input
+                  id="about-voices-count"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  placeholder="De 1 a 10"
+                  i18n-placeholder="@@player.about.countPlaceholder"
+                  [value]="voicesText()"
+                  [attr.aria-invalid]="invalid() ? 'true' : null"
+                  [attr.aria-describedby]="
+                    invalid() ? 'about-voices-error' : null
+                  "
+                  (input)="editVoices($event)"
+                />
+              </div>
+              <button
+                uiButton="outline"
+                size="sm"
+                type="submit"
+                [disabled]="busy()"
+                i18n="@@voices.request"
+              >
+                Separar vozes
+              </button>
+            </form>
+            @if (invalid()) {
+              <p
+                id="about-voices-error"
+                class="error"
+                i18n="@@voices.countInvalid"
+              >
+                Informe um número de 1 a {{ maxVoices }}, ou deixe em branco.
+              </p>
+            }
+            @if (failure()) {
+              <p class="error" role="alert">{{ failure() }}</p>
+            }
+          }
         } @else {
           <p class="quiet" i18n="@@player.about.voicesWait">
             Dá para separar as vozes quando a transcrição estiver pronta.
@@ -152,19 +195,13 @@ import { VoiceTag } from '../voices/voice-tag.js';
   `,
   styleUrl: './player-about.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.in-panel]': 'inPanel()' },
 })
 export class PlayerAbout {
   readonly media = input.required<MediaItem>();
   /** Who edits recordings: the voices, the edit's state and the removed tracks. */
   readonly canEdit = input(false);
-  protected readonly panel = inject(RightPanel);
   protected readonly sample = inject(VoiceSample);
   private readonly chat = inject(ChatStore);
-  /** In the shell's right panel (a desktop): the tab and ✕ on top. */
-  protected readonly inPanel = computed(
-    () => this.panel.content()?.component === PlayerAbout,
-  );
 
   /** The recording's approved tracks (KBC-066 FR-9), as the player plays them. */
   private readonly tracks = inject(TracksStore);
@@ -240,6 +277,57 @@ export class PlayerAbout {
       ? $localize`:@@player.about.oneAudioIn:1 áudio em ${where}:collection:`
       : $localize`:@@player.about.audiosIn:${count}:count: áudios em ${where}:collection:`;
   });
+
+  protected readonly canRequest = computed(
+    () => this.speakers.hasValue() && this.speakers.value().canRequest,
+  );
+  /** A separation asked and not done yet: said in words in the card (UP-20). */
+  protected readonly waitingText = computed(() => {
+    const status = this.speakers.hasValue()
+      ? this.speakers.value().status
+      : 'none';
+    if (status === 'waiting')
+      return $localize`:@@voices.waiting:Aguardando o transcritor`;
+    if (status === 'diarizing')
+      return $localize`:@@voices.diarizing:Separando vozes…`;
+    return '';
+  });
+  protected readonly maxVoices = MAX_VOICES;
+  protected readonly voicesText = signal('');
+  protected readonly invalid = signal(false);
+  protected readonly busy = signal(false);
+  protected readonly failure = signal('');
+  private readonly api = inject(SpeakersApi);
+  private readonly destroyRef = inject(DestroyRef);
+
+  protected editVoices(event: Event): void {
+    this.voicesText.set((event.target as HTMLInputElement).value);
+    this.invalid.set(false);
+  }
+
+  /** "Separar vozes" from the card, as the Vozes view asks it (KBC-064 FR-1). */
+  protected separate(event: Event): void {
+    event.preventDefault();
+    const voices = parseVoices(this.voicesText());
+    if (voices === 'invalid') return this.invalid.set(true);
+    this.busy.set(true);
+    this.failure.set('');
+    this.api
+      .diarize(this.media().id, voices)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (speakers) => {
+          this.busy.set(false);
+          this.speakers.set(speakers);
+        },
+        error: () => {
+          this.busy.set(false);
+          this.failure.set(
+            $localize`:@@player.about.separateFailed:Não consegui pedir a separação. Tente de novo.`,
+          );
+        },
+      });
+  }
 
   protected sampleLabel(voice: number): string {
     return this.sample.playing() === voice

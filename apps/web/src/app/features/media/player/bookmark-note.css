@@ -61,10 +61,10 @@ input {
   font-size: var(--text-sm);
 }
 
+/* field({ focus: true }): the faint 1 px edge turns white (well over 3:1 against it). */
 input:focus-visible {
   border-color: var(--color-text);
-  outline: 2px solid var(--color-text);
-  outline-offset: 1px;
+  outline: none;
 }
 
 button {
@@ -100,6 +100,9 @@ button {
     calc(var(--space-6) + env(safe-area-inset-bottom));
   border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   box-shadow: none;
+  /* mOver o.noteOpen: a 300 high sheet. */
+  min-height: 18.75rem;
+  align-content: start;
 }
 
 .note.ui-overlay--sheet::before {

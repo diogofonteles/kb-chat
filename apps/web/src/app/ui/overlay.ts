@@ -79,6 +79,19 @@ function leftEdge({ anchor, size, viewport, align }: OverlayRequest): {
  */
 export function placeOverlay(request: OverlayRequest): OverlayPlacement {
   const { side, room } = chooseSide(request);
+  const whole = Math.max(0, request.viewport.height - 2 * SCREEN_MARGIN_PX);
+  if (request.size.height > room && room < whole) {
+    // Taller than the room on either side: it slides to stay whole on the screen, over its
+    // trigger if need be, instead of scrolling inside (D5: a menu is never cut).
+    const height = Math.min(request.size.height, whole);
+    const wanted =
+      side === 'below'
+        ? request.anchor.bottom + GAP_PX
+        : request.anchor.top - GAP_PX - height;
+    const lowest = request.viewport.height - SCREEN_MARGIN_PX - height;
+    const top = Math.max(SCREEN_MARGIN_PX, Math.min(wanted, lowest));
+    return { top, ...leftEdge(request), maxHeight: whole, side };
+  }
   const height = Math.min(request.size.height, room);
   const top =
     side === 'below'

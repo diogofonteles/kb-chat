@@ -62,7 +62,9 @@
             />
           </span>
           <!-- Always present, so the first result is announced too. -->
-          <span class="count" role="status">{{ searchStatus() }}</span>
+          <span class="count" role="status" [class.none]="noHits()">{{
+            searchStatus()
+          }}</span>
         </div>
       </div>
     }
@@ -114,6 +116,10 @@
     <p class="empty" i18n="@@transcript.empty">A transcrição está vazia.</p>
   } @else {
     <div class="search-results">
+      @if (noHits()) {
+        <!-- Said by the status above; shown here, where the eyes are (UP-01). -->
+        <p class="no-hits" aria-hidden="true">{{ searchStatus() }}</p>
+      }
       @if (hits().length > 0) {
         <div class="search-actions">
           <button

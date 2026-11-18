@@ -26,7 +26,7 @@ const ICON_OF: Record<BannerTone, IconName> = {
   selector: 'ui-banner',
   imports: [UiIcon],
   template: `
-    <ui-icon class="ui-banner__icon" [name]="icon()" [size]="20" />
+    <ui-icon class="ui-banner__icon" [name]="shownIcon()" [size]="20" />
     <div class="ui-banner__body">
       @if (title()) {
         <p class="ui-banner__title">{{ title() }}</p>
@@ -41,5 +41,9 @@ const ICON_OF: Record<BannerTone, IconName> = {
 export class UiBanner {
   readonly tone = input<BannerTone>('info');
   readonly title = input('');
-  protected readonly icon = computed(() => ICON_OF[this.tone()]);
+  /** Another icon than the tone's (a refresh while it transcribes again). */
+  readonly icon = input<IconName | null>(null);
+  protected readonly shownIcon = computed(
+    () => this.icon() ?? ICON_OF[this.tone()],
+  );
 }

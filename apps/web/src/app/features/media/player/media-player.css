@@ -1,5 +1,7 @@
 :host {
   display: block;
+  /* The host is the container: the subtitles answer to its width. */
+  container: player / inline-size;
 }
 
 /* v2 action bar (player.js pActions): play 56 in green, "Continuar de", the skips and the
@@ -53,9 +55,12 @@
   text-decoration: none;
 }
 
-.icon:hover:not(:disabled) {
-  background: var(--overlay-2);
-  color: var(--color-text);
+/* No hover left behind by a tap (touch screens have no hover). */
+@media (hover: hover) {
+  .icon:hover:not(:disabled) {
+    background: var(--overlay-2);
+    color: var(--color-text);
+  }
 }
 
 .icon:disabled {
@@ -200,7 +205,18 @@
   overflow-wrap: anywhere;
 }
 
+/* Narrow players (phones): the size follows the player's width so a 42-character line
+   stays one line (two lines at most on screen), never below 12 px. */
+@container player (max-width: 34rem) {
+  .caption {
+    padding-inline: var(--space-2);
+    font-size: clamp(0.75rem, 3.5cqi, var(--text-md));
+    letter-spacing: -0.01em;
+  }
+}
+
 .low-badge {
+  display: var(--low-confidence-badge, block);
   justify-self: center;
 }
 
@@ -371,6 +387,10 @@
     display: grid;
   }
 
+  .moon.on {
+    color: var(--color-accent-text);
+  }
+
   .share {
     order: 6;
   }
@@ -444,7 +464,8 @@
 
   .more {
     position: absolute;
-    top: 0.5rem;
+    /* In the head, 56 from the top (pMobile). */
+    top: 2.75rem;
     right: var(--space-4);
     --menu-trigger-color: var(--color-text);
   }
@@ -464,4 +485,13 @@
   .track-now {
     flex: 1;
   }
+}
+
+/* The menus' widths in the frames: ⋯ 300 (menu MORE), Velocidade 180 (speedMenu). */
+.more ::ng-deep .menu:not(.ui-overlay--sheet) {
+  min-width: 18.75rem;
+}
+
+.speed ::ng-deep .menu:not(.ui-overlay--sheet) {
+  min-width: 11.25rem;
 }

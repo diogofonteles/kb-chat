@@ -132,6 +132,11 @@
   font-size: var(--text-meta);
 }
 
+.pill-why {
+  margin-left: calc(-1 * var(--space-1));
+  color: var(--color-text-muted);
+}
+
 .note:empty {
   display: none;
 }
@@ -368,10 +373,10 @@
       color-mix(in srgb, var(--page-tint, #2a2a2a) 72%, #000),
       var(--color-bg) 52.75rem
     );
-    /* Where the mark sits, beside the title (head 60 + 8 + cover + gap). */
+    /* Where the mark sits, beside the title (head 96 + 8 + cover + gap). */
     --mark-top: calc(
-      3.75rem + var(--space-2) + min(calc(100vw - 3rem), 342px) +
-        var(--space-6) + 2px
+      6rem + var(--space-2) + min(calc(100vw - 3rem), 342px) + var(--space-6) +
+        2px
     );
     padding-bottom: calc(var(--space-8) + var(--shell-mobile-foot, 0px));
   }
@@ -383,7 +388,7 @@
   }
 
   .page.compact {
-    --mark-top: calc(3.75rem + var(--space-2) + 236px + var(--space-4) + 2px);
+    --mark-top: calc(6rem + var(--space-2) + 236px + var(--space-4) + 2px);
   }
 
   .phone-head {
@@ -391,7 +396,8 @@
     grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
     align-items: center;
     min-height: 3.75rem;
-    padding: var(--space-3) var(--space-4) var(--space-3);
+    /* pMobile's head sits 56 from the top (the frames keep the status bar's room). */
+    padding: 3rem var(--space-4) var(--space-3);
   }
 
   .back {
@@ -649,6 +655,13 @@
   .notice p {
     font-size: var(--text-sm);
   }
+
+  /* Not found (pMobile o.notFound): under the head, not in the middle of the screen. */
+  .page-empty {
+    flex: none;
+    align-content: start;
+    padding: var(--space-6) var(--space-4);
+  }
 }
 
 /* The head of the phone's ⋯ sheet: the cover 48, the title 15/700 and where it is from. */
@@ -675,4 +688,12 @@
 .sheet-where {
   color: var(--color-text-muted);
   font-size: var(--text-meta);
+}
+
+/* A desktop with the transcript as the body: its own notice is in view, so the subtitles
+   bring no second one (BR-2); a phone stacks the card far below, so it goes with them. */
+@media (min-width: 1024px) {
+  .page.with-transcript {
+    --low-confidence-badge: none;
+  }
 }

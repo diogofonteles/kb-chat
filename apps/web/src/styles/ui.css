@@ -1095,9 +1095,16 @@ select.ui-input option {
     border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   }
 
+  /* As tall as its content, at the foot: a fixed box with both insets would stretch. */
   .ui-dialog--short {
+    top: auto;
     height: auto;
-    max-height: 85dvh;
+    max-height: calc(100dvh - var(--space-6));
+  }
+
+  /* The sheet's name (mTitle): 18/700. */
+  .ui-dialog--short .ui-dialog__title {
+    font-size: 1.125rem;
   }
 
   .ui-dialog--short::before {

@@ -133,11 +133,6 @@ export class MediaPlayer {
   readonly pageChosen = output<string>();
   /** The person has bookmarks in this media: the mark is filled, in green (v2). */
   readonly marked = input(false);
-  /**
-   * The synced transcript is in view (the page's body): it is the text of what plays, so
-   * the subtitles only show when it is hidden or not there (v2 · Mídia — Player).
-   */
-  readonly transcriptInView = input(false);
   /** The phone's "Sobre este áudio" button: the page brings that part into view. */
   readonly aboutAsked = output();
 
@@ -243,21 +238,23 @@ export class MediaPlayer {
   protected readonly captionsOn = computed(
     () => this.captionsAvailable() && this.transcriptPreferences.captionsOn(),
   );
-  /** Shown under the bar only while the transcript is not in view. */
-  protected readonly captionsShown = computed(
-    () => this.captionsOn() && !this.transcriptInView(),
-  );
+  /** On, they show over the player, as before v2 (KBC-038 AC-1): the frames never turn them on. */
+  protected readonly captionsShown = this.captionsOn;
   /** The cue on screen now (two lines at most), following the smoothed clock. */
   protected readonly caption = computed(() =>
     this.captionsShown()
       ? (cueAt(this.cues(), this.clock.positionMs())?.text ?? '')
       : '',
   );
-  /** ⋯ as in the v2 frame: the page's actions, a line, the listening ones, a line, keys. */
+  /**
+   * ⋯ as in the v2 frame: the page's actions, a line, the listening ones, a line, keys. The
+   * phone's sheet has no lines (mItems); "Fechar o player" (the bar's ✕ where there is no
+   * bar) and the subtitles have no place of their own in the frames, so they wait here.
+   */
   protected readonly moreOptions = computed<readonly MenuOption[]>(() => {
     const page = this.pageOptions();
-    // The bar's ✕ where there is no bar (a phone), first of the player's own options.
-    const close = this.phone() && this.engine.source() !== null;
+    const phone = this.phone();
+    const close = phone && this.engine.source() !== null;
     const own = [...this.listeningOptions(), ...this.textOptions()];
     const [first, ...rest] = own;
     return [
@@ -267,17 +264,16 @@ export class MediaPlayer {
             {
               id: 'close',
               icon: 'close' as const,
-              divider: page.length > 0,
               label: $localize`:@@mini.close:Fechar o player`,
             },
           ]
         : []),
-      ...(first ? [{ ...first, divider: page.length > 0 && !close }] : []),
+      ...(first ? [{ ...first, divider: !phone && page.length > 0 }] : []),
       ...rest,
       {
         id: 'shortcuts',
         icon: 'keyboard',
-        divider: true,
+        divider: !phone,
         label: $localize`:@@player.shortcuts.open:Atalhos de teclado`,
         keyHint: '?',
       },

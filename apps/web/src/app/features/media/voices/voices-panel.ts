@@ -102,7 +102,7 @@ function voiceOf(event: Event): number | null {
 }
 
 /** "3", "", or null when the field holds something that is not 1 to 10 (MA-23). */
-function parseVoices(text: string): number | null | 'invalid' {
+export function parseVoices(text: string): number | null | 'invalid' {
   const trimmed = text.trim();
   if (trimmed === '') return null;
   const value = Number(trimmed);

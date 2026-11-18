@@ -327,13 +327,19 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     expect(dialog.textContent).toContain('Voltar 15 segundos');
     // KBC-042: B marks this point, and the list says so.
     expect(dialog.textContent).toMatch(/B\s*Marcar este trecho/);
-    const toggle = screen.getByRole('checkbox', {
-      name: 'Usar atalhos de uma tecla',
-    }) as HTMLInputElement;
-    expect(toggle.checked).toBe(true);
+    // A switch (lib.js toggle), on by default.
+    const toggle = within(dialog).getByRole('switch', {
+      name: /^Usar atalhos de uma tecla/,
+    });
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(toggle);
+    await fixture.whenStable();
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
     expect(localStorage.getItem('kb-chat.player.single-key')).toBe('off');
-    fireEvent.click(screen.getByRole('button', { name: 'Fechar' }));
+    // ✕ in the corner and "Fechar" in the footer: both close it.
+    const closes = within(dialog).getAllByRole('button', { name: 'Fechar' });
+    expect(closes).toHaveLength(2);
+    fireEvent.click(closes[1] as HTMLElement);
     await fixture.whenStable();
     expect(document.activeElement).toBe(more);
   });

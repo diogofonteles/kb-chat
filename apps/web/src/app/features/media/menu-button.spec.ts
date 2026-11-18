@@ -26,7 +26,7 @@ async function renderChoice() {
 }
 
 describe('MenuButton (APG menu button)', () => {
-  it('lists choices as radio items with the current one checked, in text too', async () => {
+  it('lists choices as radio items with the current one checked, with a ✓ too', async () => {
     const { trigger, fixture } = await renderChoice();
     expect(trigger.getAttribute('aria-keyshortcuts')).toBe('Shift+. Shift+,');
     fireEvent.click(trigger);
@@ -34,7 +34,13 @@ describe('MenuButton (APG menu button)', () => {
     expect(screen.getByRole('menu', { name: 'Velocidade' })).toBeTruthy();
     const current = screen.getByRole('menuitemradio', { name: /1,5×/ });
     expect(current.getAttribute('aria-checked')).toBe('true');
-    expect(current.textContent).toContain('✓');
+    // A ✓ beside it, never the colour alone (UP-20); none beside the others.
+    expect(current.querySelector('.check ui-icon')).not.toBeNull();
+    expect(
+      screen
+        .getByRole('menuitemradio', { name: /^\s*2×/ })
+        .querySelector('.check ui-icon'),
+    ).toBeNull();
     expect(
       screen
         .getByRole('menuitemradio', { name: /^\s*2×/ })

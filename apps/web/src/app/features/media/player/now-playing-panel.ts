@@ -4,6 +4,7 @@ import {
   Component,
   computed,
   inject,
+  input,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
@@ -55,21 +56,26 @@ export function linesAt(
   selector: 'app-now-playing-panel',
   imports: [RouterLink, UiCover, UiIcon, UiIconButton],
   template: `
-    <section class="now" aria-labelledby="now-playing-title">
-      <div class="bar">
-        <h2 id="now-playing-title" class="label" i18n="@@nowPlaying.title">
-          Tocando agora
-        </h2>
-        <button
-          uiIconButton
-          type="button"
-          aria-label="Fechar Tocando agora"
-          i18n-aria-label="@@nowPlaying.close"
-          (click)="panel.close()"
-        >
-          <ui-icon name="close" [size]="18" />
-        </button>
-      </div>
+    <section
+      class="now"
+      [attr.aria-labelledby]="embedded() ? null : 'now-playing-title'"
+    >
+      @if (!embedded()) {
+        <div class="bar">
+          <h2 id="now-playing-title" class="label" i18n="@@nowPlaying.title">
+            Tocando agora
+          </h2>
+          <button
+            uiIconButton
+            type="button"
+            aria-label="Fechar Tocando agora"
+            i18n-aria-label="@@nowPlaying.close"
+            (click)="panel.close()"
+          >
+            <ui-icon name="close" [size]="18" />
+          </button>
+        </div>
+      }
       @if (source(); as playing) {
         <ui-cover class="art" [title]="playing.title" [size]="308" />
         <div class="head">
@@ -126,6 +132,8 @@ export function linesAt(
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class NowPlayingPanel {
+  /** In the player panel's Sobre tab: the tabs name it and hold the ✕. */
+  readonly embedded = input(false);
   private readonly engine = inject(MediaEngine);
   protected readonly panel = inject(RightPanel);
   protected readonly source = this.engine.source;

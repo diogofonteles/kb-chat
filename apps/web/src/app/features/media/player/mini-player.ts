@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -39,6 +40,8 @@ import { filter, map } from 'rxjs';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { RightPanel } from '@features/shell/right-panel.js';
 import { NowPlayingPanel } from './now-playing-panel.js';
+import { PlayerPanel } from './player-panel.js';
+import { PlayerPanelTabs } from './player-panel-tab.js';
 import { PlayerShortcuts } from './player-shortcuts.js';
 
 /**
@@ -121,9 +124,23 @@ export class MiniPlayer {
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly rightPanel = inject(RightPanel);
-  /** "Tocando agora" is in the shell's right panel (KBC-129 FR-2). */
+  private readonly panelTabs = inject(PlayerPanelTabs);
+  private readonly document = inject(DOCUMENT);
+  private readonly playerPanelOpen = computed(
+    () => this.rightPanel.content()?.component === PlayerPanel,
+  );
+  /**
+   * "Tocando agora" is in the shell's right panel (KBC-129 FR-2): its own panel, or the
+   * player panel on Sobre (the player page's).
+   */
   protected readonly nowPlayingOpen = computed(
-    () => this.rightPanel.content()?.component === NowPlayingPanel,
+    () =>
+      this.rightPanel.content()?.component === NowPlayingPanel ||
+      (this.playerPanelOpen() && this.panelTabs.tab() === 'about'),
+  );
+  /** The bar's queue button (lib.js playerBar): the player panel on Fila. */
+  protected readonly queueOpen = computed(
+    () => this.playerPanelOpen() && this.panelTabs.tab() === 'queue',
   );
 
   protected readonly skipBack = computed(
@@ -296,6 +313,10 @@ export class MiniPlayer {
 
   /** The transcript button: opens "Tocando agora" beside any screen, or closes it. */
   protected toggleNowPlaying(): void {
+    if (this.playerPanelOpen() && this.panelTabs.tab() !== 'about') {
+      this.panelTabs.tab.set('about');
+      return;
+    }
     if (this.nowPlayingOpen()) {
       this.rightPanel.close();
       return;
@@ -307,6 +328,35 @@ export class MiniPlayer {
     });
   }
 
+  /** "Abrir o player" on its own page: its head comes into view and takes the focus. */
+  protected showPlayerHead(): void {
+    const title = this.document.getElementById('media-item-title');
+    if (!title) return;
+    title.tabIndex = -1;
+    title.scrollIntoView({ block: 'center' });
+    title.focus({ preventScroll: true });
+  }
+
+  /**
+   * The queue button: the player panel on Fila beside any screen; on Fila already, it
+   * goes back to Sobre on the player page (whose panel it is) or closes elsewhere.
+   */
+  protected toggleQueue(): void {
+    if (this.queueOpen()) {
+      const content = this.rightPanel.content();
+      if (content?.inputs?.['media']) this.panelTabs.tab.set('about');
+      else this.rightPanel.close();
+      return;
+    }
+    this.panelTabs.tab.set('queue');
+    if (this.playerPanelOpen()) return;
+    this.rightPanel.open({
+      component: PlayerPanel,
+      width: 'narrow',
+      label: $localize`:@@mini.queue:Fila`,
+    });
+  }
+
   /**
    * "Fechar o player": stops, saves where it stopped and goes away (AC-11). The focus,
    * which was on the button that goes, moves to the main area (WCAG 2.4.3).
@@ -315,7 +365,8 @@ export class MiniPlayer {
     this.engine.pause();
     if (!this.gone()) this.saver.saveNow();
     this.engine.unload();
-    if (this.nowPlayingOpen()) this.rightPanel.close();
+    // "Tocando agora" or the Fila were about what played: they go with it.
+    if (this.nowPlayingOpen() || this.queueOpen()) this.rightPanel.close();
     const main = this.host.nativeElement.ownerDocument.querySelector('main');
     if (main) {
       main.tabIndex = -1;

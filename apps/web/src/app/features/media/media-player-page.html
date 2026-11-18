@@ -8,6 +8,7 @@
   [class.waiting]="!!media() && !ready()"
   [class.compact]="compactCover()"
   [class.failed-media]="failedMedia()"
+  [class.with-transcript]="transcriptInView()"
   [style.--page-tint]="pageTint()"
   aria-labelledby="media-item-title"
 >
@@ -149,10 +150,13 @@
             <ui-pill class="transcription" tone="err" i18n="@@media.failedPill"
               >Falhou</ui-pill
             >
-          } @else if (transcription(); as text) {
+          } @else if (pillText(); as text) {
             <ui-pill class="transcription" [tone]="transcriptionTone()">{{
               text
             }}</ui-pill>
+            @if (pillWhy(); as why) {
+              <span class="pill-why">{{ why }}</span>
+            }
           }
           @if (canEdit() || canEditTrack()) {
             <app-track-publication-status [mediaId]="current.id" />
@@ -186,10 +190,13 @@
       }
       @if (queuedNotice() && !desktop() && ready()) {
         <!-- The phone shows the card's notices over it (pMobile o.banner). -->
-        <ui-banner class="low-confidence" tone="info" [title]="queuedNotice()">
-          <span i18n="@@media.transcribing.keep"
-            >O texto atual continua até a nova versão ficar pronta.</span
-          >
+        <ui-banner
+          class="low-confidence"
+          tone="info"
+          icon="refresh"
+          [title]="queuedTitle()"
+        >
+          <span>{{ queuedText() }}</span>
         </ui-banner>
       }
       @if (canEditTrack() || current.parent) {
@@ -219,7 +226,6 @@
         [lowConfidence]="lowCaptions()"
         [pageOptions]="pageOptions()"
         [marked]="bookmarked()"
-        [transcriptInView]="transcriptInView()"
         (pageChosen)="choosePageAction($event)"
         (aboutAsked)="scrollToAbout()"
       >
@@ -297,11 +303,13 @@
                     <ng-container *ngTemplateOutlet="viewChips" />
                   </ng-container>
                   @if (queuedNotice()) {
-                    <ui-banner banner tone="info" [title]="queuedNotice()">
-                      <span i18n="@@media.transcribing.keep"
-                        >O texto atual continua até a nova versão ficar
-                        pronta.</span
-                      >
+                    <ui-banner
+                      banner
+                      tone="info"
+                      icon="refresh"
+                      [title]="queuedTitle()"
+                    >
+                      <span>{{ queuedText() }}</span>
                     </ui-banner>
                   }
                 </app-transcript-panel>
@@ -342,9 +350,7 @@
                 ><ui-icon name="clock" [size]="32"
               /></span>
               <p class="empty-title">{{ waitingTitle() }}</p>
-              <p i18n="@@transcript.notYet">
-                A transcrição aparece aqui quando ficar pronta.
-              </p>
+              <p>{{ waitingText() }}</p>
             </div>
           }
         } @else if (view() === 'tracks') {
@@ -363,12 +369,15 @@
       </div>
 
       @if (!desktop()) {
-        <app-player-about
+        <!-- A landmark of its own under the full-screen player, as before v2. -->
+        <aside
           #about
           class="about"
-          [media]="current"
-          [canEdit]="canEdit()"
-        />
+          aria-label="Sobre este áudio"
+          i18n-aria-label="@@player.about"
+        >
+          <app-player-about [media]="current" [canEdit]="canEdit()" />
+        </aside>
       }
     } @else if (current.archived) {
       <div class="notice" role="status">

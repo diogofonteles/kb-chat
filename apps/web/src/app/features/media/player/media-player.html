@@ -31,6 +31,7 @@
   }
 
   <div class="seek">
+    <!-- The bookmarks and track starts stay on the line (KBC-042 FR-3, KBC-066 FR-9). -->
     <app-seek-slider
       [marks]="bookmarks.positions()"
       [trackMarks]="trackStarts()"
@@ -103,6 +104,7 @@
       kind="choice"
       [label]="speedLabel()"
       menuLabel="Velocidade"
+      [titled]="true"
       i18n-menuLabel="@@player.speedMenu"
       align="start"
       [options]="speedOptions()"
@@ -123,17 +125,19 @@
           ><ui-icon name="moon" [size]="14" />{{ sleepShown() }}</span
         >
       </app-menu-button>
-    } @else {
-      <button
-        type="button"
-        class="icon moon"
-        aria-label="Timer para dormir"
-        i18n-aria-label="@@player.sleep.open"
-        (click)="openSleep()"
-      >
-        <ui-icon name="moon" [size]="24" />
-      </button>
     }
+    <!-- The moon stays in the phone's row, green while a timer runs (pMobile o.sleepOn);
+         on a desktop the chip above takes its place. -->
+    <button
+      type="button"
+      class="icon moon"
+      [class.on]="sleepOn()"
+      aria-label="Timer para dormir"
+      i18n-aria-label="@@player.sleep.open"
+      (click)="openSleep()"
+    >
+      <ui-icon name="moon" [size]="24" />
+    </button>
 
     <button
       #markButton

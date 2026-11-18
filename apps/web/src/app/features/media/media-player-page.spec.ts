@@ -150,8 +150,15 @@ describe('MediaPlayerPage (T15)', () => {
       }),
     );
     await harness.fixture.whenStable();
+    // The header's pill is short, why it waits beside it (pHeader waitStatus).
+    const pill = document.querySelector('ui-pill.transcription');
+    expect(pill?.textContent?.trim()).toBe('Aguardando o transcritor');
+    expect(pill?.nextElementSibling?.textContent?.trim()).toBe(
+      'nenhum transcritor pareado',
+    );
+    // The empty transcript says it too, in a sentence (pBody o.waiting).
     expect(document.body.textContent).toContain(
-      'Aguardando o transcritor · nenhum transcritor pareado',
+      'Nenhum transcritor pareado. A transcrição aparece aqui quando ficar pronta.',
     );
     expect(document.body.textContent).not.toContain('baixa confiança');
   });
@@ -507,8 +514,8 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
     ).toBeTruthy();
     expect(screen.getByText('Existia um rei.')).toBeTruthy();
     expect(screen.getAllByText(LOW)).toHaveLength(1);
-    // CC is in ⋯ (v2); with the synced transcript in view it is the text of what plays,
-    // so no subtitles and no second notice show over it.
+    // CC is in ⋯ (v2). With it on, a short notice goes with the subtitles: on a phone the
+    // column's own notice is far below (CSS hides this one when the column sits beside).
     fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
     await harness.fixture.whenStable();
     fireEvent.click(
@@ -520,10 +527,10 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
     await harness.fixture.whenStable();
     expect(localStorage.getItem('kb-chat.player.captions')).toBe('on');
     expect(
-      screen.queryByText(
+      screen.getByText(
         'Legendas de baixa confiança: podem ter trechos errados.',
       ),
-    ).toBeNull();
+    ).toBeTruthy();
     expect(screen.getAllByText(LOW)).toHaveLength(1);
   });
 

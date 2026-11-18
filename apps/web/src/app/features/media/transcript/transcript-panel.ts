@@ -272,6 +272,10 @@ export class TranscriptPanel {
     source: this.hits,
     computation: () => 0,
   });
+  /** Words typed that no segment has. */
+  protected readonly noHits = computed(
+    () => this.query().trim() !== '' && this.hits().length === 0,
+  );
   protected readonly searchStatus = computed(() => {
     if (this.query().trim() === '') return '';
     const count = this.hits().length;

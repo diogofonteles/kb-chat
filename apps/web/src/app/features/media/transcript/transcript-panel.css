@@ -110,6 +110,23 @@
   display: none;
 }
 
+/* Nothing found: read from the status, shown under the search as a line of its own. */
+.count.none {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.no-hits {
+  margin: 0;
+  padding: var(--space-3) 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 .search-actions {
   display: flex;
   flex-wrap: wrap;
@@ -310,8 +327,6 @@
 
 .segment.active .time {
   color: var(--color-accent-text);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
 }
 
 .segment.active .text {
@@ -412,6 +427,21 @@
   :host(.in-player) .search-pill {
     width: 100%;
     background: rgb(0 0 0 / 20%);
+    color: var(--color-on-cover-dim);
+  }
+
+  /* On the cover's colour in every theme: the card's light ink, not the theme's text. */
+  :host(.in-player) .search-pill input {
+    color: var(--color-on-cover);
+  }
+
+  :host(.in-player) .search-pill input::placeholder {
+    color: var(--color-on-cover-dim);
+  }
+
+  :host(.in-player) .count,
+  :host(.in-player) .no-hits {
+    color: var(--color-on-cover-dim);
   }
 
   :host(.in-player) .list-box {

@@ -2,11 +2,11 @@ import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   inject,
   output,
   viewChild,
 } from '@angular/core';
+import { UiButton, UiDialog } from '@ui/index.js';
 import { PlayerShortcuts } from './player-shortcuts.js';
 
 interface ShortcutRow {
@@ -16,32 +16,50 @@ interface ShortcutRow {
 
 /**
  * "Atalhos de teclado" (screens.md T15): every shortcut, each one also a button (UP-09),
- * and "Usar atalhos de uma tecla" to turn them off (WCAG 2.1.4). Esc and "Fechar" close
- * it; the focus goes back to where the person was.
+ * and the "Usar atalhos de uma tecla" switch to turn them off (WCAG 2.1.4). Esc, ✕ and
+ * "Fechar" close it; the focus goes back to where the person was.
  */
 @Component({
   selector: 'app-shortcuts-dialog',
+  imports: [UiButton, UiDialog],
   template: `
-    <dialog
+    <!-- v2 modal (player.js over 'keys'): ✕, the switch with its hint, a line, the keys
+         beside what they do and "Fechar" on the right; a sheet on a phone. -->
+    <ui-dialog
       #dialog
-      class="dialog"
-      aria-labelledby="shortcuts-title"
-      (close)="closed.emit()"
+      title="Atalhos de teclado"
+      i18n-title="@@player.shortcuts.title"
+      titleId="shortcuts-title"
+      [width]="600"
+      [short]="true"
+      (closed)="closed.emit()"
     >
-      <h2 id="shortcuts-title" i18n="@@player.shortcuts.title">
-        Atalhos de teclado
-      </h2>
-      <label class="switch">
-        <input
-          type="checkbox"
-          [checked]="shortcuts.enabled()"
-          (change)="toggle($event)"
-        />
-        <span i18n="@@player.shortcuts.enable">Usar atalhos de uma tecla</span>
-      </label>
-      <p class="hint" i18n="@@player.shortcuts.hint">
-        Valem na página do player e no mini-player, nunca enquanto você digita.
-      </p>
+      <div class="setting">
+        <div class="setting-words">
+          <p id="shortcuts-enable" class="setting-name">
+            <span i18n="@@player.shortcuts.enable"
+              >Usar atalhos de uma tecla</span
+            ><span class="phone-only" i18n="@@player.shortcuts.connected">
+              (teclado conectado)</span
+            >
+          </p>
+          <p id="shortcuts-hint" class="hint" i18n="@@player.shortcuts.hint">
+            Valem na página do player e no mini-player, nunca enquanto você
+            digita.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          class="switch"
+          aria-labelledby="shortcuts-enable"
+          aria-describedby="shortcuts-hint"
+          [attr.aria-checked]="shortcuts.enabled()"
+          (click)="shortcuts.setEnabled(!shortcuts.enabled())"
+        >
+          <span class="knob" aria-hidden="true"></span>
+        </button>
+      </div>
       <dl class="list">
         @for (row of rows; track row.does) {
           <div class="row">
@@ -57,15 +75,18 @@ interface ShortcutRow {
           </div>
         }
       </dl>
-      <button
-        type="button"
-        class="close"
-        (click)="close()"
-        i18n="@@player.shortcuts.close"
-      >
-        Fechar
-      </button>
-    </dialog>
+      <div uiDialogFooter class="footer">
+        <button
+          uiButton="ghost"
+          type="button"
+          class="close"
+          (click)="close()"
+          i18n="@@player.shortcuts.close"
+        >
+          Fechar
+        </button>
+      </div>
+    </ui-dialog>
   `,
   styleUrl: './shortcuts-dialog.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -73,8 +94,7 @@ interface ShortcutRow {
 export class ShortcutsDialog {
   protected readonly shortcuts = inject(PlayerShortcuts);
   private readonly document = inject(DOCUMENT);
-  private readonly dialog =
-    viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild.required(UiDialog);
   private opener: HTMLElement | null = null;
 
   readonly closed = output();
@@ -127,15 +147,10 @@ export class ShortcutsDialog {
   open(): void {
     const active = this.document.activeElement;
     this.opener = active instanceof HTMLElement ? active : null;
-    this.dialog().nativeElement.showModal();
+    this.dialog().open();
   }
 
   protected close(): void {
-    this.dialog().nativeElement.close();
-  }
-
-  protected toggle(event: Event): void {
-    if (event.target instanceof HTMLInputElement)
-      this.shortcuts.setEnabled(event.target.checked);
+    this.dialog().close();
   }
 }

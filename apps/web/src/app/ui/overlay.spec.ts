@@ -37,7 +37,21 @@ describe('placeOverlay (D5: menus never clipped, always on screen)', () => {
     expect(where.top).toBe(760 - 6 - 300);
   });
 
-  it('stays on its side and limits its height when the other side is smaller', () => {
+  it('slides over its trigger to stay whole when neither side has room for it', () => {
+    const where = placeOverlay({
+      anchor: anchor({ left: 40, top: 300 }),
+      size: { width: 200, height: 500 },
+      viewport,
+      align: 'start',
+      side: 'below',
+    });
+    expect(where.side).toBe('below');
+    // Its foot at the screen's margin, all of it shown: no scrolling inside (D5).
+    expect(where.top).toBe(844 - 8 - 500);
+    expect(where.maxHeight).toBe(844 - 2 * 8);
+  });
+
+  it('takes the whole screen height, and only then scrolls, when taller than the screen', () => {
     const where = placeOverlay({
       anchor: anchor({ left: 40, top: 300 }),
       size: { width: 200, height: 900 },
@@ -45,8 +59,8 @@ describe('placeOverlay (D5: menus never clipped, always on screen)', () => {
       align: 'start',
       side: 'below',
     });
-    expect(where.side).toBe('below');
-    expect(where.maxHeight).toBe(844 - 332 - 6 - 8);
+    expect(where.top).toBe(8);
+    expect(where.maxHeight).toBe(844 - 2 * 8);
   });
 
   it('shifts left to end inside the viewport, and right past the left edge', () => {
