@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import type { Browser, BrowserContext, Locator, Page } from '@playwright/test';
 import {
+  CSRF,
   WEB_ORIGIN,
   expect,
   fakeGoogle,
@@ -359,6 +360,9 @@ test('a recording opens its tracks, and removing it names them', async ({
     await expect(tracks.getByRole('listitem')).toHaveCount(TRACKS.length);
     await shoot(page, 'media-library-tracks', width);
 
+    // The removal frame draws the recording closed, the page's sections back above the list.
+    await toggle.click();
+    await expect(tracks).toBeHidden();
     await recording.hover();
     await more.click();
     await page.getByRole('menuitem', { name: 'Remover' }).click();
@@ -432,9 +436,24 @@ test('"Enviar mídia": empty, chosen, repeated, not audio, sending', async ({
       route.request().method() === 'PATCH' ? undefined : route.continue(),
     );
     await input.setInputFiles(lecture);
+    const created = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        /\/api\/v1\/topics\/[^/]+\/media$/.test(
+          new URL(response.url()).pathname,
+        ),
+    );
     await dialog.getByRole('button', { name: 'Enviar', exact: true }).click();
+    const { id } = (await (await created).json()) as { id: string };
     await expect(dialog.getByText(/Enviando/).first()).toBeVisible();
     await shoot(page, 'media-upload-sending', width);
+    // The frames after this one have no such upload: the held one goes away.
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(
+      (
+        await page.request.delete(`/api/v1/media/${id}`, { headers: CSRF })
+      ).status(),
+    ).toBe(204);
     await context.close();
   }
 });

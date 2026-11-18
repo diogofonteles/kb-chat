@@ -371,8 +371,9 @@ test('MA-01: a press anywhere on a row opens the media, its controls keep their 
   const link = row.getByRole('link', { name: lecture(3).title });
   const [area, meta] = await Promise.all([
     link.boundingBox(),
-    // The author's words: the collection has no place on a phone's line.
-    row.locator('.author').boundingBox(),
+    // The author's words: the collection has no place on a phone's line, where they come
+    // with the length in one text ("Irmã Helena Prado · 1:00", media-library@mobile).
+    row.locator('.author:visible, .phone-byline:visible').first().boundingBox(),
   ]);
   if (!area || !meta) throw new Error('no row to press');
   for (const position of [

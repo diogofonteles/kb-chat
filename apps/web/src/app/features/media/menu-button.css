@@ -53,12 +53,6 @@
   color: var(--color-text);
 }
 
-@media (max-width: 1023px) {
-  .trigger.chip {
-    min-height: 2.25rem;
-  }
-}
-
 /* The v2 menu (v2 · Componentes › Menu): the look only; the place comes from the overlay
    layer (placeOverlay), so no position, top, left or z-index here (D5). */
 .menu {

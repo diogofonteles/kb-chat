@@ -255,6 +255,13 @@ a.main ~ .cells .duration {
   color: var(--color-text-muted);
 }
 
+/* The phone's words and pills (media-library@mobile) only show in its one line. */
+.phone-byline,
+.phone-words,
+.step-pill {
+  display: none;
+}
+
 .position {
   width: 4rem;
 }
@@ -356,10 +363,9 @@ app-menu-button {
 /* A narrow table (the right panel open, a small window): the collection gives way first. */
 @container library-table (max-width: 52rem) {
   :host {
-    grid-template-columns: 1.5rem 2.5rem minmax(
-        0,
-        1fr
-      ) 10.625rem 2.75rem 1.125rem;
+    grid-template-columns:
+      1.5rem 2.5rem minmax(0, 1fr)
+      10.625rem 2.75rem 1.125rem;
     grid-template-areas:
       'lead art title status duration actions'
       'lead art byline status duration actions';
@@ -418,9 +424,16 @@ app-menu-button {
     visibility: visible;
   }
 
+  /* v2 · media-library-tracks@mobile: the chevron 20, grey, at the row's end. */
   .tracks-toggle {
     width: 1.5rem;
     height: 2.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .tracks-toggle ui-icon ::ng-deep svg {
+    width: 1.25rem;
+    height: 1.25rem;
   }
 
   /* A long press selects the row: no text selection or link preview under the finger. */
@@ -542,6 +555,31 @@ app-menu-button {
   /* The phone's line has no collection (media-library@mobile). */
   .topic {
     display: none;
+  }
+
+  /* "Irmã Helena Prado · 1:00" in one text; "Aguardando", "Passo 2" in their pills. */
+  .author,
+  .duration,
+  .desk-words,
+  app-preparation-entry {
+    display: none;
+  }
+
+  .phone-byline {
+    display: inline;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .phone-words,
+  .step-pill {
+    display: inline-flex;
+  }
+
+  .title,
+  .byline {
+    margin-inline-start: 0;
   }
 
   /* The frame's 48 px bar says how far; the words stay for a screen reader. */

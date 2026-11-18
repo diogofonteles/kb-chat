@@ -156,6 +156,13 @@ export class LibraryRow {
     return ms === null ? '—' : formatDuration(ms);
   });
   protected readonly state = computed(() => stateTextOf(this.item()));
+  /** A ready audio whose transcription waits for the transcriber (media-library@mobile). */
+  protected readonly transcriptionWaits = computed(
+    () =>
+      this.ready() &&
+      this.item().transcription.status === 'waiting' &&
+      this.paused() === null,
+  );
   protected readonly resume = computed(() => stoppedAtTextOf(this.item()));
   protected readonly percent = computed(() => percentOf(this.item()));
   /** "Na fila", "Convertendo… 40%", "Falhou: …" for a media not ready (BR-2). */

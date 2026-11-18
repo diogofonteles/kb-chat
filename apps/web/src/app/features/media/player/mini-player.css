@@ -45,8 +45,9 @@
   flex: 1;
 }
 
+/* v2 · Barra do player: "1×" is its text, 22 before −15 like the other controls. */
 .speed {
-  --menu-trigger-min: 2rem;
+  --menu-trigger-min: 0;
   --menu-trigger-height: 2rem;
   --menu-trigger-size: var(--text-sm);
   --menu-trigger-weight: 700;
@@ -290,7 +291,7 @@ a.title:hover {
     /* v2 · celular: a 56 card, 8 before the cover and 12 after the last control. */
     height: var(--shell-mini-player);
     min-height: 0;
-    padding: 0 var(--space-3) 0 var(--space-2);
+    padding: 0 var(--space-2);
     border-radius: var(--radius-card);
     background: color-mix(
       in srgb,
@@ -345,9 +346,9 @@ a.title:hover {
     font-weight: 700;
   }
 
-  /* v2 · celular: the author in white at 80% on the cover's tint (≥ 4.5:1 on any tint). */
+  /* v2 · celular: the author in white at 70% on the cover's dark tint (≥ 4.5:1 on it). */
   .subtitle {
-    color: color-mix(in srgb, var(--color-text) 80%, transparent);
+    color: color-mix(in srgb, var(--color-text) 70%, transparent);
   }
 
   .now {
@@ -355,9 +356,18 @@ a.title:hover {
     max-width: none;
   }
 
+  /* v2 · celular: the 22 mark and the 24 play/pause at the card's end, each 32 wide and
+     44 tall. */
   .mark {
     position: relative;
     z-index: 1;
+    width: 2rem;
+    min-width: 2rem;
+  }
+
+  .mark ui-icon ::ng-deep svg {
+    width: 1.375rem;
+    height: 1.375rem;
   }
 
   /* A tap anywhere on the mini player opens the full-screen player (KBC-129 FR-2, AC-3):
@@ -395,7 +405,7 @@ a.title:hover {
   }
 
   .play {
-    width: var(--target);
+    width: 2rem;
     height: var(--target);
     background: transparent;
     color: var(--color-text);

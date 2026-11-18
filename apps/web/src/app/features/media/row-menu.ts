@@ -5,6 +5,7 @@ import {
   input,
   output,
 } from '@angular/core';
+import { UiIcon } from '@ui/icon.js';
 import { editDetailsLabel } from './edit-labels.js';
 import { MenuButton, type MenuOption } from './menu-button.js';
 
@@ -15,7 +16,7 @@ import { MenuButton, type MenuOption } from './menu-button.js';
  */
 @Component({
   selector: 'app-row-menu',
-  imports: [MenuButton],
+  imports: [MenuButton, UiIcon],
   template: `
     <app-menu-button
       [label]="label()"
@@ -24,7 +25,8 @@ import { MenuButton, type MenuOption } from './menu-button.js';
       [sheetMeta]="sheetMeta()"
       (chosen)="choose($event)"
     >
-      <span aria-hidden="true">⋯</span>
+      <!-- v2 · media-list: the ⋯ icon, 18 (20 on a phone). -->
+      <ui-icon name="more" [size]="phone() ? 20 : 18" />
     </app-menu-button>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

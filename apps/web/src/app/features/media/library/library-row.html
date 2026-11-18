@@ -54,6 +54,11 @@
       }
       {{ authorName() }}</span
     >
+    <!-- The phone's one line (media-library@mobile): "Irmã Helena Prado · 1:00". -->
+    <span class="phone-byline"
+      >{{ item().author?.main ? '✦ ' : '' }}{{ authorName() }} ·
+      {{ duration() }}</span
+    >
     <app-media-level-badge [level]="item().level" [shown]="master()" />
   </span>
   <span class="topic">{{ topicTitle() }}</span>
@@ -72,8 +77,21 @@
     } @else if (state()) {
       <span class="state">{{ state() }}</span>
     }
+    @if (transcriptionWaits()) {
+      <ui-pill class="waiting-pill" tone="warn"
+        ><span class="desk-words" i18n="@@media.pill.waitingTranscriber"
+          >Aguardando o transcritor</span
+        ><span class="phone-words" i18n="@@queue.pill.waiting"
+          >Aguardando</span
+        ></ui-pill
+      >
+    }
     @if (paused(); as step) {
       <app-preparation-entry [mediaId]="item().id" [step]="step" />
+      <!-- The phone's pill in its place (media-library@mobile: "Passo 2"). -->
+      <ui-pill class="step-pill" tone="info" i18n="@@library.pausedStep"
+        >Passo {{ step }}</ui-pill
+      >
     }
   </span>
   <span class="duration">{{ duration() }}</span>
