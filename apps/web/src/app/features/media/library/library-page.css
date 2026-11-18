@@ -220,6 +220,8 @@
   margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
+  /* 20/24, as "Precisa da sua atenção" (v2 · media-library). */
+  line-height: 1.5rem;
   letter-spacing: -0.01em;
 }
 

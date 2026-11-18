@@ -39,9 +39,16 @@ export class LibraryHit {
   protected readonly spokenClock = computed(() =>
     speak(this.passage()?.startMs ?? 0),
   );
+  /** The passage's parts, its quotes in the words (“…”, as drawn in media-library-search). */
   protected readonly parts = computed(() => {
     const passage = this.passage();
-    return passage ? textParts(passage.text, passage.highlights) : [];
+    if (!passage) return [];
+    const parts = textParts(passage.text, passage.highlights);
+    return [
+      { text: '“', marked: false },
+      ...parts,
+      { text: '”', marked: false },
+    ];
   });
   protected readonly low = computed(() => this.passage()?.confidence === 'low');
   protected readonly bySubject = computed(() => this.hit().match === 'subject');

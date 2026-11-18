@@ -37,7 +37,9 @@
 
 .head h3 {
   margin: 0;
-  font-size: var(--text-section);
+  /* 20/24 (v2 · media-library-search). */
+  font-size: 1.25rem;
+  line-height: 1.5rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }

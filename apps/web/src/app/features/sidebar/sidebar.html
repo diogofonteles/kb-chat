@@ -300,7 +300,7 @@
                   [routerLink]="item.path"
                   routerLinkActive="active"
                   ariaCurrentWhenActive="page"
-                  [routerLinkActiveOptions]="{ exact: true }"
+                  [routerLinkActiveOptions]="activeOptions"
                   [attr.aria-label]="item.title"
                   [attr.aria-describedby]="'pinned-' + item.key"
                   (click)="openMedia()"

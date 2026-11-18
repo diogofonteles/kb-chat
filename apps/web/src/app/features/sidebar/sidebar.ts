@@ -211,6 +211,13 @@ export class Sidebar {
    * Biblioteca is, and no collection).
    */
   private readonly onConversation = computed(() => this.path() === '/');
+  /** A pinned page stays the current row with its query (/biblioteca?busca=…, -search). */
+  protected readonly activeOptions = {
+    paths: 'exact',
+    queryParams: 'ignored',
+    fragment: 'ignored',
+    matrixParams: 'ignored',
+  } as const;
   protected readonly ns = computed(() =>
     this.expanded() ? 'library-wide' : 'library',
   );
