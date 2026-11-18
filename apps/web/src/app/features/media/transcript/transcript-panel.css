@@ -186,7 +186,6 @@
 }
 
 :host ::ng-deep [banner] {
-  display: block;
   margin-bottom: var(--space-3);
 }
 
