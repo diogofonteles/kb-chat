@@ -3,6 +3,7 @@ import {
   type Author,
   type HiddenSpan,
   type HitSubject,
+  type LibraryCounts,
   type LibraryHome,
   type LibraryItem,
   type LibraryPage,
@@ -154,6 +155,15 @@ export class LibraryService {
       recentlyPlayed: recentlyPlayed(items, clearedAt),
       recentsClearedAt: clearedAt,
     };
+  }
+
+  /** The media the person's library lists (its recordings), in all and per collection. */
+  counts(actor: MediaActor): LibraryCounts {
+    const items = recordingsOf(this.entriesOf(actor));
+    const topics: Record<string, number> = {};
+    for (const item of items)
+      topics[item.topic] = (topics[item.topic] ?? 0) + 1;
+    return { total: items.length, topics };
   }
 
   /** BR-4: positions, marks and bookmarks stay; only the list of recents empties. */

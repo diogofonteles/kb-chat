@@ -49,7 +49,8 @@ test('AC-1/AC-2: a new conversation clears the screen and the history brings the
     history.getByRole('button', { name: new RegExp(tag) }),
   ).toHaveCount(2);
   const old = history.getByRole('button', { name: `ritmo ${tag}` });
-  await expect(old).toContainText('Busca');
+  // v2 · Sua biblioteca: a search's row says "Conversa · <when>".
+  await expect(old).toContainText('Conversa');
   await old.click();
   // The restored conversation runs its search again; the other one is gone from the screen.
   await expect(page.locator('app-result-message .question')).toHaveText([

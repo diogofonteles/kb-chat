@@ -83,6 +83,7 @@
         uiIconButton
         type="button"
         class="widen"
+        [size]="28"
         [attr.aria-label]="widenLabel"
         [attr.aria-pressed]="wide()"
         (click)="expandToggled.emit()"
@@ -216,6 +217,7 @@
       <button
         uiIconButton
         type="button"
+        [size]="24"
         aria-label="Filtrar Sua biblioteca"
         i18n-aria-label="@@library.filter"
         [attr.aria-expanded]="searching()"
@@ -533,13 +535,9 @@
                             >{{ conversation.title }}</span
                           >&ngsp;<span class="meta ui-libitem__meta">
                             <span class="meta-line"
-                              ><span
-                                class="kind"
-                                [class.research]="
-                                  conversation.kind === 'research'
-                                "
-                                >{{ kindLabels[conversation.kind] }}</span
-                              >
+                              ><span class="kind">{{
+                                kindLabels[conversation.kind]
+                              }}</span>
                               ·
                               @if (conversation.status; as status) {
                                 <span
@@ -556,10 +554,7 @@
                                   {{ statusLabels[status] }}</span
                                 >
                               } @else {
-                                {{
-                                  titles().get(conversation.topic) ??
-                                    conversation.topic
-                                }}
+                                {{ conversation.when }}
                                 @if (conversation.count > 1) {
                                   <span i18n="@@sidebar.questions"
                                     >·

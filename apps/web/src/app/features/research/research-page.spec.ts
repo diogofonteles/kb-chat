@@ -138,7 +138,8 @@ describe('ChatPage research view (KBC-008)', () => {
     });
     const history = screen.getByRole('navigation', { name: 'Conversas' });
     expect(history.textContent?.replace(/\s+/g, ' ')).toContain(
-      'o que é o ritmo? Pesquisa com IA · Hermetismo',
+      // v2 · Sua biblioteca: the kind, then when it was saved, just now.
+      'o que é o ritmo? Pesquisa com IA · agora',
     );
     // The research conversation on screen is the current one in the history.
     expect(

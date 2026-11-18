@@ -1,4 +1,5 @@
 import {
+  libraryCountsSchema,
   libraryHomeQuerySchema,
   libraryHomeSchema,
   libraryPageSchema,
@@ -33,6 +34,10 @@ const OPTIONS = {
       querystring: libraryHomeQuerySchema,
       response: { 200: libraryHomeSchema },
     },
+  },
+  counts: {
+    config: { access: LIBRARY },
+    schema: { response: { 200: libraryCountsSchema } },
   },
   clearRecents: {
     config: { access: LIBRARY },
@@ -75,6 +80,9 @@ export const libraryRoutes =
     );
     typed.get('/api/v1/media/library/home', OPTIONS.home, async (request) =>
       service.home(actorOf(request), request.query.topic),
+    );
+    typed.get('/api/v1/media/library/counts', OPTIONS.counts, async (request) =>
+      service.counts(actorOf(request)),
     );
     typed.delete(
       '/api/v1/media/library/recents',

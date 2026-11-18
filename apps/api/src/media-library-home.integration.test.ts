@@ -19,6 +19,7 @@ afterEach(closeApp);
 
 const LIBRARY = '/api/v1/media/library';
 const HOME = '/api/v1/media/library/home';
+const COUNTS = '/api/v1/media/library/counts';
 const LISTENER = ['search', 'media', 'media-library'];
 
 /** Writes to the media database as another process would (the API keeps its own handle). */
@@ -98,7 +99,7 @@ describe('Media library: access (KBC-051 BR-1)', () => {
       topics: ['hermetismo'],
       features: LISTENER,
     });
-    for (const url of [LIBRARY, HOME]) {
+    for (const url of [LIBRARY, HOME, COUNTS]) {
       expect((await listenOnly.call('GET', url)).statusCode).toBe(403);
       expect((await libraryOnly.call('GET', url)).statusCode).toBe(403);
       expect((await both.call('GET', url)).statusCode).toBe(200);
@@ -146,6 +147,27 @@ describe('Media library: what each person sees (BR-2, NFR-3)', () => {
     const page = (await media.owner('GET', LIBRARY)).json();
 
     expect(titles(page.items)).toEqual(['Aula em áudio']);
+  });
+
+  it('counts the media of each collection the person sees, and of all (v2 · Sua biblioteca)', async () => {
+    const media = await startMedia();
+    await ready(media, { title: 'Aula do Hermetismo' });
+    await ready(media, { title: 'Aula de Alquimia', topic: 'alquimia' });
+    await ready(media, { title: 'Outra de Alquimia', topic: 'alquimia' });
+    const person = await member(media, {
+      email: 'contagem@example.com',
+      topics: ['hermetismo'],
+      features: LISTENER,
+    });
+
+    expect((await media.owner('GET', COUNTS)).json()).toEqual({
+      total: 3,
+      topics: { hermetismo: 1, alquimia: 2 },
+    });
+    expect((await person.call('GET', COUNTS)).json()).toEqual({
+      total: 1,
+      topics: { hermetismo: 1 },
+    });
   });
 
   it('lists only the collections the person sees, in items, chips and home (AC-5)', async () => {

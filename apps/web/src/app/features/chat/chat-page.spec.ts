@@ -750,12 +750,13 @@ describe('ChatPage side panel (KBC-005)', () => {
     const history = screen.getByRole('navigation', { name: 'Conversas' });
     expect(screen.getByText('salvo no servidor')).toBeTruthy();
     const items = within(history).getAllByRole('button');
-    expect(
-      items.map((b) => b.textContent?.replace(/\s+/g, ' ').trim()),
-    ).toEqual([
-      'quais são os princípios Pesquisa com IA · Hermetismo',
-      'lei do ritmo Busca · Hermetismo',
-    ]);
+    // v2 · Sua biblioteca: the kind, then when it was saved (24/10, or with the year after).
+    const texts = items.map((b) => b.textContent?.replace(/\s+/g, ' ').trim());
+    expect(texts).toHaveLength(2);
+    expect(texts[0]).toMatch(
+      /^quais são os princípios Pesquisa com IA · 24\/10(\/2026)?$/,
+    );
+    expect(texts[1]).toMatch(/^lei do ritmo Conversa · 24\/10(\/2026)?$/);
   });
 
   it('hands a research conversation to the research view without searching (KBC-008 FR-6)', async () => {
