@@ -351,6 +351,12 @@ legend {
 
   .facets {
     order: 1;
+    flex: none;
+  }
+
+  /* Nothing in the row shrinks: it scrolls instead (no chip under another). */
+  .row > .authorship {
+    flex: none;
   }
 
   /* The facet chips follow the authorship in the row; each opens its own sheet. */

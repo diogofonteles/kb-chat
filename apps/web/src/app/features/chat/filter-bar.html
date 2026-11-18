@@ -240,11 +240,8 @@
     <div class="sheet-body">
       @for (group of sheetGroups(); track group.key; let first = $first) {
         <!-- chat-filters-sheet-mobile: the first facet open, the others folded under their
-             name with ˅ (open while one of theirs is ticked). -->
-        <details
-          class="sheet-facet"
-          [open]="first || sheetFacet() !== null || group.selectedCount > 0"
-        >
+             name with ˅ (one with a filter on opens with the sheet). -->
+        <details class="sheet-facet" [open]="first || sheetFacet() !== null">
           <summary [class.visually-hidden]="sheetFacet() !== null">
             <span>{{ group.title }}</span>
             <ui-icon class="fold" name="chevDown" [size]="18" />

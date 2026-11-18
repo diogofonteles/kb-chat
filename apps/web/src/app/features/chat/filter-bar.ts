@@ -225,6 +225,12 @@ export class FilterBar {
   private showSheet(facet: FacetKey | undefined): void {
     const dialog = this.sheet()?.nativeElement;
     dialog?.showModal();
+    // A folded facet with a filter on opens with the sheet (it stays as the person leaves it).
+    dialog
+      ?.querySelectorAll<HTMLDetailsElement>('details.sheet-facet')
+      .forEach((facetBox) => {
+        if (facetBox.querySelector('input:checked')) facetBox.open = true;
+      });
     if (!facet) return;
     const first = dialog?.querySelector<HTMLInputElement>(
       `[data-sheet-facet="${facet}"] input`,
