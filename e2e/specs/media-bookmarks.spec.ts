@@ -125,7 +125,14 @@ test('AC-2: three bookmarks show on the slider, and one plays from its time', as
   await openPlayer(page);
   await expect(list(page)).toHaveCount(3);
   // The time line on screen: the bar's on a desktop, the full-screen player's on a phone.
-  await expect(page.locator('app-seek-slider .mark:visible')).toHaveCount(3);
+  // Smooth at rest (v2 · Mídia — Player); the marks show while the line is aimed at.
+  const marks = page.locator('app-seek-slider .mark:visible');
+  await expect(marks).toHaveCount(0);
+  await page
+    .locator('app-seek-slider:visible')
+    .getByRole('slider', { name: 'Posição' })
+    .focus();
+  await expect(marks).toHaveCount(3);
   await list(page)
     .nth(1)
     .getByRole('button', { name: 'Tocar de 0:40' })

@@ -328,30 +328,36 @@ export async function expectLibraryView(page: Page, view: LibraryView) {
  * player has no back link of its own, so the "Mídia" row pinned in "Sua biblioteca".
  */
 export async function leaveToMediaList(page: Page): Promise<void> {
+  const from = page.url();
   const back = page.getByRole('link', { name: '← Mídia' });
-  if (await back.isVisible()) {
-    await back.click();
-    return;
-  }
-  await page
-    .getByRole('complementary', { name: 'Sua biblioteca' })
-    .getByRole('link', { name: 'Mídia', exact: true })
-    .click();
+  if (await back.isVisible()) await back.click();
+  else
+    await page
+      .getByRole('complementary', { name: 'Sua biblioteca' })
+      .getByRole('link', { name: 'Mídia', exact: true })
+      .click();
+  // Away from the player page before the next step looks at the bar.
+  await page.waitForURL((url) => url.href !== from);
 }
 
 /**
- * "Fechar o player" (KBC-041 AC-11): the ✕ of the player bar on a desktop; a phone's mini
- * player has none (v2 · Mídia — Player), so a tap on it opens the full-screen player, where
- * it is at the foot of ⋯.
+ * "Fechar o player" (KBC-041 AC-11): at the foot of the player's ⋯ at both widths (the v2
+ * bar and the phone's mini player have no ✕, v2 · Mídia — Player). From another screen
+ * the bar opens the player first: "Abrir o player" on a desktop, a tap on the card on a
+ * phone.
  */
 export async function closePlayer(page: Page): Promise<void> {
   const mini = page.getByRole('region', { name: 'Mini-player' });
   if ((page.viewportSize()?.width ?? 0) >= 1024) {
-    await mini.getByRole('button', { name: 'Fechar o player' }).click();
-    return;
+    const open = mini.getByRole('link', { name: 'Abrir o player' });
+    if (await open.count()) {
+      await open.click();
+      await page.waitForURL(/\/midia\/[0-9a-f-]{36}/);
+    }
+  } else {
+    // The card, not only its title, opens the player: a tap on its cover, at the left.
+    await mini.click({ position: { x: 24, y: 24 } });
   }
-  // The card, not only its title, opens the player: a tap on its cover, at the left.
-  await mini.click({ position: { x: 24, y: 24 } });
   await page.getByRole('button', { name: 'Mais opções' }).click();
   await page
     .getByRole('menu')

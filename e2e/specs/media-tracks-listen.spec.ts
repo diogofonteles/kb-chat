@@ -77,8 +77,15 @@ test('AC-12: who has `media-tracks` sees the marks, the title and goes to the ne
   await owner.dispose();
   const page = await pageAs(browser, email, viewport);
   await page.goto(`/midia/${media.id}`);
-  await expect(page.getByTestId('track-marks').locator('span')).toHaveCount(3);
-  const list = page.getByRole('region', { name: 'Player' });
+  // The line on screen: the bar's on a desktop (the page's own waits hidden), the phone's.
+  await expect(
+    page
+      .locator('app-seek-slider:visible')
+      .getByTestId('track-marks')
+      .locator('span'),
+  ).toHaveCount(3);
+  // The page's player, not the bar ("Mini-player" holds the word too).
+  const list = page.getByRole('region', { name: 'Player', exact: true });
   await expect(list.getByText('Primeira pergunta')).toBeVisible();
 
   await page.getByRole('button', { name: 'Próxima faixa' }).click();
@@ -98,7 +105,9 @@ test('AC-12: `?track=3` opens at track 3, paused', async ({ page }) => {
   await owner.dispose();
   await page.goto(`/midia/${media.id}?track=3`);
   await expect(
-    page.getByRole('region', { name: 'Player' }).getByText('Terceira pergunta'),
+    page
+      .getByRole('region', { name: 'Player', exact: true })
+      .getByText('Terceira pergunta'),
   ).toBeVisible();
   const state = await audioState(page);
   expect(state.paused).toBe(true);

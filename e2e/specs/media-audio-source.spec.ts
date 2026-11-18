@@ -6,7 +6,7 @@ import type {
   TestInfo,
 } from '@playwright/test';
 import { CSRF, expect, ownerApi, test } from './fixtures.js';
-import { audioState } from './media-helpers.js';
+import { audioState, closePlayer } from './media-helpers.js';
 import {
   SPEECH,
   TITLE,
@@ -443,9 +443,12 @@ async function desktopFlow(member: Page): Promise<void> {
   await pauseOnTheControl(member, panel);
   await expect(panel.getByRole('button', { name: 'Faixa toda' })).toBeVisible();
 
-  // The bar closed: "Ouvir o trecho" puts the track back on it and plays the passage.
-  await bar.getByRole('button', { name: 'Fechar o player' }).click();
+  // The bar closed (from the player's ⋯: the v2 bar has no ✕), back on the answer:
+  // "Ouvir o trecho" puts the track back on it and plays the passage.
+  await closePlayer(member);
+  await member.goBack();
   await expect(bar).toBeHidden();
+  await expect(panel).toBeVisible();
   await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
   await expect.poll(() => playing(member)).toBe(true);
   await expect(bar).toContainText(TITLE);

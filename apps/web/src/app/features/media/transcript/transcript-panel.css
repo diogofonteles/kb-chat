@@ -343,15 +343,19 @@
    the next one at 21/700 on the cover's colour; search and expand as round buttons. */
 @media (max-width: 1023px) {
   :host(.in-player) .panel {
-    gap: var(--space-3);
-    padding: var(--space-4);
-    border-radius: 0.75rem;
-    /* On the cover's colour darkened, in every theme: the text is the cover's light ink. */
-    background: color-mix(
+    /* On the cover's colour darkened, in every theme: the text is the cover's light ink,
+       so inside the card "text" means that ink (the spoken word's checks read it). */
+    --card-fill: color-mix(
       in srgb,
       var(--page-tint, var(--tint, #8a4a2e)) 70%,
       var(--color-cover-ink)
     );
+    --color-text: var(--color-on-cover);
+
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border-radius: 0.75rem;
+    background: var(--card-fill);
     color: var(--color-on-cover);
   }
 
@@ -463,8 +467,9 @@
     padding: 0;
   }
 
+  /* The line heard now sits on the card's own fill (no card of its own, pMobile). */
   :host(.in-player) .segment.active {
-    background: none;
+    background: var(--card-fill);
   }
 
   :host(.in-player) .time,

@@ -35,8 +35,8 @@ export interface MenuOption {
   /** A line above it, to set it apart (a destructive action goes last, after one). */
   readonly divider?: boolean;
   /**
-   * A short state after the words, at the right ("ligado", "?"); read as "<label>: <trail>"
-   * (a hidden colon), so the item's name says the state in words (UP-20).
+   * A short state after the words, at the right ("ligado"); the item's name is
+   * "<label>: <trail>", so it says the state in words (UP-20).
    */
   readonly trail?: string;
   /** A key that does it, shown at the right ("?"); the item's name stays its words. */
@@ -119,6 +119,11 @@ const SHEET_BELOW_PX = 1024;
                 [attr.aria-checked]="
                   kind() === 'choice' ? (entry.option.checked ?? false) : null
                 "
+                [attr.aria-label]="
+                  entry.option.trail
+                    ? entry.option.label + ': ' + entry.option.trail
+                    : null
+                "
                 [class.danger]="entry.option.danger"
                 [class.checked]="entry.option.checked"
                 (focus)="focused.set(entry.index)"
@@ -129,10 +134,7 @@ const SHEET_BELOW_PX = 1024;
                 }
                 <span class="words">{{ entry.option.label }}</span>
                 @if (entry.option.trail; as trail) {
-                  <span class="visually-hidden">:</span>&ngsp;<span
-                    class="trail"
-                    >{{ trail }}</span
-                  >
+                  <span class="trail" aria-hidden="true">{{ trail }}</span>
                 } @else if (entry.option.keyHint; as key) {
                   <span class="trail" aria-hidden="true">{{ key }}</span>
                 }
