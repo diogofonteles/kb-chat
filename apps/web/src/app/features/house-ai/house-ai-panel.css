@@ -318,6 +318,11 @@ button:disabled {
 }
 
 @media (max-width: 1023px) {
+  /* The phone puts Salvar under the model's id (v2 · IA da aplicação, celular). */
+  .row .input {
+    flex-basis: 100%;
+  }
+
   .who {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -329,4 +334,15 @@ button:disabled {
   .account-head {
     flex-wrap: wrap;
   }
+}
+
+/* A locked box with its label (the automatic free models, a master's collections): the row
+   dims as one and the tick keeps its green (v2 frames: cbx off, 50 %), not the shared grey. */
+.check:has(> .ui-check:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.check:has(> .ui-check:disabled) > .ui-check {
+  opacity: 1;
 }

@@ -132,9 +132,13 @@
   }
 
   @if (isMaster()) {
-    <p class="note" i18n="@@people.masterNote">
-      Masters veem todos os acervos e usam todas as funcionalidades.
-    </p>
+    <!-- v2 · Pessoas (master): the blue info banner over the boxes it explains. -->
+    <ui-banner
+      class="master-note"
+      tone="info"
+      title="Masters veem todos os acervos e usam todas as funcionalidades."
+      i18n-title="@@people.masterNote"
+    />
   }
 
   <fieldset
@@ -148,6 +152,7 @@
         <input
           #box
           type="checkbox"
+          class="ui-check"
           [checked]="topic.checked"
           [disabled]="topic.inherited"
           (change)="toggleTopic(topic.slug, box.checked)"
@@ -208,6 +213,7 @@
         <input
           #box
           type="checkbox"
+          class="ui-check"
           [checked]="feature.checked"
           (change)="toggleFeature(feature.id, box.checked)"
         />
@@ -221,6 +227,7 @@
       <input
         #grant
         type="checkbox"
+        class="ui-check"
         [checked]="who.canActAs"
         [disabled]="busy()"
         (change)="changed.emit({ canActAs: grant.checked })"
@@ -353,6 +360,7 @@
           uiButton="white"
           size="sm"
           type="button"
+          data-act-as
           [disabled]="busy()"
           (click)="pressActAs($event)"
         >

@@ -369,6 +369,11 @@
     margin: 0;
   }
 
+  /* The e-mail on a line of its own, the pills under it (v2 · Pessoas, celular). */
+  .phone-person .dialog-sub > span:first-child {
+    flex-basis: 100%;
+  }
+
   /* The editor's own grid, so its actions can rise above the tabs. */
   .editor {
     display: grid;
@@ -630,7 +635,7 @@ input[aria-invalid='true'] {
     display: contents;
   }
 
-  .row ui-avatar {
+  .row app-person-avatar {
     --ui-avatar-size: 48px !important;
     grid-area: 1 / 1 / span 3;
   }
@@ -796,4 +801,23 @@ input.input {
 .select option {
   background: var(--color-elevated);
   color: var(--color-text);
+}
+
+/* The v2 select (Configurações): a filled field with its own chevron, never the native one. */
+:where(select).select {
+  appearance: none;
+  padding-right: 2.25rem;
+  border-color: transparent;
+  background-color: var(--color-surface-muted);
+  background-image: var(--settings-select-chevron, none);
+  background-position:
+    right 1.25rem center,
+    right 0.875rem center;
+  background-size: 0.375rem 0.375rem;
+  background-repeat: no-repeat;
+}
+
+/* What the invitation waits for, in the warning's colour (v2 · Convite, cessão). */
+.wait-note {
+  color: var(--color-warn);
 }

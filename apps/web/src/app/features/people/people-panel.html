@@ -1,4 +1,4 @@
-<form class="invite" (submit)="invite($event)">
+<form class="invite" novalidate (submit)="invite($event)">
   @if (!configuring()) {
     <p class="invite-title" i18n="@@people.inviteTitle">Convidar por e-mail</p>
     <ng-container *ngTemplateOutlet="inviteFields" />
@@ -192,7 +192,11 @@
 <ng-template #inviteNotes>
   <div class="invite-notes">
     @if (waitsForLend()) {
-      <p id="invite-lend-wait" class="hint" i18n="@@people.inviteLendWait">
+      <p
+        id="invite-lend-wait"
+        class="hint wait-note"
+        i18n="@@people.inviteLendWait"
+      >
         Confirme ou cancele a cessão da assinatura em “IA da aplicação” para
         convidar.
       </p>
@@ -319,9 +323,9 @@
           (click)="toggle(person)"
         >
           <span class="who">
-            <ui-avatar
+            <app-person-avatar
+              [owner]="person.isOwner"
               [name]="person.name || person.email"
-              [picture]="null"
               [size]="36"
             />
             <span class="who-text">
@@ -418,8 +422,9 @@
     <!-- The frame's head: the avatar, the name, then the e-mail, the role and the status. -->
     <!-- One element per @if: each block is projected into its own slot. -->
     @if (!phone()) {
-      <ui-avatar
+      <app-person-avatar
         uiDialogLead
+        [owner]="person.isOwner"
         class="dialog-avatar"
         [name]="person.name || person.email"
         [size]="56"
@@ -436,7 +441,11 @@
          (v2 · Pessoas, celular: avatar 48, the name, the e-mail, role and status). -->
     @if (phone()) {
       <div class="phone-person">
-        <ui-avatar [name]="person.name || person.email" [size]="48" />
+        <app-person-avatar
+          [owner]="person.isOwner"
+          [name]="person.name || person.email"
+          [size]="48"
+        />
         <div class="phone-person-text">
           <p class="phone-person-name">{{ person.name || person.email }}</p>
           <p class="dialog-sub">

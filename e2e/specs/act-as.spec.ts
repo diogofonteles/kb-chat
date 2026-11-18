@@ -132,6 +132,12 @@ test('AC-9: the dialog needs a reason, and Esc gives the focus back', async ({
   const actAs = settings.getByRole('button', { name: 'Ver como', exact: true });
   await actAs.click();
   const dialog = page.getByRole('dialog', { name: /^Ver como / });
+  // It starts on the reason; on a desktop it stands over the list, the editor closed.
+  await expect(dialog.getByRole('textbox', { name: 'Motivo' })).toBeFocused();
+  if (desktop(page))
+    await expect(page.locator('dialog:has(#person-dialog-title)')).toHaveCount(
+      0,
+    );
   await startButton(page, dialog).click();
   await expect(dialog.getByText(/Escreva o motivo/)).toBeVisible();
   await expect(dialog.getByRole('textbox', { name: 'Motivo' })).toBeFocused();

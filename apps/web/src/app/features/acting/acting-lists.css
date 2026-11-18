@@ -91,7 +91,9 @@ code {
     max-width: none;
   }
 
-  .table-head {
+  /* The rows carry their own labels on a phone; the audit's head, a grid too, goes as well. */
+  .table-head,
+  .table-head.audit-cols {
     display: none;
   }
 
@@ -167,36 +169,62 @@ code {
     margin-top: var(--space-2);
   }
 
-  /* A phone's audit entry: the event and who on one line, when and the detail under. */
+  /* The event and who on one line, when · the detail on the next, the reason under them
+     ("Começou Dono como Ana Lima" / "09/11/2026 18:58:16 · voltou para a própria conta"). */
   .audit-cols {
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas:
-      'event who'
-      'when when'
-      'detail detail'
-      'reason reason';
-    gap: 0.375rem var(--space-2);
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    align-items: center;
+    /* No row gap: the break below is a line of its own; each line sets its own space. */
+    gap: 0 var(--space-2);
     padding: 0.875rem;
   }
 
+  .audit-cols::before {
+    content: '';
+    order: 3;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .audit-cols .when,
+  .audit-cols .detail {
+    margin-top: 0.25rem;
+  }
+
+  .audit-cols .reason {
+    margin-top: 0.25rem;
+  }
+
   .audit-cols .event {
-    grid-area: event;
+    order: 1;
   }
 
   .audit-cols .who {
-    grid-area: who;
+    flex: 1 1 0;
+    order: 2;
     font-size: var(--text-sm);
     font-weight: 700;
   }
 
   .audit-cols .when {
-    grid-area: when;
+    order: 4;
     font-size: var(--text-xs);
+    font-variant-numeric: normal;
   }
 
   .audit-cols .detail {
-    grid-area: detail;
+    display: block;
+    order: 5;
+    min-width: 0;
+    /* One space after the time, as in "18:58:16 · voltou". */
+    margin-left: calc(0.25rem - var(--space-2));
     font-size: var(--text-xs);
+  }
+
+  .audit-cols .detail::before {
+    content: '· ' / '';
   }
 
   .audit-cols .detail:has([aria-hidden='true']) {
@@ -204,7 +232,9 @@ code {
   }
 
   .audit-cols .reason {
-    grid-area: reason;
+    display: block;
+    flex-basis: 100%;
+    order: 6;
     font-size: var(--text-meta);
   }
 }

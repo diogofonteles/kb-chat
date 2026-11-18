@@ -109,3 +109,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* The frame's Aprovar · Recusar: 36 px pills, 14 px text (v2 · Pessoas, pedidos). */
+.actions [uiButton] {
+  min-height: 2.25rem;
+  padding: 0 1.125rem;
+  font-size: var(--text-sm);
+}

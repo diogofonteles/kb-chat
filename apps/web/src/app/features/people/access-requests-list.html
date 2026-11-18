@@ -10,7 +10,7 @@
         @let request = row.request;
         <li class="request">
           <div class="who">
-            <ui-avatar [name]="row.name" [size]="44" />
+            <app-person-avatar [name]="row.name" [size]="44" />
             <span class="who-text">
               <span class="name">{{ row.name }}</span>
               <span class="detail">{{ request.email }}</span>

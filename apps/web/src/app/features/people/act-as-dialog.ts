@@ -118,6 +118,8 @@ export class ActAsDialog {
     this.failure.set(null);
     this.reason().nativeElement.value = '';
     this.dialog().open();
+    // The reason is what the dialog asks for: it starts there (v2 · Ver como).
+    this.reason().nativeElement.focus();
   }
 
   protected close(): void {

@@ -267,7 +267,7 @@ button:disabled {
   width: 10rem;
   min-height: 2.5rem;
   border: 0;
-  background: var(--color-surface-muted);
+  background-color: var(--color-surface-muted);
 }
 
 .foot-start,
@@ -499,6 +499,20 @@ input.input {
   color: var(--color-text);
 }
 
+/* The v2 select (Configurações): a filled field with its own chevron, never the native one. */
+:where(select).select {
+  appearance: none;
+  padding-right: 2.25rem;
+  border-color: transparent;
+  background-color: var(--color-surface-muted);
+  background-image: var(--settings-select-chevron, none);
+  background-position:
+    right 1.25rem center,
+    right 0.875rem center;
+  background-size: 0.375rem 0.375rem;
+  background-repeat: no-repeat;
+}
+
 /* ---------- IA e limites (v2): label at the left, control at the right, switches ---------- */
 .ai-tab {
   gap: 0;
@@ -530,7 +544,7 @@ input.input {
   flex: none;
   width: 17.5rem;
   border: 0;
-  background: var(--color-surface-muted);
+  background-color: var(--color-surface-muted);
 }
 
 .ai-tab .field > .number {
@@ -657,4 +671,15 @@ input.input {
 .lend-confirm .actions > .secondary:not(.danger) {
   border-color: transparent;
   color: var(--color-text-muted);
+}
+
+/* A locked box with its label (the automatic free models, a master's collections): the row
+   dims as one and the tick keeps its green (v2 frames: cbx off, 50 %), not the shared grey. */
+.check:has(> .ui-check:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.check:has(> .ui-check:disabled) > .ui-check {
+  opacity: 1;
 }

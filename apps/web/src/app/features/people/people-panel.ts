@@ -69,7 +69,8 @@ import { InviteProfilesStore } from './invite-profiles-store.js';
 import { plainPreset } from './preset-defaults.js';
 import { withPresetLevels } from './level-rows.js';
 import { PeopleLevelBar, type PeopleLevelRequest } from './people-level-bar.js';
-import { UiAvatar, UiButton, UiDialog, UiIcon, UiPill } from '@ui/index.js';
+import { UiButton, UiDialog, UiIcon, UiPill } from '@ui/index.js';
+import { PersonAvatar } from './person-avatar.js';
 
 /** "Nenhum" in the invitation's "Perfil": today's plain invitation. */
 const NO_PROFILE = 'none';
@@ -99,7 +100,7 @@ interface Outcome<T> {
     InviteProfilesPanel,
     DatePipe,
     NgTemplateOutlet,
-    UiAvatar,
+    PersonAvatar,
     UiButton,
     UiDialog,
     UiIcon,
@@ -256,6 +257,8 @@ export class PeoplePanel {
   );
   private readonly personDialog = viewChild<UiDialog>('personDialog');
   private readonly inviteDialog = viewChild<UiDialog>('inviteDialog');
+  private readonly emailField =
+    viewChild<ElementRef<HTMLInputElement>>('emailInput');
   /** "Configurar agora": the configured invitation opens in its modal once drawn. */
   private readonly opensInvite = afterRenderEffect(() => {
     if (this.configuring()) this.inviteDialog()?.open();
@@ -374,19 +377,22 @@ export class PeoplePanel {
     this.lendPending.set(false);
   }
 
-  /** Convidar waits for an e-mail, and for a configuration without errors. */
+  /** Convidar stays lit with no address (v2 · Pessoas): pressing it says what is missing. */
   protected readonly inviteBlocked = computed(
-    () =>
-      this.busy() ||
-      !this.email().trim() ||
-      (this.configuring() && this.presetInvalid()),
+    () => this.busy() || (this.configuring() && this.presetInvalid()),
   );
 
   /** The form's submit, or the phone sheet's "Convidar" (no event then). */
   protected invite(event?: Event): void {
     event?.preventDefault();
     const email = this.email().trim();
-    if (!email) return;
+    if (!email) {
+      this.inviteError.set(
+        $localize`:@@people.inviteEmailMissing:Escreva o e-mail de quem você quer convidar.`,
+      );
+      this.emailField()?.nativeElement.focus();
+      return;
+    }
     const sendEmail = !this.skipEmail();
     const used = this.setupName();
     this.run(this.api.invite(email, sendEmail, this.inviteSetup()), {
@@ -523,11 +529,18 @@ export class PeoplePanel {
   protected readonly actingTarget = signal<Person | null>(null);
   private readonly actAsDialog = viewChild(ActAsDialog);
   private actAsOpener: HTMLElement | null = null;
+  /** The editor closed for "Ver como" on a desktop, to open again if it is cancelled. */
+  private editorBeforeActAs: string | null = null;
 
   protected askActAs(person: Person, opener?: HTMLElement): void {
     // The button pressed, not the focus: a click does not always move it (Safari, a modal).
     const active = opener ?? this.document.activeElement;
     this.actAsOpener = active instanceof HTMLElement ? active : null;
+    // v2 · Ver como: on a desktop the modal stands over the people list, not over the editor.
+    if (!this.phone() && this.openId() === person.id) {
+      this.editorBeforeActAs = person.id;
+      this.openId.set(null);
+    }
     this.actingTarget.set(person);
     afterNextRender(() => this.actAsDialog()?.open(), {
       injector: this.injector,
@@ -537,7 +550,27 @@ export class PeoplePanel {
   /** Esc or "Cancelar": the focus goes back to "Ver como" (NG-30). */
   protected actAsClosed(): void {
     this.actingTarget.set(null);
-    this.actAsOpener?.focus();
+    const editor = this.editorBeforeActAs;
+    this.editorBeforeActAs = null;
+    if (editor === null) {
+      this.actAsOpener?.focus();
+      return;
+    }
+    // Back where the person was: the editor again, the focus on its "Ver como".
+    this.openId.set(editor);
+    this.focusWhenShown('app-person-editor [data-act-as]');
+  }
+
+  /** Focuses `selector` once it is on screen (a modal opening takes a few frames). */
+  private focusWhenShown(selector: string, frames = 30): void {
+    const view = this.document.defaultView;
+    const look = (left: number) => {
+      const el = this.document.querySelector<HTMLElement>(selector);
+      if (el) el.focus();
+      else if (left > 0 && view)
+        view.requestAnimationFrame(() => look(left - 1));
+    };
+    afterNextRender(() => look(frames), { injector: this.injector });
   }
 
   protected change(person: Person, patch: PersonUpdate): void {
