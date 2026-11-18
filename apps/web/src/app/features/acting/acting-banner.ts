@@ -31,21 +31,24 @@ const ONE_MINUTE_MS = 60_000;
     @if (acting(); as current) {
       <div class="band">
         <ui-icon class="eye" name="eye" [size]="18" />
-        <p class="what">
+        <!-- actingBar (desktop) and cmActing (phone): the same band, a phone's words shorter. -->
+        <p class="what wide">
           <span i18n="@@acting.as"
             >Você está vendo como <strong>{{ personName() }}</strong></span
           >
           <span class="time" i18n="@@acting.endsIn"
-            >termina em {{ left() }}</span
+            >· termina em {{ left() }}</span
           >
         </p>
-        <button
-          type="button"
-          [disabled]="busy()"
-          (click)="back()"
-          i18n="@@acting.back"
-        >
-          Voltar para a minha conta
+        <p class="what narrow" i18n="@@acting.asShort">
+          Vendo como {{ personName() }} · {{ left() }}
+        </p>
+        <button type="button" [disabled]="busy()" (click)="back()">
+          <span i18n="@@acting.backShort">Voltar</span>&ngsp;<span
+            class="back-rest"
+            i18n="@@acting.backRest"
+            >para a minha conta</span
+          >
         </button>
       </div>
       <!-- Only while acting: the page's own status region stays the only one otherwise. -->
