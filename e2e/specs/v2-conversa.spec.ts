@@ -9,7 +9,12 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { startInSearchView, modeRadio, expectSummary, searchAgain } from './search-view.js';
+import {
+  startInSearchView,
+  modeRadio,
+  expectSummary,
+  searchAgain,
+} from './search-view.js';
 
 // KBC-126: the v2 conversation home and search page, at 1440 and 390 (BR-3). With
 // KBC_SHOTS=<folder> each state is also captured, to compare with the v2 · Conversa frames.
@@ -239,6 +244,12 @@ test('AC-5: on a phone the sheet says how many results a type shows, and shows t
   await page.getByRole('button', { name: 'Filtros', exact: true }).click();
   const sheet = page.getByRole('dialog', { name: 'Filtros' });
   await expect(sheet).toBeVisible();
+  // "Tipo de texto" is folded under its name (chat-filters-sheet-mobile): open it first.
+  const genres = sheet.locator('details', {
+    has: page.locator('[data-sheet-facet="genres"]'),
+  });
+  await genres.locator('summary').click();
+  await expect(genres).toHaveAttribute('open', '');
   const type = sheet.locator('[data-sheet-facet="genres"] label').first();
   const expected = Number(
     (await type.locator('.option-count').textContent())?.trim(),

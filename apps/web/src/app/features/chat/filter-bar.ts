@@ -87,6 +87,12 @@ export class FilterBar {
   protected readonly openKey = signal<FacetKey | null>(null);
   protected readonly expanded = signal<ReadonlySet<FacetKey>>(new Set());
   protected readonly sheetOpen = signal(false);
+  /**
+   * A phone's facet chip opens a sheet of that facet alone (chat-results-filter-popover
+   * @mobile: its title, its options and "Aplicar"); "Filtros" opens them all.
+   */
+  protected readonly sheetFacet = signal<FacetKey | null>(null);
+  private sheetTrigger: HTMLElement | null = null;
   /** Mobile sheet selection, discarded on Cancelar and reset when the applied filters change. */
   protected readonly draft = linkedSignal(() => this.filters());
 
@@ -96,6 +102,14 @@ export class FilterBar {
   protected readonly draftGroups = computed(() =>
     toFacetGroups(this.facets(), this.draft(), this.topicNames()),
   );
+  /** The sheet's groups: the one its chip opened, or every one from "Filtros". */
+  protected readonly sheetGroup = computed(
+    () => this.draftGroups().find((g) => g.key === this.sheetFacet()) ?? null,
+  );
+  protected readonly sheetGroups = computed(() => {
+    const only = this.sheetGroup();
+    return only ? [only] : this.draftGroups();
+  });
   /**
    * The authorship control shows a single choice (KBC-020): no removable chip repeats it.
    * Several groups (API or an edited saved search) read as "Todos" there, so they stay chips.
@@ -138,9 +152,9 @@ export class FilterBar {
   }
 
   /** Desktop opens the facet's popover; phones open the sheet (no popovers at that width). */
-  protected openFacet(key: FacetKey): void {
+  protected openFacet(key: FacetKey, chip?: HTMLElement): void {
     if (this.isPhone()) {
-      this.openSheet(key);
+      this.openSheet(key, chip);
       return;
     }
     this.openKey.update((open) => (open === key ? null : key));
@@ -198,8 +212,10 @@ export class FilterBar {
     this.draft.update((filters) => toggleFilter(filters, key, value));
   }
 
-  protected openSheet(facet?: FacetKey): void {
+  protected openSheet(facet?: FacetKey, trigger?: HTMLElement): void {
     this.draft.set(this.filters());
+    this.sheetFacet.set(facet ?? null);
+    this.sheetTrigger = trigger ?? null;
     this.sheetOpen.set(true);
     // showModal() makes the rest of the page inert, traps focus and closes on Escape;
     // opened from a chip, the sheet starts on that facet's first option.
@@ -229,7 +245,19 @@ export class FilterBar {
   /** Native "close" (Aplicar, Cancelar or Escape): unmount and return focus to "Filtros". */
   protected sheetClosed(): void {
     this.sheetOpen.set(false);
-    this.sheetButton().nativeElement.focus();
+    this.sheetFacet.set(null);
+    (this.sheetTrigger ?? this.sheetButton().nativeElement).focus();
+    this.sheetTrigger = null;
+  }
+
+  /** "Limpar" in the sheet's head: no filter in the draft (applied with "Ver resultados"). */
+  protected clearDraft(): void {
+    this.draft.set(NO_FILTERS);
+  }
+
+  /** A tap on the backdrop (the dialog itself, outside its content) cancels, as Escape does. */
+  protected backdropTapped(event: MouseEvent): void {
+    if (event.target === event.currentTarget) this.cancelSheet();
   }
 
   protected closePopover(chip: HTMLElement): void {

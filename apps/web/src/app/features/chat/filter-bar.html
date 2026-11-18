@@ -58,7 +58,7 @@
             [attr.aria-controls]="
               openKey() === group.key ? 'facet-' + group.key : null
             "
-            (click)="openFacet(group.key)"
+            (click)="openFacet(group.key, chip)"
             (keydown.escape)="closePopover(chip)"
           >
             {{ group.title }}
@@ -99,8 +99,10 @@
                   Ver todos ({{ group.options.length }})
                 </button>
               }
-              @if (group.selectedCount > 0) {
-                <div class="popover-foot">
+              <!-- subjectsPopover's foot: "Limpar" and "Aplicar" (the choices apply as they
+                   are ticked; "Aplicar" closes). -->
+              <div class="popover-foot">
+                @if (group.selectedCount > 0) {
                   <button
                     uiButton="ghost"
                     size="sm"
@@ -110,8 +112,17 @@
                   >
                     Limpar
                   </button>
-                </div>
-              }
+                }
+                <button
+                  uiButton="white"
+                  size="sm"
+                  type="button"
+                  (click)="closePopover(chip)"
+                  i18n="@@filters.apply"
+                >
+                  Aplicar
+                </button>
+              </div>
             </div>
           }
         </div>
@@ -190,15 +201,31 @@
 }
 
 @if (sheetOpen()) {
+  <!-- The backdrop tap is a pointer way out only: Escape and Cancelar close it too. -->
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
   <dialog
     #sheet
     class="sheet"
     aria-labelledby="filters-sheet-title"
+    [class.one-facet]="sheetFacet() !== null"
     (close)="sheetClosed()"
+    (click)="backdropTapped($event)"
   >
     <span class="handle" aria-hidden="true"></span>
     <header class="sheet-head">
-      <h2 id="filters-sheet-title" i18n="@@filters.sheetTitle">Filtros</h2>
+      @if (sheetGroup(); as only) {
+        <h2 id="filters-sheet-title">{{ only.title }}</h2>
+      } @else {
+        <h2 id="filters-sheet-title" i18n="@@filters.sheetTitle">Filtros</h2>
+        <button
+          type="button"
+          class="link clear-draft"
+          (click)="clearDraft()"
+          i18n="@@filters.clearSheet"
+        >
+          Limpar
+        </button>
+      }
       @if (hiddenOffTopic() > 0) {
         <p class="hidden-note" i18n="@@filters.hiddenOffTopicSheet">
           {hiddenOffTopic(), plural,
@@ -211,51 +238,66 @@
       }
     </header>
     <div class="sheet-body">
-      @for (group of draftGroups(); track group.key) {
-        <fieldset [attr.data-sheet-facet]="group.key">
-          <legend>{{ group.title }}</legend>
-          @for (option of visibleOptions(group); track option.value) {
-            <label class="option">
-              <input
-                type="checkbox"
-                class="ui-check"
-                [checked]="option.selected"
-                (change)="toggleDraft(group.key, option.value)"
-              />
-              <span class="option-label">{{ option.label }}</span>
-              <span class="option-count">{{ option.countText }}</span>
-            </label>
-          }
-          @if (hiddenOptions(group) > 0) {
-            <button
-              type="button"
-              class="link"
-              (click)="expand(group.key)"
-              i18n="@@filters.showAll"
-            >
-              Ver todos ({{ group.options.length }})
-            </button>
-          }
-        </fieldset>
+      @for (group of sheetGroups(); track group.key; let first = $first) {
+        <!-- chat-filters-sheet-mobile: the first facet open, the others folded under their
+             name with ˅ (open while one of theirs is ticked). -->
+        <details
+          class="sheet-facet"
+          [open]="first || sheetFacet() !== null || group.selectedCount > 0"
+        >
+          <summary [class.visually-hidden]="sheetFacet() !== null">
+            <span>{{ group.title }}</span>
+            <ui-icon class="fold" name="chevDown" [size]="18" />
+          </summary>
+          <fieldset [attr.data-sheet-facet]="group.key">
+            <legend class="visually-hidden">{{ group.title }}</legend>
+            @for (option of visibleOptions(group); track option.value) {
+              <label class="option">
+                <input
+                  type="checkbox"
+                  class="ui-check"
+                  [checked]="option.selected"
+                  (change)="toggleDraft(group.key, option.value)"
+                />
+                <span class="option-label">{{ option.label }}</span>
+                <span class="option-count">{{ option.countText }}</span>
+              </label>
+            }
+            @if (hiddenOptions(group) > 0) {
+              <button
+                type="button"
+                class="link"
+                (click)="expand(group.key)"
+                i18n="@@filters.showAll"
+              >
+                Ver todos ({{ group.options.length }})
+              </button>
+            }
+          </fieldset>
+        </details>
       }
     </div>
     <footer class="sheet-foot">
-      <button
-        uiButton="ghost"
-        type="button"
-        class="cancel"
-        (click)="cancelSheet()"
-        i18n="@@filters.cancel"
-      >
-        Cancelar
-      </button>
+      @if (sheetFacet() === null) {
+        <button
+          uiButton="ghost"
+          type="button"
+          class="cancel"
+          (click)="cancelSheet()"
+          i18n="@@filters.cancel"
+        >
+          Cancelar
+        </button>
+      }
       <button
         uiButton="white"
         type="button"
         class="apply"
         (click)="applySheet()"
       >
-        @if (draftCount(); as count) {
+        @if (sheetFacet() !== null) {
+          <span i18n="@@filters.apply">Aplicar</span>
+        } @else if (draftCount(); as count) {
           <span i18n="@@filters.applyCount">{count, plural,
             =1 {Ver 1 resultado}
             other {Ver {{ count }} resultados}

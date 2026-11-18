@@ -166,7 +166,8 @@
 .popover-foot {
   display: flex;
   justify-content: flex-end;
-  padding: var(--space-2) var(--space-1) 0;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-1) var(--space-1);
 }
 
 .option {
@@ -250,7 +251,30 @@
 }
 
 .sheet-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   padding: var(--space-3) var(--space-4) var(--space-2);
+}
+
+.sheet-head .hidden-note {
+  flex-basis: 100%;
+}
+
+.clear-draft {
+  color: var(--color-text-muted);
+}
+
+/* One facet's sheet (chat-results-filter-popover@mobile): as tall as its options, the
+   facet's name for a title and one "Aplicar" across. */
+.sheet.one-facet {
+  height: auto;
+  max-height: 85dvh;
+}
+
+.sheet.one-facet .sheet-foot {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .sheet-head h2 {
@@ -316,14 +340,26 @@ legend {
     scrollbar-width: none;
   }
 
+  /* "Filtros" first, the authorship, then the facet chips (chat-results@mobile). */
   .row > .bar {
-    order: -1;
-    flex: none;
+    display: contents;
   }
 
-  .facets,
+  .sheet-button {
+    order: -1;
+  }
+
+  .facets {
+    order: 1;
+  }
+
+  /* The facet chips follow the authorship in the row; each opens its own sheet. */
   .divider {
     display: none;
+  }
+
+  .facets {
+    flex-wrap: nowrap;
   }
 
   .authorship {
@@ -333,4 +369,32 @@ legend {
   .sheet-button {
     display: inline-flex;
   }
+}
+
+/* The sheet's facets fold under their name (chat-filters-sheet-mobile). */
+.sheet-facet summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--target);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+
+.sheet-facet summary::-webkit-details-marker {
+  display: none;
+}
+
+.sheet-facet .fold {
+  color: var(--color-text-muted);
+}
+
+.sheet-facet[open] .fold {
+  transform: rotate(180deg);
+}
+
+.sheet-facet[open] summary:not(.visually-hidden) + fieldset {
+  padding-top: 0;
 }
