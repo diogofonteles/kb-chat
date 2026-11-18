@@ -115,6 +115,8 @@ let nextPanel = 0;
     '[class.page-mode]': 'page()',
     '[class.source-mode]': 'inSource()',
     '[class.subject]': 'subject()',
+    '[class.tools-stuck]': 'toolsStuck()',
+    '(scroll)': 'readerScrolled($event)',
     '[style.--doc-tint]': 'tint()',
     '(keydown.escape)': 'closed.emit()',
   },
@@ -381,6 +383,23 @@ export class DocumentPanel {
       this.flashCopy('failed');
     }
   }
+
+  /**
+   * The page's tools lie on its head (actionBar) and stay at its top once the text scrolls
+   * under them ("Próxima ocorrência" always at hand): then they take the page's colour.
+   */
+  protected readonly toolsStuck = signal(false);
+
+  protected readonly readerScrolled = (event: Event): void => {
+    const reader = event.target as HTMLElement;
+    const tools = reader.querySelector<HTMLElement>('.actions');
+    const top = reader.getBoundingClientRect().top;
+    this.toolsStuck.set(
+      !!tools &&
+        reader.scrollTop > 0 &&
+        tools.getBoundingClientRect().top <= top + 1,
+    );
+  };
 
   /** Compartilhar (actionBar): the system's share sheet, or the title and summary copied. */
   private readonly shared = signal<'idle' | 'copied' | 'failed'>('idle');

@@ -1,4 +1,4 @@
-<div class="reader">
+<div class="reader" (scroll)="readerScrolled($event)">
   <header class="head">
     <div class="top-row">
       @if (sourceNav(); as nav) {
@@ -173,18 +173,35 @@
         >
           <ui-icon name="share" [size]="inSource() ? 18 : 24" />
         </button>
-        @if (sections().length > 0) {
-          <!-- ⋯ (actionBar): the document's sections, the v1 index ("Seções"). -->
+        <!-- ⋯ (actionBar): "Tela cheia" on a desktop page (the panel's own button has no
+             place there) and the document's sections, the v1 index ("Seções"). -->
+        @if (page() || sections().length > 0) {
           <ui-menu
             class="more"
-            label="Seções"
-            i18n-label="@@panel.sectionsMenu"
+            [class.no-sections]="sections().length === 0"
+            label="Mais opções do documento"
+            i18n-label="@@panel.moreMenu"
             triggerLabel="Mais opções"
             i18n-triggerLabel="@@panel.more"
             [menuId]="titleId + '-more'"
             triggerClass="ui-icon-button"
           >
             <ui-icon uiMenuTrigger name="more" [size]="24" />
+            @if (page()) {
+              <button
+                uiMenuItem
+                type="button"
+                class="full-item"
+                (click)="full.set(!full())"
+              >
+                <ui-icon name="expand" [size]="18" />
+                @if (full()) {
+                  <span i18n="@@source.exitFullscreen">Sair da tela cheia</span>
+                } @else {
+                  <span i18n="@@source.fullscreen">Tela cheia</span>
+                }
+              </button>
+            }
             @for (section of sections(); track $index) {
               <button uiMenuItem type="button" (click)="goToSection(section)">
                 {{ section.title }}

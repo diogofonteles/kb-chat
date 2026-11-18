@@ -494,9 +494,10 @@ h2:focus-visible {
   background: transparent;
 }
 
-/* The page's tools lie on its head (actionBar): not sticky, ✕ last. */
+/* The page's tools lie on its head (actionBar), ✕ last; once the text scrolls under them
+   they stay at the top on the page's colour. */
 :host(.page-mode) .actions {
-  position: static;
+  position: sticky;
   gap: var(--space-5);
   padding-block: var(--space-6);
   background: transparent;
@@ -633,8 +634,13 @@ h2:focus-visible {
   }
 
   :host(:not(.in-sheet):not(.source-mode)) .actions {
-    position: static;
+    position: sticky;
     gap: var(--space-5);
+  }
+
+  :host(.tools-stuck:not(.in-sheet):not(.source-mode)) .actions {
+    background: var(--color-bg);
+    box-shadow: 0 1px 0 var(--overlay-line);
   }
 
   :host(:not(.in-sheet):not(.source-mode)) .actions .tool-label {
@@ -822,4 +828,17 @@ h2:focus-visible {
 
 :host(.subject) .titles .criterion-line {
   display: block;
+}
+
+:host(.page-mode.tools-stuck) .actions {
+  background: var(--color-bg);
+  box-shadow: 0 1px 0 var(--overlay-line);
+}
+
+/* A phone has no "Tela cheia": its ⋯ is there only for the sections. */
+@media (max-width: 1023px) {
+  .full-item,
+  .actions .more.no-sections {
+    display: none;
+  }
 }
