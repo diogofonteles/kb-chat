@@ -842,3 +842,10 @@ h2:focus-visible {
     display: none;
   }
 }
+
+/* cmDoc error: a phone closes by its round ✕; the empty state keeps "Tentar de novo". */
+@media (max-width: 1023px) {
+  .failed-close {
+    display: none;
+  }
+}

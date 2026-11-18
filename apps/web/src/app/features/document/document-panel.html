@@ -63,7 +63,8 @@
       }
     </div>
 
-    <div class="page-head">
+    <!-- A document that fails shows only its empty state under ✕ (chat-document-error). -->
+    <div class="page-head" [hidden]="!!document.error()">
       <ui-cover
         class="art"
         [title]="title()"
@@ -300,6 +301,7 @@
           Tentar de novo
         </button>
         <button
+          class="failed-close"
           uiButton="ghost"
           type="button"
           (click)="closed.emit()"
