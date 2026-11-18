@@ -7,7 +7,11 @@
   <div class="reply">
     @if (stepsLine()) {
       @if (turn().steps.length > 0) {
-        <details class="steps" [class.working]="streaming()">
+        <details
+          class="steps"
+          [class.working]="streaming()"
+          [open]="stepsOpen()"
+        >
           <summary>
             <span class="steps-icon" aria-hidden="true">
               <ui-icon
@@ -385,6 +389,7 @@
                       }
                       <app-authorship-badge
                         class="source-authorship"
+                        [plain]="true"
                         [authorship]="source.authorship"
                       />
                     </span>

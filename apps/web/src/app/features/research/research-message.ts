@@ -108,6 +108,19 @@ export class ResearchMessage {
   readonly turn = input.required<ResearchTurn>();
   /** Only the last turn offers "Tentar de novo" (asking again in its place). */
   readonly last = input(false);
+  /** A wide screen: the latest answer shows its steps open (v2 · Conversa, chat-research-answer). */
+  private readonly wide =
+    inject(DOCUMENT).defaultView?.matchMedia?.('(min-width: 1024px)').matches ??
+    true;
+  /** The steps of the latest answer, once written, open on desktop; the others closed. */
+  protected readonly stepsOpen = computed(
+    () =>
+      this.wide &&
+      this.last() &&
+      this.turn().phase === 'done' &&
+      !this.turn().interrupted &&
+      !this.canContinue(),
+  );
   /** The source open beside the answer (its row and its [n] are marked, FR-1). */
   readonly activeSource = input<number | null>(null);
   readonly opened = output<OpenedSource>();

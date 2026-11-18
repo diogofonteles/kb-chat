@@ -62,7 +62,8 @@ function restrictedCitation(n: string): string {
 }
 
 /**
- * "[2]" → a link to source 2 named after it; the panel opens on click. A track's "[2@8:15]"
+ * "[2]" → a link to source 2 named after it; the panel opens on click. v2 draws it as a
+ * numbered circle: the brackets stay in the text (copied, read) and out of sight. A track's "[2@8:15]"
  * shows as "[2]" too (T22), and its link keeps the time it cites.
  */
 export function renderAnswer(
@@ -87,7 +88,7 @@ export function renderAnswer(
       );
       // The time rides in the href: Angular's sanitizer keeps it, not a data attribute.
       const time = source.media && at ? `@${at}` : '';
-      return `<a class="cite" href="#fonte-${n}${time}" aria-label="${label}" title="${label}">[${n}]</a>`;
+      return `<a class="cite" href="#fonte-${n}${time}" aria-label="${label}" title="${label}"><span class="cite-mark">[</span>${n}<span class="cite-mark">]</span></a>`;
     },
   );
 }
