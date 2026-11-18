@@ -45,6 +45,11 @@
   margin: 0 0 var(--space-3);
 }
 
+/* With nothing waiting it draws nothing, and takes no room above the greeting. */
+.pending:empty {
+  display: none;
+}
+
 /* homeMain no-topics: the empty state on a faint 8 px card; a phone's sits on the page. */
 .state.empty {
   border-radius: 8px;
