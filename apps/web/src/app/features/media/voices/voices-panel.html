@@ -60,9 +60,11 @@
                   >{{ one.spoken }} de fala</span
                 >
               </div>
+              <!-- Its visible words start its name, which says the voice (WCAG 2.5.3). -->
               <button
                 type="button"
                 class="secondary sample"
+                [attr.aria-label]="sampleLabel(one.voice)"
                 (click)="playSample(one.voice)"
               >
                 <ui-icon
@@ -70,16 +72,12 @@
                   [size]="14"
                 />
                 @if (sample.playing() === one.voice) {
-                  <ng-container i18n="@@voices.sampleStopV2"
-                    >Parar amostra<span class="visually-hidden">
-                      da Voz {{ one.voice }}</span
-                    ></ng-container
+                  <ng-container i18n="@@voices.sampleStopShort"
+                    >Parar amostra</ng-container
                   >
                 } @else {
-                  <ng-container i18n="@@voices.sampleV2"
-                    >Ouvir amostra<span class="visually-hidden">
-                      da Voz {{ one.voice }}</span
-                    ></ng-container
+                  <ng-container i18n="@@voices.sampleShort"
+                    >Ouvir amostra</ng-container
                   >
                 }
               </button>

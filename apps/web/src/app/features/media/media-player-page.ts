@@ -465,28 +465,50 @@ export class MediaPlayerPage {
   protected readonly pageOptions = computed<readonly MenuOption[]>(() => {
     const media = this.media();
     if (!media) return [];
+    return [
+      ...this.trackOptions(),
+      ...this.editOptions(media),
+      ...this.phoneViewOptions(),
+      ...(this.hasTranscript()
+        ? [
+            {
+              id: 'transcript',
+              icon: this.collapsed() ? ('eye' as const) : ('eyeOff' as const),
+              label: this.collapsed()
+                ? $localize`:@@transcript.show:Mostrar transcrição`
+                : $localize`:@@transcript.hide:Esconder transcrição`,
+            },
+          ]
+        : []),
+    ];
+  });
+
+  /** A track's own editing (KBC-073): "Ajustar início e fim" is in the row, the rest here. */
+  private trackOptions(): MenuOption[] {
+    if (!this.trackActions()?.editable()) return [];
+    return [
+      {
+        id: 'track-edit',
+        icon: 'edit',
+        label: $localize`:@@trackEdit.editItem:Editar faixa`,
+      },
+      {
+        id: 'track-history',
+        icon: 'clock',
+        label: $localize`:@@trackEdit.historyItem:Histórico da faixa`,
+      },
+      {
+        id: 'track-delete',
+        icon: 'trash',
+        label: $localize`:@@trackEdit.delete:Apagar faixa`,
+        danger: true,
+      },
+    ];
+  }
+
+  /** The recording's editing, at the top of ⋯ (v2): edit, prepare, transcribe again. */
+  private editOptions(media: MediaItem): MenuOption[] {
     const options: MenuOption[] = [];
-    // A track's own editing (KBC-073): "Ajustar início e fim" is in the row, the rest here.
-    if (this.trackActions()?.editable()) {
-      options.push(
-        {
-          id: 'track-edit',
-          icon: 'edit',
-          label: $localize`:@@trackEdit.editItem:Editar faixa`,
-        },
-        {
-          id: 'track-history',
-          icon: 'clock',
-          label: $localize`:@@trackEdit.historyItem:Histórico da faixa`,
-        },
-        {
-          id: 'track-delete',
-          icon: 'trash',
-          label: $localize`:@@trackEdit.delete:Apagar faixa`,
-          danger: true,
-        },
-      );
-    }
     if (media.canEdit)
       options.push({ id: 'edit', icon: 'edit', label: this.editLabel });
     if (this.editEntry()?.state === 'new')
@@ -507,29 +529,27 @@ export class MediaPlayerPage {
         icon: 'cpu',
         label: $localize`:@@groqItem.open:Transcrever com Groq`,
       });
-    // The full-screen player has no view chips (pMobile): its views wait in ⋯.
-    if (!this.desktop() && this.hasTracks() && this.view() !== 'tracks')
+    return options;
+  }
+
+  /** The full-screen player has no view chips (pMobile): its views wait in ⋯. */
+  private phoneViewOptions(): MenuOption[] {
+    if (this.desktop()) return [];
+    const options: MenuOption[] = [];
+    if (this.hasTracks() && this.view() !== 'tracks')
       options.push({
         id: 'view-tracks',
         icon: 'list',
         label: $localize`:@@player.view.tracksItem:Ver faixas`,
       });
-    if (!this.desktop() && this.canEdit() && this.view() !== 'voices')
+    if (this.canEdit() && this.view() !== 'voices')
       options.push({
         id: 'view-voices',
         icon: 'people',
         label: $localize`:@@player.view.voicesItem:Ver vozes`,
       });
-    if (this.hasTranscript())
-      options.push({
-        id: 'transcript',
-        icon: this.collapsed() ? 'eye' : 'eyeOff',
-        label: this.collapsed()
-          ? $localize`:@@transcript.show:Mostrar transcrição`
-          : $localize`:@@transcript.hide:Esconder transcrição`,
-      });
     return options;
-  });
+  }
   /** The column shows: there is a transcript and the person did not hide it (FR-9). */
   protected readonly showTranscript = computed(
     () => this.hasTranscript() && !this.collapsed(),

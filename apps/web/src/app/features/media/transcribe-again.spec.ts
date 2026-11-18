@@ -27,6 +27,16 @@ describe('TranscribeAgain (KBC-040 FR-3)', () => {
     await fixture.whenStable();
   };
 
+  /** ⋯ "Transcrever de novo" on the page asks the question (v2: no button of its own). */
+  const open = async () => {
+    fixture.componentInstance.ask();
+    await fixture.whenStable();
+  };
+  const dialogOpen = () =>
+    (fixture.nativeElement as HTMLElement)
+      .querySelector('dialog')
+      ?.hasAttribute('open') ?? false;
+
   async function show(media = item) {
     ({ fixture } = await render(TranscribeAgain, {
       inputs: { media },
@@ -43,20 +53,20 @@ describe('TranscribeAgain (KBC-040 FR-3)', () => {
 
   it('never asks the API on the first click: a person confirms', async () => {
     await show();
-    await press('Transcrever de novo');
+    await open();
+    expect(dialogOpen()).toBe(true);
     expect(text()).toContain('O texto atual continua');
     http.expectNone(`/api/v1/media/${item.id}/transcription`);
     await press('Cancelar');
-    expect(buttons().map((one) => one.textContent?.trim())).toEqual([
-      'Transcrever de novo',
-    ]);
+    expect(dialogOpen()).toBe(false);
+    http.expectNone(`/api/v1/media/${item.id}/transcription`);
   });
 
   it('queues the job on the confirmation and hands the item back', async () => {
     await show();
     const queued: unknown[] = [];
     fixture.componentInstance.queued.subscribe((one) => queued.push(one));
-    await press('Transcrever de novo');
+    await open();
     await press('Transcrever de novo');
     const after = {
       ...item,
@@ -70,7 +80,7 @@ describe('TranscribeAgain (KBC-040 FR-3)', () => {
 
   it('says why it could not be asked', async () => {
     await show();
-    await press('Transcrever de novo');
+    await open();
     await press('Transcrever de novo');
     http
       .expectOne(`/api/v1/media/${item.id}/transcription`)
@@ -84,8 +94,10 @@ describe('TranscribeAgain (KBC-040 FR-3)', () => {
 
   it('sends one request for a double click on the confirmation', async () => {
     await show();
-    await press('Transcrever de novo');
-    const confirm = buttons()[0];
+    await open();
+    const confirm = buttons().find(
+      (one) => one.textContent?.trim() === 'Transcrever de novo',
+    );
     confirm?.click();
     confirm?.click();
     await fixture.whenStable();
@@ -96,23 +108,26 @@ describe('TranscribeAgain (KBC-040 FR-3)', () => {
     expect(text()).not.toContain('Esta mídia mudou');
   });
 
-  it('keeps the focus in place after the confirmation (WCAG 2.4.3)', async () => {
+  it('closes after the confirmation, for the page to give the focus back to ⋯ (WCAG 2.4.3)', async () => {
     await show();
+    let closed = 0;
+    fixture.componentInstance.closed.subscribe(() => (closed += 1));
     fixture.componentInstance.queued.subscribe((one) =>
       fixture.componentRef.setInput('media', one),
     );
-    await press('Transcrever de novo');
+    await open();
     await press('Transcrever de novo');
     http
       .expectOne(`/api/v1/media/${item.id}/transcription`)
       .flush({ ...item, canTranscribeAgain: false });
     await fixture.whenStable();
-    expect(document.activeElement).toBe(fixture.nativeElement);
+    expect(dialogOpen()).toBe(false);
+    expect(closed).toBe(1);
   });
 
   it('gives the focus back to the question when it could not be asked', async () => {
     await show();
-    await press('Transcrever de novo');
+    await open();
     buttons()[0]?.focus();
     await press('Transcrever de novo');
     http
@@ -141,6 +156,8 @@ describe('TranscribeAgain (KBC-040 FR-3)', () => {
 
   it('shows nothing to whoever may not ask', async () => {
     await show({ ...item, canTranscribeAgain: false });
-    expect(buttons()).toEqual([]);
+    // The page offers it in ⋯ only to who may ask (KBC-129); here nothing opens by itself.
+    expect(dialogOpen()).toBe(false);
+    expect(text()).not.toContain('A nova transcrição falhou');
   });
 });

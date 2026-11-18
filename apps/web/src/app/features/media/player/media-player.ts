@@ -78,6 +78,23 @@ const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
  * time, the speed (kept on the account), the volume where the browser allows it, and
  * "Mais opções" with the keyboard shortcuts. It shows the engine's state; it holds none.
  */
+/** The on/off choices of ⋯ (their state is added where they are listed). */
+const WORD_HIGHLIGHT_OPTION = (): MenuOption => ({
+  id: 'word-highlight',
+  icon: 'type',
+  label: $localize`:@@player.wordHighlight.label:Destacar palavra a palavra`,
+});
+const SPEAKERS_OPTION = (): MenuOption => ({
+  id: 'speakers',
+  icon: 'people',
+  label: $localize`:@@player.speakers.label:Mostrar quem fala`,
+});
+const CAPTIONS_OPTION = (): MenuOption => ({
+  id: 'captions',
+  icon: 'cc',
+  label: $localize`:@@player.captions.label:Legendas`,
+});
+
 @Component({
   selector: 'app-media-player',
   imports: [
@@ -241,8 +258,8 @@ export class MediaPlayer {
     const page = this.pageOptions();
     // The bar's ✕ where there is no bar (a phone), first of the player's own options.
     const close = this.phone() && this.engine.source() !== null;
-    const on = $localize`:@@player.state.on:ligado`;
-    const off = $localize`:@@player.state.off:desligado`;
+    const own = [...this.listeningOptions(), ...this.textOptions()];
+    const [first, ...rest] = own;
     return [
       ...page,
       ...(close
@@ -255,10 +272,28 @@ export class MediaPlayer {
             },
           ]
         : []),
+      ...(first ? [{ ...first, divider: page.length > 0 && !close }] : []),
+      ...rest,
+      {
+        id: 'shortcuts',
+        icon: 'keyboard',
+        divider: true,
+        label: $localize`:@@player.shortcuts.open:Atalhos de teclado`,
+        keyHint: '?',
+      },
+    ];
+  });
+
+  private readonly stateOn = $localize`:@@player.state.on:ligado`;
+  private readonly stateOff = $localize`:@@player.state.off:desligado`;
+
+  /** The minute link, the skips, the silences and the timer. */
+  private listeningOptions(): MenuOption[] {
+    const { wordHighlight } = this.preferences.value();
+    return [
       {
         id: 'link',
         icon: 'link',
-        divider: page.length > 0 && !close,
         label: $localize`:@@player.copyMinuteLink:Copiar link deste minuto`,
       },
       {
@@ -270,52 +305,40 @@ export class MediaPlayer {
         id: 'silences',
         icon: 'wave',
         label: $localize`:@@player.silences.open:Encurtar silêncios`,
-        ...(this.silences.enabled() ? { trail: on } : {}),
+        ...(this.silences.enabled() ? { trail: this.stateOn } : {}),
       },
-      ...(this.captionsAvailable()
-        ? [
-            {
-              id: 'word-highlight',
-              icon: 'type' as const,
-              label: $localize`:@@player.wordHighlight.label:Destacar palavra a palavra`,
-              trail: this.preferences.value().wordHighlight ? on : off,
-            },
-          ]
-        : []),
+      ...this.ifCaptions(WORD_HIGHLIGHT_OPTION(), wordHighlight),
       {
         id: 'sleep',
         icon: 'moon',
         label: $localize`:@@player.sleep.open:Timer para dormir`,
       },
-      ...(this.speakersAvailable()
-        ? [
-            {
-              id: 'speakers',
-              icon: 'people' as const,
-              label: $localize`:@@player.speakers.label:Mostrar quem fala`,
-              trail: this.transcriptPreferences.speakersOn() ? on : off,
-            },
-          ]
-        : []),
-      ...(this.captionsAvailable()
-        ? [
-            {
-              id: 'captions',
-              icon: 'cc' as const,
-              label: $localize`:@@player.captions.label:Legendas`,
-              trail: this.transcriptPreferences.captionsOn() ? on : off,
-            },
-          ]
-        : []),
-      {
-        id: 'shortcuts',
-        icon: 'keyboard',
-        divider: true,
-        label: $localize`:@@player.shortcuts.open:Atalhos de teclado`,
-        trail: '?',
-      },
     ];
-  });
+  }
+
+  /** Who speaks and the subtitles, where the media has them. */
+  private textOptions(): MenuOption[] {
+    const speakers = this.transcriptPreferences.speakersOn();
+    return [
+      ...(this.speakersAvailable()
+        ? [this.toggleOption(SPEAKERS_OPTION(), speakers)]
+        : []),
+      ...this.ifCaptions(
+        CAPTIONS_OPTION(),
+        this.transcriptPreferences.captionsOn(),
+      ),
+    ];
+  }
+
+  private ifCaptions(option: MenuOption, on: boolean): MenuOption[] {
+    return this.captionsAvailable() ? [this.toggleOption(option, on)] : [];
+  }
+
+  /** An on/off choice: its state after the words ("ligado", "desligado"). */
+  private toggleOption(option: MenuOption, on: boolean): MenuOption {
+    return { ...option, trail: on ? this.stateOn : this.stateOff };
+  }
+
   /** The ☾ button, only while a sleep timer runs (KBC-046). */
   protected readonly sleepOn = computed(
     () => this.sleepTimer.timer().kind !== 'off',

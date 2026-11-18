@@ -33,6 +33,8 @@ export interface MenuOption {
    * (a hidden colon), so the item's name says the state in words (UP-20).
    */
   readonly trail?: string;
+  /** A key that does it, shown at the right ("?"); the item's name stays its words. */
+  readonly keyHint?: string;
 }
 
 /** Items under the name of their group, in the order given. */
@@ -115,8 +117,12 @@ const SHEET_BELOW_PX = 1024;
                 }
                 <span class="words">{{ entry.option.label }}</span>
                 @if (entry.option.trail; as trail) {
-                  <span class="visually-hidden">: </span
-                  ><span class="trail">{{ trail }}</span>
+                  <span class="visually-hidden">:</span>&ngsp;<span
+                    class="trail"
+                    >{{ trail }}</span
+                  >
+                } @else if (entry.option.keyHint; as key) {
+                  <span class="trail" aria-hidden="true">{{ key }}</span>
                 }
                 @if (kind() === 'choice') {
                   <span class="check" aria-hidden="true">{{

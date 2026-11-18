@@ -204,9 +204,17 @@
   justify-self: center;
 }
 
-/* The seek line and the times: the player bar has them on a desktop. */
+/* The seek line and the times; on its own page a desktop has them in the player bar
+   under it (v2 · Mídia — Player), so they go there. */
 .seek {
-  display: none;
+  display: grid;
+  gap: var(--space-1);
+}
+
+@media (min-width: 1024px) {
+  :host(.beside-bar) .seek {
+    display: none;
+  }
 }
 
 .times {

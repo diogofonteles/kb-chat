@@ -211,10 +211,14 @@ describe('VoicesPanel (KBC-064 FR-1, FR-4)', () => {
       .map((item) => item.querySelector('.voice-head')?.textContent)
       .map((text) => text?.replace(/\s+/g, ' ').trim());
     expect(voices).toEqual([
-      'Voz 1 0:12 de falaOuvir amostra da Voz 1',
-      'Voz 2 10:42 de falaOuvir amostra da Voz 2',
-      'Voz 3 0:05 de falaOuvir amostra da Voz 3',
+      'Voz 1 0:12 de fala',
+      'Voz 2 10:42 de fala',
+      'Voz 3 0:05 de fala',
     ]);
+    // The sample on the row (player.js voicesView), named with its voice.
+    expect(
+      screen.getByRole('button', { name: 'Ouvir amostra da Voz 2' }),
+    ).toBeTruthy();
     expect(
       screen.getByRole('button', { name: 'Separar vozes de novo' }),
     ).toBeTruthy();

@@ -278,6 +278,12 @@ export class VoicesPanel {
     this.speakers.reload();
   }
 
+  protected sampleLabel(voice: number): string {
+    return this.sample.playing() === voice
+      ? $localize`:@@voices.sampleStop:Parar amostra da Voz ${voice}:voice:`
+      : $localize`:@@voices.sample:Ouvir amostra da Voz ${voice}:voice:`;
+  }
+
   protected playSample(voice: number): void {
     const range = sampleOf(this.diarization()?.turns ?? [], voice);
     if (range)

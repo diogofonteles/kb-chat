@@ -19,6 +19,7 @@ import {
 import { SessionStore } from '@core/auth/session-store.js';
 import { signal } from '@angular/core';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
+import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
 import { SleepTimerService } from '@core/media/sleep-timer.js';
 import { RightPanel } from '@features/shell/right-panel.js';
 import { MiniPlayer } from './mini-player.js';
@@ -45,7 +46,14 @@ class Shell {}
 })
 class ShellWithPanel {}
 
-async function setup(url = '/') {
+/** The desktop shell: the v2 player bar, with the volume where the browser allows it. */
+@Component({
+  template: '<main><app-mini-player [desktop]="true" /></main>',
+  imports: [MiniPlayer],
+})
+class DesktopShell {}
+
+async function setup(url = '/', volume = true) {
   localStorage.clear();
   const media: FakeMedia = fakeMediaElement();
   TestBed.configureTestingModule({
@@ -55,7 +63,9 @@ async function setup(url = '/') {
       provideHttpClientTesting(),
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
       { provide: SessionStore, useValue: { me: signal(null) } },
+      { provide: VOLUME_SUPPORT, useValue: Promise.resolve(volume) },
       provideRouter([
+        { path: 'barra', component: DesktopShell },
         { path: '', component: Shell },
         { path: 'midia/:id', component: Shell },
         { path: 'painel', component: ShellWithPanel },
@@ -240,5 +250,40 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     timer.off();
     await harness.fixture.whenStable();
     expect(bar.textContent).not.toContain('Timer para dormir');
+  });
+
+  it('offers mute and volume in percent on the desktop bar where the browser allows it (KBC-041 AC-13)', async () => {
+    const { harness, media } = await setup('/barra');
+    await harness.fixture.whenStable();
+    const volume = screen.getByRole('slider', { name: 'Volume' });
+    expect(volume.getAttribute('aria-valuetext')).toBe('100%');
+    fireEvent.input(volume, { target: { value: '40' } });
+    await harness.fixture.whenStable();
+    expect(media.element.volume).toBe(0.4);
+    expect(volume.getAttribute('aria-valuetext')).toBe('40%');
+    expect(localStorage.getItem('kb-chat.player.volume')).toBe('0.4');
+    const mute = screen.getByRole('button', { name: 'Silenciar' });
+    expect(mute.getAttribute('aria-keyshortcuts')).toBe('M');
+    fireEvent.click(mute);
+    await harness.fixture.whenStable();
+    expect(media.element.muted).toBe(true);
+    // One name, and the pressed state says it is on (not a name that also changes).
+    expect(
+      screen
+        .getByRole('button', { name: 'Silenciar' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('has no volume control on the bar where the volume is read-only (iPhone, AC-13)', async () => {
+    const { harness } = await setup('/barra', false);
+    await harness.fixture.whenStable();
+    expect(screen.queryByRole('slider', { name: 'Volume' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Silenciar' })).toBeNull();
+    expect(
+      harness.fixture.nativeElement
+        .querySelector('[data-volume]')
+        ?.getAttribute('data-volume'),
+    ).toBe('off');
   });
 });

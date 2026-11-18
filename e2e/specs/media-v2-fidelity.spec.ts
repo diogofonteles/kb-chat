@@ -206,7 +206,9 @@ test('the player controls work: play, skips, speed, mark with a note, search, vi
       page.getByRole('list', { name: 'Trechos da transcrição' }),
     ).toBeVisible();
     // The card's search opens a field that takes the focus.
-    await page.getByRole('button', { name: 'Buscar na transcrição' }).click();
+    await page
+      .getByRole('button', { name: 'Mostrar a busca na transcrição' })
+      .click();
     await expect(
       page.getByRole('searchbox', { name: 'Buscar na transcrição' }),
     ).toBeFocused();

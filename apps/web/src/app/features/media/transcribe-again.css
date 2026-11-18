@@ -28,6 +28,7 @@
 @media (max-width: 1023px) {
   .actions {
     flex-direction: column-reverse;
+    width: 100%;
   }
 
   .actions button {

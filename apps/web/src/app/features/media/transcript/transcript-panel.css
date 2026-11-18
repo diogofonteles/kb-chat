@@ -15,14 +15,23 @@
   min-height: 0;
 }
 
+/* Its title where nothing else names it (a reading panel); in the player the chips
+   "Transcrição · Vozes" do (v2 · Mídia — Player), and the phone's card shows it again. */
 .card-head {
+  display: flex;
+  align-items: center;
+}
+
+:host(.in-player) .card-head,
+.card-button {
   display: none;
 }
 
 .title {
   margin: 0;
-  font-size: var(--text-sm);
+  font-size: 1.25rem;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .head-row {
@@ -329,8 +338,14 @@
     gap: var(--space-2);
   }
 
+  :host(.in-player) .card-button {
+    display: inline-flex;
+  }
+
   :host(.in-player) .title {
     flex: 1;
+    font-size: var(--text-sm);
+    letter-spacing: normal;
   }
 
   /* 32 circles on black 20% (pMobile), inside the 44 touch target. */

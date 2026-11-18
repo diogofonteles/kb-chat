@@ -25,6 +25,7 @@ import { UiIcon } from './icon.js';
       #dialog
       class="ui-dialog"
       [class.ui-dialog--actions]="!!primaryLabel()"
+      [class.ui-dialog--short]="short()"
       [style.--ui-dialog-width.px]="width()"
       [attr.aria-labelledby]="titleId()"
       (close)="closed.emit()"
@@ -91,6 +92,11 @@ export class UiDialog {
    * set up (a configured invitation): only ✕, Cancelar and Escape close it then.
    */
   readonly closeOnBackdrop = input(true);
+  /**
+   * A short question (a confirmation): below 1024 px a sheet as tall as its content, with
+   * the handle on top and the actions across it, no ✕ (v2 · Mídia — Player, celular).
+   */
+  readonly short = input(false);
   readonly primary = output();
   readonly closed = output();
   private readonly dialog =

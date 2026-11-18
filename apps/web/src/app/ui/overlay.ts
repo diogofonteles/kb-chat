@@ -193,13 +193,26 @@ export function anchorOverlay(
   };
   view?.addEventListener('resize', follow);
   view?.addEventListener('scroll', scrolled, true);
+  const grown = followSize(panel, follow);
   return () => {
+    grown();
     view?.removeEventListener('resize', follow);
     view?.removeEventListener('scroll', scrolled, true);
     if (hasPopover(panel) && panel.matches(':popover-open'))
       panel.hidePopover();
     panel.classList.remove('ui-overlay', 'ui-overlay--sheet');
   };
+}
+
+/**
+ * Content that comes after the first placement (a menu's items, a note's alert) grows the
+ * panel: placed again, it still fits the screen whole. Returns the function that stops it.
+ */
+function followSize(panel: HTMLElement, follow: () => void): () => void {
+  if (typeof ResizeObserver !== 'function') return () => undefined;
+  const grown = new ResizeObserver(follow);
+  grown.observe(panel);
+  return () => grown.disconnect();
 }
 
 /** Whether a click landed outside the panel's box (its backdrop belongs to the panel). */
