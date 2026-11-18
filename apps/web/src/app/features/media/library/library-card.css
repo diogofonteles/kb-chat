@@ -146,6 +146,11 @@ a.title:focus-visible::after {
   flex: 0 0 4rem;
 }
 
+/* The shortcut's bar is 80 (v2 · media-library "Continuar ouvindo"). */
+:host(.tile) .position {
+  flex-basis: 5rem;
+}
+
 .resume {
   color: var(--color-text-muted);
   font-size: var(--text-xs);
@@ -158,7 +163,8 @@ a.title:focus-visible::after {
   align-items: center;
   gap: var(--space-3);
   min-height: 4rem;
-  padding: 0 var(--space-3) 0 0;
+  /* v2 · media-library "Continuar ouvindo": ▶ 36 on the shortcut's right edge. */
+  padding: 0;
   overflow: hidden;
   border-radius: var(--radius-cover);
   background: var(--overlay-2);

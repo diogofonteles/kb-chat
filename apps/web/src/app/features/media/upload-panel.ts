@@ -202,6 +202,15 @@ export class UploadPanel implements OnInit {
   protected readonly nothingToPick = computed(
     () => !this.uploads.checking() && this.uploads.sendable().length === 0,
   );
+  /** No readable new file to estimate the AI's cost on (v2 · media-upload). */
+  protected readonly noFile = computed(
+    () =>
+      !this.uploads
+        .entries()
+        .some(
+          (entry) => entry.state.kind === 'ready' && entry.durationMs !== null,
+        ),
+  );
   protected readonly cancelSendingLabel = $localize`:@@media.upload.cancelSending:Cancelar envio`;
   protected readonly stage = signal<Stage>('choosing');
   protected readonly submitted = signal(false);

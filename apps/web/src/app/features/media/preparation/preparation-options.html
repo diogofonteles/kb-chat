@@ -37,11 +37,20 @@
       </p>
       @if (transcriberOff()) {
         <p class="note">
-          <ng-container i18n="@@prep.option.transcriberOff"
-            >O transcritor está desligado desde
-            {{ offer()?.transcriberOffSince | date: 'dd/MM HH:mm' }}; começa
-            quando ele ligar.</ng-container
-          >
+          @if (compact()) {
+            <!-- The upload's card says it short (v2 · media-upload). -->
+            <ui-icon name="info" [size]="13" />
+            <span i18n="@@prep.option.transcriberOffShort"
+              >Transcritor desligado desde
+              {{ offer()?.transcriberOffSince | date: 'dd/MM HH:mm' }}</span
+            >
+          } @else {
+            <ng-container i18n="@@prep.option.transcriberOff"
+              >O transcritor está desligado desde
+              {{ offer()?.transcriberOffSince | date: 'dd/MM HH:mm' }}; começa
+              quando ele ligar.</ng-container
+            >
+          }
         </p>
       }
     </div>

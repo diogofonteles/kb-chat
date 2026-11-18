@@ -377,6 +377,78 @@ button[type='submit']:disabled {
   cursor: progress;
 }
 
+/* v2 · media-upload at a desktop: the kicker 12/14 4 above the 22/26 title and the 36 ✕;
+   the dashed zone 150 tall (10 between its icon, words, button and rule); each field a 16
+   label 6 over its 44 box with a hairline, 12 between the two, the help 16 under them. */
+@media (min-width: 1024px) {
+  .panel.wide .titles {
+    gap: var(--space-1);
+  }
+
+  .panel.wide .step-kicker {
+    line-height: 0.875rem;
+  }
+
+  .panel.wide .head h2 {
+    line-height: 1.625rem;
+  }
+
+  .panel.wide .close {
+    width: 2.25rem;
+    height: 2.25rem;
+    margin: var(--space-1) 0 0;
+  }
+
+  .panel.wide .drop:not(.filled) {
+    gap: 0.625rem;
+    padding: 0.625rem var(--space-4) 0.5rem;
+  }
+
+  .panel.wide .drop .hint {
+    line-height: 1.1875rem;
+  }
+
+  .panel.wide .drop .rule {
+    line-height: 0.875rem;
+  }
+
+  .panel.wide .drop .choose {
+    padding: 0 var(--space-6);
+  }
+
+  .panel.wide .column {
+    column-gap: var(--space-3);
+  }
+
+  .panel.wide .field {
+    gap: 0.375rem;
+  }
+
+  .panel.wide .field .label,
+  .panel.wide .column ::ng-deep .combo .label {
+    margin: 0;
+    line-height: 1rem;
+  }
+
+  .panel.wide .column ::ng-deep .combo {
+    gap: 0.375rem;
+  }
+
+  .panel.wide .field select,
+  .panel.wide .column ::ng-deep .combo input {
+    border-color: color-mix(in srgb, var(--color-text) 12%, transparent);
+  }
+
+  .panel.wide .field select:focus,
+  .panel.wide .column ::ng-deep .combo input:focus {
+    border-color: var(--color-text);
+  }
+
+  .panel.wide .author-help {
+    line-height: 0.875rem;
+  }
+}
+
 @media (max-width: 1023px) {
   /* A tall sheet from the bottom (media-upload@mobile). */
   .panel,

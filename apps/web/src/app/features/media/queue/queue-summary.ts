@@ -224,7 +224,7 @@ const SHOWN = 3;
 
     .body {
       display: grid;
-      flex: 1 1 11rem;
+      flex: 1 1 10rem;
       gap: var(--space-1);
       min-width: 0;
     }
@@ -279,7 +279,7 @@ const SHOWN = 3;
       display: inline-flex;
       align-items: center;
       min-height: 2rem;
-      padding: 0 var(--space-4);
+      padding: 0 0.875rem;
       border-radius: var(--radius-pill);
       background: var(--overlay-3);
       color: var(--color-text);

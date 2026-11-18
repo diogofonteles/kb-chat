@@ -238,8 +238,9 @@
   min-width: 0;
 }
 
+/* "Limpar recentes" on the heading's 24 line (v2 · media-library). */
 .link {
-  min-height: 2rem;
+  min-height: 1.5rem;
   padding: 0 var(--space-2);
   border: none;
   background: transparent;
@@ -662,6 +663,46 @@ ui-empty-state {
   justify-content: flex-end;
   gap: var(--space-3);
   margin-top: var(--space-6);
+}
+
+/* v2 · media-library-remove at a desktop: 280 from the top whatever it holds; the 22/26
+   title beside its 36 ✕, then 20 between the title, the words, the tracks and the actions. */
+@media (min-width: 1024px) {
+  .confirm {
+    margin-top: 17.5rem;
+  }
+
+  .confirm-head {
+    gap: 0;
+  }
+
+  .confirm-close {
+    width: 2.25rem;
+    height: 2.25rem;
+    margin: var(--space-2) 0 0;
+  }
+
+  .confirm h2 {
+    margin-bottom: var(--space-5);
+    line-height: 1.625rem;
+  }
+
+  .confirm p {
+    margin-bottom: 0;
+    line-height: 1.0625rem;
+  }
+
+  .confirm .remove-tracks {
+    margin: var(--space-5) 0 0;
+  }
+
+  .confirm .remove-tracks-count {
+    line-height: 1rem;
+  }
+
+  .confirm-actions {
+    margin-top: var(--space-5);
+  }
 }
 
 /* A narrow main panel (the right panel open, media-library): no "Continuar ouvindo". */

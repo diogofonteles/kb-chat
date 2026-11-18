@@ -146,7 +146,7 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     await renderPanel();
     expect(screen.getByRole('dialog', { name: 'Enviar áudio' })).toBeTruthy();
     expect(
-      screen.getByText('mp3, m4a, wav, flac, ogg ou opus, até 4 GB cada'),
+      screen.getByText('mp3, m4a, wav, flac, ogg ou opus · até 4 GB cada'),
     ).toBeTruthy();
   });
 
@@ -1449,7 +1449,8 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
         length: () => of(null),
       });
       await chooseChecked(panel);
-      expect(aiReason()).toContain('consiga ler');
+      // The upload's card says it short (v2 · media-upload).
+      expect(aiReason()).toContain('Escolha um arquivo legível');
     });
 
     const keptWith = (acceptedUsd: number | null, tracks = 'ai' as const) =>

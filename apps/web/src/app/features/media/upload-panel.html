@@ -178,6 +178,7 @@
           <app-preparation-options
             [several]="uploads.entries().length > 1"
             [compact]="true"
+            [noFile]="noFile()"
           />
         </div>
       } @else if (stage() === 'sending') {

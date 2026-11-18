@@ -6,7 +6,7 @@ import {
 
 /** The rule shown before the choice (MA-20). */
 export const uploadRule = (): string =>
-  $localize`:@@media.upload.rule:mp3, m4a, wav, flac, ogg ou opus, até 4 GB cada`;
+  $localize`:@@media.upload.rule:mp3, m4a, wav, flac, ogg ou opus · até 4 GB cada`;
 
 /** Megabytes with a decimal below 10 MB ("2,9 MB"), whole above ("128 MB"). */
 const megabytes = (bytes: number): string => {

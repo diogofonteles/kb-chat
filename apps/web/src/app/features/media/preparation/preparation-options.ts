@@ -53,6 +53,11 @@ export class PreparationOptions {
    * a plain list of choices, only the one that cannot be chosen saying why.
    */
   readonly compact = input(false);
+  /**
+   * The upload has no readable new file yet: with nothing to estimate, the AI's choice asks
+   * for one first (v2 · media-upload, -duplicate, -bad-type).
+   */
+  readonly noFile = input(false);
 
   protected readonly choices = this.form.choices;
   /** The phone's "Dividir em faixas ›" row opened on its three choices. */
@@ -99,6 +104,13 @@ export class PreparationOptions {
 
   protected refusal(id: Refusable): string {
     const refusal: PlanRefusal | null = this.form.refusalOf(id);
+    // The upload's card says it short (v2 · media-upload, media-upload-chosen).
+    if (this.compact() && id === 'ai' && refusal !== null) {
+      if (this.noFile())
+        return $localize`:@@prep.refusal.noFileShort:Escolha um arquivo legível para ver a estimativa de custo.`;
+      if (refusal === 'not-connected')
+        return $localize`:@@prep.refusal.notConnectedShort:A IA da aplicação não está conectada. Peça a um master.`;
+    }
     return refusal ? REFUSAL_TEXTS[refusal]() : '';
   }
 
