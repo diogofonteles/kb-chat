@@ -383,6 +383,13 @@ app-menu-button {
     justify-self: start;
   }
 
+  /* A chosen row is a band from edge to edge of the screen (media-library-selection@mobile). */
+  :host(.selected) {
+    margin-inline: calc(-1 * var(--space-4));
+    padding-inline: var(--space-4);
+    border-radius: 0;
+  }
+
   /* A recording: its ⋯ and the chevron side by side at the row's end. */
   :host(.has-tracks) {
     --row-end: 3.5rem;

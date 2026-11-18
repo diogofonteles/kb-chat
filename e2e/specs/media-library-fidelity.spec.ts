@@ -490,7 +490,9 @@ async function playFirst(page: Page, width: Width): Promise<void> {
   await row.getByRole('button', { name: `Tocar ${TITLES[0]}` }).click();
   await expect(page.locator('app-library-row.playing')).toHaveCount(1);
   if (width === 'desktop') {
-    await page.getByRole('button', { name: 'Tocando agora' }).first().click();
+    await page
+      .getByRole('button', { name: 'Tocando agora', exact: true })
+      .click();
     await expect(
       page.getByRole('complementary', { name: 'Tocando agora' }),
     ).toBeVisible();
@@ -719,7 +721,9 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
       await expect(
         page.getByRole('heading', { name: 'Continuar ouvindo' }),
       ).toBeHidden();
-      await page.getByRole('button', { name: 'Tocando agora' }).first().click();
+      await page
+        .getByRole('button', { name: 'Tocando agora', exact: true })
+        .click();
       await expect(
         page.getByRole('heading', { name: 'Continuar ouvindo' }),
       ).toBeVisible();
@@ -750,10 +754,14 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
       page.locator('app-library-card:not(.tile)').first(),
     ).toBeVisible();
     if (!phone)
-      await page.getByRole('button', { name: 'Tocando agora' }).first().click();
+      await page
+        .getByRole('button', { name: 'Tocando agora', exact: true })
+        .click();
     await shoot(page, 'media-library-grid', width);
     if (!phone)
-      await page.getByRole('button', { name: 'Tocando agora' }).first().click();
+      await page
+        .getByRole('button', { name: 'Tocando agora', exact: true })
+        .click();
     if (phone)
       await page.getByRole('button', { name: 'Ver como lista' }).click();
     else {

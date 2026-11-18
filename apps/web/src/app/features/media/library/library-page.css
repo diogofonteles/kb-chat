@@ -650,12 +650,13 @@ ui-empty-state {
 /* ---------- Phone (media-library@mobile) ---------- */
 
 @media (max-width: 1023px) {
-  /* The phone's tint is a short band under the top row (260 px from the frame's top). */
+  /* The phone's tint is a short band under the top row: it ends 260 px from the frame's
+     top, the row (with its status bar's room) being the first 100. */
   .library {
     background: linear-gradient(
         180deg,
         color-mix(in srgb, var(--library-tint) 70%, transparent) 0,
-        transparent 13.5rem
+        transparent 10rem
       )
       no-repeat;
   }
@@ -722,7 +723,9 @@ ui-empty-state {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin: calc(-1 * var(--space-2)) 0 0;
+    /* Its 44 targets overflow the frame's row (the order 21 under the card, the first
+       cover 27 under the order's middle): the column's gaps are taken back. */
+    margin: calc(-1 * var(--space-3)) 0 calc(-0.8125rem);
   }
 
   .phone-view {
@@ -735,9 +738,11 @@ ui-empty-state {
     min-height: var(--target);
   }
 
+  /* Two covers a row, right under the order's row (media-library-grid@mobile). */
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
+    margin-top: 0;
   }
 
   .skeleton-strip {

@@ -408,3 +408,12 @@ app-research-message .answer :is(th, td) {
   word-break: normal;
   min-width: 6rem;
 }
+
+/* A phone choosing media in the library (media-library-selection@mobile): the selection's
+   bar stands where the mini player was; the player comes back when the choice ends. Global
+   because the library page and the shell's foot are separate components. */
+@media (max-width: 1023px) {
+  app-chat-page:has(app-library-page .library.selecting) .shell-foot > .player {
+    display: none;
+  }
+}
