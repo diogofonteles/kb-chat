@@ -601,3 +601,53 @@ button[type='submit']:disabled {
     font-size: var(--text-md);
   }
 }
+
+.rule .narrow {
+  display: none;
+}
+
+/* v2 · media-upload@mobile: the dashed zone 140 tall (its 28 icon, the 40 button and the rule
+   10 apart), each field a 16 label 6 over its box, 16 between the blocks. */
+@media (max-width: 1023px) {
+  .panel.wide .drop:not(.filled) {
+    gap: 0.625rem;
+    padding: 1.1875rem var(--space-4);
+  }
+
+  .panel.wide .drop-icon ::ng-deep svg {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .panel.wide .drop .choose {
+    min-height: 2.5rem;
+    padding: 0 var(--space-6);
+  }
+
+  .panel.wide .drop .rule {
+    line-height: 0.875rem;
+  }
+
+  .panel.wide .column {
+    gap: var(--space-4);
+  }
+
+  .panel.wide .field,
+  .panel.wide .column ::ng-deep .combo {
+    gap: 0.375rem;
+  }
+
+  .panel.wide .field .label,
+  .panel.wide .column ::ng-deep .combo .label {
+    margin: 0;
+    line-height: 1rem;
+  }
+
+  .rule .wide {
+    display: none;
+  }
+
+  .rule .narrow {
+    display: inline;
+  }
+}

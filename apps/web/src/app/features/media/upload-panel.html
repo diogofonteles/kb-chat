@@ -107,7 +107,10 @@
             id="file-rule"
             [class.visually-hidden]="uploads.entries().length > 0"
           >
-            {{ rule }}
+            <span class="wide">{{ rule }}</span
+            ><span class="narrow" i18n="@@media.upload.ruleShort"
+              >mp3, m4a, wav, flac, ogg ou opus · até 4 GB</span
+            >
           </p>
           <input
             #fileInput

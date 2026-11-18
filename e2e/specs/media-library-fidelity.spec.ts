@@ -1089,7 +1089,9 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
     const input = dialog.locator('input[type="file"]');
     const send = dialog.getByRole('button', { name: 'Enviar', exact: true });
     await expect(
-      dialog.getByText(/mp3, m4a, wav, flac, ogg ou opus/),
+      dialog
+        .getByText(/mp3, m4a, wav, flac, ogg ou opus/)
+        .and(page.locator(':visible')),
     ).toBeVisible();
     await shoot(page, 'media-upload', width);
     // Nothing chosen: "Enviar" looks off (media-upload), says what is missing, the panel stays.

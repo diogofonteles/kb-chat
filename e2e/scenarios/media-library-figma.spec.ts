@@ -395,7 +395,9 @@ test('"Enviar mídia": empty, chosen, repeated, not audio, sending', async ({
     await page.getByRole('button', { name: 'Enviar mídia' }).first().click();
     const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
     await expect(
-      dialog.getByText(/mp3, m4a, wav, flac, ogg ou opus/),
+      dialog
+        .getByText(/mp3, m4a, wav, flac, ogg ou opus/)
+        .and(page.locator(':visible')),
     ).toBeVisible();
     await shoot(page, 'media-upload', width);
     const input = dialog.locator('input[type="file"]');
@@ -514,6 +516,9 @@ test('/midia, the collection as an album for who has no library', async ({
     ).toBeVisible();
     await shoot(page, 'media-list-filter-empty', width);
     await page.getByRole('button', { name: 'Limpar filtro' }).click();
+    // The upload frame has no filter row on a phone: the 🔍 closes it again.
+    if (phone)
+      await page.getByRole('button', { name: 'Filtrar por título' }).click();
 
     await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
     const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });

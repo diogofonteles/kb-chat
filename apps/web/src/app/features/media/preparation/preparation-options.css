@@ -345,8 +345,9 @@ legend {
     display: inline;
   }
 
-  /* The hints stay for a screen reader (aria-describedby); the note of the transcriber
-     off stays in sight. */
+  /* The hints stay for a screen reader (aria-describedby), the transcriber's note too
+     (media-upload@mobile draws neither). */
+  :host(.compact) .note,
   :host(.compact) .option.row .hint,
   :host(.compact) .option.card:not(.ai) .hint {
     position: absolute;

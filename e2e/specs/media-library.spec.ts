@@ -59,8 +59,11 @@ test('AC-1: a person who may upload sends an MP3, sees it go to "Pronta" and ope
   await openMedia(page);
   await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
   const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
+  // The rule before the choice ("· até 4 GB cada"; a phone's sheet leaves "cada" out).
   await expect(
-    dialog.getByText('mp3, m4a, wav, flac, ogg ou opus · até 4 GB cada'),
+    dialog
+      .getByText(/^mp3, m4a, wav, flac, ogg ou opus · até 4 GB( cada)?$/)
+      .and(page.locator(':visible')),
   ).toBeVisible();
   await dialog.locator('input[type="file"]').setInputFiles(file);
   await expect(dialog.getByRole('textbox', { name: 'Título' })).toHaveValue(
