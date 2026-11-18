@@ -34,8 +34,11 @@
             Não consegui carregar mais referências.
           </p>
         }
+        <!-- A subject's shelf keeps "Ver todas": its tracks are reached nowhere else. -->
         @if (
-          !compact() && tracks().length > 0 && tracks().length < tracksTotal()
+          variant() !== 'column' &&
+          tracks().length > 0 &&
+          tracks().length < tracksTotal()
         ) {
           <button
             type="button"
@@ -74,9 +77,16 @@
                 </button>
               } @else {
                 <!-- miniItem: the cover, the title and its facets under it. -->
+                <!-- Named by its title (as before the cover); the facets describe it. -->
                 <button
                   type="button"
                   class="ref doc"
+                  [attr.aria-label]="ref.title"
+                  [attr.aria-describedby]="
+                    ref.facets
+                      ? titleId() + '-' + group.name + '-' + $index
+                      : null
+                  "
                   (click)="opened.emit({ id: ref.id, title: ref.title })"
                 >
                   <ui-cover
@@ -88,7 +98,11 @@
                   <span class="ref-text">
                     <span class="ref-title">{{ ref.title }}</span>
                     @if (ref.facets) {
-                      <span class="ref-facets">{{ ref.facets }}</span>
+                      <span
+                        class="ref-facets"
+                        [id]="titleId() + '-' + group.name + '-' + $index"
+                        >{{ ref.facets }}</span
+                      >
                     }
                     @if (variant() === 'shelf' && ref.byline) {
                       <span class="ref-facets ref-byline">{{

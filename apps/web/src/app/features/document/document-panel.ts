@@ -5,6 +5,8 @@ import {
   Component,
   DOCUMENT,
   ElementRef,
+  Injector,
+  afterNextRender,
   afterRenderEffect,
   computed,
   inject,
@@ -427,15 +429,36 @@ export class DocumentPanel {
    * under them ("Próxima ocorrência" always at hand): then they take the page's colour.
    */
   protected readonly toolsStuck = signal(false);
+  private readonly dom = inject(DOCUMENT);
+  private readonly injector = inject(Injector);
 
   protected readonly readerScrolled = (event: Event): void => {
     const reader = event.target as HTMLElement;
     const tools = reader.querySelector<HTMLElement>('.actions');
     const top = reader.getBoundingClientRect().top;
-    this.toolsStuck.set(
+    const stuck =
       !!tools &&
-        reader.scrollTop > 0 &&
-        tools.getBoundingClientRect().top <= top + 1,
+      reader.scrollTop > 0 &&
+      tools.getBoundingClientRect().top <= top + 1;
+    if (stuck === this.toolsStuck()) return;
+    // The occurrences' pill changes place (phone): the focus follows it to its twin.
+    const focused = this.dom.activeElement;
+    const from = focused?.closest('.occurrences');
+    this.toolsStuck.set(stuck);
+    if (!from || !(focused instanceof HTMLElement)) return;
+    const buttons = [...from.querySelectorAll('button')];
+    const index = buttons.indexOf(focused as HTMLButtonElement);
+    if (index < 0) return;
+    // After the render that draws the pill in its other place.
+    afterNextRender(
+      () =>
+        reader
+          .querySelector(
+            stuck ? '.occurrences.in-tools' : '.occurrences.in-hero',
+          )
+          ?.querySelectorAll<HTMLButtonElement>('button')
+          [index]?.focus(),
+      { injector: this.injector },
     );
   };
 

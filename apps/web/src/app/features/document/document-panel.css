@@ -678,6 +678,12 @@ h2:focus-visible {
     background: var(--overlay-dark);
   }
 
+  /* The pill moves to the stuck tools while the head is scrolled away. */
+  .occurrences.in-tools.on-phone {
+    min-height: 2.25rem;
+    background: var(--overlay-dark);
+  }
+
   :host(:not(.in-sheet):not(.source-mode)) .titles {
     gap: var(--space-2);
   }

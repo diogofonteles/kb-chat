@@ -38,7 +38,7 @@
         </button>
       }
       <span class="spacer"></span>
-      @if (heroOccurrences()) {
+      @if (heroOccurrences() && !toolsStuck()) {
         <!-- cmDoc: a phone's "1 de 2 ⌃ ⌄" sits at the top right of the hero, clear of ✦. -->
         <div class="occurrences in-hero">
           <ng-container [ngTemplateOutlet]="occurrences" />
@@ -257,8 +257,10 @@
           </ui-menu>
         }
       }
-      @if (matches() > 0 && !heroOccurrences()) {
-        <div class="occurrences in-tools">
+      @if (matches() > 0 && (!heroOccurrences() || toolsStuck())) {
+        <!-- A phone's pill lies on the head; once the tools stick at the top it comes with
+             them, so "Próxima ocorrência" stays at hand in a long text. -->
+        <div class="occurrences in-tools" [class.on-phone]="heroOccurrences()">
           <ng-container [ngTemplateOutlet]="occurrences" />
         </div>
       } @else if (passageNotFound()) {

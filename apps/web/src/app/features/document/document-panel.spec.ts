@@ -221,11 +221,12 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
     const view = await renderWith({});
     expect(screen.getByRole('heading', { name: 'Veja também' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Relacionados' })).toBeNull();
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Cabala Assunto · síntese do acervo',
-      }),
-    );
+    // Named by its title; its facets describe it.
+    const cabala = screen.getByRole('button', {
+      name: 'Cabala',
+      description: 'Assunto · síntese do acervo',
+    });
+    fireEvent.click(cabala);
     expect(view.navigated).toHaveBeenCalledWith({
       id: 'wiki/concepts/Cabala.md',
       title: 'Cabala',
