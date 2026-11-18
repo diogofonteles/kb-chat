@@ -22,7 +22,16 @@
   align-items: center;
 }
 
-:host(.in-player) .card-head,
+/* In the player the heading stays for assistive tech (the page's outline), unseen. */
+:host(.in-player) .card-head {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .card-button {
   display: none;
 }
@@ -333,9 +342,15 @@
   }
 
   :host(.in-player) .card-head {
+    position: static;
     display: flex;
     align-items: center;
     gap: var(--space-2);
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
   }
 
   :host(.in-player) .card-button {
