@@ -58,11 +58,6 @@
     line-height: 1rem;
   }
 
-  /* The author's live status takes no room until it says something. */
-  .column ::ng-deep .combo > .status:empty {
-    display: none;
-  }
-
   /* The fields' hairline (v2 · media-library-edit). */
   .column .field input[type='text'],
   .column .field select,

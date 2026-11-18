@@ -91,19 +91,30 @@
 
   <!-- A phone's upload (media-upload@mobile): one row with the choice, the three under it. -->
   @if (compact()) {
-    <button
-      type="button"
-      class="tracks-row"
-      aria-controls="prep-tracks"
-      [attr.aria-expanded]="tracksOpen()"
-      (click)="tracksOpen.set(!tracksOpen())"
-    >
-      <span class="name" i18n="@@prep.option.tracksShort"
-        >Dividir em faixas</span
+    <!-- The words, the choice and the chevron as drawn; the words label the chevron's button,
+         so a tap on any of them opens the three. -->
+    <div class="tracks-row">
+      <label
+        class="name"
+        for="prep-tracks-toggle"
+        i18n="@@prep.option.tracksShort"
+        >Dividir em faixas</label
       >
-      <span class="value">{{ tracksChoice() }}</span>
-      <ui-icon [name]="tracksOpen() ? 'chevDown' : 'chevRight'" [size]="18" />
-    </button>
+      <label class="value" for="prep-tracks-toggle">{{ tracksChoice() }}</label>
+      <button
+        type="button"
+        class="tracks-toggle"
+        id="prep-tracks-toggle"
+        aria-controls="prep-tracks"
+        [attr.aria-expanded]="tracksOpen()"
+        (click)="tracksOpen.set(!tracksOpen())"
+      >
+        <ui-icon
+          [name]="tracksOpen() ? 'chevDown' : 'chevRight'"
+          [size]="18"
+        />
+      </button>
+    </div>
   }
 
   <fieldset class="tracks" id="prep-tracks" [class.open]="tracksOpen()">

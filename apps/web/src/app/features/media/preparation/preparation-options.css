@@ -300,20 +300,24 @@ legend {
     gap: 0;
   }
 
+  /* "O que fazer com este áudio" 15/18, 8 over the rows, a row every 50 px (the words 15/18
+     beside the switch), "Dividir em faixas" 42 under the last (media-upload@mobile). */
   :host(.compact) legend {
     margin-bottom: var(--space-2);
     font-size: var(--text-item);
+    line-height: 1.125rem;
   }
 
   :host(.compact) .option.row {
     order: 0;
-    padding: var(--space-1) 0;
+    padding: 3px 0;
     border-radius: 0;
     background: none;
   }
 
   :host(.compact) .option.subjects {
     order: 1;
+    padding-bottom: 0;
   }
 
   :host(.compact) .tracks-row {
@@ -333,8 +337,10 @@ legend {
     font-weight: 400;
   }
 
+  /* Not yet in this version: the words at half their strength, as at a desktop. */
   :host(.compact) .option.off .name {
-    color: var(--color-text-muted);
+    color: var(--color-text);
+    opacity: 0.5;
   }
 
   :host(.compact) .name .wide {
@@ -358,18 +364,18 @@ legend {
     white-space: nowrap;
   }
 
+  /* The words open it too (labels of the chevron's button). */
   :host(.compact) .tracks-row {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    min-height: var(--target);
-    padding: 0;
-    border: 0;
-    background: none;
+    min-height: 2.5rem;
     color: var(--color-text);
-    font: inherit;
     font-size: var(--text-item);
-    text-align: start;
+    cursor: pointer;
+  }
+
+  :host(.compact) .tracks-row label {
     cursor: pointer;
   }
 
@@ -377,15 +383,26 @@ legend {
     flex: 1;
     font-size: var(--text-item);
     font-weight: 400;
-  }
-
-  :host(.compact) .tracks-row .value,
-  :host(.compact) .tracks-row ui-icon {
-    color: var(--color-text-muted);
+    line-height: 1.125rem;
   }
 
   :host(.compact) .tracks-row .value {
+    color: var(--color-text-muted);
     font-size: var(--text-sm);
+    line-height: 1.0625rem;
+  }
+
+  :host(.compact) .tracks-toggle {
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 2.5rem;
+    margin-right: -3px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
   }
 
   :host(.compact) .tracks:not(.open) {
@@ -425,9 +442,12 @@ legend {
     background: color-mix(in srgb, var(--color-text) 3%, transparent);
   }
 
+  /* The name's line sets the row; the 22 switch hangs over the words' first pixels, as drawn
+     (the words 4 under the name). */
   :host(.compact) .option.row .choice {
     align-items: flex-start;
-    min-height: 1.375rem;
+    min-height: 1.0625rem;
+    max-height: 1.0625rem;
   }
 
   :host(.compact) .name,
@@ -465,7 +485,7 @@ legend {
   }
 
   :host(.compact) .option.card .hint {
-    margin-top: 0.125rem;
+    margin-top: 0;
     padding-left: calc(18px + 0.625rem);
     line-height: 0.8125rem;
   }

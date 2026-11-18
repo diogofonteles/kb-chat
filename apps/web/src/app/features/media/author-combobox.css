@@ -111,6 +111,12 @@ input:focus {
   color: var(--color-accent);
 }
 
+.status:empty {
+  /* Out of the grid's flow until it says something: no gap under the field for nothing,
+     and still rendered, so a screen reader hears what arrives in it. */
+  position: absolute;
+}
+
 .status p {
   margin: var(--space-1) 0 0;
   font-size: var(--text-sm);
