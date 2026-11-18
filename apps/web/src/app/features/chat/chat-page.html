@@ -226,7 +226,7 @@
         >
           @if (phoneHistory()) {
             <!-- A phone's Conversas list (chat-history@mobile), from the Conversas tab. -->
-            <app-conversation-history (restored)="phoneHistory.set(false)" />
+            <app-conversation-history (restored)="phoneTab.set(null)" />
           } @else if (isEmpty()) {
             <app-conversation-home
               [researching]="researching()"

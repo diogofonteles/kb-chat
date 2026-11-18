@@ -306,6 +306,9 @@ test.describe('the phone tabs', () => {
     page,
   }) => {
     test.skip(desktop(page), 'The tabs are the phone navigation.');
+    // Reopening from the list throws nothing (it once called .set on a computed signal).
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
     await searchByMeaning(page, 'lei do ritmo');
     await page.goto('/');
     const nav = page.locator('app-bottom-nav');
@@ -343,6 +346,7 @@ test.describe('the phone tabs', () => {
       .click();
     await expect(page.locator('app-result-card').first()).toBeVisible();
     await expect(list).toBeHidden();
+    expect(errors).toEqual([]);
 
     await page.goto('/');
     const buscar = nav.getByRole('link', { name: 'Buscar' });
