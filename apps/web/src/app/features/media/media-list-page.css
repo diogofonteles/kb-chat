@@ -29,14 +29,22 @@
 
 .hero-text {
   display: grid;
-  gap: var(--space-2);
   min-width: 0;
 }
 
 .hero-text h2 {
   display: grid;
-  gap: var(--space-2);
   margin: 0;
+}
+
+/* v2 · pageHeader: the kicker 13/16, 10 above the 64 title, the meta 10 under its line. */
+.hero .kicker {
+  margin-bottom: 0.625rem;
+  line-height: 1rem;
+}
+
+.hero .summary {
+  margin-top: 0.125rem;
 }
 
 .hero-text h2:focus {
@@ -67,9 +75,14 @@
 
 /* The action bar (media-list actionBar): ▶ 56, shuffle, the two buttons, ⋯, then the title
    filter (240) and "Autoria ▾" at the end. */
+/* v2 · media-list actionBar: everything 20 apart, the 28 icons bare, the table 16 under. */
 .actions-bar {
-  gap: var(--space-6);
-  padding-bottom: var(--space-6);
+  gap: var(--space-5);
+  padding-bottom: var(--space-4);
+}
+
+.actions-bar .ui-btn--outline {
+  border-color: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 
 .bar-icon {
@@ -94,8 +107,8 @@
 }
 
 .bar-more {
-  --menu-trigger-min: 2.5rem;
-  --menu-trigger-height: 2.5rem;
+  --menu-trigger-min: 1.75rem;
+  --menu-trigger-height: 1.75rem;
   color: var(--color-text-muted);
 }
 
@@ -106,7 +119,6 @@
 .actions-bar .filter {
   width: 15rem;
   min-height: 2.5rem;
-  margin-right: calc(-1 * var(--space-4));
 }
 
 .filter input::-webkit-search-cancel-button {
@@ -120,6 +132,14 @@
 
 .phone-action.on {
   color: var(--color-accent-text);
+}
+
+/* v2 · media-list@mobile: 🔍 and ⬆ 36 apart at the row's end, each still 44 tall. */
+@media (max-width: 1023px) {
+  .phone-action {
+    min-width: 2.25rem;
+    width: 2.25rem;
+  }
 }
 
 .phone-tools {
@@ -136,15 +156,21 @@
 
 /* ---------- The track table: # · title · sent on · status · ⏱ · ⋯ ---------- */
 
+/* v2 · media-list: # 24 · title · sent 110 · status 260 · length 44 · ⋯ 18, 16 apart; the
+   head's own columns are drawn 28 to the right of the rows' (its clock over the length). */
 .table-head,
 .row {
   display: grid;
-  grid-template-columns: 1.5rem minmax(0, 1fr) 6.875rem 16.25rem 2.75rem auto;
+  grid-template-columns: 1.5rem minmax(
+      0,
+      1fr
+    ) 6.875rem 16.25rem 2.75rem 1.125rem;
   column-gap: var(--space-4);
   padding: 0 var(--space-4);
 }
 
 .table-head {
+  grid-template-columns: 1.5rem minmax(0, 1fr) 6.875rem 16.25rem 1rem 1.125rem;
   grid-template-areas: 'lead title date status duration actions';
   align-items: center;
   min-height: 2.25rem;
@@ -183,6 +209,11 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* The first row 8 under the head's line (v2 · media-list), not the column's 16 + 8. */
+.table-head + .rows {
+  margin-top: -0.5rem;
 }
 
 .row {
@@ -288,6 +319,11 @@ a.main:hover .title {
   display: none;
 }
 
+/* The phone's words (media-list@mobile) only show in its one line. */
+.phone-byline {
+  display: none;
+}
+
 .date,
 .duration {
   color: var(--color-text-muted);
@@ -343,9 +379,11 @@ a.main:hover .title {
   gap: var(--space-2);
 }
 
+/* The 32 ⋯ over its 18 column, the glyph in the column. */
 app-row-menu {
   --menu-trigger-min: 2rem;
   --menu-trigger-height: 2rem;
+  margin-inline: -0.4375rem;
   color: var(--color-text-muted);
 }
 
@@ -515,7 +553,7 @@ ui-empty-state {
 @container media-table (max-width: 52rem) {
   .table-head,
   .row {
-    grid-template-columns: 1.5rem minmax(0, 1fr) 12rem 2.75rem auto;
+    grid-template-columns: 1.5rem minmax(0, 1fr) 12rem 2.75rem 1.125rem;
   }
 
   .table-head {
@@ -680,13 +718,24 @@ ui-empty-state {
     margin-inline-start: calc(-1 * var(--space-1));
   }
 
-  .duration::before {
-    content: '·\00a0';
+  /* "Outros autores · 0:16" in one text. */
+  .author,
+  .duration {
+    display: none;
   }
 
+  .phone-byline {
+    display: inline;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The 20 ⋯ on the row's end (16 from the screen's edge), its 44 target past it. */
   app-row-menu {
     --menu-trigger-min: var(--target);
     --menu-trigger-height: var(--target);
+    margin-inline: 0 -0.75rem;
   }
 
   .confirm {

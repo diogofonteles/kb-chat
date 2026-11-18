@@ -308,6 +308,10 @@ const SHOWN = 3;
       }
 
       /* v2 · media-library@mobile: the count 14/700, what each needs 12 under it. */
+      .phone-card .body {
+        gap: 0.125rem;
+      }
+
       .phone-card .name {
         font-size: var(--text-sm);
         font-weight: 700;

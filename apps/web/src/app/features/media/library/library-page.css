@@ -514,6 +514,11 @@ ui-empty-state {
   ui-empty-state {
     padding-block: 4.25rem 0;
   }
+
+  /* The phone's rows start right under the order's line (media-library@mobile). */
+  .rows {
+    margin-top: 0;
+  }
 }
 
 .error {

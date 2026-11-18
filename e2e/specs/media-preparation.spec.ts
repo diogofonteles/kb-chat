@@ -245,7 +245,9 @@ test('AC-9, AC-10: not dividing skips step 3; leaving shows where it stopped', a
   await page.getByRole('link', { name: 'Sair e continuar depois' }).click();
   await page.goto('/midia');
   const row = page.getByRole('listitem').filter({ hasText: title });
-  await expect(row.getByText('Preparação parada no passo 2')).toBeVisible();
+  // v2 · media-list: "Parada no passo 2" in a pill, "Continuar" beside it; a phone's line
+  // has "Passo 2", the pill itself the way on.
+  await expect(row.getByText(/^(Parada no passo|Passo) 2$/)).toBeVisible();
   await row.getByRole('link', { name: 'Continuar' }).click();
   await expect(page).toHaveURL(/\/preparar$/);
 

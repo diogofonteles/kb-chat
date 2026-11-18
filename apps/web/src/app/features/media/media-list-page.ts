@@ -100,6 +100,23 @@ type Listening = 'in-progress' | 'unheard';
 const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
 const timeOf = (iso: string | null): number => (iso ? Date.parse(iso) : 0);
 
+/** Why it failed in a word or two, for the table's pill (media-list: "Falhou: arquivo inválido"). */
+const SHORT_FAILURES: Record<
+  NonNullable<MediaItem['failure']>,
+  () => string
+> = {
+  'invalid-audio': () =>
+    $localize`:@@media.failureShort.invalid:arquivo inválido`,
+  'conversion-failed': () =>
+    $localize`:@@media.failureShort.conversion:conversão`,
+  'too-many-attempts': () =>
+    $localize`:@@media.failureShort.conversion:conversão`,
+  'upload-abandoned': () => $localize`:@@media.failureShort.upload:envio`,
+};
+
+const shortFailureOf = (item: MediaItem): string =>
+  item.failure ? SHORT_FAILURES[item.failure]() : '';
+
 /** The list in the order chosen on the phone's line (the library's words, BR-7). */
 function sortedBy(items: readonly MediaItem[], sort: LibrarySort): MediaItem[] {
   const list = [...items];
@@ -111,6 +128,8 @@ function sortedBy(items: readonly MediaItem[], sort: LibrarySort): MediaItem[] {
     return list.sort((a, b) =>
       collator.compare(a.author?.name ?? '\uffff', b.author?.name ?? '\uffff'),
     );
+  if (sort === 'recently-added')
+    return list.sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt));
   if (sort === 'recently-played')
     return list.sort(
       (a, b) => timeOf(b.positionUpdatedAt) - timeOf(a.positionUpdatedAt),
@@ -240,7 +259,9 @@ export class MediaListPage {
           matchesAuthor(item, this.author()) &&
           (listening === null || listeningStateOf(item) === listening),
       ),
-      this.sort(),
+      // A desktop has no order to choose: the album goes as sent, newest first, as its
+      // "Enviado em" column reads (v2 · media-list); the phone's line chooses it.
+      this.phone() ? this.sort() : 'recently-added',
     );
   });
   protected readonly showFilter = computed(
@@ -251,7 +272,9 @@ export class MediaListPage {
     const items = this.items();
     if (items.length === 0)
       return $localize`:@@media.noneYet:nenhum áudio ainda`;
+    // The collection's main author leads, even with none of its audio (v2 · media-list).
     const main =
+      this.topic()?.mainAuthor ??
       items.find((item) => item.author?.main)?.author ??
       items.find((item) => item.author)?.author ??
       null;
@@ -440,7 +463,7 @@ export class MediaListPage {
       return {
         text: phone
           ? $localize`:@@media.status.failedWord:Falhou`
-          : this.statusOf(item),
+          : $localize`:@@media.status.failedShort:Falhou: ${shortFailureOf(item)}:reason:`,
         tone: 'err',
       };
     if (item.status !== 'ready')
@@ -484,6 +507,7 @@ export class MediaListPage {
   /** The words the pill leaves out, for a screen reader (UP-20). */
   protected detailOf(item: MediaItem): string {
     return [
+      item.status === 'failed' ? this.statusOf(item) : '',
       this.transcriptionOf(item),
       this.lowNoticeOf(item),
       this.resumeTextOf(item),

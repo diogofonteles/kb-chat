@@ -44,7 +44,7 @@
       type="button"
       uiIconButton
       class="bar-icon"
-      [size]="40"
+      [size]="28"
       [disabled]="!firstPlayable()"
       aria-label="Tocar em ordem aleatória"
       i18n-aria-label="@@library.shuffle"
@@ -373,6 +373,10 @@
             <span class="meta">
               <span class="byline">
                 <span class="author">{{ authorOf(item) }}</span>
+                <!-- The phone's one line (media-list@mobile): "Outros autores · 0:16". -->
+                <span class="phone-byline"
+                  >{{ authorOf(item) }} · {{ durationOf(item) || '—' }}</span
+                >
                 <app-media-level-badge
                   [level]="item.level"
                   [shown]="isMaster()"
@@ -383,7 +387,11 @@
               }}</span>
               <span class="states">
                 @if (preparations.steps().get(item.id); as step) {
-                  <app-preparation-entry [mediaId]="item.id" [step]="step" />
+                  <app-preparation-entry
+                    [mediaId]="item.id"
+                    [step]="step"
+                    [look]="phone() ? 'step' : 'pill'"
+                  />
                 } @else {
                   @if (phone() && percentOf(item) > 0) {
                     <ui-progress

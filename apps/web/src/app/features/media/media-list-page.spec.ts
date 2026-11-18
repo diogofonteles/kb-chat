@@ -100,6 +100,8 @@ describe('MediaListPage (T14)', () => {
     // The pill says it in a few words (media-list: "Falhou: …", "Na fila").
     expect(screen.getByText('Na fila')).toBeTruthy();
     expect(screen.getByText('Convertendo… 40%')).toBeTruthy();
+    // "Falhou: arquivo inválido" in the pill; the whole reason for a screen reader.
+    expect(screen.getByText('Falhou: arquivo inválido')).toBeTruthy();
     expect(
       screen.getByText('Falhou: o arquivo não é um áudio válido'),
     ).toBeTruthy();
@@ -446,7 +448,8 @@ describe('MediaListPage (T14)', () => {
         call.flush({ items: [{ mediaId: mediaId(9), step: 2 }] }),
       );
     await fixture.whenStable();
-    expect(screen.getByText('Preparação parada no passo 2')).toBeTruthy();
+    // The album's table says it in a pill, "Continuar" beside it (v2 · media-list).
+    expect(screen.getByText('Parada no passo 2')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Continuar' })).toBeTruthy();
   });
 

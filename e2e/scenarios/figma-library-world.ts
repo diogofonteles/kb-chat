@@ -353,6 +353,17 @@ export async function seedWorld(): Promise<World> {
   });
   expect(author.status(), await author.text()).toBeLessThan(300);
   const helena = ((await author.json()) as { slug: string }).slug;
+  // "Mestre Laércio e outros autores" (media-list's header): the collection's main author.
+  const laercio = await owner.post(`/api/v1/topics/${TOPIC}/authors`, {
+    headers: CSRF,
+    data: { name: 'Mestre Laércio' },
+  });
+  expect(laercio.status(), await laercio.text()).toBeLessThan(300);
+  const main = await owner.patch(`/api/v1/topics/${TOPIC}`, {
+    headers: CSRF,
+    data: { mainAuthor: ((await laercio.json()) as { slug: string }).slug },
+  });
+  expect(main.status(), await main.text()).toBeLessThan(300);
 
   const made = await owner.post('/api/v1/topics', {
     headers: CSRF,
@@ -367,12 +378,15 @@ export async function seedWorld(): Promise<World> {
   const listerApi = await request.newContext({ baseURL: WEB_ORIGIN });
   await signIn(listerApi, lister);
 
-  // Oldest first: the unplayed ones then come in the frames' order (newest added first).
+  // Oldest first: the three played ones (MEDIA's first three, Conversa the oldest), then the
+  // rest, so that newest added first gives the frames' order: the library's unplayed ones
+  // (media-library) and the album as sent, the played ones last (media-list).
   const ids: Record<string, string> = {};
   const byCode: Record<string, string> = {};
   copyFileSync(makeMp3('figma-repetida', 20), REPEATED);
   const repeated = REPEATED;
-  for (const media of [...MEDIA].reverse()) {
+  const played = MEDIA.slice(0, 3);
+  for (const media of [...played.reverse(), ...MEDIA.slice(3).reverse()]) {
     const bytes = media.corrupt
       ? Buffer.from('not an audio file at all, only words'.repeat(40))
       : media.code === 'CS'
@@ -609,7 +623,11 @@ export async function recentCollections(
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** Every media object of a response gets the frames' upload date (09/11/2026). */
+/**
+ * Every media object of a response gets the frames' upload date (09/11/2026), keeping the
+ * order they were sent in (the minutes and seconds of the hour they were seeded in): the
+ * album page goes as sent, newest first (media-list).
+ */
 function withUploadDate(value: unknown, ids: ReadonlySet<string>): unknown {
   if (Array.isArray(value)) return value.map((one) => withUploadDate(one, ids));
   if (!isRecord(value)) return value;
@@ -620,7 +638,10 @@ function withUploadDate(value: unknown, ids: ReadonlySet<string>): unknown {
   const keys = ['createdAt', 'uploadedAt', 'addedAt'].filter(
     (key) => dated && typeof out[key] === 'string',
   );
-  for (const key of keys) out[key] = UPLOADED_AT;
+  for (const key of keys)
+    out[key] = new Date(
+      Date.parse(UPLOADED_AT) + (Date.parse(String(out[key])) % 3_600_000),
+    ).toISOString();
   return out;
 }
 
@@ -667,12 +688,13 @@ export async function figmaWorld(
         });
       },
     );
-    await context.route('**/api/v1/media/preparations', (route) =>
-      route.fulfill({
-        json: { items: [{ mediaId: w.byCode['AP'], step: 2 }] },
-      }),
-    );
   }
+  // "Aula para preparar" stopped at step 2, for whoever may go on with it (media-list too).
+  await context.route('**/api/v1/media/preparations', (route) =>
+    route.fulfill({
+      json: { items: [{ mediaId: w.byCode['AP'], step: 2 }] },
+    }),
+  );
   await context.route('**/api/v1/media/*/progress', async (route) => {
     if (route.request().method() !== 'PUT') return route.continue();
     const asked = route.request().postDataJSON() as { positionMs: number };
