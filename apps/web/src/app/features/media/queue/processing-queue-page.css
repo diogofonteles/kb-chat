@@ -224,6 +224,7 @@
 
   .group h3 {
     font-size: 1.125rem;
+    line-height: 1.25;
   }
 
   .empty {
@@ -238,6 +239,17 @@
 
   .empty-title {
     font-size: 1.25rem;
+    line-height: 1.25;
+  }
+
+  .empty p:not(.empty-title) {
+    max-width: 20rem;
+    line-height: 1.25;
+  }
+
+  /* qmEmpty: the button 12 under the words (the grid's gap alone). */
+  .empty a {
+    margin-top: 0;
   }
 
   .body {
@@ -248,8 +260,9 @@
     display: none;
   }
 
+  /* The cards 10 apart, as under the name (qmCard col gap 10). */
   .rows {
-    gap: var(--space-3);
+    gap: 0.625rem;
   }
 
   .queue {

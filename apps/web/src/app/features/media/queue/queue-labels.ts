@@ -1,6 +1,7 @@
 import type { PreparationStage, ProcessingQueueItem } from '@kb-chat/contracts';
 import {
   STAGE_NAMES,
+  failureReason,
   failureText,
   stageStateText,
 } from '../preparation/preparation-labels.js';
@@ -36,14 +37,19 @@ function restingText(item: ProcessingQueueItem): string {
 }
 
 /** "Transcrição:  35 % (cortes 14 de 40)", in words: never by colour alone. */
-export function queueStateText(item: ProcessingQueueItem): string {
+export function queueStateText(
+  item: ProcessingQueueItem,
+  { pillSaysFailed = false }: { readonly pillSaysFailed?: boolean } = {},
+): string {
   const { stage, state } = item;
   if (!stage || !state) return restingText(item);
   const name = STAGE_NAMES[stage]();
   if (item.waitsForTranscriber)
     return $localize`:@@queue.state.waitingTranscriber:${name}:stage:: aguardando o transcritor`;
-  if (state === 'failed')
-    return `${name}: ${failureText(item.failure ?? 'work')}`;
+  if (state === 'failed') {
+    const failure = item.failure ?? 'work';
+    return `${name}: ${pillSaysFailed ? failureReason(failure) : failureText(failure)}`;
+  }
   const words = stageStateText(stageOf(item, stage, state), null);
   return `${name}: ${words.trim()}`;
 }

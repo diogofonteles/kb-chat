@@ -136,7 +136,10 @@ export class QueueRow {
     if (step === null || !this.canEdit()) return mediaPagePath(mediaId);
     return step === 3 ? editPagePath(mediaId) : preparationPagePath(mediaId);
   });
-  protected readonly stateText = computed(() => queueStateText(this.item()));
+  /** Beside its "Falhou" pill, a failure says only why (v2 · Fila). */
+  protected readonly stateText = computed(() =>
+    queueStateText(this.item(), { pillSaysFailed: this.failed() }),
+  );
   /** A row that failed has the grey cover (queue.js: "Arquivo corrompido"). */
   protected readonly failed = computed(() => this.status() === 'failed');
   protected readonly neutral = NEUTRAL_COVER;
