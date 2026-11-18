@@ -238,10 +238,14 @@ export class TrackRowList {
    * The focus on what stops an approval, in the middle of the list: a focus alone may leave it
    * under the sticky footer, and the list on top is far from the button (KBC-094).
    */
-  reveal(what: 'title' | 'row'): void {
+  reveal(
+    what: 'title' | 'row',
+    trackId: string | null = this.selectedId(),
+  ): void {
     // A phone keeps the title in the details (prepare.js mTkList): they open to reach it.
+    // The track comes by name: the parent's new selection has not reached the input yet.
     if (what === 'title' && matchMedia(PHONE).matches)
-      this.detailsId.set(this.selectedId());
+      this.detailsId.set(trackId);
     afterNextRender(
       () => {
         const target =

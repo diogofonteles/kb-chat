@@ -181,7 +181,8 @@ app-speaker-combobox {
 }
 
 :host([data-look='names']) .actions .secondary {
-  min-height: var(--target-desktop);
+  /* Links in a 30 px line, as voicesNames draws them; 24 px keeps WCAG 2.5.8. */
+  min-height: 24px;
   padding: 0;
   border: 0;
   font-weight: 700;

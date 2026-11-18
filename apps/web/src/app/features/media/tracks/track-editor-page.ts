@@ -915,7 +915,10 @@ export class TrackEditorPage {
     if (!first) return;
     this.chosenId.set(first.trackId);
     this.tab.set('tracks');
-    this.list()?.reveal(first.problem === 'title' ? 'title' : 'row');
+    this.list()?.reveal(
+      first.problem === 'title' ? 'title' : 'row',
+      first.trackId,
+    );
   }
 
   protected reopen(): void {

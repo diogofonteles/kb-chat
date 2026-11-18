@@ -40,7 +40,7 @@ h3 {
   font-weight: 700;
 }
 
-.short {
+.narrow {
   display: none;
 }
 
@@ -59,11 +59,11 @@ h3 {
     min-height: var(--target);
   }
 
-  .long {
+  .wide {
     display: none;
   }
 
-  .short {
+  .narrow {
     display: inline;
   }
 }

@@ -267,7 +267,13 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
       const { harness, http } = await openPage(OVERLAPPING);
       fireEvent.click(button('Aprovar faixas'));
       await harness.fixture.whenStable();
-      fireEvent.click(button('Encostar na faixa anterior'));
+      // From ⋯, where the frame keeps a track's actions (KBC-130, prepare.js tkRow).
+      fireEvent.click(button('Mais ações da faixa'));
+      fireEvent.click(
+        await screen.findByRole('menuitem', {
+          name: 'Encostar na faixa anterior',
+        }),
+      );
       await harness.fixture.whenStable();
       expect(screen.queryByRole('alert')).toBeNull();
       expect(screen.queryByText(/Sobreposta/)).toBeNull();

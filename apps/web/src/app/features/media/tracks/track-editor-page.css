@@ -128,9 +128,16 @@
   min-width: 0;
 }
 
+/* The ✕ does not make the slim line taller (the frame's line is 32 px high). */
 .dismiss {
-  --ui-icon-btn-size: 24px;
+  margin-block: -4px;
   color: var(--color-text-muted);
+}
+
+@media (max-width: 1023px) {
+  .dismiss {
+    margin-block: -10px;
+  }
 }
 
 .copy {
@@ -319,8 +326,12 @@
   background: color-mix(in srgb, var(--color-text) 2%, transparent);
 }
 
-.none .guidance {
-  font-size: var(--text-meta);
+@media (max-width: 1023px) {
+  .none .guidance {
+    display: block;
+    margin-top: var(--space-3);
+    font-size: var(--text-xs);
+  }
 }
 
 .column.text {
@@ -340,6 +351,11 @@
 }
 
 /* The approve bar: fixed at the foot of the panel, the last row whole above it (FR-3). */
+/* "1 com aviso" on the bar's dark: the pill's red lifted to 4.5:1 (WCAG 1.4.3). */
+.foot .foot-warn {
+  color: color-mix(in srgb, var(--color-danger) 70%, var(--color-text));
+}
+
 .foot {
   position: sticky;
   bottom: 0;
@@ -398,10 +414,6 @@
 
 .summary .ui-banner__text {
   margin: 0;
-}
-
-.short {
-  display: none;
 }
 
 .summary-actions {
@@ -571,19 +583,12 @@
   }
 
   /* Step 4: the banner's buttons go to the foot bar. */
-  .summary .ui-banner__text .long {
-    display: none;
-  }
-
-  .summary .ui-banner__text .short {
-    display: inline;
-  }
-
   .summary {
     flex-wrap: wrap;
   }
 
-  .summary-actions {
+  /* Step 4's own actions go to the foot bar; a notice keeps its "Recarregar" in place. */
+  .summary > .summary-actions {
     display: none;
   }
 

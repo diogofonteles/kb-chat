@@ -85,6 +85,8 @@
             #titleField
             type="text"
             [maxLength]="titleMax"
+            placeholder="Sem título"
+            i18n-placeholder="@@tracks.untitled"
             [value]="row.title"
             (keydown)="titleKey($event, row)"
             (blur)="saveTitle($event, row.track.id, row.title)"

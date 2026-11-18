@@ -67,6 +67,11 @@
   background: color-mix(in srgb, var(--color-text) 5%, transparent);
 }
 
+/* A track with a problem keeps its red even while selected (tkRow, bad). */
+.row.flawed.selected {
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+}
+
 .head {
   display: grid;
   grid-column: 1 / -1;
@@ -241,6 +246,11 @@
   border-color: var(--color-danger);
 }
 
+.flawed .field.title.inline input::placeholder {
+  color: var(--color-danger);
+  opacity: 1;
+}
+
 .people-fields {
   z-index: 1;
   display: flex;
@@ -292,10 +302,13 @@
 /* The fields cover the row's own title and chips; those step aside under them. */
 .editing .people,
 .editing .name-box {
-  visibility: hidden;
+  /* Unseen, still the row button's name ("Segunda pergunta", aria-current). */
+  opacity: 0;
 }
 
 .person-field select {
+  /* As wide as the chosen name, as the other rows' chips (a select sizes to its longest option). */
+  field-sizing: content;
   width: auto;
   max-width: 120px;
   min-height: 26px;
@@ -471,7 +484,7 @@
     min-height: 0;
     padding: 0;
     background: none;
-    line-height: 1.3;
+    line-height: 1.2;
     font-size: var(--text-item);
     font-weight: 700;
   }
@@ -483,12 +496,12 @@
   .range {
     grid-area: range;
     font-size: var(--text-xs);
-    line-height: 1.3;
+    line-height: 1.2;
   }
 
   /* On a card the title is read, not edited, until the details open. */
   .editing:not(.open) .name-box {
-    visibility: visible;
+    opacity: 1;
   }
 
   .length {

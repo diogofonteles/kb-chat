@@ -114,12 +114,12 @@
       }
     </ol>
     <p class="hint saved-alone">
-      <span class="long" i18n="@@subjects.savedAlone"
-        >Cada escolha já fica salva. Não há botão para aprovar: pode sair quando
-        quiser.</span
-      >
-      <span class="short" aria-hidden="true" i18n="@@subjects.savedAloneShort"
-        >Cada escolha já fica salva. Pode sair quando quiser.</span
+      <!-- One sentence read either way; a phone drops the middle (prepare.js, celular). -->
+      <ng-container i18n="@@subjects.savedAlone"
+        >Cada escolha já fica salva.
+        <span class="wide"
+          >Não há botão para aprovar: pode sair quando quiser.</span
+        ><span class="narrow">Pode sair quando quiser.</span></ng-container
       >
     </p>
   }

@@ -186,12 +186,10 @@
             {{ appliedText() }}
           </h2>
           <p class="ui-banner__text">
-            <span class="long" i18n="@@tracks.finished"
+            <!-- Whole on a phone too (KBC-095): it says nothing is left to do. -->
+            <span i18n="@@tracks.finished"
               >Preparação concluída: você não precisa fazer mais nada. Quem ouve
               já vê as faixas no player.</span
-            >
-            <span class="short" aria-hidden="true" i18n="@@tracks.finishedShort"
-              >Quem ouve já vê as faixas no player.</span
             >
           </p>
           <app-track-preparation [mediaId]="id()" />
@@ -285,6 +283,7 @@
                 uiIconButton
                 type="button"
                 class="dismiss"
+                [size]="24"
                 aria-label="Fechar o aviso"
                 i18n-aria-label="@@tracks.dismissNotice"
                 (click)="restoredDismissed.set(true)"
@@ -563,14 +562,17 @@
                 <p class="ui-empty__title" i18n="@@tracks.emptyTitle">
                   Nenhuma faixa ainda
                 </p>
-                <p class="ui-empty__text" i18n="@@tracks.empty">
-                  Selecione a pergunta e a resposta na transcrição ou use Nova
-                  faixa aqui.
-                </p>
-                <p class="ui-empty__text guidance" i18n="@@tracks.guidance">
-                  Uma faixa vai do começo da pergunta ao fim da resposta. A
-                  continuação da mesma pessoa sobre o mesmo assunto fica na
-                  mesma faixa.
+                <!-- One paragraph on a desktop (tracksMain, empty); a phone puts the rule on its
+                     own smaller line (prmEmpty). -->
+                <p class="ui-empty__text">
+                  <ng-container i18n="@@tracks.empty"
+                    >Selecione a pergunta e a resposta na transcrição ou use
+                    Nova faixa aqui.</ng-container
+                  >
+                  <span class="guidance" i18n="@@tracks.guidance"
+                    >Uma faixa vai do começo da pergunta ao fim da
+                    resposta.</span
+                  >
                 </p>
               </div>
             } @else {
