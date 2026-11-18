@@ -40,7 +40,12 @@ button {
   padding: 0 0.875rem;
   border: 0;
   border-radius: var(--radius-pill);
-  background: rgb(255 255 255 / 30%);
+  /* A veil of the colour opposite to the ink (lighter under black ink, darker under white),
+     so the words keep 4.5:1 in every theme. */
+  background: rgb(0 0 0 / 15%);
+  background: rgb(
+    from var(--color-on-info) calc(255 - r) calc(255 - g) calc(255 - b) / 30%
+  );
   color: var(--color-on-info);
   font: inherit;
   font-size: var(--text-meta);
