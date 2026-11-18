@@ -110,6 +110,11 @@ export class ResearchMessage {
   readonly last = input(false);
   /** The source open beside the answer (its row and its [n] are marked, FR-1). */
   readonly activeSource = input<number | null>(null);
+  /**
+   * The time of the open track's citation (KBC-150 item 7): of a track cited twice, only that
+   * citation is filled. Null fills every citation of the open source.
+   */
+  readonly activeAt = input<string | null>(null);
   readonly opened = output<OpenedSource>();
   /** A cited track (KBC-099): the panel opens on its passage with the player (T22). */
   readonly trackOpened = output<TrackOpening>();
@@ -291,12 +296,18 @@ export class ResearchMessage {
     // The [n] of the open source is marked in the sanitized answer (DOM-only work).
     afterRenderEffect(() => {
       const active = this.activeSource();
+      const at = this.activeAt();
       this.html();
       for (const link of this.host.querySelectorAll<HTMLElement>(
         '.answer a.cite',
       )) {
         const n = citedSource(link);
-        link.classList.toggle('active', n !== null && n === active);
+        // A track's citation, alone or a time of its grouped pill (KBC-155): only the open one.
+        // With no time open, a lone track pill is filled, but no time of a grouped one.
+        const here = link.matches('.cite-time')
+          ? citedAt(link) === at
+          : at === null || !link.matches('.cite-audio') || citedAt(link) === at;
+        link.classList.toggle('active', n !== null && n === active && here);
       }
     });
   }
@@ -337,7 +348,12 @@ export class ResearchMessage {
       event.target instanceof Element ? event.target.closest('a') : null;
     const trigger = link instanceof HTMLElement ? link : null;
     if (source.media)
-      this.trackOpened.emit({ source, at: citedAt(link), trigger: link });
+      this.trackOpened.emit({
+        source,
+        at: citedAt(link),
+        trigger: link,
+        ...this.answerSources(),
+      });
     else this.opened.emit({ id: source.id, title: source.title, trigger });
   }
 
@@ -350,7 +366,17 @@ export class ResearchMessage {
         source,
         at: source.passages?.[0]?.at ?? '',
         trigger,
+        ...this.answerSources(),
       });
     else this.opened.emit({ id: source.id, title: source.title, trigger });
+  }
+
+  /** The answer's cited sources and question: "Fonte n de N" and ‹ › on a track (KBC-150). */
+  private answerSources(): {
+    readonly sources: readonly AnswerSource[];
+    readonly question: string;
+  } {
+    const turn = this.turn();
+    return { sources: citedSources(turn), question: turn.question };
   }
 }

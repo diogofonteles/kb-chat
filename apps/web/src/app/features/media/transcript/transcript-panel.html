@@ -1,35 +1,40 @@
-<section class="panel" aria-labelledby="transcript-title">
-  <div class="card-head">
-    <h3 id="transcript-title" class="title" i18n="@@transcript.title">
-      Transcrição
-    </h3>
-    @if (segments().length > 0) {
-      <button
-        uiIconButton="surface"
-        type="button"
-        class="card-button"
-        [size]="32"
-        aria-label="Buscar na transcrição"
-        i18n-aria-label="@@transcript.search.label"
-        aria-controls="transcript-search"
-        [attr.aria-expanded]="searchOpen()"
-        (click)="toggleSearch()"
-      >
-        <ui-icon name="search" [size]="16" />
-      </button>
-      <button
-        uiIconButton="surface"
-        type="button"
-        class="card-button"
-        [size]="32"
-        [attr.aria-label]="expandLabel()"
-        [attr.aria-pressed]="expanded()"
-        (click)="expanded.set(!expanded())"
-      >
-        <ui-icon name="expand" [size]="16" />
-      </button>
-    }
-  </div>
+<section
+  class="panel"
+  [attr.aria-labelledby]="showTitle() ? 'transcript-title' : null"
+>
+  @if (showTitle()) {
+    <div class="card-head">
+      <h3 id="transcript-title" class="title" i18n="@@transcript.title">
+        Transcrição
+      </h3>
+      @if (segments().length > 0) {
+        <button
+          uiIconButton="surface"
+          type="button"
+          class="card-button"
+          [size]="32"
+          aria-label="Buscar na transcrição"
+          i18n-aria-label="@@transcript.search.label"
+          aria-controls="transcript-search"
+          [attr.aria-expanded]="searchOpen()"
+          (click)="toggleSearch()"
+        >
+          <ui-icon name="search" [size]="16" />
+        </button>
+        <button
+          uiIconButton="surface"
+          type="button"
+          class="card-button"
+          [size]="32"
+          [attr.aria-label]="expandLabel()"
+          [attr.aria-pressed]="expanded()"
+          (click)="expanded.set(!expanded())"
+        >
+          <ui-icon name="expand" [size]="16" />
+        </button>
+      }
+    </div>
+  }
 
   <div class="head-row">
     <ng-content select="[views]" />

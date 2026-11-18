@@ -92,6 +92,20 @@ const namesForListeners = ({ labels, namesPending }: TranscriptSpeakers) =>
       }))
     : labels;
 
+/**
+ * KBC-151 BR-0: whoever only listens learns of the voices they hear and nothing more — a voice
+ * that speaks only in a part hidden from them leaves no trace, nor its name. `speakerId`
+ * stays: it is how the screen tells two voices of one person apart from two people.
+ */
+function heardVoicesOnly(transcript: MediaTranscript): MediaTranscript {
+  if (!transcript.voiceNames) return transcript;
+  const heard = new Set(transcript.segments.map(({ voice }) => voice));
+  return {
+    ...transcript,
+    voiceNames: transcript.voiceNames.filter(({ voice }) => heard.has(voice)),
+  };
+}
+
 /** A media's subtitles and the tag that names their version (transcript, filter, rules). */
 export interface Subtitles {
   readonly etag: string;
@@ -199,7 +213,7 @@ export class TranscriptService {
 
   /**
    * The transcript; with `withVoices` (`media-edit`, KBC-064 FR-4) its separation and names,
-   * with `withNames` (`media-speakers`, KBC-065 FR-4) only who speaks in each segment.
+   * with `withNames` (anyone who may listen, KBC-151 BR-0) only who speaks in each segment.
    */
   current(
     actor: MediaActor,
@@ -221,12 +235,12 @@ export class TranscriptService {
       segments,
       ...(options.withTermList ? this.termListOf(summary) : {}),
     };
-    return foldRestricted(
-      restrictedIn(
-        this.withSpeakers(transcript, summary, { ...options, withVoices }),
-        hidden,
-      ),
+    const visible = restrictedIn(
+      this.withSpeakers(transcript, summary, { ...options, withVoices }),
+      hidden,
     );
+    // The names follow what is left to hear, never the whole separation (KBC-151 BR-0).
+    return foldRestricted(withVoices ? visible : heardVoicesOnly(visible));
   }
 
   /**
@@ -313,6 +327,21 @@ export class TranscriptService {
     return { kept, dropped };
   }
 
+  /**
+   * Who speaks each stored segment of the current transcript, by position, from the current
+   * separation (a track's, from its recording); null without a transcript or a separation.
+   * The app's own reading: no person, nothing restricted (the cited passage, KBC-156 BR-4).
+   */
+  segmentVoices(mediaId: string): readonly (number | null)[] | null {
+    const [summary] = this.deps.transcripts.transcripts(mediaId);
+    if (!summary) return null;
+    const segments = this.deps.transcripts.segments(summary.id);
+    const voices = this.voicesOf(mediaId, segments, summary);
+    return voices
+      ? segments.map((_, index) => voices.segmentVoices[index] ?? null)
+      : null;
+  }
+
   /** The transcript with what `audience` may read of the current separation, if any. */
   private withSpeakers(
     transcript: MediaTranscript,
@@ -321,7 +350,7 @@ export class TranscriptService {
   ): MediaTranscript {
     const voices =
       audience.withVoices || audience.withNames
-        ? this.voicesOf(transcript, summary)
+        ? this.voicesOf(transcript.mediaId, transcript.segments, summary)
         : null;
     if (!voices) return transcript;
     const { speakers } = voices;
@@ -339,13 +368,14 @@ export class TranscriptService {
 
   /** A track has no separation: each segment says the voice at that time of its recording. */
   private voicesOf(
-    transcript: MediaTranscript,
+    mediaId: string,
+    segments: readonly { readonly startMs: number; readonly endMs: number }[],
     summary: TranscriptSummary,
   ): TranscriptVoices | null {
     const { voices, recording } = this.deps;
-    const record = recording?.getMedia(transcript.mediaId);
+    const record = recording?.getMedia(mediaId);
     const track = record?.track;
-    if (!track) return voices?.(transcript.mediaId, summary) ?? null;
+    if (!track) return voices?.(mediaId, summary) ?? null;
     const [current] = this.deps.transcripts.transcripts(track.parentId);
     const whole = current ? voices?.(track.parentId, current) : null;
     if (!current || !whole) return null;
@@ -359,7 +389,7 @@ export class TranscriptService {
     return {
       ...whole,
       speakers: this.namedHere(whole.speakers, record),
-      segmentVoices: transcript.segments.map((segment) =>
+      segmentVoices: segments.map((segment) =>
         voiceAt(track.startMs + (segment.startMs + segment.endMs) / 2),
       ),
     };

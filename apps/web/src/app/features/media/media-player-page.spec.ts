@@ -824,7 +824,7 @@ describe('MediaPlayerPage: the transcript reads its voices again (KBC-064 FR-5)'
     localStorage.clear();
   });
 
-  it('AC-4: without `media-speakers` a hidden column stays unread', async () => {
+  it('KBC-151 BR-0: whoever only listens also sees who speaks, read-only', async () => {
     localStorage.clear();
     localStorage.setItem('kb-chat.player.captions', 'on');
     localStorage.setItem('kb-chat.player.transcript-collapsed', 'on');
@@ -833,9 +833,14 @@ describe('MediaPlayerPage: the transcript reads its voices again (KBC-064 FR-5)'
     });
     http.expectOne(ITEM_URL).flush(VOICED_ITEM);
     await settle();
-    http.expectNone(transcriptRequest);
+    http.expectOne(transcriptRequest).flush(VOICED_TRANSCRIPT);
     http.expectOne((r) => r.url === `${ITEM_URL}/subtitles.vtt`).flush(VTT);
     await harness.fixture.whenStable();
+    const page = harness.routeDebugElement?.componentInstance as {
+      cues(): readonly { text: string }[];
+    };
+    expect(page.cues()[0]?.text).toBe('— ✦ Mestre Gabriel: Existia um rei.');
+    expect(screen.queryByRole('button', { name: 'Vozes' })).toBeNull();
     localStorage.clear();
   });
 

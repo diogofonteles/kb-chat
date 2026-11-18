@@ -145,6 +145,8 @@ export class TranscriptPanel {
    * soon as it shows, with no playback to follow, and marked with a side bar besides the paint.
    */
   readonly revealPassage = input(false);
+  /** Its own "Transcrição" title; off where the host already titles it (KBC-150). */
+  readonly showTitle = input(true);
   /** "Mostrar quem fala" (KBC-065 FR-4). */
   readonly showSpeakers = input(true);
   /** "Destacar palavra a palavra" (KBC-045 FR-4). */
@@ -348,6 +350,12 @@ export class TranscriptPanel {
     return this.passageIndexes(passage);
   });
   protected readonly cited = computed(() => new Set(this.citedIndexes()));
+  /** The engine plays this transcript's media now. */
+  private readonly playingThis = computed(
+    () =>
+      this.engine.playing() &&
+      this.engine.source()?.id === this.transcript().mediaId,
+  );
   /** This transcript's media played since the list showed (or a segment was asked for). */
   private readonly heard = signal(false);
   /**
@@ -374,10 +382,7 @@ export class TranscriptPanel {
     const destroyRef = inject(DestroyRef);
     this.clock.follow(() => true, destroyRef);
     this.listenPassively(destroyRef);
-    // A skip or a jump in the player brings the list back to what is heard (FR-3).
-    toObservable(this.engine.seeksLanded)
-      .pipe(skip(1), takeUntilDestroyed())
-      .subscribe(() => this.resumeTracking());
+    this.followAgain();
     // Measure, then scroll: one layout per change, never a read after a write.
     afterRenderEffect({
       earlyRead: () => {
@@ -403,14 +408,23 @@ export class TranscriptPanel {
     this.landOnPendingWord();
   }
 
+  /**
+   * A skip or a jump in the player brings the list back to what is heard (FR-3); so does a
+   * new play of this media, from here or from the app's bar (KBC-154).
+   */
+  private followAgain(): void {
+    toObservable(this.engine.seeksLanded)
+      .pipe(skip(1), takeUntilDestroyed())
+      .subscribe(() => this.resumeTracking());
+    toObservable(this.playingThis)
+      .pipe(skip(1), filter(Boolean), takeUntilDestroyed())
+      .subscribe(() => this.resumeTracking());
+  }
+
   /** Once this media plays, the cited passage no longer holds `aria-current` (T22). */
   private noteHeard(): void {
     effect(() => {
-      if (
-        this.engine.playing() &&
-        this.engine.source()?.id === this.transcript().mediaId
-      )
-        this.heard.set(true);
+      if (this.playingThis()) this.heard.set(true);
     });
   }
 

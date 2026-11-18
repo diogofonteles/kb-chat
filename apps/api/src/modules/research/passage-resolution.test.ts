@@ -2,6 +2,7 @@ import type { AnswerSource } from '@kb-chat/contracts';
 import { describe, expect, it } from 'vitest';
 import type { ShownPassages } from './source-book.js';
 import { snapToSegment } from '@kb-chat/contracts';
+import { MediaTrackShelf } from '../media-documents/index.js';
 import { resolvePassages } from './passage-resolution.js';
 
 const TRACK = '0b9c1f7e-1111-4a2b-8c3d-000000000001';
@@ -23,10 +24,14 @@ const track: AnswerSource = {
 const text: AnswerSource = { n: 2, id: 'raw/articles/x.md', title: 'Um texto' };
 
 const SEGMENTS = [
-  { startMs: 0, endMs: 40_500 },
-  { startMs: 41_300, endMs: 70_000 },
-  { startMs: 70_000, endMs: 95_000 },
-  { startMs: 125_900, endMs: 140_000 },
+  { startMs: 0, endMs: 40_500, text: 'A abertura da palestra.' },
+  { startMs: 41_300, endMs: 70_000, text: 'O ritmo é a lei do pêndulo.' },
+  {
+    startMs: 70_000,
+    endMs: 95_000,
+    text: 'Tudo flui para fora e para dentro.',
+  },
+  { startMs: 125_900, endMs: 140_000, text: 'Outra pergunta.' },
 ];
 
 const shown = (anchors: number[], last: number | null): ShownPassages => ({
@@ -113,6 +118,35 @@ describe('resolvePassages (KBC-099 FR-6, BR-5, ADR 0035 §6)', () => {
   });
 });
 
+describe('resolvePassages: the whole sentence (KBC-156)', () => {
+  const FRAGMENT = [
+    { startMs: 0, endMs: 1_000, text: 'É, italiano, tá.' },
+    {
+      startMs: 1_200,
+      endMs: 6_000,
+      text: 'Meu pai veio da Itália com a família,',
+    },
+    {
+      startMs: 6_100,
+      endMs: 12_000,
+      text: 'e eu cresci na roça ouvindo as histórias.',
+    },
+    { startMs: 12_500, endMs: 21_000, text: 'Depois a gente foi para Manaus.' },
+  ];
+
+  it('AC-1: [1@0:00] on a 1 s fragment cites the fragment and the whole sentence after it', () => {
+    const [cited] = resolvePassages({
+      answer: 'Ele conta lembranças da infância [1@0:00].',
+      sources: [track],
+      shownOf: () => shown([0], 0),
+      segmentsOf: () => FRAGMENT,
+    });
+    expect(cited?.passages).toEqual([
+      { at: '0:00', startMs: 0, endMs: 12_000 },
+    ]);
+  });
+});
+
 describe('snapToSegment', () => {
   it('takes the segment that starts in that second', () => {
     expect(snapToSegment(SEGMENTS, 41)).toEqual({
@@ -146,5 +180,57 @@ describe('snapToSegment', () => {
     });
     expect(snapToSegment([], 41)).toEqual({ startMs: 41_000, endMs: 41_000 });
     expect(snapToSegment([], null)).toEqual({ startMs: 0, endMs: 0 });
+  });
+});
+
+describe('resolvePassages over the shelf: a change of voice (KBC-156 BR-4, AC-4)', () => {
+  const ONE_VOICE_THEN_ANOTHER = [
+    { startMs: 0, endMs: 1_000, text: 'É, italiano, tá.' },
+    {
+      startMs: 1_200,
+      endMs: 6_000,
+      text: 'Meu pai veio da Itália com a família.',
+    },
+  ];
+
+  it('the next sentence, said by another voice, does not enter the passage', () => {
+    const shelf = new MediaTrackShelf({
+      store: { getMedia: () => null },
+      transcripts: {
+        transcripts: () => [
+          {
+            id: 't1',
+            mediaId: TRACK,
+            version: 1,
+            revision: 0,
+            model: 'large-v3',
+            confidence: 'normal',
+            vad: 'applied',
+            termsVersion: 1,
+            rawPath: 't1.json',
+            filterVersion: 1,
+            confidenceVersion: 1,
+            wordCount: 10,
+            removedWords: 0,
+            createdAt: '2026-11-03T12:00:00.000Z',
+          },
+        ],
+        segments: () =>
+          ONE_VOICE_THEN_ANOTHER.map((one) => ({
+            ...one,
+            avgLogprob: null,
+            compressionRatio: null,
+            noSpeechProb: null,
+          })),
+      },
+      voicesOf: () => [0, 1],
+    });
+    const [cited] = resolvePassages({
+      answer: 'Ele diz que é italiano [1@0:00].',
+      sources: [track],
+      shownOf: () => shown([0], 0),
+      segmentsOf: (mediaId) => shelf.segmentsOf(mediaId),
+    });
+    expect(cited?.passages).toEqual([{ at: '0:00', startMs: 0, endMs: 1_000 }]);
   });
 });
