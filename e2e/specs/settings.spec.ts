@@ -9,6 +9,7 @@ import {
   SETTINGS_AXE,
   settingsPage,
 } from './settings-helpers.js';
+import { chooseView, expectView } from './search-view.js';
 
 /** Configurações opened at Sua IA (a region of its own on the page). */
 async function openSettings(page: Page) {
@@ -35,7 +36,7 @@ test.beforeEach(async ({ page }) => {
 test('FR-6: ⚙ Configurações opens as a page and goes back to the conversation', async ({
   page,
 }) => {
-  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
+  await chooseView(page, 'search');
   await page.getByLabel('Sua pergunta').fill('ritmo');
   await page.getByRole('button', { name: 'Buscar' }).click();
   await expect(page.locator('app-result-card').first()).toBeVisible();
@@ -178,9 +179,7 @@ test('the default view saved in Settings opens on the next page', async ({
     }),
   );
   await page.reload();
-  await expect(
-    page.getByRole('radio', { name: 'Buscar documentos' }),
-  ).toBeChecked();
+  await expectView(page, 'search');
   await expect(page.getByText('O que você quer estudar hoje?')).toBeVisible();
 });
 

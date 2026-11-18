@@ -15,7 +15,7 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { uniqueTag, useTheme } from './media-helpers.js';
-import { startInSearchView } from './search-view.js';
+import { expectSubjectFilter, startInSearchView } from './search-view.js';
 import { approve, audioWithTracks } from './tracks-helpers.js';
 
 // KBC-070: subjects reach the search, the concept's panel, the track's page and the library.
@@ -138,9 +138,7 @@ test('AC-1, track page: the chip opens the search with the track and its subject
   await expect(card).toContainText('Faixa · Assunto');
   await expect(card).toContainText(seed.title);
   await expect(card).toContainText('Cabala');
-  await expect(
-    page.getByRole('button', { name: `Remover Assuntos: ${seed.subject}` }),
-  ).toBeVisible();
+  await expectSubjectFilter(page, seed.subject);
 
   await card.click();
   await expect(

@@ -116,3 +116,18 @@ export async function searchAgain(page: Page, question: string): Promise<void> {
   await field.fill(question);
   await field.press('Enter');
 }
+
+/**
+ * A subject filter applied to the search on screen: on desktop its chip with ×; a phone has
+ * no strip of applied filters (v2 · Conversa, cmResults): its "Filtros (1)" says it.
+ */
+export async function expectSubjectFilter(
+  page: Page,
+  subject: string,
+): Promise<void> {
+  await expect(
+    isPhone(page)
+      ? page.getByRole('button', { name: 'Filtros (1)' })
+      : page.getByRole('button', { name: `Remover Assuntos: ${subject}` }),
+  ).toBeVisible();
+}

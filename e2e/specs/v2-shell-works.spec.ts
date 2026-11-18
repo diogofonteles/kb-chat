@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
 import {
   expectKeyboardScrolls,
@@ -7,6 +7,14 @@ import {
   shortWindow,
 } from './scroll-helpers.js';
 import { desktop, library } from './shell-helpers.js';
+import { expectSummary } from './search-view.js';
+
+/** The rows a filter leaves: at least one, each named after what was typed. */
+async function expectOnlyNamed(rows: Locator, name: RegExp): Promise<void> {
+  await expect(rows.first()).toBeVisible();
+  await expect(rows.filter({ hasNotText: name })).toHaveCount(0);
+  await expect(rows.filter({ hasText: /alquimia/i })).toHaveCount(0);
+}
 
 /**
  * KBC-124/KBC-125, v2 fidelity: the shell, the entry screens and the public pages do not only
@@ -229,7 +237,7 @@ test.describe('the shell', () => {
     await search.fill('ritmo');
     await expect(search).toHaveValue('ritmo');
     await search.press('Enter');
-    await expect(page.getByText(/documentos? · Tudo ·/)).toBeVisible();
+    await expectSummary(page, /documentos?/, 'Tudo');
     // The field holds the search; ✕ in place of ⌘K empties it (v2 · Conversa).
     await expect(search).toHaveValue('ritmo');
     await bar.getByRole('button', { name: 'Limpar a busca' }).click();
@@ -345,7 +353,8 @@ test.describe('the shell', () => {
     const rowsShown = wide.locator(
       'li.collection > .row > button.ui-libitem-row',
     );
-    await expect(rowsShown).toHaveCount(1);
+    // Only collections named after it stay (other specs add "Hermetismo <tag>" ones).
+    await expectOnlyNamed(rowsShown, /hermetismo/i);
     // The list scrolls inside the panel, not the page.
     await filter.fill('');
     const list = wide.locator('.sections');
@@ -360,6 +369,7 @@ test.describe('the shell', () => {
     // Every row has its ⋯ (v2 · Biblioteca expandida), its menu whole in the window.
     const rowMore = wide.getByRole('button', {
       name: 'Mais opções de Hermetismo',
+      exact: true,
     });
     await rowMore.click();
     const rowMenu = page.getByRole('menu', {
@@ -443,9 +453,10 @@ test.describe('the shell', () => {
     });
     await expect(field).toBeFocused();
     await field.fill('hermetismo');
-    await expect(
+    await expectOnlyNamed(
       menu.locator('li.collection > .row > button.ui-libitem-row'),
-    ).toHaveCount(1);
+      /hermetismo/i,
+    );
     await field.fill('');
     // The order row opens its menu, whole on screen.
     await menu.getByRole('button', { name: /^Ordenar/ }).click();

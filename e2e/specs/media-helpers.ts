@@ -337,7 +337,15 @@ export async function closePlayer(
     bar.getByRole('button', { name: 'Fechar o player' }),
   ).toHaveCount(0);
   if ((page.viewportSize()?.width ?? 0) < 1024) {
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    // A page with its own header (the collection's album page) has "←" in place of the
+    // avatar: there the navigation's Acervos opens the Menu.
+    const avatar = page.getByRole('button', { name: 'Menu', exact: true });
+    if (await avatar.isVisible()) await avatar.click();
+    else
+      await page
+        .getByRole('navigation', { name: 'Navegação' })
+        .getByRole('button', { name: 'Acervos' })
+        .click();
     const menu = page.getByRole('dialog', { name: 'Menu' });
     const close = menu.getByRole('button', { name: 'Fechar o player' });
     // The drawn rows stay at the sheet's foot: in sight without scrolling.
