@@ -147,6 +147,25 @@ async function replay(page: Page, saved: Saved): Promise<void> {
   );
 }
 
+/**
+ * The frame's "a partir de 10/11 às 18:59": the server counts the wait from the refusal's own
+ * time, so the sign-in's refused answer carries the frame's instant instead (only that field).
+ */
+const REFUSED_RETRY_AT = '2026-11-10T21:59:00.000Z';
+async function refusedUntil(page: Page, retryAt: string): Promise<void> {
+  await page.route('**/api/v1/auth/google', async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    route.fulfill({
+      response,
+      body: body.replace(
+        /"retryAt":"[^"]+"/,
+        `"retryAt":${JSON.stringify(retryAt)}`,
+      ),
+    });
+  });
+}
+
 test('the login: booting, loading, Google unavailable, not configured, signing in, failed', async ({
   browser,
 }) => {
@@ -248,8 +267,9 @@ test('Bruno Lima, not invited: asks for access, waits, is refused', async ({
     await page.context().close();
   }
 
-  const again = async (width: Width) => {
+  const again = async (width: Width, retryAt?: string) => {
     const { context, page } = await signedOut(browser, width);
+    if (retryAt) await refusedUntil(page, retryAt);
     await loginPage(page);
     await googleButton(page).click();
     return { context, page };
@@ -276,7 +296,7 @@ test('Bruno Lima, not invited: asks for access, waits, is refused', async ({
   expect(refused.status(), await refused.text()).toBeLessThan(300);
   await owner.dispose();
   for (const width of WIDTHS) {
-    const { context, page } = await again(width);
+    const { context, page } = await again(width, REFUSED_RETRY_AT);
     await expect(
       page.getByText('Sua solicitação foi recusada.', { exact: true }),
     ).toBeVisible();

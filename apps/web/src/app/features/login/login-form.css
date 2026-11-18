@@ -208,9 +208,10 @@ form {
   line-height: 1.2;
 }
 
-/* v2 · Auth after a Google request (enviada, em análise, recusada): a 22 headline. */
+/* v2 · Auth after a Google request (enviada, em análise, recusada): a 22 headline on a 26 line. */
 .outcome .headline.large {
   font-size: 1.375rem;
+  line-height: 1.625rem;
 }
 
 /* v2 · Auth "Pedir acesso · enviado": the headline is 24 there (22 after a Google request). */
@@ -254,6 +255,9 @@ form {
 
 .leave {
   justify-self: center;
+  /* v2 · Auth draws "Sair" 40 high; its 44 target overflows that row evenly */
+  min-height: var(--target);
+  margin-block: -0.125rem;
 }
 
 /* v2 · Auth: a field's error and hint are 12 lines of 14.4 (the frames' auto height), so the
