@@ -339,8 +339,8 @@ describe('MediaListPage (T14)', () => {
     );
   });
 
-  it('gives no master actions to a member', async () => {
-    const { answer } = await renderList({
+  it("gives no master actions to a member: a failed audio's ⋯ has its link only", async () => {
+    const { answer, fixture } = await renderList({
       features: ['search', 'media-upload'],
     });
     await answer([
@@ -351,10 +351,12 @@ describe('MediaListPage (T14)', () => {
         canEdit: false,
       }),
     ]);
-    expect(
-      screen.queryByRole('button', { name: /^Mais ações para/ }),
-    ).toBeNull();
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Mais ações para/ }));
+    await fixture.whenStable();
+    expect(
+      screen.getAllByRole('menuitem').map((one) => one.textContent?.trim()),
+    ).toEqual(['Copiar link']);
   });
 
   it('puts the new item on top and focuses it after an upload (UP-01)', async () => {
@@ -629,14 +631,16 @@ describe('MediaListPage: "Editar informações" (KBC-050)', () => {
     ).toEqual(['Tocar agora', 'Tocar em seguida', 'Copiar link']);
   });
 
-  it('FR-2: shows no menu on an audio not ready to who may not edit', async () => {
-    const { answer } = await renderList({ features: ['media'] });
+  it('FR-2: an audio not ready offers who may not edit its link only', async () => {
+    const { answer, fixture } = await renderList({ features: ['media'] });
     await answer([
       aMediaItem({ status: 'queued', durationMs: null, canEdit: false }),
     ]);
+    fireEvent.click(screen.getByRole('button', { name: /^Mais ações para/ }));
+    await fixture.whenStable();
     expect(
-      screen.queryByRole('button', { name: /^Mais ações para/ }),
-    ).toBeNull();
+      screen.getAllByRole('menuitem').map((one) => one.textContent?.trim()),
+    ).toEqual(['Copiar link']);
   });
 
   it('FR-2: who sent it edits but does not remove', async () => {

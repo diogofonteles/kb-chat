@@ -211,6 +211,9 @@ export class MenuButton {
     return this.kind() === 'choice' && !option.action;
   }
 
+  /** Whether its menu is open (a row keeps its look under the pointer meanwhile). */
+  readonly isOpen = computed(() => this.open());
+
   /** Opens it from elsewhere (a phone recording's long press, media-library@mobile). */
   openMenu(): void {
     if (!this.open()) this.openOn(this.checkedIndex());

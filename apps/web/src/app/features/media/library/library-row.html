@@ -96,6 +96,18 @@
   </span>
   <span class="duration">{{ duration() }}</span>
 </span>
+@if (ready()) {
+  <!-- Under the pointer (or the focus) a ready row offers its bookmarks before the length
+       (media-library-row-menu); the row's columns make room for it. -->
+  <button
+    type="button"
+    class="row-bookmarks"
+    [attr.aria-label]="bookmarksLabel()"
+    (click)="bookmarks()"
+  >
+    <ui-icon name="bookmark" [size]="18" />
+  </button>
+}
 <ng-template #menu>
   <app-menu-button
     [label]="menuLabel()"

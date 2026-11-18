@@ -424,22 +424,22 @@
                   Tentar de novo
                 </button>
               }
-              @if (item.status === 'ready' || item.canEdit || isMaster()) {
-                <app-row-menu
-                  [label]="menuLabelOf(item)"
-                  [canPlay]="item.status === 'ready'"
-                  [canEdit]="item.canEdit"
-                  [canRemove]="isMaster()"
-                  [phone]="phone()"
-                  [sheetTitle]="item.title"
-                  [sheetMeta]="authorOf(item) + ' · ' + (topic()?.title ?? '')"
-                  (playChosen)="play(item)"
-                  (nextChosen)="playNext(item)"
-                  (linkChosen)="copyLink(item)"
-                  (editChosen)="openEdit(item)"
-                  (removeChosen)="askRemove(item)"
-                />
-              }
+              <!-- Every row has its ⋯ (media-list), a failed one too: its link at least. -->
+              <app-row-menu
+                [label]="menuLabelOf(item)"
+                [canPlay]="item.status === 'ready'"
+                [canLink]="true"
+                [canEdit]="item.canEdit"
+                [canRemove]="isMaster()"
+                [phone]="phone()"
+                [sheetTitle]="item.title"
+                [sheetMeta]="authorOf(item) + ' · ' + (topic()?.title ?? '')"
+                (playChosen)="play(item)"
+                (nextChosen)="playNext(item)"
+                (linkChosen)="copyLink(item)"
+                (editChosen)="openEdit(item)"
+                (removeChosen)="askRemove(item)"
+              />
             </span>
           </li>
         }

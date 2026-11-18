@@ -37,6 +37,11 @@ export class RowMenu {
   readonly canPlay = input(false);
   /** "Editar informações" (KBC-050 FR-2): who sent it or a master. */
   readonly canEdit = input(false);
+  /**
+   * "Copiar link" of a media that does not play (one that failed): its page still says what
+   * happened, so its ⋯ is never empty (v2 · media-list, every row has one).
+   */
+  readonly canLink = input(false);
   /** "Remover": masters. */
   readonly canRemove = input(true);
   /** A phone: the row itself plays, the link goes through the system's sheet. */
@@ -61,7 +66,7 @@ export class RowMenu {
         icon: 'edit',
         divider: second,
       });
-    if (this.canPlay())
+    if (this.canPlay() || this.canLink())
       options.push(linkOption(phone, second && !this.canEdit()));
     if (this.canRemove())
       options.push({

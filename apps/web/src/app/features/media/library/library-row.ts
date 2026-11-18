@@ -72,6 +72,8 @@ export type RowAction =
     '[class.selected]': 'selected()',
     '[class.failed]': "item().status === 'failed'",
     '[class.playing]': 'playing()',
+    // Its ⋯ open: the row stays as under the pointer (media-library-row-menu).
+    '[class.menu-open]': 'menuOpen()',
     '[class.has-tracks]': 'tracksLabel() !== ""',
     '(pointerdown)': 'pressStarted($event)',
     '(pointermove)': 'pressMoved($event)',
@@ -110,6 +112,9 @@ export class LibraryRow {
   readonly selectedChange = output<boolean>();
   readonly acted = output<RowAction>();
   private readonly menuButton = viewChild(MenuButton);
+  protected readonly menuOpen = computed(
+    () => this.menuButton()?.isOpen() ?? false,
+  );
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   /** The long press under way: where it started and its timer. */
@@ -197,6 +202,13 @@ export class LibraryRow {
       .filter((part) => part !== '')
       .join(' · '),
   );
+  protected readonly bookmarksLabel = computed(
+    () =>
+      $localize`:@@library.rowBookmarks:Ver marcadores de ${this.item().title}:title:`,
+  );
+  protected bookmarks(): void {
+    this.acted.emit('bookmarks');
+  }
   protected readonly menuLabel = computed(
     () =>
       $localize`:@@media.moreActions:Mais ações para ${this.item().title}:title:`,

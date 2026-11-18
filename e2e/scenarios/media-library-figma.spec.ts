@@ -251,6 +251,17 @@ test('the ⋯ of a row, the selection and the dialogs', async ({ browser }) => {
   for (const width of WIDTHS) {
     const phone = width === 'phone';
     const { context, page } = await contextAt(browser, width);
+    // The row-menu frame's data: nothing to continue (its page has no "Continuar ouvindo");
+    // the later frames (edit, remove) have it back.
+    const home = '**/api/v1/media/library/home*';
+    await page.route(home, async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as Record<string, unknown>;
+      await route.fulfill({
+        response,
+        json: { ...body, continueListening: [] },
+      });
+    });
     await openLibrary(page, world);
     const row = rowNamed(page, second);
     const more = row.getByRole('button', { name: `Mais ações para ${second}` });
@@ -261,6 +272,9 @@ test('the ⋯ of a row, the selection and the dialogs', async ({ browser }) => {
     await shoot(page, 'media-library-row-menu', width);
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
+    await page.unroute(home);
+    await go(page, '/biblioteca');
+    await expect(rows(page).first()).toBeVisible();
 
     const box = (title: string) =>
       rowNamed(page, title).getByRole('checkbox', {

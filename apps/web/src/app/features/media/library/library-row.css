@@ -23,7 +23,8 @@
 }
 
 :host(:hover),
-:host(:focus-within) {
+:host(:focus-within),
+:host(.menu-open) {
   background: var(--overlay-2);
 }
 
@@ -397,6 +398,58 @@ app-menu-button {
 .tracks-toggle:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
+}
+
+/* 🔖 of a ready row: out of sight (still in the tab order) until the pointer or the focus is
+   on the row; then a column of its own before the length, the others giving it room
+   (media-library-row-menu: collection and status 34 px to the left). */
+.row-bookmarks {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+@container library-table (min-width: 52.0625rem) {
+  :host(:hover:has(.row-bookmarks)),
+  :host(:focus-within:has(.row-bookmarks)),
+  :host(.menu-open:has(.row-bookmarks)) {
+    grid-template-columns:
+      1.5rem 2.5rem minmax(0, 1fr)
+      11.25rem 13.75rem 1.125rem 2.75rem 1.125rem;
+    grid-template-areas:
+      'lead art title topic status mark duration actions'
+      'lead art byline topic status mark duration actions';
+  }
+
+  :host(:hover) .row-bookmarks,
+  :host(:focus-within) .row-bookmarks,
+  :host(.menu-open) .row-bookmarks {
+    position: relative;
+    z-index: 1;
+    grid-area: mark;
+    display: grid;
+    place-items: center;
+    width: 1.125rem;
+    height: 2rem;
+    overflow: visible;
+    clip-path: none;
+  }
+
+  .row-bookmarks:hover {
+    color: var(--color-text);
+  }
+
+  .row-bookmarks:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
 }
 
 /* A narrow table (the right panel open, a small window): the collection gives way first. */
