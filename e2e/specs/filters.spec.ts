@@ -137,14 +137,10 @@ test.describe('paging and empty filters', () => {
       });
     });
     const phone = (viewport?.width ?? 0) < 1024;
-    await page
-      .getByRole('button', {
-        name: phone ? 'Filtros' : /^Tipo de texto/,
-        exact: phone,
-      })
-      .click();
+    // "Tipo de texto": its popover on desktop, its own sheet on a phone (cmResults).
+    await page.getByRole('button', { name: /^Tipo de texto/ }).click();
     await page.getByRole('checkbox', { name: /Texto\/apostila/ }).check();
-    if (phone) await page.getByRole('button', { name: VIEW_RESULTS }).click();
+    if (phone) await page.getByRole('button', { name: 'Aplicar' }).click();
     await expect(
       page.getByText('Nada encontrado para "ritmo" com estes filtros.'),
     ).toBeVisible();
@@ -250,7 +246,10 @@ test.describe('authorship (KBC-020)', () => {
     });
     await expect(about.getByText('Mestre Laércio')).toBeVisible();
     await expect(about.getByText('José Laércio do Egito')).toBeVisible();
-    await panel.getByRole('button', { name: /Fechar/ }).click();
+    await panel
+      .getByRole('button', { name: 'Fechar', exact: true })
+      .first()
+      .click();
 
     await control.getByRole('radio', { name: /^Todos/ }).check();
     await expect(cards).toHaveCount(3);

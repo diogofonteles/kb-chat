@@ -163,6 +163,8 @@ test.describe('search view', () => {
   test('a document opened from the results scrolls in its panel', async ({
     page,
   }) => {
+    // The fixture's document fits a 900 px page beside its "Veja também" column.
+    await shortWindow(page);
     await searchFor(page, 'natureza setupla');
     await page
       .getByRole('button', { name: /A Natureza Sétupla/ })

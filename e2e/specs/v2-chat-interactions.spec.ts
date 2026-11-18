@@ -99,7 +99,7 @@ test.describe('the results', () => {
       .click();
     const modes = page.getByRole('menu', { name: 'Como buscar' });
     await expectOnScreen(page, modes);
-    await modes.getByRole('menuitem', { name: 'Palavras exatas' }).click();
+    await modes.getByRole('menuitemradio', { name: 'Palavras exatas' }).click();
     await expect(modes).toBeHidden();
     await expectSummary(page, /documentos?$/, 'Palavras exatas');
   });

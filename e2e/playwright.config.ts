@@ -16,6 +16,8 @@ const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
 const MEDIA_SPECS = /media-.*\.spec\.ts$/;
 /** v2 · Conversa's controls and scroll, also run in WebKit (see the chat-webkit projects). */
 const CHAT_WEBKIT_SPECS = /(v2-chat-interactions|content-scroll)\.spec\.ts$/;
+/** content-scroll's pages of other areas (Configurações, Biblioteca, catalog) stay out. */
+const NOT_CHAT = /pages in the main panel/;
 /**
  * The media specs play real tones (330 Hz, up to minutes long): keep them off the
  * machine's speakers. Chrome mutes its output only; `muted` and `volume` stay as the
@@ -130,17 +132,22 @@ export default defineConfig({
           {
             name: 'chat-webkit-desktop',
             testMatch: CHAT_WEBKIT_SPECS,
+            grepInvert: NOT_CHAT,
             use: {
               ...devices['Desktop Safari'],
               viewport: { width: 1440, height: 900 },
             },
           },
+          // Safari's engine at a phone's width, with touch: Playwright's mobile WebKit has
+          // no wheel, and the scroll checks turn the wheel (content-scroll.spec).
           {
             name: 'chat-webkit-mobile',
             testMatch: CHAT_WEBKIT_SPECS,
+            grepInvert: NOT_CHAT,
             use: {
-              ...devices['iPhone 13'],
+              ...devices['Desktop Safari'],
               viewport: { width: 390, height: 844 },
+              hasTouch: true,
             },
           },
           {

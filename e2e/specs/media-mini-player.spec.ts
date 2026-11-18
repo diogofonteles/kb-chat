@@ -201,7 +201,11 @@ test('AC-16: nothing focused hides behind the mini-player', async ({
   await search(page, 'ritmo');
   const bar = await mini(page).boundingBox();
   expect(bar).not.toBeNull();
-  await page.locator('h1').first().click();
+  // From the top of the page: nothing focused (a v2 search page keeps the collection's h1
+  // for screen readers only, and a phone's head is the Menu button).
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur(),
+  );
   for (let i = 0; i < 40; i++) {
     await page.keyboard.press('Tab');
     // Linux WebKit moves the focus first and scrolls to it a moment later: a rectangle read

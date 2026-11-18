@@ -71,6 +71,9 @@ test('KBC-011: "Rápido | Profundo" picks the profile of the next question and i
     'deep',
   );
   await page.reload();
+  // On a phone the conversation's profiles float over the box while it is in use.
+  if ((page.viewportSize()?.width ?? 1440) < 1024)
+    await page.getByLabel('Sua pergunta').focus();
   await expect(page.getByRole('radio', { name: 'Profundo' })).toBeChecked();
 });
 
@@ -272,7 +275,13 @@ test('ADR 0009: text written before a tool call leaves the answer and shows amon
 }) => {
   const answer = await research(page, 'natureza sétupla');
   await expect(answer.locator('.answer')).not.toContainText('confiro');
-  await answer.getByText(/Pesquisou 2 vezes · leu 1 documento/).click();
+  await expect(
+    answer.getByText(/Pesquisou 2 vezes · leu 1 documento/),
+  ).toBeVisible();
+  // The latest answer's steps open by themselves on desktop (chat-research-answer).
+  const steps = answer.locator('details.steps');
+  if ((await steps.getAttribute('open')) === null)
+    await steps.locator('summary').click();
   await expect(
     answer.getByText(
       'Pensando: Um dos documentos parece tratar disso; confiro o trecho.',
