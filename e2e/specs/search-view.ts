@@ -27,7 +27,9 @@ const isPhone = (page: Page): boolean =>
 export function viewRadio(page: Page, view: 'search' | 'research') {
   return page
     .getByRole('radiogroup', { name: 'Onde buscar' })
-    .getByRole('radio', { name: view === 'search' ? 'Tudo' : /Pesquisa com IA/ });
+    .getByRole('radio', {
+      name: view === 'search' ? 'Tudo' : /Pesquisa com IA/,
+    });
 }
 
 /**
@@ -76,9 +78,9 @@ export async function expectView(
     return;
   }
   await expect(
-    page
-      .locator('app-composer')
-      .getByRole('button', { name: view === 'search' ? 'Buscar' : 'Perguntar' }),
+    page.locator('app-composer').getByRole('button', {
+      name: view === 'search' ? 'Buscar' : 'Perguntar',
+    }),
   ).toBeVisible();
 }
 
@@ -108,7 +110,9 @@ export async function searchAgain(page: Page, question: string): Promise<void> {
       .click();
     return;
   }
-  const field = page.getByRole('searchbox', { name: 'Buscar no acervo em uso' });
+  const field = page.getByRole('searchbox', {
+    name: 'Buscar no acervo em uso',
+  });
   await field.fill(question);
   await field.press('Enter');
 }

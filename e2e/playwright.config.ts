@@ -14,6 +14,8 @@ const WEB_PORT = process.env['KBC_E2E_WEB_PORT'] ?? '4317';
 const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
 /** The media specs: they need a browser that plays AAC (see the media projects). */
 const MEDIA_SPECS = /media-.*\.spec\.ts$/;
+/** v2 · Conversa's controls and scroll, also run in WebKit (see the chat-webkit projects). */
+const CHAT_WEBKIT_SPECS = /(v2-chat-interactions|content-scroll)\.spec\.ts$/;
 /**
  * The media specs play real tones (330 Hz, up to minutes long): keep them off the
  * machine's speakers. Chrome mutes its output only; `muted` and `volume` stay as the
@@ -123,6 +125,24 @@ export default defineConfig({
     },
     ...(WITH_WEBKIT
       ? [
+          // v2 · Conversa in Safari at both widths (KBC-126/KBC-127): its controls and the
+          // scroll of its text.
+          {
+            name: 'chat-webkit-desktop',
+            testMatch: CHAT_WEBKIT_SPECS,
+            use: {
+              ...devices['Desktop Safari'],
+              viewport: { width: 1440, height: 900 },
+            },
+          },
+          {
+            name: 'chat-webkit-mobile',
+            testMatch: CHAT_WEBKIT_SPECS,
+            use: {
+              ...devices['iPhone 13'],
+              viewport: { width: 390, height: 844 },
+            },
+          },
           {
             name: 'media-webkit',
             testMatch: MEDIA_SPECS,
