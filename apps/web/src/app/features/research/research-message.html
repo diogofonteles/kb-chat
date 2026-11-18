@@ -162,7 +162,14 @@
         }
         <!-- cobertura: the counts and the set on one muted line under the bar. -->
         <p class="coverage-line">
-          <span>{{ coverage.line }}</span
+          <!-- The head above is drawn for the eye; the line says the whole of it. -->
+          <span>
+            @if (coverage.share) {
+              <span class="visually-hidden" i18n="@@sweep.coverageLead"
+                >Cobertura (medida pelo aplicativo):</span
+              >
+            }
+            {{ coverage.line }}</span
           >&ngsp;<span class="coverage-target"
             ><span i18n="@@sweep.target">Conjunto:</span>
             {{ coverage.target }}</span

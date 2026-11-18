@@ -464,7 +464,21 @@ span.source-art {
 }
 
 .source-more ::ng-deep .source-more-trigger {
+  display: inline-grid;
+  place-items: center;
+  /* A 40 target around its 18 icon (WCAG 2.5.8). */
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
   color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.source-more ::ng-deep .source-more-trigger:hover {
+  color: var(--color-text);
 }
 
 .source-open {
