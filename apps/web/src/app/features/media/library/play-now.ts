@@ -1,4 +1,11 @@
-import { Injectable, effect, inject, signal, untracked } from '@angular/core';
+import {
+  Injectable,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import type { MediaItem } from '@kb-chat/contracts';
 import { resumeFrom } from '@kb-chat/player-core';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
@@ -21,6 +28,17 @@ export class PlayNow {
   /** "Tocar em seguida" (v2 media-library-row-menu): what plays when the current one ends. */
   private readonly next = signal<readonly MediaItem[]>([]);
   readonly upNext = this.next.asReadonly();
+  /** The list whose ▶ (or 🔀) started what plays, and that media (v2: the header's ⏸). */
+  private readonly started = signal<{ list: string; id: string } | null>(null);
+  /** The list whose header plays now: its ▶ shows ⏸ only then, as a playlist does. */
+  readonly playingList = computed(() => {
+    const started = this.started();
+    return started !== null &&
+      this.engine.playing() &&
+      this.engine.source()?.id === started.id
+      ? started.list
+      : null;
+  });
 
   constructor() {
     // The one playing ended: the first one asked for next starts from where it stopped.
@@ -50,6 +68,17 @@ export class PlayNow {
       item,
       resumeFrom(this.saver.startFrom(item), item.durationMs) ?? 0,
     );
+  }
+
+  /**
+   * A list's ▶ or 🔀 (v2 · actionBar): plays the media for that list, so its header shows ⏸;
+   * the one already playing goes on, now as the list's.
+   */
+  playList(list: string, item: MediaItem): void {
+    const current = this.engine.source()?.id === item.id;
+    this.started.set({ list, id: item.id });
+    if (current && this.engine.playing()) return;
+    this.play(item);
   }
 
   /**

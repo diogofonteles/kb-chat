@@ -141,19 +141,21 @@ const SHOWN = 3;
       gap: var(--space-1) var(--space-3);
     }
 
+    /* v2 · media-library: "Precisa da sua atenção" 20/24, "Ver a fila" 13 on the same line. */
     h3 {
       margin: 0;
-      font-size: var(--text-section);
+      font-size: 1.25rem;
       font-weight: 700;
+      line-height: 1.5rem;
       letter-spacing: -0.01em;
     }
 
     .see {
       display: inline-flex;
       align-items: center;
-      min-height: var(--target-desktop);
+      min-height: 1.5rem;
       color: var(--color-text-muted);
-      font-size: var(--text-sm);
+      font-size: var(--text-meta);
       font-weight: 700;
       text-decoration: none;
     }
@@ -305,7 +307,14 @@ const SHOWN = 3;
         display: none;
       }
 
+      /* v2 · media-library@mobile: the count 14/700, what each needs 12 under it. */
+      .phone-card .name {
+        font-size: var(--text-sm);
+        font-weight: 700;
+      }
+
       .phone-card .state {
+        font-size: var(--text-xs);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;

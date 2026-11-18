@@ -202,12 +202,6 @@
   cursor: not-allowed;
 }
 
-@media (max-width: 1023px) {
-  .ui-chip {
-    min-height: 2.25rem;
-  }
-}
-
 /* ---------- Pills (status) ---------- */
 .ui-pill {
   --ui-pill-fg: var(--color-text-muted);

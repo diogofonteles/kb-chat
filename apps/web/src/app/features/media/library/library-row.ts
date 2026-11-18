@@ -152,7 +152,8 @@ export class LibraryRow {
   protected readonly ready = computed(() => this.item().status === 'ready');
   protected readonly duration = computed(() => {
     const ms = this.item().durationMs;
-    return ms === null ? '' : formatDuration(ms);
+    // v2 · media-library: "—" where the length is not known (a file that failed).
+    return ms === null ? '—' : formatDuration(ms);
   });
   protected readonly state = computed(() => stateTextOf(this.item()));
   protected readonly resume = computed(() => stoppedAtTextOf(this.item()));

@@ -26,7 +26,11 @@
   gap: var(--space-2);
 }
 
-/* v2: "Avançar" is the quieter of the two arrows (#ffffff59 until hovered). */
+/* v2: "Voltar" in white, "Avançar" the quieter of the two arrows (#ffffff59 until hovered). */
+.back {
+  color: var(--color-text);
+}
+
 .forward {
   color: var(--color-icon-faint);
 }
@@ -143,7 +147,8 @@
 
 .avatar-ring {
   display: inline-flex;
-  padding: 0.25rem;
+  /* v2 · Casca: a 40 ring, its hairline inside, around the 32 avatar. */
+  padding: 3px;
   border: 1px solid var(--overlay-3);
   border-radius: var(--radius-pill);
   background: var(--color-shell);

@@ -80,9 +80,10 @@ const VIEW_LABELS: Record<LibraryDisplay, () => string> = {
       display: inline-flex;
     }
 
+    /* v2 · actionBar: "Ouvidas recentemente ☰" ends on the bar's edge. */
     app-menu-button {
       --menu-trigger-size: var(--text-sm);
-      --menu-trigger-padding: var(--space-2);
+      --menu-trigger-padding: 0;
       --menu-trigger-height: 2rem;
     }
 

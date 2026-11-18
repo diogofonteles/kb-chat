@@ -318,8 +318,15 @@ export class MediaListPage {
   protected readonly playingId = computed(() =>
     this.engine.playing() ? (this.engine.source()?.id ?? null) : null,
   );
-  protected readonly listPlaying = computed(() =>
-    this.items().some((item) => item.id === this.playingId()),
+  /** The list's ▶ (or 🔀) started what plays: only then the header's ▶ is ⏸ (a playlist's). */
+  protected readonly listPlaying = computed(
+    () =>
+      this.items().some((item) => item.id === this.playingId()) &&
+      this.playNow.playingList() === this.listKey(),
+  );
+  /** This collection's list, as the header's ▶ names it to PlayNow. */
+  private readonly listKey = computed(
+    () => `midia:${this.chat.topicSlug() ?? ''}`,
   );
   protected readonly playAllLabel = computed(() =>
     this.listPlaying()
@@ -503,15 +510,21 @@ export class MediaListPage {
 
   /** The header's ▶: pauses what of this list plays, or plays its first ready audio. */
   protected playAll(): void {
-    const playing = this.items().find((item) => item.id === this.playingId());
-    const item = playing ?? this.firstPlayable();
-    if (item) this.playNow.play(item);
+    const playing = this.listPlaying()
+      ? this.items().find((item) => item.id === this.playingId())
+      : undefined;
+    if (playing) {
+      this.playNow.play(playing);
+      return;
+    }
+    const item = this.firstPlayable();
+    if (item) this.playNow.playList(this.listKey(), item);
   }
 
   protected playAny(): void {
     const ready = this.visible().filter((item) => item.status === 'ready');
     const item = ready[Math.floor(Math.random() * ready.length)];
-    if (item) this.playNow.play(item);
+    if (item) this.playNow.playList(this.listKey(), item);
   }
 
   protected headerAction(id: string): void {

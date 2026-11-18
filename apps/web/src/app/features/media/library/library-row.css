@@ -4,9 +4,11 @@
 :host {
   position: relative;
   display: grid;
+  /* v2 · media-library: # 24 · cover 40 · title · collection 180 · status 220 · length 44 ·
+     ⋯ 18, 16 apart (the title 12 from its cover). */
   grid-template-columns:
     1.5rem 2.5rem minmax(0, 1fr)
-    11.25rem 13.75rem 2.75rem 2rem;
+    11.25rem 13.75rem 2.75rem 1.125rem;
   grid-template-rows: auto auto;
   grid-template-areas:
     'lead art title topic status duration actions'
@@ -170,6 +172,7 @@ a.main:focus-visible {
 
 .title {
   display: block;
+  margin-inline-start: -0.25rem;
   padding-top: var(--space-2);
   overflow: hidden;
   font-size: var(--text-item);
@@ -201,6 +204,7 @@ a.main:focus-visible {
 .byline {
   grid-area: byline;
   align-self: start;
+  margin-inline-start: -0.25rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -352,7 +356,10 @@ app-menu-button {
 /* A narrow table (the right panel open, a small window): the collection gives way first. */
 @container library-table (max-width: 52rem) {
   :host {
-    grid-template-columns: 1.5rem 2.5rem minmax(0, 1fr) 10.625rem 2.75rem 2rem;
+    grid-template-columns: 1.5rem 2.5rem minmax(
+        0,
+        1fr
+      ) 10.625rem 2.75rem 1.125rem;
     grid-template-areas:
       'lead art title status duration actions'
       'lead art byline status duration actions';
@@ -564,9 +571,17 @@ app-menu-button {
     display: none;
   }
 
+  /* v2 · media-library@mobile: the 20 ⋯ on the row's end (16 from the screen's edge), its
+     44 target reaching past it. */
   app-menu-button {
     --menu-trigger-min: var(--target);
     --menu-trigger-height: var(--target);
+    margin-inline-end: -0.75rem;
+  }
+
+  .actions ui-icon ::ng-deep svg {
+    width: 1.25rem;
+    height: 1.25rem;
   }
 }
 

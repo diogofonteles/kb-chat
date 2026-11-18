@@ -118,6 +118,8 @@ import { UiIcon } from '@ui/icon.js';
 
 /** The library's own colour, its cover's (v2 media-library LIB_TINT; library-page.css). */
 const LIBRARY_TINT = '#7a3d22';
+/** The library's list, as the header's ▶ names it to PlayNow. */
+const LIST_KEY = 'library';
 
 /** The shell's phone layout (chat-page: desktop from 1024 px). */
 const PHONE_QUERY = '(max-width: 1023px)';
@@ -707,7 +709,11 @@ export class LibraryPage {
       ? null
       : (this.items().find((item) => item.id === id) ?? null);
   });
-  protected readonly listPlaying = computed(() => this.playingItem() !== null);
+  /** The list's ▶ (or 🔀) started what plays: only then the header's ▶ is ⏸ (a playlist's). */
+  protected readonly listPlaying = computed(
+    () =>
+      this.playingItem() !== null && this.playNow.playingList() === LIST_KEY,
+  );
   protected readonly playAllLabel = computed(() =>
     this.listPlaying()
       ? $localize`:@@library.pauseList:Pausar a lista`
@@ -919,8 +925,13 @@ export class LibraryPage {
 
   /** The header's ▶: pauses what of this list plays, or plays its first ready media. */
   protected playAll(): void {
-    const item = this.playingItem() ?? this.firstPlayable();
-    if (item) this.playNow.play(item);
+    const playing = this.listPlaying() ? this.playingItem() : null;
+    if (playing) {
+      this.playNow.play(playing);
+      return;
+    }
+    const item = this.firstPlayable();
+    if (item) this.playNow.playList(LIST_KEY, item);
   }
 
   /* ---------- Choices (BR-7) ---------- */
@@ -1038,7 +1049,7 @@ export class LibraryPage {
   protected playAny(): void {
     const ready = this.items().filter((item) => item.status === 'ready');
     const item = ready[Math.floor(Math.random() * ready.length)];
-    if (item) this.playNow.play(item);
+    if (item) this.playNow.playList(LIST_KEY, item);
   }
 
   protected headerAction(id: string): void {
