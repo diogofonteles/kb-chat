@@ -201,6 +201,8 @@ const SHOWN = 3;
       outline-offset: 2px;
     }
 
+    /* Cover and text on a row; the action beside them while the text keeps its room (11rem),
+       else on its own row under them, never squeezing the text. */
     .card {
       position: relative;
       display: flex;
@@ -213,37 +215,51 @@ const SHOWN = 3;
       background: var(--overlay-1);
     }
 
+    .card > ui-cover {
+      flex: none;
+      align-self: flex-start;
+    }
+
     .body {
       display: grid;
-      flex: 1;
+      flex: 1 1 11rem;
       gap: var(--space-1);
       min-width: 0;
     }
 
+    /* A long title takes two lines, then "…". */
     .name {
+      display: -webkit-box;
       overflow: hidden;
       font-size: var(--text-sm);
       font-weight: 700;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
     }
 
+    /* The pill, then the words on the text's whole width: three lines at most. */
     .line {
-      display: flex;
-      flex-wrap: nowrap;
-      align-items: center;
-      gap: var(--space-1) var(--space-2);
-      min-width: 0;
+      display: -webkit-box;
+      overflow: hidden;
+      font-size: var(--text-xs);
+      line-height: 1.5;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+    }
+
+    .line ui-pill {
+      display: inline-flex;
+      margin-inline-end: var(--space-2);
+      vertical-align: middle;
     }
 
     .state {
-      min-width: 0;
       margin: 0;
-      overflow: hidden;
       color: var(--color-text-muted);
-      font-size: var(--text-xs);
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
     app-transcribe-with-groq {
@@ -403,8 +419,12 @@ function cardStateOf(
   item: ProcessingQueueItem,
   transcriber: string | null,
 ): string {
+  // A failure with its own reason says it (the stage, then why; clamped to three lines);
+  // one that only "did not finish" names the stage (media-library: "Falhou · conversão").
   if (item.state === 'failed' && item.stage)
-    return STAGE_NAMES[item.stage]().toLocaleLowerCase('pt-BR');
+    return item.failure && item.failure !== 'work'
+      ? queueStateText(item)
+      : STAGE_NAMES[item.stage]().toLocaleLowerCase('pt-BR');
   if (item.waitsForTranscriber)
     return transcriber === 'off'
       ? $localize`:@@queue.card.transcriberOff:transcritor desligado`

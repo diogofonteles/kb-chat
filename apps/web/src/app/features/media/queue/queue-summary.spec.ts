@@ -133,6 +133,30 @@ describe('QueueSummary (KBC-090)', () => {
     expect(screen.getByText('Falta validar as faixas')).toBeTruthy();
   });
 
+  it('says why a failure with its own reason failed, in its short words (owner, 2026-11-18)', async () => {
+    await setup(
+      [
+        {
+          ...item(1),
+          phase: 'attention',
+          state: 'failed',
+          stage: 'tracks',
+          failure: 'estimate-rose',
+          action: 'retry',
+        },
+      ],
+      0,
+    );
+    expect(
+      screen.getByText(
+        'Faixas com IA: A estimativa de custo subiu e a análise não rodou. Nada foi cobrado.',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: 'Tentar de novo: Áudio 1' }),
+    ).toBeTruthy();
+  });
+
   it('offers Groq to an audio waiting for the transcriber when Groq may take it (KBC-128 AC-2)', async () => {
     await setup(
       [

@@ -35,6 +35,9 @@ async function shoot(page: Page, name: string): Promise<void> {
     });
 }
 
+/** `KBC_ATTENTION_SHOT=<path prefix>` saves the failed card (owner report, 2026-11-18). */
+const shotsOfCard = process.env['KBC_ATTENTION_SHOT'];
+
 const LIBRARY = ['search', 'media', 'media-library'];
 const viewportOf = () => test.info().project.use.viewport ?? null;
 const wide = () => (viewportOf()?.width ?? 0) >= 1024;
@@ -545,6 +548,110 @@ test('AC-1, AC-2, BR-3: on a phone one card sums up the attention, and the list 
   await shoot(page, 'media-library-attention-phone');
   await card.click();
   await expect(page).toHaveURL(/\/fila/);
+  await page.context().close();
+});
+
+/** A failed card with a long title and a long reason (owner report, 2026-11-18). */
+const LONG_TITLE =
+  '02 - artistas e artesãos da tradição hermética no encontro de outono, segunda parte';
+const LONG_FAILURE = {
+  state: 'failed',
+  stage: 'tracks',
+  failure: 'estimate-rose',
+  action: 'retry',
+  retryStage: 'tracks',
+  title: LONG_TITLE,
+};
+
+/** How many lines a block of text takes, by its height and its line height. */
+const linesOf = (element: Locator) =>
+  element.evaluate((node) => {
+    const style = getComputedStyle(node);
+    return Math.round(
+      node.getBoundingClientRect().height / parseFloat(style.lineHeight),
+    );
+  });
+
+test('owner 2026-11-18: a failed card with a long title and reason keeps its text whole, its action out of the way', async ({
+  browser,
+}) => {
+  const page = await listener(
+    browser,
+    [collection],
+    [...LIBRARY, 'media-upload', 'media-edit'],
+  );
+  const waiting = { phase: 'next', state: 'queued', waitsForTranscriber: true };
+  await page.route('**/api/v1/media/processing', (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          queueLine(1, LONG_FAILURE),
+          queueLine(2, waiting),
+          queueLine(3, { phase: 'attention', action: 'validate', step: 3 }),
+        ],
+        active: 0,
+        transcriber: 'off',
+        transcriberOffSince: null,
+      },
+    }),
+  );
+  await openLibrary(page, collection);
+  if (!desktop(page)) {
+    // A phone sums it up in one card: its words take the card's width, on few lines.
+    const phone = page.getByRole('link', {
+      name: /3 itens precisam de atenção/,
+    });
+    await expect(phone).toBeVisible();
+    const text = phone.locator('.body');
+    const [card, body] = await Promise.all([
+      phone.boundingBox(),
+      text.boundingBox(),
+    ]);
+    expect(body?.width ?? 0).toBeGreaterThanOrEqual(0.6 * (card?.width ?? 0));
+    expect(await linesOf(phone.locator('.state'))).toBeLessThanOrEqual(3);
+    if (shotsOfCard) await phone.screenshot({ path: `${shotsOfCard}-390.png` });
+    await page.context().close();
+    return;
+  }
+  const attention = page.getByRole('region', {
+    name: 'Precisa da sua atenção',
+  });
+  const cards = attention.getByRole('listitem');
+  const failed = cards.filter({ hasText: 'Falhou' });
+  await expect(failed.getByText(LONG_TITLE)).toBeVisible();
+  await expect(
+    failed.getByText(
+      'Faixas com IA: A estimativa de custo subiu e a análise não rodou. Nada foi cobrado.',
+    ),
+  ).toBeVisible();
+  // The title: two lines at most; the reason: three at most, on the text's whole width.
+  expect(await linesOf(failed.locator('.name'))).toBeLessThanOrEqual(2);
+  expect(await linesOf(failed.locator('.line'))).toBeLessThanOrEqual(3);
+  const [card, body, action] = await Promise.all([
+    failed.boundingBox(),
+    failed.locator('.body').boundingBox(),
+    failed
+      .getByRole('link', { name: `Tentar de novo: ${LONG_TITLE}` })
+      .boundingBox(),
+  ]);
+  if (!card || !body || !action) throw new Error('no box to measure');
+  expect(body.width).toBeGreaterThanOrEqual(0.6 * card.width);
+  // The action beside the text or under it, never over it.
+  expect(
+    action.x >= body.x + body.width - 0.5 ||
+      action.y >= body.y + body.height - 0.5,
+  ).toBe(true);
+  expect(action.x + action.width).toBeLessThanOrEqual(
+    card.x + card.width + 0.5,
+  );
+  // The strip's cards keep one width.
+  const widths = await cards.evaluateAll((items) =>
+    items
+      .filter((item) => item.getBoundingClientRect().width > 0)
+      .map((item) => Math.round(item.getBoundingClientRect().width)),
+  );
+  expect(new Set(widths).size).toBe(1);
+  if (shotsOfCard) await failed.screenshot({ path: `${shotsOfCard}-1440.png` });
   await page.context().close();
 });
 
