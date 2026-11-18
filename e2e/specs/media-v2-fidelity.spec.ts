@@ -55,10 +55,13 @@ async function bookmark(
   expect(made.status(), await made.text()).toBeLessThan(300);
 }
 
-async function openPlayer(page: Page): Promise<void> {
-  await page.goto(`/midia/${lecture.id}`);
+async function openPlayer(
+  page: Page,
+  media: UploadedMedia = lecture,
+): Promise<void> {
+  await page.goto(`/midia/${media.id}`);
   await expect(
-    page.getByRole('heading', { name: lecture.title, level: 1 }),
+    page.getByRole('heading', { name: media.title, level: 1 }),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Tocar', exact: true }),
@@ -337,10 +340,18 @@ test('the panel tabs, the queue button, the titled speed menu, ⋯ whole, the di
   // Timer para dormir: ✕ and "Fechar"; a choice starts it and the moon turns green.
   await menu.getByRole('menuitem', { name: 'Timer para dormir' }).click();
   const sleep = page.getByRole('dialog', { name: 'Timer para dormir' });
-  // ✕ and "Fechar" on a desktop; the phone's sheet has its "Fechar" (mOver: no ✕).
+  // ✕ and "Fechar" on a desktop; the phone's sheet shows neither (mOver), its ✕ stays for
+  // assistive tech, out of sight until focused.
   await expect(sleep.getByRole('button', { name: 'Fechar' })).toHaveCount(
     desktop(page) ? 2 : 1,
   );
+  if (!desktop(page)) {
+    const hidden = sleep.getByRole('button', { name: 'Fechar' });
+    expect((await hidden.boundingBox())?.width ?? 0).toBeLessThanOrEqual(1);
+    // Reached with the keyboard, it shows.
+    await tabTo(page, hidden);
+    expect((await hidden.boundingBox())?.width ?? 0).toBeGreaterThan(20);
+  }
   await expectInsideViewport(page, sleep);
   await sleep.getByRole('button', { name: 'No fim desta mídia' }).click();
   await expect(sleep).toBeHidden();
@@ -359,7 +370,7 @@ test('the panel tabs, the queue button, the titled speed menu, ⋯ whole, the di
     await expect(moon).toHaveClass(/\bon\b/);
   }
 
-  // Atalhos de teclado: a switch, ✕ and "Fechar".
+  // Atalhos de teclado: a switch, ✕ and "Fechar" (the phone's sheet: the scrim).
   await more.click();
   await page.getByRole('menuitem', { name: /Atalhos de teclado/ }).click();
   const keys = page.getByRole('dialog', { name: 'Atalhos de teclado' });
@@ -370,7 +381,12 @@ test('the panel tabs, the queue button, the titled speed menu, ⋯ whole, the di
   await onOff.click();
   await expect(onOff).toBeChecked();
   await expectInsideViewport(page, keys);
-  await keys.getByRole('button', { name: 'Fechar' }).first().click();
+  if (desktop(page)) {
+    await keys.getByRole('button', { name: 'Fechar' }).last().click();
+  } else {
+    // A tap on the scrim above the sheet closes it (the sheet has no "Fechar").
+    await page.mouse.click(195, 24);
+  }
   await expect(keys).toBeHidden();
 
   if (!desktop(page)) return;
@@ -425,4 +441,231 @@ test('the panel tabs, the queue button, the titled speed menu, ⋯ whole, the di
   await expect(
     page.getByRole('heading', { name: lecture.title, level: 1 }),
   ).toBeInViewport();
+});
+
+/** Tabs until `target` has the focus (a dozen stops at most). */
+async function tabTo(page: Page, target: Locator): Promise<void> {
+  for (let step = 0; step < 12; step++) {
+    if (await target.evaluate((el) => el === document.activeElement)) return;
+    await page.keyboard.press('Tab');
+  }
+  await expect(target).toBeFocused();
+}
+
+/** The box of something on screen (it must be there). */
+async function boxOf(
+  target: Locator,
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  const box = await target.boundingBox();
+  if (!box) throw new Error('not on screen');
+  return box;
+}
+
+test('where the frame puts things: menus over the action row, a smooth line, nothing marked before playing, a centred phone row, "Fechar o player" in ⋯', async ({
+  page,
+}) => {
+  // A media of its own: never heard, one bookmark.
+  const owner = await ownerApi();
+  const fresh = await uploadReady(owner, {
+    title: `Aula nova ${uniqueTag()}`,
+    seconds: 120,
+  });
+  await seedTranscript(owner, { id: fresh.id, raw: rawOf(LINES) });
+  const made = await owner.post(`/api/v1/media/${fresh.id}/bookmarks`, {
+    data: { id: crypto.randomUUID(), positionMs: 12_000, note: 'onde' },
+    headers: CSRF,
+  });
+  expect(made.status(), await made.text()).toBeLessThan(300);
+  await owner.dispose();
+  await openPlayer(page, fresh);
+  const player = page.locator('app-media-player');
+  const play = player.locator('.play');
+
+  // Opened for the first time and not played: no line is the current one yet.
+  await expect(
+    page.locator('app-transcript-panel li.segment.active'),
+  ).toHaveCount(0);
+
+  // The line is smooth at rest; the bookmark shows on it once it is aimed at.
+  const ticks = page.locator('app-seek-slider .mark:visible');
+  await expect(ticks).toHaveCount(0);
+  const slider = page
+    .locator('app-seek-slider:visible')
+    .getByRole('slider', { name: 'Posição' });
+  await slider.focus();
+  await expect(ticks).toHaveCount(1);
+  await slider.blur();
+
+  // A line's time plays from it, and marks it (the phone's card shows the lines only).
+  if (desktop(page)) {
+    await page
+      .getByRole('list', { name: 'Trechos da transcrição' })
+      .getByRole('button', { name: /0:12|12 segundos/ })
+      .first()
+      .click();
+  } else {
+    await play.click();
+  }
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThan(desktop(page) ? 11.5 : 0.2);
+  await expect(
+    page.locator('app-transcript-panel li.segment.active'),
+  ).toHaveCount(1);
+  await page.getByRole('button', { name: 'Pausar', exact: true }).click();
+
+  if (desktop(page)) {
+    const row = await boxOf(play);
+    // The speed menu covers its pill from the row's top (speedMenu at y = the row).
+    await page
+      .getByRole('button', { name: /Velocidade/ })
+      .first()
+      .click();
+    const speeds = await boxOf(page.getByRole('menu'));
+    expect(Math.abs(speeds.y - row.y)).toBeLessThanOrEqual(2);
+    await page.keyboard.press('Escape');
+    // ⋯ from the row's top, 40 px left of its button, whole on screen.
+    const more = page.getByRole('button', { name: 'Mais opções' });
+    const trigger = await boxOf(more);
+    await more.click();
+    const menu = page.getByRole('menu');
+    const box = await boxOf(menu);
+    expect(Math.abs(box.x - (trigger.x - 40))).toBeLessThanOrEqual(2);
+    expect(box.y).toBeLessThanOrEqual(row.y + 1);
+    await expectInsideViewport(page, menu);
+    await page.keyboard.press('Escape');
+    // The note opens over the row too, 32 px left of 🔖.
+    const mark = page.getByRole('button', { name: 'Marcar este trecho' });
+    const markBox = await boxOf(mark);
+    await mark.click();
+    const note = page.locator('app-bookmark-note .note');
+    const noteBox = await boxOf(note);
+    expect(Math.abs(noteBox.y - row.y)).toBeLessThanOrEqual(2);
+    expect(Math.abs(noteBox.x - (markBox.x - 32))).toBeLessThanOrEqual(2);
+    await page.keyboard.press('Escape');
+    // The player bar has no ✕ (lib.js playerBar).
+    await expect(
+      page
+        .getByRole('region', { name: 'Mini-player' })
+        .getByRole('button', { name: 'Fechar o player' }),
+    ).toHaveCount(0);
+  } else {
+    // A timer on keeps ▶ in the middle of the phone's row (pMobile o.sleepOn).
+    await page.getByRole('button', { name: 'Mais opções' }).click();
+    await page.getByRole('menuitem', { name: 'Timer para dormir' }).click();
+    await page
+      .getByRole('dialog', { name: 'Timer para dormir' })
+      .getByRole('button', { name: 'No fim desta mídia' })
+      .click();
+    await expect(player.locator('.sleep-face')).toBeVisible();
+    const box = await boxOf(play);
+    const width = page.viewportSize()?.width ?? 0;
+    expect(Math.abs(box.x + box.width / 2 - width / 2)).toBeLessThanOrEqual(2);
+  }
+
+  // "Fechar o player" waits in ⋯ at both widths: it stops and the bar goes.
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  await page.getByRole('menuitem', { name: 'Fechar o player' }).click();
+  await expect(page.getByRole('region', { name: 'Mini-player' })).toHaveCount(
+    0,
+  );
+  expect(
+    await page.locator('[data-media-engine]').getAttribute('src'),
+  ).toBeNull();
+});
+
+/** The tops of a sheet's rows, in order. */
+async function rowTops(rows: Locator): Promise<number[]> {
+  return rows.evaluateAll((all) =>
+    all.map((el) => Math.round(el.getBoundingClientRect().top)),
+  );
+}
+
+/** Every row 4 below the one before (sheet(kids): gap 4), each 44 high at least. */
+async function expectRowsFourApart(rows: Locator): Promise<void> {
+  await expect(rows.nth(2)).toBeVisible();
+  const tops = await rowTops(rows);
+  const height = (await boxOf(rows.first())).height;
+  expect(height).toBeGreaterThanOrEqual(44);
+  expect(tops.length).toBeGreaterThan(2);
+  for (let index = 1; index < tops.length; index += 1)
+    expect(
+      Math.abs((tops[index] ?? 0) - (tops[index - 1] ?? 0) - height - 4),
+    ).toBeLessThanOrEqual(1);
+}
+
+test("the phone's rhythm: bookmarks under their count, sheets' rows 4 apart, the keys under their switch, a 56 mini player", async ({
+  page,
+}) => {
+  test.skip(desktop(page), 'the phone frames (390)');
+  const owner = await ownerApi();
+  const tag = uniqueTag();
+  await bookmark(owner, 7_000, `ritmo ${tag}`);
+  await owner.dispose();
+
+  // "Meus marcadores": the first row right under the count's row (12 below its ▶ 48).
+  await page.goto('/midia/marcadores');
+  await expect(page.getByText(`ritmo ${tag}`)).toBeVisible();
+  const play = page.getByRole('button', { name: /^Tocar .* de \d+:\d\d$/ });
+  const playBox = await boxOf(play);
+  const first = await boxOf(
+    page.getByRole('main').getByRole('listitem').first(),
+  );
+  expect(
+    Math.abs(first.y - (playBox.y + playBox.height + 12)),
+  ).toBeLessThanOrEqual(1);
+
+  // The green ▶ opens the full-screen player, playing; paused, its sheets open.
+  await play.click();
+  await expect(page).toHaveURL(/\/midia\/[0-9a-f-]{36}$/);
+  await expect.poll(async () => (await audioState(page)).paused).toBe(false);
+  await page.getByRole('button', { name: 'Pausar', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  const more = page.getByRole('menu');
+  await expectRowsFourApart(more.locator('[role^="menuitem"]'));
+  await expectWhole(page, more);
+  await page.keyboard.press('Escape');
+  await expect(more).toBeHidden();
+
+  await page
+    .getByRole('button', { name: /Velocidade/ })
+    .first()
+    .click();
+  const speeds = page.getByRole('menu');
+  await expectRowsFourApart(speeds.locator('[role^="menuitem"]'));
+  await page.keyboard.press('Escape');
+  await expect(speeds).toBeHidden();
+
+  // Atalhos: the keys 12 under the switch's words (mOver 'keys').
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  await page.getByRole('menuitem', { name: /Atalhos de teclado/ }).click();
+  const keys = page.getByRole('dialog', { name: 'Atalhos de teclado' });
+  const words = await boxOf(keys.locator('.setting-name'));
+  const firstKey = await boxOf(keys.locator('.row').first());
+  expect(
+    Math.abs(firstKey.y - (words.y + words.height + 12)),
+  ).toBeLessThanOrEqual(1);
+  await page.keyboard.press('Escape');
+  await expect(keys).toBeHidden();
+
+  // Playing again, ⌄ leaves for the library; the mini player is 56 high, ❚❚ 12 + 12 from
+  // its edge.
+  await page.getByRole('button', { name: 'Tocar', exact: true }).click();
+  await expect.poll(async () => (await audioState(page)).paused).toBe(false);
+  await page.getByRole('link', { name: /^← (Biblioteca|Mídia)$/ }).click();
+  await expect(page).not.toHaveURL(/\/midia\/[0-9a-f-]{36}/);
+  const mini = page.getByRole('region', { name: 'Mini-player' });
+  await expect(mini).toBeVisible();
+  const bar = await boxOf(mini);
+  expect(Math.round(bar.height)).toBe(56);
+  const toggle = await boxOf(
+    mini.getByRole('button', { name: /^(Tocar|Pausar)$/ }),
+  );
+  expect(
+    Math.abs(toggle.x + toggle.width / 2 - (bar.x + bar.width - 24)),
+  ).toBeLessThanOrEqual(1);
+  // A tap on the card still opens the full-screen player.
+  await mini.click({ position: { x: 24, y: 24 } });
+  await expect(page).toHaveURL(/\/midia\/[0-9a-f-]{36}/);
 });
