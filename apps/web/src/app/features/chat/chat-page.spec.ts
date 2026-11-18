@@ -292,7 +292,7 @@ describe('ChatPage', () => {
     await ask('xyzzy', view);
     view.http.expectOne(SEARCH_URL).flush(aResponse([]));
     await view.fixture.whenStable();
-    expect(screen.getByText('Nada encontrado para "xyzzy".')).toBeTruthy();
+    expect(screen.getByText('Nada encontrado para “xyzzy”.')).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', { name: 'Buscar por significado' }),
     );
@@ -753,7 +753,7 @@ describe('ChatPage side panel (KBC-005)', () => {
     expect(
       items.map((b) => b.textContent?.replace(/\s+/g, ' ').trim()),
     ).toEqual([
-      'quais são os princípios IA · Hermetismo',
+      'quais são os princípios Pesquisa com IA · Hermetismo',
       'lei do ritmo Busca · Hermetismo',
     ]);
   });

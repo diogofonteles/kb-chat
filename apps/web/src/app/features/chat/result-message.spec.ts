@@ -34,7 +34,7 @@ describe('ResultMessage', () => {
       providers: [provideZonelessChangeDetection()],
       inputs: { message: base },
     });
-    expect(screen.getByText('Nada encontrado para "xyzzy".')).toBeTruthy();
+    expect(screen.getByText('Nada encontrado para “xyzzy”.')).toBeTruthy();
     expect(
       screen.queryByRole('button', { name: 'Buscar por significado' }),
     ).toBeNull();
@@ -50,7 +50,7 @@ describe('ResultMessage', () => {
       on: { filtersChanged },
     });
     expect(
-      screen.getByText('Nada encontrado para "xyzzy" com estes filtros.'),
+      screen.getByText('Nada encontrado para “xyzzy” com estes filtros.'),
     ).toBeTruthy();
     // Both the active chip and the empty-state suggestion remove the filter.
     const removers = screen.getAllByRole('button', {

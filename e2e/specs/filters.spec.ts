@@ -154,7 +154,7 @@ test.describe('paging and empty filters', () => {
     await page.getByRole('checkbox', { name: /Texto\/apostila/ }).check();
     await page.getByRole('button', { name: 'Aplicar' }).click();
     await expect(
-      page.getByText('Nada encontrado para "ritmo" com estes filtros.'),
+      page.getByText('Nada encontrado para “ritmo” com estes filtros.'),
     ).toBeVisible();
     // cmEmpty: a phone's shorter "Remover o filtro de tipo".
     await page

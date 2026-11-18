@@ -87,7 +87,7 @@ test('AC-5: no results offers a semantic search', async ({ page }) => {
   await (await modeRadio(page, 'Palavras exatas')).check();
   await ask(page, 'xyzzy plugh');
   await expect(
-    page.getByText('Nada encontrado para "xyzzy plugh".'),
+    page.getByText('Nada encontrado para “xyzzy plugh”.'),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Buscar por significado' }).click();
   // The results' head says the mode the search ran in (the search page has no question

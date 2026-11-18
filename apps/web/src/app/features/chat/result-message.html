@@ -49,6 +49,11 @@
           <span class="took">{{ seconds() | number: '1.1-1' }} s</span>
         }
       </p>
+    } @else if (message().status === 'loading') {
+      <!-- Where the count will be, at the end of the title's row (chat-results-loading). -->
+      <p class="summary status" i18n="@@message.searching">
+        Buscando em {{ topicTitle() }}…
+      </p>
     }
   </header>
 
@@ -251,9 +256,6 @@
     </div>
   } @else {
     <div class="answer">
-      <p class="status" i18n="@@message.searching">
-        Buscando em {{ topicTitle() }}…
-      </p>
       <div class="skeletons" aria-hidden="true">
         @for (row of skeletonRows; track row) {
           <span class="skeleton-row">

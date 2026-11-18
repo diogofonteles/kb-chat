@@ -199,11 +199,11 @@ export class ResultMessage {
   protected readonly skeletonRows = [0, 1, 2, 3, 4];
   protected readonly emptyTitle = computed(
     () =>
-      $localize`:@@message.empty:Nada encontrado para "${this.message().question}:question:".`,
+      $localize`:@@message.empty:Nada encontrado para “${this.message().question}:question:”.`,
   );
   protected readonly emptyFilteredTitle = computed(
     () =>
-      $localize`:@@message.emptyFiltered:Nada encontrado para "${this.message().question}:question:" com estes filtros.`,
+      $localize`:@@message.emptyFiltered:Nada encontrado para “${this.message().question}:question:” com estes filtros.`,
   );
 
   protected readonly passageKey = passageKey;

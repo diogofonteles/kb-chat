@@ -309,7 +309,7 @@ test('the states of the results: nothing found and the error, each with its acti
   await page.getByLabel('Sua pergunta').fill('xqzw kplvm');
   await page.getByRole('button', { name: 'Buscar', exact: true }).click();
   await expect(
-    page.getByText('Nada encontrado para "xqzw kplvm".'),
+    page.getByText('Nada encontrado para “xqzw kplvm”.'),
   ).toBeVisible();
   await shot(page, 'chat-results-none');
   await page.route('**/searches', (route) =>
