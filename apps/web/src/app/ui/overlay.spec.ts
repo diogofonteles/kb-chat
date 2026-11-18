@@ -25,6 +25,29 @@ describe('placeOverlay (D5: menus never clipped, always on screen)', () => {
     ).toMatchObject({ top: 138, left: 40, side: 'below' });
   });
 
+  it('opens over its trigger from the offset, and slides up to stay whole (v2 player menus)', () => {
+    const desktop = { width: 1440, height: 900 };
+    expect(
+      placeOverlay({
+        anchor: anchor({ left: 855, top: 401, width: 40 }),
+        size: { width: 300, height: 440 },
+        viewport: desktop,
+        align: 'start',
+        side: 'over',
+        offset: { x: -40, y: -8 },
+      }),
+    ).toMatchObject({ top: 393, left: 815, side: 'over' });
+    const low = placeOverlay({
+      anchor: anchor({ left: 855, top: 700, width: 40 }),
+      size: { width: 300, height: 440 },
+      viewport: desktop,
+      align: 'start',
+      side: 'over',
+      offset: { x: -40, y: -8 },
+    });
+    expect(low.top).toBe(900 - 8 - 440);
+  });
+
   it('flips above when there is no room below and more above', () => {
     const where = placeOverlay({
       anchor: anchor({ left: 40, top: 760 }),

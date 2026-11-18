@@ -27,6 +27,7 @@ import { UiIcon } from './icon.js';
       [class.ui-dialog--actions]="!!primaryLabel()"
       [class.ui-dialog--short]="short()"
       [style.--ui-dialog-width.px]="width()"
+      [style.--ui-dialog-top.px]="top()"
       [attr.aria-labelledby]="titleId()"
       (close)="closed.emit()"
       (pointerdown)="pressedOnBackdrop = $event.target === $event.currentTarget"
@@ -84,6 +85,11 @@ export class UiDialog {
   /** The title's id (aria-labelledby); unique on the page. */
   readonly titleId = input.required<string>();
   readonly width = input(560);
+  /**
+   * Where a desktop frame puts the dialog's top on a 900 px high screen (modal o.y); kept
+   * from the middle on other heights, and never off it. Centred without it.
+   */
+  readonly top = input<number | null>(null);
   /** The phone header's action ("Criar", "Salvar"); empty keeps the footer on phones. */
   readonly primaryLabel = input('');
   readonly primaryDisabled = input(false);

@@ -1013,6 +1013,14 @@ select.ui-input option {
   flex-direction: column;
 }
 
+/* A frame's own top (modal o.y on 900 px): as far from the middle on any height. */
+@media (min-width: 1024px) {
+  .ui-dialog[style*='--ui-dialog-top'] {
+    margin-top: max(var(--space-8), calc(50dvh - 450px + var(--ui-dialog-top)));
+    margin-bottom: auto;
+  }
+}
+
 .ui-dialog__head {
   display: flex;
   align-items: flex-start;
@@ -1099,6 +1107,8 @@ select.ui-input option {
   .ui-dialog--short {
     top: auto;
     height: auto;
+    /* A frame's sheet height (sheet(kids, h)), when it is taller than the content. */
+    min-height: min(var(--ui-sheet-height, 0px), calc(100dvh - var(--space-6)));
     max-height: calc(100dvh - var(--space-6));
   }
 
@@ -1126,8 +1136,20 @@ select.ui-input option {
     padding: var(--space-2) var(--space-5) var(--space-4);
   }
 
+  /* The frames' sheets have no ✕ (mOver): it stays for assistive tech and the keyboard,
+     out of sight until it has the focus. */
   .ui-dialog--short .ui-dialog__close {
-    display: none;
+    position: absolute;
+    top: var(--space-3);
+    right: var(--space-4);
+  }
+
+  .ui-dialog--short .ui-dialog__close:not(:focus-visible) {
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .ui-dialog--short .ui-dialog__footer {
