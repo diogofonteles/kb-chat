@@ -205,10 +205,113 @@
   .question {
     font-size: 1.75rem;
   }
+
+  /* cmRow has no copies line: a narrow list opens a copy from the row's ⋯. */
+  .copy-column {
+    display: none;
+  }
 }
 
+/* cmResults: the search pill above says what was searched; the head keeps only the count
+   and the mode's pill. The question stays for screen readers. */
 @media (max-width: 1023px) {
-  .question {
-    font-size: 1.5rem;
+  .exchange {
+    gap: var(--space-2);
   }
+
+  .titles {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .results-head {
+    order: 1;
+  }
+
+  .answer {
+    display: contents;
+  }
+
+  .answer > :not(app-filter-bar, app-kinds-choice) {
+    order: 2;
+  }
+
+  .summary {
+    font-size: var(--text-meta);
+  }
+
+  /* The mode's pill stays, also for "Tudo": it is where a phone changes the mode. */
+  .summary .took,
+  .summary .sep {
+    display: none;
+  }
+}
+
+/* chat-results-off-topic: a lone best result's copies in a quiet card beside it. */
+.copy-column {
+  min-width: 0;
+  padding-top: 2.25rem;
+}
+
+.copy-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0.875rem;
+  border-radius: var(--radius-menu);
+  background: var(--overlay-1);
+}
+
+.copy-title {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+.copy-list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.copy-ref {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  min-height: var(--target);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.copy-ref:hover {
+  background: var(--overlay-2);
+}
+
+.copy-text {
+  display: grid;
+  min-width: 0;
+}
+
+.copy-name {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.copy-path {
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }

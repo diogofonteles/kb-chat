@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -21,15 +22,17 @@ import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import type { CitedSource } from '@features/chat/chat-store.js';
 import {
-  UiAvatar,
   UiButton,
   UiChip,
   UiCover,
   UiEmptyState,
   UiIcon,
   UiIconButton,
+  UiMenu,
+  UiMenuItem,
 } from '@ui/index.js';
 import { describeFacets } from '@core/i18n/facet-labels.js';
+import { coverGradient } from '@ui/cover.js';
 import {
   sectionIndex,
   splitIntoChunks,
@@ -49,8 +52,27 @@ const FEEDBACK_MS = 2000;
 
 const countMarks = (html: string): number => html.split('<mark>').length - 1;
 
+/**
+ * A subject's text without a first heading that only repeats its name: the page head says it
+ * already (chat-document-see-also, a stub subject is just "# Cabala").
+ */
+export function withoutTitleHeading(body: string, title: string): string {
+  const fold = (text: string) => text.trim().replace(/\s+/g, ' ').toLowerCase();
+  const match = /^\s*#{1,6}[ \t]+([^\n]*)\n?/.exec(body);
+  return match && fold(match[1] ?? '') === fold(title)
+    ? body.slice(match[0].length)
+    : body;
+}
+
 const foldText = (text: string): string =>
   text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+
+/** The share button's name by what its last tap did. */
+const SHARE_LABELS: Record<'idle' | 'copied' | 'failed', () => string> = {
+  idle: () => $localize`:@@panel.share:Compartilhar`,
+  copied: () => $localize`:@@panel.shareCopied:Título e resumo copiados`,
+  failed: () => $localize`:@@panel.shareFailed:Não consegui compartilhar`,
+};
 
 /** Index of the first chunk containing a term, or -1. */
 function firstChunkWith(
@@ -80,16 +102,18 @@ let nextPanel = 0;
 @Component({
   selector: 'app-document-panel',
   imports: [
+    NgTemplateOutlet,
     SeeAlsoSection,
     AuthorshipBadge,
     DocumentLevel,
-    UiAvatar,
     UiButton,
     UiChip,
     UiCover,
     UiEmptyState,
     UiIcon,
     UiIconButton,
+    UiMenu,
+    UiMenuItem,
   ],
   templateUrl: './document-panel.html',
   styleUrl: './document-panel.css',
@@ -100,6 +124,14 @@ let nextPanel = 0;
     '[attr.aria-labelledby]': 'labelledBy() ?? titleId',
     '[class.full]': 'full()',
     '[class.in-sheet]': 'inSheet()',
+    '[class.page-mode]': 'page()',
+    '[class.source-mode]': 'inSource()',
+    '[class.subject]': 'subject()',
+    '[class.failed-doc]': '!!document.error()',
+    '[class.phone]': 'phone()',
+    '[class.tools-stuck]': 'toolsStuck()',
+    '(scroll)': 'readerScrolled($event)',
+    '[style.--doc-tint]': 'tint()',
     '(keydown.escape)': 'closed.emit()',
   },
 })
@@ -108,6 +140,7 @@ export class DocumentPanel {
     inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly clipboard =
     inject(DOCUMENT).defaultView?.navigator.clipboard;
+  private readonly navigator = inject(DOCUMENT).defaultView?.navigator;
   private readonly heading =
     viewChild.required<ElementRef<HTMLHeadingElement>>('heading');
   private readonly bodyRef = viewChild<ElementRef<HTMLElement>>('body');
@@ -120,14 +153,23 @@ export class DocumentPanel {
   readonly canGoBack = input(false);
   /** The text sources of the AI answer that opened it, for "Fonte ‹ ›" (KBC-127 FR-1). */
   readonly sources = input<readonly CitedSource[]>([]);
+  /** The near-identical copies the search grouped with this document ("Cópias"). */
+  readonly copies = input<readonly DocumentRef[]>([]);
   /** Inside the phone's reading sheet: its tabs and handle replace "Fonte ‹ ›" and ✕. */
   readonly inSheet = input(false);
+  /** A phone's screen (cmDoc): "1 de 2 ⌃ ⌄" sits in the hero, not among the tools. */
+  readonly phone = input(false);
   /** The element that names it instead of its title (the selected tab of a reading sheet). */
   readonly labelledBy = input<string | null>(null);
   /** False while the reader moves between a sheet's tabs: the focus stays on the tab. */
   readonly focusTitle = input(true);
   /** A source of an answer, also without its list (the sheet): "Abrir documento". */
   readonly sourceMode = input(false);
+  /**
+   * The document page of the search on desktop (chat-document): the page fills the main
+   * panel and "Sobre este documento" is the right panel; ✕ sits at the end of the tools.
+   */
+  readonly page = input(false);
   /** "Perguntar à IA" only where the research view is available. */
   readonly canAskAi = input(false);
   readonly closed = output();
@@ -154,11 +196,20 @@ export class DocumentPanel {
   protected readonly title = computed(
     () => this.loaded()?.title ?? this.fallbackTitle(),
   );
+  /** A subject's synthesis (a concept's article): its shelves instead of "Sobre este documento". */
+  protected readonly subject = computed(() => !!this.loaded()?.concept);
   protected readonly facets = computed(() => {
     const doc = this.loaded();
     return doc ? describeFacets(doc) : '';
   });
   protected readonly titleId = `document-title-${nextPanel++}`;
+  /**
+   * The page head's colour: the cover's (v2 pageHeader tint); a neutral one while it loads or
+   * fails, when there is no cover yet (chat-document-loading, chat-document-error).
+   */
+  protected readonly tint = computed(() =>
+    this.loaded() ? coverGradient(this.title())[0] : 'var(--tint-search)',
+  );
   protected readonly full = linkedSignal({
     source: this.inSheet,
     computation: () => false,
@@ -174,6 +225,10 @@ export class DocumentPanel {
     if (this.inSheet() || !source) return null;
     return { position: at + 1, total: sources.length, n: source.n };
   });
+  protected readonly heroOccurrences = computed(
+    () =>
+      this.phone() && this.matches() > 0 && !this.inSheet() && !this.inSource(),
+  );
   protected readonly nextLabel = computed(() =>
     this.inSource()
       ? $localize`:@@source.nextPassage:Próximo trecho`
@@ -182,13 +237,16 @@ export class DocumentPanel {
   protected readonly conceptLine = computed(() =>
     (this.loaded()?.concepts ?? []).join(' · '),
   );
-  private readonly labels = injectAuthorshipLabels();
-  /** The avatar of "Autoria": the author's name, else the authorship's own label. */
-  protected readonly authorName = computed(() => {
-    const doc = this.loaded();
-    if (!doc) return '';
-    return doc.author ?? this.labels()[doc.authorship];
-  });
+  protected readonly labels = injectAuthorshipLabels();
+  /** "OA" for "Outros autores", "ML" for "Mestre Laércio": the first letters of two words. */
+  protected readonly authorInitials = computed(() =>
+    this.labels()
+      [this.loaded()?.authorship ?? 'outros-autores'].split(/\s+/)
+      .filter((word) => /^\p{L}/u.test(word) && word.length > 2)
+      .slice(0, 2)
+      .map((word) => word.charAt(0).toUpperCase())
+      .join(''),
+  );
   protected readonly failedTitle = computed(
     () =>
       $localize`:@@panel.failedTitle:Não foi possível abrir “${this.title()}:title:”`,
@@ -204,9 +262,13 @@ export class DocumentPanel {
     highlightTerms(this.highlight() ?? ''),
   );
   /** Long documents render a window of chunks to stay responsive (KBC-003). */
-  private readonly chunks = computed(() =>
-    splitIntoChunks(this.loaded()?.body ?? ''),
-  );
+  private readonly chunks = computed(() => {
+    const doc = this.loaded();
+    const body = doc?.body ?? '';
+    return splitIntoChunks(
+      this.subject() && doc ? withoutTitleHeading(body, doc.title) : body,
+    );
+  });
   /** Each chunk is rendered and highlighted once per document (cache reset with the chunks). */
   private readonly chunkCache = computed(() => {
     this.chunks();
@@ -280,12 +342,15 @@ export class DocumentPanel {
       );
     });
     // Scrolled into view when a document arrives and on ▲▼ only (never on "Continuar lendo").
+    // On arrival the page stays at its top while the mark is already in sight (chat-document:
+    // the cover, the tools and the first mark on one screen); ▲▼ centre it.
+    let arrived: unknown = null;
     afterRenderEffect(() => {
-      this.loaded();
+      const loaded = this.loaded();
       this.focusRequest();
-      untracked(() =>
-        this.marks()[this.current()]?.scrollIntoView({ block: 'center' }),
-      );
+      const block = loaded === arrived ? 'center' : 'nearest';
+      arrived = loaded;
+      untracked(() => this.marks()[this.current()]?.scrollIntoView({ block }));
     });
     // A section picked in the index scrolls into view once its chunk is rendered.
     afterRenderEffect(() => this.scrollToSection(this.pendingSection()));
@@ -338,6 +403,13 @@ export class DocumentPanel {
     this.pendingSection.set({ id: headingId(section.title) });
   }
 
+  /** ⋯ "Sobre este documento": where the text ends, its authorship, subjects and copies. */
+  protected goToAbout(): void {
+    const about = this.host.querySelector<HTMLElement>('.about');
+    about?.scrollIntoView({ block: 'start' });
+    about?.querySelector<HTMLElement>('.about-title')?.focus();
+  }
+
   protected async copyPassage(): Promise<void> {
     const block = this.marks()[this.current()]?.closest(BLOCK_SELECTOR);
     const text = block?.textContent?.trim();
@@ -348,6 +420,48 @@ export class DocumentPanel {
     } catch {
       this.flashCopy('failed');
     }
+  }
+
+  /**
+   * The page's tools lie on its head (actionBar) and stay at its top once the text scrolls
+   * under them ("Próxima ocorrência" always at hand): then they take the page's colour.
+   */
+  protected readonly toolsStuck = signal(false);
+
+  protected readonly readerScrolled = (event: Event): void => {
+    const reader = event.target as HTMLElement;
+    const tools = reader.querySelector<HTMLElement>('.actions');
+    const top = reader.getBoundingClientRect().top;
+    this.toolsStuck.set(
+      !!tools &&
+        reader.scrollTop > 0 &&
+        tools.getBoundingClientRect().top <= top + 1,
+    );
+  };
+
+  /** Compartilhar (actionBar): the system's share sheet, or the title and summary copied. */
+  private readonly shared = signal<'idle' | 'copied' | 'failed'>('idle');
+  protected readonly shareLabel = computed(() => SHARE_LABELS[this.shared()]());
+
+  protected async share(doc: {
+    title: string;
+    summary: string | null;
+  }): Promise<void> {
+    const text = [doc.title, doc.summary].filter(Boolean).join('\n\n');
+    try {
+      if (this.navigator?.share) {
+        await this.navigator.share({ title: doc.title, text });
+        return;
+      }
+      if (!this.clipboard) throw new Error('no clipboard');
+      await this.clipboard.writeText(text);
+      this.shared.set('copied');
+    } catch (error) {
+      // Closing the share sheet is no failure.
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      this.shared.set('failed');
+    }
+    setTimeout(() => this.shared.set('idle'), FEEDBACK_MS);
   }
 
   private flashCopy(state: CopyState): void {

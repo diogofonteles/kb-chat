@@ -18,9 +18,33 @@
         } @else {
           <span class="found">{{ found() }}</span>
           <span class="sep" aria-hidden="true"> · </span>
-          <ui-pill [tone]="message().mode === 'semantic' ? 'info' : 'muted'">{{
-            modeName()
-          }}</ui-pill>
+          <!-- The mode's pill opens the modes: the search runs again in the one chosen
+               (a desktop search page has no question box to choose it in). -->
+          <ui-menu
+            class="mode-menu"
+            label="Como buscar"
+            i18n-label="@@composer.mode"
+            [triggerLabel]="modeMenuLabel()"
+            [menuId]="headingId('mode')"
+            align="end"
+          >
+            <ui-pill
+              uiMenuTrigger
+              [class.muted-mode]="message().mode !== 'semantic'"
+              [tone]="message().mode === 'semantic' ? 'info' : 'muted'"
+              >{{ modeName() }}</ui-pill
+            >
+            @for (option of modes; track option.value) {
+              <button
+                uiMenuItem
+                type="button"
+                [checked]="option.value === message().mode"
+                (click)="chooseMode(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            }
+          </ui-menu>
           <span class="sep" aria-hidden="true"> · </span>
           <span class="took">{{ seconds() | number: '1.1-1' }} s</span>
         }
@@ -30,12 +54,7 @@
 
   @if (message().status === 'error') {
     <div class="answer error" role="alert">
-      <ui-empty-state
-        icon="xcircle"
-        [title]="error()"
-        text="Tente de novo."
-        i18n-text="@@message.errorText"
-      >
+      <ui-empty-state icon="xcircle" [title]="error()" [text]="errorAgain">
         <button
           uiButton="white"
           type="button"
@@ -63,6 +82,7 @@
           [order]="message().filterOrder"
           [topicNames]="topicNames()"
           [total]="current.total"
+          [items]="current.items"
           (filtersChange)="filtersChanged.emit($event)"
         />
       }
@@ -120,6 +140,52 @@
                 }
               </ol>
             </section>
+          } @else if (bestCopies(); as hit) {
+            <section
+              class="copy-column"
+              [attr.aria-labelledby]="headingId('copies')"
+            >
+              <div class="copy-card">
+                <h3
+                  class="copy-title"
+                  [id]="headingId('copies')"
+                  i18n="@@message.copiesOfBest"
+                >
+                  {hit.copies.length, plural,
+                    =1 {Cópia deste documento}
+                    other {Cópias deste documento}
+                  }
+                </h3>
+                <ul class="copy-list">
+                  @for (copy of hit.copies; track copy.id) {
+                    <li>
+                      <button
+                        type="button"
+                        class="copy-ref"
+                        (click)="
+                          opened.emit({
+                            id: copy.id,
+                            title: copy.title,
+                            topic: hit.topic,
+                          })
+                        "
+                      >
+                        <ui-cover
+                          [title]="copy.title"
+                          [size]="32"
+                          [label]="false"
+                          aria-hidden="true"
+                        />
+                        <span class="copy-text">
+                          <span class="copy-name">{{ copy.title }}</span>
+                          <span class="copy-path">{{ copy.id }}</span>
+                        </span>
+                      </button>
+                    </li>
+                  }
+                </ul>
+              </div>
+            </section>
           }
         </div>
         @if (message().moreFailed) {
@@ -152,7 +218,7 @@
                   type="button"
                   (click)="removeFilter(filter)"
                 >
-                  {{ filter.removeLabel }}
+                  {{ phone ? filter.removeShort : filter.removeLabel }}
                 </button>
               }
               @if (canTrySemantic()) {
@@ -215,6 +281,7 @@
     <app-result-card
       [hit]="item.hit"
       [best]="index === 0"
+      [copiesBeside]="index === 0 && !!bestCopies()"
       [active]="item.hit.id === activeId() || activeTracks().has(item.key)"
       [place]="places().get(item.hit.topic) ?? null"
       (opened)="opened.emit($event)"

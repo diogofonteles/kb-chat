@@ -7,27 +7,24 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: 0.0625rem var(--space-2);
-  border: 1px solid var(--color-border);
+  padding: 0.125rem 0.4375rem;
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: var(--color-surface);
-  color: var(--color-text);
+  background: var(--overlay-3);
+  color: var(--color-text-muted);
   font-family: var(--font-ui);
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1.5;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.4;
   white-space: nowrap;
 }
 
-/* The collection's core: filled, with its mark. */
+/* The v2 pills (bestCard): the collection's core tinted in the accent, with its mark; other
+   authors in the muted pill; a synthesis and an unclassified one keep their dashed and
+   dotted outlines, so the label, the mark and the shape tell them apart (BR-3). */
 [data-authorship='mestre-laercio'] {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-}
-
-[data-authorship='outros-autores'] {
-  border-color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  color: var(--color-accent-text);
 }
 
 [data-authorship='sintese'] {
@@ -39,4 +36,24 @@
   border-style: dotted;
   color: var(--color-text-muted);
   font-weight: 500;
+}
+
+/* A row of a table: the name in text, the main author in the accent (docRow, cmRow). */
+:host(.plain) .authorship-badge {
+  gap: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  font-weight: 400;
+}
+
+:host(.plain) [data-authorship='mestre-laercio'] {
+  color: var(--color-accent-text);
+}
+
+/* A source's meta line (sourcesTable, sourceCard): every author in the muted text. */
+:host(.plain.quiet) [data-authorship] {
+  color: var(--color-text-muted);
 }

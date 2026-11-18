@@ -55,6 +55,8 @@ export const DEPTH_LABELS: Record<DepthLevel, string> = {
 export interface ModeOption {
   readonly value: SearchMode;
   readonly label: string;
+  /** The chip's word in the question box (v2 · Conversa: Tudo, Palavras, Significado). */
+  readonly short: string;
   readonly help: string;
 }
 
@@ -62,16 +64,19 @@ export const MODE_OPTIONS: readonly ModeOption[] = [
   {
     value: 'all',
     label: $localize`:@@mode.all:Tudo`,
+    short: $localize`:@@mode.all:Tudo`,
     help: $localize`:@@mode.all.help:Combina palavras exatas e significado.`,
   },
   {
     value: 'exact',
     label: $localize`:@@mode.exact:Palavras exatas`,
+    short: $localize`:@@mode.exactShort:Palavras`,
     help: $localize`:@@mode.exact.help:Acha o termo como você escreveu.`,
   },
   {
     value: 'semantic',
     label: $localize`:@@mode.semantic:Por significado`,
+    short: $localize`:@@mode.semanticShort:Significado`,
     help: $localize`:@@mode.semantic.help:Acha ideias parecidas, mesmo com outras palavras.`,
   },
 ];

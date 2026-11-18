@@ -261,6 +261,13 @@ export class ResearchStore {
     this.ask(originalSweepQuestion(last.question), last.turnId);
   }
 
+  /** "Refazer" on the last answer: its question asked again, as a new turn after it. */
+  redo(): void {
+    const last = this.state().turns.at(-1);
+    if (!last || last.phase !== 'done') return;
+    this.ask(originalSweepQuestion(last.question));
+  }
+
   /**
    * "Parar": the server stops the agent, records the partial cost and saves the turn as
    * interrupted. The page shows and saves it at once (also with no text yet), and again with

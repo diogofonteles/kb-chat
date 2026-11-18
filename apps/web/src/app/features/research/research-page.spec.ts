@@ -11,7 +11,7 @@ import {
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { ResearchEvent } from '@kb-chat/contracts';
-import { fireEvent, render, screen } from '@testing-library/angular';
+import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { ResearchApi } from '@core/api/research-api.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { ChatPage } from '@features/chat/chat-page.js';
@@ -88,8 +88,16 @@ async function answer(page: Page, index: number, text: string) {
   await page.fixture.whenStable();
 }
 
+/**
+ * The v1 view switch became the scope chips (v2 · Conversa); a search page has none, and its
+ * way to the research is the top bar's ✦.
+ */
 async function switchTo(page: Page, name: string) {
-  fireEvent.click(screen.getByRole('radio', { name }));
+  const scope = screen.queryByRole('radiogroup', { name: 'Onde buscar' });
+  if (scope) fireEvent.click(within(scope).getByRole('radio', { name }));
+  else if (name === 'Pesquisa com IA')
+    fireEvent.click(screen.getByRole('button', { name: 'Pesquisa com IA' }));
+  else throw new Error(`No way to "${name}" on this page`);
   await page.fixture.whenStable();
 }
 
@@ -97,12 +105,10 @@ describe('ChatPage research view (KBC-008)', () => {
   it('starts in the research view: greeting, no search mode, the agent answers', async () => {
     const page = await renderPage();
     expect(
-      (
-        screen.getByRole('radio', {
-          name: /Pesquisa com IA/,
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true);
+      screen
+        .getByRole('radio', { name: /Pesquisa com IA/ })
+        .getAttribute('aria-checked'),
+    ).toBe('true');
     expect(
       screen.getByText('O que você quer pesquisar no acervo?'),
     ).toBeTruthy();
@@ -159,7 +165,7 @@ describe('ChatPage research view (KBC-008)', () => {
     const page = await renderPage();
     await send(page, 'o que é o ritmo?', 'Perguntar');
     await answer(page, 0, 'Tudo flui [1].');
-    await switchTo(page, 'Buscar documentos');
+    await switchTo(page, 'Tudo');
     expect(screen.getByRole('group', { name: 'Como buscar' })).toBeTruthy();
     await send(page, 'ritmo', 'Buscar');
     page.http.expectOne(SEARCH_URL).flush(aResponse());
@@ -169,14 +175,14 @@ describe('ChatPage research view (KBC-008)', () => {
     expect(screen.queryByText(/Tudo flui/)).toBeNull();
     await switchTo(page, 'Pesquisa com IA');
     expect(screen.getByText(/Tudo flui/)).toBeTruthy();
-    await switchTo(page, 'Buscar documentos');
+    await switchTo(page, 'Tudo');
     expect(page.container.querySelector('app-result-card')).toBeTruthy();
     expect(localStorage.getItem('kb-chat.view')).toBe('search');
   });
 
   it('starts a new conversation only in the current view', async () => {
     const page = await renderPage();
-    await switchTo(page, 'Buscar documentos');
+    await switchTo(page, 'Tudo');
     await send(page, 'ritmo', 'Buscar');
     page.http.expectOne(SEARCH_URL).flush(aResponse());
     await switchTo(page, 'Pesquisa com IA');
@@ -187,7 +193,7 @@ describe('ChatPage research view (KBC-008)', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Nova conversa' }));
     await page.fixture.whenStable();
     expect(screen.queryByText(/Tudo flui/)).toBeNull();
-    await switchTo(page, 'Buscar documentos');
+    await switchTo(page, 'Tudo');
     expect(page.container.querySelector('app-result-card')).toBeTruthy();
   });
 

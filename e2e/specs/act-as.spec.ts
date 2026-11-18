@@ -10,6 +10,10 @@ import {
 } from './fixtures.js';
 import { openSection, openSettings } from './settings-helpers.js';
 
+/** The band's words on screen: "Você está vendo como …" or, on a phone, "Vendo como …". */
+const actingWords = (page: Page) =>
+  page.locator('app-acting-banner .what >> visible=true').first();
+
 /** KBC-060: a master acts as a person, audited (ADR 0027). */
 
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
@@ -55,9 +59,10 @@ test('AC-1, AC-2, AC-6, AC-8: the owner sees the app as a member, changes a sett
   const { email, member } = await aMember(page);
   await startActingAs(page, email, 'não vê os marcadores');
 
-  const band = page.getByText(/Você está vendo como/).first();
+  const band = actingWords(page);
   await expect(band).toBeVisible();
-  await expect(page.getByText(/termina em (29|30):\d\d/)).toBeVisible();
+  // "… · termina em 29:59" (desktop) or "Vendo como … · 29:59" (a phone's shorter band).
+  await expect(band).toContainText(/(29|30):\d\d/);
   await skipWizard(page);
   // Her view: only her collection, and no "Pessoas e permissões".
   const settings = await openSettings(page);
@@ -100,7 +105,7 @@ test('AC-5: what only the person may do is refused while acting', async ({
   const { email, member } = await aMember(page);
   await member.context().close();
   await startActingAs(page, email, 'conferir a IA');
-  await expect(page.getByText(/Você está vendo como/).first()).toBeVisible();
+  await expect(actingWords(page)).toBeVisible();
   const refused = await page.request.put('/api/v1/settings', {
     headers: { 'x-requested-with': 'kb-chat' },
     data: { ai: { keys: { openrouter: 'sk-or-fake-key-for-e2e' } } },
@@ -155,7 +160,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     const dialog = page.getByRole('dialog', { name: /^Ver como / });
     await dialog.getByRole('textbox', { name: 'Motivo' }).fill('axe');
     await dialog.getByRole('button', { name: 'Ver como esta pessoa' }).click();
-    await expect(page.getByText(/Você está vendo como/).first()).toBeVisible();
+    await expect(actingWords(page)).toBeVisible();
     await skipWizard(page);
     expect(await serious()).toEqual([]);
     const overflow = await page.evaluate(

@@ -8,6 +8,7 @@ import {
   ElementRef,
   computed,
   inject,
+  input,
   output,
   viewChild,
 } from '@angular/core';
@@ -67,6 +68,8 @@ export class TopBar {
   }
   /** Enter in the global search: the free search of the collection in use (FR-2). */
   readonly searched = output<string>();
+  /** The search on screen (v2 · Conversa, chat-results: the field holds what was searched). */
+  readonly query = input('');
   /** ✦: the research view, ready to type into. */
   readonly researchRequested = output();
   /** Início: the conversation's home. */

@@ -1,4 +1,6 @@
-/* v2 · Conversa, chat-empty*: a streaming home in the main panel, full width of its column. */
+/* v2 · Conversa, chat-empty* (homeMain / cmHome): the greeting, the recent shortcuts in
+   3×2 (2×3 on a phone) and "Comece por um assunto" as cards, under the scope row the page
+   draws. The page gives the side padding (32 desktop, 16 phone). */
 :host {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -6,51 +8,9 @@
   text-align: start;
 }
 
-.scope {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.in {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-inline-start: auto;
-  min-width: 0;
-}
-
-.in-label {
-  color: var(--color-text-muted);
-  font-size: var(--text-meta);
-}
-
-.collection-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  min-width: 0;
-}
-
-.collection-name {
-  overflow: hidden;
-  max-width: 14rem;
-  text-overflow: ellipsis;
-}
-
-.collection-count {
-  color: inherit;
-}
-
-.menu-title {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 .greeting-block {
   display: grid;
-  gap: var(--space-1);
+  gap: 0.375rem;
 }
 
 .greeting {
@@ -85,11 +45,19 @@
   margin: 0 0 var(--space-3);
 }
 
+/* homeMain no-topics: the empty state on a faint 8 px card; a phone's sits on the page. */
 .state.empty {
-  border-radius: var(--radius-card);
-  background: var(--overlay-1);
+  border-radius: 8px;
+  background: var(--overlay-0);
 }
 
+@media (max-width: 1023px) {
+  .state.empty {
+    background: transparent;
+  }
+}
+
+/* Recentes: tiles of 56, radius 4, #ffffff14, the title only (14/700). */
 .tiles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -100,11 +68,12 @@
 }
 
 .tile {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  min-height: 3.5rem;
+  height: 3.5rem;
   padding: 0 var(--space-3) 0 0;
   overflow: hidden;
   border: 0;
@@ -129,36 +98,31 @@
   min-width: 0;
 }
 
-.tile-title,
-.tile-meta {
+.tile-title {
   overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tile-title {
-  font-size: var(--text-sm);
-  font-weight: 700;
-}
-
-.tile-meta {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-}
-
+/* Comece por um assunto: the heading (20) and cards of 174 (cover 150, padding 12, #ffffff08). */
 .subjects {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-1);
+  margin: 0 calc(-1 * var(--space-3));
 }
 
 .subjects .ui-section-title {
+  margin: 0;
+  padding: 0 var(--space-3);
   font-size: 1.25rem;
 }
 
 .subject-list {
   display: flex;
   gap: var(--space-1);
-  margin: 0 calc(-1 * var(--space-3));
+  margin: 0;
   padding: 0;
   overflow-x: auto;
   list-style: none;
@@ -167,12 +131,14 @@
 
 .subject {
   display: grid;
+  align-content: start;
   gap: var(--space-2);
   width: calc(150px + var(--space-6));
+  height: 100%;
   padding: var(--space-3);
   border: 0;
   border-radius: var(--radius-card);
-  background: transparent;
+  background: var(--overlay-1);
   color: var(--color-text);
   font: inherit;
   text-align: start;
@@ -180,7 +146,7 @@
 }
 
 .subject:hover {
-  background: var(--overlay-2);
+  background: var(--overlay-3);
 }
 
 .subject-art {
@@ -211,21 +177,42 @@
     display: none;
   }
 
-  .in {
-    flex-basis: 100%;
-    margin-inline-start: 0;
-  }
-
-  .collection-name {
-    max-width: 10rem;
-  }
-
   .tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .subjects {
+    gap: var(--space-2);
+    margin: 0;
+  }
+
+  .subjects .ui-section-title {
+    padding: 0;
+    font-size: 1.125rem;
+  }
+
+  .subject-list {
+    gap: var(--space-3);
+    margin-inline-end: calc(-1 * var(--space-4));
+  }
+
+  /* cmHome: covers of 140 with the title under them, no card. */
   .subject {
-    width: calc(140px + var(--space-3));
-    padding: var(--space-1);
+    gap: 0.375rem;
+    width: 140px;
+    padding: 0;
+    background: transparent;
+  }
+
+  .subject:hover {
+    background: transparent;
+  }
+
+  .subject-art {
+    --ui-cover-size: 140px !important;
+  }
+
+  .subject-title {
+    font-size: var(--text-meta);
   }
 }

@@ -9,6 +9,7 @@ import {
   input,
   linkedSignal,
   output,
+  signal,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import type {
@@ -23,9 +24,12 @@ import {
   UiButton,
   UiCover,
   UiIcon,
+  UiMenu,
+  UiMenuItem,
   UiPill,
   UiProgress,
 } from '@ui/index.js';
+import { GENRE_LABELS } from '@core/i18n/facet-labels.js';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import {
   citedAt,
@@ -90,6 +94,8 @@ const PLAN_LABELS: Record<ResearchPlan, () => string> = {
   selector: 'app-research-message',
   imports: [
     AuthorshipBadge,
+    UiMenu,
+    UiMenuItem,
     NgTemplateOutlet,
     UiBanner,
     UiButton,
@@ -108,6 +114,19 @@ export class ResearchMessage {
   readonly turn = input.required<ResearchTurn>();
   /** Only the last turn offers "Tentar de novo" (asking again in its place). */
   readonly last = input(false);
+  /** A wide screen: the latest answer shows its steps open (v2 · Conversa, chat-research-answer). */
+  protected readonly wide =
+    inject(DOCUMENT).defaultView?.matchMedia?.('(min-width: 1024px)').matches ??
+    true;
+  /** The steps of the latest answer, once written, open on desktop; the others closed. */
+  protected readonly stepsOpen = computed(
+    () =>
+      this.wide &&
+      this.last() &&
+      this.turn().phase === 'done' &&
+      !this.turn().interrupted &&
+      !this.canContinue(),
+  );
   /** The source open beside the answer (its row and its [n] are marked, FR-1). */
   readonly activeSource = input<number | null>(null);
   /**
@@ -120,12 +139,16 @@ export class ResearchMessage {
   readonly trackOpened = output<TrackOpening>();
   readonly stopped = output();
   readonly retried = output();
+  /** "Refazer" on the last answer: the same question asked again. */
+  readonly redone = output();
   readonly continued = output();
   private readonly settings = inject(SettingsStore);
   private readonly host =
     inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly clipboard =
     inject(DOCUMENT).defaultView?.navigator.clipboard;
+  /** "Copiar referência" in a source's ⋯ said aloud, then quiet again. */
+  protected readonly referenceCopied = signal(false);
   protected readonly copyState = linkedSignal<number, CopyState>({
     source: () => this.turn().id,
     computation: () => 'idle',
@@ -247,11 +270,18 @@ export class ResearchMessage {
     };
   });
   /** The coverage the app measured, and what was left, after the turn (KBC-030). */
+  /** The interrupted banner's bold line (chat-research-interrupted). */
+  protected readonly interruptedTitle = computed(() =>
+    this.turn().text
+      ? $localize`:@@ai.interruptedTitle:A resposta foi interrompida.`
+      : $localize`:@@ai.interruptedEarly:Resposta interrompida antes de começar.`,
+  );
   protected readonly coverage = computed(() => {
     const coverage = this.turn().coverage;
     if (!coverage || this.turn().phase === 'streaming') return null;
+    const titled = coverage.needed === 0;
     return {
-      line: coverageText(coverage),
+      line: coverageText(coverage, { titled }),
       target: targetText(coverage.target, coverage.phrases, this.labels()),
       missing: leftText(coverage),
       // "10 de 22" with its bar: of the documents to analyze, those the AI analyzed.
@@ -322,6 +352,26 @@ export class ResearchMessage {
     this.clipboard.writeText(text).then(
       () => this.flashCopy('copied'),
       () => this.flashCopy('failed'),
+    );
+  }
+
+  /** A source's text kind under its title ("Mestre Laércio · Texto/apostila"). */
+  protected genreOf(source: AnswerSource): string | null {
+    return source.genre ? GENRE_LABELS[source.genre] : null;
+  }
+
+  protected menuIdOf(source: AnswerSource): string {
+    return `turn-${this.turn().id}-source-${source.n}-more`;
+  }
+
+  /** The source's ⋯: "[n] Título", to cite it elsewhere. */
+  protected copyReference(source: AnswerSource): void {
+    this.clipboard?.writeText(`[${source.n}] ${source.title}`).then(
+      () => {
+        this.referenceCopied.set(true);
+        setTimeout(() => this.referenceCopied.set(false), FEEDBACK_MS);
+      },
+      () => this.referenceCopied.set(false),
     );
   }
 

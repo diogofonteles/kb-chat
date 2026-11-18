@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { startInSearchView } from './search-view.js';
+import { startInSearchView, modeRadio, expectSummary } from './search-view.js';
 
 test.beforeEach(startInSearchView);
 
@@ -32,20 +32,28 @@ test('AC-1: a question shows the matching card in the "Tudo" mode', async ({
   await expect(
     page.getByRole('button', { name: /A Natureza Sétupla/ }),
   ).toBeVisible();
-  await expect(page.getByText(/documentos · Tudo ·/)).toBeVisible();
-  await expect(
-    page.getByText('Aula ou palestra · Intermediário · Central'),
-  ).toBeVisible();
+  await expectSummary(page, /documentos/, 'Tudo');
+  if ((page.viewportSize()?.width ?? 1440) >= 1024)
+    await expect(
+      page.getByText('Aula ou palestra · Intermediário · Central'),
+    ).toBeVisible();
+  // A phone's row (cmRow) says whose it is and its type; the rest is in the document.
+  else
+    await expect(
+      page
+        .locator('app-result-card')
+        .filter({ hasText: 'A Natureza Sétupla' })
+        .first()
+        .getByText('· Aula ou palestra'),
+    ).toBeVisible();
 });
 
 test('AC-2: the chosen mode is used and remembered after a reload', async ({
   page,
 }) => {
-  await page.getByRole('radio', { name: 'Palavras exatas' }).check();
+  await (await modeRadio(page, 'Palavras exatas')).check();
   await page.reload();
-  await expect(
-    page.getByRole('radio', { name: 'Palavras exatas' }),
-  ).toBeChecked();
+  await expect(await modeRadio(page, 'Palavras exatas')).toBeChecked();
   const request = page.waitForRequest(
     (r) => r.url().endsWith('/searches') && r.method() === 'POST',
   );
@@ -76,15 +84,17 @@ test('AC-4: a card opens the document without frontmatter and Escape closes it',
 });
 
 test('AC-5: no results offers a semantic search', async ({ page }) => {
-  await page.getByRole('radio', { name: 'Palavras exatas' }).check();
+  await (await modeRadio(page, 'Palavras exatas')).check();
   await ask(page, 'xyzzy plugh');
   await expect(
     page.getByText('Nada encontrado para "xyzzy plugh".'),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Buscar por significado' }).click();
+  // The results' head says the mode the search ran in (the search page has no question
+  // box on desktop: its mode pill is where the mode changes).
   await expect(
-    page.getByRole('radio', { name: 'Por significado' }),
-  ).toBeChecked();
+    page.getByRole('button', { name: 'Modo da busca: Por significado' }),
+  ).toBeVisible();
 });
 
 test('AC-6: a search failure keeps the question and retries', async ({

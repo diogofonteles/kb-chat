@@ -184,30 +184,39 @@ app-document-panel .body mark {
   color: inherit;
 }
 
+/* The occurrence in focus is filled in the accent (v2 · Conversa, chat-document). */
 app-document-panel .body mark.current {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
 }
 
 /* AI answer text is rendered with [innerHTML]: citation links styled globally. v2 (KBC-127):
    a small green [n]; the one whose source is open is filled (FR-1, AC-1). */
 app-research-message .answer a.cite {
-  display: inline-block;
-  min-width: 1.4em;
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.5em;
+  height: 1.5em;
+  margin-inline: 0.1em;
   padding: 0 0.3em;
   border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
   color: var(--color-accent-text);
   font-family: var(--font-ui);
-  font-size: 0.75em;
+  font-size: 0.68em;
   font-weight: 800;
-  line-height: 1.5;
+  line-height: 1;
   text-align: center;
   text-decoration: none;
-  vertical-align: super;
+  vertical-align: 0.2em;
+}
+
+app-research-message .answer a.cite .cite-mark {
+  display: none;
 }
 
 app-research-message .answer a.cite:hover {
-  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 
 app-research-message .answer a.cite.active {

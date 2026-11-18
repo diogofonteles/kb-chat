@@ -135,7 +135,7 @@ function oneCitation({ match, n, at }: Cited, cites: Cites): string {
   if (!source) return match;
   if (source.media) return audioCitation(source, at);
   const label = escapeHtml(`Fonte ${n}: ${source.title}`);
-  return `<a class="cite" href="#fonte-${n}" aria-label="${label}" title="${label}">[${n}]</a>`;
+  return `<a class="cite" href="#fonte-${n}" aria-label="${label}" title="${label}"><span class="cite-mark">[</span>${n}<span class="cite-mark">]</span></a>`;
 }
 
 /** Only spaces, commas or semicolons between two citations: they read as one run. */
@@ -206,7 +206,8 @@ function renderRun(run: string, cites: Cites): string {
 }
 
 /**
- * "[2]" → a link to source 2 named after it; the panel opens on click. A track's "[2@8:15]"
+ * "[2]" → a link to source 2 named after it; the panel opens on click. v2 draws it as a
+ * numbered circle: the brackets stay in the text (copied, read) and out of sight. A track's "[2@8:15]"
  * shows its pill, and its link keeps the time it cites; the same track's citations side by
  * side are one pill (KBC-155).
  */

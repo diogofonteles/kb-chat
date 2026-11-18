@@ -3,6 +3,7 @@ import type {
   AnswerSource,
   Authorship,
   DocumentRef,
+  Genre,
 } from '@kb-chat/contracts';
 import type { CatalogMedia } from '../catalog/index.js';
 
@@ -10,6 +11,8 @@ import type { CatalogMedia } from '../catalog/index.js';
 export interface SourceRef extends DocumentRef {
   readonly authorship?: Authorship;
   readonly author?: string | null;
+  /** The catalog's text kind, named under the source's title. */
+  readonly genre?: Genre | null;
   /** A track of the collection (KBC-099): its citations carry a passage. */
   readonly media?: CatalogMedia | null;
 }
@@ -54,6 +57,7 @@ export class SourceBook {
       title: ref.title,
       ...(ref.authorship ? { authorship: ref.authorship } : {}),
       ...(ref.author ? { author: ref.author } : {}),
+      ...(ref.genre ? { genre: ref.genre } : {}),
       ...(ref.media ? { media: toAnswerMedia(ref.media) } : {}),
     };
     this.byId.set(ref.id, source);

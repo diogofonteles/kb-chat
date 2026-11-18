@@ -16,6 +16,10 @@ const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
 const MEDIA_SPECS = /media-.*\.spec\.ts$/;
 /** The specs that also run in WebKit at both widths (with KBC_E2E_WEBKIT=1, and in CI). */
 const WEBKIT_SPECS = /v2-shell-works\.spec\.ts$/;
+/** v2 · Conversa's controls and scroll, also run in WebKit (see the chat-webkit projects). */
+const CHAT_WEBKIT_SPECS = /(v2-chat-interactions|content-scroll)\.spec\.ts$/;
+/** content-scroll's pages of other areas (Configurações, Biblioteca, catalog) stay out. */
+const NOT_CHAT = /pages in the main panel/;
 /**
  * The media specs play real tones (330 Hz, up to minutes long): keep them off the
  * machine's speakers. Chrome mutes its output only; `muted` and `volume` stay as the
@@ -144,6 +148,29 @@ export default defineConfig({
               // a 390 touch screen without the mobile flag keeps the phone layout.
               isMobile: false,
               viewport: { width: 390, height: 844 },
+            },
+          },
+          // v2 · Conversa in Safari at both widths (KBC-126/KBC-127): its controls and the
+          // scroll of its text.
+          {
+            name: 'chat-webkit-desktop',
+            testMatch: CHAT_WEBKIT_SPECS,
+            grepInvert: NOT_CHAT,
+            use: {
+              ...devices['Desktop Safari'],
+              viewport: { width: 1440, height: 900 },
+            },
+          },
+          // Safari's engine at a phone's width, with touch: Playwright's mobile WebKit has
+          // no wheel, and the scroll checks turn the wheel (content-scroll.spec).
+          {
+            name: 'chat-webkit-mobile',
+            testMatch: CHAT_WEBKIT_SPECS,
+            grepInvert: NOT_CHAT,
+            use: {
+              ...devices['Desktop Safari'],
+              viewport: { width: 390, height: 844 },
+              hasTouch: true,
             },
           },
           {

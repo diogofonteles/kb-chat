@@ -22,6 +22,7 @@ const toRef = (entry: CatalogEntry): RelatedDocument => ({
   genre: entry.genre,
   depth: entry.depth,
   relevance: entry.relevance,
+  authorship: entry.authorship,
   ...(entry.media && { media: toRefMedia(entry.media) }),
 });
 

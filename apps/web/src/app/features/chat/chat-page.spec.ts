@@ -121,9 +121,15 @@ const collectionButtons = (): HTMLButtonElement[] => [
 ];
 
 /** The search summary as read: "1 documento · Tudo · 0,6 s" (count, mode pill, time). */
-const summaryText = (): string =>
-  document.querySelector('app-result-message .summary')?.textContent?.trim() ??
-  '';
+const summaryText = (): string => {
+  const summary = document
+    .querySelector('app-result-message .summary')
+    ?.cloneNode(true);
+  if (!(summary instanceof HTMLElement)) return '';
+  // The mode pill's closed menu of modes is not part of what is read.
+  summary.querySelectorAll('[role="menu"]').forEach((menu) => menu.remove());
+  return summary.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+};
 
 /** The library beside the conversation (the home repeats its conversations as shortcuts). */
 const sidebar = (): HTMLElement =>
@@ -374,6 +380,9 @@ describe('ChatPage refining', () => {
     await view.fixture.whenStable();
     fireEvent.click(screen.getByRole('checkbox', { name: /Texto\/apostila/ }));
     await view.fixture.whenStable();
+    // The popover's ticks apply with "Aplicar" (subjectsPopover).
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+    await view.fixture.whenStable();
     // Chip changes are debounced (250 ms) so rapid clicks send one search.
     await new Promise((resolve) => setTimeout(resolve, 300));
     const refined = view.http.expectOne(SEARCH_URL);
@@ -416,8 +425,10 @@ describe('ChatPage refining', () => {
       ]),
     );
     await view.fixture.whenStable();
-    fireEvent.click(screen.getByRole('button', { name: '+1 cópia' }));
-    await view.fixture.whenStable();
+    // A lone result: its copy waits in "Cópia deste documento" beside it.
+    expect(
+      screen.getByRole('heading', { name: 'Cópia deste documento' }),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', { name: /a-lei-do-ritmo-2\.md/ }),
     );
@@ -714,7 +725,12 @@ describe('ChatPage side panel (KBC-005)', () => {
     expect(screen.getByText('Histórico indisponível no momento.')).toBeTruthy();
     conversations.failWith = null;
     // With a provider the page opens in the research view; search is one click away.
-    fireEvent.click(screen.getByRole('radio', { name: 'Buscar documentos' }));
+    fireEvent.click(
+      within(screen.getByRole('radiogroup', { name: 'Onde buscar' })).getByRole(
+        'radio',
+        { name: 'Tudo' },
+      ),
+    );
     await view.fixture.whenStable();
     await ask('lei do ritmo', view);
     view.http.expectOne(SEARCH_URL).flush(aResponse());
@@ -756,12 +772,10 @@ describe('ChatPage side panel (KBC-005)', () => {
     );
     await view.fixture.whenStable();
     expect(
-      (
-        screen.getByRole('radio', {
-          name: /Pesquisa com IA/,
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true);
+      screen
+        .getByRole('radio', { name: /Pesquisa com IA/ })
+        .getAttribute('aria-checked'),
+    ).toBe('true');
     expect(screen.getByText(/Mentalismo, correspondência/)).toBeTruthy();
     expect(answers.research).not.toHaveBeenCalled();
     view.http.expectNone(SEARCH_URL);
@@ -777,13 +791,8 @@ describe('ChatPage side panel (KBC-005)', () => {
       within(sidebar()).getByRole('button', { name: /lei do ritmo/ }),
     );
     await view.fixture.whenStable();
-    expect(
-      (
-        screen.getByRole('radio', {
-          name: 'Buscar documentos',
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true);
+    // A search page has no scope chips (v2 · Conversa): the view chosen is what is kept.
+    expect(localStorage.getItem('kb-chat.view')).toBe('search');
     view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();
     expect(view.container.querySelector('app-result-card')).toBeTruthy();

@@ -7,7 +7,16 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { aDocument } from '../../testing/fixtures.js';
-import { DocumentPanel } from './document-panel.js';
+import { DocumentPanel, withoutTitleHeading } from './document-panel.js';
+
+/** The occurrences' counter as read: "1 de 3" and "ocorrências" are two spans (cmDoc). */
+const counterWith = (text: string): HTMLElement =>
+  screen.getByText((_, element) =>
+    Boolean(
+      element?.classList.contains('counter') &&
+      element.textContent?.replace(/\s+/g, ' ').trim() === text,
+    ),
+  );
 
 const URL = '/api/v1/topics/hermetismo/documents/a.md';
 
@@ -135,20 +144,20 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
     );
     const marks = view.container.querySelectorAll('mark');
     expect(marks).toHaveLength(3);
-    expect(screen.getByText('1 de 3 ocorrências')).toBeTruthy();
+    expect(counterWith('1 de 3 ocorrências')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Próxima ocorrência' }));
     fireEvent.click(screen.getByRole('button', { name: 'Próxima ocorrência' }));
     await view.fixture.whenStable();
-    expect(screen.getByText('3 de 3 ocorrências')).toBeTruthy();
+    expect(counterWith('3 de 3 ocorrências')).toBeTruthy();
     expect(marks[2]?.classList.contains('current')).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Próxima ocorrência' }));
     await view.fixture.whenStable();
-    expect(screen.getByText('1 de 3 ocorrências')).toBeTruthy();
+    expect(counterWith('1 de 3 ocorrências')).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', { name: 'Ocorrência anterior' }),
     );
     await view.fixture.whenStable();
-    expect(screen.getByText('3 de 3 ocorrências')).toBeTruthy();
+    expect(counterWith('3 de 3 ocorrências')).toBeTruthy();
   });
 
   it('copies the paragraph of the current occurrence (AC-9)', async () => {
@@ -212,7 +221,11 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
     const view = await renderWith({});
     expect(screen.getByRole('heading', { name: 'Veja também' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Relacionados' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Cabala' }));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Cabala Assunto · síntese do acervo',
+      }),
+    );
     expect(view.navigated).toHaveBeenCalledWith({
       id: 'wiki/concepts/Cabala.md',
       title: 'Cabala',
@@ -346,5 +359,18 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
       /Não consegui carregar mais/,
     );
     expect(screen.getByRole('button', { name: 'Doc 4' })).toBeTruthy();
+  });
+});
+
+describe('withoutTitleHeading (chat-document-see-also)', () => {
+  it('drops a first heading that only repeats the name, and keeps any other text', () => {
+    expect(withoutTitleHeading('# Cabala', 'Cabala')).toBe('');
+    expect(withoutTitleHeading('## cabala\n\nO texto.', 'Cabala')).toBe(
+      '\nO texto.',
+    );
+    expect(withoutTitleHeading('# A Árvore\n\nCabala', 'Cabala')).toBe(
+      '# A Árvore\n\nCabala',
+    );
+    expect(withoutTitleHeading('Cabala é…', 'Cabala')).toBe('Cabala é…');
   });
 });

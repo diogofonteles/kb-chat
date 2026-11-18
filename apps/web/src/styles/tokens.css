@@ -41,6 +41,7 @@
   --target-desktop: 2rem;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   /* White (or the theme's text) over the surface, for hover, selected and fields (v2 overlays). */
+  --overlay-0: color-mix(in srgb, var(--color-text) 2.5%, transparent);
   --overlay-1: color-mix(in srgb, var(--color-text) 5%, transparent);
   --overlay-2: color-mix(in srgb, var(--color-text) 7%, transparent);
   --overlay-3: color-mix(in srgb, var(--color-text) 10%, transparent);
@@ -60,6 +61,7 @@
     var(--color-accent) 30%,
     var(--color-bg)
   );
+  --overlay-5: color-mix(in srgb, var(--color-text) 35%, transparent);
   --overlay-line: color-mix(in srgb, var(--color-text) 12%, transparent);
   /* A person's avatar without a picture (v2: "D" #b8862b, "BL" #2d5a8a, "IH" #6b3fa0, "H"
      #6ea8ff), picked by the name; each pair keeps its initials above 4.5:1. */
@@ -80,6 +82,16 @@
   --cover-neutral-from: #3a3a3a;
   --cover-neutral-to: #1f1f1f;
   --scrim: rgb(0 0 0 / 70%);
+  /* The main panel's gradient by page (v2 · Conversa): a search page is neutral, the AI
+     research green; a home takes its collection's cover colour. */
+  --tint-search: #3a3a3a;
+  --tint-research: #1f4d33;
+  --tint-history-research: #1f6b3c;
+  /* A round control over a cover's tint (the document page's ✕ and occurrences). */
+  --overlay-dark: rgb(0 0 0 / 40%);
+  /* A person's round with no picture and no colour of its own (docRight's "OA"): white
+     initials over it keep 6.9:1 in every theme. */
+  --avatar-neutral: #5a5a5a;
   /* Text over a cover's own colour (the cited passage while it plays, KBC-150): always light,
      the cover being dark in every theme; the unspoken words keep 4.5:1 over the darkest. */
   --color-on-cover: #ffffff;

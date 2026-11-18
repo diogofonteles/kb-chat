@@ -70,6 +70,8 @@ export interface OpenDocument {
    * the panel steps between them with "Fonte ‹ ›". Absent for a search result.
    */
   readonly sources?: readonly CitedSource[];
+  /** Near-identical copies of the result that opened it ("Cópias" in its right panel). */
+  readonly copies?: readonly DocumentRef[];
 }
 
 /** A text source of an AI answer, by its citation number. */
@@ -136,6 +138,15 @@ function placeOf(response: SearchResponse | null, id: string): number | null {
     (one) => one.kind === 'text' && one.hit.id === id,
   );
   return index < 0 ? null : index + 1;
+}
+
+/** The copies the search listed with this result (none when it was not a result). */
+function copiesOf(
+  response: SearchResponse | null,
+  id: string,
+): { readonly copies?: readonly DocumentRef[] } {
+  const copies = response?.items.find((hit) => hit.id === id)?.copies ?? [];
+  return copies.length > 0 ? { copies } : {};
 }
 
 const countFilters = (filters: SearchFilters): number =>
@@ -426,6 +437,7 @@ export class ChatStore {
       title: doc.title,
       messageId: from?.id ?? null,
       question: from?.question ?? null,
+      ...copiesOf(from?.response ?? null, doc.id),
     });
     this.recents.noteDocument({ topic, id: doc.id, title: doc.title });
   }

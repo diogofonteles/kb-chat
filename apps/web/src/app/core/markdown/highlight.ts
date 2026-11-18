@@ -82,9 +82,11 @@ const TAG = /^<\/?([a-z0-9]+)/i;
 
 function wordPattern(terms: readonly string[]): RegExp {
   // Whole words that start with a term ("sétupla" also marks "sétuplas"); never inside an
-  // HTML entity such as "&amp;".
+  // HTML entity such as "&amp;". Words of the question side by side are one occurrence
+  // ("natureza sétupla" one mark, as chat-document draws it), joined by spaces only.
+  const word = `(?:${terms.map(accentInsensitive).join('|')})[\\p{L}\\p{N}]*`;
   return new RegExp(
-    `(?<![&\\p{L}\\p{N}])((?:${terms.map(accentInsensitive).join('|')})[\\p{L}\\p{N}]*)`,
+    `(?<![&\\p{L}\\p{N}])(${word}(?:[ \\t\\u00a0]+${word})*)`,
     'giu',
   );
 }
