@@ -4,6 +4,16 @@ import type { SearchHit } from '@kb-chat/contracts';
 import { aHit } from '../../testing/fixtures.js';
 import { ResultCard } from './result-card.js';
 
+/** The card itself: its ⋯ menu is a button too (v2 docRow). */
+const cardButton = (): HTMLButtonElement =>
+  screen.getByRole('button', {
+    name: (_, el) => el.classList.contains('card'),
+  });
+
+/** What is read on screen: the row's author line repeats the badge for sight only. */
+const VISIBLE_ONLY =
+  'script, style, [aria-hidden="true"], [aria-hidden="true"] *';
+
 const providers = [provideZonelessChangeDetection()];
 
 describe('ResultCard', () => {
@@ -15,9 +25,7 @@ describe('ResultCard', () => {
       },
     });
     expect(screen.queryByText(/Assuntos:/)).toBeNull();
-    expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe(
-      'false',
-    );
+    expect(cardButton().getAttribute('aria-pressed')).toBe('false');
   });
 
   it('lists up to two subjects without a counter and emits on click', async () => {
@@ -29,10 +37,8 @@ describe('ResultCard', () => {
     });
     expect(screen.getByText(/Cabala · Alquimia/)).toBeTruthy();
     expect(screen.queryByText(/\(\+/)).toBeNull();
-    expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe(
-      'true',
-    );
-    fireEvent.click(screen.getByRole('button'));
+    expect(cardButton().getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(cardButton());
     expect(opened).toHaveBeenCalledOnce();
   });
 
@@ -41,7 +47,7 @@ describe('ResultCard', () => {
       providers,
       inputs: { hit: aHit() },
     });
-    const mestre = screen.getByText(/Mestre Laércio/);
+    const mestre = screen.getByText(/Mestre Laércio/, { ignore: VISIBLE_ONLY });
     expect(mestre.closest('[data-authorship]')?.textContent).toMatch(
       /Autoria:\s*✦\s*Mestre Laércio/,
     );
@@ -50,7 +56,9 @@ describe('ResultCard', () => {
       aHit({ authorship: 'outros-autores', author: null }),
     );
     await view.fixture.whenStable();
-    expect(screen.getByText(/Outros autores/)).toBeTruthy();
+    expect(
+      screen.getByText(/Outros autores/, { ignore: VISIBLE_ONLY }),
+    ).toBeTruthy();
     expect(screen.queryByText(/Mestre Laércio/)).toBeNull();
     expect(screen.queryByText('✦')).toBeNull();
   });
@@ -192,9 +200,9 @@ describe('ResultCard of a track (KBC-101)', () => {
       providers,
       inputs: { hit: track() },
     });
-    const ids = (
-      screen.getByRole('button').getAttribute('aria-describedby') ?? ''
-    ).split(' ');
+    const ids = (cardButton().getAttribute('aria-describedby') ?? '').split(
+      ' ',
+    );
     expect(
       ids.every((id) => view.container.querySelector(`[id="${id}"]`)),
     ).toBe(true);
@@ -202,7 +210,7 @@ describe('ResultCard of a track (KBC-101)', () => {
 
   it('a text card keeps its content as its name, with no description', async () => {
     await render(ResultCard, { providers, inputs: { hit: aHit() } });
-    const card = screen.getByRole('button');
+    const card = cardButton();
     expect(card.getAttribute('aria-label')).toBeNull();
     expect(card.getAttribute('aria-describedby')).toBeNull();
   });
@@ -215,7 +223,7 @@ describe('ResultCard of a track (KBC-101)', () => {
       inputs: { hit: track() },
       on: { opened, trackOpened },
     });
-    const card = screen.getByRole('button');
+    const card = cardButton();
     fireEvent.click(card);
     expect(opened).not.toHaveBeenCalled();
     expect(trackOpened).toHaveBeenCalledWith({

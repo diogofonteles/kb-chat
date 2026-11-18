@@ -4,6 +4,14 @@ import { aHit, aMediaHit, aResponse, aTopic } from '../../testing/fixtures.js';
 import { NO_FILTERS, type ChatMessage } from './chat-message.js';
 import { ResultMessage } from './result-message.js';
 
+/** The summary as read: the mode pill's closed menu of modes is not part of it. */
+const summaryText = (): string => {
+  const summary = document.querySelector('.summary')?.cloneNode(true);
+  if (!(summary instanceof HTMLElement)) return '';
+  summary.querySelectorAll('[role="menu"]').forEach((menu) => menu.remove());
+  return summary.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+};
+
 const base: ChatMessage = {
   id: 1,
   rev: 1,
@@ -187,7 +195,7 @@ describe('ResultMessage with spoken passages (KBC-039)', () => {
     );
     expect(items[1]?.textContent).not.toContain('baixa confiança');
     expect(items[2]?.textContent).toContain('baixa confiança');
-    expect(document.querySelector('.summary')?.textContent?.trim()).toMatch(
+    expect(summaryText()).toMatch(
       /^2 documentos · 2 trechos na fala · Tudo · 0,6 s$/,
     );
   });
@@ -205,9 +213,7 @@ describe('ResultMessage with spoken passages (KBC-039)', () => {
         }),
       },
     });
-    expect(document.querySelector('.summary')?.textContent?.trim()).toMatch(
-      /^1 trecho na fala · Tudo/,
-    );
+    expect(summaryText()).toMatch(/^1 trecho na fala · Tudo/);
   });
 
   it('keeps "0 documentos" when the texts were searched and none matched', async () => {
@@ -222,9 +228,7 @@ describe('ResultMessage with spoken passages (KBC-039)', () => {
         }),
       },
     });
-    expect(document.querySelector('.summary')?.textContent?.trim()).toMatch(
-      /^0 documentos · 1 trecho na fala · Tudo/,
-    );
+    expect(summaryText()).toMatch(/^0 documentos · 1 trecho na fala · Tudo/);
   });
 
   it('opens a passage with its place among the results (FR-4)', async () => {
