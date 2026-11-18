@@ -118,15 +118,45 @@ test.describe('the page scrolls', () => {
       await open(page, slug);
       await expect(settingsSection(page, label)).toBeVisible();
       const before = await scrollTop(page);
-      // A short section (few people on a fresh server) moves to its end, not 100 px.
-      const room = await scroller(page).evaluate(
-        (element) => element.scrollHeight - element.clientHeight,
-      );
-      expect(room).toBeGreaterThan(40);
+      // A short section (few people on a fresh server) moves to its end, not 100 px. Its
+      // data comes after the page: wait for the room it makes before measuring it.
+      const roomNow = () =>
+        scroller(page).evaluate(
+          (element) => element.scrollHeight - element.clientHeight,
+        );
+      await expect.poll(roomNow).toBeGreaterThan(40);
+      const room = await roomNow();
       await scrollDown(page, 500);
       await expect
         .poll(() => scrollTop(page))
         .toBeGreaterThanOrEqual(Math.min(before + 100, room - 1));
+    });
+  }
+});
+
+test.describe('the keyboard with nothing focused', () => {
+  for (const slug of ['pessoas', 'ia-da-aplicacao', 'termos'] as const) {
+    test(`${slug}: End reaches the end and Home the top, with the focus on nothing`, async ({
+      page,
+    }) => {
+      await open(page, slug);
+      // Opening a section leaves the focus on the body: the keys still move the page.
+      await expect
+        .poll(() => page.evaluate(() => document.activeElement?.tagName))
+        .toBe('BODY');
+      // The section's data comes after the page: wait for the room it makes.
+      const roomNow = () =>
+        scroller(page).evaluate(
+          (element) => element.scrollHeight - element.clientHeight,
+        );
+      await expect.poll(roomNow).toBeGreaterThan(40);
+      const room = await roomNow();
+      await page.keyboard.press('End');
+      await expect.poll(() => scrollTop(page)).toBeGreaterThanOrEqual(room - 1);
+      await page.keyboard.press('Home');
+      await expect.poll(() => scrollTop(page)).toBe(0);
+      await page.keyboard.press('PageDown');
+      await expect.poll(() => scrollTop(page)).toBeGreaterThan(100);
     });
   }
 });
@@ -226,21 +256,24 @@ test.describe('Pessoas e permissões', () => {
     await expect(editor).toBeHidden();
   });
 
-  test('the invitation: Convidar waits for an e-mail; "Configurar agora" opens the modal and ✕ discards it', async ({
+  test('the invitation: Convidar asks for the e-mail; "Configurar agora" opens the modal and ✕ discards it', async ({
     page,
   }) => {
     await open(page, 'pessoas');
     const section = settingsSection(page, 'Pessoas e permissões');
     const invite = section.locator('form.invite');
-    await expect(
-      invite.getByRole('button', { name: 'Convidar' }),
-    ).toBeDisabled();
+    // Lit as in the frames: with no address, pressing it says what is missing.
+    const send = invite.getByRole('button', { name: 'Convidar' });
+    await expect(send).toBeEnabled();
+    await send.click();
+    await expect(invite.getByRole('alert')).toContainText(
+      'Escreva o e-mail de quem você quer convidar.',
+    );
+    await expect(invite.getByLabel('Convidar por e-mail')).toBeFocused();
     await invite
       .getByLabel('Convidar por e-mail')
       .fill('alguem.novo@exemplo.test');
-    await expect(
-      invite.getByRole('button', { name: 'Convidar' }),
-    ).toBeEnabled();
+    await expect(send).toBeEnabled();
     await invite.getByRole('button', { name: 'Configurar agora' }).click();
     const modal = page.getByRole('dialog', { name: 'Configurar o convite' });
     await expect(modal).toBeVisible();
@@ -277,6 +310,20 @@ test.describe('Pessoas e permissões', () => {
     await expect(bar.getByRole('alert')).toContainText('Aplicar');
     await bar.getByRole('button', { name: 'Cancelar' }).click();
     await expect(bar.getByRole('alert')).toHaveCount(0);
+  });
+});
+
+test.describe('Auditoria do Ver como', () => {
+  test('a phone shows the records without the table head; a desktop keeps it', async ({
+    page,
+  }) => {
+    await open(page, 'auditoria');
+    const head = settingsSection(page, 'Auditoria do Ver como').locator(
+      '.table-head',
+    );
+    if ((await head.count()) === 0) return; // no record yet on this server
+    if (desktop(page)) await expect(head).toBeVisible();
+    else await expect(head).toBeHidden();
   });
 });
 
@@ -318,11 +365,126 @@ test.describe('the media sections', () => {
       await swipeUp(page, point, 150);
     }
     await expect.poll(top).toBeGreaterThan(20);
+    if (!desktop(page)) {
+      // The phone sheet's header holds Continuar: lit, it says what the consent misses.
+      const header = modal.locator('.ui-dialog__primary');
+      await expect(header).toHaveText('Continuar');
+      await expect(header).toBeEnabled();
+      await header.click();
+      await expect(modal.getByRole('alert').first()).toBeVisible();
+    }
     await modal.getByRole('radio', { name: 'Colar o texto do aceite' }).check();
     await expect(
       modal.getByLabel('Texto do aceite', { exact: true }),
     ).toBeVisible();
     await modal.getByRole('button', { name: 'Cancelar' }).first().click();
     await expect(modal).toBeHidden();
+  });
+});
+
+test.describe('the v2 controls in use', () => {
+  test('Pessoas: the owner on gold with one letter, the selects with their own chevron', async ({
+    page,
+  }) => {
+    await open(page, 'pessoas');
+    const section = settingsSection(page, 'Pessoas e permissões');
+    const ownerRow = section.getByRole('button', {
+      name: /owner@kb-chat\.test/,
+    });
+    const avatar = ownerRow.locator('app-person-avatar');
+    await expect(avatar).toHaveAttribute('data-tone', 'owner');
+    await expect(avatar).toHaveText(/^[A-Z]$/);
+    // The bulk AI's select: no native caret, the frame's chevron drawn in the field.
+    const select = section
+      .locator('app-ai-assignment-bar select.select')
+      .first();
+    await expect(select).toBeVisible();
+    const look = await select.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { appearance: style.appearance, image: style.backgroundImage };
+    });
+    expect(look.appearance).toBe('none');
+    expect(look.image).toContain('linear-gradient');
+    // It still chooses, by keyboard as by pointer.
+    const values = await select.evaluate((element) =>
+      [...(element as HTMLSelectElement).options].map((option) => option.value),
+    );
+    const current = await select.inputValue();
+    const other = values.find((value) => value !== current);
+    if (other !== undefined) {
+      await select.selectOption(other);
+      await expect(select).toHaveValue(other);
+    }
+  });
+
+  test("a master's editor: the info banner, and the locked boxes keep their tick's colour", async ({
+    page,
+  }) => {
+    await open(page, 'pessoas');
+    const section = settingsSection(page, 'Pessoas e permissões');
+    await section.getByRole('button', { name: /owner@kb-chat\.test/ }).click();
+    const editor = page.getByRole('dialog').filter({ hasText: 'Pessoa' });
+    await expect(editor).toBeVisible();
+    await expect(
+      editor.getByText(
+        'Masters veem todos os acervos e usam todas as funcionalidades.',
+      ),
+    ).toBeVisible();
+    const locked = editor
+      .getByRole('group', { name: 'Acervos' })
+      .getByRole('checkbox')
+      .first();
+    await expect(locked).toBeDisabled();
+    await expect(locked).toBeChecked();
+    // The row dims as one (50 %); the box itself is not dimmed again into grey.
+    expect(await locked.evaluate((box) => getComputedStyle(box).opacity)).toBe(
+      '1',
+    );
+    expect(
+      await locked.evaluate(
+        (box) => getComputedStyle(box.closest('.check') as Element).opacity,
+      ),
+    ).toBe('0.5');
+    if (!desktop(page)) {
+      // The phone sheet: the e-mail on its own line, the pills under it.
+      const email = editor.locator('.phone-person .dialog-sub > span').first();
+      const pill = editor.locator('.phone-person .dialog-sub ui-pill').first();
+      const [emailBox, pillBox] = await Promise.all([
+        email.boundingBox(),
+        pill.boundingBox(),
+      ]);
+      if (!emailBox || !pillBox) throw new Error('the person is not on screen');
+      expect(pillBox.y).toBeGreaterThan(emailBox.y + emailBox.height - 1);
+    }
+    await editor.getByRole('button', { name: 'Fechar' }).first().click();
+    await expect(editor).toBeHidden();
+  });
+
+  test('IA da aplicação: the paid model is typed and Salvar sits beside it, under it on a phone', async ({
+    page,
+  }) => {
+    await open(page, 'ia-da-aplicacao');
+    const field = page.locator('#house-paid-model');
+    await field.scrollIntoViewIfNeeded();
+    await field.click();
+    await field.pressSequentially('fake/paid');
+    await expect(field).toHaveValue('fake/paid');
+    await field.fill('');
+    // The paid model's own Salvar, in the same row as its field.
+    const save = page
+      .locator('.row', { has: field })
+      .getByRole('button', { name: 'Salvar', exact: true });
+    const [fieldBox, saveBox] = await Promise.all([
+      field.boundingBox(),
+      save.boundingBox(),
+    ]);
+    if (!fieldBox || !saveBox)
+      throw new Error('the paid model is not on screen');
+    if (desktop(page))
+      expect(Math.abs(saveBox.y - fieldBox.y)).toBeLessThan(fieldBox.height);
+    else
+      expect(saveBox.y).toBeGreaterThanOrEqual(
+        fieldBox.y + fieldBox.height - 1,
+      );
   });
 });
