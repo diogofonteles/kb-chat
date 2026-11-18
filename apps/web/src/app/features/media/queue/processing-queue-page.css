@@ -52,10 +52,12 @@
   gap: var(--space-3);
   align-items: center;
   margin: 0;
-  padding: var(--space-3) var(--space-4);
+  /* banner(): pad 14 16, title 14/700, text 13. */
+  padding: 0.875rem var(--space-4);
   border-radius: var(--radius-card);
   background: var(--overlay-2);
   font-size: var(--text-sm);
+  line-height: 1.0625rem;
   overflow-wrap: anywhere;
 }
 
@@ -72,6 +74,7 @@
 .banner-text span {
   color: var(--color-text-muted);
   font-size: var(--text-meta);
+  line-height: 1rem;
 }
 
 .banner.warn {
@@ -181,8 +184,9 @@
     flex-direction: row;
     align-items: center;
     gap: var(--space-3);
-    /* The frames' head sits 56 from the top (the status bar's room). */
-    padding: 3rem var(--space-4) var(--space-3);
+    /* qmHead: its row 56 from the top (the status bar's room), 12 under the title; the
+       44 px back target reaches over both. */
+    padding: 3rem var(--space-4) 0.3125rem;
   }
 
   .phone-back {
@@ -211,6 +215,11 @@
 
   .body {
     gap: var(--space-3);
+  }
+
+  /* qmCard list: gap 10 under the section's name. */
+  .group {
+    gap: 0.625rem;
   }
 
   .group h3 {

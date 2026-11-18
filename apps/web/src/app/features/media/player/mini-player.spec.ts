@@ -7,7 +7,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { fireEvent, screen } from '@testing-library/angular';
+import { fireEvent, screen, within } from '@testing-library/angular';
 import {
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
@@ -170,15 +170,6 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     expect(panel.content()).toBeNull();
   });
 
-  it('KBC-129 FR-2: closing the player also closes "Tocando agora"', async () => {
-    const { harness } = await setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Tocando agora' }));
-    await harness.fixture.whenStable();
-    fireEvent.click(screen.getByRole('button', { name: 'Fechar o player' }));
-    await harness.fixture.whenStable();
-    expect(TestBed.inject(RightPanel).content()).toBeNull();
-  });
-
   it('pauses, goes back 15 s and plays from the bar', async () => {
     const { media, harness } = await setup();
     fireEvent.click(screen.getByRole('button', { name: 'Voltar 15 segundos' }));
@@ -191,19 +182,15 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     expect(screen.getByRole('button', { name: 'Tocar' })).toBeTruthy();
   });
 
-  it('closes: stops, saves the position and goes away (AC-11)', async () => {
-    const { media, http, harness, engine } = await setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Fechar o player' }));
-    await harness.fixture.whenStable();
-    expect(media.calls).toContain('pause');
+  it('has no ✕ of its own (v2: "Fechar o player" is in the player\'s ⋯) and goes when it closes (AC-11)', async () => {
+    const { harness, engine } = await setup();
+    const bar = screen.getByRole('region', { name: 'Mini-player' });
     expect(
-      http.expectOne({ method: 'PUT', url: `/api/v1/media/${ID}/progress` })
-        .request.body,
-    ).toEqual({ positionMs: 150_000, basedOn: null });
-    expect(engine.source()).toBeNull();
+      within(bar).queryByRole('button', { name: 'Fechar o player' }),
+    ).toBeNull();
+    engine.unload();
+    await harness.fixture.whenStable();
     expect(screen.queryByRole('region', { name: 'Mini-player' })).toBeNull();
-    // The focus goes to the main area, not to <body> (WCAG 2.4.3).
-    expect(document.activeElement?.tagName).toBe('MAIN');
   });
 
   it('stops and says why when the media is gone from the server', async () => {

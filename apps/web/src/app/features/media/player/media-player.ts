@@ -54,6 +54,9 @@ import { SilencesDialog } from './silences-dialog.js';
 import { RestrictedSkipper } from '@core/media/restricted-skipper.js';
 import { SilenceSkipper } from '@core/media/silence-skipper.js';
 import { BookmarkNote } from './bookmark-note.js';
+import { RightPanel } from '@features/shell/right-panel.js';
+import { NowPlayingPanel } from './now-playing-panel.js';
+import { PlayerPanel } from './player-panel.js';
 
 const ERROR_MESSAGES: Record<PlaybackErrorKind, () => string> = {
   network: () =>
@@ -151,10 +154,15 @@ export class MediaPlayer {
    */
   private readonly saver = inject(ProgressSaver);
   /**
-   * A phone (below 1024 px): no player bar under the full-screen player, so "Fechar o
-   * player", the bar's ✕ on a desktop, is at the foot of ⋯ (v2 · Mídia — Player, celular).
+   * The menus over the action row, where the v2 frame draws them (player.js speedMenu(668,
+   * 396), menu MORE at 812): from the 56 px row's top, the speed at its pill (32 high), ⋯
+   * 40 px left of its button (40 high).
    */
+  protected readonly speedOffset = { x: 0, y: -12 } as const;
+  protected readonly moreOffset = { x: -40, y: -8 } as const;
+  /** A phone (below 1024 px): ⋯ is a sheet with no lines (mItems). */
   private readonly phone = signal(false);
+  private readonly rightPanel = inject(RightPanel);
   private readonly volumeAnswer = toSignal(from(inject(VOLUME_SUPPORT)));
   protected readonly volumeState = computed(() =>
     this.volumeAnswer() === undefined ? 'pending' : 'off',
@@ -248,13 +256,14 @@ export class MediaPlayer {
   );
   /**
    * ⋯ as in the v2 frame: the page's actions, a line, the listening ones, a line, keys. The
-   * phone's sheet has no lines (mItems); "Fechar o player" (the bar's ✕ where there is no
-   * bar) and the subtitles have no place of their own in the frames, so they wait here.
+   * phone's sheet has no lines (mItems). "Fechar o player" (KBC-041 AC-11) and the
+   * subtitles have no place of their own in the frames (the player bar has no ✕, the CC
+   * button opens "Tocando agora"), so they wait here, at both widths.
    */
   protected readonly moreOptions = computed<readonly MenuOption[]>(() => {
     const page = this.pageOptions();
     const phone = this.phone();
-    const close = phone && this.engine.source() !== null;
+    const close = this.engine.source() !== null;
     const own = [...this.listeningOptions(), ...this.textOptions()];
     const [first, ...rest] = own;
     return [
@@ -486,12 +495,24 @@ export class MediaPlayer {
     if (id === 'close') this.closePlayer();
   }
 
-  /** As the bar's ✕: stops, keeps the position and lets the media go (KBC-041 AC-11). */
+  /**
+   * "Fechar o player" (KBC-041 AC-11): stops, keeps the position and lets the media go; the
+   * player bar goes with it, and so do "Tocando agora" and the Fila beside another screen
+   * (they were about what played). The page's own "Sobre" stays.
+   */
   private closePlayer(): void {
     const source = this.engine.source();
     this.engine.pause();
     if (source && this.saver.gone() !== source.id) this.saver.saveNow();
     this.engine.unload();
+    const content = this.rightPanel.content();
+    if (
+      content &&
+      !content.inputs?.['media'] &&
+      (content.component === NowPlayingPanel ||
+        content.component === PlayerPanel)
+    )
+      this.rightPanel.close();
     this.focusMore();
   }
 

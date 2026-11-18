@@ -408,46 +408,44 @@
 </article>
 
 <ng-template #viewChips>
-  @if (hasViews()) {
-    <div
-      class="views"
-      role="group"
-      aria-label="Ver"
-      i18n-aria-label="@@player.views"
+  <div
+    class="views"
+    role="group"
+    aria-label="Ver"
+    i18n-aria-label="@@player.views"
+  >
+    <button
+      uiChip
+      type="button"
+      [selected]="view() === 'transcript'"
+      (click)="chosenView.set('transcript')"
+      i18n="@@player.view.transcript"
     >
+      Transcrição
+    </button>
+    @if (hasTracks()) {
       <button
         uiChip
         type="button"
-        [selected]="view() === 'transcript'"
-        (click)="chosenView.set('transcript')"
-        i18n="@@player.view.transcript"
+        [selected]="view() === 'tracks'"
+        (click)="chosenView.set('tracks')"
+        i18n="@@player.view.tracks"
       >
-        Transcrição
+        Faixas
       </button>
-      @if (hasTracks()) {
-        <button
-          uiChip
-          type="button"
-          [selected]="view() === 'tracks'"
-          (click)="chosenView.set('tracks')"
-          i18n="@@player.view.tracks"
-        >
-          Faixas
-        </button>
-      }
-      @if (canEdit()) {
-        <button
-          uiChip
-          type="button"
-          [selected]="view() === 'voices'"
-          (click)="chosenView.set('voices')"
-          i18n="@@player.view.voices"
-        >
-          Vozes
-        </button>
-      }
-    </div>
-  }
+    }
+    @if (canEdit()) {
+      <button
+        uiChip
+        type="button"
+        [selected]="view() === 'voices'"
+        (click)="chosenView.set('voices')"
+        i18n="@@player.view.voices"
+      >
+        Vozes
+      </button>
+    }
+  </div>
 </ng-template>
 
 @if (editing() && media(); as current) {

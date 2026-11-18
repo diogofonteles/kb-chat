@@ -150,6 +150,8 @@
   inset: auto 0 0;
   width: 100%;
   max-width: none;
+  /* A frame's sheet height (sheet(kids, h)), when it is taller than the items. */
+  min-height: min(var(--menu-sheet-height, 0px), calc(100dvh - var(--space-6)));
   max-height: calc(100dvh - var(--space-6));
   padding: var(--space-3) var(--space-2)
     calc(var(--space-4) + env(safe-area-inset-bottom));
@@ -181,9 +183,16 @@
   background: var(--scrim);
 }
 
+/* mItems: 20 from the edge, the icon 22, 16 before the label. */
 .menu.ui-overlay--sheet button {
+  gap: var(--space-4);
   min-height: var(--target);
   font-size: var(--text-md);
+}
+
+.menu.ui-overlay--sheet button > ui-icon:first-child ::ng-deep svg {
+  width: 1.375rem;
+  height: 1.375rem;
 }
 
 /* The sheet's name (mTitle): 18/700 in the text colour. */

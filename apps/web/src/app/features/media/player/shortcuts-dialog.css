@@ -1,3 +1,8 @@
+/* The phone sheet's height in the frame (player.js mOver). */
+ui-dialog {
+  --ui-sheet-height: 43.75rem;
+}
+
 /* player.js over 'keys': the switch row (14/700 and its 12 hint, the 40×22 switch), a line,
    then each key (200 wide, kbd 22 high) beside what it does in 14; on a phone (mOver
    'keys') the keys 130 wide and the words 13. */
@@ -135,7 +140,10 @@ kbd {
     display: inline;
   }
 
+  /* Rows 32 high, 4 apart (mOver 'keys': pad 5 around a 22 px key, gap 4). */
   .list {
+    display: grid;
+    gap: 0.25rem;
     margin: 0;
   }
 
@@ -162,9 +170,10 @@ kbd {
     font-size: var(--text-meta);
   }
 
-  .footer,
-  .footer .close {
-    width: 100%;
+  /* The sheet has no "Fechar" (mOver): a tap on the scrim, Esc or the ✕ kept for
+     assistive tech close it. */
+  .footer {
+    display: none;
   }
 }
 

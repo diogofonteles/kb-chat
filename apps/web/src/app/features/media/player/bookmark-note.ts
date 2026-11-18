@@ -50,8 +50,8 @@ import { UiOverlay } from '@ui/overlay.js';
       </div>
     }
     @if (bookmark(); as current) {
-      <!-- A popover under 🔖 (player.js noteBox), a sheet on a phone. No <form>: an Enter
-           that opened the note (on 🔖) must not submit it too. -->
+      <!-- A popover over the action row from 32 px left of 🔖 (player.js noteBox), a sheet on
+           a phone. No <form>: an Enter that opened the note (on 🔖) must not submit it too. -->
       <div
         class="note"
         role="group"
@@ -59,6 +59,8 @@ import { UiOverlay } from '@ui/overlay.js';
         data-edit-scope
         [uiOverlay]="anchor()"
         overlayAlign="start"
+        overlaySide="over"
+        [overlayOffset]="noteOffset"
         [overlaySheetBelow]="sheetBelow"
       >
         <div class="head">
@@ -112,6 +114,8 @@ export class BookmarkNote {
   readonly closed = output();
   /** "Marcar este trecho": the popover opens under it. */
   readonly anchor = input.required<HTMLElement>();
+  /** player.js noteBox(700, 396): the row's top, 32 px left of 🔖 (40 high in a 56 row). */
+  protected readonly noteOffset = { x: -32, y: -8 } as const;
   protected readonly sheetBelow = 1024;
 
   protected readonly noteMax = MEDIA_BOOKMARK_NOTE_MAX;

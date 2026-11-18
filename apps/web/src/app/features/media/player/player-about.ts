@@ -92,7 +92,7 @@ import { parseVoices } from '../voices/voices-panel.js';
           <ul class="voices">
             @for (one of voices(); track one.voice) {
               <li>
-                <app-voice-tag [voice]="one.voice" />
+                <app-voice-tag [voice]="one.voice" [round]="true" />
                 <span class="spoken" i18n="@@voices.spoken"
                   >{{ one.spoken }} de fala</span
                 >

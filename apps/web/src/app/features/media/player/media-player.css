@@ -140,8 +140,9 @@
   justify-self: start;
 }
 
-/* "1×" in an outlined pill, 32 high (velocidade). */
+/* "1×" in an outlined pill, 32 high (velocidade); its phone sheet 420 high (mOver). */
 .speed {
+  --menu-sheet-height: 26.25rem;
   --menu-trigger-height: 2rem;
   --menu-trigger-min: 2.75rem;
   --menu-trigger-padding: 0.875rem;
@@ -178,7 +179,9 @@
   white-space: nowrap;
 }
 
+/* ⋯: its phone sheet 700 high (mOver). */
 .more {
+  --menu-sheet-height: 43.75rem;
   --menu-trigger-min: 2.5rem;
   --menu-trigger-height: 2.5rem;
 }
@@ -329,21 +332,38 @@
 /* A phone (player.js pMobile): the seek line, then 1× · ⟲ · ▶ 68 · ⟳ · ☾, then share ·
    marks · about; mark beside the title and ⋯ in the head (the page places them). */
 @media (max-width: 1023px) {
+  /* pMobile's rhythm: the 4 px rail 12 under the title row (the 44 px touch box reaches
+     over it), the 11 px times 6 under the rail, the controls 8 + 4 under them, the second
+     row 16 under the first. */
   .seek {
     display: grid;
     gap: var(--space-1);
+    margin-top: -1.4375rem;
   }
 
   .times {
-    margin-top: calc(-1 * var(--space-1));
+    margin-top: -1.1875rem;
   }
 
   .row {
     display: grid;
-    grid-template-columns: repeat(5, auto);
-    justify-content: space-between;
+    /* 1× · ⟲ · ▶ · ⟳ · ☾ spread as space-between: the skips centred in the room left, so the
+       play stays in the middle whatever the second row holds (the timer's chip). */
+    grid-template-columns: auto 1fr 4.25rem 1fr auto;
     align-items: center;
-    gap: var(--space-3) 0;
+    justify-items: center;
+    gap: var(--space-4) 0;
+    margin-top: -0.375rem;
+  }
+
+  .speed,
+  .share {
+    justify-self: start;
+  }
+
+  .moon,
+  .about-link {
+    justify-self: end;
   }
 
   .row > ::ng-deep [resume],
@@ -464,14 +484,16 @@
 
   .more {
     position: absolute;
-    /* In the head, 56 from the top (pMobile). */
-    top: 2.75rem;
+    /* In the head: its row 56 from the top, centred at 74 (pMobile). */
+    top: 3.375rem;
     right: var(--space-4);
     --menu-trigger-color: var(--color-text);
   }
 
+  /* pMobile's track bar: right under the second row, 12 above the card. */
   .track-nav {
-    padding: var(--space-1) 0 0;
+    margin: -0.3125rem 0 -0.5rem;
+    padding: 0;
   }
 
   .track-step {

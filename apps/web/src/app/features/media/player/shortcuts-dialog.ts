@@ -31,6 +31,7 @@ interface ShortcutRow {
       i18n-title="@@player.shortcuts.title"
       titleId="shortcuts-title"
       [width]="600"
+      [top]="90"
       [short]="true"
       (closed)="closed.emit()"
     >

@@ -412,13 +412,6 @@ export class MediaPlayerPage {
   protected readonly hasTracks = computed(
     () => this.tracks.tracks().length > 0,
   );
-  /**
-   * The chips Transcrição · Faixas · Vozes: "Faixas" with approved tracks, "Vozes" only for
-   * who edits recordings (the voices are theirs); one view alone needs no chips.
-   */
-  protected readonly hasViews = computed(
-    () => this.canEdit() || this.hasTracks(),
-  );
   /** The view chosen; back on the transcript for each media opened. */
   protected readonly chosenView = linkedSignal<string, PlayerView>({
     source: this.id,

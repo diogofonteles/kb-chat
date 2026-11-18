@@ -1,3 +1,8 @@
+/* The phone sheet's height in the frame (player.js mOver). */
+ui-dialog {
+  --ui-sheet-height: 32.5rem;
+}
+
 /* player.js over 'sleep': "Parar depois de" 13/700 muted, the choices as chips (32 high,
    pill) on one line that wraps; on a phone (mOver 'sleep') a list, 20 clock or moon and
    16 words per row. */
@@ -94,9 +99,10 @@
     margin-left: auto;
   }
 
-  .footer,
-  .footer .close {
-    width: 100%;
+  /* The sheet has no "Fechar" (mOver): a tap on the scrim, Esc or the ✕ kept for
+     assistive tech close it. */
+  .footer {
+    display: none;
   }
 }
 

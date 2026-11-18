@@ -45,6 +45,21 @@
   pointer-events: none;
 }
 
+/*
+ * The v2 line is smooth at rest (lib.js playerBar, pMobile): the bookmarks and the track
+ * starts (KBC-042 FR-3, KBC-066 FR-9) show on it while the pointer is over it, the focus is
+ * on its thumb or a finger drags it, which is when a person aims at a time.
+ */
+.ticks {
+  visibility: hidden;
+}
+
+.track:hover .ticks,
+.track:focus-within .ticks,
+.track.engaged .ticks {
+  visibility: visible;
+}
+
 /* A thin tick across the rail, readable over the played and the unplayed part. */
 .mark {
   position: absolute;

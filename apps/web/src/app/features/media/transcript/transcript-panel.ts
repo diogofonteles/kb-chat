@@ -374,11 +374,23 @@ export class TranscriptPanel {
    * so the list stays on it, not on the segment at −2 s.
    */
   protected readonly shownActive = computed(() =>
-    this.holdingCited() ? -1 : this.activeIndex(),
+    this.holdingCited() || this.untouched() ? -1 : this.activeIndex(),
   );
   /** Who carries `aria-current`: the first cited segment, until something plays. */
   protected readonly currentIndex = computed(() =>
-    this.holdingCited() ? (this.citedIndexes()[0] ?? -1) : this.activeIndex(),
+    this.holdingCited()
+      ? (this.citedIndexes()[0] ?? -1)
+      : this.untouched()
+        ? -1
+        : this.activeIndex(),
+  );
+  /**
+   * Opened at the start (its first second) and not played yet: nothing is "now" (v2 ·
+   * Mídia — Player, the listener's frame paused at 0:00 marks no line); a play, or a seek
+   * or a resume further in, marks one.
+   */
+  private readonly untouched = computed(
+    () => !this.heard() && this.clock.positionMs() < 1000,
   );
 
   constructor() {
@@ -496,9 +508,11 @@ export class TranscriptPanel {
     const highlights = inject(SEARCH_HIGHLIGHTS);
     afterRenderEffect({
       write: () => {
-        const word = this.holdingCited()
-          ? undefined
-          : this.activeWords()[this.activeWord()];
+        // No word lit where no line is marked (a cited passage holds, or nothing played).
+        const word =
+          this.shownActive() < 0
+            ? undefined
+            : this.activeWords()[this.activeWord()];
         const range =
           word &&
           this.rangeOf({

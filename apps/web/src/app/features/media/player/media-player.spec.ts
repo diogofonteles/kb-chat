@@ -19,7 +19,10 @@ import {
   fakeMediaElement,
   type FakeMedia,
 } from '../../../testing/fake-media-element.js';
+import { RightPanel } from '@features/shell/right-panel.js';
 import { MediaPlayer } from './media-player.js';
+import { NowPlayingPanel } from './now-playing-panel.js';
+import { PlayerPanel } from './player-panel.js';
 
 const SOURCE = { id: 'm1', title: 'Palestra', src: '/api/v1/media/m1/stream' };
 
@@ -532,6 +535,51 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     expect(
       screen.getByRole('menuitem', { name: 'Desligar timer' }),
     ).toBeTruthy();
+  });
+});
+
+describe('MediaPlayer "Fechar o player" (KBC-041 AC-11, v2)', () => {
+  it('closes from ⋯: stops, saves the position, lets the media go and takes "Tocando agora" along', async () => {
+    const { media, engine, http, fixture } = await renderPlayer(loaded);
+    media.setCurrentTime(150);
+    media.emit('timeupdate');
+    const panel = TestBed.inject(RightPanel);
+    panel.open({
+      component: NowPlayingPanel,
+      width: 'narrow',
+      label: 'Tocando agora',
+    });
+    await fixture.whenStable();
+    const more = screen.getByRole('button', { name: 'Mais opções' });
+    fireEvent.click(more);
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Fechar o player' }));
+    await fixture.whenStable();
+    expect(media.calls).toContain('pause');
+    expect(
+      http.expectOne({ method: 'PUT', url: '/api/v1/media/m1/progress' })
+        .request.body,
+    ).toEqual({ positionMs: 150_000, basedOn: null });
+    expect(engine.source()).toBeNull();
+    expect(panel.content()).toBeNull();
+    // The focus stays on the page's ⋯, not on <body> (WCAG 2.4.3).
+    expect(document.activeElement).toBe(more);
+  });
+
+  it('keeps the player page\'s own "Sobre" open when it closes', async () => {
+    const { fixture } = await renderPlayer(loaded);
+    const panel = TestBed.inject(RightPanel);
+    panel.open({
+      component: PlayerPanel,
+      width: 'narrow',
+      label: 'Sobre este áudio',
+      inputs: { media: { id: 'm1' } },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Fechar o player' }));
+    await fixture.whenStable();
+    expect(panel.content()?.component).toBe(PlayerPanel);
   });
 });
 

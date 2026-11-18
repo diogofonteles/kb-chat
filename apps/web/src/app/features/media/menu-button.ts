@@ -14,7 +14,13 @@ import {
 } from '@angular/core';
 import { UiIcon } from '@ui/icon.js';
 import type { IconName } from '@ui/icons.js';
-import { UiOverlay, outsideBox, type OverlayAlign } from '@ui/overlay.js';
+import {
+  UiOverlay,
+  outsideBox,
+  type OverlayAlign,
+  type OverlayOffset,
+  type OverlaySide,
+} from '@ui/overlay.js';
 
 /** One item of a menu: an action, or one of the choices with the current one checked. */
 export interface MenuOption {
@@ -80,6 +86,8 @@ const SHEET_BELOW_PX = 1024;
         tabindex="-1"
         [uiOverlay]="trigger"
         [overlayAlign]="align()"
+        [overlaySide]="side()"
+        [overlayOffset]="offset()"
         [overlaySheetBelow]="sheetBelow"
         [attr.aria-label]="menuLabel() || label()"
         (keydown)="onMenuKey($event)"
@@ -165,6 +173,9 @@ export class MenuButton {
   readonly disabled = input(false);
   /** Which edge of the button the list lines up with. */
   readonly align = input<OverlayAlign>('end');
+  /** Below the button, or over its row from `offset` (the v2 player's menus). */
+  readonly side = input<OverlaySide>('below');
+  readonly offset = input<OverlayOffset | null>(null);
   /** The menu's name shown over its items (the speed menu of the v2 player). */
   readonly titled = input(false);
   readonly chosen = output<string>();

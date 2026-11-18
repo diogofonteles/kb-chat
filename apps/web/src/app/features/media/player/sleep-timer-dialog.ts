@@ -29,6 +29,7 @@ import { UiButton, UiDialog, UiIcon } from '@ui/index.js';
       i18n-title="@@sleep.title"
       titleId="sleep-title"
       [width]="520"
+      [top]="280"
       [short]="true"
       (closed)="closed.emit()"
     >

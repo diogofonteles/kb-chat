@@ -313,8 +313,9 @@
     flex-direction: row;
     align-items: center;
     gap: var(--space-3);
-    /* The frames' head sits 56 from the top (the status bar's room). */
-    padding: 3rem var(--space-4) var(--space-3);
+    /* qmHead: its row 56 from the top (the status bar's room), 12 under the title; the
+       44 px back target reaches over both. */
+    padding: 3rem var(--space-4) 0.3125rem;
   }
 
   .phone-back {
@@ -365,8 +366,16 @@
     display: none;
   }
 
+  /* The rows right under the count's row (bookmarksMobile: no gap of its own). */
   .body {
+    gap: 0;
     padding: 0;
+  }
+
+  /* ⋯ 20 px at 16 from the edge (bookmarksMobile); its 44 px target reaches over the
+     row's padding. */
+  .row-more {
+    margin-right: -0.75rem;
   }
 
   .columns,

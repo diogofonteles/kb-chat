@@ -151,14 +151,22 @@
 @media (max-width: 1023px) {
   :host {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-3);
+    /* qmCard: pad 12, gap 10. */
+    gap: 0.625rem;
     padding: var(--space-3);
     border-radius: var(--radius-card);
     background: var(--overlay-1);
   }
 
+  /* The button 36 high across the card (qmCard btn h 36). */
   .action {
     justify-self: stretch;
+    min-height: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .steps {
+    line-height: 0.8125rem;
   }
 
   /* qmCard: cover 44, the title 15/700, the pill beside its detail. */

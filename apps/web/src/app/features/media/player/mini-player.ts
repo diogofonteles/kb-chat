@@ -2,7 +2,6 @@ import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   computed,
   inject,
   input,
@@ -122,7 +121,6 @@ export class MiniPlayer {
   /** A media the full player shows elsewhere on screen (the reading panel, KBC-039). */
   readonly shownElsewhere = input<string | null>(null);
 
-  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly rightPanel = inject(RightPanel);
   private readonly panelTabs = inject(PlayerPanelTabs);
   private readonly document = inject(DOCUMENT);
@@ -355,22 +353,5 @@ export class MiniPlayer {
       width: 'narrow',
       label: $localize`:@@mini.queue:Fila`,
     });
-  }
-
-  /**
-   * "Fechar o player": stops, saves where it stopped and goes away (AC-11). The focus,
-   * which was on the button that goes, moves to the main area (WCAG 2.4.3).
-   */
-  protected close(): void {
-    this.engine.pause();
-    if (!this.gone()) this.saver.saveNow();
-    this.engine.unload();
-    // "Tocando agora" or the Fila were about what played: they go with it.
-    if (this.nowPlayingOpen() || this.queueOpen()) this.rightPanel.close();
-    const main = this.host.nativeElement.ownerDocument.querySelector('main');
-    if (main) {
-      main.tabIndex = -1;
-      main.focus();
-    }
   }
 }

@@ -107,6 +107,8 @@
       [titled]="true"
       i18n-menuLabel="@@player.speedMenu"
       align="start"
+      side="over"
+      [offset]="speedOffset"
       [options]="speedOptions()"
       keyshortcuts="Shift+. Shift+,"
       (chosen)="chooseSpeed($event)"
@@ -194,6 +196,9 @@
       label="Mais opções"
       i18n-label="@@player.more"
       keyshortcuts="?"
+      align="start"
+      side="over"
+      [offset]="moreOffset"
       [options]="moreOptions()"
       (chosen)="chooseMore($event)"
     >
