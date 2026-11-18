@@ -8,6 +8,7 @@ import {
   ElementRef,
   computed,
   inject,
+  linkedSignal,
   input,
   output,
   viewChild,
@@ -70,6 +71,8 @@ export class TopBar {
   readonly searched = output<string>();
   /** The search on screen (v2 · Conversa, chat-results: the field holds what was searched). */
   readonly query = input('');
+  /** What the field holds now: ✕ clears it once it holds something (v2 · Conversa). */
+  protected readonly typed = linkedSignal(() => this.query());
   /** ✦: the research view, ready to type into. */
   readonly researchRequested = output();
   /** Início: the conversation's home. */
@@ -137,6 +140,14 @@ export class TopBar {
     const field = this.search().nativeElement;
     field.focus();
     field.select();
+  }
+
+  /** ✕: empties the field and keeps the focus there. */
+  protected clear(): void {
+    const field = this.search().nativeElement;
+    field.value = '';
+    this.typed.set('');
+    field.focus();
   }
 
   protected back(): void {

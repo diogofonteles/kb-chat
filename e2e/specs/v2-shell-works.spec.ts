@@ -230,6 +230,14 @@ test.describe('the shell', () => {
     await expect(search).toHaveValue('ritmo');
     await search.press('Enter');
     await expect(page.getByText(/documentos? · Tudo ·/)).toBeVisible();
+    // The field holds the search; ✕ in place of ⌘K empties it (v2 · Conversa).
+    await expect(search).toHaveValue('ritmo');
+    await bar.getByRole('button', { name: 'Limpar a busca' }).click();
+    await expect(search).toHaveValue('');
+    await expect(search).toBeFocused();
+    await expect(
+      bar.getByRole('button', { name: 'Limpar a busca' }),
+    ).toHaveCount(0);
 
     await bar.getByRole('button', { name: /^Conta de / }).click();
     await expect(page.getByRole('menu', { name: 'Conta' })).toBeVisible();

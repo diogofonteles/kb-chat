@@ -54,8 +54,22 @@
       i18n-placeholder="@@topbar.searchPlaceholder"
       aria-keyshortcuts="Meta+K Control+K"
       enterkeyhint="search"
+      (input)="typed.set(search.value)"
     />
-    <kbd class="ui-kbd shortcut" aria-hidden="true">⌘ K</kbd>
+    @if (typed()) {
+      <button
+        uiIconButton
+        type="button"
+        class="clear"
+        aria-label="Limpar a busca"
+        i18n-aria-label="@@topbar.clearSearch"
+        (click)="clear()"
+      >
+        <ui-icon name="close" [size]="20" />
+      </button>
+    } @else {
+      <kbd class="ui-kbd shortcut" aria-hidden="true">⌘ K</kbd>
+    }
     <span class="divider" aria-hidden="true"></span>
     <button
       uiIconButton

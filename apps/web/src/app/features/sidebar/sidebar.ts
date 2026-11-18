@@ -74,7 +74,7 @@ const STATUS_LABELS: Record<ConversationStatus, () => string> = {
 
 const KIND_LABELS: Record<ConversationKind, () => string> = {
   search: () => $localize`:@@sidebar.kindSearch:Busca`,
-  research: () => $localize`:@@sidebar.kindResearch:IA`,
+  research: () => $localize`:@@sidebar.kindResearch:Pesquisa com IA`,
 };
 
 const CHIPS: readonly { kind: LibraryKind; label: () => string }[] = [

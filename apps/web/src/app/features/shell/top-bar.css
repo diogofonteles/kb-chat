@@ -87,7 +87,12 @@
 }
 
 .search input::-webkit-search-cancel-button {
-  filter: grayscale(1);
+  display: none;
+}
+
+.clear {
+  flex: none;
+  color: var(--color-text-muted);
 }
 
 .divider {
