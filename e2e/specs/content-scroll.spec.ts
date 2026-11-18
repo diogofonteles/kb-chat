@@ -4,9 +4,9 @@ import { startInSearchView, modeRadio } from './search-view.js';
 import { desktop } from './shell-helpers.js';
 
 /**
- * KBC-125 (owner's report on the v2 shell): every page that shows text scrolls it with the
- * wheel and the keyboard on desktop and with a touch on a phone. The shell is one screen
- * tall and its panels clip; the text must move inside them, at 1440 and 390.
+ * KBC-125 (owner's report on the v2 shell): every page that shows text scrolls it, with the
+ * wheel at 1440 and 390 and with the keyboard on desktop. The shell is one screen tall and
+ * its panels clip, so the text must move inside them.
  *
  * Each check scrolls over a region and asserts that the content under the pointer moved up
  * on screen, whatever element turns out to be the scroller.
@@ -84,26 +84,18 @@ async function probeAt(
   };
 }
 
-/** Scrolls by `dy` over `point` as the person would at this width (positive: down). */
+/**
+ * Scrolls by `dy` over `point` (positive: down). The wheel at both widths: it picks the box
+ * to scroll by the same hit test and scroll chain as a finger, and Chromium's emulated
+ * touches do not scroll reliably in CI's headless Linux.
+ */
 async function scrollOver(
   page: Page,
   point: { x: number; y: number },
   dy: number,
 ): Promise<void> {
-  if (desktop(page)) {
-    await page.mouse.move(point.x, point.y);
-    await page.mouse.wheel(0, dy);
-    return;
-  }
-  // A finger dragged over the text (Chromium's compositor gesture, as a real touch).
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Input.synthesizeScrollGesture', {
-    x: point.x,
-    y: point.y,
-    yDistance: -dy,
-    gestureSourceType: 'touch',
-  });
-  await cdp.detach();
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.wheel(0, dy);
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { TranscriptSpeakers } from '@kb-chat/contracts';
 import { describe, expect, it } from 'vitest';
 import type {
   DerivedSegment,
@@ -100,5 +101,42 @@ describe('TranscriptService subtitles cache (KBC-038)', () => {
     expect(reads.words).toBe(3);
     service.subtitles(ACTOR, 'b');
     expect(reads.words).toBe(4);
+  });
+});
+
+describe('TranscriptService.segmentVoices (KBC-156 BR-4)', () => {
+  const speakers: TranscriptSpeakers = {
+    version: 1,
+    createdAt: '2026-11-03T12:00:00.000Z',
+    transcriptVersion: 1,
+    staleTranscript: false,
+    requestedVoices: null,
+    voiceCount: 2,
+    voices: [],
+    turns: [],
+    labels: [],
+    merged: [],
+    namesPending: false,
+  };
+
+  it("says each stored segment's voice, by position, from the current separation", () => {
+    const { store } = fakeStore(['m']);
+    const service = new TranscriptService({
+      transcripts: store,
+      media: { get: () => ({ archived: false }) },
+      voices: () => ({ speakers, segmentVoices: [1] }),
+    });
+    expect(service.segmentVoices('m')).toEqual([1]);
+  });
+
+  it('is null without a separation or without a transcript', () => {
+    const { store } = fakeStore(['m']);
+    const service = new TranscriptService({
+      transcripts: store,
+      media: { get: () => ({ archived: false }) },
+      voices: () => null,
+    });
+    expect(service.segmentVoices('m')).toBeNull();
+    expect(service.segmentVoices('other')).toBeNull();
   });
 });

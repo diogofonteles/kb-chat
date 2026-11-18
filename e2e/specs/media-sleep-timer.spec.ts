@@ -226,11 +226,16 @@ test('the timer is chosen and turned off with the keyboard only', async ({
   await openPlayer(page);
   const more = page.getByRole('button', { name: 'Mais opções' });
   await more.focus();
-  // ↑ on the trigger opens the menu on its last item ("Atalhos de teclado"); ↑ again
-  // reaches "Timer para dormir".
+  // ↑ on the trigger opens the menu on its last item ("Atalhos de teclado"); ↑ walks up
+  // to "Timer para dormir".
   await page.keyboard.press('ArrowUp');
   await expect(
     page.getByRole('menuitem', { name: 'Atalhos de teclado' }),
+  ).toBeFocused();
+  // Everyone who may listen sees who speaks (KBC-151 BR-0), so its choice sits in between.
+  await page.keyboard.press('ArrowUp');
+  await expect(
+    page.getByRole('menuitem', { name: /^Mostrar quem fala/ }),
   ).toBeFocused();
   await page.keyboard.press('ArrowUp');
   await expect(
@@ -254,6 +259,11 @@ test('the timer is chosen and turned off with the keyboard only', async ({
   await page.keyboard.press('ArrowUp');
   await expect(
     page.getByRole('menuitem', { name: 'Atalhos de teclado' }),
+  ).toBeFocused();
+  // Everyone who may listen sees who speaks (KBC-151 BR-0), so its choice sits in between.
+  await page.keyboard.press('ArrowUp');
+  await expect(
+    page.getByRole('menuitem', { name: /^Mostrar quem fala/ }),
   ).toBeFocused();
   await page.keyboard.press('ArrowUp');
   await expect(
