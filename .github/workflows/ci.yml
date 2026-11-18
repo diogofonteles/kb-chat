@@ -119,7 +119,9 @@ jobs:
     name: E2E (Playwright) ${{ matrix.name }} ${{ matrix.shard }}
     needs: changes
     if: needs.changes.outputs.run_e2e == 'true'
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, where `playwright install-deps webkit` cannot find
+    # libicu74, libxml2, libvpx9 and libx264-164 for this Playwright version.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
