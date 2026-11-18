@@ -179,9 +179,15 @@
         i18n-title="@@voiceProfiles.newTitle"
         title="Novo perfil de voz"
         [width]="800"
+        i18n-cancelLabel="@@voiceConsent.cancel"
+        cancelLabel="Cancelar"
+        [primaryLabel]="profileForm.phoneAction()"
+        [primaryDisabled]="profileForm.phoneActionBlocked()"
+        (primary)="profileForm.runPhoneAction()"
         (closed)="adding.set(false)"
       >
         <app-voice-profile-form
+          #profileForm
           [topic]="topic()"
           [taken]="taken()"
           (created)="created($event)"

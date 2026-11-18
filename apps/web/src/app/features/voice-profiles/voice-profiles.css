@@ -64,9 +64,10 @@
 .danger {
   min-height: var(--target);
   padding: 0 var(--space-4);
-  border-radius: var(--radius-sm);
+  /* v2 buttons are pills (v2 · Perfis de voz). */
+  border-radius: var(--radius-pill);
   font: inherit;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -333,6 +334,9 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  /* The frame's outline pill: 36 px, 14 px text. */
+  min-height: 2.25rem;
+  font-size: var(--text-sm);
 }
 
 .facts-row {
@@ -414,6 +418,30 @@
   .top-row,
   .facts-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The sheet's header holds Cancelar · Continuar (and Calcular perfil) on a phone. */
+  .form-foot,
+  .sources-save {
+    display: none;
+  }
+
+  /* The note over its button, as the phone frame stacks them. */
+  .consent-foot {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  /* The phone frame gives the text more room, at the reading size. */
+  .consent-box {
+    max-height: 15rem;
+    font-size: var(--text-sm);
+  }
+
+  /* The note in the text's colour, at the field's size (v2 · Perfis de voz, celular). */
+  .consent-foot .consent-note {
+    color: var(--color-text);
+    font-size: var(--text-sm);
   }
 
   .panel > .field {

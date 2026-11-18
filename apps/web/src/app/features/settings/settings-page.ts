@@ -70,10 +70,36 @@ interface IndexItem {
 }
 
 const PHONE_QUERY = '(max-width: 1023px)';
+/** How far an arrow key moves the page, as a browser's own step. */
+const ARROW_STEP = 40;
+
+/** Where a scrolling key takes `box`, or null for a key that does not scroll. */
+export function scrollTargetFor(
+  event: Pick<KeyboardEvent, 'key' | 'shiftKey'>,
+  box: Pick<HTMLElement, 'scrollTop' | 'scrollHeight' | 'clientHeight'>,
+): number | null {
+  const page = Math.max(box.clientHeight - ARROW_STEP, ARROW_STEP);
+  const max = box.scrollHeight - box.clientHeight;
+  const at = box.scrollTop;
+  const down = (step: number) => Math.min(at + step, max);
+  const up = (step: number) => Math.max(at - step, 0);
+  const targets: Readonly<Record<string, () => number>> = {
+    End: () => max,
+    Home: () => 0,
+    PageDown: () => down(page),
+    PageUp: () => up(page),
+    ' ': () => (event.shiftKey ? up(page) : down(page)),
+    ArrowDown: () => down(ARROW_STEP),
+    ArrowUp: () => up(ARROW_STEP),
+  };
+  return Object.hasOwn(targets, event.key)
+    ? (targets[event.key]?.() ?? null)
+    : null;
+}
 /** How far below the page's top a section title counts as read (under the strip). */
 const READING_LINE = 96;
 /** Room left above a section reached from the index, for the compact strip. */
-const SECTION_GAP = 52;
+const SECTION_GAP = 60;
 /** How close to the end of the page counts as "cannot scroll any further". */
 const BOTTOM_SLACK = 2;
 /** What a person does to scroll the page themselves (the wheel, a touch, the keyboard). */
@@ -260,19 +286,19 @@ export class SettingsPage {
    * AI that answers and the default view and profile. The other sections load their own
    * data only when opened, so their rows carry just the name.
    */
-  protected readonly summaries = computed<Partial<Record<SettingsSection, string>>>(
-    () => {
-      const view = this.store.settings();
-      if (!view) return {};
-      const { preferences } = view;
-      const provider = view.ai.provider;
-      const lines: Partial<Record<SettingsSection, string>> = {
-        preferences: `${VIEW_COPY[preferences.defaultView]()} · ${PROFILE_COPY[preferences.researchProfile].label()}`,
-      };
-      if (provider !== null) lines.ai = PROVIDER_COPY[provider].name();
-      return lines;
-    },
-  );
+  protected readonly summaries = computed<
+    Partial<Record<SettingsSection, string>>
+  >(() => {
+    const view = this.store.settings();
+    if (!view) return {};
+    const { preferences } = view;
+    const provider = view.ai.provider;
+    const lines: Partial<Record<SettingsSection, string>> = {
+      preferences: `${VIEW_COPY[preferences.defaultView]()} · ${PROFILE_COPY[preferences.researchProfile].label()}`,
+    };
+    if (provider !== null) lines.ai = PROVIDER_COPY[provider].name();
+    return lines;
+  });
 
   /** The section scrolled to last; the scroll spy's own address changes do not scroll. */
   private scrolledTo: SettingsSection | null = null;
@@ -309,6 +335,7 @@ export class SettingsPage {
     });
     this.spyOnScroll();
     this.keepPinnedInPlace();
+    this.scrollByKeysFromBody();
     this.watchEdits();
     this.destroyRef.onDestroy(() => this.store.clearConnectOutcome());
   }
@@ -499,6 +526,39 @@ export class SettingsPage {
       });
     });
     this.destroyRef.onDestroy(() => observer.disconnect());
+  }
+
+  /**
+   * The page scrolls inside the panel, not the document: with the focus on nothing (the
+   * body, right after opening a section), End, Home, Page Up/Down, Space and the arrows
+   * would move nothing. They move this page then; inside a field they stay the field's.
+   */
+  private scrollByKeysFromBody(): void {
+    const host = this.host.nativeElement;
+    const onKey = (event: KeyboardEvent) => {
+      const active = this.document.activeElement;
+      if (
+        active !== this.document.body &&
+        active !== this.document.documentElement
+      )
+        return;
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      )
+        return;
+      const top = scrollTargetFor(event, host);
+      if (top === null) return;
+      event.preventDefault();
+      this.pinned = null;
+      host.scrollTo({ top });
+    };
+    this.document.addEventListener('keydown', onKey);
+    this.destroyRef.onDestroy(() =>
+      this.document.removeEventListener('keydown', onKey),
+    );
   }
 
   /**

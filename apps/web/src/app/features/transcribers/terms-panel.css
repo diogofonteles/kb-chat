@@ -1,9 +1,21 @@
 .usage {
+  /* The limit stays in sight while the list is edited, under the page's strip (v2 · Termos,
+     acima do limite: the meter over the end of the list). Opaque, as chips pass under it. */
+  position: sticky;
+  top: 4.75rem;
+  z-index: 1;
   display: grid;
   gap: var(--space-3);
   padding: var(--space-4);
   border-radius: var(--radius-card);
-  background: var(--overlay-2);
+  background: color-mix(in srgb, var(--color-text) 7%, var(--color-bg));
+}
+
+@media (max-width: 1023px) {
+  .usage {
+    /* Under the phone screen's header (‹ · title · search). */
+    top: 5.6875rem;
+  }
 }
 
 .usage-line {
@@ -220,5 +232,24 @@
 
   .add-row .secondary {
     align-self: flex-start;
+  }
+}
+
+/* After the base rules: the phone's meter is the count, the bar, then the version. */
+@media (max-width: 1023px) {
+  .usage-line {
+    display: contents;
+  }
+
+  .usage .use {
+    order: 1;
+  }
+
+  .usage .bar {
+    order: 2;
+  }
+
+  .usage .version {
+    order: 3;
   }
 }

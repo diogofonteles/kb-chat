@@ -4,10 +4,27 @@
      fixed while the page scrolls; the strip and the phone header carry their slice of it. */
   --settings-tint: color-mix(in srgb, var(--color-text) 16%, var(--color-bg));
   --settings-tint-height: 17.5rem;
+  /* The v2 select's chevron (chevDown, muted), drawn in the theme's own grey: two strokes,
+     falling then rising. The panels inside the page (Pessoas, Perfis de voz) draw it as well. */
+  --settings-select-chevron:
+    linear-gradient(
+      45deg,
+      transparent calc(50% - 1px),
+      var(--color-text-muted) calc(50% - 1px) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    ),
+    linear-gradient(
+      -45deg,
+      transparent calc(50% - 1px),
+      var(--color-text-muted) calc(50% - 1px) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    );
   display: block;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  /* The panel's own height (cqh): the index and each section are measured against it. */
+  container-type: size;
   background: linear-gradient(
     180deg,
     var(--settings-tint) 0,
@@ -36,9 +53,10 @@
   display: grid;
   align-content: start;
   gap: 0.125rem;
-  max-height: 100dvh;
+  /* Never taller than the panel, or it would scroll away with the page ("Conta" cut). */
+  max-height: 100cqh;
   overflow-y: auto;
-  padding: 2.5rem 0 var(--space-4);
+  padding: 3.375rem 0 var(--space-4);
 }
 
 .index-group {
@@ -196,9 +214,11 @@
   border-bottom: 0;
 }
 
-/* The last section can still come up under the strip, as the frames show "Sobre". */
-.layout .section:last-child {
-  min-height: calc(100dvh - 11rem);
+/* A section reached from the index stands alone under the strip, as each frame shows it:
+   it fills the panel below the strip, so the next one starts past the fold. Conta stays
+   short, as the top of the page shows it with Sua IA under it. */
+.layout .section:not([data-section='account']) {
+  min-height: calc(100cqh - 3.75rem);
   align-content: start;
 }
 
@@ -244,8 +264,12 @@
   min-height: 4.5rem;
   margin: 0 calc(-1 * var(--space-2));
   padding: 0 var(--space-2);
-  border-top: 1px solid var(--overlay-line);
-  background: var(--color-surface);
+  /* The frame's Salvar floats over the page: no bar behind it. */
+  pointer-events: none;
+}
+
+.save-bar > * {
+  pointer-events: auto;
 }
 
 .save-bar .save-status {

@@ -445,6 +445,20 @@ fieldset {
   min-height: 2.5rem;
 }
 
+/* The v2 select (Configurações): a filled field with its own chevron, never the native one. */
+:where(select).select {
+  appearance: none;
+  padding-right: 2.25rem;
+  border-color: transparent;
+  background-color: var(--color-surface-muted);
+  background-image: var(--settings-select-chevron, none);
+  background-position:
+    right 1.25rem center,
+    right 0.875rem center;
+  background-size: 0.375rem 0.375rem;
+  background-repeat: no-repeat;
+}
+
 .rule {
   width: 100%;
   margin: 0;
@@ -739,6 +753,18 @@ fieldset {
   color: var(--color-text);
   font: inherit;
   font-size: var(--text-sm);
+}
+
+/* A select in a form's field (voice profiles): the field's own look, with the v2 chevron. */
+:where(select).input {
+  appearance: none;
+  padding-right: 2.25rem;
+  background-image: var(--settings-select-chevron, none);
+  background-position:
+    right 1.25rem center,
+    right 0.875rem center;
+  background-size: 0.375rem 0.375rem;
+  background-repeat: no-repeat;
 }
 
 textarea.input {

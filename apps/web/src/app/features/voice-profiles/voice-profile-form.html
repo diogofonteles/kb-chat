@@ -11,41 +11,41 @@
     </h3>
     <!-- v2: Pessoa and "Quem é" on one line. -->
     <div class="top-row">
-    <div class="field">
-      <label
-        for="voice-consent-speaker"
-        class="label"
-        i18n="@@voiceConsent.speaker"
-        >Pessoa</label
-      >
-      <select
-        id="voice-consent-speaker"
-        class="input"
-        formControlName="speakerId"
-      >
-        <option value=""></option>
-        @for (speaker of speakers(); track speaker.id) {
-          <option [value]="speaker.id">{{ speaker.name }}</option>
-        }
-      </select>
-    </div>
-    @if (speakerList.hasValue() && speakers().length === 0) {
-      <p class="hint" i18n="@@voiceConsent.noSpeakers">
-        Ninguém para cadastrar. Dê nome às vozes em uma gravação primeiro.
-      </p>
-    }
+      <div class="field">
+        <label
+          for="voice-consent-speaker"
+          class="label"
+          i18n="@@voiceConsent.speaker"
+          >Pessoa</label
+        >
+        <select
+          id="voice-consent-speaker"
+          class="input"
+          formControlName="speakerId"
+        >
+          <option value=""></option>
+          @for (speaker of speakers(); track speaker.id) {
+            <option [value]="speaker.id">{{ speaker.name }}</option>
+          }
+        </select>
+      </div>
+      @if (speakerList.hasValue() && speakers().length === 0) {
+        <p class="hint" i18n="@@voiceConsent.noSpeakers">
+          Ninguém para cadastrar. Dê nome às vozes em uma gravação primeiro.
+        </p>
+      }
 
-    <fieldset class="group">
-      <legend class="label" i18n="@@voiceConsent.subject">Quem é</legend>
-      <label class="check">
-        <input type="radio" formControlName="subject" value="living" />
-        <span i18n="@@voiceConsent.living">Pessoa viva</span>
-      </label>
-      <label class="check">
-        <input type="radio" formControlName="subject" value="deceased" />
-        <span i18n="@@voiceConsent.deceased">Pessoa falecida</span>
-      </label>
-    </fieldset>
+      <fieldset class="group">
+        <legend class="label" i18n="@@voiceConsent.subject">Quem é</legend>
+        <label class="check">
+          <input type="radio" formControlName="subject" value="living" />
+          <span i18n="@@voiceConsent.living">Pessoa viva</span>
+        </label>
+        <label class="check">
+          <input type="radio" formControlName="subject" value="deceased" />
+          <span i18n="@@voiceConsent.deceased">Pessoa falecida</span>
+        </label>
+      </fieldset>
     </div>
 
     <section class="consent" aria-labelledby="consent-text-title">
@@ -57,86 +57,100 @@
         Consentimento específico
       </h4>
       <!-- The text in a box of its own that scrolls (v2). -->
-      <div class="consent-box" tabindex="0" aria-labelledby="consent-text-title">
+      <div
+        class="consent-box"
+        tabindex="0"
+        aria-labelledby="consent-text-title"
+      >
         @for (paragraph of paragraphs(); track paragraph; let first = $first) {
           <p [class.consent-lead]="first">{{ paragraph }}</p>
         }
       </div>
       <div class="consent-foot">
-      <p class="consent-note" i18n="@@voiceConsent.signatureNote">
-        Colha a assinatura neste texto, com o nome da pessoa, a data e o local.
-      </p>
-      <button type="button" class="secondary copy" (click)="copyText()">
-        <ui-icon name="copy" [size]="16" />
-        @if (copied()) {
-          <ng-container i18n="@@voiceConsent.copied"
-            >Texto copiado</ng-container
-          >
-        } @else {
-          <ng-container i18n="@@voiceConsent.copy">Copiar texto</ng-container>
-        }
-      </button>
+        <p class="consent-note" i18n="@@voiceConsent.signatureNote">
+          Colha a assinatura neste texto, com o nome da pessoa, a data e o
+          local.
+        </p>
+        <button type="button" class="secondary copy" (click)="copyText()">
+          <ui-icon name="copy" [size]="16" />
+          @if (copied()) {
+            <ng-container i18n="@@voiceConsent.copied"
+              >Texto copiado</ng-container
+            >
+          } @else {
+            <ng-container i18n="@@voiceConsent.copy">Copiar texto</ng-container>
+          }
+        </button>
       </div>
     </section>
 
     <!-- Quem autorizou · Data · Por qual meio, side by side. -->
     <div class="facts-row">
-    <label class="field">
-      <span class="label">
-        @if (deceased()) {
-          <ng-container i18n="@@voiceConsent.grantedByWork"
-            >Quem responde pela obra (nome ou instituição)</ng-container
-          >
-        } @else {
-          <ng-container i18n="@@voiceConsent.grantedBy"
-            >Quem autorizou</ng-container
-          >
-        }
-      </span>
-      <input
-        class="input"
-        type="text"
-        autocomplete="off"
-        maxlength="120"
-        formControlName="grantedBy"
-        [attr.aria-invalid]="invalid('grantedBy') ? 'true' : null"
-      />
-    </label>
-    @if (deceased()) {
       <label class="field">
-        <span class="label" i18n="@@voiceConsent.role"
-          >Em que qualidade (por exemplo, herdeira ou presidente)</span
-        >
+        <span class="label">
+          @if (deceased()) {
+            <ng-container i18n="@@voiceConsent.grantedByWork"
+              >Quem responde pela obra (nome ou instituição)</ng-container
+            >
+          } @else {
+            <ng-container i18n="@@voiceConsent.grantedBy"
+              >Quem autorizou</ng-container
+            >
+          }
+        </span>
         <input
           class="input"
           type="text"
           autocomplete="off"
           maxlength="120"
-          formControlName="grantedByRole"
-          [attr.aria-invalid]="invalid('grantedByRole') ? 'true' : null"
+          formControlName="grantedBy"
+          [attr.aria-invalid]="invalid('grantedBy') ? 'true' : null"
         />
       </label>
-    }
-    <label class="field">
-      <span class="label" i18n="@@voiceConsent.when">Data da autorização</span>
-      <input
-        class="input"
-        type="date"
-        [max]="maxDate"
-        formControlName="grantedOn"
-        [attr.aria-invalid]="invalid('grantedOn') ? 'true' : null"
-      />
-    </label>
-    <div class="field">
-      <label for="voice-consent-method" class="label" i18n="@@voiceConsent.how"
-        >Por qual meio</label
-      >
-      <select id="voice-consent-method" class="input" formControlName="method">
-        @for (method of methods; track method.id) {
-          <option [value]="method.id">{{ method.label }}</option>
-        }
-      </select>
-    </div>
+      @if (deceased()) {
+        <label class="field">
+          <span class="label" i18n="@@voiceConsent.role"
+            >Em que qualidade (por exemplo, herdeira ou presidente)</span
+          >
+          <input
+            class="input"
+            type="text"
+            autocomplete="off"
+            maxlength="120"
+            formControlName="grantedByRole"
+            [attr.aria-invalid]="invalid('grantedByRole') ? 'true' : null"
+          />
+        </label>
+      }
+      <label class="field">
+        <span class="label" i18n="@@voiceConsent.when"
+          >Data da autorização</span
+        >
+        <input
+          class="input"
+          type="date"
+          [max]="maxDate"
+          formControlName="grantedOn"
+          [attr.aria-invalid]="invalid('grantedOn') ? 'true' : null"
+        />
+      </label>
+      <div class="field">
+        <label
+          for="voice-consent-method"
+          class="label"
+          i18n="@@voiceConsent.how"
+          >Por qual meio</label
+        >
+        <select
+          id="voice-consent-method"
+          class="input"
+          formControlName="method"
+        >
+          @for (method of methods; track method.id) {
+            <option [value]="method.id">{{ method.label }}</option>
+          }
+        </select>
+      </div>
     </div>
 
     <fieldset class="group proof">
@@ -184,6 +198,7 @@
     @if (problem()) {
       <p class="field-error" role="alert">{{ problem() }}</p>
     }
+    <!-- Why the phone's "Continuar" waits, for the readers of its header action. -->
     <!-- The modal's foot: Cancelar · Continuar at the right. -->
     <div class="row form-foot">
       <button
@@ -237,10 +252,10 @@
     @if (problem()) {
       <p class="field-error" role="alert">{{ problem() }}</p>
     }
-    <div class="row">
+    <div class="row sources-foot">
       <button
         type="button"
-        class="primary"
+        class="primary sources-save"
         [disabled]="busy() || !enough()"
         (click)="save()"
         i18n="@@voiceConsent.save"
