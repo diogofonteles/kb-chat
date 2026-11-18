@@ -306,12 +306,14 @@ a.title:hover {
 
 @media (max-width: 1023px) {
   /* The mini player: cover, title, play and close; the line of progress at its foot. */
+  /* lib.js miniPlayer: 56 high, padded 8 · 12 at the sides only; cover, 10, the words, the
+     mark 22 and ❚❚ 24 at the right, each in its 44 px target. */
   .bar {
     position: relative;
     grid-template-columns: minmax(0, 1fr) auto auto auto;
-    gap: var(--space-2);
+    gap: 0;
     min-height: var(--shell-mini-player);
-    padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+    padding: 0 var(--space-3) 0 var(--space-2);
     border-radius: var(--radius-card);
     /* The cover's tint darkened in every theme, with the cover's light ink on it. */
     background: color-mix(
@@ -329,6 +331,16 @@ a.title:hover {
 
   .cover {
     --ui-cover-size: 40px !important;
+  }
+
+  .now {
+    gap: 0.625rem;
+  }
+
+  /* The title 13/700 over the author 12 (miniPlayer). */
+  .bar .title {
+    font-size: var(--text-meta);
+    font-weight: 700;
   }
 
   .controls {
@@ -357,6 +369,13 @@ a.title:hover {
     z-index: 1;
     width: var(--target);
     height: var(--target);
+    /* Its 44 px target reaches back over the gap, so the mark sits 10 after the words. */
+    margin-left: calc(-1 * var(--space-1));
+  }
+
+  .mark ui-icon ::ng-deep svg {
+    width: 1.375rem;
+    height: 1.375rem;
   }
 
   .subtitle {
@@ -418,11 +437,18 @@ a.title:hover {
     height: 2px;
   }
 
+  /* ▶/❚❚ 24, 12 from the card's edge: its target reaches over the padding. */
   .play {
     width: var(--target);
     height: var(--target);
+    margin-right: -0.625rem;
     background: transparent;
     color: var(--color-on-cover);
+  }
+
+  .play ui-icon ::ng-deep svg {
+    width: 1.5rem;
+    height: 1.5rem;
   }
 }
 

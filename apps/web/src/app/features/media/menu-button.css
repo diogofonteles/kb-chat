@@ -183,6 +183,11 @@
   background: var(--scrim);
 }
 
+/* The sheet's rows 4 apart (sheet(kids): gap 4). */
+.menu.ui-overlay--sheet .group {
+  gap: var(--space-1);
+}
+
 /* mItems: 20 from the edge, the icon 22, 16 before the label. */
 .menu.ui-overlay--sheet button {
   gap: var(--space-4);

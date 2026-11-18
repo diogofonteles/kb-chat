@@ -372,10 +372,14 @@
     padding: 0;
   }
 
-  /* ⋯ 20 px at 16 from the edge (bookmarksMobile); its 44 px target reaches over the
-     row's padding. */
+  .list {
+    margin-top: 0;
+  }
+
+  /* ⋯ 20 px at 16 from the edge, 12 after the words (bookmarksMobile); its 44 px target
+     reaches over the row's padding and the gap, so the title keeps the frame's width. */
   .row-more {
-    margin-right: -0.75rem;
+    margin: 0 -0.75rem;
   }
 
   .columns,
@@ -447,9 +451,20 @@
 
   .empty-title {
     font-size: 1.25rem;
+    line-height: 1.25;
   }
 
   .empty-text {
     font-size: var(--text-sm);
+    line-height: 1.25;
+  }
+
+  /* qmEmpty: the words 320 wide, the button 12 under them (the grid's gap alone). */
+  .empty p {
+    max-width: 20rem;
+  }
+
+  .empty a {
+    margin-top: 0;
   }
 }

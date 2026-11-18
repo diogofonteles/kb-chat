@@ -127,13 +127,21 @@ kbd {
 }
 
 @media (max-width: 1023px) {
+  /* The switch's row, then the keys 12 below it (mOver 'keys': pad 8, gap 4): the body's
+     own gap is wider, so the row gives some back. */
   .setting {
-    padding-bottom: var(--space-2);
+    margin-bottom: calc(var(--space-3) - var(--space-5));
+    padding-bottom: 0;
     border-bottom: 0;
   }
 
   .hint {
     display: none;
+  }
+
+  /* 14/700 on two tight lines beside the switch (mOver 'keys'). */
+  .setting-name {
+    line-height: 1.25;
   }
 
   .phone-only {
