@@ -511,6 +511,19 @@
       color-mix(in srgb, var(--color-bg) 85%, transparent);
   }
 
+  /* The library and a collection's album run under the foot, the foot translucent over them
+     (v2 · media-library@mobile, media-list@mobile); they end --shell-foot-h lower, so their
+     last row still scrolls above the foot (FR-4, AC-5). */
+  .app-shell:has(app-library-page, app-media-list-page) > .layout {
+    grid-row: 1 / -1;
+  }
+
+  .app-shell:has(app-library-page, app-media-list-page) > .shell-foot {
+    grid-row: 2;
+    z-index: 5;
+    align-self: end;
+  }
+
   /* The full-screen player: the foot keeps only the player's announcer, out of sight. */
   .shell-foot.bare {
     position: absolute;

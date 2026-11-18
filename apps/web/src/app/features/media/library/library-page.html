@@ -195,11 +195,12 @@
         </div>
         <div class="strip" role="list" #strip>
           @for (item of continueItems(); track item.id) {
+            <!-- ▶ on every shortcut, the one playing too: it goes on from the point
+                 (v2 · media-library-sort). -->
             <app-library-card
               [item]="item"
               [tile]="true"
-              [playing]="playingId() === item.id"
-              (played)="play(item)"
+              (played)="resume(item)"
             />
           }
         </div>

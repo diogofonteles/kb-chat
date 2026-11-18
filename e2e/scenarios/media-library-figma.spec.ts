@@ -363,8 +363,14 @@ test('a recording opens its tracks, and removing it names them', async ({
     // The removal frame draws the recording closed, the page's sections back above the list.
     await toggle.click();
     await expect(tracks).toBeHidden();
-    await recording.hover();
-    await more.click();
+    // A phone draws only the chevron: its ⋯ comes out on the long press, or the keyboard.
+    if (width === 'phone') {
+      await more.focus();
+      await page.keyboard.press('Enter');
+    } else {
+      await recording.hover();
+      await more.click();
+    }
     await page.getByRole('menuitem', { name: 'Remover' }).click();
     const remove = page.getByRole('dialog', {
       name: `Remover "${RECORDING}"?`,

@@ -185,6 +185,45 @@ a.main:focus-visible {
   color: var(--color-accent-text);
 }
 
+/* The one playing (media-library frames): its number gives way, the wave stands where the
+   cover starts, and the cover, the title and the author move one step (32 px) right. */
+@container library-table (min-width: 36.0625rem) {
+  :host(.playing) .wave {
+    translate: 2rem 0;
+  }
+
+  :host(.playing) .art {
+    translate: 2rem 0;
+  }
+
+  :host(.playing) .title,
+  :host(.playing) .byline {
+    padding-inline-start: 2rem;
+  }
+
+  /* The title 15/18 with its author 13/16 right under it, centred in the 56 row; "parou em"
+     12 (v2 · media-library). */
+  :host {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .title {
+    margin-bottom: -1px;
+    padding-top: 0;
+    line-height: 1.125rem;
+  }
+
+  .byline {
+    margin-top: 1px;
+    padding-bottom: 0;
+    line-height: 1rem;
+  }
+
+  .resume {
+    font-size: var(--text-xs);
+  }
+}
+
 :host(.failed) .title {
   color: var(--color-text-muted);
 }
@@ -417,6 +456,25 @@ app-menu-button {
 
   .more {
     opacity: 1;
+  }
+
+  /* Only the chevron is drawn (media-library-tracks@mobile): the ⋯ opens on a long press, and
+     shows while the keyboard is on it. */
+  :host(.has-tracks) {
+    --row-end: 1.5rem;
+  }
+
+  :host(.has-tracks:has(.more:focus-within)) {
+    --row-end: 3.5rem;
+  }
+
+  :host(.has-tracks) .more:not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   :host(.has-tracks:hover) .duration,

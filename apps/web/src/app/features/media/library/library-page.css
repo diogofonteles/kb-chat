@@ -274,7 +274,9 @@
   grid-auto-flow: column;
   grid-auto-columns: calc((100% - 2 * var(--space-3)) / 3);
   gap: var(--space-3);
-  margin: 0;
+  /* The 4 under the cards keeps their focus ring in the scroller; it takes no room below
+     (the filters 32 under the cards, v2 · media-library-sort). */
+  margin: 0 0 calc(-1 * var(--space-1));
   padding: 0 0 var(--space-1);
   overflow-x: auto;
   scroll-snap-type: x mandatory;
@@ -387,11 +389,12 @@
 }
 
 /* A flex column: grid track sizing over 2 000 rows costs a frame at every layout (NFR-2).
-   The first row starts 8 under the head's line (v2 · media-library). */
+   The first row starts 8 under the head's 1 px line (v2 · media-library: the line at the
+   head's last pixel, the rows of 56 from 9 under its box). */
 .rows {
   display: flex;
   flex-direction: column;
-  margin: var(--space-2) 0 0;
+  margin: calc(var(--space-2) + 1px) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -873,7 +876,9 @@ ui-empty-state {
   }
 
   .library.selecting {
-    padding-bottom: calc(var(--shell-mobile-nav) + var(--space-8));
+    padding-bottom: calc(
+      var(--shell-foot-h, var(--shell-mobile-nav)) + var(--space-8)
+    );
   }
 
   .confirm {
@@ -912,8 +917,20 @@ ui-empty-state {
     display: none;
   }
 
+  /* The title 20/24, the words 14/17, the tracks 13/16 and the two 44 buttons, 12 apart; the
+     buttons end 82 over the screen's foot (media-library-remove@mobile). */
+  .confirm {
+    padding-bottom: calc(5.125rem + env(safe-area-inset-bottom));
+  }
+
   .confirm h2 {
-    margin-bottom: var(--space-2);
+    margin-bottom: var(--space-3);
+    line-height: 1.5rem;
+  }
+
+  .confirm p {
+    margin-bottom: 0;
+    line-height: 1.0625rem;
   }
 
   .confirm-actions {
@@ -921,9 +938,14 @@ ui-empty-state {
   }
 
   .confirm .remove-tracks {
-    margin-top: 0;
+    margin-top: var(--space-3);
     padding: 0;
     background: none;
+  }
+
+  .confirm .remove-tracks-text {
+    font-size: var(--text-meta);
+    line-height: 1rem;
   }
 
   .confirm .remove-tracks-text {
@@ -941,5 +963,12 @@ ui-empty-state {
 
   .confirm-actions button {
     width: 100%;
+  }
+}
+
+/* On a phone the page runs under the foot (chat-page.css): it ends that much lower. */
+@media (max-width: 1023px) {
+  .library {
+    padding-bottom: calc(var(--space-8) + var(--shell-foot-h, 0px));
   }
 }

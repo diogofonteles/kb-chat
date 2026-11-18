@@ -17,8 +17,9 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  /* v2: a 24 row (16/700 and two bare icons); the 32 targets overflow it evenly. */
-  height: 1.5rem;
+  /* v2: a 20 row (16/700 and two bare icons, 8 apart, the cover 16 under it); the 32 tall
+     targets overflow it evenly, as wide as their icons. */
+  height: 1.25rem;
 }
 
 .label {
@@ -33,8 +34,12 @@
 }
 
 .more {
-  --menu-trigger-min: 2rem;
+  --menu-trigger-min: 1.25rem;
   --menu-trigger-height: 2rem;
+}
+
+.bar .open {
+  width: 1.125rem;
 }
 
 .mark {
@@ -56,21 +61,28 @@
 .head {
   display: flex;
   gap: var(--space-3);
-  align-items: flex-start;
+  align-items: center;
 }
 
+/* The title 22/26 with its author 15/18 right under it; ↗ and 🔖 bare, 12 apart, centred
+   on the two (v2 · Tocando agora). */
 .names {
   display: grid;
   flex: 1;
-  gap: var(--space-1);
+  gap: 0;
   min-width: 0;
+}
+
+.head .share,
+.head .mark {
+  width: 1.375rem;
 }
 
 .title {
   color: var(--color-text);
   font-size: var(--text-section);
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.625rem;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
@@ -90,6 +102,11 @@
 .open {
   flex: none;
   color: var(--color-text-muted);
+}
+
+.names .author {
+  font-size: var(--text-item);
+  line-height: 1.125rem;
 }
 
 .card {
@@ -122,13 +139,14 @@
 .card-title {
   font-size: var(--text-sm);
   font-weight: 700;
+  line-height: 1.0625rem;
 }
 
 .before,
 .line {
   font-size: 1.125rem;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.5rem;
   overflow-wrap: anywhere;
 }
 
@@ -145,9 +163,16 @@
   background: var(--color-surface);
 }
 
+/* "Sobre a autora" 15/18, the name 15/18 and the count 13/16 beside the 48 avatar. */
 .about h3 {
   margin: 0;
-  font-size: var(--text-md);
+  font-size: var(--text-item);
+  line-height: 1.125rem;
+}
+
+.about .person-meta {
+  font-size: var(--text-meta);
+  line-height: 1rem;
 }
 
 .person {
@@ -158,7 +183,9 @@
 
 .person-name {
   margin: 0;
+  font-size: var(--text-item);
   font-weight: 700;
+  line-height: 1.125rem;
 }
 
 .view {

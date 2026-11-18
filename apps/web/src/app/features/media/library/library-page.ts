@@ -923,6 +923,10 @@ export class LibraryPage {
     this.playNow.play(item);
   }
 
+  protected resume(item: MediaItem): void {
+    this.playNow.resume(item);
+  }
+
   /** The header's ▶: pauses what of this list plays, or plays its first ready media. */
   protected playAll(): void {
     const playing = this.listPlaying() ? this.playingItem() : null;

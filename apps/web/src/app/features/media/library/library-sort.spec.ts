@@ -29,8 +29,10 @@ describe('LibrarySortMenu ("Ordenar e ver como", KBC-128 FR-3)', () => {
     );
     await fixture.whenStable();
     expect(
-      screen.getByRole('group', { name: 'Ver como' }).textContent,
-    ).toContain('✓');
+      screen
+        .getByRole('group', { name: 'Ver como' })
+        .querySelector('.check ui-icon'),
+    ).not.toBeNull();
     fireEvent.click(screen.getByRole('menuitemradio', { name: /Grade/ }));
     expect(sorts).toEqual(['duration']);
     expect(views).toEqual(['grid']);

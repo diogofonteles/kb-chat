@@ -7,6 +7,7 @@ import {
   inject,
   input,
   output,
+  viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -108,6 +109,7 @@ export class LibraryRow {
   readonly tracksToggled = output();
   readonly selectedChange = output<boolean>();
   readonly acted = output<RowAction>();
+  private readonly menuButton = viewChild(MenuButton);
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   /** The long press under way: where it started and its timer. */
@@ -235,7 +237,7 @@ export class LibraryRow {
       timer: setTimeout(() => {
         this.press = null;
         this.pressedLong = true;
-        this.acted.emit('select');
+        this.longPressed();
       }, LONG_PRESS_MS),
     };
   }
@@ -261,7 +263,17 @@ export class LibraryRow {
     event.preventDefault();
     if (this.pressedLong) return;
     this.pressEnded();
-    this.acted.emit('select');
+    this.longPressed();
+  }
+
+  /**
+   * A phone recording draws only its chevron (media-library-tracks@mobile): its ⋯ (where it is
+   * removed, media-library-remove-tracks@mobile) opens on the long press, the other rows select.
+   */
+  private longPressed(): void {
+    const menu = this.tracksLabel() ? this.menuButton() : undefined;
+    if (menu) menu.openMenu();
+    else this.acted.emit('select');
   }
 
   /** The keyboard's context menu (the menu key, Shift+F10) selects it too, on a phone. */
@@ -270,7 +282,7 @@ export class LibraryRow {
       event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10');
     if (!menuKey || !this.phone() || !this.ready() || onControl(event)) return;
     event.preventDefault();
-    this.acted.emit('select');
+    this.longPressed();
   }
 
   protected toggleSelected(event: Event): void {

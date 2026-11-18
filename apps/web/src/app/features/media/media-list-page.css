@@ -796,3 +796,10 @@ ui-empty-state {
     width: 100%;
   }
 }
+
+/* On a phone the page runs under the foot (chat-page.css): it ends that much lower. */
+@media (max-width: 1023px) {
+  .media {
+    padding-bottom: calc(var(--space-8) + var(--shell-foot-h, 0px));
+  }
+}

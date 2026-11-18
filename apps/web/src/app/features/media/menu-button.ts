@@ -76,6 +76,7 @@ const SHEET_BELOW_PX = 1024;
       <div
         #menu
         class="menu"
+        [class.choices]="kind() === 'choice'"
         role="menu"
         tabindex="-1"
         [uiOverlay]="trigger"
@@ -132,9 +133,12 @@ const SHEET_BELOW_PX = 1024;
                   }
                   <span class="words">{{ entry.option.label }}</span>
                   @if (radio(entry.option)) {
-                    <span class="check" aria-hidden="true">{{
-                      entry.option.checked ? '✓' : ''
-                    }}</span>
+                    <!-- v2 menus: the chosen one's ✓ drawn as the check icon. -->
+                    <span class="check" aria-hidden="true">
+                      @if (entry.option.checked) {
+                        <ui-icon name="check" [size]="16" />
+                      }
+                    </span>
                   }
                 </button>
               }
@@ -205,6 +209,11 @@ export class MenuButton {
   /** A choice of a `kind="choice"` menu (an action among them is a plain item). */
   protected radio(option: MenuOption): boolean {
     return this.kind() === 'choice' && !option.action;
+  }
+
+  /** Opens it from elsewhere (a phone recording's long press, media-library@mobile). */
+  openMenu(): void {
+    if (!this.open()) this.openOn(this.checkedIndex());
   }
 
   protected toggle(): void {

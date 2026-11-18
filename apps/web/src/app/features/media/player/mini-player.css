@@ -261,10 +261,14 @@ a.title:hover {
   gap: var(--space-3);
 }
 
-/* "Tocando agora" or the Fila open in the right panel: its button in green (v2 player bar). */
-.now-playing.on,
+/* The Fila open in the right panel: its button in green (v2 player bar). "Tocando agora"
+   stays grey with its panel open (media-library: the frame's CC); its state is aria-pressed. */
 .queue.on {
   color: var(--color-accent);
+}
+
+.now-playing[aria-pressed='true'] {
+  color: var(--color-text-muted);
 }
 
 .spinner {

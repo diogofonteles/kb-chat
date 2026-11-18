@@ -71,6 +71,15 @@ export class PlayNow {
   }
 
   /**
+   * "Continuar ouvindo"'s ▶ (v2 · media-library): it always goes on, never pauses; the one
+   * already playing just keeps playing.
+   */
+  resume(item: MediaItem): void {
+    if (this.isPlaying(item.id)) return;
+    this.play(item);
+  }
+
+  /**
    * A list's ▶ or 🔀 (v2 · actionBar): plays the media for that list, so its header shows ⏸;
    * the one already playing goes on, now as the list's.
    */
