@@ -405,10 +405,120 @@ h2:focus-visible {
   }
 
   .page {
-    grid-template-columns: minmax(0, 1fr) var(--shell-right);
-    gap: var(--space-8);
     padding: var(--space-2) var(--space-8) var(--space-8);
   }
+}
+
+/* The reading column: in the 460 panel, a sheet and on a phone it is part of the host's
+   one scroll, "Sobre este documento" under the text. */
+.reader {
+  display: contents;
+}
+
+.about-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* The document page of the search (chat-document) and "Tela cheia": the page in the main
+   panel, its head in the cover's colour, and "Sobre este documento" as the right panel
+   (v2 docRight), each scrolling on its own. */
+:host(.page-mode),
+:host(.full) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--shell-right);
+  gap: var(--shell-gap);
+  overflow: hidden;
+  background: transparent;
+}
+
+:host(.full) {
+  background: var(--color-shell);
+}
+
+:host(.page-mode) .reader,
+:host(.full) .reader {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--doc-tint, var(--color-accent)) 75%, var(--color-bg))
+          0,
+        var(--color-bg) 27.5rem
+      )
+      no-repeat,
+    var(--color-bg);
+}
+
+:host(.page-mode) .head,
+:host(.full) .head {
+  background: transparent;
+}
+
+/* The page's tools lie on its head (actionBar): not sticky, ✕ last. */
+:host(.page-mode) .actions {
+  position: static;
+  gap: var(--space-5);
+  padding-block: var(--space-6);
+  background: transparent;
+}
+
+:host(.page-mode) .ask-ai {
+  min-height: 3.25rem;
+  padding-inline: 1.375rem;
+  font-size: var(--text-md);
+}
+
+/* Copiar trecho is a 40 icon on the page; its words stay its name. */
+:host(.page-mode) .actions .tool-label:not(.ask-ai .tool-label) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+:host(.page-mode) .occurrences {
+  min-height: 2.25rem;
+  background: var(--overlay-dark);
+}
+
+:host(.page-mode) .page-close {
+  color: var(--color-text-muted);
+}
+
+/* The head's ✕ and "Tela cheia" leave the page: its ✕ is in the tools and the panel's. */
+:host(.page-mode) .top-row:not(:has(.nav)) {
+  display: none;
+}
+
+:host(.page-mode) .top-row .full-toggle,
+:host(.page-mode) .top-row .close {
+  display: none;
+}
+
+:host(.page-mode) .about,
+:host(.full) .about {
+  min-height: 0;
+  padding: var(--space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--radius-card);
+  background: var(--color-bg);
+}
+
+/* In the panel and on a phone "Sobre este documento" follows the text, inside the page. */
+:host(:not(.page-mode):not(.full)) .about {
+  padding: 0 var(--space-5) var(--space-8);
 }
 
 /* A phone's page (not a source): the cover centred over the title (chat-document@mobile). */
@@ -436,6 +546,83 @@ h2:focus-visible {
   .page,
   .loading {
     padding-inline: var(--space-4);
+  }
+
+  :host(:not(.page-mode):not(.full)) .about {
+    padding-inline: var(--space-4);
+  }
+
+  /* cmDoc: ✕ round at the left of the top row, the occurrences' pill at its right, the
+     facets under the author, the tools as icons and "Perguntar à IA" the round ✦ at the
+     end. */
+  :host(:not(.in-sheet):not(.source-mode)) {
+    position: relative;
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .top-row .close {
+    order: -1;
+    width: 2.25rem;
+    height: 2.25rem;
+    background: var(--overlay-dark);
+    color: var(--color-text);
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .top-row {
+    min-height: 2.75rem;
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .occurrences {
+    position: absolute;
+    top: var(--space-3);
+    right: var(--space-4);
+    min-height: 2.25rem;
+    background: var(--overlay-dark);
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .titles {
+    gap: var(--space-2);
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .kicker {
+    order: 3;
+    color: var(--color-text-muted);
+    font-weight: 400;
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) h2 {
+    order: 1;
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .byline {
+    order: 2;
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .byline-concepts {
+    display: none;
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .actions {
+    position: static;
+    gap: var(--space-5);
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .actions .tool-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .ask-ai {
+    order: 10;
+    width: 3.25rem;
+    min-height: 3.25rem;
+    margin-inline-start: auto;
+    padding: 0;
+    justify-content: center;
+    border-radius: var(--radius-pill);
   }
 }
 

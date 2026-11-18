@@ -1,3 +1,4 @@
+<div class="reader">
 <header class="head">
   <div class="top-row">
     @if (sourceNav(); as nav) {
@@ -117,7 +118,7 @@
         (click)="askedAi.emit(doc.title)"
       >
         <ui-icon name="sparkleFill" [size]="18" />
-        <span i18n="@@panel.askAi">Perguntar à IA</span>
+        <span class="tool-label" i18n="@@panel.askAi">Perguntar à IA</span>
       </button>
     }
     @if (matches() > 0) {
@@ -128,7 +129,7 @@
         (click)="copyPassage()"
       >
         <ui-icon name="copy" [size]="16" />
-        <span i18n="@@panel.copy">{copyState(), select,
+        <span class="tool-label" i18n="@@panel.copy">{copyState(), select,
           copied {Copiado}
           failed {Não consegui copiar}
           other {Copiar trecho}
@@ -190,6 +191,19 @@
       <p class="not-found" role="status" i18n="@@source.passageNotFound">
         Trecho não localizado: nenhuma palavra da pergunta aparece neste texto.
       </p>
+    }
+    @if (page()) {
+      <!-- The page's ✕ at the end of its tools (v2 actionBar). -->
+      <button
+        uiIconButton
+        type="button"
+        class="page-close"
+        aria-label="Fechar"
+        i18n-aria-label="@@panel.closeLabel"
+        (click)="closed.emit()"
+      >
+        <ui-icon name="close" [size]="20" />
+      </button>
     }
   </div>
 }
@@ -298,70 +312,91 @@
       }
     </div>
 
-    <aside class="about" [attr.aria-labelledby]="titleId + '-about'">
+  </div>
+}
+</div>
+
+<!-- "Sobre este documento": under the text in the panel and on a phone; the right panel of
+     the document page on desktop (chat-document). -->
+@if (!document.error() && loaded(); as doc) {
+  <aside class="about" [attr.aria-labelledby]="titleId + '-about'">
+    <div class="about-head">
       <h3 class="about-title" [id]="titleId + '-about'" i18n="@@panel.about">
         Sobre este documento
       </h3>
-      @if (doc.level !== undefined) {
-        <section class="about-section">
-          <app-document-level
-            [topic]="topic()"
-            [documentId]="documentId()"
-            [level]="doc.level"
-          />
-        </section>
+      @if (page()) {
+        <!-- The right panel's ✕ (v2 panelHead): it closes the document page. -->
+        <button
+          uiIconButton
+          type="button"
+          class="about-close"
+          aria-label="Fechar o documento"
+          i18n-aria-label="@@panel.closeDocument"
+          (click)="closed.emit()"
+        >
+          <ui-icon name="close" [size]="20" />
+        </button>
       }
+    </div>
+    @if (doc.level !== undefined) {
       <section class="about-section">
-        <h4 i18n="@@panel.authorship">Autoria</h4>
-        <div class="person">
-          <ui-avatar [name]="authorName()" [size]="48" />
-          <div class="person-text">
-            <p class="person-name">
-              <app-authorship-badge [authorship]="doc.authorship" />
-            </p>
-            @if (doc.author) {
-              <p class="person-meta">{{ doc.author }}</p>
-            }
-          </div>
-        </div>
-        @if (doc.origin === 'audio') {
-          <p class="badge" i18n="@@panel.originAudio">
-            Transcrição automática de áudio — pode conter erros de
-            reconhecimento.
-          </p>
-        } @else if (doc.origin === 'ocr') {
-          <p class="badge" i18n="@@panel.originOcr">
-            Texto extraído de imagem (OCR) — pode conter erros de leitura.
-          </p>
-        }
+        <app-document-level
+          [topic]="topic()"
+          [documentId]="documentId()"
+          [level]="doc.level"
+        />
       </section>
-      @if (conceptButtons().length > 0) {
-        <section class="about-section concepts">
-          <h4 i18n="@@panel.conceptsTitle">Assuntos</h4>
-          <div class="chips">
-            @for (concept of conceptButtons(); track concept.name) {
-              <button
-                uiChip
-                type="button"
-                class="concept"
-                (click)="conceptSelected.emit(concept.name)"
-                [attr.aria-label]="concept.label"
-              >
-                {{ concept.name }}
-              </button>
-            }
-          </div>
-        </section>
+    }
+    <section class="about-section">
+      <h4 i18n="@@panel.authorship">Autoria</h4>
+      <div class="person">
+        <ui-avatar [name]="authorName()" [size]="48" />
+        <div class="person-text">
+          <p class="person-name">
+            <app-authorship-badge [authorship]="doc.authorship" />
+          </p>
+          @if (doc.author) {
+            <p class="person-meta">{{ doc.author }}</p>
+          }
+        </div>
+      </div>
+      @if (doc.origin === 'audio') {
+        <p class="badge" i18n="@@panel.originAudio">
+          Transcrição automática de áudio — pode conter erros de
+          reconhecimento.
+        </p>
+      } @else if (doc.origin === 'ocr') {
+        <p class="badge" i18n="@@panel.originOcr">
+          Texto extraído de imagem (OCR) — pode conter erros de leitura.
+        </p>
       }
-      <app-see-also
-        class="about-section"
-        [topic]="topic()"
-        [documentId]="documentId()"
-        [seeAlso]="doc.seeAlso"
-        [concept]="doc.concept"
-        (opened)="navigated.emit($event)"
-        (trackOpened)="trackOpened.emit($event)"
-      />
-    </aside>
-  </div>
+    </section>
+    @if (conceptButtons().length > 0) {
+      <section class="about-section concepts">
+        <h4 i18n="@@panel.conceptsTitle">Assuntos</h4>
+        <div class="chips">
+          @for (concept of conceptButtons(); track concept.name) {
+            <button
+              uiChip
+              type="button"
+              class="concept"
+              (click)="conceptSelected.emit(concept.name)"
+              [attr.aria-label]="concept.label"
+            >
+              {{ concept.name }}
+            </button>
+          }
+        </div>
+      </section>
+    }
+    <app-see-also
+      class="about-section"
+      [topic]="topic()"
+      [documentId]="documentId()"
+      [seeAlso]="doc.seeAlso"
+      [concept]="doc.concept"
+      (opened)="navigated.emit($event)"
+      (trackOpened)="trackOpened.emit($event)"
+    />
+  </aside>
 }

@@ -51,6 +51,8 @@
      research green; a home takes its collection's cover colour. */
   --tint-search: #3a3a3a;
   --tint-research: #1f4d33;
+  /* A round control over a cover's tint (the document page's ✕ and occurrences). */
+  --overlay-dark: rgb(0 0 0 / 40%);
   /* The accent as text over a tint (a pill, the active item of a list). */
   --color-accent-text: var(--color-accent);
   /* The v2 shell (KBC-125): panels with an 8 gap over the shell backdrop. */

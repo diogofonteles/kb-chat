@@ -30,6 +30,7 @@ import {
   UiIconButton,
 } from '@ui/index.js';
 import { describeFacets } from '@core/i18n/facet-labels.js';
+import { coverGradient } from '@ui/cover.js';
 import {
   sectionIndex,
   splitIntoChunks,
@@ -100,6 +101,9 @@ let nextPanel = 0;
     '[attr.aria-labelledby]': 'labelledBy() ?? titleId',
     '[class.full]': 'full()',
     '[class.in-sheet]': 'inSheet()',
+    '[class.page-mode]': 'page()',
+    '[class.source-mode]': 'inSource()',
+    '[style.--doc-tint]': 'tint()',
     '(keydown.escape)': 'closed.emit()',
   },
 })
@@ -128,6 +132,11 @@ export class DocumentPanel {
   readonly focusTitle = input(true);
   /** A source of an answer, also without its list (the sheet): "Abrir documento". */
   readonly sourceMode = input(false);
+  /**
+   * The document page of the search on desktop (chat-document): the page fills the main
+   * panel and "Sobre este documento" is the right panel; ✕ sits at the end of the tools.
+   */
+  readonly page = input(false);
   /** "Perguntar à IA" only where the research view is available. */
   readonly canAskAi = input(false);
   readonly closed = output();
@@ -159,6 +168,8 @@ export class DocumentPanel {
     return doc ? describeFacets(doc) : '';
   });
   protected readonly titleId = `document-title-${nextPanel++}`;
+  /** The page head's colour: the cover's (v2 pageHeader tint). */
+  protected readonly tint = computed(() => coverGradient(this.title())[0]);
   protected readonly full = linkedSignal({
     source: this.inSheet,
     computation: () => false,
