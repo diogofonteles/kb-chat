@@ -187,7 +187,10 @@
           aria-label="Conversa"
           i18n-aria-label="@@page.thread"
         >
-          @if (isEmpty()) {
+          @if (phoneHistory()) {
+            <!-- A phone's Conversas list (chat-history@mobile), from the Conversas tab. -->
+            <app-conversation-history (restored)="phoneHistory.set(false)" />
+          } @else if (isEmpty()) {
             <app-conversation-home
               [researching]="researching()"
               [topicNotice]="topicNotice()"

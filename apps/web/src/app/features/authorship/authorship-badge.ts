@@ -20,11 +20,13 @@ import { injectAuthorshipLabels } from './authorship-labels.js';
   templateUrl: './authorship-badge.html',
   styleUrl: './authorship-badge.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.plain]': 'plain()' },
+  host: { '[class.plain]': 'plain()', '[class.quiet]': 'quiet()' },
 })
 export class AuthorshipBadge {
   /** As text, no shape: a row of a table (v2 · Conversa docRow, "✦ Mestre Laércio" green). */
   readonly plain = input(false);
+  /** Plain and muted, the main author too (a source's "✦ Mestre Laércio · Texto/apostila"). */
+  readonly quiet = input(false);
   readonly authorship = input<Authorship | undefined>(undefined);
   /** A media item's author (null: none); when given, it is what the badge shows. */
   readonly mediaAuthor = input<MediaAuthor | undefined>(undefined);

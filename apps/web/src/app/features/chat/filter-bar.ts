@@ -24,6 +24,7 @@ import type {
   Authorship,
   ResultFacets,
   SearchFilters,
+  SearchHit,
 } from '@kb-chat/contracts';
 import type { FacetKey } from '@core/i18n/facet-labels.js';
 import {
@@ -82,6 +83,8 @@ export class FilterBar {
   readonly hiddenOffTopic = input(0);
   /** The results the applied filters show: what the sheet offers while unchanged. */
   readonly total = input(0);
+  /** The results on screen, to count a narrower selection exactly ("Ver 2 resultados"). */
+  readonly items = input<readonly SearchHit[]>([]);
   /** Application order of the active filters ("facet:value", newest last). */
   readonly order = input<readonly string[]>([]);
   /** Names of the collections a parent's search spans (the "Sub-acervo" filter, KBC-048). */
@@ -141,6 +144,7 @@ export class FilterBar {
       applied: this.filters(),
       draft: this.draft(),
       total: this.total(),
+      items: this.items(),
     }),
   );
 

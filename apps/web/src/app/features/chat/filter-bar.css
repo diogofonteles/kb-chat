@@ -210,6 +210,11 @@
   font-size: var(--text-sm);
 }
 
+/* "1 oculto (fora do tema)" in the banner: its 14/700 line (resultsMain). */
+.hidden-banner .hidden-note {
+  font-weight: 700;
+}
+
 .sheet-button {
   display: none;
 }
@@ -221,7 +226,8 @@
   inset: auto 0 0;
   width: 100vw;
   max-width: none;
-  height: 85dvh;
+  /* cmResults' sheet: 120 px of the page left above it. */
+  height: calc(100dvh - 7.5rem);
   max-height: none;
   margin: 0;
   padding: 0;
@@ -255,7 +261,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) var(--space-4) var(--space-2);
+  padding: var(--space-3) 1.25rem 0;
 }
 
 .sheet-head .hidden-note {
@@ -278,7 +284,7 @@
 
 .sheet-head h2 {
   margin: 0;
-  font-size: var(--text-section);
+  font-size: 1.125rem;
   font-weight: 700;
 }
 
@@ -291,26 +297,28 @@
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-2) 1.25rem;
 }
 
 fieldset {
   display: grid;
   gap: 0;
-  margin: 0 0 var(--space-4);
+  margin: 0 0 var(--space-3);
   padding: 0;
   border: none;
 }
 
 legend {
-  margin-bottom: var(--space-1);
+  margin-bottom: 0;
   font-size: var(--text-item);
   font-weight: 700;
 }
 
+/* filterSections: each option a 14 px line with 8 px above and below (38 px rows). */
 .sheet .option {
-  min-height: var(--target);
+  min-height: 2.375rem;
   padding: 0;
+  font-size: 0.875rem;
 }
 
 .sheet .option:hover {
@@ -330,7 +338,7 @@ legend {
 }
 
 .sheet .option .mark {
-  color: var(--color-accent-text);
+  color: inherit;
 }
 
 .sheet .option.off {
@@ -393,7 +401,8 @@ legend {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: var(--target);
+  min-height: 2.375rem;
+  margin-bottom: var(--space-3);
   font-size: 0.9375rem;
   font-weight: 700;
   list-style: none;

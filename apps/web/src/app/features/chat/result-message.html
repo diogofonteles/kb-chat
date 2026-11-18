@@ -82,6 +82,7 @@
           [order]="message().filterOrder"
           [topicNames]="topicNames()"
           [total]="current.total"
+          [items]="current.items"
           (filtersChange)="filtersChanged.emit($event)"
         />
       }

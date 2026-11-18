@@ -369,11 +369,14 @@ h2:focus-visible {
 .skeleton-text {
   display: grid;
   flex: 1 1 auto;
-  gap: var(--space-3);
+  gap: 0.875rem;
 }
 
+/* docMain loading: 180 × 12, 420 × 56 and 300 × 12 beside the cover; a 160 × 52 pill, then
+   lines of 640, 600 and 520 × 14 (never wider than the page). */
 .skeleton-lines span,
 .skeleton-text span {
+  max-width: 100%;
   height: 12px;
   border-radius: 6px;
   background: var(--overlay-2);
@@ -381,38 +384,45 @@ h2:focus-visible {
 }
 
 .skeleton-lines span:nth-child(1) {
-  width: 40%;
+  width: 180px;
+  background: var(--overlay-3);
 }
 
 .skeleton-lines span:nth-child(2) {
-  width: 80%;
-  height: 28px;
+  width: 420px;
+  height: 56px;
+  border-radius: 8px;
   background: var(--overlay-3);
 }
 
 .skeleton-lines span:nth-child(3) {
-  width: 60%;
+  width: 300px;
 }
 
-.skeleton-text span:nth-child(odd) {
-  width: 95%;
+.skeleton-text span {
+  height: 14px;
+  border-radius: 7px;
 }
 
-.skeleton-text span:nth-child(even) {
-  width: 80%;
+.skeleton-text span:nth-child(1) {
+  width: 640px;
+}
+
+.skeleton-text span:nth-child(2) {
+  width: 600px;
+}
+
+.skeleton-text span:nth-child(3) {
+  width: 520px;
 }
 
 .skeleton-pill {
   display: block;
-  width: 6rem;
-  height: 2rem;
-  margin-bottom: var(--space-6);
+  width: 160px;
+  height: 52px;
+  margin-bottom: 0.875rem;
   border-radius: var(--radius-pill);
   background: var(--overlay-3);
-}
-
-.loading .skeleton-text {
-  max-width: 24rem;
 }
 
 /* A document that failed to open: its empty state on the flat page, no cover tint. */
@@ -626,7 +636,17 @@ h2:focus-visible {
 
   :host(:not(.in-sheet)) .skeleton-lines span:nth-child(2) {
     order: 1;
-    width: 75%;
+    width: 260px;
+    height: 28px;
+    border-radius: 6px;
+  }
+
+  .skeleton-text span:nth-child(odd) {
+    width: 95%;
+  }
+
+  .skeleton-text span:nth-child(even) {
+    width: 80%;
   }
 
   :host(:not(.in-sheet)) .skeleton-pill {

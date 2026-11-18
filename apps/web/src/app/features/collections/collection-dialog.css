@@ -95,11 +95,12 @@ h2 {
   min-width: 0;
 }
 
+/* field: a 13/700 label 6 above its 44 box (14 px text); a hint or error at 12 px. */
 .field {
   display: grid;
-  gap: var(--space-1);
+  gap: 0.375rem;
   margin-top: var(--space-3);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
   font-weight: 700;
 }
 
@@ -110,7 +111,7 @@ h2 {
 .hint {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--text-meta);
+  font-size: var(--text-xs);
 }
 
 .hint code {
@@ -156,6 +157,7 @@ textarea {
   background: var(--overlay-3);
   color: var(--color-text);
   font: inherit;
+  font-size: 0.875rem;
   font-weight: normal;
   resize: vertical;
 }
@@ -180,9 +182,9 @@ input[aria-invalid='true'] {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  margin: var(--space-1) 0 0;
+  margin: 0;
   color: var(--color-danger);
-  font-size: var(--text-meta);
+  font-size: var(--text-xs);
 }
 
 #collection-main-author-hint .error {
@@ -257,12 +259,51 @@ select:disabled {
     text-align: center;
   }
 
+  /* cmSheetForm: the head 16 / 12 around its 15 px words (their targets stay 44 tall),
+     then the body 8 below it, each part 16 apart. */
+  .dialog {
+    padding-top: 0;
+  }
+
   .head {
-    margin-bottom: var(--space-4);
+    margin: 0;
+    padding: var(--space-4) 0 var(--space-3);
+  }
+
+  .head-text {
+    margin-block: -0.75rem;
+  }
+
+  form {
+    padding-top: var(--space-2);
   }
 
   .columns {
     grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  .fields {
+    gap: var(--space-4);
+  }
+
+  .field {
+    margin-top: 0;
+  }
+
+  /* A field's hint or error 6 under its box, not 16. */
+  .fields > .error,
+  .fields > .hint,
+  .fields > [id$='-hint'] {
+    margin-top: -0.625rem;
+  }
+
+  .fields > #collection-address:empty {
+    display: none;
+  }
+
+  .cover-hint {
+    display: none;
   }
 
   .cover-slot {

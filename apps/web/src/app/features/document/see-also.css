@@ -169,6 +169,11 @@ a.ref {
   letter-spacing: normal;
 }
 
+/* The shelf's byline is a phone's (cmRow); its cards keep the facets (pageShelf). */
+.ref-byline {
+  display: none;
+}
+
 @media (min-width: 1024px) {
   :host(.shelf) ul {
     display: flex;
@@ -205,6 +210,23 @@ a.ref {
 
   :host(.shelf) .ref-title {
     font-size: 0.9375rem;
+  }
+
+  :host(.shelf) h4 {
+    font-size: 1rem;
+  }
+
+  :host(.shelf) .ref.doc .ref-facets:not(.ref-byline) {
+    display: none;
+  }
+
+  :host(.shelf) .ref.doc .ref-byline {
+    display: block;
+  }
+
+  /* cmRow: the 52 cover on the page's own 16 px edge. */
+  :host(.shelf) .ref.doc {
+    padding-inline: 0;
   }
 
   :host(.shelf) ::ng-deep .ui-cover__label {

@@ -45,8 +45,16 @@
   margin: 0 0 var(--space-3);
 }
 
+/* homeMain no-topics: the empty state on a faint 8 px card; a phone's sits on the page. */
 .state.empty {
-  border-radius: var(--radius-card);
+  border-radius: 8px;
+  background: var(--overlay-0);
+}
+
+@media (max-width: 1023px) {
+  .state.empty {
+    background: transparent;
+  }
 }
 
 /* Recentes: tiles of 56, radius 4, #ffffff14, the title only (14/700). */

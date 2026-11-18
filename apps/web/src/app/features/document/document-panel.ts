@@ -52,6 +52,18 @@ const FEEDBACK_MS = 2000;
 
 const countMarks = (html: string): number => html.split('<mark>').length - 1;
 
+/**
+ * A subject's text without a first heading that only repeats its name: the page head says it
+ * already (chat-document-see-also, a stub subject is just "# Cabala").
+ */
+export function withoutTitleHeading(body: string, title: string): string {
+  const fold = (text: string) => text.trim().replace(/\s+/g, ' ').toLowerCase();
+  const match = /^\s*#{1,6}[ \t]+([^\n]*)\n?/.exec(body);
+  return match && fold(match[1] ?? '') === fold(title)
+    ? body.slice(match[0].length)
+    : body;
+}
+
 const foldText = (text: string): string =>
   text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
@@ -191,8 +203,13 @@ export class DocumentPanel {
     return doc ? describeFacets(doc) : '';
   });
   protected readonly titleId = `document-title-${nextPanel++}`;
-  /** The page head's colour: the cover's (v2 pageHeader tint). */
-  protected readonly tint = computed(() => coverGradient(this.title())[0]);
+  /**
+   * The page head's colour: the cover's (v2 pageHeader tint); a neutral one while it loads or
+   * fails, when there is no cover yet (chat-document-loading, chat-document-error).
+   */
+  protected readonly tint = computed(() =>
+    this.loaded() ? coverGradient(this.title())[0] : 'var(--tint-search)',
+  );
   protected readonly full = linkedSignal({
     source: this.inSheet,
     computation: () => false,
@@ -245,9 +262,13 @@ export class DocumentPanel {
     highlightTerms(this.highlight() ?? ''),
   );
   /** Long documents render a window of chunks to stay responsive (KBC-003). */
-  private readonly chunks = computed(() =>
-    splitIntoChunks(this.loaded()?.body ?? ''),
-  );
+  private readonly chunks = computed(() => {
+    const doc = this.loaded();
+    const body = doc?.body ?? '';
+    return splitIntoChunks(
+      this.subject() && doc ? withoutTitleHeading(body, doc.title) : body,
+    );
+  });
   /** Each chunk is rendered and highlighted once per document (cache reset with the chunks). */
   private readonly chunkCache = computed(() => {
     this.chunks();

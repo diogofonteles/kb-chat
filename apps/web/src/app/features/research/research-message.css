@@ -88,8 +88,8 @@ p.steps {
   transition: transform 150ms var(--ease);
 }
 
-.steps:not([open]) .chev {
-  transform: rotate(-90deg);
+.steps[open] .chev {
+  transform: rotate(180deg);
 }
 
 .steps-text {
@@ -140,9 +140,8 @@ p.steps {
   overflow-wrap: anywhere;
 }
 
-/* What the agent wrote before a tool call: kept, but quieter than the steps (ADR 0009). */
+/* What the agent wrote before a tool call ("Pensando: …"), in the steps' own voice (ADR 0009). */
 .steps li.thought {
-  font-style: italic;
   overflow-wrap: anywhere;
 }
 
@@ -423,6 +422,51 @@ span.source-art {
   white-space: nowrap;
 }
 
+.source-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.3em;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.source-genre::before {
+  content: '· ';
+}
+
+.source-meta:not(:has(app-authorship-badge > *)) .source-genre::before {
+  content: none;
+}
+
+/* "FONTE n": the card's kicker on a phone; the table row says n in its round. */
+.source-kicker {
+  display: none;
+}
+
+.source-item {
+  position: relative;
+}
+
+/* The row's own button leaves room for ⋯, which sits over its right end (no button in a
+   button). */
+.source {
+  padding-inline-end: 3.25rem;
+}
+
+.source-more {
+  position: absolute;
+  top: 50%;
+  right: var(--space-1);
+  translate: 0 -50%;
+}
+
+.source-more ::ng-deep .source-more-trigger {
+  color: var(--color-text-muted);
+}
+
 .source-open {
   flex: none;
   padding: 0 var(--space-3);
@@ -516,11 +560,79 @@ span.source-art {
     font-size: 1.0625rem;
   }
 
-  .source {
-    min-height: var(--target);
+  /* sourceCard: a row of 216 px cards that scrolls sideways, each cover + FONTE n, the
+     title, then "autor · tipo". */
+  .sources-title {
+    font-size: 1rem;
   }
 
-  .source-open {
+  .sources ol.source-list {
+    display: flex;
+    gap: 0.625rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .source-item {
+    flex: none;
+    width: 13.5rem;
+  }
+
+  .source {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.625rem;
+    height: 100%;
+    min-height: var(--target);
+    padding: var(--space-3);
+    border-radius: 8px;
+    background: var(--overlay-3);
+  }
+
+  .source-item:first-child .source,
+  .source.active {
+    border-color: var(--color-accent);
+  }
+
+  .source-item:not(:first-child) .source:not(.active) {
+    border-color: transparent;
+  }
+
+  .source-n,
+  .source-open,
+  .source-more {
+    display: none;
+  }
+
+  .source-kicker {
+    display: block;
+    color: var(--color-accent-text);
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+
+  .source-body {
+    grid-column: 1 / -1;
+    gap: 0.625rem;
+  }
+
+  .source-title {
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+
+  .source-meta {
+    overflow: hidden;
+    flex-wrap: nowrap;
+    font-size: var(--text-xs);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .source-meta ::ng-deep .mark {
     display: none;
   }
 

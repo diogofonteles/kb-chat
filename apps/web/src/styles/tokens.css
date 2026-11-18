@@ -41,6 +41,7 @@
   --target-desktop: 2rem;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   /* White (or the theme's text) over the surface, for hover, selected and fields (v2 overlays). */
+  --overlay-0: color-mix(in srgb, var(--color-text) 2.5%, transparent);
   --overlay-1: color-mix(in srgb, var(--color-text) 5%, transparent);
   --overlay-2: color-mix(in srgb, var(--color-text) 7%, transparent);
   --overlay-3: color-mix(in srgb, var(--color-text) 10%, transparent);
@@ -52,6 +53,7 @@
      research green; a home takes its collection's cover colour. */
   --tint-search: #3a3a3a;
   --tint-research: #1f4d33;
+  --tint-history-research: #1f6b3c;
   /* A round control over a cover's tint (the document page's ✕ and occurrences). */
   --overlay-dark: rgb(0 0 0 / 40%);
   /* A person's round with no picture and no colour of its own (docRight's "OA"): white

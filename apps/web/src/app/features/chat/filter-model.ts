@@ -2,6 +2,7 @@ import type {
   Authorship,
   ResultFacets,
   SearchFilters,
+  SearchHit,
 } from '@kb-chat/contracts';
 import {
   AUTHORSHIP_LABELS,
@@ -245,28 +246,75 @@ const SINGLE_VALUED: readonly FacetKey[] = [
 const sameValues = (a: readonly FacetValue[], b: readonly FacetValue[]) =>
   a.length === b.length && a.every((value) => b.includes(value));
 
+/** Whether a result keeps its place under one facet's chosen values (as the API's refine). */
+const HIT_TESTS: Record<
+  FacetKey,
+  (hit: SearchHit, chosen: readonly FacetValue[]) => boolean
+> = {
+  concepts: (hit, chosen) => hit.concepts.some((c) => chosen.includes(c)),
+  genres: (hit, chosen) => hit.genre !== null && chosen.includes(hit.genre),
+  depths: (hit, chosen) => hit.depth !== null && chosen.includes(hit.depth),
+  relevances: (hit, chosen) =>
+    hit.relevance !== null && chosen.includes(hit.relevance),
+  authorships: (hit, chosen) => chosen.includes(hit.authorship),
+  topics: (hit, chosen) => chosen.includes(hit.topic),
+};
+
+/**
+ * The count among the results on screen, when they are all of them and the draft only
+ * narrows what is applied (a facet that had nothing chosen, or fewer of its values): then
+ * every result the draft would show is already in the list.
+ */
+function narrowedCount(
+  items: readonly SearchHit[],
+  { applied, draft }: { applied: SearchFilters; draft: SearchFilters },
+  changed: readonly FacetKey[],
+): number | null {
+  const narrows = changed.every((key) => {
+    const chosen: readonly FacetValue[] = draft[key];
+    const before: readonly FacetValue[] = applied[key];
+    return (
+      chosen.length > 0 &&
+      !chosen.includes('off_topic') &&
+      (before.length === 0 || chosen.every((value) => before.includes(value)))
+    );
+  });
+  if (!narrows) return null;
+  return items.filter((hit) =>
+    changed.every((key) => HIT_TESTS[key](hit, draft[key])),
+  ).length;
+}
+
 /**
  * How many results the phone sheet's selection would show ("Ver 2 resultados", KBC-126
  * FR-3), or null when the counts on screen cannot tell: each facet counts the documents of
  * the other filters, so a change in one facet whose documents have a single value is the
- * sum of its chosen options; nothing changed is the total; anything else (subjects, where
- * a document has several, or two facets at once) needs the search.
+ * sum of its chosen options; nothing changed is the total; a narrower draft is counted on
+ * the results themselves when the list holds all of them; anything else (a widened subject,
+ * where a document has several, on a list cut short) needs the search.
  */
 export function draftResultCount({
   facets,
   applied,
   draft,
   total,
+  items = [],
 }: {
   readonly facets: ResultFacets;
   readonly applied: SearchFilters;
   readonly draft: SearchFilters;
   readonly total: number;
+  /** The results on screen: all of them when as many as the total. */
+  readonly items?: readonly SearchHit[];
 }): number | null {
   const changed = FILTER_KEYS.filter(
     (key) => !sameValues(applied[key], draft[key]),
   );
   if (changed.length === 0) return total;
+  if (items.length >= total) {
+    const counted = narrowedCount(items, { applied, draft }, changed);
+    if (counted !== null) return counted;
+  }
   const [key] = changed;
   if (changed.length > 1 || !key || !SINGLE_VALUED.includes(key)) return null;
   const chosen: readonly FacetValue[] = draft[key];

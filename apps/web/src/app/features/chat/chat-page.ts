@@ -74,6 +74,7 @@ import { UiIcon } from '@ui/icon.js';
 
 /** Where Sua biblioteca's collapsed state is kept (a per-viewer convenience). */
 const COLLAPSED_KEY = 'kb-chat.library-collapsed';
+import { ConversationHistory } from './home/conversation-history.js';
 import { ConversationHome } from './home/conversation-home.js';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
@@ -109,6 +110,7 @@ const isMediaUrl = (url: string): boolean =>
     UiAvatar,
     UiIcon,
     UiIconButton,
+    ConversationHistory,
     ConversationHome,
   ],
   providers: [
@@ -185,11 +187,25 @@ export class ChatPage {
         : null,
     ),
   );
-  protected readonly navActive = computed((): NavTab | null =>
-    !this.onMedia() && this.currentView() === 'search' && !this.isEmpty()
-      ? 'search'
-      : null,
+  /**
+   * A phone's tab: Conversas on the home opens the conversation list (chat-history@mobile),
+   * Buscar keeps its tab on while the search view waits for a question.
+   */
+  protected readonly phoneTab = signal<'history' | 'search' | null>(null);
+  protected readonly phoneHistory = computed(
+    () =>
+      this.phoneTab() === 'history' &&
+      this.isEmpty() &&
+      !this.desktop() &&
+      !this.onMedia(),
   );
+  protected readonly navActive = computed((): NavTab | null => {
+    if (this.onMedia() || this.phoneHistory()) return null;
+    const searching = this.currentView() === 'search';
+    return searching && (!this.isEmpty() || this.phoneTab() === 'search')
+      ? 'search'
+      : null;
+  });
   /** The main panel's gradient: the colour of the collection's cover (v2 pageHeader tint). */
   protected readonly tint = computed(() => {
     if (!this.onMedia() && this.researching()) return 'var(--tint-research)';
@@ -258,7 +274,12 @@ export class ChatPage {
   protected readonly showScope = computed(() => {
     if (this.onMedia()) return false;
     if (this.desktop()) return !this.searchPage();
-    return this.isEmpty() && !this.researching() && !this.noTopics();
+    return (
+      this.isEmpty() &&
+      !this.researching() &&
+      !this.noTopics() &&
+      !this.phoneHistory()
+    );
   });
   /** A phone's research home: the profiles at the top (cmHome, mode 'ia'). */
   protected readonly showProfiles = computed(
@@ -267,7 +288,8 @@ export class ChatPage {
       !this.onMedia() &&
       this.researching() &&
       this.isEmpty() &&
-      !this.noTopics(),
+      !this.noTopics() &&
+      !this.phoneHistory(),
   );
   protected readonly profileOptions = RESEARCH_PROFILES.map((value) => ({
     value,
@@ -288,6 +310,8 @@ export class ChatPage {
   );
   /** The phone's page name (cmHead): Conversas, Buscar or Pesquisa com IA. */
   protected readonly pageTitle = computed(() => {
+    if (this.phoneHistory())
+      return $localize`:@@page.titleConversations:Conversas`;
     if (this.researching())
       return $localize`:@@page.titleResearch:Pesquisa com IA`;
     if (this.searchPage()) return $localize`:@@page.titleSearch:Buscar`;
@@ -568,6 +592,7 @@ export class ChatPage {
   }
 
   protected ask(question: string): void {
+    if (this.phoneTab() === 'history') this.phoneTab.set(null);
     if (this.researching()) this.askResearch(question);
     else this.store.ask(question);
   }
@@ -833,14 +858,18 @@ export class ChatPage {
   protected navChosen(tab: NavTab): void {
     if (tab === 'collections') this.openMenu();
     else if (tab === 'conversations') {
+      // On the home Conversas lists the conversations, and from the list leads home again.
+      if (this.phoneHistory()) this.phoneTab.set(null);
+      else if (this.isEmpty() && !this.onMedia()) this.phoneTab.set('history');
       // From a search page, Conversas is the AI research and its own conversation (the
       // phone has no scope chips there: the v1 view switch's way back, KBC-008 AC-5).
-      if (this.searchPage() && this.views.researchAvailable())
+      else if (this.searchPage() && this.views.researchAvailable())
         this.views.select('research');
     } else if (tab === 'search') {
+      this.phoneTab.set('search');
       this.views.select('search');
       this.showConversation();
-    }
+    } else this.phoneTab.set(null);
   }
 
   protected toggleCollapsed(): void {

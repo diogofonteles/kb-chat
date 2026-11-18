@@ -16,6 +16,7 @@ import {
   SEE_ALSO_GROUPS,
   SUBJECT_TRACKS_PAGE_MAX,
   subjectTracksPageSchema,
+  type Authorship,
   type DocumentRef,
   type RelatedDocument,
   type SeeAlso,
@@ -25,7 +26,8 @@ import {
 import { formatClock } from '@kb-chat/player-core';
 import { KbApi, subjectTracksUrl } from '@core/api/kb-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
-import { describeFacets } from '@core/i18n/facet-labels.js';
+import { GENRE_LABELS, describeFacets } from '@core/i18n/facet-labels.js';
+import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import type { TrackOpening } from '@features/research/track-opening.js';
 
 const GROUP_TITLES: Record<SeeAlsoGroupName, string> = {
@@ -39,6 +41,8 @@ const GROUP_TITLES: Record<SeeAlsoGroupName, string> = {
 
 interface ItemView extends DocumentRef {
   readonly facets: string;
+  /** A phone's subject shelf row (cmRow): "Outros autores · Aula ou palestra". */
+  readonly byline: string;
   /** A track kb linked (KBC-101 FR-6): it opens the T22 panel, not the document. */
   readonly media?: RelatedDocument['media'];
 }
@@ -55,10 +59,25 @@ interface GroupView {
 /** References loaded per "Ver mais" click. */
 const PAGE_SIZE = 50;
 
-const toItem = (ref: RelatedDocument): ItemView => ({
+/** A subject's own article (kb's concept page): "Assunto · síntese do acervo" under it. */
+const SUBJECT_FACETS = $localize`:@@seeAlso.subjectFacets:Assunto · síntese do acervo`;
+const isSubject = (ref: RelatedDocument): boolean =>
+  ref.id.startsWith('wiki/concepts/');
+
+const toItem = (
+  ref: RelatedDocument,
+  authors: Record<Authorship, string>,
+): ItemView => ({
   id: ref.id,
   title: ref.title,
-  facets: describeFacets(ref),
+  facets: describeFacets(ref) || (isSubject(ref) ? SUBJECT_FACETS : ''),
+  byline:
+    [
+      ref.authorship ? authors[ref.authorship] : null,
+      ref.genre ? GENRE_LABELS[ref.genre] : null,
+    ]
+      .filter((part): part is string => part !== null)
+      .join(' · ') || describeFacets(ref),
   ...(ref.media && { media: ref.media }),
 });
 
@@ -166,11 +185,14 @@ export class SeeAlsoSection {
   protected readonly durationOf = (track: SubjectTrack): string =>
     track.durationMs === null ? '' : formatClock(track.durationMs);
 
+  private readonly authors = injectAuthorshipLabels();
   protected readonly groups = computed<GroupView[]>(() =>
     SEE_ALSO_GROUPS.map((name) => ({
       name,
       title: GROUP_TITLES[name],
-      items: (this.expanded()[name] ?? this.seeAlso()[name].items).map(toItem),
+      items: (this.expanded()[name] ?? this.seeAlso()[name].items).map((ref) =>
+        toItem(ref, this.authors()),
+      ),
       total: this.seeAlso()[name].total,
       loading: this.loading().has(name),
       failed: this.failed().has(name),

@@ -380,9 +380,11 @@
             </p>
           }
           <ng-template #chips let-sources let-label="label">
-            <ol [attr.aria-label]="label">
+            <!-- A desktop table row (sourcesTable: n, cover, title, "autor · tipo", Abrir, ⋯);
+                 a phone's horizontal row of cards (sourceCard: cover, FONTE n, title, meta). -->
+            <ol class="source-list" [attr.aria-label]="label">
               @for (source of sources; track source.n) {
-                <li>
+                <li class="source-item">
                   <button
                     type="button"
                     class="source"
@@ -404,6 +406,12 @@
                       [size]="40"
                       [label]="false"
                     />
+                    <span
+                      class="source-kicker"
+                      aria-hidden="true"
+                      i18n="@@ai.sourceKicker"
+                      >FONTE {{ source.n }}</span
+                    >
                     <span class="source-body">
                       @if (trackChips().get(source.n); as track) {
                         <span class="track-mark" aria-hidden="true">♪</span>
@@ -434,11 +442,17 @@
                       } @else {
                         <span class="source-title">{{ source.title }}</span>
                       }
-                      <app-authorship-badge
-                        class="source-authorship"
-                        [plain]="true"
-                        [authorship]="source.authorship"
-                      />
+                      <span class="source-meta">
+                        <app-authorship-badge
+                          class="source-authorship"
+                          [plain]="true"
+                          [quiet]="true"
+                          [authorship]="source.authorship"
+                        />
+                        @if (genreOf(source); as genre) {
+                          <span class="source-genre">{{ genre }}</span>
+                        }
+                      </span>
                     </span>
                     <span
                       class="source-open"
@@ -447,9 +461,42 @@
                       >Abrir</span
                     >
                   </button>
+                  <ui-menu
+                    class="source-more"
+                    label="Mais opções da fonte"
+                    i18n-label="@@ai.sourceMoreMenu"
+                    triggerLabel="Mais opções da fonte {{ source.n }}"
+                    i18n-triggerLabel="@@ai.sourceMore"
+                    [menuId]="menuIdOf(source)"
+                    triggerClass="ui-icon-button source-more-trigger"
+                    align="end"
+                  >
+                    <ui-icon uiMenuTrigger name="more" [size]="18" />
+                    <button
+                      uiMenuItem
+                      type="button"
+                      (click)="openSource(source, $event)"
+                    >
+                      <ui-icon name="external" [size]="18" />
+                      <span i18n="@@ai.openSourceItem">Abrir</span>
+                    </button>
+                    <button
+                      uiMenuItem
+                      type="button"
+                      (click)="copyReference(source)"
+                    >
+                      <ui-icon name="copy" [size]="18" />
+                      <span i18n="@@ai.copyReference">Copiar referência</span>
+                    </button>
+                  </ui-menu>
                 </li>
               }
             </ol>
+            <p class="visually-hidden" role="status">
+              @if (referenceCopied()) {
+                <span i18n="@@ai.referenceCopied">Referência copiada.</span>
+              }
+            </p>
           </ng-template>
         </div>
       }

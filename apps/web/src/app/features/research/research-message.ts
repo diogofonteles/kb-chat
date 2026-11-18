@@ -9,6 +9,7 @@ import {
   input,
   linkedSignal,
   output,
+  signal,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import type {
@@ -23,9 +24,12 @@ import {
   UiButton,
   UiCover,
   UiIcon,
+  UiMenu,
+  UiMenuItem,
   UiPill,
   UiProgress,
 } from '@ui/index.js';
+import { GENRE_LABELS } from '@core/i18n/facet-labels.js';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import {
   citedAt,
@@ -90,6 +94,8 @@ const PLAN_LABELS: Record<ResearchPlan, () => string> = {
   selector: 'app-research-message',
   imports: [
     AuthorshipBadge,
+    UiMenu,
+    UiMenuItem,
     NgTemplateOutlet,
     UiBanner,
     UiButton,
@@ -141,6 +147,8 @@ export class ResearchMessage {
     inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly clipboard =
     inject(DOCUMENT).defaultView?.navigator.clipboard;
+  /** "Copiar referência" in a source's ⋯ said aloud, then quiet again. */
+  protected readonly referenceCopied = signal(false);
   protected readonly copyState = linkedSignal<number, CopyState>({
     source: () => this.turn().id,
     computation: () => 'idle',
@@ -344,6 +352,26 @@ export class ResearchMessage {
     this.clipboard.writeText(text).then(
       () => this.flashCopy('copied'),
       () => this.flashCopy('failed'),
+    );
+  }
+
+  /** A source's text kind under its title ("Mestre Laércio · Texto/apostila"). */
+  protected genreOf(source: AnswerSource): string | null {
+    return source.genre ? GENRE_LABELS[source.genre] : null;
+  }
+
+  protected menuIdOf(source: AnswerSource): string {
+    return `turn-${this.turn().id}-source-${source.n}-more`;
+  }
+
+  /** The source's ⋯: "[n] Título", to cite it elsewhere. */
+  protected copyReference(source: AnswerSource): void {
+    this.clipboard?.writeText(`[${source.n}] ${source.title}`).then(
+      () => {
+        this.referenceCopied.set(true);
+        setTimeout(() => this.referenceCopied.set(false), FEEDBACK_MS);
+      },
+      () => this.referenceCopied.set(false),
     );
   }
 

@@ -153,6 +153,8 @@ export class UiMenu {
     const action = this.keys[event.key];
     if (!action) return;
     event.preventDefault();
+    // The key is the menu's alone: an Escape must not also close the panel or dialog it sits in.
+    event.stopPropagation();
     action();
   }
 

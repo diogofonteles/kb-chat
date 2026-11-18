@@ -1,5 +1,5 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
-import type { ResultFacets } from '@kb-chat/contracts';
+import type { ResultFacets, SearchHit } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { aTopic } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
@@ -459,6 +459,53 @@ describe('draftResultCount (KBC-126 FR-3)', () => {
         applied: { ...NO_FILTERS, genres: ['article_or_essay'] },
         draft: NO_FILTERS,
         total: 2,
+      }),
+    ).toBeNull();
+  });
+
+  it('counts a narrower selection on the results themselves when the list holds them all', () => {
+    const hit = (id: string, concepts: string[]) =>
+      ({
+        id,
+        concepts,
+        genre: 'article_or_essay',
+        depth: null,
+        relevance: 'core',
+        authorship: 'outros-autores',
+        topic: 'hermetismo',
+      }) as unknown as SearchHit;
+    const items = [
+      hit('a', ['Cabala']),
+      hit('b', ['Cabala', 'Magia']),
+      hit('c', []),
+    ];
+    const cabala = { ...NO_FILTERS, concepts: ['Cabala'] };
+    expect(
+      draftResultCount({
+        facets,
+        applied: NO_FILTERS,
+        draft: cabala,
+        total: 3,
+        items,
+      }),
+    ).toBe(2);
+    // a list cut short, or a widened subject, still needs the search
+    expect(
+      draftResultCount({
+        facets,
+        applied: NO_FILTERS,
+        draft: cabala,
+        total: 9,
+        items,
+      }),
+    ).toBeNull();
+    expect(
+      draftResultCount({
+        facets,
+        applied: cabala,
+        draft: { ...NO_FILTERS, concepts: ['Cabala', 'Magia'] },
+        total: 3,
+        items,
       }),
     ).toBeNull();
   });

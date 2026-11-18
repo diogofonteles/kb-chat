@@ -220,6 +220,65 @@ describe('ResearchMessage', () => {
     expect(screen.queryByRole('button', { name: 'Não citado' })).toBeNull();
   });
 
+  it('names each source "autor · tipo" and keeps Abrir and Copiar referência in its ⋯', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const view = await renderMessage(
+      aTurn({
+        sources: [
+          {
+            n: 1,
+            id: 'raw/a.md',
+            title: 'Os Princípios',
+            authorship: 'mestre-laercio',
+            genre: 'article_or_essay',
+          },
+          { n: 2, id: 'raw/b.md', title: 'O Caibalion' },
+        ],
+      }),
+    );
+    const row = screen.getByRole('button', { name: /^Os Princípios/ });
+    expect(row.querySelector('.source-meta')?.textContent).toMatch(
+      /Mestre Laércio\s*Texto\/apostila/,
+    );
+    expect(row.querySelector('.source-kicker')?.textContent?.trim()).toBe(
+      'FONTE 1',
+    );
+    // A source without a kind shows no dangling "·".
+    expect(
+      screen
+        .getByRole('button', { name: 'O Caibalion' })
+        .querySelector('.source-genre'),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mais opções da fonte 1' }),
+    );
+    await view.fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Copiar referência' }),
+    );
+    expect(writeText).toHaveBeenCalledWith('[1] Os Princípios');
+    await view.fixture.whenStable();
+    await vi.waitFor(() =>
+      expect(
+        screen
+          .getAllByRole('status')
+          .some((s) => s.textContent?.includes('Referência copiada.')),
+      ).toBe(true),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mais opções da fonte 1' }),
+    );
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Abrir' }));
+    expect(view.opened).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'raw/a.md', title: 'Os Princípios' }),
+    );
+  });
+
   describe("KBC-110: sources above today's level", () => {
     const demoted = (overrides: Partial<ResearchTurn> = {}) =>
       aTurn({
@@ -443,7 +502,9 @@ describe('ResearchMessage', () => {
     ]);
     const mestre = screen.getByRole('list', { name: 'Mestre Laércio' });
     expect(
-      [...mestre.querySelectorAll('button')].map((b) => b.dataset['docId']),
+      [...mestre.querySelectorAll('button.source')].map(
+        (b) => (b as HTMLElement).dataset['docId'],
+      ),
     ).toEqual(['raw/a.md', 'raw/c.md']);
     expect(
       screen.getByRole('button', { name: /O Caibalion/ }).textContent,

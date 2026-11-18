@@ -117,7 +117,9 @@ const NO_AUTHOR = '';
             } @else {
               <span class="cover-empty">
                 <ui-icon name="folder" [size]="40" />
-                <span i18n="@@collection.coverHint">Capa pela sigla</span>
+                <span class="cover-hint" i18n="@@collection.coverHint"
+                  >Capa pela sigla</span
+                >
               </span>
             }
           </div>
@@ -199,7 +201,7 @@ const NO_AUTHOR = '';
                       </option>
                     }
                   </select>
-                  <ui-icon class="select-chev" name="chevDown" [size]="18" />
+                  <ui-icon class="select-chev" name="chevDown" [size]="16" />
                 </span>
               </label>
               <div id="collection-main-author-hint" class="hint">
@@ -280,7 +282,7 @@ const NO_AUTHOR = '';
                       </option>
                     }
                   </select>
-                  <ui-icon class="select-chev" name="chevDown" [size]="18" />
+                  <ui-icon class="select-chev" name="chevDown" [size]="16" />
                 </span>
               </label>
             }
