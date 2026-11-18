@@ -17,12 +17,7 @@ import { HistoryStore } from '@core/history/history-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import type { SidebarAction } from '@features/sidebar/sidebar.js';
 import { PendingTranscriptions } from '@features/transcribers/pending-transcriptions.js';
-import {
-  UiBanner,
-  UiButton,
-  UiCover,
-  UiEmptyState,
-} from '@ui/index.js';
+import { UiBanner, UiButton, UiCover, UiEmptyState } from '@ui/index.js';
 import { ChatStore } from '../chat-store.js';
 import { ViewStore } from '../view-store.js';
 import { homeTiles, type HomeTile } from './home-tiles.js';
@@ -50,13 +45,7 @@ const STATUS_LABELS: Record<ConversationStatus, () => string> = {
  */
 @Component({
   selector: 'app-conversation-home',
-  imports: [
-    PendingTranscriptions,
-    UiBanner,
-    UiButton,
-    UiCover,
-    UiEmptyState,
-    ],
+  imports: [PendingTranscriptions, UiBanner, UiButton, UiCover, UiEmptyState],
   templateUrl: './conversation-home.html',
   styleUrl: './conversation-home.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -138,7 +138,8 @@ export class ResultMessage {
   protected readonly modeName = computed(() => modeLabel(this.message().mode));
   protected readonly modes = MODE_OPTIONS;
   protected readonly modeMenuLabel = computed(
-    () => $localize`:@@message.modeMenu:Modo da busca: ${this.modeName()}:mode:`,
+    () =>
+      $localize`:@@message.modeMenu:Modo da busca: ${this.modeName()}:mode:`,
   );
   protected readonly count = computed(() => {
     const response = this.response();

@@ -47,8 +47,8 @@
           [authorship]="hit().authorship"
         />
         @if (genre(); as type) {
-          <span class="line-genre"
-            >@if (hit().authorship) {
+          <span class="line-genre">
+            @if (hit().authorship) {
               ·
             }
             {{ type }}</span
