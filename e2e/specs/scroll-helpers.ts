@@ -93,7 +93,7 @@ export async function scrollOver(
   // A finger dragged over the text (Chromium's compositor gesture, as a real touch).
   // The finger stays on the screen: a swipe up from the middle goes at most to the top.
   const height = page.viewportSize()?.height ?? 844;
-  const room = dy > 0 ? point.y - 8 : height - point.y - 8;
+  const room = dy > 0 ? point.y - 48 : height - point.y - 48;
   const distance = Math.sign(dy) * Math.min(Math.abs(dy), Math.max(room, 0));
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Input.synthesizeScrollGesture', {

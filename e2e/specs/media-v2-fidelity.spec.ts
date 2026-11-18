@@ -101,6 +101,8 @@ test('the player page scrolls its transcript and itself with the wheel, a finger
   await expect
     .poll(async () => (await transcript.boundingBox())?.height ?? 0)
     .toBeGreaterThan(before + 100);
+  // The whole transcript, its top at the top of the screen: the finger moves over its text.
+  await transcript.evaluate((list) => list.scrollIntoView({ block: 'start' }));
   await expectScrolls(page, transcript);
 });
 

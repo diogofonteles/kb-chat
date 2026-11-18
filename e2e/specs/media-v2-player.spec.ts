@@ -135,8 +135,15 @@ test('KBC-129 AC-2: the player bar\'s transcript button opens "Tocando agora" on
   for (const box of await rows.evaluateAll((items) =>
     items.map((item) => {
       const rect = item.getBoundingClientRect();
+      // A strip that scrolls sideways ("Continuar ouvindo") shows its cards up to its own
+      // edge: what is seen of a card ends there.
+      const list = item.parentElement;
+      const strip =
+        list && getComputedStyle(list).overflowX !== 'visible'
+          ? list.getBoundingClientRect().right
+          : Number.POSITIVE_INFINITY;
       return {
-        right: rect.right,
+        right: Math.min(rect.right, strip),
         clipped: item.scrollWidth > item.clientWidth,
       };
     }),
