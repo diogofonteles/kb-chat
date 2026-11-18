@@ -133,6 +133,8 @@ export class ResearchMessage {
   readonly trackOpened = output<TrackOpening>();
   readonly stopped = output();
   readonly retried = output();
+  /** "Refazer" on the last answer: the same question asked again. */
+  readonly redone = output();
   readonly continued = output();
   private readonly settings = inject(SettingsStore);
   private readonly host =

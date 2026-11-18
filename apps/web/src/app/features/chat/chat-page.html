@@ -106,8 +106,7 @@
           }
         }
         @if (topic(); as current) {
-          <h1 class="topic"
-            [class.visually-hidden]="!onMedia()">
+          <h1 class="topic" [class.visually-hidden]="!onMedia()">
             {{ current.title }}
             <span class="count"
               ><span i18n="@@page.count">{current.documentCount, plural,
@@ -127,13 +126,19 @@
             </span>
           </h1>
         } @else if (allCollections()) {
-          <h1 class="topic"
-            [class.visually-hidden]="!onMedia()" i18n="@@page.allCollections">
+          <h1
+            class="topic"
+            [class.visually-hidden]="!onMedia()"
+            i18n="@@page.allCollections"
+          >
             Todos os acervos
           </h1>
         } @else {
-          <h1 class="topic"
-            [class.visually-hidden]="!onMedia()" i18n="@@page.title">
+          <h1
+            class="topic"
+            [class.visually-hidden]="!onMedia()"
+            i18n="@@page.title"
+          >
             Nova Alexandria
           </h1>
         }
@@ -205,6 +210,7 @@
               (trackOpened)="openTrack($event)"
               (stopped)="stopResearch()"
               (retried)="research.retry()"
+              (redone)="research.redo()"
               (continued)="research.continueSweep()"
             />
           } @else {
@@ -236,21 +242,21 @@
         <!-- A desktop search page has no question box: the top bar's field holds the search
              (chat-results); its mode changes in the results' head. -->
         @if (!desktop() || !searchPage()) {
-        <div class="composer-dock">
-          <app-composer
-            [mode]="store.mode()"
-            (modeChange)="changeMode($event)"
-            [research]="researching()"
-            [profile]="research.profile()"
-            (profileChange)="research.chooseProfile($event)"
-            [disabled]="!topic()"
-            [compact]="!desktop()"
-            [profilesAbove]="showProfiles()"
-            [searchPill]="searchPage()"
-            [value]="pillQuestion()"
-            (submitted)="ask($event)"
-          />
-        </div>
+          <div class="composer-dock">
+            <app-composer
+              [mode]="store.mode()"
+              (modeChange)="changeMode($event)"
+              [research]="researching()"
+              [profile]="research.profile()"
+              (profileChange)="research.chooseProfile($event)"
+              [disabled]="!topic()"
+              [compact]="!desktop()"
+              [profilesAbove]="showProfiles()"
+              [searchPill]="searchPage()"
+              [value]="pillQuestion()"
+              (submitted)="ask($event)"
+            />
+          </div>
         }
       }
     </main>

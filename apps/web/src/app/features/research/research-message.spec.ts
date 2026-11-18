@@ -51,6 +51,7 @@ async function renderMessage(turn: ResearchTurn, last = true) {
   const trackOpened = vi.fn();
   const stopped = vi.fn();
   const retried = vi.fn();
+  const redone = vi.fn();
   const settings = { openSettings: vi.fn() };
   const view = await render(ResearchMessage, {
     providers: [
@@ -58,9 +59,9 @@ async function renderMessage(turn: ResearchTurn, last = true) {
       { provide: SettingsStore, useValue: settings },
     ],
     inputs: { turn, last },
-    on: { opened, trackOpened, stopped, retried },
+    on: { opened, trackOpened, stopped, retried, redone },
   });
-  return { ...view, opened, trackOpened, stopped, retried, settings };
+  return { ...view, opened, trackOpened, stopped, retried, redone, settings };
 }
 
 describe('ResearchMessage', () => {
@@ -520,6 +521,17 @@ describe('ResearchMessage', () => {
     await renderMessage(aTurn({ steps: [], stepCount: 4, restored: true }));
     expect(screen.getByText('4 passos de pesquisa')).toBeTruthy();
     expect(screen.queryByRole('group')).toBeNull();
+  });
+
+  it('asks the last answer again with "Refazer"; an earlier answer has none (chat-research-answer)', async () => {
+    const view = await renderMessage(
+      aTurn({ phase: 'done', text: 'Tudo flui.' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Refazer' }));
+    expect(view.redone).toHaveBeenCalledOnce();
+    view.fixture.componentRef.setInput('last', false);
+    await view.fixture.whenStable();
+    expect(screen.queryByRole('button', { name: 'Refazer' })).toBeNull();
   });
 
   it('explains a missing credit with the link, and retries the last turn', async () => {

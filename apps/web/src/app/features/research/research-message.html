@@ -119,6 +119,19 @@
             other {Copiar}
           }</span>
         </button>
+        @if (last()) {
+          <!-- chat-research-answer: "Refazer" asks the same question again, as a new turn. -->
+          <button
+            uiButton="outline"
+            size="sm"
+            type="button"
+            class="redo"
+            (click)="redone.emit()"
+          >
+            <ui-icon name="refresh" [size]="16" />
+            <span i18n="@@ai.redo">Refazer</span>
+          </button>
+        }
       </div>
     }
 
