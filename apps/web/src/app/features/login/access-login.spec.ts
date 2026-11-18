@@ -73,9 +73,17 @@ describe('Entrar com código (KBC-014 FR-5, T10)', () => {
     send.flush({}, { status: 202, statusText: 'Accepted' });
     await fixture.whenStable();
 
+    // The address is in bold (v2 · Auth): the sentence spans the <strong>.
     expect(
-      screen.getByText(/Se houver um acesso para ana@example.com/),
+      screen.getByText(
+        (_, node) =>
+          node?.tagName === 'P' &&
+          /Se houver um acesso para ana@example\.com, enviamos/.test(
+            node.textContent?.replace(/\s+/g, ' ') ?? '',
+          ),
+      ),
     ).toBeTruthy();
+    expect(screen.getByText('ana@example.com').tagName).toBe('STRONG');
     expect(document.activeElement).toBe(screen.getByLabelText('Dígito 1 de 6'));
     type('Dígito 1 de 6', '12a3456');
     fireEvent.click(button('Entrar'));
@@ -315,8 +323,9 @@ describe('Google sem convite (KBC-014 FR-3, T8)', () => {
     );
     await fixture.whenStable();
 
+    expect(screen.getByText('Solicitação enviada.')).toBeTruthy();
     expect(
-      screen.getByText(/Solicitação enviada. Você recebe um e-mail/),
+      screen.getByText(/^\s*Você recebe um e-mail quando um master aprovar\./),
     ).toBeTruthy();
     expect(button('Sair')).toBeTruthy();
   });
@@ -362,8 +371,9 @@ describe('Google sem convite (KBC-014 FR-3, T8)', () => {
       status: 'refused',
       retryAt: '2026-10-26T13:30:00.000Z',
     });
+    expect(screen.getByText('Sua solicitação foi recusada.')).toBeTruthy();
     expect(
-      screen.getByText(/recusada/).textContent?.replace(/\s+/g, ' '),
+      screen.getByText(/pedir de novo/).textContent?.replace(/\s+/g, ' '),
     ).toContain('a partir de 26/10 às 10:30 (horário de Brasília).');
   });
 });

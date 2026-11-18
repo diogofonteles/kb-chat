@@ -306,20 +306,31 @@ test('D5: "+ Criar", "Recentes" and the avatar menu open whole, over the sidebar
 }) => {
   await page.goto('/');
   const side = await library(page);
-  await side.getByRole('button', { name: 'Criar', exact: true }).click();
-  await expectWholeOnTop(page, 'Criar');
-  await expect(
-    page.getByRole('menuitem', { name: 'Nova conversa' }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('menuitem', { name: 'Novo acervo' }),
-  ).toBeVisible();
-  await shoot(page, 'shell-create-menu');
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('menu', { name: 'Criar' })).toBeHidden();
-  await expect(
-    side.getByRole('button', { name: 'Criar', exact: true }),
-  ).toBeFocused();
+  if (desktop(page)) {
+    await side.getByRole('button', { name: 'Criar', exact: true }).click();
+    await expectWholeOnTop(page, 'Criar');
+    await expect(
+      page.getByRole('menuitem', { name: 'Nova conversa' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('menuitem', { name: 'Novo acervo' }),
+    ).toBeVisible();
+    await shoot(page, 'shell-create-menu');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu', { name: 'Criar' })).toBeHidden();
+    await expect(
+      side.getByRole('button', { name: 'Criar', exact: true }),
+    ).toBeFocused();
+  } else {
+    // v2 "Menu lateral aberto": what "+ Criar" offered is in the Menu's own rows.
+    await expect(
+      side.getByRole('button', { name: 'Criar', exact: true }),
+    ).toHaveCount(0);
+    for (const name of ['Nova conversa', 'Novo acervo'])
+      await expect(
+        side.getByRole('button', { name, exact: true }),
+      ).toBeVisible();
+  }
 
   const order = side.getByRole('button', { name: /Ordenar por/ });
   await order.click();
@@ -376,10 +387,16 @@ test('D5: Sua biblioteca keeps Fixados, Acervos and Conversas apart, each with i
   });
   await expect(collections).toBeVisible();
   await expect(conversations).toBeVisible();
-  // Conversations are text rows under a recency label, never covers like the collections.
+  // Conversations are rows under a recency label with the neutral chat cover (v2 · Sua
+  // biblioteca), never a collection's cover with its initials.
   const history = side.getByRole('navigation', { name: 'Conversas' });
   await expect(history.getByText('Hoje', { exact: true })).toBeVisible();
-  await expect(history.locator('ui-cover')).toHaveCount(0);
+  await expect(
+    history.locator('ui-cover:not(.conversation-cover)'),
+  ).toHaveCount(0);
+  await expect(
+    history.locator('ui-cover.conversation-cover').first(),
+  ).toBeVisible();
   await expect(history.getByRole('button').first()).toContainText('IA');
   await expect(
     side.locator('#library-collections ui-cover').first(),

@@ -72,8 +72,10 @@ export interface NavTabItem {
       display: flex;
       justify-content: space-around;
       margin: 0;
-      padding: 0.375rem var(--space-2)
-        calc(0.375rem + env(safe-area-inset-bottom));
+      /* v2 · celular: the tabs end 42 above the screen's foot under the mini player, 34
+         without it (the home indicator's room); the shell sets which. */
+      padding: 0 var(--space-2)
+        max(var(--nav-foot, 2.625rem), env(safe-area-inset-bottom));
       list-style: none;
     }
     li {
@@ -85,13 +87,14 @@ export interface NavTabItem {
       align-items: center;
       gap: var(--space-1);
       width: 100%;
-      min-height: 3.25rem;
-      padding: var(--space-1) 0;
+      /* 24 icon, 4, the 10 label; the 10 above belongs to the target (WCAG 2.5.8). */
+      padding: 0.625rem 0 0;
       border: 0;
       background: transparent;
       color: var(--color-text-muted);
       font: inherit;
-      font-size: 0.6875rem;
+      font-size: 0.625rem;
+      line-height: 0.75rem;
       text-decoration: none;
       cursor: pointer;
     }

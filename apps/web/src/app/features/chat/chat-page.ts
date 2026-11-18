@@ -62,6 +62,7 @@ import { MiniPlayer } from '@features/media/player/mini-player.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { AudioPresence } from '@features/shell/audio-presence.js';
 import { BottomNav, navTabs, type NavTab } from '@features/shell/bottom-nav.js';
+import { PageHeader } from '@features/shell/page-header.js';
 import { RightPanel } from '@features/shell/right-panel.js';
 import { TopBar } from '@features/shell/top-bar.js';
 import { hasLibrary } from '@features/media/library/library-access.js';
@@ -152,6 +153,8 @@ export class ChatPage {
   protected readonly audio = inject(AudioPresence);
   /** The shell's optional right panel, for the areas (KBC-125 FR-1). */
   protected readonly rightPanel = inject(RightPanel);
+  /** A routed page's colour under the phone's header row (v2 · celular). */
+  protected readonly pageChrome = inject(PageHeader);
   protected readonly me = this.session.me;
   private readonly topBar = viewChild(TopBar);
   /** The main panel's header (title, view switch): floating notices start under it. */
@@ -166,8 +169,21 @@ export class ChatPage {
     ),
     { initialValue: inject(Router).url.split(/[?#]/)[0] ?? '' },
   );
+  /**
+   * The page's name on a phone's header row (v2 · celular: the avatar, then "Biblioteca",
+   * "Fila de processamento"…): the routed page's title without the app's name.
+   */
+  protected readonly pageName = computed(() => {
+    this.path();
+    let route = this.router.routerState.snapshot.root;
+    while (route.firstChild) route = route.firstChild;
+    const title = route.title ?? '';
+    return title.split(' — ')[0]?.trim() ?? '';
+  });
   /** Sua biblioteca collapsed to its covers (desktop, FR-1). */
   protected readonly collapsed = signal(this.readCollapsed());
+  /** Sua biblioteca over the main panel ("Biblioteca expandida", ⤢), until an item opens. */
+  protected readonly expanded = signal(false);
   /** The media library's page, for who has it (Biblioteca, else Mídia). */
   protected readonly libraryPath = computed(() => {
     if (hasLibrary(this.session)) return '/biblioteca';
@@ -457,6 +473,8 @@ export class ChatPage {
   }
 
   protected sidebarActed(action: SidebarAction): void {
+    // What opens from "Biblioteca expandida" shows in the main panel again.
+    this.expanded.set(false);
     // A conversation started or restored from the media pages shows the conversation.
     if (
       (action === 'new' || action === 'restore' || action === 'document') &&
@@ -728,17 +746,20 @@ export class ChatPage {
 
   /** Enter in the global search: the free search of the collection in use (FR-2). */
   protected globalSearch(query: string): void {
+    this.expanded.set(false);
     this.views.select('search');
     this.globalSearches.next(query);
   }
 
   /** ✦ in the top bar: the research view, ready to type into. */
   protected openResearch(): void {
+    this.expanded.set(false);
     if (this.views.researchAvailable()) this.views.select('research');
     this.showConversation();
   }
 
   protected goHome(): void {
+    this.expanded.set(false);
     this.showConversation();
   }
 

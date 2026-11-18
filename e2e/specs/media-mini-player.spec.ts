@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { CSRF, expect, ownerApi } from './fixtures.js';
 import {
+  closePlayer,
   audioState,
   listenerTest as test,
   uniqueTag,
@@ -172,7 +173,7 @@ test('AC-11: "Fechar o player" stops, saves the position and closes', async ({
     (request) =>
       request.method() === 'PUT' && request.url().endsWith('/progress'),
   );
-  await mini(page).getByRole('button', { name: 'Fechar o player' }).click();
+  await closePlayer(page);
   const body = (await saved).postDataJSON() as { positionMs: number };
   expect(body.positionMs).toBeGreaterThan(0);
   await expect(mini(page)).toHaveCount(0);

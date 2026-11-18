@@ -704,7 +704,7 @@ describe('ChatPage side panel (KBC-005)', () => {
 
   it('shows today’s AI spend; the theme left the side panel for Configurações (AC-8, KBC-125 BR-4)', async () => {
     await renderPage();
-    expect(screen.getByText(/^US\$\s0,00 de US\$\s1,00$/)).toBeTruthy();
+    expect(screen.getByText(/^US\$\s0,00 de 1,00$/)).toBeTruthy();
     expect(screen.queryByLabelText('Tema')).toBeNull();
   });
 

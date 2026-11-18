@@ -26,8 +26,21 @@
   gap: var(--space-2);
 }
 
+/* v2: "Avançar" is the quieter of the two arrows (#ffffff59 until hovered). */
+.forward {
+  color: var(--color-icon-faint);
+}
+
+.forward:hover {
+  color: var(--color-text);
+}
+
 .home {
   color: var(--color-text-muted);
+}
+
+.home.on {
+  color: var(--color-text);
 }
 
 .home:hover {
@@ -83,8 +96,30 @@
   background: var(--overlay-4);
 }
 
-.people {
+.people,
+.bell {
   position: relative;
+}
+
+::ng-deep .bell-trigger {
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+}
+
+::ng-deep .bell-trigger:hover {
+  color: var(--color-text);
+}
+
+.bell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+}
+
+.quiet {
+  font-weight: 400;
 }
 
 .dot {

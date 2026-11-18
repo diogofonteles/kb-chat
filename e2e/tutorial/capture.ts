@@ -366,7 +366,9 @@ test('sign in', async ({ browser }) => {
   await page.getByRole('button', { name: 'Enviar código' }).click();
   const code = page.getByLabel('Código');
   await expect(code).toBeVisible();
-  await code.fill('482915');
+  // v2: six digit boxes; typing in the first fills them in turn.
+  await code.locator('input').first().click();
+  await page.keyboard.type('482915');
   await shooter.shoot(page, 'sign-in-code', {
     marks: [
       { n: 1, target: code },

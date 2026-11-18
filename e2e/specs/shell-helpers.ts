@@ -66,16 +66,28 @@ export async function signOut(page: Page): Promise<void> {
   await (await accountEntry(page, 'Sair')).click();
 }
 
-/** "+ Criar" › "Nova conversa". */
+/** "+ Criar" › "Nova conversa" (desktop); the Menu's row on a phone (v2: no "+ Criar"). */
 export async function startNewConversation(page: Page): Promise<void> {
   const side = await library(page);
+  if (!desktop(page)) {
+    await side
+      .getByRole('button', { name: 'Nova conversa', exact: true })
+      .click();
+    return;
+  }
   await side.getByRole('button', { name: 'Criar', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Nova conversa' }).click();
 }
 
-/** "+ Criar" › "Novo acervo". */
+/** "+ Criar" › "Novo acervo" (desktop); the Menu's row on a phone. */
 export async function startNewCollection(page: Page): Promise<void> {
   const side = await library(page);
+  if (!desktop(page)) {
+    await side
+      .getByRole('button', { name: 'Novo acervo', exact: true })
+      .click();
+    return;
+  }
   await side.getByRole('button', { name: 'Criar', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Novo acervo' }).click();
 }
@@ -142,6 +154,10 @@ export async function openMediaFromLibrary(
   const pinned = side.getByRole('link', { name, exact: true });
   if ((await pinned.count()) > 0) {
     await pinned.click();
+    return;
+  }
+  if (!desktop(page)) {
+    await side.getByRole('link', { name, exact: true }).click();
     return;
   }
   await side.getByRole('button', { name: 'Criar', exact: true }).click();

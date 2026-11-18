@@ -23,23 +23,27 @@
       <p i18n="@@tutorial.about.p2">
         Há dois jeitos de perguntar, escolhidos no topo da tela:
       </p>
-      <ul>
-        <li i18n="@@tutorial.about.search">
-          <strong>Buscar documentos:</strong> lista os textos que falam do
-          assunto, para você ler. Não usa IA e não tem limite.
+      <!-- v2 · Públicas: the two ways to ask as two cards (an icon, the name, what it does). -->
+      <ul class="modes">
+        <li class="mode">
+          <ui-icon name="search" [size]="22" />
+          <strong i18n="@@tutorial.about.searchName">Buscar documentos</strong>
+          <span i18n="@@tutorial.about.searchText"
+            >Lista os textos que falam do assunto, para você ler. Não usa IA e
+            não tem limite.</span
+          >
         </li>
-        <li i18n="@@tutorial.about.research">
-          <strong>✦ Pesquisa com IA:</strong> a IA procura no acervo, lê os
-          textos e escreve uma resposta com as fontes numeradas, para você
-          conferir.
+        <li class="mode">
+          <ui-icon name="sparkle" [size]="22" />
+          <strong i18n="@@tutorial.about.researchName"
+            >✦ Pesquisa com IA</strong
+          >
+          <span i18n="@@tutorial.about.researchText"
+            >A IA procura no acervo, lê os textos e escreve uma resposta com as
+            fontes numeradas, para você conferir.</span
+          >
         </li>
       </ul>
-      <p i18n="@@tutorial.about.authorship">
-        O acervo separa sempre a obra do <strong>Mestre Laércio</strong> (José
-        Laércio do Egito), marcada com ✦, dos livros de
-        <strong>outros autores</strong>. Você pode filtrar por autoria, e a IA
-        nunca atribui ao Mestre o que vem de outro autor.
-      </p>
       <app-tutorial-figure
         name="home"
         priority
@@ -52,6 +56,12 @@
           configurações.</ng-container
         >
       </app-tutorial-figure>
+      <p i18n="@@tutorial.about.authorship">
+        O acervo separa sempre a obra do <strong>Mestre Laércio</strong> (José
+        Laércio do Egito), marcada com ✦, dos livros de
+        <strong>outros autores</strong>. Você pode filtrar por autoria, e a IA
+        nunca atribui ao Mestre o que vem de outro autor.
+      </p>
     </section>
 
     <!-- 2. Entrar -->

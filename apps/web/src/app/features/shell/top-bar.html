@@ -12,6 +12,7 @@
   <button
     uiIconButton
     type="button"
+    class="forward"
     aria-label="Avançar"
     i18n-aria-label="@@topbar.forward"
     (click)="forward()"
@@ -26,11 +27,13 @@
     [size]="48"
     type="button"
     class="home"
+    [class.on]="atHome()"
     aria-label="Início"
     i18n-aria-label="@@topbar.home"
+    [attr.aria-current]="atHome() ? 'page' : null"
     (click)="homeRequested.emit()"
   >
-    <ui-icon name="home" [size]="24" />
+    <ui-icon [name]="atHome() ? 'homeFill' : 'home'" [size]="24" />
   </button>
   <form class="search" role="search" (submit)="submit($event)">
     <ui-icon class="search-icon" name="search" [size]="22" />
@@ -67,8 +70,44 @@
 </div>
 
 <div class="end">
-  <!-- The notifications slot: the bell comes with KBC-133 and does not show yet. -->
-  <ng-content select="[topBarNotifications]" />
+  <!--
+    Notificações (v2 · Casca): until KBC-133 keeps its own list, the bell gathers what the
+    app already knows needs the person: pending access requests (masters) and processing
+    that needs attention. Each item leads to its place.
+  -->
+  <ui-menu
+    label="Notificações"
+    i18n-label="@@topbar.notifications"
+    menuId="notifications-menu"
+    triggerClass="bell-trigger"
+    [triggerLabel]="bellLabel()"
+    align="end"
+  >
+    <span uiMenuTrigger class="bell">
+      <ui-icon name="bell" [size]="22" />
+      @if (noticeCount()) {
+        <span class="dot" aria-hidden="true"></span>
+      }
+    </span>
+    <p class="ui-menu__heading" i18n="@@topbar.notifications">Notificações</p>
+    @if (pendingRequests(); as pending) {
+      <button uiMenuItem type="button" (click)="openPeople()">
+        <ui-icon name="people" [size]="18" />
+        <span>{{ requestsNotice(pending) }}</span>
+      </button>
+    }
+    @if (attention(); as count) {
+      <a uiMenuItem routerLink="/fila">
+        <ui-icon name="upload" [size]="18" />
+        <span>{{ attentionNotice(count) }}</span>
+      </a>
+    }
+    @if (!noticeCount()) {
+      <p class="ui-menu__heading quiet" i18n="@@topbar.noNotifications">
+        Nada novo por aqui.
+      </p>
+    }
+  </ui-menu>
   @if (session.isMaster()) {
     <button
       uiIconButton
@@ -130,6 +169,13 @@
       <span i18n="@@page.help">Como usar</span>
       <ui-icon class="ui-menu__meta" name="external" [size]="14" />
     </a>
+    @if (playing()) {
+      <!-- The bar has no × in v2: closing the player also lives here, beside any panel. -->
+      <button uiMenuItem type="button" (click)="closePlayer()">
+        <ui-icon name="xcircle" [size]="18" />
+        <span i18n="@@mini.close">Fechar o player</span>
+      </button>
+    }
     <hr class="ui-menu__divider" />
     <button uiMenuItem type="button" (click)="signOut()">
       <ui-icon name="arrowRight" [size]="18" />

@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, ownerApi } from './fixtures.js';
 import {
+  closePlayer,
   audioState,
   listenerTest as test,
   uniqueTag,
@@ -180,7 +181,7 @@ test('AC-6: closing the player turns the timer off', async ({ page }) => {
   await page.getByRole('link', { name: '← Mídia' }).click();
   const mini = page.getByRole('region', { name: 'Mini-player' });
   await expect(mini).toContainText(/Timer para dormir: 1[45]:\d\d/);
-  await mini.getByRole('button', { name: 'Fechar o player' }).click();
+  await closePlayer(page);
   await expect(mini).toHaveCount(0);
   await page.goto(`/midia/${lecture.id}`);
   await expect(

@@ -12,7 +12,10 @@
   align-items: center;
   justify-self: start;
   gap: 0.375rem;
-  min-height: var(--target);
+  /* v2 · Auth: a 20 row (18 icon, 14/700); 24 is still a target (WCAG 2.5.8). */
+  min-height: 1.5rem;
+  /* The target overflows the drawn 18 row evenly, so the stack keeps the frame's rhythm. */
+  margin-block: -0.1875rem;
   padding: 0;
   border: 0;
   background: transparent;
@@ -31,6 +34,7 @@
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
+  line-height: 1.2;
   letter-spacing: -0.02em;
 }
 
@@ -48,21 +52,18 @@ form {
   gap: var(--space-4);
 }
 
+/* Nome and Sobrenome side by side, 12 apart, on a phone too (v2 · Auth). */
 .names {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
   align-items: start;
 }
 
-@media (min-width: 480px) {
-  .names {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
+/* v2 · Auth: "Celular (opcional)" is one bold label. */
 .optional {
-  color: var(--color-text-muted);
-  font-weight: 400;
+  color: inherit;
+  font-weight: inherit;
 }
 
 .channels {
@@ -196,6 +197,27 @@ form {
   color: var(--color-text);
   font-size: 1.25rem;
   font-weight: 700;
+  line-height: 1.2;
+}
+
+/* v2 · Auth after a Google request (enviada, em análise, recusada): a 22 headline. */
+.outcome .headline.large {
+  font-size: 1.375rem;
+}
+
+/* v2 · Auth "Pedir acesso · enviado": the headline is 24 there (22 after a Google request). */
+:host(app-sign-up-form) .done .headline {
+  font-size: 1.5rem;
+}
+
+.done {
+  gap: 0.875rem;
+  padding: var(--space-3) 0;
+}
+
+/* v2 · Auth "solicitar": the line sits in the stack's own 16 gap, without the 8 around it. */
+.outcome:has(+ form) {
+  padding: 0;
 }
 
 .mark {
@@ -224,4 +246,11 @@ form {
 
 .leave {
   justify-self: center;
+}
+
+/* v2 · Auth: a field's error and hint are 12 lines of 14.4 (the frames' auto height), so the
+   stack under them keeps the drawn rhythm. */
+:host ::ng-deep .ui-field__error,
+:host ::ng-deep .ui-field__hint {
+  line-height: 1.2;
 }

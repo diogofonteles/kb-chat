@@ -248,7 +248,8 @@
 .ui-banner {
   --ui-banner-tone: var(--color-info);
   display: flex;
-  align-items: flex-start;
+  /* v2 · Componentes › Banner: the icon, the text and the action centred on one row. */
+  align-items: center;
   gap: var(--space-3);
   padding: 0.875rem var(--space-4);
   border-radius: var(--radius-card);
@@ -269,7 +270,7 @@
 }
 
 .ui-banner__icon {
-  margin-top: 0.0625rem;
+  flex: none;
   color: var(--ui-banner-tone);
 }
 
@@ -278,6 +279,8 @@
   flex: 1;
   gap: 0.125rem;
   min-width: 0;
+  /* v2: the title and its line on tight lines (Figma's auto height). */
+  line-height: 1.2;
 }
 
 .ui-banner__title {
@@ -302,6 +305,11 @@
 .ui-banner > [uiBannerAction] {
   flex: none;
   align-self: center;
+}
+
+/* v2: the banner's button keeps the 24 sides of every filled button, at 32 tall. */
+.ui-banner > .ui-btn--sm[uiBannerAction] {
+  padding: 0 var(--space-6);
 }
 
 /* ---------- Empty state ---------- */
@@ -390,8 +398,8 @@
   height: var(--ui-avatar-size);
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-warn);
-  color: var(--color-bg);
+  background: var(--ui-avatar-bg, var(--avatar-5-bg));
+  color: var(--ui-avatar-fg, var(--avatar-5-fg));
   font-size: calc(var(--ui-avatar-size) * 0.42);
   font-weight: 700;
 }
@@ -617,6 +625,8 @@
 .ui-field__label {
   font-size: var(--text-meta);
   font-weight: 700;
+  /* v2: the 13 label, the 12 hint and error sit on tight lines (6 apart from the box). */
+  line-height: 1.2;
 }
 
 .ui-field__hint {
@@ -632,6 +642,7 @@
   margin: 0;
   color: var(--color-danger);
   font-size: var(--text-xs);
+  line-height: 1.25;
 }
 
 .ui-input {
@@ -862,6 +873,11 @@ select.ui-input option {
   color: inherit;
   font: inherit;
   cursor: pointer;
+}
+
+.ui-menu__panel:focus {
+  /* Focused only when it has no item (an empty list): its own edge already shows it. */
+  outline: none;
 }
 
 .ui-menu__panel {
@@ -1228,10 +1244,17 @@ select.ui-input option {
   border: 2px solid var(--color-text-muted);
 }
 
+/* v2 · Auth: the box in focus has a 2 px white border, nothing around it; white on the dark
+   box is the focus indicator (contrast far above 3:1, WCAG 2.4.7/1.4.11). */
 .ui-code__digit:focus-visible {
   border: 2px solid var(--color-text);
-  outline: 2px solid var(--color-focus);
-  outline-offset: 1px;
+  outline: none;
+}
+
+@media (forced-colors: active) {
+  .ui-code__digit:focus-visible {
+    outline: 2px solid Highlight;
+  }
 }
 
 .ui-code__digit[aria-invalid='true'] {

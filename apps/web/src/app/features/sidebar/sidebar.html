@@ -14,11 +14,86 @@
   }
 }
 
-<div class="head">
-  <!-- Not a heading: the pages' own h2 ("Biblioteca") stay the only ones of the outline. -->
-  <p id="your-library-title" class="title" i18n="@@library.title">
-    Sua biblioteca
-  </p>
+@if (!mobile()) {
+  <div class="head">
+    <!--
+      v2 · Casca: "Sua biblioteca" (its name folds the column, as the title does in the
+      reference player), "+ Criar" and ⤢ (the library over the main panel, "Biblioteca
+      expandida"). Folded, the library icon opens it again. Not a heading: the pages' own
+      h2 ("Biblioteca") stay the only ones of the outline.
+    -->
+    @if (collapsed()) {
+      <button
+        uiIconButton
+        type="button"
+        class="collapse"
+        [attr.aria-label]="expandLabel"
+        aria-expanded="false"
+        [attr.aria-controls]="ns() + '-body'"
+        (click)="collapseToggled.emit()"
+      >
+        <ui-icon name="library" [size]="22" />
+      </button>
+    }
+    <button
+      type="button"
+      class="title"
+      [attr.aria-label]="collapseLabel"
+      aria-expanded="true"
+      [attr.aria-controls]="ns() + '-body'"
+      [disabled]="expanded()"
+      (click)="collapseToggled.emit()"
+    >
+      <span
+        [id]="expanded() ? null : 'your-library-title'"
+        i18n="@@library.title"
+        >Sua biblioteca</span
+      >
+    </button>
+    @if (expanded()) {
+      @if (canCreateCollections()) {
+        <button
+          uiButton="white"
+          type="button"
+          class="wide-action"
+          (click)="collectionDialog.openNew()"
+        >
+          <ui-icon name="plus" [size]="16" />
+          <span i18n="@@library.newCollection">Novo acervo</span>
+        </button>
+        @if (chat.topic(); as current) {
+          @if (current.canRename) {
+            <button
+              uiButton="outline"
+              type="button"
+              class="wide-action"
+              (click)="collectionDialog.openEdit(current)"
+            >
+              <ui-icon name="edit" [size]="16" />
+              <span i18n="@@library.editCollection">Editar acervo</span>
+            </button>
+          }
+        }
+      }
+    } @else {
+      <ng-container [ngTemplateOutlet]="createMenuTpl" />
+    }
+    @if (!collapsed() && !expanded()) {
+      <button
+        uiIconButton
+        type="button"
+        class="widen"
+        [attr.aria-label]="widenLabel"
+        [attr.aria-pressed]="wide()"
+        (click)="expandToggled.emit()"
+      >
+        <ui-icon name="expand" [size]="18" />
+      </button>
+    }
+  </div>
+}
+
+<ng-template #createMenuTpl>
   <ui-menu
     #createMenu
     class="create"
@@ -54,65 +129,123 @@
       </a>
     }
   </ui-menu>
-  @if (!mobile()) {
-    <button
-      uiIconButton
-      type="button"
-      class="collapse"
-      [attr.aria-label]="collapsed() ? expandLabel : collapseLabel"
-      [attr.aria-expanded]="!collapsed()"
-      aria-controls="library-body"
-      (click)="collapseToggled.emit()"
-    >
-      <ui-icon [name]="collapsed() ? 'chevRight' : 'chevLeft'" [size]="18" />
-    </button>
-  }
-</div>
+</ng-template>
 
-<div id="library-body" class="body">
-  <div
-    class="chips"
-    role="group"
-    aria-label="Mostrar"
-    i18n-aria-label="@@library.show"
-  >
-    @for (chip of chips(); track chip.kind) {
-      <button
-        uiChip
-        type="button"
-        [selected]="kind() === chip.kind"
-        (click)="chooseKind(chip.kind)"
-      >
-        {{ chip.label }}
-      </button>
+<div [id]="ns() + '-body'" class="body">
+  <div class="chip-line">
+    <div
+      class="chips"
+      role="group"
+      aria-label="Mostrar"
+      i18n-aria-label="@@library.show"
+      (wheel)="scrollChips($event)"
+    >
+      @for (chip of chips(); track chip.kind) {
+        <button
+          uiChip
+          type="button"
+          [selected]="kind() === chip.kind"
+          (click)="chooseKind(chip.kind)"
+        >
+          {{ chip.label }}
+        </button>
+      }
+    </div>
+
+    @if (expanded()) {
+      <!-- Biblioteca expandida: the search pill at the end of the chips' line. -->
+      <label class="ui-search search wide-search">
+        <ui-icon name="search" [size]="16" />
+        <span class="visually-hidden" i18n="@@library.filter"
+          >Filtrar Sua biblioteca</span
+        >
+        <input
+          #wideSearch
+          type="search"
+          placeholder="Buscar na biblioteca"
+          i18n-placeholder="@@library.widePlaceholder"
+          [value]="query()"
+          (input)="query.set(wideSearch.value)"
+        />
+      </label>
     }
   </div>
-
-  <div class="tools">
-    <button
-      uiIconButton
-      type="button"
-      aria-label="Filtrar Sua biblioteca"
-      i18n-aria-label="@@library.filter"
-      [attr.aria-expanded]="searching()"
-      aria-controls="library-search"
-      (click)="toggleSearch()"
-    >
+  @if (expanded()) {
+    <!-- Biblioteca expandida: the list's head, Título and Tipo. -->
+    <div class="wide-head" aria-hidden="true">
+      <span i18n="@@library.colTitle">Título</span>
+      <span class="type-col" i18n="@@library.colType">Tipo</span>
+    </div>
+  } @else if (!mobile()) {
+    <div class="tools">
+      <ng-container [ngTemplateOutlet]="filterButton" />
+      <ng-container [ngTemplateOutlet]="orderMenu" />
+    </div>
+  }
+  @if (searching() && !expanded()) {
+    <label class="ui-search search">
       <ui-icon name="search" [size]="16" />
-    </button>
+      <span class="visually-hidden" i18n="@@library.filter"
+        >Filtrar Sua biblioteca</span
+      >
+      <input
+        #searchInput
+        [id]="ns() + '-search'"
+        type="search"
+        placeholder="Filtrar"
+        i18n-placeholder="@@library.filterPlaceholder"
+        [value]="query()"
+        (input)="query.set(searchInput.value)"
+      />
+    </label>
+  }
+
+  <ng-template #filterButton>
+    @if (mobile()) {
+      <button
+        type="button"
+        class="action"
+        [attr.aria-expanded]="searching()"
+        [attr.aria-controls]="ns() + '-search'"
+        (click)="toggleSearch()"
+      >
+        <ui-icon name="search" [size]="20" />
+        <span i18n="@@library.filter">Filtrar Sua biblioteca</span>
+      </button>
+    } @else {
+      <button
+        uiIconButton
+        type="button"
+        aria-label="Filtrar Sua biblioteca"
+        i18n-aria-label="@@library.filter"
+        [attr.aria-expanded]="searching()"
+        [attr.aria-controls]="ns() + '-search'"
+        (click)="toggleSearch()"
+      >
+        <ui-icon name="search" [size]="16" />
+      </button>
+    }
+  </ng-template>
+
+  <ng-template #orderMenu>
     <ui-menu
       label="Ordenar"
       i18n-label="@@library.sort"
       menuId="library-order"
       triggerClass="order-trigger"
-      align="end"
+      [align]="mobile() ? 'start' : 'end'"
     >
       <span uiMenuTrigger class="order-content">
-        <span class="visually-hidden" i18n="@@library.sortBy"
+        @if (mobile()) {
+          <ui-icon name="sort" [size]="20" />
+        }
+        <span [class.visually-hidden]="!mobile()" i18n="@@library.sortBy"
           >Ordenar por:</span
         >
         {{ orderLabel() }}
-        <ui-icon name="list" [size]="14" />
+        @if (!mobile()) {
+          <ui-icon name="list" [size]="14" />
+        }
       </span>
       <button
         uiMenuItem
@@ -133,24 +266,7 @@
         Ordem alfabética
       </button>
     </ui-menu>
-  </div>
-  @if (searching()) {
-    <label class="ui-search search">
-      <ui-icon name="search" [size]="16" />
-      <span class="visually-hidden" i18n="@@library.filter"
-        >Filtrar Sua biblioteca</span
-      >
-      <input
-        #searchInput
-        id="library-search"
-        type="search"
-        placeholder="Filtrar"
-        i18n-placeholder="@@library.filterPlaceholder"
-        [value]="query()"
-        (input)="query.set(searchInput.value)"
-      />
-    </label>
-  }
+  </ng-template>
 
   <!--
     D5: the sections never mix. Each has its heading (h2 inside the aside), its count and a
@@ -162,19 +278,19 @@
       <section
         class="section"
         role="group"
-        aria-labelledby="library-pinned-head"
+        [attr.aria-labelledby]="ns() + '-pinned-head'"
       >
         <ng-container
           [ngTemplateOutlet]="sectionHead"
           [ngTemplateOutletContext]="{
             key: 'pinned',
-            id: 'library-pinned',
+            id: ns() + '-pinned',
             label: pinnedLabel,
             count: pinnedCount(),
           }"
         />
         @if (isOpen('section:pinned')) {
-          <ul id="library-pinned" class="items">
+          <ul [id]="ns() + '-pinned'" class="items">
             @for (item of pinned(); track item.key) {
               <li>
                 <a
@@ -197,10 +313,32 @@
                       [icon]="item.icon"
                       [from]="item.colors[0]"
                       [to]="item.colors[1]"
-                      [size]="40"
+                      [size]="48"
                     />
                   </ui-library-item>
                 </a>
+                @if (expanded()) {
+                  <ui-menu
+                    class="row-more"
+                    [label]="rowMenuLabel(item.title)"
+                    [triggerLabel]="rowMenuLabel(item.title)"
+                    [menuId]="ns() + '-more-' + item.key"
+                    triggerClass="row-more-trigger"
+                    align="end"
+                  >
+                    <span uiMenuTrigger class="row-more-content">
+                      <ui-icon name="more" [size]="18" />
+                    </span>
+                    <a
+                      uiMenuItem
+                      [routerLink]="item.path"
+                      (click)="openMedia()"
+                    >
+                      <ui-icon [name]="item.icon" [size]="18" />
+                      <span i18n="@@library.openItem">Abrir</span>
+                    </a>
+                  </ui-menu>
+                }
               </li>
             }
           </ul>
@@ -212,19 +350,19 @@
       <section
         class="section"
         role="group"
-        aria-labelledby="library-collections-head"
+        [attr.aria-labelledby]="ns() + '-collections-head'"
       >
         <ng-container
           [ngTemplateOutlet]="sectionHead"
           [ngTemplateOutletContext]="{
             key: 'collections',
-            id: 'library-collections',
+            id: ns() + '-collections',
             label: collectionsLabel,
             count: collections().length,
           }"
         />
         @if (isOpen('section:collections')) {
-          <ul id="library-collections" class="items tree">
+          <ul [id]="ns() + '-collections'" class="items tree">
             @for (node of collectionNodes(); track node.entry.topic.slug) {
               <li class="collection" [class.parent]="node.children.length > 0">
                 <div class="row">
@@ -237,7 +375,7 @@
                         isOpen('branch:' + node.entry.topic.slug)
                       "
                       [attr.aria-controls]="
-                        'library-branch-' + node.entry.topic.slug
+                        ns() + '-branch-' + node.entry.topic.slug
                       "
                       [attr.aria-label]="branchLabel(node.entry.topic.title)"
                       (click)="toggleFold('branch:' + node.entry.topic.slug)"
@@ -273,7 +411,7 @@
                 ) {
                   <ul
                     class="children"
-                    [id]="'library-branch-' + node.entry.topic.slug"
+                    [id]="ns() + '-branch-' + node.entry.topic.slug"
                   >
                     @for (child of node.children; track child.topic.slug) {
                       <li class="collection child">
@@ -310,20 +448,20 @@
       <section
         class="section"
         role="group"
-        aria-labelledby="library-conversations-head"
+        [attr.aria-labelledby]="ns() + '-conversations-head'"
       >
         <ng-container
           [ngTemplateOutlet]="sectionHead"
           [ngTemplateOutletContext]="{
             key: 'conversations',
-            id: 'library-conversations',
+            id: ns() + '-conversations',
             label: conversationsLabel,
             count: entries().length,
           }"
         />
         @if (isOpen('section:conversations')) {
           <nav
-            id="library-conversations"
+            [id]="ns() + '-conversations'"
             class="history"
             aria-label="Conversas"
             i18n-aria-label="@@library.conversations"
@@ -359,76 +497,112 @@
               }
             } @else {
               @for (group of conversationGroups(); track group.group) {
-                <p class="recency" [id]="'library-recency-' + group.group">
+                <p
+                  class="recency visually-hidden"
+                  [id]="ns() + '-recency-' + group.group"
+                >
                   {{ group.label }}
                 </p>
                 <ul
                   class="conversations"
-                  [attr.aria-labelledby]="'library-recency-' + group.group"
+                  [attr.aria-labelledby]="ns() + '-recency-' + group.group"
                 >
                   @for (conversation of group.items; track conversation.id) {
                     <li>
                       <button
                         type="button"
-                        class="conversation"
+                        class="conversation ui-libitem-row"
                         [attr.aria-current]="
                           conversation.id === currentId() ? 'true' : null
                         "
                         (click)="open(conversation)"
                       >
-                        <ui-icon
-                          class="conversation-icon"
-                          [class.research]="conversation.kind === 'research'"
-                          [name]="
-                            conversation.kind === 'research'
-                              ? 'sparkle'
-                              : 'search'
-                          "
-                          [size]="16"
+                        <!-- v2 · Sua biblioteca: a conversation's row is a library item
+                             with the chat cover; the kind leads its meta line. -->
+                        <ui-cover
+                          class="conversation-cover"
+                          icon="chat"
+                          from="var(--cover-neutral-from)"
+                          to="var(--cover-neutral-to)"
+                          [size]="48"
                         />
-                        <span class="conversation-text">
-                          <span class="question" [title]="conversation.title">{{
-                            conversation.title
-                          }}</span
-                          >&ngsp;<span class="meta">
-                            <span
-                              class="kind"
-                              [class.research]="
-                                conversation.kind === 'research'
-                              "
-                              >{{ kindLabels[conversation.kind] }}</span
-                            >
-                            ·
-                            {{
-                              titles().get(conversation.topic) ??
-                                conversation.topic
-                            }}
-                            @if (conversation.count > 1) {
-                              <span i18n="@@sidebar.questions"
-                                >·
-                                {conversation.count, plural,
-                                  other {{{ conversation.count }} perguntas}
-                                }</span
+                        <span class="conversation-text ui-libitem__text">
+                          <span
+                            class="question ui-libitem__title"
+                            [title]="conversation.title"
+                            >{{ conversation.title }}</span
+                          >&ngsp;<span class="meta ui-libitem__meta">
+                            <span class="meta-line"
+                              ><span
+                                class="kind"
+                                [class.research]="
+                                  conversation.kind === 'research'
+                                "
+                                >{{ kindLabels[conversation.kind] }}</span
                               >
-                            }
-                            @if (conversation.status; as status) {
-                              <span
-                                class="status"
-                                [class.pending]="status === 'pending'"
-                                [class.failed]="status === 'failed'"
-                              >
-                                @if (status === 'pending') {
-                                  <span
-                                    class="spinner"
-                                    aria-hidden="true"
-                                  ></span>
+                              ·
+                              @if (conversation.status; as status) {
+                                <span
+                                  class="status"
+                                  [class.pending]="status === 'pending'"
+                                  [class.failed]="status === 'failed'"
+                                >
+                                  @if (status === 'pending') {
+                                    <span
+                                      class="spinner"
+                                      aria-hidden="true"
+                                    ></span>
+                                  }
+                                  {{ statusLabels[status] }}</span
+                                >
+                              } @else {
+                                {{
+                                  titles().get(conversation.topic) ??
+                                    conversation.topic
+                                }}
+                                @if (conversation.count > 1) {
+                                  <span i18n="@@sidebar.questions"
+                                    >·
+                                    {conversation.count, plural,
+                                      other {{{ conversation.count }} perguntas}
+                                    }</span
+                                  >
                                 }
-                                · {{ statusLabels[status] }}</span
-                              >
-                            }
+                              }
+                            </span>
                           </span>
                         </span>
+                        @if (expanded()) {
+                          <span class="type-col" aria-hidden="true">{{
+                            kindLabels[conversation.kind]
+                          }}</span>
+                        }
                       </button>
+                      @if (expanded()) {
+                        <ui-menu
+                          #rowMenu
+                          class="row-more"
+                          [label]="rowMenuLabel(conversation.title)"
+                          [triggerLabel]="rowMenuLabel(conversation.title)"
+                          [menuId]="ns() + '-more-' + conversation.id"
+                          triggerClass="row-more-trigger"
+                          align="end"
+                        >
+                          <span uiMenuTrigger class="row-more-content">
+                            <ui-icon name="more" [size]="18" />
+                          </span>
+                          <button
+                            uiMenuItem
+                            type="button"
+                            (click)="open(conversation)"
+                          >
+                            <ui-icon name="chat" [size]="18" />
+                            <span i18n="@@library.openConversation"
+                              >Abrir conversa</span
+                            >
+                          </button>
+                        </ui-menu>
+                      }
                     </li>
                   }
                 </ul>
@@ -447,19 +621,19 @@
       <section
         class="section"
         role="group"
-        aria-labelledby="library-documents-head"
+        [attr.aria-labelledby]="ns() + '-documents-head'"
       >
         <ng-container
           [ngTemplateOutlet]="sectionHead"
           [ngTemplateOutletContext]="{
             key: 'documents',
-            id: 'library-documents',
+            id: ns() + '-documents',
             label: documentsLabel,
             count: documents().length,
           }"
         />
         @if (isOpen('section:documents')) {
-          <ul id="library-documents" class="items">
+          <ul [id]="ns() + '-documents'" class="items">
             @for (doc of documents(); track doc.topic + doc.id) {
               <li>
                 <button
@@ -470,12 +644,43 @@
                   <ui-library-item [title]="doc.title" [meta]="doc.meta">
                     <ui-cover
                       icon="doc"
-                      from="#3a3a3a"
-                      to="#1f1f1f"
-                      [size]="40"
+                      from="var(--cover-neutral-from)"
+                      to="var(--cover-neutral-to)"
+                      [size]="48"
                     />
                   </ui-library-item>
+                  @if (expanded()) {
+                    <span
+                      class="type-col"
+                      aria-hidden="true"
+                      i18n="@@library.typeDocument"
+                      >Documento</span
+                    >
+                  }
                 </button>
+                @if (expanded()) {
+                  <ui-menu
+                    #rowMenu
+                    class="row-more"
+                    [label]="rowMenuLabel(doc.title)"
+                    [triggerLabel]="rowMenuLabel(doc.title)"
+                    [menuId]="ns() + '-more-doc-' + doc.id"
+                    triggerClass="row-more-trigger"
+                    align="end"
+                  >
+                    <span uiMenuTrigger class="row-more-content">
+                      <ui-icon name="more" [size]="18" />
+                    </span>
+                    <button
+                      uiMenuItem
+                      type="button"
+                      (click)="openDocument(doc)"
+                    >
+                      <ui-icon name="doc" [size]="18" />
+                      <span i18n="@@library.openDocument">Abrir documento</span>
+                    </button>
+                  </ui-menu>
+                }
               </li>
             } @empty {
               <li class="note" i18n="@@library.noDocuments">
@@ -532,9 +737,52 @@
       <ui-library-item [title]="entry.topic.title" [meta]="entry.meta">
         <ui-cover [title]="entry.topic.title" [size]="size" />
       </ui-library-item>
+      @if (expanded()) {
+        <span
+          class="type-col"
+          aria-hidden="true"
+          i18n="@@library.typeCollection"
+          >Acervo</span
+        >
+      }
     </button>
+    @if (expanded()) {
+      <ui-menu
+        #rowMenu
+        class="row-more"
+        [label]="rowMenuLabel(entry.topic.title)"
+        [triggerLabel]="rowMenuLabel(entry.topic.title)"
+        [menuId]="ns() + '-more-' + entry.topic.slug"
+        triggerClass="row-more-trigger"
+        align="end"
+      >
+        <span uiMenuTrigger class="row-more-content">
+          <ui-icon name="more" [size]="18" />
+        </span>
+        <button
+          uiMenuItem
+          type="button"
+          [disabled]="!entry.topic.canOpen"
+          (click)="changeTopic(entry.topic.slug)"
+        >
+          <ui-icon name="folder" [size]="18" />
+          <span i18n="@@library.openCollection">Abrir acervo</span>
+        </button>
+        @if (entry.topic.canRename && canCreateCollections()) {
+          <button
+            uiMenuItem
+            type="button"
+            (click)="rowMenu.close(); collectionDialog.openEdit(entry.topic)"
+          >
+            <ui-icon name="edit" [size]="18" />
+            <span i18n="@@library.editCollection">Editar acervo</span>
+          </button>
+        }
+      </ui-menu>
+    }
     @if (
       !mobile() &&
+      !expanded() &&
       entry.active &&
       entry.topic.canRename &&
       canCreateCollections()
@@ -553,7 +801,8 @@
   </ng-template>
 
   @if (mobile()) {
-    <div class="menu-actions">
+    <!-- v2 · Menu: the drawn rows stay in reach at the sheet's foot however long the list. -->
+    <div class="menu-actions drawn">
       @if (canCreateCollections()) {
         <button
           type="button"
@@ -561,7 +810,7 @@
           (click)="collectionDialog.openNew()"
         >
           <ui-icon name="plus" [size]="20" />
-          <span i18n="@@sidebar.newCollection">+ Novo acervo</span>
+          <span i18n="@@library.newCollection">Novo acervo</span>
         </button>
         @if (chat.topic(); as current) {
           @if (current.canRename) {
@@ -594,6 +843,29 @@
         </button>
       }
       <app-settings-button />
+      @if (playing(); as current) {
+        <!-- The mini player has no × in v2: closing the player is a row here on a phone. -->
+        <button type="button" class="action" (click)="closePlayer()">
+          <ui-icon name="xcircle" [size]="20" />
+          <span i18n="@@mini.close">Fechar o player</span>
+        </button>
+      }
+    </div>
+    <!-- v1 actions the drawn Menu has no row for ("+ Criar", its search and order on the
+         desktop column) come after the drawn ones. -->
+    <div class="menu-actions more">
+      <button type="button" class="action" (click)="startNew()">
+        <ui-icon name="chat" [size]="20" />
+        <span i18n="@@sidebar.new">Nova conversa</span>
+      </button>
+      @if (mediaFallback(); as link) {
+        <a class="action" [routerLink]="link.path" (click)="openMedia()">
+          <ui-icon name="music" [size]="20" />
+          <span>{{ link.title }}</span>
+        </a>
+      }
+      <ng-container [ngTemplateOutlet]="filterButton" />
+      <ng-container [ngTemplateOutlet]="orderMenu" />
       <a
         class="action"
         href="/tutorial"

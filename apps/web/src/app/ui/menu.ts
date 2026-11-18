@@ -66,11 +66,11 @@ export class UiMenuItem {
       <ng-content select="[uiMenuTrigger]" />
     </button>
     <!-- Choosing an item closes the menu: the click bubbles up from the item. -->
-    <!-- eslint-disable-next-line @angular-eslint/template/interactive-supports-focus -->
     <div
       #panel
       class="ui-menu__panel"
       role="menu"
+      tabindex="-1"
       [attr.id]="menuId()"
       [attr.aria-label]="label()"
       [hidden]="!open()"
@@ -128,7 +128,9 @@ export class UiMenu {
             sheetBelow: SHEET_BELOW_PX,
           },
         );
-        this.items()[0]?.focus();
+        // A menu with nothing to choose (an empty list) still takes the focus, so Escape
+        // and Tab close it.
+        (this.items()[0] ?? this.panel().nativeElement).focus();
       },
       { injector: this.injector },
     );
