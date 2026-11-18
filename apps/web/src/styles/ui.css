@@ -286,6 +286,8 @@
 .ui-banner__text {
   color: var(--color-text-muted);
   font-size: var(--text-meta);
+  /* the 13 line is 16 in v2, as Figma's auto height draws it (1.2 would give 15.6) */
+  line-height: 1rem;
 }
 
 .ui-banner__text:empty {
