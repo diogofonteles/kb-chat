@@ -317,8 +317,9 @@
     padding-inline: var(--space-2) 0;
   }
 
-  .copies-toggle {
-    min-height: var(--target);
+  /* cmRow has no copies line: a phone opens a copy from the row's ⋯ (Abrir a cópia …). */
+  .copies-area {
+    display: none;
   }
 }
 

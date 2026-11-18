@@ -55,7 +55,7 @@
         }
       </fieldset>
       <span id="mode-help" class="help">{{ modeHelp() }}</span>
-    } @else {
+    } @else if (!profilesAbove()) {
       <fieldset class="choices profile" aria-describedby="profile-help">
         <legend class="visually-hidden" i18n="@@composer.profile">
           Tipo de pesquisa

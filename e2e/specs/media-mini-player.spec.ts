@@ -8,6 +8,7 @@ import {
   type UploadedMedia,
 } from './media-helpers.js';
 import { startNewConversation } from './shell-helpers.js';
+import { expectSummary } from './search-view.js';
 
 let lecture: UploadedMedia;
 
@@ -75,7 +76,7 @@ async function search(page: Page, question: string) {
   const box = page.getByLabel('Sua pergunta');
   await box.fill(question);
   await box.press('Enter');
-  await expect(page.getByText(/documentos · Tudo ·/)).toBeVisible();
+  await expectSummary(page, /documentos/, 'Tudo');
 }
 
 /** What has the focus, with its rectangle, when that meets `bar`; null when it does not. */

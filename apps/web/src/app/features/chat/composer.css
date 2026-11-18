@@ -194,6 +194,13 @@ textarea:focus-visible {
     font-size: var(--text-item);
   }
 
+  /* cmComposer: the empty pill says its hint on one line, cut with "…" (52 tall). */
+  textarea:placeholder-shown {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .field {
     grid-row: 1;
     grid-column: 1;
@@ -227,17 +234,37 @@ textarea:focus-visible {
     grid-column: 1 / -1;
   }
 
+  /* The modes or profiles float over the page next to the pill while it is in use (focus):
+     the pill keeps its height, so nothing under a finger moves when it opens or closes (a
+     tap on a result or a source right after typing lands where it was aimed). The search
+     pill of a results page has none: the mode changes in the count's pill, under it, which
+     a floating row would cover. */
+  .composer.pill,
+  .composer.search {
+    position: relative;
+  }
+
   .choices {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 2;
     display: none;
     flex-wrap: nowrap;
     min-width: 0;
-    margin-top: var(--space-2);
+    padding: 0 var(--space-2);
     overflow-x: auto;
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-muted);
+    box-shadow: var(--shadow);
     scrollbar-width: none;
   }
 
-  .composer:focus-within .choices,
-  .composer.has-text .choices {
+  .composer.pill .choices {
+    bottom: calc(100% + var(--space-2));
+  }
+
+  .composer.pill:focus-within .choices {
     display: inline-flex;
   }
 
@@ -291,11 +318,6 @@ textarea:focus-visible {
 
   .composer.search .send:disabled {
     opacity: 1;
-  }
-
-  /* The pill holds the search on screen: its modes open only while it is in use. */
-  .composer.search.has-text:not(:focus-within) .choices {
-    display: none;
   }
 
   .composer.search:focus-within {

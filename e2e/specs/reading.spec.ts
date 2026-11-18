@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { startInSearchView } from './search-view.js';
+import { startInSearchView, modeRadio } from './search-view.js';
 
 test.beforeEach(startInSearchView);
 
@@ -13,7 +13,7 @@ async function openFirst(
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
     'Hermetismo',
   );
-  await page.getByRole('radio', { name: 'Por significado' }).check();
+  await (await modeRadio(page, 'Por significado')).check();
   await page.getByLabel('Sua pergunta').fill(question);
   await page.getByRole('button', { name: 'Buscar' }).click();
   await page.getByRole('button', { name: title }).first().click();
@@ -76,7 +76,7 @@ test('NFR-1: a 200 KB document opens with its highlight in under 500 ms', async 
   page,
 }) => {
   await page.goto('/');
-  await page.getByRole('radio', { name: 'Por significado' }).check();
+  await (await modeRadio(page, 'Por significado')).check();
   await page.getByLabel('Sua pergunta').fill('quintessência');
   await page.getByRole('button', { name: 'Buscar' }).click();
   const card = page.getByRole('button', { name: /Tratado Longo/ });

@@ -61,6 +61,8 @@ export class Composer {
   readonly compact = input(false);
   /** A phone's search page: the box is the search pill under "Buscar" (cmResults). */
   readonly searchPill = input(false);
+  /** A phone's research home draws the profiles at the top: the box leaves its own out. */
+  readonly profilesAbove = input(false);
   protected readonly maxLength = computed(() => (this.research() ? 2000 : 500));
   /** A question typed before the app reloaded into a new version comes back (KBC-123). */
   /**

@@ -208,7 +208,7 @@
 }
 
 /* cmResults: the search pill above says what was searched; the head keeps only the count
-   and, for a search by meaning, its pill. The question stays for screen readers. */
+   and the mode's pill. The question stays for screen readers. */
 @media (max-width: 1023px) {
   .exchange {
     gap: var(--space-2);
@@ -239,9 +239,9 @@
     font-size: var(--text-meta);
   }
 
+  /* The mode's pill stays, also for "Tudo": it is where a phone changes the mode. */
   .summary .took,
-  .summary .sep,
-  .summary ui-pill.muted-mode {
+  .summary .sep {
     display: none;
   }
 }

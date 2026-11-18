@@ -7,6 +7,7 @@
   @if (desktop()) {
     <app-top-bar
       class="top"
+      [query]="topQuery()"
       (searched)="globalSearch($event)"
       (researchRequested)="openResearch()"
       (homeRequested)="goHome()"
@@ -49,6 +50,7 @@
     class="layout"
     [class.with-panel]="panelOpen() || rightPanel.content() !== null"
     [class.wide-panel]="track() !== null"
+    [class.doc-page]="docPage()"
   >
     <main
       class="conversation"
@@ -144,18 +146,24 @@
             (collectionChosen)="sidebarActed('topic')"
           />
         } @else if (showProfiles()) {
+          <!-- The same choice as the question box's (one set of radios on screen: the box
+               leaves its own out here). -->
           <div
             class="profiles"
-            role="group"
-            aria-label="Perfil da pesquisa"
-            i18n-aria-label="@@page.profiles"
+            role="radiogroup"
+            aria-label="Tipo de pesquisa"
+            i18n-aria-label="@@composer.profile"
           >
             @for (option of profileOptions; track option.value) {
               <button
-                uiChip
+                class="ui-chip profile-option"
+                [class.ui-chip--on]="option.value === research.profile()"
                 type="button"
-                [selected]="option.value === research.profile()"
+                role="radio"
+                [attr.aria-checked]="option.value === research.profile()"
+                [attr.tabindex]="option.value === research.profile() ? 0 : -1"
                 (click)="research.chooseProfile(option.value)"
+                (keydown)="moveProfile($event)"
               >
                 {{ option.label }}
               </button>
@@ -226,6 +234,9 @@
           {{ announcement() }}
         </p>
 
+        <!-- A desktop search page has no question box: the top bar's field holds the search
+             (chat-results); its mode changes in the results' head. -->
+        @if (!desktop() || !searchPage()) {
         <div class="composer-dock">
           <app-composer
             [mode]="store.mode()"
@@ -235,11 +246,13 @@
             (profileChange)="research.chooseProfile($event)"
             [disabled]="!topic()"
             [compact]="!desktop()"
+            [profilesAbove]="showProfiles()"
             [searchPill]="searchPage()"
             [value]="pillQuestion()"
             (submitted)="ask($event)"
           />
         </div>
+        }
       }
     </main>
 
@@ -253,6 +266,7 @@
         [canGoBack]="store.canGoBack()"
         [sources]="doc.sources ?? []"
         [canAskAi]="views.researchAvailable()"
+        [page]="docPage()"
         (closed)="closeDocument()"
         (back)="store.back()"
         (navigated)="store.openWithin($event)"

@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { startInSearchView } from './search-view.js';
+import { startInSearchView, modeRadio } from './search-view.js';
 import { desktop } from './shell-helpers.js';
 
 /**
@@ -12,10 +12,13 @@ import { desktop } from './shell-helpers.js';
  * on screen, whatever element turns out to be the scroller.
  */
 
-/** A short window where the fixture's text would otherwise fit on one screen. */
+/**
+ * A short window where the fixture's text would otherwise fit on one screen. A phone's v2
+ * layout (the search pill, the floating question box) fits more text: it gets a shorter one.
+ */
 async function shortWindow(page: Page): Promise<void> {
   const width = page.viewportSize()?.width ?? 1440;
-  await page.setViewportSize({ width, height: 560 });
+  await page.setViewportSize({ width, height: desktop(page) ? 560 : 480 });
 }
 
 /** The middle of the part of `region` that is on screen. */
@@ -148,7 +151,7 @@ async function searchFor(page: Page, question: string): Promise<void> {
     'Hermetismo',
   );
   // By meaning, the document opens on the question's terms highlighted (as in reading.spec).
-  await page.getByRole('radio', { name: 'Por significado' }).check();
+  await (await modeRadio(page, 'Por significado')).check();
   await page.getByLabel('Sua pergunta').fill(question);
   await page.getByRole('button', { name: 'Buscar' }).click();
 }

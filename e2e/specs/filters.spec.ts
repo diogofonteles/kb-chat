@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { startInSearchView } from './search-view.js';
+import { startInSearchView, modeRadio, expectSummary } from './search-view.js';
 
 test.beforeEach(startInSearchView);
 
@@ -13,7 +13,7 @@ async function askSemantic(page: Page, question: string): Promise<void> {
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
     'Hermetismo',
   );
-  await page.getByRole('radio', { name: 'Por significado' }).check();
+  await (await modeRadio(page, 'Por significado')).check();
   await page.getByLabel('Sua pergunta').fill(question);
   await page.getByRole('button', { name: 'Buscar' }).click();
 }
@@ -28,23 +28,17 @@ test.describe('desktop filters', () => {
     page,
   }) => {
     await askSemantic(page, 'natureza');
-    await expect(
-      page.getByText(/3 documentos · Por significado/),
-    ).toBeVisible();
+    await expectSummary(page, /3 documentos/, 'Por significado');
     await page.getByRole('button', { name: /^Assuntos/ }).click();
     await expect(page.getByRole('checkbox', { name: /Cabala/ })).toBeVisible();
     await page.getByRole('checkbox', { name: /Cabala/ }).check();
-    await expect(
-      page.getByText(/2 documentos · Por significado/),
-    ).toBeVisible();
+    await expectSummary(page, /2 documentos/, 'Por significado');
     await expect(page.locator('app-result-message')).toHaveCount(1);
     await page.keyboard.press('Escape');
     await page
       .getByRole('button', { name: 'Remover Assuntos: Cabala' })
       .click();
-    await expect(
-      page.getByText(/3 documentos · Por significado/),
-    ).toBeVisible();
+    await expectSummary(page, /3 documentos/, 'Por significado');
   });
 
   test('AC-6: copies are grouped in one card and can be opened', async ({
@@ -223,9 +217,7 @@ test.describe('authorship (KBC-020)', () => {
     page,
   }) => {
     await askSemantic(page, 'natureza');
-    await expect(
-      page.getByText(/3 documentos · Por significado/),
-    ).toBeVisible();
+    await expectSummary(page, /3 documentos/, 'Por significado');
     const control = page.getByRole('radiogroup', { name: 'Autoria' });
     await expect(
       control.getByRole('radio', { name: /^Todos 3/ }),
@@ -235,15 +227,18 @@ test.describe('authorship (KBC-020)', () => {
     ).toBeVisible();
     const cards = page.locator('app-result-card');
     await expect(cards).toHaveCount(3);
-    await expect(cards.getByText('Mestre Laércio')).toHaveCount(1);
-    await expect(cards.getByText('Outros autores')).toHaveCount(2);
+    // Each card draws its authorship once: the badge on the best card, the name in text on
+    // a row of the table (the other form is in the DOM for the other layout, not shown).
+    const shownAuthor = (name: string) =>
+      cards.locator('app-authorship-badge:visible', { hasText: name });
+    await expect(shownAuthor('Mestre Laércio')).toHaveCount(1);
+    await expect(shownAuthor('Outros autores')).toHaveCount(2);
 
     await control.getByRole('radio', { name: /Outros autores/ }).check();
-    await expect(
-      page.getByText(/2 documentos · Por significado/),
-    ).toBeVisible();
+    await expectSummary(page, /2 documentos/, 'Por significado');
     await expect(page.locator('app-result-message')).toHaveCount(1);
     await expect(cards).toHaveCount(2);
+    await expect(shownAuthor('Mestre Laércio')).toHaveCount(0);
     await expect(cards.getByText('Mestre Laércio')).toHaveCount(0);
 
     await control.getByRole('radio', { name: /Mestre Laércio/ }).check();

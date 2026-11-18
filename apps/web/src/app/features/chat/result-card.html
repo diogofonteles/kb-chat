@@ -27,7 +27,7 @@
           </span>
         </span>
       }
-      <span class="title">{{ hit().title }}</span>
+      <span class="title" [id]="idOf('title')">{{ hit().title }}</span>
       <!-- The best card: the authorship badge and "Documento" (bestCard). -->
       <span class="badge-line">
         <app-authorship-badge
@@ -118,7 +118,8 @@
   <ui-menu
     class="more"
     [label]="moreLabel()"
-    [triggerLabel]="moreLabel()"
+    [triggerLabel]="moreTrigger"
+    [triggerDescribedBy]="idOf('title')"
     triggerClass="row-more"
     [menuId]="idOf('more')"
     align="end"

@@ -60,6 +60,7 @@ export class UiMenuItem {
       aria-haspopup="menu"
       [attr.aria-expanded]="open()"
       [attr.aria-label]="triggerLabel() || null"
+      [attr.aria-describedby]="triggerDescribedBy() || null"
       [attr.aria-controls]="menuId()"
       (click)="toggle()"
     >
@@ -91,6 +92,8 @@ export class UiMenu {
   readonly label = input.required<string>();
   /** The trigger's name when its content has no text (an avatar, an icon). */
   readonly triggerLabel = input('');
+  /** The id of what the trigger is about, when its name is generic ("Mais opções"). */
+  readonly triggerDescribedBy = input('');
   readonly triggerClass = input('');
   readonly menuId = input.required<string>();
   readonly align = input<'start' | 'end'>('start');

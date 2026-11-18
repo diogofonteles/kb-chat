@@ -55,7 +55,6 @@ import { ViewStore } from './view-store.js';
 import { ScopeBar } from './scope/scope-bar.js';
 import { RESEARCH_PROFILES } from '@kb-chat/contracts';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
-import { UiChip } from '@ui/button.js';
 import { MiniPlayer } from '@features/media/player/mini-player.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { AudioPresence } from '@features/shell/audio-presence.js';
@@ -92,7 +91,6 @@ const isMediaUrl = (url: string): boolean =>
     ResultMessage,
     ResearchThread,
     ScopeBar,
-    UiChip,
     DocumentPanel,
     PassagePanel,
     TrackPassagePanel,
@@ -277,6 +275,12 @@ export class ChatPage {
       ? (this.messages().at(-1)?.question ?? null)
       : null,
   );
+  /** The desktop top bar's field holds the search on screen (chat-results). */
+  protected readonly topQuery = computed(() =>
+    this.desktop() && this.searchPage()
+      ? (this.messages().at(-1)?.question ?? '')
+      : '',
+  );
   /** The phone's page name (cmHead): Conversas, Buscar or Pesquisa com IA. */
   protected readonly pageTitle = computed(() => {
     if (this.researching())
@@ -300,6 +304,20 @@ export class ChatPage {
   protected readonly panel = computed(() =>
     this.onMedia() ? null : this.opened(),
   );
+  /**
+   * A document opened from the search, on desktop: the document page takes the main panel
+   * and its "Sobre este documento" the right one (chat-document); a source of an answer
+   * stays the 460 panel beside it (Telas-chave, research with the source open).
+   */
+  protected readonly docPage = computed(() => {
+    const doc = this.panel();
+    return (
+      this.desktop() &&
+      doc !== null &&
+      !doc.sources?.length &&
+      this.rightPanel.content() === null
+    );
+  });
   /** A spoken passage in the reading panel instead of a document (KBC-039 FR-6). */
   protected readonly passage = computed(() =>
     this.onMedia() ? null : (this.store.openPassage()?.hit ?? null),
@@ -514,6 +532,31 @@ export class ChatPage {
     this.store.setMode(mode);
   }
 
+  /** Arrows in the phone's profile chips move the choice, as in a radio group. */
+  protected moveProfile(event: KeyboardEvent): void {
+    const step =
+      event.key === 'ArrowRight' || event.key === 'ArrowDown'
+        ? 1
+        : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+          ? -1
+          : 0;
+    if (!step) return;
+    event.preventDefault();
+    const values = this.profileOptions.map((option) => option.value);
+    const at = values.indexOf(this.research.profile());
+    const next = values[(at + step + values.length) % values.length];
+    if (!next) return;
+    this.research.chooseProfile(next);
+    const group = (event.currentTarget as HTMLElement | null)?.parentElement;
+    afterNextRender(
+      () =>
+        group
+          ?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')
+          ?.focus(),
+      { injector: this.injector },
+    );
+  }
+
   /** "+" of the phone's Pesquisa com IA: a new research, ready to type into. */
   protected startNewResearch(): void {
     this.research.newConversation();
@@ -718,7 +761,10 @@ export class ChatPage {
     }
     if (isTyping(event.target)) return;
     event.preventDefault();
-    this.composer()?.focus();
+    const composer = this.composer();
+    // A desktop search page asks in the top bar's field (it has no question box).
+    if (composer) composer.focus();
+    else this.topBar()?.focusSearch();
   }
 
   /** Enter in the global search: the free search of the collection in use (FR-2). */
@@ -740,7 +786,12 @@ export class ChatPage {
   /** A phone tab that acts instead of opening a page (Buscar, Acervos). */
   protected navChosen(tab: NavTab): void {
     if (tab === 'collections') this.openMenu();
-    else if (tab === 'search') {
+    else if (tab === 'conversations') {
+      // From a search page, Conversas is the AI research and its own conversation (the
+      // phone has no scope chips there: the v1 view switch's way back, KBC-008 AC-5).
+      if (this.searchPage() && this.views.researchAvailable())
+        this.views.select('research');
+    } else if (tab === 'search') {
       this.views.select('search');
       this.showConversation();
     }

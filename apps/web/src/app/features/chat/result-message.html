@@ -18,11 +18,33 @@
         } @else {
           <span class="found">{{ found() }}</span>
           <span class="sep" aria-hidden="true"> · </span>
-          <ui-pill
-            [class.muted-mode]="message().mode !== 'semantic'"
-            [tone]="message().mode === 'semantic' ? 'info' : 'muted'"
-            >{{ modeName() }}</ui-pill
+          <!-- The mode's pill opens the modes: the search runs again in the one chosen
+               (a desktop search page has no question box to choose it in). -->
+          <ui-menu
+            class="mode-menu"
+            label="Como buscar"
+            i18n-label="@@composer.mode"
+            [triggerLabel]="modeMenuLabel()"
+            [menuId]="headingId('mode')"
+            align="end"
           >
+            <ui-pill
+              uiMenuTrigger
+              [class.muted-mode]="message().mode !== 'semantic'"
+              [tone]="message().mode === 'semantic' ? 'info' : 'muted'"
+              >{{ modeName() }}</ui-pill
+            >
+            @for (option of modes; track option.value) {
+              <button
+                uiMenuItem
+                type="button"
+                [checked]="option.value === message().mode"
+                (click)="chooseMode(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            }
+          </ui-menu>
           <span class="sep" aria-hidden="true"> · </span>
           <span class="took">{{ seconds() | number: '1.1-1' }} s</span>
         }

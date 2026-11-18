@@ -9,7 +9,6 @@ import {
 } from '@angular/core';
 import type { SearchKind } from '@kb-chat/contracts';
 import {
-  UiChip,
   UiCover,
   UiIcon,
   UiMenu,
@@ -30,7 +29,7 @@ export type Scope = 'all' | 'documents' | 'research';
  */
 @Component({
   selector: 'app-scope-bar',
-  imports: [DecimalPipe, UiChip, UiCover, UiIcon, UiMenu, UiMenuItem],
+  imports: [DecimalPipe, UiCover, UiIcon, UiMenu, UiMenuItem],
   templateUrl: './scope-bar.html',
   styleUrl: './scope-bar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -64,6 +63,27 @@ export class ScopeBar {
       scope === 'documents' ? ['text'] : ALL_KINDS;
     this.store.setKinds(kinds);
     this.views.select('search');
+  }
+
+  /** Arrows move the choice among the enabled chips, as in a radio group. */
+  protected moveScope(event: KeyboardEvent): void {
+    const step =
+      event.key === 'ArrowRight' || event.key === 'ArrowDown'
+        ? 1
+        : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+          ? -1
+          : 0;
+    if (!step) return;
+    const group = event.currentTarget as HTMLElement;
+    const chips = [
+      ...group.querySelectorAll<HTMLButtonElement>('[role="radio"]'),
+    ].filter((chip) => !chip.disabled);
+    const at = chips.findIndex((chip) => chip.dataset['scope'] === this.scope());
+    const next = chips[(at + step + chips.length) % chips.length];
+    if (!next) return;
+    event.preventDefault();
+    next.click();
+    next.focus();
   }
 
   protected chooseCollection(slug: string): void {

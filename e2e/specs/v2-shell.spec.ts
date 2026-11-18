@@ -10,6 +10,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { expectSummary } from './search-view.js';
 import { aCollection } from './media-helpers.js';
 import {
   chooseCollection,
@@ -96,7 +97,7 @@ test('AC-2: ⌘K focuses the global search from the library and Enter searches t
   await search.fill('ritmo');
   await search.press('Enter');
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByText(/documentos? · Tudo ·/)).toBeVisible();
+  await expectSummary(page, /documentos?/, 'Tudo');
   await shoot(page, 'shell-search');
 
   // In a field, the key belongs to the field: the focus stays and nothing is typed.
@@ -148,7 +149,7 @@ test('AC-5: on a phone the last item of a long list stays above the navigation',
   await tabs.getByRole('link', { name: 'Buscar' }).click();
   await page.getByLabel('Sua pergunta').fill('ritmo');
   await page.getByRole('button', { name: 'Buscar', exact: true }).click();
-  await expect(page.getByText(/documentos? · Tudo ·/)).toBeVisible();
+  await expectSummary(page, /documentos?/, 'Tudo');
   // One current tab: Buscar, never Conversas too though both open "/".
   await expect(tabs.locator('[aria-current="page"]')).toHaveText(['Buscar']);
   const last = page.locator('app-result-card').last();

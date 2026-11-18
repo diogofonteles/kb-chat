@@ -14,7 +14,7 @@ import type {
   Topic,
 } from '@kb-chat/contracts';
 import { errorMessage } from '@core/api/api-error.js';
-import { modeLabel } from '@core/i18n/facet-labels.js';
+import { MODE_OPTIONS, modeLabel } from '@core/i18n/facet-labels.js';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import { hasFilters, type ChatMessage } from './chat-message.js';
 import { FilterBar } from './filter-bar.js';
@@ -33,6 +33,7 @@ import { SearchLevelChange } from './search-level-change.js';
 import { UiButton } from '@ui/button.js';
 import { UiEmptyState } from '@ui/empty-state.js';
 import { UiPill } from '@ui/pill.js';
+import { UiMenu, UiMenuItem } from '@ui/menu.js';
 
 /** Each message's own ids (its column headings). */
 let nextMessage = 0;
@@ -62,6 +63,8 @@ export interface OpenedPassage {
     UiButton,
     UiEmptyState,
     UiPill,
+    UiMenu,
+    UiMenuItem,
   ],
   templateUrl: './result-message.html',
   styleUrl: './result-message.css',
@@ -133,6 +136,10 @@ export class ResultMessage {
       : `${this.count()} · ${describeMediaCount(spoken)}`;
   });
   protected readonly modeName = computed(() => modeLabel(this.message().mode));
+  protected readonly modes = MODE_OPTIONS;
+  protected readonly modeMenuLabel = computed(
+    () => $localize`:@@message.modeMenu:Modo da busca: ${this.modeName()}:mode:`,
+  );
   protected readonly count = computed(() => {
     const response = this.response();
     return response ? describeResultCount(response) : '';
@@ -182,6 +189,11 @@ export class ResultMessage {
 
   protected openPassage(hit: MediaHit, index: number): void {
     this.passageOpened.emit({ hit, position: index + 1 });
+  }
+
+  /** A mode from the head's menu: the same question again in it (a no-op for the same). */
+  protected chooseMode(mode: SearchMode): void {
+    if (mode !== this.message().mode) this.modeSwitched.emit(mode);
   }
 
   protected removeFilter(filter: ActiveFilter): void {

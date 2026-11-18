@@ -101,6 +101,8 @@ export class ResultCard {
     const relevance = this.hit().relevance;
     return relevance === null ? '' : RELEVANCE_LABELS[relevance];
   });
+  /** The ⋯ says what it is; the title it belongs to is its description (aria-describedby). */
+  protected readonly moreTrigger = $localize`:@@card.moreTrigger:Mais opções`;
   protected readonly moreLabel = computed(
     () => $localize`:@@card.more:Mais opções para ${this.hit().title}:title:`,
   );
