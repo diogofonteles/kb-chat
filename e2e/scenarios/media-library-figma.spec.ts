@@ -273,8 +273,11 @@ test('the ⋯ of a row, the selection and the dialogs', async ({ browser }) => {
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
     await page.unroute(home);
-    await go(page, '/biblioteca');
-    await expect(rows(page).first()).toBeVisible();
+    await openLibrary(page, world);
+    if (!phone)
+      await expect(
+        page.getByRole('heading', { name: 'Continuar ouvindo' }),
+      ).toBeVisible();
 
     const box = (title: string) =>
       rowNamed(page, title).getByRole('checkbox', {
