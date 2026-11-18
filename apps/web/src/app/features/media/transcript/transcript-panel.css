@@ -351,6 +351,12 @@
       var(--color-cover-ink)
     );
     --color-text: var(--color-on-cover);
+    /* The dim ink at 80 %: at 70 % the lighter covers fall under 4.5:1 for small text. */
+    --color-on-cover-dim: color-mix(
+      in srgb,
+      var(--color-on-cover) 80%,
+      transparent
+    );
 
     gap: var(--space-3);
     padding: var(--space-4);

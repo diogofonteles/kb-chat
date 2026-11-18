@@ -626,8 +626,9 @@
     line-height: 1.6875rem;
   }
 
+  /* The cover's ink at 80 %: the dim 70 % falls under 4.5:1 on the lighter covers. */
   .waiting-card p:not(.card-title, .empty-title) {
-    color: var(--color-on-cover-dim);
+    color: color-mix(in srgb, var(--color-on-cover) 80%, transparent);
     font-size: 0.9375rem;
   }
 
