@@ -129,6 +129,14 @@ form {
   cursor: pointer;
 }
 
+/* v2 · Auth, mobile: the links' row is drawn 20 high, 16 under the button; the 44 touch target
+   overflows it evenly so the words sit where the frame has them. */
+@media (max-width: 1023px) {
+  .actions .text-link {
+    margin-block: -0.75rem;
+  }
+}
+
 .text-link:hover:not(:disabled) {
   color: var(--color-text);
   text-decoration: underline;
