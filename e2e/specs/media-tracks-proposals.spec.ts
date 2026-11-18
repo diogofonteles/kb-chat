@@ -8,7 +8,12 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { audioWithTracks, handle, trackRow } from './tracks-helpers.js';
+import {
+  audioWithTracks,
+  handle,
+  openPhoneTools,
+  trackRow,
+} from './tracks-helpers.js';
 import { separateVoices, transcribedAudio } from './voices-helpers.js';
 
 // KBC-067 on the screen of KBC-066. The E2E server cannot script its fake model, so the
@@ -172,6 +177,8 @@ test('KBC-067 AC-1, AC-2: estimate, windows, read-only, proposals, cost and sugg
       .first()
       .evaluate((region) => getComputedStyle(region).borderLeftStyle),
   ).toBe('dashed');
+  // On a phone the voices' names open with the tools (KBC-130).
+  await openPhoneTools(page);
   await expect(page.getByText('Voz 1 parece ser')).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Aceitar Mestre Gabriel para a Voz 1' }),

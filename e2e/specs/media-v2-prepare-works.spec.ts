@@ -1,7 +1,13 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, ownerApi, test } from './fixtures.js';
 import { aCollection, uniqueTag, uploadReady } from './media-helpers.js';
-import { approve, audioWithTracks, trackRow } from './tracks-helpers.js';
+import {
+  approve,
+  audioWithTracks,
+  openPhoneDetails,
+  openPhoneTools,
+  trackRow,
+} from './tracks-helpers.js';
 
 /**
  * KBC-130 (v2 fidelity): the guided flow does not only look like the frames, it works. On
@@ -28,7 +34,8 @@ const isDesktop = (page: Page): boolean =>
 /** A short window: the flow's pages hold more than one screen of it. */
 async function shortWindow(page: Page): Promise<void> {
   const width = page.viewportSize()?.width ?? DESKTOP.width;
-  await page.setViewportSize({ width, height: 560 });
+  // 460: a phone's /limites fits whole in 560 (its bar fixed at the foot).
+  await page.setViewportSize({ width, height: 460 });
 }
 
 /** The top of `target` on screen. */
@@ -162,6 +169,7 @@ test('KBC-130: "Faixas" scrolls, a row edits in place, the ⋯ menu opens and cl
 
     // A row selects by a press and its title takes text in place.
     await trackRow(page, 2).getByRole('button').first().click();
+    await openPhoneDetails(page);
     const field = page.getByRole('textbox', { name: 'Título' });
     await expect(field).toHaveValue('Segunda pergunta');
     await field.fill('Quem levou o mestre');
@@ -178,7 +186,9 @@ test('KBC-130: "Faixas" scrolls, a row edits in place, the ⋯ menu opens and cl
     await expect(menu).toHaveCount(0);
     await expect(more).toBeFocused();
 
-    // The tools: zoom in and out, a new track at the cursor, undo and redo.
+    // The tools: zoom in and out, a new track at the cursor, undo and redo (on a phone
+    // they open from "Mais ferramentas", and close again from it).
+    await openPhoneTools(page);
     await page.getByRole('button', { name: 'Aproximar' }).click();
     await page.getByRole('button', { name: 'Afastar' }).click();
     const undo = page.getByRole('button', { name: 'Desfazer', exact: true });
@@ -323,6 +333,57 @@ test('KBC-130: "/limites" scrolls, the nudges move the start, "Desfazer" and "Ca
 
     await page.getByRole('link', { name: 'Cancelar' }).click();
     await expect(page).toHaveURL(new RegExp(`/midia/${second.id}$`));
+  }
+  await owner.dispose();
+});
+
+test('KBC-130: "Aprovar faixas" with an untitled track names it, keeps its row red while selected, and a title clears it', async ({
+  page,
+  browserName,
+}) => {
+  const owner = await ownerApi();
+  for (const size of widthsFor(page, browserName)) {
+    await page.setViewportSize(size);
+    const media = await audioWithTracks(owner, [
+      { startMs: 0, endMs: 15_000, title: 'Primeira pergunta' },
+      { startMs: 15_000, endMs: 40_000, title: 'Segunda pergunta' },
+      { startMs: 40_000, endMs: 59_000, title: null },
+    ]);
+    await page.goto(`/midia/${media.id}/faixas`);
+    await expect(
+      page.getByRole('heading', { name: media.title, level: 1 }),
+    ).toBeVisible();
+
+    // Who asks and who answers are chips as wide as their names, on the selected row too.
+    await trackRow(page, 1).getByRole('button').first().click();
+    if (isDesktop(page)) {
+      const asker = trackRow(page, 1).getByRole('combobox', {
+        name: 'Quem pergunta',
+      });
+      await expect(asker).toBeVisible();
+      expect((await asker.boundingBox())?.width ?? 0).toBeLessThan(100);
+    }
+
+    await page.getByRole('button', { name: 'Aprovar faixas' }).click();
+    await expect(page.getByText('Corrija antes de aprovar:')).toBeVisible();
+    await expect(page.getByText('Faixa 3: Sem título')).toBeVisible();
+    const bad = trackRow(page, 3);
+    await expect(bad).toContainText('Sem título');
+    // The red tint stays on the row whatever is selected (tkRow, bad).
+    await bad.getByRole('button').first().click();
+    await expect(bad).toHaveCSS(
+      'border-top-color',
+      /color\(srgb 0\.95\d* 0\.44\d* 0\.49\d* \/ 0\.5\)/,
+    );
+
+    if (isDesktop(page)) {
+      const field = page.getByRole('textbox', { name: 'Título' });
+      await expect(field).toHaveValue('');
+      await expect(field).toHaveAttribute('placeholder', 'Sem título');
+      await field.fill('Terceira pergunta');
+      await field.press('Enter');
+      await expect(bad).toContainText('Terceira pergunta');
+    }
   }
   await owner.dispose();
 });

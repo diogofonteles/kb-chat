@@ -7,6 +7,7 @@ import {
   draftTracks,
   expectSaved,
   handle,
+  openPhoneTools,
   trackRow,
 } from './tracks-helpers.js';
 
@@ -450,6 +451,7 @@ test('R-4: a tap on a handle moves nothing, on the whole target', async ({
   const y = box.y + 30;
   await page.mouse.click(box.x + 2, y);
   await page.mouse.click(box.x + box.width - 2, y);
+  await openPhoneTools(page);
   await page.getByRole('button', { name: 'Mais 0,5 segundo' }).click();
   await expectSaved(owner, media.id, (tracks) => tracks[0]?.startMs === 20_500);
   await owner.dispose();

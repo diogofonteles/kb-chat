@@ -12,6 +12,7 @@ import {
   approve,
   audioWithTracks,
   handle,
+  trackMenu,
   trackRow,
 } from './tracks-helpers.js';
 
@@ -33,7 +34,8 @@ test('AC-7: "Ouvir o início" plays from 2 s before to 3 s after the start, and 
   const media = await audioWithTracks(owner);
   await page.goto(`/midia/${media.id}/faixas`);
   await trackRow(page, 2).getByRole('button').first().click();
-  await page.getByRole('button', { name: 'Ouvir o início' }).click();
+  // Listening sits in the track's ⋯ (KBC-130, prepare.js tkRow).
+  await trackMenu(page, 'Ouvir o início');
   await expect
     .poll(async () => (await auditionTime(page)).time)
     .toBeGreaterThan(13);
