@@ -53,6 +53,9 @@
   --tint-research: #1f4d33;
   /* A round control over a cover's tint (the document page's ✕ and occurrences). */
   --overlay-dark: rgb(0 0 0 / 40%);
+  /* A person's round with no picture and no colour of its own (docRight's "OA"): white
+     initials over it keep 6.9:1 in every theme. */
+  --avatar-neutral: #5a5a5a;
   /* Text over a cover's own colour (the cited passage while it plays, KBC-150): always light,
      the cover being dark in every theme; the unspoken words keep 4.5:1 over the darkest. */
   --color-on-cover: #ffffff;

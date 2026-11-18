@@ -28,6 +28,8 @@ import {
   UiEmptyState,
   UiIcon,
   UiIconButton,
+  UiMenu,
+  UiMenuItem,
 } from '@ui/index.js';
 import { describeFacets } from '@core/i18n/facet-labels.js';
 import { coverGradient } from '@ui/cover.js';
@@ -52,6 +54,13 @@ const countMarks = (html: string): number => html.split('<mark>').length - 1;
 
 const foldText = (text: string): string =>
   text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+
+/** The share button's name by what its last tap did. */
+const SHARE_LABELS: Record<'idle' | 'copied' | 'failed', () => string> = {
+  idle: () => $localize`:@@panel.share:Compartilhar`,
+  copied: () => $localize`:@@panel.shareCopied:Título e resumo copiados`,
+  failed: () => $localize`:@@panel.shareFailed:Não consegui compartilhar`,
+};
 
 /** Index of the first chunk containing a term, or -1. */
 function firstChunkWith(
@@ -91,6 +100,8 @@ let nextPanel = 0;
     UiEmptyState,
     UiIcon,
     UiIconButton,
+    UiMenu,
+    UiMenuItem,
   ],
   templateUrl: './document-panel.html',
   styleUrl: './document-panel.css',
@@ -103,6 +114,7 @@ let nextPanel = 0;
     '[class.in-sheet]': 'inSheet()',
     '[class.page-mode]': 'page()',
     '[class.source-mode]': 'inSource()',
+    '[class.subject]': 'subject()',
     '[style.--doc-tint]': 'tint()',
     '(keydown.escape)': 'closed.emit()',
   },
@@ -112,6 +124,7 @@ export class DocumentPanel {
     inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly clipboard =
     inject(DOCUMENT).defaultView?.navigator.clipboard;
+  private readonly navigator = inject(DOCUMENT).defaultView?.navigator;
   private readonly heading =
     viewChild.required<ElementRef<HTMLHeadingElement>>('heading');
   private readonly bodyRef = viewChild<ElementRef<HTMLElement>>('body');
@@ -163,6 +176,8 @@ export class DocumentPanel {
   protected readonly title = computed(
     () => this.loaded()?.title ?? this.fallbackTitle(),
   );
+  /** A subject's synthesis (a concept's article): its shelves instead of "Sobre este documento". */
+  protected readonly subject = computed(() => !!this.loaded()?.concept);
   protected readonly facets = computed(() => {
     const doc = this.loaded();
     return doc ? describeFacets(doc) : '';
@@ -193,13 +208,16 @@ export class DocumentPanel {
   protected readonly conceptLine = computed(() =>
     (this.loaded()?.concepts ?? []).join(' · '),
   );
-  private readonly labels = injectAuthorshipLabels();
-  /** The avatar of "Autoria": the author's name, else the authorship's own label. */
-  protected readonly authorName = computed(() => {
-    const doc = this.loaded();
-    if (!doc) return '';
-    return doc.author ?? this.labels()[doc.authorship];
-  });
+  protected readonly labels = injectAuthorshipLabels();
+  /** "OA" for "Outros autores", "ML" for "Mestre Laércio": the first letters of two words. */
+  protected readonly authorInitials = computed(() =>
+    this.labels()
+      [this.loaded()?.authorship ?? 'outros-autores'].split(/\s+/)
+      .filter((word) => /^\p{L}/u.test(word) && word.length > 2)
+      .slice(0, 2)
+      .map((word) => word.charAt(0).toUpperCase())
+      .join(''),
+  );
   protected readonly failedTitle = computed(
     () =>
       $localize`:@@panel.failedTitle:Não foi possível abrir “${this.title()}:title:”`,
@@ -291,12 +309,15 @@ export class DocumentPanel {
       );
     });
     // Scrolled into view when a document arrives and on ▲▼ only (never on "Continuar lendo").
+    // On arrival the page stays at its top while the mark is already in sight (chat-document:
+    // the cover, the tools and the first mark on one screen); ▲▼ centre it.
+    let arrived: unknown = null;
     afterRenderEffect(() => {
-      this.loaded();
+      const loaded = this.loaded();
       this.focusRequest();
-      untracked(() =>
-        this.marks()[this.current()]?.scrollIntoView({ block: 'center' }),
-      );
+      const block = loaded === arrived ? 'center' : 'nearest';
+      arrived = loaded;
+      untracked(() => this.marks()[this.current()]?.scrollIntoView({ block }));
     });
     // A section picked in the index scrolls into view once its chunk is rendered.
     afterRenderEffect(() => this.scrollToSection(this.pendingSection()));
@@ -359,6 +380,31 @@ export class DocumentPanel {
     } catch {
       this.flashCopy('failed');
     }
+  }
+
+  /** Compartilhar (actionBar): the system's share sheet, or the title and summary copied. */
+  private readonly shared = signal<'idle' | 'copied' | 'failed'>('idle');
+  protected readonly shareLabel = computed(() => SHARE_LABELS[this.shared()]());
+
+  protected async share(doc: {
+    title: string;
+    summary: string | null;
+  }): Promise<void> {
+    const text = [doc.title, doc.summary].filter(Boolean).join('\n\n');
+    try {
+      if (this.navigator?.share) {
+        await this.navigator.share({ title: doc.title, text });
+        return;
+      }
+      if (!this.clipboard) throw new Error('no clipboard');
+      await this.clipboard.writeText(text);
+      this.shared.set('copied');
+    } catch (error) {
+      // Closing the share sheet is no failure.
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      this.shared.set('failed');
+    }
+    setTimeout(() => this.shared.set('idle'), FEEDBACK_MS);
   }
 
   private flashCopy(state: CopyState): void {

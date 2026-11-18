@@ -9,6 +9,15 @@ import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { aDocument } from '../../testing/fixtures.js';
 import { DocumentPanel } from './document-panel.js';
 
+/** The occurrences' counter as read: "1 de 3" and "ocorrências" are two spans (cmDoc). */
+const counterWith = (text: string): HTMLElement =>
+  screen.getByText((_, element) =>
+    Boolean(
+      element?.classList.contains('counter') &&
+      element.textContent?.replace(/\s+/g, ' ').trim() === text,
+    ),
+  );
+
 const URL = '/api/v1/topics/hermetismo/documents/a.md';
 
 async function renderPanel() {
@@ -135,20 +144,20 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
     );
     const marks = view.container.querySelectorAll('mark');
     expect(marks).toHaveLength(3);
-    expect(screen.getByText('1 de 3 ocorrências')).toBeTruthy();
+    expect(counterWith('1 de 3 ocorrências')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Próxima ocorrência' }));
     fireEvent.click(screen.getByRole('button', { name: 'Próxima ocorrência' }));
     await view.fixture.whenStable();
-    expect(screen.getByText('3 de 3 ocorrências')).toBeTruthy();
+    expect(counterWith('3 de 3 ocorrências')).toBeTruthy();
     expect(marks[2]?.classList.contains('current')).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Próxima ocorrência' }));
     await view.fixture.whenStable();
-    expect(screen.getByText('1 de 3 ocorrências')).toBeTruthy();
+    expect(counterWith('1 de 3 ocorrências')).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', { name: 'Ocorrência anterior' }),
     );
     await view.fixture.whenStable();
-    expect(screen.getByText('3 de 3 ocorrências')).toBeTruthy();
+    expect(counterWith('3 de 3 ocorrências')).toBeTruthy();
   });
 
   it('copies the paragraph of the current occurrence (AC-9)', async () => {

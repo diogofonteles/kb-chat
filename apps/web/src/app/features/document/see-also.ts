@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { UiCover } from '@ui/cover.js';
 import { RouterLink } from '@angular/router';
 import {
   SEE_ALSO_GROUPS,
@@ -67,7 +68,11 @@ const toItem = (ref: RelatedDocument): ItemView => ({
  */
 @Component({
   selector: 'app-see-also',
-  imports: [RouterLink],
+  imports: [RouterLink, UiCover],
+  host: {
+    '[class.compact]': 'compact()',
+    '[class.shelf]': "variant() === 'shelf'",
+  },
   templateUrl: './see-also.html',
   styleUrl: './see-also.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -82,6 +87,16 @@ export class SeeAlsoSection {
   readonly seeAlso = input.required<SeeAlso>();
   /** The concept this article is about; null on a source. */
   readonly concept = input<string | null>(null);
+  /**
+   * Where it is drawn: the right panel's card (`panel`), docMain's column beside the text
+   * (`column`), or a subject page's shelves of cards (`shelf`, chat-document-see-also). The
+   * column and the shelves have no "Ver mais" (the panel's has) and a title id of their own.
+   */
+  readonly variant = input<'panel' | 'column' | 'shelf'>('panel');
+  protected readonly compact = computed(() => this.variant() !== 'panel');
+  protected readonly titleId = computed(
+    () => `see-also-${this.variant()}-title`,
+  );
   readonly opened = output<DocumentRef>();
   /** A linked track opens at its start, with "← Voltar" to this document (KBC-101 AC-7). */
   readonly trackOpened = output<TrackOpening>();
