@@ -8,12 +8,7 @@ import {
   output,
 } from '@angular/core';
 import type { SearchKind } from '@kb-chat/contracts';
-import {
-  UiCover,
-  UiIcon,
-  UiMenu,
-  UiMenuItem,
-} from '@ui/index.js';
+import { UiCover, UiIcon, UiMenu, UiMenuItem } from '@ui/index.js';
 import { ChatStore } from '../chat-store.js';
 import { ALL_KINDS } from '../search-kinds.js';
 import { ViewStore } from '../view-store.js';
@@ -78,7 +73,9 @@ export class ScopeBar {
     const chips = [
       ...group.querySelectorAll<HTMLButtonElement>('[role="radio"]'),
     ].filter((chip) => !chip.disabled);
-    const at = chips.findIndex((chip) => chip.dataset['scope'] === this.scope());
+    const at = chips.findIndex(
+      (chip) => chip.dataset['scope'] === this.scope(),
+    );
     const next = chips[(at + step + chips.length) % chips.length];
     if (!next) return;
     event.preventDefault();
