@@ -1037,9 +1037,15 @@ test('a recording opens its tracks, and removing it names them (tracks, remove-t
     await shoot(page, 'media-library-tracks', width);
 
     // The first "Remover" is refused while tracks hang on it (KBC-068): the dialog comes
-    // back naming them; Cancelar keeps everything.
-    await recording.hover();
-    await more.click();
+    // back naming them; Cancelar keeps everything. A phone draws only the chevron: its ⋯
+    // comes out on a long press or the keyboard (media-library-tracks@mobile).
+    if (width === 'phone') {
+      await more.focus();
+      await page.keyboard.press('Enter');
+    } else {
+      await recording.hover();
+      await more.click();
+    }
     await page.getByRole('menuitem', { name: 'Remover' }).click();
     const remove = page.getByRole('dialog', {
       name: `Remover "${RECORDING}"?`,
@@ -1114,7 +1120,8 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
       const division = dialog.getByRole('button', {
         name: /^Dividir em faixas/,
       });
-      await expect(division).toContainText('Não dividir agora');
+      // The words label the chevron's button (media-upload-chosen@mobile).
+      await expect(division).toHaveAccessibleName(/Não dividir agora/);
       await expect(
         dialog.getByRole('radio', { name: 'Vou marcar as faixas eu mesmo' }),
       ).toBeHidden();
@@ -1123,7 +1130,9 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
       await dialog
         .getByRole('radio', { name: 'Vou marcar as faixas eu mesmo' })
         .check();
-      await expect(division).toContainText('Vou marcar as faixas eu mesmo');
+      await expect(division).toHaveAccessibleName(
+        /Vou marcar as faixas eu mesmo/,
+      );
       await dialog.getByRole('radio', { name: 'Não dividir agora' }).check();
       await division.click();
       await expect(division).toHaveAttribute('aria-expanded', 'false');
