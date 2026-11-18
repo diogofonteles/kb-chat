@@ -9,7 +9,7 @@
   <form class="body" [formGroup]="form" (ngSubmit)="save()" novalidate>
     <header class="head">
       <div class="titles">
-        <h2 id="edit-title">{{ heading }}</h2>
+        <h2 #headingElement id="edit-title" tabindex="-1">{{ heading }}</h2>
       </div>
       <button
         type="button"
@@ -41,10 +41,12 @@
             formControlName="title"
             maxlength="200"
             autocomplete="off"
-            [attr.aria-invalid]="submitted() && form.controls.title.invalid"
+            [attr.aria-invalid]="
+              (submitted() || titleMissing()) && form.controls.title.invalid
+            "
             aria-describedby="edit-title-error"
           />
-          @if (submitted() && form.controls.title.invalid) {
+          @if ((submitted() || titleMissing()) && form.controls.title.invalid) {
             <span
               id="edit-title-error"
               class="error"
@@ -61,16 +63,19 @@
             i18n="@@media.upload.topic"
             >Acervo</label
           >
-          <select
-            id="edit-topic-field"
-            formControlName="topic"
-            aria-describedby="edit-move-note"
-            (change)="topicChosen()"
-          >
-            @for (option of choices(); track option.slug) {
-              <option [value]="option.slug">{{ treeTitle(option) }}</option>
-            }
-          </select>
+          <span class="select-box">
+            <select
+              id="edit-topic-field"
+              formControlName="topic"
+              aria-describedby="edit-move-note"
+              (change)="topicChosen()"
+            >
+              @for (option of choices(); track option.slug) {
+                <option [value]="option.slug">{{ treeTitle(option) }}</option>
+              }
+            </select>
+            <ui-icon class="caret" name="chevDown" [size]="18" />
+          </span>
           <span id="edit-move-note" class="note">
             @if (moving()) {
               <ng-container i18n="@@media.edit.moveNote"
@@ -150,7 +155,9 @@
         type="submit"
         uiButton="white"
         [disabled]="saving()"
-        [attr.aria-disabled]="waitingForLevels() ? 'true' : null"
+        [attr.aria-disabled]="
+          waitingForLevels() || titleMissing() ? 'true' : null
+        "
         [attr.aria-busy]="waitingForLevels() ? 'true' : null"
       >
         @if (waitingForLevels()) {

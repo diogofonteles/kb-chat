@@ -92,6 +92,22 @@ describe('EditMediaDialog (KBC-050)', () => {
     expect(document.activeElement).toBe(title);
   });
 
+  it("a phone's sheet opens on its heading, no keyboard over it (media-library-edit@mobile)", async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string) =>
+        ({ matches: query === '(max-width: 1023px)' }) as MediaQueryList,
+    );
+    try {
+      await open();
+      expect(document.activeElement).toBe(
+        screen.getByRole('heading', { name: 'Editar informações' }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('AC-4: offers only the collections the person opens', async () => {
     await open();
     expect(screen.queryByRole('option', { name: /Fechado/ })).toBeNull();

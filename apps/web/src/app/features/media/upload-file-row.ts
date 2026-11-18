@@ -6,10 +6,12 @@ import {
   output,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { UiIcon } from '@ui/icon.js';
 import type { Topic } from '@kb-chat/contracts';
 import { mediaPagePath } from '@core/media/media-api.js';
 import type { UploadEntry } from './upload-entries.js';
-import { overQuota, sentOf } from './upload-rules.js';
+import { hasAcceptedAudioExtension } from '@kb-chat/contracts';
+import { overQuota, sentOf, sizeOf } from './upload-rules.js';
 
 /** A reader hears a file's progress only at these steps, not at every percent (AC-8). */
 const SPOKEN_STEP = 25;
@@ -17,7 +19,7 @@ const SPOKEN_STEP = 25;
 /** One file of the upload panel (screens.md T14, KBC-035): its title and where it stands. */
 @Component({
   selector: 'app-upload-file-row',
-  imports: [RouterLink],
+  imports: [RouterLink, UiIcon],
   templateUrl: './upload-file-row.html',
   styleUrl: './upload-file-row.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -29,8 +31,11 @@ export class UploadFileRow {
   readonly submitted = input(false);
   /** The collections' names, for a file that is also in another one. */
   readonly topics = input<readonly Topic[]>([]);
+  /** The only file being sent: its card offers "Cancelar envio" (media-upload-sending). */
+  readonly cancellable = input(false);
   readonly renamed = output<string>();
   readonly removed = output();
+  readonly cancelled = output();
 
   protected readonly mediaPagePath = mediaPagePath;
   protected topicTitle(slug: string): string {
@@ -43,6 +48,37 @@ export class UploadFileRow {
     () =>
       $localize`:@@media.upload.removeLabel:Tirar ${this.name()}:name: da lista`,
   );
+  protected readonly cancelLabel = computed(
+    () =>
+      $localize`:@@media.upload.cancelLabel:Cancelar o envio de ${this.name()}:name:`,
+  );
+  /** An audio file shows a note on green; anything else a page on grey. */
+  protected readonly audio = computed(() =>
+    hasAcceptedAudioExtension(this.name()),
+  );
+  /** The card's edge: amber when it is already there, red when it cannot go. */
+  protected readonly tone = computed((): 'warn' | 'err' | null => {
+    const { kind } = this.entry().state;
+    if (kind === 'duplicate' || kind === 'duplicate-hidden') return 'warn';
+    if (['refused', 'over-quota', 'expired', 'stopped'].includes(kind))
+      return 'err';
+    return null;
+  });
+  /** Under the name: the size, "· áudio aceito" once checked, the progress while it goes. */
+  protected readonly meta = computed(() => {
+    const { file, state } = this.entry();
+    if (state.kind === 'sending' && !state.offline)
+      return $localize`:@@media.upload.sendingOf:Enviando… ${this.sentText()}:sent:`;
+    if (!this.audio()) {
+      const dot = file.name.lastIndexOf('.');
+      return dot > 0
+        ? file.name.slice(dot + 1).toUpperCase()
+        : sizeOf(file.size);
+    }
+    return state.kind === 'ready'
+      ? $localize`:@@media.upload.accepted:${sizeOf(file.size)}:size: · áudio aceito`
+      : sizeOf(file.size);
+  });
   protected readonly progressLabel = computed(
     () =>
       $localize`:@@media.upload.progressLabel:Progresso de ${this.name()}:name:`,

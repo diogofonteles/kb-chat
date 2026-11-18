@@ -64,6 +64,8 @@
     <main
       class="conversation"
       [style.--tint]="tint()"
+      [style.--own-tint]="ownHeader()?.tint ?? null"
+      [class.own-header]="!!ownHeader()?.tint"
       [class.covered]="panelOpen()"
       [class.media]="onMedia()"
       [class.empty]="isEmpty() && !onMedia()"
@@ -75,8 +77,19 @@
         class="topbar"
         [class.tinted]="pageChrome.tint() !== null"
         [style.--page-tint]="pageChrome.tint()"
+        [class.own]="ownHeader() !== null"
+        [hidden]="desktop() && ownHeader() !== null"
       >
-        @if (!desktop()) {
+        @if (!desktop() && ownHeader()?.back; as back) {
+          <a
+            class="menu back"
+            [routerLink]="back"
+            aria-label="Voltar"
+            i18n-aria-label="@@page.back"
+          >
+            <ui-icon name="chevLeft" [size]="26" />
+          </a>
+        } @else if (!desktop()) {
           <button
             #menuButton
             type="button"
@@ -93,10 +106,17 @@
             />
           </button>
         }
-        @if (onMedia() && !desktop() && pageName(); as name) {
-          <p class="page-name" aria-hidden="true">{{ name }}</p>
+        @if (ownHeader(); as own) {
+          <h1 class="topic own-title">{{ own.title }}</h1>
+          @if (own.actions; as actions) {
+            <div class="own-actions">
+              <ng-container [ngTemplateOutlet]="actions" />
+            </div>
+          }
+        } @else if (onMedia() && !desktop() && pageName()) {
+          <p class="page-name" aria-hidden="true">{{ pageName() }}</p>
         }
-        @if (topic(); as current) {
+        @if (!ownHeader() && topic(); as current) {
           <h1 class="topic">
             {{ current.title }}
             <span class="count"

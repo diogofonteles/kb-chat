@@ -119,7 +119,10 @@ test('AC-3, FR-5: in the grid, the tracks answer to the pointer and show their t
 test('NG-30: the links of a track pass axe', async ({ page }) => {
   const owner = await ownerApi();
   const media = await approvedAudio(owner);
-  const listed = await owner.get('/api/v1/media/library');
+  // Its own collection: on a server with many media the first page of all may not hold it.
+  const listed = await owner.get(
+    `/api/v1/media/library?topic=${encodeURIComponent(media.topic)}`,
+  );
   const { items } = (await listed.json()) as {
     items: { id: string; tracks: { id: string }[] }[];
   };
@@ -157,7 +160,10 @@ test('AC-5: a track that leaves the edit says so on its page', async ({
 }) => {
   const owner = await ownerApi();
   const media = await approvedAudio(owner);
-  const listed = await owner.get('/api/v1/media/library');
+  // Its own collection: on a server with many media the first page of all may not hold it.
+  const listed = await owner.get(
+    `/api/v1/media/library?topic=${encodeURIComponent(media.topic)}`,
+  );
   const { items } = (await listed.json()) as {
     items: { id: string; tracks: { id: string; title: string }[] }[];
   };

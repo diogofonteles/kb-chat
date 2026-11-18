@@ -21,11 +21,13 @@ import {
   type UploadedMedia,
 } from './media-helpers.js';
 import { library } from './shell-helpers.js';
+import { longPressToSelect } from './v2-media-helpers.js';
 
 /** KBC-051 (screens.md T16): the media library home. */
 
 const LIBRARY = ['search', 'media', 'media-library'];
 const viewportOf = () => test.info().project.use.viewport ?? null;
+const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 /** A new person with the library on this spec's collection: positions are theirs alone. */
 async function libraryListener(
@@ -59,6 +61,41 @@ const libraryStatus = (page: Page) =>
 const strip = (page: Page) =>
   page.getByRole('region', { name: 'Continuar ouvindo' });
 const mini = (page: Page) => page.getByRole('region', { name: 'Mini-player' });
+
+/**
+ * Selects a row: its box on a desktop. A phone shows no box until a selection starts, with a
+ * long press on a row (its ⋯ has no "Selecionar": media-library-row-menu@mobile); then the
+ * boxes lead every row (media-library-selection@mobile).
+ */
+async function selectRow(page: Page, title: string) {
+  const box = all(page).getByRole('checkbox', { name: `Selecionar ${title}` });
+  if (desktop(page) || (await box.isVisible())) {
+    await box.check();
+    return;
+  }
+  await longPressToSelect(
+    page,
+    all(page).getByRole('listitem').filter({ hasText: title }).first(),
+    box,
+  );
+}
+
+/** The page's ⋯: in the action bar on a desktop, in the top row on a phone. */
+const libraryMore = (page: Page) =>
+  page
+    .getByRole('button', { name: 'Mais ações da Biblioteca' })
+    .and(page.locator(':visible'));
+
+/**
+ * Where "Limpar recentes" is: the page's ⋯ on a desktop; on a phone (no ⋯ in its top row,
+ * media-library@mobile), the end of the order's sheet while the order is the recent plays.
+ */
+const recentsMenu = (page: Page) =>
+  desktop(page)
+    ? libraryMore(page)
+    : page
+        .getByRole('button', { name: /^Ordenar: / })
+        .and(page.locator(':visible'));
 
 /** The person's player saved this position (as the player does while playing). */
 async function savePosition(page: Page, media: UploadedMedia, ms: number) {
@@ -150,18 +187,41 @@ test('AC-3, AC-4: "Continuar ouvindo" lists the latest first, and ▶ resumes at
   await savePosition(page, lecture(3), 12_000);
   await savePosition(page, lecture(4), 19_900); // 95%: heard, not to continue
   await openLibrary(page);
-  const cards = strip(page).getByRole('listitem');
-  await expect(cards).toHaveCount(3);
-  await expect(cards.nth(0)).toContainText(lecture(3).title);
-  await expect(cards.nth(0)).toContainText('Continuar de 0:12');
-  await expect(cards.nth(1)).toContainText(lecture(2).title);
-  await expect(cards.nth(2)).toContainText(lecture(1).title);
-  await expect(strip(page)).not.toContainText(lecture(4).title);
+  let resume;
+  if (desktop(page)) {
+    const cards = strip(page).getByRole('listitem');
+    await expect(cards).toHaveCount(3);
+    await expect(cards.nth(0)).toContainText(lecture(3).title);
+    await expect(cards.nth(0)).toContainText('Continuar de 0:12');
+    await expect(cards.nth(1)).toContainText(lecture(2).title);
+    await expect(cards.nth(2)).toContainText(lecture(1).title);
+    await expect(strip(page)).not.toContainText(lecture(4).title);
+    resume = cards
+      .nth(0)
+      .getByRole('button', { name: `Tocar ${lecture(3).title}` });
+  } else {
+    // A phone has no "Continuar ouvindo" (media-library@mobile): the list in "Ouvidas
+    // recentemente" order is it — the latest first, each with its bar and where it stopped.
+    await expect(strip(page)).toHaveCount(0);
+    await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
+    await expect(all(page).locator('app-library-row')).toHaveCount(4);
+    const titles = await all(page)
+      .locator('app-library-row .title')
+      .allTextContents();
+    const at = (n: number) =>
+      titles.findIndex((t) => t.trim() === lecture(n).title);
+    expect(at(3)).toBeGreaterThanOrEqual(0);
+    expect(at(3)).toBeLessThan(at(2));
+    expect(at(2)).toBeLessThan(at(1));
+    const row = all(page)
+      .getByRole('listitem')
+      .filter({ hasText: lecture(3).title });
+    await expect(row).toContainText('parou em 0:12');
+    await expect(row.locator('ui-progress')).toBeVisible();
+    resume = row.getByRole('button', { name: `Tocar ${lecture(3).title}` });
+  }
 
-  await cards
-    .nth(0)
-    .getByRole('button', { name: `Tocar ${lecture(3).title}` })
-    .click();
+  await resume.click();
   await expect(mini(page)).toBeVisible();
   await expect.poll(async () => (await audioState(page)).paused).toBe(false);
   // The saved position is applied once the media's length is known (±1 s, AC-4).
@@ -183,7 +243,16 @@ test('AC-6: chips narrow "Todas" and say how many', async ({ browser }) => {
   const inProgress = all(page).getByRole('button', { name: 'Em andamento' });
   await inProgress.click();
   await expect(inProgress).toHaveAttribute('aria-pressed', 'true');
-  await expect(all(page).getByText(/^2 mídias/)).toBeVisible();
+  // Announced (the live region); a phone also shows it where the order was
+  // (media-library-chip@mobile).
+  await expect(all(page).getByText(/^2 mídias/)).toHaveCount(
+    desktop(page) ? 1 : 2,
+  );
+  await expect(
+    all(page)
+      .getByText(/^2 mídias/)
+      .first(),
+  ).toBeVisible();
   await expect(
     all(page).getByRole('link', { name: lecture(3).title }),
   ).toHaveCount(0);
@@ -196,14 +265,13 @@ test('AC-7, AC-8: two selected media are marked heard, then one goes back to not
   const { page } = await libraryListener(browser);
   await savePosition(page, lecture(1), 5_000);
   await openLibrary(page);
-  await expect(strip(page).getByRole('listitem')).toHaveCount(1);
+  // "Continuar ouvindo" is a desktop's (a phone's frame has none).
+  await expect(strip(page).getByRole('listitem')).toHaveCount(
+    desktop(page) ? 1 : 0,
+  );
   await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
-  await all(page)
-    .getByRole('checkbox', { name: `Selecionar ${lecture(1).title}` })
-    .check();
-  await all(page)
-    .getByRole('checkbox', { name: `Selecionar ${lecture(2).title}` })
-    .check();
+  await selectRow(page, lecture(1).title);
+  await selectRow(page, lecture(2).title);
   const bar = page.getByRole('region', { name: 'Seleção' });
   await expect(bar).toContainText('2 selecionadas');
   await bar.getByRole('button', { name: 'Marcar como ouvida' }).click();
@@ -242,12 +310,8 @@ test('FR-3: a press on the selection bar acts, also with the page short of its e
   const { page } = await libraryListener(browser);
   await openLibrary(page);
   await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
-  await all(page)
-    .getByRole('checkbox', { name: `Selecionar ${lecture(3).title}` })
-    .check();
-  await all(page)
-    .getByRole('checkbox', { name: `Selecionar ${lecture(4).title}` })
-    .check();
+  await selectRow(page, lecture(3).title);
+  await selectRow(page, lecture(4).title);
   // The page can still scroll, so a scroll on the press would take the bar from the pointer.
   await page.setViewportSize({
     width: viewportOf()?.width ?? 1440,
@@ -287,7 +351,7 @@ test('MA-01: a press anywhere on a row opens the media, its controls keep their 
     .getByRole('listitem')
     .filter({ hasText: lecture(3).title });
   const selection = page.getByRole('region', { name: 'Seleção' });
-  await row.getByRole('checkbox').check();
+  await selectRow(page, lecture(3).title);
   await expect(selection).toBeVisible();
   await row.getByRole('checkbox').uncheck();
   await expect(selection).toBeHidden();
@@ -307,7 +371,8 @@ test('MA-01: a press anywhere on a row opens the media, its controls keep their 
   const link = row.getByRole('link', { name: lecture(3).title });
   const [area, meta] = await Promise.all([
     link.boundingBox(),
-    row.getByText(/^Zz Acervo/).boundingBox(),
+    // The author's words: the collection has no place on a phone's line.
+    row.locator('.author').boundingBox(),
   ]);
   if (!area || !meta) throw new Error('no row to press');
   for (const position of [
@@ -355,18 +420,48 @@ test('AC-9: "Limpar recentes" empties the recents and keeps "Continuar ouvindo"'
   const { page } = await libraryListener(browser);
   for (const n of [1, 2, 3, 4]) await savePosition(page, lecture(n), 3_000);
   await openLibrary(page);
-  const recents = page.getByRole('region', { name: 'Ouvidas recentemente' });
-  await expect(recents.getByRole('listitem')).toHaveCount(4);
-  await recents.getByRole('button', { name: 'Limpar recentes' }).click();
-  await expect(recents).toContainText(
+  // No "Ouvidas recentemente" section in v2 (no frame has one): "Limpar recentes" is in the
+  // page's ⋯ (and, on a desktop, beside "Continuar ouvindo"); it asks above the list.
+  await expect(
+    page.getByRole('region', { name: 'Ouvidas recentemente' }),
+  ).toHaveCount(0);
+  const recentIds = async () =>
+    (
+      (await (await page.request.get('/api/v1/media/library/home')).json()) as {
+        recentlyPlayed: { id: string }[];
+      }
+    ).recentlyPlayed.map((item) => item.id);
+  expect(await recentIds()).toHaveLength(4);
+  await recentsMenu(page).click();
+  await page.getByRole('menuitem', { name: 'Limpar recentes' }).click();
+  const ask = page.getByRole('group', { name: /^Limpar as mídias/ });
+  await expect(ask).toContainText(
     'Limpar as mídias ouvidas recentemente? Suas posições, favoritas e marcadores continuam.',
   );
-  await recents.getByRole('button', { name: 'Limpar', exact: true }).click();
-  await expect(recents).toContainText('Nada ouvido desde que você limpou.');
+  await expect(ask.getByRole('button', { name: 'Cancelar' })).toBeFocused();
+  await ask.getByRole('button', { name: 'Limpar', exact: true }).click();
+  await expect(ask).toHaveCount(0);
+  await expect(libraryStatus(page)).toContainText(
+    'Ouvidas recentemente foram limpas.',
+  );
   await expect(
-    recents.getByRole('button', { name: 'Ouvidas recentemente' }),
+    page.getByRole('heading', { name: 'Todas', level: 3 }),
   ).toBeFocused();
-  await expect(strip(page).getByRole('listitem')).toHaveCount(4);
+  await expect.poll(recentIds).toEqual([]);
+  // Nothing left to clear; the positions stay ("Continuar ouvindo" keeps its four).
+  await recentsMenu(page).click();
+  await expect(
+    page
+      .getByRole('menuitem', { name: 'Meus marcadores' })
+      .or(page.getByRole('menuitemradio', { name: 'Ouvidas recentemente' }))
+      .first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('menuitem', { name: 'Limpar recentes' }),
+  ).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  if (desktop(page))
+    await expect(strip(page).getByRole('listitem')).toHaveCount(4);
   await page.context().close();
 });
 
@@ -435,19 +530,31 @@ test('AC-14: chips, order, selection and opening work by keyboard, and the count
   const box = all(page).getByRole('checkbox', {
     name: `Selecionar ${lecture(3).title}`,
   });
-  await box.focus();
-  await page.keyboard.press('Space');
+  // A desktop's box takes Space; a phone's row takes the context-menu key (Shift+F10).
+  const selectByKeyboard = async () => {
+    if (desktop(page)) {
+      await box.focus();
+      await page.keyboard.press('Space');
+      return;
+    }
+    await all(page)
+      .getByRole('link', { name: lecture(3).title, exact: true })
+      .focus();
+    await page.keyboard.press('Shift+F10');
+  };
+  await selectByKeyboard();
   await expect(page.getByRole('region', { name: 'Seleção' })).toContainText(
     '1 selecionada',
   );
   await page.getByRole('button', { name: 'Cancelar seleção' }).focus();
   await page.keyboard.press('Enter');
   await expect(
-    all(page).getByRole('checkbox', { name: /^Selecionar todas/ }),
+    desktop(page)
+      ? all(page).getByRole('checkbox', { name: /^Selecionar todas/ })
+      : page.getByRole('heading', { name: 'Todas', level: 3 }),
   ).toBeFocused();
 
-  await box.focus();
-  await page.keyboard.press('Space');
+  await selectByKeyboard();
   await page.getByRole('button', { name: 'Marcar como ouvida' }).focus();
   await page.keyboard.press('Enter');
   await expect(libraryStatus(page)).toContainText(
@@ -477,11 +584,11 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await savePosition(page, lecture(2), 19_900);
     await useTheme(page, theme);
     await openLibrary(page);
-    await expect(strip(page).getByRole('listitem')).toHaveCount(1);
+    await expect(strip(page).getByRole('listitem')).toHaveCount(
+      desktop(page) ? 1 : 0,
+    );
     await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
-    await all(page)
-      .getByRole('checkbox', { name: `Selecionar ${lecture(3).title}` })
-      .check();
+    await selectRow(page, lecture(3).title);
     expect(await seriousViolations(page)).toEqual([]);
     await chooseLibraryView(page, 'Grade');
     await expect(all(page).getByRole('checkbox')).toHaveCount(0);
@@ -606,9 +713,30 @@ test('FR-3: "Selecionar todas" marks more than the API takes at once, in batches
   await scrollToTheEnd(page, 5);
   const loaded = await all(page).getByRole('listitem').count();
   expect(loaded).toBeGreaterThan(200);
-  await all(page)
-    .getByRole('checkbox', { name: `Selecionar todas as ${loaded}` })
-    .check();
+  // The table head's box on a desktop; a phone has no table head: a long press starts the
+  // selection, then a row's ⋯ offers it (the top row has no ⋯, media-library@mobile).
+  if (desktop(page))
+    await all(page)
+      .getByRole('checkbox', { name: `Selecionar todas as ${loaded}` })
+      .check();
+  else {
+    const firstRow = all(page).getByRole('listitem').first();
+    await longPressToSelect(
+      page,
+      firstRow,
+      firstRow.getByRole('checkbox', { name: /^Selecionar / }),
+    );
+    const rowMore = all(page)
+      .getByRole('button', { name: /^Mais ações para / })
+      .first();
+    await rowMore.click();
+    await page
+      .getByRole('menuitem', { name: `Selecionar todas as ${loaded}` })
+      .click();
+  }
+  await expect(page.getByRole('region', { name: 'Seleção' })).toContainText(
+    `${loaded} selecionadas`,
+  );
   await page.getByRole('button', { name: 'Marcar como ouvida' }).click();
   await expect(libraryStatus(page)).toContainText(
     `${loaded} mídias marcadas como ouvidas.`,
@@ -766,7 +894,8 @@ test('NFR-2: 2 000 media scroll by wheel without stalling, react within 200 ms, 
   const deepBox = all(page).getByRole('checkbox', {
     name: 'Selecionar Palestra sintética 1200',
   });
-  await deepBox.click();
+  if (desktop(page)) await deepBox.click();
+  else await selectRow(page, 'Palestra sintética 1200');
   await expect(deepBox).toBeChecked();
   await expect(page.getByRole('region', { name: 'Seleção' })).toContainText(
     '1 selecionada',
@@ -797,6 +926,8 @@ test('NFR-2: 2 000 media scroll by wheel without stalling, react within 200 ms, 
   const box = all(page).getByRole('checkbox', {
     name: 'Selecionar Palestra sintética 0000',
   });
+  // A phone's boxes show once a selection is on (from a row's ⋯).
+  if (!desktop(page)) await selectRow(page, 'Palestra sintética 0001');
   await pressOften(page, box, 7);
   const { latencies, frameGaps } = await probeOf(page);
   await box.uncheck();

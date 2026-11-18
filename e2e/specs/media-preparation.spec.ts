@@ -45,7 +45,16 @@ async function person(
 async function openUpload(page: Page): Promise<Locator> {
   await page.goto('/midia');
   await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
-  return page.getByRole('dialog', { name: 'Enviar áudio' });
+  const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
+  // A phone's upload is a plain list (media-upload@mobile): "Dividir em faixas ›" opens the
+  // three choices of the division.
+  const division = dialog.getByRole('button', { name: /^Dividir em faixas/ });
+  await expect(dialog).toBeVisible();
+  if (await division.isVisible()) {
+    await division.click();
+    await expect(division).toHaveAttribute('aria-expanded', 'true');
+  }
+  return dialog;
 }
 
 async function chooseFile(dialog: Locator, title: string): Promise<void> {

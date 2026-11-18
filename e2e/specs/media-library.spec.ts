@@ -26,7 +26,7 @@ async function openMedia(page: Page) {
   // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
   await openMediaFromLibrary(page);
   await expect(
-    page.getByRole('heading', { name: /Mídia — Hermetismo/ }),
+    page.getByRole('heading', { name: /Acervo — Hermetismo/ }),
   ).toBeVisible();
 }
 
@@ -70,7 +70,11 @@ test('AC-1: a person who may upload sends an MP3, sees it go to "Pronta" and ope
   await expect(dialog).toBeHidden();
   const row = page.getByRole('listitem').filter({ hasText: title });
   await expect(row).toBeVisible();
-  await expect(row.getByText('Pronta')).toBeVisible({ timeout: 30_000 });
+  // Ready: the pill now says where its transcription stands (media-list: "Aguardando o
+  // transcritor"; "Aguardando" on a phone), which only a ready audio says.
+  await expect(row.locator('ui-pill', { hasText: /^Aguardando/ })).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(row.getByText('0:08')).toBeVisible();
   await row.getByRole('link', { name: title }).click();
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
@@ -204,7 +208,9 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await uploadReady(owner, { title: `Acessível ${theme}`, seconds: 1 });
     await useTheme(page, theme);
     await openMedia(page);
-    await expect(page.getByText('Pronta').first()).toBeVisible();
+    await expect(
+      page.locator('ui-pill', { hasText: /^Aguardando/ }).first(),
+    ).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
     await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
     await expect(

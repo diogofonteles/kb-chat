@@ -12,6 +12,7 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
+import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import type { IconName } from '@ui/icons.js';
 import { UiOverlay, outsideBox, type OverlayAlign } from '@ui/overlay.js';
@@ -28,11 +29,16 @@ export interface MenuOption {
   readonly group?: string;
   /** A line above it, to set it apart (a destructive action goes last, after one). */
   readonly divider?: boolean;
+  /** On a phone's sheet its group's items are pills in one row ("Ver como", @mobile). */
+  readonly pill?: boolean;
+  /** An action among the choices of a `kind="choice"` menu: no ✓, no radio role. */
+  readonly action?: boolean;
 }
 
 /** Items under the name of their group, in the order given. */
 interface MenuGroup {
   readonly name: string;
+  readonly pills: boolean;
   readonly items: readonly { option: MenuOption; index: number }[];
 }
 
@@ -49,12 +55,13 @@ const SHEET_BELOW_PX = 1024;
  */
 @Component({
   selector: 'app-menu-button',
-  imports: [UiIcon, UiOverlay],
+  imports: [UiCover, UiIcon, UiOverlay],
   template: `
     <button
       #trigger
       type="button"
       class="trigger"
+      [class.chip]="look() === 'chip'"
       aria-haspopup="menu"
       [attr.aria-expanded]="open()"
       [attr.aria-label]="label()"
@@ -78,42 +85,60 @@ const SHEET_BELOW_PX = 1024;
         (keydown)="onMenuKey($event)"
         (focusout)="onFocusOut($event)"
       >
+        <!-- The sheet's handle and, for a media, what it is (media-library-row-menu@mobile). -->
+        <span class="handle" aria-hidden="true"></span>
+        @if (sheetTitle(); as title) {
+          <div class="sheet-head" aria-hidden="true">
+            <ui-cover [title]="title" [size]="48" />
+            <span class="sheet-words">
+              <span class="sheet-title">{{ title }}</span>
+              @if (sheetMeta(); as meta) {
+                <span class="sheet-meta">{{ meta }}</span>
+              }
+            </span>
+          </div>
+        }
         @for (group of groups(); track $index) {
           <div
             class="group"
+            [class.pills]="group.pills"
             [attr.role]="group.name ? 'group' : null"
             [attr.aria-label]="group.name || null"
           >
             @if (group.name) {
               <p class="heading" aria-hidden="true">{{ group.name }}</p>
             }
-            @for (entry of group.items; track entry.option.id) {
-              @if (entry.option.divider) {
-                <hr class="divider" aria-hidden="true" />
+            <div class="items">
+              @for (entry of group.items; track entry.option.id) {
+                @if (entry.option.divider) {
+                  <hr class="divider" aria-hidden="true" />
+                }
+                <button
+                  #item
+                  type="button"
+                  [attr.role]="
+                    radio(entry.option) ? 'menuitemradio' : 'menuitem'
+                  "
+                  [attr.aria-checked]="
+                    radio(entry.option) ? (entry.option.checked ?? false) : null
+                  "
+                  [class.danger]="entry.option.danger"
+                  [class.checked]="entry.option.checked"
+                  (focus)="focused.set(entry.index)"
+                  (click)="choose(entry.option.id)"
+                >
+                  @if (entry.option.icon; as icon) {
+                    <ui-icon [name]="icon" [size]="18" />
+                  }
+                  <span class="words">{{ entry.option.label }}</span>
+                  @if (radio(entry.option)) {
+                    <span class="check" aria-hidden="true">{{
+                      entry.option.checked ? '✓' : ''
+                    }}</span>
+                  }
+                </button>
               }
-              <button
-                #item
-                type="button"
-                [attr.role]="kind() === 'choice' ? 'menuitemradio' : 'menuitem'"
-                [attr.aria-checked]="
-                  kind() === 'choice' ? (entry.option.checked ?? false) : null
-                "
-                [class.danger]="entry.option.danger"
-                [class.checked]="entry.option.checked"
-                (focus)="focused.set(entry.index)"
-                (click)="choose(entry.option.id)"
-              >
-                @if (entry.option.icon; as icon) {
-                  <ui-icon [name]="icon" [size]="18" />
-                }
-                <span class="words">{{ entry.option.label }}</span>
-                @if (kind() === 'choice') {
-                  <span class="check" aria-hidden="true">{{
-                    entry.option.checked ? '✓' : ''
-                  }}</span>
-                }
-              </button>
-            }
+            </div>
           </div>
         }
       </div>
@@ -142,6 +167,12 @@ export class MenuButton {
   readonly disabled = input(false);
   /** Which edge of the button the list lines up with. */
   readonly align = input<OverlayAlign>('end');
+  /** A chip that opens a menu (v2 · Componentes › Chip with ▾), as in a row of filters. */
+  readonly look = input<'plain' | 'chip'>('plain');
+  /** On a phone's sheet, the item it is about: its cover and title over the items. */
+  readonly sheetTitle = input('');
+  /** Under that title ("Irmã Helena Prado · Alquimia Prática"). */
+  readonly sheetMeta = input('');
   readonly chosen = output<string>();
 
   protected readonly sheetBelow = SHEET_BELOW_PX;
@@ -149,12 +180,18 @@ export class MenuButton {
   /** The item that has the focus, as the items report it. */
   protected readonly focused = signal(0);
   protected readonly groups = computed<readonly MenuGroup[]>(() => {
-    const groups: { name: string; items: MenuGroup['items'][number][] }[] = [];
+    const groups: {
+      name: string;
+      pills: boolean;
+      items: MenuGroup['items'][number][];
+    }[] = [];
     this.options().forEach((option, index) => {
       const name = option.group ?? '';
+      const pills = option.pill === true;
       const last = groups.at(-1);
-      if (last && last.name === name) last.items.push({ option, index });
-      else groups.push({ name, items: [{ option, index }] });
+      if (last && last.name === name && last.pills === pills)
+        last.items.push({ option, index });
+      else groups.push({ name, pills, items: [{ option, index }] });
     });
     return groups;
   });
@@ -164,6 +201,11 @@ export class MenuButton {
       this.options().findIndex((option) => option.checked),
     ),
   );
+
+  /** A choice of a `kind="choice"` menu (an action among them is a plain item). */
+  protected radio(option: MenuOption): boolean {
+    return this.kind() === 'choice' && !option.action;
+  }
 
   protected toggle(): void {
     if (this.open()) this.close(true);

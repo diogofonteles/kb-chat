@@ -18,7 +18,11 @@ import {
 import { UiButton, UiIconButton } from '@ui/button.js';
 import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
-import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import {
+  takeUntilDestroyed,
+  toObservable,
+  toSignal,
+} from '@angular/core/rxjs-interop';
 import {
   FormControl,
   FormGroup,
@@ -78,6 +82,9 @@ interface Draft {
  * says who the author is there. Only what changed is sent, and a failure keeps what was
  * typed (FR-4). Whoever opens it closes it when `closed` arrives.
  */
+/** The shell's phone layout (chat-page: desktop from 1024 px). */
+const PHONE_QUERY = '(max-width: 1023px)';
+
 @Component({
   selector: 'app-edit-media-dialog',
   imports: [
@@ -105,6 +112,8 @@ export class EditMediaDialog implements OnInit {
   private readonly injector = inject(Injector);
   private readonly titleInput =
     viewChild.required<ElementRef<HTMLInputElement>>('titleInput');
+  private readonly headingElement =
+    viewChild.required<ElementRef<HTMLHeadingElement>>('headingElement');
   private readonly raiseCancel =
     viewChild<ElementRef<HTMLButtonElement>>('raiseCancel');
 
@@ -128,6 +137,17 @@ export class EditMediaDialog implements OnInit {
       validators: Validators.required,
     }),
   });
+  /**
+   * The title emptied: said under the field at once and "Salvar" looks off (aria-disabled,
+   * a press still says why), as in media-library-edit-errors.
+   */
+  private readonly titleStatus = toSignal(
+    this.form.controls.title.statusChanges,
+    { initialValue: this.form.controls.title.status },
+  );
+  protected readonly titleMissing = computed(
+    () => this.titleStatus() === 'INVALID' && this.form.controls.title.dirty,
+  );
   /** The "Acervo" field as a signal: the author suggestions and the note follow it. */
   protected readonly chosenTopic = signal('');
   protected readonly moving = computed(
@@ -203,7 +223,13 @@ export class EditMediaDialog implements OnInit {
       .subscribe(() => this.save());
     afterNextRender(() => {
       this.dialog().nativeElement.showModal();
-      this.titleInput().nativeElement.focus();
+      // A phone's sheet opens on its heading: a field in focus would raise the keyboard over
+      // the sheet before anything is chosen (media-library-edit@mobile).
+      const phone =
+        this.dialog().nativeElement.ownerDocument.defaultView?.matchMedia?.(
+          PHONE_QUERY,
+        ).matches ?? false;
+      (phone ? this.headingElement() : this.titleInput()).nativeElement.focus();
     });
   }
 

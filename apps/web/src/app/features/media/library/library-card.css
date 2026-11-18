@@ -55,8 +55,7 @@
 }
 
 :host(:hover) .play,
-:host(:focus-within) .play,
-.play.on {
+:host(:focus-within) .play {
   opacity: 1;
   translate: 0 0;
 }
@@ -100,13 +99,40 @@ a.title:focus-visible::after {
 
 .meta {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0 var(--space-2);
   min-width: 0;
+  overflow: hidden;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta > :not(:first-child)::before {
+  content: '\00a0·\00a0';
+}
+
+/* How far, along the cover's foot (v2 Cartão: 4 px, accent over a dark track). */
+.cover-bar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 0 0 6px 6px;
+  background: rgb(0 0 0 / 50%);
+}
+
+.cover-bar span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
 }
 
 .resume-line {
@@ -176,10 +202,39 @@ a.title:focus-visible::after {
   border-radius: var(--radius-cover);
 }
 
+/* A phone's grid (media-library-grid@mobile): the bare cover, its title and author; ▶ only
+   on the one playing (a tap on the card opens it). */
 @media (max-width: 1023px) {
+  :host(:not(.tile)) {
+    gap: var(--space-1);
+    padding: 0;
+    background: transparent;
+  }
+
+  :host(:not(.tile):hover),
+  :host(:not(.tile):focus-within) {
+    background: transparent;
+  }
+
   .play {
-    opacity: 1;
     translate: none;
+  }
+
+  :host(.tile) .play {
+    opacity: 1;
+  }
+
+  :host(:not(.tile)) .title {
+    font-size: var(--text-meta);
+  }
+
+  :host(:not(.tile)) .meta {
+    font-size: var(--text-xs);
+  }
+
+  :host(:not(.tile)) .duration,
+  :host(:not(.tile)) .state {
+    display: none;
   }
 }
 
@@ -187,4 +242,9 @@ a.title:focus-visible::after {
   .play {
     border: 1px solid ButtonText;
   }
+}
+
+/* The shortcut has the title and how far (media-library-sort "Continuar ouvindo"). */
+:host(.tile) .meta {
+  display: none;
 }

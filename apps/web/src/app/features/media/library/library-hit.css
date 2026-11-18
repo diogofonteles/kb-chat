@@ -163,15 +163,17 @@ mark {
     --ui-cover-size: 52px !important;
   }
 
+  /* The frame's covers are bare (media-library-search@mobile): ▶ covers the cover whole,
+     unseen, and a tap on it plays at once, as on a row of the list. The one playing shows. */
   .play {
-    opacity: 1;
-    background: rgb(0 0 0 / 55%);
-    color: #fff;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: var(--radius-cover);
+    opacity: 0;
   }
 
   .play.on {
-    background: var(--color-accent);
-    color: var(--color-on-accent);
+    opacity: 1;
   }
 
   .title {

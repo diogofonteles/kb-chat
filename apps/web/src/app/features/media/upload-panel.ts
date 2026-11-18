@@ -78,7 +78,6 @@ import { planShare, sameChoices } from './preparation/plan-choices.js';
 import { PlanForm } from './preparation/plan-form.js';
 import { usdUpText } from './preparation/preparation-labels.js';
 import { PreparationOptions } from './preparation/preparation-options.js';
-import { PreparationSteps } from './preparation/preparation-steps.js';
 import {
   UploadEntries,
   type PlannedLength,
@@ -108,7 +107,6 @@ const FILES_AT_ONCE = 3;
     AuthorCombobox,
     LevelField,
     PreparationOptions,
-    PreparationSteps,
     UiButton,
     UiIcon,
     UiIconButton,
@@ -134,6 +132,8 @@ export class UploadPanel implements OnInit {
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private readonly levelField = viewChild(LevelField);
+  private readonly sendButton =
+    viewChild<ElementRef<HTMLButtonElement>>('sendButton');
   private readonly injector = inject(Injector);
   private readonly fileInput =
     viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
@@ -195,6 +195,14 @@ export class UploadPanel implements OnInit {
   );
   /** Said beside the files: none chosen, or none that can go. */
   protected readonly fileProblem = signal<string | null>(null);
+  /**
+   * No file that "Enviar" takes yet (media-upload, -duplicate, -bad-type): it looks off
+   * (aria-disabled), and a press still says why.
+   */
+  protected readonly nothingToPick = computed(
+    () => !this.uploads.checking() && this.uploads.sendable().length === 0,
+  );
+  protected readonly cancelSendingLabel = $localize`:@@media.upload.cancelSending:Cancelar envio`;
   protected readonly stage = signal<Stage>('choosing');
   protected readonly submitted = signal(false);
   protected readonly dragging = signal(false);
@@ -318,6 +326,8 @@ export class UploadPanel implements OnInit {
   /** True while the levels are asked for: the send waits for them, then goes on its own. */
   private holdForLevels(): boolean {
     this.waitingForLevels.set(this.levels.loading());
+    // The waiting button has the focus, also where a press does not give it (Safari).
+    if (this.waitingForLevels()) this.sendButton()?.nativeElement.focus();
     return this.waitingForLevels();
   }
 

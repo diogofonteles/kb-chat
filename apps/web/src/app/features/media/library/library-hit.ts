@@ -12,7 +12,6 @@ import type { LibraryHit as Hit } from '@kb-chat/contracts';
 import { formatClock, formatDuration } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
 import { textParts } from '@core/text/text-parts.js';
-import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import { playbackStartOf } from '../search-hit/passage-focus.js';
 
 /**
@@ -21,7 +20,7 @@ import { playbackStartOf } from '../search-hit/passage-focus.js';
  */
 @Component({
   selector: 'app-library-hit',
-  imports: [RouterLink, AuthorshipBadge, UiCover, UiIcon],
+  imports: [RouterLink, UiCover, UiIcon],
   templateUrl: './library-hit.html',
   styleUrl: './library-hit.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -67,6 +66,17 @@ export class LibraryHit {
       ? $localize`:@@library.hit.recordingOne:Gravação completa · 1 faixa`
       : $localize`:@@library.hit.recording:Gravação completa · ${trackCount}:count: faixas`;
   });
+  /** The album, the author by name ("Outros autores" with none) and the length, plain. */
+  protected readonly meta = computed(() =>
+    [
+      this.place(),
+      this.item().author?.name ??
+        $localize`:@@authorship.others:Outros autores`,
+      this.duration(),
+    ]
+      .filter((part) => part !== '')
+      .join(' · '),
+  );
   protected readonly playLabel = computed(() => {
     const { title } = this.item();
     if (this.playing())

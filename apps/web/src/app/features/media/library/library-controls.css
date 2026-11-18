@@ -1,79 +1,21 @@
+/* The filters' chips (v2 media-library "filtros"): after the search, in the same row. */
 :host {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-4);
+  flex: 1 1 0;
+  min-width: 18rem;
 }
 
-/* Chips wrap instead of scrolling sideways: no option hides off screen (MA-18). */
 .chips {
   display: flex;
-  flex: 1 1 24rem;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
 }
 
-/* A choice in a pill, like the chips (v2 · Componentes › Chip): the native list opens it,
-   so nothing it shows is ever clipped by the page (D5). */
-.choice {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-height: 2rem;
-  padding: 0 var(--space-3) 0 var(--space-4);
-  border-radius: var(--radius-pill);
-  background: var(--overlay-3);
-  color: var(--color-text);
-  font-size: var(--text-sm);
-}
-
-.choice:hover {
-  background: var(--overlay-4);
-}
-
-.choice:focus-within {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-.choice.on {
-  background: var(--color-text);
-  color: var(--color-bg);
-}
-
-.label {
-  font-weight: 600;
-}
-
-.choice select {
-  max-width: 14rem;
-  min-height: 2rem;
-  padding: 0 1.25rem 0 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  appearance: none;
-  cursor: pointer;
-}
-
-.choice select:focus {
-  outline: none;
-}
-
-.choice select option {
-  background: var(--color-elevated);
-  color: var(--color-text);
-}
-
-.caret {
-  position: absolute;
-  right: var(--space-3);
-  pointer-events: none;
+.ui-chip ui-icon[name='close'] {
+  margin-right: calc(-1 * var(--space-1));
 }
 
 .hidden-filters {
@@ -81,51 +23,59 @@
   font-size: var(--text-sm);
 }
 
-.tools {
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-}
-
-.sort {
-  --menu-trigger-padding: var(--space-3);
-  --menu-trigger-size: var(--text-sm);
-  --menu-trigger-weight: 500;
-  --menu-trigger-color: var(--color-text-muted);
-  --menu-trigger-height: 2rem;
-}
-
-.sort-words {
-  max-width: 14rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.clear {
+  --ui-btn-height: 2rem;
 }
 
 @media (max-width: 1023px) {
-  /* A compact chip row (media-library@mobile): a long choice is cut, not a line of its
-     own; the whole name is in its list. */
+  /* The row never widens the page: it scrolls inside the screen's width. */
+  :host {
+    min-width: 0;
+  }
+
+  /* One row that runs on past the screen's edge, as in media-library@mobile: what is off
+     the edge comes in with a swipe, and the focus brings a chip into view (keyboard). */
   .chips {
-    flex-basis: 100%;
+    flex-wrap: nowrap;
+    margin: 0 calc(-1 * var(--space-4));
+    padding: 0 var(--space-4);
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
-  .choice,
-  .choice select {
-    min-height: var(--target);
+  .chips::-webkit-scrollbar {
+    display: none;
   }
 
-  .choice select {
-    max-width: 8.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  /* The phone's order (media-library@mobile): Todas, Em andamento, Autoria, the collection
+     (its name alone, media-library-collection-empty@mobile), Não ouvidas. */
+  .topic-prefix {
+    display: none;
   }
 
-  .tools {
-    margin-left: 0;
+  .all-chip {
+    order: 0;
   }
 
-  .sort {
-    --menu-trigger-height: var(--target);
+  [data-state='in-progress'] {
+    order: 1;
+  }
+
+  .authorship {
+    order: 2;
+  }
+
+  .topic {
+    order: 3;
+  }
+
+  [data-state='unheard'],
+  [data-state='heard'],
+  .subject {
+    order: 4;
+  }
+
+  .clear {
+    order: 5;
   }
 }

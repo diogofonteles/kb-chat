@@ -1,13 +1,20 @@
-<button
-  type="button"
-  class="toggle"
-  [attr.aria-expanded]="open()"
-  [attr.aria-controls]="open() ? listId() : null"
-  (click)="open.set(!open())"
->
-  <ui-icon class="chevron" [class.open]="open()" name="chevRight" [size]="16" />
-  {{ label() }}
-</button>
+@if (toggle()) {
+  <button
+    type="button"
+    class="toggle"
+    [attr.aria-expanded]="open()"
+    [attr.aria-controls]="open() ? listId() : null"
+    (click)="open.set(!open())"
+  >
+    <ui-icon
+      class="chevron"
+      [class.open]="open()"
+      name="chevRight"
+      [size]="16"
+    />
+    {{ label() }}
+  </button>
+}
 @if (open()) {
   <ol class="tracks" [id]="listId()" [attr.aria-label]="listName()">
     @for (track of item().tracks; track track.id) {
@@ -15,38 +22,55 @@
         <span class="ordinal" aria-hidden="true">{{
           track.parent?.ordinal
         }}</span>
-        <button
-          type="button"
-          class="play"
-          [attr.aria-label]="playLabel(track)"
-          (click)="played.emit(track)"
-        >
-          <ui-icon
-            [name]="playingId() === track.id ? 'pause' : 'play'"
-            [size]="16"
-          />
-        </button>
+        <span class="art">
+          @if (!toggle()) {
+            <ui-cover [title]="item().title" [size]="32" [label]="false" />
+          }
+          <button
+            type="button"
+            class="play"
+            [class.on]="playingId() === track.id"
+            [attr.aria-label]="playLabel(track)"
+            (click)="played.emit(track)"
+          >
+            <ui-icon
+              [name]="playingId() === track.id ? 'pause' : 'play'"
+              [size]="16"
+            />
+          </button>
+        </span>
         <a
           class="title"
+          [class.playing]="playingId() === track.id"
           [routerLink]="['/midia', track.id]"
           [title]="track.title"
           >{{ track.title }}</a
         >
         <span class="meta">
+          @if (!toggle() && placeOf(track)) {
+            <span class="place">{{ placeOf(track) }}</span>
+          }
           @if (showsAuthor(track)) {
             <app-authorship-badge [mediaAuthor]="track.author" />
           }
-          <span>{{ durationOf(track) }}</span>
+          @if (toggle()) {
+            <span>{{ durationOf(track) }}</span>
+          }
           @if (resumeOf(track)) {
             <span>{{ resumeOf(track) }}</span>
           } @else if (stateOf(track)) {
             <span class="state">{{ stateOf(track) }}</span>
           }
         </span>
+        @if (!toggle()) {
+          <span class="duration">{{ durationOf(track) }}</span>
+        }
         @if (canEdit()) {
           <app-menu-button
             [label]="menuLabel(track)"
             [options]="trackOptions"
+            [sheetTitle]="track.title"
+            [sheetMeta]="placeOf(track)"
             (chosen)="chooseAction(track, $event)"
           >
             <ui-icon name="more" [size]="18" />

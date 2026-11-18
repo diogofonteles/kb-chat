@@ -63,6 +63,9 @@ export function titleFromFileName(name: string): string {
   return base.replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
 }
 
+/** "0,3 MB": a chosen file's size (media-upload-chosen). */
+export const sizeOf = (bytes: number): string => `${megabytes(bytes)} MB`;
+
 /** "128 de 312 MB" while sending. */
 export const sentOf = (loaded: number, total: number): string =>
   $localize`:@@media.upload.sent:${megabytes(loaded)}:loaded: de ${megabytes(total)}:total: MB`;

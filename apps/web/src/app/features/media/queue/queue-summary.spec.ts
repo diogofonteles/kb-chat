@@ -20,7 +20,11 @@ const phoneCard = () =>
         link.textContent?.trim() !== 'Ver a fila',
     );
 
-async function setup(items: ReturnType<typeof item>[], active: number) {
+async function setup(
+  items: ReturnType<typeof item>[],
+  active: number,
+  transcriber: 'on' | 'off' = 'on',
+) {
   return render(QueueSummary, {
     providers: [
       provideZonelessChangeDetection(),
@@ -30,6 +34,7 @@ async function setup(items: ReturnType<typeof item>[], active: number) {
         useValue: {
           items: signal(items),
           active: signal(active),
+          queue: signal({ items, active, transcriber }),
           refresh: () => undefined,
         },
       },
@@ -51,7 +56,8 @@ describe('QueueSummary (KBC-090)', () => {
     ).toBeTruthy();
     expect(screen.getByText('Áudio 3')).toBeTruthy();
     expect(screen.queryByText('Áudio 4')).toBeNull();
-    expect(screen.getByText('e mais 1')).toBeTruthy();
+    // The rest is a tap away in "Ver a fila" (media-library: no count under the cards).
+    expect(screen.getByRole('link', { name: 'Ver a fila' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Ver a fila' })).toBeTruthy();
   });
 
@@ -68,7 +74,8 @@ describe('QueueSummary (KBC-090)', () => {
     );
     expect(screen.getByText('Áudio 4')).toBeTruthy();
     expect(screen.queryByText('Áudio 5')).toBeNull();
-    expect(screen.getByText('e mais 1')).toBeTruthy();
+    // The rest is a tap away in "Ver a fila" (media-library: no count under the cards).
+    expect(screen.getByRole('link', { name: 'Ver a fila' })).toBeTruthy();
   });
 
   it('counts one in the singular', async () => {
@@ -94,7 +101,7 @@ describe('QueueSummary (KBC-090)', () => {
     );
     expect(screen.getByText('Falhou')).toBeTruthy();
     expect(screen.getByText('Aguardando')).toBeTruthy();
-    expect(screen.getByText('Para validar')).toBeTruthy();
+    expect(screen.getByText('Falta validar as faixas')).toBeTruthy();
     expect(
       screen.getByRole('link', { name: 'Ver detalhes: Áudio 1' }),
     ).toBeTruthy();
@@ -103,6 +110,27 @@ describe('QueueSummary (KBC-090)', () => {
         .getByRole('link', { name: 'Validar: Áudio 3' })
         .getAttribute('href'),
     ).toContain(MEDIA_ID + '3');
+  });
+
+  it('says each card in a few words: the stage that failed, the transcriber off, the tracks to validate (media-library)', async () => {
+    await setup(
+      [
+        {
+          ...item(1),
+          phase: 'attention',
+          state: 'failed',
+          stage: 'convert',
+          action: null,
+        },
+        { ...item(2), waitsForTranscriber: true, action: null },
+        { ...item(3), phase: 'attention', action: 'validate', step: 3 },
+      ],
+      1,
+      'off',
+    );
+    expect(screen.getByText('conversão')).toBeTruthy();
+    expect(screen.getByText('transcritor desligado')).toBeTruthy();
+    expect(screen.getByText('Falta validar as faixas')).toBeTruthy();
   });
 
   it('offers Groq to an audio waiting for the transcriber when Groq may take it (KBC-128 AC-2)', async () => {

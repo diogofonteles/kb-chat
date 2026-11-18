@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -15,16 +15,25 @@ import {
   signal,
   viewChild,
   viewChildren,
+  type TemplateRef,
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
-import { mediaListSchema, type MediaItem } from '@kb-chat/contracts';
+import { Router, RouterLink } from '@angular/router';
+import {
+  listeningStateOf,
+  mediaListSchema,
+  type LibrarySort,
+  type LibraryView,
+  type MediaItem,
+} from '@kb-chat/contracts';
 import { formatClock, formatDuration, resumeFrom } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { alsoRemovesText, tracksInTheWay } from './track-removal.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaApi, mediaListUrl } from '@core/media/media-api.js';
-import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
+import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
+import { MediaEngine } from '@core/media/media-engine.js';
+import { PageHeader } from '@features/shell/page-header.js';
 import {
   CollectionHeading,
   type HeadingScope,
@@ -40,9 +49,13 @@ import {
 } from 'rxjs';
 import {
   ANY_AUTHOR,
+  NO_AUTHOR,
   authorFilterOptions,
   matchesAuthor,
 } from './media-authors.js';
+import { PlayNow } from './library/play-now.js';
+import { LibrarySortMenu } from './library/library-sort.js';
+import { MenuButton, type MenuOption } from './menu-button.js';
 import { keepFocusedInView } from './keep-in-view.js';
 import {
   pollEveryOf,
@@ -59,11 +72,12 @@ import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
 import { MovedNotice, mediaMoveOf, type MediaMove } from './moved-notice.js';
 import { injectOpenPreparations } from './preparation/open-preparations.js';
 import { PreparationEntry } from './preparation/preparation-entry.js';
+import { scrollPageByKey } from './page-keys.js';
 import { RowMenu } from './row-menu.js';
 import { UploadPanel } from './upload-panel.js';
 import { UiBanner } from '@ui/banner.js';
-import { UiButton } from '@ui/button.js';
-import { UiCover } from '@ui/cover.js';
+import { UiButton, UiChip, UiIconButton } from '@ui/button.js';
+import { UiCover, coverGradient } from '@ui/cover.js';
 import { UiEmptyState } from '@ui/empty-state.js';
 import { UiIcon } from '@ui/icon.js';
 import { UiPill, type Tone } from '@ui/pill.js';
@@ -72,17 +86,56 @@ import { UiProgress } from '@ui/progress.js';
 /** The title filter appears from this many items on (T14). */
 export const FILTER_FROM = 11;
 
+/** With no collection, the frame's olive (media-list tint). */
+const MEDIA_TINT = '#5a5a1a';
+
+/** The shell's phone layout (chat-page: desktop from 1024 px). */
+const PHONE_QUERY = '(max-width: 1023px)';
+const phoneNow = (): boolean =>
+  typeof matchMedia === 'function' && matchMedia(PHONE_QUERY).matches;
+
+/** The phone's listening chips (media-list@mobile: "Em andamento", "Não ouvidas"). */
+type Listening = 'in-progress' | 'unheard';
+
+const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
+const timeOf = (iso: string | null): number => (iso ? Date.parse(iso) : 0);
+
+/** The list in the order chosen on the phone's line (the library's words, BR-7). */
+function sortedBy(items: readonly MediaItem[], sort: LibrarySort): MediaItem[] {
+  const list = [...items];
+  if (sort === 'title')
+    return list.sort((a, b) => collator.compare(a.title, b.title));
+  if (sort === 'duration')
+    return list.sort((a, b) => (b.durationMs ?? 0) - (a.durationMs ?? 0));
+  if (sort === 'author')
+    return list.sort((a, b) =>
+      collator.compare(a.author?.name ?? '\uffff', b.author?.name ?? '\uffff'),
+    );
+  if (sort === 'recently-played')
+    return list.sort(
+      (a, b) => timeOf(b.positionUpdatedAt) - timeOf(a.positionUpdatedAt),
+    );
+  return list;
+}
+
 /**
  * "Mídia" (screens.md T14, KBC-034 FR-6; v2 KBC-128 media-list): the selected collection's
- * audio as an album page — its cover, the track table with the date sent and the status in
- * words, the upload for who may send, and the masters' "Tentar de novo" and "Remover".
+ * audio as an album page — its cover, ▶ and shuffle, the upload for who may send, the title
+ * filter and "Autoria", the track table (# · title · sent · status · ⏱ · ⋯) with the status
+ * in a word, and the masters' "Tentar de novo" and "Remover". On a phone the shell's top row
+ * says the collection (PageHeader) and the list is the library's (media-list@mobile): chips,
+ * the order and the view.
  */
 @Component({
   selector: 'app-media-list-page',
   imports: [
     RouterLink,
     DatePipe,
-    AuthorshipBadge,
+    NgTemplateOutlet,
+    LibrarySortMenu,
+    MenuButton,
+    UiChip,
+    UiIconButton,
     MediaLevelBadge,
     EditMediaDialog,
     MovedNotice,
@@ -100,7 +153,11 @@ export const FILTER_FROM = 11;
   templateUrl: './media-list-page.html',
   styleUrl: './media-list-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(focusin)': 'keepInView($event)' },
+  host: {
+    '(focusin)': 'keepInView($event)',
+    '(document:keydown)': 'pageKey($event)',
+    '[style.--media-tint]': 'tint()',
+  },
 })
 export class MediaListPage {
   private readonly chat = inject(ChatStore);
@@ -115,14 +172,37 @@ export class MediaListPage {
   private readonly heading =
     viewChild.required<ElementRef<HTMLElement>>('heading');
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
+  private readonly engine = inject(MediaEngine);
+  private readonly playNow = inject(PlayNow);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly phoneActions =
+    viewChild<TemplateRef<unknown>>('phoneActions');
+  private readonly phoneFilterBox =
+    viewChild<ElementRef<HTMLInputElement>>('phoneFilterBox');
   /** The item to focus once it is on screen (after an upload). */
   private pendingFocus: string | null = null;
 
   protected readonly topic = this.chat.topic;
   protected readonly topics = this.chat.topicList;
-  /** "Mídia — Hermetismo": the heading's name, the two lines of the header in one. */
+  /** A phone (the shell's layout below 1024 px). */
+  protected readonly phone = signal(phoneNow());
+  /** The album's colour: its cover's (media-list: the "AL" cover's olive under the header). */
+  protected readonly tint = computed(() => {
+    const title = this.topic()?.title;
+    return title ? coverGradient(title)[0] : MEDIA_TINT;
+  });
+  /** The phone's filter row, opened by the top row's 🔍. */
+  protected readonly filterOpen = signal(false);
+  protected readonly listening = linkedSignal<string | null, Listening | null>({
+    source: this.chat.topicSlug,
+    computation: () => null,
+  });
+  protected readonly sort = signal<LibrarySort>('recently-played');
+  protected readonly view = signal<LibraryView>('list');
+  /** "Acervo — Hermetismo": the heading's name, the two lines of the header in one. */
   protected readonly headingText = computed(() => {
-    const word = $localize`:@@media.title:Mídia`;
+    const word = $localize`:@@media.kicker:Acervo`;
     const topic = this.topic();
     return topic ? `${word} — ${topic.title}` : word;
   });
@@ -151,16 +231,114 @@ export class MediaListPage {
   protected readonly showAuthorFilter = computed(
     () => this.authorOptions().length >= 2,
   );
-  protected readonly visible = computed(() =>
-    this.items().filter(
-      (item) =>
-        matchesTitle(item, this.query()) && matchesAuthor(item, this.author()),
-    ),
-  );
+  protected readonly visible = computed(() => {
+    const listening = this.listening();
+    return sortedBy(
+      this.items().filter(
+        (item) =>
+          matchesTitle(item, this.query()) &&
+          matchesAuthor(item, this.author()) &&
+          (listening === null || listeningStateOf(item) === listening),
+      ),
+      this.sort(),
+    );
+  });
   protected readonly showFilter = computed(
     () => this.items().length >= FILTER_FROM,
   );
-  protected readonly summary = computed(() => summaryOf(this.items()));
+  /** "Mestre Laércio e outros autores · 11 áudios · 6 min" (media-list's header). */
+  protected readonly headerMeta = computed(() => {
+    const items = this.items();
+    if (items.length === 0)
+      return $localize`:@@media.noneYet:nenhum áudio ainda`;
+    const main =
+      items.find((item) => item.author?.main)?.author ??
+      items.find((item) => item.author)?.author ??
+      null;
+    const others = items.some((item) => item.author?.slug !== main?.slug);
+    const who = main
+      ? others
+        ? $localize`:@@media.authorsAndOthers:${main.name}:name: e outros autores`
+        : main.name
+      : '';
+    const summary = summaryOf(items);
+    return who ? `${who} · ${summary}` : summary;
+  });
+  protected readonly emptyText = computed(() => {
+    const topic = this.topic();
+    // The phone's empty state is the title and the button (media-list-empty@mobile).
+    return topic && this.canUpload() && !this.phone()
+      ? $localize`:@@media.emptyText:Envie a primeira gravação de ${topic.title}:title:.`
+      : '';
+  });
+  protected readonly filterEmptyTitle = computed(() =>
+    this.query()
+      ? $localize`:@@media.filterEmpty:Nenhum áudio com “${this.query()}:query:” no título`
+      : $localize`:@@media.authorFilterEmpty:Nenhum áudio com estes filtros`,
+  );
+  protected readonly authorMenu = computed<readonly MenuOption[]>(() => {
+    const options = this.authorOptions().map((one) => ({
+      id: one.value,
+      label: `${one.label} (${one.count})`,
+      checked: one.value === this.author(),
+    }));
+    // An empty collection still has the chip (media-list-empty@mobile): every authorship.
+    return options.length > 0
+      ? options
+      : [
+          {
+            id: ANY_AUTHOR,
+            label: $localize`:@@library.allAuthorships:Todas as autorias`,
+            checked: true,
+          },
+        ];
+  });
+  protected readonly authorName = computed(() => {
+    const chosen = this.author();
+    if (chosen === ANY_AUTHOR) return '';
+    if (chosen === NO_AUTHOR) return AUTHORSHIP_LABELS['outros-autores'];
+    return (
+      this.items().find((item) => item.author?.slug === chosen)?.author?.name ??
+      chosen
+    );
+  });
+  protected readonly clearAuthorLabel = computed(
+    () =>
+      $localize`:@@library.clearAuthorship:Tirar o filtro de autoria: ${this.authorName()}:name:`,
+  );
+  protected readonly viewToggleLabel = computed(() =>
+    this.view() === 'grid'
+      ? $localize`:@@library.showList:Ver como lista`
+      : $localize`:@@library.showGrid:Ver como grade`,
+  );
+  /** What the green ▶ plays: the first ready audio of the list on screen. */
+  protected readonly firstPlayable = computed(
+    () => this.visible().find((item) => item.status === 'ready') ?? null,
+  );
+  protected readonly playingId = computed(() =>
+    this.engine.playing() ? (this.engine.source()?.id ?? null) : null,
+  );
+  protected readonly listPlaying = computed(() =>
+    this.items().some((item) => item.id === this.playingId()),
+  );
+  protected readonly playAllLabel = computed(() =>
+    this.listPlaying()
+      ? $localize`:@@library.pauseList:Pausar a lista`
+      : $localize`:@@library.playList:Tocar a primeira da lista`,
+  );
+  /** The header's ⋯ (media-list): what has no button of its own in the frame's bar. */
+  protected readonly headerOptions = computed<readonly MenuOption[]>(() => [
+    {
+      id: 'reload',
+      label: $localize`:@@media.reloadList:Atualizar a lista`,
+      icon: 'refresh',
+    },
+    {
+      id: 'copy-link',
+      label: $localize`:@@media.copyCollectionLink:Copiar link do acervo`,
+      icon: 'link',
+    },
+  ]);
   protected readonly canUpload = computed(() =>
     this.session.can('media-upload'),
   );
@@ -193,6 +371,15 @@ export class MediaListPage {
   });
 
   constructor() {
+    inject(PageHeader).own(
+      computed(() => ({
+        title: this.topic()?.title ?? $localize`:@@media.title:Mídia`,
+        back: '/',
+        actions: this.phoneActions() ?? null,
+        tint: this.tint(),
+      })),
+    );
+    this.followLayout();
     inject(CollectionHeading).follow(
       computed<HeadingScope | null>(() => {
         const slug = this.chat.topicSlug();
@@ -202,6 +389,11 @@ export class MediaListPage {
     this.pollWhileInFlight();
     this.announceReady();
     afterRenderEffect(() => this.focusPending(this.rows()));
+  }
+
+  /** The scrolling keys with nothing focused move the album (its own scroller). */
+  protected pageKey(event: KeyboardEvent): void {
+    scrollPageByKey(this.host.nativeElement, event);
   }
 
   protected keepInView(event: FocusEvent): void {
@@ -229,6 +421,174 @@ export class MediaListPage {
   protected statusToneOf(item: MediaItem): Tone {
     if (item.status === 'ready') return 'ok';
     return item.status === 'failed' ? 'err' : 'info';
+  }
+
+  /**
+   * The status in a few words, its tone backing them (media-list: "Transcrita", "Aguardando o
+   * transcritor", "Falhou: …"; a phone's are shorter: "Aguardando", "Baixa confiança").
+   */
+  protected pillOf(item: MediaItem): { text: string; tone: Tone } | null {
+    const phone = this.phone();
+    if (item.status === 'failed')
+      return {
+        text: phone
+          ? $localize`:@@media.status.failedWord:Falhou`
+          : this.statusOf(item),
+        tone: 'err',
+      };
+    if (item.status !== 'ready')
+      return { text: this.statusOf(item), tone: 'info' };
+    return this.transcriptionPillOf(item, phone);
+  }
+
+  /**
+   * A ready audio: where its transcription stands. The phone's line says nothing of a plain
+   * ready audio (media-list@mobile).
+   */
+  private transcriptionPillOf(
+    item: MediaItem,
+    phone: boolean,
+  ): { text: string; tone: Tone } | null {
+    const { status } = item.transcription;
+    if (status === 'waiting')
+      return {
+        text: phone
+          ? $localize`:@@queue.pill.waiting:Aguardando`
+          : $localize`:@@media.pill.waitingTranscriber:Aguardando o transcritor`,
+        tone: 'warn',
+      };
+    if (status === 'failed')
+      return { text: transcriptionFailed(), tone: 'err' };
+    if (status === 'transcribing')
+      return { text: this.transcriptionOf(item), tone: 'info' };
+    if (isLowConfidence(item))
+      return {
+        text: phone
+          ? $localize`:@@media.pill.lowShort:Baixa confiança`
+          : $localize`:@@media.pill.low:Transcrição de baixa confiança`,
+        tone: 'warn',
+      };
+    if (phone) return null;
+    return status === 'done'
+      ? { text: $localize`:@@media.pill.transcribed:Transcrita`, tone: 'ok' }
+      : { text: this.statusOf(item), tone: 'ok' };
+  }
+
+  /** The words the pill leaves out, for a screen reader (UP-20). */
+  protected detailOf(item: MediaItem): string {
+    return [
+      this.transcriptionOf(item),
+      this.lowNoticeOf(item),
+      this.resumeTextOf(item),
+    ]
+      .filter((words) => words !== '')
+      .join(' · ');
+  }
+
+  protected authorOf(item: MediaItem): string {
+    return item.author?.name ?? AUTHORSHIP_LABELS['outros-autores'];
+  }
+
+  /** "Tocar em seguida": after the one playing, said aloud (or it plays now). */
+  protected playNext(item: MediaItem): void {
+    if (this.playNow.playNext(item))
+      this.announcement.set(
+        $localize`:@@library.playsNext:“${item.title}:title:” toca em seguida.`,
+      );
+  }
+
+  protected play(item: MediaItem): void {
+    this.playNow.play(item);
+  }
+
+  /** The header's ▶: pauses what of this list plays, or plays its first ready audio. */
+  protected playAll(): void {
+    const playing = this.items().find((item) => item.id === this.playingId());
+    const item = playing ?? this.firstPlayable();
+    if (item) this.playNow.play(item);
+  }
+
+  protected playAny(): void {
+    const ready = this.visible().filter((item) => item.status === 'ready');
+    const item = ready[Math.floor(Math.random() * ready.length)];
+    if (item) this.playNow.play(item);
+  }
+
+  protected headerAction(id: string): void {
+    if (id === 'reload') this.reload();
+    else if (id === 'copy-link')
+      this.copy(['/midia'], this.topic()?.title ?? '');
+  }
+
+  protected copyLink(item: MediaItem): void {
+    this.copy(['/midia', item.id], item.title);
+  }
+
+  /** "Copiar link" (desktop) / "Compartilhar" (phone, the system's sheet when it has one). */
+  private copy(path: readonly string[], title: string): void {
+    const view = this.host.nativeElement.ownerDocument.defaultView;
+    const url = new URL(
+      this.router.serializeUrl(this.router.createUrlTree([...path])),
+      view?.location.origin ?? 'http://localhost',
+    ).toString();
+    const nav = view?.navigator;
+    const failed = () =>
+      this.actionError.set(
+        $localize`:@@library.linkFailed:Não consegui copiar o link. Abra a mídia e copie o endereço.`,
+      );
+    if (this.phone() && nav?.share) {
+      nav.share({ title, url }).catch(() => undefined);
+      return;
+    }
+    if (!nav?.clipboard) {
+      failed();
+      return;
+    }
+    nav.clipboard
+      .writeText(url)
+      .then(
+        () =>
+          this.announcement.set($localize`:@@library.linkCopied:Link copiado.`),
+        failed,
+      );
+  }
+
+  /** The phone's 🔍 opens the filter row with the cursor in it; again, closes it. */
+  protected toggleFilter(): void {
+    const open = !(this.filterOpen() || this.query() !== '');
+    this.filterOpen.set(open);
+    if (!open) this.query.set('');
+    else
+      afterNextRender(() => this.phoneFilterBox()?.nativeElement.focus(), {
+        injector: this.injector,
+      });
+  }
+
+  protected showAll(): void {
+    this.listening.set(null);
+    this.author.set(ANY_AUTHOR);
+  }
+
+  protected toggleListening(state: Listening): void {
+    this.listening.set(this.listening() === state ? null : state);
+  }
+
+  protected chooseAuthor(value: string): void {
+    this.author.set(this.author() === value ? ANY_AUTHOR : value);
+  }
+
+  private followLayout(): void {
+    const query =
+      this.host.nativeElement.ownerDocument.defaultView?.matchMedia?.(
+        PHONE_QUERY,
+      );
+    if (!query) return;
+    const onChange = (event: MediaQueryListEvent) =>
+      this.phone.set(event.matches);
+    query.addEventListener('change', onChange);
+    this.destroyRef.onDestroy(() =>
+      query.removeEventListener('change', onChange),
+    );
   }
 
   protected menuLabelOf(item: MediaItem): string {
@@ -260,14 +620,10 @@ export class MediaListPage {
       this.query.set(event.target.value);
   }
 
-  protected filterByAuthor(event: Event): void {
-    if (event.target instanceof HTMLSelectElement)
-      this.author.set(event.target.value);
-  }
-
   protected clearFilter(): void {
     this.query.set('');
     this.author.set(ANY_AUTHOR);
+    this.listening.set(null);
   }
 
   protected openUpload(): void {
@@ -442,3 +798,6 @@ export class MediaListPage {
     row.nativeElement.focus();
   }
 }
+
+const transcriptionFailed = (): string =>
+  $localize`:@@media.transcription.failed:A transcrição falhou`;

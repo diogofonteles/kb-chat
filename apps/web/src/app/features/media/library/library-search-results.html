@@ -3,11 +3,16 @@
   aria-labelledby="results-title"
   [attr.aria-busy]="pending()"
 >
-  <div class="head">
+  <!-- Nothing found: the empty state says it all (media-library-search-empty); the title stays
+       for the screen reader and the focus. -->
+  <div class="head" [class.visually-hidden]="nothingFound()">
     <div class="title">
       <h3 id="results-title" #title tabindex="-1">
         @if (lastPage() && !failed()) {
           {{ countText() }}
+          <ng-container i18n="@@library.results.for"
+            >para “{{ query().trim() }}”</ng-container
+          >
         } @else {
           <ng-container i18n="@@library.results.title">Resultados</ng-container>
         }
@@ -16,15 +21,15 @@
         <span class="busy" i18n="@@library.results.busy">Buscando…</span>
       }
     </div>
-    <app-library-controls
-      [compact]="true"
-      [facets]="facets()"
-      [filters]="filters()"
-      [sort]="sort()"
-      [view]="view()"
-      [topics]="topics()"
-      (filtersChange)="filtersChange.emit($event)"
-    />
+    @if (searchesSpeech()) {
+      <p class="where" i18n="@@library.results.where">
+        na fala, no título, no autor e nos assuntos
+      </p>
+    } @else {
+      <p class="where" i18n="@@library.results.whereTitles">
+        no título, no autor e nos assuntos
+      </p>
+    }
   </div>
 
   @if (failed()) {
@@ -53,32 +58,23 @@
   } @else if (nothingFound()) {
     <div class="empty">
       <span class="empty-icon"><ui-icon name="search" [size]="32" /></span>
+      <p class="empty-title" i18n="@@library.searchEmpty">
+        Nada encontrado para “{{ query().trim() }}”
+      </p>
       @if (searchesSpeech()) {
-        <p class="empty-title" i18n="@@library.searchEmpty">
-          Nada encontrado para '{{ query().trim() }}' na fala, no título, no
-          autor ou nos assuntos.
-        </p>
         <p class="hint" i18n="@@library.searchEmptyHint">
-          Na fala, a busca é por palavra inteira: confira a escrita ou tente
+          <span class="hint-where"
+            >Procuramos na fala, no título, no autor e nos assuntos.
+          </span>
+          Na fala a busca é por palavra inteira: confira a escrita ou tente
           outra palavra.
         </p>
       } @else {
-        <p class="empty-title" i18n="@@library.searchEmptyTitles">
-          Nada encontrado para '{{ query().trim() }}' no título, no autor ou nos
-          assuntos.
+        <p class="hint" i18n="@@library.searchEmptyTitles">
+          Procuramos no título, no autor e nos assuntos.
         </p>
       }
       <div class="actions">
-        @if (otherCollections()) {
-          <button
-            type="button"
-            uiButton="outline"
-            (click)="searchEverywhere()"
-            i18n="@@library.searchAllTopics"
-          >
-            Buscar em todos os acervos
-          </button>
-        }
         <button
           type="button"
           uiButton="white"

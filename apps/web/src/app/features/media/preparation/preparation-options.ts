@@ -1,4 +1,5 @@
 import { DatePipe } from '@angular/common';
+import { UiIcon } from '@ui/icon.js';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -6,6 +7,7 @@ import {
   computed,
   inject,
   input,
+  signal,
 } from '@angular/core';
 import { PLAN_ESTIMATE_TOLERANCE, type TrackChoice } from '@kb-chat/contracts';
 import { PlanForm } from './plan-form.js';
@@ -15,6 +17,13 @@ import {
   usdUpText,
   type PlanRefusal,
 } from './preparation-labels.js';
+
+/** The phone's row names the division chosen with the words of its choice. */
+const TRACK_CHOICE_LABELS: Record<TrackChoice, () => string> = {
+  none: () => $localize`:@@prep.option.none:Não dividir agora`,
+  manual: () => $localize`:@@prep.option.manual:Vou marcar as faixas eu mesmo`,
+  ai: () => $localize`:@@prep.option.ai:Propor as faixas com IA`,
+};
 
 /** A choice, its id for `aria-describedby` and why it is off. */
 type Refusable = 'speakers' | 'manual' | 'ai' | 'subjects';
@@ -26,10 +35,11 @@ type Refusable = 'speakers' | 'manual' | 'ai' | 'subjects';
  */
 @Component({
   selector: 'app-preparation-options',
-  imports: [DatePipe],
+  imports: [DatePipe, UiIcon],
   templateUrl: './preparation-options.html',
   styleUrl: './preparation-options.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.compact]': 'compact()' },
 })
 export class PreparationOptions {
   private readonly locale = inject(LOCALE_ID);
@@ -38,8 +48,18 @@ export class PreparationOptions {
   readonly locked = input(false);
   /** The choices are for several files at once: the estimates add them up. */
   readonly several = input(false);
+  /**
+   * The upload panel's column (media-upload): smaller words, the division as one card with
+   * a plain list of choices, only the one that cannot be chosen saying why.
+   */
+  readonly compact = input(false);
 
   protected readonly choices = this.form.choices;
+  /** The phone's "Dividir em faixas ›" row opened on its three choices. */
+  protected readonly tracksOpen = signal(false);
+  protected readonly tracksChoice = computed(() =>
+    TRACK_CHOICE_LABELS[this.choices().tracks](),
+  );
   protected readonly offer = this.form.offer;
   protected readonly transcriberOff = computed(
     () => this.offer()?.transcriber === 'off',

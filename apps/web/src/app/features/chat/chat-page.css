@@ -232,6 +232,43 @@
   color: var(--color-accent);
 }
 
+/* A page with its own header on a desktop: its frames have no collection bar. */
+.topbar[hidden] {
+  display: none;
+}
+
+/* A page with its own header (PageHeader): on a phone, "<avatar> Biblioteca  🔍 ⬆" in the
+   v2 frames' row (media-library@mobile: title 24/700, its icon buttons at the end). */
+.topbar.own .own-title {
+  flex: 1 1 0;
+  font-family: inherit;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.own-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+/* A page with its own header and colour (the library, a collection's album page) paints its
+   own gradient from the top: on a phone the top row is its first band, with no seam. */
+.conversation.own-header {
+  background: var(--color-bg);
+}
+
+.conversation.own-header .topbar.own {
+  background: color-mix(in srgb, var(--own-tint) 70%, transparent);
+}
+
+.menu.back {
+  color: var(--color-text);
+}
+
 .view-switch {
   flex-shrink: 0;
   margin-left: auto;

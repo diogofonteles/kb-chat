@@ -49,6 +49,17 @@ export function resumeTextOf(item: LibraryTrack): string {
     : $localize`:@@media.resumeFrom:Continuar de ${formatClock(at)}:time:`;
 }
 
+/** "parou em 0:22": the table's status cell for a media heard in part (media-library). */
+export function stoppedAtTextOf(item: LibraryTrack): string {
+  const at =
+    item.status === 'ready'
+      ? resumeFrom(item.positionMs, item.durationMs)
+      : null;
+  return at === null
+    ? ''
+    : $localize`:@@library.stoppedAt:parou em ${formatClock(at)}:time:`;
+}
+
 /** The share already heard, for the thin bar (the text says it too). */
 export const percentOf = (item: LibraryTrack): number =>
   item.durationMs
@@ -145,6 +156,8 @@ export type FilterChange =
   | { readonly kind: 'topic'; readonly topic: string | null }
   /** A subject's key (KBC-070), null for every subject. */
   | { readonly kind: 'subject'; readonly subject: string | null }
+  /** "Todas": every state and every author (the collection and the subject stay). */
+  | { readonly kind: 'all' }
   | { readonly kind: 'clear' };
 
 export const NO_FILTERS: LibraryFilters = {
@@ -171,6 +184,7 @@ const FILTER_CHANGES: {
   }),
   topic: (filters, change) => ({ ...filters, topic: change.topic }),
   subject: (filters, change) => ({ ...filters, subject: change.subject }),
+  all: (filters) => ({ ...filters, states: [], authors: [] }),
   clear: () => NO_FILTERS,
 };
 
