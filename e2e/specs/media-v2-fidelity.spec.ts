@@ -669,3 +669,48 @@ test("the phone's rhythm: bookmarks under their count, sheets' rows 4 apart, the
   await mini.click({ position: { x: 24, y: 24 } });
   await expect(page).toHaveURL(/\/midia\/[0-9a-f-]{36}/);
 });
+
+/**
+ * Where the lecture stands in the AI research, as the API words a long state: waiting for a
+ * Mac off since another day (the line then says the day), or kb's own failure (up to 200
+ * characters, publication-status.ts).
+ */
+const LONG_PUBLICATIONS = [
+  { state: 'waiting-mac', offSince: '2026-10-02T11:29:00.000Z' },
+  {
+    state: 'failed',
+    since: '2026-11-18T10:00:00.000Z',
+    reason:
+      'kb publish: o índice do acervo hermetismo está bloqueado por outra escrita (database is locked) e o documento da faixa não pôde ser gravado no cofre; tente de novo quando o Mac terminar',
+  },
+] as const;
+
+for (const publication of LONG_PUBLICATIONS)
+  test(`the AI research line stays inside the page when it says more than the frame (${publication.state})`, async ({
+    page,
+  }) => {
+    test.skip(!desktop(page), 'the desktop head keeps it beside the pill');
+    await page.route('**/api/v1/media/*/publication', async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        json: { ...(await response.json()), publication },
+      });
+    });
+    await openPlayer(page);
+    const line = page
+      .locator('app-media-player-page app-track-publication-status')
+      .first()
+      .getByRole('status');
+    await expect(line).toContainText('Pesquisa com IA:');
+    const panel = await boxOf(page.locator('app-media-player-page'));
+    const words = line.locator('.words');
+    const shown = await boxOf(words);
+    // Inside the panel, its words whole: wrapped, not cut at the panel's edge.
+    expect(shown.x).toBeGreaterThanOrEqual(panel.x);
+    expect(shown.x + shown.width).toBeLessThanOrEqual(panel.x + panel.width);
+    expect(
+      await words.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+    ).toBe(true);
+    await expect(words).toBeInViewport({ ratio: 1 });
+  });

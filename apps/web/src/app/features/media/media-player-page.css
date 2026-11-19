@@ -133,6 +133,17 @@
   font-size: var(--text-meta);
 }
 
+/* Over the cover's tint a pill keeps its own ground: its 15 % of the tone over the page's
+   colour, not over a tint that changes with every title (WCAG 1.4.3: 4.5:1 whatever the
+   cover; over the tint the waiting pill fell to 4.4:1 in the dark theme, 2:1 in the light). */
+.note ui-pill {
+  background: color-mix(in srgb, var(--ui-pill-fg) 15%, var(--color-bg));
+}
+
+.note ui-pill[data-tone='muted'] {
+  background: color-mix(in srgb, var(--color-text) 10%, var(--color-bg));
+}
+
 .pill-why {
   flex: none;
   margin-left: calc(-1 * var(--space-1));
@@ -146,22 +157,36 @@
 }
 
 /* A desktop keeps the pill and the AI-research line on one row, as drawn (pHeader): the
-   line may run into the page's side padding rather than wrap under the pill. */
+   line may run into the head's right padding (the frame's ends 4 px from the panel's edge)
+   rather than go under the pill. Words too long for that go under the pill, as wide as
+   the head's column, and wrap there: never past the panel's edge, where they were cut. */
 @media (min-width: 1024px) {
   .note:has(> app-track-publication-status) {
-    flex-wrap: nowrap;
     /* Its words never widen the head's column (the title keeps its 472 and its lines). */
     width: 0;
-    min-width: 100%;
+    min-width: calc(100% + var(--space-8));
+  }
+
+  .note > app-track-publication-status {
+    min-width: 0;
+    max-width: calc(100% - var(--space-8));
   }
 
   .note ::ng-deep app-track-publication-status .line {
     flex-wrap: nowrap;
-    white-space: nowrap;
+  }
+
+  .note ::ng-deep app-track-publication-status .words {
+    min-width: 0;
   }
 
   .note ::ng-deep app-track-publication-status .publication {
     flex-wrap: nowrap;
+  }
+
+  /* "Tentar de novo" keeps its one line; the words beside it give way. */
+  .note ::ng-deep app-track-publication-status .publication > button {
+    flex: none;
   }
 }
 
