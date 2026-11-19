@@ -60,9 +60,23 @@
   grid-area: 1 / 1;
 }
 
-/* The box at the column's start, the number at its end (media-library-selection). */
+/* The box at the column's start, the number at its end (media-library-selection). A 24 px
+   target (WCAG 2.5.8) around the frame's 18 px box: a transparent 3 px ring, the box's edge
+   drawn inside it, the box where the frame has it. */
 .lead > .select {
   justify-self: start;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-inline-start: -0.1875rem;
+  border: 0.1875rem solid transparent;
+  border-radius: 7px;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 1px var(--ui-check-edge);
+}
+
+.lead > .select:checked {
+  border-color: transparent;
+  box-shadow: none;
 }
 
 /* Over the box in the same cell, they only show: a press there is the box's (WebKit can
@@ -80,14 +94,14 @@
    An unchecked box is hidden by its edge, not by opacity: going from 0 to 1 on 2 000 boxes
    when the selection starts changed every row's paint layers (NFR-2). A checked box is in a
    selected row, shown anyway. It stays focusable all along. */
-.select:not(:checked) {
-  border-color: transparent;
+.lead > .select:not(:checked) {
+  box-shadow: none;
 }
 
-:host(:hover) .select:not(:checked),
-:host(:focus-within) .select:not(:checked),
-:host-context(.selecting) .select:not(:checked) {
-  border-color: var(--ui-check-edge);
+:host(:hover) .lead > .select:not(:checked),
+:host(:focus-within) .lead > .select:not(:checked),
+:host-context(.selecting) .lead > .select:not(:checked) {
+  box-shadow: inset 0 0 0 1px var(--ui-check-edge);
 }
 
 :host(:hover) .number,
@@ -457,8 +471,10 @@ app-menu-button {
     grid-area: mark;
     display: grid;
     place-items: center;
-    width: 1.125rem;
+    /* A 24 px target (WCAG 2.5.8) reaching 3 px into the gaps of its 18 px column. */
+    width: 1.5rem;
     height: 2rem;
+    margin-inline: -0.1875rem;
     overflow: visible;
     clip-path: none;
   }
@@ -637,8 +653,8 @@ app-menu-button {
   /* With no hover to bring it out, the unchecked box shows its edge once it is there: an
      invisible box would take a tap on what looks like blank space. Still the edge, not
      opacity, as above (NFR-2). */
-  .select:not(:checked) {
-    border-color: var(--ui-check-edge);
+  .lead > .select:not(:checked) {
+    box-shadow: inset 0 0 0 1px var(--ui-check-edge);
   }
 
   .number,

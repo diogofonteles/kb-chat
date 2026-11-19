@@ -326,10 +326,8 @@ test('AC-4: three selected — the bar takes the foot of the phone, and the mark
     await expect(boxOf(2)).toBeHidden();
     await longPressToSelect(page, rowOf(page, lecture(1)), boxOf(1));
     for (const n of [2, 3])
-      await expect(boxOf(n)).not.toHaveCSS(
-        'border-top-color',
-        'rgba(0, 0, 0, 0)',
-      );
+      // The edge is drawn inside the box's transparent 24 px target ring (WCAG 2.5.8).
+      await expect(boxOf(n)).not.toHaveCSS('box-shadow', 'none');
   }
   for (const n of [1, 2, 3]) await boxOf(n).check();
   const bar = page.getByRole('region', { name: 'Seleção' });
@@ -712,5 +710,40 @@ for (const theme of ['light', 'dark', 'esoteric'] as const)
     await page.getByRole('button', { name: /^Ordenar:/ }).click();
     await expect(page.getByRole('menu')).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
+    await page.context().close();
+  });
+
+/** WCAG 2.2 AA too: axe leaves target-size (2.5.8) out unless its tag is asked for. */
+const seriousWcag22 = async (page: Page) =>
+  (
+    await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze()
+  ).violations.filter((violation) =>
+    ['serious', 'critical'].includes(violation.impact ?? ''),
+  );
+
+for (const theme of ['light', 'dark'] as const)
+  test(`WCAG 2.5.8 (${theme}): a short list's selection box is a 24 px target around its 18 px drawing`, async ({
+    browser,
+  }) => {
+    const page = await listener(browser, [collection]);
+    await useTheme(page, theme);
+    await openLibrary(page, collection);
+    const row = rowOf(page, lecture(1));
+    const box = all(page).getByRole('checkbox', {
+      name: `Selecionar ${lecture(1).title}`,
+    });
+    if (desktop(page)) await row.hover();
+    else await longPressToSelect(page, row, box);
+    await expect(box).toBeVisible();
+    const target = await box.boundingBox();
+    expect(target?.width ?? 0).toBeGreaterThanOrEqual(24);
+    expect(target?.height ?? 0).toBeGreaterThanOrEqual(24);
+    // What is drawn stays the frame's 18 px box (v2 · Componentes › Checkbox).
+    expect(
+      await box.evaluate((input) => [input.clientWidth, input.clientHeight]),
+    ).toEqual([18, 18]);
+    expect(await seriousWcag22(page)).toEqual([]);
     await page.context().close();
   });
