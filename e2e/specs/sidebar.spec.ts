@@ -241,8 +241,14 @@ test('AC-9: on a phone the Menu drawer closes with Escape and focus returns to t
   await menu.click();
   await drawer.getByRole('button', { name: 'Fechar menu' }).click();
   await expect(drawer).toBeHidden();
+  // The phone Menu fills the screen, so there is no "outside" to tap: a fixed point lands on
+  // whatever row the data put there, and on CI that was a row's ✎ or the Acervos "+", which open
+  // a dialog instead. Choosing a collection by its row is what closes the Menu.
   await menu.click();
-  await page.mouse.click(380, 400);
+  await drawer
+    .locator('.ui-libitem-row--collection')
+    .first()
+    .click({ position: { x: 24, y: 24 } });
   await expect(drawer).toBeHidden();
 });
 
