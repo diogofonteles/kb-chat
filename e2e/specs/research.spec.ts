@@ -94,10 +94,16 @@ test('KBC-017 AC-9: "Exaustivo" explains itself, asks with the exhaustive profil
   await expect(
     page.getByText(/Varre o acervo inteiro.*pode levar vários minutos/),
   ).toBeVisible();
+  // The question box's chip is drawn 32 high (v2), its radio the 44 target around it; the
+  // phone's chips are 44 buttons (MA-03).
   const option = await page
     .locator('.profile-option')
     .last()
-    .evaluate((el) => el.getBoundingClientRect().height);
+    .evaluate(
+      (el) =>
+        (el.querySelector('.profile-radio') ?? el).getBoundingClientRect()
+          .height,
+    );
   expect(option).toBeGreaterThanOrEqual(44);
   const asked = page.waitForRequest(
     (request) =>
