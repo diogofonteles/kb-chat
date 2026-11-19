@@ -66,13 +66,14 @@
       <span>{{ line.state }}</span>
     </p>
     @if (leftText(line.stage); as left) {
-      @if (leftTextNarrow(line.stage); as narrow) {
-        @if (narrow !== left) {
-          <p class="detail wide-only">{{ left }}</p>
-          <p class="detail narrow-only">{{ narrow }}</p>
-        } @else {
-          <p class="detail">{{ left }}</p>
-        }
+      @if (retryCostShort(line.stage); as short) {
+        <!-- A phone says the retry's cost in the same line (prmFail: "… (cerca de US$ 0,020)."). -->
+        <p class="detail">
+          {{ left.slice(0, -1)
+          }}<span class="narrow-only">&ngsp;{{ short }}</span>{{ left.slice(-1) }}
+        </p>
+      } @else {
+        <p class="detail">{{ left }}</p>
       }
     }
     @if (line.stage.canRetry) {

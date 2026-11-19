@@ -3,6 +3,7 @@ import { CSRF, expect, ownerApi } from './fixtures.js';
 import {
   closePlayer,
   audioState,
+  leaveToMediaList,
   listenerTest as test,
   uniqueTag,
   uploadReady,
@@ -123,7 +124,7 @@ test('AC-10, NFR-1: the audio goes on while the person searches, in the mini-pla
 }) => {
   await playLecture(page);
   const stop = await sampleClock(page);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   // The album page (its phone top row has "←", not the menu's avatar: media-list@mobile).
   await expect(page).toHaveURL(/\/midia(\?|$)/);
   await toConversation(page);
@@ -150,14 +151,21 @@ test('AC-10, NFR-1: the audio goes on while the person searches, in the mini-pla
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pausar' })).toBeVisible();
   expect((await audioState(page)).currentTime).toBeGreaterThanOrEqual(before);
-  await expect(mini(page)).toHaveCount(0);
+  // On its own page a phone's full player replaces the bar; a desktop keeps the bar as the
+  // page's echo (v2 · Mídia — Player), its transport out of the reading order.
+  if ((page.viewportSize()?.width ?? 0) < 1024)
+    await expect(mini(page)).toHaveCount(0);
+  else
+    await expect(
+      mini(page).getByRole('button', { name: 'Pausar' }),
+    ).toHaveCount(0);
 });
 
 test('AC-7: typing in the question box never drives the mini-player', async ({
   page,
 }) => {
   await playLecture(page);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   // The album page (its phone top row has "←", not the menu's avatar: media-list@mobile).
   await expect(page).toHaveURL(/\/midia(\?|$)/);
   await toConversation(page);
@@ -172,7 +180,7 @@ test('AC-11: "Fechar o player" stops, saves the position and closes', async ({
   page,
 }) => {
   await playLecture(page);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   // The album page (its phone top row has "←", not the menu's avatar: media-list@mobile).
   await expect(page).toHaveURL(/\/midia(\?|$)/);
   await expect(mini(page)).toBeVisible();
@@ -194,7 +202,7 @@ test('FR-8: leaving the player paused closes it, with no mini-player', async ({
 }) => {
   await page.goto(`/midia/${lecture.id}`);
   await expect(page.getByRole('button', { name: 'Tocar' })).toBeEnabled();
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   // The album page (its phone top row has "←", not the menu's avatar: media-list@mobile).
   await expect(page).toHaveURL(/\/midia(\?|$)/);
   await expect(page.getByRole('heading', { name: /Acervo — / })).toBeVisible();
@@ -205,7 +213,7 @@ test('AC-16: nothing focused hides behind the mini-player', async ({
   page,
 }) => {
   await playLecture(page);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   // The album page (its phone top row has "←", not the menu's avatar: media-list@mobile).
   await expect(page).toHaveURL(/\/midia(\?|$)/);
   await toConversation(page);
@@ -229,7 +237,7 @@ test('AC-16: on the media list too, nothing focused hides behind the mini-player
   page,
 }) => {
   await playLecture(page);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   // The album page (its phone top row has "←", not the menu's avatar: media-list@mobile).
   await expect(page).toHaveURL(/\/midia(\?|$)/);
   await expect(page.getByRole('heading', { name: /Acervo — / })).toBeVisible();
@@ -276,7 +284,7 @@ test('a media removed while it plays in the mini-player stops and says why', asy
   await expect
     .poll(async () => (await audioState(page)).currentTime)
     .toBeGreaterThan(0.5);
-  await page.getByRole('link', { name: '← Mídia' }).click();
+  await leaveToMediaList(page);
   // The album page (its phone top row has "←", not the menu's avatar: media-list@mobile).
   await expect(page).toHaveURL(/\/midia(\?|$)/);
   await expect(mini(page)).toBeVisible();

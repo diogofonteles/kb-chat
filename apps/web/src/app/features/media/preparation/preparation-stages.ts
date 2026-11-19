@@ -117,12 +117,9 @@ export class PreparationStageList {
   }
 
   /** What a proposal that failed left in the draft, and what became of its cost (BR-6). */
-  /**
-   * A phone says what was left and the retry's cost in one line (v2 · Mídia — Preparar,
-   * celular: "… refaz só as que faltam (cerca de US$ 0,020)."); otherwise as a desktop.
-   */
-  protected leftTextNarrow(stage: PreparationStage): string {
-    const { windows, spentUsd, canRetry, estimateUsd } = stage;
+  /** The retry's cost in a word, for a phone's one line: "(cerca de US$ 0,020)". */
+  protected retryCostShort(stage: PreparationStage): string {
+    const { windows, canRetry, estimateUsd } = stage;
     if (
       !windows ||
       windows.done === 0 ||
@@ -131,10 +128,9 @@ export class PreparationStageList {
       stage.stage !== 'tracks' ||
       estimateUsd === null
     )
-      return this.leftText(stage);
-    const spent = this.usd(spentUsd ?? 0);
+      return '';
     const value = usdUpText(estimateUsd, this.locale);
-    return $localize`:@@prep.failure.leftWithCost:${windows.done}:done: de ${windows.total}:total: janelas prontas, por ${spent}:spent:. Tentar de novo refaz só as que faltam (cerca de ${value}:value:).`;
+    return $localize`:@@prep.failure.costShort:(cerca de ${value}:value:)`;
   }
 
   protected leftText(stage: PreparationStage): string {

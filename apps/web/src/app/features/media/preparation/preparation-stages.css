@@ -188,7 +188,7 @@
   }
 
   .narrow-only {
-    display: block;
+    display: inline;
   }
 }
 

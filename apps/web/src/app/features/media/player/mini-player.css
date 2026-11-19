@@ -235,6 +235,12 @@ a.title:hover {
   white-space: nowrap;
 }
 
+/* The page's seek line in the bar, beside its own player (echo). */
+.timeline .seek {
+  flex: 1;
+  min-width: 0;
+}
+
 .progress {
   flex: 1;
   height: 4px;

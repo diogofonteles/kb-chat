@@ -8,7 +8,11 @@
     i18n-aria-label="@@mini.region"
     [style.--mini-tint]="tint()"
   >
-    <div class="now" [attr.inert]="echo() ? '' : null">
+    <div
+      class="now"
+      [attr.inert]="echo() ? '' : null"
+      [attr.aria-hidden]="echo() ? 'true' : null"
+    >
       <ui-cover class="cover" [title]="current.title" [size]="56" />
       <div class="text">
         @if (gone()) {
@@ -53,8 +57,14 @@
         <ui-icon [name]="marked() ? 'bookmarkFill' : 'bookmark'" [size]="20" />
       </button>
     </div>
-    <div class="controls" [attr.inert]="echo() ? '' : null">
-      <div class="buttons">
+    <div class="controls">
+      <!-- Beside the page's own player its transport is an echo; the seek line is the page's
+           only one on a desktop (v2 · Mídia — Player), so it stays. -->
+      <div
+        class="buttons"
+        [attr.inert]="echo() ? '' : null"
+        [attr.aria-hidden]="echo() ? 'true' : null"
+      >
         <app-menu-button
           class="speed"
           [class.on]="speedChanged()"
@@ -127,18 +137,35 @@
             >
           }
         </span>
-        <div
-          class="progress"
-          role="progressbar"
-          aria-label="Posição"
-          i18n-aria-label="@@mini.progress"
-          aria-valuemin="0"
-          aria-valuemax="100"
-          [attr.aria-valuenow]="roundedPercent()"
-          [attr.aria-valuetext]="positionText()"
-        >
-          <span class="played" [style.width.%]="percent()"></span>
-        </div>
+        @if (echo()) {
+          <!-- Beside the page's own player the bar's line is the page's seek line (a desktop
+               has no other, v2 · Mídia — Player); bookmarks and track starts stay on it. -->
+          <app-seek-slider
+            class="seek"
+            [marks]="bookmarks.positions()"
+            [trackMarks]="trackStarts()"
+            [restricted]="restricted.spans()"
+            [currentMs]="engine.playback().currentMs"
+            [durationMs]="engine.playback().durationMs"
+            [bufferedEndMs]="engine.playback().bufferedEndMs"
+            [disabled]="!engine.operable()"
+            (seekRequested)="engine.seek($event)"
+            (stepRequested)="engine.skip($event)"
+          />
+        } @else {
+          <div
+            class="progress"
+            role="progressbar"
+            aria-label="Posição"
+            i18n-aria-label="@@mini.progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            [attr.aria-valuenow]="roundedPercent()"
+            [attr.aria-valuetext]="positionText()"
+          >
+            <span class="played" [style.width.%]="percent()"></span>
+          </div>
+        }
         <span class="total" aria-hidden="true">{{ total() }}</span>
       </div>
     </div>

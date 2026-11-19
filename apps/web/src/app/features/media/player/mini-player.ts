@@ -32,6 +32,7 @@ import { BookmarksStore } from '@core/media/bookmarks-store.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import { PlayerVolume } from './player-volume.js';
+import { SeekSlider } from './seek-slider.js';
 import { SleepTimerDialog } from './sleep-timer-dialog.js';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { RightPanel } from '@features/shell/right-panel.js';
@@ -52,6 +53,7 @@ const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
   imports: [
     RouterLink,
     MenuButton,
+    SeekSlider,
     SleepTimerDialog,
     UiButton,
     UiCover,
@@ -68,9 +70,9 @@ const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
   },
 })
 export class MiniPlayer {
-  private readonly engine = inject(MediaEngine);
+  protected readonly engine = inject(MediaEngine);
   /** Skips the parts above the person's level wherever it plays (KBC-106). */
-  private readonly restricted = inject(RestrictedSkipper);
+  protected readonly restricted = inject(RestrictedSkipper);
   private readonly saver = inject(ProgressSaver);
   private readonly preferences = inject(ListeningPreferences);
   private readonly sleepTimer = inject(SleepTimerService);
@@ -155,6 +157,11 @@ export class MiniPlayer {
   protected readonly source = this.engine.source;
   /** The track playing, under the recording's title (KBC-066 FR-9). */
   protected readonly currentTrack = inject(TracksStore).current;
+  private readonly currentTrackList = inject(TracksStore).tracks;
+  /** Where the tracks start, on the seek line (KBC-066 FR-9). */
+  protected readonly trackStarts = computed(() =>
+    this.currentTrackList().map((track) => track.startMs),
+  );
   /** The server no longer has what plays for this person (removed, access taken away). */
   protected readonly gone = computed(() => {
     const source = this.source();
@@ -214,7 +221,7 @@ export class MiniPlayer {
       .subscribe(() => this.engine.pause());
   }
 
-  private readonly bookmarks = inject(BookmarksStore);
+  protected readonly bookmarks = inject(BookmarksStore);
   private readonly volumeMemory = inject(PlayerVolume);
   /** Marking needs the loaded media's bookmarks (KBC-042 FR-2). */
   protected readonly canMark = computed(
