@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   inject,
+  input,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import type { ProcessingQueueItem, QueueAction } from '@kb-chat/contracts';
@@ -361,8 +362,30 @@ export class QueueSummary {
   private readonly session = inject(SessionStore);
   protected readonly path = QUEUE_PAGE_PATH;
   /** What needs the person first: with three at work it would never show. */
-  private readonly shown = computed(() => {
+  /**
+   * The collections the page is about (the library's scope with its sub-collections), or
+   * null for every one: the block never shows another collection's audio (owner, 2026-11-19).
+   */
+  readonly scope = input<ReadonlySet<string> | null>(null);
+  private readonly inScope = computed(() => {
+    const scope = this.scope();
     const items = this.store.items();
+    return scope ? items.filter((item) => scope.has(item.topic)) : items;
+  });
+  /** What is at work or in line, in the scope: the server's count less what is outside it. */
+  private readonly active = computed(() => {
+    const scope = this.scope();
+    if (!scope) return this.store.active();
+    const outside = this.store
+      .items()
+      .filter(
+        ({ phase, topic }) =>
+          !scope.has(topic) && (phase === 'running' || phase === 'next'),
+      ).length;
+    return Math.max(0, this.store.active() - outside);
+  });
+  private readonly shown = computed(() => {
+    const items = this.inScope();
     return [
       ...items.filter(({ phase }) => phase === 'attention'),
       ...items.filter(({ phase }) => phase === 'running' || phase === 'next'),
@@ -384,7 +407,7 @@ export class QueueSummary {
   ]);
   /** The phone's card: how many, then what each needs (media-library@mobile). */
   protected readonly compactTitle = computed(() => {
-    const active = this.store.active() + this.sending().length;
+    const active = this.active() + this.sending().length;
     if (active > 0) return this.titleText();
     const count = this.shown().length;
     return count === 1
@@ -401,7 +424,7 @@ export class QueueSummary {
     ].join(' · ');
   });
   protected readonly titleText = computed(() => {
-    const active = this.store.active() + this.sending().length;
+    const active = this.active() + this.sending().length;
     if (active === 0)
       return $localize`:@@queue.summary.waiting:Precisa da sua atenção`;
     return active === 1

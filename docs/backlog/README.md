@@ -43,6 +43,7 @@ Pedido do dono: levar o app inteiro para a UI/UX v2 desenhada no Figma ("Nova Al
 | [KBC-151](KBC-151-who-speaks-in-the-audio-source.md) | Quem fala na fonte de áudio para quem só ouve (pendência do KBC-150) | ui-v2-areas | draft | KBC-150 |
 | [KBC-155](KBC-155-audio-source-one-control.md) | Fonte de áudio com um controle só (a barra do player) e citações da mesma faixa agrupadas | ui-v2-areas | ready | KBC-150, KBC-154 |
 | [KBC-156](KBC-156-cited-passage-whole-sentence.md) | Trecho citado de uma faixa cobre a frase inteira (≥ 8 s ou ≥ 12 palavras, até 45 s), nunca um pedaço de 1 s | complete-answers | ready | KBC-099, KBC-150 |
+| [KBC-161](KBC-161-search-several-collections.md) | Buscar e pesquisar em vários acervos de uma vez, só por escolha explícita (padrão: o acervo em uso, KBC-152) | ui-v2-areas | draft | KBC-152 |
 
 Itens que já existiam e que a v2 desenhou (sobem de prioridade junto, na ordem: KBC-052, KBC-053, KBC-054, KBC-055, KBC-059): ver a seção "Fase 2" abaixo. Cada um ganhou a nota "Redesign v2" com o ponto de entrada na casca nova.
 

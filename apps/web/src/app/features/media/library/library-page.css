@@ -82,6 +82,11 @@
   text-overflow: ellipsis;
 }
 
+/* The way between the collection and every collection: beside the scope, never a chip. */
+.actions .scope-switch {
+  flex: none;
+}
+
 .hero-text h2:focus {
   outline: none;
 }

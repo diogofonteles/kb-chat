@@ -150,7 +150,11 @@ const rowNamed = (page: Page, title: string) =>
   rows(page).filter({ hasText: title });
 const filtersOf = (page: Page) => page.getByRole('group', { name: 'Filtros' });
 
-/** The library as the frames have it: every collection, recent plays first, as a list. */
+/**
+ * The library as the frames have it: every collection, recent plays first, as a list. Every
+ * collection is "Todas as mídias", chosen by the address (owner, 2026-11-19): the account's
+ * `allTopics` no longer opens it so.
+ */
 async function openLibrary(page: Page, world: World): Promise<void> {
   const reset = await page.request.put('/api/v1/media/preferences', {
     headers: { 'x-requested-with': 'kb-chat' },
@@ -168,7 +172,7 @@ async function openLibrary(page: Page, world: World): Promise<void> {
   });
   expect(reset.status(), await reset.text()).toBe(200);
   await playInterview(page, world);
-  await go(page, '/biblioteca');
+  await go(page, '/biblioteca?acervos=todos');
   await expect(rows(page).first()).toBeVisible();
 }
 

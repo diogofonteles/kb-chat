@@ -21,9 +21,9 @@
       >
         Biblioteca
       </h2>
-      <p class="ui-page-header__title" aria-hidden="true" i18n="@@library.hero">
-        Tudo para ouvir
-      </p>
+      <!-- The scope, with emphasis: the collection in use (with its sub-collections) or
+           "Todas as mídias" by choice (owner, 2026-11-19). -->
+      <p class="ui-page-header__title library-scope">{{ scopeTitle() }}</p>
       <p class="ui-page-header__meta">{{ headerMeta() }}</p>
     </div>
   </header>
@@ -88,6 +88,19 @@
     >
       <ui-icon name="more" [size]="28" />
     </app-menu-button>
+    <!-- The way between the collection in use and "Todas as mídias": beside the list's own
+         actions, never a filter chip (owner, 2026-11-19). -->
+    @if (!phone() && scopeSwitch(); as change) {
+      <button
+        type="button"
+        uiButton="ghost"
+        size="sm"
+        class="scope-switch"
+        (click)="switchScope(change.topic)"
+      >
+        {{ change.label }}
+      </button>
+    }
     <span class="bar-space"></span>
     <button
       type="button"
@@ -114,6 +127,23 @@
 
   <!-- The phone's top row holds these (PageHeader): the search and the upload. -->
   <ng-template #phoneActions>
+    <!-- A phone has no hero: its top row names the scope, and this is the way between the
+         collection in use and "Todas as mídias" (owner, 2026-11-19). -->
+    @if (scopeSwitch(); as change) {
+      <button
+        type="button"
+        uiIconButton
+        class="phone-action scope-switch"
+        [attr.aria-label]="change.label"
+        [title]="change.label"
+        (click)="switchScope(change.topic)"
+      >
+        <ui-icon
+          [name]="change.topic === null ? 'library' : 'folder'"
+          [size]="24"
+        />
+      </button>
+    }
     <button
       type="button"
       uiIconButton
@@ -145,7 +175,7 @@
   <div class="sections">
     <!-- On a phone the chips come first, the queue's card under them (media-library@mobile). -->
     @if (showQueue() && !phone()) {
-      <app-queue-summary />
+      <app-queue-summary [scope]="scopeTopics()" />
     }
 
     <app-moved-notice
@@ -302,7 +332,7 @@
       <!-- On a phone the selection takes the attention card's place (media-library-selection@mobile):
            hidden by the page's style while it lasts, not destroyed (library-page.css). -->
       @if (showQueue() && phone()) {
-        <app-queue-summary class="phone-queue" />
+        <app-queue-summary class="phone-queue" [scope]="scopeTopics()" />
       }
 
       @if (searching()) {

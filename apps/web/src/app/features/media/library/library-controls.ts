@@ -13,7 +13,6 @@ import {
   type ListeningState,
   type Topic,
 } from '@kb-chat/contracts';
-import { treeTitle } from '@core/topics/topic-tree.js';
 import { UiButton, UiChip } from '@ui/button.js';
 import { UiIcon } from '@ui/icon.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
@@ -33,8 +32,8 @@ interface Chip<T> {
 /**
  * The library's filters (screens.md T16, SL-13/15/16; v2 media-library "filtros"): "Todas",
  * the state chips with aria-pressed, "Autoria ▾" (a menu; once chosen, the author's name
- * with ✕), "Assunto ▾" likewise, "Acervo: <nome> ✕" while one collection is in force and
- * "Limpar filtros". "Ouvidas" shows only when something is heard; the order and the view are
+ * with ✕), "Assunto ▾" likewise and "Limpar filtros". The collection is not here: it is the
+ * page's scope, named in its header (owner, 2026-11-19). "Ouvidas" shows only when something is heard; the order and the view are
  * the action bar's (LibrarySortMenu).
  */
 @Component({
@@ -51,7 +50,7 @@ export class LibraryControls {
   readonly topics = input<readonly Topic[]>([]);
   /** A search is on (KBC-096): only the collection, the rest out of the results' way. */
   readonly compact = input(false);
-  /** A search is on: the collection's chip is the way out, no "Limpar filtros" for it alone. */
+  /** A search is on (the results' own controls). */
   readonly searching = input(false);
   readonly filtersChange = output<FilterChange>();
 
@@ -171,18 +170,6 @@ export class LibraryControls {
     () =>
       $localize`:@@library.clearSubject:Tirar o filtro de assunto: ${this.subjectName()}:name:`,
   );
-  /** The collection in force, named, while the person sees more than one. */
-  protected readonly topicName = computed(() => {
-    const chosen = this.filters().topic;
-    if (chosen === null || this.topics().length < 2) return '';
-    const topic = this.topics().find((one) => one.slug === chosen);
-    return topic ? treeTitle(topic) : chosen;
-  });
-  protected readonly clearTopicLabel = computed(
-    () =>
-      $localize`:@@library.clearTopic:Ver todos os acervos (tirar ${this.topicName()}:name:)`,
-  );
-
   /** "Todas": no state, no author (the collection stays). */
   protected showAll(): void {
     if (!this.noListFilter()) this.filtersChange.emit({ kind: 'all' });
@@ -195,10 +182,6 @@ export class LibraryControls {
   protected chooseAuthorship(id: string): void {
     const value = this.authors().find((one) => one.value === id);
     this.filtersChange.emit({ kind: 'author', author: value?.value ?? null });
-  }
-
-  protected clearTopic(): void {
-    this.filtersChange.emit({ kind: 'topic', topic: null });
   }
 
   protected chooseSubject(id: string): void {

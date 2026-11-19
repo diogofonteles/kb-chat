@@ -50,6 +50,10 @@ import {
   type Topic,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import {
+  ALL_COLLECTIONS_PARAM,
+  ALL_COLLECTIONS_VALUE,
+} from './library-access.js';
 import { TrackGroup } from './track-group.js';
 import { scrollPageByKey } from '../page-keys.js';
 import {
@@ -167,8 +171,10 @@ interface Choices {
 }
 
 /**
- * Where the list is (KBC-091): every collection, one named by a link, or, by default, the one
- * selected in the sidebar.
+ * Where the list is (KBC-091): one named by a link, or, by default, the one selected in the
+ * sidebar (each with its sub-collections, ADR 0028 §6); every collection only while the
+ * address says "Todas as mídias" (`?acervos=todos`, the Biblioteca pin), never from the
+ * account (owner, 2026-11-19: "os acervos não deveriam se misturar").
  */
 type Scope =
   | { readonly kind: 'all' }
@@ -284,17 +290,30 @@ export class LibraryPage {
       filters: kept.libraryFilters,
     };
   });
-  /** A change of collection in the sidebar brings the list along, even from "Todos". */
+  /** "Todas as mídias" in the address: the one way to list every collection. */
+  private readonly allInAddress = signal(
+    this.route.snapshot.queryParamMap.get(ALL_COLLECTIONS_PARAM) ===
+      ALL_COLLECTIONS_VALUE,
+  );
+  /** A change of collection in the sidebar brings the list along, even from "Todas". */
   private readonly scope = linkedSignal<
-    { readonly ready: boolean; readonly slug: string | null },
+    {
+      readonly ready: boolean;
+      readonly slug: string | null;
+      readonly all: boolean;
+    },
     Scope
   >({
     source: () => ({
       ready: this.kept() !== null,
       slug: this.chat.topicSlug(),
+      all: this.allInAddress(),
     }),
-    computation: ({ ready, slug }, previous) => {
+    computation: ({ ready, slug, all }, previous) => {
+      if (all) return { kind: 'all' };
       if (!ready || !previous?.source.ready) return this.startingScope();
+      // Out of "Todas as mídias": back to the collection in use.
+      if (previous.source.all) return { kind: 'selected' };
       const before = previous.source.slug;
       return before === slug || before === null
         ? previous.value
@@ -750,13 +769,80 @@ export class LibraryPage {
           : (this.facets().authors.find((one) => one.slug === author)?.name ??
             author)
         : topic
-          ? (this.titles().get(topic) ?? topic)
+          ? this.collectionLine(topic)
           : $localize`:@@library.allCollections:Todos os acervos`;
     if (this.libraryEmpty())
       return $localize`:@@library.nothingYet:Nenhuma mídia por enquanto`;
     const count = this.countText();
     return count ? `${where} · ${count}` : where;
   });
+  /**
+   * The header's title: the collection the list is about, or "Todas as mídias" by choice —
+   * the page's context, never a removable filter (owner, 2026-11-19).
+   */
+  protected readonly scopeTitle = computed(() => {
+    const choices = this.choices();
+    if (!choices) return '';
+    const { topic } = choices.filters;
+    return topic
+      ? (this.titles().get(topic) ?? topic)
+      : $localize`:@@library.allMedia:Todas as mídias`;
+  });
+  /**
+   * The explicit way between the two scopes, beside the header's title: "Ver todas as mídias"
+   * from a collection, "Ver só <the collection in use>" back from every collection. Nothing
+   * with a single collection in sight.
+   */
+  protected readonly scopeSwitch = computed(() => {
+    const choices = this.choices();
+    if (!choices || this.topics().length < 2) return null;
+    if (choices.filters.topic !== null)
+      return {
+        topic: null,
+        label: $localize`:@@library.seeAllMedia:Ver todas as mídias`,
+      };
+    const slug = this.chat.topicSlug();
+    const title = slug ? this.titles().get(slug) : undefined;
+    return slug && title
+      ? {
+          topic: slug,
+          label: $localize`:@@library.seeOnly:Ver só ${title}:name:`,
+        }
+      : null;
+  });
+
+  /** The collection of the list with its sub-collections, or null for every collection. */
+  protected readonly scopeTopics = computed<ReadonlySet<string> | null>(() => {
+    const choices = this.choices();
+    // Not known yet: nothing, rather than every collection for a moment.
+    if (!choices) return new Set<string>();
+    const { topic } = choices.filters;
+    if (topic === null) return null;
+    return new Set([
+      topic,
+      ...this.topics()
+        .filter((one) => one.parent === topic)
+        .map((one) => one.slug),
+    ]);
+  });
+
+  protected switchScope(topic: string | null): void {
+    this.changeFilter({ kind: 'topic', topic });
+  }
+
+  /** What of the collection the list holds: "Acervo", or "Acervo com <its sub-collections>". */
+  private collectionLine(slug: string): string {
+    const children = this.topics()
+      .filter((one) => one.parent === slug)
+      .map((one) => one.title);
+    if (children.length === 0)
+      return $localize`:@@library.scopeCollection:Acervo`;
+    const names = new Intl.ListFormat('pt-BR', {
+      style: 'long',
+      type: 'conjunction',
+    }).format(children);
+    return $localize`:@@library.scopeWithChildren:Acervo com ${names}:names:`;
+  }
   /** What the green ▶ plays: the first ready media of the list on screen. */
   protected readonly firstPlayable = computed(
     () => this.items().find((item) => item.status === 'ready') ?? null,
@@ -798,7 +884,8 @@ export class LibraryPage {
     this.markChoosing();
     inject(PageHeader).own(
       computed(() => ({
-        title: $localize`:@@library.title:Biblioteca`,
+        // The phone's top row names the scope: the collection in use or "Todas as mídias".
+        title: this.scopeTitle() || $localize`:@@library.title:Biblioteca`,
         back: null,
         actions: this.phoneActions() ?? null,
         tint: LIBRARY_TINT,
@@ -821,6 +908,7 @@ export class LibraryPage {
       )
       .subscribe();
     this.followAddress();
+    this.followAllInAddress();
   }
 
   /** The shell's breakpoint: below it, the phone's layout (the rows' ⋯ changes). */
@@ -889,6 +977,18 @@ export class LibraryPage {
       });
   }
 
+  /** The Biblioteca pin ("Todas as mídias") or a collection of the sidebar: the scope follows. */
+  private followAllInAddress(): void {
+    this.router.events
+      .pipe(
+        filter((event) => event instanceof NavigationEnd),
+        filter(() => !this.isAway()),
+        map(() => this.allFromAddress()),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((all) => this.allInAddress.set(all));
+  }
+
   /** On another page, or on the way to one: a write would replace that page's address. */
   private isAway(): boolean {
     const going = this.router.currentNavigation()?.extractedUrl;
@@ -950,13 +1050,14 @@ export class LibraryPage {
     return this.topics().some((one) => one.slug === topic && one.canOpen);
   }
 
-  /** A link's collection first, then "Todos os acervos", then the selected one (KBC-091). */
+  /**
+   * A link's collection first, else the selected one (KBC-091). "Todos os acervos" kept in
+   * the account no longer opens the library mixed: the collection in use is its scope.
+   */
   private startingScope(): Scope {
     if (this.arrivedWithTopic)
       return { kind: 'topic', slug: this.arrivedWithTopic };
-    return this.kept()?.filters.allTopics
-      ? { kind: 'all' }
-      : { kind: 'selected' };
+    return { kind: 'selected' };
   }
 
   private topicInForce(): string | null {
@@ -1031,9 +1132,34 @@ export class LibraryPage {
     topic: string | null,
     filters: LibraryFilters,
   ): void {
+    this.allInAddress.set(topic === null);
+    this.keepAllInAddress(topic === null);
     this.scope.set(topic ? { kind: 'topic', slug: topic } : { kind: 'all' });
     if (topic && this.canOpen(topic)) this.chat.selectTopic(topic);
     this.saveChoice({ ...filters, topic, allTopics: topic === null });
+  }
+
+  /** "Todas as mídias" goes into the address (or out of it): Back and a reload keep it. */
+  private keepAllInAddress(all: boolean): void {
+    if (this.isAway() || this.allFromAddress() === all) return;
+    const address = this.router.parseUrl(this.router.url);
+    const rest = Object.fromEntries(
+      Object.entries(address.queryParams).filter(
+        ([name]) => name !== ALL_COLLECTIONS_PARAM,
+      ),
+    );
+    address.queryParams = all
+      ? { ...rest, [ALL_COLLECTIONS_PARAM]: ALL_COLLECTIONS_VALUE }
+      : rest;
+    void this.router.navigateByUrl(address);
+  }
+
+  private allFromAddress(): boolean {
+    const { queryParams } = this.router.parseUrl(this.router.url);
+    return (
+      convertToParamMap(queryParams).get(ALL_COLLECTIONS_PARAM) ===
+      ALL_COLLECTIONS_VALUE
+    );
   }
 
   private leaveAllTopics(): void {

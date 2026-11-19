@@ -136,8 +136,9 @@ test('AC-1: the library is a playlist — cover, green ▶, the table, the one p
 }) => {
   const page = await pageAs(browser, OWNER_EMAIL, viewportOf());
   await openLibrary(page, collection);
-  await expect(page.locator('app-library-page')).toContainText(
-    'Tudo para ouvir',
+  // The header names the collection in use (owner, 2026-11-19).
+  await expect(page.locator('app-library-page .library-scope')).toHaveText(
+    /^Zz Acervo /,
   );
   await expect(all(page).getByRole('listitem')).toHaveCount(3);
   // A desktop's header has ▶ for the list; a phone's has none (media-library@mobile): a tap

@@ -160,14 +160,16 @@ test('KBC-091: the library follows the collection, and the header never lies', a
     topic: 'alquimia',
   });
   await page.goto('/biblioteca');
-  // v2 (media-library): the header's line names the scope, and "Acervo: <nome> ✕" says one
-  // collection is in force; its ✕ goes back to every one.
-  const scope = page.locator('app-library-page .hero .ui-page-header__meta');
-  const topicChip = page
-    .locator('app-library-controls')
-    .getByRole('button', { name: /^Ver todos os acervos/ });
-  await expect(scope).toContainText('Hermetismo');
-  await expect(topicChip).toHaveAccessibleName(/Hermetismo/);
+  // The header names the scope, the collection in use (owner, 2026-11-19): no removable
+  // chip; "Todas as mídias" is a choice of its own, kept by the address.
+  const scope = page.locator('app-library-page .hero .library-scope');
+  const meta = page.locator('app-library-page .hero .ui-page-header__meta');
+  await expect(scope).toHaveText('Hermetismo');
+  await expect(
+    page
+      .locator('app-library-controls')
+      .getByRole('button', { name: /^Ver todos os acervos/ }),
+  ).toHaveCount(0);
   // A phone's box opens from the 🔍 of its top row (media-library-search@mobile).
   if ((page.viewportSize()?.width ?? 0) < 1024)
     await page.getByRole('button', { name: 'Abrir a busca' }).click();
@@ -176,13 +178,14 @@ test('KBC-091: the library follows the collection, and the header never lies', a
   await expect(page.getByRole('link', { name: here.title })).toBeVisible();
   await expect(page.getByRole('link', { name: there.title })).toHaveCount(0);
 
-  await topicChip.click();
-  await expect(scope).toContainText('Todos os acervos');
-  await expect(topicChip).toHaveCount(0);
+  await page.getByRole('button', { name: 'Ver todas as mídias' }).click();
+  await expect(page).toHaveURL(/acervos=todos/);
+  await expect(scope).toHaveText('Todas as mídias');
+  await expect(meta).toContainText('Todos os acervos');
   await expect(page.getByRole('link', { name: there.title })).toBeVisible();
 
   await page.reload();
-  await expect(scope).toContainText('Todos os acervos');
+  await expect(meta).toContainText('Todos os acervos');
 
   const heading = page.getByRole('heading', { level: 1 });
   await page.goto(`/midia/${there.id}`);

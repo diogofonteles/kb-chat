@@ -31,7 +31,6 @@ import { HistoryStore } from '@core/history/history-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import { EMPTY, Subject, catchError, filter, map, switchMap } from 'rxjs';
 import { SpendStore } from '@core/spend/spend-store.js';
-import { CollectionHeading } from '@features/chat/collection-heading.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
 import { ResearchStore } from '@features/research/research-store.js';
@@ -39,7 +38,11 @@ import { AccessRequestsStore } from '@core/auth/access-requests-store.js';
 import { SettingsButton } from '@features/settings/settings-button.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
 import { SessionStore } from '@core/auth/session-store.js';
-import { hasLibrary } from '@features/media/library/library-access.js';
+import {
+  ALL_COLLECTIONS_PARAM,
+  ALL_COLLECTIONS_VALUE,
+  hasLibrary,
+} from '@features/media/library/library-access.js';
 import { ProcessingQueueStore } from '@features/media/queue/processing-queue-store.js';
 import { AudioPresence } from '@features/shell/audio-presence.js';
 import { LibraryRecents } from '@features/shell/library-recents.js';
@@ -125,6 +128,11 @@ interface PinnedItem {
   readonly title: string;
   readonly meta: string;
   readonly path: string;
+  /**
+   * Biblioteca only: whether it is the current row, said by the library's scope rather than
+   * the path (see `libraryCurrent`).
+   */
+  readonly current?: boolean;
   readonly icon: 'library' | 'bookmarkFill' | 'upload';
   readonly colors: readonly [string, string];
 }
@@ -203,33 +211,22 @@ export class Sidebar {
   /** Its ids' prefix: the column and the expanded view are on screen together. */
   /** The column's ⤢ is on while "Biblioteca expandida" shows. */
   readonly wide = input(false);
+  private readonly router = inject(Router);
   /** The address without query or fragment, as the router last settled on it. */
   private readonly path = toSignal(
-    inject(Router).events.pipe(
+    this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
       map((event) => event.urlAfterRedirects.split(/[?#]/)[0] ?? ''),
     ),
-    { initialValue: inject(Router).url.split(/[?#]/)[0] ?? '' },
+    { initialValue: this.router.url.split(/[?#]/)[0] ?? '' },
   );
   /**
-   * The conversation is on screen (not a media or settings page over it): only then is the
-   * collection in use the current row (v2 · Sua biblioteca: on /biblioteca the pinned
-   * Biblioteca is, and no collection).
+   * The conversation is on screen (not a media or settings page over it): only then does the
+   * row of the collection in use carry the unassigned-people notice.
    */
   private readonly onConversation = computed(() => this.path() === '/');
-  /**
-   * A recording's own pages (its player, "Preparar áudio", its tracks): its collection is the
-   * current row (v2 · Mídia — Player, Preparar: "Alquimia Prática" lit).
-   */
-  /** The collection the recording's page names (its player, "Preparar áudio"). */
-  private readonly itemTopic = computed(() => {
-    const scope = this.heading.scope();
-    return scope?.kind === 'topic' ? scope.slug : null;
-  });
-  private readonly heading = inject(CollectionHeading);
-  private readonly onMediaItem = computed(() =>
-    /^\/midia\/[0-9a-f-]{36}(\/|$)/.test(this.path()),
-  );
+  /** The library page, in either scope. */
+  private readonly onLibrary = computed(() => this.path() === '/biblioteca');
   /** A pinned page stays the current row with its query (/biblioteca?busca=…, -search). */
   protected readonly activeOptions = {
     paths: 'exact',
@@ -237,6 +234,22 @@ export class Sidebar {
     fragment: 'ignored',
     matrixParams: 'ignored',
   } as const;
+  /** "Todas as mídias" in the address: the library lists every collection, by that choice. */
+  private readonly allInAddress = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => this.allFromAddress()),
+    ),
+    { initialValue: this.allFromAddress() },
+  );
+  /**
+   * Biblioteca opens the library of the collection in use; it is the current row only while
+   * the library lists every collection ("Todas as mídias", chosen on the page). A library of
+   * one collection marks that collection's row, never the pin too (owner, 2026-11-19).
+   */
+  private readonly libraryCurrent = computed(
+    () => this.onLibrary() && this.allInAddress(),
+  );
   protected readonly ns = computed(() =>
     this.expanded() ? 'library-wide' : 'library',
   );
@@ -331,10 +344,12 @@ export class Sidebar {
           topic,
           meta: this.collectionMeta(topic),
           active: this.onConversation() && topic.slug === this.chat.topicSlug(),
-          /** The current row: the conversation's collection, or the recording's own. */
-          lit: this.onConversation()
-            ? topic.slug === this.chat.topicSlug()
-            : this.onMediaItem() && topic.slug === this.itemTopic(),
+          /**
+           * The collection in use, marked on every page (green title, overlay, aria-current):
+           * the person always sees which one the conversation, the search and the library
+           * are about (owner, 2026-11-19).
+           */
+          lit: topic.slug === this.chat.topicSlug(),
         }))
       : [],
   );
@@ -562,6 +577,17 @@ export class Sidebar {
   protected changeTopic(slug: string): void {
     this.chat.selectTopic(slug);
     this.recents.noteCollection(slug);
+    // On the library, a collection is its scope: "Todas as mídias" ends there (the same
+    // collection chosen again included), the words searched stay.
+    if (this.onLibrary()) {
+      const address = this.router.parseUrl(this.router.url);
+      address.queryParams = Object.fromEntries(
+        Object.entries(address.queryParams).filter(
+          ([name]) => name !== ALL_COLLECTIONS_PARAM && name !== 'acervo',
+        ),
+      );
+      void this.router.navigateByUrl(address);
+    }
     this.acted.emit('topic');
   }
 
@@ -637,15 +663,43 @@ export class Sidebar {
       ? {
           key: 'library',
           title: link.title,
-          meta: this.withCount(
-            $localize`:@@library.allMedia:Todas as mídias`,
-            this.counts.total(),
-          ),
+          meta: this.libraryMeta(),
           path: link.path,
+          ...(link.path === '/biblioteca' && {
+            current: this.libraryCurrent(),
+          }),
           icon: 'library',
           colors: ['#7a3d22', '#2a120a'],
         }
       : null;
+  }
+
+  /**
+   * What the library holds: "<the collection in use> · 11" (its media, its sub-collections'
+   * included), the library being that collection's; "Todas as mídias · 40" while it lists
+   * every collection.
+   */
+  private libraryMeta(): string {
+    const topic = this.chat.topic();
+    if (this.libraryCurrent() || !topic)
+      return this.withCount(
+        $localize`:@@library.allMedia:Todas as mídias`,
+        this.counts.total(),
+      );
+    const children = this.chat
+      .topicList()
+      .filter((one) => one.parent === topic.slug)
+      .map((one) => one.slug);
+    return this.withCount(
+      topic.title,
+      this.counts.mediaIn(topic.slug, children),
+    );
+  }
+
+  private allFromAddress(): boolean {
+    const { queryParams } = this.router.parseUrl(this.router.url);
+    const value: unknown = queryParams[ALL_COLLECTIONS_PARAM];
+    return value === ALL_COLLECTIONS_VALUE;
   }
 
   /** "Todas as mídias · 11": the count once known. */
