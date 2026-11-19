@@ -50,12 +50,24 @@ test('KBC-129 AC-6: "Meus marcadores" and the queue show their v2 states and pas
   ).toBeVisible();
   // The summary shows once: the header's on a desktop, the phone's under the title.
   // The page's own summary: Sua biblioteca's "Lista · N marcadores" is another place.
-  await expect(
-    page
-      .getByRole('main')
-      .getByText(/\d+ marcador|Nenhum marcador ainda/)
-      .and(page.locator(':visible')),
-  ).toBeVisible();
+  // With none (a fresh database: the owner's bookmarks are other tests'), a phone draws no
+  // count, only the empty state (media-bookmarks-empty@mobile); a desktop says so in its
+  // header (media-bookmarks-empty).
+  const main = page.getByRole('main');
+  const summary = (text: RegExp) =>
+    main.getByText(text).and(page.locator(':visible'));
+  const empty = main.getByText('Seus marcadores aparecem aqui');
+  await expect(summary(/\d+ marcador/).or(empty)).toBeVisible();
+  if (await empty.isVisible()) {
+    if (desktop(page))
+      await expect(summary(/^Nenhum marcador ainda$/)).toBeVisible();
+    else
+      await expect(summary(/\d+ marcador|Nenhum marcador ainda/)).toHaveCount(
+        0,
+      );
+  } else {
+    await expect(summary(/\d+ marcador/)).toBeVisible();
+  }
   await capture(page, 'bookmarks', info.project.name);
   const bookmarksAxe = await new AxeBuilder({ page })
     .include('.page')
