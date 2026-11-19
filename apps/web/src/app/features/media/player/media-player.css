@@ -342,7 +342,7 @@
   }
 
   .times {
-    margin-top: -1.1875rem;
+    margin-top: -0.75rem;
   }
 
   .row {
@@ -544,4 +544,18 @@
 
 .skip {
   position: relative;
+}
+
+/* The full-screen player's transport (pMobile): the skips 30, the ⏸/▶ 28 in its 68 circle. */
+@media (max-width: 1023px) {
+  .play ui-icon ::ng-deep svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .skip > ui-icon ::ng-deep svg,
+  .skip > .skip-n {
+    width: 30px;
+    height: 30px;
+  }
 }

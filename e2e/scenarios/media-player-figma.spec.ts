@@ -72,7 +72,10 @@ async function openPlayer(
     .toBe(true);
 }
 
-/** The interview heard at 0:22, its line of 0:22 (from 22.5 s) the one heard now. */
+/**
+ * The interview heard at 0:22, its line of 0:22 (from 22.5 s) the one heard now. A phone's
+ * shot keeps its transcript card where it follows that line (the line before on top).
+ */
 const AT = 22.55;
 
 const more = (page: Page) =>
@@ -97,7 +100,11 @@ test('the interview: player, voices, speed, ⋯, shortcuts, a new note, the slee
         .and(page.locator(':visible'))
         .first(),
     ).toBeVisible();
-    await shoot(page, 'media-player', { width, at: AT });
+    await shoot(page, 'media-player', {
+      width,
+      at: AT,
+      top: width === 'desktop',
+    });
 
     const voices = page
       .getByRole('group', { name: 'Ver' })
@@ -105,32 +112,53 @@ test('the interview: player, voices, speed, ⋯, shortcuts, a new note, the slee
     if (await voices.isVisible().catch(() => false)) {
       await voices.click();
       await expect(voices).toHaveAttribute('aria-pressed', 'true');
-      await shoot(page, 'media-player-voices', { width, at: AT });
+      await shoot(page, 'media-player-voices', {
+        width,
+        at: AT,
+        top: width === 'desktop',
+      });
       await page
         .getByRole('group', { name: 'Ver' })
         .getByRole('button', { name: 'Transcrição', exact: true })
         .click();
-    } else await shoot(page, 'media-player-voices', { width, at: AT });
+    } else
+      await shoot(page, 'media-player-voices', {
+        width,
+        at: AT,
+        top: width === 'desktop',
+      });
 
     await page
       .getByRole('button', { name: /Velocidade/ })
       .first()
       .click();
     await expect(page.getByRole('menuitemradio').first()).toBeVisible();
-    await shoot(page, 'media-player-speed', { width, at: AT });
+    await shoot(page, 'media-player-speed', {
+      width,
+      at: AT,
+      top: width === 'desktop',
+    });
     await page.keyboard.press('Escape');
 
     await more(page).click();
     await expect(
       page.getByRole('menuitem', { name: /Timer para dormir/ }),
     ).toBeVisible();
-    await shoot(page, 'media-player-more', { width, at: AT });
+    await shoot(page, 'media-player-more', {
+      width,
+      at: AT,
+      top: width === 'desktop',
+    });
     await page.keyboard.press('Escape');
 
     await menuItem(page, /Atalhos de teclado/);
     const keys = page.getByRole('dialog', { name: /Atalhos/ });
     await expect(keys).toBeVisible();
-    await shoot(page, 'media-player-shortcuts', { width, at: AT });
+    await shoot(page, 'media-player-shortcuts', {
+      width,
+      at: AT,
+      top: width === 'desktop',
+    });
     await page.keyboard.press('Escape');
     await expect(keys).toHaveCount(0);
 
@@ -166,7 +194,11 @@ test('the interview: player, voices, speed, ⋯, shortcuts, a new note, the slee
     await menuItem(page, /Timer para dormir/);
     const sleep = page.getByRole('dialog', { name: 'Timer para dormir' });
     await expect(sleep).toBeVisible();
-    await shoot(page, 'media-player-sleep-dialog', { width, at: AT });
+    await shoot(page, 'media-player-sleep-dialog', {
+      width,
+      at: AT,
+      top: width === 'desktop',
+    });
     await sleep.getByText('No fim desta mídia').click();
     if (await sleep.isVisible().catch(() => false))
       await page.keyboard.press('Escape');
@@ -178,7 +210,11 @@ test('the interview: player, voices, speed, ⋯, shortcuts, a new note, the slee
         .first(),
     ).toBeVisible();
     await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
-    await shoot(page, 'media-player-sleep-on', { width, at: AT });
+    await shoot(page, 'media-player-sleep-on', {
+      width,
+      at: AT,
+      top: width === 'desktop',
+    });
     await context.close();
   }
 });

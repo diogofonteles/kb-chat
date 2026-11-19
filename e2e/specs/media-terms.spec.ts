@@ -93,8 +93,13 @@ test('AC-2, AC-5: the text stays while it is redone, and the new version brings 
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
   const transcript = page.getByRole('list', { name: 'Trechos da transcrição' });
   await expect(transcript).toContainText('Tioaco');
+  // On a phone it says so under the full-screen player ("Sobre este áudio"), the
+  // transcript's card has no room for it.
   await expect(
-    page.getByText(/Feita com a lista de termos v\d+ \(\d{2}\/\d{2}\/\d{4}\)/),
+    page
+      .getByText(/Feita com a lista de termos v\d+ \(\d{2}\/\d{2}\/\d{4}\)/)
+      .and(page.locator(':visible'))
+      .first(),
   ).toBeVisible();
 
   await pageAction(page, 'Transcrever de novo');

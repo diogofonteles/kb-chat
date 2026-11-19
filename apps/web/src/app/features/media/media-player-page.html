@@ -391,6 +391,38 @@
           aria-label="Sobre este áudio"
           i18n-aria-label="@@player.about"
         >
+          <!-- A phone's head shows only the title and the author (pMobile): a track's way to
+               its recording (KBC-068 FR-4) and, for who edits, where it stands in the AI
+               research (KBC-100 AC-15) come first here. -->
+          @if (current.parent; as parent) {
+            <a
+              uiButton="outline"
+              size="sm"
+              class="in-context about-context"
+              [routerLink]="['/midia', parent.id]"
+              [queryParams]="contextParams()"
+            >
+              <ui-icon name="arrowRight" [size]="16" />
+              <span i18n="@@tracks.inContext">Ouvir no contexto</span>
+            </a>
+          }
+          @if (canEdit() || canEditTrack()) {
+            <app-track-publication-status
+              class="about-publication"
+              [mediaId]="current.id"
+            />
+          }
+          <!-- The term list it was made with (KBC-040 AC-5): the card has no room for it. -->
+          @if (
+            transcript.hasValue() ? transcript.value().termList : null;
+            as list
+          ) {
+            <p class="about-terms" i18n="@@transcript.termList">
+              Feita com a lista de termos v{{ list.version }} ({{
+                list.createdAt | date: 'dd/MM/yyyy'
+              }})
+            </p>
+          }
           <app-player-about [media]="current" [canEdit]="canEdit()" />
         </aside>
       }

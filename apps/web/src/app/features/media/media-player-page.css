@@ -535,22 +535,21 @@
     font-weight: 400;
   }
 
-  /* The full-screen player shows the title and the author (pMobile); under them, for who
-     edits, where it stands in the AI research (KBC-100 AC-15: it fits at 390), and a
-     track's way to the whole recording, "Ouvir no contexto" (KBC-068 FR-4). */
+  /* The full-screen player shows only the title and the author (pMobile): the head's
+     notes (the track's way to its recording, the AI research's state) wait at the top of
+     "Sobre este áudio" under it. */
   .note {
-    margin-top: var(--space-2);
-  }
-
-  .note > :not(app-track-publication-status, .in-context) {
     display: none;
   }
 
-  .note:not(:has(> app-track-publication-status, > .in-context)) {
-    display: none;
+  .about-terms {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
   }
 
-  .note > .in-context {
+  .about-context {
+    justify-self: start;
     min-height: var(--target);
   }
 
@@ -597,6 +596,8 @@
 
   .about {
     order: 3;
+    display: grid;
+    gap: var(--space-3);
     padding: 0 var(--space-4);
   }
 

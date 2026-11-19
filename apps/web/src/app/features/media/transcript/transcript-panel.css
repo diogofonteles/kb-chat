@@ -412,16 +412,11 @@
   }
 
   :host(.in-player) .head-row,
+  :host(.in-player) .made-with,
   :host(.in-player) .legend,
   :host(.in-player) .low-confidence,
   :host(.in-player) ::ng-deep [banner] {
     display: none;
-  }
-
-  /* The term list it was made with, for who edits (KBC-040 AC-5), small under the title. */
-  :host(.in-player) .made-with {
-    margin: 0;
-    color: var(--color-on-cover-dim);
   }
 
   :host(.in-player) .search {
@@ -463,7 +458,8 @@
 
   :host(.in-player) .list-box {
     flex: none;
-    height: 7.5rem;
+    /* The card 235 high (pMobile), its foot under the screen's. */
+    height: 9.9375rem;
     min-height: 0;
   }
 
@@ -471,9 +467,11 @@
     height: 60dvh;
   }
 
+  /* The lines take the card's whole width (pMobile): no scrollbar gutter beside them. */
   :host(.in-player) .segments {
     margin-left: 0;
     padding-left: 0;
+    scrollbar-width: none;
   }
 
   :host(.in-player) .segment {
