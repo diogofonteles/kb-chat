@@ -7,6 +7,11 @@
   display: none;
 }
 
+/* The note alone lives in the top layer (its popover): it opens no row in the player. */
+:host:not(:has(> .alert)) {
+  display: contents;
+}
+
 /* noteBox: 340 wide, #282828, 16 inside, 12 apart, with its shadow. */
 .note {
   display: grid;

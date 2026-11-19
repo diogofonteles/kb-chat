@@ -179,7 +179,12 @@ test('the interview: player, voices, speed, ⋯, shortcuts, a new note, the slee
     await expect(
       page.getByRole('textbox', { name: /^Nota do marcador em/ }),
     ).toBeVisible();
-    await shoot(page, 'media-player-bookmark-note', { width, at: 30 });
+    // A phone's card keeps following the line heard (0:22's, under 0:15's), as drawn.
+    await shoot(page, 'media-player-bookmark-note', {
+      width,
+      at: 30,
+      top: width === 'desktop',
+    });
     await page.keyboard.press('Escape');
     // The frames after this one have the interview's three bookmarks only.
     expect(

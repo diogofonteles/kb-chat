@@ -71,6 +71,13 @@ ui-dialog {
 }
 
 @media (max-width: 1023px) {
+  /* mOver 'sleep': the rows 5 under "Parar depois de", the last one 13 higher off the
+     sheet's foot than the dialog's own padding leaves it. */
+  .choices {
+    gap: 5px;
+    margin-bottom: 13px;
+  }
+
   .options {
     display: grid;
     gap: 0;
@@ -92,9 +99,15 @@ ui-dialog {
     color: var(--color-text-muted);
   }
 
+  /* mOver 'sleep': the ☾ a 20 glyph like the ⏲ above it. */
   .moon {
     width: 20px;
     justify-content: center;
+  }
+
+  .moon ::ng-deep svg {
+    width: 1.25rem;
+    height: 1.25rem;
   }
 
   .on {

@@ -16,6 +16,8 @@ ui-dialog {
 .question {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+  /* The confirm's two 17 px lines (player.js over 'again'). */
+  line-height: 1.0625rem;
 }
 
 .error {

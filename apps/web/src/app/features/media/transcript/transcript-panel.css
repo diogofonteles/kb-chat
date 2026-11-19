@@ -480,6 +480,11 @@
     padding: 0;
   }
 
+  /* pMobile: the card's lines 12 apart. */
+  :host(.in-player) .segment + .segment {
+    margin-top: var(--space-3);
+  }
+
   /* The line heard now sits on the card's own fill (no card of its own, pMobile). */
   :host(.in-player) .segment.active {
     background: var(--card-fill);
@@ -509,7 +514,8 @@
     font-size: 1.3125rem;
     font-weight: 700;
     line-height: 1.6875rem;
-    letter-spacing: 0;
+    /* The frames' 21 px lines are set 2 % tight (as every text of 20 px and more). */
+    letter-spacing: -0.02em;
   }
 
   :host(.in-player) .segment.active .text {
