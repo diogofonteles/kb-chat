@@ -1,6 +1,9 @@
 /* The phone sheet's height in the frame (player.js mOver). */
 ui-dialog {
   --ui-sheet-height: 32.5rem;
+  /* Out of the flow of whatever holds it (the host is display: contents; in the player bar's
+     grid it opened a second row). The modal itself is in the top layer. */
+  position: absolute;
 }
 
 /* player.js over 'sleep': "Parar depois de" 13/700 muted, the choices as chips (32 high,
