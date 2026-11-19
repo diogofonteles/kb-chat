@@ -53,6 +53,16 @@
   color: var(--color-text);
 }
 
+/* No message: the live region stays but takes no room. */
+.status.idle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 .status.error {
   color: var(--color-danger);
   font-weight: 600;
@@ -345,4 +355,46 @@ button:disabled {
 
 .check:has(> .ui-check:disabled) > .ui-check {
   opacity: 1;
+}
+
+/* v2 · IA da aplicação (desktop and phone): the account's line 13/16, its buttons 36 with 14
+   words, "Desconectar" as words at the end; rows of a label and a switch 36 tall; the paid
+   model's id 10 from its 44 "Salvar". */
+.account .saved-key {
+  display: block;
+  font-size: var(--text-meta);
+  line-height: 1rem;
+}
+
+.account .saved-key .masked {
+  display: inline;
+}
+
+.account .row > button {
+  min-height: 2.25rem;
+  padding-inline: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.account .row > .link.danger {
+  padding-inline: 0;
+  color: var(--color-danger);
+}
+
+.switch-row {
+  min-height: 2.25rem;
+}
+
+.block > .row:has(> .input) {
+  gap: 0.625rem;
+}
+
+.block > .row:has(> .input) > button {
+  min-height: 2.75rem;
+  padding-inline: var(--space-4);
+}
+
+/* Para quem: each card as tall as its own words (v2 · IA da aplicação). */
+.who {
+  align-items: start;
 }

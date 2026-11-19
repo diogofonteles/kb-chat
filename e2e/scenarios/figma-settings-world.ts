@@ -712,6 +712,10 @@ export async function settingsWorld(
       ? { ...out, connection: null, freeUsage: null, managementKey: null }
       : out;
   });
+  // The free models' list "atualizada às 18:40" (its own endpoint).
+  await patchGet(context, '**/api/v1/ai/free-models', (body) =>
+    restamp(body, sp('2026-11-09T18:40')),
+  );
   if (options.groqConnected)
     await patchGet(context, '**/api/v1/media/groq', (body) => ({
       ...body,

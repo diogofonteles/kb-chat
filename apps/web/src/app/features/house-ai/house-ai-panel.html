@@ -1,4 +1,9 @@
-<p class="status" role="status" [class.error]="status()?.kind === 'error'">
+<p
+  class="status"
+  role="status"
+  [class.idle]="!status()"
+  [class.error]="status()?.kind === 'error'"
+>
   @if (status(); as current) {
     <span aria-hidden="true">{{ current.kind === 'error' ? '⚠' : '✓' }}</span>
     {{ current.text }}
@@ -83,10 +88,11 @@
         [disabled]="busy()"
         (click)="connect()"
       >
-        <ui-icon name="link" [size]="18" />
+        <!-- The 🔗 leads "Conectar OpenRouter" only; "Conectar outra conta" is words. -->
         @if (current.connection) {
           <span i18n="@@house.reconnect">Conectar outra conta</span>
         } @else {
+          <ui-icon name="link" [size]="18" />
           <span i18n="@@house.connect">Conectar OpenRouter</span>
         }
       </button>

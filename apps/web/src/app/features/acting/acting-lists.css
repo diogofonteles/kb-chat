@@ -239,10 +239,23 @@ code {
   }
 }
 
-/* v2 · Auditoria: one line a record, the rest ends in "…". */
+/* v2 · Auditoria: one line a record of 41, the rest ends in "…"; the columns as drawn
+   (86 · 150 · 150 · 180 · 146, 16 apart), the rows right under the head's line. */
 @media (min-width: 1024px) {
+  .audit-cols {
+    grid-template-columns: 5.375rem 9.375rem 9.375rem 11.25rem minmax(0, 1fr);
+  }
+
   .row.audit-cols {
-    min-height: 2.5rem;
+    min-height: 2.5625rem;
+  }
+
+  .table-head.audit-cols + .list {
+    margin-top: calc(-1 * var(--space-3));
+  }
+
+  .audit-cols .when {
+    font-variant-numeric: normal;
   }
 
   .audit-cols .who,
