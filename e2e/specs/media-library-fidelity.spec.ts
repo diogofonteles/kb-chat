@@ -23,7 +23,7 @@ import {
 import { makeMp3, uniqueTag } from './media-helpers.js';
 import { approve, audioWithTracks } from './tracks-helpers.js';
 import { longPressToSelect } from './v2-media-helpers.js';
-import { touchSwipe } from './scroll-helpers.js';
+import { scrollSettled, touchSwipe } from './scroll-helpers.js';
 
 /**
  * KBC-128 fidelity: the library and a collection's album page put in the states of the
@@ -601,6 +601,8 @@ async function expectScrolls(
     .toBeLessThan(5)
     .catch(() => page.keyboard.press('Home'));
   await expect.poll(() => scrollTopOf(scroller)).toBeLessThan(5);
+  // A key pressed while the last one's scroll still animates is dropped: wait for it to end.
+  await scrollSettled(page);
   await scroller.evaluate((node) => node.focus());
   await page.keyboard.press('PageDown');
   await expect.poll(() => scrollTopOf(scroller)).toBeGreaterThan(100);
