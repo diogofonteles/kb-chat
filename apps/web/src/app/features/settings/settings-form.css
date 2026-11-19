@@ -40,6 +40,11 @@ fieldset {
   gap: 0;
 }
 
+/* The first option 13 under "Como a IA responde" (v2 · Sua IA). */
+.providers > .group-title {
+  margin-bottom: 0.8125rem;
+}
+
 .card {
   display: flex;
   align-items: flex-start;
@@ -75,11 +80,13 @@ fieldset {
   margin-top: 0;
 }
 
+/* The name's line 1 under the cover's top (v2 · Sua IA). */
 .card-body {
   display: grid;
   flex: 1;
   gap: var(--space-1);
   min-width: 0;
+  padding-top: 0.0625rem;
 }
 
 .card-head {

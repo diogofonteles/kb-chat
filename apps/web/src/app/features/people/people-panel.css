@@ -12,6 +12,17 @@ app-access-requests-list {
   margin-top: 0.75rem;
 }
 
+/* On a phone the profiles sit 12 under the invitation, the requests 22 under them. */
+@media (max-width: 1023px) {
+  app-invite-profiles-panel {
+    margin-top: 0;
+  }
+
+  app-access-requests-list {
+    margin-top: 0.5rem;
+  }
+}
+
 .invite {
   display: grid;
   gap: var(--space-3);
@@ -280,8 +291,14 @@ app-access-requests-list {
     padding-block: var(--space-2);
   }
 
+  /* In the sheet: Perfil 24 under the e-mail, the box 40 under the profile, the tabs 32
+     under the box (v2 · Convite cedendo, celular). */
+  .invite-fields.in-dialog .setup-field {
+    padding-block: 0.875rem 0.8125rem;
+  }
+
   .invite-fields.in-dialog + .preset {
-    margin-top: -0.5rem;
+    margin-top: -0.375rem;
   }
 
   .setup-field .label {
@@ -292,6 +309,8 @@ app-access-requests-list {
     clip-path: none;
     font-size: var(--text-item);
     font-weight: 500;
+    /* One 18 px line, the profile 3 under it (v2 · Pessoas, celular). */
+    line-height: 1.125rem;
   }
 
   .setup-field .select {
@@ -322,7 +341,6 @@ app-access-requests-list {
   .select-value {
     display: block;
     margin-top: 0.1875rem;
-    line-height: 1rem;
     color: var(--color-text-muted);
     font-size: var(--text-meta);
     line-height: 1rem;

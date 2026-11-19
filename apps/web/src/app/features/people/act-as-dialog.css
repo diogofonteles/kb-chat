@@ -68,3 +68,11 @@
     padding-inline: var(--space-6, 1.5rem);
   }
 }
+
+/* Drawn from 245 under the screen's top, so the reason's error grows it downwards (v2 · Ver
+   como, motivo inválido); a short screen keeps it whole and scrolls its body. */
+@media (min-width: 1024px) {
+  :host ::ng-deep .ui-dialog {
+    max-height: calc(100dvh - var(--ui-dialog-top, 0px) - 2rem);
+  }
+}

@@ -128,7 +128,7 @@
   }
 }
 
-/* The invitation's wait over the AI tab: a phone's (13/16, 16 over the first row). */
+/* The invitation's wait over the AI tab: a phone's (13/16, 24 over the first row). */
 .lend-wait-top {
   display: none;
 }
@@ -144,5 +144,10 @@
 
   .panel:has(> .lend-wait-top) {
     padding-top: 0;
+  }
+
+  /* The first row 24 under the wait. */
+  .lend-wait-top {
+    margin-bottom: 0.5rem;
   }
 }

@@ -27,7 +27,7 @@ const GRADIENTS: readonly (readonly [string, string])[] = [
   ['#2f4f8a', '#0b1424'],
 ];
 const FALLBACK: readonly [string, string] = ['#5a5a5a', '#1a1a1a'];
-/** Short words that never make a cover's initials ("A Lei do Ritmo" → LR). */
+/** Short words that never make a cover's code ("A Lei do Ritmo" → LE). */
 const SKIPPED = new Set([
   'a',
   'o',
@@ -42,16 +42,17 @@ const SKIPPED = new Set([
   'the',
 ]);
 
-/** The two initials of a title: "Alquimia Prática" → AP, "Hermetismo" → HE. */
+/**
+ * A title's code, as the v2 frames draw it: the first two letters of its first word
+ * ("Alquimia Prática" → AL, "Cosmologia Espiritual" → CO, "Hermetismo" → HE), short words
+ * skipped ("A Lei do Ritmo" → LE).
+ */
 export function coverCode(title: string): string {
-  const words = title
+  const [first = ''] = title
     .split(/[\s/·—-]+/)
     .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ''))
     .filter((word) => word && !SKIPPED.has(word.toLowerCase()));
-  const [first = '', second = ''] = words;
-  if (!first) return '?';
-  if (!second) return first.slice(0, 2).toUpperCase();
-  return (first.charAt(0) + second.charAt(0)).toUpperCase();
+  return first ? first.slice(0, 2).toUpperCase() : '?';
 }
 
 /** The same title always gets the same gradient. */

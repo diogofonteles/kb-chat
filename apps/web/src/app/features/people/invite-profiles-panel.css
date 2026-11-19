@@ -55,6 +55,11 @@
   justify-self: start;
 }
 
+/* The open profile's form only hosts its modal: it takes no room in the card. */
+.body > .draft {
+  position: absolute;
+}
+
 .hint {
   font-size: var(--text-meta);
 }
@@ -220,6 +225,7 @@
 .field-label {
   font-size: var(--text-meta);
   font-weight: 700;
+  line-height: 1rem;
 }
 
 .draft-name .text {
@@ -295,4 +301,24 @@
   .draft-top {
     row-gap: 0.6875rem;
   }
+
+  /* The sheet's body keeps 20 between its parts; the tabs sit 11 under the switch. */
+  .draft-top ~ app-invite-preset-editor {
+    margin-top: -0.5625rem;
+  }
+}
+
+/* The open card (v2 · Pessoas): the title row 17 from the top, the hint 47 from it on
+   19 px lines. */
+.profiles:has(.body) .toggle {
+  align-items: flex-start;
+  padding: 1.0625rem 0 0;
+}
+
+.profiles:has(.body) .toggle > span {
+  line-height: 1.125rem;
+}
+
+.hint {
+  line-height: 1.1875rem;
 }

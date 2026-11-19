@@ -739,12 +739,14 @@ input.input {
 
 .history {
   display: grid;
-  gap: var(--space-3);
+  gap: 0.625rem;
 }
 
+/* The title's 20 px line, the changes 10 under it (v2 · IA e limites). */
 .history-title {
   margin: 0;
   font-size: 1.0625rem;
+  line-height: 1.25rem;
   font-weight: 700;
 }
 
@@ -765,6 +767,7 @@ input.input {
   border-radius: 6px;
   background: var(--overlay-1);
   font-size: var(--text-meta);
+  line-height: 1rem;
 }
 
 .history-when {
@@ -902,7 +905,7 @@ input.input {
     column-gap: var(--space-3);
     row-gap: 0.1875rem;
     min-height: 0;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.1875rem;
     padding-bottom: 1.375rem;
   }
 
@@ -946,10 +949,24 @@ input.input {
   }
 
   /* The history's change on two lines: when · who, then the AI. */
+  /* The sheet's own gap already keeps the history 12 under the last line. */
+  .history {
+    margin-top: 0;
+  }
+
   .history li {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     justify-items: start;
+    row-gap: 0.375rem;
+  }
+
+  /* A switch's words on 18 px lines, the row 19.5 above and under them, so a two-line row
+     (Usar sempre a IA da aplicação…) grows as drawn (v2 · IA e limites, celular). */
+  .ai-tab > .check,
+  .ai-tab .limits > .check {
+    padding-block: 1.21875rem;
+    line-height: 1.125rem;
   }
 
   .history-what {
