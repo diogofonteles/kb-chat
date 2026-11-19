@@ -107,10 +107,8 @@ h2:focus-visible {
 }
 
 .byline {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1) var(--space-2);
+  /* pageHeader: "Outros autores · Assuntos: …" in one line of words. */
+  display: block;
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
@@ -155,9 +153,8 @@ h2:focus-visible {
 }
 
 .counter {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0 0.35em;
+  /* "1 de 2 ocorrências": one line of words (actionBar). */
+  display: inline-block;
   font-size: var(--text-meta);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -537,6 +534,34 @@ h2:focus-visible {
   gap: var(--space-5);
   padding-block: var(--space-6);
   background: transparent;
+}
+
+.byline app-authorship-badge,
+.byline ::ng-deep .authorship-badge,
+.byline ::ng-deep .words {
+  display: inline;
+}
+
+.byline > * + *::before {
+  content: '\00a0';
+}
+
+/* actionBar: the tools 40 rounds, ✕ 36. */
+:host(.page-mode) .actions :is(.obsidian, .share) {
+  --ui-icon-btn-size: 2.5rem !important;
+}
+
+:host(.page-mode) .actions > button:not(.ask-ai):not([uiIconButton]) {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0;
+  justify-content: center;
+}
+
+:host(.page-mode) .actions .page-close {
+  --ui-icon-btn-size: 2.25rem !important;
 }
 
 :host(.page-mode) .ask-ai {

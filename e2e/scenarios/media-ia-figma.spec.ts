@@ -10,6 +10,7 @@ import {
 import { chooseCollectionSlug } from '../specs/shell-helpers.js';
 import {
   HELENA_NAME,
+  MINUTE,
   OWNER,
   TOPIC,
   figmaWorld,
@@ -158,7 +159,9 @@ const source = (page: Page, phone: boolean): Locator =>
 let world: World;
 test.beforeAll(async () => {
   test.setTimeout(300_000);
-  world = await seedWorld();
+  // The frames quote the interview's longer minute (the player world's lines), not the
+  // library's short transcript; only this capture's own server gets them.
+  world = await seedWorld({ lines: { ES: MINUTE } });
 });
 
 test('the audio source of an answer: open, then its passage playing', async ({

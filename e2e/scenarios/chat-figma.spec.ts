@@ -478,8 +478,9 @@ test('the document: open, loading, error, a subject of "Veja também"', async ({
 
     await page.route(/\/documents\//, (route) =>
       route.fulfill({
-        status: 503,
-        json: { error: { code: 'SEARCH_UNAVAILABLE', message: 'down' } },
+        // chat-document-error: "Algo deu errado do nosso lado." (the server's own fault)
+        status: 500,
+        json: { error: { code: 'INTERNAL', message: 'down' } },
       }),
     );
     await search(page, 'natureza sétupla', 'Por significado');
