@@ -263,19 +263,28 @@ export class TranscriptService {
     return Number.parseInt(digestOf(heard).slice(0, 7), 16);
   }
 
-  /** The list it was made with; a track's text was cut from its recording's (KBC-040 AC-5). */
+  /**
+   * The list it was made with (KBC-040 AC-5). A track's text was cut from one version of its
+   * recording's (its `model` names it): that version's list, even after the recording was
+   * transcribed again; the recording is read only when the track has no list of its own.
+   */
   private termListOf(summary: TranscriptSummary, recordingId: string | null) {
-    const [recording] = recordingId
-      ? this.deps.transcripts.transcripts(recordingId)
-      : [];
     const list =
       this.deps.transcripts.termVersion(summary.termsVersion) ??
-      (recording
-        ? this.deps.transcripts.termVersion(recording.termsVersion)
-        : null);
+      this.cutFromList(summary, recordingId);
     return list
       ? { termList: { version: list.version, createdAt: list.createdAt } }
       : {};
+  }
+
+  private cutFromList(summary: TranscriptSummary, recordingId: string | null) {
+    if (!recordingId) return null;
+    const versions = this.deps.transcripts.transcripts(recordingId);
+    const source =
+      versions.find((one) => one.id === summary.model) ?? versions[0];
+    return source
+      ? this.deps.transcripts.termVersion(source.termsVersion)
+      : null;
   }
 
   /** A page of the current transcript's words: apart, so `current` never scans them all. */
