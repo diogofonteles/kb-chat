@@ -105,6 +105,8 @@ import { mediaUrl } from '@core/media/media-api.js';
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // The page hides an empty note by this class: WebKit never re-checks :empty once content arrives.
+  host: { '[class.has-content]': '!!shown()' },
 })
 export class TrackAboutView {
   readonly mediaId = input.required<string>();

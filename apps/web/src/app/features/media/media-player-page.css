@@ -179,8 +179,25 @@
 }
 
 /* A track's notes (its about, the moved bookmarks) take no room while they say nothing. */
-.notes > :empty,
-.notes:not(:has(> :not(:empty))) {
+/* Each note view says when it has content (`has-content`); WebKit never re-checks :empty when
+   content arrives after the first paint, so the page does not rely on it. */
+.notes
+  > :is(
+    app-track-about-view,
+    app-track-subjects-view,
+    app-moved-bookmarks-notice
+  ):not(.has-content),
+.notes:not(
+  :has(
+    > :not(
+      :is(
+        app-track-about-view,
+        app-track-subjects-view,
+        app-moved-bookmarks-notice
+      ):not(.has-content)
+    )
+  )
+) {
   display: none;
 }
 
