@@ -161,35 +161,60 @@ export async function expectScrolls(
 
 /** Frames without a move that end a key's scroll (its animation moves on every frame). */
 const STILL_FRAMES = 10;
+/** A key's scroll ends well within this; past it, a box keeps moving on its own. */
+const STILL_WITHIN_MS = 3_000;
 
 /**
  * Until no box on the page has scrolled for STILL_FRAMES frames in a row. A key's scroll is
  * animated, and WebKit on Linux drops a keyboard scroll that starts while the one before is
  * still running (a person reads before pressing again), so each key waits for the last.
+ * Only the boxes that can scroll are read, and a box still moving after STILL_WITHIN_MS (a
+ * transcript following the speech, an animation) fails the test, naming the box.
  */
 async function untilStill(page: Page): Promise<void> {
   await page.evaluate(
-    (frames) =>
-      new Promise<void>((resolve) => {
-        const positions = () =>
-          [
-            document.scrollingElement,
-            ...Array.from(document.querySelectorAll('*')),
-          ]
-            .map((element) => element?.scrollTop ?? 0)
-            .join(',');
+    ({ frames, withinMs }) =>
+      new Promise<void>((resolve, reject) => {
+        const scrollable = (element: Element): boolean => {
+          if (element.scrollHeight <= element.clientHeight) return false;
+          const { overflowY } = getComputedStyle(element);
+          return overflowY === 'auto' || overflowY === 'scroll';
+        };
+        const boxes = [
+          ...(document.scrollingElement ? [document.scrollingElement] : []),
+          ...Array.from(document.querySelectorAll('*')).filter(scrollable),
+        ];
+        const name = (element: Element): string =>
+          element === document.scrollingElement
+            ? 'the page'
+            : `<${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}${
+                element.classList.length > 0
+                  ? `.${Array.from(element.classList).join('.')}`
+                  : ''
+              }>`;
+        const positions = () => boxes.map((box) => box.scrollTop);
         let last = positions();
         let still = 0;
+        let moving: Element[] = [];
+        const started = performance.now();
         const frame = () => {
           const now = positions();
-          still = now === last ? still + 1 : 0;
+          const moved = boxes.filter((_, i) => now[i] !== last[i]);
+          if (moved.length > 0) moving = moved;
+          still = moved.length === 0 ? still + 1 : 0;
           last = now;
-          if (still >= frames) resolve();
-          else requestAnimationFrame(frame);
+          if (still >= frames) return resolve();
+          if (performance.now() - started > withinMs)
+            return reject(
+              new Error(
+                `untilStill: still scrolling after ${withinMs} ms: ${moving.map(name).join(', ')}`,
+              ),
+            );
+          requestAnimationFrame(frame);
         };
         requestAnimationFrame(frame);
       }),
-    STILL_FRAMES,
+    { frames: STILL_FRAMES, withinMs: STILL_WITHIN_MS },
   );
 }
 
