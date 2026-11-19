@@ -1052,6 +1052,11 @@ select.ui-input option {
     max-height: calc(100dvh - 2 * var(--ui-dialog-top));
   }
 
+  /* A small modal the frames draw above the middle (Ver como, Recusar, Revogar). */
+  .ui-dialog[style*='--ui-dialog-lift'] {
+    inset-block-end: calc(2 * var(--ui-dialog-lift));
+  }
+
   /* The wide modals (800: a person, an invitation, a profile): the 24/29 title. */
   .ui-dialog--wide .ui-dialog__title {
     font-size: 1.5rem;

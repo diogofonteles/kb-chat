@@ -34,6 +34,7 @@ const REASON_MAX = 500;
       titleId="act-as-title"
       [title]="title()"
       [width]="520"
+      [lift]="52"
       i18n-primaryLabel="@@actAs.startShort"
       primaryLabel="Ver como"
       [primaryDisabled]="busy()"

@@ -10,11 +10,15 @@
   display: grid;
   gap: 0.375rem;
   font-size: var(--text-meta);
+  line-height: 1rem;
   font-weight: 700;
 }
 
+/* 44 tall with one line (20 on 12 + 12). */
 .field textarea {
   min-height: 2.75rem;
+  padding-block: 0.75rem;
+  line-height: 1.25rem;
   font-weight: 400;
   /* One line as the frame's field; a longer reason grows it. */
   field-sizing: content;
@@ -32,4 +36,11 @@
 
 .actions {
   display: contents;
+}
+
+/* A phone's sheet: "Motivo" 14 under the words (v2 · Ver como, celular). */
+@media (max-width: 1023px) {
+  .field {
+    margin-top: -0.375rem;
+  }
 }

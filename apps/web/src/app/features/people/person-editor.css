@@ -670,9 +670,12 @@ input.input {
 }
 
 .ai-tab > .field:first-of-type {
+  min-height: 0;
+  margin-bottom: 0.5rem;
   padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--overlay-line);
 }
+
 
 .ai-tab .field > .select {
   flex: none;
@@ -816,4 +819,16 @@ input.input {
 
 .check:has(> .ui-check:disabled) > .ui-check {
   opacity: 1;
+}
+
+/* The lines under it 61 apart, the history 12 under the last (v2 · IA e limites). */
+.ai-tab > .field:not(:first-of-type),
+.ai-tab > .check,
+.ai-tab .limits > .field,
+.ai-tab .limits > .check {
+  min-height: 3.8125rem;
+}
+
+.history {
+  margin-top: 0.75rem;
 }

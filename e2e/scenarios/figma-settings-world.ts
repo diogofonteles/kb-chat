@@ -401,7 +401,13 @@ export async function seedSettingsWorld(): Promise<SettingsWorld> {
           topics: ['hermetismo', 'alquimia'],
           features: [...READER, 'own-ai-settings'],
           ai: { appAi: 'house', dailyResearches: 5 },
-          preferences: { defaultTopic: 'hermetismo', defaultView: 'research' },
+          // Its "Preferências iniciais" (settings-invite-profile-edit).
+          preferences: {
+            defaultTopic: 'hermetismo',
+            defaultView: 'research',
+            researchProfile: 'fast',
+            theme: 'revised',
+          },
         },
       },
       headers: CSRF,

@@ -16,3 +16,41 @@
 .field-with-notes:has(.hint:not(.visually-hidden)) {
   margin-block-end: var(--space-2);
 }
+
+/* Preferências iniciais (v2 · Perfil de convite): the hint 20 under the tabs, then each line a
+   label at the left and its 220 select at the right, 70 apart. */
+@media (min-width: 1024px) {
+  .panel:has(.prefs-hint) {
+    padding-top: 1.25rem;
+  }
+
+  .panel .group:has(> .prefs-hint) {
+    gap: 1.375rem;
+  }
+
+  .prefs-hint {
+    font-size: var(--text-meta);
+    line-height: 1.1875rem;
+  }
+
+  .group:has(> .prefs-hint) .field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6);
+    max-width: none;
+    min-height: 2.5rem;
+    font-size: var(--text-item);
+    font-weight: 500;
+  }
+
+  .group:has(> .prefs-hint) .field + .field,
+  .group:has(> .prefs-hint) .field-with-notes + .field {
+    margin-top: 0.5rem;
+  }
+
+  .group:has(> .prefs-hint) .field > .select {
+    flex: none;
+    width: 13.75rem;
+  }
+}

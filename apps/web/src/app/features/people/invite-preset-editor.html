@@ -353,10 +353,11 @@
   [hidden]="tab() !== 'prefs'"
 >
   <fieldset class="group" [disabled]="busy()">
-    <legend class="legend" i18n="@@preset.preferences">
+    <!-- The tab already names the part: the legend is for readers (v2 · Perfil de convite). -->
+    <legend class="visually-hidden" i18n="@@preset.preferences">
       Preferências iniciais
     </legend>
-    <p class="hint" i18n="@@preset.preferencesHint">
+    <p class="hint prefs-hint" i18n="@@preset.preferencesHint">
       Valem até a pessoa salvar as dela em Configurações.
     </p>
     <!-- The hint and the notice stay with their field, apart from the next one. -->

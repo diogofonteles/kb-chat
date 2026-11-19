@@ -36,6 +36,7 @@ import { UiIcon } from './icon.js';
       [style.--ui-dialog-width.px]="width()"
       [style.--ui-dialog-height.px]="height() || null"
       [style.--ui-dialog-top.px]="top() || null"
+      [style.--ui-dialog-lift.px]="lift() || null"
       [attr.aria-labelledby]="label() ? null : titleId()"
       [attr.aria-label]="label() || null"
       (close)="closed.emit()"
@@ -107,6 +108,8 @@ export class UiDialog {
   readonly height = input(0);
   /** At a desktop, the modal's distance from the screen's top (the frame's); 0 centres it. */
   readonly top = input(0);
+  /** At a desktop, how far above the screen's middle the modal sits (the frames' 52); 0 centres it. */
+  readonly lift = input(0);
   /**
    * The dialog's name when the visible title would repeat a field's name inside it (the
    * invitation's "Convidar por e-mail"); empty names it by the title.

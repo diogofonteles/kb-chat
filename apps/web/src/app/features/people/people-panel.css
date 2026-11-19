@@ -96,7 +96,7 @@ app-access-requests-list {
   font-size: var(--text-sm);
 }
 
-.skip {
+.invite-fields .skip {
   grid-area: skip;
   gap: 0.625rem;
   min-height: 0;

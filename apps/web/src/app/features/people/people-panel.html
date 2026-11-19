@@ -210,7 +210,8 @@
         <span aria-hidden="true">⚠</span>&ngsp;{{ inviteError() }}
       </p>
     }
-    <p id="invite-hint" class="hint">
+    <!-- While the lent subscription waits, the foot says only that (the hint stays for readers). -->
+    <p id="invite-hint" class="hint" [class.visually-hidden]="waitsForLend()">
       @if (setupLabel(); as setup) {
         @if (skipEmail()) {
           <ng-container i18n="@@people.inviteHintSetupNoEmail"

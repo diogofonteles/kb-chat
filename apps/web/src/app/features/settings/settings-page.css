@@ -133,15 +133,16 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  height: 4.75rem;
-  margin-bottom: -4.75rem;
-  /* The words 31 under the panel's top, the 🔍 on their line (v2 · Configurações). */
-  padding-top: 0.125rem;
-  /* Its 76 px of the tint (27 % of 280). */
+  /* 58 tall, the words 31 under the panel's top and the 🔍 on their line: a title placed
+     62 under the top shows whole (v2 · Configurações). */
+  height: 3.625rem;
+  margin-bottom: -3.625rem;
+  padding-top: 1.3125rem;
+  /* Its 58 px of the tint (21 % of 280). */
   background: linear-gradient(
     180deg,
     var(--settings-tint) 0,
-    color-mix(in srgb, var(--settings-tint) 73%, var(--color-bg)) 100%
+    color-mix(in srgb, var(--settings-tint) 79%, var(--color-bg)) 100%
   );
   color: var(--color-text-muted);
   font-size: var(--text-sm);
