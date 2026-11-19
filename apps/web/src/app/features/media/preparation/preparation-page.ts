@@ -8,6 +8,7 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  LOCALE_ID,
   afterRenderEffect,
   computed,
   effect,
@@ -21,11 +22,19 @@ import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   mediaItemSchema,
+  retryStageSchema,
   type MediaStatus,
+  type PreparationStage,
   type RetryStage,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
-import { UiButton, UiCover, UiIcon } from '@ui/index.js';
+import {
+  UiBanner,
+  UiButton,
+  UiCover,
+  UiIcon,
+  coverGradient,
+} from '@ui/index.js';
 import { mediaPagePath, mediaUrl } from '@core/media/media-api.js';
 import { editPagePath } from '@core/media/media-edit-api.js';
 import { PreparationApi } from '@core/media/preparation-api.js';
@@ -39,9 +48,15 @@ import {
 } from '../tracks/track-text-source.js';
 import type { MediaPreparation } from '@kb-chat/contracts';
 import { PlanForm } from './plan-form.js';
-import { PreparationOptions } from './preparation-options.js';
+import { PreparationOptions, summaryOf } from './preparation-options.js';
 import { PreparationStageList } from './preparation-stages.js';
-import { PreparationSteps, stepTitle } from './preparation-steps.js';
+import { usdUpText } from './preparation-labels.js';
+import {
+  PreparationSteps,
+  stepKicker,
+  stepTitle,
+  stepWhy,
+} from './preparation-steps.js';
 import { PreparationTracks } from './preparation-tracks.js';
 import { PreparationVoices } from './preparation-voices.js';
 import { PREPARATION_POLL_MS, PreparationWatch } from './preparation-watch.js';
@@ -83,6 +98,7 @@ function concludedText({ tracks, voices }: MediaPreparation): string {
     PreparationTracks,
     PreparationVoices,
     TranscriberStatus,
+    UiBanner,
     UiButton,
     UiCover,
     UiIcon,
@@ -113,6 +129,7 @@ export class PreparationPage {
   private readonly queue = inject(ProcessingQueueStore);
   private readonly pageTitle = inject(Title);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly locale = inject(LOCALE_ID);
   protected readonly watch = inject(PreparationWatch);
   /** The transcriber's status, beside the steps that wait for it (KBC-114 AC-16; masters). */
   protected readonly master = inject(SessionStore).isMaster;
@@ -152,6 +169,56 @@ export class PreparationPage {
   protected readonly canStart = computed(() => {
     const { transcribe } = this.form.choices();
     return transcribe || this.form.guided();
+  });
+  /** The page's gradient: the colour of the recording's cover (prepare.js, PR_TINT). */
+  protected readonly tint = computed(() => {
+    const title = this.preparation()?.title ?? this.itemTitle();
+    return title ? coverGradient(title)[0] : null;
+  });
+  /** The recording's title where there is no preparation to read it from (no permission). */
+  protected readonly itemTitle = computed(() =>
+    this.item.hasValue() ? this.item.value().title : '',
+  );
+  /** "Passo 2 de 4" after "Preparar áudio"; nothing when nothing is left to prepare. */
+  protected readonly kickerStep = computed(() =>
+    this.choosing() && this.form.nothingLeft() ? '' : stepKicker(this.step()),
+  );
+  /** Why the next steps are closed: under "Processamento", or by the buttons on step 1. */
+  protected readonly why = computed(() =>
+    stepWhy(this.step(), (this.preparation()?.next ?? null) !== null),
+  );
+  /** "Depois do envio: indicar quem fala." beside "Preparar" (prepare.js, chooseMain). */
+  protected readonly summary = computed(() =>
+    summaryOf(this.form, (value) => usdUpText(value, this.locale)),
+  );
+  /** The first stage that failed: on a phone its two ways on go to the foot bar. */
+  protected readonly failedStage = computed<PreparationStage | null>(
+    () =>
+      this.preparation()?.stages.find(({ state }) => state === 'failed') ??
+      null,
+  );
+  /** A track is still to come from the AI: a placeholder card waits for it. */
+  protected readonly arriving = computed(() =>
+    (this.preparation()?.stages ?? []).some(
+      ({ stage, state }) =>
+        stage === 'tracks' &&
+        (state === 'running' || state === 'waiting' || state === 'queued'),
+    ),
+  );
+  /**
+   * The AI proposes the tracks, or failed to: a phone shows only that stage and the tracks
+   * (prepare.js, "Faixas chegando" and "Falha da IA" on a phone); the voices wait for step 3.
+   */
+  protected readonly aiAtWork = computed(() =>
+    (this.preparation()?.stages ?? []).some(
+      ({ stage, state }) =>
+        stage === 'tracks' && (state === 'running' || state === 'failed'),
+    ),
+  );
+  /** "Faixas: 0 até agora" under the banner of a phone. */
+  protected readonly soFar = computed(() => {
+    const count = this.preparation()?.tracks.length ?? 0;
+    return $localize`:@@prep.tracks.soFarText:Faixas: ${count}:count: até agora`;
   });
   protected readonly mediaLink = computed(() => mediaPagePath(this.id()));
   protected readonly editLink = computed(() => editPagePath(this.id()));
@@ -243,6 +310,12 @@ export class PreparationPage {
       (one) => one.stage === stage,
     )?.estimateUsd;
     this.act(this.api.retry(this.id(), stage, shown ?? undefined));
+  }
+
+  /** "Tentar de novo" in the phone's foot bar: the stage that failed. */
+  protected retryFailed(stage: PreparationStage): void {
+    const retried = retryStageSchema.safeParse(stage.stage);
+    if (retried.success) this.retry(retried.data);
   }
 
   /** From the AI to the person: on to step 3 when the words are there (AC-11). */

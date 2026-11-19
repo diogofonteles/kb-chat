@@ -27,7 +27,7 @@ import { HistoryStore } from '@core/history/history-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { LibraryRecents } from '@features/shell/library-recents.js';
 import { KbApi, topicsUrl } from '@core/api/kb-api.js';
-import { withTopic } from '@core/topics/topic-tree.js';
+import { defaultTopicOf, withTopic } from '@core/topics/topic-tree.js';
 import {
   Subject,
   catchError,
@@ -70,6 +70,8 @@ export interface OpenDocument {
    * the panel steps between them with "Fonte ‹ ›". Absent for a search result.
    */
   readonly sources?: readonly CitedSource[];
+  /** Near-identical copies of the result that opened it ("Cópias" in its right panel). */
+  readonly copies?: readonly DocumentRef[];
 }
 
 /** A text source of an AI answer, by its citation number. */
@@ -104,18 +106,6 @@ function safeStorage(view: Window | null): Storage | undefined {
   }
 }
 
-/** KB_TOPIC when configured, otherwise the largest collection (the main study material). */
-function pickDefaultTopic(list: TopicList | null): string | null {
-  if (!list) return null;
-  if (list.defaultSlug) return list.defaultSlug;
-  // A parent shown only as a group title never opens (KBC-048 BR-3).
-  return (
-    list.items
-      .filter((one) => one.canOpen)
-      .sort((a, b) => b.documentCount - a.documentCount)[0]?.slug ?? null
-  );
-}
-
 export interface AskOptions {
   readonly mode?: SearchMode;
   readonly filters?: SearchFilters;
@@ -136,6 +126,15 @@ function placeOf(response: SearchResponse | null, id: string): number | null {
     (one) => one.kind === 'text' && one.hit.id === id,
   );
   return index < 0 ? null : index + 1;
+}
+
+/** The copies the search listed with this result (none when it was not a result). */
+function copiesOf(
+  response: SearchResponse | null,
+  id: string,
+): { readonly copies?: readonly DocumentRef[] } {
+  const copies = response?.items.find((hit) => hit.id === id)?.copies ?? [];
+  return copies.length > 0 ? { copies } : {};
 }
 
 const countFilters = (filters: SearchFilters): number =>
@@ -183,6 +182,19 @@ function toConversation(
   };
 }
 
+/** What a conversation asked, in order: its id, collection, questions, modes and filters. */
+function askedKey(conversation: SearchConversation): string {
+  return JSON.stringify([
+    conversation.id,
+    conversation.topic,
+    conversation.asks.map(({ question, mode, filters }) => [
+      question,
+      mode,
+      filters,
+    ]),
+  ]);
+}
+
 /** Conversation state of the chat page (provided on the page, NG-16). */
 @Injectable()
 export class ChatStore {
@@ -198,6 +210,8 @@ export class ChatStore {
   private nextId = 1;
   private nextRev = 1;
   private rememberedKey = '';
+  /** What a conversation brought back from the history asked, until it asks something else. */
+  private restoredKey = '';
 
   readonly topics = httpResource(topicsUrl, {
     parse: (body) => topicListSchema.parse(body),
@@ -219,7 +233,7 @@ export class ChatStore {
       const stillThere = list?.items.some(
         (topic) => topic.slug === kept && topic.canOpen,
       );
-      return stillThere && kept ? kept : pickDefaultTopic(list);
+      return stillThere && kept ? kept : defaultTopicOf(list);
     },
   });
   readonly topic = computed(
@@ -296,6 +310,10 @@ export class ChatStore {
     ]);
     if (key === this.rememberedKey) return;
     this.rememberedKey = key;
+    // A conversation opened again runs its searches anew, which is no new question: it keeps
+    // its place and time in "Sua biblioteca" (chat-results: "lei do ritmo" open, third).
+    if (askedKey(conversation) === this.restoredKey) return;
+    this.restoredKey = '';
     this.history.save(conversation);
   }
 
@@ -339,6 +357,7 @@ export class ChatStore {
     this.topicNoticeState.set(null);
     const { id, createdAt } = conversation;
     this.conversationState.set({ id, createdAt });
+    this.restoredKey = askedKey(conversation);
     for (const saved of conversation.asks)
       this.ask(saved.question, {
         mode: saved.mode,
@@ -426,6 +445,7 @@ export class ChatStore {
       title: doc.title,
       messageId: from?.id ?? null,
       question: from?.question ?? null,
+      ...copiesOf(from?.response ?? null, doc.id),
     });
     this.recents.noteDocument({ topic, id: doc.id, title: doc.title });
   }
@@ -542,6 +562,7 @@ export class ChatStore {
   private reset(): void {
     // A restored conversation is saved again (and moves to the top) once its searches settle.
     this.rememberedKey = '';
+    this.restoredKey = '';
     this.close();
     this.conversationState.set(freshConversation());
     this.resets.next({ type: 'reset' });

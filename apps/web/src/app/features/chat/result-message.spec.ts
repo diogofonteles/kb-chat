@@ -4,6 +4,14 @@ import { aHit, aMediaHit, aResponse, aTopic } from '../../testing/fixtures.js';
 import { NO_FILTERS, type ChatMessage } from './chat-message.js';
 import { ResultMessage } from './result-message.js';
 
+/** The summary as read: the mode pill's closed menu of modes is not part of it. */
+const summaryText = (): string => {
+  const summary = document.querySelector('.summary')?.cloneNode(true);
+  if (!(summary instanceof HTMLElement)) return '';
+  summary.querySelectorAll('[role="menu"]').forEach((menu) => menu.remove());
+  return summary.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+};
+
 const base: ChatMessage = {
   id: 1,
   rev: 1,
@@ -26,7 +34,7 @@ describe('ResultMessage', () => {
       providers: [provideZonelessChangeDetection()],
       inputs: { message: base },
     });
-    expect(screen.getByText('Nada encontrado para "xyzzy".')).toBeTruthy();
+    expect(screen.getByText('Nada encontrado para “xyzzy”.')).toBeTruthy();
     expect(
       screen.queryByRole('button', { name: 'Buscar por significado' }),
     ).toBeNull();
@@ -42,7 +50,7 @@ describe('ResultMessage', () => {
       on: { filtersChanged },
     });
     expect(
-      screen.getByText('Nada encontrado para "xyzzy" com estes filtros.'),
+      screen.getByText('Nada encontrado para “xyzzy” com estes filtros.'),
     ).toBeTruthy();
     // Both the active chip and the empty-state suggestion remove the filter.
     const removers = screen.getAllByRole('button', {
@@ -62,6 +70,51 @@ describe('ResultMessage', () => {
       },
     });
     expect(screen.getByText('Buscando em Hermetismo…')).toBeTruthy();
+  });
+
+  describe('the time so far (chat-results-loading, chat-results-error)', () => {
+    // Only the clock and the interval: the zoneless scheduler keeps its real timeouts.
+    beforeEach(() =>
+      vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] }),
+    );
+    afterEach(() => vi.useRealTimers());
+
+    const took = () => document.querySelector('.took')?.textContent?.trim();
+
+    it('counts tenths while it searches, keeps how long it tried on an error, and starts over', async () => {
+      const loading: ChatMessage = {
+        ...base,
+        status: 'loading',
+        response: null,
+      };
+      const view = await render(ResultMessage, {
+        providers: [provideZonelessChangeDetection()],
+        inputs: { message: loading, topicTitle: 'Hermetismo' },
+      });
+      await view.fixture.whenStable();
+      expect(took()).toMatch(/^0[,.]0 s$/);
+
+      await vi.advanceTimersByTimeAsync(1_250);
+      await view.fixture.whenStable();
+      expect(took()).toMatch(/^1[,.]2 s$/);
+
+      view.fixture.componentRef.setInput('message', {
+        ...loading,
+        status: 'error',
+        error: 'OFFLINE',
+      });
+      await view.fixture.whenStable();
+      await vi.advanceTimersByTimeAsync(1_000);
+      await view.fixture.whenStable();
+      expect(took()).toMatch(/^1[,.]2 s$/);
+
+      view.fixture.componentRef.setInput('message', { ...loading, rev: 2 });
+      await view.fixture.whenStable();
+      expect(took()).toMatch(/^0[,.]0 s$/);
+      await vi.advanceTimersByTimeAsync(300);
+      await view.fixture.whenStable();
+      expect(took()).toMatch(/^0[,.]3 s$/);
+    });
   });
 
   it('keeps the cards while a re-run refreshes them and offers more pages', async () => {
@@ -187,7 +240,7 @@ describe('ResultMessage with spoken passages (KBC-039)', () => {
     );
     expect(items[1]?.textContent).not.toContain('baixa confiança');
     expect(items[2]?.textContent).toContain('baixa confiança');
-    expect(document.querySelector('.summary')?.textContent?.trim()).toMatch(
+    expect(summaryText()).toMatch(
       /^2 documentos · 2 trechos na fala · Tudo · 0,6 s$/,
     );
   });
@@ -205,9 +258,7 @@ describe('ResultMessage with spoken passages (KBC-039)', () => {
         }),
       },
     });
-    expect(document.querySelector('.summary')?.textContent?.trim()).toMatch(
-      /^1 trecho na fala · Tudo/,
-    );
+    expect(summaryText()).toMatch(/^1 trecho na fala · Tudo/);
   });
 
   it('keeps "0 documentos" when the texts were searched and none matched', async () => {
@@ -222,9 +273,7 @@ describe('ResultMessage with spoken passages (KBC-039)', () => {
         }),
       },
     });
-    expect(document.querySelector('.summary')?.textContent?.trim()).toMatch(
-      /^0 documentos · 1 trecho na fala · Tudo/,
-    );
+    expect(summaryText()).toMatch(/^0 documentos · 1 trecho na fala · Tudo/);
   });
 
   it('opens a passage with its place among the results (FR-4)', async () => {

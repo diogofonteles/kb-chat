@@ -55,8 +55,7 @@
 }
 
 :host(:hover) .play,
-:host(:focus-within) .play,
-.play.on {
+:host(:focus-within) .play {
   opacity: 1;
   translate: 0 0;
 }
@@ -100,13 +99,40 @@ a.title:focus-visible::after {
 
 .meta {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0 var(--space-2);
   min-width: 0;
+  overflow: hidden;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta > :not(:first-child)::before {
+  content: '\00a0·\00a0';
+}
+
+/* How far, along the cover's foot (v2 Cartão: 4 px, accent over a dark track). */
+.cover-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 0 0 6px 6px;
+  background: rgb(0 0 0 / 50%);
+}
+
+.cover-progress span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
 }
 
 .resume-line {
@@ -118,6 +144,11 @@ a.title:focus-visible::after {
 
 .position {
   flex: 0 0 4rem;
+}
+
+/* The shortcut's bar is 80 (v2 · media-library "Continuar ouvindo"). */
+:host(.tile) .position {
+  flex-basis: 5rem;
 }
 
 .resume {
@@ -132,7 +163,8 @@ a.title:focus-visible::after {
   align-items: center;
   gap: var(--space-3);
   min-height: 4rem;
-  padding: 0 var(--space-3) 0 0;
+  /* v2 · media-library "Continuar ouvindo": ▶ 36 on the shortcut's right edge. */
+  padding: 0;
   overflow: hidden;
   border-radius: var(--radius-cover);
   background: var(--overlay-2);
@@ -176,10 +208,53 @@ a.title:focus-visible::after {
   border-radius: var(--radius-cover);
 }
 
+/* A phone's grid (media-library-grid@mobile): the bare cover, its title and author; ▶ only
+   on the one playing (a tap on the card opens it). */
 @media (max-width: 1023px) {
+  /* v2 grid (mobile): the cover, then the title 13/16 and the author 12/14, 6 apart. */
+  :host(:not(.tile)) {
+    gap: 0.375rem;
+    padding: 0;
+    background: transparent;
+  }
+
+  :host(:not(.tile)) .body {
+    gap: 0.375rem;
+  }
+
+  /* The phone's covers carry no bar (media-library-grid@mobile); how far stays in words for a
+     screen reader (the resume line). */
+  :host(:not(.tile)) .cover-progress {
+    display: none;
+  }
+
+  :host(:not(.tile):hover),
+  :host(:not(.tile):focus-within) {
+    background: transparent;
+  }
+
   .play {
-    opacity: 1;
     translate: none;
+  }
+
+  :host(.tile) .play {
+    opacity: 1;
+  }
+
+  :host(:not(.tile)) .title {
+    display: block;
+    font-size: var(--text-meta);
+    line-height: 1rem;
+  }
+
+  :host(:not(.tile)) .meta {
+    font-size: var(--text-xs);
+    line-height: 0.875rem;
+  }
+
+  :host(:not(.tile)) .duration,
+  :host(:not(.tile)) .state {
+    display: none;
   }
 }
 
@@ -187,4 +262,9 @@ a.title:focus-visible::after {
   .play {
     border: 1px solid ButtonText;
   }
+}
+
+/* The shortcut has the title and how far (media-library-sort "Continuar ouvindo"). */
+:host(.tile) .meta {
+  display: none;
 }

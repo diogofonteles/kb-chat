@@ -6,7 +6,7 @@ import {
 
 /** The rule shown before the choice (MA-20). */
 export const uploadRule = (): string =>
-  $localize`:@@media.upload.rule:mp3, m4a, wav, flac, ogg ou opus, até 4 GB cada`;
+  $localize`:@@media.upload.rule:mp3, m4a, wav, flac, ogg ou opus · até 4 GB cada`;
 
 /** Megabytes with a decimal below 10 MB ("2,9 MB"), whole above ("128 MB"). */
 const megabytes = (bytes: number): string => {
@@ -62,6 +62,9 @@ export function titleFromFileName(name: string): string {
   const base = dot > 0 ? name.slice(0, dot) : name;
   return base.replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
 }
+
+/** "0,3 MB": a chosen file's size (media-upload-chosen). */
+export const sizeOf = (bytes: number): string => `${megabytes(bytes)} MB`;
 
 /** "128 de 312 MB" while sending. */
 export const sentOf = (loaded: number, total: number): string =>

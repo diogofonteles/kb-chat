@@ -46,9 +46,34 @@
 
 .title {
   flex: 1;
+  min-width: 0;
+  min-height: 2rem;
   margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
   font-size: var(--text-md);
   font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.title:hover:not(:disabled) {
+  color: var(--color-text-muted);
+}
+
+.title:disabled {
+  cursor: default;
+}
+
+.widen {
+  color: var(--color-text-muted);
+}
+
+.widen:hover {
+  color: var(--color-text);
 }
 
 .create ::ng-deep .create-trigger {
@@ -77,28 +102,45 @@
   min-height: 0;
 }
 
-/* With "Áudios" the four chips pass the column's 300: they wrap to a second line instead of
-   scrolling out of sight with no scroll bar (a mouse could not reach "Documentos"). */
-.chips {
+/* v2: the chips on one line; with "Áudios" the last passes the column's 300 and is cut at
+   its edge, as drawn. The line scrolls sideways (a touch, Tab, the wheel: scrollChips). */
+.chip-line {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.chips {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-2);
   padding: var(--space-1) var(--space-4) var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
 }
 
 .chips ::ng-deep .ui-chip {
-  padding: 0 0.75rem;
+  flex: none;
+  padding: 0 0.875rem;
 }
 
+/* v2 · Sua biblioteca: the filter and "Recentes" on one 24 line under the chips. */
 .tools {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--space-3) 0 var(--space-2);
+  min-height: 1.5rem;
+  padding: 0 var(--space-2) 0 var(--space-3);
 }
 
 .tools ::ng-deep .order-trigger {
-  min-height: 2rem;
+  min-height: 1.5rem;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
 }
@@ -120,19 +162,61 @@
 /* ---------- Sections (D5): Fixados · Acervos · Conversas · Documentos ---------- */
 .sections {
   display: grid;
-  gap: var(--space-2);
+  align-content: start;
   padding-bottom: var(--space-3);
 }
 
-.section + .section {
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--overlay-3);
+/* Desktop: the column is one screen tall; only the rows scroll, between the chips and the
+   day's spend, which stays at the foot (v2 · Casca: "gasto ia" under the list). */
+:host(:not(.mobile)) {
+  height: 100%;
+  min-height: 0;
+}
+
+:host(:not(.mobile)) .sections {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .section-head {
   margin: 0;
   padding: 0 var(--space-2);
   font-size: inherit;
+}
+
+/* The Menu and Biblioteca expandida: one list, the sections one after the other with no head
+   or hairline between them (v2 · Menu lateral aberto); the chosen collection in green, as the
+   page you are on. */
+:host(.mobile)
+  .ui-libitem-row[aria-current='true']
+  ::ng-deep
+  .ui-libitem__title,
+:host(.expanded)
+  .ui-libitem-row[aria-current='true']
+  ::ng-deep
+  .ui-libitem__title {
+  color: var(--color-accent-text);
+}
+
+/* v2 · Sua biblioteca (the column): the sections run on, each after the first starting
+   on a hairline over its 28 head, the rows' width. */
+:host(:not(.mobile):not(.expanded)) .section-head {
+  margin: 0 var(--space-2);
+  padding: 0;
+}
+
+:host(:not(.mobile):not(.expanded)) .section + .section .section-head {
+  border-top: 1px solid var(--overlay-3);
+}
+
+:host(:not(.mobile):not(.expanded)) .section-toggle {
+  min-height: 1.75rem;
+}
+
+:host(:not(.mobile):not(.expanded)) .section + .section .section-toggle {
+  min-height: 1.6875rem;
 }
 
 .section-toggle {
@@ -210,16 +294,22 @@
   padding: 0;
 }
 
+/*
+ * A sub-collection sits a step further in than any top-level collection: past the caret
+ * column AND past its parent's cover edge. With the caret column alone, a top-level
+ * collection without sub-collections (its caret gap) lined up with the sub-collections and
+ * read as one of them (owner, 2026-11-19: Hermetismo drawn "under" UDV).
+ */
 .child .row {
-  padding-left: 1.5rem;
+  padding-left: 2.5rem;
 }
 
-/* The tree's guide: a thin line from the parent's caret down its sub-collections. */
+/* The tree's guide: a thin line down the sub-collections, inside the parent's cover edge. */
 .branch-line {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 0.75rem;
+  left: 2.25rem;
   width: 1px;
   background: var(--overlay-4);
 }
@@ -240,7 +330,21 @@
   transform: translateY(-50%);
 }
 
-.notice:empty {
+/* v2 draws the rows bare: "Editar acervo" shows on the row under the pointer or with the
+   focus in it (a touch screen, with no hover, keeps it on). */
+@media (hover: hover) {
+  .edit:not(:focus-visible) {
+    opacity: 0;
+  }
+
+  .collection:hover .edit,
+  .collection:focus-within .edit {
+    opacity: 1;
+  }
+}
+
+.notice:empty,
+.notice:has(> app-unassigned-notice:empty) {
   display: none;
 }
 
@@ -248,76 +352,20 @@
   padding: var(--space-1) var(--space-2) var(--space-1) 2rem;
 }
 
-/* Conversas: compact text rows with the kind's icon, never a cover (D5). */
+/* Conversas: library items like the others (v2 · Sua biblioteca): the chat cover, the
+   question and "kind · topic" (or the state) under it. */
 .recency {
   margin: 0;
-  padding: var(--space-2) var(--space-4) var(--space-1);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: 700;
 }
 
 .conversation {
-  display: flex;
-  align-items: flex-start;
   gap: var(--space-3);
-  width: 100%;
-  min-height: 2.75rem;
-  padding: var(--space-2);
-  border: 0;
-  border-radius: var(--radius-menu);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
 }
 
-.conversation:hover {
-  background: var(--overlay-2);
-}
-
-.conversation[aria-current='true'] {
-  background: var(--overlay-3);
-}
-
-.conversation[aria-current='true'] .question {
-  color: var(--color-accent-text);
-}
-
-.conversation-icon {
-  flex: none;
-  margin-top: 0.125rem;
-  color: var(--color-text-muted);
-}
-
-.conversation-icon.research {
-  color: var(--color-accent-text);
-}
-
-.conversation-text {
-  display: grid;
-  flex: 1;
-  gap: 0.125rem;
-  min-width: 0;
-}
-
-.question,
-.conversation .meta {
+.meta-line {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.question {
-  color: var(--color-text);
-  font-size: var(--text-sm);
-  font-weight: 500;
-}
-
-.conversation .meta {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
 }
 
 .note {
@@ -327,13 +375,7 @@
   font-size: var(--text-meta);
 }
 
-.kind.research {
-  color: var(--color-accent-text);
-}
-
-.status.failed {
-  color: var(--color-danger);
-}
+/* "falhou" reads in the line's own grey, as v2 draws it (the word says it). */
 
 .spinner {
   display: inline-block;
@@ -398,6 +440,12 @@
   color: var(--color-text-muted);
 }
 
+/* The sparkle sits on the line's middle, not stretched along the bar under it. */
+.spend > ui-icon {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+}
+
 .spend-body {
   display: grid;
   flex: 1;
@@ -455,7 +503,6 @@
   padding-left: 0;
 }
 
-:host(.collapsed) .conversation-text,
 :host(.collapsed) ::ng-deep .ui-libitem__text {
   position: absolute;
   width: 1px;
@@ -491,11 +538,221 @@
     width: 2rem;
   }
 
+  /* Past the 2rem caret column and the parent's cover edge, as on a desktop. */
   .child .row {
-    padding-left: 2rem;
+    padding-left: 3rem;
   }
 
   .branch-line {
-    left: 1rem;
+    left: 2.75rem;
   }
+}
+
+/* ---------- Biblioteca expandida (desktop, ⤢): the library over the main panel ---------- */
+:host(.expanded) .head {
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-8) var(--space-3);
+}
+
+:host(.expanded) .title {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 2.25rem;
+  letter-spacing: -0.06em;
+}
+
+:host(.expanded) .spend {
+  display: none;
+}
+
+:host(.expanded) .items,
+:host(.expanded) .conversations,
+:host(.expanded) .section-head {
+  padding: 0;
+}
+
+:host(.expanded) .wide-action {
+  min-height: 2.25rem;
+  font-size: var(--text-sm);
+}
+
+:host(.expanded) .chip-line {
+  gap: var(--space-2);
+  padding: 0 var(--space-8) var(--space-4);
+}
+
+:host(.expanded) .chips {
+  padding: 0;
+}
+
+.wide-search {
+  flex: none;
+  width: 15rem;
+  min-height: 2.25rem;
+  margin: 0;
+}
+
+.wide-head {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  min-height: 2rem;
+  margin: 0 var(--space-8);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--overlay-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.wide-head > span:first-child {
+  flex: 1;
+}
+
+.type-col {
+  flex: none;
+  width: 10rem;
+  /* Where the drawn rows keep their ⋯ (18 and a 14 gap). */
+  margin-right: 2rem;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wide-head .type-col {
+  font-size: var(--text-xs);
+}
+
+:host(.expanded) .sections {
+  padding: 0 var(--space-8) var(--space-3);
+}
+
+:host(.expanded) li,
+:host(.expanded) .row {
+  position: relative;
+}
+
+/* The drawn rows' ⋯ (18, muted) in the 2rem the type column leaves at their end. */
+.row-more {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+}
+
+.row-more ::ng-deep .row-more-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.row-more ::ng-deep .row-more-trigger:hover,
+.row-more ::ng-deep .row-more-trigger[aria-expanded='true'] {
+  color: var(--color-text);
+}
+
+:host(.expanded) .ui-libitem-row {
+  gap: 0.875rem;
+  padding: 0 var(--space-3);
+}
+
+/* ---------- The phone's Menu (Menu lateral aberto · celular) ---------- */
+:host(.mobile) .account {
+  padding: 3.5rem 4rem 0.9375rem var(--space-4);
+}
+
+:host(.mobile) .name {
+  line-height: 1.1875rem;
+}
+
+:host(.mobile) .email {
+  line-height: 0.875rem;
+}
+
+:host(.mobile) .chip-line {
+  padding-bottom: var(--space-1);
+}
+
+:host(.mobile) .chips {
+  padding: 0 var(--space-4) var(--space-3);
+}
+
+:host(.mobile) .items,
+:host(.mobile) .conversations {
+  padding: 0;
+}
+
+/* The drawn rows run edge to edge: 48 covers, 6 above and below, 16 at the sides. */
+:host(.mobile) .ui-libitem-row {
+  gap: var(--space-3);
+  padding: 0.375rem var(--space-4);
+  border-radius: 0;
+}
+
+:host(.mobile) .section-head {
+  padding: 0 var(--space-2);
+}
+
+:host(.mobile) .menu-actions {
+  gap: 0;
+  margin: var(--space-3) var(--space-4) 0;
+}
+
+/* Sticky at the foot of the Menu's scroll while the list runs under it; in its drawn
+   place, right after the list, once the list is short or scrolled past. */
+:host(.mobile) .menu-actions.drawn {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) var(--space-4) 0;
+  border-top: 0;
+  background: var(--color-bg);
+}
+
+/* The drawn divider, 16 in from each side. */
+:host(.mobile) .menu-actions.drawn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: var(--space-4);
+  left: var(--space-4);
+  border-top: 1px solid var(--overlay-3);
+}
+
+:host(.mobile) .menu-actions.more {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+:host(.mobile) .menu-actions ::ng-deep .order-trigger {
+  display: flex;
+  width: 100%;
+  min-height: var(--target);
+  padding: 0;
+  color: var(--color-text);
+  font-size: var(--text-item);
+}
+
+:host(.mobile) .order-content {
+  gap: 0.875rem;
+}
+
+:host(.mobile) .spend {
+  margin-top: 0;
+  padding: var(--space-2) var(--space-4) var(--space-6);
+}
+
+:host(.mobile) .spend-bar {
+  display: none;
 }

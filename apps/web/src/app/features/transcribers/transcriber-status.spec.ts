@@ -83,9 +83,10 @@ const anOverview = (
 async function renderIt(
   overview: TranscriberStatusOverview,
   transcriberId: string | null = null,
+  compact = false,
 ) {
   const result = await render(TranscriberStatus, {
-    inputs: { transcriberId },
+    inputs: { transcriberId, compact },
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(),
@@ -156,6 +157,26 @@ describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
     expect(screen.getByRole('dialog').textContent).toContain(
       '2 trabalhos de Vozes esperam: nenhum transcritor está marcado para isso. Marque "Separa vozes" em Transcritores.',
     );
+  });
+
+  it('KBC-152: the guided flow small pill says the state, as drawn, not the waiting work', async () => {
+    await renderIt(
+      anOverview({
+        items: [anItem({ state: 'offline', report: null })],
+        attention: {
+          blocked: [{ kind: 'diarize', ready: 2, reason: 'not-marked' }],
+          stuck: null,
+        },
+      }),
+      null,
+      true,
+    );
+    expect(
+      screen.queryByRole('button', { name: /trabalho parado/ }),
+    ).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Transcritor: desligado' }),
+    ).toBeTruthy();
   });
 
   it('QA F-1: says when it was started and took nothing, and that it waits for the queue to change', async () => {

@@ -26,7 +26,7 @@ describe('SpendStore (KBC-005 FR-5)', () => {
     ];
     const store = createStore(() => of(values.shift()));
     await settle();
-    expect(store.label()).toMatch(/^US\$\s0,03 de US\$\s1,00$/);
+    expect(store.label()).toMatch(/^US\$\s0,03 de 1,00$/);
     store.refresh();
     await settle();
     expect(store.label()).toMatch(/^US\$\s0,05 de/);

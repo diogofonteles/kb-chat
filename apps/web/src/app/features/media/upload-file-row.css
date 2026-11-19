@@ -1,25 +1,56 @@
+/* One chosen file (v2 · Mídia › media-upload-chosen, -duplicate, -bad-type, -sending): a tinted
+   card with the file's tile, name and size, then its title as a field below. */
 .row {
   display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  gap: var(--space-4);
 }
 
 .row p {
   margin: 0;
 }
 
+.file {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-cover);
+  background: var(--overlay-2);
+}
+
+.file.warn {
+  border-color: var(--color-warn);
+}
+
+.file.err {
+  border-color: var(--color-danger);
+}
+
 .top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
 }
 
+.names {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
 .name {
-  font-weight: 600;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs, 0.75rem);
+  font-variant-numeric: tabular-nums;
 }
 
 .remove {
@@ -27,69 +58,275 @@
   min-height: var(--target);
   padding: 0 var(--space-3);
   border: none;
+  border-radius: var(--radius-pill);
   background: none;
-  color: var(--color-accent-strong, var(--color-accent));
-  font-weight: 600;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-meta);
+  font-weight: 700;
   cursor: pointer;
+}
+
+.remove:hover {
+  background: var(--overlay-2);
+}
+
+/* A ✕ on a phone (media-upload-chosen@mobile), the words on a desktop; the name is the
+   button's aria-label either way. */
+.remove .x {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .remove {
+    display: grid;
+    place-items: center;
+    min-width: var(--target);
+    padding: 0;
+    color: var(--color-text-muted);
+  }
+
+  .remove .words {
+    display: none;
+  }
+
+  .remove .x {
+    display: block;
+  }
 }
 
 .field {
   display: grid;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 .label {
-  font-weight: 600;
+  font-size: var(--text-meta);
+  font-weight: 700;
 }
 
 .field input {
   min-height: var(--target);
   padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-cover);
+  background: var(--overlay-2);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--color-focus, var(--color-text));
+  outline-offset: 1px;
 }
 
 .field input[aria-invalid='true'] {
   border-color: var(--color-danger);
 }
 
+/* While it goes, the title stays as written (media-upload-sending): locked, not faded. */
 .field input:disabled {
-  color: var(--color-text-muted);
+  color: var(--color-text);
+  cursor: default;
+}
+
+.error,
+.notice {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--space-1);
+  font-size: var(--text-xs, 0.75rem);
+}
+
+.error ui-icon,
+.notice ui-icon {
+  align-self: center;
 }
 
 .error {
   color: var(--color-danger);
-  font-size: var(--text-sm);
-  font-weight: 600;
 }
 
-.status,
-.notice {
-  font-size: var(--text-sm);
+.file.warn .notice {
+  color: var(--color-warn);
 }
 
 .notice a {
-  color: var(--color-accent-strong);
+  color: inherit;
   overflow-wrap: anywhere;
+}
+
+.file.warn .notice a {
+  text-decoration: none;
 }
 
 .status {
   color: var(--color-text-muted);
+  font-size: var(--text-xs, 0.75rem);
   font-variant-numeric: tabular-nums;
 }
 
 .progress {
-  display: grid;
-  gap: var(--space-1);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .progress progress {
-  width: 100%;
-  height: 0.5rem;
+  flex: 1;
+  height: 4px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-4);
   accent-color: var(--color-accent);
+  appearance: none;
 }
 
-.progress p {
+.progress progress::-webkit-progress-bar {
+  border-radius: var(--radius-pill);
+  background: var(--overlay-4);
+}
+
+.progress progress::-webkit-progress-value {
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+}
+
+.progress progress::-moz-progress-bar {
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+}
+
+.percent {
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+/* v2 · media-upload-chosen, -duplicate, -bad-type, -sending: the card at 5 %, 12 in (its
+   edge inside), the file's cover 40, the name 14/17 4 under its top and the line 12/14 2
+   under it; "Tirar" grey on a 32 line; what stands in its way 8 under the cover, 12/14 after
+   its 14 icon; the title's label 16 under the card, its box 6 under the label. */
+.file {
+  gap: var(--space-2);
+  padding: calc(var(--space-3) - 1px);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+.cover {
+  flex: none;
+}
+
+.top {
+  align-items: flex-start;
+}
+
+.names {
+  padding-top: var(--space-1);
+}
+
+.name {
+  line-height: 1.0625rem;
+}
+
+.meta {
+  line-height: 0.875rem;
+}
+
+.meta .narrow {
+  display: none;
+}
+
+.remove {
+  align-self: flex-start;
+  min-height: 2rem;
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+}
+
+.error,
+.notice,
+.status {
+  line-height: 0.875rem;
+}
+
+.error ui-icon,
+.notice ui-icon {
+  margin-right: 0.125rem;
+}
+
+.field {
+  gap: 0.375rem;
+}
+
+.label {
+  line-height: 1rem;
+}
+
+@media (max-width: 1023px) {
+  .meta .wide {
+    display: none;
+  }
+
+  .meta .narrow {
+    display: inline;
+  }
+
+  .top {
+    align-items: center;
+  }
+
+  .names {
+    padding-top: 0;
+  }
+
+  /* The ✕ 18, 12 from the card's edge (media-upload-chosen@mobile). */
+  .remove {
+    align-self: center;
+    min-width: 1.5rem;
+    min-height: var(--target);
+    margin: 0 -3px 0 0;
+  }
+}
+
+/* The phone's card says how far in its line; the bar alone under the cover. */
+@media (max-width: 1023px) {
+  .percent {
+    display: none;
+  }
+}
+
+/* What refuses a file in one line beside its ✕ icon (media-upload-bad-type); a phone says it
+   shorter, without the icon (…@mobile: "Não é um áudio aceito…"). */
+.error.refused {
+  flex-wrap: nowrap;
+}
+
+.refused-words {
+  white-space: nowrap;
+}
+
+.refused-words.narrow {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .error.refused ui-icon,
+  .notice ui-icon {
+    display: none;
+  }
+
+  .refused-words {
+    white-space: normal;
+  }
+
+  .refused-words.wide {
+    display: none;
+  }
+
+  .refused-words.narrow {
+    display: inline;
+  }
 }

@@ -12,12 +12,15 @@ import { UiIcon } from './icon.js';
   template: `
     <ng-content select="ui-cover" />
     <span class="ui-libitem__text">
-      <span class="ui-libitem__title">{{ title() }}</span
+      <span class="ui-libitem__title" [attr.title]="title()">{{ title() }}</span
       >&ngsp;<span class="ui-libitem__meta">
         @if (pinned()) {
           <ui-icon class="ui-libitem__pin" name="pin" [size]="12" />
         }
-        <ng-content select="[uiLibraryItemMeta]" />{{ meta() }}
+        <!-- The words in a block of their own: "…" does nothing on the flex line's text. -->
+        <span class="ui-libitem__meta-text" [attr.title]="meta() || null"
+          ><ng-content select="[uiLibraryItemMeta]" />{{ meta() }}</span
+        >
       </span>
     </span>
     <ng-content />

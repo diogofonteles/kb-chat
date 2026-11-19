@@ -72,6 +72,8 @@ import { movedText } from './track-edit-labels.js';
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // The page hides an empty note by this class: WebKit never re-checks :empty once content arrives.
+  host: { '[class.has-content]': 'entries().length > 0' },
 })
 export class MovedBookmarksNotice {
   private readonly api = inject(TrackRevisionsApi);

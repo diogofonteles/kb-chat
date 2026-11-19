@@ -1,5 +1,6 @@
 import {
   ChangeDetectionStrategy,
+  booleanAttribute,
   Component,
   DestroyRef,
   ElementRef,
@@ -168,6 +169,7 @@ export function chipText(item: TranscriberStatusItem | null): string {
   selector: 'app-transcriber-status',
   templateUrl: './transcriber-status.html',
   styleUrl: './transcriber-status.css',
+  host: { '[class.pill]': 'pill()', '[class.compact]': 'compact()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TranscriberStatus {
@@ -182,6 +184,13 @@ export class TranscriberStatus {
 
   /** One transcriber (a row of Transcritores); none: the one that publishes. */
   readonly transcriberId = input<string | null>(null);
+  /**
+   * In a table row (v2 · Transcritores, column "Estado"): a small pill with the state word;
+   * the chip's full words stay as its name.
+   */
+  readonly pill = input(false);
+  /** The small pill of the guided flow's head (KBC-130, prepare.js transcriberPill). */
+  readonly compact = input(false, { transform: booleanAttribute });
 
   protected readonly item = computed(() => {
     const id = this.transcriberId();
@@ -221,11 +230,17 @@ export class TranscriberStatus {
       this.attention().length > 0,
   );
   protected readonly icon = computed(() =>
-    this.unavailable() || this.stalled() ? '⚠' : ICON[this.state()],
+    this.unavailable() || (this.stalled() && !this.compact())
+      ? '⚠'
+      : ICON[this.state()],
   );
   protected readonly text = computed(() => {
     if (this.unavailable())
       return $localize`:@@transcriberStatus.unavailable:Transcritor: status indisponível`;
+    // The guided flow's small pill says the transcriber's state, as drawn ("Transcritor:
+    // desligado", paired or not); the waiting work is the page's to say (v2 · Mídia — Preparar).
+    if (this.compact() && this.offline())
+      return $localize`:@@transcriberStatus.compactOff:Transcritor: desligado`;
     if (this.stalled())
       return $localize`:@@transcriberStatus.stalled:Transcritor: trabalho parado`;
     // A row's transcriber the status has not caught up with yet (just paired): off.
@@ -236,6 +251,12 @@ export class TranscriberStatus {
   protected readonly report = computed<Report | null>(
     () => this.item()?.report ?? null,
   );
+  /** The pill's words: "Desligado" for "Transcritor: Desligado". */
+  protected readonly shortText = computed(() => {
+    const full = this.text();
+    const cut = full.indexOf(': ');
+    return cut === -1 ? full : full.slice(cut + 2);
+  });
   protected readonly stateWord = computed(() => {
     const item = this.item();
     return item ? STATE_WORD[item.state]() : '';

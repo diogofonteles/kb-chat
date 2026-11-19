@@ -1,5 +1,11 @@
 <span class="art">
-  <ui-cover [title]="item().title" [size]="tile() ? 64 : 180" />
+  <ui-cover [title]="item().title" [size]="tile() ? 64 : 156" />
+  @if (!tile() && resume()) {
+    <!-- How far, as a bar along the cover's foot (v2 Cartão); the words follow below. -->
+    <span class="cover-progress" aria-hidden="true"
+      ><span [style.width.%]="percent()"></span
+    ></span>
+  }
   @if (ready()) {
     <button
       type="button"
@@ -27,7 +33,7 @@
     <span class="title" [title]="item().title">{{ item().title }}</span>
   }
   <span class="meta">
-    <app-authorship-badge [mediaAuthor]="item().author" />
+    <span class="author">{{ authorName() }}</span>
     @if (duration()) {
       <span class="duration">{{ duration() }}</span>
     }
@@ -36,7 +42,7 @@
     }
   </span>
   @if (resume()) {
-    <span class="resume-line">
+    <span class="resume-line" [class.visually-hidden]="!tile()">
       <ui-progress class="position" [value]="percent() / 100" />
       <span class="resume">{{ resume() }}</span>
     </span>

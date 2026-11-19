@@ -17,6 +17,7 @@ import {
   useTheme,
   type UploadedMedia,
 } from './media-helpers.js';
+import { library } from './shell-helpers.js';
 import { approve, seedDraft } from './tracks-helpers.js';
 
 /** KBC-096: the library's search answers with tracks, the speech first (screens.md T16). */
@@ -157,10 +158,34 @@ const answered = (page: Page) =>
 const status = (page: Page) =>
   page.locator('app-library-search-results').getByRole('status');
 
+/** A phone's box opens from the 🔍 of its top row (media-library-search@mobile). */
+async function openSearch(page: Page) {
+  if ((page.viewportSize()?.width ?? 0) < 1024)
+    await page.getByRole('button', { name: 'Abrir a busca' }).click();
+}
+
 async function openLibrary(page: Page) {
   await page.goto('/biblioteca');
+  await openSearch(page);
   await expect(box(page)).toBeVisible();
 }
+
+/** The collection in force is chosen in Sua biblioteca (D5), as the v2 library has it. */
+async function chooseCollection(page: Page, slug: string) {
+  await (await library(page)).locator(`button[data-slug="${slug}"]`).click();
+}
+
+/**
+ * "Ver todas as mídias": the explicit way from the collection in use to every collection
+ * (owner, 2026-11-19: the collection is the page's scope, not a removable chip).
+ */
+const allMedia = (page: Page) =>
+  page.getByRole('button', { name: 'Ver todas as mídias' });
+/** The old chip of the collection in force: gone. */
+const topicChip = (page: Page) =>
+  page
+    .locator('app-library-controls')
+    .getByRole('button', { name: /^Ver todos os acervos/ });
 
 test('AC-1, AC-7: only the tracks that say the words, first under the box, whatever the case', async ({
   browser,
@@ -172,8 +197,11 @@ test('AC-1, AC-7: only the tracks that say the words, first under the box, whate
   });
   expect(saved.status()).toBe(200);
   await openLibrary(page);
+  // "Continuar ouvindo" is a desktop's (no phone frame has it); the search hides it.
   const strip = page.getByRole('region', { name: 'Continuar ouvindo' });
-  await expect(strip).toBeVisible();
+  const phone = (page.viewportSize()?.width ?? 0) < 1024;
+  if (phone) await expect(strip).toHaveCount(0);
+  else await expect(strip).toBeVisible();
 
   for (const words of [
     `padre ${word}`,
@@ -184,16 +212,21 @@ test('AC-1, AC-7: only the tracks that say the words, first under the box, whate
     await expect(strip).toHaveCount(0);
     await answered(page);
     await expect(results(page)).toHaveCount(2);
-    await expect(results(page).first().locator('mark').first()).toBeVisible();
+    await expect(
+      results(page).first().locator('mark:visible').first(),
+    ).toBeVisible();
     await expect(status(page)).toContainText('2 resultados');
   }
 
   await expect(page.getByRole('region', { name: 'Todas' })).toHaveCount(0);
-  await expect(page.getByText('Ouvidas recentemente')).toHaveCount(0);
-  // The library page's own order (Sua biblioteca has its "Ordenar por", KBC-125).
+  await expect(
+    page.getByRole('region', { name: 'Ouvidas recentemente' }),
+  ).toHaveCount(0);
+  // A desktop keeps the order in the action bar while searching (media-library-search); a
+  // phone's results have no order line (media-library-search@mobile).
   await expect(
     page.getByRole('main').getByRole('button', { name: /^Ordenar/ }),
-  ).toHaveCount(0);
+  ).toHaveCount(phone ? 0 : 1);
   const under = await box(page).boundingBox();
   const first = await results(page).first().boundingBox();
   expect((first?.y ?? 0) - (under?.y ?? 0)).toBeLessThan(180);
@@ -273,10 +306,12 @@ test('AC-4: without `search` a spoken word finds nothing, and the message does n
   ]);
   await openLibrary(page);
   await box(page).fill(word);
-  await expect(page.getByText(/Nada encontrado/)).toContainText(
-    'no título, no autor ou nos assuntos',
+  const empty = page.locator('app-library-search-results .empty');
+  await expect(empty.getByText(/Nada encontrado/)).toBeVisible();
+  await expect(empty).toContainText(
+    'Procuramos no título, no autor e nos assuntos.',
   );
-  await expect(page.getByText(/Nada encontrado/)).not.toContainText('fala');
+  await expect(empty).not.toContainText('fala');
   await box(page).fill('o encontro');
   await expect(results(page)).toHaveCount(1);
   await expect(results(page).locator('mark')).toHaveCount(0);
@@ -301,26 +336,28 @@ test('AC-6: a recording found by title is one row, and the Acervo stays in reach
   await owner.dispose();
   const page = await pageAs(browser, email, viewportOf());
   await openLibrary(page);
-  // The library opens on the selected collection (KBC-091): every one is a choice.
-  const acervo = page
-    .locator('app-library-controls')
-    .getByRole('combobox', { name: 'Acervo' });
-  await acervo.selectOption({ label: 'Todos os acervos' });
+  // The library opens on the selected collection (KBC-091), no chip for it:
+  // "Ver todas as mídias" is the way to every collection.
+  await expect(topicChip(page)).toHaveCount(0);
+  await allMedia(page).click();
+  await expect(page).toHaveURL(/acervos=todos/);
   await box(page).fill(interview.title);
   await expect(results(page)).toHaveCount(2);
   await expect(
     results(page).filter({ hasText: 'Gravação completa · 3 faixas' }),
   ).toHaveCount(1);
 
-  await acervo.selectOption(other);
+  await chooseCollection(page, other);
+  await expect(page).not.toHaveURL(/acervos=todos/);
+  await expect(box(page)).toHaveValue(interview.title);
   await expect(results(page)).toHaveCount(1);
   await expect(results(page).first()).toContainText(`Outra ${interview.title}`);
-  await acervo.selectOption({ label: 'Todos os acervos' });
+  await allMedia(page).click();
   await expect(results(page)).toHaveCount(2);
   await page.context().close();
 });
 
-test('KBC-091 QA I-10: nothing found in one collection, "Buscar em todos os acervos" finds it in another', async ({
+test('KBC-091 QA I-10: nothing found in one collection, "Ver todas as mídias" finds it in another', async ({
   browser,
 }) => {
   const owner = await ownerApi();
@@ -335,25 +372,25 @@ test('KBC-091 QA I-10: nothing found in one collection, "Buscar em todos os acer
   await owner.dispose();
   const page = await pageAs(browser, email, viewportOf());
   await openLibrary(page);
-  const acervo = page
-    .locator('app-library-controls')
-    .getByRole('combobox', { name: 'Acervo' });
-  await acervo.selectOption(collection);
+  await chooseCollection(page, collection);
+  await expect(topicChip(page)).toHaveCount(0);
   await box(page).fill(elsewhere);
   await expect(
-    page.getByText(`Nada encontrado para '${elsewhere}'`, { exact: false }),
+    page.getByText(`Nada encontrado para “${elsewhere}”`, { exact: false }),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Limpar filtros' }),
   ).toHaveCount(0);
 
-  await page
-    .getByRole('button', { name: 'Buscar em todos os acervos' })
-    .click();
+  // Only "Limpar busca" under the words (media-library-search-empty); every collection
+  // only by the explicit "Ver todas as mídias" (owner, 2026-11-19).
+  await expect(
+    page.getByRole('button', { name: 'Buscar em todos os acervos' }),
+  ).toHaveCount(0);
+  await allMedia(page).click();
 
   await expect(results(page)).toHaveCount(1);
   await expect(results(page).first()).toContainText(elsewhere);
-  await expect(acervo).toHaveValue('');
   await expect(
     page.locator('app-library-search-results').getByRole('heading', {
       level: 3,
@@ -373,11 +410,13 @@ test('AC-9: nothing found says where it looked, and "Limpar busca" returns to th
   const page = await listener(browser);
   await openLibrary(page);
   await box(page).fill('xylofone');
+  const empty = page.locator('app-library-search-results .empty');
   await expect(
-    page.getByText(
-      "Nada encontrado para 'xylofone' na fala, no título, no autor ou nos assuntos.",
-    ),
+    empty.getByText('Nada encontrado para “xylofone”'),
   ).toBeVisible();
+  await expect(empty).toContainText(
+    'Procuramos na fala, no título, no autor e nos assuntos.',
+  );
   await expect(
     page.getByRole('button', { name: 'Buscar na fala' }),
   ).toHaveCount(0);
@@ -398,8 +437,8 @@ test('AC-10: a long passage shows the word and never widens the page', async ({
   await openLibrary(page);
   await box(page).fill(longWord);
   const row = results(page).first();
-  await expect(row.locator('mark')).toHaveText(longWord);
-  await expect(row.locator('mark')).toBeInViewport();
+  await expect(row.locator('mark:visible')).toHaveText(longWord);
+  await expect(row.locator('mark:visible')).toBeInViewport();
   const { scroll, client } = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth,
     client: document.documentElement.clientWidth,
@@ -439,7 +478,9 @@ test('AC-11: by keyboard from the box to the player, and axe finds nothing serio
     page.getByRole('button', { name: 'Limpar busca' }),
   ).toBeFocused();
   const link = results(page).first().getByRole('link');
-  const play = results(page).first().getByRole('button');
+  const play = results(page)
+    .first()
+    .getByRole('button', { name: /^Ouvir o trecho|^Tocar|^Pausar/ });
   for (let press = 0; press < 6; press++) {
     await page.keyboard.press('Tab');
     if (await play.evaluate((el) => el === document.activeElement)) break;

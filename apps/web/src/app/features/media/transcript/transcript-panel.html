@@ -3,10 +3,72 @@
   [attr.aria-labelledby]="showTitle() ? 'transcript-title' : null"
 >
   @if (showTitle()) {
-    <h3 id="transcript-title" class="title" i18n="@@transcript.title">
-      Transcrição
-    </h3>
+    <div class="card-head">
+      <h3 id="transcript-title" class="title" i18n="@@transcript.title">
+        Transcrição
+      </h3>
+      @if (segments().length > 0) {
+        <button
+          uiIconButton="surface"
+          type="button"
+          class="card-button"
+          [size]="32"
+          aria-label="Mostrar a busca na transcrição"
+          i18n-aria-label="@@transcript.search.open"
+          aria-controls="transcript-search"
+          [attr.aria-expanded]="searchOpen()"
+          (click)="toggleSearch()"
+        >
+          <ui-icon name="search" [size]="16" />
+        </button>
+        <button
+          uiIconButton="surface"
+          type="button"
+          class="card-button"
+          [size]="32"
+          [attr.aria-label]="expandLabel()"
+          [attr.aria-pressed]="expanded()"
+          (click)="expanded.set(!expanded())"
+        >
+          <ui-icon name="expand" [size]="16" />
+        </button>
+      }
+    </div>
   }
+
+  <div class="head-row">
+    <ng-content select="[views]" />
+    @if (segments().length > 0) {
+      <div class="search" role="search" [class.open]="searchOpen()">
+        <label
+          class="visually-hidden"
+          for="transcript-search"
+          i18n="@@transcript.search.label"
+          >Buscar na transcrição</label
+        >
+        <div class="search-row">
+          <span class="search-pill">
+            <ui-icon name="search" [size]="18" />
+            <input
+              id="transcript-search"
+              type="search"
+              autocomplete="off"
+              enterkeyhint="search"
+              placeholder="Buscar na transcrição"
+              i18n-placeholder="@@transcript.search.label"
+              [value]="typed()"
+              (input)="search($event)"
+              (keydown)="searchKeys($event)"
+            />
+          </span>
+          <!-- Always present, so the first result is announced too. -->
+          <span class="count" role="status" [class.none]="noHits()">{{
+            searchStatus()
+          }}</span>
+        </div>
+      </div>
+    }
+  </div>
 
   @if (termList(); as list) {
     <p class="made-with" i18n="@@transcript.termList">
@@ -16,35 +78,48 @@
     </p>
   }
 
+  @if (legend().length > 0) {
+    <div class="legend">
+      <ul
+        class="voices"
+        aria-label="Quem fala"
+        i18n-aria-label="@@transcript.legend"
+      >
+        @for (one of legend(); track one.voice) {
+          <li class="voice-chip">
+            <app-voice-tag [voice]="one.voice" [name]="one.name" />
+          </li>
+        }
+      </ul>
+      <p class="legend-hint" i18n="@@transcript.legendHint">
+        Toque no tempo para ir até o trecho
+      </p>
+    </div>
+  }
+
+  <ng-content select="[banner]" />
+
   @if (low()) {
-    <p
-      class="warning-notice low-confidence"
-      i18n="@@media.transcription.lowNotice"
+    <ui-banner
+      class="low-confidence"
+      tone="warn"
+      title="Transcrição automática de baixa confiança"
+      i18n-title="@@media.transcription.low"
     >
-      Transcrição automática de baixa confiança: pode haver trechos errados.
-    </p>
+      <span i18n="@@media.transcription.lowText"
+        >Pode haver trechos errados.</span
+      >
+    </ui-banner>
   }
 
   @if (segments().length === 0) {
     <p class="empty" i18n="@@transcript.empty">A transcrição está vazia.</p>
   } @else {
-    <div class="search" role="search">
-      <label for="transcript-search" i18n="@@transcript.search.label"
-        >Buscar na transcrição</label
-      >
-      <div class="search-row">
-        <input
-          id="transcript-search"
-          type="search"
-          autocomplete="off"
-          enterkeyhint="search"
-          [value]="typed()"
-          (input)="search($event)"
-          (keydown)="searchKeys($event)"
-        />
-        <!-- Always present, so the first result is announced too. -->
-        <span class="count" role="status">{{ searchStatus() }}</span>
-      </div>
+    <div class="search-results">
+      @if (noHits()) {
+        <!-- Said by the status above; shown here, where the eyes are (UP-01). -->
+        <p class="no-hits" aria-hidden="true">{{ searchStatus() }}</p>
+      }
       @if (hits().length > 0) {
         <div class="search-actions">
           <button
@@ -96,9 +171,13 @@
             [class.cited]="cited().has(segment.index)"
             [class.restricted]="segment.restricted"
             [hidden]="segment.folded"
+            [class.marked]="marked().has(segment.index)"
             [attr.data-start-ms]="segment.startMs"
             [attr.data-index]="segment.index"
           >
+            @if (marked().has(segment.index)) {
+              <ui-icon class="mark" name="bookmarkFill" [size]="14" />
+            }
             <button
               #time
               type="button"
@@ -114,6 +193,7 @@
             </button>
             <div class="body">
               @if (segment.speaker; as speaker) {
+                <!-- "Voz N" or the name, with its dot: 12/700 over the line (tLine). -->
                 <app-voice-tag
                   class="voice"
                   [voice]="speaker.voice"

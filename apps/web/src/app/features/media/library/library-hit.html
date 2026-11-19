@@ -18,14 +18,9 @@
     (click)="opened.emit()"
     >{{ item().title }}</a
   >
+  <!-- One muted line, "·" between (media-library-search): the album, the author, the length. -->
   <p class="meta">
-    @if (place()) {
-      <span class="place">{{ place() }}</span>
-    }
-    <app-authorship-badge [mediaAuthor]="item().author" />
-    @if (duration()) {
-      <span class="duration">{{ duration() }}</span>
-    }
+    <span class="place">{{ meta() }}</span>
     @if (bySubject()) {
       <span i18n="@@library.hit.bySubject">Pelo assunto</span>
     }
@@ -36,8 +31,18 @@
       <span class="visually-hidden" i18n="@@mediaHit.at"
         >aos {{ spokenClock() }}</span
       >
-      <span class="snippet">
+      <span class="snippet wide">
         @for (part of parts(); track $index) {
+          @if (part.marked) {
+            <mark>{{ part.text }}</mark>
+          } @else {
+            <span>{{ part.text }}</span>
+          }
+        }
+      </span>
+      <span class="snippet-spoken">{{ spokenPassage() }}</span>
+      <span class="snippet narrow" aria-hidden="true">
+        @for (part of shortParts(); track $index) {
           @if (part.marked) {
             <mark>{{ part.text }}</mark>
           } @else {
@@ -51,3 +56,13 @@
     }
   }
 </div>
+<!-- Its ⋯ at the row's end (media-library-search): play now, next, its bookmarks. -->
+<app-menu-button
+  class="more"
+  [label]="menuLabel()"
+  [options]="options"
+  [sheetTitle]="item().title"
+  (chosen)="choose($event)"
+>
+  <ui-icon name="more" [size]="18" />
+</app-menu-button>

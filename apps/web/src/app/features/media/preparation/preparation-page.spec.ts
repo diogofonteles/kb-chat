@@ -168,11 +168,11 @@ describe('PreparationPage (T20, step 2)', () => {
   it('says the step, with what is done and what is closed and why (AC-5)', async () => {
     await open(RUNNING);
     expect(screen.getByTestId('step-text').textContent).toContain(
-      'Passo 2 de 4: Processar',
+      'Passo 2 de 4 · Processar',
     );
     expect(
       screen.getByText('1 Enviar e escolher').closest('li')?.textContent,
-    ).toContain('✓');
+    ).toContain('concluído');
     expect(
       screen
         .getByText('2 Processar')
@@ -418,8 +418,14 @@ describe('PreparationPage (T20, step 2)', () => {
         canSwitchToManual: true,
       }),
     );
+    // The stage says it in its line, and the failure's card under the list again (v2).
     expect(
-      screen.getByText('Falhou: o provedor de IA não respondeu.'),
+      screen.getAllByText('Falhou: o provedor de IA não respondeu.'),
+    ).toHaveLength(2);
+    expect(
+      screen.getByRole('group', {
+        name: 'Falhou: o provedor de IA não respondeu.',
+      }),
     ).toBeTruthy();
     expect(screen.getByText('Pergunta 1')).toBeTruthy();
     expect(
@@ -497,7 +503,9 @@ describe('PreparationPage (T20, step 2)', () => {
     expect(
       screen.getByText(/2 de 3 janelas prontas, por US\$\s0,40\.$/),
     ).toBeTruthy();
-    expect(screen.getByText(/passaria do teto por gravação/)).toBeTruthy();
+    expect(screen.getAllByText(/passaria do teto por gravação/)).toHaveLength(
+      2,
+    );
     expect(screen.queryByText(/não rodaram/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
   });
@@ -531,8 +539,8 @@ describe('PreparationPage (T20, step 2)', () => {
       }),
     );
     expect(
-      screen.getByText(/O limite mensal da mídia foi atingido/),
-    ).toBeTruthy();
+      screen.getAllByText(/O limite mensal da mídia foi atingido/),
+    ).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
     screen.getByRole('button', { name: 'Marcar as faixas eu mesmo' }).click();
     http

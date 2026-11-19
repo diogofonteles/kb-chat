@@ -77,6 +77,8 @@ import { trackSubjectsUrl } from '@core/media/track-subjects-api.js';
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // The page hides an empty note by this class: WebKit never re-checks :empty once content arrives.
+  host: { '[class.has-content]': '!!shown()' },
 })
 export class TrackSubjectsView {
   readonly mediaId = input.required<string>();

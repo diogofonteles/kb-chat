@@ -1,57 +1,95 @@
-.dialog {
-  /* The padding counts in the width: it fits a 390 px screen with its margins. */
-  box-sizing: border-box;
-  width: min(32rem, calc(100vw - 2 * var(--space-4)));
-  max-height: calc(100dvh - 2 * var(--space-4));
-  padding: var(--space-6);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  color: var(--color-text);
-  box-shadow: var(--shadow);
+/* The phone sheet's height in the frame (player.js mOver). */
+ui-dialog {
+  --ui-sheet-height: 43.75rem;
 }
 
-.dialog::backdrop {
-  background: color-mix(in srgb, var(--color-bg) 60%, transparent);
+/* player.js over 'keys': the switch row (14/700 and its 12 hint, the 40×22 switch), a line,
+   then each key (200 wide, kbd 22 high) beside what it does in 14; on a phone (mOver
+   'keys') the keys 130 wide and the words 13. */
+:host {
+  display: contents;
 }
 
-h2 {
-  margin: 0 0 var(--space-4);
-  font-family: var(--font-reading);
-  font-size: var(--text-lg);
-}
-
-.switch {
+.setting {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  min-height: var(--target);
-  font-weight: 600;
+  gap: var(--space-3);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--overlay-3);
 }
 
-.switch input {
-  width: 1.25rem;
-  height: 1.25rem;
-  accent-color: var(--color-accent);
+.setting-words {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.setting-name {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.phone-only {
+  display: none;
 }
 
 .hint {
-  margin: 0 0 var(--space-4);
+  margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+}
+
+/* The v2 switch (lib.js toggle): green with a black knob when on, the knob on the right. */
+.switch {
+  position: relative;
+  flex: none;
+  width: 2.5rem;
+  height: 1.375rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-4);
+  cursor: pointer;
+}
+
+.switch[aria-checked='true'] {
+  background: var(--color-accent);
+}
+
+.knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  background: var(--color-text);
+  transition: left 0.15s ease;
+}
+
+.switch[aria-checked='true'] .knob {
+  left: calc(100% - 1.125rem - 2px);
+  background: var(--color-on-accent);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .list {
   display: grid;
-  gap: var(--space-2);
-  margin: 0 0 var(--space-6);
+  margin: calc(-1 * var(--space-2)) 0 0;
 }
 
 .row {
   display: grid;
-  grid-template-columns: minmax(8rem, auto) 1fr;
-  gap: var(--space-4);
-  align-items: baseline;
+  grid-template-columns: 12.5rem minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+  padding: 6px 0;
 }
 
 dt,
@@ -63,40 +101,108 @@ dt {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1);
+  gap: 6px;
+}
+
+dd {
+  font-size: var(--text-sm);
 }
 
 kbd {
-  min-width: 1.75rem;
-  padding: 0.1rem 0.45rem;
-  border: 1px solid var(--color-border);
-  border-bottom-width: 2px;
+  display: inline-flex;
+  align-items: center;
+  height: 1.375rem;
+  padding: 0 6px;
+  border: 1px solid var(--overlay-4);
   border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
   font: inherit;
-  font-size: var(--text-sm);
-  text-align: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
 }
 
 .or {
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
 }
 
-.close {
-  min-height: var(--target);
-  padding: 0 var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-weight: 600;
-  cursor: pointer;
-}
+@media (max-width: 1023px) {
+  /* The switch's row, then the keys 12 below it (mOver 'keys': pad 8, gap 4): the body's
+     own gap is wider, so the row gives some back. */
+  .setting {
+    margin-bottom: calc(var(--space-3) - var(--space-5));
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
 
-@media (max-width: 479px) {
+  .hint {
+    display: none;
+  }
+
+  /* 14/700 on two tight lines beside the switch (mOver 'keys'). */
+  .setting-name {
+    line-height: 1.25;
+  }
+
+  .phone-only {
+    display: inline;
+  }
+
+  /* Rows 32 high, 4 apart (mOver 'keys': pad 5 around a 22 px key, gap 4). */
+  .list {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+  }
+
   .row {
-    grid-template-columns: 1fr;
+    grid-template-columns: 8.125rem minmax(0, 1fr);
+    padding: 5px 0;
+  }
+
+  dt {
     gap: var(--space-1);
   }
+
+  /* Unseen on the phone (mOver 'keys' has none), still read between the keys. */
+  .or {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  dd {
+    font-size: var(--text-meta);
+  }
+
+  /* The sheet has no "Fechar" (mOver): a tap on the scrim, Esc or the ✕ kept for
+     assistive tech close it. */
+  .footer {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .knob {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .switch {
+    border: 1px solid CanvasText;
+  }
+
+  .knob {
+    background: CanvasText;
+  }
+}
+
+/* The ghost "Fechar" on the dialog's own colour: said, so contrast tools find it in the top
+   layer too (the page under the sheet is not its background). */
+.footer .close:not(:hover) {
+  background: var(--color-elevated);
 }

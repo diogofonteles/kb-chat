@@ -1,9 +1,42 @@
 /* Configurações as a page (KBC-131): it scrolls inside the main panel, whatever its width. */
 :host {
+  /* The frame's tint: grey into the background over the panel's top 280 px (220 on a phone),
+     fixed while the page scrolls; the strip and the phone header carry their slice of it. */
+  --settings-tint: color-mix(in srgb, var(--color-text) 16%, var(--color-bg));
+  --settings-tint-height: 17.5rem;
+  /* The v2 select's chevron (chevDown, muted), drawn in the theme's own grey: two strokes,
+     falling then rising. The panels inside the page (Pessoas, Perfis de voz) draw it as well. */
+  --settings-select-chevron:
+    linear-gradient(
+      45deg,
+      transparent calc(50% - 1px),
+      var(--color-text-muted) calc(50% - 1px) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    ),
+    linear-gradient(
+      -45deg,
+      transparent calc(50% - 1px),
+      var(--color-text-muted) calc(50% - 1px) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    );
   display: block;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  /* The panel's own height (cqh): the index and each section are measured against it. */
+  container-type: size;
+  background: linear-gradient(
+    180deg,
+    var(--settings-tint) 0,
+    var(--color-bg) var(--settings-tint-height)
+  );
+}
+
+@media (max-width: 1023px) {
+  :host {
+    --settings-tint: color-mix(in srgb, var(--color-text) 10%, var(--color-bg));
+    --settings-tint-height: 13.75rem;
+  }
 }
 
 .layout {
@@ -20,13 +53,14 @@
   display: grid;
   align-content: start;
   gap: 0.125rem;
-  max-height: 100dvh;
+  /* Never taller than the panel, or it would scroll away with the page ("Conta" cut). */
+  max-height: 100cqh;
   overflow-y: auto;
-  padding: 2.5rem 0 var(--space-4);
+  padding: 3.375rem 0 var(--space-4);
 }
 
 .index-group {
-  margin: var(--space-4) 0 0.375rem;
+  margin: 0.9375rem 0 0.25rem;
   padding: 0 var(--space-3);
   color: var(--color-text-muted);
   font-size: 0.6875rem;
@@ -84,10 +118,11 @@
 }
 
 /* ---------- Content ---------- */
+/* The last section's own height lets it reach the top, where the index reads it; no room
+   below that, or the end of the page shows nothing ("End" hid "Sobre" under the strip). */
 .content {
   min-width: 0;
-  /* The last section can still reach the top, where the index reads it. */
-  padding-bottom: 40vh;
+  padding-bottom: var(--space-8);
 }
 
 .strip {
@@ -96,11 +131,19 @@
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  height: 3.25rem;
-  margin-bottom: -3.25rem;
-  border-bottom: 1px solid var(--overlay-line);
-  background: var(--color-surface);
+  justify-content: space-between;
+  gap: var(--space-4);
+  /* 58 tall, the words 31 under the panel's top and the 🔍 on their line: a title placed
+     62 under the top shows whole (v2 · Configurações). */
+  height: 3.625rem;
+  margin-bottom: -3.625rem;
+  padding-top: 1.3125rem;
+  /* Its 58 px of the tint (21 % of 280). */
+  background: linear-gradient(
+    180deg,
+    var(--settings-tint) 0,
+    color-mix(in srgb, var(--settings-tint) 79%, var(--color-bg)) 100%
+  );
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   font-weight: 700;
@@ -114,15 +157,29 @@
   opacity: 1;
 }
 
+.strip-path {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 .strip-section {
   color: var(--color-text);
 }
 
+.search-toggle {
+  flex: none;
+  margin-right: -0.5625rem;
+  color: var(--color-text-muted);
+}
+
 .head {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--space-6);
-  padding: 2.25rem 0 var(--space-2);
+  min-height: 5.875rem;
+  padding-top: 2.25rem;
 }
 
 .title {
@@ -131,7 +188,14 @@
   font-size: 3rem;
   font-weight: 800;
   letter-spacing: -0.03em;
-  line-height: 1.05;
+  line-height: 1.2;
+}
+
+/* The 🔍 beside the title, its glyph 18 under the head's padding (v2 · Configurações): it
+   never makes the head taller than its 94. */
+.head .search-toggle {
+  align-self: flex-start;
+  margin-top: 0.5625rem;
 }
 
 .search {
@@ -140,19 +204,47 @@
 
 .section {
   display: grid;
-  gap: var(--space-4);
-  padding: var(--space-6) 0;
+  gap: 0.875rem;
+  padding: var(--space-4) 0 var(--space-6);
   border-bottom: 1px solid var(--overlay-line);
-  scroll-margin-top: 3.25rem;
+  scroll-margin-top: 4.75rem;
+}
+
+.section[data-section='account'] {
+  padding-bottom: var(--space-2);
 }
 
 .section:last-child {
   border-bottom: 0;
 }
 
+/* A section reached from the index stands alone under the strip, as each frame shows it:
+   it fills the panel below the strip, so the next one starts past the fold. Conta stays
+   short, as the top of the page shows it with Sua IA under it. */
+.layout .section:not([data-section='account']) {
+  min-height: calc(100cqh - 3.75rem);
+  align-content: start;
+}
+
+/* Acessos right over Sobre (a member's page: Conta, Sua IA, Preferências, Acessos, Sobre): the
+   frame draws Sobre under it, so it keeps its own height (Sobre, the last, still fills). */
+.layout
+  .section[data-section='accesses']:has(+ .section[data-section='about']) {
+  min-height: 0;
+}
+
+/* The title and, for Sua IA on the application's AI, its pill 10 after it (v2). */
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
 .section-title {
   margin: 0;
-  font-size: var(--text-section);
+  font-size: 1.5rem;
+  line-height: 1.2;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
@@ -191,8 +283,12 @@
   min-height: 4.5rem;
   margin: 0 calc(-1 * var(--space-2));
   padding: 0 var(--space-2);
-  border-top: 1px solid var(--overlay-line);
-  background: var(--color-surface);
+  /* The frame's Salvar floats over the page: no bar behind it. */
+  pointer-events: none;
+}
+
+.save-bar > * {
+  pointer-events: auto;
 }
 
 .save-bar .save-status {
@@ -204,7 +300,20 @@
 .account {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-6);
+  padding: var(--space-2) 0;
+}
+
+/* The frame's outline button: 36 high, 14 px. */
+.sign-out {
+  min-height: 2.25rem;
+  padding: 0 var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.save {
+  min-height: 2.5rem;
+  font-size: var(--text-sm);
 }
 
 .account-who {
@@ -216,9 +325,17 @@
 
 .account-name {
   margin: 0;
+  line-height: 1.2;
   font-size: var(--text-item);
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+
+/* The role under the name: 13 on 18, 3 under it (v2 · Conta). */
+.account-who .muted {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: 1.125rem;
 }
 
 .about {
@@ -248,15 +365,32 @@
   justify-self: start;
 }
 
+/* v2 · Sobre: each card as tall as its words, the icon at its start; "Rever o assistente de
+   início" the frame's outline 36 (14 px, 20 a side). */
+.about {
+  align-items: start;
+}
+
+.about-card ui-icon {
+  justify-self: start;
+}
+
+.wizard.ui-btn {
+  min-height: 2.25rem;
+  padding: 0 var(--space-5);
+  font-size: var(--text-sm);
+}
+
 /* ---------- Phone: the root and the pushed screens ---------- */
 .root,
 .screen {
   display: grid;
+  align-content: start;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-4)
-    calc(var(--space-8) + var(--shell-mobile-foot, 0px));
+  padding: 0 var(--space-4) calc(var(--space-8) + var(--shell-mobile-foot, 0px));
 }
 
+/* The pushed screen's header (celular): ‹ · title · search, over the panel's own colour. */
 .screen-head {
   position: sticky;
   top: 0;
@@ -265,8 +399,20 @@
   align-items: center;
   gap: var(--space-3);
   margin: 0 calc(-1 * var(--space-4));
-  padding: var(--space-2) var(--space-4);
-  background: var(--color-surface);
+  /* The frame's header: 56 above the 26 px chevron, so the 44 px button centres at 69. */
+  padding: 2.9375rem var(--space-2) 0;
+  /* The screen's first block 3 under it (v2 · Configurações, celular: 94 from the top). */
+  margin-bottom: -0.5625rem;
+  /* Its 91 px of the tint (41 % of 220). */
+  background: linear-gradient(
+    180deg,
+    var(--settings-tint) 0,
+    color-mix(in srgb, var(--settings-tint) 59%, var(--color-bg)) 100%
+  );
+}
+
+.screen-head [uiIconButton] {
+  color: var(--color-text);
 }
 
 .screen-title {
@@ -281,18 +427,11 @@
   width: 2.75rem;
 }
 
-.root-title {
-  padding: var(--space-4) 0 var(--space-1);
-  font-size: 2rem;
-  font-weight: 800;
-  text-align: left;
-}
-
 .root-profile {
   display: flex;
   align-items: center;
   gap: 0.875rem;
-  padding: var(--space-2) 0 var(--space-3);
+  padding: 0 0 var(--space-2);
   color: inherit;
   text-decoration: none;
 }
@@ -321,7 +460,7 @@
 }
 
 .root-group {
-  margin: var(--space-4) 0 0.125rem;
+  margin: var(--space-2) 0 0.125rem;
   font-size: 1.125rem;
   font-weight: 700;
 }
@@ -330,16 +469,27 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: var(--target);
-  padding: 0.625rem 0;
+  min-height: 3.375rem;
+  padding: 0.375rem 0;
   color: inherit;
   text-decoration: none;
 }
 
-.root-label {
+.root-text {
+  display: grid;
   flex: 1;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.root-label {
   font-size: var(--text-item);
   font-weight: 500;
+}
+
+.root-summary {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 .root-item ui-icon,
@@ -350,6 +500,34 @@
 .screen .section {
   padding: 0;
   border: 0;
+}
+
+/* Preferências' first group 24 under the section's title (desktop, v2 · Preferências). */
+.layout
+  .section[data-section='preferences']
+  > .section-head
+  + app-preferences-form {
+  margin-top: 0.625rem;
+}
+
+/* Preferências' first title 24 under who answers (a member's card), 26 under a phone's header
+   (v2 · Preferências). */
+app-ai-status-card + app-preferences-form,
+.screen .section > app-preferences-form:first-child {
+  margin-top: 0.625rem;
+}
+
+/* Sua IA's and Preferências' screens start 16 under the header (v2, celular: 110 from the top). */
+.screen .section[data-section='ai'],
+.screen .section[data-section='preferences'],
+.screen .section[data-section='accesses'],
+.screen .section[data-section='audit'],
+.screen .section[data-section='about'] {
+  padding-top: var(--space-4);
+}
+
+.app-ai-pill {
+  justify-self: start;
 }
 
 @media (max-width: 1023px) {
@@ -369,13 +547,21 @@
     bottom: var(--shell-mobile-foot, 0px);
     min-height: 0;
     margin: 0 calc(-1 * var(--space-4));
-    padding: var(--space-3) var(--space-4) var(--space-4);
+    /* The frame's bar: Salvar 12 under its top, 24 over the panel's foot (celular). */
+    padding: var(--space-3) var(--space-4) var(--space-6);
+    border-top: 0;
+    background: linear-gradient(transparent, var(--color-surface) 45%);
     flex-direction: column-reverse;
     align-items: stretch;
   }
 
+  /* The phone's Salvar: a white pill across the screen (celular). */
   .save-bar .save {
+    --ui-btn-bg: var(--color-text);
+    --ui-btn-fg: var(--color-bg);
     width: 100%;
+    min-height: 2.75rem;
+    font-size: var(--text-item);
   }
 
   .save-bar .save-status {

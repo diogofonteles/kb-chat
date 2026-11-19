@@ -43,28 +43,28 @@ describe('TrackPublicationStatus (KBC-100 FR-3, BR-4, T22)', () => {
   it('AC-15: "Na pesquisa" is said in words, with since when, in a status region', async () => {
     await renderIt({ state: 'live', since: at1402() });
     expect(status().textContent).toContain('Pesquisa com IA:');
-    expect(status().textContent).toContain('Na pesquisa');
+    expect(status().textContent).toContain('na pesquisa');
     expect(status().textContent).toContain('desde 14:02');
   });
 
   it('AC-7: with the Mac off it says since when it is off', async () => {
     await renderIt({ state: 'waiting-mac', offSince: at1402() });
     expect(status().textContent).toContain(
-      'Aguardando o Mac do dono (desligado desde 14:02)',
+      'aguardando o Mac do dono (desligado desde 14:02)',
     );
   });
 
   it('a Mac never paired is waited for without a time', async () => {
     await renderIt({ state: 'waiting-mac', offSince: null });
     expect(status().textContent?.replace(/\s+/g, ' ')).toContain(
-      'Aguardando o Mac do dono',
+      'aguardando o Mac do dono',
     );
     expect(status().textContent).not.toContain('desligado desde');
   });
 
   it('BR-4: updating says so, with since when', async () => {
     await renderIt({ state: 'updating', since: at1402() });
-    expect(status().textContent).toContain('Atualizando na pesquisa');
+    expect(status().textContent).toContain('atualizando na pesquisa');
     expect(status().textContent).toContain('desde 14:02');
   });
 
@@ -85,7 +85,7 @@ describe('TrackPublicationStatus (KBC-100 FR-3, BR-4, T22)', () => {
       reason: 'kb classify: OpenRouter 502',
     });
     expect(status().textContent).toContain(
-      'Falhou: kb classify: OpenRouter 502',
+      'falhou: kb classify: OpenRouter 502',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
     // PD-02: a second click before the answer sends nothing more.
@@ -97,7 +97,7 @@ describe('TrackPublicationStatus (KBC-100 FR-3, BR-4, T22)', () => {
       publication: { state: 'updating', since: at1402() },
     });
     await fixture.whenStable();
-    expect(status().textContent).toContain('Atualizando na pesquisa');
+    expect(status().textContent).toContain('atualizando na pesquisa');
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
     // The button went: the focus goes to the line that says what happened (WCAG 2.4.3).
     expect(document.activeElement).toBe(status());
@@ -138,7 +138,7 @@ describe('TrackPublicationStatus (KBC-100 FR-3, BR-4, T22)', () => {
         publication: { state: 'live', since: at1402() },
       });
       await fixture.whenStable();
-      expect(status().textContent).toContain('Na pesquisa');
+      expect(status().textContent).toContain('na pesquisa');
       vi.advanceTimersByTime(120_000);
       TestBed.tick();
       http.expectNone(URL);

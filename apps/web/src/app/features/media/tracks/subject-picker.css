@@ -45,3 +45,37 @@ input:focus-visible {
 .options li:hover {
   background: var(--color-surface-muted);
 }
+
+/* "+ Assunto": a chip on the row (KBC-130), wide enough to type once it has the focus. */
+:host(.compact) input {
+  width: 5.5rem;
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  transition: width 0.15s var(--ease);
+}
+
+:host(.compact) input::placeholder {
+  color: var(--color-text);
+  opacity: 1;
+}
+
+:host(.compact) input:focus {
+  width: 14rem;
+}
+
+@media (max-width: 1023px) {
+  :host(.compact) input {
+    min-height: var(--target);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :host(.compact) input {
+    transition: none;
+  }
+}

@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { startInSearchView } from './search-view.js';
+import { startInSearchView, modeRadio } from './search-view.js';
 import { desktop } from './shell-helpers.js';
 
 /**
@@ -12,10 +12,16 @@ import { desktop } from './shell-helpers.js';
  * on screen, whatever element turns out to be the scroller.
  */
 
-/** A short window where the fixture's text would otherwise fit on one screen. */
-async function shortWindow(page: Page): Promise<void> {
+/**
+ * A short window where the fixture's text would otherwise fit on one screen. A phone's v2
+ * layout (the search pill, the floating question box) fits more text: it gets a shorter one.
+ */
+async function shortWindow(page: Page, height?: number): Promise<void> {
   const width = page.viewportSize()?.width ?? 1440;
-  await page.setViewportSize({ width, height: 560 });
+  await page.setViewportSize({
+    width,
+    height: height ?? (desktop(page) ? 560 : 480),
+  });
 }
 
 /** The middle of the part of `region` that is on screen. */
@@ -129,7 +135,7 @@ async function expectKeyboardScrolls(page: Page, text: Locator): Promise<void> {
 async function openedDocument(page: Page): Promise<Locator> {
   const panel = page.getByRole('dialog');
   await expect(panel.getByRole('heading', { level: 2 })).toBeVisible();
-  await expect(panel.getByText(/1 de \d+ ocorrências/)).toBeVisible();
+  await expect(panel.getByText(/1 de \d+ ocorrências?/)).toBeVisible();
   await expect(panel.locator('mark').first()).toBeInViewport();
   return panel;
 }
@@ -140,7 +146,7 @@ async function searchFor(page: Page, question: string): Promise<void> {
     'Hermetismo',
   );
   // By meaning, the document opens on the question's terms highlighted (as in reading.spec).
-  await page.getByRole('radio', { name: 'Por significado' }).check();
+  await (await modeRadio(page, 'Por significado')).check();
   await page.getByLabel('Sua pergunta').fill(question);
   await page.getByRole('button', { name: 'Buscar' }).click();
 }
@@ -160,6 +166,8 @@ test.describe('search view', () => {
   test('a document opened from the results scrolls in its panel', async ({
     page,
   }) => {
+    // The fixture's document fits a 900 px page beside its "Veja também" column.
+    await shortWindow(page);
     await searchFor(page, 'natureza setupla');
     await page
       .getByRole('button', { name: /A Natureza Sétupla/ })
@@ -193,7 +201,9 @@ test.describe('research view', () => {
       .first()
       .click();
     const panel = await openedDocument(page);
-    await expectScrolls(page, panel);
+    // Over the source's text: on a phone the sheet's middle is its sticky tools (the source's
+    // two rows of actions and occurrences stay on screen while the text moves under them).
+    await expectScrolls(page, panel.locator('.text'));
   });
 });
 
@@ -211,7 +221,9 @@ test.describe('pages in the main panel', () => {
   });
 
   test('Biblioteca scrolls', async ({ page }) => {
-    await shortWindow(page);
+    // The fixture's collection has no media: on a phone its empty state (top row, chips,
+    // media-library-empty-uploader@mobile) fits in 560 px, so a shorter window.
+    await shortWindow(page, 420);
     await page.goto('/biblioteca');
     await expect(
       page.getByRole('heading', { name: 'Biblioteca', level: 2 }),

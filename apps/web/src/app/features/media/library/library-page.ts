@@ -1,4 +1,4 @@
-import { Location } from '@angular/common';
+import { DOCUMENT, Location } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -6,9 +6,10 @@ import {
   DestroyRef,
   ElementRef,
   Injector,
-  LOCALE_ID,
   type Signal,
+  type TemplateRef,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   linkedSignal,
@@ -33,6 +34,7 @@ import {
 import {
   DEFAULT_LIBRARY_PREFERENCES,
   LIBRARY_QUERY_MAX,
+  NO_AUTHOR,
   libraryHomeSchema,
   libraryPageSchema,
   listeningPreferencesSchema,
@@ -48,8 +50,18 @@ import {
   type Topic,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import {
+  ALL_COLLECTIONS_PARAM,
+  ALL_COLLECTIONS_VALUE,
+} from './library-access.js';
 import { TrackGroup } from './track-group.js';
-import { alsoRemovesText, tracksInTheWay } from '../track-removal.js';
+import { scrollPageByKey } from '../page-keys.js';
+import {
+  alsoRemovesCount,
+  alsoRemovesText,
+  trackListRows,
+  tracksInTheWay,
+} from '../track-removal.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import {
   LibraryApi,
@@ -73,9 +85,9 @@ import {
   concatMap,
   debounceTime,
   filter,
+  forkJoin,
   map,
   of,
-  pairwise,
   share,
   take,
 } from 'rxjs';
@@ -90,13 +102,16 @@ import { LibraryCard } from './library-card.js';
 import { LibraryControls } from './library-controls.js';
 import {
   NO_FILTERS,
+  STATE_CHIP_LABELS,
   activeFiltersOf,
   applyFilterChange,
   countTextOf,
-  playedAgoOf,
   type FilterChange,
 } from './library-labels.js';
 import { LibraryRow, type RowAction } from './library-row.js';
+import { LibrarySortMenu, type LibraryDisplay } from './library-sort.js';
+import { MenuButton, type MenuOption } from '../menu-button.js';
+import { PageHeader } from '@features/shell/page-header.js';
 import { LibrarySearchResults } from './library-search-results.js';
 import { NearEnd } from './near-end.js';
 import { PlayNow } from './play-now.js';
@@ -105,6 +120,34 @@ import { UiButton, UiIconButton } from '@ui/button.js';
 import { UiCover } from '@ui/cover.js';
 import { UiEmptyState } from '@ui/empty-state.js';
 import { UiIcon } from '@ui/icon.js';
+
+/** The library's own colour, its cover's (v2 media-library LIB_TINT; library-page.css). */
+const LIBRARY_TINT = '#7a3d22';
+/** The library's list, as the header's ▶ names it to PlayNow. */
+const LIST_KEY = 'library';
+
+/** The shell's phone layout (chat-page: desktop from 1024 px). */
+const PHONE_QUERY = '(max-width: 1023px)';
+/** "Compacta" (media-library-sort): a density of the list, kept in this browser only. */
+const COMPACT_KEY = 'kb-chat.library.compact';
+function readCompact(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(COMPACT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+function keepCompact(on: boolean): void {
+  try {
+    if (on) globalThis.localStorage?.setItem(COMPACT_KEY, '1');
+    else globalThis.localStorage?.removeItem(COMPACT_KEY);
+  } catch {
+    // No storage (a private window): the choice lasts while the page is open.
+  }
+}
+
+const phoneNow = (): boolean =>
+  typeof matchMedia === 'function' && matchMedia(PHONE_QUERY).matches;
 
 /** "Buscar na biblioteca" waits this long after the last key (T16). */
 export const SEARCH_DEBOUNCE_MS = 200;
@@ -127,8 +170,11 @@ interface Choices {
 }
 
 /**
- * Where the list is (KBC-091): every collection, one named by a link, or, by default, the one
- * selected in the sidebar.
+ * Where the list is (KBC-091): one named by a link, or, by default, the one selected in the
+ * sidebar (each with its sub-collections, ADR 0028 §6); every collection only while the
+ * address says "Todas as mídias" (`?acervos=todos`, from the "Ver todas as mídias" button; the
+ * Biblioteca pin is `/biblioteca`, the collection in use), never from the
+ * account (owner, 2026-11-19: "os acervos não deveriam se misturar").
  */
 type Scope =
   | { readonly kind: 'all' }
@@ -163,6 +209,8 @@ interface MorePages {
     LibraryControls,
     LibraryRow,
     LibrarySearchResults,
+    LibrarySortMenu,
+    MenuButton,
     MovedNotice,
     NearEnd,
     QueueSummary,
@@ -178,7 +226,10 @@ interface MorePages {
   templateUrl: './library-page.html',
   styleUrl: './library-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(focusin)': 'keepInView($event)' },
+  host: {
+    '(focusin)': 'keepInView($event)',
+    '(document:keydown)': 'pageKey($event)',
+  },
 })
 export class LibraryPage {
   private readonly api = inject(LibraryApi);
@@ -188,19 +239,20 @@ export class LibraryPage {
   private readonly collectionHeading = inject(CollectionHeading);
   private readonly engine = inject(MediaEngine);
   private readonly playNow = inject(PlayNow);
-  private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
+  private readonly host =
+    inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly heading =
     viewChild.required<ElementRef<HTMLElement>>('heading');
-  private readonly strip = viewChild<ElementRef<HTMLElement>>('strip');
+  private readonly phoneActions =
+    viewChild<TemplateRef<unknown>>('phoneActions');
   private readonly searchBox = viewChild<ElementRef<HTMLElement>>('searchBox');
   private readonly allTitle = viewChild<ElementRef<HTMLElement>>('allTitle');
-  private readonly recentsToggle =
-    viewChild<ElementRef<HTMLElement>>('recentsToggle');
+  private readonly searchResults = viewChild(LibrarySearchResults);
   private readonly clearRecentsButton =
     viewChild<ElementRef<HTMLElement>>('clearRecentsButton');
   private readonly keepRecentsButton =
@@ -238,17 +290,30 @@ export class LibraryPage {
       filters: kept.libraryFilters,
     };
   });
-  /** A change of collection in the sidebar brings the list along, even from "Todos". */
+  /** "Todas as mídias" in the address: the one way to list every collection. */
+  private readonly allInAddress = signal(
+    this.route.snapshot.queryParamMap.get(ALL_COLLECTIONS_PARAM) ===
+      ALL_COLLECTIONS_VALUE,
+  );
+  /** A change of collection in the sidebar brings the list along, even from "Todas". */
   private readonly scope = linkedSignal<
-    { readonly ready: boolean; readonly slug: string | null },
+    {
+      readonly ready: boolean;
+      readonly slug: string | null;
+      readonly all: boolean;
+    },
     Scope
   >({
     source: () => ({
       ready: this.kept() !== null,
       slug: this.chat.topicSlug(),
+      all: this.allInAddress(),
     }),
-    computation: ({ ready, slug }, previous) => {
+    computation: ({ ready, slug, all }, previous) => {
+      if (all) return { kind: 'all' };
       if (!ready || !previous?.source.ready) return this.startingScope();
+      // Out of "Todas as mídias": back to the collection in use.
+      if (previous.source.all) return { kind: 'selected' };
       const before = previous.source.slug;
       return before === slug || before === null
         ? previous.value
@@ -277,7 +342,6 @@ export class LibraryPage {
     const filters = {
       ...kept.filters,
       topic: this.topicInForce(),
-      allTopics: this.scope().kind === 'all',
       subject: this.lostSubject() ? null : kept.filters.subject,
     };
     return { ...kept, filters };
@@ -421,6 +485,18 @@ export class LibraryPage {
   protected readonly nothingFound = computed(
     () => this.lastPage() !== null && this.items().length === 0,
   );
+  /**
+   * "Precisa da sua atenção" over a list with something in it: the search, an empty
+   * collection and an empty library leave it out (media-library-search, -collection-empty,
+   * -empty-*); the queue stays a tap away in the sidebar's "Fila de processamento".
+   */
+  protected readonly showQueue = computed(
+    () =>
+      !this.searching() &&
+      !this.nothingFound() &&
+      !this.libraryEmpty() &&
+      !this.tracksOpen(),
+  );
   protected readonly showSkeleton = computed(
     () =>
       !this.choices() ||
@@ -449,29 +525,117 @@ export class LibraryPage {
   private readonly recentItems = computed(() =>
     this.home.hasValue() ? this.home.value().recentlyPlayed : [],
   );
-  /** Each recent play with "há 2 dias", worked out once per answer. */
-  protected readonly recents = computed(() => {
-    const now = new Date();
-    return this.recentItems().map((item) => ({
-      item,
-      ago: item.lastPlayedAt
-        ? playedAgoOf(item.lastPlayedAt, now, this.locale)
-        : '',
-    }));
-  });
-  protected readonly recentsCleared = computed(
-    () => this.home.hasValue() && this.home.value().recentsClearedAt !== null,
-  );
-  protected readonly showRecents = computed(
-    () =>
-      this.home.hasValue() &&
-      (this.recents().length > 0 || this.recentsCleared()),
-  );
-  protected readonly recentsOpen = signal(true);
   protected readonly confirmingClear = signal(false);
   protected readonly canClearRecents = computed(
-    () => this.recents().length > 0 && !this.confirmingClear(),
+    () => this.recentItems().length > 0 && !this.confirmingClear(),
   );
+  /** A phone (the shell's layout below 1024 px): the rows' ⋯ offers "Selecionar". */
+  protected readonly phone = signal(phoneNow());
+  /** The phone's search row, opened by the top row's 🔍 (media-library-search@mobile). */
+  protected readonly searchOpen = signal(false);
+  /**
+   * "Continuar ouvindo" (media-library-sort): the plain list only — no filter, no search, no
+   * selection (media-library-selection) — and, on a narrow main panel, not at all
+   * (media-library: the right panel open; CSS).
+   */
+  protected readonly showContinue = computed(
+    () =>
+      this.continueItems().length > 0 &&
+      !this.searching() &&
+      !this.selecting() &&
+      !this.filtered() &&
+      !this.libraryEmpty() &&
+      !this.tracksOpen(),
+  );
+  /** "Compacta": the list without covers (media-library-sort's "Ver como"). */
+  private readonly compact = signal(readCompact());
+  protected readonly display = computed<LibraryDisplay>(() => {
+    const view = this.choices()?.view ?? 'list';
+    return view === 'list' && this.compact() ? 'compact' : view;
+  });
+  /**
+   * The phone's sort sheet ends with "Limpar recentes" while the order is "Ouvidas
+   * recentemente" (the header's ⋯ of the desktop has no place in media-library@mobile).
+   */
+  protected readonly phoneClearRecents = computed(
+    () =>
+      this.phone() &&
+      this.canClearRecents() &&
+      this.choices()?.sort === 'recently-played',
+  );
+  protected readonly titleHead = $localize`:@@library.col.title:Título`;
+  /**
+   * The title column's head: "Título", or "3 selecionadas" during a selection. One signal,
+   * not `selecting() ? selectedText() : …` in the template: the page's bindings, the 2 000
+   * rows' among them, share one reactive consumer, and a read that one run makes and the
+   * next skips puts every later read out of step with its last run (each then walks all the
+   * earlier ones): ending a selection took 4× the time of starting one (NFR-2).
+   */
+  protected readonly titleHeadText = computed(() =>
+    this.selecting() ? this.selectedText() : this.titleHead,
+  );
+  protected readonly searchPlaceholder = computed(() =>
+    this.phone()
+      ? $localize`:@@library.searchPlaceholderPhone:Buscar na fala, título, autor`
+      : $localize`:@@library.searchPlaceholder:Buscar na biblioteca (fala, título, autor)`,
+  );
+  protected readonly emptyUploaderText = computed(() =>
+    this.phone()
+      ? $localize`:@@library.emptyUploaderTextPhone:Aulas e palestras viram mídia com transcrição, busca na fala e marcadores.`
+      : $localize`:@@library.emptyUploaderText:Aulas, palestras e conversas viram mídia com transcrição, busca na fala e marcadores.`,
+  );
+  protected readonly emptyReaderText = computed(() =>
+    this.phone()
+      ? $localize`:@@library.emptyReaderTextPhone:Os áudios dos acervos liberados para você aparecem aqui.`
+      : $localize`:@@library.emptyReaderText:Os áudios dos acervos liberados para você aparecem aqui assim que forem enviados.`,
+  );
+  protected readonly otherViewLabel = computed(() =>
+    this.choices()?.view === 'grid'
+      ? $localize`:@@library.showList:Ver como lista`
+      : $localize`:@@library.showGrid:Ver como grade`,
+  );
+  /** The header's ⋯ (media-library): what has no icon of its own in the action bar. */
+  protected readonly headerOptions = computed<readonly MenuOption[]>(() => [
+    {
+      id: 'bookmarks',
+      label: $localize`:@@bookmarks.mine:Meus marcadores`,
+      icon: 'bookmark',
+    },
+    ...(this.selectable().length > 0
+      ? [
+          {
+            id: 'select',
+            label: $localize`:@@library.selectMany:Selecionar mídias`,
+            icon: 'checkcircle' as const,
+          },
+        ]
+      : []),
+    ...(this.canClearRecents()
+      ? [
+          {
+            id: 'clear-recents',
+            label: $localize`:@@library.clearRecents:Limpar recentes`,
+            icon: 'close' as const,
+          },
+        ]
+      : []),
+  ]);
+
+  /** The recordings whose tracks show under their row (media-library-tracks). */
+  protected readonly openTracks = signal<ReadonlySet<string>>(new Set());
+  /**
+   * A recording's tracks are open: the list is the page, without the attention cards and
+   * "Continuar ouvindo" over it (media-library-tracks, both widths).
+   */
+  private readonly tracksOpen = computed(() => this.openTracks().size > 0);
+
+  protected toggleTracks(id: string): void {
+    this.openTracks.update((open) => {
+      const next = new Set(open);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
 
   /** Selected media for "Marcar como ouvida/não ouvida" (only those on screen). */
   protected readonly selected = linkedSignal<
@@ -487,8 +651,45 @@ export class LibraryPage {
     computation: () => new Set<string>(),
   });
   protected readonly selecting = computed(() => this.selected().size > 0);
+
+  /**
+   * `data-choosing` on the page's root while a selection is on: the shell hides the phone's
+   * navigation for the selection's bar (media-library-selection@mobile) without a `:has()`
+   * over the 2 000 rows (NFR-2).
+   */
+  private markChoosing(): void {
+    const root = inject(DOCUMENT).documentElement;
+    // DOM work outside any template (the attribute is on <html>): after the render (NG-14).
+    afterRenderEffect({
+      write: () => root.toggleAttribute('data-choosing', this.selecting()),
+    });
+    this.destroyRef.onDestroy(() => root.removeAttribute('data-choosing'));
+  }
+  /** The ready ones and the files that failed (media-library-selection@mobile). */
   protected readonly selectable = computed(() =>
-    this.items().filter((item) => item.status === 'ready'),
+    this.items().filter(
+      (item) => item.status === 'ready' || item.status === 'failed',
+    ),
+  );
+  private readonly selectedItems = computed(() =>
+    this.items().filter((item) => this.selected().has(item.id)),
+  );
+  /** What "Marcar como (não) ouvida" acts on: a failed file has nothing to hear. */
+  protected readonly selectedReady = computed(() =>
+    this.selectedItems().filter((item) => item.status === 'ready'),
+  );
+  /** Only files that failed are chosen: a master removes them from the bar. */
+  protected readonly selectedFailedOnly = computed(() => {
+    const chosen = this.selectedItems();
+    return (
+      chosen.length > 0 && chosen.every((item) => item.status === 'failed')
+    );
+  });
+  /** Several failed files removed at once, from the selection's bar. */
+  protected readonly removingMany = signal<readonly LibraryItem[]>([]);
+  protected readonly removingManyTitle = computed(
+    () =>
+      $localize`:@@library.removeManyTitle:Remover ${this.removingMany().length}:count: áudios?`,
   );
   protected readonly allSelected = computed(
     () =>
@@ -505,6 +706,16 @@ export class LibraryPage {
     () =>
       $localize`:@@library.selectAll:Selecionar todas as ${this.selectable().length}:count:`,
   );
+  /**
+   * Each row's "Selecionar todas as N", which only a phone's ⋯ offers: '' on a desktop, so a
+   * selection that starts or ends changes no input of the 2 000 rows there and none of them
+   * is checked again (NFR-2). One signal, read by every row whatever the state.
+   */
+  protected readonly rowSelectAll = computed(() =>
+    this.phone() && this.selecting() && !this.allSelected()
+      ? this.selectAllText()
+      : '',
+  );
 
   protected readonly uploading = signal(false);
   protected readonly removing = signal<MediaItem | null>(null);
@@ -512,6 +723,12 @@ export class LibraryPage {
   protected readonly removingTracks = signal<readonly string[] | null>(null);
   protected readonly removingTracksText = computed(() =>
     alsoRemovesText(this.removingTracks() ?? []),
+  );
+  protected readonly removingTracksCount = computed(() =>
+    alsoRemovesCount(this.removingTracks()?.length ?? 0),
+  );
+  protected readonly removingTracksShown = computed(() =>
+    trackListRows(this.removingTracks() ?? []),
   );
   protected readonly editing = signal<LibraryItem | null>(null);
   /** The last audio moved from here (KBC-050 FR-3). */
@@ -537,13 +754,94 @@ export class LibraryPage {
   );
   /** The header's line: where the list is and what it holds (v2 media-library). */
   protected readonly headerMeta = computed(() => {
-    const topic = this.choices()?.filters.topic ?? null;
-    const where = topic
-      ? (this.titles().get(topic) ?? topic)
-      : $localize`:@@library.allCollections:Todos os acervos`;
+    const filters = this.choices()?.filters ?? null;
+    const topic = filters?.topic ?? null;
+    // A filter of one state or one author names what the list is (media-library-chip,
+    // -author: "Em andamento · 3 mídias", "Irmã Helena Prado · 5 mídias").
+    const state = filters?.states.length === 1 ? filters.states[0] : null;
+    const author = filters?.authors.length === 1 ? filters.authors[0] : null;
+    const where = state
+      ? STATE_CHIP_LABELS[state]()
+      : author
+        ? author === NO_AUTHOR
+          ? $localize`:@@authorship.others:Outros autores`
+          : (this.facets().authors.find((one) => one.slug === author)?.name ??
+            author)
+        : topic
+          ? this.collectionLine(topic)
+          : $localize`:@@library.allCollections:Todos os acervos`;
+    if (this.libraryEmpty())
+      return $localize`:@@library.nothingYet:Nenhuma mídia por enquanto`;
     const count = this.countText();
     return count ? `${where} · ${count}` : where;
   });
+  /**
+   * The header's title: the collection the list is about, or "Todas as mídias" by choice —
+   * the page's context, never a removable filter (owner, 2026-11-19).
+   */
+  protected readonly scopeTitle = computed(() => {
+    const choices = this.choices();
+    if (!choices) return '';
+    const { topic } = choices.filters;
+    return topic
+      ? (this.titles().get(topic) ?? topic)
+      : $localize`:@@library.allMedia:Todas as mídias`;
+  });
+  /**
+   * The explicit way between the two scopes, beside the header's title: "Ver todas as mídias"
+   * from a collection, "Ver só <the collection in use>" back from every collection. Nothing
+   * with a single collection in sight.
+   */
+  protected readonly scopeSwitch = computed(() => {
+    const choices = this.choices();
+    if (!choices || this.topics().length < 2) return null;
+    if (choices.filters.topic !== null)
+      return {
+        topic: null,
+        label: $localize`:@@library.seeAllMedia:Ver todas as mídias`,
+      };
+    const slug = this.chat.topicSlug();
+    const title = slug ? this.titles().get(slug) : undefined;
+    return slug && title
+      ? {
+          topic: slug,
+          label: $localize`:@@library.seeOnly:Ver só ${title}:name:`,
+        }
+      : null;
+  });
+
+  /** The collection of the list with its sub-collections, or null for every collection. */
+  protected readonly scopeTopics = computed<ReadonlySet<string> | null>(() => {
+    const choices = this.choices();
+    // Not known yet: nothing, rather than every collection for a moment.
+    if (!choices) return new Set<string>();
+    const { topic } = choices.filters;
+    if (topic === null) return null;
+    return new Set([
+      topic,
+      ...this.topics()
+        .filter((one) => one.parent === topic)
+        .map((one) => one.slug),
+    ]);
+  });
+
+  protected switchScope(topic: string | null): void {
+    this.changeFilter({ kind: 'topic', topic });
+  }
+
+  /** What of the collection the list holds: "Acervo", or "Acervo com <its sub-collections>". */
+  private collectionLine(slug: string): string {
+    const children = this.topics()
+      .filter((one) => one.parent === slug)
+      .map((one) => one.title);
+    if (children.length === 0)
+      return $localize`:@@library.scopeCollection:Acervo`;
+    const names = new Intl.ListFormat('pt-BR', {
+      style: 'long',
+      type: 'conjunction',
+    }).format(children);
+    return $localize`:@@library.scopeWithChildren:Acervo com ${names}:names:`;
+  }
   /** What the green ▶ plays: the first ready media of the list on screen. */
   protected readonly firstPlayable = computed(
     () => this.items().find((item) => item.status === 'ready') ?? null,
@@ -555,7 +853,11 @@ export class LibraryPage {
       ? null
       : (this.items().find((item) => item.id === id) ?? null);
   });
-  protected readonly listPlaying = computed(() => this.playingItem() !== null);
+  /** The list's ▶ (or 🔀) started what plays: only then the header's ▶ is ⏸ (a playlist's). */
+  protected readonly listPlaying = computed(
+    () =>
+      this.playingItem() !== null && this.playNow.playingList() === LIST_KEY,
+  );
   protected readonly playAllLabel = computed(() =>
     this.listPlaying()
       ? $localize`:@@library.pauseList:Pausar a lista`
@@ -563,17 +865,32 @@ export class LibraryPage {
   );
   protected readonly nothingFoundTitle = computed(() =>
     this.filtered()
-      ? $localize`:@@library.filtersEmpty:Nenhuma mídia com estes filtros.`
-      : $localize`:@@library.collectionEmpty:Nenhuma mídia neste acervo.`,
+      ? $localize`:@@library.filtersEmpty:Nenhuma mídia com estes filtros`
+      : $localize`:@@library.collectionEmpty:Nenhuma mídia neste acervo`,
   );
-  protected readonly nothingFoundText = computed(() =>
-    this.filtered()
-      ? ''
-      : $localize`:@@library.collectionEmptyText:Quando alguém enviar um áudio para este acervo, ele aparece aqui.`,
-  );
+  protected readonly nothingFoundText = computed(() => {
+    // The phone's empty collection is its title and the way out (-collection-empty@mobile).
+    if (this.filtered() || this.phone()) return '';
+    const topic = this.choices()?.filters.topic ?? null;
+    const name = topic ? (this.titles().get(topic) ?? null) : null;
+    return name
+      ? $localize`:@@library.collectionEmptyNamed:Quando alguém enviar um áudio para ${name}:name:, ele aparece aqui.`
+      : $localize`:@@library.collectionEmptyText:Quando alguém enviar um áudio para este acervo, ele aparece aqui.`;
+  });
 
   constructor() {
     this.followCollection();
+    this.markChoosing();
+    inject(PageHeader).own(
+      computed(() => ({
+        // The phone's top row names the scope: the collection in use or "Todas as mídias".
+        title: this.scopeTitle() || $localize`:@@library.title:Biblioteca`,
+        back: null,
+        actions: this.phoneActions() ?? null,
+        tint: LIBRARY_TINT,
+      })),
+    );
+    this.followLayout();
     this.saves
       .pipe(
         concatMap((update) =>
@@ -590,6 +907,20 @@ export class LibraryPage {
       )
       .subscribe();
     this.followAddress();
+    this.followAllInAddress();
+  }
+
+  /** The shell's breakpoint: below it, the phone's layout (the rows' ⋯ changes). */
+  private followLayout(): void {
+    const query =
+      this.host.ownerDocument.defaultView?.matchMedia?.(PHONE_QUERY);
+    if (!query) return;
+    const onChange = (event: MediaQueryListEvent) =>
+      this.phone.set(event.matches);
+    query.addEventListener('change', onChange);
+    this.destroyRef.onDestroy(() =>
+      query.removeEventListener('change', onChange),
+    );
   }
 
   /** The header, the sidebar and the account say the collection the list shows (KBC-091). */
@@ -599,16 +930,6 @@ export class LibraryPage {
     toObservable(this.chat.topicsKnown)
       .pipe(filter(Boolean), take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.selectArrivedTopic());
-    // The sidebar took the list out of "Todos os acervos": the account forgets it too.
-    toObservable(this.scope)
-      .pipe(
-        pairwise(),
-        filter(
-          ([before, after]) => before.kind === 'all' && after.kind !== 'all',
-        ),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe(() => this.leaveAllTopics());
   }
 
   /** The words and the address, each following the other (KBC-096). */
@@ -643,6 +964,18 @@ export class LibraryPage {
         this.lastWordsInAddress = words;
         this.query.set(words);
       });
+  }
+
+  /** "Ver todas as mídias" (`?acervos=todos`) or a collection of the sidebar: the scope follows. */
+  private followAllInAddress(): void {
+    this.router.events
+      .pipe(
+        filter((event) => event instanceof NavigationEnd),
+        filter(() => !this.isAway()),
+        map(() => this.allFromAddress()),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((all) => this.allInAddress.set(all));
   }
 
   /** On another page, or on the way to one: a write would replace that page's address. */
@@ -706,13 +1039,14 @@ export class LibraryPage {
     return this.topics().some((one) => one.slug === topic && one.canOpen);
   }
 
-  /** A link's collection first, then "Todos os acervos", then the selected one (KBC-091). */
+  /**
+   * A link's collection first, else the selected one (KBC-091). "Todos os acervos" kept in
+   * the account no longer opens the library mixed: the collection in use is its scope.
+   */
   private startingScope(): Scope {
     if (this.arrivedWithTopic)
       return { kind: 'topic', slug: this.arrivedWithTopic };
-    return this.kept()?.filters.allTopics
-      ? { kind: 'all' }
-      : { kind: 'selected' };
+    return { kind: 'selected' };
   }
 
   private topicInForce(): string | null {
@@ -720,6 +1054,11 @@ export class LibraryPage {
     if (scope.kind === 'all') return null;
     if (scope.kind === 'topic' && this.sees(scope.slug)) return scope.slug;
     return this.chat.topicSlug();
+  }
+
+  /** The scrolling keys with nothing focused move the library (its own scroller). */
+  protected pageKey(event: KeyboardEvent): void {
+    scrollPageByKey(this.host, event);
   }
 
   protected keepInView(event: FocusEvent): void {
@@ -734,10 +1073,19 @@ export class LibraryPage {
     this.playNow.play(item);
   }
 
+  protected resume(item: MediaItem): void {
+    this.playNow.resume(item);
+  }
+
   /** The header's ▶: pauses what of this list plays, or plays its first ready media. */
   protected playAll(): void {
-    const item = this.playingItem() ?? this.firstPlayable();
-    if (item) this.playNow.play(item);
+    const playing = this.listPlaying() ? this.playingItem() : null;
+    if (playing) {
+      this.playNow.play(playing);
+      return;
+    }
+    const item = this.firstPlayable();
+    if (item) this.playNow.playList(LIST_KEY, item);
   }
 
   /* ---------- Choices (BR-7) ---------- */
@@ -760,6 +1108,12 @@ export class LibraryPage {
     if (change.kind === 'topic') this.chooseCollection(change.topic, filters);
     else this.saveFilters(filters);
     if (change.kind === 'clear') this.focusAfterRender(this.allTitle);
+    // The collection's chip went with the focus: during a search, to the results' title.
+    else if (change.kind === 'topic' && change.topic === null) {
+      const results = this.searchResults();
+      if (results) results.focusTitle();
+      else this.focusAfterRender(this.allTitle);
+    }
   }
 
   /** Only this replaces the kept collection; choosing one selects it everywhere (KBC-091). */
@@ -767,14 +1121,34 @@ export class LibraryPage {
     topic: string | null,
     filters: LibraryFilters,
   ): void {
+    this.allInAddress.set(topic === null);
+    this.keepAllInAddress(topic === null);
     this.scope.set(topic ? { kind: 'topic', slug: topic } : { kind: 'all' });
     if (topic && this.canOpen(topic)) this.chat.selectTopic(topic);
-    this.saveChoice({ ...filters, topic, allTopics: topic === null });
+    this.saveChoice({ ...filters, topic });
   }
 
-  private leaveAllTopics(): void {
-    const kept = this.kept()?.filters;
-    if (kept?.allTopics) this.saveChoice({ ...kept, allTopics: false });
+  /** "Todas as mídias" goes into the address (or out of it): Back and a reload keep it. */
+  private keepAllInAddress(all: boolean): void {
+    if (this.isAway() || this.allFromAddress() === all) return;
+    const address = this.router.parseUrl(this.router.url);
+    const rest = Object.fromEntries(
+      Object.entries(address.queryParams).filter(
+        ([name]) => name !== ALL_COLLECTIONS_PARAM,
+      ),
+    );
+    address.queryParams = all
+      ? { ...rest, [ALL_COLLECTIONS_PARAM]: ALL_COLLECTIONS_VALUE }
+      : rest;
+    void this.router.navigateByUrl(address);
+  }
+
+  private allFromAddress(): boolean {
+    const { queryParams } = this.router.parseUrl(this.router.url);
+    return (
+      convertToParamMap(queryParams).get(ALL_COLLECTIONS_PARAM) ===
+      ALL_COLLECTIONS_VALUE
+    );
   }
 
   /** Any change but the collection's: what is kept of it stays. */
@@ -783,13 +1157,17 @@ export class LibraryPage {
     this.saveChoice({
       ...chosen,
       topic: kept?.topic ?? null,
-      allTopics: kept?.allTopics ?? false,
     });
   }
 
+  /**
+   * `allTopics` is always written false: "Todas as mídias" lives in the address only, and
+   * nothing reads the account's flag any more (owner, 2026-11-19). The field stays in the
+   * strict contract so the choices already stored still parse; any write clears an old true.
+   */
   private saveChoice(chosen: LibraryFilters): void {
     const subject = chosen.subject ?? this.lostSubject();
-    const filters = { ...chosen, subject };
+    const filters = { ...chosen, subject, allTopics: false };
     this.choose({ filters }, { libraryFilters: filters });
   }
 
@@ -804,17 +1182,19 @@ export class LibraryPage {
     this.focusAfterRender(this.allTitle);
   }
 
-  /** "Ver tudo" of "Continuar ouvindo": "Todas" with only what is in progress. */
-  protected showInProgress(): void {
-    this.saveFilters({ ...NO_FILTERS, states: ['in-progress'] });
-  }
-
   protected changeSort(sort: LibrarySort): void {
     this.choose({ sort }, { librarySort: sort });
   }
 
-  protected changeView(view: LibraryView): void {
-    this.choose({ view }, { libraryView: view });
+  protected changeView(display: LibraryDisplay): void {
+    const view: LibraryView = display === 'compact' ? 'list' : display;
+    this.compact.set(display === 'compact');
+    keepCompact(display === 'compact');
+    if (view !== this.choices()?.view) {
+      // Each view opens its recordings anew, as the grid's cards do.
+      this.openTracks.set(new Set());
+      this.choose({ view }, { libraryView: view });
+    }
   }
 
   private choose(
@@ -841,25 +1221,47 @@ export class LibraryPage {
     this.home.reload();
   }
 
-  /* ---------- "Continuar ouvindo" strip ---------- */
+  /* ---------- Header actions (media-library actionBar) ---------- */
 
-  /** ◂ ▸: one card width at a time (also by keyboard, UP-09). */
-  protected scrollStrip(direction: 1 | -1): void {
-    const strip = this.strip()?.nativeElement;
-    strip?.scrollBy({ left: direction * strip.clientWidth * 0.8 });
+  /** 🔀: one ready media of the list, at random (there is no play queue to shuffle). */
+  protected playAny(): void {
+    const ready = this.items().filter((item) => item.status === 'ready');
+    const item = ready[Math.floor(Math.random() * ready.length)];
+    if (item) this.playNow.playList(LIST_KEY, item);
+  }
+
+  protected headerAction(id: string): void {
+    if (id === 'bookmarks') void this.router.navigate(['/midia/marcadores']);
+    else if (id === 'select') this.startSelection();
+    else if (id === 'select-all')
+      this.selected.set(new Set(this.selectable().map((item) => item.id)));
+    else if (id === 'clear-recents') this.askClearRecents();
+  }
+
+  /** The action bar's 🔍: the search field of the filters' row. */
+  protected focusSearch(): void {
+    this.searchBox()?.nativeElement.focus();
+  }
+
+  /** The phone's 🔍 opens the search row and puts the cursor in it; again, closes it. */
+  protected toggleSearch(): void {
+    if (this.searchOpen() || this.searching()) {
+      this.searchOpen.set(false);
+      if (this.query()) this.query.set('');
+      return;
+    }
+    this.searchOpen.set(true);
+    this.focusAfterRender(this.searchBox);
   }
 
   /* ---------- Recents (BR-4) ---------- */
-
-  protected toggleRecents(): void {
-    this.recentsOpen.update((open) => !open);
-  }
 
   protected askClearRecents(): void {
     this.confirmingClear.set(true);
     this.focusAfterRender(this.keepRecentsButton);
   }
 
+  /** Back to the link that asked, or to the list when the ⋯ asked (no link in sight). */
   protected cancelClearRecents(): void {
     this.confirmingClear.set(false);
     this.focusAfterRender(this.clearRecentsButton);
@@ -867,7 +1269,7 @@ export class LibraryPage {
 
   protected clearRecents(): void {
     this.confirmingClear.set(false);
-    this.focusAfterRender(this.recentsToggle);
+    this.focusAfterRender(this.allTitle);
     this.api
       .clearRecents()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -896,6 +1298,13 @@ export class LibraryPage {
     });
   }
 
+  /** "Selecionar mídias" (header ⋯, a row's ⋯ on a phone): the selection starts with one. */
+  protected startSelection(item?: LibraryItem): void {
+    const first = item ?? this.selectable()[0];
+    if (first) this.select(first, true);
+    this.focusAfterRender(this.selectAllBox);
+  }
+
   protected toggleAll(event: Event): void {
     const on = event.target instanceof HTMLInputElement && event.target.checked;
     this.selected.set(
@@ -905,17 +1314,48 @@ export class LibraryPage {
 
   protected cancelSelection(): void {
     this.selected.set(new Set());
-    this.focusAfterRender(this.selectAllBox);
+    // A phone has no table head (media-library@mobile): the list's heading takes the focus.
+    this.focusAfterRender(this.phone() ? this.allTitle : this.selectAllBox);
   }
 
   protected markSelected(played: boolean): void {
-    this.mark([...this.selected()], played);
+    this.mark(
+      this.selectedReady().map((item) => item.id),
+      played,
+    );
+  }
+
+  /** "Remover" on the bar: the chosen files that failed, after the same confirmation. */
+  protected removeSelected(): void {
+    const chosen = this.selectedItems();
+    const first = chosen[0];
+    if (!first || !this.selectedFailedOnly()) return;
+    this.removingMany.set(chosen);
+    this.askRemove(first);
   }
 
   protected rowAction(item: LibraryItem, action: RowAction): void {
     if (action === 'remove') this.askRemove(item);
     else if (action === 'edit') this.openEdit(item);
+    else if (action === 'play') this.play(item);
+    else if (action === 'select') this.startSelection(item);
+    else if (action === 'select-all') this.headerAction('select-all');
+    else if (action === 'play-next') this.playNextOf(item);
+    else if (action === 'bookmarks')
+      void this.router.navigate(['/midia', item.id], {
+        fragment: 'marcadores',
+      });
+    else if (action === 'retry') this.retry(item);
+    else if (action === 'copy-link') this.copyLink(item);
     else this.mark([item.id], action === 'mark-played');
+  }
+
+  /** "Tocar em seguida": after the one playing, said aloud (or it plays now). */
+  private playNextOf(item: LibraryItem): void {
+    if (this.playNow.playNext(item))
+      this.announcement.set(
+        $localize`:@@library.playsNext:“${item.title}:title:” toca em seguida.`,
+      );
   }
 
   private mark(ids: readonly string[], played: boolean): void {
@@ -1025,6 +1465,31 @@ export class LibraryPage {
     return shown !== null && topic !== shown && parent !== shown;
   }
 
+  /** "Copiar link" (desktop) / "Compartilhar" (phone, the system's sheet when it has one). */
+  private copyLink(item: LibraryItem): void {
+    const view = this.host.ownerDocument.defaultView;
+    const url = new URL(
+      this.router.serializeUrl(this.router.createUrlTree(['/midia', item.id])),
+      view?.location.origin ?? 'http://localhost',
+    ).toString();
+    const nav = view?.navigator;
+    const done = () =>
+      this.announcement.set($localize`:@@library.linkCopied:Link copiado.`);
+    const failed = () =>
+      this.actionError.set(
+        $localize`:@@library.linkFailed:Não consegui copiar o link. Abra a mídia e copie o endereço.`,
+      );
+    if (this.phone() && nav?.share) {
+      nav.share({ title: item.title, url }).catch(() => undefined);
+      return;
+    }
+    if (!nav?.clipboard) {
+      failed();
+      return;
+    }
+    nav.clipboard.writeText(url).then(done, failed);
+  }
+
   protected retry(item: LibraryItem): void {
     this.actionError.set('');
     this.mediaApi
@@ -1092,9 +1557,14 @@ export class LibraryPage {
 
   protected confirmRemove(): void {
     const item = this.removing();
+    const many = this.removingMany();
     const cascade = this.removingTracks() !== null;
     this.removeDialog()?.nativeElement.close();
     if (!item) return;
+    if (many.length > 0) {
+      this.removeMany(many);
+      return;
+    }
     this.mediaApi
       .remove(item.id, { cascade })
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -1107,6 +1577,30 @@ export class LibraryPage {
           this.heading().nativeElement.focus();
         },
         error: (err: unknown) => this.removeRefused(item, err),
+      });
+  }
+
+  /** The bar's failed files, one request each; the list comes back either way. */
+  private removeMany(items: readonly LibraryItem[]): void {
+    forkJoin(
+      items.map((one) => this.mediaApi.remove(one.id, { cascade: false })),
+    )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.selected.set(new Set());
+          this.reload();
+          this.announcement.set(
+            items.length === 1
+              ? $localize`:@@media.removedAnnouncement:${items[0]?.title}:title: foi removido.`
+              : $localize`:@@library.removedManyAnnouncement:${items.length}:count: áudios foram removidos.`,
+          );
+          this.heading().nativeElement.focus();
+        },
+        error: (err: unknown) => {
+          this.reload();
+          this.actionError.set(errorMessage(toUiErrorCode(err)));
+        },
       });
   }
 
@@ -1128,6 +1622,7 @@ export class LibraryPage {
 
   protected removeClosed(): void {
     this.removing.set(null);
+    this.removingMany.set([]);
     this.removingTracks.set(null);
   }
 

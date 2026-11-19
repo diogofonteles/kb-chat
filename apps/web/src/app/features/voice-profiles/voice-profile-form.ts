@@ -1,3 +1,4 @@
+import { UiIcon } from '@ui/index.js';
 import { DOCUMENT } from '@angular/common';
 import { HttpErrorResponse, httpResource } from '@angular/common/http';
 import {
@@ -72,7 +73,7 @@ const today = (): string => {
  */
 @Component({
   selector: 'app-voice-profile-form',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, UiIcon],
   templateUrl: './voice-profile-form.html',
   styleUrls: ['../settings/settings-form.css', './voice-profiles.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -179,6 +180,23 @@ export class VoiceProfileForm {
       MIN_PROFILE_SPEECH_MS,
   );
 
+  /** The phone sheet's header action (v2 · Perfis de voz, celular): this step's own. */
+  readonly phoneAction = computed(() =>
+    this.step() === 'consent'
+      ? $localize`:@@voiceConsent.continue:Continuar`
+      : $localize`:@@voiceConsent.save:Calcular perfil`,
+  );
+  /** As the step's own buttons: Continuar stays lit and says what is missing when pressed. */
+  readonly phoneActionBlocked = computed(
+    () => this.step() !== 'consent' && (this.busy() || !this.enough()),
+  );
+
+  /** The sheet header's action: the same as the step's own button. */
+  runPhoneAction(): void {
+    if (this.step() === 'consent') this.continueToSources();
+    else this.save();
+  }
+
   constructor() {
     // The role is asked only for a deceased person; its rule follows the choice.
     effect(() => {
@@ -188,8 +206,8 @@ export class VoiceProfileForm {
     });
   }
 
-  protected continueToSources(event: Event): void {
-    event.preventDefault();
+  protected continueToSources(event?: Event): void {
+    event?.preventDefault();
     this.form.markAllAsTouched();
     const problem = this.consentProblem();
     this.problem.set(problem);

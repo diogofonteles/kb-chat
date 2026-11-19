@@ -4,7 +4,11 @@
 :host {
   position: relative;
   display: grid;
-  grid-template-columns: 2rem 2.5rem minmax(0, 1fr) 11rem 14rem 3.5rem 2.5rem;
+  /* v2 · media-library: # 24 · cover 40 · title · collection 180 · status 220 · length 44 ·
+     ⋯ 18, 16 apart (the title 12 from its cover). */
+  grid-template-columns:
+    1.5rem 2.5rem minmax(0, 1fr)
+    11.25rem 13.75rem 2.75rem 1.125rem;
   grid-template-rows: auto auto;
   grid-template-areas:
     'lead art title topic status duration actions'
@@ -14,12 +18,18 @@
   min-height: 3.5rem;
   padding: 0 var(--space-4);
   border-radius: var(--radius-menu);
-  /* 2 000 rows (NFR-2): a change in one row does not lay out or paint the others. */
+  /* 2 000 rows (NFR-2): a change in one row does not lay out or paint the others, and the
+     rows out of sight are not laid out at all when a selection starts or ends (the page
+     around them changes: its head, its bar, its padding). Their size is the last one drawn,
+     a 56 px row (64 on a phone, below) until then. */
   contain: content;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 3.5rem;
 }
 
 :host(:hover),
-:host(:focus-within) {
+:host(:focus-within),
+:host(.menu-open) {
   background: var(--overlay-2);
 }
 
@@ -50,6 +60,25 @@
   grid-area: 1 / 1;
 }
 
+/* The box at the column's start, the number at its end (media-library-selection). A 24 px
+   target (WCAG 2.5.8) around the frame's 18 px box: a transparent 3 px ring, the box's edge
+   drawn inside it, the box where the frame has it. */
+.lead > .select {
+  justify-self: start;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-inline-start: -0.1875rem;
+  border: 0.1875rem solid transparent;
+  border-radius: 7px;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 1px var(--ui-check-edge);
+}
+
+.lead > .select:checked {
+  border-color: transparent;
+  box-shadow: none;
+}
+
 /* Over the box in the same cell, they only show: a press there is the box's (WebKit can
    test the press before the hover hides them). */
 .number,
@@ -65,14 +94,14 @@
    An unchecked box is hidden by its edge, not by opacity: going from 0 to 1 on 2 000 boxes
    when the selection starts changed every row's paint layers (NFR-2). A checked box is in a
    selected row, shown anyway. It stays focusable all along. */
-.select:not(:checked) {
-  border-color: transparent;
+.lead > .select:not(:checked) {
+  box-shadow: none;
 }
 
-:host(:hover) .select:not(:checked),
-:host(:focus-within) .select:not(:checked),
-:host-context(.selecting) .select:not(:checked) {
-  border-color: var(--color-text-muted);
+:host(:hover) .lead > .select:not(:checked),
+:host(:focus-within) .lead > .select:not(:checked),
+:host-context(.selecting) .lead > .select:not(:checked) {
+  box-shadow: inset 0 0 0 1px var(--ui-check-edge);
 }
 
 :host(:hover) .number,
@@ -100,7 +129,8 @@
   grid-area: 1 / 1;
 }
 
-/* ▶ over the cover: shown under the pointer and the focus, and while this one plays. */
+/* ▶ over the cover: shown under the pointer and the focus. The one playing keeps a bare cover,
+   with the wave in its lead and its title in the accent (media-library frames). */
 .play {
   /* Above the cover, which is positioned and would otherwise paint over it. */
   position: relative;
@@ -119,8 +149,7 @@
 }
 
 :host(:hover) .play,
-.play:focus-visible,
-.play.on {
+.play:focus-visible {
   opacity: 1;
 }
 
@@ -168,6 +197,7 @@ a.main:focus-visible {
 
 .title {
   display: block;
+  margin-inline-start: -0.25rem;
   padding-top: var(--space-2);
   overflow: hidden;
   font-size: var(--text-item);
@@ -178,6 +208,45 @@ a.main:focus-visible {
 
 :host(.playing) .title {
   color: var(--color-accent-text);
+}
+
+/* The one playing (media-library frames): its number gives way, the wave stands where the
+   cover starts, and the cover, the title and the author move one step (32 px) right. */
+@container library-table (min-width: 36.0625rem) {
+  :host(.playing) .wave {
+    translate: 2rem 0;
+  }
+
+  :host(.playing) .art {
+    translate: 2rem 0;
+  }
+
+  :host(.playing) .title,
+  :host(.playing) .byline {
+    padding-inline-start: 2rem;
+  }
+
+  /* The title 15/18 with its author 13/16 right under it, centred in the 56 row; "parou em"
+     12 (v2 · media-library). */
+  :host {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .title {
+    margin-bottom: -1px;
+    padding-top: 0;
+    line-height: 1.125rem;
+  }
+
+  .byline {
+    margin-top: 1px;
+    padding-bottom: 0;
+    line-height: 1rem;
+  }
+
+  .resume {
+    font-size: var(--text-xs);
+  }
 }
 
 :host(.failed) .title {
@@ -199,6 +268,7 @@ a.main:focus-visible {
 .byline {
   grid-area: byline;
   align-self: start;
+  margin-inline-start: -0.25rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -249,6 +319,13 @@ a.main ~ .cells .duration {
   color: var(--color-text-muted);
 }
 
+/* The phone's words and pills (media-library@mobile) only show in its one line. */
+.phone-duration,
+.phone-words,
+.step-pill {
+  display: none;
+}
+
 .position {
   width: 4rem;
 }
@@ -264,15 +341,166 @@ a.main ~ .cells .duration {
   justify-content: flex-end;
 }
 
+/* The ⋯ shows on the row under the pointer or the focus, and while its menu is open
+   (media-library-row-menu); it stays focusable all along. */
+.actions app-menu-button {
+  opacity: 0;
+}
+
+:host(:hover) .actions app-menu-button,
+:host(:focus-within) .actions app-menu-button,
+.actions app-menu-button:has([aria-expanded='true']) {
+  opacity: 1;
+}
+
+/* While choosing, a row's focus is its box's: its ⋯ does not come out for it, only under
+   the pointer or on its own focus (media-library-selection). */
+@container library-table (min-width: 36.0625rem) {
+  :host(:focus-within:not(:hover, .menu-open):has(.select:focus))
+    .actions
+    app-menu-button {
+    opacity: 0;
+  }
+}
+
+.author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 app-menu-button {
   --menu-trigger-min: 2rem;
   --menu-trigger-height: 2rem;
 }
 
+/* A recording (media-library-tracks): the "3 faixas" pill leads its byline, the chevron
+   holds the row's end, and its ⋯ comes out over the length under the pointer or the focus. */
+.tracks-pill {
+  flex: none;
+}
+
+.end {
+  display: contents;
+}
+
+.more {
+  grid-area: duration;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  opacity: 0;
+}
+
+:host(:hover) .more,
+:host(:focus-within) .more,
+.more:has([aria-expanded='true']) {
+  opacity: 1;
+}
+
+:host(.has-tracks:hover) .duration,
+:host(.has-tracks:focus-within) .duration,
+:host(.has-tracks:has(.more [aria-expanded='true'])) .duration {
+  visibility: hidden;
+}
+
+.tracks-toggle {
+  /* Above the row's link, as the box and ▶ are. */
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.tracks-toggle:hover {
+  background: var(--overlay-2);
+}
+
+.tracks-toggle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* 🔖 of a ready row: out of sight (still in the tab order) until the pointer or the focus is
+   on the row; then a column of its own before the length, the others giving it room
+   (media-library-row-menu: collection and status 34 px to the left). */
+.row-bookmarks {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+@container library-table (min-width: 52.0625rem) {
+  :host(.ready:hover),
+  :host(.ready:focus-within:not(:has(.select:focus))),
+  :host(.ready.menu-open) {
+    grid-template-columns:
+      1.5rem 2.5rem minmax(0, 1fr)
+      11.25rem 13.75rem 1.125rem 2.75rem 1.125rem;
+    grid-template-areas:
+      'lead art title topic status mark duration actions'
+      'lead art byline topic status mark duration actions';
+  }
+
+  /* The focus on a row's box (a selection) brings no 🔖 (media-library-selection). */
+  :host(:hover) .row-bookmarks,
+  :host(:focus-within:not(:has(.select:focus))) .row-bookmarks,
+  :host(.menu-open) .row-bookmarks {
+    position: relative;
+    z-index: 1;
+    grid-area: mark;
+    display: grid;
+    place-items: center;
+    /* A 24 px target (WCAG 2.5.8) reaching 3 px into the gaps of its 18 px column. */
+    width: 1.5rem;
+    height: 2rem;
+    margin-inline: -0.1875rem;
+    overflow: visible;
+    clip-path: none;
+  }
+
+  .row-bookmarks:hover {
+    color: var(--color-text);
+  }
+
+  .row-bookmarks:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+}
+
 /* A narrow table (the right panel open, a small window): the collection gives way first. */
 @container library-table (max-width: 52rem) {
+  /* No column brings the 🔖 out here, a phone has no hover: out of the tab order and the
+     accessibility tree, the row's ⋯ keeps Ver marcadores. */
+  .row-bookmarks {
+    display: none;
+  }
+
   :host {
-    grid-template-columns: 2rem 2.5rem minmax(0, 1fr) 11rem 3.5rem 2.5rem;
+    grid-template-columns:
+      1.5rem 2.5rem minmax(0, 1fr)
+      10.625rem 2.75rem 1.125rem;
     grid-template-areas:
       'lead art title status duration actions'
       'lead art byline status duration actions';
@@ -287,18 +515,136 @@ app-menu-button {
    author and the length (media-library@mobile). The box stays in reach, with no hover. */
 @container library-table (max-width: 36rem) {
   :host {
-    grid-template-columns: 1.75rem 3.25rem minmax(0, 1fr) var(--target);
+    /* The box's column (24, then 12) and the cover's (52, then 12 to the title: mRow) are
+       always there: out of a selection the list holds the box's column out of view
+       (library-page.css), so starting or ending one moves one box, not 2 000 rows' columns. */
+    grid-template-columns:
+      1.5rem var(--space-3) 3.25rem var(--space-3) minmax(0, 1fr)
+      var(--row-end, 1.5rem);
     grid-template-areas:
-      'lead art title actions'
-      'lead art cells actions';
-    column-gap: var(--space-3);
+      'lead . art . title actions'
+      'lead . art . cells actions';
+    /* The title and its line centred in the 64 row, 4 apart: a line with a pill is taller and
+       lifts the title, as mRow draws it (media-library-selection@mobile). What spans both
+       lines (the box, the cover, the row's end) gives up its height to them (the margins
+       below) and is centred over them. */
+    align-content: center;
+    column-gap: 0;
+    row-gap: 0;
     min-height: 4rem;
-    padding: 0 var(--space-2);
+    contain-intrinsic-size: auto 4rem;
+    padding: 0;
+  }
+
+  .art {
+    justify-self: start;
+  }
+
+  .lead,
+  .art,
+  :host > .actions,
+  .end {
+    align-self: center;
+    margin-block: -1rem;
+  }
+
+  .title {
+    padding-top: 0;
+    line-height: 1.125rem;
+  }
+
+  .cells {
+    margin-top: var(--space-1);
+    line-height: 1rem;
+  }
+
+  /* A chosen row is a band from edge to edge of the screen (media-library-selection@mobile). */
+  :host(.selected) {
+    margin-inline: calc(-1 * var(--space-4));
+    padding-inline: var(--space-4);
+    border-radius: 0;
+  }
+
+  /* A recording: its ⋯ and the chevron side by side at the row's end. */
+  :host(.has-tracks) {
+    --row-end: 3.5rem;
+  }
+
+  .end {
+    grid-area: actions;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .more {
+    opacity: 1;
+  }
+
+  /* Only the chevron is drawn (media-library-tracks@mobile): the ⋯ opens on a long press, and
+     shows while the keyboard is on it. */
+  :host(.has-tracks) {
+    --row-end: 1.5rem;
+  }
+
+  :host(.has-tracks:has(.more:focus-within)) {
+    --row-end: 3.5rem;
+  }
+
+  :host(.has-tracks) .more:not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  :host(.has-tracks:hover) .duration,
+  :host(.has-tracks:focus-within) .duration {
+    visibility: visible;
+  }
+
+  /* v2 · media-library-tracks@mobile: the chevron 20, grey, at the row's end. */
+  .tracks-toggle {
+    width: 1.5rem;
+    height: 2.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .tracks-toggle ui-icon ::ng-deep svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  /* A long press selects the row: no text selection or link preview under the finger. */
+  :host {
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+
+  /* No box until a selection starts (a long press): then it leads every row (selection@mobile). */
+  .lead {
+    visibility: hidden;
+  }
+
+  /* During a selection the title and its line end 12 before the row's end, as drawn. */
+  :host-context(.selecting) .title,
+  :host-context(.selecting) .cells {
+    margin-inline-end: var(--space-3);
+  }
+
+  :host-context(.selecting) .lead {
+    visibility: visible;
+  }
+
+  .actions app-menu-button {
+    opacity: 1;
   }
 
   a.main {
-    margin-inline-start: calc(-1 * var(--space-2));
-    padding-inline-start: var(--space-2);
+    margin-inline-start: 0;
+    padding-inline-start: 0;
   }
 
   .art {
@@ -310,11 +656,11 @@ app-menu-button {
     --ui-cover-size: 52px !important;
   }
 
-  /* With no hover to bring it out, the unchecked box shows its edge all along: an invisible
-     box in the lead column would take a tap on what looks like blank space. Still the edge,
-     not opacity, as above (NFR-2). */
-  .select:not(:checked) {
-    border-color: var(--color-text-muted);
+  /* With no hover to bring it out, the unchecked box shows its edge once it is there: an
+     invisible box would take a tap on what looks like blank space. Still the edge, not
+     opacity, as above (NFR-2). */
+  .lead > .select:not(:checked) {
+    box-shadow: inset 0 0 0 1px var(--ui-check-edge);
   }
 
   .number,
@@ -322,22 +668,13 @@ app-menu-button {
     display: none;
   }
 
-  /* ▶ sits on the cover, always in reach of a thumb (MA-02). */
+  /* The frame's cover is bare (media-library@mobile), the one playing too: ▶ covers it
+     whole, unseen, and a tap on the cover plays or pauses at once (MA-02). */
   .play {
-    width: 2rem;
-    height: 2rem;
-    opacity: 1;
-    background: rgb(0 0 0 / 55%);
-    color: #fff;
-  }
-
-  .play.on {
-    background: var(--color-accent);
-    color: var(--color-on-accent);
-  }
-
-  .title {
-    padding-top: var(--space-1);
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: var(--radius-cover);
+    opacity: 0;
   }
 
   /* One line under the title: status, author · length · collection, cut at the end
@@ -350,7 +687,6 @@ app-menu-button {
     align-items: center;
     gap: 0 var(--space-2);
     min-width: 0;
-    padding-bottom: var(--space-1);
     overflow: hidden;
     white-space: nowrap;
   }
@@ -389,12 +725,30 @@ app-menu-button {
     display: inline;
   }
 
-  /* The last to give way: cut at the end, never pushed out of the row. */
+  /* The phone's line has no collection (media-library@mobile). */
   .topic {
-    flex: 0 100 auto;
+    display: none;
+  }
+
+  /* "Irmã Helena Prado · 1:00" in one text; "Aguardando", "Passo 2" in their pills. */
+  .duration,
+  .desk-words,
+  app-preparation-entry {
+    display: none;
+  }
+
+  .phone-duration {
     display: inline;
-    min-width: 0;
-    order: 1;
+  }
+
+  .phone-words,
+  .step-pill {
+    display: inline-flex;
+  }
+
+  .title,
+  .byline {
+    margin-inline-start: 0;
   }
 
   /* The frame's 48 px bar says how far; the words stay for a screen reader. */
@@ -411,19 +765,30 @@ app-menu-button {
     white-space: nowrap;
   }
 
-  .duration::before,
-  .topic::before {
-    content: '·';
-    margin-right: var(--space-2);
+  /* "Irmã Helena Prado · 1:00": one space each side of the dot, as in the frame. */
+  .duration {
+    margin-inline-start: calc(-1 * var(--space-1));
+  }
+
+  .duration::before {
+    content: '·\00a0';
   }
 
   .topic:empty {
     display: none;
   }
 
+  /* v2 · media-library@mobile: the 20 ⋯ on the row's end (16 from the screen's edge), its
+     44 target reaching past it. */
   app-menu-button {
     --menu-trigger-min: var(--target);
     --menu-trigger-height: var(--target);
+    margin-inline-end: -0.75rem;
+  }
+
+  .actions ui-icon ::ng-deep svg {
+    width: 1.25rem;
+    height: 1.25rem;
   }
 }
 
@@ -431,4 +796,18 @@ app-menu-button {
   .play {
     border: 1px solid ButtonText;
   }
+}
+
+/* "Compacta" (media-library-sort's "Ver como"): no cover, the ▶ alone in its place under
+   the pointer, and shorter rows. */
+:host-context(.compact) {
+  min-height: 2.75rem;
+}
+
+:host-context(.compact) .art ui-cover {
+  visibility: hidden;
+}
+
+:host-context(.compact) .art {
+  height: 2rem;
 }

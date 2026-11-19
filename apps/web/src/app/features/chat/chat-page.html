@@ -2,11 +2,13 @@
   class="app-shell"
   [class.desktop]="desktop()"
   [class.collapsed]="collapsed()"
+  [class.expanded]="desktop() && expanded()"
   [class.with-player]="playerShown()"
 >
   @if (desktop()) {
     <app-top-bar
       class="top"
+      [query]="topQuery()"
       (searched)="globalSearch($event)"
       (researchRequested)="openResearch()"
       (homeRequested)="goHome()"
@@ -14,10 +16,21 @@
     <aside class="library" aria-labelledby="your-library-title">
       <app-sidebar
         [collapsed]="collapsed()"
+        [wide]="expanded()"
         (collapseToggled)="toggleCollapsed()"
+        (expandToggled)="expanded.set(!expanded())"
         (acted)="sidebarActed($event)"
       />
     </aside>
+    @if (expanded()) {
+      <section
+        class="library-wide"
+        aria-label="Sua biblioteca"
+        i18n-aria-label="@@library.title"
+      >
+        <app-sidebar [expanded]="true" (acted)="sidebarActed($event)" />
+      </section>
+    }
   } @else {
     <!-- The backdrop click only adds a pointer way out: the modal <dialog> already closes on Escape. -->
     <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
@@ -31,7 +44,7 @@
     >
       <div class="drawer-body">
         <button
-          uiIconButton="circle"
+          uiIconButton
           [size]="36"
           type="button"
           class="drawer-close"
@@ -48,18 +61,48 @@
   <div
     class="layout"
     [class.with-panel]="panelOpen() || rightPanel.content() !== null"
+    [class.doc-page]="docPage()"
   >
     <main
       class="conversation"
       [style.--tint]="tint()"
+      [style.--own-tint]="ownHeader()?.tint ?? null"
+      [class.own-header]="!!ownHeader()?.tint"
       [class.covered]="panelOpen()"
       [class.media]="onMedia()"
+      [class.bare]="onSettings()"
+      [class.player-page]="playerPage()"
+      [class.guided]="guidedFlow()"
       [class.empty]="isEmpty() && !onMedia()"
+      [class.research]="researching()"
       [attr.inert]="covered() ? '' : null"
     >
       <p class="visually-hidden" aria-live="polite">{{ queue.said() }}</p>
-      <header #pageHeader class="topbar">
-        @if (!desktop()) {
+      <!--
+        v2 · Conversa: no title row on desktop, the scope row at the top (escopo) or, on a
+        search page, the results' own head; on a phone the avatar (Menu) and the page's name
+        (Conversas, Buscar, Pesquisa com IA). The collection stays the page's h1, for
+        assistive technology.
+      -->
+      <header
+        #pageHeader
+        class="topbar"
+        [class.bare]="desktop() && searchPage() && !onMedia()"
+        [class.tinted]="pageChrome.tint() !== null"
+        [style.--page-tint]="pageChrome.tint()"
+        [class.own]="ownHeader() !== null"
+        [hidden]="onSettings() || (desktop() && ownHeader() !== null)"
+      >
+        @if (!desktop() && ownHeader()?.back; as back) {
+          <a
+            class="menu back"
+            [routerLink]="back"
+            aria-label="Voltar"
+            i18n-aria-label="@@page.back"
+          >
+            <ui-icon name="chevLeft" [size]="26" />
+          </a>
+        } @else if (!desktop()) {
           <button
             #menuButton
             type="button"
@@ -75,9 +118,35 @@
               [size]="32"
             />
           </button>
+          @if (!onMedia()) {
+            <p class="page-title" aria-hidden="true">{{ pageTitle() }}</p>
+            @if (researching()) {
+              <button
+                uiIconButton
+                [size]="40"
+                type="button"
+                class="new-research"
+                aria-label="Nova conversa"
+                i18n-aria-label="@@sidebar.new"
+                (click)="startNewResearch()"
+              >
+                <ui-icon name="plus" [size]="24" />
+              </button>
+            }
+          }
         }
-        @if (topic(); as current) {
-          <h1 class="topic">
+        @if (ownHeader(); as own) {
+          <h1 class="topic own-title">{{ own.title }}</h1>
+          @if (own.actions; as actions) {
+            <div class="own-actions">
+              <ng-container [ngTemplateOutlet]="actions" />
+            </div>
+          }
+        } @else if (onMedia() && !desktop() && pageName()) {
+          <p class="page-name" aria-hidden="true">{{ pageName() }}</p>
+        }
+        @if (!ownHeader() && topic(); as current) {
+          <h1 class="topic" [class.visually-hidden]="!onMedia()">
             {{ current.title }}
             <span class="count"
               ><span i18n="@@page.count">{current.documentCount, plural,
@@ -97,17 +166,56 @@
             </span>
           </h1>
         } @else if (allCollections()) {
-          <h1 class="topic" i18n="@@page.allCollections">Todos os acervos</h1>
+          <h1
+            class="topic"
+            [class.visually-hidden]="!onMedia()"
+            i18n="@@page.allCollections"
+          >
+            Todos os acervos
+          </h1>
         } @else {
-          <h1 class="topic" i18n="@@page.title">Nova Alexandria</h1>
+          <h1
+            class="topic"
+            [class.visually-hidden]="!onMedia()"
+            i18n="@@page.title"
+          >
+            Nova Alexandria
+          </h1>
         }
-        @if (views.bothAllowed() && !onMedia()) {
-          <app-view-switch
-            class="view-switch"
-            [view]="currentView()"
-            [researchAvailable]="views.researchAvailable()"
-            (changed)="changeView($event)"
+        @if (showScope()) {
+          <app-scope-bar
+            class="scope-bar"
+            [researching]="researching()"
+            [compact]="!desktop()"
+            (collectionChosen)="sidebarActed('topic')"
           />
+        } @else if (showProfiles()) {
+          <!-- The same choice as the question box's (one set of radios on screen: the box
+               leaves its own out here). -->
+          <div
+            class="profiles"
+            role="radiogroup"
+            aria-label="Tipo de pesquisa"
+            i18n-aria-label="@@composer.profile"
+          >
+            @for (option of profileOptions; track option.value) {
+              <button
+                class="ui-chip profile-option"
+                [class.ui-chip--on]="option.value === research.profile()"
+                type="button"
+                role="radio"
+                [attr.aria-checked]="option.value === research.profile()"
+                [attr.tabindex]="option.value === research.profile() ? 0 : -1"
+                (click)="research.chooseProfile(option.value)"
+                (keydown)="moveProfile($event)"
+              >
+                {{ option.label }}
+              </button>
+            }
+          </div>
+          @if (research.profile() === 'exhaustive') {
+            <p class="profile-help">{{ exhaustiveHelp }}</p>
+          }
         }
       </header>
 
@@ -119,7 +227,10 @@
           aria-label="Conversa"
           i18n-aria-label="@@page.thread"
         >
-          @if (isEmpty()) {
+          @if (phoneHistory()) {
+            <!-- A phone's Conversas list (chat-history@mobile), from the Conversas tab. -->
+            <app-conversation-history (restored)="phoneTab.set(null)" />
+          } @else if (isEmpty()) {
             <app-conversation-home
               [researching]="researching()"
               [topicNotice]="topicNotice()"
@@ -142,6 +253,7 @@
               (trackOpened)="openTrack($event)"
               (stopped)="stopResearch()"
               (retried)="research.retry()"
+              (redone)="research.redo()"
               (continued)="research.continueSweep()"
             />
           } @else {
@@ -170,17 +282,26 @@
           {{ announcement() }}
         </p>
 
-        <div class="composer-dock">
-          <app-composer
-            [mode]="store.mode()"
-            (modeChange)="changeMode($event)"
-            [research]="researching()"
-            [profile]="research.profile()"
-            (profileChange)="research.chooseProfile($event)"
-            [disabled]="!topic()"
-            (submitted)="ask($event)"
-          />
-        </div>
+        <!-- A desktop search page has no question box: the top bar's field holds the search
+             (chat-results); its mode changes in the results' head. -->
+        @if (!desktop() || !searchPage()) {
+          <div class="composer-dock">
+            <app-composer
+              [mode]="store.mode()"
+              (modeChange)="changeMode($event)"
+              [research]="researching()"
+              [profile]="research.profile()"
+              (profileChange)="research.chooseProfile($event)"
+              [disabled]="!topic()"
+              [busy]="researching() && research.streaming()"
+              [compact]="!desktop()"
+              [profilesAbove]="showProfiles()"
+              [searchPill]="searchPage()"
+              [value]="pillQuestion()"
+              (submitted)="ask($event)"
+            />
+          </div>
+        }
       }
     </main>
 
@@ -193,7 +314,10 @@
         [highlight]="doc.question"
         [canGoBack]="store.canGoBack()"
         [sources]="doc.sources ?? []"
+        [copies]="doc.copies ?? []"
+        [phone]="!desktop()"
         [canAskAi]="views.researchAvailable()"
+        [page]="docPage()"
         (closed)="closeDocument()"
         (back)="store.back()"
         (navigated)="store.openWithin($event)"
@@ -240,14 +364,23 @@
     (no bar row then): its announcer speaks the skips and the sleep timer from any page.
   -->
   @if (audio.shown() || !desktop()) {
-    <div class="shell-foot" [class.bare]="fullScreenPlayer()">
+    <div
+      #shellFoot
+      class="shell-foot"
+      [class.bare]="
+        fullScreenPlayer() || phoneFlow() || (onSettings() && !audio.shown())
+      "
+    >
       <app-mini-player
         class="player"
-        [shownElsewhere]="playerInPanel()"
-        [idle]="audio.collectionHasAudio() && !audio.playing()"
+        [shownElsewhere]="
+          phoneFlow() ? (engineSource()?.id ?? null) : playerInPanel()
+        "
+        [desktop]="desktop()"
+        [idle]="!phoneFlow() && audio.collectionHasAudio() && !audio.playing()"
         [idleLink]="libraryPath()"
       />
-      @if (!desktop() && !fullScreenPlayer()) {
+      @if (!desktop() && !fullScreenPlayer() && !onSettings() && !phoneFlow()) {
         <app-bottom-nav
           [tabs]="navTabs()"
           [active]="navActive()"

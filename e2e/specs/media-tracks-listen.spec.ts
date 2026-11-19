@@ -12,6 +12,7 @@ import {
   approve,
   audioWithTracks,
   handle,
+  trackMenu,
   trackRow,
 } from './tracks-helpers.js';
 
@@ -33,7 +34,8 @@ test('AC-7: "Ouvir o início" plays from 2 s before to 3 s after the start, and 
   const media = await audioWithTracks(owner);
   await page.goto(`/midia/${media.id}/faixas`);
   await trackRow(page, 2).getByRole('button').first().click();
-  await page.getByRole('button', { name: 'Ouvir o início' }).click();
+  // Listening sits in the track's ⋯ (KBC-130, prepare.js tkRow).
+  await trackMenu(page, 'Ouvir o início');
   await expect
     .poll(async () => (await auditionTime(page)).time)
     .toBeGreaterThan(13);
@@ -77,8 +79,15 @@ test('AC-12: who has `media-tracks` sees the marks, the title and goes to the ne
   await owner.dispose();
   const page = await pageAs(browser, email, viewport);
   await page.goto(`/midia/${media.id}`);
-  await expect(page.getByTestId('track-marks').locator('span')).toHaveCount(3);
-  const list = page.getByRole('region', { name: 'Player' });
+  // The line on screen: the bar's on a desktop (the page's own waits hidden), the phone's.
+  await expect(
+    page
+      .locator('app-seek-slider:visible')
+      .getByTestId('track-marks')
+      .locator('span'),
+  ).toHaveCount(3);
+  // The page's player, not the bar ("Mini-player" holds the word too).
+  const list = page.getByRole('region', { name: 'Player', exact: true });
   await expect(list.getByText('Primeira pergunta')).toBeVisible();
 
   await page.getByRole('button', { name: 'Próxima faixa' }).click();
@@ -98,7 +107,9 @@ test('AC-12: `?track=3` opens at track 3, paused', async ({ page }) => {
   await owner.dispose();
   await page.goto(`/midia/${media.id}?track=3`);
   await expect(
-    page.getByRole('region', { name: 'Player' }).getByText('Terceira pergunta'),
+    page
+      .getByRole('region', { name: 'Player', exact: true })
+      .getByText('Terceira pergunta'),
   ).toBeVisible();
   const state = await audioState(page);
   expect(state.paused).toBe(true);

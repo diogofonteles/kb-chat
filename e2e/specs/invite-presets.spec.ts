@@ -10,11 +10,13 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import {
+  desktop,
   openSection,
   openSettings,
   SETTINGS_AXE,
   showTab,
   openPeople as openPeopleSettings,
+  profileAction,
 } from './settings-helpers.js';
 
 /**
@@ -87,7 +89,8 @@ async function createAluno(dialog: Locator, name: string): Promise<void> {
   await section.getByLabel('Perfil de pesquisa').selectOption('fast');
   await section.getByLabel('Tema').selectOption('dark');
   await expectAccessible(section.page());
-  await section.getByRole('button', { name: 'Salvar perfil' }).click();
+  // "Salvar perfil" in the modal's foot; a phone's sheet says "Salvar" in its header.
+  await section.getByRole('button', { name: /^Salvar( perfil)?$/ }).click();
   await expect(section.getByText(`Perfil "${name}" salvo.`)).toBeVisible();
 }
 
@@ -99,7 +102,7 @@ async function expectAccessible(page: Page): Promise<void> {
 
 async function removeProfile(dialog: Locator, name: string): Promise<void> {
   const section = profiles(dialog);
-  await section.getByRole('button', { name: `Apagar ${name}` }).click();
+  await profileAction(section, 'Apagar', name);
   await section.getByRole('button', { name: 'Apagar', exact: true }).click();
   await expect(section.getByText(`Perfil "${name}" apagado.`)).toBeVisible();
 }
@@ -133,9 +136,13 @@ test('AC-1: inviting with a profile sets up access, AI and the first Settings', 
   // The new person's editor opened as a modal (KBC-132), the AI in its own tab.
   await showTab(dialog, 'IA e limites');
   await dialog.getByText('Histórico da IA').click();
+  // The history as the v2 rows: when, who, and what as a pill (KBC-132).
   await expect(
-    dialog.getByText(/owner@kb-chat\.test · Plano da casa/),
-  ).toBeVisible();
+    dialog
+      .getByRole('region', { name: 'Histórico da IA' })
+      .getByRole('listitem')
+      .filter({ hasText: 'owner@kb-chat.test' }),
+  ).toContainText('Plano da casa');
   await shoot(page, 'invite-with-profile', page.getByRole('dialog'));
   await page.keyboard.press('Escape');
 
@@ -174,9 +181,15 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
     .locator('select[name="profile"]')
     .selectOption({ label: name });
   await dialog.getByRole('button', { name: 'Configurar agora' }).click();
-  await expect(
-    dialog.getByRole('button', { name: 'Descartar configuração' }),
-  ).toHaveAttribute('aria-expanded', 'true');
+  // Desktop: the modal's "Descartar configuração"; a phone's sheet discards with "Cancelar".
+  if (desktop(page))
+    await expect(
+      dialog.getByRole('button', { name: 'Descartar configuração' }),
+    ).toHaveAttribute('aria-expanded', 'true');
+  else
+    await expect(
+      page.getByRole('dialog', { name: 'Configurar o convite' }),
+    ).toBeVisible();
   const preset = dialog.locator('#invite-preset');
   await showTab(preset, 'IA e limites');
   await expect(
@@ -204,7 +217,7 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
 
   // The profile kept its own numbers.
   const section = profiles(dialog);
-  await section.getByRole('button', { name: `Editar ${name}` }).click();
+  await profileAction(section, 'Editar', name);
   await showTab(section, 'IA e limites');
   await expect(
     section.getByLabel('Pesquisas por dia (vazio = padrão)'),
@@ -215,7 +228,9 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
   await dialog
     .locator('app-person-editor select[name="applyProfile"]')
     .selectOption({ label: name });
-  await dialog.getByRole('button', { name: 'Aplicar perfil' }).click();
+  // A phone's "Aplicar perfil" is one row: choosing the profile already asks to apply it.
+  if ((page.viewportSize()?.width ?? 0) >= 1024)
+    await dialog.getByRole('button', { name: 'Aplicar perfil' }).click();
   await expect(
     dialog.getByText(`Aplicar o perfil "${name}" a ${existing}?`),
   ).toBeVisible();

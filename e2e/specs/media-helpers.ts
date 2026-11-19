@@ -2,7 +2,12 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { APIRequestContext, Browser, Page } from '@playwright/test';
+import type {
+  APIRequestContext,
+  Browser,
+  Locator,
+  Page,
+} from '@playwright/test';
 import {
   CSRF,
   expect,
@@ -320,4 +325,96 @@ export async function expectLibraryView(page: Page, view: LibraryView) {
   );
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu')).toHaveCount(0);
+}
+
+/**
+ * "Fechar o player" (KBC-041 AC-11): v2 draws no × on the bar or on the phone's mini player.
+ * On a phone it is a row of the Menu (the avatar); on desktop it is in "Tocando agora" ⋯
+ * (opened from the bar if need be) and, `via: 'account'`, in the avatar's menu (where a
+ * source panel takes the right panel, so "Tocando agora" cannot open).
+ */
+export async function closePlayer(
+  page: Page,
+  via: 'panel' | 'account' = 'panel',
+): Promise<void> {
+  const bar = page.getByRole('region', { name: 'Mini-player' });
+  await expect(
+    bar.getByRole('button', { name: 'Fechar o player' }),
+  ).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 0) < 1024) {
+    // A page with its own header (the collection's album page) has "←" in place of the
+    // avatar: there the navigation's Acervos opens the Menu.
+    const avatar = page.getByRole('button', { name: 'Menu', exact: true });
+    const acervos = page
+      .getByRole('navigation', { name: 'Navegação' })
+      .getByRole('button', { name: 'Acervos' });
+    // Whichever the page draws, once it is drawn.
+    await expect(avatar.or(acervos).first()).toBeVisible();
+    if (await avatar.isVisible()) await avatar.click();
+    else await acervos.click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    const close = menu.getByRole('button', { name: 'Fechar o player' });
+    // The drawn rows stay at the sheet's foot: in sight without scrolling.
+    await expect(close).toBeInViewport();
+    await close.click();
+    await expect(menu).toBeHidden();
+    return;
+  }
+  if (via === 'account') {
+    await page.getByRole('button', { name: /^Conta de / }).click();
+    await page
+      .getByRole('menu', { name: 'Conta' })
+      .getByRole('menuitem', { name: 'Fechar o player' })
+      .click();
+    return;
+  }
+  const nowPlaying = bar.getByRole('button', { name: 'Tocando agora' });
+  if ((await nowPlaying.getAttribute('aria-pressed')) !== 'true')
+    await nowPlaying.click();
+  await page
+    .getByRole('complementary', { name: 'Tocando agora' })
+    .getByRole('button', { name: 'Mais opções de Tocando agora' })
+    .click();
+  await page.getByRole('menuitem', { name: 'Fechar o player' }).click();
+}
+
+/**
+ * Leaves the player page for the media list inside the app, as the person would (KBC-129,
+ * v2 · Mídia — Player): the full-screen player's "← Mídia" on a phone; on a desktop the
+ * player has no back link of its own, so the "Mídia" row pinned in "Sua biblioteca".
+ */
+export async function leaveToMediaList(page: Page): Promise<void> {
+  const from = page.url();
+  const back = page.getByRole('link', { name: '← Mídia' });
+  if (await back.isVisible()) await back.click();
+  else
+    await page
+      .getByRole('complementary', { name: 'Sua biblioteca' })
+      .getByRole('link', { name: 'Mídia', exact: true })
+      .click();
+  // Away from the player page before the next step looks at the bar.
+  await page.waitForURL((url) => url.href !== from);
+}
+
+/** The media page's ⋯ ("Mais opções"): the page's own actions wait there (v2 · Mídia — Player). */
+const pageMore = (page: Page): Locator =>
+  page
+    .locator('app-media-player-page')
+    .getByRole('button', { name: 'Mais opções', exact: true })
+    .first();
+
+/** Chooses one of the media page's actions in its ⋯ (Transcrever de novo, com Groq…). */
+export async function pageAction(page: Page, item: string): Promise<void> {
+  await pageMore(page).click();
+  await page.getByRole('menuitem', { name: item, exact: true }).click();
+}
+
+/** Whether the media page's ⋯ offers `item`; the menu is closed again after looking. */
+export async function pageOffers(page: Page, item: string): Promise<boolean> {
+  await pageMore(page).click();
+  await expect(page.getByRole('menuitem').first()).toBeVisible();
+  const offered =
+    (await page.getByRole('menuitem', { name: item, exact: true }).count()) > 0;
+  await page.keyboard.press('Escape');
+  return offered;
 }

@@ -4,10 +4,23 @@
   aria-label="Filtros"
   i18n-aria-label="@@library.filters"
 >
+  @if (!compact()) {
+    <button
+      type="button"
+      uiChip
+      class="all-chip"
+      [selected]="noListFilter()"
+      (click)="showAll()"
+      i18n="@@library.allChip"
+    >
+      Todas
+    </button>
+  }
   @for (chip of stateChips(); track chip.value) {
     <button
       type="button"
       uiChip
+      [attr.data-state]="chip.value"
       [selected]="chip.pressed"
       (click)="toggleState(chip.value)"
     >
@@ -18,77 +31,68 @@
     </button>
   }
   @if (showAuthorship()) {
-    <label class="choice" [class.on]="authorship() !== ''">
-      <span class="label" i18n="@@library.authorship">Autoria</span>
-      <select (change)="chooseAuthorship($event)">
-        <option
-          value=""
-          [selected]="authorship() === ''"
-          i18n="@@library.allAuthorships"
-        >
-          Todas
-        </option>
-        @for (option of authors(); track option.value) {
-          <option
-            [value]="option.value"
-            [selected]="option.value === authorship()"
-          >
-            {{ option.label }}
-          </option>
-        }
-      </select>
-      <ui-icon class="caret" name="chevDown" [size]="16" />
-    </label>
+    @if (authorshipName(); as name) {
+      <button
+        type="button"
+        uiChip
+        class="authorship"
+        [selected]="true"
+        [attr.aria-label]="clearAuthorshipLabel()"
+        (click)="chooseAuthorship('')"
+      >
+        {{ name }}
+        <ui-icon name="close" [size]="14" />
+      </button>
+    } @else {
+      <app-menu-button
+        look="chip"
+        kind="choice"
+        align="start"
+        class="authorship"
+        label="Autoria"
+        i18n-label="@@library.authorship"
+        [options]="authorOptions()"
+        (chosen)="chooseAuthorship($event)"
+      >
+        <span i18n="@@library.authorship">Autoria</span>
+        <ui-icon name="chevDown" [size]="14" />
+      </app-menu-button>
+    }
   }
   @if (showSubjects()) {
-    <label class="choice" [class.on]="filters().subject !== null">
-      <span class="label" i18n="@@library.subject">Assunto</span>
-      <select (change)="chooseSubject($event)">
-        <option
-          value=""
-          [selected]="filters().subject === null"
-          i18n="@@library.allSubjects"
-        >
-          Todos
-        </option>
-        @for (option of subjectOptions(); track option.key) {
-          <option
-            [value]="option.key"
-            [selected]="option.key === filters().subject"
-          >
-            {{ option.name }}
-          </option>
-        }
-      </select>
-      <ui-icon class="caret" name="chevDown" [size]="16" />
-    </label>
-  }
-  @if (showTopics()) {
-    <label class="choice" [class.on]="filters().topic !== null">
-      <span class="label" i18n="@@library.topic">Acervo</span>
-      <select (change)="chooseTopic($event)">
-        <option
-          value=""
-          [selected]="filters().topic === null"
-          i18n="@@library.allTopics"
-        >
-          Todos os acervos
-        </option>
-        @for (option of topicOptions(); track option.value) {
-          <option
-            [value]="option.value"
-            [selected]="option.value === filters().topic"
-          >
-            {{ option.label }}
-          </option>
-        }
-      </select>
-      <ui-icon class="caret" name="chevDown" [size]="16" />
-    </label>
+    @if (subjectName(); as name) {
+      <button
+        type="button"
+        uiChip
+        class="subject"
+        [selected]="true"
+        [attr.aria-label]="clearSubjectLabel()"
+        (click)="chooseSubject('')"
+      >
+        {{ name }}
+        <ui-icon name="close" [size]="14" />
+      </button>
+    } @else {
+      <app-menu-button
+        look="chip"
+        kind="choice"
+        align="start"
+        class="subject"
+        label="Assunto"
+        i18n-label="@@library.subject"
+        [options]="subjectMenu()"
+        (chosen)="chooseSubject($event)"
+      >
+        <span i18n="@@library.subject">Assunto</span>
+        <ui-icon name="chevDown" [size]="14" />
+      </app-menu-button>
+    }
   }
   @if (compact() && hiddenActive() > 0) {
     <span class="hidden-filters">{{ hiddenText() }}</span>
   }
+  <!-- The collection is the page's scope (its header), not a filter: "Limpar filtros" never
+       takes it out (owner, 2026-11-19). -->
   @if (active() > 0) {
     <button
       type="button"
@@ -102,19 +106,3 @@
     </button>
   }
 </div>
-@if (!compact()) {
-  <div class="tools">
-    <app-menu-button
-      kind="choice"
-      class="sort"
-      [label]="sortLabel()"
-      menuLabel="Ordenar e ver como"
-      i18n-menuLabel="@@library.sortAndView"
-      [options]="sortOptions()"
-      (chosen)="chooseSort($event)"
-    >
-      <span class="sort-words">{{ sortName() }}</span>
-      <ui-icon [name]="view() === 'grid' ? 'grid' : 'list'" [size]="18" />
-    </app-menu-button>
-  </div>
-}

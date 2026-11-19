@@ -121,3 +121,23 @@ describe('RowMenu "Editar informações" (KBC-050 FR-2)', () => {
     expect(editChosen).toHaveBeenCalledOnce();
   });
 });
+
+describe('RowMenu of a media that does not play (v2 media-list)', () => {
+  it('still offers its link, so its ⋯ is never empty', async () => {
+    const view = await render(RowMenu, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        label: 'Mais ações para Arquivo',
+        canLink: true,
+        canRemove: false,
+      },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mais ações para Arquivo' }),
+    );
+    await view.fixture.whenStable();
+    expect(
+      screen.getAllByRole('menuitem').map((item) => item.textContent?.trim()),
+    ).toEqual(['Copiar link']);
+  });
+});

@@ -1,24 +1,48 @@
 @if (forbidden()) {
-  <div class="page">
-    <div class="empty-state" role="alert">
-      <ui-icon class="empty-icon" name="lock" [size]="28" />
-      <p class="empty-title" i18n="@@tracks.forbidden">
+  <div class="page flow bare" [style.--flow-tint]="tint()">
+    <header class="top v2-head">
+      <a
+        class="head-back"
+        [routerLink]="mediaLink()"
+        aria-label="Voltar ao áudio"
+        i18n-aria-label="@@tracks.backToAudio"
+        ><ui-icon name="chevLeft" [size]="26"
+      /></a>
+      <div class="head-text">
+        <p class="kicker" i18n="@@prep.kicker">Preparar áudio</p>
+        <h1 class="heading">{{ title() }}</h1>
+      </div>
+      @if (title()) {
+        <ui-cover class="head-cover-sm" [title]="title()" [size]="40" />
+      }
+    </header>
+    <div class="ui-empty lone" role="alert">
+      <span class="ui-empty__icon"><ui-icon name="lock" [size]="32" /></span>
+      <p class="ui-empty__title" i18n="@@tracks.forbiddenTitle">
+        Sem permissão
+      </p>
+      <p class="ui-empty__text" i18n="@@tracks.forbidden">
         Você não tem permissão para editar esta gravação.
       </p>
-      <a uiButton="white" [routerLink]="mediaLink()" i18n="@@tracks.backToAudio"
-        >Voltar ao áudio</a
-      >
+      <div class="ui-empty__actions">
+        <a
+          uiButton="white"
+          [routerLink]="mediaLink()"
+          i18n="@@tracks.backToAudio"
+          >Voltar ao áudio</a
+        >
+      </div>
     </div>
   </div>
 } @else if (loadError()) {
-  <div class="page">
+  <div class="page flow">
     <p class="banner" role="alert">{{ loadError() }}</p>
     <a class="secondary" [routerLink]="mediaLink()" i18n="@@tracks.backToAudio"
       >Voltar ao áudio</a
     >
   </div>
 } @else if (!ready()) {
-  <div class="page" aria-busy="true">
+  <div class="page flow" aria-busy="true">
     <span class="visually-hidden" i18n="@@tracks.loading"
       >Carregando as faixas…</span
     >
@@ -29,15 +53,54 @@
     }
   </div>
 } @else {
-  <div class="page">
+  <div class="page flow" [style.--flow-tint]="tint()">
     <header class="top v2-head">
+      @if (step() === 3) {
+        <!-- On a phone the "‹" is "Sair e continuar depois": it saves what is on screen first. -->
+        <button
+          type="button"
+          class="head-back"
+          aria-label="Sair e continuar depois"
+          i18n-aria-label="@@tracks.leave"
+          [disabled]="draft.busy()"
+          (click)="leave()"
+        >
+          <ui-icon name="chevLeft" [size]="26" />
+        </button>
+      } @else {
+        <a
+          class="head-back"
+          [routerLink]="mediaLink()"
+          aria-label="Voltar ao áudio"
+          i18n-aria-label="@@tracks.backToAudio"
+          ><ui-icon name="chevLeft" [size]="26"
+        /></a>
+      }
       <ui-cover class="head-cover" [title]="title()" [size]="112" />
       <div class="head-text">
-        <p class="kicker" i18n="@@prep.kicker">Preparar áudio</p>
-        <h2 class="heading">{{ title() }}</h2>
+        <p class="kicker">
+          <span i18n="@@prep.kicker">Preparar áudio</span>
+          <span class="kicker-step">
+            ·
+            @if (step() === 4) {
+              <ng-container i18n="@@tracks.kickerFinished"
+                >Concluído</ng-container
+              >
+            } @else {
+              <ng-container i18n="@@tracks.stepKicker3"
+                >Passo 3 de 4</ng-container
+              >
+            }
+          </span>
+        </p>
+        <h1 class="heading">{{ title() }}</h1>
       </div>
-      @if (step() === 3) {
-        <div class="head-tools">
+      <ui-cover class="head-cover-sm" [title]="title()" [size]="40" />
+      <div class="head-tools">
+        @if (master()) {
+          <app-transcriber-status class="transcriber" compact />
+        }
+        @if (step() === 3) {
           <button
             uiButton="outline"
             size="sm"
@@ -49,11 +112,12 @@
           >
             Sair e continuar depois
           </button>
-        </div>
-      }
+        }
+      </div>
     </header>
     <app-preparation-steps
       class="progress"
+      flow
       [step]="step()"
       [finished]="step() === 4"
       [mediaId]="id()"
@@ -115,366 +179,460 @@
     }
 
     @if (step() === 4) {
-      <section class="summary">
-        <h3 #summaryHeading tabindex="-1">{{ appliedText() }}</h3>
-        <p i18n="@@tracks.finished">
-          Preparação concluída: você não precisa fazer mais nada. Quem ouve já
-          vê as faixas no player.
-        </p>
-        @if (canClassify()) {
-          <p i18n="@@tracks.subjectsSaveThemselves">
-            Os assuntos abaixo são salvos sozinhos, a cada escolha: não há o que
-            aprovar neles.
+      <section class="summary ui-banner" data-tone="ok">
+        <ui-icon class="ui-banner__icon" name="checkcircle" [size]="20" />
+        <div class="ui-banner__body">
+          <h2 #summaryHeading class="ui-banner__title" tabindex="-1">
+            {{ appliedText() }}
+          </h2>
+          <p class="ui-banner__text">
+            <!-- A phone shows the second sentence (prepare.js, celular: its kicker already
+                 says "Concluído"); the first stays for screen readers. -->
+            <span class="done-words" i18n="@@tracks.finishedDone"
+              >Preparação concluída: você não precisa fazer mais nada.</span
+            >&ngsp;<span i18n="@@tracks.finishedHeard"
+              >Quem ouve já vê as faixas no player.</span
+            >
           </p>
-        }
+          <app-track-preparation [mediaId]="id()" />
+        </div>
         <div class="summary-actions">
-          <a
-            class="primary"
-            [routerLink]="mediaLink()"
-            i18n="@@tracks.seeInPlayer"
-            >Ver no player</a
-          >
+          <a uiButton="white" size="sm" class="main" [routerLink]="mediaLink()">
+            <ui-icon name="play" [size]="18" />
+            <ng-container i18n="@@tracks.seeInPlayer"
+              >Ver no player</ng-container
+            >
+          </a>
           <button
+            uiButton="outline"
+            size="sm"
             type="button"
-            class="secondary"
             (click)="reopen()"
             i18n="@@tracks.reopen"
           >
             Reabrir edição
           </button>
         </div>
-        <app-track-preparation [mediaId]="id()" />
       </section>
-      <ng-container [ngTemplateOutlet]="voiceNames" />
-      @if (canClassify()) {
-        <app-track-subjects [mediaId]="id()" [topic]="topic()" />
-      }
+      <div class="body finished">
+        <div class="main-column">
+          @if (canClassify()) {
+            <app-track-subjects [mediaId]="id()" [topic]="topic()" />
+          }
+        </div>
+        <aside class="side">
+          <ng-container [ngTemplateOutlet]="voiceNames" />
+        </aside>
+      </div>
+      <!-- A phone keeps the two ways on at the foot (prepare.js, "Faixas aprovadas"). -->
+      <div class="flow-bar phone-only">
+        <button
+          uiButton="outline"
+          type="button"
+          (click)="reopen()"
+          i18n="@@tracks.reopen"
+        >
+          Reabrir edição
+        </button>
+        <a uiButton="white" class="main" [routerLink]="mediaLink()">
+          <ui-icon name="play" [size]="18" />
+          <ng-container i18n="@@tracks.seeInPlayer">Ver no player</ng-container>
+        </a>
+      </div>
     } @else {
-      @if (offlineKept() === true) {
-        <p class="banner" role="status" i18n="@@tracks.offline">
-          Sem conexão: suas mudanças ficam neste aparelho e serão salvas quando
-          a rede voltar.
-        </p>
-      } @else if (offlineKept() === false) {
-        <p class="banner" role="status" i18n="@@tracks.offlineNotKept">
-          Sem conexão: não feche esta página. Suas mudanças serão salvas quando
-          a rede voltar.
-        </p>
-      }
-      @if (watching()) {
-        <p class="banner" role="status" i18n="@@tracks.watching">
-          Uma análise com IA está propondo faixas. A edição volta quando ela
-          terminar.
-        </p>
-      }
-      @if (draft.recovered()) {
-        <p class="banner" role="status" i18n="@@tracks.recovered">
-          Recuperei mudanças que ainda não tinham sido salvas.
-        </p>
-      }
-      @if (transcriptChanged()) {
-        <p class="banner" role="status" i18n="@@tracks.transcriptChanged">
-          Revise os limites: a transcrição mudou.
-        </p>
-      }
-      @if (canClassify() && approvedCount() > 0) {
-        <p class="hint" i18n="@@subjects.reopened">
-          Os assuntos voltam depois de aprovar. Faixas mantidas guardam os seus.
-        </p>
-      }
-      @if (draft.restored()) {
-        <p class="hint" i18n="@@tracks.historyRestarted">
-          Rascunho recuperado. O histórico de desfazer recomeçou.
-        </p>
-      }
-      @if (titlesToReview()) {
-        <p class="banner" role="status" i18n="@@tracks.reviewNames">
-          Alguns títulos podem citar um nome errado. Reveja antes de aprovar: a
-          lista está em "Nomes das vozes".
-        </p>
-      }
-      @if (hasProposals()) {
-        <p class="banner" role="status" i18n="@@tracks.proposalNotice">
-          Confira as faixas propostas. Nada é aplicado antes de você aprovar.
-        </p>
-      }
-      @if (problemRows().length) {
-        @for (press of [problemPress()]; track press) {
-          <section class="banner" role="alert">
-            @if (showProblems()) {
-              <p i18n="@@tracks.problems">Corrija antes de aprovar:</p>
-            } @else {
-              <p i18n="@@tracks.notSaved">
-                A última mudança ainda não foi salva e continua aqui. Corrija:
+      <div class="body" [class.tools-open]="toolsOpen()">
+        <div class="main-column">
+          @if (offlineKept() === true) {
+            <p class="banner" role="status" i18n="@@tracks.offline">
+              Sem conexão: suas mudanças ficam neste aparelho e serão salvas
+              quando a rede voltar.
+            </p>
+          } @else if (offlineKept() === false) {
+            <p class="banner" role="status" i18n="@@tracks.offlineNotKept">
+              Sem conexão: não feche esta página. Suas mudanças serão salvas
+              quando a rede voltar.
+            </p>
+          }
+          @if (watching()) {
+            <p class="banner" role="status" i18n="@@tracks.watching">
+              Uma análise com IA está propondo faixas. A edição volta quando ela
+              terminar.
+            </p>
+          }
+          @if (draft.recovered()) {
+            <p class="banner" role="status" i18n="@@tracks.recovered">
+              Recuperei mudanças que ainda não tinham sido salvas.
+            </p>
+          }
+          @if (transcriptChanged()) {
+            <p class="banner" role="status" i18n="@@tracks.transcriptChanged">
+              Revise os limites: a transcrição mudou.
+            </p>
+          }
+          @if (canClassify() && approvedCount() > 0) {
+            <p class="hint" i18n="@@subjects.reopened">
+              Os assuntos voltam depois de aprovar. Faixas mantidas guardam os
+              seus.
+            </p>
+          }
+          @if (draft.restored() && !restoredDismissed()) {
+            <p class="banner info" role="status">
+              <ui-icon name="info" [size]="16" />
+              <span class="banner-text" i18n="@@tracks.historyRestarted"
+                >Rascunho recuperado. O histórico de desfazer recomeçou.</span
+              >
+              <button
+                uiIconButton
+                type="button"
+                class="dismiss"
+                [size]="24"
+                aria-label="Fechar o aviso"
+                i18n-aria-label="@@tracks.dismissNotice"
+                (click)="restoredDismissed.set(true)"
+              >
+                <ui-icon name="close" [size]="14" />
+              </button>
+            </p>
+          }
+          @if (titlesToReview()) {
+            <p class="banner" role="status" i18n="@@tracks.reviewNames">
+              Alguns títulos podem citar um nome errado. Reveja antes de
+              aprovar: a lista está em "Nomes das vozes".
+            </p>
+          }
+          @if (hasProposals()) {
+            <p class="banner" role="status" i18n="@@tracks.proposalNotice">
+              Confira as faixas propostas. Nada é aplicado antes de você
+              aprovar.
+            </p>
+          }
+          @if (problemRows().length) {
+            @for (press of [problemPress()]; track press) {
+              <section class="banner problems" role="alert">
+                <ui-icon class="banner-icon" name="warn" [size]="20" />
+                @if (showProblems()) {
+                  <p i18n="@@tracks.problems">Corrija antes de aprovar:</p>
+                } @else {
+                  <p i18n="@@tracks.notSaved">
+                    A última mudança ainda não foi salva e continua aqui.
+                    Corrija:
+                  </p>
+                }
+                <ul>
+                  @for (row of problemRows(); track row.key) {
+                    <li>{{ row.text }}</li>
+                  }
+                </ul>
+                @if (copyWhileInvalid()) {
+                  <label class="copy">
+                    <span i18n="@@tracks.yourChange"
+                      >Suas faixas, para copiar</span
+                    >
+                    <textarea readonly rows="4" [value]="copyable()"></textarea>
+                  </label>
+                  <div class="summary-actions">
+                    <button
+                      type="button"
+                      class="secondary"
+                      (click)="copyTracks()"
+                      i18n="@@tracks.copy"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                }
+              </section>
+            }
+          }
+          @if (deleted(); as gone) {
+            <p class="banner undo" role="status">
+              <span i18n="@@tracks.deleted"
+                >Faixa {{ gone.ordinal }} apagada</span
+              >
+              ·
+              <button
+                type="button"
+                class="link"
+                (click)="undo()"
+                i18n="@@tracks.undo"
+              >
+                Desfazer
+              </button>
+            </p>
+          }
+
+          <!-- One card on a phone, the wave over its tools (prepare.js mWave). -->
+          <div class="wave-card">
+            <app-track-timeline
+              [tracks]="draft.numbered()"
+              [selected]="selected()"
+              [durationMs]="durationMs()"
+              [peaks]="peaks()"
+              [peaksPerSecond]="peaksPerSecond()"
+              [words]="wordList()"
+              [snap]="snap()"
+              [cursorMs]="cursorMs()"
+              [playheadMs]="audition.positionMs()"
+              [readOnly]="readOnly()"
+              (selectTrack)="chooseOnWave($event)"
+              (moved)="moveHandle($event)"
+              (cursorChange)="placeCursor($event)"
+              (listen)="listenByKey($event)"
+              (edgeChange)="edge.set($event)"
+            />
+            @if (waveformPending()) {
+              <p class="hint" i18n="@@tracks.waveformPending">
+                A onda do áudio ainda está sendo preparada; dá para validar sem
+                ela.
+              </p>
+            } @else if (waveformFailed()) {
+              <p class="hint" i18n="@@tracks.waveformFailed">
+                Não consegui preparar a onda deste áudio; dá para validar sem
+                ela.
               </p>
             }
-            <ul>
-              @for (row of problemRows(); track row.key) {
-                <li>{{ row.text }}</li>
-              }
-            </ul>
-            @if (copyWhileInvalid()) {
-              <label class="copy">
-                <span i18n="@@tracks.yourChange">Suas faixas, para copiar</span>
-                <textarea readonly rows="4" [value]="copyable()"></textarea>
-              </label>
-              <div class="summary-actions">
+
+            <div
+              class="toolbar"
+              [class.open]="toolsOpen()"
+              role="group"
+              aria-label="Edição"
+              i18n-aria-label="@@tracks.tools"
+            >
+              <button
+                uiButton="white"
+                size="sm"
+                type="button"
+                class="new"
+                [disabled]="readOnly()"
+                (click)="newTrack()"
+              >
+                <ui-icon name="plus" [size]="18" />
+                <ng-container i18n="@@tracks.new">Nova faixa aqui</ng-container>
+              </button>
+              @if (selectionFits()) {
                 <button
+                  uiButton="dark"
+                  size="sm"
                   type="button"
-                  class="secondary"
-                  (click)="copyTracks()"
-                  i18n="@@tracks.copy"
+                  (click)="newFromText()"
+                  i18n="@@tracks.newFromText"
                 >
-                  Copiar
+                  Criar faixa com a seleção
                 </button>
+              }
+              <button
+                uiIconButton
+                type="button"
+                class="tool undo"
+                aria-label="Desfazer"
+                i18n-aria-label="@@tracks.undoButton"
+                aria-keyshortcuts="Control+Z"
+                [disabled]="!draft.canUndo()"
+                (click)="undo()"
+              >
+                <ui-icon name="rewind" [size]="16" />
+              </button>
+              <button
+                uiIconButton
+                type="button"
+                class="tool"
+                aria-label="Refazer"
+                i18n-aria-label="@@tracks.redo"
+                aria-keyshortcuts="Control+Shift+Z"
+                [disabled]="!draft.canRedo()"
+                (click)="redo()"
+              >
+                <ui-icon name="forward" [size]="16" />
+              </button>
+              <span class="divider" aria-hidden="true"></span>
+              <button
+                uiIconButton
+                type="button"
+                class="tool zoom"
+                aria-label="Aproximar"
+                i18n-aria-label="@@tracks.zoomIn"
+                aria-keyshortcuts="+"
+                (click)="zoomIn()"
+              >
+                <ui-icon name="plus" [size]="16" />
+              </button>
+              <button
+                uiIconButton
+                type="button"
+                class="tool zoom"
+                aria-label="Afastar"
+                i18n-aria-label="@@tracks.zoomOut"
+                aria-keyshortcuts="-"
+                (click)="zoomOut()"
+              >
+                <ui-icon name="minus" [size]="14" />
+              </button>
+              @if (hasEdges()) {
+                <span class="divider" aria-hidden="true"></span>
+                <span class="nudges">
+                  <span class="hint">
+                    @if (edge() === 'start') {
+                      <ng-container i18n="@@tracks.adjustStart"
+                        >Ajustar o início:</ng-container
+                      >
+                    } @else {
+                      <ng-container i18n="@@tracks.adjustEnd"
+                        >Ajustar o fim:</ng-container
+                      >
+                    }
+                  </span>
+                  <button
+                    uiChip
+                    type="button"
+                    aria-label="Menos 0,5 segundo"
+                    i18n-aria-label="@@tracks.nudgeBack"
+                    (click)="nudge(-1)"
+                  >
+                    −0,5 s
+                  </button>
+                  <button
+                    uiChip
+                    type="button"
+                    aria-label="Mais 0,5 segundo"
+                    i18n-aria-label="@@tracks.nudgeForward"
+                    (click)="nudge(1)"
+                  >
+                    +0,5 s
+                  </button>
+                </span>
+              }
+              <!-- A phone keeps "Nova faixa aqui" and "Propor com IA" in sight (prepare.js mWave):
+                 the other tools and the transcript open from this button. -->
+              <button
+                uiIconButton
+                type="button"
+                class="tool more-tools"
+                aria-label="Mais ferramentas, transcrição e vozes"
+                i18n-aria-label="@@tracks.moreTools"
+                aria-controls="track-tools-more"
+                [attr.aria-expanded]="toolsOpen()"
+                (click)="toggleTools()"
+              >
+                <ui-icon name="chevLeft" [size]="18" />
+              </button>
+              @if (canPropose()) {
+                <app-track-proposals
+                  class="proposals"
+                  [mediaId]="id()"
+                  [latestRun]="run()"
+                  [lastFailure]="lastFailure()"
+                  [stopped]="stopped()"
+                  [start]="startProposal"
+                  [blocked]="proposalsBlocked()"
+                  [replaces]="hasProposals()"
+                />
+              }
+            </div>
+          </div>
+          <div
+            id="track-tools-more"
+            class="tabs"
+            role="group"
+            aria-label="Faixas e transcrição"
+            i18n-aria-label="@@tracks.tabs"
+          >
+            <button
+              type="button"
+              [attr.aria-pressed]="tab() === 'tracks'"
+              (click)="tab.set('tracks')"
+            >
+              {{ countText() }}
+            </button>
+            <button
+              type="button"
+              [attr.aria-pressed]="tab() === 'text'"
+              (click)="tab.set('text')"
+              i18n="@@tracks.tabText"
+            >
+              Transcrição
+            </button>
+          </div>
+
+          <section
+            class="column"
+            [class.hidden]="tab() !== 'tracks'"
+            aria-label="Lista de faixas"
+            i18n-aria-label="@@tracks.listRegion"
+          >
+            @if (count() === 0) {
+              <div class="none ui-empty">
+                <span class="ui-empty__icon"
+                  ><ui-icon name="scissors" [size]="32"
+                /></span>
+                <p class="ui-empty__title" i18n="@@tracks.emptyTitle">
+                  Nenhuma faixa ainda
+                </p>
+                <!-- One paragraph on a desktop (tracksMain, empty); a phone puts the rule on its
+                     own smaller line (prmEmpty). -->
+                <p class="ui-empty__text">
+                  <ng-container i18n="@@tracks.empty"
+                    >Selecione a pergunta e a resposta na transcrição ou use
+                    Nova faixa aqui.</ng-container
+                  >&ngsp;<span class="guidance" i18n="@@tracks.guidance"
+                    >Uma faixa vai do começo da pergunta ao fim da
+                    resposta.</span
+                  >
+                </p>
               </div>
+            } @else {
+              <app-track-row-list
+                [tracks]="draft.numbered()"
+                [selectedId]="selectedId()"
+                [problems]="shownProblems()"
+                [people]="people()"
+                [readOnly]="readOnly()"
+                [playing]="playingKind()"
+                [playingElsewhere]="playingElsewhere()"
+                [levels]="trackLevels()"
+                [levelError]="draft.levelError()"
+                (levelChange)="changeLevel($event)"
+                (stopPlaying)="audition.stop()"
+                (listenKey)="listenByKey($event)"
+                (selectTrack)="choose($event)"
+                (titleChange)="rename($event)"
+                (kindChange)="changeKind($event)"
+                (personChange)="changePerson($event)"
+                (listen)="listen($event)"
+                (split)="split($event)"
+                (join)="join($event)"
+                (remove)="remove($event)"
+                (closeOverlap)="closeOverlap($event)"
+              />
             }
           </section>
-        }
-      }
-      @if (deleted(); as gone) {
-        <p class="banner undo" role="status">
-          <span i18n="@@tracks.deleted">Faixa {{ gone.ordinal }} apagada</span>
-          ·
-          <button
-            type="button"
-            class="link"
-            (click)="undo()"
-            i18n="@@tracks.undo"
+        </div>
+        <aside class="side">
+          <ng-container [ngTemplateOutlet]="voiceNames" />
+          <section
+            class="column text"
+            [class.hidden]="tab() !== 'text'"
+            aria-label="Transcrição"
+            i18n-aria-label="@@tracks.textRegion"
           >
-            Desfazer
-          </button>
-        </p>
-      }
-
-      <app-track-timeline
-        [tracks]="draft.numbered()"
-        [selected]="selected()"
-        [durationMs]="durationMs()"
-        [peaks]="peaks()"
-        [peaksPerSecond]="peaksPerSecond()"
-        [words]="wordList()"
-        [snap]="snap()"
-        [cursorMs]="cursorMs()"
-        [playheadMs]="audition.positionMs()"
-        [readOnly]="readOnly()"
-        (selectTrack)="chooseOnWave($event)"
-        (moved)="moveHandle($event)"
-        (cursorChange)="placeCursor($event)"
-        (listen)="listenByKey($event)"
-        (edgeChange)="edge.set($event)"
-      />
-      @if (waveformPending()) {
-        <p class="hint" i18n="@@tracks.waveformPending">
-          A onda do áudio ainda está sendo preparada; dá para validar sem ela.
-        </p>
-      } @else if (waveformFailed()) {
-        <p class="hint" i18n="@@tracks.waveformFailed">
-          Não consegui preparar a onda deste áudio; dá para validar sem ela.
-        </p>
-      }
-
-      <div
-        class="toolbar"
-        role="group"
-        aria-label="Edição"
-        i18n-aria-label="@@tracks.tools"
-      >
-        <button
-          type="button"
-          class="secondary"
-          [disabled]="readOnly()"
-          (click)="newTrack()"
-          i18n="@@tracks.new"
-        >
-          Nova faixa aqui
-        </button>
-        @if (selectionFits()) {
-          <button
-            type="button"
-            class="secondary"
-            (click)="newFromText()"
-            i18n="@@tracks.newFromText"
-          >
-            Criar faixa com a seleção
-          </button>
-        }
-        <button
-          type="button"
-          class="secondary"
-          aria-keyshortcuts="Control+Z"
-          [disabled]="!draft.canUndo()"
-          (click)="undo()"
-          i18n="@@tracks.undoButton"
-        >
-          Desfazer
-        </button>
-        <button
-          type="button"
-          class="secondary"
-          aria-keyshortcuts="Control+Shift+Z"
-          [disabled]="!draft.canRedo()"
-          (click)="redo()"
-          i18n="@@tracks.redo"
-        >
-          Refazer
-        </button>
-        <button
-          type="button"
-          class="secondary zoom"
-          aria-label="Aproximar"
-          i18n-aria-label="@@tracks.zoomIn"
-          aria-keyshortcuts="+"
-          (click)="zoomIn()"
-        >
-          +
-        </button>
-        <button
-          type="button"
-          class="secondary zoom"
-          aria-label="Afastar"
-          i18n-aria-label="@@tracks.zoomOut"
-          aria-keyshortcuts="-"
-          (click)="zoomOut()"
-        >
-          −
-        </button>
-        @if (hasEdges()) {
-          <span class="nudges">
-            <span class="hint">
-              @if (edge() === 'start') {
-                <ng-container i18n="@@tracks.adjustStart"
-                  >Ajustar o início:</ng-container
-                >
-              } @else {
-                <ng-container i18n="@@tracks.adjustEnd"
-                  >Ajustar o fim:</ng-container
-                >
-              }
-            </span>
-            <button
-              type="button"
-              class="secondary"
-              aria-label="Menos 0,5 segundo"
-              i18n-aria-label="@@tracks.nudgeBack"
-              (click)="nudge(-1)"
-            >
-              −0,5 s
-            </button>
-            <button
-              type="button"
-              class="secondary"
-              aria-label="Mais 0,5 segundo"
-              i18n-aria-label="@@tracks.nudgeForward"
-              (click)="nudge(1)"
-            >
-              +0,5 s
-            </button>
-          </span>
-        }
-      </div>
-      @if (canPropose()) {
-        <app-track-proposals
-          [mediaId]="id()"
-          [latestRun]="run()"
-          [lastFailure]="lastFailure()"
-          [stopped]="stopped()"
-          [start]="startProposal"
-          [blocked]="proposalsBlocked()"
-          [replaces]="hasProposals()"
-        />
-      }
-      <ng-container [ngTemplateOutlet]="voiceNames" />
-
-      <div
-        class="tabs"
-        role="group"
-        aria-label="Faixas e transcrição"
-        i18n-aria-label="@@tracks.tabs"
-      >
-        <button
-          type="button"
-          [attr.aria-pressed]="tab() === 'tracks'"
-          (click)="tab.set('tracks')"
-        >
-          {{ countText() }}
-        </button>
-        <button
-          type="button"
-          [attr.aria-pressed]="tab() === 'text'"
-          (click)="tab.set('text')"
-          i18n="@@tracks.tabText"
-        >
-          Transcrição
-        </button>
-      </div>
-
-      <div class="columns">
-        <section
-          class="column"
-          [class.hidden]="tab() !== 'tracks'"
-          aria-label="Lista de faixas"
-          i18n-aria-label="@@tracks.listRegion"
-        >
-          @if (count() === 0) {
-            <ui-icon class="empty-icon" name="scissors" [size]="28" />
-            <p class="empty" i18n="@@tracks.empty">
-              Nenhuma faixa ainda. Selecione a pergunta e a resposta na
-              transcrição ou use Nova faixa aqui.
-            </p>
-            <p class="hint" i18n="@@tracks.guidance">
-              Uma faixa vai do começo da pergunta ao fim da resposta. A
-              continuação da mesma pessoa sobre o mesmo assunto fica na mesma
-              faixa.
-            </p>
-          } @else {
-            <app-track-row-list
-              [tracks]="draft.numbered()"
-              [selectedId]="selectedId()"
-              [problems]="shownProblems()"
-              [people]="people()"
-              [readOnly]="readOnly()"
-              [playing]="playingKind()"
-              [playingElsewhere]="playingElsewhere()"
-              [levels]="trackLevels()"
-              [levelError]="draft.levelError()"
-              (levelChange)="changeLevel($event)"
-              (stopPlaying)="audition.stop()"
-              (listenKey)="listenByKey($event)"
-              (selectTrack)="choose($event)"
-              (titleChange)="rename($event)"
-              (kindChange)="changeKind($event)"
-              (personChange)="changePerson($event)"
-              (listen)="listen($event)"
-              (split)="split($event)"
-              (join)="join($event)"
-              (remove)="remove($event)"
-              (closeOverlap)="closeOverlap($event)"
+            <h3 class="side-title" i18n="@@tracks.textTitle">Transcrição</h3>
+            <app-track-transcript
+              [segments]="segments()"
+              [span]="selectedSpanMs()"
+              [playheadMs]="audition.positionMs()"
+              (place)="placeCursor($event)"
+              (selection)="noteText($event)"
             />
-          }
-        </section>
-        <section
-          class="column text"
-          [class.hidden]="tab() !== 'text'"
-          aria-label="Transcrição"
-          i18n-aria-label="@@tracks.textRegion"
-        >
-          <app-track-transcript
-            [segments]="segments()"
-            [span]="selectedSpanMs()"
-            [playheadMs]="audition.positionMs()"
-            (place)="placeCursor($event)"
-            (selection)="noteText($event)"
-          />
-        </section>
+          </section>
+        </aside>
       </div>
 
       <footer class="foot">
         <p class="foot-summary">
           <span class="foot-count">{{ countText() }}</span>
           @if (warningCount()) {
-            <span class="foot-warn" i18n="@@tracks.footWarnings"
-              >{{ warningCount() }} com aviso</span
+            <ui-pill tone="err" class="foot-warn" i18n="@@tracks.footWarnings"
+              >{{ warningCount() }} com aviso</ui-pill
             >
           }
           @if (unsavedTrack(); as ordinal) {
@@ -489,11 +647,13 @@
           }
         </p>
         <button
+          uiButton="primary"
           type="button"
-          class="primary"
+          class="approve"
           [disabled]="!canApprove()"
           (click)="approve()"
         >
+          <ui-icon name="check" [size]="18" />
           @if (draft.approving()) {
             <ng-container i18n="@@tracks.applying"
               >Aplicando as faixas…</ng-container
@@ -509,17 +669,12 @@
 
 <ng-template #voiceNames>
   @if (voicesToName(); as prep) {
-    <details
+    <app-preparation-voices
       class="voice-names"
-      [open]="voicesOpen()"
-      (toggle)="voicesToggled($event)"
-    >
-      <summary i18n="@@tracks.voiceNames">Nomes das vozes</summary>
-      <app-preparation-voices
-        [preparation]="prep"
-        [beforeNaming]="saveFirst"
-        (named)="voicesNamed()"
-      />
-    </details>
+      look="names"
+      [preparation]="prep"
+      [beforeNaming]="saveFirst"
+      (named)="voicesNamed()"
+    />
   }
 </ng-template>

@@ -13,6 +13,9 @@
 
   @if (!done('transcribe')) {
     <div class="option row">
+      @if (flow()) {
+        <ui-icon class="row-icon" name="doc" [size]="22" />
+      }
       <label class="choice">
         <input
           class="ui-switch"
@@ -26,22 +29,31 @@
       </label>
       <p class="hint" id="prep-transcribe-hint">
         <ng-container i18n="@@prep.option.transcribeHint"
-          >Gera o texto com o tempo de cada palavra, para ler junto, buscar e
-          criar legendas. Grátis, no computador do transcritor.</ng-container
+          >Texto com o tempo de cada palavra, para ler junto, buscar e criar
+          legendas. Grátis, no computador do transcritor.</ng-container
         >
         @if (transcribeMinutes(); as minutes) {
-          &ngsp;<ng-container i18n="@@prep.option.minutes"
-            >Estimativa: cerca de {{ minutes }} min.</ng-container
+          &ngsp;<span class="estimate" i18n="@@prep.option.minutes"
+            >Estimativa: cerca de {{ minutes }} min.</span
           >
         }
       </p>
       @if (transcriberOff()) {
         <p class="note">
-          <ng-container i18n="@@prep.option.transcriberOff"
-            >O transcritor está desligado desde
-            {{ offer()?.transcriberOffSince | date: 'dd/MM HH:mm' }}; começa
-            quando ele ligar.</ng-container
-          >
+          @if (compact()) {
+            <!-- The upload's card says it short (v2 · media-upload). -->
+            <ui-icon name="info" [size]="13" />
+            <span i18n="@@prep.option.transcriberOffShort"
+              >Transcritor desligado desde
+              {{ offer()?.transcriberOffSince | date: 'dd/MM HH:mm' }}</span
+            >
+          } @else {
+            <ng-container i18n="@@prep.option.transcriberOff"
+              >O transcritor está desligado desde
+              {{ offer()?.transcriberOffSince | date: 'dd/MM HH:mm' }}; começa
+              quando ele ligar.</ng-container
+            >
+          }
         </p>
       }
     </div>
@@ -49,6 +61,9 @@
 
   @if (!done('speakers')) {
     <div class="option row" [class.off]="isOff('speakers')">
+      @if (flow()) {
+        <ui-icon class="row-icon" name="people" [size]="22" />
+      }
       <label class="choice">
         <input
           class="ui-switch"
@@ -66,14 +81,21 @@
         @if (refusal('speakers'); as reason) {
           {{ reason }}
         } @else {
-          <ng-container i18n="@@prep.option.speakersHint"
-            >Separa as vozes (Voz 1, Voz 2…) e sugere os nomes pelo que já
-            sabemos do acervo, como o autor da gravação. Você confirma os nomes.
-            Grátis.</ng-container
-          >
+          @if (flow()) {
+            <ng-container i18n="@@prep.option.speakersHintFlow"
+              >Separa as vozes (Voz 1, Voz 2…) e sugere os nomes pelo que já
+              sabemos do acervo, como o autor da gravação. Você confirma os
+              nomes. Grátis.</ng-container
+            >
+          } @else {
+            <ng-container i18n="@@prep.option.speakersHint"
+              >Separa as vozes e sugere os nomes pelo que já sabemos do acervo.
+              Você confirma. Grátis.</ng-container
+            >
+          }
           @if (speakersMinutes(); as minutes) {
-            &ngsp;<ng-container i18n="@@prep.option.minutes"
-              >Estimativa: cerca de {{ minutes }} min.</ng-container
+            &ngsp;<span class="estimate" i18n="@@prep.option.minutes"
+              >Estimativa: cerca de {{ minutes }} min.</span
             >
           }
         }
@@ -81,11 +103,51 @@
     </div>
   }
 
-  <fieldset class="tracks">
-    <legend i18n="@@prep.option.tracks">
-      Dividir em faixas de pergunta e resposta
+  <!-- A phone's upload (media-upload@mobile): one row with the choice, the three under it. -->
+  @if (compact()) {
+    <!-- The words, the choice and the chevron as drawn; the words label the chevron's button,
+         so a tap on any of them opens the three. -->
+    <div class="tracks-row">
+      <label
+        class="name"
+        for="prep-tracks-toggle"
+        i18n="@@prep.option.tracksShort"
+        >Dividir em faixas</label
+      >
+      <label class="value" for="prep-tracks-toggle">{{ tracksChoice() }}</label>
+      <button
+        type="button"
+        class="tracks-toggle"
+        id="prep-tracks-toggle"
+        aria-controls="prep-tracks"
+        [attr.aria-expanded]="tracksOpen()"
+        (click)="tracksOpen.set(!tracksOpen())"
+      >
+        <ui-icon [name]="tracksOpen() ? 'chevDown' : 'chevRight'" [size]="18" />
+      </button>
+    </div>
+  }
+
+  <fieldset class="tracks" id="prep-tracks" [class.open]="tracksOpen()">
+    <legend>
+      <span class="long" i18n="@@prep.option.tracks"
+        >Dividir em faixas de pergunta e resposta</span
+      >
+      @if (flow()) {
+        <span class="short" aria-hidden="true" i18n="@@prep.option.tracksShort"
+          >Dividir em faixas</span
+        >
+      }
     </legend>
     <div class="option card">
+      @if (flow()) {
+        <span class="card-top" aria-hidden="true">
+          <span class="card-icon"><ui-icon name="clock" [size]="22" /></span>
+          @if (choices().tracks === 'none') {
+            <ui-icon class="card-check" name="checkcircle" [size]="22" />
+          }
+        </span>
+      }
       <label class="choice">
         <input
           type="radio"
@@ -96,12 +158,32 @@
         />
         <span i18n="@@prep.option.none">Não dividir agora</span>
       </label>
-      <p class="hint" id="prep-none-hint" i18n="@@prep.option.noneHint">
-        Fica como uma gravação só. Dá para dividir depois.
+      <p class="hint" id="prep-none-hint">
+        <span class="long" i18n="@@prep.option.noneHint"
+          >Fica como uma gravação só. Dá para dividir depois.</span
+        >
+        @if (flow()) {
+          <span
+            class="short"
+            aria-hidden="true"
+            i18n="@@prep.option.noneHintShort"
+            >Fica como uma gravação só.</span
+          >
+        }
       </p>
     </div>
 
     <div class="option card" [class.off]="isOff('manual')">
+      @if (flow()) {
+        <span class="card-top" aria-hidden="true">
+          <span class="card-icon"><ui-icon name="scissors" [size]="22" /></span>
+          @if (choices().tracks === 'manual') {
+            <ui-icon class="card-check" name="checkcircle" [size]="22" />
+          } @else if (refusalPill('manual'); as pill) {
+            <ui-pill class="card-pill">{{ pill }}</ui-pill>
+          }
+        </span>
+      }
       <label class="choice">
         <input
           type="radio"
@@ -117,15 +199,33 @@
         @if (refusal('manual'); as reason) {
           {{ reason }}
         } @else {
-          <ng-container i18n="@@prep.option.manualHint"
+          <span class="long" i18n="@@prep.option.manualHint"
             >Cada pergunta com a sua resposta vira uma faixa com título. Você
-            confere e aprova antes de aplicar.</ng-container
+            confere e aprova antes de aplicar.</span
           >
+          @if (flow()) {
+            <span
+              class="short"
+              aria-hidden="true"
+              i18n="@@prep.option.manualHintShort"
+              >Você confere e aprova antes de aplicar.</span
+            >
+          }
         }
       </p>
     </div>
 
-    <div class="option card" [class.off]="isOff('ai')">
+    <div class="option card ai" [class.off]="isOff('ai')">
+      @if (flow()) {
+        <span class="card-top" aria-hidden="true">
+          <span class="card-icon"><ui-icon name="sparkle" [size]="22" /></span>
+          @if (choices().tracks === 'ai') {
+            <ui-icon class="card-check" name="checkcircle" [size]="22" />
+          } @else if (refusalPill('ai'); as pill) {
+            <ui-pill class="card-pill">{{ pill }}</ui-pill>
+          }
+        </span>
+      }
       <label class="choice">
         <input
           type="radio"
@@ -140,7 +240,12 @@
       </label>
       <p class="hint" id="prep-ai-hint">
         @if (refusal('ai'); as reason) {
-          {{ reason }}
+          @if (flow()) {
+            <span class="wide-words">{{ reason }}</span
+            ><span class="narrow-words">{{ refusalNarrow('ai') }}</span>
+          } @else {
+            {{ reason }}
+          }
         } @else {
           <ng-container i18n="@@prep.option.aiHint"
             >A IA propõe as faixas, os títulos e quem pergunta e responde. Você
@@ -164,24 +269,31 @@
         }
       </p>
     </div>
-
-    <div class="option row subjects" [class.off]="isOff('subjects')">
-      <label class="choice">
-        <input
-          class="ui-switch"
-          type="checkbox"
-          [checked]="false"
-          aria-disabled="true"
-          aria-describedby="prep-subjects-hint"
-          (click)="$event.preventDefault()"
-        />
-        <span i18n="@@prep.option.subjects"
-          >Sugerir os assuntos de cada faixa</span
-        >
-      </label>
-      <p class="hint" id="prep-subjects-hint">{{ refusal('subjects') }}</p>
-    </div>
   </fieldset>
+
+  <div class="option row subjects" [class.off]="isOff('subjects')">
+    @if (flow()) {
+      <ui-icon class="row-icon" name="list" [size]="22" />
+    }
+    <label class="choice">
+      <input
+        class="ui-switch"
+        type="checkbox"
+        [checked]="false"
+        aria-disabled="true"
+        aria-describedby="prep-subjects-hint"
+        (click)="$event.preventDefault()"
+      />
+      <span class="name"
+        ><span class="wide" i18n="@@prep.option.subjects"
+          >Sugerir os assuntos de cada faixa</span
+        ><span class="narrow" i18n="@@prep.option.subjectsSoon"
+          >Sugerir os assuntos (em breve)</span
+        ></span
+      >
+    </label>
+    <p class="hint" id="prep-subjects-hint">{{ refusal('subjects') }}</p>
+  </div>
 
   @if (droppedText(); as text) {
     <p class="note" role="status">{{ text }}</p>

@@ -1,3 +1,4 @@
+import { UiButton, UiIcon, UiPill } from '@ui/index.js';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -44,7 +45,7 @@ const lineOf = (track: PreparationTrack, index: number): TrackLine => ({
  */
 @Component({
   selector: 'app-preparation-tracks',
-  imports: [TrackText],
+  imports: [TrackText, UiButton, UiIcon, UiPill],
   templateUrl: './preparation-tracks.html',
   styleUrls: ['./preparation-buttons.css', './preparation-tracks.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -56,6 +57,10 @@ export class PreparationTracks {
   private readonly end = viewChild<ElementRef<HTMLElement>>('end');
 
   readonly tracks = input.required<readonly PreparationTrack[]>();
+  /** Another track is still to come: a placeholder card waits for it (prepare.js). */
+  readonly arriving = input(false);
+  /** Processing ended: with no track, the list says the person marks them next. */
+  readonly none = input(false);
 
   private readonly atEnd = signal(true);
   protected readonly lines = computed(() => this.tracks().map(lineOf));

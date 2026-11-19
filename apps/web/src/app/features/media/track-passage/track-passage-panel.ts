@@ -292,9 +292,10 @@ export class TrackPassagePanel {
       place?.ordinal && place.total
         ? $localize`:@@trackPassage.ordinal:faixa ${place.ordinal}:ordinal: de ${place.total}:total:`
         : '';
+    // (the phone's sheet leaves the collection out: "Irmã Helena Prado · 1:00", cmSheet)
     return [
       author,
-      collection,
+      this.inSheet() ? '' : collection,
       duration ? formatClock(duration) : '',
       ordinal,
       place?.kind === 'track' ? place.recordingTitle : '',

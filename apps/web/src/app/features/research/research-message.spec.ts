@@ -51,6 +51,7 @@ async function renderMessage(turn: ResearchTurn, last = true) {
   const trackOpened = vi.fn();
   const stopped = vi.fn();
   const retried = vi.fn();
+  const redone = vi.fn();
   const settings = { openSettings: vi.fn() };
   const view = await render(ResearchMessage, {
     providers: [
@@ -58,9 +59,9 @@ async function renderMessage(turn: ResearchTurn, last = true) {
       { provide: SettingsStore, useValue: settings },
     ],
     inputs: { turn, last },
-    on: { opened, trackOpened, stopped, retried },
+    on: { opened, trackOpened, stopped, retried, redone },
   });
-  return { ...view, opened, trackOpened, stopped, retried, settings };
+  return { ...view, opened, trackOpened, stopped, retried, redone, settings };
 }
 
 describe('ResearchMessage', () => {
@@ -217,6 +218,65 @@ describe('ResearchMessage', () => {
     });
     // Only the documents the answer cites are listed as sources.
     expect(screen.queryByRole('button', { name: 'Não citado' })).toBeNull();
+  });
+
+  it('names each source "autor · tipo" and keeps Abrir and Copiar referência in its ⋯', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const view = await renderMessage(
+      aTurn({
+        sources: [
+          {
+            n: 1,
+            id: 'raw/a.md',
+            title: 'Os Princípios',
+            authorship: 'mestre-laercio',
+            genre: 'article_or_essay',
+          },
+          { n: 2, id: 'raw/b.md', title: 'O Caibalion' },
+        ],
+      }),
+    );
+    const row = screen.getByRole('button', { name: /^Os Princípios/ });
+    expect(row.querySelector('.source-meta')?.textContent).toMatch(
+      /Mestre Laércio\s*Texto\/apostila/,
+    );
+    expect(row.querySelector('.source-kicker')?.textContent?.trim()).toBe(
+      'FONTE 1',
+    );
+    // A source without a kind shows no dangling "·".
+    expect(
+      screen
+        .getByRole('button', { name: 'O Caibalion' })
+        .querySelector('.source-genre'),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mais opções da fonte 1' }),
+    );
+    await view.fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Copiar referência' }),
+    );
+    expect(writeText).toHaveBeenCalledWith('[1] Os Princípios');
+    await view.fixture.whenStable();
+    await vi.waitFor(() =>
+      expect(
+        screen
+          .getAllByRole('status')
+          .some((s) => s.textContent?.includes('Referência copiada.')),
+      ).toBe(true),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mais opções da fonte 1' }),
+    );
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Abrir' }));
+    expect(view.opened).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'raw/a.md', title: 'Os Princípios' }),
+    );
   });
 
   describe("KBC-110: sources above today's level", () => {
@@ -442,7 +502,9 @@ describe('ResearchMessage', () => {
     ]);
     const mestre = screen.getByRole('list', { name: 'Mestre Laércio' });
     expect(
-      [...mestre.querySelectorAll('button')].map((b) => b.dataset['docId']),
+      [...mestre.querySelectorAll('button.source')].map(
+        (b) => (b as HTMLElement).dataset['docId'],
+      ),
     ).toEqual(['raw/a.md', 'raw/c.md']);
     expect(
       screen.getByRole('button', { name: /O Caibalion/ }).textContent,
@@ -520,6 +582,17 @@ describe('ResearchMessage', () => {
     await renderMessage(aTurn({ steps: [], stepCount: 4, restored: true }));
     expect(screen.getByText('4 passos de pesquisa')).toBeTruthy();
     expect(screen.queryByRole('group')).toBeNull();
+  });
+
+  it('asks the last answer again with "Refazer"; an earlier answer has none (chat-research-answer)', async () => {
+    const view = await renderMessage(
+      aTurn({ phase: 'done', text: 'Tudo flui.' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Refazer' }));
+    expect(view.redone).toHaveBeenCalledOnce();
+    view.fixture.componentRef.setInput('last', false);
+    await view.fixture.whenStable();
+    expect(screen.queryByRole('button', { name: 'Refazer' })).toBeNull();
   });
 
   it('explains a missing credit with the link, and retries the last turn', async () => {
@@ -772,8 +845,12 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
       await renderMessage(aTurn({ coverage }));
       expect(
         screen.getByText(
-          'Cobertura (medida pelo aplicativo): 2.555 documentos no conjunto · 2.555 conferidos pelas expressões · 412 com ocorrências · 412 analisados pela IA.',
+          '2.555 documentos no conjunto · 2.555 conferidos pelas expressões · 412 com ocorrências · 412 analisados pela IA.',
         ),
+      ).toBeTruthy();
+      // The card's head carries the title once (cobertura), not the line again.
+      expect(
+        screen.getByText('Cobertura (medida pelo aplicativo)'),
       ).toBeTruthy();
       expect(
         screen.getByText(/autoria Mestre Laércio; expressões: livro, obra/),

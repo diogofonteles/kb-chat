@@ -27,3 +27,26 @@ export async function expectInsideViewport(
   expect(rect.x + rect.width).toBeLessThanOrEqual(viewport.width);
   expect(rect.y + rect.height).toBeLessThanOrEqual(viewport.height);
 }
+
+/**
+ * A phone's long press on a library row (media-library-row-menu@mobile: its ⋯ has no
+ * "Selecionar"): the finger stays on the row until its box is checked, then lifts — and the
+ * lift opens nothing.
+ */
+export async function longPressToSelect(
+  page: Page,
+  row: Locator,
+  box: Locator,
+): Promise<void> {
+  const target = row.locator('.main');
+  await target.scrollIntoViewIfNeeded();
+  const rect = await target.boundingBox();
+  expect(rect, 'the row is on screen').not.toBeNull();
+  if (!rect) return;
+  const url = page.url();
+  await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
+  await page.mouse.down();
+  await expect(box).toBeChecked();
+  await page.mouse.up();
+  expect(page.url(), 'the long press opened nothing').toBe(url);
+}

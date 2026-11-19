@@ -45,7 +45,16 @@ async function person(
 async function openUpload(page: Page): Promise<Locator> {
   await page.goto('/midia');
   await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
-  return page.getByRole('dialog', { name: 'Enviar áudio' });
+  const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
+  // A phone's upload is a plain list (media-upload@mobile): "Dividir em faixas ›" opens the
+  // three choices of the division.
+  const division = dialog.getByRole('button', { name: /^Dividir em faixas/ });
+  await expect(dialog).toBeVisible();
+  if (await division.isVisible()) {
+    await division.click();
+    await expect(division).toHaveAttribute('aria-expanded', 'true');
+  }
+  return dialog;
 }
 
 async function chooseFile(dialog: Locator, title: string): Promise<void> {
@@ -236,7 +245,9 @@ test('AC-9, AC-10: not dividing skips step 3; leaving shows where it stopped', a
   await page.getByRole('link', { name: 'Sair e continuar depois' }).click();
   await page.goto('/midia');
   const row = page.getByRole('listitem').filter({ hasText: title });
-  await expect(row.getByText('Preparação parada no passo 2')).toBeVisible();
+  // v2 · media-list: "Parada no passo 2" in a pill, "Continuar" beside it; a phone's line
+  // has "Passo 2", the pill itself the way on.
+  await expect(row.getByText(/^(Parada no passo|Passo) 2$/)).toBeVisible();
   await row.getByRole('link', { name: 'Continuar' }).click();
   await expect(page).toHaveURL(/\/preparar$/);
 
@@ -493,7 +504,10 @@ test('AC-11: a failure keeps the work and offers both ways out', async ({
   await page.goto(`/midia/${media.id}/preparar`);
   await expect(page.getByText(/1 de 3 janelas prontas/)).toBeVisible();
   await expect(
-    page.getByText('Falhou: o provedor de IA não respondeu.'),
+    // The failure's card, under the stages (v2), says it again with the ways on.
+    page.getByRole('group', {
+      name: 'Falhou: o provedor de IA não respondeu.',
+    }),
   ).toBeVisible();
   await expect(page.getByText('Pergunta 1')).toBeVisible();
   await expect(page.getByText(/Tentar de novo custa cerca de/)).toBeVisible();

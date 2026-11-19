@@ -51,28 +51,36 @@
         >
           @for (one of voices(); track one.voice) {
             <li class="voice">
+              <!-- One row each (player.js voicesView): the dot and the time, the sample,
+                   "Quem é a Voz N?". -->
               <div class="voice-head">
                 <app-voice-tag [voice]="one.voice" />&ngsp;<span
                   class="spoken"
                   i18n="@@voices.spoken"
                   >{{ one.spoken }} de fala</span
                 >
-                <button
-                  type="button"
-                  class="secondary sample"
-                  (click)="playSample(one.voice)"
-                >
-                  @if (sample.playing() === one.voice) {
-                    <ng-container i18n="@@voices.sampleStop"
-                      >Parar amostra da Voz {{ one.voice }}</ng-container
-                    >
-                  } @else {
-                    <ng-container i18n="@@voices.sample"
-                      >Ouvir amostra da Voz {{ one.voice }}</ng-container
-                    >
-                  }
-                </button>
               </div>
+              <!-- Its visible words start its name, which says the voice (WCAG 2.5.3). -->
+              <button
+                type="button"
+                class="secondary sample"
+                [attr.aria-label]="sampleLabel(one.voice)"
+                (click)="playSample(one.voice)"
+              >
+                <ui-icon
+                  [name]="sample.playing() === one.voice ? 'pause' : 'play'"
+                  [size]="18"
+                />
+                @if (sample.playing() === one.voice) {
+                  <ng-container i18n="@@voices.sampleStopShort"
+                    >Parar amostra</ng-container
+                  >
+                } @else {
+                  <ng-container i18n="@@voices.sampleShort"
+                    >Ouvir amostra</ng-container
+                  >
+                }
+              </button>
               <app-speaker-combobox
                 [voice]="one.voice"
                 [current]="one.current"

@@ -67,6 +67,40 @@ async function renderList(
 }
 
 describe('MediaListPage (T14)', () => {
+  it('v2 media-list: a recording says "N faixas" and its chevron opens its tracks under it', async () => {
+    const { answer, fixture } = await renderList({ features: ['media'] });
+    const recording = aMediaItem({ id: mediaId(1), title: 'Perguntas' });
+    const trackOf = (n: number, title: string) =>
+      aMediaItem({
+        id: mediaId(10 + n),
+        title,
+        parent: {
+          id: recording.id,
+          title: recording.title,
+          startMs: n * 1000,
+          endMs: n * 1000 + 500,
+          ordinal: n,
+          total: 2,
+          version: 1,
+          fileVersion: 1,
+        },
+      });
+    await answer([
+      {
+        ...recording,
+        tracks: [trackOf(1, 'Primeira'), trackOf(2, 'Segunda')],
+      } as MediaItem,
+    ]);
+    expect(screen.getByText('2 faixas')).toBeTruthy();
+    const toggle = screen.getByRole('button', { name: '2 faixas' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(toggle);
+    await fixture.whenStable();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const tracks = screen.getByRole('list', { name: 'Faixas de Perguntas' });
+    expect(within(tracks).getByRole('link', { name: 'Segunda' })).toBeTruthy();
+  });
+
   it('shows a skeleton while loading, then the items with status in words', async () => {
     const { answer } = await renderList();
     expect(screen.getByRole('list', { name: 'Carregando…' })).toBeTruthy();
@@ -94,11 +128,14 @@ describe('MediaListPage (T14)', () => {
       }),
     ]);
     expect(
-      screen.getByRole('heading', { name: /Mídia — Hermetismo/ }),
+      screen.getByRole('heading', { name: /Acervo — Hermetismo/ }),
     ).toBeTruthy();
-    expect(screen.getByText('4 áudios · 1 h')).toBeTruthy();
+    expect(screen.getByText(/· 4 áudios · 1 h$|^4 áudios · 1 h$/)).toBeTruthy();
+    // The pill says it in a few words (media-list: "Falhou: …", "Na fila").
     expect(screen.getByText('Na fila')).toBeTruthy();
     expect(screen.getByText('Convertendo… 40%')).toBeTruthy();
+    // "Falhou: arquivo inválido" in the pill; the whole reason for a screen reader.
+    expect(screen.getByText('Falhou: arquivo inválido')).toBeTruthy();
     expect(
       screen.getByText('Falhou: o arquivo não é um áudio válido'),
     ).toBeTruthy();
@@ -113,7 +150,7 @@ describe('MediaListPage (T14)', () => {
   it('shows "Enviar áudio" only to who may upload (AC-4)', async () => {
     const reader = await renderList({ features: ['search'] });
     await reader.answer([]);
-    expect(screen.getByText('Ainda não há áudios neste acervo.')).toBeTruthy();
+    expect(screen.getByText('Ainda não há áudios neste acervo')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Enviar áudio' })).toBeNull();
   });
 
@@ -158,7 +195,7 @@ describe('MediaListPage (T14)', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
     fireEvent.input(filter, { target: { value: 'xyz' } });
     await fixture.whenStable();
-    expect(screen.getByText('Nenhum áudio com "xyz" no título.')).toBeTruthy();
+    expect(screen.getByText('Nenhum áudio com “xyz” no título')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Limpar filtro' }));
     await fixture.whenStable();
     expect(screen.getAllByRole('listitem')).toHaveLength(11);
@@ -180,33 +217,42 @@ describe('MediaListPage (T14)', () => {
         author: { slug: 'ana', name: 'Ana', main: false },
       }),
     ]);
-    const filter = screen.getByRole<HTMLSelectElement>('combobox', {
-      name: 'Autoria',
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Autoria' }));
+    await fixture.whenStable();
     expect(
-      [...filter.options].map((option) => option.textContent?.trim()),
+      screen
+        .getAllByRole('menuitemradio')
+        .map((option) => option.textContent?.trim()),
     ).toEqual([
-      'Todos',
       'Mestre Gabriel, principal (1)',
       'Ana (1)',
       'Outros autores (1)',
     ]);
+    // The row says who: the author's name, "Outros autores" for none.
     expect(
-      screen.getByText('Outros autores', {
-        selector: '.authorship-badge *, .authorship-badge',
-      }),
+      screen.getByText('Outros autores', { selector: '.author' }),
     ).toBeTruthy();
 
-    fireEvent.change(filter, { target: { value: '-' } });
+    fireEvent.click(
+      screen.getByRole('menuitemradio', { name: /Outros autores/ }),
+    );
     await fixture.whenStable();
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
     expect(screen.getByText('Aula B')).toBeTruthy();
+    // The chosen author is a chip with ✕: it brings everyone back.
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Tirar o filtro de autoria: Outros autores',
+      }),
+    );
+    await fixture.whenStable();
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
   });
 
   it('has no author filter when every item has the same authorship', async () => {
     const { answer } = await renderList();
     await answer([aMediaItem()]);
-    expect(screen.queryByRole('combobox', { name: 'Autoria' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Autoria' })).toBeNull();
   });
 
   it('refreshes every 5 s while something converts, and announces it once ready', async () => {
@@ -281,7 +327,7 @@ describe('MediaListPage (T14)', () => {
     await fixture.whenStable();
     expect(screen.getByText('Palestra de 1998 foi removido.')).toBeTruthy();
     expect(document.activeElement).toBe(
-      screen.getByRole('heading', { name: /Mídia/ }),
+      screen.getByRole('heading', { name: /^Acervo — / }),
     );
   });
 
@@ -327,8 +373,8 @@ describe('MediaListPage (T14)', () => {
     );
   });
 
-  it('gives no master actions to a member', async () => {
-    const { answer } = await renderList({
+  it("gives no master actions to a member: a failed audio's ⋯ has its link only", async () => {
+    const { answer, fixture } = await renderList({
       features: ['search', 'media-upload'],
     });
     await answer([
@@ -339,8 +385,12 @@ describe('MediaListPage (T14)', () => {
         canEdit: false,
       }),
     ]);
-    expect(screen.queryByRole('button', { name: /Mais ações/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Mais ações para/ }));
+    await fixture.whenStable();
+    expect(
+      screen.getAllByRole('menuitem').map((one) => one.textContent?.trim()),
+    ).toEqual(['Copiar link']);
   });
 
   it('puts the new item on top and focuses it after an upload (UP-01)', async () => {
@@ -434,7 +484,8 @@ describe('MediaListPage (T14)', () => {
         call.flush({ items: [{ mediaId: mediaId(9), step: 2 }] }),
       );
     await fixture.whenStable();
-    expect(screen.getByText('Preparação parada no passo 2')).toBeTruthy();
+    // The album's table says it in a pill, "Continuar" beside it (v2 · media-list).
+    expect(screen.getByText('Parada no passo 2')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Continuar' })).toBeTruthy();
   });
 
@@ -503,10 +554,10 @@ describe('MediaListPage (T14)', () => {
       }),
     ]);
     const [first, second] = screen.getAllByRole('listitem');
+    // In words for a screen reader; the bar is the phone's (media-list@mobile).
     expect(first?.textContent).toContain('Continuar de 23:10');
-    const bar = container.querySelector<HTMLElement>('.position span');
-    expect(bar?.style.width).toMatch(/^37\.2/);
     expect(second?.textContent).not.toContain('Continuar de');
+    expect(container.querySelector('.position')).toBeNull();
   });
 
   it('says where each transcription is, with the low notice in words (KBC-036)', async () => {
@@ -603,20 +654,42 @@ describe('MediaListPage: "Editar informações" (KBC-050)', () => {
     return view;
   }
 
-  it('FR-2: shows no menu to who may not edit', async () => {
-    const { answer } = await renderList({ features: ['media'] });
+  it('FR-2: gives no edit and no removal to who may not edit', async () => {
+    const { answer, fixture } = await renderList({ features: ['media'] });
     await answer([aMediaItem({ canEdit: false })]);
-    expect(screen.queryByRole('button', { name: /Mais ações/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Mais ações para/ }));
+    await fixture.whenStable();
+    // A ready audio's ⋯ plays it and copies its link (media-list-menu); nothing more.
+    expect(
+      screen.getAllByRole('menuitem').map((one) => one.textContent?.trim()),
+    ).toEqual(['Tocar agora', 'Tocar em seguida', 'Copiar link']);
+  });
+
+  it('FR-2: an audio not ready offers who may not edit its link only', async () => {
+    const { answer, fixture } = await renderList({ features: ['media'] });
+    await answer([
+      aMediaItem({ status: 'queued', durationMs: null, canEdit: false }),
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: /^Mais ações para/ }));
+    await fixture.whenStable();
+    expect(
+      screen.getAllByRole('menuitem').map((one) => one.textContent?.trim()),
+    ).toEqual(['Copiar link']);
   });
 
   it('FR-2: who sent it edits but does not remove', async () => {
     const { answer, fixture } = await renderList({ features: ['media'] });
     await answer([aMediaItem({ canEdit: true })]);
-    fireEvent.click(screen.getByRole('button', { name: /Mais ações/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Mais ações para/ }));
     await fixture.whenStable();
     expect(
       screen.getAllByRole('menuitem').map((one) => one.textContent?.trim()),
-    ).toEqual(['Editar informações']);
+    ).toEqual([
+      'Tocar agora',
+      'Tocar em seguida',
+      'Editar informações',
+      'Copiar link',
+    ]);
   });
 
   it('AC-1: saving closes the dialog, reloads and says so', async () => {
@@ -690,7 +763,7 @@ describe('MediaListPage: "Editar informações" (KBC-050)', () => {
     expect(screen.getAllByText(new RegExp(text)).length).toBe(2);
     const link = screen.getByRole('link', { name: 'Ver o acervo' });
     expect(document.activeElement).toBe(
-      screen.getByRole('heading', { name: /Mídia/ }),
+      screen.getByRole('heading', { name: /^Acervo — / }),
     );
     fireEvent.click(link);
     expect(TestBed.inject(ChatStore).topicSlug()).toBe('alquimia');
@@ -726,7 +799,7 @@ describe('MediaListPage: "Editar informações" (KBC-050)', () => {
     view.http.expectOne(LIST_URL).flush({ items: many });
     await view.fixture.whenStable();
     expect(document.activeElement).toBe(
-      screen.getByRole('heading', { name: /Mídia/ }),
+      screen.getByRole('heading', { name: /^Acervo — / }),
     );
   });
 });

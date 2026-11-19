@@ -218,8 +218,11 @@ test('a master refuses a request, and the person is told when to ask again', asy
     .getByRole('button', { name: 'Fazer login com o Google' })
     .click();
   await expect(
+    person.getByText('Sua solicitação foi recusada.', { exact: true }),
+  ).toBeVisible();
+  await expect(
     person.getByText(
-      /Sua solicitação foi recusada\. Você pode pedir de novo a partir de .* \(horário de Brasília\)/,
+      /Você pode pedir de novo a partir de .* \(horário de Brasília\)/,
     ),
   ).toBeVisible();
   await expect(

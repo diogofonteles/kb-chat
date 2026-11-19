@@ -16,6 +16,7 @@ h3 {
   font-family: var(--font-ui);
   font-size: var(--text-item);
   font-weight: 700;
+  line-height: 1.125rem;
 }
 
 .count {
@@ -86,7 +87,6 @@ h3 {
   gap: var(--space-1);
 }
 
-.actions button,
 .edit button,
 .undo button {
   min-height: var(--target);
@@ -101,7 +101,6 @@ h3 {
   cursor: pointer;
 }
 
-.actions button:hover,
 .edit button:hover,
 .undo button:hover {
   background: var(--overlay-2);
@@ -113,7 +112,6 @@ h3 {
     min-height: 1.75rem;
   }
 
-  .actions button,
   .edit button,
   .undo button {
     min-height: 2rem;
@@ -154,13 +152,55 @@ h3 {
   color: var(--color-text);
 }
 
-@media (max-width: 599px) {
+/* v2 row (Figma: pill 44×24, the note on one line, ✎ and 🗑 as 16 icons). */
+.item {
+  gap: var(--space-3);
+  padding: 0;
+}
+
+.time {
+  min-width: 2.75rem;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note.none {
+  font-style: normal;
+}
+
+.actions {
+  gap: 0;
+  color: var(--color-text-muted);
+}
+
+/* The desktop panel's row (pRight bmRow): pill 44×24, the note 10 after it, ✎ and 🗑 as
+   16 icons 26 apart at the card's edge; each target 24 (WCAG 2.5.8), rows 12 apart. */
+@media (min-width: 1024px) {
+  .list {
+    gap: var(--space-3);
+  }
+
   .item {
-    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 0.625rem;
+  }
+
+  .time {
+    min-height: 1.5rem;
   }
 
   .actions {
-    grid-column: 1 / -1;
-    justify-content: flex-end;
+    gap: 0.125rem;
+    margin-right: -0.25rem;
+  }
+
+  .actions button {
+    width: 1.5rem;
+    height: 1.5rem;
   }
 }

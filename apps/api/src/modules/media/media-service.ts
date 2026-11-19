@@ -10,6 +10,7 @@ import {
   type LevelChoice,
   type MediaAuthor,
   type MediaItem,
+  type MediaListItem,
   type MediaLevelChoices,
   type TrackParent,
   type PreparationPlan,
@@ -604,7 +605,7 @@ export class MediaService {
     }
   }
 
-  list(actor: MediaActor, topic: string): MediaItem[] {
+  list(actor: MediaActor, topic: string): MediaListItem[] {
     this.assertTopic(topic);
     const scope = this.deps.scopeOf?.(topic) ?? [topic];
     const records = scope
@@ -620,11 +621,44 @@ export class MediaService {
       records.map((record) => record.id),
     );
     const presence = this.deps.presence?.();
-    return records.map((record) =>
-      this.itemOf(record, actor, {
+    const tracks = this.tracksOf(actor, records);
+    return records.map((record) => ({
+      ...this.itemOf(record, actor, {
         progress: progress.get(record.id),
         presence,
       }),
+      tracks: tracks.get(record.id) ?? [],
+    }));
+  }
+
+  /**
+   * The recordings' tracks in force, as the library lists them (v2 media-list, FR-5): one
+   * read for all of them and one for their progress, never one per recording (ND-19).
+   */
+  private tracksOf(
+    actor: MediaActor,
+    records: readonly MediaRecord[],
+  ): ReadonlyMap<string, MediaItem[]> {
+    if (!actor.seesTracks) return new Map();
+    const parents = records
+      .filter((record) => !record.track && record.status === 'ready')
+      .map((record) => record.id);
+    const stored = this.deps.store.listTracksOf(parents);
+    const heard = [...stored].map(
+      ([parent, tracks]) =>
+        [parent, tracks.filter((track) => seesMedia(actor, track))] as const,
+    );
+    const progress = this.deps.listening.progressOf(
+      actor.principal,
+      heard.flatMap(([, tracks]) => tracks.map((track) => track.id)),
+    );
+    return new Map(
+      heard.map(([parent, tracks]) => [
+        parent,
+        tracks.map((track) =>
+          this.itemOf(track, actor, this.view(progress.get(track.id))),
+        ),
+      ]),
     );
   }
 

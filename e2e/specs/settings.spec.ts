@@ -9,6 +9,7 @@ import {
   SETTINGS_AXE,
   settingsPage,
 } from './settings-helpers.js';
+import { chooseView, expectView } from './search-view.js';
 
 /** Configurações opened at Sua IA (a region of its own on the page). */
 async function openSettings(page: Page) {
@@ -35,7 +36,7 @@ test.beforeEach(async ({ page }) => {
 test('FR-6: ⚙ Configurações opens as a page and goes back to the conversation', async ({
   page,
 }) => {
-  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
+  await chooseView(page, 'search');
   await page.getByLabel('Sua pergunta').fill('ritmo');
   await page.getByRole('button', { name: 'Buscar' }).click();
   await expect(page.locator('app-result-card').first()).toBeVisible();
@@ -153,10 +154,11 @@ test('AC-1: the wizard shows on the first run and not again after "Concluir"', a
   await expect(wizard.getByText('Passo 1 de 4')).toBeVisible();
   for (let step = 0; step < 3; step += 1)
     await wizard.getByRole('button', { name: 'Continuar' }).click();
-  await wizard.getByRole('radio', { name: 'Escuro', exact: true }).check();
+  // The wizard's three themes (v2): Claro, Escuro (the revised dark) and Esotérico.
+  await wizard.getByRole('radio', { name: 'Esotérico', exact: true }).check();
   await wizard.getByRole('button', { name: 'Concluir' }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
-  expect(saved).toMatchObject({ preferences: { theme: 'dark' } });
+  expect(saved).toMatchObject({ preferences: { theme: 'esoteric' } });
   await page.reload();
   // The saved default view (research) opens, with the stub provider answering.
   await expect(
@@ -178,9 +180,7 @@ test('the default view saved in Settings opens on the next page', async ({
     }),
   );
   await page.reload();
-  await expect(
-    page.getByRole('radio', { name: 'Buscar documentos' }),
-  ).toBeChecked();
+  await expectView(page, 'search');
   await expect(page.getByText('O que você quer estudar hoje?')).toBeVisible();
 });
 

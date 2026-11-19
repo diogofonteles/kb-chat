@@ -4,11 +4,7 @@
   display: block;
   min-height: 100dvh;
   background:
-    linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--color-accent) 38%, var(--color-shell)) 0,
-        var(--color-shell) 34.5rem
-      )
+    linear-gradient(180deg, var(--color-entry-glow) 0, transparent 35rem)
       no-repeat,
     var(--color-shell);
   color: var(--color-text);
@@ -19,6 +15,9 @@
   place-items: center;
   min-height: 100dvh;
   padding: var(--space-8) var(--space-4);
+  /* v2 · Auth sets its texts at their font's own height (15 → 20, 12 → 16), not the
+     reading pages' 1.5. */
+  line-height: 1.3;
 }
 
 .column {
@@ -47,7 +46,6 @@
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-item);
-  text-wrap: balance;
 }
 
 .card {
@@ -58,19 +56,68 @@
   background: var(--overlay-1);
 }
 
-.google-button {
-  display: flex;
-  justify-content: center;
-  min-height: 2.75rem;
+.google-slot {
+  position: relative;
+  /* v2 · Auth: 48 (52 on a phone), the frame's place even before Google answers. */
+  min-height: 3rem;
   width: 100%;
 }
 
-.google-button.hidden {
+@media (max-width: 1023px) {
+  .google-slot {
+    min-height: 3.25rem;
+  }
+}
+
+.google-slot.hidden {
   display: none;
 }
 
-.google-button.busy {
+.google-face {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-size: var(--text-item);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.google-slot.ready .google-face {
+  display: flex;
+}
+
+.google-slot.busy .google-face {
   opacity: 0.6;
+}
+
+.google-slot:hover .google-face {
+  transform: scale(1.02);
+}
+
+.google-slot:focus-within .google-face {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Google's button over the pill: it takes the click and the focus, never shows. */
+.google-button {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scaleY(1.2);
+}
+
+.google-slot.busy .google-button {
+  pointer-events: none;
 }
 
 .pending,
@@ -94,17 +141,26 @@
   opacity: 0.6;
 }
 
+@media (max-width: 1023px) {
+  .pending {
+    min-height: 3.25rem;
+  }
+}
+
 .status:empty {
   display: none;
 }
 
+/* v2 · Auth: the refresh glyph (18), turning; still under reduced motion. */
 .spinner {
-  width: 1rem;
-  height: 1rem;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  display: inline-flex;
+  animation: spin 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
 }
 
 @keyframes spin {
@@ -131,7 +187,8 @@
 
 .link {
   justify-self: center;
-  min-height: var(--target);
+  /* v2 · Auth: 14/700 with 4 above and below (26); still a target (WCAG 2.5.8). */
+  min-height: 1.625rem;
   padding: 0 var(--space-2);
   border: 0;
   background: transparent;
@@ -147,7 +204,7 @@
 .foot {
   display: grid;
   justify-items: center;
-  gap: var(--space-1);
+  gap: 0.625rem;
   text-align: center;
 }
 
@@ -160,15 +217,19 @@
 .links {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  margin: 0;
+  gap: var(--space-4);
+  /* The 24 targets overflow the drawn 16 line evenly. */
+  margin: -0.25rem 0;
   color: var(--color-text-muted);
+  /* the "·" between the links is 13 too, as drawn */
+  font-size: var(--text-meta);
 }
 
 .footer-link {
   display: inline-flex;
   align-items: center;
-  min-height: var(--target);
+  /* 13/700 on one line, 10 under the note (v2 · Auth); 24 keeps it a target. */
+  min-height: 1.5rem;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
   font-weight: 700;
@@ -181,10 +242,49 @@
 }
 
 @media (max-width: 1023px) {
-  /* The same stack without the card, 16 margins and 52 buttons (v2 · Auth, mobile). */
+  /* The same stack without the card, 16 margins and 52 buttons (v2 · Auth, mobile); the
+     footer at the foot of the screen. */
+  :host {
+    background:
+      linear-gradient(180deg, var(--color-entry-glow) 0, transparent 26.25rem)
+        no-repeat,
+      var(--color-shell);
+  }
+
   .entry {
-    align-items: start;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
     padding: 5.5rem var(--space-4) var(--space-8);
+  }
+
+  .column {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .foot {
+    margin-top: auto;
+    /* a form longer than the screen keeps the foot 57 under it (v2 · Auth, mobile: the
+       column's 28 and 29 more) */
+    padding-top: 1.8125rem;
+  }
+
+  .logo {
+    --ui-logo-size: 56px !important;
+  }
+
+  /* the 56 mark's sparkle is 28 (v2 · Auth, mobile), half of it as on desktop */
+  :host ::ng-deep .logo svg {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .tagline {
+    max-width: 18.75rem;
+    justify-self: center;
   }
 
   .name {
@@ -195,4 +295,21 @@
     padding: 0;
     background: transparent;
   }
+}
+
+/* v2 · Auth, desktop: the pill buttons are 48 (52 on a phone) and the text links of a form
+   ("Reenviar código", "Trocar e-mail") a 20 row; 24 stays their target (WCAG 2.5.8). */
+@media (min-width: 1024px) {
+  :host ::ng-deep .ui-btn--lg {
+    min-height: 3rem;
+  }
+
+  :host ::ng-deep .actions .text-link {
+    min-height: 1.5rem;
+    margin-block: -0.1875rem;
+  }
+}
+
+:host ::ng-deep .ui-btn--lg {
+  font-size: var(--text-item);
 }

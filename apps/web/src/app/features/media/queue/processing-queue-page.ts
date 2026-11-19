@@ -114,25 +114,39 @@ export class ProcessingQueuePage {
     if (items.length === 0)
       return $localize`:@@queue.summaryNone:Nada sendo processado agora`;
     const need = items.filter((one) => one.phase === 'attention').length;
+    const next = items.filter((one) => one.phase === 'next').length;
     const all =
       items.length === 1
         ? $localize`:@@queue.summaryOne:1 item`
         : $localize`:@@queue.summaryMany:${items.length}:count: itens`;
-    if (need === 0) return all;
-    return need === 1
-      ? $localize`:@@queue.summaryNeedOne:${all}:all: · 1 precisa de você`
-      : $localize`:@@queue.summaryNeed:${all}:all: · ${need}:need: precisam de você`;
+    const parts = [all];
+    if (need > 0)
+      parts.push(
+        need === 1
+          ? $localize`:@@queue.summaryNeedPart:1 precisa de você`
+          : $localize`:@@queue.summaryNeedMany:${need}:need: precisam de você`,
+      );
+    if (next > 0)
+      parts.push($localize`:@@queue.summaryNext:${next}:next: a seguir`);
+    return parts.join(' · ');
   });
-  /** "Aguardando o transcritor": the usual reason nothing moves. */
+  /** "Aguardando o transcritor": the usual reason nothing moves, in a title and a line. */
   protected readonly transcriberText = computed(() => {
     const queue = this.store.queue();
-    if (!this.store.items().some((one) => one.waitsForTranscriber)) return '';
+    if (!this.store.items().some((one) => one.waitsForTranscriber)) return null;
     const since = queue?.transcriberOffSince;
+    const title = $localize`:@@queue.transcriberTitle:Aguardando o transcritor`;
     if (queue?.transcriber === 'none')
-      return $localize`:@@queue.noTranscriber:Aguardando o transcritor: nenhum transcritor está pareado. Um master pareia em Transcritores.`;
-    return since
-      ? $localize`:@@queue.transcriberOff:Aguardando o transcritor · desligado desde ${formatDate(since, 'dd/MM HH:mm', this.locale)}:date:. Nada anda até ele voltar.`
-      : $localize`:@@queue.transcriberWaiting:Aguardando o transcritor. Nada anda até ele voltar.`;
+      return {
+        title,
+        text: $localize`:@@queue.noTranscriberText:Nenhum transcritor está pareado. Um master pareia em Transcritores.`,
+      };
+    return {
+      title,
+      text: since
+        ? $localize`:@@queue.transcriberOffText:Desligado desde ${formatDate(since, 'dd/MM HH:mm', this.locale)}:date:. Nada anda até ele voltar.`
+        : $localize`:@@queue.transcriberWaitingText:Nada anda até ele voltar.`,
+    };
   });
   private readonly titles = computed(
     () => new Map(this.chat.topicList().map((one) => [one.slug, one.title])),

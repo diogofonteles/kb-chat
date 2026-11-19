@@ -24,20 +24,25 @@
   } @else if (step() === 'sent') {
     <span class="mark ok"><ui-icon name="check" [size]="36" /></span>
     <ui-pill tone="ok" i18n="@@access.pillSent">Enviada</ui-pill>
-    <p i18n="@@access.sent">
-      Solicitação enviada. Você recebe um e-mail quando um master aprovar.
+    <!-- v2 · Auth "enviada": a 22 headline, then the line under it. -->
+    <p class="headline large" i18n="@@access.sentTitle">Solicitação enviada.</p>
+    <p i18n="@@access.sentText">
+      Você recebe um e-mail quando um master aprovar.
     </p>
   } @else if (request.status === 'pending') {
     <span class="mark warn"><ui-icon name="clock" [size]="36" /></span>
     <ui-pill tone="warn" i18n="@@access.pillPending">Em análise</ui-pill>
-    <p class="headline" i18n="@@access.pending">
+    <p class="headline large" i18n="@@access.pending">
       Sua solicitação está em análise.
     </p>
   } @else if (retryAt(); as retry) {
     <span class="mark err"><ui-icon name="xcircle" [size]="36" /></span>
     <ui-pill tone="err" i18n="@@access.pillRefused">Recusada</ui-pill>
-    <p i18n="@@access.refused">
-      Sua solicitação foi recusada. Você pode pedir de novo a partir de
+    <p class="headline large" i18n="@@access.refusedTitle">
+      Sua solicitação foi recusada.
+    </p>
+    <p i18n="@@access.refusedText">
+      Você pode pedir de novo a partir de
       {{ retry | date: "dd/MM 'às' HH:mm" : BRASILIA }} (horário de Brasília).
     </p>
   } @else {

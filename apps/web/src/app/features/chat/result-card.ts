@@ -8,12 +8,19 @@ import {
 } from '@angular/core';
 import type { AnswerSource, DocumentRef, SearchHit } from '@kb-chat/contracts';
 import { formatClock } from '@kb-chat/player-core';
-import { RELEVANCE_LABELS, describeFacets } from '@core/i18n/facet-labels.js';
+import {
+  DEPTH_LABELS,
+  GENRE_LABELS,
+  RELEVANCE_LABELS,
+  describeFacets,
+} from '@core/i18n/facet-labels.js';
 import { speak } from '@core/i18n/spoken-time.js';
 import { textParts } from '@core/text/text-parts.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import type { TrackOpening } from '@features/research/track-opening.js';
 import { UiCover } from '@ui/cover.js';
+import { UiIcon } from '@ui/icon.js';
+import { UiMenu, UiMenuItem } from '@ui/menu.js';
 import { UiPill } from '@ui/pill.js';
 
 const VISIBLE_CONCEPTS = 2;
@@ -57,7 +64,7 @@ export function trackSourceOf(hit: SearchHit): AnswerSource | null {
  */
 @Component({
   selector: 'app-result-card',
-  imports: [AuthorshipBadge, UiCover, UiPill],
+  imports: [AuthorshipBadge, UiCover, UiIcon, UiMenu, UiMenuItem, UiPill],
   templateUrl: './result-card.html',
   styleUrl: './result-card.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -67,6 +74,8 @@ export class ResultCard {
   readonly active = input(false);
   /** The first result as the "Melhor resultado" card; the others are rows of the table. */
   readonly best = input(false);
+  /** Its copies have their own card beside it (a lone best result): the pill only says so. */
+  readonly copiesBeside = input(false);
   /** The sub-collection the hit is in, when searching its parent (ADR 0028). */
   readonly place = input<string | null>(null);
   readonly opened = output<OpenedHit>();
@@ -81,6 +90,24 @@ export class ResultCard {
     this.facets() ? this.facets().split(' · ') : [],
   );
   protected readonly central = RELEVANCE_LABELS.core;
+  /** A row's columns (docRow): the type after the author, the depth, the link as a pill. */
+  protected readonly genre = computed(() => {
+    const genre = this.hit().genre;
+    return genre === null ? '' : GENRE_LABELS[genre];
+  });
+  protected readonly depth = computed(() => {
+    const depth = this.hit().depth;
+    return depth === null ? '' : DEPTH_LABELS[depth];
+  });
+  protected readonly relevance = computed(() => {
+    const relevance = this.hit().relevance;
+    return relevance === null ? '' : RELEVANCE_LABELS[relevance];
+  });
+  /** The ⋯ says what it is; the title it belongs to is its description (aria-describedby). */
+  protected readonly moreTrigger = $localize`:@@card.moreTrigger:Mais opções`;
+  protected readonly moreLabel = computed(
+    () => $localize`:@@card.more:Mais opções para ${this.hit().title}:title:`,
+  );
   protected readonly concepts = computed(() =>
     this.hit().concepts.slice(0, VISIBLE_CONCEPTS).join(' · '),
   );

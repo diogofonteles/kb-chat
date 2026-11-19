@@ -36,7 +36,7 @@ import {
   type Toggle,
 } from './pending-changes.js';
 import { PersonAiEditor } from './person-ai-editor.js';
-import { UiButton, UiIcon, UiTablist } from '@ui/index.js';
+import { UiBanner, UiButton, UiIcon, UiTablist } from '@ui/index.js';
 
 const BYTES_PER_GB = 1024 ** 3;
 
@@ -52,13 +52,14 @@ const quotaFormat = new Intl.NumberFormat('pt-BR', {
  */
 @Component({
   selector: 'app-person-editor',
-  imports: [PersonAiEditor, UiButton, UiIcon, UiTablist],
+  imports: [PersonAiEditor, UiBanner, UiButton, UiIcon, UiTablist],
   templateUrl: './person-editor.html',
   styleUrl: './person-editor.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PersonEditor {
   private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   readonly person = input.required<Person>();
   readonly topics = input.required<readonly Topic[]>();
   /** Any write of the panel is on its way: the actions that are not boxes wait. */
@@ -96,6 +97,8 @@ export class PersonEditor {
     viewChild<ElementRef<HTMLButtonElement>>('applyConfirmButton');
   private readonly applyButton =
     viewChild<ElementRef<HTMLButtonElement>>('applyButton');
+  private readonly profileSelect =
+    viewChild<ElementRef<HTMLSelectElement>>('profileSelect');
 
   protected readonly confirming = signal(false);
 
@@ -136,7 +139,7 @@ export class PersonEditor {
   private readonly refocusAfterApply = afterRenderEffect(() => {
     if (this.busy() || !this.refocusApply) return;
     this.refocusApply = false;
-    this.applyButton()?.nativeElement.focus();
+    this.applyTarget()?.nativeElement.focus();
   });
   protected readonly isMaster = computed(() => this.person().role === 'master');
   /** What is saved with the changes still on their way on top (KBC-062). */
@@ -229,6 +232,21 @@ export class PersonEditor {
   protected chooseProfile(id: string): void {
     this.chosenProfileId.set(id);
     this.confirmingApply.set(false);
+    // A phone's "Aplicar perfil" is one row (v2 · Pessoas, celular): choosing asks at once.
+    if (this.onPhone()) this.askApply();
+  }
+
+  private onPhone(): boolean {
+    return (
+      this.host.nativeElement.ownerDocument.defaultView?.matchMedia?.(
+        '(max-width: 1023px)',
+      ).matches ?? false
+    );
+  }
+
+  /** "Aplicar perfil", or on a phone (where the choice is the row) the choice itself. */
+  private applyTarget(): ElementRef<HTMLElement> | undefined {
+    return this.onPhone() ? this.profileSelect() : this.applyButton();
   }
 
   protected askApply(): void {
@@ -238,7 +256,7 @@ export class PersonEditor {
 
   protected cancelApply(): void {
     this.confirmingApply.set(false);
-    this.focusAfterRender(() => this.applyButton());
+    this.focusAfterRender(() => this.applyTarget());
   }
 
   protected confirmApply(): void {
@@ -261,7 +279,7 @@ export class PersonEditor {
   }
 
   private focusAfterRender(
-    target: () => ElementRef<HTMLButtonElement> | undefined,
+    target: () => ElementRef<HTMLElement> | undefined,
   ): void {
     afterNextRender(() => target()?.nativeElement.focus(), {
       injector: this.injector,

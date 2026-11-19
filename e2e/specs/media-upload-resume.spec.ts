@@ -177,7 +177,9 @@ test('AC-2: a file already in the collection is named, linked and not sent', asy
   await dialog.locator('input[type="file"]').setInputFiles(file);
   await expect(dialog.getByText('Já está no acervo:')).toBeVisible();
   await expect(dialog.getByRole('link', { name: title })).toBeVisible();
-  await sendButton(dialog).click();
+  // Nothing it takes: "Enviar" looks off (aria-disabled), and a press still says why.
+  await expect(sendButton(dialog)).toHaveAttribute('aria-disabled', 'true');
+  await sendButton(dialog).click({ force: true });
   await expect(
     dialog.getByText('Nada a enviar: estes arquivos não podem ser enviados.'),
   ).toBeVisible();
@@ -284,7 +286,8 @@ test('KBC-072: a repeated file sends nothing, and the choices stay for the next'
   await expect(again.getByText(/Já está no acervo/)).toBeVisible({
     timeout: 30_000,
   });
-  await sendButton(again).click();
+  await expect(sendButton(again)).toHaveAttribute('aria-disabled', 'true');
+  await sendButton(again).click({ force: true });
   await expect(again.getByText(/Nada a enviar/)).toBeVisible();
   await expect(page).toHaveURL(/\/midia$/);
 });

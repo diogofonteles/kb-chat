@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   afterNextRender,
@@ -12,9 +13,16 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
+import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import type { IconName } from '@ui/icons.js';
-import { UiOverlay, outsideBox, type OverlayAlign } from '@ui/overlay.js';
+import {
+  UiOverlay,
+  outsideBox,
+  type OverlayAlign,
+  type OverlayOffset,
+  type OverlaySide,
+} from '@ui/overlay.js';
 
 /** One item of a menu: an action, or one of the choices with the current one checked. */
 export interface MenuOption {
@@ -28,11 +36,23 @@ export interface MenuOption {
   readonly group?: string;
   /** A line above it, to set it apart (a destructive action goes last, after one). */
   readonly divider?: boolean;
+  /** On a phone's sheet its group's items are pills in one row ("Ver como", @mobile). */
+  readonly pill?: boolean;
+  /** An action among the choices of a `kind="choice"` menu: no ✓, no radio role. */
+  readonly action?: boolean;
+  /**
+   * A short state after the words, at the right ("ligado"); the item's name is
+   * "<label>: <trail>", so it says the state in words (UP-20).
+   */
+  readonly trail?: string;
+  /** A key that does it, shown at the right ("?"); the item's name stays its words. */
+  readonly keyHint?: string;
 }
 
 /** Items under the name of their group, in the order given. */
 interface MenuGroup {
   readonly name: string;
+  readonly pills: boolean;
   readonly items: readonly { option: MenuOption; index: number }[];
 }
 
@@ -49,12 +69,13 @@ const SHEET_BELOW_PX = 1024;
  */
 @Component({
   selector: 'app-menu-button',
-  imports: [UiIcon, UiOverlay],
+  imports: [UiCover, UiIcon, UiOverlay],
   template: `
     <button
       #trigger
       type="button"
       class="trigger"
+      [class.chip]="look() === 'chip'"
       aria-haspopup="menu"
       [attr.aria-expanded]="open()"
       [attr.aria-label]="label()"
@@ -69,51 +90,92 @@ const SHEET_BELOW_PX = 1024;
       <div
         #menu
         class="menu"
+        [class.choices]="kind() === 'choice'"
+        [class.spaced]="spaced()"
         role="menu"
         tabindex="-1"
         [uiOverlay]="trigger"
         [overlayAlign]="align()"
+        [overlaySide]="side()"
+        [overlayOffset]="offset()"
         [overlaySheetBelow]="sheetBelow"
         [attr.aria-label]="menuLabel() || label()"
         (keydown)="onMenuKey($event)"
         (focusout)="onFocusOut($event)"
       >
+        <!-- The sheet's handle and, for a media, what it is (media-library-row-menu@mobile). -->
+        <span class="handle" aria-hidden="true"></span>
+        @if (sheetTitle(); as title) {
+          <div class="sheet-head" aria-hidden="true">
+            <ui-cover [title]="title" [size]="48" />
+            <span class="sheet-words">
+              <span class="sheet-title">{{ title }}</span>
+              @if (sheetMeta(); as meta) {
+                <span class="sheet-meta">{{ meta }}</span>
+              }
+            </span>
+          </div>
+        }
+        <!-- What the sheet is about, given by the page (player.js mOver: the cover and title). -->
+        <div class="sheet-slot"><ng-content select="[sheetHead]" /></div>
+        @if (titled()) {
+          <!-- The menu's name over its items (speedMenu, mTitle): read as its label. -->
+          <p class="title" aria-hidden="true">{{ menuLabel() || label() }}</p>
+        }
         @for (group of groups(); track $index) {
           <div
             class="group"
+            [class.pills]="group.pills"
             [attr.role]="group.name ? 'group' : null"
             [attr.aria-label]="group.name || null"
           >
             @if (group.name) {
               <p class="heading" aria-hidden="true">{{ group.name }}</p>
             }
-            @for (entry of group.items; track entry.option.id) {
-              @if (entry.option.divider) {
-                <hr class="divider" aria-hidden="true" />
+            <div class="items">
+              @for (entry of group.items; track entry.option.id) {
+                @if (entry.option.divider) {
+                  <hr class="divider" aria-hidden="true" />
+                }
+                <button
+                  #item
+                  type="button"
+                  [attr.role]="
+                    radio(entry.option) ? 'menuitemradio' : 'menuitem'
+                  "
+                  [attr.aria-checked]="
+                    radio(entry.option) ? (entry.option.checked ?? false) : null
+                  "
+                  [attr.aria-label]="
+                    entry.option.trail
+                      ? entry.option.label + ': ' + entry.option.trail
+                      : null
+                  "
+                  [class.danger]="entry.option.danger"
+                  [class.checked]="entry.option.checked"
+                  (focus)="focused.set(entry.index)"
+                  (click)="choose(entry.option.id)"
+                >
+                  @if (entry.option.icon; as icon) {
+                    <ui-icon [name]="icon" [size]="18" />
+                  }
+                  <span class="words">{{ entry.option.label }}</span>
+                  @if (entry.option.trail; as trail) {
+                    <span class="trail" aria-hidden="true">{{ trail }}</span>
+                  } @else if (entry.option.keyHint; as key) {
+                    <span class="trail" aria-hidden="true">{{ key }}</span>
+                  }
+                  @if (radio(entry.option)) {
+                    <!-- v2 menus: the chosen one's ✓ drawn as the check icon. -->
+                    <span class="check" aria-hidden="true">
+                      @if (entry.option.checked) {
+                        <ui-icon name="check" [size]="16" />
+                      }
+                    </span>
+                  }
+                </button>
               }
-              <button
-                #item
-                type="button"
-                [attr.role]="kind() === 'choice' ? 'menuitemradio' : 'menuitem'"
-                [attr.aria-checked]="
-                  kind() === 'choice' ? (entry.option.checked ?? false) : null
-                "
-                [class.danger]="entry.option.danger"
-                [class.checked]="entry.option.checked"
-                (focus)="focused.set(entry.index)"
-                (click)="choose(entry.option.id)"
-              >
-                @if (entry.option.icon; as icon) {
-                  <ui-icon [name]="icon" [size]="18" />
-                }
-                <span class="words">{{ entry.option.label }}</span>
-                @if (kind() === 'choice') {
-                  <span class="check" aria-hidden="true">{{
-                    entry.option.checked ? '✓' : ''
-                  }}</span>
-                }
-              </button>
-            }
+            </div>
           </div>
         }
       </div>
@@ -121,12 +183,19 @@ const SHEET_BELOW_PX = 1024;
   `,
   styleUrl: './menu-button.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(document:click)': 'closeOnOutside($event)' },
 })
 export class MenuButton {
   private readonly injector = inject(Injector);
   private readonly host =
     inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  /**
+   * The document's clicks, heard only while this menu is open. Not a `(document:click)` host
+   * listener: with one ⋯ per row, every click anywhere ran 2 000 Angular listeners, and each
+   * marked its row for a check, so all 2 000 rows were checked again (NFR-2).
+   */
+  private readonly onDocumentClick = (event: MouseEvent): void =>
+    this.closeOnOutside(event);
+  private hearingOutside = false;
   private readonly trigger =
     viewChild.required<ElementRef<HTMLButtonElement>>('trigger');
   private readonly items = viewChildren<ElementRef<HTMLButtonElement>>('item');
@@ -142,6 +211,19 @@ export class MenuButton {
   readonly disabled = input(false);
   /** Which edge of the button the list lines up with. */
   readonly align = input<OverlayAlign>('end');
+  /** A chip that opens a menu (v2 · Componentes › Chip with ▾), as in a row of filters. */
+  readonly look = input<'plain' | 'chip'>('plain');
+  /** On a phone's sheet, the item it is about: its cover and title over the items. */
+  readonly sheetTitle = input('');
+  /** Under that title ("Irmã Helena Prado · Alquimia Prática"). */
+  readonly sheetMeta = input('');
+  /** Below the button, or over its row from `offset` (the v2 player's menus). */
+  readonly side = input<OverlaySide>('below');
+  readonly offset = input<OverlayOffset | null>(null);
+  /** The menu's name shown over its items (the speed menu of the v2 player). */
+  readonly titled = input(false);
+  /** The player's sheets (pMobile sheet(kids)): rows 4 apart, not touching. */
+  readonly spaced = input(false);
   readonly chosen = output<string>();
 
   protected readonly sheetBelow = SHEET_BELOW_PX;
@@ -149,12 +231,18 @@ export class MenuButton {
   /** The item that has the focus, as the items report it. */
   protected readonly focused = signal(0);
   protected readonly groups = computed<readonly MenuGroup[]>(() => {
-    const groups: { name: string; items: MenuGroup['items'][number][] }[] = [];
+    const groups: {
+      name: string;
+      pills: boolean;
+      items: MenuGroup['items'][number][];
+    }[] = [];
     this.options().forEach((option, index) => {
       const name = option.group ?? '';
+      const pills = option.pill === true;
       const last = groups.at(-1);
-      if (last && last.name === name) last.items.push({ option, index });
-      else groups.push({ name, items: [{ option, index }] });
+      if (last && last.name === name && last.pills === pills)
+        last.items.push({ option, index });
+      else groups.push({ name, pills, items: [{ option, index }] });
     });
     return groups;
   });
@@ -164,6 +252,19 @@ export class MenuButton {
       this.options().findIndex((option) => option.checked),
     ),
   );
+
+  /** A choice of a `kind="choice"` menu (an action among them is a plain item). */
+  protected radio(option: MenuOption): boolean {
+    return this.kind() === 'choice' && !option.action;
+  }
+
+  /** Whether its menu is open (a row keeps its look under the pointer meanwhile). */
+  readonly isOpen = computed(() => this.open());
+
+  /** Opens it from elsewhere (a phone recording's long press, media-library@mobile). */
+  openMenu(): void {
+    if (!this.open()) this.openOn(this.checkedIndex());
+  }
 
   protected toggle(): void {
     if (this.open()) this.close(true);
@@ -192,15 +293,15 @@ export class MenuButton {
 
   protected onFocusOut(event: FocusEvent): void {
     const next = event.relatedTarget;
-    if (next instanceof Node && !this.host.contains(next)) this.open.set(false);
+    if (next instanceof Node && !this.host.contains(next)) this.shut();
   }
 
   /** A click outside, or on the phone sheet's scrim (the list's own backdrop). */
-  protected closeOnOutside(event: MouseEvent): void {
+  private closeOnOutside(event: MouseEvent): void {
     if (!this.open() || !(event.target instanceof Node)) return;
     const menu = this.menu()?.nativeElement;
     const onScrim = event.target === menu && outsideBox(menu, event);
-    if (onScrim || !this.host.contains(event.target)) this.open.set(false);
+    if (onScrim || !this.host.contains(event.target)) this.shut();
   }
 
   protected choose(id: string): void {
@@ -210,6 +311,7 @@ export class MenuButton {
 
   private openOn(index: number): void {
     this.open.set(true);
+    this.hearOutside();
     afterNextRender(() => this.focusItem(index), { injector: this.injector });
   }
 
@@ -223,13 +325,35 @@ export class MenuButton {
     items.at(index < 0 ? items.length - 1 : index)?.nativeElement.focus();
   }
 
+  private hearOutside(): void {
+    if (this.hearingOutside) return;
+    this.hearingOutside = true;
+    this.host.ownerDocument.addEventListener('click', this.onDocumentClick);
+  }
+
+  private stopHearingOutside(): void {
+    if (!this.hearingOutside) return;
+    this.hearingOutside = false;
+    this.host.ownerDocument.removeEventListener('click', this.onDocumentClick);
+  }
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.stopHearingOutside());
+  }
+
   /** Puts the focus on the trigger (a neighbour that went away hands it here). */
   focus(): void {
     this.trigger().nativeElement.focus();
   }
 
   private close(refocus: boolean): void {
-    this.open.set(false);
+    this.shut();
     if (refocus) this.trigger().nativeElement.focus();
+  }
+
+  /** Closed, it hears the document no more, however it closed. */
+  private shut(): void {
+    this.open.set(false);
+    this.stopHearingOutside();
   }
 }

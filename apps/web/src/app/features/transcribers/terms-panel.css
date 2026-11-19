@@ -1,9 +1,21 @@
 .usage {
+  /* The limit stays in sight while the list is edited, under the page's strip (v2 · Termos,
+     acima do limite: the meter over the end of the list). Opaque, as chips pass under it. */
+  position: sticky;
+  top: 3.625rem;
+  z-index: 1;
   display: grid;
   gap: var(--space-3);
   padding: var(--space-4);
   border-radius: var(--radius-card);
-  background: var(--overlay-2);
+  background: color-mix(in srgb, var(--color-text) 7%, var(--color-bg));
+}
+
+@media (max-width: 1023px) {
+  .usage {
+    /* Under the phone screen's header (‹ · title · search). */
+    top: 5.6875rem;
+  }
 }
 
 .usage-line {
@@ -70,13 +82,14 @@
   max-width: 100%;
 }
 
+/* 32 tall, the words 14 in, the ✕ (14, in a 24 target) 6 after them and 8 from the end. */
 .term {
   display: inline-flex;
   align-items: center;
-  gap: 0.125rem;
+  gap: 0.0625rem;
   max-width: 100%;
   min-height: 2rem;
-  padding: 0 var(--space-1) 0 0.875rem;
+  padding: 0 0.1875rem 0 0.875rem;
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   background: var(--color-surface-muted);
@@ -110,8 +123,8 @@
 .remove {
   display: inline-grid;
   place-items: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.5rem;
+  height: 1.5rem;
   padding: 0;
   border: 0;
   border-radius: var(--radius-pill);
@@ -184,5 +197,150 @@
 
   .versions-open {
     display: inline-flex;
+  }
+}
+
+/* v2 · Termos: the box with "Adicionar" at its right; "Salvar lista" as a green pill. */
+.add-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.add-row .add {
+  flex: 1;
+  min-height: 3.75rem;
+}
+
+.add-row .secondary {
+  margin-top: 0;
+}
+
+.primary {
+  justify-self: start;
+  min-height: 2.5rem;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+@media (max-width: 1023px) {
+  .add-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .add-row .secondary {
+    align-self: flex-start;
+  }
+}
+
+/* After the base rules: the phone's meter is the count, the bar, then the version. */
+@media (max-width: 1023px) {
+  .usage-line {
+    display: contents;
+  }
+
+  .usage .use {
+    order: 1;
+  }
+
+  .usage .bar {
+    order: 2;
+  }
+
+  .usage .version {
+    order: 3;
+  }
+}
+
+/* v2 · Termos: the version 13, "Adicionar termos" 17/20 with its hint 13 10 under it, the box
+   8 under that, the list's title 30 under the box and the chips 10 under it; "Adicionar" 40. */
+.usage .version {
+  font-size: var(--text-meta);
+}
+
+.field > .label {
+  font-size: 1.0625rem;
+  line-height: 1.25rem;
+  font-weight: 700;
+}
+
+.field > .hint {
+  font-size: var(--text-meta);
+  line-height: 1.1875rem;
+}
+
+.add-row .secondary {
+  min-height: 2.5rem;
+  padding-inline: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.lead {
+  line-height: 1.25rem;
+}
+
+/* The meter's card 66 tall: 16 in, the count on an 18 line, 10 over the bar. */
+.usage {
+  gap: 0.625rem;
+}
+
+.use {
+  line-height: 1.125rem;
+}
+
+/* "Termos (N)" 30 under the box, the chips 10 under it. */
+.block > .block-title {
+  margin: 1.125rem 0 -0.125rem;
+  line-height: 1.25rem;
+}
+
+/* "Adicionar termos" 24 under the meter's card; 10 from its title to the hint and from the
+   hint to the box (v2 · Termos). */
+.usage + .field,
+.usage + .field-error + .field {
+  margin-top: var(--space-2);
+}
+
+.block > .field {
+  gap: 0.625rem;
+}
+
+/* "Salvar lista" 40 with 24 a side; the versions 28 under it, 10 to their rows of 38 (10/12
+   inside, 14/17); "Termos (N)" 23 under the box. */
+.primary {
+  padding: 0 var(--space-6, 1.5rem);
+}
+
+.block > .block-title {
+  margin-top: 0.6875rem;
+}
+
+.versions {
+  gap: 0.625rem;
+  margin-top: var(--space-3);
+}
+
+.versions > .block-title {
+  line-height: 1.25rem;
+}
+
+.version-list li {
+  padding: 0.625rem var(--space-3);
+  line-height: 1.0625rem;
+}
+
+/* Who made a version at the row's end, 13 (desktop). */
+@media (min-width: 1024px) {
+  .version-text {
+    flex: 1;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+
+  .version-text .by {
+    font-size: var(--text-meta);
   }
 }

@@ -6,7 +6,7 @@ import {
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { MediaTranscript } from '@kb-chat/contracts';
-import { fireEvent, render, screen } from '@testing-library/angular';
+import { fireEvent, render, screen, within } from '@testing-library/angular';
 import {
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
@@ -388,7 +388,10 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
   it('shows the low-confidence notice above the text (AC-6, BR-2)', async () => {
     await renderPanel(transcriptOf({ confidence: 'low' }));
     const notice = screen.getByText(
-      'Transcrição automática de baixa confiança: pode haver trechos errados.',
+      'Transcrição automática de baixa confiança',
+    );
+    expect(notice.closest('ui-banner')?.textContent).toContain(
+      'Pode haver trechos errados.',
     );
     const list = screen.getByRole('list', { name: 'Trechos da transcrição' });
     expect(
@@ -571,11 +574,16 @@ describe('TranscriptPanel: "Voz N" at each change of voice (KBC-064 FR-5, AC-1)'
       },
     });
   };
+  /** The labels in the lines (the legend "Quem fala" above them names each voice once). */
+  const lines = () =>
+    within(screen.getByRole('list', { name: 'Trechos da transcrição' }));
   const labels = () =>
-    screen.queryAllByText(/^Voz \d+$/).map((label) => ({
-      voice: label.textContent,
-      segment: label.closest('li')?.getAttribute('data-index'),
-    }));
+    lines()
+      .queryAllByText(/^Voz \d+$/)
+      .map((label) => ({
+        voice: label.textContent,
+        segment: label.closest('li')?.getAttribute('data-index'),
+      }));
 
   it('labels the first segment of each voice, not one that goes on after a silence', async () => {
     await renderPanel(voiced([1, 1, 2, null, 2]));
@@ -636,8 +644,8 @@ describe('TranscriptPanel: "Voz N" at each change of voice (KBC-064 FR-5, AC-1)'
       ],
     });
     expect(screen.getByText('✦').getAttribute('aria-hidden')).toBe('true');
-    expect(screen.getByText('Mestre Gabriel')).toBeTruthy();
-    expect(screen.getByText('Pergunta da plateia')).toBeTruthy();
+    expect(lines().getByText('Mestre Gabriel')).toBeTruthy();
+    expect(lines().getByText('Pergunta da plateia')).toBeTruthy();
     expect(labels()).toEqual([]);
   });
 
@@ -650,7 +658,7 @@ describe('TranscriptPanel: "Voz N" at each change of voice (KBC-064 FR-5, AC-1)'
         { voice: 1, kind: 'unnamed', speakerId: null, name: null, main: false },
       ],
     });
-    expect(screen.getByText('Falante não identificado')).toBeTruthy();
+    expect(lines().getByText('Falante não identificado')).toBeTruthy();
   });
 });
 

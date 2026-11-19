@@ -60,17 +60,18 @@ export class UiMenuItem {
       aria-haspopup="menu"
       [attr.aria-expanded]="open()"
       [attr.aria-label]="triggerLabel() || null"
+      [attr.aria-describedby]="triggerDescribedBy() || null"
       [attr.aria-controls]="menuId()"
       (click)="toggle()"
     >
       <ng-content select="[uiMenuTrigger]" />
     </button>
     <!-- Choosing an item closes the menu: the click bubbles up from the item. -->
-    <!-- eslint-disable-next-line @angular-eslint/template/interactive-supports-focus -->
     <div
       #panel
       class="ui-menu__panel"
       role="menu"
+      tabindex="-1"
       [attr.id]="menuId()"
       [attr.aria-label]="label()"
       [hidden]="!open()"
@@ -91,6 +92,8 @@ export class UiMenu {
   readonly label = input.required<string>();
   /** The trigger's name when its content has no text (an avatar, an icon). */
   readonly triggerLabel = input('');
+  /** The id of what the trigger is about, when its name is generic ("Mais opções"). */
+  readonly triggerDescribedBy = input('');
   readonly triggerClass = input('');
   readonly menuId = input.required<string>();
   readonly align = input<'start' | 'end'>('start');
@@ -128,7 +131,9 @@ export class UiMenu {
             sheetBelow: SHEET_BELOW_PX,
           },
         );
-        this.items()[0]?.focus();
+        // A menu with nothing to choose (an empty list) still takes the focus, so Escape
+        // and Tab close it.
+        (this.items()[0] ?? this.panel().nativeElement).focus();
       },
       { injector: this.injector },
     );
@@ -150,6 +155,8 @@ export class UiMenu {
     const action = this.keys[event.key];
     if (!action) return;
     event.preventDefault();
+    // The key is the menu's alone: an Escape must not also close the panel or dialog it sits in.
+    event.stopPropagation();
     action();
   }
 

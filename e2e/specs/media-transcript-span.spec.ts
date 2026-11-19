@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { expect, ownerApi, test } from './fixtures.js';
 import { uniqueTag, uploadReady } from './media-helpers.js';
-import { seedDraft, trackRow } from './tracks-helpers.js';
+import { seedDraft, trackMenu, trackRow } from './tracks-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
 
 // KBC-115: choosing many words of the track text at once (a drag, a held finger, Shift+click,
@@ -76,6 +76,8 @@ async function openStep3(
 ) {
   await page.goto(`/midia/${media.id}/faixas`);
   await trackRow(page, 1).getByRole('button').first().click();
+  // The text waits in the track's details, opened from its ⋯ (v2 · Faixas, KBC-130).
+  await trackMenu(page, 'Tipo, nível e texto da faixa');
   await expect(textOf(page)).toContainText(says);
   await expect(audition(page)).toBeAttached();
 }
@@ -234,6 +236,14 @@ test('AC-6, AC-7: Shift+click stretches the open choice; Shift+→ on the text c
   const mestre = await wordAt(region, 'mestre');
   await page.mouse.click(mestre.x, mestre.y);
   await expect(field(page)).toHaveValue('mestre');
+  // The word's time holds once the audition knows its length (a seek waits for it).
+  await expect
+    .poll(() =>
+      audition(page).evaluate(
+        (element) => (element as HTMLAudioElement).readyState,
+      ),
+    )
+    .toBeGreaterThanOrEqual(1);
   const atWord = await auditionTime(page);
   await field(page).fill('Mestre');
   const disse = await wordAt(region, 'disse');

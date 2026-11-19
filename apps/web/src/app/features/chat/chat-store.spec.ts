@@ -114,6 +114,34 @@ describe('ChatStore conversations (KBC-005)', () => {
     expect(savedOnServer(saved.id)?.createdAt).toBe(saved.createdAt);
   });
 
+  it('keeps a conversation opened again in its place until it asks something new (chat-results)', async () => {
+    const { store, history, answer, savedOnServer } = await setup();
+    store.ask('ritmo');
+    answer(0);
+    const saved = savedOnServer(store.conversationId());
+    if (!saved) throw new Error('the conversation was not saved');
+    store.newConversation();
+    store.ask('polaridade');
+    answer(1);
+    expect(history.conversations().map((c) => c.title)).toEqual([
+      'polaridade',
+      'ritmo',
+    ]);
+    store.newConversation();
+    store.restore(saved);
+    answer(2);
+    // The search ran again: the list keeps its order and the saved copy its time.
+    expect(history.conversations().map((c) => c.title)).toEqual([
+      'polaridade',
+      'ritmo',
+    ]);
+    expect(savedOnServer(saved.id)?.updatedAt).toBe(saved.updatedAt);
+    // A new question in it is news: it goes to the top.
+    store.ask('vibração');
+    answer(3);
+    expect(history.conversations()[0]?.id).toBe(saved.id);
+  });
+
   it('keeps the creation time across the saves of one conversation', async () => {
     const { store, answer, savedOnServer } = await setup();
     store.ask('ritmo');

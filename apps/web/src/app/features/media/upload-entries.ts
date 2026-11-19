@@ -14,6 +14,7 @@ import {
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaApi } from '@core/media/media-api.js';
 import { PreparationApi } from '@core/media/preparation-api.js';
+import { UploadsInFlight } from '@core/media/uploads-in-flight.js';
 import {
   EMPTY,
   Subject,
@@ -60,6 +61,8 @@ export type EntryState =
   | { readonly kind: 'expired' }
   | {
       readonly kind: 'sending';
+      /** The collection it goes to, fixed when it started: the library's block keeps to it. */
+      readonly topic: string;
       readonly loaded: number;
       readonly total: number;
       /** The network went away: the upload goes on by itself when it returns (AC-1). */
@@ -141,6 +144,23 @@ export class UploadEntries {
   private lastKey = 0;
 
   readonly entries = this.list.asReadonly();
+  private readonly source = `upload-${Math.random().toString(36).slice(2)}`;
+  /** What goes now, said to the library's block (media-upload-sending); nothing once gone. */
+  private readonly sending = computed(() =>
+    this.list().flatMap(({ key, title, file, state }) =>
+      state.kind === 'sending'
+        ? [
+            {
+              key: `${this.source}-${key}`,
+              title: title || file.name,
+              topic: state.topic,
+              loaded: state.loaded,
+              total: state.total,
+            },
+          ]
+        : [],
+    ),
+  );
   readonly checking = computed(() =>
     this.list().some(({ state }) => state.kind === 'checking'),
   );
@@ -189,10 +209,12 @@ export class UploadEntries {
   });
 
   constructor() {
+    const destroyRef = inject(DestroyRef);
+    inject(UploadsInFlight).register(this.sending, destroyRef);
     this.toCheck
       .pipe(
         concatMap((key) => this.inspect(key)),
-        takeUntilDestroyed(inject(DestroyRef)),
+        takeUntilDestroyed(destroyRef),
       )
       .subscribe();
   }

@@ -210,4 +210,19 @@
       >
     </p>
   </article>
+  @if (contact(); as email) {
+    <aside
+      readingAside
+      class="contact-card"
+      aria-label="Contato"
+      i18n-aria-label="@@privacy.contactCard"
+    >
+      <ui-icon name="mail" [size]="20" />
+      <p i18n="@@privacy.contactCardText">
+        Para ver, corrigir ou apagar os seus dados, escreva para
+        <a [href]="'mailto:' + email">{{ email }}</a
+        >.
+      </p>
+    </aside>
+  }
 </app-reading-page>

@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   ElementRef,
   inject,
   input,
@@ -12,7 +13,7 @@ import type { Person } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { ActAsApi, RESTART_APP } from '@core/auth/act-as-api.js';
 
-import { UiButton, UiIcon } from '@ui/index.js';
+import { UiButton, UiDialog, UiIcon } from '@ui/index.js';
 
 const REASON_MIN = 3;
 const REASON_MAX = 500;
@@ -24,17 +25,22 @@ const REASON_MAX = 500;
  */
 @Component({
   selector: 'app-act-as-dialog',
-  imports: [UiButton, UiIcon],
+  imports: [UiButton, UiDialog, UiIcon],
   template: `
-    <dialog
+    <!-- A v2 modal on a desktop; on a phone the tall sheet "Cancelar · título · Ver como"
+         (v2 · Configurações › Ver como, celular). -->
+    <ui-dialog
       #dialog
-      class="dialog"
-      aria-labelledby="act-as-title"
-      (close)="closed.emit()"
+      titleId="act-as-title"
+      [title]="title()"
+      [width]="520"
+      [top]="245"
+      i18n-primaryLabel="@@actAs.startShort"
+      primaryLabel="Ver como"
+      [primaryDisabled]="busy()"
+      (primary)="start(reason.value)"
+      (closed)="closed.emit()"
     >
-      <h2 id="act-as-title" i18n="@@actAs.title">
-        Ver como {{ person().name || person().email }}
-      </h2>
       <p class="hint" i18n="@@actAs.explain">
         Você vai usar o app com os acervos, as permissões e os dados desta
         pessoa por até 30 minutos. Tudo o que você alterar fica registrado, e a
@@ -46,7 +52,7 @@ const REASON_MAX = 500;
           #reason
           id="act-as-reason"
           class="ui-input"
-          rows="3"
+          rows="1"
           [attr.maxlength]="reasonMax"
           [attr.aria-invalid]="invalid() ? 'true' : null"
           [attr.aria-describedby]="invalid() ? 'act-as-reason-error' : null"
@@ -55,7 +61,7 @@ const REASON_MAX = 500;
       </label>
       @if (invalid()) {
         <p id="act-as-reason-error" class="error">
-          <ui-icon name="xcircle" [size]="14" />
+          <ui-icon name="warn" [size]="14" />
           <span i18n="@@actAs.reasonRequired"
             >Escreva o motivo (pelo menos 3 letras).</span
           >
@@ -64,7 +70,7 @@ const REASON_MAX = 500;
       @if (failure(); as message) {
         <p class="error" role="alert">{{ message }}</p>
       }
-      <div class="actions">
+      <div uiDialogFooter class="actions">
         <button
           uiButton="ghost"
           type="button"
@@ -75,6 +81,7 @@ const REASON_MAX = 500;
         </button>
         <button
           uiButton="white"
+          class="start"
           type="button"
           [disabled]="busy()"
           (click)="start(reason.value)"
@@ -83,7 +90,7 @@ const REASON_MAX = 500;
           <span i18n="@@actAs.start">Ver como esta pessoa</span>
         </button>
       </div>
-    </dialog>
+    </ui-dialog>
   `,
   styleUrl: './act-as-dialog.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -91,13 +98,17 @@ const REASON_MAX = 500;
 export class ActAsDialog {
   private readonly api = inject(ActAsApi);
   private readonly restart = inject(RESTART_APP);
-  private readonly dialog =
-    viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild.required<UiDialog>('dialog');
   private readonly reason =
     viewChild.required<ElementRef<HTMLTextAreaElement>>('reason');
 
   readonly person = input.required<Person>();
   readonly closed = output();
+
+  protected readonly title = computed(() => {
+    const name = this.person().name || this.person().email;
+    return $localize`:@@actAs.title:Ver como ${name}:name:`;
+  });
 
   protected readonly reasonMax = REASON_MAX;
   protected readonly invalid = signal(false);
@@ -108,11 +119,13 @@ export class ActAsDialog {
     this.invalid.set(false);
     this.failure.set(null);
     this.reason().nativeElement.value = '';
-    this.dialog().nativeElement.showModal();
+    this.dialog().open();
+    // The reason is what the dialog asks for: it starts there (v2 · Ver como).
+    this.reason().nativeElement.focus();
   }
 
   protected close(): void {
-    this.dialog().nativeElement.close();
+    this.dialog().close();
   }
 
   protected start(text: string): void {

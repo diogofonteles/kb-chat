@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { CSRF, expect, ownerApi } from './fixtures.js';
+import { desktop, library } from './shell-helpers.js';
 import {
   audioState,
   listenerTest as test,
@@ -53,7 +54,9 @@ async function goToMinute(page: Page) {
 }
 
 const list = (page: Page) =>
-  page.getByRole('region', { name: /Marcadores/ }).getByRole('listitem');
+  page
+    .getByRole('region', { name: /^Seus marcadores aqui/ })
+    .getByRole('listitem');
 
 async function seed(page: Page, positions: readonly number[]) {
   for (const positionMs of positions) {
@@ -122,7 +125,15 @@ test('AC-2: three bookmarks show on the slider, and one plays from its time', as
   await seed(page, [10_000, 40_000, 90_000]);
   await openPlayer(page);
   await expect(list(page)).toHaveCount(3);
-  await expect(page.locator('app-seek-slider .mark')).toHaveCount(3);
+  // The time line on screen: the bar's on a desktop, the full-screen player's on a phone.
+  // Smooth at rest (v2 · Mídia — Player); the marks show while the line is aimed at.
+  const marks = page.locator('app-seek-slider .mark:visible');
+  await expect(marks).toHaveCount(0);
+  await page
+    .locator('app-seek-slider:visible')
+    .getByRole('slider', { name: 'Posição' })
+    .focus();
+  await expect(marks).toHaveCount(3);
   await list(page)
     .nth(1)
     .getByRole('button', { name: 'Tocar de 0:40' })
@@ -212,11 +223,19 @@ test('FR-5: "Meus marcadores" opens the media playing from the bookmark', async 
 }) => {
   await seed(page, [30_000]);
   await page.goto('/midia');
-  // The media page's own link (Sua biblioteca pins one too, KBC-125).
-  await page
-    .getByRole('main')
-    .getByRole('link', { name: 'Meus marcadores' })
-    .click();
+  // The media page's own link on a desktop (media-list); a phone's album has none
+  // (media-list@mobile), and Sua biblioteca pins one (KBC-125).
+  if (desktop(page))
+    await page
+      .getByRole('main')
+      .getByRole('link', { name: 'Meus marcadores' })
+      .click();
+  else
+    await (
+      await library(page)
+    )
+      .getByRole('link', { name: /^Meus marcadores/ })
+      .click();
   await page
     .getByRole('link', {
       name: `${lecture.title} 0:30, tocar daqui`,
@@ -241,8 +260,8 @@ test('AC-9: marking, noting, playing from the list and undoing work with the key
 }) => {
   await openPlayer(page);
   const mark = page.getByRole('button', { name: 'Marcar este trecho' });
-  // From the time slider, Tab walks the controls up to 🔖.
-  await page.getByRole('slider', { name: 'Posição' }).focus();
+  // From ▶, the first of the action row (v2), Tab walks the controls up to 🔖.
+  await page.getByRole('button', { name: 'Tocar', exact: true }).focus();
   for (let i = 0; i < 12; i++) {
     if (await mark.evaluate((node) => node === document.activeElement)) break;
     await page.keyboard.press('Tab');
@@ -258,8 +277,8 @@ test('AC-9: marking, noting, playing from the list and undoing work with the key
   const time = list(page)
     .first()
     .getByRole('button', { name: /^Tocar de/ });
-  // After 🔖 come "Mais opções" and the list.
-  for (let i = 0; i < 6; i++) {
+  // After 🔖 come share, "Mais opções", the views and the list beside them.
+  for (let i = 0; i < 10; i++) {
     if (await time.evaluate((node) => node === document.activeElement)) break;
     await page.keyboard.press('Tab');
   }

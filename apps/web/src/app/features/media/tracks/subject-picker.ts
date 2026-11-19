@@ -1,5 +1,6 @@
 import {
   ChangeDetectionStrategy,
+  booleanAttribute,
   Component,
   DestroyRef,
   ElementRef,
@@ -43,6 +44,7 @@ let nextId = 0;
   templateUrl: './subject-picker.html',
   styleUrl: './subject-picker.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.compact]': 'compact()' },
 })
 export class SubjectPicker {
   readonly collection = input.required<CollectionSubjects>();
@@ -51,6 +53,10 @@ export class SubjectPicker {
   readonly disabled = input(false);
   /** Names the field after the track. */
   readonly label = input.required<string>();
+  /** A chip "+ Assunto" on the row of step 4 (KBC-130, prepare.js finishedMain). */
+  readonly compact = input(false, { transform: booleanAttribute });
+  protected readonly addText = $localize`:@@subjects.addPlaceholder:Adicionar assunto`;
+  protected readonly addChip = $localize`:@@subjects.addChip:+ Assunto`;
   readonly chosen = output<SubjectChoice>();
 
   private readonly field = viewChild<ElementRef<HTMLInputElement>>('field');

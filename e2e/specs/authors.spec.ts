@@ -61,7 +61,7 @@ async function memberOnMedia(
   // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
   await openMediaFromLibrary(member);
   await expect(
-    member.getByRole('heading', { name: new RegExp(`Mídia — ${udv.name}`) }),
+    member.getByRole('heading', { name: new RegExp(`Acervo — ${udv.name}`) }),
   ).toBeVisible();
   return member;
 }
@@ -260,9 +260,8 @@ test('FR-2: the owner chooses the main author in "Editar acervo" and the badges 
   ).toBeVisible();
   await page.goto(`/biblioteca?acervo=${encodeURIComponent(udv.slug)}`);
   const row = page.getByRole('listitem').filter({ hasText: title });
-  await expect(row.locator('.authorship-badge')).toHaveText(
-    /✦\s*Mestre Gabriel/,
-  );
+  // v2 (media-library): the author in plain words, the main one with its ✦.
+  await expect(row.locator('.author')).toHaveText(/✦\s*Mestre Gabriel/);
   const saved = await owner.get('/api/v1/topics');
   expect(
     (

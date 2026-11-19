@@ -17,7 +17,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { AccessRequest, Person } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { AccessRequestsStore } from '@core/auth/access-requests-store.js';
-import { UiAvatar, UiButton, UiDialog, UiPill } from '@ui/index.js';
+import { UiButton, UiDialog, UiPill } from '@ui/index.js';
+import { PersonAvatar } from './person-avatar.js';
 
 /** "+55 81 99999-0000" for a Brazilian mobile; other numbers as stored (E.164). */
 export function displayPhone(phone: string): string {
@@ -36,12 +37,18 @@ interface RowError {
  */
 @Component({
   selector: 'app-access-requests-list',
-  imports: [DatePipe, UiAvatar, UiButton, UiDialog, UiPill],
+  imports: [DatePipe, PersonAvatar, UiButton, UiDialog, UiPill],
   templateUrl: './access-requests-list.html',
   styleUrl: './access-requests-list.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AccessRequestsList {
+  /** The heading as it reads: "Solicitações pendentes (2)" (the badge is the count). */
+  protected readonly titleLabel = computed(
+    () =>
+      $localize`:@@requests.title:Solicitações pendentes (${this.store.count()}:count:)`,
+  );
+
   protected readonly store = inject(AccessRequestsStore);
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);

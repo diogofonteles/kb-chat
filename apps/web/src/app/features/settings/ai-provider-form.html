@@ -14,104 +14,146 @@
     </p>
   }
   @for (option of options(); track option.info.id) {
-    <label
-      class="card"
-      [class.selected]="option.info.id === draft().provider"
-      [class.disabled]="option.blocked !== null"
+    <!-- The chosen option and its details are one box (v2 · Sua IA); the others are their row. -->
+    <div
+      class="option-box"
+      [class.open]="!compact() && option.info.id === draft().provider"
     >
-      <ui-cover
-        class="card-art"
-        [icon]="option.icon"
-        [title]="option.name"
-        [size]="compact() ? 40 : 44"
-      />
-      <span class="card-body">
-        <span class="card-head">
-          <span class="card-title">{{ option.name }}</span>
-          <ui-pill [tone]="option.tone">{{ option.billing }}</ui-pill>
-        </span>
-        <span class="card-hint">{{ option.description }}</span>
-        @if (option.blocked; as blocked) {
-          <span class="card-install">
-            <span class="unavailable">{{ blocked.label }}</span>
-            {{ blocked.steps }}
-          </span>
-        }
-      </span>
-      <input
-        #providerRadio
-        type="radio"
-        name="ai-provider"
-        class="ui-radio"
-        [value]="option.info.id"
-        [checked]="option.info.id === draft().provider"
-        [disabled]="option.blocked !== null"
-        (change)="choose(option.info.id)"
-      />
-    </label>
-    @if (option.info.id === draft().provider) {
-      <div class="details">
-        <ng-container
-          [ngTemplateOutlet]="detailsOf"
-          [ngTemplateOutletContext]="{ $implicit: option }"
+      <label
+        class="card"
+        [class.selected]="option.info.id === draft().provider"
+        [class.disabled]="option.blocked !== null"
+      >
+        <ui-cover
+          class="card-art"
+          [icon]="option.icon"
+          [title]="option.name"
+          [from]="option.cover"
+          to="var(--cover-provider-dark)"
+          [size]="compact() ? 40 : 44"
         />
-      </div>
+        <span class="card-body">
+          <span class="card-head">
+            <span class="card-title">{{ option.name }}</span>
+            <ui-pill [tone]="option.tone">{{ option.billing }}</ui-pill>
+          </span>
+          <span class="card-hint">{{ option.description }}</span>
+          @if (option.blocked; as blocked) {
+            <span class="card-install">
+              <span class="unavailable">{{ blocked.label }}</span>
+              {{ blocked.steps }}
+            </span>
+          }
+        </span>
+        <input
+          #providerRadio
+          type="radio"
+          name="ai-provider"
+          class="ui-radio"
+          [value]="option.info.id"
+          [checked]="option.info.id === draft().provider"
+          [disabled]="option.blocked !== null"
+          (change)="choose(option.info.id)"
+        />
+      </label>
+      @if (!compact() && option.info.id === draft().provider) {
+        <div class="details">
+          <ng-container
+            [ngTemplateOutlet]="detailsOf"
+            [ngTemplateOutletContext]="{ $implicit: option }"
+          />
+        </div>
+      }
+    </div>
+  }
+  <!-- The wizard (v2 · Assistente): every card first, the chosen one's details under the
+       grid; the application's AI needs no setup, so only its facts show, without a panel. -->
+  @if (compact()) {
+    @for (option of options(); track option.info.id) {
+      @if (option.info.id === draft().provider) {
+        <div class="details" [class.bare]="option.info.id === 'app'">
+          <ng-container
+            [ngTemplateOutlet]="detailsOf"
+            [ngTemplateOutletContext]="{ $implicit: option }"
+          />
+        </div>
+      }
     }
   }
 </fieldset>
 
 <ng-template #detailsOf let-current>
-  <app-provider-guide [provider]="current.info.id" />
+  <app-provider-guide
+    [provider]="current.info.id"
+    [factsOnly]="compact() && current.info.id === 'app'"
+  />
 
   @if (current.info.id === 'openrouter') {
     <div class="field">
-      <button
-        uiButton="white"
-        type="button"
-        class="connect"
-        [disabled]="connecting()"
-        (click)="connectOpenRouter()"
-      >
-        <ui-icon name="link" [size]="18" />
-        @if (savedKey()) {
-          <span i18n="@@ai.reconnectOpenRouter">Conectar outra conta</span>
-        } @else {
-          <span i18n="@@ai.connectOpenRouter">Conectar OpenRouter</span>
-        }
-      </button>
-      <p class="hint" i18n="@@ai.connectHint">
-        Você vai ao OpenRouter, autoriza e volta para cá com a chave salva.
-      </p>
+      <div class="connect-row">
+        <button
+          uiButton="white"
+          type="button"
+          class="connect"
+          [disabled]="connecting()"
+          (click)="connectOpenRouter()"
+        >
+          <ui-icon name="link" [size]="18" />
+          @if (savedKey()) {
+            <span i18n="@@ai.reconnectOpenRouter">Conectar outra conta</span>
+          } @else {
+            <span i18n="@@ai.connectOpenRouter">Conectar OpenRouter</span>
+          }
+        </button>
+        <p class="connect-hint" i18n="@@ai.connectHint">
+          Você vai ao OpenRouter, autoriza e volta para cá com a chave salva.
+        </p>
+      </div>
       @if (connectFailed()) {
         <p class="field-error" role="alert" i18n="@@ai.connectFailed">
           ⚠ Não consegui abrir o OpenRouter. Tente de novo.
         </p>
       }
     </div>
-    <fieldset class="plans">
-      <legend class="field-label" i18n="@@ai.orModeLegend">
+    <!-- The two modes as chips (v2 frame): radios underneath, for the keyboard and readers. -->
+    <fieldset class="plans chips">
+      <legend class="group-legend" i18n="@@ai.orModeLegend">
         Quais modelos usar
       </legend>
-      <label class="option">
-        <input
-          type="radio"
-          class="ui-radio"
-          name="or-mode"
-          [checked]="draft().openrouterMode === 'free'"
-          (change)="setOpenRouterMode('free')"
-        />
-        <span i18n="@@ai.orModeFree">Só modelos gratuitos (recomendado)</span>
-      </label>
-      <label class="option">
-        <input
-          type="radio"
-          class="ui-radio"
-          name="or-mode"
-          [checked]="draft().openrouterMode === 'models'"
-          (change)="setOpenRouterMode('models')"
-        />
-        <span i18n="@@ai.orModeModels">Modelo à escolha (pago por uso)</span>
-      </label>
+      <div class="chip-row">
+        <label
+          class="ui-chip chip-option"
+          [class.ui-chip--on]="draft().openrouterMode === 'free'"
+        >
+          <input
+            type="radio"
+            class="chip-radio"
+            name="or-mode"
+            [checked]="draft().openrouterMode === 'free'"
+            (change)="setOpenRouterMode('free')"
+          />
+          @if (draft().openrouterMode === 'free') {
+            <ui-icon name="check" [size]="16" />
+          }
+          <span i18n="@@ai.orModeFree">Só modelos gratuitos (recomendado)</span>
+        </label>
+        <label
+          class="ui-chip chip-option"
+          [class.ui-chip--on]="draft().openrouterMode === 'models'"
+        >
+          <input
+            type="radio"
+            class="chip-radio"
+            name="or-mode"
+            [checked]="draft().openrouterMode === 'models'"
+            (change)="setOpenRouterMode('models')"
+          />
+          @if (draft().openrouterMode === 'models') {
+            <ui-icon name="check" [size]="16" />
+          }
+          <span i18n="@@ai.orModeModels">Modelo à escolha (pago por uso)</span>
+        </label>
+      </div>
     </fieldset>
     @if (ownFree() && !compact()) {
       <div class="field">
@@ -189,7 +231,9 @@
   @if (current.info.billing === 'per-token') {
     <div class="field">
       <label class="field-label" for="ai-key" i18n="@@ai.key"
-        >Chave da API · {{ current.name }}</label
+        >Chave da API<span class="visually-hidden">
+          · {{ current.name }}</span
+        ></label
       >
       @if (savedKey(); as saved) {
         <p class="saved-key">
@@ -231,7 +275,7 @@
       />
       @if (keyRejected()) {
         <p id="ai-key-error" class="field-error" role="alert">
-          <ui-icon name="xcircle" [size]="14" />
+          <ui-icon name="warn" [size]="14" />
           {{ testMessage() }}
         </p>
       }
@@ -242,89 +286,93 @@
     </div>
   }
 
-  @if (!compact() && showModels()) {
-    @for (field of modelFields(); track field.key) {
-      <div class="field">
-        <label class="field-label" [for]="field.id">{{ field.label }}</label>
-        @if (current.info.freeModel) {
-          <input
-            class="ui-input"
-            autocomplete="off"
-            spellcheck="false"
-            [id]="field.id"
-            [attr.list]="field.id + '-list'"
-            [value]="field.value"
-            [placeholder]="field.defaultLabel"
-            [attr.aria-invalid]="field.error ? true : null"
-            [attr.aria-describedby]="field.error ? field.id + '-error' : null"
-            (input)="setModel(field.key, modelInput.value)"
-            #modelInput
-          />
-          @if (field.error) {
-            <p class="field-error" [id]="field.id + '-error'">
-              {{ field.error }}
-            </p>
-          }
-          <datalist [id]="field.id + '-list'">
-            @for (name of current.info.models; track name) {
-              <option [value]="name"></option>
+  <!-- The models and the daily cap side by side (v2 frame), the hint under them. -->
+  @if (!compact() && (showModels() || capShown())) {
+    <div class="model-row">
+      @if (showModels()) {
+        @for (field of modelFields(); track field.key) {
+          <div class="field">
+            <label class="field-label" [for]="field.id">{{
+              field.label
+            }}</label>
+            @if (current.info.freeModel) {
+              <input
+                class="ui-input"
+                autocomplete="off"
+                spellcheck="false"
+                [id]="field.id"
+                [attr.list]="field.id + '-list'"
+                [value]="field.value"
+                [placeholder]="field.defaultLabel"
+                [attr.aria-invalid]="field.error ? true : null"
+                [attr.aria-describedby]="
+                  field.error ? field.id + '-error' : null
+                "
+                (input)="setModel(field.key, modelInput.value)"
+                #modelInput
+              />
+              @if (field.error) {
+                <p class="field-error" [id]="field.id + '-error'">
+                  {{ field.error }}
+                </p>
+              }
+              <datalist [id]="field.id + '-list'">
+                @for (name of current.info.models; track name) {
+                  <option [value]="name"></option>
+                }
+              </datalist>
+            } @else {
+              <select
+                class="ui-input"
+                [id]="field.id"
+                (change)="setModel(field.key, modelSelect.value)"
+                #modelSelect
+              >
+                <option value="" [selected]="field.value === ''">
+                  {{ field.defaultLabel }}
+                </option>
+                @for (name of field.choices; track name) {
+                  <option [value]="name" [selected]="name === field.value">
+                    {{ name }}
+                  </option>
+                }
+              </select>
             }
-          </datalist>
-        } @else {
-          <select
-            class="ui-input"
-            [id]="field.id"
-            (change)="setModel(field.key, modelSelect.value)"
-            #modelSelect
-          >
-            <option value="" [selected]="field.value === ''">
-              {{ field.defaultLabel }}
-            </option>
-            @for (name of field.choices; track name) {
-              <option [value]="name" [selected]="name === field.value">
-                {{ name }}
-              </option>
-            }
-          </select>
+          </div>
         }
-      </div>
-    }
-    <p class="hint" i18n="@@ai.modelsHint">
-      O modelo rápido responde no modo “Rápido” da pesquisa; o profundo, no
-      “Profundo”.
-    </p>
-  }
-
-  @if (!compact() && current.info.billing === 'per-token' && capApplies()) {
-    <div class="field">
-      <label class="field-label" for="ai-cap" i18n="@@ai.cap"
-        >Limite de gasto por dia (US$)</label
-      >
-      <input
-        id="ai-cap"
-        class="ui-input cap"
-        type="number"
-        inputmode="decimal"
-        min="0"
-        max="100"
-        step="0.5"
-        [value]="draft().dailyCapUsd"
-        (change)="setCap(capInput.value)"
-        #capInput
-      />
+      }
+      @if (capShown()) {
+        <div class="field">
+          <label class="field-label" for="ai-cap" i18n="@@ai.cap"
+            >Limite de gasto por dia (US$)</label
+          >
+          <input
+            id="ai-cap"
+            class="ui-input cap"
+            type="number"
+            inputmode="decimal"
+            min="0"
+            max="100"
+            step="0.5"
+            [value]="draft().dailyCapUsd"
+            (change)="setCap(capInput.value)"
+            #capInput
+          />
+        </div>
+      }
     </div>
-  } @else if (current.info.billing === 'subscription') {
+    @if (showModels()) {
+      <p class="hint" i18n="@@ai.modelsHint">
+        O modelo rápido responde no modo “Rápido” da pesquisa; o profundo, no
+        “Profundo”.
+      </p>
+    }
+  }
+  @if (current.info.billing === 'subscription') {
     <p class="hint" i18n="@@ai.subscriptionNote">
       Incluído na sua assinatura: não entra no gasto do dia e não tem limite em
       US$. A Nova Alexandria nunca vê a sua senha; ela só chama a ferramenta já
       logada.
-    </p>
-  }
-
-  @if (current.info.billing === 'free') {
-    <p class="hint" i18n="@@ai.appNote">
-      A aplicação paga; o rodapé de cada resposta mostra o modelo que respondeu
-      e quantas pesquisas restam hoje.
     </p>
   }
 

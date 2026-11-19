@@ -158,7 +158,8 @@ describe('TrackTimeline (KBC-066)', () => {
       expect(cursors).toEqual([]);
       fireEvent.pointerDown(detail, { clientX: 300 });
       fireEvent.click(detail, { clientX: 300 });
-      expect(cursors).toEqual([30_000]);
+      // The detail shows the track ± 30 s, never less than a minute: here the whole 0–60 s.
+      expect(cursors).toEqual([36_000]);
     });
 
     it('moves by what the pointer moved, not to where it landed (R-4)', async () => {
@@ -168,8 +169,9 @@ describe('TrackTimeline (KBC-066)', () => {
       press(120);
       moveTo(160);
       lift(160);
+      // 40 px of the 500 px minute (the track ± 30 s, at least a minute) is 4.8 s.
       expect(moved).toEqual([
-        { trackId: ONE.track.id, edge: 'start', ms: 14_000 },
+        { trackId: ONE.track.id, edge: 'start', ms: 14_800 },
       ]);
     });
   });

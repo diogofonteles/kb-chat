@@ -185,3 +185,65 @@ h3 {
   margin: 0 0 var(--space-2);
   font-weight: 600;
 }
+
+:host(.pill) {
+  display: inline-flex;
+}
+
+/* In a table row (v2 · Transcritores): a small pill with the state word (19 high, 11 on 13,
+   as ui-pill), still a button whose target reaches 24 (WCAG 2.5.8). */
+:host(.pill) .chip {
+  position: relative;
+  min-height: 1.1875rem;
+  padding: 0 var(--space-2);
+  line-height: 0.8125rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+:host(.pill) .chip::after {
+  content: '';
+  position: absolute;
+  inset: -0.15625rem 0;
+}
+
+:host(.pill) .chip[data-state='working'],
+:host(.pill) .chip[data-state='idle'] {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: var(--color-accent);
+}
+
+:host(.pill) .sign {
+  display: none;
+}
+
+/* The guided flow's head (KBC-130): a 28 pill, no edge, muted words. */
+:host(.compact) .chip {
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border: 0;
+  background: var(--overlay-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+/* Its state as an 8 px dot before the words (prepare.js transcriberPill). */
+:host(.compact) .sign {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 50%;
+  background: currentColor;
+  font-size: 0;
+}
+
+:host(.compact) .chip[data-state='working'] .sign,
+:host(.compact) .chip[data-state='idle'] .sign {
+  background: var(--color-accent);
+}

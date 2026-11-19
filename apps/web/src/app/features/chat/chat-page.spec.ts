@@ -121,9 +121,15 @@ const collectionButtons = (): HTMLButtonElement[] => [
 ];
 
 /** The search summary as read: "1 documento · Tudo · 0,6 s" (count, mode pill, time). */
-const summaryText = (): string =>
-  document.querySelector('app-result-message .summary')?.textContent?.trim() ??
-  '';
+const summaryText = (): string => {
+  const summary = document
+    .querySelector('app-result-message .summary')
+    ?.cloneNode(true);
+  if (!(summary instanceof HTMLElement)) return '';
+  // The mode pill's closed menu of modes is not part of what is read.
+  summary.querySelectorAll('[role="menu"]').forEach((menu) => menu.remove());
+  return summary.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+};
 
 /** The library beside the conversation (the home repeats its conversations as shortcuts). */
 const sidebar = (): HTMLElement =>
@@ -286,7 +292,7 @@ describe('ChatPage', () => {
     await ask('xyzzy', view);
     view.http.expectOne(SEARCH_URL).flush(aResponse([]));
     await view.fixture.whenStable();
-    expect(screen.getByText('Nada encontrado para "xyzzy".')).toBeTruthy();
+    expect(screen.getByText('Nada encontrado para “xyzzy”.')).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', { name: 'Buscar por significado' }),
     );
@@ -374,6 +380,9 @@ describe('ChatPage refining', () => {
     await view.fixture.whenStable();
     fireEvent.click(screen.getByRole('checkbox', { name: /Texto\/apostila/ }));
     await view.fixture.whenStable();
+    // The popover's ticks apply with "Aplicar" (subjectsPopover).
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+    await view.fixture.whenStable();
     // Chip changes are debounced (250 ms) so rapid clicks send one search.
     await new Promise((resolve) => setTimeout(resolve, 300));
     const refined = view.http.expectOne(SEARCH_URL);
@@ -416,8 +425,10 @@ describe('ChatPage refining', () => {
       ]),
     );
     await view.fixture.whenStable();
-    fireEvent.click(screen.getByRole('button', { name: '+1 cópia' }));
-    await view.fixture.whenStable();
+    // A lone result: its copy waits in "Cópia deste documento" beside it.
+    expect(
+      screen.getByRole('heading', { name: 'Cópia deste documento' }),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', { name: /a-lei-do-ritmo-2\.md/ }),
     );
@@ -704,7 +715,7 @@ describe('ChatPage side panel (KBC-005)', () => {
 
   it('shows today’s AI spend; the theme left the side panel for Configurações (AC-8, KBC-125 BR-4)', async () => {
     await renderPage();
-    expect(screen.getByText(/^US\$\s0,00 de US\$\s1,00$/)).toBeTruthy();
+    expect(screen.getByText(/^US\$\s0,00 de 1,00$/)).toBeTruthy();
     expect(screen.queryByLabelText('Tema')).toBeNull();
   });
 
@@ -714,7 +725,12 @@ describe('ChatPage side panel (KBC-005)', () => {
     expect(screen.getByText('Histórico indisponível no momento.')).toBeTruthy();
     conversations.failWith = null;
     // With a provider the page opens in the research view; search is one click away.
-    fireEvent.click(screen.getByRole('radio', { name: 'Buscar documentos' }));
+    fireEvent.click(
+      within(screen.getByRole('radiogroup', { name: 'Onde buscar' })).getByRole(
+        'radio',
+        { name: 'Tudo' },
+      ),
+    );
     await view.fixture.whenStable();
     await ask('lei do ritmo', view);
     view.http.expectOne(SEARCH_URL).flush(aResponse());
@@ -734,12 +750,13 @@ describe('ChatPage side panel (KBC-005)', () => {
     const history = screen.getByRole('navigation', { name: 'Conversas' });
     expect(screen.getByText('salvo no servidor')).toBeTruthy();
     const items = within(history).getAllByRole('button');
-    expect(
-      items.map((b) => b.textContent?.replace(/\s+/g, ' ').trim()),
-    ).toEqual([
-      'quais são os princípios IA · Hermetismo',
-      'lei do ritmo Busca · Hermetismo',
-    ]);
+    // v2 · Sua biblioteca: the kind, then when it was saved (24/10, or with the year after).
+    const texts = items.map((b) => b.textContent?.replace(/\s+/g, ' ').trim());
+    expect(texts).toHaveLength(2);
+    expect(texts[0]).toMatch(
+      /^quais são os princípios Pesquisa com IA · 24\/10(\/2026)?$/,
+    );
+    expect(texts[1]).toMatch(/^lei do ritmo Conversa · 24\/10(\/2026)?$/);
   });
 
   it('hands a research conversation to the research view without searching (KBC-008 FR-6)', async () => {
@@ -756,12 +773,10 @@ describe('ChatPage side panel (KBC-005)', () => {
     );
     await view.fixture.whenStable();
     expect(
-      (
-        screen.getByRole('radio', {
-          name: /Pesquisa com IA/,
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true);
+      screen
+        .getByRole('radio', { name: /Pesquisa com IA/ })
+        .getAttribute('aria-checked'),
+    ).toBe('true');
     expect(screen.getByText(/Mentalismo, correspondência/)).toBeTruthy();
     expect(answers.research).not.toHaveBeenCalled();
     view.http.expectNone(SEARCH_URL);
@@ -777,13 +792,8 @@ describe('ChatPage side panel (KBC-005)', () => {
       within(sidebar()).getByRole('button', { name: /lei do ritmo/ }),
     );
     await view.fixture.whenStable();
-    expect(
-      (
-        screen.getByRole('radio', {
-          name: 'Buscar documentos',
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true);
+    // A search page has no scope chips (v2 · Conversa): the view chosen is what is kept.
+    expect(localStorage.getItem('kb-chat.view')).toBe('search');
     view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();
     expect(view.container.querySelector('app-result-card')).toBeTruthy();
@@ -900,6 +910,100 @@ class ResettingStub {
     inject(DestroyRef).onDestroy(() => chat.newConversation());
   }
 }
+
+describe('ChatPage: the collection in use, marked on every page (owner, 2026-11-19)', () => {
+  const OWNER_TOPICS: TopicList = {
+    items: [
+      aTopic({ slug: 'hermetismo', title: 'Hermetismo', documentCount: 10 }),
+      aTopic({ slug: 'udv', title: 'UDV', documentCount: 30 }),
+      aTopic({
+        slug: 'udv/palavra-do-mestre',
+        title: 'Palavra do Mestre',
+        parent: 'udv',
+        documentCount: 20,
+      }),
+    ],
+    defaultSlug: 'hermetismo',
+  };
+
+  async function openAt(url: string) {
+    localStorage.clear();
+    localStorage.setItem('kb-chat.view', 'search');
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([fakeStartRequests])),
+        provideHttpClientTesting(),
+        FAKE_ANSWERS,
+        { provide: UsageLog, useValue: usage },
+        provideRouter([
+          {
+            path: '',
+            component: ChatPage,
+            children: [
+              { path: '', children: [] },
+              { path: 'biblioteca', component: MediaStub },
+              { path: 'midia/:id', component: MediaStub },
+            ],
+          },
+        ]),
+      ],
+    });
+    const harness = await RouterTestingHarness.create(url);
+    TestBed.inject(HttpTestingController)
+      .match('/api/v1/topics')
+      .forEach((request) => request.flush(OWNER_TOPICS));
+    await harness.fixture.whenStable();
+    return harness;
+  }
+
+  const marked = () =>
+    collectionButtons()
+      .concat([
+        ...document.querySelectorAll<HTMLButtonElement>(
+          'li.child button.ui-libitem-row',
+        ),
+      ])
+      .filter((button) => button.getAttribute('aria-current') === 'true')
+      .map((button) => button.dataset['slug']);
+
+  it.each(['/', '/biblioteca', '/midia/0b6e8c8e-5f0c-4f4e-9a59-1f2a3b4c5d6e'])(
+    'on %s the chosen collection is the one row marked',
+    async (url) => {
+      const harness = await openAt(url);
+      expect(marked()).toEqual(['hermetismo']);
+      const chosen = document.querySelector('[data-slug="hermetismo"]');
+      expect(chosen?.classList).toContain('ui-libitem-row--collection');
+      // Choosing UDV moves the mark: one row at a time.
+      fireEvent.click(
+        document.querySelector('[data-slug="udv"]') as HTMLElement,
+      );
+      await harness.fixture.whenStable();
+      expect(marked()).toEqual(['udv']);
+    },
+  );
+
+  it("Hermetismo is a top-level row, never inside UDV's branch", async () => {
+    await openAt('/biblioteca');
+    const branch = document.querySelector('ul.children');
+    expect(
+      [...(branch?.querySelectorAll('[data-slug]') ?? [])].map(
+        (row) => (row as HTMLElement).dataset['slug'],
+      ),
+    ).toEqual(['udv/palavra-do-mestre']);
+    expect(collectionButtons().map((button) => button.dataset['slug'])).toEqual(
+      expect.arrayContaining(['hermetismo', 'udv']),
+    );
+  });
+
+  it('choosing a collection on the library leaves "Todas as mídias" (the address drops it)', async () => {
+    await openAt('/biblioteca?acervos=todos&busca=ritmo');
+    const router = TestBed.inject(Router);
+    fireEvent.click(document.querySelector('[data-slug="udv"]') as HTMLElement);
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(router.url).toBe('/biblioteca?busca=ritmo');
+  });
+});
 
 describe('ChatPage on the media pages (no question box)', () => {
   async function openMediaWith(scope: HeadingScope | null) {

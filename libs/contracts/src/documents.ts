@@ -22,11 +22,13 @@ export type SeeAlsoGroupName = z.infer<typeof seeAlsoGroupNameSchema>;
 
 /**
  * A related document with the facets needed to judge it before opening (KBC-003 FR-3); a
- * track linked by kb carries its media and opens the T22 panel (KBC-101 FR-6).
+ * track linked by kb carries its media and opens the T22 panel (KBC-101 FR-6). Its
+ * authorship (KBC-020) names it on a phone's subject shelf ("Outros autores · Aula").
  */
 export const relatedDocumentSchema = documentRefSchema.extend({
   ...documentFacetsSchema.pick({ genre: true, depth: true, relevance: true })
     .shape,
+  authorship: documentFacetsSchema.shape.authorship.optional(),
   media: answerMediaSchema.optional(),
 });
 export type RelatedDocument = z.infer<typeof relatedDocumentSchema>;

@@ -18,6 +18,7 @@ import {
   withVersion,
   type World,
 } from '../test/track-items-harness.js';
+import { scene, setTrackLevel } from '../test/track-levels-world.js';
 
 afterEach(closeApp);
 
@@ -218,6 +219,62 @@ describe('Approved tracks become items (KBC-068)', () => {
     );
     expect(found.json().items).toHaveLength(1);
   });
+
+  it("v2 media-list: a recording's row carries its tracks in order, as the library; none without media-tracks", async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { recording, tracks } = await published(world);
+    const url = `/api/v1/topics/${recording.topic}/media`;
+    const [row] = (await media.owner('GET', url)).json().items as {
+      id: string;
+      tracks: MediaItem[];
+    }[];
+    expect(row?.tracks.map((track) => track.id)).toEqual(
+      tracks.map((track) => track.id),
+    );
+    expect(row?.tracks.map((track) => track.parent?.ordinal)).toEqual(
+      tracks.map((_, at) => at + 1),
+    );
+    const person = await member(media, {
+      email: 'sem-faixas@example.com',
+      topics: ['hermetismo'],
+      features: ['media'],
+    });
+    const [plain] = (await person.call('GET', url)).json().items as {
+      tracks: MediaItem[];
+    }[];
+    expect(plain?.tracks).toEqual([]);
+  });
+
+  it("v2 media-list, KBC-106/111: a track above a member's level is not in the row, nor in its count", async () => {
+    const { world, ana, recording, tracks } = await scene();
+    const [first, second, third] = tracks.map((track) => String(track.id));
+    expect((await setTrackLevel(world, String(second), 'cdc')).statusCode).toBe(
+      200,
+    );
+    const url = `/api/v1/topics/${recording.topic}/media`;
+
+    const listed = await ana.call('GET', url);
+
+    expect(listed.statusCode, listed.body).toBe(200);
+    expect(listed.body).not.toContain('Pergunta Sensivel');
+    const row = (
+      listed.json().items as { id: string; tracks: MediaItem[] }[]
+    ).find((one) => one.id === recording.id);
+    expect(row?.tracks.map((track) => track.id)).toEqual([first, third]);
+    // "2 faixas", numbered among those she hears: the hidden one is not counted.
+    expect(
+      row?.tracks.map((track) => [track.parent?.ordinal, track.parent?.total]),
+    ).toEqual([
+      [1, 2],
+      [2, 2],
+    ]);
+    // The master still lists all three.
+    const [mastersRow] = (await world.owner('GET', url)).json().items as {
+      tracks: MediaItem[];
+    }[];
+    expect(mastersRow?.tracks).toHaveLength(3);
+  }, 60_000);
 
   it('BR-3 home: a track being heard is in "Continuar ouvindo" with its own title', async () => {
     const world = await startWorld();

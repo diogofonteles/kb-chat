@@ -1,6 +1,10 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { startInSearchView } from './search-view.js';
+import {
+  expectSubjectFilter,
+  modeRadio,
+  startInSearchView,
+} from './search-view.js';
 
 test.beforeEach(startInSearchView);
 
@@ -13,7 +17,7 @@ async function openFirst(
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
     'Hermetismo',
   );
-  await page.getByRole('radio', { name: 'Por significado' }).check();
+  await (await modeRadio(page, 'Por significado')).check();
   await page.getByLabel('Sua pergunta').fill(question);
   await page.getByRole('button', { name: 'Buscar' }).click();
   await page.getByRole('button', { name: title }).first().click();
@@ -25,7 +29,7 @@ async function openFirst(
 test('AC-1/AC-2: the question terms are highlighted and the counter steps through them', async ({
   page,
 }) => {
-  await openFirst(page, 'natureza setupla', /A Natureza Sétupla/);
+  await openFirst(page, 'setupla setuplicidade', /A Natureza Sétupla/);
   const panel = page.getByRole('dialog');
   await expect(panel.locator('mark').first()).toBeInViewport();
   await expect(panel.getByText(/1 de \d+ ocorrências/)).toBeVisible();
@@ -60,9 +64,7 @@ test('AC-7: a subject in the panel filters the conversation', async ({
     .getByRole('button', { name: 'Filtrar a conversa por Cabala' })
     .click();
   await page.keyboard.press('Escape');
-  await expect(
-    page.getByRole('button', { name: 'Remover Assuntos: Cabala' }),
-  ).toBeVisible();
+  await expectSubjectFilter(page, 'Cabala');
 });
 
 test('AC-8: an audio transcription carries its badge', async ({ page }) => {
@@ -76,7 +78,7 @@ test('NFR-1: a 200 KB document opens with its highlight in under 500 ms', async 
   page,
 }) => {
   await page.goto('/');
-  await page.getByRole('radio', { name: 'Por significado' }).check();
+  await (await modeRadio(page, 'Por significado')).check();
   await page.getByLabel('Sua pergunta').fill('quintessência');
   await page.getByRole('button', { name: 'Buscar' }).click();
   const card = page.getByRole('button', { name: /Tratado Longo/ });
@@ -99,7 +101,7 @@ test('AC-9: "Copiar trecho" copies the paragraph of the current occurrence', asy
     'clipboard permissions are Chromium-only here',
   );
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  await openFirst(page, 'natureza setupla', /A Natureza Sétupla/);
+  await openFirst(page, 'setupla setuplicidade', /A Natureza Sétupla/);
   await page
     .getByRole('dialog')
     .getByRole('button', { name: 'Copiar trecho' })

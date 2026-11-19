@@ -13,7 +13,17 @@ export const SCREEN_MARGIN_PX = 8;
 const GAP_PX = 6;
 
 export type OverlayAlign = 'start' | 'end';
-export type OverlaySide = 'below' | 'above';
+/**
+ * Below or above its trigger; or `over` it, opening down from a point given by `offset`
+ * from the trigger's top start (the v2 player's menus, drawn over their action row).
+ */
+export type OverlaySide = 'below' | 'above' | 'over';
+
+/** Where an `over` panel starts, from its trigger's top and aligned edge, in px. */
+export interface OverlayOffset {
+  readonly x: number;
+  readonly y: number;
+}
 
 export interface OverlayBox {
   readonly top: number;
@@ -34,6 +44,7 @@ export interface OverlayRequest {
   readonly viewport: Size;
   readonly align: OverlayAlign;
   readonly side: OverlaySide;
+  readonly offset?: OverlayOffset;
 }
 
 export interface OverlayPlacement {
@@ -46,27 +57,37 @@ export interface OverlayPlacement {
 
 /** The side it opens on, and the room it has there. */
 function chooseSide({ anchor, size, viewport, side }: OverlayRequest): {
-  side: OverlaySide;
+  side: Exclude<OverlaySide, 'over'>;
   room: number;
 } {
   const room = {
     below: viewport.height - anchor.bottom - GAP_PX - SCREEN_MARGIN_PX,
     above: anchor.top - GAP_PX - SCREEN_MARGIN_PX,
   };
-  const other: OverlaySide = side === 'below' ? 'above' : 'below';
-  const flip = size.height > room[side] && room[other] > room[side];
-  const chosen = flip ? other : side;
+  const wanted = side === 'above' ? 'above' : 'below';
+  const other = wanted === 'below' ? 'above' : 'below';
+  const flip = size.height > room[wanted] && room[other] > room[wanted];
+  const chosen = flip ? other : wanted;
   return { side: chosen, room: Math.max(0, room[chosen]) };
 }
 
 /** The left edge: under the trigger's start or end, shifted to stay inside the viewport. */
-function leftEdge({ anchor, size, viewport, align }: OverlayRequest): {
+function leftEdge({
+  anchor,
+  size,
+  viewport,
+  align,
+  side,
+  offset,
+}: OverlayRequest): {
   left: number;
   maxWidth: number;
 } {
   const maxWidth = Math.max(0, viewport.width - 2 * SCREEN_MARGIN_PX);
   const width = Math.min(size.width, maxWidth);
-  const wanted = align === 'start' ? anchor.left : anchor.right - width;
+  const shift = side === 'over' ? (offset?.x ?? 0) : 0;
+  const wanted =
+    (align === 'start' ? anchor.left : anchor.right - width) + shift;
   const highest = viewport.width - SCREEN_MARGIN_PX - width;
   const left = Math.min(Math.max(SCREEN_MARGIN_PX, wanted), highest);
   return { left: Math.max(SCREEN_MARGIN_PX, left), maxWidth };
@@ -78,7 +99,28 @@ function leftEdge({ anchor, size, viewport, align }: OverlayRequest): {
  * shifted sideways so it never leaves the viewport. Pure, for the tests.
  */
 export function placeOverlay(request: OverlayRequest): OverlayPlacement {
+  const whole = Math.max(0, request.viewport.height - 2 * SCREEN_MARGIN_PX);
+  if (request.side === 'over') {
+    // Over its trigger's row: down from the offset, slid up to stay whole (D5).
+    const height = Math.min(request.size.height, whole);
+    const wanted = request.anchor.top + (request.offset?.y ?? 0);
+    const lowest = request.viewport.height - SCREEN_MARGIN_PX - height;
+    const top = Math.max(SCREEN_MARGIN_PX, Math.min(wanted, lowest));
+    return { top, ...leftEdge(request), maxHeight: whole, side: 'over' };
+  }
   const { side, room } = chooseSide(request);
+  if (request.size.height > room && room < whole) {
+    // Taller than the room on either side: it slides to stay whole on the screen, over its
+    // trigger if need be, instead of scrolling inside (D5: a menu is never cut).
+    const height = Math.min(request.size.height, whole);
+    const wanted =
+      side === 'below'
+        ? request.anchor.bottom + GAP_PX
+        : request.anchor.top - GAP_PX - height;
+    const lowest = request.viewport.height - SCREEN_MARGIN_PX - height;
+    const top = Math.max(SCREEN_MARGIN_PX, Math.min(wanted, lowest));
+    return { top, ...leftEdge(request), maxHeight: whole, side };
+  }
   const height = Math.min(request.size.height, room);
   const top =
     side === 'below'
@@ -90,6 +132,8 @@ export function placeOverlay(request: OverlayRequest): OverlayPlacement {
 export interface AnchorOptions {
   readonly align?: OverlayAlign;
   readonly side?: OverlaySide;
+  /** For `side: 'over'`: where the panel starts from the trigger's top and aligned edge. */
+  readonly offset?: OverlayOffset;
   /** The panel at least as wide as the trigger (a select list). */
   readonly matchWidth?: boolean;
   /** Below this width the panel is only lifted, never positioned: its CSS makes it a sheet. */
@@ -135,6 +179,34 @@ function apply(
   panel.dataset['side'] = where.side;
 }
 
+/** Where `panel` goes beside `anchor` now, measured on the page. */
+function measure(
+  panel: HTMLElement,
+  anchor: HTMLElement,
+  options: AnchorOptions,
+): { where: OverlayPlacement; cssMax: number } {
+  const view = panel.ownerDocument.defaultView ?? window;
+  const box = anchor.getBoundingClientRect();
+  if (options.matchWidth) panel.style.minWidth = `${box.width}px`;
+  const cssMax = cssMaxHeight(panel, view);
+  const { align = 'start', side = 'below', offset } = options;
+  const where = placeOverlay({
+    anchor: box,
+    size: {
+      width: panel.offsetWidth,
+      height: Math.min(panel.scrollHeight, cssMax),
+    },
+    viewport: {
+      width: panel.ownerDocument.documentElement.clientWidth,
+      height: view.innerHeight,
+    },
+    align,
+    side,
+    ...(offset ? { offset } : {}),
+  });
+  return { where, cssMax };
+}
+
 /** Puts `panel` where `placeOverlay` says (or leaves it to its sheet CSS on a phone). */
 function place(
   panel: HTMLElement,
@@ -150,20 +222,7 @@ function place(
     for (const prop of PLACED) panel.style.removeProperty(prop);
     return;
   }
-  const box = anchor.getBoundingClientRect();
-  if (options.matchWidth) panel.style.minWidth = `${box.width}px`;
-  const cssMax = cssMaxHeight(panel, view);
-  const viewport = panel.ownerDocument.documentElement.clientWidth;
-  const where = placeOverlay({
-    anchor: box,
-    size: {
-      width: panel.offsetWidth,
-      height: Math.min(panel.scrollHeight, cssMax),
-    },
-    viewport: { width: viewport, height: view.innerHeight },
-    align: options.align ?? 'start',
-    side: options.side ?? 'below',
-  });
+  const { where, cssMax } = measure(panel, anchor, options);
   apply(panel, where, cssMax);
 }
 
@@ -193,13 +252,26 @@ export function anchorOverlay(
   };
   view?.addEventListener('resize', follow);
   view?.addEventListener('scroll', scrolled, true);
+  const grown = followSize(panel, follow);
   return () => {
+    grown();
     view?.removeEventListener('resize', follow);
     view?.removeEventListener('scroll', scrolled, true);
     if (hasPopover(panel) && panel.matches(':popover-open'))
       panel.hidePopover();
     panel.classList.remove('ui-overlay', 'ui-overlay--sheet');
   };
+}
+
+/**
+ * Content that comes after the first placement (a menu's items, a note's alert) grows the
+ * panel: placed again, it still fits the screen whole. Returns the function that stops it.
+ */
+function followSize(panel: HTMLElement, follow: () => void): () => void {
+  if (typeof ResizeObserver !== 'function') return () => undefined;
+  const grown = new ResizeObserver(follow);
+  grown.observe(panel);
+  return () => grown.disconnect();
 }
 
 /** Whether a click landed outside the panel's box (its backdrop belongs to the panel). */
@@ -224,6 +296,7 @@ export class UiOverlay {
   readonly anchor = input.required<HTMLElement>({ alias: 'uiOverlay' });
   readonly overlayAlign = input<OverlayAlign>('start');
   readonly overlaySide = input<OverlaySide>('below');
+  readonly overlayOffset = input<OverlayOffset | null>(null);
   readonly overlayMatchWidth = input(false);
   /** Below this width the panel's CSS makes it a sheet: lifted, not positioned. */
   readonly overlaySheetBelow = input<number | null>(null);
@@ -232,9 +305,11 @@ export class UiOverlay {
     const panel = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
     let release: (() => void) | null = null;
     afterNextRender(() => {
+      const offset = this.overlayOffset();
       release = anchorOverlay(panel, this.anchor(), {
         align: this.overlayAlign(),
         side: this.overlaySide(),
+        ...(offset ? { offset } : {}),
         matchWidth: this.overlayMatchWidth(),
         sheetBelow: this.overlaySheetBelow(),
       });

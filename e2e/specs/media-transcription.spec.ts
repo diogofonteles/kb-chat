@@ -20,7 +20,7 @@ async function openMedia(page: Page) {
   // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
   await openMediaFromLibrary(page);
   await expect(
-    page.getByRole('heading', { name: /Mídia — Hermetismo/ }),
+    page.getByRole('heading', { name: /Acervo — Hermetismo/ }),
   ).toBeVisible();
 }
 
@@ -117,8 +117,13 @@ test('AC-2: with no transcriber seen for 2 h, a ready audio waits and says since
   );
   await row.getByRole('link', { name: title }).click();
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
-  await expect(page.locator('app-media-player-page .meta')).toContainText(
-    /Aguardando o transcritor · desligado desde/,
+  // The pill under the title says where it is, and beside it since when (v2 · Mídia — Player).
+  const note = page.locator('app-media-player-page .note');
+  await expect(note.locator('.transcription')).toHaveText(
+    'Aguardando o transcritor',
+  );
+  await expect(note.locator('.pill-why')).toHaveText(
+    /^desligado desde \d{2}\/\d{2}\/\d{4} às \d{2}:\d{2}$/,
   );
 });
 

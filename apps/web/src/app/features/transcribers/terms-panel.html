@@ -20,7 +20,7 @@
         </p>
       </div>
       @if (usage()) {
-        <span class="bar" aria-hidden="true"
+        <span class="bar meter" aria-hidden="true"
           ><span class="fill" [style.width.%]="usedPercent()"></span
         ></span>
       }
@@ -38,24 +38,27 @@
       <span class="hint" id="terms-add-hint" i18n="@@terms.addHint"
         >Um por linha. Pode colar vários de uma vez.</span
       >
-      <textarea
-        id="terms-add"
-        class="input add"
-        rows="3"
-        autocapitalize="off"
-        autocomplete="off"
-        aria-describedby="terms-add-hint"
-        [value]="toAdd()"
-        (input)="editToAdd($event)"
-      ></textarea>
-      <button
-        type="button"
-        class="secondary"
-        (click)="addTerms()"
-        i18n="@@terms.add"
-      >
-        Adicionar
-      </button>
+      <!-- The box and "Adicionar" side by side (v2 · Termos). -->
+      <div class="add-row">
+        <textarea
+          id="terms-add"
+          class="input add"
+          rows="3"
+          autocapitalize="off"
+          autocomplete="off"
+          aria-describedby="terms-add-hint"
+          [value]="toAdd()"
+          (input)="editToAdd($event)"
+        ></textarea>
+        <button
+          type="button"
+          class="secondary"
+          (click)="addTerms()"
+          i18n="@@terms.add"
+        >
+          Adicionar
+        </button>
+      </div>
     </div>
 
     <h3 class="block-title" i18n="@@terms.listTitle">
@@ -129,7 +132,7 @@
       @if (changed()) {
         <button
           type="button"
-          class="secondary"
+          class="link"
           (click)="discard()"
           i18n="@@terms.discard"
         >

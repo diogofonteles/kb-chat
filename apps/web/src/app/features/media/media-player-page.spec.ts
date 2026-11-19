@@ -30,6 +30,7 @@ import {
 import { answeringLevels } from '../../testing/level-fixtures.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaPlayerPage } from './media-player-page.js';
+import { PlayerPanelTabs } from './player/player-panel-tab.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
 import { ANIMATION_FRAMES } from '@core/media/playback-clock.js';
@@ -95,8 +96,13 @@ describe('MediaPlayerPage (T15)', () => {
     expect(
       screen.getByRole('heading', { name: 'Palestra de 1998' }),
     ).toBeTruthy();
-    expect(screen.getByText('1:02:15')).toBeTruthy();
-    expect(screen.getByRole('slider', { name: 'Posição' })).toBeTruthy();
+    // The header's meta line (pageHeader): author · duration · sent.
+    expect(
+      harness.routeNativeElement?.querySelector('.hero .meta')?.textContent,
+    ).toContain('1:02:15');
+    expect(
+      screen.getByRole('slider', { name: 'Posição', hidden: true }),
+    ).toBeTruthy();
     expect(media.calls).toEqual([`load:/api/v1/media/${ITEM.id}/stream`]);
     expect(TestBed.inject(Title).getTitle()).toBe(
       'Palestra de 1998 — Nova Alexandria',
@@ -126,9 +132,11 @@ describe('MediaPlayerPage (T15)', () => {
       }),
     );
     await harness.fixture.whenStable();
+    // The v2 banner: its title and the line under it (player.js lowBanner).
     expect(document.body.textContent).toContain(
-      'Transcrição automática de baixa confiança: pode haver trechos errados.',
+      'Transcrição automática de baixa confiança',
     );
+    expect(document.body.textContent).toContain('Pode haver trechos errados.');
     expect(document.body.textContent).not.toContain('Transcrita');
   });
 
@@ -143,8 +151,15 @@ describe('MediaPlayerPage (T15)', () => {
       }),
     );
     await harness.fixture.whenStable();
+    // The header's pill is short, why it waits beside it (pHeader waitStatus).
+    const pill = document.querySelector('ui-pill.transcription');
+    expect(pill?.textContent?.trim()).toBe('Aguardando o transcritor');
+    expect(pill?.nextElementSibling?.textContent?.trim()).toBe(
+      'nenhum transcritor pareado',
+    );
+    // The empty transcript says it too, in a sentence (pBody o.waiting).
     expect(document.body.textContent).toContain(
-      'Aguardando o transcritor · nenhum transcritor pareado',
+      'Nenhum transcritor pareado. A transcrição aparece aqui quando ficar pronta.',
     );
     expect(document.body.textContent).not.toContain('baixa confiança');
   });
@@ -161,6 +176,22 @@ describe('MediaPlayerPage (T15)', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'Esta mídia não está mais no acervo ou você não tem acesso a ela.',
     );
+    expect(
+      screen.getByRole('link', { name: 'Voltar à Mídia' }).getAttribute('href'),
+    ).toBe('/midia');
+  });
+
+  it('says "Mídia não encontrada" for an address that is no media id, asking nothing', async () => {
+    const { harness, http } = await openPage('/midia/fila');
+    await harness.fixture.whenStable();
+    // Nothing is asked of the API for it (it would answer 400, VALIDATION_FAILED).
+    http.verify();
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('Mídia não encontrada');
+    expect(alert.textContent).toContain(
+      'Esta mídia não está mais no acervo ou você não tem acesso a ela.',
+    );
+    expect(alert.textContent).not.toContain('pergunta');
     expect(
       screen.getByRole('link', { name: 'Voltar à Mídia' }).getAttribute('href'),
     ).toBe('/midia');
@@ -223,7 +254,9 @@ describe('MediaPlayerPage (T15)', () => {
           wordHighlight: true,
         });
       TestBed.tick();
-      expect(screen.getByRole('slider', { name: 'Posição' })).toBeTruthy();
+      expect(
+        screen.getByRole('slider', { name: 'Posição', hidden: true }),
+      ).toBeTruthy();
     });
     expect(media.calls).toEqual([`load:/api/v1/media/${ITEM.id}/stream`]);
   });
@@ -232,7 +265,7 @@ describe('MediaPlayerPage (T15)', () => {
     const { harness, http, media } = await openPage();
     http.expectOne(ITEM_URL).flush(ITEM);
     await harness.fixture.whenStable();
-    screen.getByRole('slider', { name: 'Posição' }).focus();
+    screen.getByRole('slider', { name: 'Posição', hidden: true }).focus();
     media.setError(2);
     media.emit('error');
     TestBed.tick();
@@ -391,6 +424,19 @@ describe('MediaPlayerPage opened from "Meus marcadores" (KBC-042 FR-5)', () => {
   });
 });
 
+describe('MediaPlayerPage opened with #marcadores (v2 media-library-row-menu)', () => {
+  it('shows the Sobre tab, where the bookmarks are, once the media is in', async () => {
+    const { harness, http } = await openPage(`/midia/${ITEM.id}#marcadores`);
+    const tabs = TestBed.inject(PlayerPanelTabs);
+    tabs.tab.set('queue');
+
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+
+    expect(tabs.tab()).toBe('about');
+  });
+});
+
 describe('MediaPlayerPage: link to a minute (KBC-038 FR-5, AC-5)', () => {
   it('opens ?t=754 at 12:34, paused, with no "Continuar de" over the saved position', async () => {
     localStorage.clear();
@@ -439,7 +485,10 @@ describe('MediaPlayerPage: link to a minute (KBC-038 FR-5, AC-5)', () => {
  * stands in the AI research (KBC-100: a recording with no document, here).
  */
 const answerArchivedTracks = (http: HttpTestingController): void => {
-  http.expectOne(`${ITEM_URL}/archived-tracks`).flush({ tracks: [] });
+  // Read by "Sobre" (its removed tracks): inline on a phone, in the shell's panel on a
+  // desktop, so not always asked here.
+  for (const request of http.match(`${ITEM_URL}/archived-tracks`))
+    request.flush({ tracks: [] });
   http
     .expectOne(`${ITEM_URL}/publication`)
     .flush({ mediaId: ITEM.id, publication: null });
@@ -480,8 +529,8 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
     r.urlWithParams === `${ITEM_URL}/transcript?v=2`;
   const subtitlesRequest = (r: { urlWithParams: string }) =>
     r.urlWithParams === `${ITEM_URL}/subtitles.vtt?v=2`;
-  const LOW =
-    'Transcrição automática de baixa confiança: pode haver trechos errados.';
+  /** The v2 banner's title (player.js lowBanner), its line "Pode haver trechos errados." */
+  const LOW = 'Transcrição automática de baixa confiança';
 
   it('shows the transcript beside the player, the low notice once, above the text (AC-6)', async () => {
     localStorage.clear();
@@ -490,23 +539,29 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
     await settle();
     http.expectOne(transcriptRequest).flush(TRANSCRIPT);
     await harness.fixture.whenStable();
-    expect(screen.getByRole('heading', { name: 'Transcrição' })).toBeTruthy();
+    expect(
+      screen.getByRole('list', { name: 'Trechos da transcrição' }),
+    ).toBeTruthy();
     expect(screen.getByText('Existia um rei.')).toBeTruthy();
     expect(screen.getAllByText(LOW)).toHaveLength(1);
-    expect(
-      screen
-        .getByRole('button', { name: 'CC, legendas' })
-        .hasAttribute('disabled'),
-    ).toBe(false);
-    // With CC on, a short notice goes with the subtitles: on a phone the column's own
-    // notice is far below (CSS hides this one when the column sits beside the player).
-    fireEvent.click(screen.getByRole('button', { name: 'CC, legendas' }));
+    // CC is in ⋯ (v2). With it on, a short notice goes with the subtitles: on a phone the
+    // column's own notice is far below (CSS hides this one when the column sits beside).
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+    await harness.fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Legendas: desligado' }),
+    );
     await settle();
+    for (const request of http.match(subtitlesRequest))
+      request.flush('WEBVTT\n\n00:00.000 --> 00:02.000\nExistia um rei.\n');
+    await harness.fixture.whenStable();
+    expect(localStorage.getItem('kb-chat.player.captions')).toBe('on');
     expect(
       screen.getByText(
         'Legendas de baixa confiança: podem ter trechos errados.',
       ),
     ).toBeTruthy();
+    expect(screen.getAllByText(LOW)).toHaveLength(1);
   });
 
   it('goes back to the transcript when the view chosen is no longer offered (KBC-129 FR-3)', async () => {
@@ -553,7 +608,9 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
     // v2 (KBC-129): the toggle is the first of the page's actions in ⋯ "Mais opções".
     expect(document.getElementById('transcript-column')).not.toBeNull();
     await chooseInMore(harness, 'Esconder transcrição');
-    expect(screen.queryByRole('heading', { name: 'Transcrição' })).toBeNull();
+    expect(
+      screen.queryByRole('list', { name: 'Trechos da transcrição' }),
+    ).toBeNull();
     expect(document.getElementById('transcript-column')).toBeNull();
     expect(screen.getAllByText(LOW)).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
@@ -581,11 +638,7 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
     media.setCurrentTime(1);
     media.emit('timeupdate');
     await harness.fixture.whenStable();
-    expect(
-      screen
-        .getByRole('button', { name: 'CC, legendas' })
-        .getAttribute('aria-pressed'),
-    ).toBe('true');
+    // The transcript hidden, the subtitles show what is heard (CC on, kept in the browser).
     expect(document.querySelector('.caption')?.textContent).toBe(
       'Existia um rei.',
     );
@@ -672,7 +725,10 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     expect(
       screen.getByRole('link', { name: 'Palestra completa' }),
     ).toBeTruthy();
-    expect(screen.getByText('· faixa 3 de 12')).toBeTruthy();
+    // One run of words, the recording's name a link inside it (pHeader).
+    expect(
+      harness.routeNativeElement?.querySelector('.part-of')?.textContent,
+    ).toMatch(/Parte de:\s+Palestra completa\s+· faixa 3 de 12/);
     const context = screen.getByRole('link', { name: 'Ouvir no contexto' });
     expect(context.getAttribute('href')).toBe(
       '/midia/22222222-2222-4222-8222-222222222222?t=754',
@@ -972,6 +1028,13 @@ describe('MediaPlayerPage: listening by track (KBC-066 FR-9)', () => {
     TestBed.tick();
     http.expectOne(`${ITEM_URL}/tracks`).flush(TRACKS);
     await harness.fixture.whenStable();
+    // v2: the tracks are the "Faixas" view of the body (and "Sobre" in the side panel).
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Ver' })).getByRole('button', {
+        name: 'Faixas',
+      }),
+    );
+    await harness.fixture.whenStable();
     expect(screen.getByRole('heading', { name: 'Faixas' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Segunda/ }));
     expect(media.element.currentTime).toBe(600);
@@ -991,8 +1054,9 @@ describe('MediaPlayerPage: listening by track (KBC-066 FR-9)', () => {
     expect(within(views).queryByRole('button', { name: 'Vozes' })).toBeNull();
     fireEvent.click(within(views).getByRole('button', { name: 'Faixas' }));
     await harness.fixture.whenStable();
+    // The chips come again with the view they show.
     expect(
-      within(views)
+      within(screen.getByRole('group', { name: 'Ver' }))
         .getByRole('button', { name: 'Faixas' })
         .getAttribute('aria-pressed'),
     ).toBe('true');

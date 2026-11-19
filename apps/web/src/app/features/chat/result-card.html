@@ -27,12 +27,34 @@
           </span>
         </span>
       }
-      <app-authorship-badge
-        class="authorship"
-        [attr.id]="idOf('authorship')"
-        [authorship]="hit().authorship"
-      />
-      <span class="title">{{ hit().title }}</span>
+      <span class="title" [id]="idOf('title')">{{ hit().title }}</span>
+      <!-- The best card: the authorship badge and "Documento" (bestCard). -->
+      <span class="badge-line">
+        <app-authorship-badge
+          class="authorship"
+          [attr.id]="idOf('authorship')"
+          [authorship]="hit().authorship"
+        />
+        @if (!media()) {
+          <span class="doc-kind" i18n="@@card.document">Documento</span>
+        }
+      </span>
+      <!-- A row of the table: the author in text, then the type (docRow). -->
+      <span class="line" aria-hidden="true">
+        <app-authorship-badge
+          class="authorship-text"
+          [plain]="true"
+          [authorship]="hit().authorship"
+        />
+        @if (genre(); as type) {
+          <span class="line-genre">
+            @if (hit().authorship) {
+              ·
+            }
+            {{ type }}</span
+          >
+        }
+      </span>
       @if (spoken(); as parts) {
         <span class="snippet spoken" [id]="idOf('snippet')">
           @for (part of parts; track $index) {
@@ -61,6 +83,18 @@
               part
             }}</ui-pill>
           }
+          @if (copiesBeside()) {
+            <!-- bestCard: "+1 cópia" among its pills; the copy is in the card beside. -->
+            <ui-pill
+              class="facet copies-pill"
+              tone="warn"
+              i18n="@@card.copies"
+              >{hit().copies.length, plural,
+                =1 {+1 cópia}
+                other {+{{ hit().copies.length }} cópias}
+              }</ui-pill
+            >
+          }
         </span>
       }
       @if (concepts()) {
@@ -85,11 +119,46 @@
       }
     </span>
   </button>
-  @if (hit().copies.length > 0) {
+  <!-- docRow: the depth and the link after the copies' pill, before ⋯ (the card's
+       click covers them). -->
+  <span class="cols" aria-hidden="true">
+    @if (depth(); as level) {
+      <span class="col-depth">{{ level }}</span>
+    }
+    @if (relevance(); as link) {
+      <ui-pill [tone]="link === central ? 'ok' : 'info'">{{ link }}</ui-pill>
+    }
+  </span>
+  <ui-menu
+    class="more"
+    [label]="moreLabel()"
+    [triggerLabel]="moreTrigger"
+    [triggerDescribedBy]="idOf('title')"
+    triggerClass="row-more"
+    [menuId]="idOf('more')"
+    align="end"
+  >
+    <ui-icon uiMenuTrigger name="more" [size]="18" />
+    <button uiMenuItem type="button" (click)="open(hit(), $event)">
+      <ui-icon name="external" [size]="18" />
+      <span i18n="@@card.open">Abrir documento</span>
+    </button>
+    @for (copy of hit().copies; track copy.id) {
+      <button uiMenuItem type="button" (click)="open(copy, $event)">
+        <ui-icon name="copy" [size]="18" />
+        <span class="menu-copy" i18n="@@card.openCopy"
+          >Abrir a cópia {{ copy.id }}</span
+        >
+      </button>
+    }
+  </ui-menu>
+  @if (hit().copies.length > 0 && !copiesBeside()) {
     <div class="copies-area">
+      <!-- docRow: "+1 cópia" is drawn as the warn pill; it opens the copies under the row. -->
       <button
         type="button"
-        class="copies-toggle"
+        class="copies-toggle ui-pill"
+        data-tone="warn"
         [attr.aria-expanded]="copiesOpen()"
         [attr.aria-controls]="copiesOpen() ? copiesId() : null"
         (click)="toggleCopies()"

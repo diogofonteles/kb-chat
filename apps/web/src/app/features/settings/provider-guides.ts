@@ -14,6 +14,13 @@ export interface ProviderGuide {
   readonly limits?: () => string;
   /** What cannot be done (subscriptions, BR-5). */
   readonly note?: () => string;
+  /**
+   * Nothing to set up (the application's AI): the first step is a ✓ line, the rest a note
+   * under it, no numbers (v2 · Sua IA).
+   */
+  readonly ready?: boolean;
+  /** Said after the limits in Sua IA (not in the wizard's short facts). */
+  readonly limitsMore?: () => string;
 }
 
 const TEST_STEP: GuideStep = {
@@ -39,6 +46,9 @@ export const PROVIDER_GUIDES: Partial<Record<AiProvider, ProviderGuide>> = {
       $localize`:@@guide.appPrivacy:As perguntas e os trechos do acervo vão para os modelos gratuitos do OpenRouter escolhidos pela aplicação; alguns podem guardar os dados.`,
     limits: () =>
       $localize`:@@guide.appLimits:Há um limite de pesquisas por dia (Rápido conta 1, Profundo 2, Exaustivo 5).`,
+    limitsMore: () =>
+      $localize`:@@ai.appNote:A aplicação paga; o rodapé de cada resposta mostra o modelo que respondeu e quantas pesquisas restam hoje.`,
+    ready: true,
   },
   openrouter: {
     steps: [

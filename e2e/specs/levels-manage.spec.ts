@@ -9,7 +9,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { openPeople } from './settings-helpers.js';
+import { openPeople, profileAction } from './settings-helpers.js';
 
 /**
  * KBC-108 (ADR 0036 §10, §11, screens.md T24): the master deletes a level choosing where its
@@ -101,9 +101,7 @@ async function seeStaleProfile(page: Page, name: string): Promise<void> {
   const dialog = await openPeople(page);
   const section = dialog.getByRole('region', { name: /Perfis de convite/ });
   await section.getByRole('button', { name: /Perfis de convite/ }).click();
-  await section
-    .getByRole('button', { name: new RegExp(`Editar.*${name}`) })
-    .click();
+  await profileAction(section, 'Editar', name);
   await expect(
     section.getByText('O nível CI não existe mais; escolha outro.'),
   ).toBeVisible();

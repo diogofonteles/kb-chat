@@ -21,9 +21,9 @@
       >
         Biblioteca
       </h2>
-      <p class="ui-page-header__title" aria-hidden="true" i18n="@@library.hero">
-        Tudo para ouvir
-      </p>
+      <!-- The scope, with emphasis: the collection in use (with its sub-collections) or
+           "Todas as mídias" by choice (owner, 2026-11-19). -->
+      <p class="ui-page-header__title library-scope">{{ scopeTitle() }}</p>
       <p class="ui-page-header__meta">{{ headerMeta() }}</p>
     </div>
   </header>
@@ -34,68 +34,148 @@
       uiIconButton="play"
       class="play-all"
       [size]="56"
-      [disabled]="!firstPlayable()"
+      [attr.aria-disabled]="!firstPlayable() || null"
       [attr.aria-label]="playAllLabel()"
       (click)="playAll()"
     >
       <ui-icon [name]="listPlaying() ? 'pause' : 'play'" [size]="24" />
     </button>
+    <button
+      type="button"
+      uiIconButton
+      class="bar-icon"
+      [size]="28"
+      [attr.aria-disabled]="!firstPlayable() || null"
+      aria-label="Tocar em ordem aleatória"
+      i18n-aria-label="@@library.shuffle"
+      (click)="playAny()"
+    >
+      <ui-icon name="shuffle" [size]="28" />
+    </button>
     @if (canUpload()) {
       <button
         type="button"
-        uiButton="outline"
-        size="sm"
+        uiIconButton
+        class="bar-icon"
+        [size]="28"
         aria-haspopup="dialog"
+        aria-label="Enviar mídia"
+        i18n-aria-label="@@library.upload"
         (click)="openUpload()"
       >
-        <ui-icon name="upload" [size]="16" />
-        <span i18n="@@library.upload">Enviar mídia</span>
+        <ui-icon name="upload" [size]="28" />
       </button>
     }
-    <a uiButton="dark" size="sm" routerLink="/midia/marcadores">
-      <ui-icon name="bookmark" [size]="16" />
-      <span class="phone-hidden" i18n="@@bookmarks.mine">Meus marcadores</span>
-    </a>
-    @if (!libraryEmpty()) {
-      <div class="search">
-        <label
-          class="visually-hidden"
-          for="library-search"
-          i18n="@@library.search"
-          >Buscar na biblioteca</label
-        >
-        <div class="ui-search search-box">
-          <ui-icon name="search" [size]="18" />
-          <input
-            #searchBox
-            id="library-search"
-            type="search"
-            autocomplete="off"
-            maxlength="200"
-            placeholder="Fala, título, autor"
-            i18n-placeholder="@@library.searchPlaceholder"
-            [value]="query()"
-            (input)="search($event)"
-          />
-          @if (query()) {
-            <button
-              type="button"
-              class="clear-search"
-              aria-label="Limpar busca"
-              i18n-aria-label="@@library.clearSearch"
-              (click)="clearSearch()"
-            >
-              <ui-icon name="close" [size]="16" />
-            </button>
-          }
-        </div>
-      </div>
+    @if (isMaster()) {
+      <a
+        uiIconButton
+        class="bar-icon"
+        [size]="28"
+        routerLink="/configuracoes/pessoas"
+        aria-label="Convidar pessoas"
+        i18n-aria-label="@@library.invite"
+      >
+        <ui-icon name="personAdd" [size]="28" />
+      </a>
+    }
+    <app-menu-button
+      class="bar-more"
+      align="start"
+      label="Mais ações da Biblioteca"
+      i18n-label="@@library.moreActions"
+      [options]="headerOptions()"
+      (chosen)="headerAction($event)"
+    >
+      <ui-icon name="more" [size]="28" />
+    </app-menu-button>
+    <!-- The way between the collection in use and "Todas as mídias": beside the list's own
+         actions, never a filter chip (owner, 2026-11-19). -->
+    @if (!phone() && scopeSwitch(); as change) {
+      <button
+        type="button"
+        uiButton="ghost"
+        size="sm"
+        class="scope-switch"
+        (click)="switchScope(change.topic)"
+      >
+        {{ change.label }}
+      </button>
+    }
+    <span class="bar-space"></span>
+    <button
+      type="button"
+      uiIconButton
+      class="bar-search"
+      [class.on]="searching()"
+      [size]="32"
+      aria-label="Ir para a busca"
+      i18n-aria-label="@@library.goToSearch"
+      aria-controls="library-search"
+      (click)="focusSearch()"
+    >
+      <ui-icon name="search" [size]="20" />
+    </button>
+    @if (choices(); as current) {
+      <app-library-sort
+        [sort]="current.sort"
+        [view]="display()"
+        (sortChange)="changeSort($event)"
+        (viewChange)="changeView($event)"
+      />
     }
   </div>
 
+  <!-- The phone's top row holds these (PageHeader): the search and the upload. -->
+  <ng-template #phoneActions>
+    <!-- A phone has no hero: its top row names the scope, and this is the way between the
+         collection in use and "Todas as mídias" (owner, 2026-11-19). -->
+    @if (scopeSwitch(); as change) {
+      <button
+        type="button"
+        uiIconButton
+        class="phone-action scope-switch"
+        [attr.aria-label]="change.label"
+        [title]="change.label"
+        (click)="switchScope(change.topic)"
+      >
+        <ui-icon
+          [name]="change.topic === null ? 'library' : 'folder'"
+          [size]="24"
+        />
+      </button>
+    }
+    <button
+      type="button"
+      uiIconButton
+      class="phone-action"
+      [class.on]="searchOpen() || searching()"
+      [attr.aria-expanded]="searchOpen() || searching()"
+      aria-controls="library-search"
+      aria-label="Abrir a busca"
+      i18n-aria-label="@@library.openSearch"
+      (click)="toggleSearch()"
+    >
+      <ui-icon name="search" [size]="24" />
+    </button>
+    @if (canUpload()) {
+      <button
+        type="button"
+        uiIconButton
+        class="phone-action"
+        aria-haspopup="dialog"
+        aria-label="Enviar mídia"
+        i18n-aria-label="@@library.upload"
+        (click)="openUpload()"
+      >
+        <ui-icon name="upload" [size]="24" />
+      </button>
+    }
+  </ng-template>
+
   <div class="sections">
-    @if (!searching()) {
-      <app-queue-summary />
+    <!-- On a phone the chips come first, the queue's card under them (media-library@mobile). -->
+    @if (showQueue() && !phone()) {
+      <app-queue-summary [scope]="scopeTopics()" />
     }
 
     <app-moved-notice
@@ -126,256 +206,239 @@
       </ui-banner>
     }
 
-    @if (searching()) {
-      @if (choices(); as current) {
-        <app-library-search-results
-          [query]="askedQuery()"
-          [typed]="trimmedQuery()"
-          [filters]="current.filters"
-          [facets]="facets()"
-          [topics]="topics()"
-          [sort]="current.sort"
-          [view]="current.view"
-          (filtersChange)="changeFilter($event)"
-          (clearedSearch)="clearSearch()"
-          (clearedFilters)="clearFilters()"
-        />
-      }
-    } @else {
-      @if (homeLoading()) {
-        <div class="skeleton-strip" aria-hidden="true">
-          @for (n of [1, 2, 3]; track n) {
-            <span class="skeleton-tile"></span>
+    @if (showContinue()) {
+      <section class="continue" aria-labelledby="continue-title">
+        <div class="section-head">
+          <h3 id="continue-title" class="title" i18n="@@library.continue">
+            Continuar ouvindo
+          </h3>
+          @if (canClearRecents()) {
+            <button
+              #clearRecentsButton
+              type="button"
+              class="link"
+              (click)="askClearRecents()"
+              i18n="@@library.clearRecents"
+            >
+              Limpar recentes
+            </button>
           }
         </div>
-      } @else if (continueItems().length > 0) {
-        <section class="continue" aria-labelledby="continue-title">
-          <div class="section-head">
-            <h3 id="continue-title" class="title" i18n="@@library.continue">
-              Continuar ouvindo
-            </h3>
-            <div class="strip-tools">
+        <div class="strip" role="list" #strip>
+          @for (item of continueItems(); track item.id) {
+            <!-- ▶ on every shortcut, the one playing too: it goes on from the point
+                 (v2 · media-library-sort). -->
+            <app-library-card
+              [item]="item"
+              [tile]="true"
+              (played)="resume(item)"
+            />
+          }
+        </div>
+      </section>
+    }
+
+    <!-- "Limpar recentes" asks here, from the section's link or the header's ⋯. -->
+    @if (confirmingClear()) {
+      <div class="confirm-inline" role="group" aria-labelledby="clear-text">
+        <p id="clear-text" i18n="@@library.clearRecentsQuestion">
+          Limpar as mídias ouvidas recentemente? Suas posições, favoritas e
+          marcadores continuam.
+        </p>
+        <button
+          type="button"
+          uiButton="white"
+          size="sm"
+          (click)="clearRecents()"
+          i18n="@@library.clearRecentsConfirm"
+        >
+          Limpar
+        </button>
+        <button
+          #keepRecentsButton
+          type="button"
+          uiButton="ghost"
+          size="sm"
+          (click)="cancelClearRecents()"
+          i18n="@@library.clearRecentsCancel"
+        >
+          Cancelar
+        </button>
+      </div>
+    }
+
+    <!-- While searching the results are the section's content and name (KBC-096 AC-7). -->
+    <section
+      class="all"
+      [attr.aria-labelledby]="searching() ? null : 'all-title'"
+    >
+      @if (!searching()) {
+        <h3
+          id="all-title"
+          class="visually-hidden"
+          #allTitle
+          tabindex="-1"
+          i18n="@@library.all"
+        >
+          Todas
+        </h3>
+      }
+      <p class="visually-hidden" aria-live="polite">{{ countText() }}</p>
+
+      <div class="toolbar" [class.searching]="searchOpen() || searching()">
+        <div class="search">
+          <label
+            class="visually-hidden"
+            for="library-search"
+            i18n="@@library.search"
+            >Buscar na biblioteca</label
+          >
+          <div class="ui-search search-box">
+            <ui-icon name="search" [size]="18" />
+            <input
+              #searchBox
+              id="library-search"
+              type="search"
+              autocomplete="off"
+              maxlength="200"
+              [placeholder]="searchPlaceholder()"
+              [value]="query()"
+              (input)="search($event)"
+            />
+            @if (query()) {
               <button
                 type="button"
-                uiIconButton="circle"
-                class="arrow"
-                aria-label="Rolar para trás"
-                i18n-aria-label="@@library.scrollBack"
-                (click)="scrollStrip(-1)"
+                class="clear-search"
+                aria-label="Limpar busca"
+                i18n-aria-label="@@library.clearSearch"
+                (click)="clearSearch()"
               >
-                <ui-icon name="chevLeft" [size]="18" />
+                <ui-icon name="close" [size]="16" />
               </button>
-              <button
-                type="button"
-                uiIconButton="circle"
-                class="arrow"
-                aria-label="Rolar para frente"
-                i18n-aria-label="@@library.scrollForward"
-                (click)="scrollStrip(1)"
-              >
-                <ui-icon name="chevRight" [size]="18" />
-              </button>
-              <button
-                type="button"
-                class="link"
-                (click)="showInProgress()"
-                i18n="@@library.seeAll"
-              >
-                Ver tudo
-              </button>
-            </div>
-          </div>
-          <div class="strip" role="list" #strip>
-            @for (item of continueItems(); track item.id) {
-              <app-library-card
-                [item]="item"
-                [tile]="true"
-                [playing]="playingId() === item.id"
-                (played)="play(item)"
-              />
             }
           </div>
-        </section>
+        </div>
+        @if (choices(); as current) {
+          <app-library-controls
+            [facets]="facets()"
+            [filters]="current.filters"
+            [searching]="searching()"
+            [topics]="topics()"
+            (filtersChange)="changeFilter($event)"
+          />
+        }
+      </div>
+
+      <!-- On a phone the selection takes the attention card's place (media-library-selection@mobile):
+           hidden by the page's style while it lasts, not destroyed (library-page.css). -->
+      @if (showQueue() && phone()) {
+        <app-queue-summary class="phone-queue" [scope]="scopeTopics()" />
       }
 
-      @if (showRecents()) {
-        <section class="recents" aria-labelledby="recents-title">
-          <div class="section-head">
-            <h3 id="recents-title" class="title">
-              <button
-                #recentsToggle
-                type="button"
-                class="disclosure"
-                [attr.aria-expanded]="recentsOpen()"
-                aria-controls="recents-list"
-                (click)="toggleRecents()"
-              >
-                <ui-icon
-                  [name]="recentsOpen() ? 'chevDown' : 'chevRight'"
-                  [size]="18"
-                />
-                <ng-container i18n="@@library.recents"
-                  >Ouvidas recentemente</ng-container
-                >
-              </button>
-            </h3>
-            @if (canClearRecents()) {
-              <button
-                #clearRecentsButton
-                type="button"
-                class="link"
-                (click)="askClearRecents()"
-                i18n="@@library.clearRecents"
-              >
-                Limpar recentes
-              </button>
-            }
-          </div>
-          @if (confirmingClear()) {
-            <div
-              class="confirm-inline"
-              role="group"
-              aria-labelledby="clear-text"
+      @if (searching()) {
+        @if (choices(); as current) {
+          <app-library-search-results
+            [query]="askedQuery()"
+            [typed]="trimmedQuery()"
+            [filters]="current.filters"
+            [facets]="facets()"
+            [topics]="topics()"
+            [sort]="current.sort"
+            [view]="current.view"
+            (filtersChange)="changeFilter($event)"
+            (clearedSearch)="clearSearch()"
+            (clearedFilters)="clearFilters()"
+          />
+        }
+      } @else if (showSkeleton()) {
+        <ul
+          class="rows skeleton"
+          aria-busy="true"
+          aria-label="Carregando…"
+          i18n-aria-label="@@app.loading"
+        >
+          @for (n of [1, 2, 3, 4, 5, 6, 7, 8]; track n) {
+            <li class="skeleton-row">
+              <span class="skeleton-cover"></span><span class="bar"></span>
+            </li>
+          }
+        </ul>
+      } @else if (choices(); as current) {
+        @if (libraryEmpty()) {
+          @if (canUpload()) {
+            <ui-empty-state
+              icon="upload"
+              title="Comece enviando um áudio"
+              i18n-title="@@library.emptyUploader"
+              [text]="emptyUploaderText()"
             >
-              <p id="clear-text" i18n="@@library.clearRecentsQuestion">
-                Limpar as mídias ouvidas recentemente? Suas posições, favoritas
-                e marcadores continuam.
-              </p>
+              <button type="button" uiButton="primary" (click)="openUpload()">
+                <ui-icon name="upload" [size]="18" />
+                <span i18n="@@library.upload">Enviar mídia</span>
+              </button>
+            </ui-empty-state>
+          } @else {
+            <ui-empty-state
+              icon="library"
+              title="Ainda não há mídias para você"
+              i18n-title="@@library.emptyReader"
+              [text]="emptyReaderText()"
+            />
+          }
+        } @else if (nothingFound()) {
+          <ui-empty-state
+            [icon]="filtered() ? 'filter' : 'music'"
+            [title]="nothingFoundTitle()"
+            [text]="nothingFoundText()"
+          >
+            @if (canSeeAll()) {
               <button
                 type="button"
                 uiButton="white"
-                size="sm"
-                (click)="clearRecents()"
-                i18n="@@library.clearRecentsConfirm"
+                (click)="showAllCollections()"
+                i18n="@@library.seeAllCollections"
               >
-                Limpar
+                Ver todos os acervos
               </button>
+            }
+            @if (filtered()) {
               <button
-                #keepRecentsButton
                 type="button"
-                uiButton="ghost"
-                size="sm"
-                (click)="cancelClearRecents()"
-                i18n="@@library.clearRecentsCancel"
+                uiButton="outline"
+                (click)="clearFilters()"
+                i18n="@@library.clearFilters"
               >
-                Cancelar
+                Limpar filtros
               </button>
-            </div>
-          }
-          <div id="recents-list" [hidden]="!recentsOpen()">
-            @if (recents().length === 0) {
-              <p class="quiet" i18n="@@library.recentsEmpty">
-                Nada ouvido desde que você limpou.
-              </p>
-            } @else {
-              <ol class="recent-list">
-                @for (recent of recents(); track recent.item.id) {
-                  <li>
-                    <ui-cover [title]="recent.item.title" [size]="32" />
-                    <a [routerLink]="['/midia', recent.item.id]">{{
-                      recent.item.title
-                    }}</a>
-                    <span class="quiet">{{ recent.ago }}</span>
-                  </li>
-                }
-              </ol>
             }
-          </div>
-        </section>
-      }
-
-      <section class="all" aria-labelledby="all-title">
-        <div class="section-head">
-          <h3
-            id="all-title"
-            class="title"
-            #allTitle
-            tabindex="-1"
-            i18n="@@library.all"
-          >
-            Todas
-          </h3>
-          <p class="count" aria-live="polite">{{ countText() }}</p>
-        </div>
-
-        @if (showSkeleton()) {
-          <ul
-            class="rows skeleton"
-            aria-busy="true"
-            aria-label="Carregando…"
-            i18n-aria-label="@@app.loading"
-          >
-            @for (n of [1, 2, 3, 4, 5, 6, 7, 8]; track n) {
-              <li class="skeleton-row">
-                <span class="skeleton-cover"></span><span class="bar"></span>
-              </li>
-            }
-          </ul>
-        } @else if (choices(); as current) {
-          @if (!libraryEmpty()) {
-            <app-library-controls
-              [facets]="facets()"
-              [filters]="current.filters"
+          </ui-empty-state>
+        } @else {
+          <div class="phone-sort">
+            <app-library-sort
+              [phone]="true"
+              align="start"
+              [summary]="phone() && filtered() ? countText() : ''"
               [sort]="current.sort"
-              [view]="current.view"
-              [topics]="topics()"
-              (filtersChange)="changeFilter($event)"
+              [view]="display()"
+              [clearRecents]="phoneClearRecents()"
               (sortChange)="changeSort($event)"
               (viewChange)="changeView($event)"
+              (recentsCleared)="askClearRecents()"
             />
-          }
-
-          @if (libraryEmpty()) {
-            @if (canUpload()) {
-              <ui-empty-state
-                icon="upload"
-                title="Ainda não há mídias nos seus acervos."
-                i18n-title="@@library.emptyUploader"
-                text="Aulas, palestras e conversas viram mídia com transcrição, busca na fala e marcadores."
-                i18n-text="@@library.emptyUploaderText"
-              >
-                <button type="button" uiButton="primary" (click)="openUpload()">
-                  <ui-icon name="upload" [size]="18" />
-                  <span i18n="@@library.upload">Enviar mídia</span>
-                </button>
-              </ui-empty-state>
-            } @else {
-              <ui-empty-state
-                icon="library"
-                title="Ainda não há mídias nos acervos liberados para você."
-                i18n-title="@@library.emptyReader"
-                text="Os áudios dos acervos liberados para você aparecem aqui assim que forem enviados."
-                i18n-text="@@library.emptyReaderText"
-              />
-            }
-          } @else if (nothingFound()) {
-            <ui-empty-state
-              [icon]="filtered() ? 'filter' : 'music'"
-              [title]="nothingFoundTitle()"
-              [text]="nothingFoundText()"
+            <button
+              type="button"
+              uiIconButton
+              class="phone-view"
+              [attr.aria-label]="otherViewLabel()"
+              (click)="changeView(current.view === 'grid' ? 'list' : 'grid')"
             >
-              @if (canSeeAll()) {
-                <button
-                  type="button"
-                  uiButton="white"
-                  (click)="showAllCollections()"
-                  i18n="@@library.seeAllCollections"
-                >
-                  Ver todos os acervos
-                </button>
-              }
-              @if (filtered()) {
-                <button
-                  type="button"
-                  uiButton="outline"
-                  (click)="clearFilters()"
-                  i18n="@@library.clearFilters"
-                >
-                  Limpar filtros
-                </button>
-              }
-            </ui-empty-state>
-          } @else if (current.view === 'grid') {
+              <ui-icon
+                [name]="current.view === 'grid' ? 'list' : 'grid'"
+                [size]="18"
+              />
+            </button>
+          </div>
+          @if (current.view === 'grid') {
             <div class="grid" role="list">
               @for (item of items(); track item.id) {
                 <app-library-card
@@ -394,30 +457,40 @@
               }
             </div>
           } @else {
-            <div class="table">
-              <div class="table-head" aria-hidden="true">
-                <span class="col-lead">#</span>
-                <span class="col-title" i18n="@@library.col.title">Título</span>
-                <span class="col-topic" i18n="@@library.col.topic">Acervo</span>
-                <span class="col-status" i18n="@@library.col.status"
+            <div class="table" [class.compact]="display() === 'compact'">
+              <div class="table-head">
+                <span class="col-lead">
+                  <span class="number-head" aria-hidden="true">#</span>
+                  @if (selectable().length > 0) {
+                    <input
+                      #selectAllBox
+                      type="checkbox"
+                      class="ui-check select-all"
+                      [checked]="allSelected()"
+                      [attr.aria-label]="selectAllText()"
+                      (change)="toggleAll($event)"
+                    />
+                  }
+                </span>
+                <span class="col-title" aria-hidden="true">{{
+                  titleHeadText()
+                }}</span>
+                <span
+                  class="col-topic"
+                  aria-hidden="true"
+                  i18n="@@library.col.topic"
+                  >Acervo</span
+                >
+                <span
+                  class="col-status"
+                  aria-hidden="true"
+                  i18n="@@library.col.status"
                   >Situação</span
                 >
-                <span class="col-duration"
+                <span class="col-duration" aria-hidden="true"
                   ><ui-icon name="clock" [size]="16"
                 /></span>
               </div>
-              @if (selectable().length > 0) {
-                <label class="select-all">
-                  <input
-                    #selectAllBox
-                    type="checkbox"
-                    class="ui-check"
-                    [checked]="allSelected()"
-                    (change)="toggleAll($event)"
-                  />
-                  {{ selectAllText() }}
-                </label>
-              }
               <div class="rows" role="list">
                 @for (item of items(); track item.id; let index = $index) {
                   <app-library-row
@@ -427,18 +500,23 @@
                     [selected]="selected().has(item.id)"
                     [playing]="playingId() === item.id"
                     [master]="isMaster()"
+                    [phone]="phone()"
+                    [choosing]="selecting() && playingId() === item.id"
+                    [selectAll]="rowSelectAll()"
                     [paused]="preparations.steps().get(item.id) ?? null"
+                    [tracksOpen]="openTracks().has(item.id)"
+                    (tracksToggled)="toggleTracks(item.id)"
                     (played)="play(item)"
                     (selectedChange)="select(item, $event)"
                     (acted)="rowAction(item, $event)"
-                    (retried)="retry(item)"
                   />
-                  @if (item.tracks.length > 0) {
+                  @if (item.tracks.length > 0 && openTracks().has(item.id)) {
                     <app-track-group
                       class="row-tracks"
                       role="listitem"
                       [item]="item"
-                      [openByDefault]="query() !== ''"
+                      [toggle]="false"
+                      [open]="true"
                       [playingId]="playingId()"
                       (played)="play($event)"
                     />
@@ -463,8 +541,8 @@
             </button>
           }
         }
-      </section>
-    }
+      }
+    </section>
   </div>
 
   @if (selecting()) {
@@ -480,18 +558,29 @@
         </p>
       }
       <span class="selection-count">{{ selectedText() }}</span>
-      <button type="button" class="bar-action" (click)="markSelected(true)">
-        <ui-icon name="checkcircle" [size]="20" />
-        <span class="bar-words" i18n="@@library.markPlayed"
-          >Marcar como ouvida</span
+      @if (selectedReady().length > 0) {
+        <button type="button" class="bar-action" (click)="markSelected(true)">
+          <ui-icon name="checkcircle" [size]="20" />
+          <span class="bar-words" i18n="@@library.markPlayed"
+            >Marcar como ouvida</span
+          >
+        </button>
+        <button type="button" class="bar-action" (click)="markSelected(false)">
+          <ui-icon name="eyeOff" [size]="20" />
+          <span class="bar-words" i18n="@@library.markUnplayed"
+            >Marcar como não ouvida</span
+          >
+        </button>
+      } @else if (selectedFailedOnly() && isMaster()) {
+        <button
+          type="button"
+          class="bar-action danger"
+          (click)="removeSelected()"
         >
-      </button>
-      <button type="button" class="bar-action" (click)="markSelected(false)">
-        <ui-icon name="eyeOff" [size]="20" />
-        <span class="bar-words" i18n="@@library.markUnplayed"
-          >Marcar como não ouvida</span
-        >
-      </button>
+          <ui-icon name="trash" [size]="20" />
+          <span class="bar-words" i18n="@@media.remove">Remover</span>
+        </button>
+      }
       <button
         type="button"
         class="bar-close"
@@ -533,16 +622,48 @@
     aria-describedby="remove-text"
     (close)="removeClosed()"
   >
-    <h2 id="remove-title" i18n="@@media.removeTitle">
-      Remover "{{ item.title }}"?
-    </h2>
+    <!-- The sheet's handle on a phone; the ✕ beside the title on a desktop (media-library-remove). -->
+    <span class="handle" aria-hidden="true"></span>
+    <div class="confirm-head">
+      @if (removingMany().length > 1) {
+        <h2 id="remove-title">{{ removingManyTitle() }}</h2>
+      } @else {
+        <h2 id="remove-title" i18n="@@media.removeTitle">
+          Remover "{{ item.title }}"?
+        </h2>
+      }
+      <button
+        type="button"
+        uiIconButton
+        class="confirm-close"
+        aria-label="Fechar"
+        i18n-aria-label="@@ui.dialog.close"
+        (click)="cancelRemove()"
+      >
+        <ui-icon name="close" [size]="20" />
+      </button>
+    </div>
     <p id="remove-text" i18n="@@media.removeText">
       O áudio e a transcrição serão apagados e não podem ser recuperados.
     </p>
     @if (removingTracks(); as tracks) {
-      <p class="remove-tracks" role="alert">
-        {{ removingTracksText() }}
-      </p>
+      <!-- The frame lists each track under its count (media-library-remove-tracks); the
+           phone's sheet says it in one sentence (…-remove-tracks@mobile). Readers hear the
+           sentence either way. -->
+      <div class="remove-tracks" role="alert">
+        <p class="remove-tracks-text">{{ removingTracksText() }}</p>
+        <div class="remove-tracks-list" aria-hidden="true">
+          <p class="remove-tracks-count">{{ removingTracksCount() }}</p>
+          <ul>
+            @for (track of removingTracksShown(); track $index) {
+              <li>
+                <ui-cover [title]="item.title" [size]="24" />
+                <span>{{ track }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      </div>
     }
     <div class="confirm-actions">
       <button

@@ -32,6 +32,7 @@ export const ICONS = {
     { t: 'path', fill: true, d: 'M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z' },
   ],
   plus: [{ t: 'path', d: 'M12 5v14M5 12h14' }],
+  minus: [{ t: 'path', d: 'M5 12h14' }],
   more: [
     { t: 'circle', fill: true, cx: '5', cy: '12', r: '1.7' },
     { t: 'circle', fill: true, cx: '12', cy: '12', r: '1.7' },
@@ -117,6 +118,11 @@ export const ICONS = {
   volume: [
     { t: 'path', d: 'M4 9h4l5-4v14l-5-4H4z' },
     { t: 'path', d: 'M16 9a4 4 0 0 1 0 6' },
+  ],
+  /** Muted: the speaker of `volume` with a cross where its wave was. */
+  volumeOff: [
+    { t: 'path', d: 'M4 9h4l5-4v14l-5-4H4z' },
+    { t: 'path', d: 'm16 9 5 6M21 9l-5 6' },
   ],
   arrowRight: [{ t: 'path', d: 'M5 12h14M13 6l6 6-6 6' }],
   send: [{ t: 'path', d: 'M4 12 20 4l-6 16-3-7z' }],

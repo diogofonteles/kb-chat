@@ -1,8 +1,9 @@
-<div class="title">
-  <span class="ordinal">{{ track().ordinal }}</span>
-  <span>{{ track().title }}</span>
-</div>
+<span class="done" aria-hidden="true"
+  ><ui-icon name="check" [size]="16"
+/></span>
+<span class="ordinal">{{ track().ordinal }}</span>
 <div class="subjects">
+  <p class="title">{{ track().title }}</p>
   @if (empty()) {
     <p class="hint" i18n="@@subjects.none">Nenhum assunto ainda</p>
   }
@@ -84,13 +85,27 @@
       Até 5 assuntos por faixa
     </p>
   }
-  <app-subject-picker
-    [collection]="collection()"
-    [taken]="taken()"
-    [disabled]="busy()"
-    [label]="pickerLabel()"
-    (chosen)="added($event)"
-  />
+</div>
+<app-subject-picker
+  class="add"
+  compact
+  [collection]="collection()"
+  [taken]="taken()"
+  [disabled]="busy()"
+  [label]="pickerLabel()"
+  (chosen)="added($event)"
+/>
+<button
+  type="button"
+  class="summary-toggle"
+  [attr.aria-expanded]="summaryShown()"
+  [attr.aria-controls]="summaryId"
+  (click)="summaryOpen.set(!summaryShown())"
+  i18n="@@subjects.summaryToggle"
+>
+  Resumo
+</button>
+<div class="more" [id]="summaryId" [hidden]="!summaryShown()">
   @if (track().suggestedSummary; as suggested) {
     <div class="suggested-summary">
       <p>

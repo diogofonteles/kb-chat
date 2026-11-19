@@ -1,5 +1,5 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
-import type { ResultFacets } from '@kb-chat/contracts';
+import type { ResultFacets, SearchHit } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { aTopic } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
@@ -40,7 +40,7 @@ async function renderBar(filters = NO_FILTERS, hiddenOffTopic = 0) {
 }
 
 describe('FilterBar (desktop popovers)', () => {
-  it('opens a facet, lists values with counts and applies a choice at once', async () => {
+  it('opens a facet, lists values with counts and applies the ticks with Aplicar', async () => {
     const view = await renderBar();
     const chip = screen.getByRole('button', { name: /Tipo de texto/ });
     fireEvent.click(chip);
@@ -49,6 +49,11 @@ describe('FilterBar (desktop popovers)', () => {
     const option = screen.getByRole('checkbox', { name: /Aula ou palestra/ });
     expect(option.closest('label')?.textContent).toContain('3');
     fireEvent.click(option);
+    await view.fixture.whenStable();
+    // subjectsPopover: nothing applies until "Aplicar".
+    expect(view.filtersChange).not.toHaveBeenCalled();
+    expect((option as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
     expect(view.filtersChange).toHaveBeenCalledWith({
       ...NO_FILTERS,
       genres: ['talk_or_interview'],
@@ -77,6 +82,23 @@ describe('FilterBar (desktop popovers)', () => {
     fireEvent.click(document.body);
     await view.fixture.whenStable();
     expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('discards the ticks of a popover closed without Aplicar, also by Escape on the page', async () => {
+    const view = await renderBar();
+    fireEvent.click(screen.getByRole('button', { name: /Profundidade/ }));
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('checkbox'));
+    // Safari keeps the focus on the page after a click on a checkbox.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await view.fixture.whenStable();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(view.filtersChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /Profundidade/ }));
+    await view.fixture.whenStable();
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(
+      false,
+    );
   });
 
   it('shows active filters as removable chips, the count and hidden off-topic note', async () => {
@@ -190,7 +212,7 @@ describe('FilterBar (mobile sheet)', () => {
     });
   });
 
-  it('discards the draft on Cancelar', async () => {
+  it('discards the draft when the sheet is dismissed by its backdrop', async () => {
     const view = await renderBar();
     fireEvent.click(
       screen.getByText('Filtros').closest('button') as HTMLButtonElement,
@@ -201,7 +223,9 @@ describe('FilterBar (mobile sheet)', () => {
       sheet.querySelector('input[type=checkbox]') as HTMLInputElement,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Ver todos (14)' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    // filterSections has no Cancelar: a tap on the backdrop (or Escape) dismisses it.
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).toBeNull();
+    fireEvent.click(sheet);
     await view.fixture.whenStable();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(view.filtersChange).not.toHaveBeenCalled();
@@ -353,6 +377,8 @@ describe('FilterBar "Sub-acervo" (KBC-048 FR-4)', () => {
     const option = screen.getByRole('checkbox', { name: /Palavra do Mestre/ });
     expect(option.closest('label')?.textContent).toContain('5');
     fireEvent.click(option);
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
     expect(filtersChange).toHaveBeenCalledWith({
       ...NO_FILTERS,
       topics: ['udv/palavra-do-mestre'],
@@ -433,6 +459,53 @@ describe('draftResultCount (KBC-126 FR-3)', () => {
         applied: { ...NO_FILTERS, genres: ['article_or_essay'] },
         draft: NO_FILTERS,
         total: 2,
+      }),
+    ).toBeNull();
+  });
+
+  it('counts a narrower selection on the results themselves when the list holds them all', () => {
+    const hit = (id: string, concepts: string[]) =>
+      ({
+        id,
+        concepts,
+        genre: 'article_or_essay',
+        depth: null,
+        relevance: 'core',
+        authorship: 'outros-autores',
+        topic: 'hermetismo',
+      }) as unknown as SearchHit;
+    const items = [
+      hit('a', ['Cabala']),
+      hit('b', ['Cabala', 'Magia']),
+      hit('c', []),
+    ];
+    const cabala = { ...NO_FILTERS, concepts: ['Cabala'] };
+    expect(
+      draftResultCount({
+        facets,
+        applied: NO_FILTERS,
+        draft: cabala,
+        total: 3,
+        items,
+      }),
+    ).toBe(2);
+    // a list cut short, or a widened subject, still needs the search
+    expect(
+      draftResultCount({
+        facets,
+        applied: NO_FILTERS,
+        draft: cabala,
+        total: 9,
+        items,
+      }),
+    ).toBeNull();
+    expect(
+      draftResultCount({
+        facets,
+        applied: cabala,
+        draft: { ...NO_FILTERS, concepts: ['Cabala', 'Magia'] },
+        total: 3,
+        items,
       }),
     ).toBeNull();
   });

@@ -237,7 +237,19 @@ export const mediaItemSchema = z.object({
 });
 export type MediaItem = z.infer<typeof mediaItemSchema>;
 
-export const mediaListSchema = z.object({ items: z.array(mediaItemSchema) });
+/**
+ * A row of a collection's list (/midia): the item and, for a recording, its published tracks
+ * in order, for who has `media-tracks` (v2 media-list: "3 faixas" and the chevron, as the
+ * library's rows). Empty for a track, an undivided audio or who does not see tracks.
+ */
+export const mediaListItemSchema = mediaItemSchema.extend({
+  tracks: z.array(mediaItemSchema).default([]),
+});
+export type MediaListItem = z.infer<typeof mediaListItemSchema>;
+
+export const mediaListSchema = z.object({
+  items: z.array(mediaListItemSchema),
+});
 export type MediaList = z.infer<typeof mediaListSchema>;
 
 /** "Dividir em faixas": not now, by the person, or proposed by the AI (KBC-072 BR-1). */

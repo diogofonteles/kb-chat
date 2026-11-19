@@ -23,9 +23,37 @@
   cursor: pointer;
 }
 
-.trigger:hover,
-.trigger[aria-expanded='true'] {
+.trigger:hover {
   background: var(--overlay-3);
+  color: var(--color-text);
+}
+
+.trigger[aria-expanded='true'] {
+  background: var(--menu-trigger-open-bg, var(--overlay-3));
+  color: var(--color-text);
+}
+
+/* A chip with ▾ (v2 · Componentes › Chip): the filters' row look, the same as .ui-chip. */
+.trigger.chip {
+  gap: 0.375rem;
+  min-width: 0;
+  height: auto;
+  min-height: 2rem;
+  padding: 0 0.875rem;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.trigger.chip:hover,
+.trigger.chip[aria-expanded='true'] {
+  background: color-mix(
+    in srgb,
+    var(--color-surface-muted) 80%,
+    var(--color-text)
+  );
   color: var(--color-text);
 }
 
@@ -34,8 +62,9 @@
 .menu {
   display: flex;
   flex-direction: column;
-  min-width: 12rem;
-  max-height: min(70vh, 32rem);
+  min-width: 15rem;
+  /* Never cut (D5): as tall as its items, up to the screen; the overlay slides it to fit. */
+  max-height: calc(100dvh - var(--space-4));
   margin: 0;
   padding: var(--space-1);
   overflow-y: auto;
@@ -46,12 +75,15 @@
   box-shadow: var(--shadow);
 }
 
-.group {
+.group,
+.items {
   display: flex;
   flex-direction: column;
 }
 
-.group + .group {
+/* A named group ("Ordenar por", "Ver como") is set apart by its name, not by a line
+   (media-library-sort); an unnamed one after another keeps the line. */
+.group + .group:not(:has(> .heading)) {
   margin-top: var(--space-1);
   padding-top: var(--space-1);
   border-top: 1px solid var(--overlay-3);
@@ -61,8 +93,17 @@
   margin: 0;
   padding: var(--space-2) var(--space-3);
   color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: 700;
+  font-size: var(--text-meta);
+}
+
+/* At a desktop a group's name takes an item's 40 row (media-library-sort). */
+@media (min-width: 1024px) {
+  .heading {
+    display: flex;
+    align-items: center;
+    min-height: 2.5rem;
+    padding: 0 var(--space-3);
+  }
 }
 
 .divider {
@@ -102,25 +143,51 @@
   flex: 1;
 }
 
+.trail {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
 .menu button.checked {
   color: var(--color-accent-text);
 }
 
-/* On the lighter row of the pointer or the focus the accent falls under 4.5:1 in the dark
-   themes: the words (and the check) take the text colour there. */
-.menu button.checked:hover,
-.menu button.checked:focus-visible {
+/* On the lighter row of the pointer the accent falls under 4.5:1 in the dark themes: the
+   words (and the check) take the text colour there. The focus is a ring instead, so the
+   chosen row stays green on the menu's own colour (speedMenu). */
+.menu button.checked:hover {
   color: var(--color-text);
 }
 
+.menu button.checked:focus-visible {
+  background: transparent;
+  outline: 2px solid var(--color-focus);
+}
+
 .check {
-  display: inline-block;
-  width: 1em;
-  text-align: center;
+  display: inline-flex;
+  flex: none;
+  width: 1rem;
+}
+
+.title {
+  margin: 0;
+  padding: 0 var(--space-3);
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .menu button.danger {
   color: var(--color-danger);
+}
+
+/* The handle and the item's head show on a phone's sheet only. */
+.handle,
+.sheet-head {
+  display: none;
 }
 
 /* A phone: a sheet from the bottom over a scrim (DESIGN.md: menus become sheets). */
@@ -129,17 +196,210 @@
   inset: auto 0 0;
   width: 100%;
   max-width: none;
-  max-height: 85dvh;
+  /* A frame's sheet height (sheet(kids, h)), when it is taller than the items. */
+  min-height: min(var(--menu-sheet-height, 0px), calc(100dvh - var(--space-6)));
+  max-height: calc(100dvh - var(--space-6));
   padding: var(--space-3) var(--space-2)
     calc(var(--space-4) + env(safe-area-inset-bottom));
   border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+}
+
+.sheet-slot,
+.sheet-slot:empty {
+  display: none;
+}
+
+.menu.ui-overlay--sheet .sheet-slot:not(:empty) {
+  display: block;
+  padding: var(--space-1) var(--space-3) var(--space-3);
+}
+
+.menu.ui-overlay--sheet .handle {
+  display: block;
+  width: 2.25rem;
+  height: 0.25rem;
+  margin: 0 auto var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-line);
+}
+
+/* mSheetHead: cover 48, the title 15/700 and its line, over the items. */
+.menu.ui-overlay--sheet .sheet-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-3) var(--space-3);
+}
+
+.sheet-words {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sheet-title {
+  overflow: hidden;
+  font-size: var(--text-item);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-meta {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .menu.ui-overlay--sheet::backdrop {
   background: var(--scrim);
 }
 
+/* The sheet's name (mTitle): 18/700 in the text colour. */
+.menu.ui-overlay--sheet .title {
+  padding: var(--space-1) var(--space-3) var(--space-2);
+  min-height: 0;
+  color: var(--color-text);
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.menu.ui-overlay--sheet .heading {
+  padding: var(--space-2) var(--space-3);
+  font-weight: 700;
+}
+
+/* The sheet's items (mSheetItems): 52 px rows, the icon 22, the words 16, no lines between
+   the groups (media-library-row-menu@mobile, media-list-menu@mobile). */
 .menu.ui-overlay--sheet button {
-  min-height: var(--target);
+  min-height: 3.25rem;
+  gap: var(--space-4);
   font-size: var(--text-md);
+}
+
+.menu.ui-overlay--sheet button ui-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.menu.ui-overlay--sheet button ui-icon ::ng-deep svg {
+  width: 22px;
+  height: 22px;
+}
+
+.menu.ui-overlay--sheet .divider {
+  display: none;
+}
+
+.menu.ui-overlay--sheet .group + .group {
+  border-top: 0;
+}
+
+/* A sheet of actions (media-library-row-menu@mobile): 54 rows, 14 under the head, 56 of foot. */
+.menu.ui-overlay--sheet:not(.choices) {
+  padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+}
+
+.menu.ui-overlay--sheet:not(.choices) button {
+  min-height: 3.375rem;
+}
+
+.menu.ui-overlay--sheet:not(.choices) .sheet-head {
+  padding-bottom: calc(var(--space-3) + 2px);
+}
+
+/* A sheet of choices (media-library-sort@mobile): 47 px rows of words, the chosen one's ✓ 18
+   at the end; the groups' names 13/16, 6 over their first row and 12 over the pills. */
+.menu.ui-overlay--sheet.choices button {
+  min-height: 2.9375rem;
+}
+
+.menu.ui-overlay--sheet.choices .heading {
+  padding: var(--space-2) var(--space-3) 0.375rem;
+  line-height: 1rem;
+}
+
+.menu.ui-overlay--sheet.choices .pills .items {
+  padding-top: 0.375rem;
+}
+
+.menu.ui-overlay--sheet .check ui-icon,
+.menu.ui-overlay--sheet .check ui-icon ::ng-deep svg {
+  width: 18px;
+  height: 18px;
+}
+
+.menu.ui-overlay--sheet .pills .check ui-icon,
+.menu.ui-overlay--sheet .pills .check ui-icon ::ng-deep svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* "Ver como" on a phone: three pills in a row, the chosen one white with its ✓. */
+.menu.ui-overlay--sheet .pills .items {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+}
+
+.menu.ui-overlay--sheet .pills button {
+  gap: var(--space-1);
+  min-height: 2rem;
+  padding: 0 0.875rem;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  font-size: var(--text-meta);
+  font-weight: 500;
+}
+
+.menu.ui-overlay--sheet .pills button > ui-icon {
+  display: none;
+}
+
+.menu.ui-overlay--sheet .pills .words {
+  flex: none;
+}
+
+.menu.ui-overlay--sheet .pills .check {
+  order: -1;
+  width: auto;
+}
+
+.menu.ui-overlay--sheet .pills button.checked,
+.menu.ui-overlay--sheet .pills button.checked:hover,
+.menu.ui-overlay--sheet .pills button.checked:focus-visible {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+/* A phone: the sheet covers the page, the ⋯ under it keeps its colour (media-library-row-menu@mobile). */
+@media (max-width: 1023px) {
+  .trigger:not(.chip)[aria-expanded='true'] {
+    background: transparent;
+    color: var(--menu-trigger-color, var(--color-text-muted));
+  }
+}
+
+/* The player's sheets on a phone (pMobile sheet(kids): gap 4): rows of 44 (the target), 4
+   apart, one 4 between groups too, with no line; a ⋯ longer than the frame's (it keeps
+   "Legendas", "Fechar o player", the views) still fits whole on a 844 screen. */
+.menu.ui-overlay--sheet.spaced .items {
+  gap: 0.25rem;
+}
+
+.menu.ui-overlay--sheet.spaced .group + .group {
+  margin-top: 0.25rem;
+  padding-top: 0;
+}
+
+.menu.ui-overlay--sheet.spaced button,
+.menu.ui-overlay--sheet.spaced:not(.choices) button {
+  min-height: 2.75rem;
+}
+
+.menu.ui-overlay--sheet.spaced:not(.choices) {
+  padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
 }

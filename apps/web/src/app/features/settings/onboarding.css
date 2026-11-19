@@ -82,12 +82,12 @@
   justify-content: flex-end;
   gap: var(--space-3);
   padding: var(--space-4) var(--space-8) var(--space-6);
-  border-top: 1px solid var(--overlay-line);
 }
 
 @media (max-width: 1023px) {
+  /* The phone's wizard fills the screen: its head under the status bar's room (48). */
   .head {
-    padding: var(--space-4) var(--space-5) 0;
+    padding: 3rem var(--space-5) 0;
   }
 
   .intro {
@@ -106,11 +106,100 @@
     padding: var(--space-4) var(--space-5);
   }
 
+  /* The phone's foot: a bar 12 over its 48 buttons (10 apart), 32 under them. */
   .foot {
-    padding: var(--space-3) var(--space-4) var(--space-6);
+    gap: 0.625rem;
+    padding: var(--space-3) var(--space-4) var(--space-8);
+    border-top: 1px solid var(--overlay-line);
+  }
+
+  .foot [uiButton] {
+    min-height: 3rem;
   }
 
   .foot .next {
     flex: 1;
+  }
+}
+
+/* v2 · Assistente (desktop): step 14 on its line, 10 over the bar, the title 10 under it and
+   the lead 10 under that (18 line); the cards 20 under; "Continuar" 44 with 24 at its sides,
+   "Pular" as words 8 from the edge. */
+@media (min-width: 1024px) {
+  .progress {
+    line-height: 0.875rem;
+  }
+
+  .title {
+    margin-top: 0.125rem;
+    line-height: 1.2;
+  }
+
+  .lead {
+    margin-top: 0.125rem;
+    line-height: 1.125rem;
+  }
+
+  .foot .next {
+    min-height: 2.75rem;
+    padding-inline: var(--space-6);
+  }
+
+  .head .skip {
+    min-height: 2rem;
+    margin-right: -0.5rem;
+    padding-inline: 0.5rem;
+  }
+}
+
+/* v2 · Assistente (celular): the mark 28 at 56 from the top, the welcome 14/17 10 after it,
+   "Pular" as words at the edge. */
+@media (max-width: 1023px) {
+  .head {
+    gap: 0.625rem;
+    padding-top: 3.5rem;
+  }
+
+  .mark {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .welcome {
+    font-size: var(--text-sm);
+    line-height: 1.0625rem;
+  }
+
+  .head .skip {
+    min-height: 1.75rem;
+    margin-right: 0;
+    padding-inline: 0;
+    font-size: var(--text-sm);
+  }
+}
+
+/* v2 · Assistente (celular): the step 12 under the head, then 14 between the step, its bar,
+   the title and the lead (14/17); the cards 14 under. */
+@media (max-width: 1023px) {
+  .intro {
+    gap: 0.875rem;
+    padding-top: 0.875rem;
+  }
+
+  .progress {
+    line-height: 0.875rem;
+  }
+
+  .title {
+    margin-top: 0;
+    line-height: 1.2;
+  }
+
+  .lead {
+    line-height: 1.0625rem;
+  }
+
+  .content {
+    padding-top: 0.875rem;
   }
 }

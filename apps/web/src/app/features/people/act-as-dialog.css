@@ -1,31 +1,4 @@
-/* "Ver como" as a v2 modal (KBC-132 AC-7): the reason is required before anything starts. */
-.dialog {
-  width: min(32.5rem, calc(100vw - 2rem));
-  max-height: calc(100dvh - 4rem);
-  padding: var(--space-6);
-  border: 0;
-  border-radius: var(--radius-card);
-  background: var(--color-elevated);
-  color: var(--color-text);
-  box-shadow: var(--shadow);
-}
-
-.dialog[open] {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.dialog::backdrop {
-  background: var(--scrim);
-}
-
-h2 {
-  margin: 0;
-  font-size: var(--text-section);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
+/* "Ver como" in the v2 modal (KBC-132 AC-7): the reason is required before anything starts. */
 .hint {
   margin: 0;
   color: var(--color-text-muted);
@@ -37,40 +10,69 @@ h2 {
   display: grid;
   gap: 0.375rem;
   font-size: var(--text-meta);
+  line-height: 1rem;
   font-weight: 700;
 }
 
+/* 44 tall with one line (20 on 12 + 12). */
 .field textarea {
+  min-height: 2.75rem;
+  padding-block: 0.75rem;
+  line-height: 1.25rem;
   font-weight: 400;
+  /* One line as the frame's field; a longer reason grows it. */
+  field-sizing: content;
+  resize: none;
 }
 
 .error {
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  margin: 0;
+  /* 6 under the field (v2 · Ver como, motivo inválido). */
+  margin: -0.875rem 0 0;
   color: var(--color-danger);
   font-size: var(--text-xs);
 }
 
 .actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--space-3);
+  display: contents;
 }
 
-/* A phone: a sheet from the bottom, the actions full width. */
+/* A phone's sheet: "Motivo" 14 under the words (v2 · Ver como, celular). */
 @media (max-width: 1023px) {
-  .dialog {
-    width: 100vw;
-    max-width: 100vw;
-    margin: auto 0 0;
-    border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
-    padding: var(--space-5) var(--space-4) var(--space-6);
+  .field {
+    margin-top: -0.375rem;
+  }
+}
+
+/* "Ver como esta pessoa", white with its 👁, 22 at its sides. */
+.start {
+  padding-inline: 1.375rem;
+}
+
+/* The modal's buttons 40 high (v2 · Ver como): "Cancelar" 16 a side, "Ver como esta pessoa"
+   with its 👁 8 before the words. */
+@media (min-width: 1024px) {
+  .actions [uiButton] {
+    min-height: 2.5rem;
+    font-size: var(--text-sm);
   }
 
-  .actions > * {
-    flex: 1 1 100%;
+  .actions [uiButton='ghost'] {
+    padding-inline: var(--space-4);
+  }
+
+  .start {
+    gap: var(--space-2);
+    padding-inline: var(--space-6, 1.5rem);
+  }
+}
+
+/* Drawn from 245 under the screen's top, so the reason's error grows it downwards (v2 · Ver
+   como, motivo inválido); a short screen keeps it whole and scrolls its body. */
+@media (min-width: 1024px) {
+  :host ::ng-deep .ui-dialog {
+    max-height: calc(100dvh - var(--ui-dialog-top, 0px) - 2rem);
   }
 }

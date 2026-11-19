@@ -325,6 +325,11 @@ test('a search over the spoken word stays readable, with both painted', async ({
   await openPlayer(page, lecture);
   await moveAudioTo(page, 2.7);
   await expect.poll(() => spokenWord(page)).toBe('está');
+  // The phone's transcript card shows its search from its 🔍 (pMobile).
+  const open = page.getByRole('button', {
+    name: 'Mostrar a busca na transcrição',
+  });
+  if (await open.isVisible()) await open.click();
   const field = page.getByLabel('Buscar na transcrição');
   await field.fill('está');
   // Also "esta frase", far ahead: the search ignores accents.

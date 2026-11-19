@@ -28,7 +28,14 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
   template: `
     @if (status(); as current) {
       <div class="card" role="group" aria-labelledby="ai-status-title">
-        <ui-cover class="art" icon="sparkleFill" title="IA" [size]="48" />
+        <ui-cover
+          class="art"
+          icon="sparkleFill"
+          title="IA"
+          from="var(--cover-provider-app)"
+          to="var(--cover-provider-app-dark)"
+          [size]="48"
+        />
         <div class="text">
           <p id="ai-status-title" class="title" i18n="@@aiStatus.title">
             Quem atende você agora
@@ -43,7 +50,6 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
                 <strong i18n="@@aiStatus.app"
                   >IA da aplicação (cedida pelo administrador)</strong
                 >
-                · {{ appLabel() }}
               </p>
             }
             <p class="detail">
@@ -52,13 +58,16 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
                   >Incluído na assinatura do administrador</span
                 >
               } @else {
+                {{ appLabel() }} ·
                 <span i18n="@@aiStatus.free">Gratuito para você</span>
               }
               @if (current.remainingToday !== null) {
-                ·
-                <span i18n="@@aiStatus.remaining"
-                  >Pesquisas restantes hoje: {{ current.remainingToday }} de
-                  {{ current.dailyResearches }}</span
+                <span class="left-inline">
+                  ·
+                  <span i18n="@@aiStatus.remaining"
+                    >Pesquisas restantes hoje: {{ current.remainingToday }} de
+                    {{ current.dailyResearches }}</span
+                  ></span
                 >
               }
             </p>
@@ -145,15 +154,25 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
           }
         </div>
         @if (remaining(); as left) {
-          <ui-progress class="left" [value]="left" />
+          <!-- The day's researches at the right (desktop frame), under the words on a phone. -->
+          <div class="left">
+            <p class="left-text" aria-hidden="true">
+              <span i18n="@@aiStatus.remaining"
+                >Pesquisas restantes hoje: {{ status()?.remainingToday }} de
+                {{ status()?.dailyResearches }}</span
+              >
+            </p>
+            <ui-progress [value]="left" />
+          </div>
         }
       </div>
     }
   `,
   styles: `
+    /* v2 · Sua IA: 16 inside, the cover in the middle of the words (12/14, 16/19, 13/16). */
     .card {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       gap: 0.875rem;
       padding: var(--space-4);
       border-radius: var(--radius-card);
@@ -170,6 +189,7 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
       color: var(--color-text-muted);
       font-size: var(--text-xs);
       font-weight: 700;
+      line-height: 0.875rem;
     }
     .who,
     .detail {
@@ -177,15 +197,40 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
     }
     .who {
       font-size: var(--text-md);
+      font-weight: 700;
+      line-height: 1.1875rem;
     }
     .detail {
       color: var(--color-text-muted);
       font-size: var(--text-meta);
+      line-height: 1rem;
     }
     .left {
+      display: grid;
       flex: none;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.375rem;
+      justify-items: end;
       width: 10rem;
       align-self: center;
+    }
+    .left ui-progress {
+      width: 100%;
+    }
+    .left-text {
+      margin: 0;
+      font-size: var(--text-xs);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    /* On desktop the count is read here but drawn at the right, beside the bar. */
+    .left-inline {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
     }
     .lent {
       display: grid;
@@ -206,7 +251,15 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
         flex-wrap: wrap;
       }
       .left {
-        width: 100%;
+        display: none;
+      }
+      .left-inline {
+        position: static;
+        width: auto;
+        height: auto;
+        overflow: visible;
+        clip-path: none;
+        white-space: normal;
       }
     }
   `,

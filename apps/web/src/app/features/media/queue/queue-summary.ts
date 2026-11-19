@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   inject,
+  input,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import type { ProcessingQueueItem, QueueAction } from '@kb-chat/contracts';
@@ -16,12 +17,19 @@ import {
 import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import { UiPill, type Tone } from '@ui/pill.js';
+import { UiProgress } from '@ui/progress.js';
+import {
+  UploadsInFlight,
+  percentOfUpload,
+  type UploadInFlight,
+} from '@core/media/uploads-in-flight.js';
 import {
   TranscribeWithGroq,
   type GroqCandidate,
 } from '../transcribe-with-groq.js';
 import { ProcessingQueueStore } from './processing-queue-store.js';
 import { queueStateText } from './queue-labels.js';
+import { STAGE_NAMES } from '../preparation/preparation-labels.js';
 
 /** How many audios the block shows; the page has the rest. */
 const SHOWN = 3;
@@ -35,7 +43,14 @@ const SHOWN = 3;
  */
 @Component({
   selector: 'app-queue-summary',
-  imports: [RouterLink, TranscribeWithGroq, UiCover, UiIcon, UiPill],
+  imports: [
+    RouterLink,
+    TranscribeWithGroq,
+    UiCover,
+    UiIcon,
+    UiPill,
+    UiProgress,
+  ],
   template: `
     @if (lines().length > 0) {
       <section class="summary" aria-labelledby="queue-summary-title">
@@ -54,10 +69,21 @@ const SHOWN = 3;
         <ul class="cards">
           @for (line of lines(); track line.id) {
             <li class="card">
+              @if (!line.groq && !line.hasAction) {
+                <a
+                  class="card-link"
+                  [routerLink]="line.link"
+                  [attr.aria-label]="line.actionLabel"
+                ></a>
+              }
               <ui-cover [title]="line.title" [size]="48" />
               <span class="body">
                 <span class="name">{{ line.title }}</span>
                 <span class="line">
+                  @if (line.sending !== null) {
+                    <!-- What this browser sends now (media-upload-sending). -->
+                    <ui-progress class="sending" [value]="line.sending / 100" />
+                  }
                   @if (line.pill) {
                     <ui-pill [tone]="line.tone">{{ line.pill }}</ui-pill>
                   }
@@ -72,7 +98,7 @@ const SHOWN = 3;
                   (sent)="refresh()"
                   (capped)="refresh()"
                 />
-              } @else {
+              } @else if (line.hasAction) {
                 <a
                   class="action"
                   [class.strong]="line.strong"
@@ -84,13 +110,15 @@ const SHOWN = 3;
             </li>
           }
         </ul>
-        @if (hiddenCount() > 0) {
-          <p class="more" i18n="@@queue.more">e mais {{ hiddenCount() }}</p>
-        }
       </section>
     }
   `,
   styles: `
+    :host {
+      display: block;
+      container: queue-summary / inline-size;
+    }
+
     .summary {
       display: grid;
       gap: var(--space-3);
@@ -131,19 +159,21 @@ const SHOWN = 3;
       gap: var(--space-1) var(--space-3);
     }
 
+    /* v2 · media-library: "Precisa da sua atenção" 20/24, "Ver a fila" 13 on the same line. */
     h3 {
       margin: 0;
       font-size: 1.25rem;
       font-weight: 700;
+      line-height: 1.5rem;
       letter-spacing: -0.01em;
     }
 
     .see {
       display: inline-flex;
       align-items: center;
-      min-height: var(--target-desktop);
+      min-height: 1.5rem;
       color: var(--color-text-muted);
-      font-size: var(--text-sm);
+      font-size: var(--text-meta);
       font-weight: 700;
       text-decoration: none;
     }
@@ -153,9 +183,10 @@ const SHOWN = 3;
       text-decoration: underline;
     }
 
+    /* Three cards side by side; two on a narrow panel (media-library, the right panel open). */
     .cards {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       align-items: start;
       gap: var(--space-3);
       margin: 0;
@@ -164,7 +195,36 @@ const SHOWN = 3;
     }
 
     /* "Precisa da sua atenção": cover, title, status in a word and the direct action. */
+    @container queue-summary (max-width: 52rem) {
+      .cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .card:nth-child(n + 3) {
+        display: none;
+      }
+    }
+
+    /* A card with nothing to do here is its own way to the details. */
+    .card-link {
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+    }
+
+    .card-link:hover {
+      background: var(--overlay-1);
+    }
+
+    .card-link:focus-visible {
+      outline: 2px solid var(--color-focus);
+      outline-offset: 2px;
+    }
+
+    /* Cover and text on a row; the action beside them while the text keeps its room (11rem),
+       else on its own row under them, never squeezing the text. */
     .card {
+      position: relative;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -175,36 +235,51 @@ const SHOWN = 3;
       background: var(--overlay-1);
     }
 
+    .card > ui-cover {
+      flex: none;
+      align-self: flex-start;
+    }
+
     .body {
       display: grid;
-      flex: 1;
+      flex: 1 1 10rem;
       gap: var(--space-1);
       min-width: 0;
     }
 
+    /* A long title takes two lines, then "…". */
     .name {
+      display: -webkit-box;
       overflow: hidden;
       font-size: var(--text-sm);
       font-weight: 700;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
     }
 
+    /* The pill, then the words on the text's whole width: three lines at most. */
     .line {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: var(--space-1) var(--space-2);
-      min-width: 0;
+      display: -webkit-box;
+      overflow: hidden;
+      font-size: var(--text-xs);
+      line-height: 1.5;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
     }
 
-    .state,
-    .more {
-      min-width: 0;
+    .line ui-pill {
+      display: inline-flex;
+      margin-inline-end: var(--space-2);
+      vertical-align: middle;
+    }
+
+    .state {
       margin: 0;
       color: var(--color-text-muted);
-      font-size: var(--text-xs);
-      overflow-wrap: anywhere;
     }
 
     app-transcribe-with-groq {
@@ -217,11 +292,12 @@ const SHOWN = 3;
     }
 
     .action {
+      position: relative;
       flex: none;
       display: inline-flex;
       align-items: center;
-      min-height: var(--target-desktop);
-      padding: 0 var(--space-4);
+      min-height: 2rem;
+      padding: 0 0.875rem;
       border-radius: var(--radius-pill);
       background: var(--overlay-3);
       color: var(--color-text);
@@ -232,6 +308,18 @@ const SHOWN = 3;
 
     .action:hover {
       background: var(--overlay-4);
+    }
+
+    /* The send's bar, then how far, on one line (media-upload-sending). */
+    .line:has(.sending) {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .sending {
+      flex: none;
+      width: 7.5rem;
     }
 
     .action.strong {
@@ -245,12 +333,22 @@ const SHOWN = 3;
       }
 
       .top,
-      .cards,
-      .more {
+      .cards {
         display: none;
       }
 
+      /* v2 · media-library@mobile: the count 14/700, what each needs 12 under it. */
+      .phone-card .body {
+        gap: 0.125rem;
+      }
+
+      .phone-card .name {
+        font-size: var(--text-sm);
+        font-weight: 700;
+      }
+
       .phone-card .state {
+        font-size: var(--text-xs);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -263,52 +361,76 @@ export class QueueSummary {
   private readonly store = inject(ProcessingQueueStore);
   private readonly session = inject(SessionStore);
   protected readonly path = QUEUE_PAGE_PATH;
+  /**
+   * The collections the page is about (the library's scope with its sub-collections), or
+   * null for every one: the block never shows another collection's audio (owner, 2026-11-19).
+   */
+  readonly scope = input<ReadonlySet<string> | null>(null);
+  private readonly inScope = computed(() => {
+    const scope = this.scope();
+    const items = this.store.items();
+    return scope ? items.filter((item) => scope.has(item.topic)) : items;
+  });
+  /** What is at work or in line, in the scope: the server's count less what is outside it. */
+  private readonly active = computed(() => {
+    const scope = this.scope();
+    if (!scope) return this.store.active();
+    const outside = this.store
+      .items()
+      .filter(
+        ({ phase, topic }) =>
+          !scope.has(topic) && (phase === 'running' || phase === 'next'),
+      ).length;
+    return Math.max(0, this.store.active() - outside);
+  });
   /** What needs the person first: with three at work it would never show. */
   private readonly shown = computed(() => {
-    const items = this.store.items();
+    const items = this.inScope();
     return [
       ...items.filter(({ phase }) => phase === 'attention'),
       ...items.filter(({ phase }) => phase === 'running' || phase === 'next'),
     ];
   });
   private readonly canEdit = computed(() => this.session.can('media-edit'));
-  protected readonly lines = computed(() =>
-    this.shown()
-      .slice(0, SHOWN)
-      .map((item) => {
-        const { pill, tone } = pillOf(item);
-        const action = actionTextOf(item);
-        return {
-          id: item.mediaId,
-          title: item.title,
-          state: queueStateText(item),
-          pill,
-          tone,
-          link: linkOf(item, this.canEdit()),
-          action,
-          actionLabel: `${action}: ${item.title}`,
-          strong: item.action === 'validate' || item.action === 'conclude',
-          groq: groqOf(item),
-        };
-      }),
-  );
-  protected readonly hiddenCount = computed(() =>
-    Math.max(0, this.shown().length - SHOWN),
-  );
+  private readonly inFlight = inject(UploadsInFlight).items;
+  /** What this browser sends to a collection in the scope: another one's never shows. */
+  private readonly sending = computed(() => {
+    const scope = this.scope();
+    const sends = this.inFlight();
+    return scope ? sends.filter(({ topic }) => scope.has(topic)) : sends;
+  });
+  protected readonly lines = computed(() => [
+    ...this.sending().map(sendingLine),
+    ...this.shown()
+      .slice(0, Math.max(0, SHOWN - this.sending().length))
+      .map((item) =>
+        queueLine(
+          item,
+          this.store.queue()?.transcriber ?? null,
+          this.canEdit(),
+        ),
+      ),
+  ]);
   /** The phone's card: how many, then what each needs (media-library@mobile). */
   protected readonly compactTitle = computed(() => {
-    const active = this.store.active();
+    const active = this.active() + this.sending().length;
     if (active > 0) return this.titleText();
     const count = this.shown().length;
     return count === 1
       ? $localize`:@@queue.summary.attentionOne:1 item precisa de atenção`
       : $localize`:@@queue.summary.attentionMany:${count}:count: itens precisam de atenção`;
   });
-  protected readonly compactParts = computed(() =>
-    partsOf(this.shown()).join(' · '),
-  );
+  protected readonly compactParts = computed(() => {
+    const sending = this.sending().length;
+    return [
+      ...(sending > 0
+        ? [$localize`:@@queue.part.sending:Enviando ${sending}:count:`]
+        : []),
+      ...partsOf(this.shown()),
+    ].join(' · ');
+  });
   protected readonly titleText = computed(() => {
-    const active = this.store.active();
+    const active = this.active() + this.sending().length;
     if (active === 0)
       return $localize`:@@queue.summary.waiting:Precisa da sua atenção`;
     return active === 1
@@ -320,6 +442,65 @@ export class QueueSummary {
   protected refresh(): void {
     this.store.refresh();
   }
+}
+
+/** A card of the block: an audio of the queue, or a file this browser sends now. */
+interface Line {
+  readonly id: string;
+  readonly title: string;
+  readonly state: string;
+  readonly pill: string;
+  readonly tone: Tone;
+  readonly link: string;
+  readonly action: string;
+  readonly actionLabel: string;
+  readonly strong: boolean;
+  readonly hasAction: boolean;
+  readonly groq: GroqCandidate | null;
+  /** How far a send has gone, in percent; null for the queue's own. */
+  readonly sending: number | null;
+}
+
+/** What this browser sends, first (media-upload-sending: "Enviando · 0%" and its bar). */
+function sendingLine(upload: UploadInFlight): Line {
+  const percent = percentOfUpload(upload);
+  return {
+    id: upload.key,
+    title: upload.title,
+    state: $localize`:@@queue.card.sending:Enviando · ${percent}:percent:%`,
+    pill: '',
+    tone: 'muted',
+    link: QUEUE_PAGE_PATH,
+    action: '',
+    actionLabel: upload.title,
+    strong: false,
+    hasAction: false,
+    groq: null,
+    sending: percent,
+  };
+}
+
+function queueLine(
+  item: ProcessingQueueItem,
+  transcriber: string | null,
+  canEdit: boolean,
+): Line {
+  const { pill, tone } = pillOf(item);
+  const action = actionTextOf(item);
+  return {
+    id: item.mediaId,
+    title: item.title,
+    state: cardStateOf(item, transcriber),
+    pill,
+    tone,
+    link: linkOf(item, canEdit),
+    action,
+    actionLabel: `${action}: ${item.title}`,
+    strong: item.action === 'validate' || item.action === 'conclude',
+    hasAction: item.action !== null,
+    groq: groqOf(item),
+    sending: null,
+  };
 }
 
 /** Groq may take this one now (KBC-037): the card offers it in place of the details. */
@@ -357,6 +538,30 @@ function partsOf(items: readonly ProcessingQueueItem[]): string[] {
   ].filter((part): part is string => typeof part === 'string');
 }
 
+/**
+ * The card's second line, short (media-library "Precisa da sua atenção": "Falta validar as
+ * faixas", "Falhou · conversão", "Aguardando · transcritor desligado"); the queue page keeps
+ * the long words (queueStateText).
+ */
+function cardStateOf(
+  item: ProcessingQueueItem,
+  transcriber: string | null,
+): string {
+  // A failure with its own reason says it (the stage, then why; clamped to three lines);
+  // one that only "did not finish" names the stage (media-library: "Falhou · conversão").
+  if (item.state === 'failed' && item.stage)
+    return item.failure && item.failure !== 'work'
+      ? queueStateText(item)
+      : STAGE_NAMES[item.stage]().toLocaleLowerCase('pt-BR');
+  if (item.waitsForTranscriber)
+    return transcriber === 'off'
+      ? $localize`:@@queue.card.transcriberOff:transcritor desligado`
+      : $localize`:@@queue.card.transcriberQueue:na fila do transcritor`;
+  if (item.action === 'validate')
+    return $localize`:@@queue.card.validate:Falta validar as faixas`;
+  return queueStateText(item);
+}
+
 /** The state in a word, its tone backing it (never the colour alone). */
 function pillOf(item: ProcessingQueueItem): {
   readonly pill: string;
@@ -366,11 +571,6 @@ function pillOf(item: ProcessingQueueItem): {
     return { pill: $localize`:@@queue.pill.failed:Falhou`, tone: 'err' };
   if (item.waitsForTranscriber)
     return { pill: $localize`:@@queue.pill.waiting:Aguardando`, tone: 'warn' };
-  if (item.action === 'validate')
-    return {
-      pill: $localize`:@@queue.pill.validate:Para validar`,
-      tone: 'info',
-    };
   if (item.phase === 'running')
     return {
       pill: $localize`:@@queue.pill.running:Em processamento`,

@@ -26,8 +26,25 @@
   gap: var(--space-2);
 }
 
+/* v2: "Voltar" in white, "Avançar" the quieter of the two arrows (#ffffff59 until hovered). */
+.back {
+  color: var(--color-text);
+}
+
+.forward {
+  color: var(--color-icon-faint);
+}
+
+.forward:hover {
+  color: var(--color-text);
+}
+
 .home {
   color: var(--color-text-muted);
+}
+
+.home.on {
+  color: var(--color-text);
 }
 
 .home:hover {
@@ -74,7 +91,12 @@
 }
 
 .search input::-webkit-search-cancel-button {
-  filter: grayscale(1);
+  display: none;
+}
+
+.clear {
+  flex: none;
+  color: var(--color-text-muted);
 }
 
 .divider {
@@ -83,8 +105,30 @@
   background: var(--overlay-4);
 }
 
-.people {
+.people,
+.bell {
   position: relative;
+}
+
+::ng-deep .bell-trigger {
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+}
+
+::ng-deep .bell-trigger:hover {
+  color: var(--color-text);
+}
+
+.bell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+}
+
+.quiet {
+  font-weight: 400;
 }
 
 .dot {
@@ -103,7 +147,8 @@
 
 .avatar-ring {
   display: inline-flex;
-  padding: 0.25rem;
+  /* v2 · Casca: a 40 ring, its hairline inside, around the 32 avatar. */
+  padding: 3px;
   border: 1px solid var(--overlay-3);
   border-radius: var(--radius-pill);
   background: var(--color-shell);
