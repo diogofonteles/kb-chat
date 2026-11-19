@@ -470,7 +470,7 @@
                     [playing]="playingId() === item.id"
                     [master]="isMaster()"
                     [phone]="phone()"
-                    [choosing]="selecting()"
+                    [choosing]="selecting() && playingId() === item.id"
                     [selectAll]="
                       selecting() && !allSelected() ? selectAllText() : ''
                     "

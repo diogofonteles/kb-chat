@@ -334,12 +334,12 @@ a.main ~ .cells .duration {
   opacity: 1;
 }
 
-/* While choosing, a row's focus is its box's: no ⋯ or 🔖 come out for it, only under the
-   pointer or on their own focus (media-library-selection). */
+/* While choosing, a row's focus is its box's: its ⋯ does not come out for it, only under
+   the pointer or on its own focus (media-library-selection). */
 @container library-table (min-width: 36.0625rem) {
-  :host(.choosing:not(:hover, .menu-open))
+  :host(:focus-within:not(:hover, .menu-open):has(.select:focus))
     .actions
-    app-menu-button:not(:focus-within) {
+    app-menu-button {
     opacity: 0;
   }
 }
@@ -432,9 +432,9 @@ app-menu-button {
 }
 
 @container library-table (min-width: 52.0625rem) {
-  :host(:hover:has(.row-bookmarks)),
-  :host(:focus-within:has(.row-bookmarks)),
-  :host(.menu-open:has(.row-bookmarks)) {
+  :host(.ready:hover),
+  :host(.ready:focus-within:not(:has(.select:focus))),
+  :host(.ready.menu-open) {
     grid-template-columns:
       1.5rem 2.5rem minmax(0, 1fr)
       11.25rem 13.75rem 1.125rem 2.75rem 1.125rem;
@@ -443,8 +443,9 @@ app-menu-button {
       'lead art byline topic status mark duration actions';
   }
 
+  /* The focus on a row's box (a selection) brings no 🔖 (media-library-selection). */
   :host(:hover) .row-bookmarks,
-  :host(:focus-within) .row-bookmarks,
+  :host(:focus-within:not(:has(.select:focus))) .row-bookmarks,
   :host(.menu-open) .row-bookmarks {
     position: relative;
     z-index: 1;
@@ -455,23 +456,6 @@ app-menu-button {
     height: 2rem;
     overflow: visible;
     clip-path: none;
-  }
-
-  :host(.choosing:not(:hover, .menu-open, :has(.row-bookmarks:focus))) {
-    grid-template-columns:
-      1.5rem 2.5rem minmax(0, 1fr)
-      11.25rem 13.75rem 2.75rem 1.125rem;
-    grid-template-areas:
-      'lead art title topic status duration actions'
-      'lead art byline topic status duration actions';
-  }
-
-  :host(.choosing:not(:hover, .menu-open)) .row-bookmarks:not(:focus) {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
   }
 
   .row-bookmarks:hover {

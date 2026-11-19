@@ -1005,4 +1005,9 @@
     align-self: flex-start;
     margin-left: 10.25rem;
   }
+
+  /* The count's own room, as drawn (137 for "2 selecionadas"), so the bar does not jump. */
+  .selection-count {
+    min-width: 8.5625rem;
+  }
 }

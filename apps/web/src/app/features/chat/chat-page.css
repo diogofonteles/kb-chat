@@ -527,7 +527,7 @@
 
   /* While choosing, the selection's bar takes the navigation's place (media-library-
      selection@mobile). */
-  .app-shell:has(.library.selecting) app-bottom-nav {
+  :host-context([data-choosing]) app-bottom-nav {
     display: none;
   }
 

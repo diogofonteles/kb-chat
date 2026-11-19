@@ -72,7 +72,8 @@ export type RowAction =
     '[class.selected]': 'selected()',
     '[class.failed]': "item().status === 'failed'",
     '[class.playing]': 'playing() && !choosing()',
-    '[class.choosing]': 'choosing()',
+    // A ready row has its 🔖 under the pointer (a class, not :has(), over 2 000 rows: NFR-2).
+    '[class.ready]': 'ready()',
     // Its ⋯ open: the row stays as under the pointer (media-library-row-menu).
     '[class.menu-open]': 'menuOpen()',
     '[class.has-tracks]': 'tracksLabel() !== ""',
@@ -99,7 +100,10 @@ export class LibraryRow {
    * (media-library-row-menu@mobile) — and the ⋯ says "Compartilhar".
    */
   readonly phone = input(false);
-  /** A selection is on: the one playing is drawn as the others (media-library-selection). */
+  /**
+   * The one playing while a selection is on: drawn as the others (media-library-selection).
+   * Set on that row alone: a class on all 2 000 rows doubled a selection's latency (NFR-2).
+   */
   readonly choosing = input(false);
   /**
    * During a selection on a phone, "Selecionar todas as N" (the table's box has no place

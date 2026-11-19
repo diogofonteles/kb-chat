@@ -1,4 +1,4 @@
-import { Location } from '@angular/common';
+import { DOCUMENT, Location } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -10,6 +10,7 @@ import {
   type TemplateRef,
   afterNextRender,
   computed,
+  effect,
   inject,
   linkedSignal,
   signal,
@@ -621,6 +622,17 @@ export class LibraryPage {
     computation: () => new Set<string>(),
   });
   protected readonly selecting = computed(() => this.selected().size > 0);
+
+  /**
+   * `data-choosing` on the page's root while a selection is on: the shell hides the phone's
+   * navigation for the selection's bar (media-library-selection@mobile) without a `:has()`
+   * over the 2 000 rows (NFR-2).
+   */
+  private markChoosing(): void {
+    const root = inject(DOCUMENT).documentElement;
+    effect(() => root.toggleAttribute('data-choosing', this.selecting()));
+    this.destroyRef.onDestroy(() => root.removeAttribute('data-choosing'));
+  }
   protected readonly selectable = computed(() =>
     this.items().filter((item) => item.status === 'ready'),
   );
@@ -736,6 +748,7 @@ export class LibraryPage {
 
   constructor() {
     this.followCollection();
+    this.markChoosing();
     inject(PageHeader).own(
       computed(() => ({
         title: $localize`:@@library.title:Biblioteca`,
