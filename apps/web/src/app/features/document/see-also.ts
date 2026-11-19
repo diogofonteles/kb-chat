@@ -41,8 +41,8 @@ const GROUP_TITLES: Record<SeeAlsoGroupName, string> = {
 
 interface ItemView extends DocumentRef {
   readonly facets: string;
-  /** A phone's subject shelf row (cmRow): "Outros autores · Aula ou palestra". */
-  readonly byline: string;
+  /** A phone's subject shelf row (cmRow): "Outros autores", "· Aula ou palestra". */
+  readonly byline: readonly string[];
   /** A track kb linked (KBC-101 FR-6): it opens the T22 panel, not the document. */
   readonly media?: RelatedDocument['media'];
 }
@@ -71,15 +71,25 @@ const toItem = (
   id: ref.id,
   title: ref.title,
   facets: describeFacets(ref) || (isSubject(ref) ? SUBJECT_FACETS : ''),
-  byline:
-    [
-      ref.authorship ? authors[ref.authorship] : null,
-      ref.genre ? GENRE_LABELS[ref.genre] : null,
-    ]
-      .filter((part): part is string => part !== null)
-      .join(' · ') || describeFacets(ref),
+  byline: bylineOf(ref, authors),
   ...(ref.media && { media: ref.media }),
 });
+
+/** The row's line in its parts: who wrote it, then "· the kind" (cmRow draws them apart). */
+function bylineOf(
+  ref: RelatedDocument,
+  authors: Record<Authorship, string>,
+): readonly string[] {
+  const parts = [
+    ref.authorship ? authors[ref.authorship] : null,
+    ref.genre ? GENRE_LABELS[ref.genre] : null,
+  ].filter((part): part is string => part !== null);
+  if (parts.length === 0) {
+    const facets = describeFacets(ref);
+    return facets ? [facets] : [];
+  }
+  return parts.map((part, index) => (index === 0 ? part : `· ${part}`));
+}
 
 /**
  * "Veja também" in the document panel (screens.md T3, KBC-003 BR-1/BR-3); on a concept's

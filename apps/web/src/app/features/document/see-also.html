@@ -104,10 +104,12 @@
                         >{{ ref.facets }}</span
                       >
                     }
-                    @if (variant() === 'shelf' && ref.byline) {
-                      <span class="ref-facets ref-byline">{{
-                        ref.byline
-                      }}</span>
+                    @if (variant() === 'shelf' && ref.byline.length > 0) {
+                      <span class="ref-facets ref-byline">
+                        @for (part of ref.byline; track $index) {
+                          <span>{{ part }}</span>
+                        }
+                      </span>
                     }
                   </span>
                 </button>

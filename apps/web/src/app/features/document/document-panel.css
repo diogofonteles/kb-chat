@@ -152,6 +152,11 @@ h2:focus-visible {
   font-size: var(--text-meta);
 }
 
+/* actionBar's ▴ ▾: white, as the words beside them. */
+.occurrences [uiIconButton] {
+  color: var(--color-text);
+}
+
 .counter {
   /* "1 de 2 ocorrências": one line of words (actionBar). */
   display: inline-block;
@@ -272,13 +277,14 @@ h2:focus-visible {
   background: var(--color-surface);
 }
 
-/* pSection: the title at 15/700. */
+/* pSection: the title at 15/700 on its 18 line. */
 .about-section h4,
 .about-section ::ng-deep h3 {
   margin: 0;
   font-family: inherit;
   font-size: 0.9375rem;
   font-weight: 700;
+  line-height: 1.125rem;
 }
 
 /* docRight's person: the initials on a neutral round (the main author's on the accent). */
@@ -429,6 +435,11 @@ h2:focus-visible {
   :host(.failed-doc) .head {
     background: var(--color-bg) !important;
   }
+
+  /* docMain error: the empty state in the middle of the panel (the head holds nothing then). */
+  :host(.page-mode.failed-doc) .head {
+    display: none;
+  }
 }
 
 @keyframes pulse {
@@ -525,6 +536,40 @@ h2:focus-visible {
 :host(.page-mode) .head,
 :host(.full) .head {
   background: transparent;
+}
+
+/* docMain: the cover 32 under the panel's top, the tools 32 under the cover. */
+:host(.page-mode:not(.subject)) .head {
+  padding-top: 2rem;
+}
+
+@media (min-width: 1024px) {
+  :host(.page-mode) .actions {
+    margin-top: 0.75rem;
+  }
+}
+
+/* pageSubject: "‹ Voltar" (16 and its word 6 after it) on the page's edge 20 under the panel's
+   top, the cover 12 under it; "Exemplos" 16 under the tools. */
+@media (min-width: 1024px) {
+  :host(.page-mode.subject) .head {
+    gap: var(--space-3);
+    padding-top: var(--space-2);
+  }
+
+  :host(.page-mode.subject) .top-row .nav {
+    gap: 0.375rem;
+    min-height: 2rem;
+    padding: 0;
+  }
+
+  :host(.page-mode.subject) .actions {
+    padding-bottom: var(--space-4);
+  }
+
+  :host(.page-mode.subject) .page {
+    padding-top: 0;
+  }
 }
 
 /* The page's tools lie on its head (actionBar), ✕ last; once the text scrolls under them
@@ -815,6 +860,63 @@ h2:focus-visible {
     justify-content: center;
     border-radius: var(--radius-pill);
   }
+
+  /* cmDoc's ✦ of 22 in its 52 round. */
+  :host(:not(.in-sheet):not(.source-mode)) .ask-ai ::ng-deep ui-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* cmDoc: the hero's row 56 under the screen's top (✕ 36 there, its 44 target centred on it),
+     the cover 16 under it; the tools 40 rounds, 18 apart. */
+  :host(:not(.in-sheet):not(.source-mode)) .head {
+    padding-top: 3.5rem;
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .top-row {
+    margin-block: -0.25rem;
+  }
+
+  /* the title 20 under the cover, "Outros autores" 8 under it and the facets 8 under that */
+  :host(:not(.subject):not(.in-sheet):not(.source-mode)) .titles {
+    margin-top: 0.3125rem;
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .byline,
+  :host(:not(.subject):not(.in-sheet):not(.source-mode)) .kicker {
+    line-height: 1rem;
+  }
+
+  /* the tools' row 12 under the facets (the ✦ round's top) */
+  :host(:not(.subject):not(.in-sheet):not(.source-mode)) .actions {
+    padding-top: 0.1875rem;
+  }
+
+  /* the subject's ‹ of 20 in its 36 round */
+  :host(.subject:not(.in-sheet):not(.source-mode))
+    .top-row
+    .nav
+    ::ng-deep
+    ui-icon
+    svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  :host(:not(.in-sheet):not(.source-mode)) .actions {
+    gap: 1.125rem;
+  }
+
+  :host(:not(.in-sheet):not(.source-mode))
+    .actions
+    > button:not(.ask-ai):not([uiIconButton]) {
+    width: 2.5rem;
+    min-width: 2.5rem;
+    height: 2.5rem;
+    min-height: 2.5rem;
+    padding: 0;
+    justify-content: center;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -931,6 +1033,7 @@ h2:focus-visible {
     color: var(--color-text-muted);
     font-size: var(--text-sm);
     font-weight: 400;
+    line-height: 1.0625rem;
   }
 }
 
@@ -972,8 +1075,9 @@ h2:focus-visible {
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  min-height: var(--target);
-  padding: var(--space-1) 0;
+  /* miniItem: 40 tall, its cover's height */
+  min-height: 2.5rem;
+  padding: 0;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -1037,9 +1141,15 @@ h2:focus-visible {
     display: none;
   }
 
-  /* cmDoc error: the empty state under ✕, from the top (not centred in the page). */
+  /* cmDoc error: the empty state under ✕, from the top (not centred in the page), its title
+     18 on a 22 line (emptyM). */
   :host(:not(.in-sheet)) .failed {
     place-items: start center;
-    padding-top: 3rem;
+    padding-top: 1.5rem;
+  }
+
+  :host(:not(.in-sheet)) .failed ::ng-deep .ui-empty__title {
+    font-size: 1.125rem;
+    line-height: 1.375rem;
   }
 }

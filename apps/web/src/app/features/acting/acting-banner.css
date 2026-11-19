@@ -63,10 +63,12 @@ button:focus-visible {
 }
 
 @media (max-width: 599px) {
+  /* cmActing: the band 52 from the top, over the page's own top room (the page under it keeps
+     its place: the band takes the 48 it took at the top). */
   .band {
     flex-wrap: nowrap;
     min-height: 2.5rem;
-    margin: var(--space-2) var(--space-2) 0;
+    margin: 3.25rem var(--space-2) -2.75rem;
     padding: 0 var(--space-3);
   }
 

@@ -150,13 +150,16 @@ textarea:focus-visible {
 }
 
 /* Figma draws the empty box with the button lit, with or without a collection (the hint says
-   why it does not send yet), and dims it only while an answer is on its way. */
+   why it does not send yet), and dims it only while an answer is on its way (desktop; the
+   phone's round button stays lit). */
 .send:disabled {
   cursor: not-allowed;
 }
 
-.send.blocked {
-  opacity: 0.4;
+@media (min-width: 1024px) {
+  .send.blocked {
+    opacity: 0.4;
+  }
 }
 
 .send:not(:disabled):hover {
