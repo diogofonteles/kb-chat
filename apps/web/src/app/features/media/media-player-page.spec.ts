@@ -695,7 +695,10 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     expect(
       screen.getByRole('link', { name: 'Palestra completa' }),
     ).toBeTruthy();
-    expect(screen.getByText('· faixa 3 de 12')).toBeTruthy();
+    // One run of words, the recording's name a link inside it (pHeader).
+    expect(
+      harness.routeNativeElement?.querySelector('.part-of')?.textContent,
+    ).toMatch(/Parte de:\s+Palestra completa\s+· faixa 3 de 12/);
     const context = screen.getByRole('link', { name: 'Ouvir no contexto' });
     expect(context.getAttribute('href')).toBe(
       '/midia/22222222-2222-4222-8222-222222222222?t=754',
