@@ -10,6 +10,17 @@
   scroll-padding-bottom: 7rem;
 }
 
+/* A phone's page runs under the foot (mini player and navigation, chat-page.css): what takes
+   the focus stops above all of it (KBC-041 AC-16). */
+@media (max-width: 1023px) {
+  :host {
+    scroll-padding-bottom: max(
+      7rem,
+      calc(var(--shell-foot-h, 0px) + var(--space-4))
+    );
+  }
+}
+
 .library {
   container: library / inline-size;
   display: flex;

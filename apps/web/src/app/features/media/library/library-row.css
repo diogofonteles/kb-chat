@@ -301,7 +301,7 @@ a.main ~ .cells .duration {
 }
 
 /* The phone's words and pills (media-library@mobile) only show in its one line. */
-.phone-byline,
+.phone-duration,
 .phone-words,
 .step-pill {
   display: none;
@@ -704,18 +704,14 @@ app-menu-button {
   }
 
   /* "Irmã Helena Prado · 1:00" in one text; "Aguardando", "Passo 2" in their pills. */
-  .author,
   .duration,
   .desk-words,
   app-preparation-entry {
     display: none;
   }
 
-  .phone-byline {
+  .phone-duration {
     display: inline;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .phone-words,

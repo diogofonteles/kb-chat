@@ -425,11 +425,16 @@ export class Sidebar {
     research: FLAT_KIND_LABELS.research(),
   };
   /**
-   * The wide list (⤢) and the phone Menu draw one list (v2 · Menu lateral aberto): no section
-   * heads to fold (each section keeps its name for screen readers), a conversation's cover
-   * says its kind and its line names its collection.
+   * The wide list (⤢) and the phone Menu draw one list (v2 · Menu lateral aberto): a
+   * conversation's cover says its kind and its line names its collection.
    */
   protected readonly flat = computed(() => this.expanded() || this.mobile());
+  /**
+   * The wide list has no section heads to fold (each section keeps its name for screen
+   * readers; Tipo says the kind). The phone Menu keeps them: D5 (each section with its
+   * title, count and caret) prevails over the frame where they conflict.
+   */
+  protected readonly headless = computed(() => this.expanded());
   /** "Novo acervo" and "Editar acervo" (KBC-048 FR-6): only with "Criar acervos". */
   protected readonly canCreateCollections = computed(() =>
     this.session.can('collection-create'),
@@ -451,7 +456,7 @@ export class Sidebar {
 
   /** Whether a section (or a collection's branch) shows its items. */
   protected isOpen(key: string): boolean {
-    if (this.flat() && key.startsWith('section:')) return true;
+    if (this.headless() && key.startsWith('section:')) return true;
     return this.filtering() || !this.folded().has(key);
   }
 

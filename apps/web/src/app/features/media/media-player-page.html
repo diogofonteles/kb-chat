@@ -429,6 +429,20 @@
     } @else if (current.archived) {
       <div class="notice" role="status">
         <p i18n="@@tracks.removedFromEdit">Faixa removida da edição</p>
+        <!-- A phone's head has no room for it and an archived track has no "Sobre": its way
+             to the recording (KBC-068 FR-4) stays under the notice. -->
+        @if (!desktop() && current.parent; as parent) {
+          <a
+            uiButton="outline"
+            size="sm"
+            class="in-context"
+            [routerLink]="['/midia', parent.id]"
+            [queryParams]="contextParams()"
+          >
+            <ui-icon name="arrowRight" [size]="16" />
+            <span i18n="@@tracks.inContext">Ouvir no contexto</span>
+          </a>
+        }
       </div>
     } @else {
       <div class="not-ready" role="status">

@@ -755,7 +755,7 @@
     let-label="label"
     let-count="count"
   >
-    @if (flat()) {
+    @if (headless()) {
       <h2 class="visually-hidden" [id]="id + '-head'">{{ label }}</h2>
     } @else {
       <h2 class="section-head" [id]="id + '-head'">

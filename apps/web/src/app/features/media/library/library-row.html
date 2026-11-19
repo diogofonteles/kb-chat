@@ -52,12 +52,13 @@
       @if (item().author?.main) {
         <span class="main-mark" aria-hidden="true">✦ </span>
       }
-      {{ authorName() }}</span
-    >
-    <!-- The phone's one line (media-library@mobile): "Irmã Helena Prado · 1:00". -->
-    <span class="phone-byline"
-      >{{ item().author?.main ? '✦ ' : '' }}{{ authorName() }} ·
-      {{ duration() }}</span
+      {{
+        authorName()
+      }}<!-- The phone's one line (media-library@mobile): "Irmã Helena Prado · 1:00", the
+      author's words once (the length joins them on a phone). --><span
+        class="phone-duration"
+        >&ngsp;· {{ duration() }}</span
+      ></span
     >
     <app-media-level-badge [level]="item().level" [shown]="master()" />
   </span>

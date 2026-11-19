@@ -382,10 +382,13 @@
                     >{{ tracksLabelOf(item) }}</ui-pill
                   >
                 }
-                <span class="author">{{ authorOf(item) }}</span>
-                <!-- The phone's one line (media-list@mobile): "Outros autores · 0:16". -->
-                <span class="phone-byline"
-                  >{{ authorOf(item) }} · {{ durationOf(item) || '—' }}</span
+                <!-- The phone's one line (media-list@mobile): "Outros autores · 0:16", the
+                     author's words once (the length joins them on a phone). -->
+                <span class="author"
+                  >{{ authorOf(item)
+                  }}<span class="phone-duration"
+                    >&ngsp;· {{ durationOf(item) || '—' }}</span
+                  ></span
                 >
                 <app-media-level-badge
                   [level]="item.level"

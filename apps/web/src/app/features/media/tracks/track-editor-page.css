@@ -554,7 +554,9 @@
     order: 2;
   }
 
-  .body:not(.tools-open) .voice-names {
+  /* Behind the tools button while editing; once published the voices stay under the
+     subjects, where a name is still corrected (KBC-090: it reaches the published track). */
+  .body:not(.tools-open):not(.finished) .voice-names {
     display: none;
   }
 
@@ -618,9 +620,5 @@
 
   .body.finished {
     padding-bottom: var(--space-2);
-  }
-
-  .body.finished .side {
-    display: none;
   }
 }
