@@ -31,8 +31,18 @@
       <span class="visually-hidden" i18n="@@mediaHit.at"
         >aos {{ spokenClock() }}</span
       >
-      <span class="snippet">
+      <span class="snippet wide">
         @for (part of parts(); track $index) {
+          @if (part.marked) {
+            <mark>{{ part.text }}</mark>
+          } @else {
+            <span>{{ part.text }}</span>
+          }
+        }
+      </span>
+      <span class="snippet-spoken">{{ spokenPassage() }}</span>
+      <span class="snippet narrow" aria-hidden="true">
+        @for (part of shortParts(); track $index) {
           @if (part.marked) {
             <mark>{{ part.text }}</mark>
           } @else {

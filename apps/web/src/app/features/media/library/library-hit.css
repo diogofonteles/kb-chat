@@ -238,3 +238,30 @@ mark {
     display: none;
   }
 }
+
+.snippet.narrow,
+.snippet-spoken {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  /* The line shows the passage's end, with the mark; the whole of it stays for a screen
+     reader, in words. */
+  .snippet.wide {
+    display: none;
+  }
+
+  .snippet.narrow {
+    display: inline;
+  }
+
+  .snippet-spoken {
+    display: inline;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

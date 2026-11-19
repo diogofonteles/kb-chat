@@ -206,7 +206,9 @@ test('AC-1, AC-7: only the tracks that say the words, first under the box, whate
     await expect(strip).toHaveCount(0);
     await answered(page);
     await expect(results(page)).toHaveCount(2);
-    await expect(results(page).first().locator('mark').first()).toBeVisible();
+    await expect(
+      results(page).first().locator('mark:visible').first(),
+    ).toBeVisible();
     await expect(status(page)).toContainText('2 resultados');
   }
 
@@ -428,8 +430,8 @@ test('AC-10: a long passage shows the word and never widens the page', async ({
   await openLibrary(page);
   await box(page).fill(longWord);
   const row = results(page).first();
-  await expect(row.locator('mark')).toHaveText(longWord);
-  await expect(row.locator('mark')).toBeInViewport();
+  await expect(row.locator('mark:visible')).toHaveText(longWord);
+  await expect(row.locator('mark:visible')).toBeInViewport();
   const { scroll, client } = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth,
     client: document.documentElement.clientWidth,
@@ -469,7 +471,9 @@ test('AC-11: by keyboard from the box to the player, and axe finds nothing serio
     page.getByRole('button', { name: 'Limpar busca' }),
   ).toBeFocused();
   const link = results(page).first().getByRole('link');
-  const play = results(page).first().getByRole('button');
+  const play = results(page)
+    .first()
+    .getByRole('button', { name: /^Ouvir o trecho|^Tocar|^Pausar/ });
   for (let press = 0; press < 6; press++) {
     await page.keyboard.press('Tab');
     if (await play.evaluate((el) => el === document.activeElement)) break;

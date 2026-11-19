@@ -846,6 +846,7 @@
     left: var(--space-2);
     z-index: 60;
     width: auto;
+    max-width: none;
     min-height: 3.5rem;
     margin: 0;
     padding: var(--space-1) var(--space-4);
