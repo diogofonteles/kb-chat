@@ -692,3 +692,26 @@ button[type='submit']:disabled {
     padding-right: var(--space-4);
   }
 }
+
+/* At a desktop "Adicionar arquivos" sits at the start of the footer's row, so the drawn
+   blocks and buttons keep their places (media-upload-chosen). */
+@media (min-width: 1024px) {
+  .panel.wide .body > .actions,
+  .panel.wide .body > .add-more {
+    grid-row: 3;
+    grid-column: 1;
+  }
+
+  .panel.wide .body > .actions {
+    align-items: flex-start;
+    align-self: start;
+  }
+
+  .panel.wide .body > .add-more {
+    position: sticky;
+    bottom: calc(var(--space-4) - var(--space-6));
+    z-index: 2;
+    align-self: start;
+    margin-top: var(--space-1);
+  }
+}

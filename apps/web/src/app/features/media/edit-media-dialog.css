@@ -85,3 +85,9 @@
     padding-top: 0;
   }
 }
+
+/* A field's problem under it, 12/14 (media-library-edit-errors). */
+.field .error {
+  font-size: var(--text-xs);
+  line-height: 0.875rem;
+}
