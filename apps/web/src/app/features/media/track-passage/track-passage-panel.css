@@ -549,8 +549,8 @@ h2:focus-visible {
 }
 
 .line.past .text {
-  /* what was heard: the words at half white (#ffffff80), as v2 dims them */
-  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  /* what was heard: muted (v2's #ffffff80 misses 4.5:1 on the light theme, WCAG 1.4.3) */
+  color: var(--color-text-muted);
 }
 
 /* The whole transcript keeps its own scroll: following the audio never moves the panel. */
