@@ -8,7 +8,9 @@
   display: grid;
   gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-4) var(--space-4) var(--space-3);
+  /* The frame's wave is 668 wide in its 732 card (prepare.js onda): 16 at the left, 48 at
+     the right. */
+  padding: var(--space-4) 3rem var(--space-3) var(--space-4);
   border-radius: var(--radius-card);
   background: color-mix(in srgb, var(--color-text) 3%, transparent);
 }
@@ -260,9 +262,14 @@
   font-weight: 600;
 }
 
-.stop:empty {
+/* Silent until a move stops (the live region stays for that): it takes no room. */
+.stop.idle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   min-height: 0;
-  margin-top: calc(-1 * var(--space-2));
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 
 @media (prefers-reduced-motion: no-preference) {

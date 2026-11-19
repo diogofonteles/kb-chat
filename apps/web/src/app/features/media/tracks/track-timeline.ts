@@ -496,9 +496,14 @@ export class TrackTimeline {
     const total = this.durationMs();
     const track = this.selected()?.track;
     if (!track) return { startMs: 0, spanMs: total };
-    const startMs = Math.max(0, track.startMs - MARGIN_MS);
-    const endMs = Math.min(total, track.endMs + MARGIN_MS);
-    return { startMs, spanMs: endMs - startMs };
+    // Never less than the margin on both sides of an instant: a track at the recording's edge
+    // keeps the minute it would show in the middle (v2 · Validar faixas: the whole minute).
+    const spanMs = Math.min(
+      total,
+      Math.max(2 * MARGIN_MS, track.endMs - track.startMs + 2 * MARGIN_MS),
+    );
+    const center = (track.startMs + track.endMs) / 2;
+    return { startMs: this.clampStart(center - spanMs / 2, spanMs), spanMs };
   }
 
   private plainTracks() {

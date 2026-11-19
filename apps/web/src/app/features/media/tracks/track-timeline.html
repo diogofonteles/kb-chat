@@ -112,7 +112,9 @@
     }
   </div>
 </div>
-<p class="stop" aria-live="polite">{{ dragStop() }}</p>
+<p class="stop" [class.idle]="!dragStop()" aria-live="polite">
+  {{ dragStop() }}
+</p>
 @if (visibleWords() === null) {
   <p class="hint" i18n="@@tracks.zoomForWords">
     Aproxime para ver as palavras.

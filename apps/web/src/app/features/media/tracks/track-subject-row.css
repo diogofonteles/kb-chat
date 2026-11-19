@@ -30,6 +30,7 @@
   margin: 0;
   font-size: var(--text-item);
   font-weight: 700;
+  line-height: 1.125rem;
   overflow-wrap: anywhere;
 }
 
@@ -41,6 +42,14 @@
 
 .subjects .hint {
   font-size: var(--text-xs);
+  line-height: 0.875rem;
+}
+
+/* "Resumo" on its 16 px line in the 58 row (finishedMain); its target is 24 tall. */
+@media (min-width: 1024px) {
+  .summary-toggle {
+    min-height: 24px;
+  }
 }
 
 .summary-toggle {
@@ -84,16 +93,12 @@
     color: var(--color-text);
     font-size: var(--text-item);
     font-weight: 700;
-    line-height: 1.3;
+    line-height: 1.125rem;
     white-space: nowrap;
   }
 
   .ordinal::after {
     content: '.';
-  }
-
-  .title {
-    line-height: 1.3;
   }
 
   .add,

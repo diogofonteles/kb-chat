@@ -191,7 +191,7 @@
         </button>
       </div>
     }
-    <p class="status" role="status">
+    <p class="status" role="status" [class.idle]="!cutting() && !finished()">
       @if (cutting()) {
         <ng-container i18n="@@trackEdit.cutting">Recortando…</ng-container>
       } @else if (finished()) {
@@ -202,13 +202,10 @@
       @if (unsaved()) {
         <p class="unsaved">
           <ui-pill tone="warn" i18n="@@trackEdit.unsaved">Não salvo</ui-pill>
-          <button
-            type="button"
-            class="link"
-            (click)="undo()"
-            i18n="@@tracks.undo"
-          >
-            Desfazer
+          <!-- A phone's bar has room for the ↶ alone (KBC-130 AC-5: one step back). -->
+          <button type="button" class="link undo" (click)="undo()">
+            <ui-icon class="undo-icon" name="rewind" [size]="18" />
+            <span class="undo-words" i18n="@@tracks.undo">Desfazer</span>
           </button>
         </p>
       }

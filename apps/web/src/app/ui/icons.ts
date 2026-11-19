@@ -32,6 +32,7 @@ export const ICONS = {
     { t: 'path', fill: true, d: 'M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z' },
   ],
   plus: [{ t: 'path', d: 'M12 5v14M5 12h14' }],
+  minus: [{ t: 'path', d: 'M5 12h14' }],
   more: [
     { t: 'circle', fill: true, cx: '5', cy: '12', r: '1.7' },
     { t: 'circle', fill: true, cx: '12', cy: '12', r: '1.7' },

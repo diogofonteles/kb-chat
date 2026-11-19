@@ -78,7 +78,8 @@
   grid-row: 1;
   grid-template-columns: subgrid;
   align-items: center;
-  min-height: 46px;
+  /* 46 with the row's 1 px border (tkRow h 46). */
+  min-height: 44px;
   margin: 0 calc(-1 * var(--space-3));
   padding: 0 var(--space-3);
   border: 0;
@@ -469,7 +470,8 @@
       'number range more';
     row-gap: 2px;
     min-height: 0;
-    padding-block: var(--space-3);
+    /* 58 with the row's 1 px border (mTkList: 12 around the two lines). */
+    padding-block: 11px;
   }
 
   .number {

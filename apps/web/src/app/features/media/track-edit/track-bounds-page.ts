@@ -17,6 +17,10 @@ import {
 } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
+  CollectionHeading,
+  type HeadingScope,
+} from '@features/chat/collection-heading.js';
+import {
   editWordsSchema,
   mediaSilencesSchema,
   mediaWaveformSchema,
@@ -316,6 +320,13 @@ export class TrackBoundsPage {
 
   constructor() {
     this.audition.followElement(this.auditionElement);
+    // A track's page lights its collection in Sua biblioteca, as its recording's do.
+    inject(CollectionHeading).follow(
+      computed<HeadingScope | null>(() => {
+        const slug = this.current()?.topic;
+        return slug ? { kind: 'topic', slug } : null;
+      }),
+    );
     toObservable(
       computed(
         () => this.current()?.cut === 'running' || this.theirCutRunning(),

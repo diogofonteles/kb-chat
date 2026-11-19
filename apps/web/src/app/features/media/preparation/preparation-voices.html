@@ -15,7 +15,7 @@
         class="mark"
         [class.avatar]="look() !== 'names'"
         aria-hidden="true"
-        >{{ row.initials }}</span
+        >{{ look() === 'names' ? '' : row.initials }}</span
       >
       <p class="line">
         <span class="who">{{ row.who }}</span>

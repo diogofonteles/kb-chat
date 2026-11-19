@@ -55,9 +55,10 @@
   display: none;
 }
 
+/* On the main panel's middle (forbiddenMain: the block centred in the panel). */
 .lone {
   align-self: center;
-  padding-bottom: 6rem;
+  padding-bottom: 4.5rem;
 }
 
 /* ---------- Notices: v2 banners (prepare.js banner) ---------- */
@@ -103,10 +104,17 @@
 
 .banner.problems > p {
   font-weight: 700;
+  line-height: 1.0625rem;
+}
+
+/* The frame's banner (lib.js banner): 17 and 16 px lines 2 apart, the icon on their middle. */
+.banner.problems > ul {
+  line-height: 1rem;
 }
 
 .banner-icon {
   grid-row: 1 / span 2;
+  align-self: center;
   color: var(--color-danger);
 }
 
@@ -228,6 +236,11 @@
 
 /* The tools (prepare.js editTools): "Nova faixa aqui" in white, round tools, the nudges as
    chips and "Propor com IA" at the end. */
+/* A desktop lays the wave and its tools out as the column's own rows. */
+.wave-card {
+  display: contents;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -253,12 +266,6 @@
 
 .tool:disabled {
   opacity: 0.4;
-}
-
-.minus {
-  font-size: 1.125rem;
-  font-weight: 700;
-  line-height: 1;
 }
 
 .divider {
@@ -331,8 +338,10 @@
 @media (max-width: 1023px) {
   .none .guidance {
     display: block;
-    margin-top: var(--space-3);
+    max-width: 18.75rem;
+    margin: var(--space-3) auto 0;
     font-size: var(--text-xs);
+    line-height: 0.875rem;
   }
 }
 
@@ -346,6 +355,7 @@
   margin: 0 0 var(--space-2);
   font-size: var(--text-item);
   font-weight: 700;
+  line-height: 1.125rem;
 }
 
 .phone-only {
@@ -358,19 +368,21 @@
   color: color-mix(in srgb, var(--color-danger) 70%, var(--color-text));
 }
 
+/* The approve bar (prepare.js approveBar): 8 inside the main panel's sides and foot, on the
+   surface with its hairline all round. */
 .foot {
   position: sticky;
-  bottom: 0;
+  bottom: var(--space-2);
   z-index: 2;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2) 14px;
   align-items: center;
-  margin-inline: calc(-1 * var(--space-8));
+  margin: 0 calc(var(--space-2) - var(--space-8)) var(--space-2);
   padding: 0 var(--space-6);
   min-height: 56px;
-  border-top: 1px solid var(--overlay-2);
-  background: var(--color-elevated);
+  border: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+  background: var(--color-surface);
 }
 
 .foot-summary {
@@ -428,6 +440,12 @@
 .summary-actions .ui-btn {
   min-height: 36px;
   gap: var(--space-2);
+  padding: 0 var(--space-6);
+}
+
+/* Nothing of the preparation to add under the banner's words: no gap for it. */
+.summary app-track-preparation:empty {
+  display: none;
 }
 
 .body.finished {
@@ -488,9 +506,21 @@
     display: grid;
   }
 
-  .lone {
+  /* prmEmpty: 56 under the head, its words 320 wide. */
+  .lone,
+  .none.ui-empty {
     align-self: start;
-    padding: var(--space-8) var(--space-6);
+    padding: 3.5rem var(--space-6);
+  }
+
+  /* The page's own 16 already stands at the sides: 24 from the screen in all. */
+  .lone {
+    padding-inline: var(--space-2);
+  }
+
+  .lone .ui-empty__text,
+  .none .ui-empty__text {
+    max-width: 20rem;
   }
 
   .body {
@@ -514,18 +544,21 @@
     --ui-icon-btn-size: var(--target);
   }
 
-  /* The tools sit inside the wave's card on a phone (prepare.js mWave). */
-  app-track-timeline {
-    --wave-h: 72px;
-    padding: 14px var(--space-3) 0;
-    border-radius: var(--radius-card) var(--radius-card) 0 0;
+  /* The tools sit inside the wave's card on a phone (prepare.js mWave): 14 above the wave,
+     10 between them and under the tools. */
+  .wave-card {
+    display: grid;
+    gap: 10px;
+    padding: 14px var(--space-3) 10px;
+    border-radius: var(--radius-card);
+    background: color-mix(in srgb, var(--color-text) 3%, transparent);
   }
 
-  .toolbar {
-    margin-top: -10px;
-    padding: 10px var(--space-3) 10px;
-    border-radius: 0 0 var(--radius-card) var(--radius-card);
-    background: color-mix(in srgb, var(--color-text) 3%, transparent);
+  app-track-timeline {
+    --wave-h: 72px;
+    padding: 0;
+    border-radius: 0;
+    background: none;
   }
 
   .proposals {
@@ -562,7 +595,7 @@
 
   .toolbar:not(.open) .tool:not(.more-tools),
   .toolbar:not(.open) .nudges,
-  .toolbar:not(.open) + .tabs {
+  .wave-card:has(.toolbar:not(.open)) + .tabs {
     display: none;
   }
 
@@ -571,9 +604,11 @@
   }
 
   .foot {
+    bottom: 0;
     margin: auto calc(-1 * var(--space-4)) 0;
     padding: var(--space-3) var(--space-4)
       calc(1.75rem + env(safe-area-inset-bottom, 0px));
+    border: 0;
     border-top: 1px solid var(--overlay-2);
     background: color-mix(in srgb, var(--color-bg) 95%, transparent);
   }
@@ -584,6 +619,15 @@
 
   .foot-count {
     font-size: var(--text-sm);
+  }
+
+  .summary .done-words {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   /* Step 4: the banner's buttons go to the foot bar. */

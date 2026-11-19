@@ -41,14 +41,16 @@
         <span class="length">{{ row.length }}</span>
         <span class="people">
           @if (row.askerLabel) {
-            <span class="person" [attr.data-voice]="row.askerTone">{{
+            <span class="person voice-chip" [attr.data-voice]="row.askerTone">{{
               row.askerLabel
             }}</span>
           }
           @if (row.answererLabel) {
-            <span class="person" [attr.data-voice]="row.answererTone">{{
-              row.answererLabel
-            }}</span>
+            <span
+              class="person voice-chip"
+              [attr.data-voice]="row.answererTone"
+              >{{ row.answererLabel }}</span
+            >
           }
         </span>
         <span class="more-mark" aria-hidden="true"

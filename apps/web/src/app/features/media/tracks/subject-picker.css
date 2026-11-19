@@ -48,7 +48,7 @@ input:focus-visible {
 
 /* "+ Assunto": a chip on the row (KBC-130), wide enough to type once it has the focus. */
 :host(.compact) input {
-  width: 6.5rem;
+  width: 5.5rem;
   min-height: 32px;
   padding: 0 var(--space-3);
   border: 0;

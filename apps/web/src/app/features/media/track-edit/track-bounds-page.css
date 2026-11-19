@@ -39,7 +39,9 @@ h2 {
   gap: 6px;
   align-items: center;
   justify-self: start;
-  min-height: var(--target-desktop);
+  /* A 24 target on the frame's 16 line (boundsMain: the head 28 under it). */
+  min-height: 24px;
+  margin-top: -4px;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
   font-weight: 700;
@@ -76,6 +78,7 @@ h2 {
 
 .spoken {
   margin: 0;
+  line-height: 1rem;
   overflow: hidden;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
@@ -141,14 +144,22 @@ h2 {
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
+  line-height: 1rem;
 }
 
 .status {
   margin: 0;
 }
 
-.status:empty {
-  display: none;
+/* Silent until a cut runs: the live region stays, out of the page's flow (on the first
+   row's cell, so it opens no row of its own). */
+.status.idle {
+  grid-area: 1 / 1;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 
 .line {
@@ -172,6 +183,7 @@ h2 {
 .listens .ui-btn {
   min-height: 36px;
   gap: var(--space-2);
+  padding: 0 var(--space-6);
 }
 
 .line-actions {
@@ -182,8 +194,15 @@ h2 {
   gap: var(--space-2) var(--space-3);
 }
 
+/* 8 above it (boundsMain), the page's gap the only other air (not the dialogs' 16). It
+   stays at the foot of a short window, so a moved bound is saved without looking for it. */
 .save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: 0;
   padding-top: var(--space-2);
+  background: var(--color-bg);
 }
 
 .unsaved {
@@ -246,7 +265,8 @@ h2 {
 
   .v2-head {
     grid-template-columns: auto minmax(0, 1fr);
-    padding-top: 3.25rem;
+    /* The wave's card 24 under the title (bm). */
+    padding: 3.25rem 0 6px;
   }
 
   .v2-head .head-text {
@@ -338,4 +358,41 @@ h2 {
   .save-bar .ui-btn {
     min-height: var(--target);
   }
+
+  /* One line: the pill and ↶ at the start, Cancelar and Salvar at the end (bm bar). */
+  .save-bar > * {
+    flex: none;
+  }
+
+  .save-bar .cancel {
+    padding-inline: var(--space-2);
+  }
+
+  .save-bar .unsaved {
+    gap: var(--space-2);
+  }
+
+  .undo {
+    display: grid;
+    place-items: center;
+    min-width: var(--target);
+    min-height: var(--target);
+  }
+
+  .undo-icon {
+    display: block;
+  }
+
+  .undo-words {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+.undo-icon {
+  display: none;
 }

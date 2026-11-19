@@ -147,8 +147,13 @@ app-speaker-combobox {
   background: var(--color-surface);
 }
 
+:host([data-look='names']) .found {
+  line-height: 0.875rem;
+}
+
+/* voicesNames: each row 4 above and below its 16 px lines, 6 apart like the card's lines. */
 :host([data-look='names']) .voices {
-  gap: 0;
+  gap: 6px;
 }
 
 :host([data-look='names']) .who,
@@ -172,6 +177,7 @@ app-speaker-combobox {
 :host([data-look='names']) .line {
   display: block;
   font-size: var(--text-meta);
+  line-height: 1rem;
 }
 
 :host([data-look='names']) .who {
@@ -194,8 +200,10 @@ app-speaker-combobox {
 }
 
 :host([data-look='names']) .actions .secondary {
-  /* Links in a 30 px line, as voicesNames draws them; 24 px keeps WCAG 2.5.8. */
-  min-height: 24px;
+  /* Links on the row's 16 px line, as voicesNames draws them; the ::after below gives each
+     a 30 px target (WCAG 2.5.8). */
+  min-height: 1rem;
+  line-height: 1rem;
   padding: 0;
   border: 0;
   font-weight: 700;

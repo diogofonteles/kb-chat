@@ -49,7 +49,7 @@ export interface TextSpan {
     }
     .segments {
       display: grid;
-      gap: var(--space-1);
+      gap: var(--space-2);
       margin: 0;
       padding: 0;
       list-style: none;
@@ -59,7 +59,10 @@ export interface TextSpan {
       display: grid;
       grid-template-columns: 32px minmax(0, 1fr);
       gap: 10px;
-      align-items: baseline;
+      align-items: start;
+      /* The passage's words on the card's 16 (transcriptCard); the selected track's mark
+         sits in the card's margin before them. */
+      margin-inline-start: -7px;
       padding-inline: var(--space-1);
       border-left: 3px solid transparent;
       content-visibility: auto;
@@ -74,6 +77,8 @@ export interface TextSpan {
     .time {
       min-width: 32px;
       min-height: 24px;
+      /* A 24 target around the 18 line it starts. */
+      margin-block: -3px;
       padding: 0;
       border: 0;
       background: none;
@@ -86,6 +91,7 @@ export interface TextSpan {
       cursor: pointer;
     }
     .text {
+      display: block;
       font-size: var(--text-meta);
       line-height: 18px;
     }
@@ -93,6 +99,7 @@ export interface TextSpan {
       .time {
         min-width: 44px;
         min-height: 44px;
+        margin-block: 0;
       }
       .segment {
         grid-template-columns: 44px minmax(0, 1fr);

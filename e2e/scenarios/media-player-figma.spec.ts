@@ -484,8 +484,15 @@ test('the track editor and the bounds', async ({ browser }) => {
     await expect(
       page.getByText('Terceira faixa').and(page.locator(':visible')).first(),
     ).toBeAttached();
+    // The phone frame and the problems frame draw no "Rascunho recuperado": it was read and
+    // closed (the desktop frame still shows it).
+    const notice = page
+      .getByRole('button', { name: 'Fechar o aviso' })
+      .and(page.locator(':visible'))
+      .first();
+    if (width === 'phone') await notice.click();
     await shoot(page, 'media-tracks', { width, top: true });
-
+    if (width !== 'phone') await notice.click();
     // Track 3 with no title: "Aprovar" names it and sends nothing.
     const third = page
       .getByRole('list', { name: 'Faixas' })
@@ -509,6 +516,13 @@ test('the track editor and the bounds', async ({ browser }) => {
         .and(page.locator(':visible'))
         .first(),
     ).toBeVisible();
+    // The frame lights the first row, as on arrival (tkRow), the untitled one in red.
+    await page
+      .getByRole('list', { name: 'Faixas' })
+      .getByRole('listitem')
+      .first()
+      .locator('button.head')
+      .click();
     await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
     await shoot(page, 'media-tracks-problems', { width, top: true });
     await context.close();
