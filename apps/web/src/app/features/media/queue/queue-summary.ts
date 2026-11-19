@@ -311,7 +311,7 @@ const SHOWN = 3;
 
     /* The send's bar, then how far, on one line (media-upload-sending). */
     .line:has(.sending) {
-      flex-wrap: nowrap;
+      display: flex;
       align-items: center;
       gap: var(--space-2);
     }
