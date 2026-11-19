@@ -48,7 +48,14 @@ import {
   type Observable,
 } from 'rxjs';
 import { z } from 'zod';
-import { UiCover, UiIcon } from '@ui/index.js';
+import {
+  UiButton,
+  UiChip,
+  UiCover,
+  UiIcon,
+  UiPill,
+  coverGradient,
+} from '@ui/index.js';
 import { MEDIA_POLL_MS } from '../media-polling.js';
 import {
   TrackAudition,
@@ -108,7 +115,15 @@ const timesOf = ({ startMs, endMs }: TrackBoundsRequest): string => {
  */
 @Component({
   selector: 'app-track-bounds-page',
-  imports: [RouterLink, TrackTimeline, UiCover, UiIcon],
+  imports: [
+    RouterLink,
+    TrackTimeline,
+    UiButton,
+    UiChip,
+    UiCover,
+    UiIcon,
+    UiPill,
+  ],
   templateUrl: './track-bounds-page.html',
   styleUrls: [
     './track-edit.css',
@@ -206,9 +221,49 @@ export class TrackBoundsPage {
   );
   protected readonly cursorMs = linkedSignal(() => this.bounds()?.startMs ?? 0);
   protected readonly edge = signal<TrackEdge>('start');
-  protected readonly timesText = computed(() => {
+  /** The page's gradient: the colour of the recording's cover (prepare.js, PR_TINT). */
+  protected readonly tint = computed(() => {
+    const track = this.current();
+    return track ? coverGradient(track.recordingTitle || track.title)[0] : null;
+  });
+  /** "Perguntas e respostas de 2019 · faixa 2 de 3" under the title. */
+  protected readonly subText = computed(() => {
+    const track = this.current();
+    if (!track) return '';
+    const ordinal = track.ordinal;
+    const total = track.tracks.length;
+    const which = $localize`:@@trackEdit.whichTrack:faixa ${ordinal}:ordinal: de ${total}:total:`;
+    return track.recordingTitle ? `${track.recordingTitle} · ${which}` : which;
+  });
+  protected readonly startText = computed(() => {
     const bounds = this.bounds();
-    return bounds ? timesOf(bounds) : '';
+    return bounds ? formatBoundary(bounds.startMs) : '';
+  });
+  protected readonly endText = computed(() => {
+    const bounds = this.bounds();
+    return bounds ? formatBoundary(bounds.endMs) : '';
+  });
+  /** What the track says, on one line under the wave (prepare.js boundsMain). */
+  protected readonly spoken = computed(() => {
+    const bounds = this.bounds();
+    if (!bounds) return '';
+    return this.words()
+      .filter(
+        ([startMs]) => startMs >= bounds.startMs && startMs < bounds.endMs,
+      )
+      .map(([, , text]) => text)
+      .join(' ');
+  });
+  /** The nudge that moved the edge in use away from the track's own, lit (prepare.js). */
+  protected readonly lastNudge = computed((): 1 | -1 | 0 => {
+    const track = this.current();
+    const bounds = this.bounds();
+    if (!track || !bounds) return 0;
+    const delta =
+      this.edge() === 'start'
+        ? bounds.startMs - track.startMs
+        : bounds.endMs - track.endMs;
+    return delta > 0 ? 1 : delta < 0 ? -1 : 0;
   });
   /** The version on screen is old: the person says whose bounds go on first (BR-10). */
   protected readonly conflict = signal<TrackEditView | null>(null);

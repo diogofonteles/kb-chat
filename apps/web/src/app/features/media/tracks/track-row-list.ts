@@ -1,3 +1,4 @@
+import { UiIcon } from '@ui/index.js';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -8,6 +9,7 @@ import {
   inject,
   input,
   output,
+  signal,
   viewChildren,
 } from '@angular/core';
 import { regionHue } from './track-timeline.js';
@@ -94,6 +96,10 @@ export function problemLabel(
   return $localize`:@@tracks.problem.overlapBy:Sobreposta à anterior em ${size}:size:`;
 }
 
+/** The colour of a voice's chip, as on "Nomes das vozes" (1 to 5; none for a name only). */
+const voiceTone = (voice: number | null): number | null =>
+  voice === null ? null : ((voice - 1) % 5) + 1;
+
 export const personValue = (
   voice: number | null,
   speakerId: string | null,
@@ -109,7 +115,7 @@ export const personValue = (
  */
 @Component({
   selector: 'app-track-row-list',
-  imports: [MenuButton, TrackText],
+  imports: [MenuButton, TrackText, UiIcon],
   templateUrl: './track-row-list.html',
   styleUrl: './track-row-list.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -150,6 +156,11 @@ export class TrackRowList {
     viewChildren<ElementRef<HTMLInputElement>>('titleField');
   /** Esc: the blur that follows must not save what was thrown away. */
   private discarding = false;
+  /**
+   * The track whose details are open (type, level, listening, its text): the frame keeps
+   * each row to one line, so they open under it from ⋯ (KBC-130, prepare.js tkRow).
+   */
+  protected readonly detailsId = signal<string | null>(null);
 
   protected readonly titleMax = TRACK_TITLE_MAX;
   protected readonly kinds = TRACK_KINDS.map((kind) => ({
@@ -162,19 +173,22 @@ export class TrackRowList {
     const selectedId = this.selectedId();
     const plain = this.tracks().map(({ track }) => track);
     return this.tracks().map(({ track, ordinal }) => ({
+      ...this.peopleOf(track),
       hue: regionHue(ordinal),
       track,
       ordinal,
       selected: track.id === selectedId,
+      open: track.id === selectedId && this.detailsId() === track.id,
       range: `${formatBoundary(track.startMs)} – ${formatBoundary(track.endMs)}`,
       length: formatDuration(track.endMs - track.startMs),
       title: track.title ?? '',
-      asker: personValue(track.askerVoice, track.askerSpeakerId),
-      answerer: personValue(track.answererVoice, track.answererSpeakerId),
       proposal: track.source === 'ai' && !track.edited,
       levelCode: this.levelCodeOf(track.level),
       levelOutside: this.outsideOf(track.level),
-      actions: track.id === selectedId ? this.actionsOf(track) : [],
+      actions:
+        track.id === selectedId
+          ? this.actionsOf(track, this.detailsId() === track.id, problems)
+          : [],
       warnings: problems
         .filter((problem) => problem.trackId === track.id)
         .map((problem) => problemLabel(problem, plain)),
@@ -184,6 +198,22 @@ export class TrackRowList {
         ) && closeOverlap(plain, track.id) !== null,
     }));
   });
+  /** Who asks and who answers on a row: the stored value, its label and its voice tone. */
+  private peopleOf(track: NumberedTrack['track']) {
+    const people = this.people();
+    const labelOf = (value: string): string =>
+      value ? (people.find((one) => one.value === value)?.label ?? '') : '';
+    const asker = personValue(track.askerVoice, track.askerSpeakerId);
+    const answerer = personValue(track.answererVoice, track.answererSpeakerId);
+    return {
+      asker,
+      answerer,
+      askerLabel: labelOf(asker),
+      answererLabel: labelOf(answerer),
+      askerTone: voiceTone(track.askerVoice),
+      answererTone: voiceTone(track.answererVoice),
+    };
+  }
   protected readonly listenButtons = computed(() =>
     LISTEN_BUTTONS.map(({ kind, shortcut, idle, stop }) => ({
       kind,
@@ -208,7 +238,14 @@ export class TrackRowList {
    * The focus on what stops an approval, in the middle of the list: a focus alone may leave it
    * under the sticky footer, and the list on top is far from the button (KBC-094).
    */
-  reveal(what: 'title' | 'row'): void {
+  reveal(
+    what: 'title' | 'row',
+    trackId: string | null = this.selectedId(),
+  ): void {
+    // A phone keeps the title in the details (prepare.js mTkList): they open to reach it.
+    // The track comes by name: the parent's new selection has not reached the input yet.
+    if (what === 'title' && globalThis.matchMedia?.(PHONE).matches)
+      this.detailsId.set(trackId);
     afterNextRender(
       () => {
         const target =
@@ -324,40 +361,88 @@ export class TrackRowList {
     this.personChange.emit({ id, field, value });
   }
 
-  /** ⋯ (FR-6): dividing only where it fits (BR-4), joining only with a next track. */
-  private actionsOf(track: DraftTrack): readonly MenuOption[] {
+  /**
+   * ⋯ (FR-6): listening, the details, dividing only where it fits (BR-4), joining only with
+   * a next track; the frame has no other place for them (KBC-130).
+   */
+  private actionsOf(
+    track: DraftTrack,
+    open: boolean,
+    problems: readonly TrackProblem[],
+  ): readonly MenuOption[] {
     const plain = this.tracks().map((one) => one.track);
+    const closable =
+      problems.some(
+        (one) => one.trackId === track.id && one.problem === 'overlap',
+      ) && closeOverlap(plain, track.id) !== null;
     return [
-      ...(canSplit(track)
-        ? [
-            {
-              id: 'split',
-              label: $localize`:@@tracks.action.split:Dividir aqui`,
-            },
-          ]
-        : []),
-      ...(nextOf(plain, track.id)
-        ? [
-            {
-              id: 'join',
-              label: $localize`:@@tracks.action.join:Juntar com a próxima`,
-            },
-          ]
-        : []),
+      ...listenOptions(this.playing()),
       {
-        id: 'remove',
-        label: $localize`:@@tracks.action.remove:Apagar`,
-        danger: true,
+        id: 'details',
+        label: open
+          ? $localize`:@@tracks.action.hideDetails:Esconder os detalhes`
+          : $localize`:@@tracks.action.showDetails:Tipo, nível e texto da faixa`,
+        divider: true,
       },
+      ...editOptions(track, plain, closable),
     ];
   }
 
   protected act(action: string, id: string): void {
+    if (action.startsWith('listen-'))
+      this.listen.emit(action.slice('listen-'.length) as ListenKind);
+    if (action === 'details')
+      this.detailsId.update((open) => (open === id ? null : id));
+    if (action === 'close-overlap') this.closeOverlap.emit(id);
     if (action === 'split') this.split.emit(id);
     if (action === 'join') this.join.emit(id);
     if (action === 'remove') this.remove.emit(id);
   }
 }
+
+/** Listening from ⋯: each item stops what it started (KBC-066 FR-5). */
+function listenOptions(playing: ListenKind | null): MenuOption[] {
+  return LISTEN_BUTTONS.map(({ kind, idle, stop }) => ({
+    id: `listen-${kind}`,
+    label:
+      kind === 'track' && playing !== kind
+        ? $localize`:@@tracks.action.listenTrack:Ouvir a faixa`
+        : (playing === kind ? stop() : idle()).replace(/^[▶■] /, ''),
+    icon: playing === kind ? ('pause' as const) : ('play' as const),
+  }));
+}
+
+/** What changes the track from ⋯, the deletion last and apart. */
+function editOptions(
+  track: DraftTrack,
+  plain: readonly DraftTrack[],
+  closable: boolean,
+): MenuOption[] {
+  const option = (id: string, label: string): MenuOption[] => [{ id, label }];
+  return [
+    ...(closable
+      ? option(
+          'close-overlap',
+          $localize`:@@tracks.closeOverlap:Encostar na faixa anterior`,
+        )
+      : []),
+    ...(canSplit(track)
+      ? option('split', $localize`:@@tracks.action.split:Dividir aqui`)
+      : []),
+    ...(nextOf(plain, track.id)
+      ? option('join', $localize`:@@tracks.action.join:Juntar com a próxima`)
+      : []),
+    {
+      id: 'remove',
+      label: $localize`:@@tracks.action.remove:Apagar`,
+      danger: true,
+      divider: true,
+    },
+  ];
+}
+
+/** The layout where each track is a card and its fields wait in the details. */
+const PHONE = '(max-width: 1023px)';
 
 const LISTEN_KEYS: Readonly<Record<string, ListenKind>> = {
   ' ': 'track',

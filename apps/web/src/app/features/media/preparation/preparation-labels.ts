@@ -44,6 +44,22 @@ export const REFUSAL_TEXTS: Record<PlanRefusal, () => string> = {
     $localize`:@@prep.refusal.pastLimit:O áudio passa de 24 h, o limite da estimativa de custo. Para propor faixas com IA, envie menos horas de uma vez.`,
 };
 
+/** The same reasons in a word or two, on the pill of a card that cannot be chosen (v2). */
+export const REFUSAL_PILLS: Record<PlanRefusal, () => string> = {
+  permission: () => $localize`:@@prep.refusalPill.permission:Sem permissão`,
+  dependency: () =>
+    $localize`:@@prep.refusalPill.dependency:Depende de outra opção`,
+  unavailable: () => $localize`:@@prep.refusalPill.unavailable:Indisponível`,
+  'not-connected': () =>
+    $localize`:@@prep.refusalPill.notConnected:IA não conectada`,
+  'run-cap': () => $localize`:@@prep.refusalPill.runCap:Passa do teto`,
+  'monthly-cap': () =>
+    $localize`:@@prep.refusalPill.monthlyCap:Limite atingido`,
+  approved: () => $localize`:@@prep.refusalPill.approved:Já aprovadas`,
+  'no-estimate': () => $localize`:@@prep.refusalPill.noEstimate:Sem estimativa`,
+  'past-limit': () => $localize`:@@prep.refusalPill.pastLimit:Passa de 24 h`,
+};
+
 /** "US$ 0,0016", "US$ 1,20": small values keep the digits that say them. */
 export const usdText = (value: number, locale: string): string =>
   new Intl.NumberFormat(locale, {

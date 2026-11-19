@@ -1,5 +1,6 @@
 import {
   ChangeDetectionStrategy,
+  booleanAttribute,
   Component,
   computed,
   input,
@@ -24,11 +25,42 @@ const SHORT: Record<PreparationStep, () => string> = {
   4: () => $localize`:@@tracks.stepShort4:4/4 Aprovar`,
 };
 
+/** The guided flow's label under the bars on a phone (v2 · Mídia — Preparar, celular). */
+const LABEL: Record<PreparationStep, () => string> = {
+  1: () => $localize`:@@prep.step.label1:Passo 1 de 4 · Enviar e escolher`,
+  2: () => $localize`:@@prep.step.label2:Passo 2 de 4 · Processar`,
+  3: () => $localize`:@@tracks.stepLabel3:Passo 3 de 4 · Validar faixas`,
+  4: () => $localize`:@@tracks.stepLabel4:Passo 4 de 4 · Aprovar`,
+};
+
 /** Step 4 of a finished preparation: nothing there is left to press (KBC-095). */
 const FINISHED = {
   whole: () => $localize`:@@tracks.stepFinished:Passo 4 de 4: Concluído`,
   short: () => $localize`:@@tracks.stepFinishedShort:4/4 Concluído`,
+  label: () => $localize`:@@tracks.stepFinishedLabel:Passo 4 de 4 · Concluído`,
 };
+
+/** Nothing left to prepare: every step is behind. */
+const ALL_DONE = () => $localize`:@@prep.step.allDone:Tudo pronto`;
+
+/** Future steps are not links, and this says why (AC-5); empty once nothing waits. */
+export function stepWhy(step: PreparationStep, processed: boolean): string {
+  if (step === 1)
+    return $localize`:@@prep.step.why1:Os próximos passos abrem depois do envio.`;
+  if (step === 2 && !processed)
+    return $localize`:@@prep.step.why2:O próximo passo fica disponível quando o processamento terminar.`;
+  return '';
+}
+
+const KICKER: Record<PreparationStep, () => string> = {
+  1: () => $localize`:@@prep.step.kicker1:Passo 1 de 4`,
+  2: () => $localize`:@@prep.step.kicker2:Passo 2 de 4`,
+  3: () => $localize`:@@tracks.stepKicker3:Passo 3 de 4`,
+  4: () => $localize`:@@tracks.stepKicker4:Passo 4 de 4`,
+};
+
+/** "Passo 2 de 4", after "Preparar áudio" in the flow's head. */
+export const stepKicker = (step: PreparationStep): string => KICKER[step]();
 
 /** "Passo 2 de 4: Processar", also the page's title. */
 export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
@@ -42,36 +74,38 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
   selector: 'app-preparation-steps',
   imports: [RouterLink],
   template: `
-    <p class="step-text" data-testid="step-text">
-      <span class="wide">{{ whole() }}</span>
-      <span class="narrow">{{ short() }}</span>
-    </p>
-    <button
-      type="button"
-      class="toggle"
-      [attr.aria-expanded]="expanded()"
-      (click)="expanded.set(!expanded())"
-      i18n="@@prep.step.toggle"
-    >
-      Ver os passos
-    </button>
+    @if (!flow()) {
+      <p class="step-text" data-testid="step-text">
+        <span class="wide">{{ whole() }}</span>
+        <span class="narrow">{{ short() }}</span>
+      </p>
+      <button
+        type="button"
+        class="toggle"
+        [attr.aria-expanded]="expanded()"
+        (click)="expanded.set(!expanded())"
+        i18n="@@prep.step.toggle"
+      >
+        Ver os passos
+      </button>
+    }
     <ol
       class="steps"
-      [class.open]="expanded()"
+      [class.open]="expanded() || flow()"
       aria-label="Preparar áudio"
       i18n-aria-label="@@tracks.flow"
     >
       <li
-        [class.done]="step() > 1"
-        [attr.aria-current]="step() === 1 ? 'step' : null"
+        [class.done]="step() > 1 || allDone()"
+        [attr.aria-current]="step() === 1 && !allDone() ? 'step' : null"
       >
         <span i18n="@@prep.step.name1">1 Enviar e escolher</span>
-        @if (step() > 1) {
+        @if (step() > 1 || allDone()) {
           <span class="check">✓</span>
         }
       </li>
       <li
-        [class.done]="step() > 2"
+        [class.done]="step() > 2 || allDone()"
         [attr.aria-current]="step() === 2 ? 'step' : null"
       >
         @if (step() > 2 && mediaId()) {
@@ -81,12 +115,12 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
         } @else {
           <span i18n="@@prep.step.name2">2 Processar</span>
         }
-        @if (step() > 2) {
+        @if (step() > 2 || allDone()) {
           <span class="check">✓</span>
         }
       </li>
       <li
-        [class.done]="step() > 3"
+        [class.done]="step() > 3 || allDone()"
         [class.skipped]="skipped()"
         [attr.aria-current]="step() === 3 && !skipped() ? 'step' : null"
       >
@@ -99,13 +133,16 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
           <span class="check">✓</span>
         } @else {
           <span i18n="@@tracks.step3">3 Validar faixas</span>
+          @if (allDone()) {
+            <span class="check">✓</span>
+          }
         }
       </li>
       <li
-        [class.done]="finished()"
+        [class.done]="finished() || allDone()"
         [attr.aria-current]="step() === 4 ? 'step' : null"
       >
-        @if (finished()) {
+        @if (finished() || allDone()) {
           <span i18n="@@tracks.step4Finished">4 Concluído</span>
           <span class="check">✓</span>
         } @else if (skipped()) {
@@ -115,12 +152,15 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
         }
       </li>
     </ol>
-    @if (why(); as reason) {
+    @if (flow()) {
+      <p class="step-text label" data-testid="step-text">{{ label() }}</p>
+    } @else if (why(); as reason) {
       <p class="why">{{ reason }}</p>
     }
   `,
   styleUrl: './preparation-steps.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.flow]': 'flow()' },
 })
 export class PreparationSteps {
   readonly step = input.required<PreparationStep>();
@@ -132,6 +172,13 @@ export class PreparationSteps {
   readonly finished = input(false);
   /** Empty on the upload: nothing to go back to yet. */
   readonly mediaId = input('');
+  /**
+   * The guided flow's pages (KBC-130): the names under the bars on a desktop, the step in
+   * words under them on a phone; the page says why the next steps are closed.
+   */
+  readonly flow = input(false, { transform: booleanAttribute });
+  /** Nothing left to prepare: every bar is green ("Tudo pronto"). */
+  readonly allDone = input(false);
 
   protected readonly expanded = signal(false);
   protected readonly whole = computed(() =>
@@ -140,6 +187,10 @@ export class PreparationSteps {
   protected readonly short = computed(() =>
     this.finished() ? FINISHED.short() : SHORT[this.step()](),
   );
+  protected readonly label = computed(() => {
+    if (this.allDone()) return ALL_DONE();
+    return this.finished() ? FINISHED.label() : LABEL[this.step()]();
+  });
   protected readonly processLink = computed(() =>
     preparationPagePath(this.mediaId()),
   );
@@ -147,12 +198,7 @@ export class PreparationSteps {
     editPagePath(this.mediaId()),
   );
   /** Future steps are not links, and this says why (AC-5). */
-  protected readonly why = computed(() => {
-    const step = this.step();
-    if (step === 1)
-      return $localize`:@@prep.step.why1:Os próximos passos abrem depois do envio.`;
-    if (step === 2 && !this.processed())
-      return $localize`:@@prep.step.why2:O próximo passo fica disponível quando o processamento terminar.`;
-    return '';
-  });
+  protected readonly why = computed(() =>
+    stepWhy(this.step(), this.processed()),
+  );
 }

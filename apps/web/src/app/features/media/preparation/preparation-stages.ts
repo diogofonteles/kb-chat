@@ -1,4 +1,4 @@
-import { UiIcon } from '@ui/index.js';
+import { UiButton, UiIcon, UiPill } from '@ui/index.js';
 import { DatePipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
@@ -38,7 +38,7 @@ interface StageLine {
  */
 @Component({
   selector: 'app-preparation-stage-list',
-  imports: [DatePipe, UiIcon],
+  imports: [DatePipe, UiButton, UiIcon, UiPill],
   templateUrl: './preparation-stages.html',
   styleUrls: ['./preparation-buttons.css', './preparation-stages.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -61,6 +61,19 @@ export class PreparationStageList {
       state: stageStateText(stage, stages[index - 1] ?? null),
     }));
   });
+  /** The failed stages: each gets its card under the list, with the ways on (prepare.js). */
+  protected readonly failures = computed(() =>
+    this.lines().filter(({ stage }) => stage.state === 'failed'),
+  );
+  /**
+   * The AI is proposing the tracks: on a phone only that stage stays in sight, the tracks
+   * that arrive under it (prepare.js, "Faixas chegando (celular)").
+   */
+  protected readonly aiActive = computed(() =>
+    this.preparation().stages.some(
+      ({ stage, state }) => stage === 'tracks' && state === 'running',
+    ),
+  );
   protected readonly waitsForTranscriber = computed(() => {
     const { stages, transcriber } = this.preparation();
     return (

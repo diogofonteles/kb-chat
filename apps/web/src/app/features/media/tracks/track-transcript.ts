@@ -54,10 +54,12 @@ export interface TextSpan {
       padding: 0;
       list-style: none;
     }
+    /* v2 (KBC-130, prepare.js transcriptCard): the time small and bold, 13 px lines. */
     .segment {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      gap: var(--space-2);
+      grid-template-columns: 32px minmax(0, 1fr);
+      gap: 10px;
+      align-items: baseline;
       padding-inline: var(--space-1);
       border-left: 3px solid transparent;
       content-visibility: auto;
@@ -70,19 +72,31 @@ export interface TextSpan {
       background: var(--color-mark);
     }
     .time {
-      min-width: 44px;
-      min-height: 32px;
-      padding: 0 var(--space-1);
+      min-width: 32px;
+      min-height: 24px;
+      padding: 0;
       border: 0;
       background: none;
       color: var(--color-text-muted);
       font: inherit;
-      font-size: var(--text-sm);
+      font-size: var(--text-xs);
+      font-weight: 700;
+      text-align: left;
       font-variant-numeric: tabular-nums;
       cursor: pointer;
     }
     .text {
-      font-family: var(--font-reading);
+      font-size: var(--text-meta);
+      line-height: 18px;
+    }
+    @media (max-width: 1023px) {
+      .time {
+        min-width: 44px;
+        min-height: 44px;
+      }
+      .segment {
+        grid-template-columns: 44px minmax(0, 1fr);
+      }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

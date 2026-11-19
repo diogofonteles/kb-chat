@@ -1,9 +1,19 @@
+<div class="table-head" aria-hidden="true">
+  <span>#</span>
+  <span i18n="@@tracks.col.title">Título</span>
+  <span i18n="@@tracks.col.range">Início – fim</span>
+  <span i18n="@@tracks.col.length">Duração</span>
+  <span i18n="@@tracks.col.people">Quem pergunta · quem responde</span>
+  <span></span>
+</div>
 <ol class="rows" aria-label="Faixas" i18n-aria-label="@@tracks.list">
   @for (row of rows(); track row.track.id) {
     <li
       class="row"
       [class.selected]="row.selected"
       [class.flawed]="row.warnings.length > 0"
+      [class.open]="row.open"
+      [class.editing]="row.selected && !readOnly()"
       [attr.data-hue]="row.hue"
     >
       <button
@@ -17,74 +27,81 @@
       >
         <span class="number">{{ row.ordinal }}</span>
         <span class="name">
-          @if (row.title) {
-            {{ row.title }}
-          } @else {
-            <em i18n="@@tracks.untitled">Sem título</em>
-          }
+          <span class="name-box">
+            @if (row.title) {
+              {{ row.title }}
+            } @else {
+              <em i18n="@@tracks.untitled">Sem título</em>
+            }
+          </span>
         </span>
-        <span class="range">{{ row.range }}</span>
+        <span class="range" [attr.data-length]="row.length">{{
+          row.range
+        }}</span>
         <span class="length">{{ row.length }}</span>
-        <span class="badge" [class.ai]="row.proposal">
-          @if (row.proposal) {
-            <ng-container i18n="@@tracks.badge.ai"
-              >Proposta pela IA</ng-container
+        <span class="people">
+          @if (row.askerLabel) {
+            <span class="person" [attr.data-voice]="row.askerTone">{{
+              row.askerLabel
+            }}</span>
+          }
+          @if (row.answererLabel) {
+            <span class="person" [attr.data-voice]="row.answererTone">{{
+              row.answererLabel
+            }}</span>
+          }
+        </span>
+        <span class="more-mark" aria-hidden="true"
+          ><ui-icon name="more" [size]="18"
+        /></span>
+        <span class="said">
+          <span class="badge" [class.ai]="row.proposal">
+            @if (row.proposal) {
+              <ng-container i18n="@@tracks.badge.ai"
+                >Proposta pela IA</ng-container
+              >
+            } @else {
+              <ng-container i18n="@@tracks.badge.person"
+                >Criada por você</ng-container
+              >
+            }
+          </span>
+          @if (row.levelCode) {
+            <span class="level" i18n="@@tracks.level.badge"
+              >Nível: {{ row.levelCode }}</span
             >
-          } @else {
-            <ng-container i18n="@@tracks.badge.person"
-              >Criada por você</ng-container
+          }
+          @for (warning of row.warnings; track warning) {
+            <span class="warning"
+              ><span aria-hidden="true">⚠ </span>{{ warning }}</span
             >
           }
         </span>
-        @if (row.levelCode) {
-          <span class="level" i18n="@@tracks.level.badge"
-            >Nível: {{ row.levelCode }}</span
-          >
-        }
-        @for (warning of row.warnings; track warning) {
-          <span class="warning"
-            ><span aria-hidden="true">⚠ </span>{{ warning }}</span
-          >
-        }
       </button>
       @if (row.selected && !readOnly()) {
-        <div class="fields">
-          @if (row.closable) {
-            <button
-              type="button"
-              class="action close-overlap"
-              (click)="closeOverlap.emit(row.track.id)"
-              i18n="@@tracks.closeOverlap"
+        <label class="field title inline">
+          <span class="field-name" i18n="@@tracks.field.title">Título</span>
+          <input
+            #titleField
+            type="text"
+            [maxLength]="titleMax"
+            placeholder="Sem título"
+            i18n-placeholder="@@tracks.untitled"
+            [value]="row.title"
+            (keydown)="titleKey($event, row)"
+            (blur)="saveTitle($event, row.track.id, row.title)"
+          />
+        </label>
+        <div class="people-fields">
+          <label class="field person-field">
+            <span class="field-name" i18n="@@tracks.field.asker"
+              >Quem pergunta</span
             >
-              Encostar na faixa anterior
-            </button>
-          }
-          <label class="field title">
-            <span i18n="@@tracks.field.title">Título</span>
-            <input
-              #titleField
-              type="text"
-              [maxLength]="titleMax"
-              [value]="row.title"
-              (keydown)="titleKey($event, row)"
-              (blur)="saveTitle($event, row.track.id, row.title)"
-            />
-          </label>
-          <label class="field">
-            <span i18n="@@tracks.field.kind">Tipo</span>
-            <select (change)="chooseKind($event, row.track.id)">
-              @for (option of kinds; track option.kind) {
-                <option
-                  [value]="option.kind"
-                  [selected]="option.kind === row.track.kind"
-                >
-                  {{ option.label }}
-                </option>
-              }
-            </select>
-          </label>
-          <label class="field">
-            <span i18n="@@tracks.field.asker">Quem pergunta</span>
+            <span
+              class="dot"
+              aria-hidden="true"
+              [attr.data-voice]="row.askerTone"
+            ></span>
             <select (change)="choosePerson($event, row.track.id, 'asker')">
               <option value="" i18n="@@tracks.field.nobody">Ninguém</option>
               @for (person of people(); track person.value) {
@@ -97,8 +114,15 @@
               }
             </select>
           </label>
-          <label class="field">
-            <span i18n="@@tracks.field.answerer">Quem responde</span>
+          <label class="field person-field">
+            <span class="field-name" i18n="@@tracks.field.answerer"
+              >Quem responde</span
+            >
+            <span
+              class="dot"
+              aria-hidden="true"
+              [attr.data-voice]="row.answererTone"
+            ></span>
             <select (change)="choosePerson($event, row.track.id, 'answerer')">
               <option value="" i18n="@@tracks.field.nobody">Ninguém</option>
               @for (person of people(); track person.value) {
@@ -107,6 +131,42 @@
                   [selected]="person.value === row.answerer"
                 >
                   {{ person.label }}
+                </option>
+              }
+            </select>
+          </label>
+        </div>
+        <app-menu-button
+          class="more"
+          label="Mais ações da faixa"
+          i18n-label="@@tracks.more"
+          [options]="row.actions"
+          (chosen)="act($event, row.track.id)"
+        >
+          <ui-icon name="more" [size]="18" />
+        </app-menu-button>
+      }
+      @if (row.open && !readOnly()) {
+        <div class="fields">
+          @if (row.closable) {
+            <button
+              type="button"
+              class="action close-overlap"
+              (click)="closeOverlap.emit(row.track.id)"
+              i18n="@@tracks.closeOverlap"
+            >
+              Encostar na faixa anterior
+            </button>
+          }
+          <label class="field">
+            <span i18n="@@tracks.field.kind">Tipo</span>
+            <select (change)="chooseKind($event, row.track.id)">
+              @for (option of kinds; track option.kind) {
+                <option
+                  [value]="option.kind"
+                  [selected]="option.kind === row.track.kind"
+                >
+                  {{ option.label }}
                 </option>
               }
             </select>
@@ -176,19 +236,10 @@
                 </span>
               </button>
             }
-            <app-menu-button
-              class="more"
-              label="Mais ações da faixa"
-              i18n-label="@@tracks.more"
-              [options]="row.actions"
-              (chosen)="act($event, row.track.id)"
-            >
-              <span aria-hidden="true">⋯</span>
-            </app-menu-button>
           </div>
         </div>
       }
-      @if (row.selected) {
+      @if (row.selected && (row.open || readOnly())) {
         <app-track-text
           class="text"
           [span]="row.track"

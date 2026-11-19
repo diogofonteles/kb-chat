@@ -72,6 +72,7 @@
       [class.media]="onMedia()"
       [class.bare]="onSettings()"
       [class.player-page]="playerPage()"
+      [class.guided]="guidedFlow()"
       [class.empty]="isEmpty() && !onMedia()"
       [class.research]="researching()"
       [attr.inert]="covered() ? '' : null"
@@ -366,16 +367,20 @@
     <div
       #shellFoot
       class="shell-foot"
-      [class.bare]="fullScreenPlayer() || (onSettings() && !audio.shown())"
+      [class.bare]="
+        fullScreenPlayer() || phoneFlow() || (onSettings() && !audio.shown())
+      "
     >
       <app-mini-player
         class="player"
-        [shownElsewhere]="playerInPanel()"
+        [shownElsewhere]="
+          phoneFlow() ? (engineSource()?.id ?? null) : playerInPanel()
+        "
         [desktop]="desktop()"
-        [idle]="audio.collectionHasAudio() && !audio.playing()"
+        [idle]="!phoneFlow() && audio.collectionHasAudio() && !audio.playing()"
         [idleLink]="libraryPath()"
       />
-      @if (!desktop() && !fullScreenPlayer() && !onSettings()) {
+      @if (!desktop() && !fullScreenPlayer() && !onSettings() && !phoneFlow()) {
         <app-bottom-nav
           [tabs]="navTabs()"
           [active]="navActive()"

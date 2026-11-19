@@ -1,30 +1,52 @@
+/* The tracks as a table (KBC-130, prepare.js tkHead / tkRow): number, title in its field,
+   start – end, length, who asks and who answers in chips, ⋯. The selected row is lit and
+   edits in place (its title, its people, its menu); what the frame has no column for
+   (type, level, the listening buttons, the track's text) opens under it from ⋯. */
 :host {
+  --cols: 24px minmax(0, 1fr) 130px 56px 200px 18px;
   display: block;
   min-width: 0;
 }
 
+.table-head {
+  display: grid;
+  grid-template-columns: var(--cols);
+  gap: 14px;
+  align-items: center;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--color-text) 10%, transparent);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
 .rows {
   display: grid;
-  gap: var(--space-1);
+  gap: 14px;
   margin: 0;
-  padding: 0;
+  padding: 14px 0 0;
   list-style: none;
 }
 
-/* v2 rows (KBC-130): 46 high, the number in its region colour, the selected row lit. */
 .row {
   --region: var(--color-voice-1);
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--cols);
+  column-gap: 14px;
+  align-items: center;
+  padding: 0 var(--space-3);
   border: 1px solid transparent;
   border-radius: var(--radius-menu);
-  background: none;
 }
 
 .row[data-hue='1'] {
-  --region: var(--color-warn);
+  --region: var(--color-voice-2);
 }
 
 .row[data-hue='2'] {
-  --region: var(--color-accent);
+  --region: var(--color-voice-3);
 }
 
 .row:hover {
@@ -42,18 +64,23 @@
 }
 
 .row.selected {
-  border-color: var(--overlay-4);
-  background: var(--overlay-2);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+/* A track with a problem keeps its red even while selected (tkRow, bad). */
+.row.flawed.selected {
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
 }
 
 .head {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr) auto auto;
-  gap: var(--space-1) var(--space-2);
+  grid-column: 1 / -1;
+  grid-row: 1;
+  grid-template-columns: subgrid;
   align-items: center;
-  width: 100%;
   min-height: 46px;
-  padding: var(--space-1) var(--space-3);
+  margin: 0 calc(-1 * var(--space-3));
+  padding: 0 var(--space-3);
   border: 0;
   border-radius: inherit;
   background: none;
@@ -63,18 +90,16 @@
   cursor: pointer;
 }
 
-.range,
-.length {
-  color: var(--color-text-muted);
-  font-size: var(--text-meta);
-  font-variant-numeric: tabular-nums;
+.head:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
 }
 
 .number {
   display: grid;
   place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 24px;
+  height: 24px;
   border-radius: var(--radius-pill);
   background: var(--region);
   color: var(--color-bg);
@@ -83,80 +108,289 @@
   font-variant-numeric: tabular-nums;
 }
 
-.name {
+/* The title in its field look (the selected row puts the real field over it). */
+.name-box {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 10px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
   font-size: var(--text-sm);
   font-weight: 500;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.badge,
-.level,
-.warning {
-  grid-column: 2 / -1;
-  font-size: var(--text-xs);
+.flawed .name-box {
+  outline: 1px solid var(--color-danger);
+  color: var(--color-danger);
+}
+
+.name-box em {
+  font-style: normal;
+}
+
+.range,
+.length {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.people {
+  display: flex;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* A voice in a chip with its dot (prepare.js chip with dot). */
+.person {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  max-width: 100%;
+  min-height: 26px;
+  padding: 0 var(--space-3);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  font-size: var(--text-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.person::before {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-text-muted);
+  content: '';
+}
+
+.person[data-voice='1']::before {
+  background: var(--color-voice-1);
+}
+
+.person[data-voice='2']::before {
+  background: var(--color-voice-2);
+}
+
+.person[data-voice='3']::before {
+  background: var(--color-voice-3);
+}
+
+.person[data-voice='4']::before {
+  background: var(--color-voice-4);
+}
+
+.person[data-voice='5']::before {
+  background: var(--color-voice-5);
+}
+
+.more-mark {
+  display: grid;
+  place-items: center;
   color: var(--color-text-muted);
 }
 
-.badge.ai {
-  color: var(--color-text);
-  font-weight: 600;
+.selected .more-mark {
+  visibility: hidden;
 }
 
-.level {
-  color: var(--color-text);
-  font-weight: 600;
+/* Who made it, the level and the warnings are read with the row; the frame shows them by
+   the field's colour and the banner above. */
+.said {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.warning {
-  color: var(--color-danger);
-  font-weight: 600;
+/* ---------- The selected row: its fields in place ---------- */
+.field-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border-top: 1px solid var(--overlay-line);
+.field.title.inline {
+  z-index: 1;
+  grid-column: 2;
+  grid-row: 1;
 }
 
-.close-overlap {
-  grid-column: 1 / -1;
-  justify-self: start;
-}
-
-.field {
-  display: grid;
-  gap: var(--space-1);
-  font-size: var(--text-sm);
-}
-
-.field.title {
-  grid-column: 1 / -1;
-}
-
-.field {
-  min-width: 0;
-}
-
-.field input,
-.field select {
+.field.title.inline input {
   width: 100%;
-  min-width: 0;
-  min-height: 44px;
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid transparent;
-  border-radius: var(--radius-menu);
-  background: var(--overlay-2);
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--color-text) 35%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
   color: var(--color-text);
   font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.flawed .field.title.inline input {
+  border-color: var(--color-danger);
+}
+
+.flawed .field.title.inline input::placeholder {
+  color: var(--color-danger);
+  opacity: 1;
+}
+
+.people-fields {
+  z-index: 1;
+  display: flex;
+  grid-column: 5;
+  grid-row: 1;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Who asks and who answers: a chip with its voice's dot, as on the other rows (tkRow). */
+.person-field {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.person-field .dot {
+  position: absolute;
+  top: 50%;
+  left: var(--space-3);
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-text-muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.person-field .dot[data-voice='1'] {
+  background: var(--color-voice-1);
+}
+
+.person-field .dot[data-voice='2'] {
+  background: var(--color-voice-2);
+}
+
+.person-field .dot[data-voice='3'] {
+  background: var(--color-voice-3);
+}
+
+.person-field .dot[data-voice='4'] {
+  background: var(--color-voice-4);
+}
+
+.person-field .dot[data-voice='5'] {
+  background: var(--color-voice-5);
+}
+
+/* The fields cover the row's own title and chips; those step aside under them. */
+.editing .people,
+.editing .name-box {
+  /* Unseen, still the row button's name ("Segunda pergunta", aria-current). */
+  opacity: 0;
+}
+
+.person-field select {
+  /* As wide as the chosen name, as the other rows' chips (a select sizes to its longest option). */
+  field-sizing: content;
+  width: auto;
+  max-width: 120px;
+  min-height: 26px;
+  padding: 0 var(--space-3) 0 calc(var(--space-3) + 14px);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  appearance: none;
+}
+
+.person-field select:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.more {
+  z-index: 1;
+  grid-column: 6;
+  grid-row: 1;
+  justify-self: center;
+}
+
+.more ::ng-deep .trigger {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 -5px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.more ::ng-deep .trigger:hover {
+  background: var(--overlay-2);
+  color: var(--color-text);
+}
+
+/* Type, level and the listening buttons: one compact line under the selected row. */
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2) 0 var(--space-3);
+}
+
+.field {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.fields .field select {
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-meta);
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-  grid-column: 1 / -1;
+  margin-left: auto;
 }
 
 /* Both labels hold the width, so the buttons beside this one do not move. */
@@ -174,11 +408,11 @@
 }
 
 .action {
-  min-height: 2.25rem;
-  padding: 0 var(--space-4);
-  border: 1px solid var(--overlay-4);
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border: 0;
   border-radius: var(--radius-pill);
-  background: none;
+  background: var(--overlay-3);
   color: inherit;
   font: inherit;
   font-size: var(--text-meta);
@@ -186,22 +420,155 @@
   cursor: pointer;
 }
 
-@media (max-width: 1023px) {
-  .action {
-    min-height: var(--target);
-  }
-}
-
 /* "Texto da faixa" (KBC-092 FR-2): under the fields, or alone while editing is locked. */
 .text {
-  padding: var(--space-3);
+  grid-column: 1 / -1;
+  padding: var(--space-3) 0;
   border-top: 1px solid var(--overlay-line);
 }
 
 /* The server's word on a track's level, at its field (KBC-106 review m6). */
 .field-error {
-  grid-column: 1 / -1;
+  flex-basis: 100%;
   color: var(--color-danger);
   font-size: var(--text-sm);
   font-weight: 600;
+}
+
+/* ---------- A phone (prepare.js mTkList): each track a card ---------- */
+@media (max-width: 1023px) {
+  :host {
+    --cols: 24px minmax(0, 1fr) 18px;
+  }
+
+  .table-head {
+    display: none;
+  }
+
+  .rows {
+    gap: var(--space-2);
+    padding: 0;
+  }
+
+  .row {
+    grid-template-columns: var(--cols);
+    column-gap: 10px;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-card);
+    background: var(--overlay-1);
+  }
+
+  .row.selected {
+    background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  }
+
+  .head {
+    grid-template-columns: subgrid;
+    grid-template-areas:
+      'number name more'
+      'number range more';
+    row-gap: 2px;
+    min-height: 0;
+    padding-block: var(--space-3);
+  }
+
+  .number {
+    grid-area: number;
+  }
+
+  .name {
+    grid-area: name;
+  }
+
+  .name-box {
+    min-height: 0;
+    padding: 0;
+    background: none;
+    line-height: 1.2;
+    font-size: var(--text-item);
+    font-weight: 700;
+  }
+
+  .flawed .name-box {
+    outline: 0;
+  }
+
+  .range {
+    grid-area: range;
+    font-size: var(--text-xs);
+    line-height: 1.2;
+  }
+
+  /* On a card the title is read, not edited, until the details open. */
+  .editing:not(.open) .name-box {
+    opacity: 1;
+  }
+
+  .length {
+    display: none;
+  }
+
+  .range::after {
+    content: ' · ' attr(data-length);
+  }
+
+  .people {
+    display: none;
+  }
+
+  .more-mark {
+    grid-area: more;
+  }
+
+  /* The card stays one title and its times (mTkList): the fields wait in the details. */
+  .row:not(.open) .field.title.inline,
+  .row:not(.open) .people-fields {
+    display: none;
+  }
+
+  .field.title.inline {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .field.title.inline input {
+    min-height: var(--target);
+  }
+
+  .people-fields {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    padding-top: var(--space-2);
+  }
+
+  .person-field select {
+    max-width: none;
+  }
+
+  .person-field select,
+  .fields .field select,
+  .action {
+    min-height: var(--target);
+  }
+
+  .more {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: start;
+    padding-top: var(--space-3);
+  }
+
+  .more ::ng-deep .trigger {
+    width: var(--target);
+    height: var(--target);
+    margin: -10px -13px;
+  }
+
+  .fields {
+    grid-row: 4;
+  }
+
+  .actions {
+    margin-left: 0;
+  }
 }

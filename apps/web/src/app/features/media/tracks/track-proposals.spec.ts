@@ -58,7 +58,7 @@ async function setup(inputs: object = {}) {
 }
 
 const ask = async (rendered: Awaited<ReturnType<typeof setup>>) => {
-  fireEvent.click(screen.getByRole('button', { name: 'Propor faixas com IA' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Propor com IA' }));
   const estimate = rendered.http.expectOne(URL);
   expect(estimate.request.body).toEqual({ dryRun: true });
   return estimate;
@@ -214,9 +214,7 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
     await rendered.fixture.whenStable();
     rendered.http.expectNone(URL);
     expect(screen.queryByText(/O valor mudou/)).toBeNull();
-    expect(
-      screen.getByRole('button', { name: 'Propor faixas com IA' }),
-    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Propor com IA' })).toBeTruthy();
   });
 
   it('takes each answer for its own press: an older one never stands for a newer (PD-03)', async () => {
@@ -244,9 +242,7 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
     second.next({ kind: 'started' });
     second.complete();
     await rendered.fixture.whenStable();
-    expect(
-      screen.getByRole('button', { name: 'Propor faixas com IA' }),
-    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Propor com IA' })).toBeTruthy();
     expect(start).toHaveBeenCalledTimes(2);
   });
 
@@ -265,7 +261,7 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
     await rendered.fixture.whenStable();
     expect(
       screen.getByRole<HTMLButtonElement>('button', {
-        name: 'Propor faixas com IA',
+        name: 'Propor com IA',
       }).disabled,
     ).toBe(false);
   });
@@ -274,7 +270,7 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
     await setup({ blocked: true });
     expect(
       screen.getByRole<HTMLButtonElement>('button', {
-        name: 'Propor faixas com IA',
+        name: 'Propor com IA',
       }).disabled,
     ).toBe(true);
   });

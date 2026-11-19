@@ -105,6 +105,7 @@ function placeWords<T extends { readonly px: number; readonly text: string }>(
   templateUrl: './track-timeline.html',
   styleUrl: './track-timeline.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[attr.data-size]': 'size()' },
 })
 export class TrackTimeline {
   readonly tracks = input.required<readonly NumberedTrack[]>();
@@ -119,6 +120,8 @@ export class TrackTimeline {
   /** What plays now, in the bar. */
   readonly playheadMs = input<number | null>(null);
   readonly readOnly = input(false);
+  /** The wave's height (KBC-130): 64 in the tracks editor, 200 on "/limites". */
+  readonly size = input<'compact' | 'large'>('compact');
 
   readonly selectTrack = output<string>();
   readonly moved = output<HandleMoved>();

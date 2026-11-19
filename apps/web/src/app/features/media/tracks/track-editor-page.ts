@@ -2,7 +2,17 @@ import {
   CollectionHeading,
   type HeadingScope,
 } from '@features/chat/collection-heading.js';
-import { UiButton, UiCover, UiIcon } from '@ui/index.js';
+import {
+  UiButton,
+  UiChip,
+  UiCover,
+  UiIcon,
+  UiIconButton,
+  UiPill,
+  coverGradient,
+} from '@ui/index.js';
+import { TranscriberStatus } from '@features/transcribers/transcriber-status.js';
+import { TranscriberStatusStore } from '@features/transcribers/transcriber-status-store.js';
 import { httpResource } from '@angular/common/http';
 import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import {
@@ -15,7 +25,6 @@ import {
   effect,
   Injector,
   inject,
-  linkedSignal,
   signal,
   viewChild,
 } from '@angular/core';
@@ -214,13 +223,22 @@ function copyableLine(
     PreparationVoices,
     TrackPreparationStatus,
     TrackSubjects,
+    TranscriberStatus,
     UiButton,
+    UiChip,
     UiCover,
     UiIcon,
+    UiIconButton,
+    UiPill,
   ],
   templateUrl: './track-editor-page.html',
   styleUrls: ['../preparation/prep-head.css', './track-editor-page.css'],
-  providers: [TrackDraft, TrackAudition, TrackTextSource],
+  providers: [
+    TrackDraft,
+    TrackAudition,
+    TrackTextSource,
+    TranscriberStatusStore,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown)': 'pageKey($event)' },
 })
@@ -287,10 +305,20 @@ export class TrackEditorPage {
   protected readonly notice = signal('');
   private readonly deletedNotice = signal<DeletedNotice | null>(null);
   protected readonly tab = signal<'tracks' | 'text'>('tracks');
+  /** A phone: the tools beyond "Nova faixa aqui" and the transcript, open (KBC-130). */
+  protected readonly toolsOpen = signal(false);
   private readonly textSpan = signal<TextSpan | null>(null);
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly mediaLink = computed(() => mediaPagePath(this.id()));
+  /** The transcriber's status in the head (KBC-114 AC-16; masters). */
+  protected readonly master = this.session.isMaster;
+  /** The page's gradient: the colour of the recording's cover (prepare.js, PR_TINT). */
+  protected readonly tint = computed(() =>
+    this.title() ? coverGradient(this.title())[0] : null,
+  );
+  /** "Rascunho recuperado…" closed by its ✕ (prepare.js, the info banner of step 3). */
+  protected readonly restoredDismissed = signal(false);
   protected readonly title = computed(() => this.media()?.title ?? '');
   protected readonly topic = computed(() => this.media()?.topic ?? '');
   protected readonly durationMs = computed(() => this.media()?.durationMs ?? 0);
@@ -360,20 +388,6 @@ export class TrackEditorPage {
   protected readonly titlesToReview = computed(
     () => (this.voicesToName()?.nameReviews.length ?? 0) > 0,
   );
-  /**
-   * Opens when something asks for a person, and stays as the person leaves it: closing with
-   * the last answer would drop the focus (WCAG 2.4.3).
-   */
-  protected readonly voicesOpen = linkedSignal<boolean, boolean>({
-    source: () => {
-      const voices = this.voicesToName();
-      return (
-        voices !== null &&
-        (voices.suggestions.length > 0 || voices.nameReviews.length > 0)
-      );
-    },
-    computation: (asks, previous) => asks || (previous?.value ?? false),
-  });
   /** What is on screen goes first: a name may change the proposals' titles. */
   protected readonly saveFirst = (): Observable<unknown> => this.draft.flush();
   /** Nothing can change now: a run writes the draft, or a press runs, or a conflict (R-5). */
@@ -389,8 +403,13 @@ export class TrackEditorPage {
     const notice = this.deletedNotice();
     return notice?.revision === this.draft.revision() ? notice : null;
   });
+  /** Off while the problems a press found are still there (prepare.js approveBar). */
   protected readonly canApprove = computed(
-    () => this.count() > 0 && !this.draft.busy() && !this.draft.running(),
+    () =>
+      this.count() > 0 &&
+      !this.draft.busy() &&
+      !this.draft.running() &&
+      !(this.showProblems() && this.problems().length > 0),
   );
   protected readonly conflicted = computed(() => {
     const phase = this.draft.phase();
@@ -882,6 +901,12 @@ export class TrackEditorPage {
     else this.say(errorMessage(toUiErrorCode(result.error)));
   }
 
+  protected toggleTools(): void {
+    const open = !this.toolsOpen();
+    this.toolsOpen.set(open);
+    if (!open) this.tab.set('tracks');
+  }
+
   /** The list on top, and the focus where the first problem is fixed (FR-8, AC-11). */
   private showProblem(problems: readonly TrackProblem[]): void {
     this.showProblems.set(true);
@@ -890,7 +915,10 @@ export class TrackEditorPage {
     if (!first) return;
     this.chosenId.set(first.trackId);
     this.tab.set('tracks');
-    this.list()?.reveal(first.problem === 'title' ? 'title' : 'row');
+    this.list()?.reveal(
+      first.problem === 'title' ? 'title' : 'row',
+      first.trackId,
+    );
   }
 
   protected reopen(): void {
@@ -948,11 +976,6 @@ export class TrackEditorPage {
 
   protected readonly startProposal = (acceptedUsd: number) =>
     this.draft.propose(acceptedUsd);
-
-  protected voicesToggled(event: Event): void {
-    if (event.target instanceof HTMLDetailsElement)
-      this.voicesOpen.set(event.target.open);
-  }
 
   /** The names, and the titles that may have changed with them. */
   protected voicesNamed(): void {

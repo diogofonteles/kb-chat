@@ -113,3 +113,26 @@ export async function dragHandle(
   });
   await page.mouse.up();
 }
+
+/** A phone keeps the tools, the transcript and the voices behind one button (KBC-130). */
+export async function openPhoneTools(page: Page): Promise<void> {
+  const more = page.getByRole('button', {
+    name: 'Mais ferramentas, transcrição e vozes',
+  });
+  if (!(await more.isVisible())) return;
+  if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
+}
+
+/** An item of the selected track's ⋯ (listening, details, editing: KBC-130). */
+export async function trackMenu(page: Page, item: string): Promise<void> {
+  await page.getByRole('button', { name: 'Mais ações da faixa' }).click();
+  await page.getByRole('menuitem', { name: item }).click();
+}
+
+/** On a phone the selected track's title waits in its details, opened from ⋯ (KBC-130). */
+export async function openPhoneDetails(page: Page): Promise<void> {
+  if ((page.viewportSize()?.width ?? 0) >= 1024) return;
+  await trackMenu(page, 'Tipo, nível e texto da faixa');
+  await expect(page.getByRole('textbox', { name: 'Título' })).toBeVisible();
+}

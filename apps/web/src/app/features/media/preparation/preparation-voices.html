@@ -1,10 +1,27 @@
-<h3 class="title" i18n="@@prep.voices.found">
-  Vozes achadas: {{ preparation().voices.length }}
-</h3>
+@if (look() === 'names') {
+  <h3 class="title" i18n="@@tracks.voiceNames">Nomes das vozes</h3>
+  <p class="found" i18n="@@prep.voices.found">
+    Vozes achadas: {{ preparation().voices.length }}
+  </p>
+} @else {
+  <h3 class="title" i18n="@@prep.voices.found">
+    Vozes achadas: {{ preparation().voices.length }}
+  </h3>
+}
 <ul class="voices">
   @for (row of rows(); track row.voice) {
-    <li>
-      <p class="line">{{ row.line }}</p>
+    <li [style.--voice]="'var(--color-voice-' + row.tone + ')'">
+      <span class="mark" aria-hidden="true">{{ row.initials }}</span>
+      <p class="line">
+        <span class="who">{{ row.who }}</span>
+        <span class="sep"> — </span>
+        <span class="sub"
+          ><span class="long">{{ row.long }}</span
+          ><span class="of-speech" i18n="@@prep.voice.ofSpeech">
+            de fala</span
+          ></span
+        >
+      </p>
       @if (row.suggestion; as suggestion) {
         <p class="seems">
           <span i18n="@@prep.voice.seems"
@@ -62,7 +79,7 @@
           @if (row.refusable) {
             <button
               type="button"
-              class="secondary"
+              class="secondary quiet"
               [attr.aria-label]="refuseLabel(row)"
               [disabled]="saving()"
               (click)="refuse(row)"

@@ -1,4 +1,8 @@
-<section class="page" aria-labelledby="track-bounds-title">
+<section
+  class="page flow"
+  aria-labelledby="track-bounds-title"
+  [style.--flow-tint]="tint()"
+>
   <a class="back" [routerLink]="['/midia', id()]"
     ><ui-icon name="chevLeft" [size]="16" /><span i18n="@@trackEdit.backToTrack"
       >Voltar à faixa</span
@@ -18,13 +22,24 @@
     </div>
   } @else if (current(); as track) {
     <header class="v2-head">
-      <ui-cover class="head-cover" [title]="track.title" [size]="112" />
+      <a
+        class="head-back"
+        [routerLink]="['/midia', id()]"
+        aria-label="Voltar à faixa"
+        i18n-aria-label="@@trackEdit.backToTrack"
+        ><ui-icon name="chevLeft" [size]="26"
+      /></a>
+      <ui-cover
+        class="head-cover"
+        [title]="track.recordingTitle || track.title"
+        [size]="112"
+      />
       <div class="head-text">
         <h2 id="track-bounds-title" class="kicker" i18n="@@trackEdit.bounds">
           Ajustar início e fim
         </h2>
         <p class="heading">{{ track.title }}</p>
-        <p class="sub">{{ track.recordingTitle }}</p>
+        <p class="sub">{{ subText() }}</p>
       </div>
     </header>
     <audio
@@ -38,27 +53,34 @@
         Não consegui tocar este trecho. Tente de novo.
       </p>
     }
-    <app-track-timeline
-      [tracks]="numbered()"
-      [selected]="selected()"
-      [durationMs]="track.recordingDurationMs"
-      [peaks]="peaks()"
-      [peaksPerSecond]="peaksPerSecond()"
-      [words]="words()"
-      [snap]="snap()"
-      [cursorMs]="cursorMs()"
-      [playheadMs]="audition.positionMs()"
-      [readOnly]="track.locked"
-      (selectTrack)="ignoreOthers()"
-      (moved)="moveHandle($event)"
-      (cursorChange)="cursorMs.set($event)"
-      (listen)="listen($event)"
-      (edgeChange)="edge.set($event)"
-    />
-    <!-- The text starts the paragraph: "Início 0:00,0 · Fim 0:15,0", read as one. -->
-    <!-- prettier-ignore -->
-    <p class="times" aria-live="polite" [class.start-moved]="startMoved()" [class.end-moved]="endMoved()">{{ timesText() }}</p>
+    <div class="wave-card">
+      <app-track-timeline
+        size="large"
+        [tracks]="numbered()"
+        [selected]="selected()"
+        [durationMs]="track.recordingDurationMs"
+        [peaks]="peaks()"
+        [peaksPerSecond]="peaksPerSecond()"
+        [words]="words()"
+        [snap]="snap()"
+        [cursorMs]="cursorMs()"
+        [playheadMs]="audition.positionMs()"
+        [readOnly]="track.locked"
+        (selectTrack)="ignoreOthers()"
+        (moved)="moveHandle($event)"
+        (cursorChange)="cursorMs.set($event)"
+        (listen)="listen($event)"
+        (edgeChange)="edge.set($event)"
+      />
+      @if (spoken(); as text) {
+        <p class="spoken">{{ text }}</p>
+      }
+    </div>
     <div class="line">
+      <!-- The text starts the paragraph: "Início 0:00,0 · Fim 0:15,0", read as one. -->
+      <!-- prettier-ignore -->
+      <p class="times" aria-live="polite" [class.start-moved]="startMoved()" [class.end-moved]="endMoved()"><span class="time start"><span class="time-name" i18n="@@trackEdit.start">Início</span>&ngsp;<strong>{{ startText() }}</strong></span><span class="sep">&ngsp;·&ngsp;</span><span class="time end"><span class="time-name" i18n="@@trackEdit.end">Fim</span>&ngsp;<strong>{{ endText() }}</strong></span></p>
+      <span class="divider" aria-hidden="true"></span>
       <span class="note">
         @if (edge() === 'start') {
           <ng-container i18n="@@tracks.adjustStart"
@@ -68,40 +90,45 @@
           <ng-container i18n="@@tracks.adjustEnd">Ajustar o fim:</ng-container>
         }
       </span>
-      <button
-        type="button"
-        class="secondary"
-        aria-label="Menos 0,5 segundo"
-        i18n-aria-label="@@tracks.nudgeBack"
-        (click)="nudge(-1)"
-      >
-        −0,5 s
-      </button>
-      <button
-        type="button"
-        class="secondary"
-        aria-label="Mais 0,5 segundo"
-        i18n-aria-label="@@tracks.nudgeForward"
-        (click)="nudge(1)"
-      >
-        +0,5 s
-      </button>
-      <button
-        type="button"
-        class="secondary"
-        (click)="listen('start')"
-        i18n="@@trackEdit.listenStart"
-      >
-        Ouvir o início
-      </button>
-      <button
-        type="button"
-        class="secondary"
-        (click)="listen('end')"
-        i18n="@@trackEdit.listenEnd"
-      >
-        Ouvir o fim
-      </button>
+      <span class="nudges">
+        <button
+          uiChip
+          type="button"
+          aria-label="Menos 0,5 segundo"
+          i18n-aria-label="@@tracks.nudgeBack"
+          [class.ui-chip--on]="lastNudge() === -1"
+          (click)="nudge(-1)"
+        >
+          −0,5 s
+        </button>
+        <button
+          uiChip
+          type="button"
+          aria-label="Mais 0,5 segundo"
+          i18n-aria-label="@@tracks.nudgeForward"
+          [class.ui-chip--on]="lastNudge() === 1"
+          (click)="nudge(1)"
+        >
+          +0,5 s
+        </button>
+      </span>
+      <span class="listens">
+        <button
+          uiButton="dark"
+          size="sm"
+          type="button"
+          (click)="listen('start')"
+        >
+          <ui-icon name="play" [size]="18" />
+          <ng-container i18n="@@trackEdit.listenStart"
+            >Ouvir o início</ng-container
+          >
+        </button>
+        <button uiButton="dark" size="sm" type="button" (click)="listen('end')">
+          <ui-icon name="play" [size]="18" />
+          <ng-container i18n="@@trackEdit.listenEnd">Ouvir o fim</ng-container>
+        </button>
+      </span>
     </div>
     <p class="note" i18n="@@trackEdit.bounds.note">
       Posições e marcadores acompanham o novo recorte. Quem estiver ouvindo
@@ -174,8 +201,7 @@
     <div class="line-actions save-bar">
       @if (unsaved()) {
         <p class="unsaved">
-          <span i18n="@@trackEdit.unsaved">Não salvo</span>
-          ·
+          <ui-pill tone="warn" i18n="@@trackEdit.unsaved">Não salvo</ui-pill>
           <button
             type="button"
             class="link"
@@ -187,14 +213,16 @@
         </p>
       }
       <a
-        class="secondary"
+        uiButton="ghost"
+        class="cancel"
         [routerLink]="['/midia', id()]"
         i18n="@@trackEdit.cancel"
         >Cancelar</a
       >
       <button
+        uiButton="primary"
         type="button"
-        class="primary"
+        class="save"
         [disabled]="!canSave()"
         (click)="save()"
         i18n="@@trackEdit.bounds.save"

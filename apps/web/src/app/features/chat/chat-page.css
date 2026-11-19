@@ -212,8 +212,14 @@
 }
 
 /* The player page names its collection in its own header (v2 · Mídia — Player). */
-.conversation.player-page {
+.conversation.player-page,
+.conversation.media.guided {
   grid-template-rows: minmax(0, 1fr) auto;
+}
+
+/* The guided flow (KBC-130) brings its own head: the collection header steps aside. */
+.conversation.guided > .topbar {
+  display: none;
 }
 
 .conversation.player-page > .topbar {

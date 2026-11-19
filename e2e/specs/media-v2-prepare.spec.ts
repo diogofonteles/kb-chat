@@ -22,9 +22,10 @@ test('KBC-130 AC-1: on step 2 the stepper marks step 1 done and step 2 current, 
   await page.getByRole('button', { name: 'Preparar', exact: true }).click();
   await expect(page.getByTestId('step-text')).toContainText(/2.*Processar/);
   const steps = page.getByRole('list', { name: 'Preparar áudio' });
-  const isNarrow = (page.viewportSize()?.width ?? 0) < 1024;
-  if (isNarrow)
-    await page.getByRole('button', { name: 'Ver os passos' }).click();
+  // The guided flow keeps the four bars in sight at every width: nothing to open (v2).
+  await expect(page.getByRole('button', { name: 'Ver os passos' })).toHaveCount(
+    0,
+  );
   await expect(steps.getByRole('listitem').nth(0)).toHaveClass(/done/);
   await expect(steps.getByRole('listitem').nth(0)).toContainText(
     '1 Enviar e escolher',
@@ -45,7 +46,8 @@ test('KBC-130 AC-2, AC-4: a track picked on the waveform selects its row, and th
   const owner = await ownerApi();
   const media = await audioWithTracks(owner);
   await page.goto(`/midia/${media.id}/faixas`);
-  const blocks = page.getByTestId('overview-block');
+  // The track's region on the waveform (the frames have no overview strip).
+  const blocks = page.getByTestId('track-detail').locator('[data-track]');
   await expect(blocks).toHaveCount(3);
   await blocks.nth(1).click();
   const rows = page.getByRole('list', { name: 'Faixas' }).getByRole('listitem');

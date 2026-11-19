@@ -1,10 +1,10 @@
 :host {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .count {
-  margin: 0;
+  margin: 0 0 var(--space-1);
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -18,14 +18,26 @@
   list-style: none;
 }
 
+/* A proposed track (prepare.js, proposed): number, title and span on one line, who asks and
+   answers under it, then its status, "Ouvir" and "Ver texto". */
 .tracks li {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr) auto;
-  gap: var(--space-2) var(--space-3);
-  align-items: start;
-  padding: var(--space-3) var(--space-4);
+  gap: var(--space-2);
+  padding: 14px;
   border-radius: var(--radius-card);
   background: var(--overlay-1);
+}
+
+.row,
+.foot {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.foot {
+  gap: var(--space-2);
 }
 
 .tracks li.fresh {
@@ -52,6 +64,7 @@
 .ordinal {
   display: grid;
   place-items: center;
+  flex: none;
   width: 1.5rem;
   height: 1.5rem;
   border-radius: var(--radius-pill);
@@ -63,19 +76,17 @@
 }
 
 .tracks li:nth-child(3n + 2) .ordinal {
-  background: var(--color-warn);
+  background: var(--color-voice-2);
 }
 
 .tracks li:nth-child(3n) .ordinal {
-  background: var(--color-accent);
-}
-
-.body {
-  min-width: 0;
+  background: var(--color-voice-3);
 }
 
 .title {
   display: -webkit-box;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   margin: 0;
   font-size: var(--text-item);
@@ -92,37 +103,107 @@
   font-weight: 400;
 }
 
-.meta {
+.span,
+.who,
+.later,
+.none {
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
   overflow-wrap: anywhere;
 }
 
-.status {
-  color: var(--color-text);
+.span {
+  flex: none;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
 }
 
-.actions {
-  display: grid;
-  gap: var(--space-1);
+.later {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+  overflow-wrap: normal;
+}
+
+.foot .ui-btn {
+  min-height: 30px;
+  font-size: var(--text-xs);
+}
+
+.listen {
+  padding: 0 var(--space-3);
+}
+
+.text-toggle {
+  padding: 0 var(--space-2);
+}
+
+.swap > span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
 }
 
 /* The track's text, under its row (KBC-092). */
 .text {
-  grid-column: 2 / -1;
+  min-width: 0;
 }
 
-/* On a phone the buttons go under the row, side by side, with full targets (MA-01). */
-@media (max-width: 40rem) {
-  .tracks li {
-    grid-template-columns: 2rem minmax(0, 1fr);
+/* The next track on its way: a card of grey bones (prepare.js, skeleton). */
+.arriving {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 14px;
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-text) 2%, transparent);
+}
+
+.bone {
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+.bone.dot {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-2);
+}
+
+.bone.line {
+  width: 220px;
+  max-width: 100%;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--overlay-2);
+}
+
+.bone.wide,
+.bone.mid {
+  grid-column: 1 / -1;
+}
+
+.bone.mid {
+  width: 260px;
+  max-width: 100%;
+}
+
+@media (max-width: 1023px) {
+  .count {
+    font-size: 1.0625rem;
   }
 
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    grid-column: 2 / -1;
+  .tracks li {
+    padding: var(--space-3);
+  }
+
+  :host(.no-bones-on-phone) .arriving {
+    display: none;
   }
 }
 

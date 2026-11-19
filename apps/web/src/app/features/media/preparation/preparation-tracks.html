@@ -5,8 +5,8 @@
   <ul class="tracks" aria-label="Faixas" i18n-aria-label="@@tracks.list">
     @for (line of lines(); track line.track.id) {
       <li [class.fresh]="fresh().has(line.track.id)">
-        <span class="ordinal">{{ line.ordinal }}</span>
-        <div class="body">
+        <div class="row">
+          <span class="ordinal">{{ line.ordinal }}</span>
           <p class="title">
             @if (line.track.title) {
               {{ line.track.title }}
@@ -16,39 +16,47 @@
               >
             }
           </p>
-          <p class="meta">{{ line.span }} · {{ line.length }}</p>
-          @if (line.who) {
-            <p class="meta">{{ line.who }}</p>
-          }
-          <p class="meta">
-            <span class="status">{{ line.status }}</span>
-            ·
-            <span i18n="@@prep.track.later">Você ajusta no próximo passo</span>
-          </p>
+          <p class="span">{{ line.span }} · {{ line.length }}</p>
         </div>
-        <div class="actions">
+        @if (line.who) {
+          <p class="who">{{ line.who }}</p>
+        }
+        <div class="foot">
+          <ui-pill
+            [tone]="line.track.status === 'proposed' ? 'info' : 'muted'"
+            >{{ line.status }}</ui-pill
+          >
+          <span class="later" i18n="@@prep.track.later"
+            >Você ajusta no próximo passo</span
+          >
           <button
+            uiButton="dark"
+            size="sm"
             type="button"
-            class="secondary listen"
+            class="listen"
             [attr.aria-label]="listenLabel(line)"
             (click)="listen(line.track)"
           >
             <span class="swap" aria-hidden="true">
-              <span
-                [class.off]="isPlaying(line.track)"
-                i18n="@@prep.track.listen"
-                >▶ Ouvir</span
+              <span [class.off]="isPlaying(line.track)"
+                ><ui-icon name="play" [size]="16" /><ng-container
+                  i18n="@@prep.track.listenWord"
+                  >Ouvir</ng-container
+                ></span
               >
-              <span
-                [class.off]="!isPlaying(line.track)"
-                i18n="@@prep.track.stop"
-                >■ Parar</span
+              <span [class.off]="!isPlaying(line.track)"
+                ><ui-icon name="pause" [size]="16" /><ng-container
+                  i18n="@@prep.track.stopWord"
+                  >Parar</ng-container
+                ></span
               >
             </span>
           </button>
           <button
+            uiButton="ghost"
+            size="sm"
             type="button"
-            class="secondary"
+            class="text-toggle"
             [attr.aria-label]="textLabel(line)"
             [attr.aria-expanded]="textOpen() === line.track.id"
             [attr.aria-controls]="textId(line.track)"
@@ -79,6 +87,16 @@
       </li>
     }
   </ul>
+}
+@if (arriving()) {
+  <div class="arriving" aria-hidden="true">
+    <span class="bone dot"></span><span class="bone line"></span>
+    <span class="bone wide"></span><span class="bone mid"></span>
+  </div>
+} @else if (none() && lines().length === 0) {
+  <p class="none" i18n="@@prep.tracks.none">
+    Nenhuma faixa proposta: você marca as faixas no próximo passo.
+  </p>
 }
 <span #end class="end"></span>
 @if (unseen() > 0) {

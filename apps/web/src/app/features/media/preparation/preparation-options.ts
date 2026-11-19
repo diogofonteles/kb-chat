@@ -1,7 +1,9 @@
 import { DatePipe } from '@angular/common';
 import { UiIcon } from '@ui/icon.js';
+import { UiPill } from '@ui/pill.js';
 import {
   ChangeDetectionStrategy,
+  booleanAttribute,
   Component,
   LOCALE_ID,
   computed,
@@ -12,6 +14,7 @@ import {
 import { PLAN_ESTIMATE_TOLERANCE, type TrackChoice } from '@kb-chat/contracts';
 import { PlanForm } from './plan-form.js';
 import {
+  REFUSAL_PILLS,
   REFUSAL_TEXTS,
   usdText,
   usdUpText,
@@ -35,11 +38,11 @@ type Refusable = 'speakers' | 'manual' | 'ai' | 'subjects';
  */
 @Component({
   selector: 'app-preparation-options',
-  imports: [DatePipe, UiIcon],
+  imports: [DatePipe, UiIcon, UiPill],
   templateUrl: './preparation-options.html',
   styleUrl: './preparation-options.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.compact]': 'compact()' },
+  host: { '[class.compact]': 'compact()', '[class.flow]': 'flow()' },
 })
 export class PreparationOptions {
   private readonly locale = inject(LOCALE_ID);
@@ -58,6 +61,12 @@ export class PreparationOptions {
    * for one first (v2 · media-upload, -duplicate, -bad-type).
    */
   readonly noFile = input(false);
+  /**
+   * "Preparar áudio" (KBC-130, v2 · Mídia — Preparar): the cards with their round icon, the
+   * chosen one with a check, one that cannot be chosen with its reason in a pill; the page
+   * writes the summary beside its buttons.
+   */
+  readonly flow = input(false, { transform: booleanAttribute });
 
   protected readonly choices = this.form.choices;
   /** The phone's "Dividir em faixas ›" row opened on its three choices. */
@@ -114,6 +123,12 @@ export class PreparationOptions {
     return refusal ? REFUSAL_TEXTS[refusal]() : '';
   }
 
+  /** The reason in a word or two, on the pill of a card that cannot be chosen. */
+  protected refusalPill(id: Refusable): string {
+    const refusal: PlanRefusal | null = this.form.refusalOf(id);
+    return refusal ? REFUSAL_PILLS[refusal]() : '';
+  }
+
   protected isOff(id: Refusable): boolean {
     return this.locked() || this.form.refusalOf(id) !== null;
   }
@@ -143,7 +158,10 @@ export class PreparationOptions {
 }
 
 /** "Depois do envio: transcrever, indicar quem fala…": changes with the choices (UP-01). */
-function summaryOf(form: PlanForm, usd: (value: number) => string): string {
+export function summaryOf(
+  form: PlanForm,
+  usd: (value: number) => string,
+): string {
   const { transcribe, speakers, tracks } = form.choices();
   const asked = [
     transcribe ? $localize`:@@prep.summary.transcribe:transcrever` : '',

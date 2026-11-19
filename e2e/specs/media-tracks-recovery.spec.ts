@@ -7,6 +7,7 @@ import {
   draftTracks,
   expectSaved,
   handle,
+  openPhoneTools,
   trackRow,
 } from './tracks-helpers.js';
 
@@ -401,7 +402,7 @@ test('F-2: "Confirmar e propor" waits for an approval on hold', async ({
   await stubProposals(page, media.id);
   const sent = pressesSent(page, media.id);
   await open(page, media.id);
-  await page.getByRole('button', { name: 'Propor faixas com IA' }).click();
+  await page.getByRole('button', { name: 'Propor com IA' }).click();
   const confirm = page.getByRole('button', { name: 'Confirmar e propor' });
   await expect(confirm).toBeEnabled();
   const release = await holdSaves(page, media.id);
@@ -422,7 +423,7 @@ test('F-2: "Aprovar faixas" waits for a paid run on hold', async ({ page }) => {
   await stubProposals(page, media.id);
   const sent = pressesSent(page, media.id);
   await open(page, media.id);
-  await page.getByRole('button', { name: 'Propor faixas com IA' }).click();
+  await page.getByRole('button', { name: 'Propor com IA' }).click();
   const confirm = page.getByRole('button', { name: 'Confirmar e propor' });
   await expect(confirm).toBeEnabled();
   const release = await holdSaves(page, media.id);
@@ -450,6 +451,7 @@ test('R-4: a tap on a handle moves nothing, on the whole target', async ({
   const y = box.y + 30;
   await page.mouse.click(box.x + 2, y);
   await page.mouse.click(box.x + box.width - 2, y);
+  await openPhoneTools(page);
   await page.getByRole('button', { name: 'Mais 0,5 segundo' }).click();
   await expectSaved(owner, media.id, (tracks) => tracks[0]?.startMs === 20_500);
   await owner.dispose();
