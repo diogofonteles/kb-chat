@@ -1,11 +1,5 @@
-import {
-  Injectable,
-  computed,
-  effect,
-  inject,
-  signal,
-  untracked,
-} from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import type { MediaItem } from '@kb-chat/contracts';
 import { resumeFrom } from '@kb-chat/player-core';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
@@ -13,6 +7,8 @@ import { mediaStreamUrl } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { RestrictedSkipper } from '@core/media/restricted-skipper.js';
 import { ProgressSaver } from '@core/media/progress-saver.js';
+import { SleepTimerService } from '@core/media/sleep-timer.js';
+import { filter } from 'rxjs';
 
 /**
  * The library's ▶ (KBC-051 FR-8): plays a media at once from where the person stopped,
@@ -25,6 +21,7 @@ export class PlayNow {
   /** Skips the parts above the person's level wherever it plays (KBC-106). */
   private readonly restricted = inject(RestrictedSkipper);
   private readonly saver = inject(ProgressSaver);
+  private readonly sleepTimer = inject(SleepTimerService);
   /** "Tocar em seguida" (v2 media-library-row-menu): what plays when the current one ends. */
   private readonly next = signal<readonly MediaItem[]>([]);
   readonly upNext = this.next.asReadonly();
@@ -42,15 +39,26 @@ export class PlayNow {
 
   constructor() {
     // The one playing ended: the first one asked for next starts from where it stopped.
-    effect(() => {
-      if (this.engine.playback().phase !== 'ended') return;
-      untracked(() => {
-        const [first, ...rest] = this.next();
-        if (!first) return;
-        this.next.set(rest);
-        this.play(first);
-      });
-    });
+    toObservable(computed(() => this.engine.playback().phase))
+      .pipe(
+        filter((phase) => phase === 'ended'),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.playQueued());
+  }
+
+  /** "Fechar o player": what was asked for next goes with it (PD-04). */
+  clearQueue(): void {
+    this.next.set([]);
+  }
+
+  /** The next one asked for, unless the person asked to stop at this end (KBC-046). */
+  private playQueued(): void {
+    if (this.sleepTimer.stopsAtEnd()) return;
+    const [first, ...rest] = this.next();
+    if (!first) return;
+    this.next.set(rest);
+    this.play(first);
   }
 
   /** True while this media is the one loaded and playing. */
