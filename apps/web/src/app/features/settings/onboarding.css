@@ -85,8 +85,9 @@
 }
 
 @media (max-width: 1023px) {
+  /* The phone's wizard fills the screen: its head under the status bar's room (48). */
   .head {
-    padding: var(--space-4) var(--space-5) 0;
+    padding: 3rem var(--space-5) 0;
   }
 
   .intro {
@@ -111,5 +112,35 @@
 
   .foot .next {
     flex: 1;
+  }
+}
+
+/* v2 · Assistente (desktop): step 14 on its line, 10 over the bar, the title 10 under it and
+   the lead 10 under that (18 line); the cards 20 under; "Continuar" 44 with 24 at its sides,
+   "Pular" as words 8 from the edge. */
+@media (min-width: 1024px) {
+  .progress {
+    line-height: 0.875rem;
+  }
+
+  .title {
+    margin-top: 0.125rem;
+    line-height: 1.2;
+  }
+
+  .lead {
+    margin-top: 0.125rem;
+    line-height: 1.125rem;
+  }
+
+  .foot .next {
+    min-height: 2.75rem;
+    padding-inline: var(--space-6);
+  }
+
+  .head .skip {
+    min-height: 2rem;
+    margin-right: -0.5rem;
+    padding-inline: 0.5rem;
   }
 }

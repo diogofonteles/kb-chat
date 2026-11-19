@@ -541,3 +541,9 @@ button:disabled {
 .done {
   justify-self: start;
 }
+
+/* The lead 14 on a 20 line (v2 · Transcritores). */
+.lead {
+  font-size: var(--text-sm);
+  line-height: 1.25rem;
+}

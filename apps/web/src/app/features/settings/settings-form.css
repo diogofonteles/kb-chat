@@ -115,10 +115,28 @@ fieldset {
   background: var(--overlay-2);
 }
 
-/* The wizard: large cards two by two, the chosen one's details under the row. */
+/* The wizard: large cards two by two, the chosen one's details under the row; each card as
+   tall as its own words (v2 · Assistente). */
 .providers.grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: var(--space-3);
+}
+
+.providers.grid .card-title {
+  line-height: 1.125rem;
+}
+
+.providers.grid .card-head .ui-pill {
+  line-height: 0.875rem;
+}
+
+.providers.grid .card-hint {
+  line-height: 1rem;
+}
+
+.providers.grid .card-install {
+  line-height: 0.875rem;
 }
 
 .providers.grid .card {

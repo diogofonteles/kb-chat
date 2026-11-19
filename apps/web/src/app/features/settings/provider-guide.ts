@@ -101,16 +101,18 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
       color: var(--color-accent-text);
       overflow-wrap: anywhere;
     }
+    /* Cost, privacy and limits: three cards 10 apart, each as tall as its words. */
     .facts {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-      gap: var(--space-3);
+      align-items: start;
+      gap: 0.625rem;
       margin: 0;
     }
     .fact {
       display: grid;
       align-content: start;
-      gap: var(--space-2);
+      gap: 0.375rem;
       padding: 0.875rem;
       border-radius: var(--radius-card);
       background: var(--overlay-2);
@@ -118,6 +120,7 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
     }
     .fact dt {
       font-weight: 700;
+      line-height: 1rem;
     }
     .fact dd {
       margin: 0;

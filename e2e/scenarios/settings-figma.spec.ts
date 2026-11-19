@@ -532,9 +532,10 @@ test('Mídia: Transcritores, Termos, Groq, Perfis de voz', async ({
       .getByRole('button', { name: 'Adicionar', exact: true })
       .click();
     await expect(settings.getByText('Termos (72)')).toBeVisible();
-    await place(settings.getByText('Termos (72)'), {
-      desktop: 222,
-      phone: 216,
+    // The frames show the list from its 33rd term ("Termo de exemplo número 33") on.
+    await place(settings.locator('.chip-input').nth(32), {
+      desktop: 258,
+      phone: 252,
     });
     await shoot(page, 'settings-terms-over-limit', width);
 

@@ -417,3 +417,11 @@ app-research-message .answer :is(th, td) {
     display: none;
   }
 }
+
+/* Configurações on a phone: a section's lead opens it 16 under its first line, as the frames
+   draw them (94 from the top for a card, 110 for a lead). */
+@media (max-width: 1023px) {
+  app-settings-page .screen .lead:first-child {
+    margin-top: 1rem;
+  }
+}
