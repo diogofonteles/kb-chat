@@ -1,7 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, ownerApi, test } from './fixtures.js';
+import { CSRF, expect, ownerApi, test } from './fixtures.js';
 import type { Page } from '@playwright/test';
-import { audioState, uniqueTag, uploadReady } from './media-helpers.js';
+import {
+  audioState,
+  newListener,
+  uniqueTag,
+  uploadReady,
+} from './media-helpers.js';
 import { desktop } from './shell-helpers.js';
 import { capture, expectInsideViewport } from './v2-media-helpers.js';
 
@@ -42,34 +47,35 @@ test('KBC-129: the editing actions are at the top of ⋯, whole on screen, and "
 });
 
 test('KBC-129 AC-6: "Meus marcadores" and the queue show their v2 states and pass axe', async ({
+  browser,
   page,
+  viewport,
 }, info) => {
-  await page.goto('/midia/marcadores');
+  // A person of this test alone: no one else's bookmarks, so each state is set here.
+  const owner = await ownerApi();
+  const media = await uploadReady(owner, {
+    title: `Marcadores ${uniqueTag()}`,
+    seconds: 3,
+  });
+  await owner.dispose();
+  const { page: listener } = await newListener(browser, { viewport });
+  await listener.goto('/midia/marcadores');
   await expect(
-    page.getByRole('heading', { name: 'Meus marcadores' }),
+    listener.getByRole('heading', { name: 'Meus marcadores' }),
   ).toBeVisible();
-  // The summary shows once: the header's on a desktop, the phone's under the title.
   // The page's own summary: Sua biblioteca's "Lista · N marcadores" is another place.
-  // With none (a fresh database: the owner's bookmarks are other tests'), a phone draws no
-  // count, only the empty state (media-bookmarks-empty@mobile); a desktop says so in its
-  // header (media-bookmarks-empty).
-  const main = page.getByRole('main');
+  const main = listener.getByRole('main');
   const summary = (text: RegExp) =>
-    main.getByText(text).and(page.locator(':visible'));
-  const empty = main.getByText('Seus marcadores aparecem aqui');
-  await expect(summary(/\d+ marcador/).or(empty)).toBeVisible();
-  if (await empty.isVisible()) {
-    if (desktop(page))
-      await expect(summary(/^Nenhum marcador ainda$/)).toBeVisible();
-    else
-      await expect(summary(/\d+ marcador|Nenhum marcador ainda/)).toHaveCount(
-        0,
-      );
-  } else {
-    await expect(summary(/\d+ marcador/)).toBeVisible();
-  }
-  await capture(page, 'bookmarks', info.project.name);
-  const bookmarksAxe = await new AxeBuilder({ page })
+    main.getByText(text).and(listener.locator(':visible'));
+  // With none, a phone draws no count, only the empty state (media-bookmarks-empty@mobile);
+  // a desktop says so in its header (media-bookmarks-empty).
+  await expect(main.getByText('Seus marcadores aparecem aqui')).toBeVisible();
+  if (desktop(listener))
+    await expect(summary(/^Nenhum marcador ainda$/)).toBeVisible();
+  else
+    await expect(summary(/\d+ marcador|Nenhum marcador ainda/)).toHaveCount(0);
+  await capture(listener, 'bookmarks', info.project.name);
+  const bookmarksAxe = await new AxeBuilder({ page: listener })
     .include('.page')
     .analyze();
   expect(
@@ -77,6 +83,17 @@ test('KBC-129 AC-6: "Meus marcadores" and the queue show their v2 states and pas
       ['serious', 'critical'].includes(v.impact ?? ''),
     ),
   ).toEqual([]);
+
+  // One bookmark: the summary counts it, once, at either width.
+  const created = await listener.request.post(
+    `/api/v1/media/${media.id}/bookmarks`,
+    { headers: CSRF, data: { id: crypto.randomUUID(), positionMs: 1_000 } },
+  );
+  expect(created.status(), await created.text()).toBe(201);
+  await listener.reload();
+  await expect(summary(/^1 marcador em 1 áudio$/)).toHaveCount(1);
+  await expect(main.getByText('Seus marcadores aparecem aqui')).toHaveCount(0);
+  await listener.context().close();
 
   await page.goto('/fila');
   await expect(
