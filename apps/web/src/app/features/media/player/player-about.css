@@ -18,6 +18,15 @@
   display: none;
 }
 
+/* Nothing of the preparation to say under "3 faixas aplicadas": no gap for it. */
+.card app-track-preparation:has(.status:empty) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 h3 {
   margin: 0;
   font-size: var(--text-item);

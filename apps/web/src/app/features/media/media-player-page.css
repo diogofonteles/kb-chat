@@ -134,8 +134,11 @@
 }
 
 .pill-why {
+  flex: none;
   margin-left: calc(-1 * var(--space-1));
   color: var(--color-text-muted);
+  /* "desligado desde 10/11/2026 às 11:29" on the pill's line (pageHeader), never a column. */
+  white-space: nowrap;
 }
 
 .note:empty {
@@ -164,6 +167,21 @@
 
 .in-context {
   gap: var(--space-2);
+}
+
+/* "Ouvir no contexto" on the head's 28 line (pageHeader: btn h 28); 24 keeps the target. */
+@media (min-width: 1024px) {
+  .note .in-context {
+    min-height: 28px;
+    padding-inline: var(--space-3);
+    font-size: var(--text-xs);
+  }
+}
+
+/* A track's notes (its about, the moved bookmarks) take no room while they say nothing. */
+.notes > :empty,
+.notes:not(:has(> :not(:empty))) {
+  display: none;
 }
 
 .notes {
@@ -323,17 +341,22 @@
 .waiting-card p,
 .not-ready p,
 .notice p {
-  max-width: 29rem;
+  max-width: 28.75rem;
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-item);
+  /* emptyState: 15 px words on 18 px lines, 460 wide. */
+  line-height: 1.125rem;
 }
 
 .not-ready .status,
-.empty-title {
+.empty-title,
+.notice .empty-title,
+.waiting-card .empty-title {
   color: var(--color-text) !important;
   font-size: 1.5rem !important;
   font-weight: 700;
+  line-height: 1.8125rem;
 }
 
 .empty-icon {
@@ -356,6 +379,13 @@
 
 .edit {
   gap: var(--space-2);
+}
+
+/* "Editar informações" on the head's 36 line (pScreen: btn h 36). */
+@media (min-width: 1024px) {
+  .edit {
+    min-height: 36px;
+  }
 }
 
 .page.waiting .notes {
@@ -404,7 +434,7 @@
     /* Where the mark sits, beside the title (head 96 + 8 + cover + gap). */
     --mark-top: calc(
       6rem + var(--space-2) + min(calc(100vw - 3rem), 342px) + var(--space-6) +
-        2px
+        9px
     );
     padding-bottom: calc(var(--space-8) + var(--shell-mobile-foot, 0px));
   }
@@ -416,7 +446,8 @@
   }
 
   .page.compact {
-    --mark-top: calc(6rem + var(--space-2) + 236px + var(--space-4) + 2px);
+    /* The title 24 under the 236 cover (pMobile compact), the mark 1 under its top. */
+    --mark-top: calc(6rem + var(--space-2) + 236px + var(--space-6) + 1px);
   }
 
   .phone-head {
@@ -646,9 +677,12 @@
     text-align: left;
   }
 
+  /* The card's head row as tall as the transcript card's (its 32 buttons), 12 above. */
   .waiting-card .card-title {
-    display: block;
-    margin: 0 0 var(--space-2);
+    display: flex;
+    align-items: center;
+    min-height: 2rem;
+    margin: 0;
     color: var(--color-on-cover);
     font-size: var(--text-sm);
     font-weight: 700;
@@ -668,6 +702,7 @@
   .waiting-card p:not(.card-title, .empty-title) {
     color: color-mix(in srgb, var(--color-on-cover) 80%, transparent);
     font-size: 0.9375rem;
+    line-height: 1.3125rem;
   }
 
   /* Failed or still on its way (pMobile o.failed): the page's own empty state, no card,
@@ -684,8 +719,15 @@
     justify-items: center;
   }
 
-  .waiting .meta > :not(.by-avatar) {
+  .waiting .meta > :not(.by-avatar),
+  .waiting .facts > :not(.duration) {
     display: inline;
+  }
+
+  /* emptyState on a phone: the 64 circle around a 28 glyph. */
+  .empty-icon ui-icon {
+    width: 1.75rem;
+    height: 1.75rem;
   }
 
   .waiting .meta {
@@ -751,7 +793,12 @@
   }
 
   .page-empty .notice-actions {
-    margin-top: -0.75rem;
+    margin-top: 0;
+  }
+
+  .notice .empty-title {
+    font-size: 1.25rem !important;
+    line-height: 1.5rem;
   }
 
   .waiting .notes .edit,

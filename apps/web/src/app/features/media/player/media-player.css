@@ -261,11 +261,12 @@
 }
 
 /* "FAIXA 1 DE 3" with ‹ › and the segments (player.js trackBar). */
+/* The chips 22 under the rail's buttons (pScreen: the track row, then the views). */
 .track-nav {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding-bottom: var(--space-1);
+  margin-bottom: calc(-1 * var(--space-2));
 }
 
 .track-step {
@@ -299,6 +300,7 @@
   color: var(--color-text-muted);
   font-size: 0.6875rem;
   font-weight: 700;
+  line-height: 0.8125rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -307,6 +309,7 @@
   overflow: hidden;
   font-size: var(--text-item);
   font-weight: 700;
+  line-height: 1.125rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -477,7 +480,8 @@
   .bookmark {
     position: absolute;
     top: var(--mark-top, 27.25rem);
-    right: var(--space-5);
+    /* Its glyph over the transport's right edge (pMobile: 24 from the screen's). */
+    right: var(--space-6);
   }
 
   .bookmark.marked {
@@ -501,9 +505,16 @@
   }
 
   /* pMobile's track bar: right under the second row, 12 above the card. */
+  /* pMobile's track row: its ‹ › 16 from the screen's edges, the words 10 after ‹, 14 px. */
   .track-nav {
-    margin: -0.3125rem 0 -0.5rem;
+    gap: 0.625rem;
+    margin: 0.25rem calc(-1 * var(--space-2)) -0.5rem;
     padding: 0;
+  }
+
+  .track-title {
+    font-size: var(--text-sm);
+    line-height: 1.0625rem;
   }
 
   .track-step {

@@ -101,11 +101,14 @@ export class UiCover {
   readonly from = input<string | null>(null);
   readonly to = input<string | null>(null);
   readonly label = input(true);
-  protected readonly code = computed(() => coverCode(this.title()));
+  /** The code and colours of another title (a track wears its recording's cover). */
+  readonly of = input<string | null>(null);
+  private readonly owner = computed(() => this.of() || this.title());
+  protected readonly code = computed(() => coverCode(this.owner()));
   protected readonly colors = computed((): readonly [string, string] => {
     const from = this.from();
     const to = this.to();
-    return from && to ? [from, to] : coverGradient(this.title());
+    return from && to ? [from, to] : coverGradient(this.owner());
   });
   protected readonly iconSize = computed(() => Math.round(this.size() * 0.42));
   protected readonly showLabel = computed(

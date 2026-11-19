@@ -250,7 +250,8 @@
       >
         <ui-icon name="chevRight" [size]="16" />
       </button>
-      <span class="segments" aria-hidden="true">
+      <!-- The recording drawn as its tracks: one bar, the current one lit (pTrackBar). -->
+      <span class="segments track-bar" aria-hidden="true">
         @for (track of tracks.tracks(); track track.id) {
           <span
             class="segment"

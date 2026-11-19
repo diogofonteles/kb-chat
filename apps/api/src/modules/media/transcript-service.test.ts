@@ -140,3 +140,40 @@ describe('TranscriptService.segmentVoices (KBC-156 BR-4)', () => {
     expect(service.segmentVoices('other')).toBeNull();
   });
 });
+
+describe('the list a track was made with (KBC-040 AC-5)', () => {
+  it("names its recording's list: the track's text was cut from it", () => {
+    const { store } = fakeStore(['recording', 'track']);
+    const service = new TranscriptService({
+      transcripts: {
+        ...store,
+        transcripts: (mediaId) =>
+          mediaId === 'track'
+            ? [{ ...summaryOf('track', 1), termsVersion: 0 }]
+            : [{ ...summaryOf(mediaId, 1), termsVersion: 3 }],
+        termVersion: (version) =>
+          version === 3
+            ? {
+                version: 3,
+                createdAt: '2026-10-28T12:00:00.000Z',
+                authorName: null,
+                termCount: 1,
+              }
+            : null,
+      },
+      media: {
+        get: (_actor, id) => ({
+          archived: false,
+          parent: id === 'track' ? { id: 'recording' } : null,
+        }),
+      },
+    });
+    expect(
+      service.current(ACTOR, 'track', {
+        withVoices: false,
+        withNames: false,
+        withTermList: true,
+      }).termList,
+    ).toEqual({ version: 3, createdAt: '2026-10-28T12:00:00.000Z' });
+  });
+});

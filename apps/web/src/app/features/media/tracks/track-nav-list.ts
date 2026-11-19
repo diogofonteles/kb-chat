@@ -103,17 +103,20 @@ import { MediaLevelBadge } from '../media-level-badge.js';
     }
     /* "Faixas desta gravação" in "Sobre" (pRight): one line each, number 13, title 14,
        the time 12, the one playing in the accent. */
+    /* pRight: the titles 12 apart on their 17 px lines; each row a 29 target around them. */
     :host-context(app-player-about) .title {
-      margin-bottom: var(--space-1);
+      margin-bottom: 0;
+      line-height: 1.125rem;
     }
     :host-context(app-player-about) .rows {
       gap: 0;
+      margin: 6px 0 -6px;
     }
     :host-context(app-player-about) .row {
       grid-template-columns: 0.875rem minmax(0, 1fr) auto;
       gap: 0.625rem;
       align-items: center;
-      min-height: 2rem;
+      min-height: 1.8125rem;
       padding: 0 var(--space-1);
       margin: 0 calc(-1 * var(--space-1));
       width: calc(100% + 2 * var(--space-1));

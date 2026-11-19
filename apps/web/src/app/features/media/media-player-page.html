@@ -94,6 +94,7 @@
       <ui-cover
         class="art"
         [title]="current.title"
+        [of]="current.parent?.title ?? null"
         [size]="208"
         [from]="failedMedia() ? neutralCover[0] : null"
         [to]="failedMedia() ? neutralCover[1] : null"

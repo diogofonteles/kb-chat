@@ -72,8 +72,9 @@ import { parseVoices } from '../voices/voices-panel.js';
         />
         @if (applied(); as text) {
           <p class="applied">
-            <span>{{ text }} ·</span>
-            <a [routerLink]="editLink()" i18n="@@tracks.entry.see"
+            <span>{{ text }} ·</span>&ngsp;<a
+              [routerLink]="editLink()"
+              i18n="@@tracks.entry.see"
               >Ver edição</a
             >
           </p>

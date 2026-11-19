@@ -447,7 +447,10 @@ export class MediaPlayerPage {
   /** The header's tint is the cover's colour (player.js P_TINT), not the collection's. */
   protected readonly pageTint = computed(() => {
     // Not found: the panel keeps the colour of what plays (pScreen o.notFound).
-    const title = this.media()?.title ?? this.engine.source()?.title;
+    // A track wears its recording's cover, and so its colour (player.js: "Parte de").
+    const media = this.media();
+    const title =
+      media?.parent?.title ?? media?.title ?? this.engine.source()?.title;
     if (this.failedMedia()) return NEUTRAL_COVER[0];
     return title ? coverGradient(title)[0] : null;
   });

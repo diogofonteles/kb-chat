@@ -298,7 +298,8 @@ test('other media: low confidence, waiting, failed, not found, a recording and i
         .and(page.locator(':visible'))
         .first(),
     ).toBeVisible();
-    await shoot(page, 'media-player-track', { width, at: 0 });
+    // At 0:00,6: its first passage (from 0,5 s) is the one heard, as the frame lights it.
+    await shoot(page, 'media-player-track', { width, at: 0.6 });
     await context.close();
   }
 });

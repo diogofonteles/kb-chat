@@ -233,7 +233,9 @@ export class TranscriptService {
       revision: this.revisionFor(summary, hidden),
       confidence: summary.confidence,
       segments,
-      ...(options.withTermList ? this.termListOf(summary) : {}),
+      ...(options.withTermList
+        ? this.termListOf(summary, recordingId === mediaId ? null : recordingId)
+        : {}),
     };
     const visible = restrictedIn(
       this.withSpeakers(transcript, summary, { ...options, withVoices }),
@@ -261,8 +263,16 @@ export class TranscriptService {
     return Number.parseInt(digestOf(heard).slice(0, 7), 16);
   }
 
-  private termListOf(summary: TranscriptSummary) {
-    const list = this.deps.transcripts.termVersion(summary.termsVersion);
+  /** The list it was made with; a track's text was cut from its recording's (KBC-040 AC-5). */
+  private termListOf(summary: TranscriptSummary, recordingId: string | null) {
+    const [recording] = recordingId
+      ? this.deps.transcripts.transcripts(recordingId)
+      : [];
+    const list =
+      this.deps.transcripts.termVersion(summary.termsVersion) ??
+      (recording
+        ? this.deps.transcripts.termVersion(recording.termsVersion)
+        : null);
     return list
       ? { termList: { version: list.version, createdAt: list.createdAt } }
       : {};
