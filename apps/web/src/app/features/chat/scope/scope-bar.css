@@ -40,7 +40,7 @@
 
 .collection-name {
   overflow: hidden;
-  max-width: 14rem;
+  max-width: 20rem;
   text-overflow: ellipsis;
 }
 

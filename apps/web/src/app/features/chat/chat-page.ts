@@ -305,12 +305,8 @@ export class ChatPage {
   protected readonly showScope = computed(() => {
     if (this.onMedia()) return false;
     if (this.desktop()) return !this.searchPage();
-    return (
-      this.isEmpty() &&
-      !this.researching() &&
-      !this.noTopics() &&
-      !this.phoneHistory()
-    );
+    // (with no collection too: chat-no-topics@mobile keeps the chips over its empty state)
+    return this.isEmpty() && !this.researching() && !this.phoneHistory();
   });
   /** A phone's research home: the profiles at the top (cmHome, mode 'ia'). */
   protected readonly showProfiles = computed(

@@ -186,12 +186,18 @@
   font-size: inherit;
 }
 
-/* The Menu and Biblioteca expandida: a hairline and a gap between the sections. */
-:host(.mobile) .section + .section,
-:host(.expanded) .section + .section {
-  margin-top: var(--space-2);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--overlay-3);
+/* The Menu and Biblioteca expandida: one list, the sections one after the other with no head
+   or hairline between them (v2 · Menu lateral aberto); the chosen collection in green, as the
+   page you are on. */
+:host(.mobile)
+  .ui-libitem-row[aria-current='true']
+  ::ng-deep
+  .ui-libitem__title,
+:host(.expanded)
+  .ui-libitem-row[aria-current='true']
+  ::ng-deep
+  .ui-libitem__title {
+  color: var(--color-accent-text);
 }
 
 /* v2 · Sua biblioteca (the column): the sections run on, each after the first starting
@@ -350,10 +356,6 @@
   gap: var(--space-3);
 }
 
-.conversation[aria-current='true'] .question {
-  color: var(--color-accent-text);
-}
-
 .meta-line {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -367,9 +369,7 @@
   font-size: var(--text-meta);
 }
 
-.status.failed {
-  color: var(--color-danger);
-}
+/* "falhou" reads in the line's own grey, as v2 draws it (the word says it). */
 
 .spinner {
   display: inline-block;

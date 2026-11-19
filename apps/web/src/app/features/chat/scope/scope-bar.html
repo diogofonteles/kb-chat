@@ -78,13 +78,16 @@
           align="end"
         >
           <span uiMenuTrigger class="collection-trigger">
-            <span class="collection-name">{{ current.title }}</span>
-            <span class="collection-count" i18n="@@home.collectionCount"
-              >·
-              {current.documentCount, plural,
-                =1 {1 documento}
-                other {{{ current.documentCount | number }} documentos}
-              }</span
+            <!-- "Hermetismo · 22 documentos": one line of words before the ▾ (v2 chip). -->
+            <span class="collection-name"
+              >{{ current.title }}
+              <ng-container i18n="@@home.collectionCount"
+                >·
+                {current.documentCount, plural,
+                  =1 {1 documento}
+                  other {{{ current.documentCount | number }} documentos}
+                }</ng-container
+              ></span
             >
             <ui-icon name="chevDown" [size]="14" />
           </span>

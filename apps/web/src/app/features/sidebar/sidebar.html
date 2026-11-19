@@ -520,56 +520,110 @@
                         (click)="open(conversation)"
                       >
                         <!-- v2 · Sua biblioteca: a conversation's row is a library item
-                             with the chat cover; the kind leads its meta line. -->
-                        <ui-cover
-                          class="conversation-cover"
-                          icon="chat"
-                          from="var(--cover-neutral-from)"
-                          to="var(--cover-neutral-to)"
-                          [size]="48"
-                        />
+                             with the chat cover; the kind leads its meta line. The wide
+                             list and the Menu draw the kind's own cover (as the home's). -->
+                        @if (!flat()) {
+                          <ui-cover
+                            class="conversation-cover"
+                            icon="chat"
+                            from="var(--cover-neutral-from)"
+                            to="var(--cover-neutral-to)"
+                            [size]="48"
+                          />
+                        } @else if (conversation.kind === 'research') {
+                          <ui-cover
+                            class="conversation-cover"
+                            icon="sparkle"
+                            from="#1f6b3c"
+                            to="#1f1f1f"
+                            [size]="48"
+                          />
+                        } @else {
+                          <ui-cover
+                            class="conversation-cover"
+                            icon="search"
+                            from="#3a3a3a"
+                            to="#1f1f1f"
+                            [size]="48"
+                          />
+                        }
                         <span class="conversation-text ui-libitem__text">
                           <span
                             class="question ui-libitem__title"
                             [title]="conversation.title"
                             >{{ conversation.title }}</span
                           >&ngsp;<span class="meta ui-libitem__meta">
-                            <span class="meta-line"
-                              ><span class="kind">{{
-                                kindLabels[conversation.kind]
-                              }}</span>
-                              ·
-                              @if (conversation.status; as status) {
-                                <span
-                                  class="status"
-                                  [class.pending]="status === 'pending'"
-                                  [class.failed]="status === 'failed'"
-                                >
-                                  @if (status === 'pending') {
-                                    <span
-                                      class="spinner"
-                                      aria-hidden="true"
-                                    ></span>
-                                  }
-                                  {{ statusLabels[status] }}</span
-                                >
-                              } @else {
-                                {{ conversation.when }}
-                                @if (conversation.count > 1) {
-                                  <span i18n="@@sidebar.questions"
-                                    >·
-                                    {conversation.count, plural,
-                                      other {{{ conversation.count }} perguntas}
-                                    }</span
+                            @if (flat()) {
+                              <!-- "Pesquisa com IA · Hermetismo · falhou" (Menu), "Hermetismo ·
+                                   falhou" (the wide list says the kind in Tipo). -->
+                              <span class="meta-line">
+                                @if (mobile()) {
+                                  <span class="kind">{{
+                                    flatKindLabels[conversation.kind]
+                                  }}</span>
+                                  ·
+                                }
+                                {{
+                                  titles().get(conversation.topic) ??
+                                    conversation.topic
+                                }}
+                                @if (conversation.status; as status) {
+                                  ·
+                                  <span
+                                    class="status"
+                                    [class.pending]="status === 'pending'"
+                                    [class.failed]="status === 'failed'"
+                                  >
+                                    @if (status === 'pending') {
+                                      <span
+                                        class="spinner"
+                                        aria-hidden="true"
+                                      ></span>
+                                    }
+                                    {{ statusLabels[status] }}</span
                                   >
                                 }
-                              }
-                            </span>
+                              </span>
+                            } @else {
+                              <span class="meta-line"
+                                ><span class="kind">{{
+                                  kindLabels[conversation.kind]
+                                }}</span>
+                                ·
+                                @if (conversation.status; as status) {
+                                  <span
+                                    class="status"
+                                    [class.pending]="status === 'pending'"
+                                    [class.failed]="status === 'failed'"
+                                  >
+                                    @if (status === 'pending') {
+                                      <span
+                                        class="spinner"
+                                        aria-hidden="true"
+                                      ></span>
+                                    }
+                                    {{ statusLabels[status] }}</span
+                                  >
+                                } @else {
+                                  {{ conversation.when }}
+                                  @if (conversation.count > 1) {
+                                    <span i18n="@@sidebar.questions"
+                                      >·
+                                      {conversation.count, plural,
+                                        other {
+                                          {{ conversation.count }} perguntas
+                                        }
+                                      }</span
+                                    >
+                                  }
+                                }
+                              </span>
+                            }
                           </span>
                         </span>
                         @if (expanded()) {
                           <span class="type-col" aria-hidden="true">{{
-                            kindLabels[conversation.kind]
+                            flatKindLabels[conversation.kind]
                           }}</span>
                         }
                       </button>
@@ -701,23 +755,27 @@
     let-label="label"
     let-count="count"
   >
-    <h2 class="section-head" [id]="id + '-head'">
-      <button
-        type="button"
-        class="section-toggle"
-        [attr.aria-expanded]="isOpen('section:' + key)"
-        [attr.aria-controls]="id"
-        (click)="toggleFold('section:' + key)"
-      >
-        <span class="section-title">{{ label }}</span>
-        <span class="section-count">{{ count }}</span>
-        <ui-icon
-          class="section-caret"
-          [name]="isOpen('section:' + key) ? 'chevDown' : 'chevRight'"
-          [size]="16"
-        />
-      </button>
-    </h2>
+    @if (flat()) {
+      <h2 class="visually-hidden" [id]="id + '-head'">{{ label }}</h2>
+    } @else {
+      <h2 class="section-head" [id]="id + '-head'">
+        <button
+          type="button"
+          class="section-toggle"
+          [attr.aria-expanded]="isOpen('section:' + key)"
+          [attr.aria-controls]="id"
+          (click)="toggleFold('section:' + key)"
+        >
+          <span class="section-title">{{ label }}</span>
+          <span class="section-count">{{ count }}</span>
+          <ui-icon
+            class="section-caret"
+            [name]="isOpen('section:' + key) ? 'chevDown' : 'chevRight'"
+            [size]="16"
+          />
+        </button>
+      </h2>
+    }
   </ng-template>
 
   <ng-template #collectionRow let-entry="entry" let-size="size">
@@ -846,6 +904,7 @@
         </button>
       }
     </div>
+    <ng-container [ngTemplateOutlet]="spendLine" />
     <!-- v1 actions the drawn Menu has no row for ("+ Criar", its search and order on the
          desktop column) come after the drawn ones. -->
     <div class="menu-actions more">
@@ -884,47 +943,57 @@
   }
 </div>
 
-<div class="spend">
-  <ui-icon name="sparkle" [size]="16" />
-  <div class="spend-body">
-    @if (appServed(); as served) {
-      <p class="spend-line">
-        <span class="label" i18n="@@sidebar.appAi">IA da aplicação</span>
-        <span class="amount" i18n="@@sidebar.appAiLeft"
-          >Gratuita · {{ served.remaining }} de {{ served.daily }} pesquisas
-          hoje</span
-        >
-      </p>
-    } @else if (ownFree()) {
-      <p class="spend-line">
-        <span class="label" i18n="@@sidebar.ownAi">Sua IA</span>
-        <span class="amount" i18n="@@sidebar.ownAiFree">Gratuita</span>
-      </p>
-    } @else {
-      <p class="spend-line">
-        <span class="label" i18n="@@sidebar.spend">Gasto com IA hoje</span>
-        @if (!spend.configured()) {
-          <span class="amount" i18n="@@sidebar.spendOff"
-            >IA não configurada</span
+@if (!mobile()) {
+  <ng-container [ngTemplateOutlet]="spendLine" />
+}
+
+<!-- The day's AI spend: at the column's foot; in the phone Menu right under its drawn rows (v2 ·
+     Menu lateral aberto), the actions the drawing has no row for after it. -->
+<ng-template #spendLine>
+  <div class="spend">
+    <ui-icon name="sparkle" [size]="16" />
+    <div class="spend-body">
+      @if (appServed(); as served) {
+        <p class="spend-line">
+          <span class="label" i18n="@@sidebar.appAi">IA da aplicação</span>
+          <span class="amount" i18n="@@sidebar.appAiLeft"
+            >Gratuita · {{ served.remaining }} de {{ served.daily }} pesquisas
+            hoje</span
           >
+        </p>
+      } @else if (ownFree()) {
+        <p class="spend-line">
+          <span class="label" i18n="@@sidebar.ownAi">Sua IA</span>
+          <span class="amount" i18n="@@sidebar.ownAiFree">Gratuita</span>
+        </p>
+      } @else {
+        <p class="spend-line">
+          <span class="label" i18n="@@sidebar.spend">Gasto com IA hoje</span>
+          @if (!spend.configured()) {
+            <span class="amount" i18n="@@sidebar.spendOff"
+              >IA não configurada</span
+            >
+          } @else if (spend.label()) {
+            <span class="amount">{{ spend.label() }}</span>
+          } @else if (spend.today.error()) {
+            <span class="amount" i18n="@@sidebar.spendError"
+              >Gasto indisponível</span
+            >
+          } @else {
+            <span class="amount" i18n="@@sidebar.spendLoading"
+              >Carregando…</span
+            >
+          }
+        </p>
+        @if (spend.ratio(); as ratio) {
+          <ui-progress class="spend-bar" [value]="ratio" />
         } @else if (spend.label()) {
-          <span class="amount">{{ spend.label() }}</span>
-        } @else if (spend.today.error()) {
-          <span class="amount" i18n="@@sidebar.spendError"
-            >Gasto indisponível</span
-          >
-        } @else {
-          <span class="amount" i18n="@@sidebar.spendLoading">Carregando…</span>
+          <ui-progress class="spend-bar" [value]="0" />
         }
-      </p>
-      @if (spend.ratio(); as ratio) {
-        <ui-progress class="spend-bar" [value]="ratio" />
-      } @else if (spend.label()) {
-        <ui-progress class="spend-bar" [value]="0" />
       }
-    }
+    </div>
   </div>
-</div>
+</ng-template>
 
 <app-collection-dialog
   #collectionDialog
