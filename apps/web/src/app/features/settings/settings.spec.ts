@@ -175,11 +175,17 @@ describe('first-run wizard (AC-1)', () => {
     TestBed.tick();
     http.expectOne('/api/v1/topics').flush(TOPICS);
     await fixture.whenStable();
-    fireEvent.click(screen.getByRole('radio', { name: /Hermetismo/ }));
+    // The largest collection opens now: its card is chosen until another is (v2 · passo 3).
+    expect(
+      (screen.getByRole('radio', { name: /Hermetismo/ }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: /Alquimia/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     await fixture.whenStable();
     expect(screen.getByText('Passo 4 de 4')).toBeTruthy();
-    fireEvent.click(screen.getByRole('radio', { name: 'Escuro' }));
+    // The wizard's three themes (v2): Claro, Escuro (the revised dark) and Esotérico.
+    fireEvent.click(screen.getByRole('radio', { name: 'Esotérico' }));
     fireEvent.click(screen.getByRole('button', { name: 'Concluir' }));
     const put = http.expectOne({ method: 'PUT', url: '/api/v1/settings' });
     expect(put.request.body).toEqual({
@@ -190,18 +196,18 @@ describe('first-run wizard (AC-1)', () => {
       },
       preferences: {
         searchMode: 'all',
-        theme: 'dark',
+        theme: 'esoteric',
         defaultView: 'search',
         researchProfile: 'fast',
         autoDeepen: true,
-        defaultTopic: 'hermetismo',
+        defaultTopic: 'alquimia',
       },
     });
     put.flush(
       aSettingsView({
         preferences: {
           searchMode: 'all',
-          theme: 'dark',
+          theme: 'esoteric',
           defaultView: 'search',
           researchProfile: 'fast',
           autoDeepen: true,
@@ -213,7 +219,7 @@ describe('first-run wizard (AC-1)', () => {
     flushAiStatus(http);
     await fixture.whenStable();
     expect(dialog()?.open).toBe(false);
-    expect(TestBed.inject(ThemeStore).theme()).toBe('dark');
+    expect(TestBed.inject(ThemeStore).theme()).toBe('esoteric');
   });
 
   it('stays closed once settings exist', async () => {

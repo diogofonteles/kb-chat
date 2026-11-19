@@ -71,7 +71,7 @@
   @if (compact()) {
     @for (option of options(); track option.info.id) {
       @if (option.info.id === draft().provider) {
-        <div class="details" [class.bare]="option.info.id === 'house'">
+        <div class="details" [class.bare]="option.info.id === 'app'">
           <ng-container
             [ngTemplateOutlet]="detailsOf"
             [ngTemplateOutletContext]="{ $implicit: option }"
@@ -85,7 +85,7 @@
 <ng-template #detailsOf let-current>
   <app-provider-guide
     [provider]="current.info.id"
-    [factsOnly]="compact() && current.info.id === 'house'"
+    [factsOnly]="compact() && current.info.id === 'app'"
   />
 
   @if (current.info.id === 'openrouter') {

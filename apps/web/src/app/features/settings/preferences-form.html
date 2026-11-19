@@ -1,9 +1,14 @@
 @if (shows('view')) {
   <fieldset class="group">
-    <legend class="group-title" i18n="@@prefs.view">
+    <!-- The wizard's step says it in its title ("Por onde começar?"): the legend is for readers. -->
+    <legend
+      class="group-title"
+      [class.visually-hidden]="wizard()"
+      i18n="@@prefs.view"
+    >
       Ao abrir a Nova Alexandria
     </legend>
-    <div class="choices two">
+    <div class="choices two" [class.wizard-views]="wizard()">
       @for (view of views; track view.value) {
         <label class="choice-label">
           <ui-choice-card
@@ -83,36 +88,12 @@
         Acervo padrão
       </legend>
       <div class="choices covers">
-        <label
-          class="cover-choice"
-          [class.chosen]="!preferences().defaultTopic"
-        >
-          <ui-cover icon="library" [size]="160" class="cover-art" />
-          <span class="cover-line">
-            <span class="cover-title" i18n="@@prefs.topicAuto"
-              >O maior acervo</span
-            >
-            <input
-              type="radio"
-              name="pref-topic"
-              class="ui-radio"
-              value=""
-              [checked]="!preferences().defaultTopic"
-              (change)="setTopic('')"
-            />
-          </span>
-        </label>
-        @for (topic of topics(); track topic.slug) {
+        @for (topic of wizardTopics(); track topic.slug) {
           <label
             class="cover-choice"
-            [class.chosen]="topic.slug === preferences().defaultTopic"
+            [class.chosen]="topic.slug === chosenTopic()"
           >
-            <ui-cover
-              [title]="topic.title"
-              [size]="160"
-              [label]="false"
-              class="cover-art"
-            />
+            <ui-cover [title]="topic.title" [size]="172" class="cover-art" />
             <span class="cover-line">
               <span class="cover-title">{{ treeTitle(topic) }}</span>
               <input
@@ -120,18 +101,11 @@
                 name="pref-topic"
                 class="ui-radio"
                 [value]="topic.slug"
-                [checked]="topic.slug === preferences().defaultTopic"
+                [checked]="topic.slug === chosenTopic()"
                 (change)="setTopic(topic.slug)"
               />
             </span>
-            <span
-              class="cover-meta"
-              i18n="@@prefs.topicCount"
-              >{topic.documentCount, plural,
-                =1 {1 documento}
-                other {{{ topic.documentCount | number }} documentos}
-              }</span
-            >
+            <span class="cover-meta">{{ wizardMeta(topic) }}</span>
           </label>
         }
       </div>
@@ -144,6 +118,8 @@
       label="Acervo padrão"
       for="pref-topic"
     >
+      <!-- A phone draws the value under the label (selRow); the select over the row chooses. -->
+      <span class="select-value" aria-hidden="true">{{ topicValue() }}</span>
       <select
         id="pref-topic"
         class="ui-input select"
@@ -178,6 +154,8 @@
     label="Como buscar, por padrão"
     for="pref-mode"
   >
+    <!-- A phone draws the value under the label (selRow); the select over the row chooses. -->
+    <span class="select-value" aria-hidden="true">{{ modeValue() }}</span>
     <select
       id="pref-mode"
       class="ui-input select"
@@ -202,7 +180,7 @@
     <fieldset class="group">
       <legend class="visually-hidden" i18n="@@prefs.theme">Tema</legend>
       <div class="choices themes">
-        @for (theme of themes; track theme.value) {
+        @for (theme of wizardThemes; track theme.value) {
           <label
             class="theme-choice"
             [class.chosen]="theme.value === shownTheme()"
@@ -243,6 +221,8 @@
       label="Tema"
       for="pref-theme"
     >
+      <!-- A phone draws the value under the label (selRow); the select over the row chooses. -->
+      <span class="select-value" aria-hidden="true">{{ themeValue() }}</span>
       <select
         id="pref-theme"
         class="ui-input select"
