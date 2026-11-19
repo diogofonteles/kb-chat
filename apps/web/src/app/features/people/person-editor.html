@@ -55,6 +55,12 @@
         i18n="@@people.applyProfileLegend"
         >Aplicar perfil</span
       >
+      <!-- A phone's row (v2 · Pessoas, celular): the profile under the words, a chevron; the
+           select over the whole row chooses, and choosing asks to apply. -->
+      <span class="apply-value" aria-hidden="true">{{
+        chosenProfile()?.name
+      }}</span>
+      <ui-icon class="apply-chevron" name="chevRight" [size]="20" />
       <div class="actions apply-row">
         <label class="field">
           <span class="visually-hidden" i18n="@@people.profile">Perfil</span>
@@ -364,7 +370,7 @@
           [disabled]="busy()"
           (click)="pressActAs($event)"
         >
-          <ui-icon name="eye" [size]="16" />
+          <ui-icon name="eye" [size]="18" />
           <span i18n="@@people.actAs">Ver como</span>
         </button>
       }

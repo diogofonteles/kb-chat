@@ -32,8 +32,10 @@ import { UiIcon } from './icon.js';
       class="ui-dialog"
       [class.ui-dialog--actions]="sheetHead()"
       [class.ui-dialog--confirm]="confirm()"
+      [class.ui-dialog--wide]="width() >= 800"
       [style.--ui-dialog-width.px]="width()"
       [style.--ui-dialog-height.px]="height() || null"
+      [style.--ui-dialog-top.px]="top() || null"
       [attr.aria-labelledby]="label() ? null : titleId()"
       [attr.aria-label]="label() || null"
       (close)="closed.emit()"
@@ -103,6 +105,8 @@ export class UiDialog {
   readonly width = input(560);
   /** A fixed height (the wide modals with tabs keep theirs from tab to tab); 0 fits. */
   readonly height = input(0);
+  /** At a desktop, the modal's distance from the screen's top (the frame's); 0 centres it. */
+  readonly top = input(0);
   /**
    * The dialog's name when the visible title would repeat a field's name inside it (the
    * invitation's "Convidar por e-mail"); empty names it by the title.

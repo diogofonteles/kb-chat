@@ -3,6 +3,22 @@
   gap: var(--space-4);
 }
 
+/* v2 · Pessoa (desktop): tabs, then the part 28 under them, the footer band at the bottom of
+   the modal's fixed height. */
+@media (min-width: 1024px) {
+  :host {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .panel {
+    padding-top: 1.75rem;
+  }
+
+}
+
 .note {
   margin: 0;
   color: var(--color-text-muted);
@@ -27,7 +43,7 @@
 .check {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 0.625rem;
   min-height: var(--target);
   cursor: pointer;
 }
@@ -199,15 +215,17 @@ button:disabled {
   border-bottom: 1px solid var(--overlay-line);
 }
 
+/* The words, 10 above the 2 px mark, the line under the row (v2 · Pessoa). */
 .tab {
-  min-height: 2.5rem;
-  padding: 0;
+  min-height: 0;
+  padding: 0 0 0.625rem;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--color-text-muted);
   font: inherit;
   font-size: var(--text-sm);
+  line-height: 1.0625rem;
   font-weight: 700;
   cursor: pointer;
 }
@@ -242,6 +260,18 @@ button:disabled {
   background: color-mix(in srgb, var(--color-text) 3%, var(--color-elevated));
 }
 
+@media (min-width: 1024px) {
+  .foot {
+    margin-top: auto;
+  }
+}
+
+/* The phone's row only. */
+.apply-value,
+.apply-chevron {
+  display: none;
+}
+
 /* "Aplicar perfil": the legend at the left, the select and the button at the right. */
 .apply-group {
   display: flex;
@@ -249,6 +279,10 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+}
+
+.apply-group {
+  margin-bottom: 0.625rem;
 }
 
 .group.apply-group > .legend {
@@ -261,6 +295,7 @@ button:disabled {
 .apply-group > .apply-row {
   justify-content: flex-end;
   align-items: center;
+  gap: var(--space-6);
 }
 
 .apply-group .select {
@@ -275,7 +310,19 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
+}
+
+/* The frame's 36 px buttons with 14 px words, at both widths. */
+.foot .ui-btn {
+  min-height: 2.25rem;
+  padding-inline: 1.125rem;
+  font-size: var(--text-sm);
+}
+
+/* "Ver como", white with its 👁, a little wider (24 at its sides). */
+.foot [data-act-as] {
+  padding-inline: 1.5rem;
 }
 
 .danger-outline {
@@ -283,10 +330,17 @@ button:disabled {
   color: var(--color-danger);
 }
 
-/* The features two or three to a row, as checkboxes in a grid (v2 · Pessoas). */
+/* The features three to a row, 232 each and 12 apart, as checkboxes in a grid (v2 · Pessoas). */
 .group.grid {
-  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-  column-gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, 14.5rem);
+  column-gap: 0.75rem;
+  row-gap: 0;
+}
+
+.group.grid > .check > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .group.grid > .legend {
@@ -343,14 +397,95 @@ button:disabled {
 }
 
 .group > .legend {
+  margin-bottom: var(--space-1);
   font-size: 1.0625rem;
+  line-height: 1.25rem;
   font-weight: 700;
 }
 
+.group.inline {
+  row-gap: 0;
+}
+
 @media (max-width: 1023px) {
+  /* Two columns of 165, 12 apart (v2 · Pessoas, celular). */
   .group.grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 10.3125rem));
     column-gap: var(--space-3);
+  }
+
+  /* The person's actions, the chips and the part 14 apart; the part's first line 24 under the
+     chips. */
+  :host {
+    gap: 0.875rem;
+  }
+
+  .panel {
+    padding-top: 0.625rem;
+  }
+
+  /* "Aplicar perfil" as one row: the words, the profile under them, a chevron; the select is
+     the whole row (transparent over it), so a tap chooses (v2 · Pessoas, celular). */
+  .apply-group {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 1.25rem;
+    align-items: center;
+    column-gap: var(--space-3);
+    row-gap: 0.1875rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .apply-group:focus-within {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .group.apply-group > .legend {
+    grid-area: 1 / 1;
+    line-height: 1.125rem;
+  }
+
+  .apply-value {
+    display: block;
+    grid-area: 2 / 1;
+    color: var(--color-text-muted);
+    font-size: var(--text-meta);
+    line-height: 1rem;
+  }
+
+  .apply-chevron {
+    display: inline-flex;
+    grid-area: 1 / 2 / span 2;
+    color: var(--color-text-muted);
+  }
+
+  .apply-group > .apply-row {
+    position: absolute;
+    inset: 0;
+  }
+
+  .apply-group > .apply-row > .field,
+  .apply-group > .apply-row .select {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+  }
+
+  .apply-group > .apply-row .select {
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .apply-group > .apply-row > button {
+    display: none;
+  }
+
+  /* Confirming: the question and its buttons under the row, in the flow. */
+  .apply-group > .actions:not(.apply-row) {
+    grid-column: 1 / -1;
+    margin-top: var(--space-3);
   }
 
   .group.grid > .check span {
@@ -367,7 +502,7 @@ button:disabled {
 
   .tab {
     min-height: 2rem;
-    padding: 0 0.875rem;
+    padding: 0 0.75rem;
     border: 0;
     border-radius: var(--radius-pill);
     font-weight: 500;
@@ -400,12 +535,6 @@ button:disabled {
     display: none;
   }
 
-  /* The frame's 36 px buttons with 14 px words. */
-  .foot .ui-btn {
-    min-height: 2.25rem;
-    padding-inline: 1.125rem;
-    font-size: var(--text-sm);
-  }
 }
 
 .panel[hidden] {

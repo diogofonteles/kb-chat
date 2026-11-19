@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { request } from '@playwright/test';
 import type { APIRequestContext, BrowserContext } from '@playwright/test';
 import {
@@ -21,7 +22,8 @@ import {
  * master, Lucas Martins, Ana Lima, Nina Ouvinte), the invite profiles "Aluno" (default) and
  * "Pesquisador", the three access requests (Bruno Lima and Paulo Nunes by Google, Fernanda
  * Costa by the form), one "Ver como" of Ana Souza with one change and six of Ana Lima, and the
- * transcriber "Mac do estúdio".
+ * transcriber "Mac do estúdio"; the two conversations of "Sua biblioteca" (the research "O que
+ * é a natureza sétupla?" and the search "Os sete planos em ordem") for the owner and Ana Souza.
  *
  * Patched in the responses (`settingsWorld`), each because no API can set it:
  * - the instants the server stamps (last sign-in, invitation, request, the audit's and the
@@ -33,7 +35,12 @@ import {
  * - GET /api/v1/media/terms is the frames' list (32 hermetic terms, version 1 of 28/10/2026,
  *   162 of 224): the server's own list is another collection's and a saved list is version 2;
  * - GET /api/v1/media/track-documents has Alquimia Prática's 11 tracks waiting for the Mac;
- * - GET /api/v1/house-ai's free list is "atualizada às 18:40".
+ * - GET /api/v1/house-ai's free list is "atualizada às 18:40";
+ * - GET /api/v1/conversations dates the research now and the search yesterday ("agora",
+ *   "ontem"), whenever the frame is taken.
+ *
+ * In the browser: "Sua biblioteca" in its "Recentes" order of the frames (Hermetismo, Cabala,
+ * Cosmologia Espiritual), the order this browser keeps (LibraryRecents).
  */
 
 export const OWNER = OWNER_EMAIL;
@@ -116,6 +123,8 @@ export const PEOPLE: readonly Person[] = [
     email: 'helena.prado@exemplo.test',
     name: 'Helena Prado',
     role: 'master',
+    // "IA: Nenhuma (IA própria ou só a busca)", chosen (not the default the owner has).
+    ai: { appAi: 'none' },
     at: '2026-11-10T11:28',
   },
   {
@@ -448,6 +457,20 @@ export async function seedSettingsWorld(): Promise<SettingsWorld> {
     await again.dispose();
   }
 
+  for (const email of [OWNER, ANA_SOUZA]) {
+    const api = await apiAs(email);
+    for (const chat of CHATS()) {
+      await ok(
+        api.put(`/api/v1/conversations/${String(chat['id'])}`, {
+          data: chat,
+          headers: CSRF,
+        }),
+        `conversation ${email}`,
+      );
+    }
+    await api.dispose();
+  }
+
   await ok(
     owner.post('/api/v1/media/transcribers', {
       data: { name: MAC },
@@ -458,6 +481,55 @@ export async function seedSettingsWorld(): Promise<SettingsWorld> {
   await owner.dispose();
   world = { ids };
   return world;
+}
+
+/** "Sua biblioteca"'s two conversations (settings.*.js): a research and a search. */
+const RESEARCH = 'O que é a natureza sétupla?';
+const SEARCH = 'Os sete planos em ordem';
+function CHATS(): Record<string, unknown>[] {
+  const now = new Date().toISOString();
+  return [
+    {
+      kind: 'search',
+      id: randomUUID(),
+      topic: 'hermetismo',
+      title: SEARCH,
+      createdAt: now,
+      updatedAt: now,
+      asks: [{ question: SEARCH, mode: 'all', filters: {}, total: 3 }],
+    },
+    {
+      kind: 'research',
+      id: randomUUID(),
+      topic: 'hermetismo',
+      title: RESEARCH,
+      createdAt: now,
+      updatedAt: now,
+      turns: [
+        {
+          question: RESEARCH,
+          answer: 'A natureza sétupla é a divisão do ser em sete planos.',
+          sources: [],
+          steps: 1,
+          usd: 0.03,
+          billing: 'per-token',
+          model: 'stub',
+          interrupted: false,
+          at: now,
+        },
+      ],
+    },
+  ];
+}
+
+/** LibraryRecents' key for an account (its FNV-1a of the address, as the app keeps it). */
+function recentsKey(email: string): string {
+  let hash = 0x811c9dc5;
+  for (const char of email.toLowerCase()) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `kb-chat.library-recents:${(hash >>> 0).toString(36)}`;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -621,6 +693,37 @@ export async function settingsWorld(
       keyProblem: null,
       mode: 'manual',
     }));
+  // The research "agora", the search "ontem", whenever the frame is taken.
+  await patchGet(context, /\/api\/v1\/conversations(\?.*)?$/, (body) => {
+    const now = Date.now();
+    return {
+      ...body,
+      items: ((body['items'] as Record<string, unknown>[] | undefined) ?? []).map(
+        (one) => {
+          const at = new Date(
+            one['title'] === SEARCH ? now - 24 * 3_600_000 : now,
+          ).toISOString();
+          return { ...one, createdAt: at, updatedAt: at };
+        },
+      ),
+    };
+  });
+  // "Sua biblioteca" in the frames' "Recentes" order: Hermetismo, Cabala, Cosmologia.
+  const recents = JSON.stringify({
+    collections: {
+      hermetismo: 3_000,
+      cabala: 2_000,
+      'cosmologia-espiritual': 1_000,
+    },
+    documents: [],
+  });
+  await context.addInitScript(
+    ([keys, value]) => {
+      for (const key of keys as string[])
+        if (!localStorage.getItem(key)) localStorage.setItem(key, value as string);
+    },
+    [[OWNER, ANA_SOUZA].map(recentsKey), recents] as const,
+  );
   if (options.firstRun)
     await patchGet(context, '**/api/v1/settings', (body) => ({
       ...body,

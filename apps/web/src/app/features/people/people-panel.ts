@@ -88,6 +88,9 @@ interface Outcome<T> {
  * "Pessoas e permissões" (KBC-010 FR-3, screens.md T9): invite by e-mail, then per person
  * the collections, features and the master role; revoke at any time. Masters only.
  */
+/** How long a finger rests on a phone's row before it selects it. */
+const LONG_PRESS_MS = 500;
+
 @Component({
   selector: 'app-people-panel',
   imports: [
@@ -274,6 +277,53 @@ export class PeoplePanel {
   /** A failure stays said while the writes queued with it go on. */
   private failedInRun = false;
   protected readonly notice = signal<Notice>(null);
+
+  /**
+   * A phone's list draws no boxes (v2 · Pessoas, celular): a long press on a row (or its
+   * context menu: Android's long press, the menu key) selects it, and the boxes show while
+   * a selection is on. A box reached by keyboard shows as it takes the focus.
+   */
+  protected readonly selecting = computed(() => this.selected().size > 0);
+  private press: ReturnType<typeof setTimeout> | null = null;
+  /** A long press just selected: the click that ends it opens nothing. */
+  private pressedLong = false;
+
+  protected pressStarted(person: Person, event: PointerEvent): void {
+    this.pressEnded();
+    this.pressedLong = false;
+    if (!this.phone() || event.button !== 0) return;
+    this.press = setTimeout(() => {
+      this.press = null;
+      this.pressedLong = true;
+      this.select(person, !this.selected().has(person.id));
+    }, LONG_PRESS_MS);
+  }
+
+  protected pressEnded(): void {
+    if (this.press) clearTimeout(this.press);
+    this.press = null;
+  }
+
+  protected rowMenu(person: Person, event: MouseEvent): void {
+    if (!this.phone()) return;
+    event.preventDefault();
+    if (this.pressedLong) return;
+    this.pressEnded();
+    this.select(person, !this.selected().has(person.id));
+  }
+
+  /** The row's tap: during a selection on a phone it picks; else it opens the editor. */
+  protected rowClick(person: Person): void {
+    if (this.pressedLong) {
+      this.pressedLong = false;
+      return;
+    }
+    if (this.phone() && this.selecting()) {
+      this.select(person, !this.selected().has(person.id));
+      return;
+    }
+    this.toggle(person);
+  }
 
   protected toggle(person: Person): void {
     this.openId.update((id) => (id === person.id ? null : person.id));

@@ -281,7 +281,7 @@
       (apply)="assignLevel($event)"
     />
   }
-  <label class="select-all">
+  <label class="select-all" [class.selecting]="selecting()">
     <input
       #allBox
       type="checkbox"
@@ -298,7 +298,12 @@
     <span i18n="@@people.colToday">Hoje</span>
     <span i18n="@@people.colStatus">Situação</span>
   </div>
-  <ul class="people" aria-label="Pessoas" i18n-aria-label="@@people.listLabel">
+  <ul
+    class="people"
+    [class.selecting]="selecting()"
+    aria-label="Pessoas"
+    i18n-aria-label="@@people.listLabel"
+  >
     @for (person of list(); track person.id) {
       <li class="person" [class.open]="openId() === person.id">
         <label class="pick">
@@ -320,7 +325,12 @@
           aria-haspopup="dialog"
           [attr.data-id]="person.id"
           [attr.aria-expanded]="openId() === person.id"
-          (click)="toggle(person)"
+          (click)="rowClick(person)"
+          (pointerdown)="pressStarted(person, $event)"
+          (pointerup)="pressEnded()"
+          (pointercancel)="pressEnded()"
+          (pointerleave)="pressEnded()"
+          (contextmenu)="rowMenu(person, $event)"
         >
           <span class="who">
             <app-person-avatar
@@ -415,6 +425,8 @@
     step="Pessoa"
     [title]="person.name || person.email"
     [width]="800"
+    [height]="728"
+    [top]="40"
     i18n-cancelLabel="@@people.close"
     cancelLabel="Fechar"
     (closed)="closeEditor()"
@@ -535,6 +547,7 @@
   <p
     #statusLine
     class="notice"
+    [class.idle]="!notice()"
     [class.error]="notice()?.kind === 'error'"
     role="status"
     tabindex="-1"

@@ -160,8 +160,9 @@ const HOUR_MS = 60 * 60_000;
 
 /**
  * When a conversation was last saved, as its row's meta says it (v2 · Sua biblioteca:
- * "Pesquisa com IA · agora", "Conversa · 12/11"): "agora", "há N min" within the hour, the
- * time on the same day, the day and month this year, else the full date.
+ * "Pesquisa com IA · agora", "Conversa · ontem", "Conversa · 12/11"): "agora", "há N min"
+ * within the hour, the time on the same day, "ontem" the day before, the day and month this
+ * year, else the full date.
  */
 export function savedWhen(updatedAt: string, now: Date): string {
   const at = new Date(updatedAt);
@@ -174,6 +175,10 @@ export function savedWhen(updatedAt: string, now: Date): string {
   const two = (n: number) => String(n).padStart(2, '0');
   const sameDay = at.toDateString() === now.toDateString();
   if (sameDay) return `${two(at.getHours())}:${two(at.getMinutes())}`;
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (at.toDateString() === yesterday.toDateString())
+    return $localize`:@@library.savedYesterday:ontem`;
   const dayMonth = `${two(at.getDate())}/${two(at.getMonth() + 1)}`;
   return at.getFullYear() === now.getFullYear()
     ? dayMonth

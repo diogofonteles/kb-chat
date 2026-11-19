@@ -341,7 +341,13 @@ test('Pessoas e permissões: invitation, list, requests, editors, profiles, Ver 
     await expect(actAs.getByRole('textbox', { name: 'Motivo' })).toBeVisible();
     await shoot(page, 'settings-act-as', width);
     await actAs.getByRole('textbox', { name: 'Motivo' }).fill('ok');
-    await actAs.getByRole('button', { name: 'Ver como esta pessoa' }).click();
+    // The desktop modal's footer says "Ver como esta pessoa"; a phone's sheet header "Ver como".
+    await actAs
+      .getByRole('button', {
+        name: phone ? 'Ver como' : 'Ver como esta pessoa',
+        exact: true,
+      })
+      .click();
     await expect(actAs.getByText(/Escreva o motivo/)).toBeVisible();
     await shoot(page, 'settings-act-as-invalid', width);
 
@@ -362,8 +368,11 @@ test('Pessoas e permissões: invitation, list, requests, editors, profiles, Ver 
     await toList(settings);
     await settings.getByRole('button', { name: 'Configurar agora' }).click();
     editor = modal();
+    // The desktop modal has "Descartar configuração"; a phone's sheet has the tabs only.
     await expect(
-      editor.getByRole('button', { name: 'Descartar configuração' }),
+      phone
+        ? editor.getByRole('tab', { name: 'Preferências iniciais' })
+        : editor.getByRole('button', { name: 'Descartar configuração' }),
     ).toBeVisible();
     await shoot(page, 'settings-people-invite-setup', width);
     await editor

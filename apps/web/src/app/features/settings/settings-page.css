@@ -135,7 +135,8 @@
   gap: var(--space-4);
   height: 4.75rem;
   margin-bottom: -4.75rem;
-  padding-top: var(--space-3);
+  /* The words 31 under the panel's top, the 🔍 on their line (v2 · Configurações). */
+  padding-top: 0.125rem;
   /* Its 76 px of the tint (27 % of 280). */
   background: linear-gradient(
     180deg,
