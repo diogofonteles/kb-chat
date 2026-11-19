@@ -697,6 +697,13 @@ button:disabled {
   line-height: 1.1875rem;
 }
 
+/* The token is one word of base64url: it breaks at any letter and fills each line, as the
+   frame draws it. A "-" it may hold would otherwise end the line early, and the box would grow
+   a line or not depending on where the random token puts its hyphens. */
+.code.token {
+  word-break: break-all;
+}
+
 .copy {
   min-height: 2.25rem;
   padding: 0 1.125rem;
