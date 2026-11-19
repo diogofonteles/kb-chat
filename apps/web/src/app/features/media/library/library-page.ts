@@ -9,8 +9,8 @@ import {
   type Signal,
   type TemplateRef,
   afterNextRender,
+  afterRenderEffect,
   computed,
-  effect,
   inject,
   linkedSignal,
   signal,
@@ -641,7 +641,10 @@ export class LibraryPage {
    */
   private markChoosing(): void {
     const root = inject(DOCUMENT).documentElement;
-    effect(() => root.toggleAttribute('data-choosing', this.selecting()));
+    // DOM work outside any template (the attribute is on <html>): after the render (NG-14).
+    afterRenderEffect({
+      write: () => root.toggleAttribute('data-choosing', this.selecting()),
+    });
     this.destroyRef.onDestroy(() => root.removeAttribute('data-choosing'));
   }
   /** The ready ones and the files that failed (media-library-selection@mobile). */
