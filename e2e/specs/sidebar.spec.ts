@@ -250,8 +250,14 @@ test('AC-9: on a phone the Menu drawer closes with Escape and focus returns to t
  * Every text of the line that runs past its box ends in "…" (a block with ellipsis), never cut
  * mid-letter: text-overflow does nothing on a flex container's own text.
  */
+interface Listed {
+  slug: string;
+  canOpen?: boolean;
+  parent: string | null;
+}
+
 const clippedMidGlyph = (line: Element): string[] =>
-  [line, ...line.querySelectorAll('*')].flatMap((box) => {
+  [line, ...Array.from(line.querySelectorAll('*'))].flatMap((box) => {
     if (box.scrollWidth <= box.clientWidth) return [];
     const style = getComputedStyle(box);
     const ellipsis =
@@ -266,19 +272,19 @@ test('Sua biblioteca: a collection with many áudios and documentos ends its lin
 }) => {
   const title =
     'Coletânea das palestras e estudos de alquimia prática do Mestre';
-  let slug = '';
+  // The collection is known before the page asks: the counts may come back before the topics.
+  const listed = await page.request.get('/api/v1/topics', { headers: CSRF });
+  expect(listed.status(), await listed.text()).toBe(200);
+  const slug = ((await listed.json()) as { items: Listed[] }).items.find(
+    (topic) => topic.canOpen !== false && topic.parent === null,
+  )?.slug;
+  if (!slug) throw new Error('the fixture vault has no collection');
   await page.route('**/api/v1/topics', async (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
     const response = await route.fetch();
-    const body = (await response.json()) as {
-      items: { slug: string; canOpen?: boolean; parent: string | null }[];
-    };
-    const first = body.items.find(
-      (topic) => topic.canOpen !== false && topic.parent === null,
-    );
-    if (!first) throw new Error('the fixture vault has no collection');
-    slug = first.slug;
-    Object.assign(first, { title, documentCount: 2996 });
+    const body = (await response.json()) as { items: Listed[] };
+    const chosen = body.items.find((topic) => topic.slug === slug);
+    if (chosen) Object.assign(chosen, { title, documentCount: 2996 });
     await route.fulfill({ response, json: body });
   });
   await page.route('**/api/v1/media/library/counts', async (route) => {
