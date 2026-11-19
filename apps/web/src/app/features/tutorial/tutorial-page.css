@@ -250,6 +250,11 @@ thead th {
     line-height: 1.55;
   }
 
+  /* cmPublic: the paragraphs' lines 12 apart (their 23 lines carry 4 of it each side). */
+  p {
+    margin-bottom: 0.5rem;
+  }
+
   h2 {
     font-size: 1.375rem;
     scroll-margin-top: 4rem;
