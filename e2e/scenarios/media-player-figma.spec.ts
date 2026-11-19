@@ -13,6 +13,7 @@ import {
   shotsDone,
   type PlayerWorld,
 } from './figma-player-world.js';
+import { queueOf } from './figma-library-world.js';
 
 /**
  * The states of the v2 · Mídia — Player and Fila e Marcadores frames (media-player-*,
@@ -434,6 +435,10 @@ test('the mini player, "Meus marcadores" and the queue', async ({
     ).toBeVisible();
     await shoot(page, 'media-bookmarks', { width, top: true });
 
+    // The Fila's own frame: AP processed, AC to continue, AS next in the transcriber's line.
+    await context.route('**/api/v1/media/processing', (route) =>
+      route.fulfill({ json: queueOf(world, true) }),
+    );
     await go(page, '/fila');
     await expect(
       page

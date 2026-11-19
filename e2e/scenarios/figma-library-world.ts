@@ -575,8 +575,13 @@ export async function seedWorld(options: SeedOptions = {}): Promise<World> {
   return world;
 }
 
-/** The frame's queue: one to validate, one failed, one waiting for the transcriber. */
-function queueOf(w: World) {
+/**
+ * The frame's queue: one to validate, one failed, one waiting for the transcriber. `page`:
+ * as the Fila de processamento frame draws it (AP processed, AC to continue, AS next in
+ * the transcriber's line); the library and player frames count all three as needing
+ * attention ("3 precisam de atenção").
+ */
+export function queueOf(w: Pick<World, 'byCode'>, page = false) {
   const line = (code: string, over: Record<string, unknown>) => {
     const media = MEDIA.find((one) => one.code === code);
     return {
@@ -604,20 +609,22 @@ function queueOf(w: World) {
   };
   return {
     items: [
-      // The frame: AP processed, its tracks to validate; AC failed, to continue; AS next,
-      // first in the transcriber's line.
-      line('AP', { action: 'validate', stage: null, state: null }),
+      line(
+        'AP',
+        page
+          ? { action: 'validate', stage: null, state: null }
+          : { action: 'validate', stage: 'tracks' },
+      ),
       line('AC', {
         state: 'failed',
         failure: 'work',
         stage: 'convert',
-        action: 'continue',
+        ...(page ? { action: 'continue' } : {}),
       }),
       line('AS', {
-        phase: 'next',
         state: 'waiting',
         waitsForTranscriber: true,
-        position: 1,
+        ...(page ? { phase: 'next', position: 1 } : {}),
       }),
     ],
     active: 0,
