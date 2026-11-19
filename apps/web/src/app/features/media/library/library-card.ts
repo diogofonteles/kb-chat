@@ -11,7 +11,7 @@ import { UiIcon } from '@ui/icon.js';
 import { UiProgress } from '@ui/progress.js';
 import type { LibraryItem } from '@kb-chat/contracts';
 import { formatDuration } from '@kb-chat/player-core';
-import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
+import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { percentOf, resumeTextOf, stateTextOf } from './library-labels.js';
 
 /**
@@ -23,7 +23,7 @@ import { percentOf, resumeTextOf, stateTextOf } from './library-labels.js';
 @Component({
   // The host is the list item (role), so the list holds only items (axe "list").
   selector: 'app-library-card',
-  imports: [RouterLink, AuthorshipBadge, UiCover, UiIcon, UiProgress],
+  imports: [RouterLink, UiCover, UiIcon, UiProgress],
   templateUrl: './library-card.html',
   styleUrl: './library-card.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -37,6 +37,10 @@ export class LibraryCard {
   readonly played = output();
 
   protected readonly ready = computed(() => this.item().status === 'ready');
+  /** "Irmã Helena Prado · 1:00" under the title (v2 Cartão: author · length). */
+  protected readonly authorName = computed(
+    () => this.item().author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
+  );
   protected readonly duration = computed(() => {
     const ms = this.item().durationMs;
     return ms === null ? '' : formatDuration(ms);

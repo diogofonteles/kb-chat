@@ -1,6 +1,6 @@
 @if (groups().length > 0 || tracks().length > 0 || tracksFailed()) {
-  <section class="see-also" aria-labelledby="see-also-title">
-    <h3 id="see-also-title" i18n="@@seeAlso.title">Veja também</h3>
+  <section class="see-also" [attr.aria-labelledby]="titleId()">
+    <h3 [id]="titleId()" i18n="@@seeAlso.title">Veja também</h3>
     @if (tracks().length > 0 || tracksFailed()) {
       <div class="group">
         <h4 i18n="@@seeAlso.tracks">
@@ -34,7 +34,12 @@
             Não consegui carregar mais referências.
           </p>
         }
-        @if (tracks().length > 0 && tracks().length < tracksTotal()) {
+        <!-- A subject's shelf keeps "Ver todas": its tracks are reached nowhere else. -->
+        @if (
+          variant() !== 'column' &&
+          tracks().length > 0 &&
+          tracks().length < tracksTotal()
+        ) {
           <button
             type="button"
             class="more"
@@ -71,15 +76,43 @@
                   <span class="recording">· {{ media.recordingTitle }}</span>
                 </button>
               } @else {
+                <!-- miniItem: the cover, the title and its facets under it. -->
+                <!-- Named by its title (as before the cover); the facets describe it. -->
                 <button
                   type="button"
-                  class="ref"
+                  class="ref doc"
+                  [attr.aria-label]="ref.title"
+                  [attr.aria-describedby]="
+                    ref.facets
+                      ? titleId() + '-' + group.name + '-' + $index
+                      : null
+                  "
                   (click)="opened.emit({ id: ref.id, title: ref.title })"
                 >
-                  {{ ref.title }}
+                  <ui-cover
+                    [title]="ref.title"
+                    [size]="variant() === 'shelf' ? 150 : 40"
+                    [label]="variant() === 'shelf'"
+                    aria-hidden="true"
+                  />
+                  <span class="ref-text">
+                    <span class="ref-title">{{ ref.title }}</span>
+                    @if (ref.facets) {
+                      <span
+                        class="ref-facets"
+                        [id]="titleId() + '-' + group.name + '-' + $index"
+                        >{{ ref.facets }}</span
+                      >
+                    }
+                    @if (variant() === 'shelf' && ref.byline) {
+                      <span class="ref-facets ref-byline">{{
+                        ref.byline
+                      }}</span>
+                    }
+                  </span>
                 </button>
               }
-              @if (ref.facets) {
+              @if (ref.media && ref.facets) {
                 <span class="ref-facets">{{ ref.facets }}</span>
               }
             </li>
@@ -90,7 +123,7 @@
             Não consegui carregar mais referências.
           </p>
         }
-        @if (group.items.length < group.total) {
+        @if (!compact() && group.items.length < group.total) {
           <button
             type="button"
             class="more"

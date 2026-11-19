@@ -36,6 +36,9 @@ type Mode = 'start' | 'code' | 'signup';
  * "Entrar com Google" (KBC-010, screens.md T8): the Google Identity Services button, the
  * not-invited state and the sign-in errors. Shown by the shell while nobody is signed in.
  */
+/** The closing "Tente de novo." a message may carry, said by the banner's own text. */
+const TRY_AGAIN = / ?Tente de novo\.$/;
+
 @Component({
   selector: 'app-login-page',
   imports: [
@@ -99,9 +102,12 @@ export class LoginPage {
       ? this.config.value().codeChannels
       : (['email'] as const),
   );
+  /** The banner's title; its text already says "Tente de novo.", so the title does not
+   *  repeat it (v2 · Auth "Falha ao entrar"). */
   protected readonly failure = computed(() => {
     const state = this.session.state();
-    return state.kind === 'failed' ? errorMessage(state.code) : '';
+    if (state.kind !== 'failed') return '';
+    return errorMessage(state.code).replace(TRY_AGAIN, '');
   });
 
   constructor() {
@@ -112,6 +118,9 @@ export class LoginPage {
       this.renderButton(this.accounts.value(), host, clientId);
     });
   }
+
+  /** Google's button is in place: the drawn pill shows over it. */
+  protected readonly rendered = signal(false);
 
   /** Google warns when initialize runs twice: once per client id, then only the button. */
   private initializedFor: string | null = null;
@@ -130,6 +139,7 @@ export class LoginPage {
       });
       this.initializedFor = clientId;
     }
+    this.rendered.set(true);
     accounts.renderButton(host, {
       type: 'standard',
       theme: 'outline',

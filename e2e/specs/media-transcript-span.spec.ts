@@ -234,6 +234,14 @@ test('AC-6, AC-7: Shift+click stretches the open choice; Shift+→ on the text c
   const mestre = await wordAt(region, 'mestre');
   await page.mouse.click(mestre.x, mestre.y);
   await expect(field(page)).toHaveValue('mestre');
+  // The word's time holds once the audition knows its length (a seek waits for it).
+  await expect
+    .poll(() =>
+      audition(page).evaluate(
+        (element) => (element as HTMLAudioElement).readyState,
+      ),
+    )
+    .toBeGreaterThanOrEqual(1);
   const atWord = await auditionTime(page);
   await field(page).fill('Mestre');
   const disse = await wordAt(region, 'disse');

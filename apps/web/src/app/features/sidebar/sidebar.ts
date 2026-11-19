@@ -1,16 +1,23 @@
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import {
+  NavigationEnd,
+  Router,
+  RouterLink,
+  RouterLinkActive,
+} from '@angular/router';
 import { DOCUMENT, NgTemplateOutlet, formatNumber } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  Injector,
   LOCALE_ID,
+  afterNextRender,
   computed,
   inject,
   input,
   output,
   signal,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import type {
   Conversation,
   ConversationKind,
@@ -22,7 +29,7 @@ import { CollectionDialog } from '@features/collections/collection-dialog.js';
 import { UnassignedNotice } from '@features/collections/unassigned-notice.js';
 import { HistoryStore } from '@core/history/history-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
-import { EMPTY, Subject, catchError, switchMap } from 'rxjs';
+import { EMPTY, Subject, catchError, filter, map, switchMap } from 'rxjs';
 import { SpendStore } from '@core/spend/spend-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
@@ -35,9 +42,14 @@ import { hasLibrary } from '@features/media/library/library-access.js';
 import { ProcessingQueueStore } from '@features/media/queue/processing-queue-store.js';
 import { AudioPresence } from '@features/shell/audio-presence.js';
 import { LibraryRecents } from '@features/shell/library-recents.js';
+import { LibraryCounts } from './library-counts.js';
 import { SignOut } from '@features/shell/sign-out.js';
+import { RightPanel } from '@features/shell/right-panel.js';
+import { MediaEngine } from '@core/media/media-engine.js';
+import { ClosePlayer } from '@features/media/player/close-player.js';
+import { NowPlayingPanel } from '@features/media/player/now-playing-panel.js';
 import { UiAvatar } from '@ui/avatar.js';
-import { UiChip, UiIconButton } from '@ui/button.js';
+import { UiButton, UiChip, UiIconButton } from '@ui/button.js';
 import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import { UiLibraryItem } from '@ui/library-item.js';
@@ -49,6 +61,7 @@ import {
   inVisibleCollections,
   orderByTitle,
   orderCollections,
+  savedWhen,
   shows,
   type RecencyGroup,
   type LibraryKind,
@@ -57,7 +70,7 @@ import {
 } from './library-list.js';
 
 export type SidebarAction =
-  'new' | 'restore' | 'topic' | 'media' | 'levels' | 'document';
+  'new' | 'restore' | 'topic' | 'media' | 'levels' | 'document' | 'player';
 
 /** How a conversation stands, in words (KBC-029): never color alone. */
 const STATUS_LABELS: Record<ConversationStatus, () => string> = {
@@ -67,8 +80,8 @@ const STATUS_LABELS: Record<ConversationStatus, () => string> = {
 };
 
 const KIND_LABELS: Record<ConversationKind, () => string> = {
-  search: () => $localize`:@@sidebar.kindSearch:Busca`,
-  research: () => $localize`:@@sidebar.kindResearch:IA`,
+  search: () => $localize`:@@sidebar.kindConversation:Conversa`,
+  research: () => $localize`:@@sidebar.kindResearch:Pesquisa com IA`,
 };
 
 const CHIPS: readonly { kind: LibraryKind; label: () => string }[] = [
@@ -129,6 +142,7 @@ interface PinnedItem {
     CollectionDialog,
     UnassignedNotice,
     UiAvatar,
+    UiButton,
     UiChip,
     UiCover,
     UiIcon,
@@ -141,7 +155,11 @@ interface PinnedItem {
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.collapsed]': 'collapsed()' },
+  host: {
+    '[class.collapsed]': 'collapsed()',
+    '[class.mobile]': 'mobile()',
+    '[class.expanded]': 'expanded()',
+  },
 })
 export class Sidebar {
   protected readonly chat = inject(ChatStore);
@@ -156,9 +174,15 @@ export class Sidebar {
   protected readonly queue = inject(ProcessingQueueStore);
   protected readonly audio = inject(AudioPresence);
   private readonly recents = inject(LibraryRecents);
+  private readonly counts = inject(LibraryCounts);
   private readonly settings = inject(SettingsStore);
   private readonly signOutAction = inject(SignOut);
+  private readonly closer = inject(ClosePlayer);
+  private readonly rightPanel = inject(RightPanel);
+  /** What the player has loaded: the phone Menu offers "Fechar o player" then. */
+  protected readonly playing = inject(MediaEngine).source;
   private readonly locale = inject(LOCALE_ID);
+  private readonly injector = inject(Injector);
   /** Research conversations go to the research view (KBC-008 FR-6), shown as saved. */
   private readonly restorer = inject(RESEARCH_RESTORER);
   /** A newer click cancels the load of the previous one. */
@@ -168,13 +192,44 @@ export class Sidebar {
   readonly mobile = input(false);
   /** Collapsed to its covers (desktop, FR-1). */
   readonly collapsed = input(false);
+  /** In the main panel, "Biblioteca expandida" (desktop, ⤢): a second instance. */
+  readonly expanded = input(false);
+  /** Its ids' prefix: the column and the expanded view are on screen together. */
+  /** The column's ⤢ is on while "Biblioteca expandida" shows. */
+  readonly wide = input(false);
+  /** The address without query or fragment, as the router last settled on it. */
+  private readonly path = toSignal(
+    inject(Router).events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map((event) => event.urlAfterRedirects.split(/[?#]/)[0] ?? ''),
+    ),
+    { initialValue: inject(Router).url.split(/[?#]/)[0] ?? '' },
+  );
+  /**
+   * The conversation is on screen (not a media or settings page over it): only then is the
+   * collection in use the current row (v2 · Sua biblioteca: on /biblioteca the pinned
+   * Biblioteca is, and no collection).
+   */
+  private readonly onConversation = computed(() => this.path() === '/');
+  /** A pinned page stays the current row with its query (/biblioteca?busca=…, -search). */
+  protected readonly activeOptions = {
+    paths: 'exact',
+    queryParams: 'ignored',
+    fragment: 'ignored',
+    matrixParams: 'ignored',
+  } as const;
+  protected readonly ns = computed(() =>
+    this.expanded() ? 'library-wide' : 'library',
+  );
   /** The parent closes the drawer and moves focus after each action. */
   readonly acted = output<SidebarAction>();
   readonly collapseToggled = output();
+  readonly expandToggled = output();
 
   protected readonly createLabel = $localize`:@@library.create:Criar`;
   protected readonly collapseLabel = $localize`:@@library.collapse:Recolher Sua biblioteca`;
   protected readonly expandLabel = $localize`:@@library.expand:Expandir Sua biblioteca`;
+  protected readonly widenLabel = $localize`:@@library.widen:Ampliar Sua biblioteca`;
   protected readonly pinnedLabel = $localize`:@@library.pinned:Fixados`;
   protected readonly collectionsLabel = $localize`:@@library.chipCollections:Acervos`;
   protected readonly conversationsLabel = $localize`:@@library.chipConversations:Conversas`;
@@ -256,7 +311,7 @@ export class Sidebar {
         ).map((topic) => ({
           topic,
           meta: this.collectionMeta(topic),
-          active: topic.slug === this.chat.topicSlug(),
+          active: this.onConversation() && topic.slug === this.chat.topicSlug(),
         }))
       : [],
   );
@@ -301,11 +356,16 @@ export class Sidebar {
     const researching = this.research.streaming()
       ? this.research.conversationId()
       : null;
+    const now = new Date();
     const list = this.history.conversations().map((conversation) => {
       const running =
         conversation.id === searching || conversation.id === researching;
       const status = running ? 'pending' : conversation.status;
-      return { ...conversation, status };
+      return {
+        ...conversation,
+        status,
+        when: savedWhen(conversation.updatedAt, now),
+      };
     });
     return orderByTitle(list, this.view());
   });
@@ -374,9 +434,30 @@ export class Sidebar {
     this.writeFolded(next);
   }
 
+  /**
+   * The chips sit on one line, as v2 draws them (the last one under the column's edge): a
+   * vertical wheel over them scrolls the line sideways, so a mouse reaches every chip.
+   */
+  protected scrollChips(event: WheelEvent): void {
+    const row = event.currentTarget;
+    if (!(row instanceof HTMLElement) || row.scrollWidth <= row.clientWidth)
+      return;
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    event.preventDefault();
+    row.scrollLeft += event.deltaY;
+  }
+
   protected toggleSearch(): void {
     this.searching.update((on) => !on);
-    if (!this.searching()) this.query.set('');
+    if (!this.searching()) {
+      this.query.set('');
+      return;
+    }
+    // The field opens above the Menu's rows on a phone: take the focus there.
+    afterNextRender(
+      () => this.document.getElementById(`${this.ns()}-search`)?.focus(),
+      { injector: this.injector },
+    );
   }
 
   /** "Nova conversa" starts over in the current view; the other one keeps its conversation. */
@@ -414,6 +495,17 @@ export class Sidebar {
 
   protected openMedia(): void {
     this.acted.emit('media');
+  }
+
+  /** The name of a row's ⋯ in "Biblioteca expandida". */
+  protected rowMenuLabel(title: string): string {
+    return $localize`:@@library.rowMore:Mais opções de ${title}:title:`;
+  }
+
+  /** "Fechar o player" (KBC-041 AC-11) from the phone Menu: v2 draws no × on the card. */
+  protected closePlayer(): void {
+    this.closer.run(this.rightPanel.content()?.component === NowPlayingPanel);
+    this.acted.emit('player');
   }
 
   /** "N documentos sem nível" (KBC-107) leads to T24: the drawer closes. */
@@ -477,9 +569,27 @@ export class Sidebar {
     if (!topic.canOpen)
       return $localize`:@@library.groupOnly:Só os sub-acervos abaixo`;
     const documents = formatNumber(topic.documentCount, this.locale);
-    return topic.documentCount === 1
-      ? $localize`:@@library.collectionOne:Acervo · 1 documento`
-      : $localize`:@@library.collectionMany:Acervo · ${documents}:count: documentos`;
+    const texts =
+      topic.documentCount === 1
+        ? $localize`:@@library.collectionOne:Acervo · 1 documento`
+        : $localize`:@@library.collectionMany:Acervo · ${documents}:count: documentos`;
+    // v2 · Sua biblioteca: "Acervo · 11 áudios · 1 documento", the audio first.
+    const children = this.chat
+      .topicList()
+      .filter((one) => one.parent === topic.slug)
+      .map((one) => one.slug);
+    const media = this.counts.mediaIn(topic.slug, children) ?? 0;
+    if (media === 0) return texts;
+    const audio = formatNumber(media, this.locale);
+    const heard =
+      media === 1
+        ? $localize`:@@library.collectionAudioOne:1 áudio`
+        : $localize`:@@library.collectionAudioMany:${audio}:count: áudios`;
+    const docs =
+      topic.documentCount === 1
+        ? $localize`:@@library.documentsOne:1 documento`
+        : $localize`:@@library.documentsMany:${documents}:count: documentos`;
+    return $localize`:@@library.collectionWithAudio:Acervo · ${heard}:audio: · ${docs}:documents:`;
   }
 
   private libraryItem(): PinnedItem | null {
@@ -488,7 +598,10 @@ export class Sidebar {
       ? {
           key: 'library',
           title: link.title,
-          meta: $localize`:@@library.allMedia:Todas as mídias`,
+          meta: this.withCount(
+            $localize`:@@library.allMedia:Todas as mídias`,
+            this.counts.total(),
+          ),
           path: link.path,
           icon: 'library',
           colors: ['#7a3d22', '#2a120a'],
@@ -496,12 +609,29 @@ export class Sidebar {
       : null;
   }
 
+  /** "Todas as mídias · 11": the count once known. */
+  private withCount(label: string, count: number | null): string {
+    return count === null
+      ? label
+      : `${label} · ${formatNumber(count, this.locale)}`;
+  }
+
+  /** "Lista · 12 marcadores" (v2 · Sua biblioteca), "Lista" until the count is known. */
+  private bookmarksMeta(count: number | null): string {
+    const list = $localize`:@@library.bookmarksMeta:Lista`;
+    if (count === null) return list;
+    const marks = formatNumber(count, this.locale);
+    return count === 1
+      ? $localize`:@@library.bookmarksMetaOne:Lista · 1 marcador`
+      : $localize`:@@library.bookmarksMetaMany:Lista · ${marks}:count: marcadores`;
+  }
+
   private bookmarksItem(): PinnedItem | null {
     return this.audio.listens()
       ? {
           key: 'bookmarks',
           title: $localize`:@@library.bookmarks:Meus marcadores`,
-          meta: $localize`:@@library.bookmarksMeta:Lista`,
+          meta: this.bookmarksMeta(this.counts.bookmarks()),
           path: '/midia/marcadores',
           icon: 'bookmarkFill',
           colors: ['#5b3fd1', '#9ad1ff'],
@@ -512,12 +642,21 @@ export class Sidebar {
   private queueItem(): PinnedItem | null {
     if (!this.queue.allowed()) return null;
     const active = this.queue.active();
+    // v2 · Sua biblioteca: what needs the person comes first ("3 precisam de atenção").
+    const attention = this.queue
+      .items()
+      .filter(({ phase }) => phase === 'attention').length;
     return {
       key: 'queue',
       title: $localize`:@@library.queue:Fila de processamento`,
-      meta: active
-        ? $localize`:@@library.queueActive:${active}:count: em processamento`
-        : $localize`:@@library.queueIdle:Nada em processamento`,
+      meta:
+        attention === 1
+          ? $localize`:@@library.queueAttentionOne:1 precisa de atenção`
+          : attention > 1
+            ? $localize`:@@library.queueAttention:${attention}:count: precisam de atenção`
+            : active
+              ? $localize`:@@library.queueActive:${active}:count: em processamento`
+              : $localize`:@@library.queueIdle:Nada em processamento`,
       path: '/fila',
       icon: 'upload',
       colors: ['#1f9c56', '#0b3d22'],

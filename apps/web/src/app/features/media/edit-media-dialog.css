@@ -1,6 +1,6 @@
 .note {
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
 }
 
 .note:empty {
@@ -24,4 +24,64 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+/* The phone's sheet opens on its heading (a target of the focus, not a control). */
+.head h2:focus {
+  outline: none;
+}
+
+/* v2 · media-library-edit at a desktop: 180 from the top whatever the fields below hold,
+   the cover 20 from the fields, each field a 16 label 6 over its 44 box and 14 from the
+   next, the help 6 under the author, "Cancelar"/"Salvar" 20 under it and 24 from the edge. */
+@media (min-width: 1024px) {
+  .panel {
+    margin-top: 11.25rem;
+  }
+
+  .columns:has(> .edit-cover) {
+    gap: var(--space-5);
+  }
+
+  .column {
+    gap: 0.875rem;
+  }
+
+  .column .field,
+  .column ::ng-deep .combo {
+    gap: 0.375rem;
+  }
+
+  .column .label,
+  .column ::ng-deep .label {
+    margin: 0;
+    line-height: 1rem;
+  }
+
+  /* The fields' hairline (v2 · media-library-edit). */
+  .column .field input[type='text'],
+  .column .field select,
+  .column ::ng-deep .combo input {
+    border-color: color-mix(in srgb, var(--color-text) 12%, transparent);
+  }
+
+  .column .field input[type='text']:focus,
+  .column .field select:focus,
+  .column ::ng-deep .combo input:focus {
+    border-color: var(--color-text);
+  }
+
+  .column .field input[aria-invalid='true'] {
+    border-color: var(--color-danger);
+  }
+
+  .close {
+    width: 2.25rem;
+    height: 2.25rem;
+    margin: 0;
+  }
+
+  .actions {
+    padding-top: 0;
+  }
 }

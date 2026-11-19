@@ -146,7 +146,7 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     await renderPanel();
     expect(screen.getByRole('dialog', { name: 'Enviar áudio' })).toBeTruthy();
     expect(
-      screen.getByText('mp3, m4a, wav, flac, ogg ou opus, até 4 GB cada'),
+      screen.getByText('mp3, m4a, wav, flac, ogg ou opus · até 4 GB cada'),
     ).toBeTruthy();
   });
 
@@ -521,7 +521,15 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     });
     expect(author.value).toBe('');
     expect(author.getAttribute('aria-describedby')).toBeTruthy();
-    expect(screen.getByText(/Em branco, o áudio fica em/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Escolha um autor do acervo .*Em branco, o áudio fica em/,
+      ),
+    ).toBeTruthy();
+    // A phone says only the blank's part, under the field (media-upload@mobile).
+    expect(
+      screen.getByText(/^Em branco, o áudio fica em "Outros autores"\.$/),
+    ).toBeTruthy();
   });
 
   it('creates the item, sends the file with real progress, then hands it over (AC-1)', async () => {
@@ -558,7 +566,9 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     tus.last.progress(1, 3);
     await fixture.whenStable();
     expect(screen.getByRole('progressbar').getAttribute('value')).toBe('33');
-    expect(screen.getByText(/Enviando… 0 de 0 MB · 33%/)).toBeTruthy();
+    // The words under the name, the percent beside the bar (media-upload-sending).
+    expect(screen.getByText('Enviando… 0 de 0 MB')).toBeTruthy();
+    expect(screen.getByText('33%')).toBeTruthy();
     tus.last.succeed();
     http
       .expectOne(`/api/v1/media/${CREATED.id}`)
@@ -1439,7 +1449,8 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
         length: () => of(null),
       });
       await chooseChecked(panel);
-      expect(aiReason()).toContain('consiga ler');
+      // The upload's card says it short (v2 · media-upload).
+      expect(aiReason()).toContain('Escolha um arquivo legível');
     });
 
     const keptWith = (acceptedUsd: number | null, tracks = 'ai' as const) =>

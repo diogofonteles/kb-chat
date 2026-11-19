@@ -40,4 +40,16 @@ describe('RelationIndex', () => {
     const self = doc('wiki/concepts/Gnose.md', { related: ['[[Gnose]]'] });
     expect(new RelationIndex([self]).groupsOf(self).relatedFrom).toEqual([]);
   });
+
+  it("carries each reference's authorship, for a phone's subject shelf", () => {
+    const own = doc('raw/a/aula.md', {
+      example_of: ['[[Cabala]]'],
+      author_group: 'outros-autores',
+    });
+    const [ref] = new RelationIndex([cabala, own]).groupsOf(cabala).examples;
+    expect(ref).toMatchObject({
+      id: 'raw/a/aula.md',
+      authorship: 'outros-autores',
+    });
+  });
 });

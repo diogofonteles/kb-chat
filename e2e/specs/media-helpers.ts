@@ -321,3 +321,53 @@ export async function expectLibraryView(page: Page, view: LibraryView) {
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu')).toHaveCount(0);
 }
+
+/**
+ * "Fechar o player" (KBC-041 AC-11): v2 draws no × on the bar or on the phone's mini player.
+ * On a phone it is a row of the Menu (the avatar); on desktop it is in "Tocando agora" ⋯
+ * (opened from the bar if need be) and, `via: 'account'`, in the avatar's menu (where a
+ * source panel takes the right panel, so "Tocando agora" cannot open).
+ */
+export async function closePlayer(
+  page: Page,
+  via: 'panel' | 'account' = 'panel',
+): Promise<void> {
+  const bar = page.getByRole('region', { name: 'Mini-player' });
+  await expect(
+    bar.getByRole('button', { name: 'Fechar o player' }),
+  ).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 0) < 1024) {
+    // A page with its own header (the collection's album page) has "←" in place of the
+    // avatar: there the navigation's Acervos opens the Menu.
+    const avatar = page.getByRole('button', { name: 'Menu', exact: true });
+    if (await avatar.isVisible()) await avatar.click();
+    else
+      await page
+        .getByRole('navigation', { name: 'Navegação' })
+        .getByRole('button', { name: 'Acervos' })
+        .click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    const close = menu.getByRole('button', { name: 'Fechar o player' });
+    // The drawn rows stay at the sheet's foot: in sight without scrolling.
+    await expect(close).toBeInViewport();
+    await close.click();
+    await expect(menu).toBeHidden();
+    return;
+  }
+  if (via === 'account') {
+    await page.getByRole('button', { name: /^Conta de / }).click();
+    await page
+      .getByRole('menu', { name: 'Conta' })
+      .getByRole('menuitem', { name: 'Fechar o player' })
+      .click();
+    return;
+  }
+  const nowPlaying = bar.getByRole('button', { name: 'Tocando agora' });
+  if ((await nowPlaying.getAttribute('aria-pressed')) !== 'true')
+    await nowPlaying.click();
+  await page
+    .getByRole('complementary', { name: 'Tocando agora' })
+    .getByRole('button', { name: 'Mais opções de Tocando agora' })
+    .click();
+  await page.getByRole('menuitem', { name: 'Fechar o player' }).click();
+}

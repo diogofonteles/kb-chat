@@ -6,6 +6,7 @@ import {
   matches,
   orderByTitle,
   orderCollections,
+  savedWhen,
   shows,
   type LibraryView,
 } from './library-list.js';
@@ -136,5 +137,22 @@ describe('the recent documents (KBC-125 FR-5)', () => {
     expect(
       inVisibleCollections(docs, new Set(['hermetismo'])).map((d) => d.title),
     ).toEqual(['Caibalion']);
+  });
+});
+
+describe('savedWhen (v2 · Sua biblioteca, a conversation row)', () => {
+  const now = new Date(2026, 10, 18, 15, 30);
+  const at = (...parts: [number, number, number, number, number]) =>
+    new Date(...parts).toISOString();
+
+  it('says "agora" within five minutes, then the minutes within the hour', () => {
+    expect(savedWhen(at(2026, 10, 18, 15, 27), now)).toBe('agora');
+    expect(savedWhen(at(2026, 10, 18, 15, 5), now)).toBe('há 25 min');
+  });
+
+  it('gives the time on the same day, the day and month this year, else the full date', () => {
+    expect(savedWhen(at(2026, 10, 18, 9, 4), now)).toBe('09:04');
+    expect(savedWhen(at(2026, 10, 12, 12, 0), now)).toBe('12/11');
+    expect(savedWhen(at(2025, 2, 3, 12, 0), now)).toBe('03/03/2025');
   });
 });

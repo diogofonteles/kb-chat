@@ -18,14 +18,9 @@
     (click)="opened.emit()"
     >{{ item().title }}</a
   >
+  <!-- One muted line, "·" between (media-library-search): the album, the author, the length. -->
   <p class="meta">
-    @if (place()) {
-      <span class="place">{{ place() }}</span>
-    }
-    <app-authorship-badge [mediaAuthor]="item().author" />
-    @if (duration()) {
-      <span class="duration">{{ duration() }}</span>
-    }
+    <span class="place">{{ meta() }}</span>
     @if (bySubject()) {
       <span i18n="@@library.hit.bySubject">Pelo assunto</span>
     }

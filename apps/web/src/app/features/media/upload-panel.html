@@ -10,7 +10,14 @@
       <div class="titles">
         <h2 id="upload-title" i18n="@@media.upload.title">Enviar áudio</h2>
         @if (showSteps()) {
-          <app-preparation-steps [step]="1" />
+          <!-- "PASSO 1 DE 4 · ENVIAR E ESCOLHER" over the title (media-upload): the other
+               steps open after the upload, on the preparation's page. -->
+          <p class="step-kicker" data-testid="step-text">
+            <span class="wide" i18n="@@media.upload.stepKicker"
+              >Passo 1 de 4 · Enviar e escolher</span
+            >
+            <span class="narrow" i18n="@@prep.step.of1">Passo 1 de 4</span>
+          </p>
         }
       </div>
       @if (stage() !== 'sending') {
@@ -29,8 +36,11 @@
 
     <div class="columns">
       <div class="column">
+        <!-- With nothing chosen, the dashed zone (media-upload); once there are files, their
+             cards take its place (media-upload-chosen) and it still takes a drop. -->
         <section
           class="drop"
+          [class.filled]="uploads.entries().length > 0"
           [class.dragging]="dragging()"
           [class.invalid]="!!fileProblem()"
           aria-labelledby="file-label"
@@ -38,35 +48,70 @@
           (dragleave)="dragging.set(false)"
           (drop)="dropped($event)"
         >
-          @if (uploads.entries().length === 0) {
-            <ui-icon class="drop-icon" name="upload" [size]="32" />
-          }
-          <p id="file-label" class="label" i18n="@@media.upload.file">
+          <p
+            id="file-label"
+            class="label visually-hidden"
+            i18n="@@media.upload.file"
+          >
             Arquivo
           </p>
-          <p class="rule" id="file-rule">{{ rule }}</p>
           @if (uploads.entries().length === 0) {
+            <ui-icon class="drop-icon" name="upload" [size]="32" />
             <p class="hint" i18n="@@media.upload.dropHint">
-              Arraste os arquivos para cá ou
+              Arraste os áudios para cá
             </p>
-          }
-          <button
-            type="button"
-            uiButton="white"
-            size="sm"
-            [disabled]="stage() === 'sending'"
-            (click)="chooseFile()"
-          >
-            @if (uploads.entries().length > 0) {
-              <ng-container i18n="@@media.upload.chooseOther"
-                >Adicionar arquivos</ng-container
-              >
-            } @else {
-              <ng-container i18n="@@media.upload.choose"
-                >Escolher arquivos</ng-container
-              >
+            <button
+              type="button"
+              uiButton="white"
+              class="choose"
+              (click)="chooseFile()"
+              i18n="@@media.upload.choose"
+            >
+              Escolher arquivos
+            </button>
+          } @else {
+            <ul
+              class="files"
+              aria-label="Arquivos"
+              i18n-aria-label="@@media.upload.files"
+            >
+              @for (entry of uploads.entries(); track entry.key) {
+                <li>
+                  <app-upload-file-row
+                    [entry]="entry"
+                    [locked]="stage() === 'sending'"
+                    [cancellable]="
+                      stage() === 'sending' && uploads.entries().length === 1
+                    "
+                    [submitted]="submitted()"
+                    [topics]="topics()"
+                    (renamed)="uploads.rename(entry.key, $event)"
+                    (removed)="uploads.remove(entry.key)"
+                    (cancelled)="cancelUpload()"
+                  />
+                </li>
+              }
+            </ul>
+            @if (stage() !== 'sending') {
+              <!-- No place in the frames: more files join the list from here (or a drop). -->
+              <button type="button" class="add-more" (click)="chooseFile()">
+                <ui-icon name="plus" [size]="16" />
+                <span i18n="@@media.upload.chooseOther"
+                  >Adicionar arquivos</span
+                >
+              </button>
             }
-          </button>
+          }
+          <p
+            class="rule"
+            id="file-rule"
+            [class.visually-hidden]="uploads.entries().length > 0"
+          >
+            <span class="wide">{{ rule }}</span
+            ><span class="narrow" i18n="@@media.upload.ruleShort"
+              >mp3, m4a, wav, flac, ogg ou opus · até 4 GB</span
+            >
+          </p>
           <input
             #fileInput
             class="visually-hidden"
@@ -84,41 +129,33 @@
           }
         </section>
 
-        @if (uploads.entries().length > 0) {
-          <ul
-            class="files"
-            aria-label="Arquivos"
-            i18n-aria-label="@@media.upload.files"
-          >
-            @for (entry of uploads.entries(); track entry.key) {
-              <li>
-                <app-upload-file-row
-                  [entry]="entry"
-                  [locked]="stage() === 'sending'"
-                  [submitted]="submitted()"
-                  [topics]="topics()"
-                  (renamed)="uploads.rename(entry.key, $event)"
-                  (removed)="uploads.remove(entry.key)"
-                />
-              </li>
-            }
-          </ul>
-        }
-
         <label class="field">
           <span class="label" i18n="@@media.upload.topic">Acervo</span>
-          <select formControlName="topic" (change)="topicChosen()">
-            @for (option of choices(); track option.slug) {
-              <option [value]="option.slug">{{ treeTitle(option) }}</option>
-            }
-          </select>
+          <span class="select-box">
+            <select formControlName="topic" (change)="topicChosen()">
+              @for (option of choices(); track option.slug) {
+                <option [value]="option.slug">{{ treeTitle(option) }}</option>
+              }
+            </select>
+            <ui-icon class="caret" name="chevDown" [size]="18" />
+          </span>
         </label>
 
         <app-author-combobox
           [topic]="chosenTopic()"
           [disabled]="stage() === 'sending'"
+          helpId="upload-author-help"
           [(name)]="authorName"
         />
+        <!-- Under both fields, as wide as they are (media-upload). -->
+        <p class="author-help" id="upload-author-help">
+          <span class="wide" i18n="@@media.upload.authorHelp"
+            >Escolha um autor do acervo ou digite um novo. Em branco, o áudio
+            fica em "Outros autores".</span
+          ><span class="narrow" i18n="@@media.upload.authorHelpShort"
+            >Em branco, o áudio fica em "Outros autores".</span
+          >
+        </p>
 
         @if (levels.shown()) {
           <app-level-field
@@ -141,20 +178,31 @@
       <!-- Out of the way while sending: the progress of each file is what matters then. -->
       @if (!uploads.onlyResuming() && stage() !== 'sending') {
         <div class="column options">
-          <app-preparation-options [several]="uploads.entries().length > 1" />
+          <app-preparation-options
+            [several]="uploads.entries().length > 1"
+            [compact]="true"
+            [noFile]="noFile()"
+          />
         </div>
+      } @else if (stage() === 'sending') {
+        <p class="column next" i18n="@@media.upload.nextSteps">
+          Os próximos passos abrem depois do envio.
+        </p>
       }
     </div>
 
     <footer class="actions">
       @if (stage() === 'sending') {
+        <!-- "Cancelar" in the phone's top row (media-upload-sending@mobile). -->
         <button
           type="button"
           uiButton="ghost"
+          [attr.aria-label]="cancelSendingLabel"
           (click)="cancelUpload()"
-          i18n="@@media.upload.cancelSending"
         >
-          Cancelar envio
+          <span class="wide" i18n="@@media.upload.cancelSending"
+            >Cancelar envio</span
+          ><span class="narrow" i18n="@@media.upload.cancel">Cancelar</span>
         </button>
       } @else {
         <button
@@ -166,10 +214,13 @@
           Cancelar
         </button>
         <button
+          #sendButton
           type="submit"
           uiButton="primary"
           [disabled]="uploads.checking()"
-          [attr.aria-disabled]="waitingForLevels() ? 'true' : null"
+          [attr.aria-disabled]="
+            waitingForLevels() || nothingToPick() ? 'true' : null
+          "
           [attr.aria-busy]="waitingForLevels() ? 'true' : null"
         >
           @if (waitingForLevels()) {
@@ -185,6 +236,8 @@
               >Tentar de novo</ng-container
             >
           } @else {
+            <!-- With its icon, as in every frame (media-upload*). -->
+            <ui-icon name="upload" [size]="18" />
             <ng-container i18n="@@media.upload.send">Enviar</ng-container>
           }
         </button>

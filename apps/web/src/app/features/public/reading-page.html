@@ -4,7 +4,7 @@
     <span i18n="@@reading.brand">Nova Alexandria</span>
   </a>
   <a class="other" [routerLink]="other().path">{{ other().label }}</a>
-  <a uiButton="white" size="sm" routerLink="/">
+  <a uiButton="white" size="sm" class="enter" routerLink="/">
     @if (signedIn()) {
       <ng-container i18n="@@reading.openApp">Abrir o app</ng-container>
     } @else {
@@ -49,5 +49,7 @@
       </ul>
     </nav>
     <div class="column"><ng-content /></div>
+    <!-- v2 · Públicas: an optional card to the right of the column (the privacy contact). -->
+    <div class="aside"><ng-content select="[readingAside]" /></div>
   </div>
 </main>

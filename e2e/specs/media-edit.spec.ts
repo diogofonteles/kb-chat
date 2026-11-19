@@ -34,7 +34,7 @@ async function openMedia(page: Page) {
   // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
   await openMediaFromLibrary(page);
   await expect(
-    page.getByRole('heading', { name: /Mídia — Hermetismo/ }),
+    page.getByRole('heading', { name: /Acervo — Hermetismo/ }),
   ).toBeVisible();
 }
 
@@ -131,7 +131,7 @@ test('AC-2: moved, it leaves the list with the notice and the link, and keeps th
   await expect(page.getByRole('link', { name: title })).toBeHidden();
   await page.getByRole('link', { name: 'Ver o acervo' }).click();
   await expect(
-    page.getByRole('heading', { name: /Mídia — Alquimia Prática/ }),
+    page.getByRole('heading', { name: /Acervo — Alquimia Prática/ }),
   ).toBeVisible();
   await expect(page.getByRole('link', { name: title })).toBeVisible();
   const read = await page.request.get(`/api/v1/media/${id}`);
@@ -149,7 +149,13 @@ test('AC-3: whoever did not send it sees no "Editar informações"', async ({
   const other = await personPage(browser);
   await openMedia(other);
   await expect(other.getByRole('link', { name: title })).toBeVisible();
-  await expect(menuOf(other, title)).toBeHidden();
+  // v2 (media-list-menu): everyone's ⋯ plays and shares; editing is not in it.
+  await menuOf(other, title).click();
+  await expect(other.getByRole('menuitem').first()).toBeVisible();
+  await expect(
+    other.getByRole('menuitem', { name: 'Editar informações' }),
+  ).toHaveCount(0);
+  await other.keyboard.press('Escape');
   await other.goto(`/midia/${id}`);
   await expect(other.getByRole('heading', { name: title })).toBeVisible();
   await expect(
@@ -169,7 +175,10 @@ test('AC-5, FR-4: a blank title is said at the field; a server error keeps what 
   await openDialog(page, title);
   const field = titleField(page);
   await field.fill('   ');
-  await saveButton(page).click();
+  // Said at once, "Salvar" looks off; a press (aria-disabled keeps it pressable) says it too.
+  await expect(page.getByText('Dê um título ao áudio.')).toBeVisible();
+  await expect(saveButton(page)).toHaveAttribute('aria-disabled', 'true');
+  await saveButton(page).click({ force: true });
   await expect(page.getByText('Dê um título ao áudio.')).toBeVisible();
   await expect(field).toHaveAttribute('aria-invalid', 'true');
   await field.fill('Título que fica');
@@ -193,10 +202,24 @@ test('AC-7: works by keyboard, and Escape gives the focus back to the menu', asy
   const trigger = menuOf(page, title);
   await trigger.focus();
   await page.keyboard.press('Enter');
-  await expect(
-    page.getByRole('menuitem', { name: 'Editar informações' }),
-  ).toBeFocused();
+  // The menu opens on its first item ("Tocar agora" on a desktop, media-list-menu); the
+  // arrows reach "Editar informações".
+  const edit = page.getByRole('menuitem', { name: 'Editar informações' });
+  await expect(page.getByRole('menuitem').first()).toBeFocused();
+  for (let step = 0; step < 3; step++) {
+    if (await edit.evaluate((item) => item === document.activeElement)) break;
+    await page.keyboard.press('ArrowDown');
+  }
+  await expect(edit).toBeFocused();
   await page.keyboard.press('Enter');
+  // A phone's sheet opens on its heading, with no keyboard over it (media-library-edit@mobile);
+  // Tab reaches the title.
+  if ((page.viewportSize()?.width ?? 0) < 1024) {
+    await expect(
+      editor(page).getByRole('heading', { name: 'Editar informações' }),
+    ).toBeFocused();
+    await page.keyboard.press('Tab');
+  }
   await expect(titleField(page)).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(editor(page)).toBeHidden();
@@ -215,7 +238,8 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await openDialog(page, title);
     await topicField(page).selectOption('alquimia');
     await titleField(page).fill('');
-    await saveButton(page).click();
+    await expect(saveButton(page)).toHaveAttribute('aria-disabled', 'true');
+    await saveButton(page).click({ force: true });
     await expect(page.getByText('Dê um título ao áudio.')).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
     await titleField(page).fill(title);

@@ -19,7 +19,9 @@
     'foot foot';
   gap: var(--shell-gap);
   height: 100%;
-  padding: 0 var(--shell-gap) var(--shell-gap);
+  /* v2 · Casca: 8 around every panel, the top bar included (its row starts at 8, the panels
+     at 72). */
+  padding: var(--shell-gap);
   background: var(--color-shell);
 }
 
@@ -27,8 +29,31 @@
   grid-template-columns: var(--shell-sidebar-collapsed) minmax(0, 1fr);
 }
 
+/* Biblioteca expandida (⤢): Sua biblioteca, wide, in the main panel's place. */
+.library-wide {
+  grid-area: main;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(to bottom, var(--overlay-2), transparent 20rem),
+    var(--color-bg);
+}
+
+.app-shell.expanded > .layout {
+  display: none;
+}
+
 .app-shell:not(.with-player) {
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* Without the bar (v2 · a collection of texts) the panels reach 8 from the foot: no empty
+   foot row, and so no gap for it. */
+.app-shell.desktop:not(.with-player) {
+  grid-template-areas:
+    'top top'
+    'library main';
 }
 
 .top {
@@ -38,7 +63,8 @@
 .library {
   grid-area: library;
   min-height: 0;
-  overflow-y: auto;
+  /* The sidebar scrolls its own rows and keeps its foot (the AI spend) in place. */
+  overflow: hidden;
   border-radius: var(--radius-card);
   background: var(--color-bg);
 }
@@ -79,6 +105,22 @@
   grid-template-columns: minmax(0, 1fr) var(--shell-source);
 }
 
+/* The document page (chat-document): it takes the main panel and the right one; the
+   conversation waits under it, out of sight, as it is (back with ✕ or Escape). */
+.layout.doc-page {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.layout.doc-page > .conversation {
+  display: none;
+}
+
+.layout.doc-page > .panel {
+  overflow: hidden;
+  border-radius: 0;
+  background: transparent;
+}
+
 .panel {
   min-height: 0;
   /* The panel is its own scroller: a host's overflow-y (the document, a passage, a track's
@@ -117,22 +159,36 @@
   container-type: inline-size;
 }
 
-/* A column too narrow for one line (the panel open below ~1366 px): the switch and the help
-   wrap below the title instead of passing under the panel. */
-@container (max-width: 33rem) {
-  .topbar {
-    flex-wrap: wrap;
-    row-gap: var(--space-2);
-  }
-}
-
-/* First screen: greeting and question box centered together (like a chat home);
-   after the first question the box docks at the bottom. The greeting's row takes its
-   content height first and only the spacers around it shrink, so a short window never
-   clips the greeting: it scrolls in its own row instead. */
 /* The media pages (T14, T15) take the conversation's place under the top bar and scroll. */
 .conversation > router-outlet {
   display: none;
+}
+
+/* v2: a media page starts with its own header (art, title) at the top of the main panel;
+   the shell's band with the collection only keeps its heading for screen readers. On a
+   phone the band is the page's header row: the avatar (Menu) and the page's name. */
+.conversation.media > .topbar {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.page-name {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation.media {
@@ -155,44 +211,70 @@
   overflow-y: auto;
 }
 
-.conversation.empty {
-  grid-template-rows:
-    auto minmax(0, 1fr) minmax(0, max-content) auto
-    minmax(0, 1.25fr) auto;
-}
-
-.conversation.empty > .thread {
-  grid-row: 3;
-  padding-bottom: var(--space-6);
-}
-
-.conversation.empty > .composer-dock {
-  grid-row: 4;
-}
-
-.conversation.empty .welcome {
-  padding-top: 0;
-}
-
+/* v2 · Conversa: the scope row (or the results' head), the page, the question box at the
+   foot, all with 32 at the sides (homeMain, convoMain, resultsMain). */
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
-  min-height: 4rem;
   padding: var(--space-4) var(--space-8) var(--space-2);
 }
 
-/* The esoteric theme's one ornament: a discreet ☿ before the title, never in running text (DS-16). */
-:host-context([data-theme='esoteric']) .topic::before {
+.topbar.bare {
+  padding: 0;
+}
+
+.scope-bar {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+/* The esoteric theme's one ornament: a discreet ☿ before the page's name, never in running
+   text (DS-16). */
+:host-context([data-theme='esoteric']) .page-title::before {
   content: '☿ ';
   color: var(--color-accent);
 }
 
-.view-switch {
-  flex-shrink: 0;
+/* A page with its own header on a desktop: its frames have no collection bar. */
+.topbar[hidden] {
+  display: none;
+}
+
+/* A page with its own header (PageHeader): on a phone, "<avatar> Biblioteca  🔍 ⬆" in the
+   v2 frames' row (media-library@mobile: title 24/700, its icon buttons at the end). */
+.topbar.own .own-title {
+  flex: 1 1 0;
+  font-family: inherit;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.own-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
   margin-left: auto;
 }
 
+/* A page with its own header and colour (the library, a collection's album page) paints its
+   own gradient from the top: on a phone the top row is its first band, with no seam. */
+.conversation.own-header {
+  background: var(--color-bg);
+}
+
+.conversation.own-header .topbar.own {
+  background: color-mix(in srgb, var(--own-tint) 70%, transparent);
+}
+
+.menu.back {
+  color: var(--color-text);
+}
+
+/* The media pages keep the collection as their title (they draw their own v2 head below). */
 .topic {
   /* One line, whatever the panel leaves: a long title ends in "…" (M-1). */
   min-width: 0;
@@ -214,6 +296,72 @@
   color: var(--color-text-muted);
 }
 
+:host-context([data-theme='esoteric']) .topic::before {
+  content: '☿ ';
+  color: var(--color-accent);
+}
+
+.page-title {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--text-section);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profiles {
+  display: flex;
+  flex: 1 1 100%;
+  gap: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* A 36 chip on a 44 target (MA-03): the pill is drawn behind the label, as the box's. */
+.profiles .ui-chip {
+  position: relative;
+  z-index: 0;
+  min-height: var(--target);
+  margin-block: -0.25rem;
+  background: none;
+}
+
+.profiles .ui-chip::before {
+  content: '';
+  position: absolute;
+  inset: 0.25rem 0;
+  z-index: -1;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+}
+
+.profiles .ui-chip.ui-chip--on {
+  color: var(--color-bg);
+}
+
+.profiles .ui-chip.ui-chip--on::before {
+  background: var(--color-text);
+}
+
+.profiles .ui-chip:focus-visible {
+  outline: none;
+}
+
+.profiles .ui-chip:focus-visible::before {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.profile-help {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
 .thread {
   /* Containing block for absolutely positioned descendants (the visually hidden live
      regions): without it they escape the scroller and stretch the page itself. */
@@ -221,110 +369,22 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
-  gap: var(--space-8);
+  gap: var(--space-5);
   width: 100%;
-  max-width: var(--column);
-  margin: 0 auto;
-  padding: var(--space-8) var(--space-4);
+  min-height: 0;
+  padding: var(--space-3) var(--space-8) var(--space-4);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-/* v2 chat-results: a search page uses the whole main panel (32 at the sides), not the
-   reading column, so "Melhor resultado" fits beside the "Documentos" table (KBC-126 FR-2). */
+/* chat-results: the results' head carries its own 20 at the top. */
 .thread.search-page {
-  max-width: none;
-  padding-inline: var(--space-8);
-}
-
-.welcome {
-  display: grid;
-  gap: var(--space-2);
-  padding-top: 12vh;
-  text-align: center;
-}
-
-.greeting {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(1.75rem, 4vw, 2.25rem);
-  line-height: 1.2;
-}
-
-.hint {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0 0.35em;
-  margin: 0;
-  color: var(--color-text-muted);
-}
-
-.suggestions {
-  display: grid;
-  justify-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-4);
-}
-
-.suggestions-title {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-.suggestions ul {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.suggestion {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--target);
-  padding: 0 var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-surface);
-  color: var(--color-text);
-  font: inherit;
-  cursor: pointer;
-}
-
-.suggestion:hover {
-  border-color: var(--color-accent);
-}
-
-.notice {
-  display: grid;
-  justify-items: center;
-  gap: var(--space-2);
-  margin: var(--space-4) 0 0;
-}
-
-.notice p {
-  margin: 0;
-}
-
-.secondary {
-  min-height: var(--target);
-  padding: 0 var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  cursor: pointer;
+  padding-top: var(--space-5);
 }
 
 .composer-dock {
   width: 100%;
-  max-width: var(--column);
-  margin: 0 auto;
-  padding: 0 var(--space-4) var(--space-4);
+  padding: 0 var(--space-8) var(--space-5);
 }
 
 /* Phones: Sua biblioteca as a full-screen "Menu" (chat-sidebar-drawer-mobile). */
@@ -346,13 +406,16 @@
 
 .drawer-body {
   position: relative;
-  min-height: 100%;
+  /* The Menu's own scroller (one screen tall), so its drawn rows can stick to its foot. */
+  height: 100%;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .drawer-close {
   position: absolute;
-  top: var(--space-3);
+  /* Beside the account, as drawn: its row starts 56 down. */
+  top: 3.5rem;
   right: var(--space-4);
   z-index: 1;
 }
@@ -400,10 +463,58 @@
     border-radius: 0;
   }
 
+  /* v2 · celular: the header row of a page, 56 from the top (the status bar's room), the
+     avatar 32, 12 apart from the page's name (24/700). */
+  .conversation.media > .topbar {
+    position: static;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    gap: var(--space-3);
+    padding: 3.5rem var(--space-4) var(--space-3);
+    overflow: visible;
+    clip-path: none;
+  }
+
+  /* On the page's colour when it gives one: its own gradient goes on from 70% below. */
+  .conversation.media > .topbar.tinted {
+    background: color-mix(in srgb, var(--page-tint) 70%, var(--color-bg));
+  }
+
+  /* The 44 target around the 32 avatar overflows the row evenly: the avatar sits at 16. */
+  .conversation.media > .topbar .menu {
+    margin: calc((2rem - var(--target)) / 2);
+  }
+
+  /* A page's own row (PageHeader) keeps the 32 of the avatar: its title's line and the 44
+     targets of its icons overflow it evenly, as the avatar's does. */
+  .conversation.media > .topbar .own-title {
+    line-height: 2rem;
+  }
+
+  .conversation.media > .topbar .own-actions {
+    margin-block: calc((2rem - var(--target)) / 2);
+  }
+
+  .conversation.media > .topbar .topic:not(.own-title) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  /* v2 · celular: the mini player right on top of the navigation, 8 from the sides. */
+  /* Without the mini player (a collection of texts, nothing played yet) the navigation
+     band is 84 tall (v2 · celular "Conversa vazia"). */
+  .shell-foot:not(:has(app-mini-player .bar)) {
+    --nav-foot: 2.125rem;
+  }
+
   .shell-foot {
     display: grid;
-    gap: var(--space-1);
-    padding: var(--space-1) var(--space-2) 0;
+    gap: 0;
+    padding: 0 var(--space-2);
     background: color-mix(in srgb, var(--color-bg) 95%, transparent);
     box-shadow: 0 -24px 24px -8px
       color-mix(in srgb, var(--color-bg) 85%, transparent);
@@ -430,64 +541,64 @@
     visibility: hidden;
   }
 
+  /* Over the conversation, above the bottom navigation (cmDoc keeps the tabs). */
+  .layout {
+    position: relative;
+  }
+
   .panel {
-    position: fixed;
+    position: absolute;
     inset: 0;
     z-index: 10;
   }
 
+  /* cmHead: the avatar (Menu), the page's name (22/700) and, in the research, "+". Its
+     row's middle 72 from the top, under the v2 · celular status bar's room, as the media
+     pages' row (the 44 row from 50). */
   .topbar {
-    flex-wrap: wrap;
-    min-height: var(--topbar-height);
-    padding: var(--space-2) var(--space-4) var(--space-3);
+    gap: var(--space-1) var(--space-3);
+    padding: 3.125rem var(--space-4) 0.375rem;
   }
 
-  .topic {
+  .topbar:has(.scope-bar, .profiles) {
+    padding-bottom: var(--space-3);
+  }
+
+  .topic:not(.visually-hidden) {
+    flex: 1 1 0;
     font-size: 1.375rem;
-  }
-
-  /* Phones: the view switch takes its own full-width row under the title. */
-  .view-switch {
-    flex-basis: 100%;
-    order: 1;
-    margin-left: 0;
   }
 
   .hint-keyboard {
     display: none;
   }
 
-  /* Phones: the start screen fills the space above the docked question box, so a long list
-     of suggestions scrolls instead of pushing the greeting off screen. */
-  .conversation.empty {
-    grid-template-rows: auto minmax(0, 1fr) auto auto;
+  .thread {
+    gap: var(--space-4);
+    padding: var(--space-1) var(--space-4) var(--space-4);
   }
 
-  .conversation.empty > .thread {
-    grid-row: auto;
-    align-content: safe center;
-    padding-bottom: var(--space-4);
+  .thread.search-page {
+    padding-top: 0;
   }
 
-  .conversation.empty > .composer-dock {
-    grid-row: auto;
-  }
-
-  .topic {
-    /* Shrinks (with "…") instead of wrapping, so the help stays on the title row. */
-    flex: 1 1 0;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
+  /* cmComposer: the question box floats as a pill over the page's foot, 12 at the sides. */
   .composer-dock {
     padding: 0 var(--space-3) var(--space-3);
   }
 
-  .thread.search-page {
-    padding-inline: var(--space-4);
+  /* cmResults: on a phone's search page the box is the search pill under "Buscar". */
+  .conversation:not(.empty):not(.research):not(.media) {
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .conversation:not(.empty):not(.research):not(.media) > .composer-dock {
+    grid-row: 2;
+    padding: 0 var(--space-4) var(--space-3);
+  }
+
+  .conversation:not(.empty):not(.research):not(.media) > .thread {
+    grid-row: 3;
   }
 }
 

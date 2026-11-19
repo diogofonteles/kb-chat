@@ -165,3 +165,370 @@ legend {
   color: var(--color-text-muted);
   font-size: var(--text-meta);
 }
+
+/* ---------- In the upload panel (media-upload, KBC-128) ---------- */
+
+:host(.compact) {
+  gap: var(--space-3);
+}
+
+:host(.compact) .options {
+  gap: var(--space-3);
+}
+
+:host(.compact) legend {
+  margin-bottom: var(--space-3);
+  color: var(--color-text);
+  font-size: var(--text-item, 0.9375rem);
+}
+
+:host(.compact) .option.row {
+  gap: var(--space-1);
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-cover);
+}
+
+:host(.compact) .choice {
+  min-height: 1.5rem;
+}
+
+:host(.compact) .name,
+:host(.compact) .tracks legend {
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+:host(.compact) .hint,
+:host(.compact) .note {
+  font-size: 0.6875rem;
+}
+
+:host(.compact) .note {
+  color: var(--color-warn);
+}
+
+/* The division: one tinted card, its legend inside, the choices a plain list. */
+:host(.compact) .tracks {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  margin-top: 0;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-cover);
+  background: var(--overlay-1);
+}
+
+:host(.compact) .tracks legend {
+  float: left;
+  width: 100%;
+  margin: 0 0 var(--space-1);
+  letter-spacing: 0;
+}
+
+:host(.compact) .option.card,
+:host(.compact) .option.card:has(input:checked) {
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+:host(.compact) .option.card .choice {
+  gap: var(--space-2);
+  min-height: 1.75rem;
+  font-size: var(--text-meta);
+  font-weight: 400;
+}
+
+:host(.compact) .option.card .choice input {
+  width: 18px;
+  height: 18px;
+}
+
+/* The free choices say nothing more here; the one that cannot be chosen says why. */
+:host(.compact) .option.card:not(.off) .hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+:host(.compact) .option.card .hint {
+  padding-left: calc(18px + var(--space-2));
+  font-size: 0.6875rem;
+}
+
+:host(.compact) .option.card.off {
+  opacity: 1;
+}
+
+:host(.compact) .summary {
+  font-size: var(--text-xs);
+}
+
+/* The AI's cost is said once it is chosen (DS-19), under its choice; the summary line under
+   the card has no place in the frame (media-upload) and stays for a screen reader. */
+:host(.compact) .option.card.ai:has(input:checked) .hint {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+:host(.compact) .summary {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.tracks-row,
+.name .narrow {
+  display: none;
+}
+
+/* ---------- A phone's upload (media-upload@mobile): a plain list ---------- */
+
+@media (max-width: 1023px) {
+  :host(.compact) .options {
+    gap: 0;
+  }
+
+  /* "O que fazer com este áudio" 15/18, 8 over the rows, a row every 50 px (the words 15/18
+     beside the switch), "Dividir em faixas" 42 under the last (media-upload@mobile). */
+  :host(.compact) legend {
+    margin-bottom: var(--space-2);
+    font-size: var(--text-item);
+    line-height: 1.125rem;
+  }
+
+  :host(.compact) .option.row {
+    order: 0;
+    padding: 3px 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  :host(.compact) .option.subjects {
+    order: 1;
+    padding-bottom: 0;
+  }
+
+  :host(.compact) .tracks-row {
+    order: 2;
+  }
+
+  :host(.compact) .tracks {
+    order: 3;
+  }
+
+  :host(.compact) .choice {
+    min-height: var(--target);
+  }
+
+  :host(.compact) .option.row .name {
+    font-size: var(--text-item);
+    font-weight: 400;
+  }
+
+  /* Not yet in this version: the words at half their strength, as at a desktop. */
+  :host(.compact) .option.off .name {
+    color: var(--color-text);
+    opacity: 0.5;
+  }
+
+  :host(.compact) .name .wide {
+    display: none;
+  }
+
+  :host(.compact) .name .narrow {
+    display: inline;
+  }
+
+  /* The hints stay for a screen reader (aria-describedby), the transcriber's note too
+     (media-upload@mobile draws neither). */
+  :host(.compact) .note,
+  :host(.compact) .option.row .hint,
+  :host(.compact) .option.card:not(.ai) .hint {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  /* The words open it too (labels of the chevron's button). */
+  :host(.compact) .tracks-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 2.5rem;
+    color: var(--color-text);
+    font-size: var(--text-item);
+    cursor: pointer;
+  }
+
+  :host(.compact) .tracks-row label {
+    cursor: pointer;
+  }
+
+  :host(.compact) .tracks-row .name {
+    flex: 1;
+    font-size: var(--text-item);
+    font-weight: 400;
+    line-height: 1.125rem;
+  }
+
+  :host(.compact) .tracks-row .value {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    line-height: 1.0625rem;
+  }
+
+  :host(.compact) .tracks-toggle {
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 2.5rem;
+    margin-right: -3px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+
+  :host(.compact) .tracks:not(.open) {
+    display: none;
+  }
+
+  :host(.compact) .tracks legend {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+/* ---------- The upload panel at a desktop (v2 · media-upload) ----------
+   "O que fazer com este áudio" 15/18, 10 above four tinted cards 10 apart, each 14 in: its
+   name 14/17 with the switch at its top right, the words 12/17 under it, the transcriber's
+   note 11/13 with ⓘ; the division's radios 18 a ring each, 28 apart; what cannot be chosen
+   at about half its strength (an inactive control, WCAG 1.4.3's exception). */
+@media (min-width: 1024px) {
+  :host(.compact) .options {
+    gap: 0.625rem;
+  }
+
+  :host(.compact) legend {
+    margin-bottom: 0.625rem;
+    font-size: var(--text-item);
+    line-height: 1.125rem;
+  }
+
+  :host(.compact) .option.row,
+  :host(.compact) .tracks {
+    gap: var(--space-1);
+    padding: 0.875rem;
+    background: color-mix(in srgb, var(--color-text) 3%, transparent);
+  }
+
+  /* The name's line sets the row; the 22 switch hangs over the words' first pixels, as drawn
+     (the words 4 under the name). */
+  :host(.compact) .option.row .choice {
+    align-items: flex-start;
+    min-height: 1.0625rem;
+    max-height: 1.0625rem;
+  }
+
+  :host(.compact) .name,
+  :host(.compact) .tracks legend {
+    font-size: var(--text-sm);
+    line-height: 1.0625rem;
+  }
+
+  :host(.compact) .option.row .hint {
+    font-size: var(--text-xs);
+    line-height: 1.0625rem;
+  }
+
+  :host(.compact) .note {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: var(--space-1);
+    font-size: 0.6875rem;
+    line-height: 0.8125rem;
+  }
+
+  :host(.compact) .tracks legend {
+    margin-bottom: 0;
+  }
+
+  :host(.compact) .tracks {
+    gap: 0.625rem;
+  }
+
+  :host(.compact) .option.card .choice {
+    gap: 0.625rem;
+    min-height: 1.125rem;
+    line-height: 1rem;
+  }
+
+  :host(.compact) .option.card .hint {
+    margin-top: 0;
+    padding-left: calc(18px + 0.625rem);
+    line-height: 0.8125rem;
+  }
+
+  :host(.compact) .option.card .choice input[type='radio'] {
+    appearance: none;
+    box-sizing: border-box;
+    border: 2px solid color-mix(in srgb, var(--color-text) 50%, transparent);
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  :host(.compact) .option.card .choice input[type='radio']:checked {
+    border-color: var(--color-accent);
+    background: radial-gradient(
+      circle,
+      var(--color-accent) 0 4px,
+      transparent 4.5px
+    );
+  }
+
+  /* Under its row's 55 %: a 27 % ring. */
+  :host(.compact) .option.card.off .choice input[type='radio'] {
+    border-color: color-mix(in srgb, var(--color-text) 50%, transparent);
+    opacity: 1;
+  }
+
+  :host(.compact) .option.card.off .choice,
+  :host(.compact) .option.card.off .hint {
+    opacity: 0.55;
+  }
+
+  :host(.compact) .option.off .choice {
+    color: var(--color-text);
+  }
+
+  :host(.compact) .option.row.subjects {
+    background: color-mix(in srgb, var(--color-text) 1.5%, transparent);
+  }
+
+  :host(.compact) .option.row.subjects .name,
+  :host(.compact) .option.row.subjects .hint {
+    opacity: 0.5;
+  }
+}

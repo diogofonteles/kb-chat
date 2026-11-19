@@ -169,6 +169,7 @@ export class MediaPlayerPage {
   protected readonly shortcuts = inject(PlayerShortcuts);
   private readonly title = inject(Title);
   private readonly route = inject(ActivatedRoute);
+  private readonly host: HTMLElement = inject(ElementRef).nativeElement;
   private readonly preferences = inject(TranscriptPreferences);
   private readonly listening = inject(ListeningPreferences);
   /** The collections the person sees, for "Editar informações" (KBC-050). */
@@ -466,7 +467,31 @@ export class MediaPlayerPage {
   /** The edit dialog was opened from ⋯: closing it gives the focus back there. */
   private editFromMenu = false;
 
+  /**
+   * "Ver marcadores" of a library row (v2 media-library-row-menu) opens here with
+   * `#marcadores`: once the page is in, the focus (and the view) go to its bookmarks.
+   */
+  private followBookmarksLink(): void {
+    let done = false;
+    effect(() => {
+      if (done || !this.ready()) return;
+      if (this.route.snapshot.fragment !== 'marcadores') return;
+      done = true;
+      afterNextRender(
+        () => {
+          const heading = this.host.querySelector<HTMLElement>(
+            'app-bookmark-list h3',
+          );
+          heading?.scrollIntoView({ block: 'start' });
+          heading?.focus({ preventScroll: true });
+        },
+        { injector: this.injector },
+      );
+    });
+  }
+
   constructor() {
+    this.followBookmarksLink();
     inject(CollectionHeading).follow(
       computed<HeadingScope | null>(() => {
         const slug = this.media()?.topic;

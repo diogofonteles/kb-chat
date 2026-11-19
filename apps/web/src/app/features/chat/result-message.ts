@@ -2,7 +2,9 @@ import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  DOCUMENT,
   computed,
+  inject,
   input,
   output,
 } from '@angular/core';
@@ -14,7 +16,7 @@ import type {
   Topic,
 } from '@kb-chat/contracts';
 import { errorMessage } from '@core/api/api-error.js';
-import { modeLabel } from '@core/i18n/facet-labels.js';
+import { MODE_OPTIONS, modeLabel } from '@core/i18n/facet-labels.js';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import { hasFilters, type ChatMessage } from './chat-message.js';
 import { FilterBar } from './filter-bar.js';
@@ -31,8 +33,10 @@ import { ResultCard, type OpenedHit } from './result-card.js';
 import { describeMediaCount, describeResultCount } from './result-count.js';
 import { SearchLevelChange } from './search-level-change.js';
 import { UiButton } from '@ui/button.js';
+import { UiCover } from '@ui/cover.js';
 import { UiEmptyState } from '@ui/empty-state.js';
 import { UiPill } from '@ui/pill.js';
+import { UiMenu, UiMenuItem } from '@ui/menu.js';
 
 /** Each message's own ids (its column headings). */
 let nextMessage = 0;
@@ -60,14 +64,21 @@ export interface OpenedPassage {
     NgTemplateOutlet,
     SearchLevelChange,
     UiButton,
+    UiCover,
     UiEmptyState,
     UiPill,
+    UiMenu,
+    UiMenuItem,
   ],
   templateUrl: './result-message.html',
   styleUrl: './result-message.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ResultMessage {
+  /** A phone's screen (cmResults): its shorter labels. */
+  protected readonly phone =
+    inject(DOCUMENT).defaultView?.matchMedia?.('(max-width: 1023px)').matches ??
+    false;
   readonly message = input.required<ChatMessage>();
   readonly topicTitle = input('');
   readonly activeId = input<string | null>(null);
@@ -133,6 +144,11 @@ export class ResultMessage {
       : `${this.count()} · ${describeMediaCount(spoken)}`;
   });
   protected readonly modeName = computed(() => modeLabel(this.message().mode));
+  protected readonly modes = MODE_OPTIONS;
+  protected readonly modeMenuLabel = computed(
+    () =>
+      $localize`:@@message.modeMenu:Modo da busca: ${this.modeName()}:mode:`,
+  );
   protected readonly count = computed(() => {
     const response = this.response();
     return response ? describeResultCount(response) : '';
@@ -140,9 +156,15 @@ export class ResultMessage {
   protected readonly seconds = computed(
     () => (this.response()?.tookMs ?? 0) / 1000,
   );
+  /** The empty state's line under the error (chat-results-error). */
+  protected readonly errorAgain = $localize`:@@message.errorText:Tente de novo.`;
+  /** The error's title, without the "Tente de novo." its line already says. */
   protected readonly error = computed(() => {
     const code = this.message().error;
-    return code ? errorMessage(code) : '';
+    const text = code ? errorMessage(code) : '';
+    return text.endsWith(` ${this.errorAgain}`)
+      ? text.slice(0, -this.errorAgain.length - 1)
+      : text;
   });
   protected readonly filtered = computed(() =>
     hasFilters(this.message().filters),
@@ -165,23 +187,34 @@ export class ResultMessage {
   /** The first of the search's own order (BR-4) and the rest, for the table. */
   protected readonly best = computed(() => this.references()[0] ?? null);
   protected readonly rest = computed(() => this.references().slice(1));
+  /** A lone best result's copies, beside it ("Cópia deste documento", chat-results-off-topic). */
+  protected readonly bestCopies = computed(() => {
+    const first = this.best();
+    if (!first || first.kind !== 'text' || this.rest().length > 0) return null;
+    return first.hit.copies.length > 0 ? first.hit : null;
+  });
   private readonly messageId = nextMessage++;
   protected readonly headingId = (part: string) =>
     `results-${this.messageId}-${part}`;
   protected readonly skeletonRows = [0, 1, 2, 3, 4];
   protected readonly emptyTitle = computed(
     () =>
-      $localize`:@@message.empty:Nada encontrado para "${this.message().question}:question:".`,
+      $localize`:@@message.empty:Nada encontrado para “${this.message().question}:question:”.`,
   );
   protected readonly emptyFilteredTitle = computed(
     () =>
-      $localize`:@@message.emptyFiltered:Nada encontrado para "${this.message().question}:question:" com estes filtros.`,
+      $localize`:@@message.emptyFiltered:Nada encontrado para “${this.message().question}:question:” com estes filtros.`,
   );
 
   protected readonly passageKey = passageKey;
 
   protected openPassage(hit: MediaHit, index: number): void {
     this.passageOpened.emit({ hit, position: index + 1 });
+  }
+
+  /** A mode from the head's menu: the same question again in it (a no-op for the same). */
+  protected chooseMode(mode: SearchMode): void {
+    if (mode !== this.message().mode) this.modeSwitched.emit(mode);
   }
 
   protected removeFilter(filter: ActiveFilter): void {

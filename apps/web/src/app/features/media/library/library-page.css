@@ -11,6 +11,7 @@
 }
 
 .library {
+  container: library / inline-size;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -40,8 +41,27 @@
 
 .hero-text {
   display: grid;
-  gap: var(--space-2);
   min-width: 0;
+}
+
+/* v2 · pageHeader: the kicker 13/16, 10 above the 64 title, the meta 10 under its line. */
+.hero .ui-page-header__kicker {
+  margin-bottom: 0.625rem;
+  line-height: 1rem;
+}
+
+.hero .ui-page-header__meta {
+  margin-top: 0.125rem;
+}
+
+/* The frame's title is 64 at 1440 (pageHeader size 64); the shared hero token reaches 72. */
+.hero .ui-page-header__title {
+  font-size: clamp(2.25rem, 1rem + 3.4vw, 4rem);
+  /* One line, as in the frame; the descenders keep their room under the clip. */
+  padding-bottom: 0.12em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hero-text h2:focus {
@@ -53,19 +73,103 @@
   outline-offset: 2px;
 }
 
+/* v2 · actionBar: ▶ 56, then the 28 icons 20 apart; the sections start 16 under it. */
 .actions {
-  gap: var(--space-4);
+  gap: var(--space-5);
+  padding-bottom: var(--space-4);
 }
 
-.play-all:disabled {
+.bar-icon {
+  color: var(--color-text-muted);
+}
+
+.bar-icon:hover:not(:disabled, [aria-disabled='true']) {
+  color: var(--color-text);
+}
+
+.bar-icon:disabled {
   opacity: 0.5;
+}
+
+.bar-more {
+  --menu-trigger-min: 1.75rem;
+  --menu-trigger-height: 1.75rem;
+}
+
+.bar-space {
+  flex: 1 1 auto;
+}
+
+/* 🔍 and the order sit together at the end (media-library actionBar: search, then
+   "Ouvidas recentemente ☰"). */
+.bar-search {
+  /* Its glyph 20 before "Ouvidas recentemente". */
+  margin-right: -0.375rem;
+  color: var(--color-text-muted);
+}
+
+.bar-search:hover {
+  color: var(--color-text);
+}
+
+/* With nothing ready the ▶ and 🔀 look the same (media-library-collection-empty) and say
+   they are off by aria-disabled: a press does nothing. */
+.actions [aria-disabled='true'] {
   cursor: default;
 }
 
+/* The filters' row: the search (280), then the chips (media-library "filtros"). */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  /* v2 · media-library: the table's head 12 under the filters (the section's gap). */
+  padding: var(--space-2) 0 0;
+}
+
 .search {
-  flex: 0 1 20rem;
+  flex: 0 1 17.5rem;
   min-width: 12rem;
-  margin-left: auto;
+}
+
+.search-box {
+  min-height: 2.5rem;
+}
+
+.search-box input::placeholder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phone-sort {
+  display: none;
+}
+
+.phone-action {
+  --ui-icon-btn-size: var(--target) !important;
+  color: var(--color-text);
+}
+
+/* v2 · media-library@mobile: 🔍 and ⬆ 36 apart at the row's end, each still 44 tall. */
+@media (max-width: 1023px) {
+  .phone-action {
+    min-width: 2.25rem;
+    width: 2.25rem;
+  }
+
+  /* Side by side (the row's 4 gap taken back), the last glyph 16 from the screen's edge. */
+  .phone-action + .phone-action {
+    margin-left: -0.25rem;
+  }
+
+  .phone-action:last-child {
+    margin-right: -0.375rem;
+  }
+}
+
+.phone-action.on {
+  color: var(--color-accent-text);
 }
 
 .search-box {
@@ -100,8 +204,8 @@
 .sections {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-2) var(--space-8) 0;
+  gap: var(--space-6);
+  padding: 0 var(--space-8);
 }
 
 .section-head {
@@ -116,6 +220,8 @@
   margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
+  /* 20/24, as "Precisa da sua atenção" (v2 · media-library). */
+  line-height: 1.5rem;
   letter-spacing: -0.01em;
 }
 
@@ -136,7 +242,6 @@
 }
 
 .continue,
-.recents,
 .all {
   display: flex;
   flex-direction: column;
@@ -144,14 +249,9 @@
   min-width: 0;
 }
 
-.strip-tools {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
+/* "Limpar recentes" on the heading's 24 line (v2 · media-library). */
 .link {
-  min-height: 2rem;
+  min-height: 1.5rem;
   padding: 0 var(--space-2);
   border: none;
   background: transparent;
@@ -167,8 +267,8 @@
   text-decoration: underline;
 }
 
-/* Three shortcuts side by side; more scroll sideways (UP-09: the arrows and "Ver tudo"
-   too, never only a swipe). */
+/* Three shortcuts side by side (media-library-sort "Continuar ouvindo"); more scroll
+   sideways, and the focus brings each one into view. */
 .strip {
   display: grid;
   grid-auto-flow: column;
@@ -184,58 +284,6 @@
 
 .strip > * {
   scroll-snap-align: start;
-}
-
-.disclosure {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--target-desktop);
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--color-text);
-  font: inherit;
-  cursor: pointer;
-}
-
-.recent-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-  gap: var(--space-1) var(--space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.recent-list li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: var(--target);
-  min-width: 0;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-menu);
-}
-
-.recent-list li:hover {
-  background: var(--overlay-2);
-}
-
-.recent-list a {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.recent-list a:hover {
-  text-decoration: underline;
 }
 
 .quiet {
@@ -271,8 +319,13 @@
 
 .table-head {
   display: grid;
-  grid-template-columns: 2rem 2.5rem minmax(0, 1fr) 11rem 14rem 3.5rem 2.5rem;
-  grid-template-areas: 'lead title title topic status duration actions';
+  /* v2 · media-library's head: "#", "Título" over the cover and the title, then
+     "Acervo" 180, "Situação" 220 and the clock, 16 apart (drawn 28 right of the rows' own
+     columns, the clock over the length). */
+  grid-template-columns:
+    1.5rem minmax(0, 1fr)
+    11.25rem 13.75rem 1rem 1.125rem;
+  grid-template-areas: 'lead title topic status duration actions';
   align-items: center;
   column-gap: var(--space-4);
   min-height: 2.25rem;
@@ -284,7 +337,35 @@
 
 .col-lead {
   grid-area: lead;
-  text-align: right;
+  display: grid;
+  place-items: center end;
+}
+
+.col-lead > * {
+  grid-area: 1 / 1;
+}
+
+/* Over the box in the same cell, "#" only shows: a press there is the box's (WebKit paints a
+   grid's items in source order and took the press on "#"). */
+.number-head {
+  pointer-events: none;
+}
+
+/* "#" gives way to "select all" under the pointer, the focus or a selection, like a row's. */
+.select-all:not(:checked) {
+  border-color: transparent;
+}
+
+.table-head:hover .select-all,
+.select-all:focus-visible,
+.selecting .select-all {
+  border-color: var(--color-text-muted);
+}
+
+.table-head:hover .number-head,
+.table-head:focus-within .number-head,
+.selecting .number-head {
+  visibility: hidden;
 }
 
 .col-title {
@@ -305,37 +386,22 @@
   justify-content: flex-end;
 }
 
-.select-all {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
-  gap: var(--space-3);
-  min-height: var(--target-desktop);
-  margin: var(--space-2) 0 var(--space-1);
-  padding: 0 var(--space-4);
-  color: var(--color-text-muted);
-  font-size: var(--text-meta);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-/* A flex column: grid track sizing over 2 000 rows costs a frame at every layout (NFR-2). */
+/* A flex column: grid track sizing over 2 000 rows costs a frame at every layout (NFR-2).
+   The first row starts 8 under the head's line (v2 · media-library). */
 .rows {
   display: flex;
   flex-direction: column;
-  margin: 0;
+  margin: var(--space-2) 0 0;
   padding: 0;
   list-style: none;
 }
 
-.row-tracks {
-  padding-left: 5.5rem;
-}
-
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
-  gap: var(--space-3);
+  /* The frame's cards keep their size (a 156 px cover in 12 px of padding) and the row
+     leaves the rest empty (media-library-grid). */
+  grid-template-columns: repeat(auto-fill, 11.25rem);
+  gap: var(--space-2);
   margin: var(--space-2) 0 0;
   padding: 0;
   list-style: none;
@@ -347,8 +413,8 @@
 
 @container library-table (max-width: 52rem) {
   .table-head {
-    grid-template-columns: 2rem 2.5rem minmax(0, 1fr) 11rem 3.5rem 2.5rem;
-    grid-template-areas: 'lead title title status duration actions';
+    grid-template-columns: 1.5rem minmax(0, 1fr) 10.625rem 1rem 1.125rem;
+    grid-template-areas: 'lead title status duration actions';
   }
 
   .col-topic {
@@ -359,15 +425,6 @@
 @container library-table (max-width: 36rem) {
   .table-head {
     display: none;
-  }
-
-  .select-all {
-    min-height: var(--target);
-    padding: 0 var(--space-2);
-  }
-
-  .row-tracks {
-    padding-left: 3.5rem;
   }
 }
 
@@ -415,6 +472,11 @@
   cursor: pointer;
 }
 
+/* Words only at 1440 (media-library-selection); the phone's bar keeps the icons. */
+.bar-action ui-icon {
+  display: none;
+}
+
 .bar-action:hover {
   background: color-mix(in srgb, var(--color-bg) 16%, transparent);
 }
@@ -455,6 +517,19 @@
 
 ui-empty-state {
   padding-block: var(--space-8);
+}
+
+/* A phone's empty list sits lower, nearer the middle of what is left (emptyM: 24 + 48 over
+   the icon, @mobile). */
+@media (max-width: 1023px) {
+  ui-empty-state {
+    padding-block: 4.25rem 0;
+  }
+
+  /* The phone's rows start right under the order's line (media-library@mobile). */
+  .rows {
+    margin-top: 0;
+  }
 }
 
 .error {
@@ -519,6 +594,26 @@ ui-empty-state {
   background: var(--scrim);
 }
 
+.confirm-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.confirm-head h2 {
+  flex: 1;
+}
+
+.confirm-close {
+  flex: none;
+  margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2)) 0 0;
+  color: var(--color-text-muted);
+}
+
+.confirm .handle {
+  display: none;
+}
+
 .confirm h2 {
   margin: 0 0 var(--space-3);
   font-size: var(--text-section);
@@ -533,10 +628,50 @@ ui-empty-state {
 }
 
 .confirm .remove-tracks {
+  margin-top: var(--space-2);
   padding: var(--space-3);
   border-radius: var(--radius-menu);
-  background: var(--overlay-2);
+  background: var(--overlay-1);
+}
+
+/* Desktop: the count, then one row per track with its cover (media-library-remove-tracks). */
+.confirm .remove-tracks-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.confirm .remove-tracks-count {
+  margin: 0 0 var(--space-2);
   color: var(--color-text);
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+.confirm .remove-tracks-list ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.confirm .remove-tracks-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.confirm .remove-tracks-list li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .confirm-actions {
@@ -546,51 +681,114 @@ ui-empty-state {
   margin-top: var(--space-6);
 }
 
+/* v2 · media-library-remove at a desktop: 280 from the top whatever it holds; the 22/26
+   title beside its 36 ✕, then 20 between the title, the words, the tracks and the actions. */
+@media (min-width: 1024px) {
+  .confirm {
+    margin-top: 17.5rem;
+  }
+
+  .confirm-head {
+    gap: 0;
+  }
+
+  .confirm-close {
+    width: 2.25rem;
+    height: 2.25rem;
+    margin: var(--space-2) 0 0;
+  }
+
+  .confirm h2 {
+    margin-bottom: var(--space-5);
+    line-height: 1.625rem;
+  }
+
+  .confirm p {
+    margin-bottom: 0;
+    line-height: 1.0625rem;
+  }
+
+  .confirm .remove-tracks {
+    margin: var(--space-5) 0 0;
+  }
+
+  .confirm .remove-tracks-count {
+    line-height: 1rem;
+  }
+
+  .confirm-actions {
+    margin-top: var(--space-5);
+  }
+}
+
+/* A narrow main panel (the right panel open, media-library): no "Continuar ouvindo". */
+@container library (max-width: 56rem) {
+  .continue {
+    display: none;
+  }
+}
+
 /* ---------- Phone (media-library@mobile) ---------- */
 
 @media (max-width: 1023px) {
+  /* The phone's tint is a short band under the top row: it ends 260 px from the frame's
+     top, the row (with its status bar's room) being the first 100. */
+  .library {
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--library-tint) 70%, transparent) 0,
+        transparent 10rem
+      )
+      no-repeat;
+  }
+
+  /* The phone's header is the shell's top row (PageHeader): "Biblioteca", 🔍 and ⬆. The
+     hero stays for a screen reader (its heading), out of sight; the action bar has no
+     place in the frame (media-library@mobile). */
   .hero {
-    flex-direction: row;
-    align-items: center;
-    padding: var(--space-4) var(--space-4) var(--space-2);
-  }
-
-  .hero-art,
-  .hero .ui-page-header__title {
-    display: none;
-  }
-
-  .hero-text {
-    gap: var(--space-1);
-  }
-
-  .hero-text h2 {
-    font-size: 1.5rem;
-    font-weight: 700;
-  }
-
-  .actions {
-    gap: var(--space-3);
-  }
-
-  .play-all {
-    --ui-icon-btn-size: 48px !important;
-  }
-
-  /* An icon is enough beside its neighbours on a phone; the words stay its name. */
-  .phone-hidden {
     position: absolute;
     width: 1px;
     height: 1px;
+    padding: 0;
     overflow: hidden;
-    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
     white-space: nowrap;
   }
 
+  .actions,
+  .continue {
+    display: none;
+  }
+
+  .sections {
+    gap: var(--space-3);
+    padding: 0 var(--space-4);
+  }
+
+  /* No wrap: a wrapping column sizes its line by its widest item (the chips' row), and the
+     search would run past the screen's side. */
+  .toolbar {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: var(--space-3);
+    min-width: 0;
+    padding: 0;
+  }
+
+  /* The chips' row scrolls inside the screen; it never widens the search above it. */
+  .toolbar > * {
+    min-width: 0;
+  }
+
+  /* The search row opens from the top row's 🔍 (media-library-search@mobile). */
+  .toolbar:not(.searching) .search {
+    display: none;
+  }
+
   .search {
-    flex: 1 1 100%;
-    order: 9;
-    margin-left: 0;
+    flex: none;
+    min-width: 0;
   }
 
   .search-box {
@@ -602,50 +800,49 @@ ui-empty-state {
     height: var(--target);
   }
 
-  .sections {
-    gap: var(--space-6);
-    padding: var(--space-2) var(--space-4) 0;
+  .phone-sort {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    /* Its 44 targets overflow the frame's row (the order 21 under the card, the first
+       cover 27 under the order's middle): the column's gaps are taken back. */
+    margin: calc(-1 * var(--space-3)) 0 calc(-0.8125rem);
   }
 
-  .section-head .title {
-    font-size: var(--text-md);
+  .phone-view {
+    --ui-icon-btn-size: var(--target) !important;
+    margin-right: calc(-1 * var(--space-3));
+    color: var(--color-text);
   }
 
-  .strip {
-    grid-auto-columns: 85%;
-  }
-
-  .arrow {
-    display: none;
-  }
-
-  .disclosure,
   .link {
     min-height: var(--target);
   }
 
+  /* Two covers a row, right under the order's row (media-library-grid@mobile). */
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
+    margin-top: 0;
   }
 
   .skeleton-strip {
     grid-template-columns: 1fr;
   }
 
-  /* The selection's bar takes the place of the bottom navigation (KBC-128 FR-4, AC-4). */
+  /* The selection's bar floats over the bottom navigation, a card 8 px in from the edges
+     (KBC-128 FR-4, AC-4; media-library-selection@mobile). */
   .selection-bar {
     position: fixed;
-    right: 0;
-    bottom: 0;
-    left: 0;
+    right: var(--space-2);
+    bottom: calc(var(--space-6) + env(safe-area-inset-bottom));
+    left: var(--space-2);
     z-index: 60;
     width: auto;
-    min-height: var(--shell-mobile-nav);
+    min-height: 3.5rem;
     margin: 0;
-    padding: var(--space-2) var(--space-2)
-      calc(var(--space-2) + env(safe-area-inset-bottom)) var(--space-5);
-    border-radius: var(--radius-card) var(--radius-card) 0 0;
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+    border-radius: var(--radius-card);
     gap: var(--space-1);
   }
 
@@ -655,6 +852,10 @@ ui-empty-state {
     padding: 0;
     justify-content: center;
     background: transparent;
+  }
+
+  .bar-action ui-icon {
+    display: inline-flex;
   }
 
   .bar-words {
@@ -690,6 +891,52 @@ ui-empty-state {
 
   .confirm-actions {
     flex-direction: column-reverse;
+  }
+
+  /* The sheet: its handle, no ✕ (Cancelar is there), the tracks in plain words
+     (media-library-remove-tracks@mobile). */
+  .confirm {
+    padding-top: var(--space-3);
+  }
+
+  .confirm .handle {
+    display: block;
+    width: 2.25rem;
+    height: 0.25rem;
+    margin: 0 auto var(--space-3);
+    border-radius: var(--radius-pill);
+    background: var(--overlay-line);
+  }
+
+  .confirm-close {
+    display: none;
+  }
+
+  .confirm h2 {
+    margin-bottom: var(--space-2);
+  }
+
+  .confirm-actions {
+    margin-top: var(--space-3);
+  }
+
+  .confirm .remove-tracks {
+    margin-top: 0;
+    padding: 0;
+    background: none;
+  }
+
+  .confirm .remove-tracks-text {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+
+  .confirm .remove-tracks-list {
+    display: none;
   }
 
   .confirm-actions button {

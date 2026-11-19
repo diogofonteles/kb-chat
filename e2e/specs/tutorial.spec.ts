@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
+import { chooseView } from './search-view.js';
 
 /** KBC-032: the public "how to use" guide with real screenshots, at 1440 and 390. */
 const shots = process.env['KBC_SHOTS'];
@@ -163,7 +164,7 @@ test('AC-4: with the document panel open on a narrow desktop, the help stays vis
   for (const width of [1280, 1024]) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto('/');
-    await page.getByRole('radio', { name: 'Buscar documentos' }).check();
+    await chooseView(page, 'search');
     await page.getByLabel('Sua pergunta').fill('ritmo');
     await page.getByRole('button', { name: 'Buscar' }).click();
     await page

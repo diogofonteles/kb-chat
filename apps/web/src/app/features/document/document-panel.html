@@ -1,307 +1,465 @@
-<header class="head">
-  <div class="top-row">
-    @if (sourceNav(); as nav) {
-      <p class="source-kicker" i18n="@@source.position">
-        Fonte {{ nav.position }} de {{ nav.total }}
-      </p>
-      @if (nav.total > 1) {
-        <button
-          uiIconButton="surface"
-          type="button"
-          aria-label="Fonte anterior"
-          i18n-aria-label="@@source.previous"
-          (click)="moveSource(-1)"
-        >
-          <ui-icon name="chevLeft" [size]="18" />
-        </button>
-        <button
-          uiIconButton="surface"
-          type="button"
-          aria-label="Próxima fonte"
-          i18n-aria-label="@@source.next"
-          (click)="moveSource(1)"
-        >
-          <ui-icon name="chevRight" [size]="18" />
-        </button>
-      }
-    } @else if (canGoBack()) {
-      <button
-        uiButton="ghost"
-        size="sm"
-        type="button"
-        class="nav"
-        (click)="back.emit()"
-      >
-        <ui-icon name="chevLeft" [size]="16" />
-        <span i18n="@@panel.backDoc">Voltar</span>
-      </button>
-    }
-    <span class="spacer"></span>
-    @if (!inSheet()) {
-      <button
-        uiIconButton
-        type="button"
-        class="full-toggle"
-        [attr.aria-pressed]="full()"
-        aria-label="Tela cheia"
-        i18n-aria-label="@@source.fullscreen"
-        (click)="full.set(!full())"
-      >
-        <ui-icon name="expand" [size]="18" />
-      </button>
-      <button
-        uiIconButton
-        type="button"
-        class="close"
-        aria-label="Fechar"
-        i18n-aria-label="@@panel.closeLabel"
-        (click)="closed.emit()"
-      >
-        <ui-icon name="close" [size]="20" />
-      </button>
-    }
-  </div>
-
-  <div class="page-head">
-    <ui-cover
-      class="art"
-      [title]="title()"
-      [size]="208"
-      [label]="!inSource()"
-    />
-    <div class="titles">
-      @if (facets()) {
-        <p class="kicker">{{ facets() }}</p>
-      }
-      <h2 [id]="titleId" #heading tabindex="-1">{{ title() }}</h2>
-      @if (loaded(); as doc) {
-        <p class="byline">
-          <app-authorship-badge [authorship]="doc.authorship" />
-          @if (doc.author) {
-            <span class="author">{{ doc.author }}</span>
-          }
-          @if (doc.concepts.length > 0) {
-            <span class="byline-concepts">
-              · <span i18n="@@panel.concepts">Assuntos:</span>
-              {{ conceptLine() }}
-            </span>
-          }
+<div class="reader" (scroll)="readerScrolled($event)">
+  <header class="head">
+    <div class="top-row">
+      @if (sourceNav(); as nav) {
+        <p class="source-kicker" i18n="@@source.position">
+          Fonte {{ nav.position }} de {{ nav.total }}
         </p>
-      }
-    </div>
-  </div>
-</header>
-
-@if (loaded(); as doc) {
-  <div
-    class="actions"
-    role="toolbar"
-    aria-label="Ferramentas do documento"
-    i18n-aria-label="@@panel.tools"
-  >
-    @if (inSource()) {
-      <button
-        uiButton="white"
-        size="sm"
-        type="button"
-        (click)="documentOpened.emit()"
-      >
-        <ui-icon name="book" [size]="16" />
-        <span i18n="@@source.openDocument">Abrir documento</span>
-      </button>
-    } @else if (canAskAi()) {
-      <button
-        uiButton="primary"
-        type="button"
-        class="ask-ai"
-        (click)="askedAi.emit(doc.title)"
-      >
-        <ui-icon name="sparkleFill" [size]="18" />
-        <span i18n="@@panel.askAi">Perguntar à IA</span>
-      </button>
-    }
-    @if (matches() > 0) {
-      <button
-        [uiButton]="inSource() ? 'outline' : 'ghost'"
-        size="sm"
-        type="button"
-        (click)="copyPassage()"
-      >
-        <ui-icon name="copy" [size]="16" />
-        <span i18n="@@panel.copy">{copyState(), select,
-          copied {Copiado}
-          failed {Não consegui copiar}
-          other {Copiar trecho}
-        }</span>
-      </button>
-    }
-    <a
-      uiIconButton
-      class="obsidian"
-      [href]="doc.obsidianUrl"
-      aria-label="Abrir no Obsidian"
-      i18n-aria-label="@@panel.obsidian"
-      title="Abrir no Obsidian"
-      i18n-title="@@panel.obsidianTitle"
-    >
-      <ui-icon name="external" [size]="18" />
-    </a>
-    @if (matches() > 0) {
-      <div class="occurrences">
-        <span class="counter" aria-live="polite">
-          @if (sourceNav(); as nav) {
-            <span class="cited" aria-hidden="true">[{{ nav.n }}]</span>
-          }
-          <span i18n="@@panel.matches"
-            >{{ current() + 1 }} de
-            {matches(), plural,
-              =1 {1 ocorrência}
-              other {{{ matches() }} ocorrências}
-            }</span
+        @if (nav.total > 1) {
+          <button
+            uiIconButton="surface"
+            type="button"
+            aria-label="Fonte anterior"
+            i18n-aria-label="@@source.previous"
+            (click)="moveSource(-1)"
           >
-          @if (totalMatches() > matches()) {
-            <span i18n="@@panel.totalMatches"
-              >({{ totalMatches() }} no documento)</span
-            >
+            <ui-icon name="chevLeft" [size]="18" />
+          </button>
+          <button
+            uiIconButton="surface"
+            type="button"
+            aria-label="Próxima fonte"
+            i18n-aria-label="@@source.next"
+            (click)="moveSource(1)"
+          >
+            <ui-icon name="chevRight" [size]="18" />
+          </button>
+        }
+      } @else if (canGoBack()) {
+        <button
+          uiButton="ghost"
+          size="sm"
+          type="button"
+          class="nav"
+          (click)="back.emit()"
+        >
+          <ui-icon name="chevLeft" [size]="16" />
+          <span i18n="@@panel.backDoc">Voltar</span>
+        </button>
+      }
+      <span class="spacer"></span>
+      @if (heroOccurrences() && !toolsStuck()) {
+        <!-- cmDoc: a phone's "1 de 2 ⌃ ⌄" sits at the top right of the hero, clear of ✦. -->
+        <div class="occurrences in-hero">
+          <ng-container [ngTemplateOutlet]="occurrences" />
+        </div>
+      }
+      @if (subject() && !inSheet() && !inSource() && loaded(); as doc) {
+        <!-- A phone's subject page (cmDoc subject) has no tools row: its tools wait in ⋯. -->
+        <ui-menu
+          class="hero-more"
+          label="Mais opções do assunto"
+          i18n-label="@@panel.subjectMoreMenu"
+          triggerLabel="Mais opções"
+          i18n-triggerLabel="@@panel.more"
+          [menuId]="titleId + '-hero-more'"
+          triggerClass="ui-icon-button"
+        >
+          <ui-icon uiMenuTrigger name="more" [size]="22" />
+          @if (canAskAi()) {
+            <button uiMenuItem type="button" (click)="askedAi.emit(doc.title)">
+              <ui-icon name="sparkleFill" [size]="18" />
+              <span i18n="@@panel.askAi">Perguntar à IA</span>
+            </button>
           }
-        </span>
+          <a uiMenuItem [href]="doc.obsidianUrl">
+            <ui-icon name="external" [size]="18" />
+            <span i18n="@@panel.obsidian">Abrir no Obsidian</span>
+          </a>
+          <button uiMenuItem type="button" (click)="share(doc)">
+            <ui-icon name="share" [size]="18" />
+            <span>{{ shareLabel() }}</span>
+          </button>
+        </ui-menu>
+      }
+      @if (!inSheet()) {
         <button
           uiIconButton
           type="button"
-          [size]="28"
-          (click)="step(-1)"
-          aria-label="Ocorrência anterior"
-          i18n-aria-label="@@panel.prev"
+          class="full-toggle"
+          [attr.aria-pressed]="full()"
+          aria-label="Tela cheia"
+          i18n-aria-label="@@source.fullscreen"
+          (click)="full.set(!full())"
         >
-          <ui-icon name="chevUp" [size]="16" />
+          <ui-icon name="expand" [size]="18" />
         </button>
         <button
           uiIconButton
           type="button"
-          [size]="28"
-          (click)="step(1)"
-          [attr.aria-label]="nextLabel()"
+          class="close"
+          aria-label="Fechar"
+          i18n-aria-label="@@panel.closeLabel"
+          (click)="closed.emit()"
         >
-          <ui-icon name="chevDown" [size]="16" />
+          <ui-icon name="close" [size]="20" />
         </button>
-      </div>
-    } @else if (passageNotFound()) {
-      <!-- The source is marked by the question's words (KBC-127 BR-4): none in this text. -->
-      <p class="not-found" role="status" i18n="@@source.passageNotFound">
-        Trecho não localizado: nenhuma palavra da pergunta aparece neste texto.
-      </p>
-    }
-  </div>
-}
-
-@if (document.isLoading() && !loaded()) {
-  <div class="loading" role="status">
-    <span class="visually-hidden" i18n="@@panel.loading"
-      >Carregando documento…</span
-    >
-    <div class="skeleton-text" aria-hidden="true">
-      <span></span><span></span><span></span><span></span>
+      }
     </div>
-  </div>
-} @else if (document.error()) {
-  <div class="failed">
-    <ui-empty-state
-      icon="xcircle"
-      [title]="failedTitle()"
-      [text]="errorText()"
-      role="alert"
+
+    <!-- A document that fails shows only its empty state under ✕ (chat-document-error). -->
+    <!-- Loading draws a skeleton in its place; the title stays there for the reader's ear. -->
+    <div
+      class="page-head"
+      [hidden]="!!document.error()"
+      [class.visually-hidden]="!loaded()"
     >
-      <button
-        uiButton="white"
-        type="button"
-        (click)="document.reload()"
-        i18n="@@panel.retry"
+      <ui-cover
+        class="art"
+        [title]="title()"
+        [size]="208"
+        [label]="!inSource()"
+      />
+      <div class="titles">
+        @if (subject()) {
+          <p class="kicker" i18n="@@panel.subjectKicker">
+            Assunto · Síntese do acervo
+          </p>
+        } @else if (facets()) {
+          <p class="kicker">{{ facets() }}</p>
+        }
+        <h2 [id]="titleId" #heading tabindex="-1">{{ title() }}</h2>
+        @if (subject() && loaded()?.criterion) {
+          <!-- A subject's page header: what the subject gathers, under its name. -->
+          <p class="byline criterion-line">
+            <span i18n="@@panel.criterion">Sobre este assunto:</span>
+            {{ loaded()?.criterion }}
+          </p>
+        } @else if (loaded(); as doc) {
+          <p class="byline">
+            <!-- pageHeader: "Outros autores · Assuntos: …" in text; the badge is the right
+               panel's (Autoria). -->
+            <app-authorship-badge
+              [plain]="true"
+              [authorship]="doc.authorship"
+            />
+            @if (doc.author) {
+              <span class="author">{{ doc.author }}</span>
+            }
+            @if (doc.concepts.length > 0) {
+              <span class="byline-concepts">
+                · <span i18n="@@panel.concepts">Assuntos:</span>
+                {{ conceptLine() }}
+              </span>
+            }
+          </p>
+        }
+      </div>
+    </div>
+  </header>
+
+  @if (loaded(); as doc) {
+    <div
+      class="actions"
+      role="toolbar"
+      aria-label="Ferramentas do documento"
+      i18n-aria-label="@@panel.tools"
+    >
+      @if (inSource()) {
+        <button
+          uiButton="white"
+          size="sm"
+          type="button"
+          (click)="documentOpened.emit()"
+        >
+          <ui-icon name="book" [size]="16" />
+          <span i18n="@@source.openDocument">Abrir documento</span>
+        </button>
+      } @else if (canAskAi()) {
+        <button
+          uiButton="primary"
+          type="button"
+          class="ask-ai"
+          (click)="askedAi.emit(doc.title)"
+        >
+          <ui-icon name="sparkleFill" [size]="18" />
+          <span class="tool-label" i18n="@@panel.askAi">Perguntar à IA</span>
+        </button>
+      }
+      @if (matches() > 0) {
+        <button
+          [uiButton]="inSource() ? 'outline' : 'ghost'"
+          size="sm"
+          type="button"
+          (click)="copyPassage()"
+        >
+          <ui-icon name="copy" [size]="inSource() ? 16 : 24" />
+          <span class="tool-label" i18n="@@panel.copy">{copyState(), select,
+            copied {Copiado}
+            failed {Não consegui copiar}
+            other {Copiar trecho}
+          }</span>
+        </button>
+      }
+      <a
+        uiIconButton
+        class="obsidian"
+        [href]="doc.obsidianUrl"
+        aria-label="Abrir no Obsidian"
+        i18n-aria-label="@@panel.obsidian"
+        title="Abrir no Obsidian"
+        i18n-title="@@panel.obsidianTitle"
       >
-        Tentar de novo
-      </button>
-      <button
-        uiButton="ghost"
-        type="button"
-        (click)="closed.emit()"
-        i18n="@@panel.close"
-      >
-        Fechar
-      </button>
-    </ui-empty-state>
-  </div>
-} @else if (loaded(); as doc) {
-  <div class="page">
-    <div class="text">
-      @if (doc.criterion) {
-        <p class="criterion">
-          <strong i18n="@@panel.criterion">Sobre este assunto:</strong>
-          {{ doc.criterion }}
+        <ui-icon name="external" [size]="inSource() ? 18 : 24" />
+      </a>
+      @if (!inSource()) {
+        <button
+          uiIconButton
+          type="button"
+          class="share"
+          [attr.aria-label]="shareLabel()"
+          [title]="shareLabel()"
+          (click)="share(doc)"
+        >
+          <ui-icon name="share" [size]="inSource() ? 18 : 24" />
+        </button>
+        <!-- ⋯ (actionBar): "Tela cheia" on a desktop page (the panel's own button has no
+             place there) and the document's sections, the v1 index ("Seções"). -->
+        <!-- …and, beside a panel or on a phone, "Sobre este documento" under the text. -->
+        @if (page() || sections().length > 0 || !document.error()) {
+          <ui-menu
+            class="more"
+            [class.no-sections]="sections().length === 0 && page()"
+            label="Mais opções do documento"
+            i18n-label="@@panel.moreMenu"
+            triggerLabel="Mais opções"
+            i18n-triggerLabel="@@panel.more"
+            [menuId]="titleId + '-more'"
+            triggerClass="ui-icon-button"
+          >
+            <ui-icon uiMenuTrigger name="more" [size]="24" />
+            @if (page()) {
+              <button
+                uiMenuItem
+                type="button"
+                class="full-item"
+                (click)="full.set(!full())"
+              >
+                <ui-icon name="expand" [size]="18" />
+                @if (full()) {
+                  <span i18n="@@source.exitFullscreen">Sair da tela cheia</span>
+                } @else {
+                  <span i18n="@@source.fullscreen">Tela cheia</span>
+                }
+              </button>
+            }
+            @if (!page() && (!subject() || loaded()?.level !== undefined)) {
+              <button uiMenuItem type="button" (click)="goToAbout()">
+                <ui-icon name="info" [size]="18" />
+                <span i18n="@@panel.goToAbout">Sobre este documento</span>
+              </button>
+            }
+            @for (section of sections(); track $index) {
+              <button uiMenuItem type="button" (click)="goToSection(section)">
+                {{ section.title }}
+              </button>
+            }
+          </ui-menu>
+        }
+      }
+      @if (matches() > 0 && (!heroOccurrences() || toolsStuck())) {
+        <!-- A phone's pill lies on the head; once the tools stick at the top it comes with
+             them, so "Próxima ocorrência" stays at hand in a long text. -->
+        <div class="occurrences in-tools" [class.on-phone]="heroOccurrences()">
+          <ng-container [ngTemplateOutlet]="occurrences" />
+        </div>
+      } @else if (passageNotFound()) {
+        <!-- The source is marked by the question's words (KBC-127 BR-4): none in this text. -->
+        <p class="not-found" role="status" i18n="@@source.passageNotFound">
+          Trecho não localizado: nenhuma palavra da pergunta aparece neste
+          texto.
         </p>
       }
-      @if (doc.summary) {
-        <details class="summary" open>
-          <summary>
-            <ui-icon class="chev" name="chevDown" [size]="14" />
-            <span i18n="@@panel.summary">Resumo</span>
-          </summary>
-          <p>{{ doc.summary }}</p>
-        </details>
-      }
-      @if (sections().length > 0) {
-        <details class="summary sections">
-          <summary>
-            <ui-icon class="chev" name="chevDown" [size]="14" />
-            <span i18n="@@panel.sections"
-              >Seções ({{ sections().length }})</span
-            >
-          </summary>
-          <ul>
-            @for (section of sections(); track $index) {
-              <li>
-                <button
-                  type="button"
-                  class="section"
-                  (click)="goToSection(section)"
-                >
-                  {{ section.title }}
-                </button>
-              </li>
-            }
-          </ul>
-        </details>
-      }
-      @if (earlierPercent() > 0) {
+      @if (page() && !(subject() && canGoBack())) {
+        <!-- The page's ✕ at the end of its tools (v2 actionBar); a subject reached from a
+           document goes back by "Voltar" instead. -->
         <button
-          uiButton="outline"
-          size="sm"
+          uiIconButton
           type="button"
-          class="read-more"
-          (click)="readEarlier()"
-          i18n="@@panel.readEarlier"
+          class="page-close"
+          aria-label="Fechar"
+          i18n-aria-label="@@panel.closeLabel"
+          (click)="closed.emit()"
         >
-          Mostrar o trecho anterior ({{ earlierPercent() }}% do documento antes
-          deste ponto)
-        </button>
-      }
-      <div class="body" #body [innerHTML]="html()"></div>
-      @if (remainingPercent() > 0) {
-        <button
-          uiButton="outline"
-          size="sm"
-          type="button"
-          class="read-more"
-          (click)="readMore()"
-          i18n="@@panel.readMore"
-        >
-          Continuar lendo (faltam {{ remainingPercent() }}% do documento)
+          <ui-icon name="close" [size]="20" />
         </button>
       }
     </div>
+  }
 
+  @if (document.isLoading() && !loaded()) {
+    <div class="loading" role="status">
+      <span class="visually-hidden" i18n="@@panel.loading"
+        >Carregando documento…</span
+      >
+      <!-- docMain / cmDoc loading: the cover, the title and the tools drawn as skeletons. -->
+      <div class="page-head skeleton" aria-hidden="true">
+        <span class="skeleton-art"></span>
+        <span class="skeleton-lines"
+          ><span></span><span></span><span></span
+        ></span>
+      </div>
+      <span class="skeleton-pill" aria-hidden="true"></span>
+      <div class="skeleton-text" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  } @else if (document.error()) {
+    <div class="failed">
+      <ui-empty-state
+        icon="xcircle"
+        [title]="failedTitle()"
+        [text]="errorText()"
+        role="alert"
+      >
+        <button
+          uiButton="white"
+          type="button"
+          (click)="document.reload()"
+          i18n="@@panel.retry"
+        >
+          Tentar de novo
+        </button>
+        <button
+          class="failed-close"
+          uiButton="ghost"
+          type="button"
+          (click)="closed.emit()"
+          i18n="@@panel.close"
+        >
+          Fechar
+        </button>
+      </ui-empty-state>
+    </div>
+  } @else if (loaded(); as doc) {
+    <div class="page">
+      @if (subject()) {
+        <!-- A subject's page: its shelves, "Exemplos" and "Relacionados a este assunto"
+           (chat-document-see-also), before its own text. -->
+        <app-see-also
+          class="see-also-shelf"
+          variant="shelf"
+          [topic]="topic()"
+          [documentId]="documentId()"
+          [seeAlso]="doc.seeAlso"
+          [concept]="doc.concept"
+          (opened)="navigated.emit($event)"
+          (trackOpened)="trackOpened.emit($event)"
+        />
+      }
+      <div class="text">
+        @if (doc.criterion && !subject()) {
+          <p class="criterion">
+            <strong i18n="@@panel.criterion">Sobre este assunto:</strong>
+            {{ doc.criterion }}
+          </p>
+        }
+        @if (doc.summary) {
+          <details class="summary" open>
+            <summary>
+              <ui-icon class="chev" name="chevDown" [size]="14" />
+              <span i18n="@@panel.summary">Resumo</span>
+            </summary>
+            <p>{{ doc.summary }}</p>
+          </details>
+        }
+        @if (sections().length > 0 && !page()) {
+          <details class="summary sections">
+            <summary>
+              <ui-icon class="chev" name="chevDown" [size]="14" />
+              <span i18n="@@panel.sections"
+                >Seções ({{ sections().length }})</span
+              >
+            </summary>
+            <ul>
+              @for (section of sections(); track $index) {
+                <li>
+                  <button
+                    type="button"
+                    class="section"
+                    (click)="goToSection(section)"
+                  >
+                    {{ section.title }}
+                  </button>
+                </li>
+              }
+            </ul>
+          </details>
+        }
+        @if (earlierPercent() > 0) {
+          <button
+            uiButton="outline"
+            size="sm"
+            type="button"
+            class="read-more"
+            (click)="readEarlier()"
+            i18n="@@panel.readEarlier"
+          >
+            Mostrar o trecho anterior ({{ earlierPercent() }}% do documento
+            antes deste ponto)
+          </button>
+        }
+        <div class="body" #body [innerHTML]="html()"></div>
+        @if (remainingPercent() > 0) {
+          <button
+            uiButton="outline"
+            size="sm"
+            type="button"
+            class="read-more"
+            (click)="readMore()"
+            i18n="@@panel.readMore"
+          >
+            Continuar lendo (faltam {{ remainingPercent() }}% do documento)
+          </button>
+        }
+      </div>
+      @if (page() && !subject()) {
+        <!-- docMain's second column: "Veja também" beside the text (also in the right panel). -->
+        <app-see-also
+          class="see-also-column"
+          variant="column"
+          [topic]="topic()"
+          [documentId]="documentId()"
+          [seeAlso]="doc.seeAlso"
+          [concept]="doc.concept"
+          (opened)="navigated.emit($event)"
+          (trackOpened)="trackOpened.emit($event)"
+        />
+      }
+    </div>
+  }
+</div>
+
+<!-- "Sobre este documento": under the text in the panel and on a phone; the right panel of
+     the document page on desktop (chat-document). -->
+<!-- A subject's page has no right panel (chat-document-see-also) unless a master sets its
+     level there. -->
+@if (!document.error() && loaded(); as doc) {
+  @if (!subject() || doc.level !== undefined) {
     <aside class="about" [attr.aria-labelledby]="titleId + '-about'">
-      <h3 class="about-title" [id]="titleId + '-about'" i18n="@@panel.about">
-        Sobre este documento
-      </h3>
+      <div class="about-head">
+        <h3
+          class="about-title"
+          [id]="titleId + '-about'"
+          tabindex="-1"
+          i18n="@@panel.about"
+        >
+          Sobre este documento
+        </h3>
+        @if (page()) {
+          <!-- The right panel's ✕ (v2 panelHead): it closes the document page. -->
+          <button
+            uiIconButton
+            type="button"
+            class="about-close"
+            aria-label="Fechar o documento"
+            i18n-aria-label="@@panel.closeDocument"
+            (click)="closed.emit()"
+          >
+            <ui-icon name="close" [size]="20" />
+          </button>
+        }
+      </div>
       @if (doc.level !== undefined) {
         <section class="about-section">
           <app-document-level
@@ -314,14 +472,26 @@
       <section class="about-section">
         <h4 i18n="@@panel.authorship">Autoria</h4>
         <div class="person">
-          <ui-avatar [name]="authorName()" [size]="48" />
+          <!-- docRight: the initials on a round, the authorship by name, what it means. -->
+          <span
+            class="person-art"
+            [class.main]="doc.authorship === 'mestre-laercio'"
+            aria-hidden="true"
+            >{{ authorInitials() }}</span
+          >
           <div class="person-text">
-            <p class="person-name">
-              <app-authorship-badge [authorship]="doc.authorship" />
+            <p class="person-name">{{ labels()[doc.authorship] }}</p>
+            <p class="person-meta">
+              @if (doc.author) {
+                {{ doc.author }}
+              } @else if (doc.authorship === 'mestre-laercio') {
+                <span i18n="@@panel.mainAuthor">Autor principal do acervo</span>
+              } @else {
+                <span i18n="@@panel.notMainAuthor"
+                  >Não é do autor principal do acervo</span
+                >
+              }
             </p>
-            @if (doc.author) {
-              <p class="person-meta">{{ doc.author }}</p>
-            }
           </div>
         </div>
         @if (doc.origin === 'audio') {
@@ -362,6 +532,72 @@
         (opened)="navigated.emit($event)"
         (trackOpened)="trackOpened.emit($event)"
       />
+      @if (copies().length > 0) {
+        <!-- docRight "Cópias": the near-identical documents the search grouped with it. -->
+        <section class="about-section copies">
+          <h4 i18n="@@panel.copies">Cópias</h4>
+          <ul>
+            @for (copy of copies(); track copy.id) {
+              <li>
+                <button
+                  type="button"
+                  class="copy"
+                  (click)="navigated.emit(copy)"
+                >
+                  <ui-cover
+                    [title]="copy.title"
+                    [size]="40"
+                    aria-hidden="true"
+                  />
+                  <span class="copy-text">
+                    <span class="copy-title">{{ copy.title }}</span>
+                    <span class="copy-path">{{ copy.id }}</span>
+                  </span>
+                </button>
+              </li>
+            }
+          </ul>
+        </section>
+      }
     </aside>
-  </div>
+  }
 }
+
+<ng-template #occurrences>
+  <span class="counter" aria-live="polite">
+    @if (sourceNav(); as nav) {
+      <span class="cited" aria-hidden="true">[{{ nav.n }}]</span>
+    }
+    <!-- "1 de 2 ocorrências"; a phone keeps "1 de 2" (cmDoc) and says the rest aloud. -->
+    <span i18n="@@panel.matchesCount"
+      >{{ current() + 1 }} de {{ matches() }}</span
+    >&ngsp;<span class="occ-word" i18n="@@panel.matchesWord">{matches(), plural,
+      =1 {ocorrência}
+      other {ocorrências}
+    }</span>
+    @if (totalMatches() > matches()) {
+      <span i18n="@@panel.totalMatches"
+        >({{ totalMatches() }} no documento)</span
+      >
+    }
+  </span>
+  <button
+    uiIconButton
+    type="button"
+    [size]="28"
+    (click)="step(-1)"
+    aria-label="Ocorrência anterior"
+    i18n-aria-label="@@panel.prev"
+  >
+    <ui-icon name="chevUp" [size]="16" />
+  </button>
+  <button
+    uiIconButton
+    type="button"
+    [size]="28"
+    (click)="step(1)"
+    [attr.aria-label]="nextLabel()"
+  >
+    <ui-icon name="chevDown" [size]="16" />
+  </button>
+</ng-template>

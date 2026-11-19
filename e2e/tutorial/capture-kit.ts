@@ -163,8 +163,13 @@ async function clearMarks(page: Page): Promise<void> {
 export class Shooter {
   private readonly shots = new Map<string, Shot>();
   private readonly files = new Map<string, Buffer>();
+  // A plain field: Node's type stripping (Playwright on Node 22.18+) refuses parameter
+  // properties, and the capture found no tests.
+  private readonly converter: Page;
 
-  constructor(private readonly converter: Page) {}
+  constructor(converter: Page) {
+    this.converter = converter;
+  }
 
   static async create(browser: Browser): Promise<Shooter> {
     return new Shooter(await browser.newPage());

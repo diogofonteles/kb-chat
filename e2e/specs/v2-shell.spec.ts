@@ -10,6 +10,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { expectSummary } from './search-view.js';
 import { aCollection } from './media-helpers.js';
 import {
   chooseCollection,
@@ -96,11 +97,12 @@ test('AC-2: ⌘K focuses the global search from the library and Enter searches t
   await search.fill('ritmo');
   await search.press('Enter');
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByText(/documentos? · Tudo ·/)).toBeVisible();
+  await expectSummary(page, /documentos?/, 'Tudo');
   await shoot(page, 'shell-search');
 
-  // In a field, the key belongs to the field: the focus stays and nothing is typed.
-  const question = page.getByLabel('Sua pergunta');
+  // In a field, the key belongs to the field: the focus stays and nothing is typed. A
+  // desktop search page has no question box (chat-results): its field is the top bar's.
+  const question = search;
   await question.fill('natureza');
   await question.press('ControlOrMeta+k');
   await expect(question).toBeFocused();
@@ -148,7 +150,7 @@ test('AC-5: on a phone the last item of a long list stays above the navigation',
   await tabs.getByRole('link', { name: 'Buscar' }).click();
   await page.getByLabel('Sua pergunta').fill('ritmo');
   await page.getByRole('button', { name: 'Buscar', exact: true }).click();
-  await expect(page.getByText(/documentos? · Tudo ·/)).toBeVisible();
+  await expectSummary(page, /documentos?/, 'Tudo');
   // One current tab: Buscar, never Conversas too though both open "/".
   await expect(tabs.locator('[aria-current="page"]')).toHaveText(['Buscar']);
   const last = page.locator('app-result-card').last();
@@ -257,10 +259,16 @@ test('AC-8: acting as a person, the blue band is on every page', async ({
   expect(started.ok(), await started.text()).toBe(true);
   for (const path of ['/', '/catalogo-ui']) {
     await page.goto(path);
-    await expect(page.getByText(/Você está vendo como/)).toBeVisible();
+    await expect(
+      // The band's words on screen ("Vendo como …" on a phone), not its status line.
+      page.locator('app-acting-banner .what >> visible=true').first(),
+    ).toContainText(/endo como/);
   }
   await page.goto('/');
-  await expect(page.getByText(/Você está vendo como/)).toBeVisible();
+  await expect(
+    // The band's words on screen ("Vendo como …" on a phone), not its status line.
+    page.locator('app-acting-banner .what >> visible=true').first(),
+  ).toContainText(/endo como/);
   await expect(page.getByLabel('Sua pergunta')).toBeVisible();
   // The band and the shell share one screen: the page itself never scrolls.
   expect(
@@ -306,20 +314,31 @@ test('D5: "+ Criar", "Recentes" and the avatar menu open whole, over the sidebar
 }) => {
   await page.goto('/');
   const side = await library(page);
-  await side.getByRole('button', { name: 'Criar', exact: true }).click();
-  await expectWholeOnTop(page, 'Criar');
-  await expect(
-    page.getByRole('menuitem', { name: 'Nova conversa' }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('menuitem', { name: 'Novo acervo' }),
-  ).toBeVisible();
-  await shoot(page, 'shell-create-menu');
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('menu', { name: 'Criar' })).toBeHidden();
-  await expect(
-    side.getByRole('button', { name: 'Criar', exact: true }),
-  ).toBeFocused();
+  if (desktop(page)) {
+    await side.getByRole('button', { name: 'Criar', exact: true }).click();
+    await expectWholeOnTop(page, 'Criar');
+    await expect(
+      page.getByRole('menuitem', { name: 'Nova conversa' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('menuitem', { name: 'Novo acervo' }),
+    ).toBeVisible();
+    await shoot(page, 'shell-create-menu');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu', { name: 'Criar' })).toBeHidden();
+    await expect(
+      side.getByRole('button', { name: 'Criar', exact: true }),
+    ).toBeFocused();
+  } else {
+    // v2 "Menu lateral aberto": what "+ Criar" offered is in the Menu's own rows.
+    await expect(
+      side.getByRole('button', { name: 'Criar', exact: true }),
+    ).toHaveCount(0);
+    for (const name of ['Nova conversa', 'Novo acervo'])
+      await expect(
+        side.getByRole('button', { name, exact: true }),
+      ).toBeVisible();
+  }
 
   const order = side.getByRole('button', { name: /Ordenar por/ });
   await order.click();
@@ -376,10 +395,16 @@ test('D5: Sua biblioteca keeps Fixados, Acervos and Conversas apart, each with i
   });
   await expect(collections).toBeVisible();
   await expect(conversations).toBeVisible();
-  // Conversations are text rows under a recency label, never covers like the collections.
+  // Conversations are rows under a recency label with the neutral chat cover (v2 · Sua
+  // biblioteca), never a collection's cover with its initials.
   const history = side.getByRole('navigation', { name: 'Conversas' });
   await expect(history.getByText('Hoje', { exact: true })).toBeVisible();
-  await expect(history.locator('ui-cover')).toHaveCount(0);
+  await expect(
+    history.locator('ui-cover:not(.conversation-cover)'),
+  ).toHaveCount(0);
+  await expect(
+    history.locator('ui-cover.conversation-cover').first(),
+  ).toBeVisible();
   await expect(history.getByRole('button').first()).toContainText('IA');
   await expect(
     side.locator('#library-collections ui-cover').first(),

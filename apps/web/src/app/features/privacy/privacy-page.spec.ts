@@ -86,11 +86,14 @@ describe('PrivacyPage (KBC-016)', () => {
   it('names the configured contact for data requests as a mail link', async () => {
     await renderPolicy('dono@example.com');
 
+    // In "Seus direitos" and in the card beside the column (v2 · Públicas).
+    const links = screen.getAllByRole('link', { name: 'dono@example.com' });
+    expect(links).toHaveLength(2);
+    for (const link of links)
+      expect(link.getAttribute('href')).toBe('mailto:dono@example.com');
     expect(
-      screen
-        .getByRole('link', { name: 'dono@example.com' })
-        .getAttribute('href'),
-    ).toBe('mailto:dono@example.com');
+      screen.getByRole('complementary', { name: 'Contato' }).textContent,
+    ).toMatch(/Para ver, corrigir ou apagar os seus dados, escreva para/);
   });
 
   it('points to the administrator when no contact is configured', async () => {

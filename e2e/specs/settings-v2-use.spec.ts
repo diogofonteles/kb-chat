@@ -407,7 +407,7 @@ test.describe('the v2 controls in use', () => {
     expect(look.image).toContain('linear-gradient');
     // It still chooses, by keyboard as by pointer.
     const values = await select.evaluate((element) =>
-      [...(element as HTMLSelectElement).options].map((option) => option.value),
+      Array.from((element as HTMLSelectElement).options, (option) => option.value),
     );
     const current = await select.inputValue();
     const other = values.find((value) => value !== current);

@@ -18,15 +18,28 @@
   min-height: var(--target);
 }
 
+/* Kept for the screen reader and the focus, out of sight (the global class loses to .head). */
+.head.visually-hidden {
+  min-height: 0;
+}
+
 .title {
   display: flex;
   align-items: baseline;
   gap: var(--space-3);
 }
 
+.where {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
 .head h3 {
   margin: 0;
+  /* 20/24 (v2 · media-library-search). */
   font-size: 1.25rem;
+  line-height: 1.5rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -167,5 +180,21 @@
 
   .empty-title {
     font-size: 1.25rem;
+  }
+
+  /* The phone's empty state keeps the advice only (media-library-search-empty@mobile). */
+  .hint-where {
+    display: none;
+  }
+
+  /* The phone's head is the count alone (media-library-search@mobile); where it looked stays
+     for a screen reader. */
+  .where {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }

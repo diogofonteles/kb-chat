@@ -9,7 +9,12 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { startInSearchView } from './search-view.js';
+import {
+  startInSearchView,
+  modeRadio,
+  expectSummary,
+  searchAgain,
+} from './search-view.js';
 
 // KBC-126: the v2 conversation home and search page, at 1440 and 390 (BR-3). With
 // KBC_SHOTS=<folder> each state is also captured, to compare with the v2 · Conversa frames.
@@ -181,9 +186,7 @@ test('AC-3: the first result is the "Melhor resultado" and the others fill the t
         card.closest('section')?.classList.contains('best-column'),
       ),
   ).toBe(true);
-  await expect(message.locator('.summary')).toContainText(
-    /documentos · Tudo ·/,
-  );
+  await expectSummary(page, /documentos/, 'Tudo');
   await shot(page, 'chat-results');
   if (!phone(page)) {
     // At 1440 the search page uses the main panel: the best result is a card left of the
@@ -208,7 +211,7 @@ test('AC-4: a subject in the popover filters, shows its chip, and Escape returns
 }) => {
   test.skip(phone(page), 'Phones filter in the sheet (AC-5).');
   await page.goto('/');
-  await page.getByRole('radio', { name: 'Por significado' }).check();
+  await (await modeRadio(page, 'Por significado')).check();
   await ask(page, 'natureza');
   const chip = page.getByRole('button', { name: /^Assuntos/ });
   await chip.click();
@@ -216,13 +219,24 @@ test('AC-4: a subject in the popover filters, shows its chip, and Escape returns
   await expectWholeOnScreen(page, popover);
   await shot(page, 'chat-results-filter-popover');
   await popover.getByRole('checkbox', { name: /Cabala/ }).check();
+  // subjectsPopover: the tick waits for "Aplicar"; Escape leaves the filters as they were.
+  await expect(page.getByText(/3 documentos ·/)).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Remover Assuntos: Cabala' }),
+  ).toHaveCount(0);
+  await popover.getByRole('checkbox', { name: /Cabala/ }).press('Escape');
+  await expect(popover).toBeHidden();
+  await expect(chip).toBeFocused();
+  await expect(page.getByText(/3 documentos ·/)).toBeVisible();
+  await chip.click();
+  await popover.getByRole('checkbox', { name: /Cabala/ }).check();
+  await popover.getByRole('button', { name: 'Aplicar' }).click();
+  await expect(popover).toBeHidden();
+  await expect(chip).toBeFocused();
   await expect(
     page.getByRole('button', { name: 'Remover Assuntos: Cabala' }),
   ).toBeVisible();
   await expect(page.getByText(/2 documentos ·/)).toBeVisible();
-  await popover.getByRole('checkbox', { name: /Cabala/ }).press('Escape');
-  await expect(popover).toBeHidden();
-  await expect(chip).toBeFocused();
   await shot(page, 'chat-results-filtered');
   await page.getByRole('button', { name: 'Limpar filtros' }).click();
   await expect(
@@ -236,11 +250,17 @@ test('AC-5: on a phone the sheet says how many results a type shows, and shows t
 }) => {
   test.skip(!phone(page), 'Desktop filters in popovers (AC-4).');
   await page.goto('/');
-  await page.getByRole('radio', { name: 'Por significado' }).check();
+  await (await modeRadio(page, 'Por significado')).check();
   await ask(page, 'natureza');
   await page.getByRole('button', { name: 'Filtros', exact: true }).click();
   const sheet = page.getByRole('dialog', { name: 'Filtros' });
   await expect(sheet).toBeVisible();
+  // "Tipo de texto" is folded under its name (chat-filters-sheet-mobile): open it first.
+  const genres = sheet.locator('details', {
+    has: page.locator('[data-sheet-facet="genres"]'),
+  });
+  await genres.locator('summary').click();
+  await expect(genres).toHaveAttribute('open', '');
   const type = sheet.locator('[data-sheet-facet="genres"] label').first();
   const expected = Number(
     (await type.locator('.option-count').textContent())?.trim(),
@@ -259,9 +279,13 @@ test('AC-5: on a phone the sheet says how many results a type shows, and shows t
 test('the collection menu of the home is whole on screen and switches the collection', async ({
   page,
 }) => {
+  test.skip(
+    phone(page),
+    'A phone changes the collection in the Menu: its home has no "Em:" (cmHome).',
+  );
   await page.goto('/');
   const trigger = page
-    .locator('app-conversation-home')
+    .locator('app-scope-bar')
     .getByRole('button', { name: /Hermetismo · / });
   await trigger.click();
   const menu = page.getByRole('menu', { name: 'Trocar de acervo' });
@@ -270,20 +294,6 @@ test('the collection menu of the home is whole on screen and switches the collec
   expect(
     await menu.evaluate((element) => getComputedStyle(element).borderTopWidth),
   ).toBe('0px');
-  if (phone(page)) {
-    // On a phone it is the full-width sheet at the foot, over a scrim.
-    const box = await menu.boundingBox();
-    const view = page.viewportSize();
-    if (!box || !view) throw new Error('The menu must render.');
-    expect(Math.round(box.width)).toBe(view.width);
-    expect(Math.round(box.x)).toBe(0);
-    expect(Math.round(box.y + box.height)).toBe(view.height);
-    expect(
-      await menu.evaluate(
-        (element) => getComputedStyle(element, '::backdrop').backgroundColor,
-      ),
-    ).not.toBe('rgba(0, 0, 0, 0)');
-  }
   await shot(page, 'chat-collection-menu');
   await menu.getByRole('menuitem', { name: /Alquimia/ }).click();
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
@@ -295,11 +305,11 @@ test('the states of the results: nothing found and the error, each with its acti
   page,
 }) => {
   await page.goto('/');
-  await page.getByRole('radio', { name: 'Palavras exatas' }).check();
+  await (await modeRadio(page, 'Palavras exatas')).check();
   await page.getByLabel('Sua pergunta').fill('xqzw kplvm');
   await page.getByRole('button', { name: 'Buscar', exact: true }).click();
   await expect(
-    page.getByText('Nada encontrado para "xqzw kplvm".'),
+    page.getByText('Nada encontrado para “xqzw kplvm”.'),
   ).toBeVisible();
   await shot(page, 'chat-results-none');
   await page.route('**/searches', (route) =>
@@ -308,8 +318,7 @@ test('the states of the results: nothing found and the error, each with its acti
       json: { error: { code: 'SEARCH_UNAVAILABLE', message: 'down' } },
     }),
   );
-  await page.getByLabel('Sua pergunta').fill('lei do ritmo');
-  await page.getByRole('button', { name: 'Buscar', exact: true }).click();
+  await searchAgain(page, 'lei do ritmo');
   const error = page.locator('app-result-message .answer.error').last();
   await expect(error).toBeVisible();
   await expect(

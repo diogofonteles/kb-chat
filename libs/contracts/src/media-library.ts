@@ -170,6 +170,17 @@ export const libraryPageSchema = z.object({
 });
 export type LibraryPage = z.infer<typeof libraryPageSchema>;
 
+/**
+ * GET /api/v1/media/library/counts: how many media the person's library holds, in all and
+ * in each collection (each one's own, its sub-collections apart), for "Sua biblioteca"
+ * ("Todas as mídias · 11", "Acervo · 11 áudios · 1 documento").
+ */
+export const libraryCountsSchema = z.object({
+  total: z.number().int().min(0),
+  topics: z.record(topicSlugSchema, z.number().int().min(0)),
+});
+export type LibraryCounts = z.infer<typeof libraryCountsSchema>;
+
 /** GET /api/v1/media/library/home (FR-2). */
 export const libraryHomeSchema = z.object({
   continueListening: z.array(libraryItemSchema).max(CONTINUE_LISTENING_MAX),

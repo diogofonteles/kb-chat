@@ -1,5 +1,8 @@
 <form
   class="composer"
+  [class.pill]="compact() && !searchPill()"
+  [class.search]="compact() && searchPill()"
+  [class.has-text]="text().length > 0"
   [attr.data-draft-kept]="''"
   (submit)="$event.preventDefault(); send()"
 >
@@ -32,7 +35,13 @@
   </div>
   <div class="actions">
     @if (!research()) {
-      <fieldset class="choices mode" aria-describedby="mode-help">
+      <!-- A press on a chip keeps the focus in the question (Safari moves it nowhere, and
+           a phone's chips live only while the box has it): the choice is still made. -->
+      <fieldset
+        class="choices mode"
+        aria-describedby="mode-help"
+        (mousedown)="keepFocus($event)"
+      >
         <legend class="visually-hidden" i18n="@@composer.mode">
           Como buscar
         </legend>
@@ -44,15 +53,22 @@
               class="choice-radio"
               [value]="option.value"
               [checked]="option.value === mode()"
+              [attr.aria-label]="option.label"
               (change)="selectMode($event)"
             />
-            <span>{{ option.label }}</span>
+            <span aria-hidden="true">{{ option.short }}</span>
           </label>
         }
       </fieldset>
       <span id="mode-help" class="help">{{ modeHelp() }}</span>
-    } @else {
-      <fieldset class="choices profile" aria-describedby="profile-help">
+    } @else if (!profilesAbove()) {
+      <!-- A press on a chip keeps the focus in the question (Safari moves it nowhere, and
+           a phone's chips live only while the box has it): the choice is still made. -->
+      <fieldset
+        class="choices profile"
+        aria-describedby="profile-help"
+        (mousedown)="keepFocus($event)"
+      >
         <legend class="visually-hidden" i18n="@@composer.profile">
           Tipo de pesquisa
         </legend>

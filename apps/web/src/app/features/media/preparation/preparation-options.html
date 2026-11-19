@@ -26,8 +26,8 @@
       </label>
       <p class="hint" id="prep-transcribe-hint">
         <ng-container i18n="@@prep.option.transcribeHint"
-          >Gera o texto com o tempo de cada palavra, para ler junto, buscar e
-          criar legendas. Grátis, no computador do transcritor.</ng-container
+          >Texto com o tempo de cada palavra, para ler junto, buscar e criar
+          legendas. Grátis, no computador do transcritor.</ng-container
         >
         @if (transcribeMinutes(); as minutes) {
           &ngsp;<ng-container i18n="@@prep.option.minutes"
@@ -37,11 +37,20 @@
       </p>
       @if (transcriberOff()) {
         <p class="note">
-          <ng-container i18n="@@prep.option.transcriberOff"
-            >O transcritor está desligado desde
-            {{ offer()?.transcriberOffSince | date: 'dd/MM HH:mm' }}; começa
-            quando ele ligar.</ng-container
-          >
+          @if (compact()) {
+            <!-- The upload's card says it short (v2 · media-upload). -->
+            <ui-icon name="info" [size]="13" />
+            <span i18n="@@prep.option.transcriberOffShort"
+              >Transcritor desligado desde
+              {{ offer()?.transcriberOffSince | date: 'dd/MM HH:mm' }}</span
+            >
+          } @else {
+            <ng-container i18n="@@prep.option.transcriberOff"
+              >O transcritor está desligado desde
+              {{ offer()?.transcriberOffSince | date: 'dd/MM HH:mm' }}; começa
+              quando ele ligar.</ng-container
+            >
+          }
         </p>
       }
     </div>
@@ -67,9 +76,8 @@
           {{ reason }}
         } @else {
           <ng-container i18n="@@prep.option.speakersHint"
-            >Separa as vozes (Voz 1, Voz 2…) e sugere os nomes pelo que já
-            sabemos do acervo, como o autor da gravação. Você confirma os nomes.
-            Grátis.</ng-container
+            >Separa as vozes e sugere os nomes pelo que já sabemos do acervo.
+            Você confirma. Grátis.</ng-container
           >
           @if (speakersMinutes(); as minutes) {
             &ngsp;<ng-container i18n="@@prep.option.minutes"
@@ -81,7 +89,35 @@
     </div>
   }
 
-  <fieldset class="tracks">
+  <!-- A phone's upload (media-upload@mobile): one row with the choice, the three under it. -->
+  @if (compact()) {
+    <!-- The words, the choice and the chevron as drawn; the words label the chevron's button,
+         so a tap on any of them opens the three. -->
+    <div class="tracks-row">
+      <label
+        class="name"
+        for="prep-tracks-toggle"
+        i18n="@@prep.option.tracksShort"
+        >Dividir em faixas</label
+      >
+      <label class="value" for="prep-tracks-toggle">{{ tracksChoice() }}</label>
+      <button
+        type="button"
+        class="tracks-toggle"
+        id="prep-tracks-toggle"
+        aria-controls="prep-tracks"
+        [attr.aria-expanded]="tracksOpen()"
+        (click)="tracksOpen.set(!tracksOpen())"
+      >
+        <ui-icon
+          [name]="tracksOpen() ? 'chevDown' : 'chevRight'"
+          [size]="18"
+        />
+      </button>
+    </div>
+  }
+
+  <fieldset class="tracks" id="prep-tracks" [class.open]="tracksOpen()">
     <legend i18n="@@prep.option.tracks">
       Dividir em faixas de pergunta e resposta
     </legend>
@@ -125,7 +161,7 @@
       </p>
     </div>
 
-    <div class="option card" [class.off]="isOff('ai')">
+    <div class="option card ai" [class.off]="isOff('ai')">
       <label class="choice">
         <input
           type="radio"
@@ -164,24 +200,28 @@
         }
       </p>
     </div>
-
-    <div class="option row subjects" [class.off]="isOff('subjects')">
-      <label class="choice">
-        <input
-          class="ui-switch"
-          type="checkbox"
-          [checked]="false"
-          aria-disabled="true"
-          aria-describedby="prep-subjects-hint"
-          (click)="$event.preventDefault()"
-        />
-        <span i18n="@@prep.option.subjects"
-          >Sugerir os assuntos de cada faixa</span
-        >
-      </label>
-      <p class="hint" id="prep-subjects-hint">{{ refusal('subjects') }}</p>
-    </div>
   </fieldset>
+
+  <div class="option row subjects" [class.off]="isOff('subjects')">
+    <label class="choice">
+      <input
+        class="ui-switch"
+        type="checkbox"
+        [checked]="false"
+        aria-disabled="true"
+        aria-describedby="prep-subjects-hint"
+        (click)="$event.preventDefault()"
+      />
+      <span class="name"
+        ><span class="wide" i18n="@@prep.option.subjects"
+          >Sugerir os assuntos de cada faixa</span
+        ><span class="narrow" i18n="@@prep.option.subjectsSoon"
+          >Sugerir os assuntos (em breve)</span
+        ></span
+      >
+    </label>
+    <p class="hint" id="prep-subjects-hint">{{ refusal('subjects') }}</p>
+  </div>
 
   @if (droppedText(); as text) {
     <p class="note" role="status">{{ text }}</p>

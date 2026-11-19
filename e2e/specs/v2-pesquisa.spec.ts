@@ -136,7 +136,9 @@ test('AC-1, AC-2, NFR-4: [2] opens its source beside the answer, marked; "Fonte 
   await expect(
     panel.getByRole('complementary', { name: 'Sobre este documento' }),
   ).toBeVisible();
-  await panel.getByRole('button', { name: 'Tela cheia' }).click();
+  // The document page keeps "Tela cheia" in its ⋯ (chat-document's actionBar).
+  await panel.getByRole('button', { name: 'Mais opções' }).click();
+  await page.getByRole('menuitem', { name: 'Tela cheia' }).click();
   await expect(panel).toHaveClass(/full/);
   await shot(page, 'chat-document');
   await page.context().close();

@@ -1,0 +1,109 @@
+<div class="scope">
+  <!-- One choice of three (the v1 view switch and the search's reach): a radio group,
+       arrows move the choice (the keys come from the focused radio). -->
+  <!-- eslint-disable-next-line @angular-eslint/template/interactive-supports-focus -->
+  <div
+    class="scope-chips"
+    role="radiogroup"
+    aria-label="Onde buscar"
+    i18n-aria-label="@@home.scope"
+    (keydown)="moveScope($event)"
+  >
+    @if (views.searchAllowed()) {
+      <button
+        class="ui-chip"
+        [class.ui-chip--on]="scope() === 'all'"
+        type="button"
+        role="radio"
+        [attr.aria-checked]="scope() === 'all'"
+        [attr.tabindex]="scope() === 'all' ? 0 : -1"
+        [attr.data-scope]="'all'"
+        (click)="chooseScope('all')"
+        i18n="@@home.scopeAll"
+      >
+        Tudo
+      </button>
+      <button
+        class="ui-chip"
+        [class.ui-chip--on]="scope() === 'documents'"
+        type="button"
+        role="radio"
+        [attr.aria-checked]="scope() === 'documents'"
+        [attr.tabindex]="scope() === 'documents' ? 0 : -1"
+        [attr.data-scope]="'documents'"
+        (click)="chooseScope('documents')"
+        i18n="@@home.scopeDocuments"
+      >
+        Documentos
+      </button>
+    }
+    @if (views.researchAllowed()) {
+      <button
+        class="ui-chip"
+        [class.ui-chip--on]="scope() === 'research'"
+        type="button"
+        role="radio"
+        [attr.aria-checked]="scope() === 'research'"
+        [attr.tabindex]="scope() === 'research' ? 0 : -1"
+        [attr.data-scope]="'research'"
+        [disabled]="!views.researchAvailable()"
+        [attr.aria-describedby]="
+          views.researchAvailable() ? null : 'research-unavailable'
+        "
+        (click)="chooseScope('research')"
+      >
+        <ui-icon name="sparkleFill" [size]="14" />
+        <span i18n="@@home.scopeResearch">Pesquisa com IA</span>
+      </button>
+      @if (!views.researchAvailable()) {
+        <span
+          id="research-unavailable"
+          class="visually-hidden"
+          i18n="@@view.unavailable"
+          >Configure um provedor de IA em ⚙ Configurações para pesquisar com
+          IA.</span
+        >
+      }
+    }
+  </div>
+  @if (!compact()) {
+    @if (topic(); as current) {
+      <span class="in">
+        <span class="in-label" i18n="@@home.in">Em:</span>
+        <ui-menu
+          label="Trocar de acervo"
+          i18n-label="@@home.collectionMenu"
+          menuId="home-collection-menu"
+          triggerClass="ui-chip collection-chip"
+          align="end"
+        >
+          <span uiMenuTrigger class="collection-trigger">
+            <span class="collection-name">{{ current.title }}</span>
+            <span class="collection-count" i18n="@@home.collectionCount"
+              >·
+              {current.documentCount, plural,
+                =1 {1 documento}
+                other {{{ current.documentCount | number }} documentos}
+              }</span
+            >
+            <ui-icon name="chevDown" [size]="14" />
+          </span>
+          @for (one of collections(); track one.slug) {
+            <button
+              uiMenuItem
+              type="button"
+              [attr.aria-current]="one.slug === current.slug ? 'true' : null"
+              (click)="chooseCollection(one.slug)"
+            >
+              <ui-cover [title]="one.title" [size]="24" />
+              <span class="menu-title">{{ one.title }}</span>
+              <span class="ui-menu__meta">{{
+                one.documentCount | number
+              }}</span>
+            </button>
+          }
+        </ui-menu>
+      </span>
+    }
+  }
+</div>

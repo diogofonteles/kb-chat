@@ -1,5 +1,9 @@
 import { expect, test } from './fixtures.js';
-import { startInSearchView } from './search-view.js';
+import {
+  chooseView,
+  expectSubjectFilter,
+  startInSearchView,
+} from './search-view.js';
 
 test.beforeEach(startInSearchView);
 
@@ -24,9 +28,7 @@ test('AC-1/AC-2: start suggestions list the largest subjects and search one with
   await expect(page.locator('app-result-message .question')).toContainText(
     name ?? '',
   );
-  await expect(
-    page.getByRole('button', { name: `Remover Assuntos: ${name}` }),
-  ).toBeVisible();
+  await expectSubjectFilter(page, name ?? '');
 });
 
 test('AC-4: a failing usage log never shows an error', async ({ page }) => {
@@ -52,8 +54,8 @@ for (const size of [
     test.skip(testInfo.project.name !== 'desktop', 'laptop heights only');
     await page.setViewportSize(size);
     await page.goto('/');
-    for (const view of ['Pesquisa com IA', 'Buscar documentos']) {
-      await page.getByRole('radio', { name: new RegExp(view) }).check();
+    for (const view of ['research', 'search'] as const) {
+      await chooseView(page, view);
       const greeting = page.locator('.greeting');
       await expect(greeting).toBeVisible();
       const top = await page.locator('.topbar').boundingBox();
@@ -78,7 +80,7 @@ test('the top bar stays on one line with the document panel open', async ({
   const height = async () =>
     (await page.locator('.topbar').boundingBox())?.height ?? 0;
   const closed = await height();
-  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
+  await chooseView(page, 'search');
   await page.getByLabel('Sua pergunta').fill('ritmo');
   await page.getByRole('button', { name: 'Buscar' }).click();
   await page.locator('[data-doc-id]').first().click();

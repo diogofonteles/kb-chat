@@ -82,3 +82,158 @@ a.ref {
 .recording {
   color: var(--color-text-muted);
 }
+
+/* v2 miniItem (docRight, docMain): a 40 cover, the title and its facets under it. */
+.ref.doc {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.ref.doc ui-cover {
+  flex: none;
+  border-radius: 4px;
+}
+
+.ref-text {
+  display: grid;
+  min-width: 0;
+}
+
+.ref-title {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ref.doc .ref-facets {
+  padding: 0;
+  font-size: var(--text-xs);
+}
+
+/* In the right panel's card the section has no rule of its own. */
+:host-context(.about) .see-also {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+/* docMain's column: "VEJA TAMBÉM" in small caps, the groups as quiet labels. */
+:host(.compact) .see-also {
+  margin: 0;
+  padding: 0;
+  border: none;
+  gap: var(--space-2);
+}
+
+:host(.compact) h3 {
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--text-meta);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+:host(.compact) h4 {
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+
+/* A subject's shelves (chat-document-see-also): each group a 20/700 title over 150 cards
+   with the title and the facets under the cover; a phone lists them as rows (cmRow). */
+:host(.shelf) h3 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+:host(.shelf) .group {
+  display: grid;
+  gap: var(--space-2);
+}
+
+:host(.shelf) h4 {
+  color: var(--color-text);
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* The shelf's byline is a phone's (cmRow); its cards keep the facets (pageShelf). */
+.ref-byline {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  :host(.shelf) ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  :host(.shelf) .ref.doc {
+    flex-direction: column;
+    align-items: flex-start;
+    width: calc(150px + 2 * var(--space-3));
+    padding: var(--space-3);
+    border-radius: var(--radius-card);
+  }
+
+  :host(.shelf) .ref.doc ui-cover {
+    border-radius: 6px;
+  }
+
+  :host(.shelf) .ref-title {
+    white-space: normal;
+    font-weight: 700;
+  }
+
+  :host(.shelf) .ref.doc .ref-facets {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 1023px) {
+  :host(.shelf) .ref.doc ui-cover {
+    --ui-cover-size: 52px !important;
+  }
+
+  :host(.shelf) .ref-title {
+    font-size: 0.9375rem;
+  }
+
+  :host(.shelf) h4 {
+    font-size: 1rem;
+  }
+
+  :host(.shelf) .ref.doc .ref-facets:not(.ref-byline) {
+    display: none;
+  }
+
+  :host(.shelf) .ref.doc .ref-byline {
+    display: block;
+  }
+
+  /* cmRow: the 52 cover on the page's own 16 px edge. */
+  :host(.shelf) .ref.doc {
+    padding-inline: 0;
+  }
+
+  :host(.shelf) ::ng-deep .ui-cover__label {
+    display: none;
+  }
+
+  :host(.shelf) .ref.doc .ref-facets {
+    font-size: var(--text-meta);
+  }
+}

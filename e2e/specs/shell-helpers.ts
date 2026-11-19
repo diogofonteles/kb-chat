@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import { expect } from './fixtures.js';
 
 /**
  * The v2 shell (KBC-125) as the specs reach it, at 1440 and 390: on desktop "Sua biblioteca"
@@ -13,8 +14,17 @@ export async function library(page: Page): Promise<Locator> {
   if (desktop(page))
     return page.getByRole('complementary', { name: 'Sua biblioteca' });
   const menu = page.getByRole('dialog', { name: 'Menu' });
-  if (!(await menu.isVisible()))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  if (await menu.isVisible()) return menu;
+  const button = page.getByRole('button', { name: 'Menu', exact: true });
+  // A page under another (the album page, media-list@mobile) has "←" where the avatar is:
+  // the menu is one step back.
+  const back = page.getByRole('link', { name: 'Voltar', exact: true });
+  await expect(button.or(back).first()).toBeVisible();
+  if (await back.isVisible()) {
+    await back.click();
+    await expect(back).toHaveCount(0);
+  }
+  await button.click();
   return menu;
 }
 
@@ -66,16 +76,28 @@ export async function signOut(page: Page): Promise<void> {
   await (await accountEntry(page, 'Sair')).click();
 }
 
-/** "+ Criar" › "Nova conversa". */
+/** "+ Criar" › "Nova conversa" (desktop); the Menu's row on a phone (v2: no "+ Criar"). */
 export async function startNewConversation(page: Page): Promise<void> {
   const side = await library(page);
+  if (!desktop(page)) {
+    await side
+      .getByRole('button', { name: 'Nova conversa', exact: true })
+      .click();
+    return;
+  }
   await side.getByRole('button', { name: 'Criar', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Nova conversa' }).click();
 }
 
-/** "+ Criar" › "Novo acervo". */
+/** "+ Criar" › "Novo acervo" (desktop); the Menu's row on a phone. */
 export async function startNewCollection(page: Page): Promise<void> {
   const side = await library(page);
+  if (!desktop(page)) {
+    await side
+      .getByRole('button', { name: 'Novo acervo', exact: true })
+      .click();
+    return;
+  }
   await side.getByRole('button', { name: 'Criar', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Novo acervo' }).click();
 }
@@ -142,6 +164,10 @@ export async function openMediaFromLibrary(
   const pinned = side.getByRole('link', { name, exact: true });
   if ((await pinned.count()) > 0) {
     await pinned.click();
+    return;
+  }
+  if (!desktop(page)) {
+    await side.getByRole('link', { name, exact: true }).click();
     return;
   }
   await side.getByRole('button', { name: 'Criar', exact: true }).click();

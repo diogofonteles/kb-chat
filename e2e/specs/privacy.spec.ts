@@ -30,10 +30,12 @@ test.describe('signed out', () => {
     await expect(
       page.getByRole('heading', { level: 2, name: 'Quem participa' }),
     ).toBeVisible();
-    await expect(page.getByRole('link', { name: OWNER_EMAIL })).toHaveAttribute(
-      'href',
-      `mailto:${OWNER_EMAIL}`,
-    );
+    // In the rights at every width; on desktop the Contato card beside the text names it too.
+    await expect(
+      page
+        .getByRole('region', { name: 'Seus direitos' })
+        .getByRole('link', { name: OWNER_EMAIL }),
+    ).toHaveAttribute('href', `mailto:${OWNER_EMAIL}`);
     await expect(page.getByText(/Última atualização/)).toBeVisible();
     const results = await new AxeBuilder({ page }).analyze();
     expect(

@@ -4,14 +4,15 @@ import {
   computed,
   inject,
   input,
+  model,
   output,
-  signal,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import type { LibraryItem, LibraryTrack } from '@kb-chat/contracts';
 import { SessionStore } from '@core/auth/session-store.js';
 import { formatDuration } from '@kb-chat/player-core';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
+import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import { resumeTextOf, stateTextOf } from './library-labels.js';
@@ -22,7 +23,8 @@ import { resumeTextOf, stateTextOf } from './library-labels.js';
  */
 @Component({
   selector: 'app-track-group',
-  imports: [RouterLink, AuthorshipBadge, MenuButton, UiIcon],
+  imports: [RouterLink, AuthorshipBadge, MenuButton, UiCover, UiIcon],
+  host: { '[class.in-table]': '!toggle()' },
   templateUrl: './track-group.html',
   styleUrl: './track-group.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -52,7 +54,13 @@ export class TrackGroup {
   readonly playingId = input<string | null>(null);
   readonly played = output<LibraryTrack>();
 
-  protected readonly open = signal(false);
+  /**
+   * Its own "3 faixas" button (a card of the grid). In the table the recording's row holds the
+   * chevron (media-library-tracks: "3 faixas" pill, ⌄ at the row's end), and the tracks below
+   * are rows of the table: ↳ n · cover · title · "faixa n de 3" · length · ⋯.
+   */
+  readonly toggle = input(true);
+  readonly open = model(false);
   protected readonly label = computed(() => {
     const count = this.item().tracks.length;
     return count === 1
@@ -74,6 +82,13 @@ export class TrackGroup {
       : this.router.navigate(['/midia', track.id], {
           queryParams: { acao: action },
         }));
+  }
+
+  /** "faixa 2 de 3" (media-library-tracks). */
+  protected placeOf(track: LibraryTrack): string {
+    const parent = track.parent;
+    if (!parent || parent.ordinal === null) return '';
+    return $localize`:@@tracks.place:faixa ${parent.ordinal}:ordinal: de ${parent.total}:total:`;
   }
 
   protected durationOf(track: LibraryTrack): string {

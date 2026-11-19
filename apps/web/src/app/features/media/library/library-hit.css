@@ -102,7 +102,9 @@
 .passage {
   justify-self: start;
   margin: var(--space-1) 0 0;
-  padding: var(--space-2) var(--space-3);
+  /* v2 · media-library-search: a 29 band, 10 in, the words 14/17. */
+  padding: 0.375rem 0.625rem;
+  line-height: 1.0625rem;
   border-radius: var(--radius-cover);
   background: var(--overlay-1);
   font-size: var(--text-sm);
@@ -114,15 +116,6 @@
   color: var(--color-accent-text);
   font-size: var(--text-meta);
   font-weight: 700;
-}
-
-/* Text nodes between the parts would add spaces: the quotes come from CSS. */
-.snippet::before {
-  content: '“';
-}
-
-.snippet::after {
-  content: '”';
 }
 
 mark {
@@ -163,15 +156,17 @@ mark {
     --ui-cover-size: 52px !important;
   }
 
+  /* The frame's covers are bare (media-library-search@mobile): ▶ covers the cover whole,
+     unseen, and a tap on it plays at once, as on a row of the list. The one playing shows. */
   .play {
-    opacity: 1;
-    background: rgb(0 0 0 / 55%);
-    color: #fff;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: var(--radius-cover);
+    opacity: 0;
   }
 
   .play.on {
-    background: var(--color-accent);
-    color: var(--color-on-accent);
+    opacity: 1;
   }
 
   .title {

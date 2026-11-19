@@ -49,7 +49,8 @@ test('AC-1/AC-2: a new conversation clears the screen and the history brings the
     history.getByRole('button', { name: new RegExp(tag) }),
   ).toHaveCount(2);
   const old = history.getByRole('button', { name: `ritmo ${tag}` });
-  await expect(old).toContainText('Busca');
+  // v2 · Sua biblioteca: a search's row says "Conversa · <when>".
+  await expect(old).toContainText('Conversa');
   await old.click();
   // The restored conversation runs its search again; the other one is gone from the screen.
   await expect(page.locator('app-result-message .question')).toHaveText([
@@ -214,10 +215,13 @@ test('AC-8: shows today’s AI spend against the cap', async ({ page }) => {
   // The server starts the day at the seeded US$ 0.03 (e2e/server.ts) and a cap of US$ 1.
   expect(usd).toBeGreaterThanOrEqual(0.03);
   expect(capUsd).toBe(1);
+  // v2 · Casca: "US$ 0,03 de 1,00", the cap without its currency again.
+  const cap = new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(capUsd);
   await expect(
-    (await sidebar(page)).getByText(
-      new RegExp(`^${dollars(usd)} de ${dollars(capUsd)}$`),
-    ),
+    (await sidebar(page)).getByText(new RegExp(`^${dollars(usd)} de ${cap}$`)),
   ).toBeVisible();
 });
 

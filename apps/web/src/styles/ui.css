@@ -202,12 +202,6 @@
   cursor: not-allowed;
 }
 
-@media (max-width: 1023px) {
-  .ui-chip {
-    min-height: 2.25rem;
-  }
-}
-
 /* ---------- Pills (status) ---------- */
 .ui-pill {
   --ui-pill-fg: var(--color-text-muted);
@@ -248,7 +242,8 @@
 .ui-banner {
   --ui-banner-tone: var(--color-info);
   display: flex;
-  align-items: flex-start;
+  /* v2 · Componentes › Banner: the icon, the text and the action centred on one row. */
+  align-items: center;
   gap: var(--space-3);
   padding: 0.875rem var(--space-4);
   border-radius: var(--radius-card);
@@ -269,7 +264,7 @@
 }
 
 .ui-banner__icon {
-  margin-top: 0.0625rem;
+  flex: none;
   color: var(--ui-banner-tone);
 }
 
@@ -278,6 +273,8 @@
   flex: 1;
   gap: 0.125rem;
   min-width: 0;
+  /* v2: the title and its line on tight lines (Figma's auto height). */
+  line-height: 1.2;
 }
 
 .ui-banner__title {
@@ -289,6 +286,8 @@
 .ui-banner__text {
   color: var(--color-text-muted);
   font-size: var(--text-meta);
+  /* the 13 line is 16 in v2, as Figma's auto height draws it (1.2 would give 15.6) */
+  line-height: 1rem;
 }
 
 .ui-banner__text:empty {
@@ -302,6 +301,11 @@
 .ui-banner > [uiBannerAction] {
   flex: none;
   align-self: center;
+}
+
+/* v2: the banner's button keeps the 24 sides of every filled button, at 32 tall. */
+.ui-banner > .ui-btn--sm[uiBannerAction] {
+  padding: 0 var(--space-6);
 }
 
 /* ---------- Empty state ---------- */
@@ -390,8 +394,8 @@
   height: var(--ui-avatar-size);
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-warn);
-  color: var(--color-bg);
+  background: var(--ui-avatar-bg, var(--avatar-5-bg));
+  color: var(--ui-avatar-fg, var(--avatar-5-fg));
   font-size: calc(var(--ui-avatar-size) * 0.42);
   font-weight: 700;
 }
@@ -557,6 +561,7 @@
   color: var(--color-text);
   font-size: var(--text-item);
   font-weight: 500;
+  line-height: 1.125rem;
 }
 
 .ui-libitem__meta {
@@ -565,6 +570,7 @@
   gap: 0.3125rem;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
+  line-height: 1rem;
 }
 
 .ui-libitem__pin {
@@ -617,6 +623,8 @@
 .ui-field__label {
   font-size: var(--text-meta);
   font-weight: 700;
+  /* v2: the 13 label, the 12 hint and error sit on tight lines (6 apart from the box). */
+  line-height: 1.2;
 }
 
 .ui-field__hint {
@@ -632,6 +640,7 @@
   margin: 0;
   color: var(--color-danger);
   font-size: var(--text-xs);
+  line-height: 1.25;
 }
 
 .ui-input {
@@ -862,6 +871,27 @@ select.ui-input option {
   color: inherit;
   font: inherit;
   cursor: pointer;
+}
+
+.ui-menu__panel:focus {
+  /* Focused only when it has no item (an empty list): its own edge already shows it. */
+  outline: none;
+}
+
+/* A menu whose trigger is drawn as a chip (the "Em: <acervo>" of v2 · Conversa). */
+.ui-menu__trigger.ui-chip {
+  gap: 0.375rem;
+  padding: 0 0.875rem;
+  background: var(--color-surface-muted);
+  font-size: var(--text-meta);
+}
+
+.ui-menu__trigger.ui-chip:hover {
+  background: color-mix(
+    in srgb,
+    var(--color-surface-muted) 80%,
+    var(--color-text)
+  );
 }
 
 .ui-menu__panel {
@@ -1305,10 +1335,17 @@ select.ui-input option {
   border: 2px solid var(--color-text-muted);
 }
 
+/* v2 · Auth: the box in focus has a 2 px white border, nothing around it; white on the dark
+   box is the focus indicator (contrast far above 3:1, WCAG 2.4.7/1.4.11). */
 .ui-code__digit:focus-visible {
   border: 2px solid var(--color-text);
-  outline: 2px solid var(--color-focus);
-  outline-offset: 1px;
+  outline: none;
+}
+
+@media (forced-colors: active) {
+  .ui-code__digit:focus-visible {
+    outline: 2px solid Highlight;
+  }
 }
 
 .ui-code__digit[aria-invalid='true'] {

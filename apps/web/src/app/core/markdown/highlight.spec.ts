@@ -1,4 +1,4 @@
-import { highlightTerms, markTerms } from './highlight.js';
+import { countTerms, highlightTerms, markTerms } from './highlight.js';
 
 describe('highlightTerms', () => {
   it('keeps meaningful words, folded and unique', () => {
@@ -12,11 +12,28 @@ describe('highlightTerms', () => {
 describe('markTerms', () => {
   it('marks accent- and case-insensitive occurrences at word starts', () => {
     expect(
-      markTerms('A Natureza Sétupla e a setuplicidade.', [
+      markTerms('A Sétupla, a NATUREZA e a setuplicidade.', [
         'setupla',
         'natureza',
       ]),
-    ).toBe('A <mark>Natureza</mark> <mark>Sétupla</mark> e a setuplicidade.');
+    ).toBe(
+      'A <mark>Sétupla</mark>, a <mark>NATUREZA</mark> e a setuplicidade.',
+    );
+  });
+
+  it("marks the question's words side by side as one occurrence (chat-document)", () => {
+    expect(
+      markTerms('A Natureza Sétupla e a natureza do ser.', [
+        'setupla',
+        'natureza',
+      ]),
+    ).toBe('A <mark>Natureza Sétupla</mark> e a <mark>natureza</mark> do ser.');
+    expect(
+      countTerms('A natureza  sétupla; a natureza e a sétupla', [
+        'natureza',
+        'setupla',
+      ]),
+    ).toBe(3);
   });
 
   it('does not mark inside other words and leaves text without terms untouched', () => {
