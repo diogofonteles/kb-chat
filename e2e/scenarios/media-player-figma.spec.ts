@@ -68,7 +68,10 @@ test('the interview: player, voices, speed, ⋯, shortcuts, a new note, the slee
     const { context, page } = await contextAt(browser, width);
     await openPlayer(page, es, title);
     await expect(
-      page.getByText('Cheguei pela mão de um amigo').first(),
+      page
+        .getByText('Cheguei pela mão de um amigo')
+        .and(page.locator(':visible'))
+        .first(),
     ).toBeVisible();
     await shoot(page, 'media-player', width);
 
@@ -144,7 +147,12 @@ test('the interview: player, voices, speed, ⋯, shortcuts, a new note, the slee
     if (await sleep.isVisible().catch(() => false))
       await page.keyboard.press('Escape');
     await expect(sleep).toHaveCount(0);
-    await expect(page.getByText(/[Nn]o fim/).first()).toBeVisible();
+    await expect(
+      page
+        .getByText(/[Nn]o fim/)
+        .and(page.locator(':visible'))
+        .first(),
+    ).toBeVisible();
     await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
     await shoot(page, 'media-player-sleep-on', width);
     await context.close();
@@ -162,7 +170,10 @@ test('other media: low confidence, waiting, failed, not found, a recording and i
       'Gravação ruidosa do encontro',
     );
     await expect(
-      page.getByText('Transcrição automática de baixa confiança').first(),
+      page
+        .getByText('Transcrição automática de baixa confiança')
+        .and(page.locator(':visible'))
+        .first(),
     ).toBeVisible();
     await shoot(page, 'media-player-low-confidence', width);
 
@@ -172,7 +183,10 @@ test('other media: low confidence, waiting, failed, not found, a recording and i
       'Aula ainda sem transcrição',
     );
     await expect(
-      page.getByText(/Aguardando o transcritor/).first(),
+      page
+        .getByText(/Aguardando o transcritor/)
+        .and(page.locator(':visible'))
+        .first(),
     ).toBeVisible();
     await shoot(page, 'media-player-waiting', width);
 
@@ -181,11 +195,21 @@ test('other media: low confidence, waiting, failed, not found, a recording and i
       world.byCode['AC'] ?? '',
       'Arquivo corrompido da reunião',
     );
-    await expect(page.getByText(/não é um áudio válido/).first()).toBeVisible();
+    await expect(
+      page
+        .getByText(/não é um áudio válido/)
+        .and(page.locator(':visible'))
+        .first(),
+    ).toBeVisible();
     await shoot(page, 'media-player-failed', width);
 
     await page.goto('/midia/00000000-0000-4000-8000-000000000000');
-    await expect(page.getByText('Mídia não encontrada').first()).toBeVisible();
+    await expect(
+      page
+        .getByText('Mídia não encontrada')
+        .and(page.locator(':visible'))
+        .first(),
+    ).toBeVisible();
     await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
     await shoot(page, 'media-player-not-found', width);
 
@@ -195,12 +219,20 @@ test('other media: low confidence, waiting, failed, not found, a recording and i
       'Perguntas e respostas de 2019',
     );
     await expect(
-      page.getByText('Como o senhor chegou à sessão?').first(),
+      page
+        .getByText('Como o senhor chegou à sessão?')
+        .and(page.locator(':visible'))
+        .first(),
     ).toBeVisible();
     await shoot(page, 'media-player-recording-tracks', width);
 
     await openPlayer(page, world.tracks[1] ?? '', 'Quem o levou até lá?');
-    await expect(page.getByText(/Parte de/).first()).toBeVisible();
+    await expect(
+      page
+        .getByText(/Parte de/)
+        .and(page.locator(':visible'))
+        .first(),
+    ).toBeVisible();
     await shoot(page, 'media-player-track', width);
     await context.close();
   }
@@ -215,7 +247,10 @@ test('who only listens', async ({ browser }) => {
       'Entrevista sobre a Tábua de Esmeralda',
     );
     await expect(
-      page.getByText('Mestre, o senhor está lembrado daquele dia?').first(),
+      page
+        .getByText('Mestre, o senhor está lembrado daquele dia?')
+        .and(page.locator(':visible'))
+        .first(),
     ).toBeVisible();
     await shoot(page, 'media-player-listener', width);
     await context.close();
@@ -236,7 +271,10 @@ test('"Transcrever de novo": confirm, then queued', async ({ browser }) => {
   const lc = world.byCode['LC'] ?? '';
   const title = 'Leitura comentada do Caibalion';
   const confirm = (page: Page) =>
-    page.getByText('Transcrever de novo com a lista de termos atual?').first();
+    page
+      .getByText('Transcrever de novo com a lista de termos atual?')
+      .and(page.locator(':visible'))
+      .first();
   // Both widths confirm before the first one queues it for real.
   for (const width of WIDTHS) {
     const { context, page } = await contextAt(browser, width);
@@ -256,9 +294,14 @@ test('"Transcrever de novo": confirm, then queued', async ({ browser }) => {
         .getByRole('button', { name: 'Transcrever de novo', exact: true })
         .last()
         .click();
-      await expect(confirm(page)).toHaveCount(0);
+      await expect(confirm(page)).toBeHidden();
     }
-    await expect(page.getByText(/Retranscrevendo/).first()).toBeVisible();
+    await expect(
+      page
+        .getByText(/Retranscrevendo/)
+        .and(page.locator(':visible'))
+        .first(),
+    ).toBeVisible();
     await shoot(page, 'media-player-transcribe-again-queued', width);
     await context.close();
   }
@@ -307,12 +350,20 @@ test('the mini player, "Meus marcadores" and the queue', async ({
 
     await go(page, '/midia/marcadores');
     await expect(
-      page.getByText('3 marcadores em 1 áudio').first(),
+      page
+        .getByText('3 marcadores em 1 áudio')
+        .and(page.locator(':visible'))
+        .first(),
     ).toBeVisible();
     await shoot(page, 'media-bookmarks', { width, top: true });
 
     await go(page, '/fila');
-    await expect(page.getByText('Aula para preparar').first()).toBeVisible();
+    await expect(
+      page
+        .getByText('Aula para preparar')
+        .and(page.locator(':visible'))
+        .first(),
+    ).toBeVisible();
     await shoot(page, 'media-queue', { width, top: true });
 
     // Nothing in the queue (a stand-in: the seeded media are all done or held).
@@ -329,7 +380,10 @@ test('the mini player, "Meus marcadores" and the queue', async ({
     await go(page, '/biblioteca');
     await go(page, '/fila');
     await expect(
-      page.getByText(/Nada sendo processado agora/).first(),
+      page
+        .getByText(/Nada sendo processado agora/)
+        .and(page.locator(':visible'))
+        .first(),
     ).toBeVisible();
     await shoot(page, 'media-queue-empty', { width, top: true });
     await context.close();
@@ -338,7 +392,10 @@ test('the mini player, "Meus marcadores" and the queue', async ({
     await playInterview(listener.page, world);
     await go(listener.page, '/midia/marcadores');
     await expect(
-      listener.page.getByText(/Você ainda não marcou nenhum trecho/).first(),
+      listener.page
+        .getByText(/Você ainda não marcou nenhum trecho/)
+        .and(listener.page.locator(':visible'))
+        .first(),
     ).toBeVisible();
     await shoot(listener.page, 'media-bookmarks-empty', { width, top: true });
     await listener.context.close();
@@ -353,7 +410,9 @@ test('the track editor and the bounds', async ({ browser }) => {
     await go(page, `/midia/${rp}/faixas`);
     const approve = page.getByRole('button', { name: 'Aprovar faixas' }).last();
     await expect(approve).toBeVisible();
-    await expect(page.getByText('Terceira faixa').first()).toBeAttached();
+    await expect(
+      page.getByText('Terceira faixa').and(page.locator(':visible')).first(),
+    ).toBeAttached();
     await shoot(page, 'media-tracks', { width, top: true });
 
     // Track 3 with no title: "Aprovar" names it and sends nothing.
@@ -362,12 +421,22 @@ test('the track editor and the bounds', async ({ browser }) => {
       .getByRole('listitem')
       .nth(2);
     await third.locator('button.head').click();
+    // A phone keeps the title in the track's details, opened from its ⋯.
+    if (width === 'phone') {
+      await third.getByRole('button', { name: 'Mais ações da faixa' }).click();
+      await page
+        .getByRole('menuitem', { name: 'Tipo, nível e texto da faixa' })
+        .click();
+    }
     const name = third.getByRole('textbox', { name: 'Título' });
     await name.fill('');
     await name.blur();
     await approve.click();
     await expect(
-      page.getByText('Corrija antes de aprovar:').first(),
+      page
+        .getByText('Corrija antes de aprovar:')
+        .and(page.locator(':visible'))
+        .first(),
     ).toBeVisible();
     await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
     await shoot(page, 'media-tracks-problems', { width, top: true });
@@ -401,7 +470,10 @@ test('the track editor and the bounds', async ({ browser }) => {
     await playInterview(listener.page, world);
     await go(listener.page, `/midia/${rp}/faixas`);
     await expect(
-      listener.page.getByText(/não tem permissão para editar/).first(),
+      listener.page
+        .getByText(/não tem permissão para editar/)
+        .and(listener.page.locator(':visible'))
+        .first(),
     ).toBeVisible();
     await shoot(listener.page, 'media-tracks-forbidden', { width, top: true });
     await listener.context.close();

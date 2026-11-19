@@ -376,6 +376,7 @@
         [shownElsewhere]="
           phoneFlow() ? (engineSource()?.id ?? null) : playerInPanel()
         "
+        [desktop]="desktop()"
         [idle]="!phoneFlow() && audio.collectionHasAudio() && !audio.playing()"
         [idleLink]="libraryPath()"
       />

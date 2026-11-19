@@ -110,6 +110,11 @@ export class MiniPlayer {
   protected readonly idleInMedia = computed(() => this.idleLink() === '/midia');
   /** A media the full player shows elsewhere on screen (the reading panel, KBC-039). */
   readonly shownElsewhere = input<string | null>(null);
+  /**
+   * A desktop keeps the bar under the player's own page too (v2 · Mídia — Player draws it
+   * there): its transport is then an echo of the page's (lib.js playerBar).
+   */
+  readonly desktop = input(false);
 
   private readonly rightPanel = inject(RightPanel);
   /** "Tocando agora" is in the shell's right panel (KBC-129 FR-2). */
@@ -161,13 +166,23 @@ export class MiniPlayer {
   );
   protected readonly playing = this.engine.playing;
   protected readonly busy = this.engine.busy;
-  /** On its own page the full player shows it: no mini-player there. */
+  /** The playing media's own page is on screen. */
+  private readonly onItsPage = computed(() => {
+    const source = this.source();
+    const path = this.url().split(/[?#]/)[0];
+    return !!source && path === `/midia/${encodeURIComponent(source.id)}`;
+  });
+  /** On its own page a phone's full player shows it: no mini-player there; a desktop keeps it. */
   protected readonly visible = computed(() => {
     const source = this.source();
     if (!source || source.id === this.shownElsewhere()) return false;
-    const path = this.url().split(/[?#]/)[0];
-    return path !== `/midia/${encodeURIComponent(source.id)}`;
+    return this.desktop() || !this.onItsPage();
   });
+  /**
+   * The bar beside the page's own player: what it shows and its transport repeat the page's,
+   * so they stay out of the keyboard and the reading order (one control each).
+   */
+  protected readonly echo = computed(() => this.desktop() && this.onItsPage());
   protected readonly percent = computed(() => {
     const { currentMs, durationMs } = this.engine.playback();
     return durationMs ? Math.min(100, (currentMs / durationMs) * 100) : 0;

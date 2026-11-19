@@ -8,7 +8,7 @@
     i18n-aria-label="@@mini.region"
     [style.--mini-tint]="tint()"
   >
-    <div class="now">
+    <div class="now" [attr.inert]="echo() ? '' : null">
       <ui-cover class="cover" [title]="current.title" [size]="56" />
       <div class="text">
         @if (gone()) {
@@ -53,7 +53,7 @@
         <ui-icon [name]="marked() ? 'bookmarkFill' : 'bookmark'" [size]="20" />
       </button>
     </div>
-    <div class="controls">
+    <div class="controls" [attr.inert]="echo() ? '' : null">
       <div class="buttons">
         <app-menu-button
           class="speed"
