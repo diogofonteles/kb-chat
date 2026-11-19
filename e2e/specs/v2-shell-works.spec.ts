@@ -179,6 +179,14 @@ test.describe('the shell', () => {
     await expect(page.getByLabel('Sua pergunta')).toBeVisible();
     const side = await library(page);
     const spend = side.getByText('Gasto com IA hoje');
+    // The rows to scroll are the collections': the column (its foot, the spend) is drawn
+    // before they come, and a wheel over an empty list moves nothing.
+    await expect(
+      side
+        .getByRole('group', { name: /^Acervos/ })
+        .getByRole('listitem')
+        .first(),
+    ).toBeVisible();
     if (desktop(page)) {
       // At the column's foot before and after the rows scroll.
       // Both boxes in one frame: the player bar may still be coming in (it takes 72 off
