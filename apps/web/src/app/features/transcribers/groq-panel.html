@@ -37,7 +37,7 @@
       </p>
     } @else if (current.connected) {
       <p class="connected">
-        <span aria-hidden="true">✓</span>
+        <ui-icon name="checkcircle" [size]="20" />
         <ng-container i18n="@@groq.isConnected"
           >Chave conectada. Ela fica cifrada e não aparece de
           novo.</ng-container
@@ -62,14 +62,33 @@
       autocomplete="off"
       spellcheck="false"
       maxlength="500"
-      aria-describedby="groq-key-hint"
+      [attr.aria-describedby]="
+        noticeOf('key') ? 'groq-key-status groq-key-hint' : 'groq-key-hint'
+      "
       [value]="key()"
       (input)="editKey($event)"
     />
+    <p
+      class="status key-status"
+      id="groq-key-status"
+      role="status"
+      [class.error]="noticeOf('key')?.kind === 'error'"
+      [class.empty]="busy() !== 'key' && !noticeOf('key')"
+    >
+      @if (busy() === 'key') {
+        <ng-container i18n="@@groq.testing">Testando…</ng-container>
+      } @else if (noticeOf('key'); as notice) {
+        <ui-icon
+          [name]="notice.kind === 'error' ? 'warn' : 'checkcircle'"
+          [size]="14"
+        />
+        {{ notice.text }}
+      }
+    </p>
     <p class="hint" id="groq-key-hint" i18n="@@groq.keyHint">
       Crie em console.groq.com, em "API Keys", e cole aqui.
     </p>
-    <div class="row">
+    <div class="row key-actions">
       <button
         type="submit"
         class="secondary"
@@ -81,7 +100,7 @@
       @if (current.connected) {
         <button
           type="button"
-          class="secondary"
+          class="link remove"
           [attr.aria-disabled]="busy() !== null ? 'true' : null"
           (click)="removeKey()"
           i18n="@@groq.remove"
@@ -90,20 +109,6 @@
         </button>
       }
     </div>
-    <p
-      class="status"
-      role="status"
-      [class.error]="noticeOf('key')?.kind === 'error'"
-    >
-      @if (busy() === 'key') {
-        <ng-container i18n="@@groq.testing">Testando…</ng-container>
-      } @else if (noticeOf('key'); as notice) {
-        <span aria-hidden="true">{{
-          notice.kind === 'error' ? '⚠' : '✓'
-        }}</span>
-        {{ notice.text }}
-      }
-    </p>
   </form>
 
   <form class="block" (submit)="saveMode($event)" novalidate>
@@ -162,7 +167,7 @@
                   />
                   @if (!hoursValid()) {
                     <p class="field-error" id="groq-hours-error">
-                      <span aria-hidden="true">⚠</span>
+                      <ui-icon name="warn" [size]="14" />
                       <ng-container i18n="@@groq.hoursInvalid"
                         >Use um número inteiro de {{ hoursLimits.min }} a
                         {{ hoursLimits.max }}.</ng-container
@@ -202,6 +207,7 @@
       class="status"
       role="status"
       [class.error]="noticeOf('mode')?.kind === 'error'"
+      [class.empty]="!noticeOf('mode')"
     >
       @if (noticeOf('mode'); as notice) {
         <span aria-hidden="true">{{
@@ -235,7 +241,7 @@
       <label class="field" for="groq-cap">
         <span class="label" i18n="@@groq.capLabel">Teto mensal (US$)</span>
       </label>
-      <div class="row">
+      <div class="row cap-row">
         <input
           id="groq-cap"
           class="input cap"
@@ -260,7 +266,7 @@
       </div>
       @if (capInvalid()) {
         <p class="field-error" id="groq-cap-error">
-          <span aria-hidden="true">⚠</span>
+          <ui-icon name="warn" [size]="14" />
           <ng-container i18n="@@groq.capInvalid"
             >Use um valor de 0 a 1000 dólares.</ng-container
           >
@@ -273,6 +279,7 @@
       class="status"
       role="status"
       [class.error]="noticeOf('cap')?.kind === 'error'"
+      [class.empty]="!noticeOf('cap')"
     >
       @if (noticeOf('cap'); as notice) {
         <span aria-hidden="true">{{

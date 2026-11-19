@@ -100,3 +100,201 @@ button[aria-disabled='true'] {
 .choice-label:has(.hours :focus-visible) ui-choice-card {
   outline: none;
 }
+
+/* ---------- v2 · Groq de reserva, the frame's numbers (KBC-152) ---------- */
+/* 24 under the lead, 28 between the blocks, 10 inside them (6 from a label to its field and
+   from the field to its hint). */
+:host {
+  gap: 0;
+}
+
+.lead + .block {
+  margin-top: var(--space-6, 1.5rem);
+}
+
+.block + .block {
+  margin-top: 1.75rem;
+}
+
+.block {
+  gap: 0.625rem;
+}
+
+.block-title {
+  line-height: 1.25rem;
+}
+
+.block > .label {
+  line-height: 1rem;
+}
+
+.block > .label + .input,
+.block > .input + .hint {
+  margin-top: -0.25rem;
+}
+
+.block > .hint {
+  font-size: var(--text-xs);
+  line-height: 0.875rem;
+}
+
+.key-actions .secondary {
+  min-height: 2.25rem;
+  padding: 0 var(--space-4);
+}
+
+.block > .primary {
+  justify-self: start;
+  min-height: 2.5rem;
+  padding: 0 var(--space-5, 1.25rem);
+}
+
+.group > .legend {
+  margin-bottom: 0.625rem;
+  padding: 0;
+}
+
+/* The three cards 10 apart: 14/16 inside the line, the title 15/18 beside its radio (in the
+   middle of the title), 6 to the help 13/18. */
+.choices.three {
+  gap: 0.625rem;
+}
+
+.choice-label ui-choice-card {
+  row-gap: 0.375rem;
+  padding: 0.875rem var(--space-4);
+}
+
+.choice-label ui-choice-card ::ng-deep .ui-choice__title {
+  line-height: 1.125rem;
+}
+
+.choice-label ui-choice-card ::ng-deep .ui-choice__help {
+  line-height: 1.125rem;
+}
+
+/* The month: 16 inside, the amount 28/34 and "de US$ 10,00" 15, the bar 6 high 10 under it,
+   the note 13/19 10 under the bar. */
+.month {
+  gap: 0.625rem;
+}
+
+.spent {
+  height: 2.125rem;
+  line-height: 2.125rem;
+}
+
+.spent-cap {
+  font-size: 0.9375rem;
+}
+
+.month ui-progress {
+  height: 0.375rem;
+  margin-right: var(--space-2);
+}
+
+.month .hint {
+  font-size: var(--text-meta);
+  line-height: 1.1875rem;
+}
+
+/* The cap: its field 220 wide, "Salvar teto" 44 high (16 a side) 10 after it. */
+.cap-row {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 0.625rem;
+}
+
+.cap-row .input.cap {
+  flex: none;
+  width: 13.75rem;
+  height: 2.75rem;
+}
+
+.cap-row .secondary {
+  min-height: 2.75rem;
+  margin-top: 0.25rem;
+  padding: 0 var(--space-4);
+}
+
+.block > .field + .cap-row {
+  margin-top: -0.25rem;
+}
+
+/* "Chave conectada": a green note, ✓ 20 and the words 14/17, 14/16 inside. */
+.connected {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0.875rem var(--space-4);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  line-height: 1.0625rem;
+}
+
+.connected ui-icon {
+  flex: none;
+  color: var(--color-accent);
+}
+
+/* What the test said, under the field, before its hint: ⚠ 14 and 12/14. */
+.key-status {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: -0.25rem;
+  font-size: var(--text-xs);
+  line-height: 0.875rem;
+}
+
+.key-status:not(.empty) + .hint {
+  margin-top: -0.25rem;
+}
+
+/* "Remover chave": words, 18 after "Testar conexão". */
+.key-actions {
+  gap: var(--space-2) 1.125rem;
+}
+
+.key-actions .remove {
+  min-height: 2.25rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.field-error {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: var(--text-xs);
+  line-height: 0.875rem;
+}
+
+.hours .hint {
+  font-size: var(--text-xs);
+  line-height: 0.875rem;
+}
+
+/* The cap's label 13/16, 6 over its row; its error 6 under the field (the button sits 4 lower
+   than the field, as drawn, so the row is 48). */
+.block > .field {
+  line-height: 1rem;
+}
+
+.cap-row + .field-error {
+  margin-top: -0.5rem;
+}
+
+.hours {
+  margin-top: 0;
+}
+
+.hours .label {
+  line-height: 1rem;
+}

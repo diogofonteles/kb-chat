@@ -25,7 +25,7 @@ import {
 } from '@kb-chat/contracts';
 import { GroqApi, groqUrl } from '@core/media/groq-api.js';
 import type { Observable } from 'rxjs';
-import { UiBanner, UiChoiceCard, UiProgress } from '@ui/index.js';
+import { UiBanner, UiChoiceCard, UiIcon, UiProgress } from '@ui/index.js';
 
 /** What a status line says after an action (UP-01), in words, never by color alone. */
 interface Notice {
@@ -93,7 +93,7 @@ export const GROQ_MODE_OPTIONS: readonly {
  */
 @Component({
   selector: 'app-groq-panel',
-  imports: [UiBanner, UiChoiceCard, UiProgress],
+  imports: [UiBanner, UiChoiceCard, UiIcon, UiProgress],
   templateUrl: './groq-panel.html',
   styleUrls: [
     '../settings/settings-form.css',
