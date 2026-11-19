@@ -90,6 +90,47 @@
                   </button>
                 </div>
               } @else {
+                <!-- A phone's row has its actions in a ⋯ menu (v2 · Perfis, celular). -->
+                <ui-menu
+                  class="phone-more"
+                  [label]="profile.name"
+                  [menuId]="'profile-menu-' + profile.id"
+                  i18n-triggerLabel="@@profiles.more"
+                  triggerLabel="Mais ações de {{ profile.name }}"
+                  align="end"
+                >
+                  <ui-icon uiMenuTrigger name="more" [size]="20" />
+                  <button
+                    uiMenuItem
+                    type="button"
+                    [disabled]="busy()"
+                    (click)="edit(profile)"
+                    i18n="@@profiles.editShort"
+                  >
+                    Editar
+                  </button>
+                  @if (!profile.isDefault) {
+                    <button
+                      uiMenuItem
+                      type="button"
+                      [disabled]="busy()"
+                      (click)="makeDefault(profile)"
+                      i18n="@@profiles.makeDefaultShort"
+                    >
+                      Tornar padrão
+                    </button>
+                  }
+                  <button
+                    uiMenuItem
+                    [danger]="true"
+                    type="button"
+                    [disabled]="busy()"
+                    (click)="askDelete(profile)"
+                    i18n="@@profiles.deleteShort"
+                  >
+                    Apagar
+                  </button>
+                </ui-menu>
                 <div class="actions">
                   <button
                     type="button"
@@ -160,8 +201,8 @@
             [height]="651"
             [top]="40"
             [closeOnBackdrop]="false"
-            i18n-primaryLabel="@@profiles.save"
-            primaryLabel="Salvar perfil"
+            i18n-primaryLabel="@@profiles.saveShort"
+            primaryLabel="Salvar"
             [primaryDisabled]="saveBlocked()"
             (primary)="save()"
             (closed)="dialogClosed()"
@@ -268,21 +309,22 @@
             </div>
           </ui-dialog>
         </form>
-      } @else {
-        <button
-          #newButton
-          type="button"
-          class="secondary new"
-          [disabled]="busy()"
-          (click)="startNew()"
-        >
-          <ui-icon name="plus" [size]="16" />
-          <span i18n="@@profiles.new">Novo perfil</span>
-        </button>
       }
+      <!-- Stays under the profile's modal too, as the list draws it (v2 · Perfil de convite). -->
+      <button
+        #newButton
+        type="button"
+        class="secondary new"
+        [disabled]="busy()"
+        (click)="startNew()"
+      >
+        <ui-icon name="plus" [size]="16" />
+        <span i18n="@@profiles.new">Novo perfil</span>
+      </button>
 
       <p
         class="notice"
+        [class.idle]="!notice()"
         [class.error]="notice()?.kind === 'error'"
         aria-live="polite"
       >

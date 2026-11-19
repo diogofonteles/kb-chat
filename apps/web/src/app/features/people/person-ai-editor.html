@@ -4,7 +4,12 @@
   <legend class="visually-hidden" i18n="@@personAi.legend">
     IA da aplicação
   </legend>
-  <label class="field">
+  <!-- A phone's row: the AI under the words, a chevron; the select covers the row (the
+       label's words stay its name: the value and the chevron sit beside the label). -->
+  <div class="field which">
+    <span class="row-value" aria-hidden="true">{{ chosenLabel() }}</span>
+    <ui-icon class="row-chevron" name="chevRight" [size]="20" />
+    <label>
     <span i18n="@@personAi.which">Qual IA atende esta pessoa</span>
     <select
       #appAiSelect
@@ -21,6 +26,7 @@
       }
     </select>
   </label>
+  </div>
   @if (unavailableNote(); as note) {
     <p id="lend-unavailable-person" class="hint">{{ note }}</p>
   }
@@ -31,7 +37,9 @@
       aria-labelledby="lend-title-person"
       aria-describedby="lend-terms-person"
     >
-      <p id="lend-title-person" class="lend-title">{{ copy.toPerson() }}</p>
+      <p id="lend-title-person" class="lend-title">
+        <ui-icon name="warn" [size]="20" />{{ copy.toPerson() }}
+      </p>
       <p id="lend-terms-person">{{ copy.terms() }}</p>
       <div class="actions">
         <button

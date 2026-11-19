@@ -44,6 +44,7 @@
 .bar > .check {
   min-height: 0;
   gap: 0.625rem;
+  line-height: 1.125rem;
 }
 
 .field {

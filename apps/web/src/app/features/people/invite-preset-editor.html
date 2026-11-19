@@ -193,7 +193,10 @@
     <legend class="visually-hidden" i18n="@@preset.ai">
       IA da aplicação
     </legend>
-    <label class="field">
+    <div class="field which">
+      <span class="row-value" aria-hidden="true">{{ appAiWords() }}</span>
+      <ui-icon class="row-chevron" name="chevRight" [size]="20" />
+      <label>
       <span i18n="@@preset.appAi">Qual IA atende a pessoa</span>
       <select
         #appAiSelect
@@ -208,6 +211,7 @@
         }
       </select>
     </label>
+    </div>
     @if (canLend()) {
       <p [id]="uid + '-ai-hint'" class="hint" i18n="@@preset.aiHintOwner">
         As suas assinaturas aparecem aqui enquanto podem ser cedidas, sempre com
@@ -229,7 +233,7 @@
         [attr.aria-describedby]="uid + '-lend-terms'"
       >
         <p [id]="uid + '-lend-title'" class="lend-title">
-          {{ copy.toInvitee() }}
+          <ui-icon name="warn" [size]="20" />{{ copy.toInvitee() }}
         </p>
         <p [id]="uid + '-lend-terms'">{{ copy.terms() }}</p>
         <div class="actions">
@@ -362,7 +366,10 @@
     </p>
     <!-- The hint and the notice stay with their field, apart from the next one. -->
     <div class="field-with-notes">
-      <label class="field">
+      <div class="field pref">
+        <span class="row-value" aria-hidden="true">{{ prefWords().topic }}</span>
+        <ui-icon class="row-chevron" name="chevRight" [size]="20" />
+        <label>
         <span i18n="@@preset.defaultTopic">Acervo padrão</span>
         <select
           #topicSelect
@@ -387,6 +394,7 @@
           }
         </select>
       </label>
+      </div>
       @if (needsCollection()) {
         <p
           [id]="uid + '-default-topic-hint'"
@@ -406,7 +414,10 @@
         }
       </p>
     </div>
-    <label class="field">
+    <div class="field pref">
+      <span class="row-value" aria-hidden="true">{{ prefWords().view }}</span>
+      <ui-icon class="row-chevron" name="chevRight" [size]="20" />
+      <label>
       <span i18n="@@preset.defaultView">Visão inicial</span>
       <select
         #viewSelect
@@ -424,7 +435,11 @@
         }
       </select>
     </label>
-    <label class="field">
+    </div>
+    <div class="field pref">
+      <span class="row-value" aria-hidden="true">{{ prefWords().profile }}</span>
+      <ui-icon class="row-chevron" name="chevRight" [size]="20" />
+      <label>
       <span i18n="@@preset.researchProfile">Perfil de pesquisa</span>
       <select
         #profileSelect
@@ -442,7 +457,11 @@
         }
       </select>
     </label>
-    <label class="field">
+    </div>
+    <div class="field pref">
+      <span class="row-value" aria-hidden="true">{{ prefWords().theme }}</span>
+      <ui-icon class="row-chevron" name="chevRight" [size]="20" />
+      <label>
       <span i18n="@@preset.theme">Tema</span>
       <select
         #themeSelect
@@ -460,5 +479,6 @@
         }
       </select>
     </label>
+    </div>
   </fieldset>
 </div>

@@ -27,7 +27,14 @@ import {
   type UiErrorCode,
 } from '@core/api/api-error.js';
 import type { Observable } from 'rxjs';
-import { UiButton, UiDialog, UiIcon, UiPill } from '@ui/index.js';
+import {
+  UiButton,
+  UiDialog,
+  UiIcon,
+  UiMenu,
+  UiMenuItem,
+  UiPill,
+} from '@ui/index.js';
 import { InvitePresetEditor } from './invite-preset-editor.js';
 import { InviteProfilesStore } from './invite-profiles-store.js';
 import { plainPreset } from './preset-defaults.js';
@@ -60,7 +67,15 @@ type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
  */
 @Component({
   selector: 'app-invite-profiles-panel',
-  imports: [InvitePresetEditor, UiButton, UiDialog, UiIcon, UiPill],
+  imports: [
+    InvitePresetEditor,
+    UiButton,
+    UiDialog,
+    UiIcon,
+    UiMenu,
+    UiMenuItem,
+    UiPill,
+  ],
   templateUrl: './invite-profiles-panel.html',
   styleUrls: ['./person-editor.css', './invite-profiles-panel.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,

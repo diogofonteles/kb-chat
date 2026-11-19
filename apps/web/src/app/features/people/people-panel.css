@@ -275,6 +275,11 @@ app-access-requests-list {
     min-height: 0;
   }
 
+  /* In the page's card the Perfil row sits 20 from the e-mail and from the buttons. */
+  .invite-fields:not(.in-dialog) .setup-field {
+    padding-block: var(--space-2);
+  }
+
   .invite-fields.in-dialog + .preset {
     margin-top: -0.5rem;
   }
@@ -748,6 +753,11 @@ input[aria-invalid='true'] {
 
   .table-head {
     display: none;
+  }
+
+  /* No head on a phone: the rows 12 under the card. */
+  .people {
+    margin-top: 0;
   }
 
   /* A phone's row (peopleList): avatar 48; the name and its pills; one line with the

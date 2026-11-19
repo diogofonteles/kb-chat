@@ -309,7 +309,13 @@
     i18n-aria-label="@@people.listLabel"
   >
     @for (person of list(); track person.id) {
-      <li class="person" [class.open]="openId() === person.id">
+      <!-- Lit while its editor is open, or its "Ver como" over the list (v2 · Ver como). -->
+      <li
+        class="person"
+        [class.open]="
+          openId() === person.id || actingTarget()?.id === person.id
+        "
+      >
         <label class="pick">
           <input
             #pickBox

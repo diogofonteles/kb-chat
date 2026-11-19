@@ -180,6 +180,16 @@
   color: var(--color-danger);
 }
 
+/* No message: the live region stays but takes no room. */
+.notice.idle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 .alert p {
   margin: 0 0 var(--space-2);
 }
@@ -250,5 +260,27 @@
 @media (max-width: 1023px) {
   .draft-name {
     flex-basis: 100%;
+  }
+}
+
+/* Desktop: the actions as words; a phone: one ⋯ that opens them (v2 · Perfis, celular). */
+.phone-more {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .profile {
+    flex-wrap: nowrap;
+    padding-right: var(--space-3);
+  }
+
+  .profile > .actions:not(:has(.danger)) {
+    display: none;
+  }
+
+  .phone-more {
+    display: inline-flex;
+    margin-left: auto;
+    color: var(--color-text-muted);
   }
 }

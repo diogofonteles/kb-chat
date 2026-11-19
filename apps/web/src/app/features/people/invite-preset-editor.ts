@@ -34,7 +34,7 @@ import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { THEME_CHOICES } from '@core/theme/theme-store.js';
 import { THEME_COPY, VIEW_COPY } from '@features/settings/provider-copy.js';
 import { collectionChoices, treeTitle } from '@core/topics/topic-tree.js';
-import { UiTablist } from '@ui/index.js';
+import { UiIcon, UiTablist } from '@ui/index.js';
 import { FEATURE_LABELS } from './feature-labels.js';
 import {
   CHOOSE_LEVEL,
@@ -77,7 +77,7 @@ let presetEditors = 0;
 
 @Component({
   selector: 'app-invite-preset-editor',
-  imports: [UiTablist],
+  imports: [UiIcon, UiTablist],
   templateUrl: './invite-preset-editor.html',
   styleUrls: ['./person-editor.css', './invite-preset-editor.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -254,6 +254,30 @@ export class InvitePresetEditor {
     id,
     label: THEME_COPY[id](),
   }));
+  /**
+   * The words of each preference as chosen ("Sem preferência" when none): a phone's row draws
+   * them under its label (v2 · Perfil de convite, celular).
+   */
+  /** The chosen app AI's words, under the label of a phone's row. */
+  protected readonly appAiWords = computed(
+    () =>
+      this.appAis().find((one) => one.id === this.shownAppAi())?.label ?? '',
+  );
+  protected readonly prefWords = computed(() => {
+    const prefs = this.preset().preferences;
+    const none = $localize`:@@preset.noPreference:Sem preferência`;
+    const topic = this.defaultTopics().find(
+      (one) => one.slug === prefs.defaultTopic,
+    );
+    return {
+      topic: topic ? treeTitle(topic) : none,
+      view: this.views.find((one) => one.id === prefs.defaultView)?.label ?? none,
+      profile:
+        this.profiles.find((one) => one.id === prefs.researchProfile)?.label ??
+        none,
+      theme: this.themes.find((one) => one.id === prefs.theme)?.label ?? none,
+    };
+  });
   protected readonly maxDaily = MAX_DAILY_RESEARCHES;
   protected readonly maxCap = MAX_MONTHLY_CAP_USD;
   /** Why a typed number was not kept; shown on its field (MA-23). */

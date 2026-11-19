@@ -61,7 +61,7 @@ const REASON_MAX = 500;
       </label>
       @if (invalid()) {
         <p id="act-as-reason-error" class="error">
-          <ui-icon name="xcircle" [size]="14" />
+          <ui-icon name="warn" [size]="14" />
           <span i18n="@@actAs.reasonRequired"
             >Escreva o motivo (pelo menos 3 letras).</span
           >
@@ -81,6 +81,7 @@ const REASON_MAX = 500;
         </button>
         <button
           uiButton="white"
+          class="start"
           type="button"
           [disabled]="busy()"
           (click)="start(reason.value)"

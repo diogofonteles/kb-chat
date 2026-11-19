@@ -1,4 +1,4 @@
-import { UiPill } from '@ui/index.js';
+import { UiIcon, UiPill } from '@ui/index.js';
 import { DatePipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
@@ -43,7 +43,7 @@ const isAssignment = (value: string): value is AppAiAssignment =>
  */
 @Component({
   selector: 'app-person-ai-editor',
-  imports: [DatePipe, UiPill],
+  imports: [DatePipe, UiIcon, UiPill],
   templateUrl: './person-ai-editor.html',
   styleUrl: './person-editor.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -68,6 +68,12 @@ export class PersonAiEditor {
       id,
       label: assignmentLabel(id, this.defaultAppAi()),
     })),
+  );
+  /** The chosen option's words, a phone's row draws them under its label (v2 · IA e limites). */
+  protected readonly chosenLabel = computed(
+    () =>
+      this.options().find((option) => option.id === this.ai().appAi)?.label ??
+      '',
   );
   protected readonly history = computed(() =>
     [...this.ai().history].reverse().map((change) => ({

@@ -179,6 +179,8 @@ const ANA_LIMA_STARTS = [
   '2026-11-09T19:01:35',
 ];
 const ANA_SOUZA_AT = '2026-11-09T18:58:16';
+/** When the house plan was given to each person, as the AI's history says it. */
+const AI_CHANGED_AT = '2026-11-09T18:58';
 
 /** São Paulo wall time (UTC−3) → ISO instant. */
 const sp = (wall: string): string =>
@@ -599,7 +601,15 @@ export async function settingsWorld(
     ...body,
     items: (body['items'] as Record<string, unknown>[]).map((person) => {
       const at = atOf.get(String(person['email']));
-      return at ? restamp(person, sp(at)) : person;
+      const stamped = (at ? restamp(person, sp(at)) : person) as Record<
+        string,
+        unknown
+      >;
+      // The AI's history in the frames: the change of 09/11/2026 18:58 (settings-people-editor-ai).
+      const ai = stamped['ai'];
+      return isRecord(ai) && Array.isArray(ai['history'])
+        ? { ...stamped, ai: { ...ai, history: restamp(ai['history'], sp(AI_CHANGED_AT)) } }
+        : stamped;
     }),
   }));
   await patchGet(context, '**/api/v1/access-requests', (body) => ({

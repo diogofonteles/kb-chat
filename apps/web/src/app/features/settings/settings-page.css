@@ -361,6 +361,8 @@
   margin: 0 calc(-1 * var(--space-4));
   /* The frame's header: 56 above the 26 px chevron, so the 44 px button centres at 69. */
   padding: 2.9375rem var(--space-2) 0;
+  /* The screen's first block 3 under it (v2 · Configurações, celular: 94 from the top). */
+  margin-bottom: -0.5625rem;
   /* Its 91 px of the tint (41 % of 220). */
   background: linear-gradient(
     180deg,

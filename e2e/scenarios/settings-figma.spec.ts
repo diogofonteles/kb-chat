@@ -394,6 +394,12 @@ test('Pessoas e permissões: invitation, list, requests, editors, profiles, Ver 
     await expect(
       editor.getByRole('button', { name: 'Ceder assim mesmo' }),
     ).toBeVisible();
+    // The frame draws the sheet from its top (choosing scrolled it to the notice).
+    if (phone)
+      await editor
+        .locator('.ui-dialog__body')
+        .evaluate((body) => body.scrollTo({ top: 0 }));
+    await page.waitForTimeout(200);
     await shoot(page, 'settings-people-invite-lend', width);
 
     settings = await people();
@@ -401,16 +407,20 @@ test('Pessoas e permissões: invitation, list, requests, editors, profiles, Ver 
       name: /Perfis de convite/,
     });
     await profiles.getByRole('button', { name: /Perfis de convite/ }).click();
-    await expect(
-      profiles.getByRole('button', { name: 'Editar Aluno' }),
-    ).toBeVisible();
+    // A phone's row keeps its actions in its ⋯ (v2 · Perfis, celular).
+    const aluno = phone
+      ? profiles.getByRole('button', { name: 'Mais ações de Aluno' })
+      : profiles.getByRole('button', { name: 'Editar Aluno' });
+    await expect(aluno).toBeVisible();
     if (phone)
       await place(profiles.getByText('Perfis de convite').first(), {
         desktop: 0,
         phone: 111,
       });
     await shoot(page, 'settings-invite-profiles', width);
-    await profiles.getByRole('button', { name: 'Editar Aluno' }).click();
+    await aluno.click();
+    if (phone)
+      await page.getByRole('menuitem', { name: 'Editar', exact: true }).click();
     // The profile's editor opens in place, under the list (a sheet on a phone's frame).
     await expect(page.getByLabel('Nome do perfil')).toBeVisible();
     await page
