@@ -50,3 +50,21 @@
 .start {
   padding-inline: 1.375rem;
 }
+
+/* The modal's buttons 40 high (v2 · Ver como): "Cancelar" 16 a side, "Ver como esta pessoa"
+   with its 👁 8 before the words. */
+@media (min-width: 1024px) {
+  .actions [uiButton] {
+    min-height: 2.5rem;
+    font-size: var(--text-sm);
+  }
+
+  .actions [uiButton='ghost'] {
+    padding-inline: var(--space-4);
+  }
+
+  .start {
+    gap: var(--space-2);
+    padding-inline: var(--space-6, 1.5rem);
+  }
+}

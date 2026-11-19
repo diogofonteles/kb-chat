@@ -114,3 +114,35 @@
     border-radius: 4px;
   }
 }
+
+/* A phone's preferences (v2 · Perfil de convite, celular): the hint 14 under the tabs, 24 to
+   the first row, the rows 34 apart. */
+@media (max-width: 1023px) {
+  .panel:has(.prefs-hint) {
+    padding-top: 0;
+  }
+
+  .group:has(> .prefs-hint) .field + .field,
+  .group:has(> .prefs-hint) .field-with-notes + .field {
+    margin-top: 0.625rem;
+  }
+}
+
+/* The invitation's wait over the AI tab: a phone's (13/16, 16 over the first row). */
+.lend-wait-top {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .lend-wait-top {
+    display: block;
+    margin: 0;
+    color: var(--color-warn);
+    font-size: var(--text-meta);
+    line-height: 1rem;
+  }
+
+  .panel:has(> .lend-wait-top) {
+    padding-top: 0;
+  }
+}

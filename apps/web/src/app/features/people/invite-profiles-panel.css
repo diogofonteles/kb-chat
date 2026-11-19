@@ -284,3 +284,15 @@
     color: var(--color-text-muted);
   }
 }
+
+/* The phone's sheet (v2 · Perfil de convite, celular): the name's field, 11 to the default's
+   row (44), 11 to the tabs. */
+@media (max-width: 1023px) {
+  .draft {
+    gap: 0.6875rem;
+  }
+
+  .draft-top {
+    row-gap: 0.6875rem;
+  }
+}

@@ -188,6 +188,18 @@
   [attr.aria-labelledby]="tabsId + '-ai'"
   [hidden]="tab() !== 'ai'"
 >
+  <!-- A phone draws the invitation's wait at the tab's top (v2 · Convite cedendo, celular); the
+       foot keeps it for readers, so this copy is only seen. -->
+  @if (mode() === 'invite' && confirmingLend() !== null) {
+    <p
+      class="hint lend-wait-top"
+      aria-hidden="true"
+      i18n="@@people.inviteLendWait"
+    >
+      Confirme ou cancele a cessão da assinatura em “IA da aplicação” para
+      convidar.
+    </p>
+  }
   <!-- v2 · IA e limites: each line a label at the left and its control at the right. -->
   <fieldset class="group ai-tab" [disabled]="busy()">
     <legend class="visually-hidden" i18n="@@preset.ai">IA da aplicação</legend>

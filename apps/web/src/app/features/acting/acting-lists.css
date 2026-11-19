@@ -328,6 +328,11 @@ code {
   /* "Motivo: …" one text under the name and the time (the row's p is a flex line elsewhere). */
   .row .reason {
     display: block;
+    font-size: var(--text-meta);
+    line-height: 1rem;
+  }
+
+  .row.access .reason {
     font-size: var(--text-sm);
     line-height: 1.0625rem;
   }

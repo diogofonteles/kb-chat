@@ -989,3 +989,16 @@ input.input {
 .wait-note {
   color: var(--color-warn);
 }
+
+/* A phone shows the invitation's wait at the AI tab's top (invite-preset-editor); the foot's
+   copy stays for readers of "Convidar". */
+@media (max-width: 1023px) {
+  .invite-foot .wait-note {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

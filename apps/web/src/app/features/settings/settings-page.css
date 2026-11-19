@@ -521,6 +521,7 @@ app-ai-status-card + app-preferences-form,
 .screen .section[data-section='ai'],
 .screen .section[data-section='preferences'],
 .screen .section[data-section='accesses'],
+.screen .section[data-section='audit'],
 .screen .section[data-section='about'] {
   padding-top: var(--space-4);
 }

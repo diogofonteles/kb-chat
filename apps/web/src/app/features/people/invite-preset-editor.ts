@@ -259,10 +259,17 @@ export class InvitePresetEditor {
    * them under its label (v2 · Perfil de convite, celular).
    */
   /** The chosen app AI's words, under the label of a phone's row. */
-  protected readonly appAiWords = computed(
-    () =>
-      this.appAis().find((one) => one.id === this.shownAppAi())?.label ?? '',
-  );
+  /**
+   * The AI row's value, as a phone draws it (the row is a phone's only): the owner's Claude
+   * subscription is "Assinatura do Claude (sua)" there (v2 · Convite cedendo, celular), while
+   * the desktop's select keeps "Claude do administrador" (each frame at its own width).
+   */
+  protected readonly appAiWords = computed(() => {
+    const id = this.shownAppAi();
+    if (id === 'claude-subscription')
+      return $localize`:@@preset.claudeSubscriptionOwn:Assinatura do Claude (sua)`;
+    return this.appAis().find((one) => one.id === id)?.label ?? '';
+  });
   protected readonly prefWords = computed(() => {
     const prefs = this.preset().preferences;
     const none = $localize`:@@preset.noPreference:Sem preferência`;

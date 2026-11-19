@@ -28,7 +28,7 @@ fieldset {
 }
 
 /* A select's value in words: only a phone's row draws it (under the label). */
-.select-value {
+.select-row .select-value {
   display: none;
 }
 
@@ -771,7 +771,7 @@ fieldset {
   }
 
   /* The value under the label (13/16, 3 under it), drawn by its face; never clipped. */
-  .select-value {
+  .select-row .select-value {
     position: absolute;
     top: 1.9375rem;
     right: 2rem;
