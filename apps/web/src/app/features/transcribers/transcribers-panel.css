@@ -548,11 +548,14 @@ button:disabled {
 }
 
 /* ---------- v2 · Transcritores, the frame's numbers (KBC-152) ---------- */
-:host {
+/* (Only the transcribers' own hosts: Termos, Groq and the learning panel share this file.) */
+:host(app-transcribers-panel),
+:host(app-existing-tracks) {
   gap: 0;
 }
 
-.block-title {
+:host(app-transcribers-panel) .block-title,
+:host(app-existing-tracks) .block-title {
   line-height: 1.25rem;
 }
 
@@ -651,7 +654,7 @@ button:disabled {
   line-height: 0.875rem;
 }
 
-.check {
+:host(app-transcribers-panel) .check {
   min-height: 1.375rem;
 }
 
@@ -774,7 +777,7 @@ button:disabled {
     margin-top: 0.1875rem;
   }
 
-  .check {
+  .item .check {
     margin-top: var(--space-3);
     font-size: 0.9375rem;
     line-height: 1.125rem;

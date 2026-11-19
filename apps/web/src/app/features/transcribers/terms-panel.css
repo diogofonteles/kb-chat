@@ -296,3 +296,51 @@
   margin: 1.125rem 0 -0.125rem;
   line-height: 1.25rem;
 }
+
+/* "Adicionar termos" 24 under the meter's card; 10 from its title to the hint and from the
+   hint to the box (v2 · Termos). */
+.usage + .field,
+.usage + .field-error + .field {
+  margin-top: var(--space-2);
+}
+
+.block > .field {
+  gap: 0.625rem;
+}
+
+/* "Salvar lista" 40 with 24 a side; the versions 28 under it, 10 to their rows of 38 (10/12
+   inside, 14/17); "Termos (N)" 23 under the box. */
+.primary {
+  padding: 0 var(--space-6, 1.5rem);
+}
+
+.block > .block-title {
+  margin-top: 0.6875rem;
+}
+
+.versions {
+  gap: 0.625rem;
+  margin-top: var(--space-3);
+}
+
+.versions > .block-title {
+  line-height: 1.25rem;
+}
+
+.version-list li {
+  padding: 0.625rem var(--space-3);
+  line-height: 1.0625rem;
+}
+
+/* Who made a version at the row's end, 13 (desktop). */
+@media (min-width: 1024px) {
+  .version-text {
+    flex: 1;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+
+  .version-text .by {
+    font-size: var(--text-meta);
+  }
+}

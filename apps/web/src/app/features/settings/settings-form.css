@@ -1057,28 +1057,37 @@ select.input option {
   line-height: 1.25rem;
 }
 
-:host(:not(.in-wizard)) {
+:host(app-preferences-form:not(.in-wizard)) {
   gap: 0.875rem;
 }
 
-:host(:not(.in-wizard)) > .group + .group {
+:host(app-preferences-form:not(.in-wizard)) > .group + .group {
   margin-top: 0.875rem;
 }
 
-:host(:not(.in-wizard)) > .group + ui-setting-row {
+:host(app-preferences-form:not(.in-wizard)) > .group + ui-setting-row {
   margin-top: 0.25rem;
 }
 
 /* A row 8 above and below its words: the label 15/18, 3 to its description 13/18. */
-:host(:not(.in-wizard)) > ui-setting-row {
+:host(app-preferences-form:not(.in-wizard)) > ui-setting-row {
   padding: var(--space-2) 0;
 }
 
-:host(:not(.in-wizard)) > ui-setting-row ::ng-deep .ui-setting__text {
+:host(app-preferences-form:not(.in-wizard))
+  > ui-setting-row
+  ::ng-deep
+  .ui-setting__text {
   gap: 0.1875rem;
 }
 
-:host(:not(.in-wizard)) > ui-setting-row ::ng-deep .ui-setting__label,
-:host(:not(.in-wizard)) > ui-setting-row ::ng-deep .ui-setting__description {
+:host(app-preferences-form:not(.in-wizard))
+  > ui-setting-row
+  ::ng-deep
+  .ui-setting__label,
+:host(app-preferences-form:not(.in-wizard))
+  > ui-setting-row
+  ::ng-deep
+  .ui-setting__description {
   line-height: 1.125rem;
 }
