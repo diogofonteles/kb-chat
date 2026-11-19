@@ -113,6 +113,7 @@ a {
 }
 
 .contact-card ui-icon {
+  justify-self: start;
   color: var(--color-accent);
 }
 
