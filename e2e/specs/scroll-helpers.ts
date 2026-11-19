@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+import type { CDPSession, Locator, Page } from '@playwright/test';
 import { expect } from './fixtures.js';
 import { desktop } from './shell-helpers.js';
 
@@ -48,10 +48,69 @@ async function probe(
   return async () => (await marked.boundingBox())?.y ?? Number.NaN;
 }
 
+/** The longest single stroke of the finger, as a thumb drags on a phone. */
+const STROKE = 200;
+/** The finger's samples per stroke: a touchmove every few pixels, as a screen reports them. */
+const STEPS = 10;
+/** Longer than Chromium's 40 ms after which a still pointer has no velocity left to fling. */
+const REST_MS = 100;
+
+/** One stroke: the finger down on `point`, `length` pixels up, still, then lifted. */
+async function stroke(
+  cdp: CDPSession,
+  point: { x: number; y: number },
+  length: number,
+): Promise<void> {
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: point.x, y: point.y }],
+  });
+  for (let step = 1; step <= STEPS; step++) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [
+        { x: point.x, y: Math.round(point.y - (length * step) / STEPS) },
+      ],
+    });
+  }
+  // The finger rests before it lifts, so no fling carries the page on after the swipe (a
+  // check that scrolls back to the top right after it would be undone by the momentum).
+  await new Promise((resolve) => setTimeout(resolve, REST_MS));
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+  });
+}
+
 /**
- * A wheel on desktop; on a phone a finger dragged up (Chromium's touch gesture) or, in WebKit,
- * which has no synthetic touch scroll, the wheel over the same point (its 390 project is a
- * touch screen without the mobile flag, which would refuse the wheel).
+ * A finger put down on `point` and dragged up by `dy` pixels (in strokes of at most STROKE,
+ * each lifted at its end), through the browser's touch input: touchstart, touchmove, touchend.
+ * Chromium's `Input.synthesizeScrollGesture` with a touch source moves nothing in CI's
+ * headless Linux, not even on a blank page with one scrolling box (it does on macOS), so it
+ * cannot tell a page that scrolls from one that does not; real touch events go through the
+ * same hit test, `touch-action` and scroll chain as a person's thumb.
+ */
+export async function touchSwipe(
+  page: Page,
+  point: { x: number; y: number },
+  dy: number,
+): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    // The finger stays on screen: a stroke never goes above the top of the viewport.
+    const longest = Math.min(STROKE, Math.max(point.y - 4, 40));
+    for (let left = dy; left > 0; left -= longest) {
+      await stroke(cdp, point, Math.min(left, longest));
+    }
+  } finally {
+    await cdp.detach();
+  }
+}
+
+/**
+ * A wheel on desktop; on a phone a finger dragged up (real touch events, see touchSwipe) or,
+ * in WebKit, which has no synthetic touch, the wheel over the same point (its 390 project is
+ * a touch screen without the mobile flag, which would refuse the wheel).
  */
 export async function scrollOver(
   page: Page,
@@ -65,14 +124,7 @@ export async function scrollOver(
     await page.mouse.wheel(0, dy);
     return;
   }
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Input.synthesizeScrollGesture', {
-    x: point.x,
-    y: point.y,
-    yDistance: -dy,
-    gestureSourceType: 'touch',
-  });
-  await cdp.detach();
+  await touchSwipe(page, point, dy);
 }
 
 /** Scrolls down over `region` and expects its content to move up by more than MOVED. */

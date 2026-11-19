@@ -23,6 +23,7 @@ import {
 import { makeMp3, uniqueTag } from './media-helpers.js';
 import { approve, audioWithTracks } from './tracks-helpers.js';
 import { longPressToSelect } from './v2-media-helpers.js';
+import { touchSwipe } from './scroll-helpers.js';
 
 /**
  * KBC-128 fidelity: the library and a collection's album page put in the states of the
@@ -599,19 +600,11 @@ async function expectScrolls(
   await expect.poll(() => scrollTopOf(scroller)).toBeGreaterThan(100);
   await scroller.evaluate((node) => node.removeAttribute('tabindex'));
 
-  // A finger (Chromium speaks touch through CDP; WebKit has no synthetic swipe).
+  // A finger (Chromium takes touch events through CDP; WebKit has no synthetic touch).
   if (width === 'phone' && browserName === 'chromium') {
     await scroller.evaluate((node) => node.scrollTo({ top: 0 }));
-    const cdp = await page.context().newCDPSession(page);
-    await cdp.send('Input.synthesizeScrollGesture', {
-      x: Math.round(x),
-      y: Math.round(y),
-      yDistance: -400,
-      gestureSourceType: 'touch',
-      speed: 1200,
-    });
+    await touchSwipe(page, { x: Math.round(x), y: Math.round(y) }, 400);
     await expect.poll(() => scrollTopOf(scroller)).toBeGreaterThan(100);
-    await cdp.detach();
   }
   await scroller.evaluate((node) => node.scrollTo({ top: 0 }));
   // Back to the pointer, as a person who reaches for the mouse or the screen again: a tap on

@@ -6,6 +6,7 @@ import {
   settingsPage,
   settingsSection,
 } from './settings-helpers.js';
+import { shortWindow, touchSwipe } from './scroll-helpers.js';
 
 /**
  * KBC-131/KBC-132, v2 fidelity: Configurações is used for real at 1440 and 390, not only
@@ -21,26 +22,19 @@ const scroller = (page: Page): Locator => page.locator('app-settings-page');
 const scrollTop = (page: Page): Promise<number> =>
   scroller(page).evaluate((element) => element.scrollTop);
 
-/** A finger dragged up over `point` (Chromium's compositor gesture, as a real touch). */
+/** A finger dragged up over `point` (real touch events, see touchSwipe). */
 async function swipeUp(
   page: Page,
   point: { x: number; y: number },
   distance: number,
 ): Promise<void> {
-  // WebKit has no CDP touch gesture: the wheel over the same point moves the same scroller.
+  // WebKit has no CDP touch: the wheel over the same point moves the same scroller.
   if (page.context().browser()?.browserType().name() !== 'chromium') {
     await page.mouse.move(point.x, point.y);
     await page.mouse.wheel(0, distance);
     return;
   }
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Input.synthesizeScrollGesture', {
-    x: point.x,
-    y: point.y,
-    yDistance: -distance,
-    gestureSourceType: 'touch',
-  });
-  await cdp.detach();
+  await touchSwipe(page, point, distance);
 }
 
 /** Scrolls the page down over its content as the person would at this width. */
@@ -57,6 +51,15 @@ async function scrollDown(page: Page, distance = 600): Promise<void> {
   } else {
     await swipeUp(page, point, distance);
   }
+}
+
+/**
+ * Pessoas on a phone with the fixture's one person (the owner) fits 844 px exactly: on a
+ * fresh server, before any spec invites someone, it has nothing to scroll. A shorter phone
+ * gives it room whatever order the specs ran in.
+ */
+async function roomToScroll(page: Page, slug: string): Promise<void> {
+  if (slug === 'pessoas' && !desktop(page)) await shortWindow(page);
 }
 
 /** Opens Configurações at `slug` (the root without one) and waits for its sections. */
@@ -115,6 +118,7 @@ test.describe('the page scrolls', () => {
     test(`${label}: its text moves with a touch on a phone, with the wheel on desktop`, async ({
       page,
     }) => {
+      await roomToScroll(page, slug);
       await open(page, slug);
       await expect(settingsSection(page, label)).toBeVisible();
       const before = await scrollTop(page);
@@ -139,6 +143,7 @@ test.describe('the keyboard with nothing focused', () => {
     test(`${slug}: End reaches the end and Home the top, with the focus on nothing`, async ({
       page,
     }) => {
+      await roomToScroll(page, slug);
       await open(page, slug);
       // Opening a section leaves the focus on the body: the keys still move the page.
       await expect

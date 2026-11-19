@@ -8,6 +8,7 @@ import {
   openPhoneTools,
   trackRow,
 } from './tracks-helpers.js';
+import { touchSwipe } from './scroll-helpers.js';
 
 /**
  * KBC-130 (v2 fidelity): the guided flow does not only look like the frames, it works. On
@@ -48,7 +49,7 @@ async function topOf(target: Locator): Promise<number> {
 
 /**
  * Scrolls down over `region` as the person would at this width: the wheel on a desktop or
- * in WebKit, a finger in Chromium on a phone (the compositor's touch gesture).
+ * in WebKit, a finger in Chromium on a phone (real touch events, see touchSwipe).
  */
 async function scrollDown(
   page: Page,
@@ -67,14 +68,7 @@ async function scrollDown(
     await page.mouse.wheel(0, 400);
     return;
   }
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Input.synthesizeScrollGesture', {
-    x,
-    y,
-    yDistance: -400,
-    gestureSourceType: 'touch',
-  });
-  await cdp.detach();
+  await touchSwipe(page, { x, y }, 400);
 }
 
 /** The wheel (or the finger) moves `marker` up; then the keyboard moves it again. */
