@@ -621,29 +621,44 @@ export class MediaService {
       records.map((record) => record.id),
     );
     const presence = this.deps.presence?.();
+    const tracks = this.tracksOf(actor, records);
     return records.map((record) => ({
       ...this.itemOf(record, actor, {
         progress: progress.get(record.id),
         presence,
       }),
-      tracks: this.tracksOf(actor, record),
+      tracks: tracks.get(record.id) ?? [],
     }));
   }
 
-  /** A recording's tracks in force, as the library lists them (v2 media-list, FR-5). */
-  private tracksOf(actor: MediaActor, record: MediaRecord): MediaItem[] {
-    if (!actor.seesTracks || record.track || record.status !== 'ready')
-      return [];
-    const tracks = this.deps.store
-      .listTracks(record.id)
-      .filter((track) => seesMedia(actor, track));
-    if (tracks.length === 0) return [];
+  /**
+   * The recordings' tracks in force, as the library lists them (v2 media-list, FR-5): one
+   * read for all of them and one for their progress, never one per recording (ND-19).
+   */
+  private tracksOf(
+    actor: MediaActor,
+    records: readonly MediaRecord[],
+  ): ReadonlyMap<string, MediaItem[]> {
+    if (!actor.seesTracks) return new Map();
+    const parents = records
+      .filter((record) => !record.track && record.status === 'ready')
+      .map((record) => record.id);
+    const stored = this.deps.store.listTracksOf(parents);
+    const heard = [...stored].map(
+      ([parent, tracks]) =>
+        [parent, tracks.filter((track) => seesMedia(actor, track))] as const,
+    );
     const progress = this.deps.listening.progressOf(
       actor.principal,
-      tracks.map((track) => track.id),
+      heard.flatMap(([, tracks]) => tracks.map((track) => track.id)),
     );
-    return tracks.map((track) =>
-      this.itemOf(track, actor, this.view(progress.get(track.id))),
+    return new Map(
+      heard.map(([parent, tracks]) => [
+        parent,
+        tracks.map((track) =>
+          this.itemOf(track, actor, this.view(progress.get(track.id))),
+        ),
+      ]),
     );
   }
 
