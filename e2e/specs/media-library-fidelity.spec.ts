@@ -217,11 +217,17 @@ async function expectHeldSend(
     readonly width: Width;
   },
 ): Promise<void> {
-  await page.route('**/api/v1/media/*/upload', (route) =>
-    route.request().method() === 'PATCH' ? undefined : route.continue(),
-  );
+  // "Enviando" shows before tus sends its part: the route stays until the part is held, or
+  // a slow runner removes it first and the file goes whole (the dialog leaves for "Preparar").
+  let partHeld = false;
+  await page.route('**/api/v1/media/*/upload', (route) => {
+    if (route.request().method() !== 'PATCH') return route.continue();
+    partHeld = true;
+    return undefined;
+  });
   await input.setInputFiles(makeMp3(`Envio parado ${uniqueTag()}`, 4));
   await send.click();
+  await expect.poll(() => partHeld, { message: 'the part is held' }).toBe(true);
   await expect(
     dialog.locator('.meta span:visible', { hasText: /Enviando/ }).first(),
   ).toBeVisible();

@@ -546,6 +546,16 @@ export class LibraryPage {
       this.choices()?.sort === 'recently-played',
   );
   protected readonly titleHead = $localize`:@@library.col.title:Título`;
+  /**
+   * The title column's head: "Título", or "3 selecionadas" during a selection. One signal,
+   * not `selecting() ? selectedText() : …` in the template: the page's bindings, the 2 000
+   * rows' among them, share one reactive consumer, and a read that one run makes and the
+   * next skips puts every later read out of step with its last run (each then walks all the
+   * earlier ones): ending a selection took 4× the time of starting one (NFR-2).
+   */
+  protected readonly titleHeadText = computed(() =>
+    this.selecting() ? this.selectedText() : this.titleHead,
+  );
   protected readonly searchPlaceholder = computed(() =>
     this.phone()
       ? $localize`:@@library.searchPlaceholderPhone:Buscar na fala, título, autor`
