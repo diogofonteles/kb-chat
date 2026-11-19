@@ -13,6 +13,7 @@ import {
   openSection,
   openSettings,
   SETTINGS_AXE,
+  selectFirstPerson,
   showTab,
 } from './settings-helpers.js';
 
@@ -73,13 +74,7 @@ test('AC-12: the master lends the house plan to two of three selected people, wi
   await page.goto('/');
   const dialog = await openSettings(page);
   await openSection(dialog, 'Pessoas e permissões');
-  // A phone's list shows its boxes once a selection is on: a long press (its context menu)
-  // on a row starts it.
-  if ((page.viewportSize()?.width ?? 0) < 1024)
-    await dialog
-      .getByRole('button', { name: new RegExp(first.replace(/[.]/g, '\\.')) })
-      .dispatchEvent('contextmenu');
-  await dialog.getByLabel(`Selecionar ${first}`).check();
+  await selectFirstPerson(dialog, first);
   await dialog.getByLabel(`Selecionar ${second}`).check();
   const bar = dialog.getByRole('group', {
     name: 'IA da aplicação para várias pessoas',

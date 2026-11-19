@@ -16,6 +16,7 @@ import {
   SETTINGS_AXE,
   showTab,
   openPeople as openPeopleSettings,
+  profileAction,
 } from './settings-helpers.js';
 
 /**
@@ -97,28 +98,6 @@ async function createAluno(dialog: Locator, name: string): Promise<void> {
 async function expectAccessible(page: Page): Promise<void> {
   const axe = await new AxeBuilder({ page }).include(SETTINGS_AXE).analyze();
   expect(axe.violations).toEqual([]);
-}
-
-/**
- * A profile's action: the words on its row on a desktop; on a phone they are in its ⋯ menu
- * (v2 · Perfis, celular).
- */
-async function profileAction(
-  section: Locator,
-  action: 'Editar' | 'Apagar' | 'Tornar padrão',
-  name: string,
-): Promise<void> {
-  if ((section.page().viewportSize()?.width ?? 0) < 1024) {
-    await section
-      .getByRole('button', { name: `Mais ações de ${name}` })
-      .click();
-    await section
-      .page()
-      .getByRole('menuitem', { name: action, exact: true })
-      .click();
-    return;
-  }
-  await section.getByRole('button', { name: `${action} ${name}` }).click();
 }
 
 async function removeProfile(dialog: Locator, name: string): Promise<void> {

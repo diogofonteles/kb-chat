@@ -116,3 +116,43 @@ export async function showTab(where: Where, tab: string): Promise<void> {
 
 /** What axe checks on Configurações: the page and any modal open over it. */
 export const SETTINGS_AXE = 'section[aria-label="Configurações"], dialog[open]';
+
+/**
+ * A profile's action: the words on its row on a desktop; on a phone they are in its ⋯ menu
+ * (v2 · Perfis, celular).
+ */
+export async function profileAction(
+  section: Locator,
+  action: 'Editar' | 'Apagar' | 'Tornar padrão',
+  name: string,
+): Promise<void> {
+  if ((section.page().viewportSize()?.width ?? 0) < 1024) {
+    await section
+      .getByRole('button', { name: `Mais ações de ${name}` })
+      .click();
+    await section
+      .page()
+      .getByRole('menuitem', { name: action, exact: true })
+      .click();
+    return;
+  }
+  await section.getByRole('button', { name: `${action} ${name}` }).click();
+}
+
+/**
+ * Starts a selection in Pessoas e permissões with this person. A phone's list shows its
+ * boxes once a selection is on: a long press (its context menu) on a row starts it; the
+ * next people are checked by their boxes.
+ */
+export async function selectFirstPerson(
+  section: Locator,
+  email: string,
+): Promise<void> {
+  const page = section.page();
+  const box = section.getByLabel(`Selecionar ${email}`);
+  if (!desktop(page))
+    await section
+      .getByRole('button', { name: new RegExp(email.replace(/[.]/g, '\\.')) })
+      .dispatchEvent('contextmenu');
+  await box.check();
+}

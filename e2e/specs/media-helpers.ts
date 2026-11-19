@@ -345,12 +345,13 @@ export async function closePlayer(
     // A page with its own header (the collection's album page) has "←" in place of the
     // avatar: there the navigation's Acervos opens the Menu.
     const avatar = page.getByRole('button', { name: 'Menu', exact: true });
+    const acervos = page
+      .getByRole('navigation', { name: 'Navegação' })
+      .getByRole('button', { name: 'Acervos' });
+    // Whichever the page draws, once it is drawn.
+    await expect(avatar.or(acervos).first()).toBeVisible();
     if (await avatar.isVisible()) await avatar.click();
-    else
-      await page
-        .getByRole('navigation', { name: 'Navegação' })
-        .getByRole('button', { name: 'Acervos' })
-        .click();
+    else await acervos.click();
     const menu = page.getByRole('dialog', { name: 'Menu' });
     const close = menu.getByRole('button', { name: 'Fechar o player' });
     // The drawn rows stay at the sheet's foot: in sight without scrolling.

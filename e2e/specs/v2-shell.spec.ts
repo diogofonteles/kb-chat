@@ -66,12 +66,14 @@ test('AC-1: every route has the top bar, Sua biblioteca and the main panel', asy
         page.getByRole('complementary', { name: 'Sua biblioteca' }),
       ).toBeVisible();
     } else {
-      await expect(
-        page.getByRole('navigation', { name: 'Navegação' }),
-      ).toBeVisible();
-      await expect(
-        page.getByRole('button', { name: 'Menu', exact: true }),
-      ).toBeVisible();
+      const nav = page.getByRole('navigation', { name: 'Navegação' });
+      await expect(nav).toBeVisible();
+      // The Menu from every route: the avatar, or on a page drawn with "‹" in its place
+      // (v2 · Fila, celular) one step back.
+      const menu = await library(page);
+      await expect(menu).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(menu).toBeHidden();
     }
     await expect(page.getByRole('main')).toBeVisible();
   }
@@ -121,7 +123,10 @@ test('AC-4: in a collection of texts only, nothing of audio shows', async ({
     'aria-current',
     'true',
   );
-  await expect(side.getByRole('button', { name: 'Áudios' })).toHaveCount(0);
+  // The chip by its whole name: a collection's row says "Acervo · 11 áudios" (v2).
+  await expect(
+    side.getByRole('button', { name: 'Áudios', exact: true }),
+  ).toHaveCount(0);
   await expect(side.getByRole('link', { name: /Meus marcadores/ })).toHaveCount(
     0,
   );

@@ -373,7 +373,7 @@ test('MA-01: a press anywhere on a row opens the media, its controls keep their 
     link.boundingBox(),
     // The author's words: the collection has no place on a phone's line, where they come
     // with the length in one text ("Irmã Helena Prado · 1:00", media-library@mobile).
-    row.locator('.author:visible, .phone-byline:visible').first().boundingBox(),
+    row.locator('.author:visible').first().boundingBox(),
   ]);
   if (!area || !meta) throw new Error('no row to press');
   for (const position of [

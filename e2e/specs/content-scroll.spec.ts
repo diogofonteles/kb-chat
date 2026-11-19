@@ -201,7 +201,9 @@ test.describe('research view', () => {
       .first()
       .click();
     const panel = await openedDocument(page);
-    await expectScrolls(page, panel);
+    // Over the source's text: on a phone the sheet's middle is its sticky tools (the source's
+    // two rows of actions and occurrences stay on screen while the text moves under them).
+    await expectScrolls(page, panel.locator('.text'));
   });
 });
 

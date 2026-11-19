@@ -80,7 +80,7 @@ test('AC-1: a person who may upload sends an MP3, sees it go to "Pronta" and ope
   });
   // Its length: in its column on a desktop, after the author on a phone's one line.
   await expect(
-    row.locator('.duration:visible, .phone-byline:visible', {
+    row.locator('.duration:visible, .phone-duration:visible', {
       hasText: '0:08',
     }),
   ).toBeVisible();
