@@ -605,6 +605,13 @@
   line-height: 1rem;
 }
 
+.ui-libitem__meta-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ui-libitem__pin {
   color: var(--color-accent);
 }

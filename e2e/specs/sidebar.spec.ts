@@ -245,3 +245,64 @@ test('AC-9: on a phone the Menu drawer closes with Escape and focus returns to t
   await page.mouse.click(380, 400);
   await expect(drawer).toBeHidden();
 });
+
+/**
+ * Every text of the line that runs past its box ends in "…" (a block with ellipsis), never cut
+ * mid-letter: text-overflow does nothing on a flex container's own text.
+ */
+const clippedMidGlyph = (line: Element): string[] =>
+  [line, ...line.querySelectorAll('*')].flatMap((box) => {
+    if (box.scrollWidth <= box.clientWidth) return [];
+    const style = getComputedStyle(box);
+    const ellipsis =
+      style.textOverflow === 'ellipsis' &&
+      style.overflowX === 'hidden' &&
+      !/flex|grid/.test(style.display);
+    return ellipsis ? [] : [`${box.className}: ${box.textContent?.trim()}`];
+  });
+
+test('Sua biblioteca: a collection with many áudios and documentos ends its line in "…", the whole line in its name', async ({
+  page,
+}) => {
+  const title =
+    'Coletânea das palestras e estudos de alquimia prática do Mestre';
+  let slug = '';
+  await page.route('**/api/v1/topics', async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const response = await route.fetch();
+    const body = (await response.json()) as {
+      items: { slug: string; canOpen?: boolean; parent: string | null }[];
+    };
+    const first = body.items.find(
+      (topic) => topic.canOpen !== false && topic.parent === null,
+    );
+    if (!first) throw new Error('the fixture vault has no collection');
+    slug = first.slug;
+    Object.assign(first, { title, documentCount: 2996 });
+    await route.fulfill({ response, json: body });
+  });
+  await page.route('**/api/v1/media/library/counts', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as {
+      total: number;
+      topics: Record<string, number>;
+    };
+    body.topics[slug] = 128;
+    await route.fulfill({ response, json: body });
+  });
+  await page.reload();
+  const panel = await sidebar(page);
+  const row = panel.getByRole('button', {
+    name: `${title} Acervo · 128 áudios · 2.996 documentos`,
+  });
+  await expect(row).toBeVisible();
+  const lines = row.locator('.ui-libitem__title, .ui-libitem__meta');
+  await expect(lines).toHaveCount(2);
+  for (const line of await lines.all())
+    expect(await line.evaluate(clippedMidGlyph)).toEqual([]);
+  // The whole line shows on hover too.
+  await expect(
+    row.getByTitle('Acervo · 128 áudios · 2.996 documentos', { exact: true }),
+  ).toBeVisible();
+  await expect(row.getByTitle(title, { exact: true })).toBeVisible();
+});
