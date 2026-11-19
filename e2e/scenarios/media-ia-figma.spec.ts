@@ -1,21 +1,31 @@
 import { writeFileSync } from 'node:fs';
-import type { Browser, BrowserContext, Locator, Page } from '@playwright/test';
+import type {
+  APIRequestContext,
+  Browser,
+  BrowserContext,
+  Locator,
+  Page,
+} from '@playwright/test';
 import {
+  CSRF,
   WEB_ORIGIN,
   expect,
   fakeGoogle,
+  ownerApi,
   signIn,
   test,
 } from '../specs/fixtures.js';
 import { chooseCollectionSlug } from '../specs/shell-helpers.js';
+import { separateVoices } from '../specs/voices-helpers.js';
 import {
   HELENA_NAME,
-  MINUTE,
   OWNER,
   TOPIC,
   figmaWorld,
+  rawOf,
   recentCollections,
   seedWorld,
+  type Line,
   type World,
 } from './figma-library-world.js';
 
@@ -156,12 +166,116 @@ const source = (page: Page, phone: boolean): Locator =>
     ? page.getByRole('dialog', { name: 'Fonte' })
     : page.getByRole('dialog', { name: /^Trecho d/ });
 
+/**
+ * The interview as the frames quote it (the library world's transcript override, only on
+ * this capture's own server; the library's states keep their lines): Irmã Helena Prado at
+ * 0:16 and in the cited passage 0:22–0:31, the interviewer ("Voz 2") at 0:31, the second
+ * passage at 0:45.
+ */
+const INTERVIEW_LINES: readonly Line[] = [
+  [0, 7.5, 'A Tábua de Esmeralda cabe numa página só.'],
+  [8, 15.5, 'E o que ela ensina sobre estudar?'],
+  [
+    16,
+    21.5,
+    'A frase mais conhecida diz que o que está em cima é como o que está embaixo.',
+  ],
+  [
+    22,
+    31,
+    'Isso não é uma imagem poética. É um método: entender um plano observando o outro, a correspondência entre eles.',
+  ],
+  [31.5, 44.5, 'E na prática, no estudo do dia a dia, como isso aparece?'],
+  [45, 52, 'No ritmo: o mesmo vaivém no corpo, nas estações e nas ideias.'],
+  [52.5, 59, 'É assim que se estuda por correspondência.'],
+];
+/**
+ * The phone frames quote the same two lines shorter ("…entender um plano observando o outro.",
+ * "E na prática, como isso aparece?"): the phone's capture reseeds them, the same times.
+ */
+const PHONE_LINES: readonly Line[] = INTERVIEW_LINES.map(
+  ([start, end, text]) => [
+    start,
+    end,
+    start === 22
+      ? 'Isso não é uma imagem poética. É um método: entender um plano observando o outro.'
+      : start === 31.5
+        ? 'E na prática, como isso aparece?'
+        : text,
+  ],
+);
+
+/** Who speaks: Irmã Helena Prado first (voice 1), the interviewer (voice 2) asks. */
+const TURNS = [
+  { start: 0, end: 7.8, voice: 'SPEAKER_01' },
+  { start: 7.8, end: 15.8, voice: 'SPEAKER_02' },
+  { start: 15.8, end: 31.2, voice: 'SPEAKER_01' },
+  { start: 31.2, end: 44.8, voice: 'SPEAKER_02' },
+  { start: 44.8, end: 59, voice: 'SPEAKER_01' },
+];
+
+let helenaSpeaker = '';
+/** The interview's voices: Irmã Helena Prado named, the interviewer left as "Voz 2". */
+async function interviewVoices(
+  owner: APIRequestContext,
+  byCode: Readonly<Record<string, string>>,
+): Promise<void> {
+  const mediaId = byCode['ES'] ?? '';
+  await separateVoices(owner, mediaId, { turns: TURNS });
+  if (!helenaSpeaker) {
+    const made = await owner.post(`/api/v1/topics/${TOPIC}/speakers`, {
+      headers: CSRF,
+      data: { name: HELENA_NAME },
+    });
+    expect(made.status(), await made.text()).toBe(201);
+    helenaSpeaker = ((await made.json()) as { id: string }).id;
+  }
+  const speakerId = helenaSpeaker;
+  const read = await owner.get(`/api/v1/media/${mediaId}/transcript`);
+  const { segments } = (await read.json()) as {
+    segments: { startMs: number; voice?: number | null }[];
+  };
+  const voice = segments.find((one) => one.startMs >= 22_000)?.voice;
+  expect(voice, 'the cited passage has a voice').toEqual(expect.any(Number));
+  const put = await owner.put(`/api/v1/media/${mediaId}/voices/${voice}`, {
+    headers: CSRF,
+    data: { version: 1, speakerId, audience: false },
+  });
+  expect(put.status(), await put.text()).toBe(200);
+}
+
+/** The interview's transcript again with `lines`, its voices separated and named again. */
+async function reseed(lines: readonly Line[]): Promise<void> {
+  const owner = await ownerApi();
+  const mediaId = world.byCode['ES'] ?? '';
+  // "Transcrever de novo" queues the job the new lines answer.
+  const again = await owner.post(`/api/v1/media/${mediaId}/transcription`, {
+    data: {},
+    headers: CSRF,
+  });
+  expect(again.status(), await again.text()).toBeLessThan(300);
+  const seeded = await owner.post(`/api/e2e/media/${mediaId}/transcript`, {
+    data: { raw: rawOf(lines, 60, false) },
+    headers: CSRF,
+  });
+  expect(seeded.status(), await seeded.text()).toBe(204);
+  // The new version's voices, separated and named as before (when they did not carry over).
+  const read = await owner.get(`/api/v1/media/${mediaId}/transcript`);
+  const { segments } = (await read.json()) as {
+    segments: { startMs: number; voice?: number | null }[];
+  };
+  if (typeof segments.find((one) => one.startMs >= 22_000)?.voice !== 'number')
+    await interviewVoices(owner, world.byCode);
+  await owner.dispose();
+}
+
 let world: World;
 test.beforeAll(async () => {
   test.setTimeout(300_000);
-  // The frames quote the interview's longer minute (the player world's lines), not the
-  // library's short transcript; only this capture's own server gets them.
-  world = await seedWorld({ lines: { ES: MINUTE } });
+  world = await seedWorld({
+    lines: { ES: INTERVIEW_LINES },
+    beforeTracks: interviewVoices,
+  });
 });
 
 test('the audio source of an answer: open, then its passage playing', async ({
@@ -169,6 +283,7 @@ test('the audio source of an answer: open, then its passage playing', async ({
 }) => {
   for (const width of WIDTHS) {
     const phone = width === 'phone';
+    if (phone) await reseed(PHONE_LINES);
     const { context, page } = await contextAt(browser, width);
     await page.goto('/');
     const skip = page.getByRole('button', { name: 'Pular' });

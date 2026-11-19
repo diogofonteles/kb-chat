@@ -231,7 +231,12 @@ export interface World {
   readonly emptyUploader: string;
 }
 
-const rawOf = (lines: readonly Line[], seconds: number, low: boolean) => ({
+/** What the transcriber sends for `lines` (the e2e transcript route's `raw`). */
+export const rawOf = (
+  lines: readonly Line[],
+  seconds: number,
+  low: boolean,
+) => ({
   chunks: [
     {
       offset: 0,
