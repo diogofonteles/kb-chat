@@ -3,13 +3,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   DOCUMENT,
-  DestroyRef,
   computed,
-  effect,
   inject,
   input,
   output,
-  signal,
 } from '@angular/core';
 import type {
   MediaHit,
@@ -40,9 +37,25 @@ import { UiCover } from '@ui/cover.js';
 import { UiEmptyState } from '@ui/empty-state.js';
 import { UiPill } from '@ui/pill.js';
 import { UiMenu, UiMenuItem } from '@ui/menu.js';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import {
+  EMPTY,
+  interval,
+  map,
+  startWith,
+  switchMap,
+  type Observable,
+} from 'rxjs';
 
 /** Each message's own ids (its column headings). */
 let nextMessage = 0;
+
+/** The tenths of a second since `from`, from 0, while subscribed. */
+const tenthsSince = (from: number): Observable<number> =>
+  interval(100).pipe(
+    map(() => Math.floor((Date.now() - from) / 100) / 10),
+    startWith(0),
+  );
 
 /** A spoken passage opened, with its place among the results (KBC-039 FR-4). */
 export interface OpenedPassage {
@@ -159,32 +172,16 @@ export class ResultMessage {
   protected readonly seconds = computed(
     () => (this.response()?.tookMs ?? 0) / 1000,
   );
-  /** The time so far while it searches, in tenths (chat-results-loading: "0,0 s"). */
-  protected readonly elapsed = signal(0);
-
-  constructor() {
-    this.tickWhileLoading();
-  }
-
-  private tickWhileLoading(): void {
-    let timer: ReturnType<typeof setInterval> | undefined;
-    const stop = () => {
-      if (timer !== undefined) clearInterval(timer);
-      timer = undefined;
-    };
-    effect(() => {
-      const loading = this.message().status === 'loading';
-      stop();
-      if (!loading) return;
-      const from = Date.now();
-      this.elapsed.set(0);
-      timer = setInterval(
-        () => this.elapsed.set(Math.floor((Date.now() - from) / 100) / 10),
-        100,
-      );
-    });
-    inject(DestroyRef).onDestroy(stop);
-  }
+  /**
+   * The time so far while it searches, in tenths (chat-results-loading: "0,0 s"); after it,
+   * how long it tried, for the error's line (chat-results-error).
+   */
+  protected readonly elapsed = toSignal(
+    toObservable(computed(() => this.message().status === 'loading')).pipe(
+      switchMap((loading) => (loading ? tenthsSince(Date.now()) : EMPTY)),
+    ),
+    { initialValue: 0 },
+  );
   /** The empty state's line under the error (chat-results-error). */
   protected readonly errorAgain = $localize`:@@message.errorText:Tente de novo.`;
   /** The error's title, without the "Tente de novo." its line already says. */

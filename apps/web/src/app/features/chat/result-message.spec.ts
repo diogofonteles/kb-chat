@@ -72,6 +72,51 @@ describe('ResultMessage', () => {
     expect(screen.getByText('Buscando em Hermetismo…')).toBeTruthy();
   });
 
+  describe('the time so far (chat-results-loading, chat-results-error)', () => {
+    // Only the clock and the interval: the zoneless scheduler keeps its real timeouts.
+    beforeEach(() =>
+      vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] }),
+    );
+    afterEach(() => vi.useRealTimers());
+
+    const took = () => document.querySelector('.took')?.textContent?.trim();
+
+    it('counts tenths while it searches, keeps how long it tried on an error, and starts over', async () => {
+      const loading: ChatMessage = {
+        ...base,
+        status: 'loading',
+        response: null,
+      };
+      const view = await render(ResultMessage, {
+        providers: [provideZonelessChangeDetection()],
+        inputs: { message: loading, topicTitle: 'Hermetismo' },
+      });
+      await view.fixture.whenStable();
+      expect(took()).toMatch(/^0[,.]0 s$/);
+
+      await vi.advanceTimersByTimeAsync(1_250);
+      await view.fixture.whenStable();
+      expect(took()).toMatch(/^1[,.]2 s$/);
+
+      view.fixture.componentRef.setInput('message', {
+        ...loading,
+        status: 'error',
+        error: 'OFFLINE',
+      });
+      await view.fixture.whenStable();
+      await vi.advanceTimersByTimeAsync(1_000);
+      await view.fixture.whenStable();
+      expect(took()).toMatch(/^1[,.]2 s$/);
+
+      view.fixture.componentRef.setInput('message', { ...loading, rev: 2 });
+      await view.fixture.whenStable();
+      expect(took()).toMatch(/^0[,.]0 s$/);
+      await vi.advanceTimersByTimeAsync(300);
+      await view.fixture.whenStable();
+      expect(took()).toMatch(/^0[,.]3 s$/);
+    });
+  });
+
   it('keeps the cards while a re-run refreshes them and offers more pages', async () => {
     const moreRequested = vi.fn();
     await render(ResultMessage, {
