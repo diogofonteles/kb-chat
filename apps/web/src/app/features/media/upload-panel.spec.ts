@@ -19,6 +19,7 @@ import type {
   UploadCheck,
 } from '@kb-chat/contracts';
 import { TUS_UPLOAD } from '@core/media/tus-upload.js';
+import { UploadsInFlight } from '@core/media/uploads-in-flight.js';
 import { of, throwError } from 'rxjs';
 import { aTopic } from '../../testing/fixtures.js';
 import {
@@ -569,6 +570,10 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     // The words under the name, the percent beside the bar (media-upload-sending).
     expect(screen.getByText('Enviando… 0 de 0 MB')).toBeTruthy();
     expect(screen.getByText('33%')).toBeTruthy();
+    // The library's block learns where it goes, to keep to its own collection.
+    expect(TestBed.inject(UploadsInFlight).items()).toEqual([
+      expect.objectContaining({ topic: 'hermetismo', loaded: 1, total: 3 }),
+    ]);
     tus.last.succeed();
     http
       .expectOne(`/api/v1/media/${CREATED.id}`)

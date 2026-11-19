@@ -61,6 +61,8 @@ export type EntryState =
   | { readonly kind: 'expired' }
   | {
       readonly kind: 'sending';
+      /** The collection it goes to, fixed when it started: the library's block keeps to it. */
+      readonly topic: string;
       readonly loaded: number;
       readonly total: number;
       /** The network went away: the upload goes on by itself when it returns (AC-1). */
@@ -151,6 +153,7 @@ export class UploadEntries {
             {
               key: `${this.source}-${key}`,
               title: title || file.name,
+              topic: state.topic,
               loaded: state.loaded,
               total: state.total,
             },

@@ -32,9 +32,16 @@ const phoneCard = () =>
 async function setup(
   items: ReturnType<typeof item>[],
   active: number,
-  transcriber: 'on' | 'off' = 'on',
+  {
+    transcriber = 'on',
+    scope = null,
+  }: {
+    readonly transcriber?: 'on' | 'off';
+    readonly scope?: ReadonlySet<string> | null;
+  } = {},
 ) {
   return render(QueueSummary, {
+    inputs: { scope },
     providers: [
       provideZonelessChangeDetection(),
       provideRouter([]),
@@ -135,7 +142,7 @@ describe('QueueSummary (KBC-090)', () => {
         { ...item(3), phase: 'attention', action: 'validate', step: 3 },
       ],
       1,
-      'off',
+      { transcriber: 'off' },
     );
     expect(screen.getByText('conversão')).toBeTruthy();
     expect(screen.getByText('transcritor desligado')).toBeTruthy();
@@ -223,7 +230,13 @@ describe('QueueSummary: what this browser sends (v2 media-upload-sending)', () =
   it('counts it among those at work and shows it first, how far it has gone', async () => {
     const view = await setup([{ ...item(1), phase: 'attention' }], 0);
     const panel = signal<readonly UploadInFlight[]>([
-      { key: 'panel-1', title: 'Palestra', loaded: 25, total: 100 },
+      {
+        key: 'panel-1',
+        title: 'Palestra',
+        topic: 'hermetismo',
+        loaded: 25,
+        total: 100,
+      },
     ]);
     TestBed.inject(UploadsInFlight).register(panel, TestBed.inject(DestroyRef));
     await view.fixture.whenStable();
@@ -238,5 +251,112 @@ describe('QueueSummary: what this browser sends (v2 media-upload-sending)', () =
     expect(
       screen.getByRole('heading', { name: 'Precisa da sua atenção' }),
     ).toBeTruthy();
+  });
+});
+
+describe("QueueSummary: only the library's collections (owner, 2026-11-19)", () => {
+  const inA = (n: number, phase: 'running' | 'next' | 'attention') => ({
+    ...item(n),
+    topic: 'udv',
+    phase,
+  });
+  const inB = (n: number, phase: 'running' | 'next' | 'attention') => ({
+    ...item(n),
+    topic: 'hermetismo',
+    phase,
+  });
+  const twoCollections = [
+    inA(1, 'running'),
+    inB(2, 'running'),
+    inB(3, 'next'),
+    { ...inA(4, 'next'), topic: 'udv/hinos' },
+    inB(5, 'attention'),
+  ];
+  const cardTitles = () =>
+    screen.getAllByRole('listitem').map((card) => card.textContent ?? '');
+
+  it("shows only the scope's cards and counts only its audios at work", async () => {
+    // The server counts all four at work; two of them are Hermetismo's.
+    await setup(twoCollections, 4, { scope: new Set(['udv']) });
+    expect(
+      screen.getByRole('heading', { name: '1 áudio em processamento' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Áudio 1')).toBeTruthy();
+    for (const other of ['Áudio 2', 'Áudio 3', 'Áudio 4', 'Áudio 5'])
+      expect(screen.queryByText(other)).toBeNull();
+    expect(cardTitles()).toHaveLength(1);
+  });
+
+  it("takes in the scope's sub-collections", async () => {
+    await setup(twoCollections, 4, { scope: new Set(['udv', 'udv/hinos']) });
+    expect(
+      screen.getByRole('heading', { name: '2 áudios em processamento' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Áudio 1')).toBeTruthy();
+    expect(screen.getByText('Áudio 4')).toBeTruthy();
+    expect(screen.queryByText('Áudio 2')).toBeNull();
+  });
+
+  it("shows every collection's with no scope (Todas as mídias)", async () => {
+    await setup(twoCollections, 4, { scope: null });
+    expect(
+      screen.getByRole('heading', { name: '4 áudios em processamento' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Áudio 5')).toBeTruthy();
+    expect(screen.getByText('Áudio 2')).toBeTruthy();
+  });
+
+  it('shows nothing while the choices are not known yet (an empty scope)', async () => {
+    const { container } = await setup(twoCollections, 4, { scope: new Set() });
+    expect(container.querySelector('section')).toBeNull();
+  });
+
+  it('leaves out, and does not count, what this browser sends to another collection', async () => {
+    const view = await setup([inA(1, 'running')], 1, {
+      scope: new Set(['udv']),
+    });
+    const panel = signal<readonly UploadInFlight[]>([
+      {
+        key: 'panel-1',
+        title: 'Palestra de Hermetismo',
+        topic: 'hermetismo',
+        loaded: 10,
+        total: 100,
+      },
+      {
+        key: 'panel-2',
+        title: 'Hino da UDV',
+        topic: 'udv',
+        loaded: 50,
+        total: 100,
+      },
+    ]);
+    TestBed.inject(UploadsInFlight).register(panel, TestBed.inject(DestroyRef));
+    await view.fixture.whenStable();
+    expect(
+      screen.getByRole('heading', { name: '2 áudios em processamento' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Hino da UDV')).toBeTruthy();
+    expect(screen.queryByText('Palestra de Hermetismo')).toBeNull();
+    expect(cardTitles()[0]).toContain('Enviando · 50%');
+    // The phone's card counts the same, and says only the scope's send.
+    expect(phoneCard()?.textContent).toMatch(/2 áudios em processamento/);
+    expect(phoneCard()?.textContent).toContain('Enviando 1');
+  });
+
+  it('with no scope, shows what goes to any collection', async () => {
+    const view = await setup([], 0, { scope: null });
+    const panel = signal<readonly UploadInFlight[]>([
+      {
+        key: 'panel-1',
+        title: 'Palestra de Hermetismo',
+        topic: 'hermetismo',
+        loaded: 10,
+        total: 100,
+      },
+    ]);
+    TestBed.inject(UploadsInFlight).register(panel, TestBed.inject(DestroyRef));
+    await view.fixture.whenStable();
+    expect(screen.getByText('Palestra de Hermetismo')).toBeTruthy();
   });
 });

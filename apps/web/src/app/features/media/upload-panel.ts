@@ -424,15 +424,17 @@ export class UploadPanel implements OnInit {
   private sendOne(entry: UploadEntry, batch: Batch): Observable<never> {
     const { key, file } = entry;
     const start = entry.state.kind === 'resume' ? entry.state.offset : 0;
+    const { topic } = this.form.getRawValue();
     this.uploads.set(key, {
       kind: 'sending',
+      topic,
       loaded: start,
       total: file.size,
     });
     return this.itemFor(entry, batch).pipe(
       concatMap((id) => this.api.upload(id, file)),
       concatMap((event) => {
-        this.follow(key, event);
+        this.follow(key, topic, event);
         return EMPTY;
       }),
       catchError((err: unknown) => {
@@ -442,11 +444,11 @@ export class UploadPanel implements OnInit {
     );
   }
 
-  private follow(key: number, event: UploadEvent): void {
+  private follow(key: number, topic: string, event: UploadEvent): void {
     if (event.kind === 'done') return this.finishOne(key, event.item);
     if (event.kind === 'offline') return this.uploads.markOffline(key);
     const { loaded, total } = event;
-    this.uploads.set(key, { kind: 'sending', loaded, total });
+    this.uploads.set(key, { kind: 'sending', topic, loaded, total });
   }
 
   /**

@@ -11,6 +11,7 @@ import { UploadsInFlight, type UploadInFlight } from './uploads-in-flight.js';
 const sending = (key: string, loaded: number): UploadInFlight => ({
   key,
   title: `Palestra ${key}`,
+  topic: 'hermetismo',
   loaded,
   total: 100,
 });

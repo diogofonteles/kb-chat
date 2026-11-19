@@ -361,7 +361,6 @@ export class QueueSummary {
   private readonly store = inject(ProcessingQueueStore);
   private readonly session = inject(SessionStore);
   protected readonly path = QUEUE_PAGE_PATH;
-  /** What needs the person first: with three at work it would never show. */
   /**
    * The collections the page is about (the library's scope with its sub-collections), or
    * null for every one: the block never shows another collection's audio (owner, 2026-11-19).
@@ -384,6 +383,7 @@ export class QueueSummary {
       ).length;
     return Math.max(0, this.store.active() - outside);
   });
+  /** What needs the person first: with three at work it would never show. */
   private readonly shown = computed(() => {
     const items = this.inScope();
     return [
@@ -392,7 +392,13 @@ export class QueueSummary {
     ];
   });
   private readonly canEdit = computed(() => this.session.can('media-edit'));
-  private readonly sending = inject(UploadsInFlight).items;
+  private readonly inFlight = inject(UploadsInFlight).items;
+  /** What this browser sends to a collection in the scope: another one's never shows. */
+  private readonly sending = computed(() => {
+    const scope = this.scope();
+    const sends = this.inFlight();
+    return scope ? sends.filter(({ topic }) => scope.has(topic)) : sends;
+  });
   protected readonly lines = computed(() => [
     ...this.sending().map(sendingLine),
     ...this.shown()

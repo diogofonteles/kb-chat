@@ -6,10 +6,12 @@ import {
   signal,
 } from '@angular/core';
 
-/** A file this browser is sending now: its title and how much has gone. */
+/** A file this browser is sending now: its title, where it goes and how much has gone. */
 export interface UploadInFlight {
   readonly key: string;
   readonly title: string;
+  /** The collection the file goes to: the library of another one never shows it. */
+  readonly topic: string;
   readonly loaded: number;
   readonly total: number;
 }
