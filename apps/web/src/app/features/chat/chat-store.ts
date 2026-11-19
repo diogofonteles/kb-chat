@@ -27,7 +27,7 @@ import { HistoryStore } from '@core/history/history-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { LibraryRecents } from '@features/shell/library-recents.js';
 import { KbApi, topicsUrl } from '@core/api/kb-api.js';
-import { withTopic } from '@core/topics/topic-tree.js';
+import { defaultTopicOf, withTopic } from '@core/topics/topic-tree.js';
 import {
   Subject,
   catchError,
@@ -104,18 +104,6 @@ function safeStorage(view: Window | null): Storage | undefined {
   } catch {
     return undefined;
   }
-}
-
-/** KB_TOPIC when configured, otherwise the largest collection (the main study material). */
-function pickDefaultTopic(list: TopicList | null): string | null {
-  if (!list) return null;
-  if (list.defaultSlug) return list.defaultSlug;
-  // A parent shown only as a group title never opens (KBC-048 BR-3).
-  return (
-    list.items
-      .filter((one) => one.canOpen)
-      .sort((a, b) => b.documentCount - a.documentCount)[0]?.slug ?? null
-  );
 }
 
 export interface AskOptions {
@@ -245,7 +233,7 @@ export class ChatStore {
       const stillThere = list?.items.some(
         (topic) => topic.slug === kept && topic.canOpen,
       );
-      return stillThere && kept ? kept : pickDefaultTopic(list);
+      return stillThere && kept ? kept : defaultTopicOf(list);
     },
   });
   readonly topic = computed(

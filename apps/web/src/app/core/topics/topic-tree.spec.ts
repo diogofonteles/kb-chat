@@ -1,6 +1,7 @@
 import { aTopic } from '../../testing/fixtures.js';
 import {
   collectionChoices,
+  defaultTopicOf,
   openable,
   treeTitle,
   withTopic,
@@ -86,5 +87,48 @@ describe('withTopic (KBC-048 FR-3)', () => {
       documentCount: 7,
       trackCount: 2,
     });
+  });
+});
+
+describe('the collection that opens when none is chosen (chat and wizard, KBC-028)', () => {
+  const list = (
+    items: Parameters<typeof aTopic>[0][],
+    defaultSlug = null as string | null,
+  ) => ({
+    items: items.map(aTopic),
+    defaultSlug,
+  });
+
+  it("is the server's default when it gives one", () => {
+    expect(
+      defaultTopicOf(
+        list(
+          [
+            { slug: 'hermetismo', title: 'Hermetismo', documentCount: 9 },
+            { slug: 'udv', title: 'UDV', documentCount: 1 },
+          ],
+          'udv',
+        ),
+      ),
+    ).toBe('udv');
+  });
+
+  it('else the one with most documents that opens, the first listed on a tie', () => {
+    expect(
+      defaultTopicOf(
+        list([
+          { slug: 'udv', title: 'UDV', documentCount: 50, canOpen: false },
+          { slug: 'alquimia', title: 'Alquimia', documentCount: 7 },
+          { slug: 'hermetismo', title: 'Hermetismo', documentCount: 7 },
+        ]),
+      ),
+    ).toBe('alquimia');
+  });
+
+  it('is none without a list or a collection that opens', () => {
+    expect(defaultTopicOf(null)).toBeNull();
+    expect(
+      defaultTopicOf(list([{ slug: 'udv', title: 'UDV', canOpen: false }])),
+    ).toBeNull();
   });
 });
