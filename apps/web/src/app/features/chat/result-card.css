@@ -247,7 +247,12 @@
     padding: 0 var(--space-5) var(--space-4);
   }
 
-  .best .copies-toggle,
+  .best .copies-toggle {
+    grid-column: auto;
+    grid-row: auto;
+    margin: 0;
+  }
+
   .best .copies {
     grid-column: auto;
     grid-row: auto;
@@ -278,6 +283,21 @@
   grid-row: 1;
   align-self: center;
   margin-inline-start: 0.875rem;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* The pill is 19 high; its target reaches 24 around it (WCAG 2.5.8). */
+.copies-toggle::after {
+  content: '';
+  position: absolute;
+  inset: -0.1875rem -0.125rem;
+}
+
+.copies-toggle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .frame:not(.best) .copies {
@@ -289,16 +309,6 @@
 
 .copies-toggle {
   justify-self: start;
-  min-height: 2rem;
-  padding: 0 0.625rem;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-warn) 18%, transparent);
-  color: var(--color-text);
-  font: inherit;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .copies {

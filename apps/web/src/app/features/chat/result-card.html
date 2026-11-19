@@ -154,9 +154,11 @@
   </ui-menu>
   @if (hit().copies.length > 0 && !copiesBeside()) {
     <div class="copies-area">
+      <!-- docRow: "+1 cópia" is drawn as the warn pill; it opens the copies under the row. -->
       <button
         type="button"
-        class="copies-toggle"
+        class="copies-toggle ui-pill"
+        data-tone="warn"
         [attr.aria-expanded]="copiesOpen()"
         [attr.aria-controls]="copiesOpen() ? copiesId() : null"
         (click)="toggleCopies()"

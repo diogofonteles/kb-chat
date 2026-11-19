@@ -264,6 +264,7 @@
 }
 
 .ui-banner__icon {
+  display: flex;
   flex: none;
   color: var(--ui-banner-tone);
 }

@@ -581,6 +581,11 @@
     padding-bottom: var(--space-3);
   }
 
+  /* cmHead with "+" (the research): its row is the 40 "+" from 56, the avatar in its middle. */
+  .topbar:has(.new-research) {
+    padding-top: 3.375rem;
+  }
+
   /* The 32 avatar at 16 and the name 12 after it (cmHead): the 44 target overflows the
      avatar's sides evenly. */
   .topbar .menu {

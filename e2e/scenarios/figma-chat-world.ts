@@ -118,6 +118,8 @@ function conversationsOf(): Record<string, unknown>[] {
         usd: 0,
         billing: 'per-token',
         model: 'stub/model',
+        // "Sua IA · Respondido por stub/model": the owner's own key paid (chat-research-*).
+        plan: 'own',
         interrupted: false,
         profile: 'fast',
         at: at(minute),

@@ -3,10 +3,13 @@ import {
   ChangeDetectionStrategy,
   Component,
   DOCUMENT,
+  DestroyRef,
   computed,
+  effect,
   inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 import type {
   MediaHit,
@@ -156,6 +159,32 @@ export class ResultMessage {
   protected readonly seconds = computed(
     () => (this.response()?.tookMs ?? 0) / 1000,
   );
+  /** The time so far while it searches, in tenths (chat-results-loading: "0,0 s"). */
+  protected readonly elapsed = signal(0);
+
+  constructor() {
+    this.tickWhileLoading();
+  }
+
+  private tickWhileLoading(): void {
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const stop = () => {
+      if (timer !== undefined) clearInterval(timer);
+      timer = undefined;
+    };
+    effect(() => {
+      const loading = this.message().status === 'loading';
+      stop();
+      if (!loading) return;
+      const from = Date.now();
+      this.elapsed.set(0);
+      timer = setInterval(
+        () => this.elapsed.set(Math.floor((Date.now() - from) / 100) / 10),
+        100,
+      );
+    });
+    inject(DestroyRef).onDestroy(stop);
+  }
   /** The empty state's line under the error (chat-results-error). */
   protected readonly errorAgain = $localize`:@@message.errorText:Tente de novo.`;
   /** The error's title, without the "Tente de novo." its line already says. */

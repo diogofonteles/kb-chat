@@ -85,11 +85,18 @@ async function shoot(
     await page.evaluate(() =>
       document.querySelectorAll('*').forEach((node) => {
         if (node.scrollTop > 0) node.scrollTop = 0;
+        // a row of chips scrolled to the one pressed starts again at its first, as drawn
+        if (node.scrollLeft > 0) node.scrollLeft = 0;
       }),
     );
     await page.waitForTimeout(300);
   }
   await page.mouse.move(1, 1);
+  // The frames draw the question box at rest: no focus ring, no profiles floating over it.
+  await page.evaluate(() => {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLTextAreaElement) focused.blur();
+  });
   if (hover && width === 'desktop') {
     await hover.hover();
     await page.waitForTimeout(200);
@@ -328,7 +335,7 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
     await search(page, 'ritmo', 'Tudo');
     const more = page.getByRole('button', { name: 'Mostrar mais' });
     await expect(more).toBeVisible();
-    await shoot(page, 'chat-results-more', width);
+    await shoot(page, 'chat-results-more', width, firstDocument(page));
 
     await fresh();
     await search(page, 'xqzw kplvm', 'Tudo');
@@ -340,7 +347,7 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
     await fresh();
     await search(page, 'natureza', 'Por significado');
     await expect(cards(page).first()).toBeVisible();
-    await shoot(page, 'chat-results-semantic', width);
+    await shoot(page, 'chat-results-semantic', width, firstDocument(page));
 
     // A popover on desktop, its own sheet on a phone.
     await page.getByRole('button', { name: /^Assuntos/ }).click();
@@ -348,17 +355,23 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
       ? page.getByRole('dialog', { name: 'Assuntos' })
       : page.getByRole('group', { name: 'Assuntos' });
     await expect(place).toBeVisible();
-    await shoot(page, 'chat-results-filter-popover', width);
+    // The frames draw Cabala chosen, not yet applied ("Limpar" beside "Aplicar").
     await place
       .getByRole('checkbox', { name: /Cabala/ })
       .first()
       .check();
+    await shoot(
+      page,
+      'chat-results-filter-popover',
+      width,
+      firstDocument(page),
+    );
     await place
       .getByRole('button', { name: /^(Aplicar|Ver \d+ resultados?)$/ })
       .click();
     await expect(place).toBeHidden();
     await expect(page.getByText(/^2 documentos/).first()).toBeVisible();
-    await shoot(page, 'chat-results-filtered', width);
+    await shoot(page, 'chat-results-filtered', width, firstDocument(page));
 
     await fresh();
     await search(page, 'natureza', 'Por significado');
@@ -386,8 +399,7 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
     await fresh();
     await search(page, 'sétupla', 'Por significado');
     await expect(cards(page).first()).toBeVisible();
-    const copy = page.getByRole('button', { name: /\+1 cópia/ }).first();
-    if (await copy.isVisible()) await copy.click();
+    // The lone best result shows its copy beside it by itself (copy-column): nothing to open.
     await shoot(page, 'chat-results-off-topic', width);
 
     // No text/apostila on "ritmo" (the frame): the filtered search answers nothing.

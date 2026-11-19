@@ -139,9 +139,11 @@
   border-left: 3px solid var(--color-danger);
 }
 
+/* The empty state's own 72 above its icon is the whole room under the head (chat-results-none,
+   -error: the icon's circle 84 under the title). */
 .empty,
 .error {
-  padding: var(--space-6) 0;
+  padding: 0;
 }
 
 .skeletons {
@@ -263,6 +265,18 @@
     display: none;
   }
 
+  /* chat-results-error@mobile: its circle 60 under the question box (no chips between). */
+  .error {
+    padding-top: 0.875rem;
+  }
+
+  /* emptyM of the results (chat-results-none@mobile): the title 18/22 on one line. */
+  .empty ::ng-deep .ui-empty__title,
+  .error ::ng-deep .ui-empty__title {
+    font-size: 1.125rem;
+    line-height: 1.375rem;
+  }
+
   /* cmRow: 68 rows one after the other, the best result first (chat-results@mobile). */
   .results,
   .cards {
@@ -289,6 +303,7 @@
   color: var(--color-text-muted);
   font-size: var(--text-meta);
   font-weight: 700;
+  line-height: 1rem;
 }
 
 .copy-list {
@@ -304,7 +319,8 @@
   align-items: center;
   gap: 0.625rem;
   width: 100%;
-  min-height: var(--target);
+  /* The copy's row is its 32 cover (chat-results-off-topic: the card 84 high). */
+  min-height: 2rem;
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
