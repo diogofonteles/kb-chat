@@ -515,7 +515,9 @@ test('where the frame puts things: menus over the action row, a smooth line, not
   await page.getByRole('button', { name: 'Pausar', exact: true }).click();
 
   if (desktop(page)) {
-    const row = await boxOf(play);
+    // The action row itself, not ▶ in it: the pointer that pressed Pausar is still over ▶,
+    // whose hover grows it by 4 % (1.1 px above the row's top once its 120 ms have run).
+    const row = await boxOf(player.locator('section.player > .row'));
     // The speed menu covers its pill from the row's top (speedMenu at y = the row).
     await page
       .getByRole('button', { name: /Velocidade/ })
