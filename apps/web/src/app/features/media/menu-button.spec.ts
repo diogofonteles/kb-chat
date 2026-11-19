@@ -102,6 +102,34 @@ describe('MenuButton (APG menu button)', () => {
     stopped.mockRestore();
   });
 
+  it.each([
+    [
+      'Escape',
+      (menu: HTMLElement) => fireEvent.keyDown(menu, { key: 'Escape' }),
+    ],
+    ['Tab', (menu: HTMLElement) => fireEvent.keyDown(menu, { key: 'Tab' })],
+    [
+      'a choice',
+      () =>
+        fireEvent.click(screen.getByRole('menuitemradio', { name: /^\s*2×/ })),
+    ],
+  ])(
+    'stops hearing the document as soon as it closes by %s, with no click after',
+    async (_how, close) => {
+      const { trigger, fixture } = await renderChoice();
+      fireEvent.click(trigger);
+      await fixture.whenStable();
+      const stopped = vi.spyOn(document, 'removeEventListener');
+
+      close(screen.getByRole('menu'));
+      await fixture.whenStable();
+
+      expect(screen.queryByRole('menu')).toBeNull();
+      expect(stopped.mock.calls.some(([type]) => type === 'click')).toBe(true);
+      stopped.mockRestore();
+    },
+  );
+
   describe('stays on the screen, however wide its text', () => {
     const rectOf = (left: number, right: number) =>
       ({ left, right }) as DOMRect;

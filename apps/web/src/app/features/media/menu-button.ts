@@ -193,10 +193,8 @@ export class MenuButton {
    * listener: with one ⋯ per row, every click anywhere ran 2 000 Angular listeners, and each
    * marked its row for a check, so all 2 000 rows were checked again (NFR-2).
    */
-  private readonly onDocumentClick = (event: MouseEvent): void => {
+  private readonly onDocumentClick = (event: MouseEvent): void =>
     this.closeOnOutside(event);
-    if (!this.open()) this.stopHearingOutside();
-  };
   private hearingOutside = false;
   private readonly trigger =
     viewChild.required<ElementRef<HTMLButtonElement>>('trigger');
@@ -295,7 +293,7 @@ export class MenuButton {
 
   protected onFocusOut(event: FocusEvent): void {
     const next = event.relatedTarget;
-    if (next instanceof Node && !this.host.contains(next)) this.open.set(false);
+    if (next instanceof Node && !this.host.contains(next)) this.shut();
   }
 
   /** A click outside, or on the phone sheet's scrim (the list's own backdrop). */
@@ -303,7 +301,7 @@ export class MenuButton {
     if (!this.open() || !(event.target instanceof Node)) return;
     const menu = this.menu()?.nativeElement;
     const onScrim = event.target === menu && outsideBox(menu, event);
-    if (onScrim || !this.host.contains(event.target)) this.open.set(false);
+    if (onScrim || !this.host.contains(event.target)) this.shut();
   }
 
   protected choose(id: string): void {
@@ -349,7 +347,13 @@ export class MenuButton {
   }
 
   private close(refocus: boolean): void {
-    this.open.set(false);
+    this.shut();
     if (refocus) this.trigger().nativeElement.focus();
+  }
+
+  /** Closed, it hears the document no more, however it closed. */
+  private shut(): void {
+    this.open.set(false);
+    this.stopHearingOutside();
   }
 }
