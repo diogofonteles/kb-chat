@@ -177,21 +177,6 @@
   font-size: var(--text-sm);
 }
 
-/* What was left and the cost: two lines on a desktop, one on a phone. */
-.narrow-only {
-  display: none;
-}
-
-@media (max-width: 1023px) {
-  .wide-only {
-    display: none;
-  }
-
-  .narrow-only {
-    display: inline;
-  }
-}
-
 /* A phone: while the AI proposes, only its stage stays; a failure keeps its card, without
    the buttons (they are in the foot bar). */
 @media (max-width: 1023px) {

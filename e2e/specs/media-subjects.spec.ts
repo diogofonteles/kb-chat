@@ -216,7 +216,7 @@ test('AC-5: the concept panel lists the tracks, each opening at the start', asyn
   await link.click();
   await expect(page).toHaveURL(new RegExp(`/midia/${seed.trackId}\\?t=0`));
   await expect(
-    page.getByRole('heading', { level: 2, name: seed.title }),
+    page.getByRole('heading', { level: 1, name: seed.title }),
   ).toBeVisible();
   await page.context().close();
 });
@@ -267,7 +267,7 @@ test('AC-6: without `media-subjects` nothing of a subject shows', async ({
   const page = await reader(browser, viewport, READER);
   await page.goto(`/midia/${seed.trackId}`);
   await expect(
-    page.getByRole('heading', { level: 2, name: seed.title }),
+    page.getByRole('heading', { level: 1, name: seed.title }),
   ).toBeVisible();
   await expect(page.getByText('Assuntos:')).toHaveCount(0);
   // A subject saved while the person still had the feature: left aside, not a filter.

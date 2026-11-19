@@ -66,19 +66,12 @@
       <span>{{ line.state }}</span>
     </p>
     @if (leftText(line.stage); as left) {
-      @if (retryCostShort(line.stage); as short) {
-        <!-- A phone says the retry's cost in the same line (prmFail: "… (cerca de US$ 0,020)."). -->
-        <p class="detail">
-          {{ left.slice(0, -1)
-          }}<span class="narrow-only">&ngsp;{{ short }}</span>{{ left.slice(-1) }}
-        </p>
-      } @else {
-        <p class="detail">{{ left }}</p>
-      }
+      <p class="detail">{{ left }}</p>
     }
+    <!-- What a retry costs, before it is spent, at every width (KBC-072 AC-11). -->
     @if (line.stage.canRetry) {
       @if (retryCost(line.stage); as cost) {
-        <p class="detail wide-only">{{ cost }}</p>
+        <p class="detail">{{ cost }}</p>
       }
     }
     <div class="failure-actions">

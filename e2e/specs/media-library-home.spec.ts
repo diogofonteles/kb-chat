@@ -572,7 +572,15 @@ test('AC-14: chips, order, selection and opening work by keyboard, and the count
   await expect(
     page.getByRole('heading', { name: lecture(3).title }),
   ).toBeVisible();
-  await expect(page.getByRole('link', { name: '← Biblioteca' })).toBeVisible();
+  // The way back: the phone's "←"; a desktop's player page has none of its own (v2 · Mídia —
+  // Player), the library stays pinned in "Sua biblioteca" beside it.
+  const back =
+    (page.viewportSize()?.width ?? 0) >= 1024
+      ? page
+          .getByRole('complementary', { name: 'Sua biblioteca' })
+          .getByRole('link', { name: 'Biblioteca', exact: true })
+      : page.getByRole('link', { name: '← Biblioteca' });
+  await expect(back).toBeVisible();
   await page.context().close();
 });
 

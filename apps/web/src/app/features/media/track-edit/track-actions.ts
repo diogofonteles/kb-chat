@@ -135,9 +135,7 @@ export class TrackActions {
   protected readonly historyShown = signal(false);
   protected readonly failure = signal('');
   protected readonly restoring = signal(false);
-  protected readonly boundsLink = computed(() =>
-    trackBoundsPath(this.media().id),
-  );
+  readonly boundsLink = computed(() => trackBoundsPath(this.media().id));
   protected readonly editLink = computed(() =>
     editPagePath(this.current()?.recordingId ?? ''),
   );

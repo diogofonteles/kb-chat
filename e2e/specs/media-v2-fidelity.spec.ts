@@ -437,7 +437,7 @@ test('the panel tabs, the queue button, the titled speed menu, ⋯ whole, the di
     'true',
   );
   // "Abrir o player" on its own page brings its head back.
-  await bar.getByRole('button', { name: 'Abrir o player' }).click();
+  await bar.getByRole('link', { name: 'Abrir o player' }).click();
   await expect(
     page.getByRole('heading', { name: lecture.title, level: 1 }),
   ).toBeInViewport();

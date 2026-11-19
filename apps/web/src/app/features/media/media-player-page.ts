@@ -138,6 +138,9 @@ export type PlayerView = 'transcript' | 'tracks' | 'voices';
  * "Continuar de" and "Começar do início". Leaving it while it plays keeps it playing in
  * the mini-player (FR-8); leaving it paused stops it.
  */
+/** Frames to wait for the panel beside the page to draw its bookmarks (about half a second). */
+const FOCUS_TRIES = 30;
+
 /** What the page says while a transcription waits for the transcriber (pBody o.waiting). */
 interface WaitingWords {
   /** The empty state's and the banner's title. */
@@ -580,6 +583,16 @@ export class MediaPlayerPage {
   private trackOptions(): MenuOption[] {
     if (!this.trackActions()?.editable()) return [];
     return [
+      // A phone has no room for the link in its row (pMobile): it waits here.
+      ...(this.desktop()
+        ? []
+        : [
+            {
+              id: 'track-bounds',
+              icon: 'scissors' as const,
+              label: $localize`:@@trackEdit.bounds:Ajustar início e fim`,
+            },
+          ]),
       {
         id: 'track-edit',
         icon: 'edit',
@@ -715,7 +728,8 @@ export class MediaPlayerPage {
 
   /**
    * "Ver marcadores" of a library row (v2 media-library-row-menu) opens here with
-   * `#marcadores`: once the page is in, the focus (and the view) go to its bookmarks.
+   * `#marcadores`: once the page is in, the focus (and the view) go to its bookmarks — on a
+   * desktop in the Sobre tab of the panel beside the page, which renders a moment later.
    */
   private followBookmarksLink(): void {
     let done = false;
@@ -723,17 +737,25 @@ export class MediaPlayerPage {
       if (done || !this.ready()) return;
       if (this.route.snapshot.fragment !== 'marcadores') return;
       done = true;
-      afterNextRender(
-        () => {
-          const heading = this.host.querySelector<HTMLElement>(
-            'app-bookmark-list h3',
-          );
-          heading?.scrollIntoView({ block: 'start' });
-          heading?.focus({ preventScroll: true });
-        },
-        { injector: this.injector },
-      );
+      this.panelTabs.tab.set('about');
+      afterNextRender(() => this.focusBookmarks(FOCUS_TRIES), {
+        injector: this.injector,
+      });
     });
+  }
+
+  private focusBookmarks(tries: number): void {
+    const heading =
+      this.host.querySelector<HTMLElement>('app-bookmark-list h3') ??
+      this.document.querySelector<HTMLElement>('app-bookmark-list h3');
+    if (!heading) {
+      const view = this.document.defaultView;
+      if (tries > 0 && view)
+        view.requestAnimationFrame(() => this.focusBookmarks(tries - 1));
+      return;
+    }
+    heading.scrollIntoView({ block: 'start' });
+    heading.focus({ preventScroll: true });
   }
 
   constructor() {
@@ -794,6 +816,10 @@ export class MediaPlayerPage {
     if (id === 'prepare') void this.router.navigateByUrl(this.prepareLink());
     if (id === 'transcript') this.toggleTranscript();
     if (id === 'view-tracks') this.chosenView.set('tracks');
+    if (id === 'track-bounds') {
+      const link = this.trackActions()?.boundsLink();
+      if (link) void this.router.navigateByUrl(link);
+    }
     if (id === 'track-edit') this.trackActions()?.openEdit();
     if (id === 'track-history') this.trackActions()?.openHistory();
     if (id === 'track-delete') this.trackActions()?.openDelete();

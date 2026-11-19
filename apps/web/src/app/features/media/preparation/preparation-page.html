@@ -208,7 +208,13 @@
         </section>
         <section class="result">
           @if (prep.voices.length > 0) {
-            <app-preparation-voices [preparation]="prep" (named)="named()" />
+            <!-- While the AI proposes the tracks, or failed to, a phone keeps the count of the
+                 voices found (KBC-072 AC-6) and names them in the next step. -->
+            <app-preparation-voices
+              [class.count-only]="aiAtWork()"
+              [preparation]="prep"
+              (named)="named()"
+            />
           }
           @if (prep.plan?.tracks !== 'none' || prep.tracks.length > 0) {
             <app-preparation-tracks

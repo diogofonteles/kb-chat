@@ -46,7 +46,14 @@
     @if (ready()) {
       <p class="playing-from">
         <span class="from">{{ playingFrom() }}</span>
-        <span class="where">{{ playingWhere() }}</span>
+        @if (media()?.parent; as parent) {
+          <!-- A track says where it comes from, as a link to it (KBC-068 FR-4). -->
+          <a class="where" [routerLink]="['/midia', parent.id]">{{
+            playingWhere()
+          }}</a>
+        } @else {
+          <span class="where">{{ playingWhere() }}</span>
+        }
       </p>
     }
   </div>

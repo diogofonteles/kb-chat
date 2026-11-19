@@ -87,6 +87,9 @@
           (click)="back()"
         >
           <ui-icon name="rewind" [size]="20" />
+          <svg class="skip-n" viewBox="0 0 24 24" aria-hidden="true">
+            <text x="12" y="15.2" text-anchor="middle">{{ skipBack() }}</text>
+          </svg>
         </button>
         <button
           type="button"
@@ -113,6 +116,11 @@
           (click)="forward()"
         >
           <ui-icon name="forward" [size]="20" />
+          <svg class="skip-n" viewBox="0 0 24 24" aria-hidden="true">
+            <text x="12" y="15.2" text-anchor="middle">
+              {{ skipForward() }}
+            </text>
+          </svg>
         </button>
         <button
           uiIconButton
@@ -228,6 +236,7 @@
         [routerLink]="['/midia', current.id]"
         aria-label="Abrir o player"
         i18n-aria-label="@@mini.expand"
+        (click)="openHere(current.id)"
       >
         <ui-icon name="expand" [size]="20" />
       </a>

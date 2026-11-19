@@ -17,7 +17,13 @@ test('KBC-130 AC-1: on step 2 the stepper marks step 1 done and step 2 current, 
     seconds: 6,
   });
   await page.goto(`/midia/${media.id}/preparar`);
-  await expect(page.getByText('Preparar áudio', { exact: true })).toBeVisible();
+  // The phone's head names the page too (aria-hidden, the kicker says it to readers).
+  await expect(
+    page
+      .getByText('Preparar áudio', { exact: true })
+      .and(page.locator(':visible'))
+      .first(),
+  ).toBeVisible();
   await capture(page, 'prepare-choose', info.project.name);
   await page.getByRole('button', { name: 'Preparar', exact: true }).click();
   await expect(page.getByTestId('step-text')).toContainText(/2.*Processar/);

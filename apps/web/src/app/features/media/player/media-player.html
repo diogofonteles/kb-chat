@@ -85,7 +85,11 @@
       [disabled]="!operable()"
       (click)="back()"
     >
+      <!-- The chosen number in the icon (KBC-043 FR-2); the name says it in words. -->
       <ui-icon name="rewind" [size]="24" />
+      <svg class="skip-n" viewBox="0 0 24 24" aria-hidden="true">
+        <text x="12" y="15.2" text-anchor="middle">{{ skipBack() }}</text>
+      </svg>
     </button>
 
     <button
@@ -97,6 +101,9 @@
       (click)="forward()"
     >
       <ui-icon name="forward" [size]="24" />
+      <svg class="skip-n" viewBox="0 0 24 24" aria-hidden="true">
+        <text x="12" y="15.2" text-anchor="middle">{{ skipForward() }}</text>
+      </svg>
     </button>
 
     <app-menu-button
@@ -105,6 +112,7 @@
       [label]="speedLabel()"
       menuLabel="Velocidade"
       [titled]="true"
+      [spaced]="true"
       i18n-menuLabel="@@player.speedMenu"
       align="start"
       side="over"
@@ -195,6 +203,7 @@
       class="more"
       label="Mais opções"
       i18n-label="@@player.more"
+      [spaced]="true"
       keyshortcuts="?"
       align="start"
       side="over"

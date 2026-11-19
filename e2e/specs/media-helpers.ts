@@ -2,7 +2,12 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { APIRequestContext, Browser, Page } from '@playwright/test';
+import type {
+  APIRequestContext,
+  Browser,
+  Locator,
+  Page,
+} from '@playwright/test';
 import {
   CSRF,
   expect,
@@ -388,4 +393,27 @@ export async function leaveToMediaList(page: Page): Promise<void> {
       .click();
   // Away from the player page before the next step looks at the bar.
   await page.waitForURL((url) => url.href !== from);
+}
+
+/** The media page's ⋯ ("Mais opções"): the page's own actions wait there (v2 · Mídia — Player). */
+const pageMore = (page: Page): Locator =>
+  page
+    .locator('app-media-player-page')
+    .getByRole('button', { name: 'Mais opções', exact: true })
+    .first();
+
+/** Chooses one of the media page's actions in its ⋯ (Transcrever de novo, com Groq…). */
+export async function pageAction(page: Page, item: string): Promise<void> {
+  await pageMore(page).click();
+  await page.getByRole('menuitem', { name: item, exact: true }).click();
+}
+
+/** Whether the media page's ⋯ offers `item`; the menu is closed again after looking. */
+export async function pageOffers(page: Page, item: string): Promise<boolean> {
+  await pageMore(page).click();
+  await expect(page.getByRole('menuitem').first()).toBeVisible();
+  const offered =
+    (await page.getByRole('menuitem', { name: item, exact: true }).count()) > 0;
+  await page.keyboard.press('Escape');
+  return offered;
 }

@@ -211,6 +211,13 @@
   :host(.no-bones-on-phone) .arriving {
     display: none;
   }
+
+  /* "Ver texto" is drawn 30 tall; a finger's target is 44 (MA-01, WCAG 2.5.8), its words
+     where drawn: the 7 above and below lie over the row's own padding. */
+  .foot .text-toggle {
+    min-height: 2.75rem;
+    margin-block: -0.4375rem;
+  }
 }
 
 .end {

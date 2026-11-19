@@ -388,7 +388,10 @@ test('FR-6, AC-6: the editor of one track saves with the keyboard and stops at t
   const owner = await ownerApi();
   const { first } = await approvedTracks(owner);
   await page.goto(trackPage(first.id));
-  await page.getByRole('link', { name: 'Ajustar início e fim' }).click();
+  // A desktop has the link in the player's row; a phone keeps it in ⋯ (pMobile).
+  if ((page.viewportSize()?.width ?? 0) >= 1024)
+    await page.getByRole('link', { name: 'Ajustar início e fim' }).click();
+  else await chooseInMore(page, 'Ajustar início e fim');
   const end = page.getByRole('slider', { name: /Fim da faixa 1/ });
   await end.focus();
   await page.keyboard.press('Alt+ArrowRight');
@@ -429,7 +432,10 @@ test('AC-8: deleting says the impact, the track leaves the library, and it comes
 
   await page.goto(trackPage(first.id));
   await expect(page.getByText('Faixa removida da edição')).toBeHidden();
-  await expect(page.getByText('faixa 1 de 3')).toBeVisible();
+  // The phone's head says it too ("Parte de · faixa 1 de 3"), hidden on a desktop.
+  await expect(
+    page.getByText('faixa 1 de 3').and(page.locator(':visible')).first(),
+  ).toBeVisible();
   await owner.dispose();
 });
 
@@ -624,7 +630,12 @@ test('AC-14: a listener sees none of it', async ({ browser, viewport }) => {
   ).toBeHidden();
   await page.getByRole('button', { name: 'Mais opções' }).click();
   await expect(page.getByRole('menuitem').first()).toBeVisible();
-  for (const item of ['Editar faixa', 'Histórico da faixa', 'Apagar faixa'])
+  for (const item of [
+    'Editar faixa',
+    'Histórico da faixa',
+    'Apagar faixa',
+    'Ajustar início e fim',
+  ])
     await expect(page.getByRole('menuitem', { name: item })).toHaveCount(0);
   await page.keyboard.press('Escape');
 });

@@ -117,22 +117,6 @@ export class PreparationStageList {
   }
 
   /** What a proposal that failed left in the draft, and what became of its cost (BR-6). */
-  /** The retry's cost in a word, for a phone's one line: "(cerca de US$ 0,020)". */
-  protected retryCostShort(stage: PreparationStage): string {
-    const { windows, canRetry, estimateUsd } = stage;
-    if (
-      !windows ||
-      windows.done === 0 ||
-      !canRetry ||
-      stage.restarts ||
-      stage.stage !== 'tracks' ||
-      estimateUsd === null
-    )
-      return '';
-    const value = usdUpText(estimateUsd, this.locale);
-    return $localize`:@@prep.failure.costShort:(cerca de ${value}:value:)`;
-  }
-
   protected leftText(stage: PreparationStage): string {
     const { windows, spentUsd, canRetry } = stage;
     if (!windows) return '';

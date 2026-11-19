@@ -34,8 +34,11 @@ const isDesktop = (page: Page): boolean =>
 /** A short window: the flow's pages hold more than one screen of it. */
 async function shortWindow(page: Page): Promise<void> {
   const width = page.viewportSize()?.width ?? DESKTOP.width;
-  // 460: a phone's /limites fits whole in 560 (its bar fixed at the foot).
-  await page.setViewportSize({ width, height: 460 });
+  // 460: a phone's /limites fits whole in 560 (its bar fixed at the foot). A desktop also
+  // keeps the player bar (72) under the page when the collection has audio (KBC-125
+  // BR-2): the page gets the same room it had without it.
+  const bar = width >= DESKTOP.width ? 72 : 0;
+  await page.setViewportSize({ width, height: 460 + bar });
 }
 
 /** The top of `target` on screen. */

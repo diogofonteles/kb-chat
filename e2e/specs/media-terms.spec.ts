@@ -2,7 +2,13 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page } from '@playwright/test';
 import { expect, ownerApi, test } from './fixtures.js';
 import { openSection, openSettings, SETTINGS_AXE } from './settings-helpers.js';
-import { newListener, uniqueTag, uploadReady } from './media-helpers.js';
+import {
+  newListener,
+  pageAction,
+  pageOffers,
+  uniqueTag,
+  uploadReady,
+} from './media-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
 
 // KBC-040: the term list a master edits and "Transcrever de novo" on a media.
@@ -91,20 +97,23 @@ test('AC-2, AC-5: the text stays while it is redone, and the new version brings 
     page.getByText(/Feita com a lista de termos v\d+ \(\d{2}\/\d{2}\/\d{4}\)/),
   ).toBeVisible();
 
-  await page.getByRole('button', { name: 'Transcrever de novo' }).click();
-  const question = page.getByRole('group', { name: /Transcrever de novo com/ });
+  await pageAction(page, 'Transcrever de novo');
+  // Asked in a modal (a sheet on a phone) that opens on its safe answer (v2, KBC-129).
+  const question = page.getByRole('dialog', { name: 'Transcrever de novo?' });
   await expect(
     question.getByRole('button', { name: 'Cancelar' }),
   ).toBeFocused();
   await question.getByRole('button', { name: 'Transcrever de novo' }).click();
 
-  await expect(page.locator('app-media-player-page .meta')).toContainText(
+  // Where the transcription is: the pill under the title (v2 · Mídia — Player).
+  await expect(page.locator('app-media-player-page .note')).toContainText(
     'Retranscrevendo',
   );
   await expect(transcript).toContainText('Tioaco');
   await expect(
     page.getByRole('button', { name: 'Transcrever de novo' }),
   ).toHaveCount(0);
+  expect(await pageOffers(page, 'Transcrever de novo')).toBe(false);
 
   await seedTranscript(owner, {
     id,
@@ -113,7 +122,7 @@ test('AC-2, AC-5: the text stays while it is redone, and the new version brings 
   await owner.dispose();
   await page.reload();
   await expect(transcript).toContainText('Tiuaco');
-  await expect(page.locator('app-media-player-page .meta')).not.toContainText(
+  await expect(page.locator('app-media-player-page .note')).not.toContainText(
     'Retranscrevendo',
   );
 });
@@ -133,6 +142,7 @@ test('a person who only listens sees neither the button nor the list version', a
   await expect(
     page.getByRole('button', { name: 'Transcrever de novo' }),
   ).toHaveCount(0);
+  expect(await pageOffers(page, 'Transcrever de novo')).toBe(false);
   await expect(page.getByText(/Feita com a lista de termos/)).toHaveCount(0);
   await page.context().close();
 });

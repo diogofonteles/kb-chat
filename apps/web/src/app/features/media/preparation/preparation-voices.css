@@ -243,3 +243,11 @@ app-speaker-combobox {
     gap: 1.375rem;
   }
 }
+
+/* A phone while the AI proposes the tracks (or failed to): the count only (KBC-072 AC-6);
+   the voices are named in the next step (v2 · Mídia — Preparar, celular). */
+@media (max-width: 1023px) {
+  :host(.count-only) .voices {
+    display: none;
+  }
+}

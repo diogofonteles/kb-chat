@@ -90,6 +90,7 @@ const SHEET_BELOW_PX = 1024;
         #menu
         class="menu"
         [class.choices]="kind() === 'choice'"
+        [class.spaced]="spaced()"
         role="menu"
         tabindex="-1"
         [uiOverlay]="trigger"
@@ -213,6 +214,8 @@ export class MenuButton {
   readonly offset = input<OverlayOffset | null>(null);
   /** The menu's name shown over its items (the speed menu of the v2 player). */
   readonly titled = input(false);
+  /** The player's sheets (pMobile sheet(kids)): rows 4 apart, not touching. */
+  readonly spaced = input(false);
   readonly chosen = output<string>();
 
   protected readonly sheetBelow = SHEET_BELOW_PX;

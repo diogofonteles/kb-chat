@@ -63,7 +63,8 @@
   display: flex;
   flex-direction: column;
   min-width: 15rem;
-  max-height: min(70vh, 32rem);
+  /* Never cut (D5): as tall as its items, up to the screen; the overlay slides it to fit. */
+  max-height: calc(100dvh - var(--space-4));
   margin: 0;
   padding: var(--space-1);
   overflow-y: auto;
@@ -380,4 +381,25 @@
     background: transparent;
     color: var(--menu-trigger-color, var(--color-text-muted));
   }
+}
+
+/* The player's sheets on a phone (pMobile sheet(kids): gap 4): rows of 44 (the target), 4
+   apart, one 4 between groups too, with no line; a ⋯ longer than the frame's (it keeps
+   "Legendas", "Fechar o player", the views) still fits whole on a 844 screen. */
+.menu.ui-overlay--sheet.spaced .items {
+  gap: 0.25rem;
+}
+
+.menu.ui-overlay--sheet.spaced .group + .group {
+  margin-top: 0.25rem;
+  padding-top: 0;
+}
+
+.menu.ui-overlay--sheet.spaced button,
+.menu.ui-overlay--sheet.spaced:not(.choices) button {
+  min-height: 2.75rem;
+}
+
+.menu.ui-overlay--sheet.spaced:not(.choices) {
+  padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
 }

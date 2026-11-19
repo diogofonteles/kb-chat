@@ -119,7 +119,9 @@ export async function openPhoneTools(page: Page): Promise<void> {
   const more = page.getByRole('button', {
     name: 'Mais ferramentas, transcrição e vozes',
   });
-  if (!(await more.isVisible())) return;
+  if ((page.viewportSize()?.width ?? 0) >= 1024) return;
+  // The page may still be drawing its step: the button comes with it.
+  await expect(more).toBeVisible();
   if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
   await expect(more).toHaveAttribute('aria-expanded', 'true');
 }

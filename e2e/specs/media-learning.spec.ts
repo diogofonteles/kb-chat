@@ -5,7 +5,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { CSRF, expect, ownerApi, test } from './fixtures.js';
 import { openSection, openSettings } from './settings-helpers.js';
 import { uniqueTag, uploadReady } from './media-helpers.js';
-import { seedDraft, trackRow } from './tracks-helpers.js';
+import { seedDraft, trackMenu, trackRow } from './tracks-helpers.js';
 import {
   rawOf,
   seedTranscript,
@@ -131,6 +131,8 @@ test('AC-2, AC-8, AC-17: a learned word is marked on step 3, says what it was, a
 
   await page.goto(`/midia/${id}/faixas`);
   await trackRow(page, 1).getByRole('button').first().click();
+  // The text waits in the track's details, opened from its ⋯ (v2 · Faixas, KBC-130).
+  await trackMenu(page, 'Tipo, nível e texto da faixa');
   const region = page.getByRole('region', { name: 'Texto da faixa 1' });
   await expect(region).toContainText('e com Atlântida veio');
   await expect(region).toContainText(`na a ${word} disse`);

@@ -4,6 +4,8 @@
   display: block;
   min-height: 0;
   overflow-y: auto;
+  /* What takes the focus is never hidden under the phone's mini player (KBC-041 AC-16). */
+  scroll-padding-bottom: 5rem;
 }
 
 .media {

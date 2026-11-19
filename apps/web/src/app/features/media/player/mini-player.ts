@@ -37,6 +37,8 @@ import { SleepTimerDialog } from './sleep-timer-dialog.js';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { RightPanel } from '@features/shell/right-panel.js';
 import { NowPlayingPanel } from './now-playing-panel.js';
+import { PlayerPanel } from './player-panel.js';
+import { PlayerPanelTabs } from './player-panel-tab.js';
 import { PlayerShortcuts } from './player-shortcuts.js';
 
 const DECIMAL = new Intl.NumberFormat('pt-BR');
@@ -130,8 +132,15 @@ export class MiniPlayer {
   protected readonly nowPlayingOpen = computed(
     () => this.panelOpen() && this.panelStart() === 'now',
   );
+  /** The player page's own panel (Sobre · Fila · Ouvidas) is beside it. */
+  private readonly pagePanel = computed(
+    () => this.rightPanel.content()?.component === PlayerPanel,
+  );
+  private readonly panelTabs = inject(PlayerPanelTabs);
   protected readonly queueOpen = computed(
-    () => this.panelOpen() && this.panelStart() !== 'now',
+    () =>
+      (this.panelOpen() && this.panelStart() !== 'now') ||
+      (this.pagePanel() && this.panelTabs.tab() === 'queue'),
   );
 
   protected readonly skipBack = computed(
@@ -318,8 +327,21 @@ export class MiniPlayer {
     });
   }
 
+  /** "Abrir o player" on the player's own page: its head comes back into view. */
+  protected openHere(id: string): void {
+    if (this.router.url.split(/[?#]/)[0] !== `/midia/${id}`) return;
+    globalThis.document
+      ?.getElementById('media-item-title')
+      ?.scrollIntoView({ block: 'center' });
+  }
+
   /** The Fila button: the panel on its tabs, at the Fila (v2 player bar). */
   protected toggleQueue(): void {
+    // On the player's own page its panel stays: Fila, then back to Sobre.
+    if (this.pagePanel()) {
+      this.panelTabs.tab.set(this.queueOpen() ? 'about' : 'queue');
+      return;
+    }
     if (this.queueOpen()) {
       this.rightPanel.close();
       return;

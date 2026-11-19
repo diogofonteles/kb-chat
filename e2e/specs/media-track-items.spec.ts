@@ -55,7 +55,10 @@ test('AC-3, AC-2: the library shows the tracks; a track says where it comes from
   await expect(
     page.getByRole('heading', { name: 'Segunda pergunta' }),
   ).toBeVisible();
-  await expect(page.getByText('faixa 2 de 3')).toBeVisible();
+  // The phone's head says it too ("Parte de · faixa 2 de 3"), hidden on a desktop.
+  await expect(
+    page.getByText('faixa 2 de 3').and(page.locator(':visible')).first(),
+  ).toBeVisible();
   await expect(page.getByRole('link', { name: media.title })).toBeVisible();
   await page.getByRole('button', { name: 'Tocar', exact: true }).click();
   await expect
@@ -214,9 +217,15 @@ test('removing a recording names the tracks that go with it', async ({
   const owner = await ownerApi();
   const media = await approvedAudio(owner);
   await openCollection(page, media.topic);
-  await page
-    .getByRole('button', { name: `Mais ações para ${media.title}` })
-    .click();
+  const more = page.getByRole('button', {
+    name: `Mais ações para ${media.title}`,
+  });
+  // A phone draws only the recording's chevron: its ⋯ comes out on a long press or the
+  // keyboard (media-library-tracks@mobile).
+  if ((page.viewportSize()?.width ?? 0) < 1024) {
+    await more.focus();
+    await page.keyboard.press('Enter');
+  } else await more.click();
   await page.getByRole('menuitem', { name: 'Remover' }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: 'Remover' }).click();

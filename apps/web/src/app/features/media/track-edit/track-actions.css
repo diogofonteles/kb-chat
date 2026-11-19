@@ -37,3 +37,10 @@
     flex: 1 1 100%;
   }
 }
+
+/* A phone reaches it from the player's ⋯ (pMobile has no room in its row). */
+@media (max-width: 1023px) {
+  .bounds {
+    display: none;
+  }
+}

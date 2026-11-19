@@ -232,12 +232,6 @@ a.primary,
     display: none;
   }
 
-  /* While the AI proposes the tracks, or failed to, a phone shows the tracks alone: the voices
-     are named in the next step (v2 · Mídia — Preparar, celular: proposing, failed). */
-  .ai-at-work app-preparation-voices {
-    display: none;
-  }
-
   /* Why the next step is closed (KBC-072 AC-5): a phone draws the closed steps as bars and
      "Passo 2 de 4 · Processar" only (v2 · Mídia — Preparar, celular), so the words stay for
      assistive tech, not on screen. */
@@ -325,5 +319,19 @@ a.primary,
 @media (prefers-reduced-motion: reduce) {
   .page {
     scroll-behavior: auto;
+  }
+}
+
+/* A master's phone keeps the transcriber's pill beside the steps (KBC-114 AC-16): the
+   head's other tool ("Sair e continuar depois") is in the foot bar there. */
+@media (max-width: 1023px) {
+  :host .v2-head .head-tools:has(.transcriber) {
+    display: flex;
+    grid-column: 1 / -1;
+    padding-bottom: 0;
+  }
+
+  :host .v2-head .head-tools .leave {
+    display: none;
   }
 }

@@ -26,6 +26,7 @@ import {
   Injector,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
@@ -609,10 +610,18 @@ export class TrackEditorPage {
     });
   }
 
-  /** What plays elsewhere stops: one sound at a time, and these keys are this page's. */
+  /**
+   * One sound at a time: what plays in the bar keeps playing on this page (v2 · Preparar,
+   * Faixas e Limites draw it) until a track or a boundary is heard here, which pauses it;
+   * playing the bar again stops what this page plays.
+   */
   private stopOtherPlayback(): void {
-    this.engine.pause();
-    this.engine.unload();
+    effect(() => {
+      if (this.audition.playing()) untracked(() => this.engine.pause());
+    });
+    effect(() => {
+      if (this.engine.playing()) untracked(() => this.audition.stop());
+    });
   }
 
   /** The button that had the focus is gone with the step: it moves on (WCAG 2.4.3). */

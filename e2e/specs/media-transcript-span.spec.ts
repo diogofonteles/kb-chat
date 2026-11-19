@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { expect, ownerApi, test } from './fixtures.js';
 import { uniqueTag, uploadReady } from './media-helpers.js';
-import { seedDraft, trackRow } from './tracks-helpers.js';
+import { seedDraft, trackMenu, trackRow } from './tracks-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
 
 // KBC-115: choosing many words of the track text at once (a drag, a held finger, Shift+click,
@@ -76,6 +76,8 @@ async function openStep3(
 ) {
   await page.goto(`/midia/${media.id}/faixas`);
   await trackRow(page, 1).getByRole('button').first().click();
+  // The text waits in the track's details, opened from its ⋯ (v2 · Faixas, KBC-130).
+  await trackMenu(page, 'Tipo, nível e texto da faixa');
   await expect(textOf(page)).toContainText(says);
   await expect(audition(page)).toBeAttached();
 }

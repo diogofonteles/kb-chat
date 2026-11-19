@@ -15,7 +15,14 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { makeMp3, uniqueTag, uploadReady } from './media-helpers.js';
-import { audioWithTracks, expectSaved, trackRow } from './tracks-helpers.js';
+import {
+  audioWithTracks,
+  expectSaved,
+  openPhoneDetails,
+  openPhoneTools,
+  trackMenu,
+  trackRow,
+} from './tracks-helpers.js';
 import {
   seedTranscript,
   separateVoices,
@@ -214,9 +221,14 @@ async function proposedAudio(
 }
 
 async function correctVoice(page: Page, voice: number, name: string) {
-  await page
-    .getByRole('button', { name: `Corrigir o nome da Voz ${voice}` })
-    .click();
+  const correct = page.getByRole('button', {
+    name: `Corrigir o nome da Voz ${voice}`,
+  });
+  // Mid-screen: a phone's foot bar is fixed over the page's last lines.
+  await correct.evaluate((button) =>
+    button.scrollIntoView({ block: 'center' }),
+  );
+  await correct.click();
   const field = page.getByRole('combobox', { name: `Quem é a Voz ${voice}?` });
   await expect(field).toBeFocused();
   await field.fill(name);
@@ -264,6 +276,8 @@ test('KBC-090: a correction and a refusal reach the published track', async ({
 
   await page.getByRole('button', { name: 'Validar faixas' }).click();
   await expect(page).toHaveURL(/\/faixas$/);
+  // A phone keeps the voices (and their warning) behind one button (KBC-130).
+  await openPhoneTools(page);
   await expect(page.getByText(/Reveja estes títulos/)).toBeVisible();
   await expect(page.getByText(/Alguns títulos podem citar/)).toBeInViewport();
 
@@ -322,6 +336,8 @@ test('KBC-102: the "Reveja" warning goes once the title on screen no longer says
   await expect(warning).toBeVisible();
 
   await trackRow(page, 2).getByRole('button').first().click();
+  // A phone keeps the title in the track's details, opened from its ⋯ (KBC-130).
+  await openPhoneDetails(page);
   const title = page.getByRole('textbox', { name: 'Título' });
   await expect(title).toHaveValue(`Pergunta de ${refused}`);
   await title.fill(`Pergunta da plateia ${tag}`);
@@ -333,6 +349,7 @@ test('KBC-102: the "Reveja" warning goes once the title on screen no longer says
     tracks.some(({ title }) => title === `Pergunta da plateia ${tag}`),
   );
   await page.reload();
+  await openPhoneDetails(page);
   await expect(page.getByRole('textbox', { name: 'Título' })).toBeVisible();
   await expect(warning).toHaveCount(0);
   await owner.dispose();
@@ -384,6 +401,7 @@ test('KBC-090: a voice already accepted is corrected from step 3, and the focus 
   await page.goto(`/midia/${media.id}/preparar`);
   await page.getByRole('button', { name: 'Validar faixas' }).click();
   await expect(page).toHaveURL(/\/faixas$/);
+  await openPhoneTools(page);
 
   const accept = page.getByRole('button', {
     name: `Aceitar ${wrong} para a Voz 1`,
@@ -399,6 +417,8 @@ test('KBC-090: a voice already accepted is corrected from step 3, and the focus 
   const right = `Márcio da Rós ${tag}`;
   await correctVoice(page, 1, right);
   await expect(correction).toBeFocused();
+  // On a phone the track's people wait in its details, opened from its ⋯ (KBC-130).
+  await openPhoneDetails(page);
   await expect(
     page.getByRole('combobox', { name: 'Quem responde' }),
   ).toContainText(right);
@@ -417,6 +437,8 @@ test('KBC-090: the button that plays offers to stop, with nothing moving around 
   const media = await transcribedAudio(owner);
   await page.goto(`/midia/${media.id}/faixas`);
   await page.getByRole('button', { name: 'Nova faixa aqui' }).click();
+  // The listening buttons wait in the track's details, opened from its ⋯ (KBC-130).
+  await trackMenu(page, 'Tipo, nível e texto da faixa');
   const listen = page.getByRole('button', { name: '▶ Ouvir' });
   const end = page.getByRole('button', { name: 'Ouvir o fim' });
   await expect(listen).toBeVisible();
@@ -443,10 +465,12 @@ test('KBC-090: another row selected, the person can still stop, and Space stops'
   const media = await audioWithTracks(owner);
   await page.goto(`/midia/${media.id}/faixas`);
   await trackRow(page, 1).getByRole('button').first().click();
+  await trackMenu(page, 'Tipo, nível e texto da faixa');
   await page.getByRole('button', { name: '▶ Ouvir' }).click();
   await expect(page.getByRole('button', { name: '■ Parar' })).toBeVisible();
 
   await trackRow(page, 2).getByRole('button').first().click();
+  await trackMenu(page, 'Tipo, nível e texto da faixa');
   const stop = page.getByRole('button', { name: '■ Parar o que está tocando' });
   await expect(stop).toBeVisible();
   await trackRow(page, 2).getByRole('button').first().press('Space');

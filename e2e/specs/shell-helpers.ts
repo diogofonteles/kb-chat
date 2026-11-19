@@ -16,13 +16,20 @@ export async function library(page: Page): Promise<Locator> {
   const menu = page.getByRole('dialog', { name: 'Menu' });
   if (await menu.isVisible()) return menu;
   const button = page.getByRole('button', { name: 'Menu', exact: true });
-  // A page under another (the album page, media-list@mobile) has "←" where the avatar is:
-  // the menu is one step back.
-  const back = page.getByRole('link', { name: 'Voltar', exact: true });
-  await expect(button.or(back).first()).toBeVisible();
-  if (await back.isVisible()) {
-    await back.click();
-    await expect(back).toHaveCount(0);
+  // A page under another (the album page, media-list@mobile, the full-screen player) has
+  // "←" where the avatar is: the menu is one step back.
+  const back = page.getByRole('link', {
+    name: /^(Voltar|← Biblioteca|← Mídia)$/,
+  });
+  // The player's "← Mídia" leads to the album page, itself one step under: up to two steps.
+  for (let step = 0; step < 3; step += 1) {
+    await expect(button.or(back).first()).toBeVisible();
+    if (await button.isVisible()) break;
+    const from = page.url();
+    await back.first().click();
+    await expect
+      .poll(async () => (await button.isVisible()) || page.url() !== from)
+      .toBe(true);
   }
   await button.click();
   return menu;
