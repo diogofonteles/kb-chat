@@ -239,3 +239,34 @@ test('KBC-129 AC-3: on a phone, a tap on the mini player opens the full-screen p
     page.getByRole('navigation', { name: 'Navegação' }),
   ).toBeVisible();
 });
+
+test('a very long title stops at three lines in the player header, whole in its name and on hover', async ({
+  page,
+}, info) => {
+  const owner = await ownerApi();
+  const media = await uploadReady(owner, {
+    title: `Uma palestra sobre o caminho espiritual da União do Vegetal e a palavra do Mestre na sessão de escala de março, parte dois, com perguntas ${uniqueTag()}`,
+    seconds: 3,
+  });
+  await owner.dispose();
+  await page.goto(`/midia/${media.id}`);
+  const heading = page.getByRole('heading', { level: 1, name: media.title });
+  await expect(heading).toBeVisible();
+  await expect(heading).toHaveAttribute('title', media.title);
+  const { lines, clipped } = await heading.evaluate((h1) => {
+    const style = getComputedStyle(h1);
+    return {
+      lines: Math.round(h1.clientHeight / parseFloat(style.lineHeight)),
+      // What does not fit ends in "…": a clamp of lines, or one line's ellipsis.
+      clipped:
+        h1.scrollHeight > h1.clientHeight + 1 || h1.scrollWidth > h1.clientWidth
+          ? style.webkitLineClamp !== 'none' ||
+            style.textOverflow === 'ellipsis'
+          : true,
+    };
+  });
+  // v2 · Mídia — Player: the 56 px title in at most three lines beside the cover.
+  expect(lines).toBeLessThanOrEqual(3);
+  expect(clipped).toBe(true);
+  await capture(page, 'player-long-title', info.project.name);
+});

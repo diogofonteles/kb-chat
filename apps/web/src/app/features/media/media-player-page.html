@@ -113,7 +113,9 @@
         } @else {
           <p class="kicker">{{ kicker() }}</p>
         }
-        <h1 id="media-item-title">{{ current.title }}</h1>
+        <h1 id="media-item-title" [title]="current.title">
+          {{ current.title }}
+        </h1>
         <p class="meta">
           @if (current.author; as author) {
             <span

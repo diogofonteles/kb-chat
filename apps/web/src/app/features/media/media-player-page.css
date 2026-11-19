@@ -84,6 +84,13 @@
   line-height: round(1.02em, 1px);
   letter-spacing: -0.04em;
   overflow-wrap: anywhere;
+  /* v2 · Mídia — Player: at most three lines beside the cover, the rest in "…" (the whole
+     title in its name and on hover). */
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 
 .meta {
@@ -581,7 +588,10 @@
   }
 
   .hero h1 {
+    display: block;
     overflow: hidden;
+    -webkit-line-clamp: none;
+    line-clamp: none;
     font-size: 1.375rem;
     font-weight: 700;
     line-height: 1.3;
@@ -697,6 +707,9 @@
   }
 
   .waiting .hero h1 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
     white-space: normal;
   }
 
