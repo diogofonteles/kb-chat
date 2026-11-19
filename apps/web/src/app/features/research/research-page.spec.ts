@@ -189,9 +189,11 @@ describe('ChatPage research view (KBC-008)', () => {
     await switchTo(page, 'Pesquisa com IA');
     await send(page, 'o que é o ritmo?', 'Perguntar');
     await answer(page, 0, 'Tudo flui [1].');
-    fireEvent.click(screen.getByRole('button', { name: 'Criar' }));
-    await page.fixture.whenStable();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Nova conversa' }));
+    fireEvent.click(
+      within(
+        screen.getByRole('complementary', { name: 'Sua biblioteca' }),
+      ).getByRole('button', { name: 'Nova conversa' }),
+    );
     await page.fixture.whenStable();
     expect(screen.queryByText(/Tudo flui/)).toBeNull();
     await switchTo(page, 'Tudo');

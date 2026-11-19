@@ -331,7 +331,7 @@ test('AC-7: "Novo acervo" with no name says why and keeps the dialog open', asyn
   page,
 }) => {
   await page.goto('/');
-  // v2 shell (KBC-125): "+ Criar" › "Novo acervo" in Sua biblioteca, at both widths.
+  // KBC-164: the "+" of the Acervos head in Sua biblioteca, at both widths.
   await startNewCollection(page);
   const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
   await expect(dialog).toBeVisible();

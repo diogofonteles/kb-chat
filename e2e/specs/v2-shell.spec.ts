@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import {
   CSRF,
@@ -314,36 +314,51 @@ async function expectWholeOnTop(page: Page, menuName: string): Promise<void> {
   }
 }
 
-test('D5: "+ Criar", "Recentes" and the avatar menu open whole, over the sidebar, inside the viewport', async ({
+/** The head's line holds "Sua biblioteca" (whole), "+ Nova conversa" and ⤢, none over another. */
+async function expectLibraryHeadWhole(
+  page: Page,
+  side: Locator,
+): Promise<void> {
+  const title = side.getByRole('button', { name: 'Recolher Sua biblioteca' });
+  const head = [
+    title,
+    side.getByRole('button', { name: 'Nova conversa', exact: true }),
+    side.getByRole('button', { name: 'Ampliar Sua biblioteca' }),
+  ];
+  const boxes = await Promise.all(head.map((one) => one.boundingBox()));
+  const aside = await side.boundingBox();
+  const edges = boxes.map((box) => (box ? box.x + box.width : Infinity));
+  expect(boxes.every((box) => box !== null)).toBe(true);
+  expect(Math.max(...edges)).toBeLessThanOrEqual(
+    (aside?.x ?? 0) + (aside?.width ?? 0),
+  );
+  for (const [at, edge] of edges.slice(0, -1).entries())
+    expect(edge).toBeLessThanOrEqual(boxes[at + 1]?.x ?? 0);
+  expect(await title.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
+    true,
+  );
+  await shoot(page, 'shell-library-head');
+}
+
+test('D5: "Recentes" and the avatar menu open whole, over the sidebar, inside the viewport; a conversation and a collection are created apart (KBC-164)', async ({
   page,
 }) => {
   await page.goto('/');
   const side = await library(page);
-  if (desktop(page)) {
-    await side.getByRole('button', { name: 'Criar', exact: true }).click();
-    await expectWholeOnTop(page, 'Criar');
-    await expect(
-      page.getByRole('menuitem', { name: 'Nova conversa' }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('menuitem', { name: 'Novo acervo' }),
-    ).toBeVisible();
-    await shoot(page, 'shell-create-menu');
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('menu', { name: 'Criar' })).toBeHidden();
-    await expect(
-      side.getByRole('button', { name: 'Criar', exact: true }),
-    ).toBeFocused();
-  } else {
-    // v2 "Menu lateral aberto": what "+ Criar" offered is in the Menu's own rows.
-    await expect(
-      side.getByRole('button', { name: 'Criar', exact: true }),
-    ).toHaveCount(0);
-    for (const name of ['Nova conversa', 'Novo acervo'])
-      await expect(
-        side.getByRole('button', { name, exact: true }),
-      ).toBeVisible();
-  }
+  // No "+ Criar" menu (KBC-164): "Nova conversa" is a button of its own, "Novo acervo" the
+  // "+" of the Acervos head, at both widths.
+  await expect(
+    side.getByRole('button', { name: 'Criar', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    side.getByRole('button', { name: 'Nova conversa', exact: true }),
+  ).toBeVisible();
+  await expect(
+    side
+      .getByRole('group', { name: /^Acervos/ })
+      .getByRole('button', { name: 'Novo acervo', exact: true }),
+  ).toBeVisible();
+  if (desktop(page)) await expectLibraryHeadWhole(page, side);
 
   const order = side.getByRole('button', { name: /Ordenar por/ });
   await order.click();
@@ -371,12 +386,12 @@ test('D5: "+ Criar", "Recentes" and the avatar menu open whole, over the sidebar
     await page.getByRole('button', { name: /^Conta de / }).click();
     await expectWholeOnTop(page, 'Conta');
     await page.keyboard.press('Escape');
-    // Collapsed to its covers, the 72 px column still opens the whole "+ Criar" beside it.
+    // Collapsed to its covers, the 72 px column keeps "+ Nova conversa" as its "+".
     await page.getByRole('button', { name: 'Recolher Sua biblioteca' }).click();
-    await side.getByRole('button', { name: 'Criar', exact: true }).click();
-    await expectWholeOnTop(page, 'Criar');
-    await shoot(page, 'shell-create-menu-collapsed');
-    await page.keyboard.press('Escape');
+    await expect(
+      side.getByRole('button', { name: 'Nova conversa', exact: true }),
+    ).toBeVisible();
+    await shoot(page, 'shell-new-conversation-collapsed');
     await page.getByRole('button', { name: 'Expandir Sua biblioteca' }).click();
   }
 });

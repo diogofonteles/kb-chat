@@ -11,6 +11,7 @@ import {
 } from './fixtures.js';
 import {
   activeCollection,
+  chooseCollectionSlug,
   startNewCollection,
   collectionBySlug,
   collectionButtons,
@@ -61,11 +62,19 @@ async function aCreator(page: Page): Promise<Page> {
   return member;
 }
 
+/**
+ * Creates `name` from the Acervos "+" and picks it from the list: creating changes neither
+ * the collection in use nor the conversation (KBC-164 BR-3). Returns how long it took to
+ * appear in the list (NFR-1).
+ */
 async function create(
   page: Page,
   name: string,
   inside?: string,
 ): Promise<number> {
+  const before = await activeCollection(await sidebar(page)).getAttribute(
+    'data-slug',
+  );
   await startNewCollection(page);
   const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
   await dialog.getByRole('textbox', { name: 'Nome' }).fill(name);
@@ -76,13 +85,21 @@ async function create(
   const startedAt = Date.now();
   await dialog.getByRole('button', { name: 'Criar acervo' }).click();
   await expect(dialog).toBeHidden();
-  await expect(activeCollection(await sidebar(page))).toContainText(name);
+  const side = await sidebar(page);
+  const slug = inside ? `${slugOf(inside)}/${slugOf(name)}` : slugOf(name);
+  await expect(collectionBySlug(side, slug)).toBeVisible();
   const took = Date.now() - startedAt;
+  await expect(activeCollection(side)).toHaveAttribute(
+    'data-slug',
+    before ?? '',
+  );
+  await chooseCollectionSlug(page, slug);
+  await expect(activeCollection(await sidebar(page))).toContainText(name);
   if (!desktop(page)) await page.keyboard.press('Escape');
   return took;
 }
 
-test('AC-1, AC-2, NFR-1: a member creates a collection and a sub-collection and opens them at once', async ({
+test('AC-1, AC-2, NFR-1: a member creates a collection and a sub-collection, each in the list at once and in use once picked', async ({
   page,
 }) => {
   const member = await aCreator(page);
@@ -125,7 +142,6 @@ test('AC-7: a name already taken is refused in the dialog', async ({
   const member = await aCreator(page);
   const name = uniqueName('Repetido');
   await create(member, name);
-  // v2 (KBC-125): "+ Criar" › "Novo acervo".
   await startNewCollection(member);
   const dialog = member.getByRole('dialog', { name: 'Novo acervo' });
   await dialog.getByRole('textbox', { name: 'Nome' }).fill(name.toUpperCase());
@@ -155,21 +171,10 @@ test('AC-4: without "Criar acervos" there is no button and the API refuses', asy
   await expect(
     panel.getByRole('button', { name: 'Novo acervo', exact: true }),
   ).toHaveCount(0);
-  // "+ Criar" offers a conversation only (the phone's Menu has its row instead).
-  if (desktop(member)) {
-    await panel.getByRole('button', { name: 'Criar', exact: true }).click();
-    await expect(
-      member.getByRole('menuitem', { name: 'Nova conversa' }),
-    ).toBeVisible();
-    await expect(
-      member.getByRole('menuitem', { name: 'Novo acervo' }),
-    ).toHaveCount(0);
-    await member.keyboard.press('Escape');
-  } else {
-    await expect(
-      panel.getByRole('button', { name: 'Nova conversa', exact: true }),
-    ).toBeVisible();
-  }
+  // A conversation is still one button away (KBC-164 FR-1).
+  await expect(
+    panel.getByRole('button', { name: 'Nova conversa', exact: true }),
+  ).toBeVisible();
   const refused = await member.request.post('/api/v1/topics', {
     headers: CSRF,
     data: { title: 'Proibido' },
@@ -219,22 +224,12 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     );
     await page.goto('/');
     const panel = await sidebar(page);
-    // v2 (KBC-125): "+ Criar" › "Novo acervo" on desktop, the Menu's entry on a phone.
-    const opener = desktop(page)
-      ? panel.getByRole('button', { name: 'Criar', exact: true })
-      : panel.getByRole('button', { name: 'Novo acervo', exact: true });
+    // KBC-164: the "+" of the Acervos head, at both widths.
+    const opener = panel
+      .getByRole('group', { name: /^Acervos/ })
+      .getByRole('button', { name: 'Novo acervo', exact: true });
     await opener.focus();
     await page.keyboard.press('Enter');
-    if (desktop(page)) {
-      await expect(
-        page.getByRole('menuitem', { name: 'Nova conversa' }),
-      ).toBeFocused();
-      await page.keyboard.press('ArrowDown');
-      await expect(
-        page.getByRole('menuitem', { name: 'Novo acervo' }),
-      ).toBeFocused();
-      await page.keyboard.press('Enter');
-    }
     const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
     await expect(dialog.getByRole('textbox', { name: 'Nome' })).toBeFocused();
     await page.keyboard.type('Teclado');
