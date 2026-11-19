@@ -289,3 +289,50 @@ code {
   font-size: 1.125rem;
   letter-spacing: 0;
 }
+
+/* v2 · Acessos à sua conta (desktop): 14 from the lead to the head, the rows of 58 right under
+   its line; the name 14 in 700, the time without tabular figures, the reason 13/16. */
+@media (min-width: 1024px) {
+  :host {
+    gap: 0.875rem;
+  }
+
+  .table-head:not(.audit-cols) + .list {
+    margin-top: -0.875rem;
+  }
+
+  .row.access {
+    min-height: 3.625rem;
+  }
+
+  .access .who strong {
+    font-size: var(--text-sm);
+  }
+
+  .access .when {
+    font-variant-numeric: normal;
+  }
+
+  .access p {
+    line-height: 1rem;
+  }
+}
+
+/* The empty state's eye 28 in its 64 circle (v2 · Acessos, vazio). */
+:host ::ng-deep .ui-empty__icon svg {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+@media (max-width: 1023px) {
+  /* "Motivo: …" one text under the name and the time (the row's p is a flex line elsewhere). */
+  .row .reason {
+    display: block;
+    font-size: var(--text-sm);
+    line-height: 1.0625rem;
+  }
+
+  .access .when {
+    font-variant-numeric: normal;
+  }
+}

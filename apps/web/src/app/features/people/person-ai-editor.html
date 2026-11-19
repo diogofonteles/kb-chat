@@ -10,22 +10,22 @@
     <span class="row-value" aria-hidden="true">{{ chosenLabel() }}</span>
     <ui-icon class="row-chevron" name="chevRight" [size]="20" />
     <label>
-    <span i18n="@@personAi.which">Qual IA atende esta pessoa</span>
-    <select
-      #appAiSelect
-      class="select"
-      [attr.aria-describedby]="
-        unavailableNote() ? 'lend-unavailable-person' : null
-      "
-      (change)="chooseAppAi(appAiSelect.value)"
-    >
-      @for (option of options(); track option.id) {
-        <option [value]="option.id" [selected]="option.id === current.appAi">
-          {{ option.label }}
-        </option>
-      }
-    </select>
-  </label>
+      <span i18n="@@personAi.which">Qual IA atende esta pessoa</span>
+      <select
+        #appAiSelect
+        class="select"
+        [attr.aria-describedby]="
+          unavailableNote() ? 'lend-unavailable-person' : null
+        "
+        (change)="chooseAppAi(appAiSelect.value)"
+      >
+        @for (option of options(); track option.id) {
+          <option [value]="option.id" [selected]="option.id === current.appAi">
+            {{ option.label }}
+          </option>
+        }
+      </select>
+    </label>
   </div>
   @if (unavailableNote(); as note) {
     <p id="lend-unavailable-person" class="hint">{{ note }}</p>

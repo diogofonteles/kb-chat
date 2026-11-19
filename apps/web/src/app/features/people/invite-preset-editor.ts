@@ -271,7 +271,8 @@ export class InvitePresetEditor {
     );
     return {
       topic: topic ? treeTitle(topic) : none,
-      view: this.views.find((one) => one.id === prefs.defaultView)?.label ?? none,
+      view:
+        this.views.find((one) => one.id === prefs.defaultView)?.label ?? none,
       profile:
         this.profiles.find((one) => one.id === prefs.researchProfile)?.label ??
         none,

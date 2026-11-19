@@ -544,7 +544,9 @@ export class SettingsPage {
     // From the page's top, a section whose title already shows in the upper half stays where
     // it is (v2 · Sua IA: the page's title, Conta, then Sua IA, marked in the index).
     if (host.scrollTop === 0 && offset < host.clientHeight / 2) return;
-    host.scrollTo({ top: host.scrollTop + offset - SECTION_GAP });
+    // The "Você" frames (Preferências, Acessos à sua conta) draw their title 8 higher (134).
+    const lift = target === 'preferences' || target === 'accesses' ? 8 : 0;
+    host.scrollTo({ top: host.scrollTop + offset - SECTION_GAP + lift });
   }
 
   /**

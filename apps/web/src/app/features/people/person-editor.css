@@ -16,7 +16,6 @@
   .panel {
     padding-top: 1.75rem;
   }
-
 }
 
 .note {
@@ -553,7 +552,6 @@ button:disabled {
   .foot-start:empty {
     display: none;
   }
-
 }
 
 .panel[hidden] {
@@ -698,7 +696,6 @@ input.input {
 .ai-tab > .field:first-of-type + .hint {
   margin-top: 1.375rem;
 }
-
 
 .ai-tab .field > .select,
 .ai-tab .field > label > .select {

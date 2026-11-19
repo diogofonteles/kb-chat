@@ -190,27 +190,25 @@
 >
   <!-- v2 · IA e limites: each line a label at the left and its control at the right. -->
   <fieldset class="group ai-tab" [disabled]="busy()">
-    <legend class="visually-hidden" i18n="@@preset.ai">
-      IA da aplicação
-    </legend>
+    <legend class="visually-hidden" i18n="@@preset.ai">IA da aplicação</legend>
     <div class="field which">
       <span class="row-value" aria-hidden="true">{{ appAiWords() }}</span>
       <ui-icon class="row-chevron" name="chevRight" [size]="20" />
       <label>
-      <span i18n="@@preset.appAi">Qual IA atende a pessoa</span>
-      <select
-        #appAiSelect
-        class="select"
-        [attr.aria-describedby]="appAiDescribedBy()"
-        (change)="chooseAppAi(appAiSelect.value)"
-      >
-        @for (option of appAis(); track option.id) {
-          <option [value]="option.id" [selected]="option.id === shownAppAi()">
-            {{ option.label }}
-          </option>
-        }
-      </select>
-    </label>
+        <span i18n="@@preset.appAi">Qual IA atende a pessoa</span>
+        <select
+          #appAiSelect
+          class="select"
+          [attr.aria-describedby]="appAiDescribedBy()"
+          (change)="chooseAppAi(appAiSelect.value)"
+        >
+          @for (option of appAis(); track option.id) {
+            <option [value]="option.id" [selected]="option.id === shownAppAi()">
+              {{ option.label }}
+            </option>
+          }
+        </select>
+      </label>
     </div>
     @if (canLend()) {
       <p [id]="uid + '-ai-hint'" class="hint" i18n="@@preset.aiHintOwner">
@@ -367,33 +365,35 @@
     <!-- The hint and the notice stay with their field, apart from the next one. -->
     <div class="field-with-notes">
       <div class="field pref">
-        <span class="row-value" aria-hidden="true">{{ prefWords().topic }}</span>
+        <span class="row-value" aria-hidden="true">{{
+          prefWords().topic
+        }}</span>
         <ui-icon class="row-chevron" name="chevRight" [size]="20" />
         <label>
-        <span i18n="@@preset.defaultTopic">Acervo padrão</span>
-        <select
-          #topicSelect
-          class="select"
-          [attr.aria-describedby]="defaultTopicDescribedBy()"
-          (change)="setDefaultTopic(topicSelect.value)"
-        >
-          <option
-            value=""
-            [selected]="!current.preferences.defaultTopic"
-            i18n="@@preset.noPreference"
+          <span i18n="@@preset.defaultTopic">Acervo padrão</span>
+          <select
+            #topicSelect
+            class="select"
+            [attr.aria-describedby]="defaultTopicDescribedBy()"
+            (change)="setDefaultTopic(topicSelect.value)"
           >
-            Sem preferência
-          </option>
-          @for (topic of defaultTopics(); track topic.slug) {
             <option
-              [value]="topic.slug"
-              [selected]="topic.slug === current.preferences.defaultTopic"
+              value=""
+              [selected]="!current.preferences.defaultTopic"
+              i18n="@@preset.noPreference"
             >
-              {{ treeTitle(topic) }}
+              Sem preferência
             </option>
-          }
-        </select>
-      </label>
+            @for (topic of defaultTopics(); track topic.slug) {
+              <option
+                [value]="topic.slug"
+                [selected]="topic.slug === current.preferences.defaultTopic"
+              >
+                {{ treeTitle(topic) }}
+              </option>
+            }
+          </select>
+        </label>
       </div>
       @if (needsCollection()) {
         <p
@@ -418,67 +418,69 @@
       <span class="row-value" aria-hidden="true">{{ prefWords().view }}</span>
       <ui-icon class="row-chevron" name="chevRight" [size]="20" />
       <label>
-      <span i18n="@@preset.defaultView">Visão inicial</span>
-      <select
-        #viewSelect
-        class="select"
-        (change)="setDefaultView(viewSelect.value)"
-      >
-        <option value="" i18n="@@preset.noPreference">Sem preferência</option>
-        @for (view of views; track view.id) {
-          <option
-            [value]="view.id"
-            [selected]="view.id === current.preferences.defaultView"
-          >
-            {{ view.label }}
-          </option>
-        }
-      </select>
-    </label>
+        <span i18n="@@preset.defaultView">Visão inicial</span>
+        <select
+          #viewSelect
+          class="select"
+          (change)="setDefaultView(viewSelect.value)"
+        >
+          <option value="" i18n="@@preset.noPreference">Sem preferência</option>
+          @for (view of views; track view.id) {
+            <option
+              [value]="view.id"
+              [selected]="view.id === current.preferences.defaultView"
+            >
+              {{ view.label }}
+            </option>
+          }
+        </select>
+      </label>
     </div>
     <div class="field pref">
-      <span class="row-value" aria-hidden="true">{{ prefWords().profile }}</span>
+      <span class="row-value" aria-hidden="true">{{
+        prefWords().profile
+      }}</span>
       <ui-icon class="row-chevron" name="chevRight" [size]="20" />
       <label>
-      <span i18n="@@preset.researchProfile">Perfil de pesquisa</span>
-      <select
-        #profileSelect
-        class="select"
-        (change)="setResearchProfile(profileSelect.value)"
-      >
-        <option value="" i18n="@@preset.noPreference">Sem preferência</option>
-        @for (profile of profiles; track profile.id) {
-          <option
-            [value]="profile.id"
-            [selected]="profile.id === current.preferences.researchProfile"
-          >
-            {{ profile.label }}
-          </option>
-        }
-      </select>
-    </label>
+        <span i18n="@@preset.researchProfile">Perfil de pesquisa</span>
+        <select
+          #profileSelect
+          class="select"
+          (change)="setResearchProfile(profileSelect.value)"
+        >
+          <option value="" i18n="@@preset.noPreference">Sem preferência</option>
+          @for (profile of profiles; track profile.id) {
+            <option
+              [value]="profile.id"
+              [selected]="profile.id === current.preferences.researchProfile"
+            >
+              {{ profile.label }}
+            </option>
+          }
+        </select>
+      </label>
     </div>
     <div class="field pref">
       <span class="row-value" aria-hidden="true">{{ prefWords().theme }}</span>
       <ui-icon class="row-chevron" name="chevRight" [size]="20" />
       <label>
-      <span i18n="@@preset.theme">Tema</span>
-      <select
-        #themeSelect
-        class="select"
-        (change)="setTheme(themeSelect.value)"
-      >
-        <option value="" i18n="@@preset.noPreference">Sem preferência</option>
-        @for (theme of themes; track theme.id) {
-          <option
-            [value]="theme.id"
-            [selected]="theme.id === current.preferences.theme"
-          >
-            {{ theme.label }}
-          </option>
-        }
-      </select>
-    </label>
+        <span i18n="@@preset.theme">Tema</span>
+        <select
+          #themeSelect
+          class="select"
+          (change)="setTheme(themeSelect.value)"
+        >
+          <option value="" i18n="@@preset.noPreference">Sem preferência</option>
+          @for (theme of themes; track theme.id) {
+            <option
+              [value]="theme.id"
+              [selected]="theme.id === current.preferences.theme"
+            >
+              {{ theme.label }}
+            </option>
+          }
+        </select>
+      </label>
     </div>
   </fieldset>
 </div>

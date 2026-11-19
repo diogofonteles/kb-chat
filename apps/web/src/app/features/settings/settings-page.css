@@ -226,6 +226,13 @@
   align-content: start;
 }
 
+/* Acessos right over Sobre (a member's page: Conta, Sua IA, Preferências, Acessos, Sobre): the
+   frame draws Sobre under it, so it keeps its own height (Sobre, the last, still fills). */
+.layout
+  .section[data-section='accesses']:has(+ .section[data-section='about']) {
+  min-height: 0;
+}
+
 /* The title and, for Sua IA on the application's AI, its pill 10 after it (v2). */
 .section-head {
   display: flex;
@@ -358,6 +365,22 @@
   justify-self: start;
 }
 
+/* v2 · Sobre: each card as tall as its words, the icon at its start; "Rever o assistente de
+   início" the frame's outline 36 (14 px, 20 a side). */
+.about {
+  align-items: start;
+}
+
+.about-card ui-icon {
+  justify-self: start;
+}
+
+.wizard.ui-btn {
+  min-height: 2.25rem;
+  padding: 0 var(--space-5);
+  font-size: var(--text-sm);
+}
+
 /* ---------- Phone: the root and the pushed screens ---------- */
 .root,
 .screen {
@@ -479,6 +502,14 @@
   border: 0;
 }
 
+/* Preferências' first group 24 under the section's title (desktop, v2 · Preferências). */
+.layout
+  .section[data-section='preferences']
+  > .section-head
+  + app-preferences-form {
+  margin-top: 0.625rem;
+}
+
 /* Preferências' first title 24 under who answers (a member's card), 26 under a phone's header
    (v2 · Preferências). */
 app-ai-status-card + app-preferences-form,
@@ -488,7 +519,9 @@ app-ai-status-card + app-preferences-form,
 
 /* Sua IA's and Preferências' screens start 16 under the header (v2, celular: 110 from the top). */
 .screen .section[data-section='ai'],
-.screen .section[data-section='preferences'] {
+.screen .section[data-section='preferences'],
+.screen .section[data-section='accesses'],
+.screen .section[data-section='about'] {
   padding-top: var(--space-4);
 }
 

@@ -1365,9 +1365,9 @@ describe('PeoplePanel: a phone selects with a long press (v2 · Pessoas, celular
     await fixture.whenStable();
     expect(box().checked).toBe(true);
     expect(guest.getAttribute('aria-expanded')).toBe('false');
-    expect(
-      screen.getByRole('list', { name: 'Pessoas' }).classList,
-    ).toContain('selecting');
+    expect(screen.getByRole('list', { name: 'Pessoas' }).classList).toContain(
+      'selecting',
+    );
 
     // During the selection a tap picks or unpicks; it opens no editor.
     fireEvent.click(guest);
@@ -1380,7 +1380,10 @@ describe('PeoplePanel: a phone selects with a long press (v2 · Pessoas, celular
     asPhone(false);
     const { fixture } = await renderPanel();
     const guest = row(/Guest/);
-    const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    const menu = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+    });
     guest.dispatchEvent(menu);
     await fixture.whenStable();
     expect(menu.defaultPrevented).toBe(false);
