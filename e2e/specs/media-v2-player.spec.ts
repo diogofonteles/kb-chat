@@ -49,8 +49,10 @@ test('KBC-129 AC-6: "Meus marcadores" and the queue show their v2 states and pas
     page.getByRole('heading', { name: 'Meus marcadores' }),
   ).toBeVisible();
   // The summary shows once: the header's on a desktop, the phone's under the title.
+  // The page's own summary: Sua biblioteca's "Lista · N marcadores" is another place.
   await expect(
     page
+      .getByRole('main')
       .getByText(/\d+ marcador|Nenhum marcador ainda/)
       .and(page.locator(':visible')),
   ).toBeVisible();

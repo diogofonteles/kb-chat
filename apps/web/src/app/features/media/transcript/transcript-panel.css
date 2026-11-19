@@ -466,6 +466,7 @@
 
   :host(.in-player.expanded) .list-box {
     height: 60dvh;
+    max-height: none;
   }
 
   /* The lines take the card's whole width (pMobile): no scrollbar gutter beside them. */

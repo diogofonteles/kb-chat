@@ -54,7 +54,12 @@ async function addLevel(page: Page, code: string): Promise<void> {
 }
 
 async function searchFor(page: Page, words: string): Promise<void> {
-  const box = page.getByLabel('Sua pergunta');
+  // A desktop search page has no question box (v2 · chat-results): its field is the top
+  // bar's, which searches the collection in use the same way.
+  const question = page.getByLabel('Sua pergunta');
+  const top = page.getByRole('searchbox', { name: 'Buscar no acervo em uso' });
+  await expect(question.or(top).first()).toBeVisible();
+  const box = (await question.isVisible()) ? question : top;
   await box.fill(words);
   await box.press('Enter');
 }

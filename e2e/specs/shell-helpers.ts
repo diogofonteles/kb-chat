@@ -173,6 +173,12 @@ export async function openMediaFromLibrary(
   // The audio rule settles once the collection's media list has answered.
   await page.waitForLoadState('networkidle');
   const pinned = side.getByRole('link', { name, exact: true });
+  // Under load the collection's media list can answer after the network went quiet: a
+  // collection with audio pins its link within moments; only then is "+ Criar" the way.
+  await pinned
+    .first()
+    .waitFor({ timeout: 5_000 })
+    .catch(() => undefined);
   if ((await pinned.count()) > 0) {
     await pinned.click();
     return;
