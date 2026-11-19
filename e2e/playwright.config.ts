@@ -15,7 +15,7 @@ const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
 /** The media specs: they need a browser that plays AAC (see the media projects). */
 const MEDIA_SPECS = /media-.*\.spec\.ts$/;
 /** The specs that also run in WebKit at both widths (with KBC_E2E_WEBKIT=1, and in CI). */
-const WEBKIT_SPECS = /v2-shell-works\.spec\.ts$/;
+const WEBKIT_SPECS = /(v2-shell-works|new-conversation-home)\.spec\.ts$/;
 /** v2 · Conversa's controls and scroll, also run in WebKit (see the chat-webkit projects). */
 const CHAT_WEBKIT_SPECS = /(v2-chat-interactions|content-scroll)\.spec\.ts$/;
 /** content-scroll's pages of other areas (Configurações, Biblioteca, catalog) stay out. */
