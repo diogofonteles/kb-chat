@@ -26,6 +26,8 @@ interface World {
   readonly inHermes: UploadedMedia;
   readonly inUdv: UploadedMedia;
   readonly inPalavra: UploadedMedia;
+  /** Hermes's audio held in processing: its transcription waits for a transcriber. */
+  readonly heldInHermes: UploadedMedia;
 }
 
 let world: World;
@@ -50,7 +52,7 @@ test.beforeAll(async () => {
   const hermes = await created(api, `Zz Hermes ${tag}`);
   const udv = await created(api, `Zz UDV ${tag}`);
   const palavra = await created(api, `Palavra ${tag}`, udv);
-  const [inHermes, inUdv, inPalavra] = await Promise.all([
+  const [inHermes, inUdv, inPalavra, heldInHermes] = await Promise.all([
     uploadReady(api, {
       title: `Aula hermética ${tag}`,
       seconds: 3,
@@ -62,10 +64,67 @@ test.beforeAll(async () => {
       seconds: 3,
       topic: encodeURIComponent(palavra),
     }),
+    uploadReady(api, {
+      title: `Em processamento ${tag}`,
+      seconds: 3,
+      topic: hermes,
+    }),
   ]);
-  world = { hermes, udv, palavra, inHermes, inUdv, inPalavra };
+  await holdInProcessing(api, heldInHermes.id);
+  world = { hermes, udv, palavra, inHermes, inUdv, inPalavra, heldInHermes };
   await api.dispose();
 });
+
+/**
+ * A plan that transcribes: the E2E server has no transcriber, so the audio stays in line
+ * ("next") for as long as the test runs, as the queue's own specs hold theirs.
+ */
+async function holdInProcessing(
+  api: Awaited<ReturnType<typeof ownerApi>>,
+  mediaId: string,
+): Promise<void> {
+  const started = await api.post(`/api/v1/media/${mediaId}/preparation`, {
+    data: {
+      plan: {
+        transcribe: true,
+        speakers: false,
+        tracks: 'none',
+        subjects: false,
+      },
+    },
+    headers: CSRF,
+  });
+  expect(started.status(), await started.text()).toBe(200);
+  await expect
+    .poll(async () => {
+      const queue = (await (
+        await api.get('/api/v1/media/processing')
+      ).json()) as { items: { mediaId: string; phase: string }[] };
+      return queue.items.find((item) => item.mediaId === mediaId)?.phase;
+    })
+    .toMatch(/^(running|next)$/);
+}
+
+/** How many audios of these collections the server has at work or in line. */
+async function atWorkIn(topics: readonly string[]): Promise<number> {
+  const api = await ownerApi();
+  const queue = (await (await api.get('/api/v1/media/processing')).json()) as {
+    items: { topic: string; phase: string }[];
+  };
+  await api.dispose();
+  return queue.items.filter(
+    ({ topic, phase }) =>
+      topics.includes(topic) && (phase === 'running' || phase === 'next'),
+  ).length;
+}
+
+/** The queue's block on the library: its title on a desktop, its one card on a phone. */
+const queueBlock = (page: Page): Locator =>
+  page.locator('app-library-page app-queue-summary');
+const queueCount = (page: Page): Locator =>
+  desktop(page)
+    ? queueBlock(page).getByRole('heading', { level: 3 })
+    : queueBlock(page).locator('.phone-card .name');
 
 const list = (page: Page): Locator =>
   page.getByRole('region', { name: 'Todas' });
@@ -192,4 +251,36 @@ test('a top-level collection is never drawn as a sub-collection of UDV', async (
     side.locator('ul.children').locator(`[data-slug="${hermes}"]`),
   ).toHaveCount(0);
   await closeMenu(page);
+});
+
+test("the library's queue block keeps to its collection: Hermes's audio in processing never shows, nor counts, in UDV's", async ({
+  page,
+}) => {
+  const { hermes, udv, palavra, heldInHermes } = world;
+  await page.goto('/');
+  await chooseCollectionSlug(page, hermes);
+  await openMediaFromLibrary(page, 'Biblioteca');
+  // Positive control: Hermes's library has it in its block, counted with Hermes's own.
+  const inHermes = await atWorkIn([hermes]);
+  expect(inHermes).toBeGreaterThanOrEqual(1);
+  await expect(queueBlock(page)).toContainText(heldInHermes.title);
+  await expect(queueCount(page)).toHaveText(
+    inHermes === 1
+      ? '1 áudio em processamento'
+      : `${inHermes} áudios em processamento`,
+  );
+
+  await chooseCollectionSlug(page, udv);
+  await expect(page).toHaveURL(/\/biblioteca(\?|$)/);
+  await expect(scopeName(page, /^Zz UDV /)).toHaveText(/^Zz UDV /);
+  // UDV's (and its sub-collection's) audios are still waiting for the transcriber here, so
+  // the block stays, counting only them: never Hermes's audio.
+  const inUdv = await atWorkIn([udv, palavra]);
+  expect(inUdv).toBeGreaterThanOrEqual(1);
+  await expect(queueCount(page)).toHaveText(
+    inUdv === 1
+      ? '1 áudio em processamento'
+      : `${inUdv} áudios em processamento`,
+  );
+  await expect(queueBlock(page)).not.toContainText(heldInHermes.title);
 });
