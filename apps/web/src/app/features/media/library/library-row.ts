@@ -164,6 +164,13 @@ export class LibraryRow {
   });
   protected readonly tracksId = computed(() => `tracks-${this.item().id}`);
   protected readonly ready = computed(() => this.item().status === 'ready');
+  /**
+   * A box for the ready ones and for a file that failed (media-library-selection@mobile): a
+   * failed one, chosen, is removed from the selection's bar.
+   */
+  protected readonly selectable = computed(
+    () => this.ready() || this.item().status === 'failed',
+  );
   protected readonly duration = computed(() => {
     const ms = this.item().durationMs;
     // v2 · media-library: "—" where the length is not known (a file that failed).
@@ -247,7 +254,7 @@ export class LibraryRow {
   protected pressStarted(event: PointerEvent): void {
     this.pressEnded();
     this.pressedLong = false;
-    if (!this.phone() || !this.ready() || event.button !== 0) return;
+    if (!this.phone() || !this.selectable() || event.button !== 0) return;
     // Not from the row's own controls: the ⋯, ▶, the box and the chevron keep their tap.
     if (onControl(event)) return;
     this.press = {
@@ -278,7 +285,7 @@ export class LibraryRow {
 
   /** The context menu on a phone's row selects it (no browser menu over the row). */
   protected contextMenu(event: MouseEvent): void {
-    if (!this.phone() || !this.ready() || onControl(event)) return;
+    if (!this.phone() || !this.selectable() || onControl(event)) return;
     event.preventDefault();
     if (this.pressedLong) return;
     this.pressEnded();

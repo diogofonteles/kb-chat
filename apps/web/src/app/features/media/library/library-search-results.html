@@ -62,10 +62,12 @@
         Nada encontrado para “{{ query().trim() }}”
       </p>
       @if (searchesSpeech()) {
-        <p class="hint" i18n="@@library.searchEmptyHint">
-          <span class="hint-where"
-            >Procuramos na fala, no título, no autor e nos assuntos.
-          </span>
+        <!-- Each width says it as its frame does: media-library-search-empty and its @mobile. -->
+        <p class="hint wide" i18n="@@library.searchEmptyHintWide">
+          Procuramos na fala, no título, no autor e nos assuntos. Na fala a
+          busca é por palavra inteira: confira a escrita ou tente outra palavra.
+        </p>
+        <p class="hint narrow" i18n="@@library.searchEmptyHint">
           Na fala, a busca é por palavra inteira: confira a escrita ou tente
           outra palavra.
         </p>

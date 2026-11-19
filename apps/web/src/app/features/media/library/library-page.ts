@@ -81,6 +81,7 @@ import {
   concatMap,
   debounceTime,
   filter,
+  forkJoin,
   map,
   of,
   pairwise,
@@ -633,8 +634,31 @@ export class LibraryPage {
     effect(() => root.toggleAttribute('data-choosing', this.selecting()));
     this.destroyRef.onDestroy(() => root.removeAttribute('data-choosing'));
   }
+  /** The ready ones and the files that failed (media-library-selection@mobile). */
   protected readonly selectable = computed(() =>
-    this.items().filter((item) => item.status === 'ready'),
+    this.items().filter(
+      (item) => item.status === 'ready' || item.status === 'failed',
+    ),
+  );
+  private readonly selectedItems = computed(() =>
+    this.items().filter((item) => this.selected().has(item.id)),
+  );
+  /** What "Marcar como (não) ouvida" acts on: a failed file has nothing to hear. */
+  protected readonly selectedReady = computed(() =>
+    this.selectedItems().filter((item) => item.status === 'ready'),
+  );
+  /** Only files that failed are chosen: a master removes them from the bar. */
+  protected readonly selectedFailedOnly = computed(() => {
+    const chosen = this.selectedItems();
+    return (
+      chosen.length > 0 && chosen.every((item) => item.status === 'failed')
+    );
+  });
+  /** Several failed files removed at once, from the selection's bar. */
+  protected readonly removingMany = signal<readonly LibraryItem[]>([]);
+  protected readonly removingManyTitle = computed(
+    () =>
+      $localize`:@@library.removeManyTitle:Remover ${this.removingMany().length}:count: áudios?`,
   );
   protected readonly allSelected = computed(
     () =>
@@ -1158,7 +1182,19 @@ export class LibraryPage {
   }
 
   protected markSelected(played: boolean): void {
-    this.mark([...this.selected()], played);
+    this.mark(
+      this.selectedReady().map((item) => item.id),
+      played,
+    );
+  }
+
+  /** "Remover" on the bar: the chosen files that failed, after the same confirmation. */
+  protected removeSelected(): void {
+    const chosen = this.selectedItems();
+    const first = chosen[0];
+    if (!first || !this.selectedFailedOnly()) return;
+    this.removingMany.set(chosen);
+    this.askRemove(first);
   }
 
   protected rowAction(item: LibraryItem, action: RowAction): void {
@@ -1384,9 +1420,14 @@ export class LibraryPage {
 
   protected confirmRemove(): void {
     const item = this.removing();
+    const many = this.removingMany();
     const cascade = this.removingTracks() !== null;
     this.removeDialog()?.nativeElement.close();
     if (!item) return;
+    if (many.length > 0) {
+      this.removeMany(many);
+      return;
+    }
     this.mediaApi
       .remove(item.id, { cascade })
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -1399,6 +1440,30 @@ export class LibraryPage {
           this.heading().nativeElement.focus();
         },
         error: (err: unknown) => this.removeRefused(item, err),
+      });
+  }
+
+  /** The bar's failed files, one request each; the list comes back either way. */
+  private removeMany(items: readonly LibraryItem[]): void {
+    forkJoin(
+      items.map((one) => this.mediaApi.remove(one.id, { cascade: false })),
+    )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.selected.set(new Set());
+          this.reload();
+          this.announcement.set(
+            items.length === 1
+              ? $localize`:@@media.removedAnnouncement:${items[0]?.title}:title: foi removido.`
+              : $localize`:@@library.removedManyAnnouncement:${items.length}:count: áudios foram removidos.`,
+          );
+          this.heading().nativeElement.focus();
+        },
+        error: (err: unknown) => {
+          this.reload();
+          this.actionError.set(errorMessage(toUiErrorCode(err)));
+        },
       });
   }
 
@@ -1420,6 +1485,7 @@ export class LibraryPage {
 
   protected removeClosed(): void {
     this.removing.set(null);
+    this.removingMany.set([]);
     this.removingTracks.set(null);
   }
 

@@ -810,9 +810,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    /* Its 44 targets overflow the frame's row (the order 21 under the card, the first
-       cover 27 under the order's middle): the column's gaps are taken back. */
-    margin: calc(-1 * var(--space-3)) 0 calc(-0.8125rem);
+    /* Its 44 targets overflow the frame's row (the order 21 under the card, the first row
+       18 under the order's foot): the column's gaps are taken back. */
+    margin: calc(-1 * var(--space-3)) 0 calc(-0.875rem);
   }
 
   .phone-view {
@@ -825,9 +825,9 @@
     min-height: var(--target);
   }
 
-  /* Two covers a row, right under the order's row (media-library-grid@mobile). */
+  /* Two covers a row of 171, 12 apart, right under the order's row (media-library-grid@mobile). */
   .grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 10.6875rem));
     gap: var(--space-3);
     margin-top: 0;
     margin-left: 0;
@@ -1009,5 +1009,12 @@
   /* The count's own room, as drawn (137 for "2 selecionadas"), so the bar does not jump. */
   .selection-count {
     min-width: 8.5625rem;
+  }
+}
+
+/* A tablet's grid: as many 171 covers as fit (the phone's two, media-library-grid@mobile). */
+@media (min-width: 600px) and (max-width: 1023px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, 10.6875rem);
   }
 }

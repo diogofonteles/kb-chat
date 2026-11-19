@@ -495,13 +495,37 @@ app-menu-button {
     grid-template-areas:
       'lead art title actions'
       'lead art cells actions';
+    /* The title and its line centred in the 64 row, 4 apart: a line with a pill is taller and
+       lifts the title, as mRow draws it (media-library-selection@mobile). What spans both
+       lines (the box, the cover, the row's end) gives up its height to them (the margins
+       below) and is centred over them. */
+    align-content: center;
     column-gap: 0;
+    row-gap: 0;
     min-height: 4rem;
     padding: 0;
   }
 
   .art {
     justify-self: start;
+  }
+
+  .lead,
+  .art,
+  :host > .actions,
+  .end {
+    align-self: center;
+    margin-block: -1rem;
+  }
+
+  .title {
+    padding-top: 0;
+    line-height: 1.125rem;
+  }
+
+  .cells {
+    margin-top: var(--space-1);
+    line-height: 1rem;
   }
 
   /* A chosen row is a band from edge to edge of the screen (media-library-selection@mobile). */
@@ -626,10 +650,6 @@ app-menu-button {
     opacity: 0;
   }
 
-  .title {
-    padding-top: var(--space-1);
-  }
-
   /* One line under the title: status, author · length · collection, cut at the end
      rather than wrapped, so the row keeps the frame's 64 px. */
   .cells {
@@ -640,7 +660,6 @@ app-menu-button {
     align-items: center;
     gap: 0 var(--space-2);
     min-width: 0;
-    padding-bottom: var(--space-1);
     overflow: hidden;
     white-space: nowrap;
   }

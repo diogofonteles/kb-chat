@@ -105,6 +105,10 @@
   line-height: 1.125rem;
 }
 
+.hint.narrow {
+  display: none;
+}
+
 .empty > :is(button, a):last-child {
   margin-top: var(--space-3);
 }
@@ -212,8 +216,21 @@
   }
 
   /* The phone's empty state keeps the advice only (media-library-search-empty@mobile). */
-  .hint-where {
+  .hint.wide {
     display: none;
+  }
+
+  .hint.narrow {
+    display: block;
+  }
+
+  /* The way out 12 under the words, 40 tall, as emptyM draws it. */
+  .actions {
+    margin-top: 0;
+  }
+
+  .actions > button {
+    min-height: 2.5rem;
   }
 
   /* The phone's head is the count alone (media-library-search@mobile); where it looked stays

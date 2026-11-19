@@ -4,7 +4,7 @@
   } @else if (position()) {
     <span class="number" aria-hidden="true">{{ position() }}</span>
   }
-  @if (ready()) {
+  @if (selectable()) {
     <input
       type="checkbox"
       class="select ui-check"
