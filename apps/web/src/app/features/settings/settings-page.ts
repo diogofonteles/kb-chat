@@ -17,7 +17,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import type { Preferences } from '@kb-chat/contracts';
+import type { AiProvider, Preferences } from '@kb-chat/contracts';
 import { map } from 'rxjs';
 import { GoogleIdentity } from '@core/auth/google-identity.js';
 import { SessionStore } from '@core/auth/session-store.js';
@@ -37,8 +37,10 @@ import {
   UiButton,
   UiIcon,
   UiIconButton,
+  UiPill,
 } from '@ui/index.js';
 import { AiProviderForm } from './ai-provider-form.js';
+import { rootSummaries } from './root-summaries.js';
 import {
   aiDraftFrom,
   aiUpdateFrom,
@@ -116,6 +118,8 @@ const EDIT_EVENTS = ['input', 'change', 'pointerdown', 'keydown'];
  * every section one after the other; scrolling marks the section in the index and the
  * address. On a phone, the root lists the groups and each section is a pushed screen.
  */
+const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
+
 @Component({
   selector: 'app-settings-page',
   imports: [
@@ -139,6 +143,7 @@ const EDIT_EVENTS = ['input', 'change', 'pointerdown', 'keydown'];
     UiButton,
     UiIcon,
     UiIconButton,
+    UiPill,
   ],
   templateUrl: './settings-page.html',
   styleUrl: './settings-page.css',
@@ -194,6 +199,13 @@ export class SettingsPage {
     const entry = sectionBySlug(this.routeSlug());
     return this.items().find((item) => item.id === entry?.id) ?? null;
   });
+  /** The phone root's lines that need a section's own data, read only while the root shows. */
+  private readonly rootLines = rootSummaries(
+    (id) =>
+      this.phone() &&
+      this.requested() === null &&
+      this.items().some((item) => item.id === id),
+  );
 
   /** The index's current item: the address's, then what the scroll reached. */
   protected readonly active = linkedSignal<SettingsSection>(
@@ -263,6 +275,13 @@ export class SettingsPage {
   protected readonly preferences = linkedSignal<Preferences | null>(
     () => this.store.settings()?.preferences ?? null,
   );
+  /** The application's AI answers this person (KBC-022): Sua IA's title says so. */
+  protected readonly onAppAi = computed(() => {
+    const status = this.store.aiStatus.hasValue()
+      ? this.store.aiStatus.value()
+      : undefined;
+    return status?.source === 'app';
+  });
   protected readonly aiSave = signal<SaveState>('idle');
   protected readonly preferencesSave = signal<SaveState>('idle');
   protected readonly roleLabel = computed(() => {
@@ -295,12 +314,29 @@ export class SettingsPage {
     const view = this.store.settings();
     if (!view) return {};
     const { preferences } = view;
-    const provider = view.ai.provider;
     const lines: Partial<Record<SettingsSection, string>> = {
+      ...this.rootLines(),
       preferences: `${VIEW_COPY[preferences.defaultView]()} · ${PROFILE_COPY[preferences.researchProfile].label()}`,
     };
-    if (provider !== null) lines.ai = PROVIDER_COPY[provider].name();
+    const ai = this.aiLine();
+    if (ai) lines.ai = ai;
     return lines;
+  });
+
+  /** Who answers, as Sua IA's card says it: "Sua IA · OpenRouter", "IA da aplicação". */
+  private readonly aiLine = computed(() => {
+    const status = this.store.aiStatus.hasValue()
+      ? this.store.aiStatus.value()
+      : undefined;
+    if (status?.source === 'app')
+      return $localize`:@@settings.root.aiApp:IA da aplicação`;
+    if (status?.source === 'own') {
+      const id = status.provider ?? '';
+      const name = isProvider(id) ? PROVIDER_COPY[id].name() : id;
+      return $localize`:@@settings.root.aiOwn:Sua IA · ${name}:provider:`;
+    }
+    const provider = this.store.settings()?.ai.provider ?? null;
+    return provider !== null ? PROVIDER_COPY[provider].name() : '';
   });
 
   /** The section scrolled to last; the scroll spy's own address changes do not scroll. */
@@ -505,6 +541,9 @@ export class SettingsPage {
     const offset =
       el.nativeElement.getBoundingClientRect().top -
       host.getBoundingClientRect().top;
+    // From the page's top, a section whose title already shows in the upper half stays where
+    // it is (v2 · Sua IA: the page's title, Conta, then Sua IA, marked in the index).
+    if (host.scrollTop === 0 && offset < host.clientHeight / 2) return;
     host.scrollTo({ top: host.scrollTop + offset - SECTION_GAP });
   }
 

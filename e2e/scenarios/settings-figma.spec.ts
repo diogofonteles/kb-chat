@@ -165,8 +165,8 @@ test('Sua IA: the owner, OpenRouter, a refused key, a member with the house plan
   for (const width of WIDTHS) {
     const phone = width === 'phone';
     const { context, page } = await contextAt(browser, width);
-    // Desktop: the page from its top (Conta, then Sua IA); a phone: Sua IA's screen.
-    await section(page, phone ? 'sua-ia' : 'conta');
+    // Desktop: the page from its top (Conta, then Sua IA, marked); a phone: Sua IA's screen.
+    await section(page, 'sua-ia');
     let settings = settingsOf(page);
     await expect(settings.getByText('Quem atende você agora')).toBeVisible();
     await shoot(page, 'settings-ai', width);
@@ -223,7 +223,7 @@ test('Sua IA: the owner, OpenRouter, a refused key, a member with the house plan
     await openai.context.close();
 
     const member = await contextAt(browser, width, { email: ANA_SOUZA });
-    await section(member.page, phone ? 'sua-ia' : 'conta');
+    await section(member.page, 'sua-ia');
     settings = settingsOf(member.page);
     await expect(
       settings.getByText(/cedida pelo administrador/).first(),
@@ -294,10 +294,13 @@ test('Pessoas e permissões: invitation, list, requests, editors, profiles, Ver 
       ).toBeVisible();
       // These frames draw the section's title 62 under the panel's top (8 above the others').
       if (!phone)
-        await place(settings.getByRole('heading', { name: 'Pessoas e permissões' }), {
-          desktop: 134,
-          phone: 0,
-        });
+        await place(
+          settings.getByRole('heading', { name: 'Pessoas e permissões' }),
+          {
+            desktop: 134,
+            phone: 0,
+          },
+        );
       return settings;
     };
     const toList = (settings: Locator) =>

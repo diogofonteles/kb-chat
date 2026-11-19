@@ -64,9 +64,14 @@
               [attr.data-section]="item.id"
               [attr.aria-labelledby]="'settings-' + item.id"
             >
-              <h2 class="section-title" [id]="'settings-' + item.id">
-                {{ item.label }}
-              </h2>
+              <div class="section-head">
+                <h2 class="section-title" [id]="'settings-' + item.id">
+                  {{ item.label }}
+                </h2>
+                @if (item.id === 'ai' && onAppAi()) {
+                  <ng-container *ngTemplateOutlet="appAiPill" />
+                }
+              </div>
               @for (visit of [visits()[item.id] ?? 0]; track visit) {
                 <ng-container
                   *ngTemplateOutlet="body; context: { $implicit: item.id }"
@@ -273,6 +278,13 @@
   </ui-banner>
 </ng-template>
 
+<!-- Who answers, beside Sua IA's title: the application's AI (v2 · Sua IA, a member). -->
+<ng-template #appAiPill>
+  <ui-pill class="app-ai-pill" tone="ok" i18n="@@settings.onAppAi"
+    >IA da aplicação</ui-pill
+  >
+</ng-template>
+
 <ng-template #body let-id>
   @switch (id) {
     @case ('account') {
@@ -300,6 +312,9 @@
       }
     }
     @case ('ai') {
+      @if (phone() && onAppAi()) {
+        <ng-container *ngTemplateOutlet="appAiPill" />
+      }
       @if (ownOutcome(); as outcome) {
         @if (outcome === 'connected') {
           <ui-banner tone="ok" role="status">

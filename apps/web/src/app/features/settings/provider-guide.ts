@@ -16,10 +16,24 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
   template: `
     @if (guide(); as current) {
       <section class="guide" [attr.aria-label]="label()">
-        @if (!factsOnly()) {
+        @if (!factsOnly() && current.ready) {
+          <div class="ready">
+            @for (step of current.steps; track $index) {
+              @if ($first) {
+                <p class="ready-line">
+                  <ui-icon name="checkcircle" [size]="18" />
+                  <span>{{ step.text() }}</span>
+                </p>
+              } @else {
+                <p class="ready-note">{{ step.text() }}</p>
+              }
+            }
+          </div>
+        } @else if (!factsOnly()) {
           <ol class="steps">
             @for (step of current.steps; track $index) {
               <li>
+                <span class="step-n" aria-hidden="true">{{ $index + 1 }}</span>
                 {{ step.text() }}
                 @if (step.link; as link) {
                   <a
@@ -48,13 +62,18 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
           @if (current.limits) {
             <div class="fact">
               <dt i18n="@@guide.limits">Limites</dt>
-              <dd>{{ current.limits() }}</dd>
+              <dd>
+                {{ current.limits() }}
+                @if (current.limitsMore && !factsOnly()) {
+                  {{ current.limitsMore() }}
+                }
+              </dd>
             </div>
           }
         </dl>
         @if (current.note && !factsOnly()) {
           <p class="note">
-            <ui-icon name="info" [size]="18" />
+            <ui-icon name="info" [size]="20" />
             <span>{{ current.note() }}</span>
           </p>
         }
@@ -62,29 +81,28 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
     }
   `,
   styles: `
+    /* v2 · Sua IA: the steps 14/20, 14 apart, their numbers as words in the green dot; 20 to
+       the facts. */
     .guide {
       display: grid;
-      gap: var(--space-4);
+      gap: 1.25rem;
     }
     .steps {
       display: grid;
-      gap: var(--space-3);
+      gap: 0.875rem;
       margin: 0;
       padding: 0;
       list-style: none;
-      counter-reset: step;
       font-size: var(--text-sm);
-      line-height: 1.45;
+      line-height: 1.25rem;
     }
     .steps li {
       position: relative;
       padding-left: 2.25rem;
-      counter-increment: step;
     }
-    .steps li::before {
-      content: counter(step);
+    .steps .step-n {
       position: absolute;
-      top: -0.0625rem;
+      top: 0;
       left: 0;
       display: grid;
       place-items: center;
@@ -100,6 +118,31 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
       margin-left: var(--space-1);
       color: var(--color-accent-text);
       overflow-wrap: anywhere;
+    }
+    /* Nothing to set up: ✓ 18 and the words 14/17 in 700, 16 to the note 13/19, 16 to the facts. */
+    .ready {
+      display: grid;
+      gap: var(--space-4);
+      margin-bottom: -0.25rem;
+    }
+    .ready-line {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      margin: 0;
+      font-size: var(--text-sm);
+      font-weight: 700;
+      line-height: 1.0625rem;
+    }
+    .ready-line ui-icon {
+      flex: none;
+      color: var(--color-accent);
+    }
+    .ready-note {
+      margin: 0;
+      color: var(--color-text-muted);
+      font-size: var(--text-meta);
+      line-height: 1.1875rem;
     }
     /* Cost, privacy and limits: three cards 10 apart, each as tall as its words. */
     .facts {
@@ -125,24 +168,30 @@ import { PROVIDER_GUIDES } from './provider-guides.js';
     .fact dd {
       margin: 0;
       color: var(--color-text-muted);
-      line-height: 1.4;
+      line-height: 1.125rem;
     }
     /* The frame's info banner: blue tint, icon in blue, the text in 600. */
     .note {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       gap: var(--space-3);
       margin: 0;
-      padding: var(--space-3) var(--space-4);
+      padding: 0.875rem var(--space-4);
       border-radius: var(--radius-card);
       background: color-mix(in srgb, var(--color-info) 12%, transparent);
       font-size: var(--text-sm);
       font-weight: 600;
-      line-height: 1.45;
+      line-height: 1.0625rem;
     }
     .note ui-icon {
       flex: none;
       color: var(--color-info);
+    }
+    /* A phone: the steps 10 apart (v2 · Sua IA, celular). */
+    @media (max-width: 1023px) {
+      .steps {
+        gap: 0.625rem;
+      }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -14,51 +14,57 @@
     </p>
   }
   @for (option of options(); track option.info.id) {
-    <label
-      class="card"
-      [class.selected]="option.info.id === draft().provider"
-      [class.disabled]="option.blocked !== null"
+    <!-- The chosen option and its details are one box (v2 · Sua IA); the others are their row. -->
+    <div
+      class="option-box"
+      [class.open]="!compact() && option.info.id === draft().provider"
     >
-      <ui-cover
-        class="card-art"
-        [icon]="option.icon"
-        [title]="option.name"
-        [from]="option.cover"
-        to="var(--cover-provider-dark)"
-        [size]="compact() ? 40 : 44"
-      />
-      <span class="card-body">
-        <span class="card-head">
-          <span class="card-title">{{ option.name }}</span>
-          <ui-pill [tone]="option.tone">{{ option.billing }}</ui-pill>
-        </span>
-        <span class="card-hint">{{ option.description }}</span>
-        @if (option.blocked; as blocked) {
-          <span class="card-install">
-            <span class="unavailable">{{ blocked.label }}</span>
-            {{ blocked.steps }}
-          </span>
-        }
-      </span>
-      <input
-        #providerRadio
-        type="radio"
-        name="ai-provider"
-        class="ui-radio"
-        [value]="option.info.id"
-        [checked]="option.info.id === draft().provider"
-        [disabled]="option.blocked !== null"
-        (change)="choose(option.info.id)"
-      />
-    </label>
-    @if (!compact() && option.info.id === draft().provider) {
-      <div class="details">
-        <ng-container
-          [ngTemplateOutlet]="detailsOf"
-          [ngTemplateOutletContext]="{ $implicit: option }"
+      <label
+        class="card"
+        [class.selected]="option.info.id === draft().provider"
+        [class.disabled]="option.blocked !== null"
+      >
+        <ui-cover
+          class="card-art"
+          [icon]="option.icon"
+          [title]="option.name"
+          [from]="option.cover"
+          to="var(--cover-provider-dark)"
+          [size]="compact() ? 40 : 44"
         />
-      </div>
-    }
+        <span class="card-body">
+          <span class="card-head">
+            <span class="card-title">{{ option.name }}</span>
+            <ui-pill [tone]="option.tone">{{ option.billing }}</ui-pill>
+          </span>
+          <span class="card-hint">{{ option.description }}</span>
+          @if (option.blocked; as blocked) {
+            <span class="card-install">
+              <span class="unavailable">{{ blocked.label }}</span>
+              {{ blocked.steps }}
+            </span>
+          }
+        </span>
+        <input
+          #providerRadio
+          type="radio"
+          name="ai-provider"
+          class="ui-radio"
+          [value]="option.info.id"
+          [checked]="option.info.id === draft().provider"
+          [disabled]="option.blocked !== null"
+          (change)="choose(option.info.id)"
+        />
+      </label>
+      @if (!compact() && option.info.id === draft().provider) {
+        <div class="details">
+          <ng-container
+            [ngTemplateOutlet]="detailsOf"
+            [ngTemplateOutletContext]="{ $implicit: option }"
+          />
+        </div>
+      }
+    </div>
   }
   <!-- The wizard (v2 · Assistente): every card first, the chosen one's details under the
        grid; the application's AI needs no setup, so only its facts show, without a panel. -->
@@ -269,7 +275,7 @@
       />
       @if (keyRejected()) {
         <p id="ai-key-error" class="field-error" role="alert">
-          <ui-icon name="xcircle" [size]="14" />
+          <ui-icon name="warn" [size]="14" />
           {{ testMessage() }}
         </p>
       }
@@ -367,13 +373,6 @@
       Incluído na sua assinatura: não entra no gasto do dia e não tem limite em
       US$. A Nova Alexandria nunca vê a sua senha; ela só chama a ferramenta já
       logada.
-    </p>
-  }
-
-  @if (current.info.billing === 'free') {
-    <p class="hint" i18n="@@ai.appNote">
-      A aplicação paga; o rodapé de cada resposta mostra o modelo que respondeu
-      e quantas pesquisas restam hoje.
     </p>
   }
 

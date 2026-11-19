@@ -191,9 +191,11 @@
   line-height: 1.2;
 }
 
+/* The 🔍 beside the title, its glyph 18 under the head's padding (v2 · Configurações): it
+   never makes the head taller than its 94. */
 .head .search-toggle {
-  align-self: center;
-  margin-top: 2.25rem;
+  align-self: flex-start;
+  margin-top: 0.5625rem;
 }
 
 .search {
@@ -222,6 +224,14 @@
 .layout .section:not([data-section='account']) {
   min-height: calc(100cqh - 3.75rem);
   align-content: start;
+}
+
+/* The title and, for Sua IA on the application's AI, its pill 10 after it (v2). */
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
 }
 
 .section-title {
@@ -312,6 +322,13 @@
   font-size: var(--text-item);
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+
+/* The role under the name: 13 on 18, 3 under it (v2 · Conta). */
+.account-who .muted {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: 1.125rem;
 }
 
 .about {
@@ -462,6 +479,15 @@
   border: 0;
 }
 
+/* Sua IA's screen starts 16 under the header (v2 · Sua IA, celular: 110 from the top). */
+.screen .section[data-section='ai'] {
+  padding-top: var(--space-4);
+}
+
+.app-ai-pill {
+  justify-self: start;
+}
+
 @media (max-width: 1023px) {
   .search {
     width: 100%;
@@ -479,7 +505,8 @@
     bottom: var(--shell-mobile-foot, 0px);
     min-height: 0;
     margin: 0 calc(-1 * var(--space-4));
-    padding: var(--space-6) var(--space-4) var(--space-4);
+    /* The frame's bar: Salvar 12 under its top, 24 over the panel's foot (celular). */
+    padding: var(--space-3) var(--space-4) var(--space-6);
     border-top: 0;
     background: linear-gradient(transparent, var(--color-surface) 45%);
     flex-direction: column-reverse;

@@ -169,9 +169,10 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
     }
   `,
   styles: `
+    /* v2 · Sua IA: 16 inside, the cover in the middle of the words (12/14, 16/19, 13/16). */
     .card {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       gap: 0.875rem;
       padding: var(--space-4);
       border-radius: var(--radius-card);
@@ -188,6 +189,7 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
       color: var(--color-text-muted);
       font-size: var(--text-xs);
       font-weight: 700;
+      line-height: 0.875rem;
     }
     .who,
     .detail {
@@ -196,14 +198,17 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
     .who {
       font-size: var(--text-md);
       font-weight: 700;
+      line-height: 1.1875rem;
     }
     .detail {
       color: var(--color-text-muted);
       font-size: var(--text-meta);
+      line-height: 1rem;
     }
     .left {
       display: grid;
       flex: none;
+      grid-template-columns: minmax(0, 1fr);
       gap: 0.375rem;
       justify-items: end;
       width: 10rem;
