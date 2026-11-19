@@ -471,9 +471,7 @@
                     [master]="isMaster()"
                     [phone]="phone()"
                     [choosing]="selecting() && playingId() === item.id"
-                    [selectAll]="
-                      selecting() && !allSelected() ? selectAllText() : ''
-                    "
+                    [selectAll]="rowSelectAll()"
                     [paused]="preparations.steps().get(item.id) ?? null"
                     [tracksOpen]="openTracks().has(item.id)"
                     (tracksToggled)="toggleTracks(item.id)"

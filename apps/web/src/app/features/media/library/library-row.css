@@ -18,8 +18,13 @@
   min-height: 3.5rem;
   padding: 0 var(--space-4);
   border-radius: var(--radius-menu);
-  /* 2 000 rows (NFR-2): a change in one row does not lay out or paint the others. */
+  /* 2 000 rows (NFR-2): a change in one row does not lay out or paint the others, and the
+     rows out of sight are not laid out at all when a selection starts or ends (the page
+     around them changes: its head, its bar, its padding). Their size is the last one drawn,
+     a 56 px row (64 on a phone, below) until then. */
   contain: content;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 3.5rem;
 }
 
 :host(:hover),
@@ -503,6 +508,7 @@ app-menu-button {
     column-gap: 0;
     row-gap: 0;
     min-height: 4rem;
+    contain-intrinsic-size: auto 4rem;
     padding: 0;
   }
 

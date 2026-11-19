@@ -81,6 +81,27 @@ describe('MenuButton (APG menu button)', () => {
     expect(outside).not.toHaveBeenCalled();
   });
 
+  it('hears the document only while open: a click outside closes it (NFR-2)', async () => {
+    const listening = vi.spyOn(document, 'addEventListener');
+    const { trigger, fixture } = await renderChoice();
+    // Closed, it listens to no click of the document (one ⋯ per row of 2 000).
+    expect(listening.mock.calls.some(([type]) => type === 'click')).toBe(false);
+    fireEvent.click(trigger);
+    await fixture.whenStable();
+    expect(screen.getByRole('menu')).toBeTruthy();
+    fireEvent.click(document.body);
+    await fixture.whenStable();
+    expect(screen.queryByRole('menu')).toBeNull();
+    const stopped = vi.spyOn(document, 'removeEventListener');
+    fireEvent.click(trigger);
+    await fixture.whenStable();
+    fireEvent.click(document.body);
+    await fixture.whenStable();
+    expect(stopped.mock.calls.some(([type]) => type === 'click')).toBe(true);
+    listening.mockRestore();
+    stopped.mockRestore();
+  });
+
   describe('stays on the screen, however wide its text', () => {
     const rectOf = (left: number, right: number) =>
       ({ left, right }) as DOMRect;

@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   afterNextRender,
@@ -182,12 +183,21 @@ const SHEET_BELOW_PX = 1024;
   `,
   styleUrl: './menu-button.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(document:click)': 'closeOnOutside($event)' },
 })
 export class MenuButton {
   private readonly injector = inject(Injector);
   private readonly host =
     inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  /**
+   * The document's clicks, heard only while this menu is open. Not a `(document:click)` host
+   * listener: with one ⋯ per row, every click anywhere ran 2 000 Angular listeners, and each
+   * marked its row for a check, so all 2 000 rows were checked again (NFR-2).
+   */
+  private readonly onDocumentClick = (event: MouseEvent): void => {
+    this.closeOnOutside(event);
+    if (!this.open()) this.stopHearingOutside();
+  };
+  private hearingOutside = false;
   private readonly trigger =
     viewChild.required<ElementRef<HTMLButtonElement>>('trigger');
   private readonly items = viewChildren<ElementRef<HTMLButtonElement>>('item');
@@ -289,7 +299,7 @@ export class MenuButton {
   }
 
   /** A click outside, or on the phone sheet's scrim (the list's own backdrop). */
-  protected closeOnOutside(event: MouseEvent): void {
+  private closeOnOutside(event: MouseEvent): void {
     if (!this.open() || !(event.target instanceof Node)) return;
     const menu = this.menu()?.nativeElement;
     const onScrim = event.target === menu && outsideBox(menu, event);
@@ -303,6 +313,7 @@ export class MenuButton {
 
   private openOn(index: number): void {
     this.open.set(true);
+    this.hearOutside();
     afterNextRender(() => this.focusItem(index), { injector: this.injector });
   }
 
@@ -314,6 +325,22 @@ export class MenuButton {
   private focusItem(index: number): void {
     const items = this.items();
     items.at(index < 0 ? items.length - 1 : index)?.nativeElement.focus();
+  }
+
+  private hearOutside(): void {
+    if (this.hearingOutside) return;
+    this.hearingOutside = true;
+    this.host.ownerDocument.addEventListener('click', this.onDocumentClick);
+  }
+
+  private stopHearingOutside(): void {
+    if (!this.hearingOutside) return;
+    this.hearingOutside = false;
+    this.host.ownerDocument.removeEventListener('click', this.onDocumentClick);
+  }
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.stopHearingOutside());
   }
 
   /** Puts the focus on the trigger (a neighbour that went away hands it here). */

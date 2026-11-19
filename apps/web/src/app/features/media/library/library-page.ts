@@ -685,6 +685,16 @@ export class LibraryPage {
     () =>
       $localize`:@@library.selectAll:Selecionar todas as ${this.selectable().length}:count:`,
   );
+  /**
+   * Each row's "Selecionar todas as N", which only a phone's ⋯ offers: '' on a desktop, so a
+   * selection that starts or ends changes no input of the 2 000 rows there and none of them
+   * is checked again (NFR-2). One signal, read by every row whatever the state.
+   */
+  protected readonly rowSelectAll = computed(() =>
+    this.phone() && this.selecting() && !this.allSelected()
+      ? this.selectAllText()
+      : '',
+  );
 
   protected readonly uploading = signal(false);
   protected readonly removing = signal<MediaItem | null>(null);
