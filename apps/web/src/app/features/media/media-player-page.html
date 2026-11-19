@@ -101,10 +101,12 @@
       <div class="hero-text">
         @if (current.parent; as parent) {
           <p class="part-of">
-            <span i18n="@@tracks.partOf">Parte de:</span>
-            <a [routerLink]="['/midia', parent.id]">{{ parent.title }}</a>
+            <ng-container i18n="@@tracks.partOf">Parte de:</ng-container
+            >&ngsp;<a [routerLink]="['/midia', parent.id]">{{
+              parent.title
+            }}</a>
             @if (trackPlace()) {
-              <span>· {{ trackPlace() }}</span>
+              · {{ trackPlace() }}
             }
           </p>
         } @else {
@@ -128,13 +130,15 @@
               }
               {{ author.name }}</span
             >
-          } @else {
-            <span class="others" i18n="@@authorship.others"
-              >Outros autores</span
-            >
           }
-          <!-- One line of facts after the name (v2 · Mídia — Player: "· 1:00 · enviado em …"). -->
+          <!-- One line of facts after the name (v2 · Mídia — Player: "· 1:00 · enviado em …");
+               with no author, "Outros autores" opens the same run. -->
           <span class="facts">
+            @if (!current.author) {
+              <span class="others" i18n="@@authorship.others"
+                >Outros autores</span
+              >&ngsp;
+            }
             @if (duration()) {
               <span class="duration">· {{ duration() }}</span
               >&ngsp;

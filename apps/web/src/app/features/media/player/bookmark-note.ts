@@ -64,7 +64,7 @@ import { UiOverlay } from '@ui/overlay.js';
         [overlaySheetBelow]="sheetBelow"
       >
         <div class="head">
-          <span class="time" aria-hidden="true">{{ clock() }}</span>
+          <span class="time time-pill" aria-hidden="true">{{ clock() }}</span>
           <label id="bookmark-note-label" for="bookmark-note" class="label">{{
             label()
           }}</label>

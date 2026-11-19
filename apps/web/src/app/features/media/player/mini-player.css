@@ -239,6 +239,8 @@ a.title:hover {
 .timeline .seek {
   flex: 1;
   min-width: 0;
+  /* Its 44 target reaches over the bar's padding: the line keeps the bar's 72 rhythm. */
+  margin-block: -1.25rem;
 }
 
 .progress {

@@ -42,7 +42,7 @@ import {
  *   (Voz 1 0:12, Voz 2 0:41, Voz 3 0:05), named on the first two: Mestre Álvaro Nunes,
  *   Sérgio Andrade and the audience ("Pergunta da plateia");
  * - the interview's three bookmarks (0:05 "O dia da sessão", 0:22 "Quem o levou: um amigo da
- *   construção", 0:45 with no note), the library's other eight kept and one more: "Lista ·
+ *   construção", 0:45 with no note, each at its line's start), the library's other eight kept and one more: "Lista ·
  *   12 marcadores";
  * - the draft of "Roda de perguntas para validar": Primeira pergunta, Segunda pergunta,
  *   Terceira faixa (0:00–0:15, 0:15–0:40, 0:40–1:00), Voz 1 asks and Voz 2 answers;
@@ -50,7 +50,8 @@ import {
  *
  * Patched in the responses (`playerWorld`), besides the library's (`figmaWorld`): the term
  * list the transcripts were made with is dated 28/10/2026, as the frames have it (the server
- * stamps the day it was seeded).
+ * stamps the day it was seeded), and the AI research waits for the owner's Mac, off since
+ * 10/11 11:29 (no Mac is paired with a test server).
  */
 
 export const LISTENER = 'figma-ouvinte@kb-chat.test';
@@ -84,11 +85,14 @@ const PRINCIPLES: readonly Line[] = [
 ];
 const LINES = { ES: MINUTE, LC: CAIBALION, GR: NOISY, CS: PRINCIPLES };
 
-/** The interview's bookmarks in the frames (BM3). */
+/**
+ * The interview's bookmarks in the frames (BM3), each where its line starts (0:05 is the
+ * line from 5.5 s, 0:22 the one from 22.5 s): the transcript marks the line it falls in.
+ */
 const BOOKMARKS = [
-  { positionMs: 5_000, note: 'O dia da sessão' },
-  { positionMs: 22_000, note: 'Quem o levou: um amigo da construção' },
-  { positionMs: 45_000 },
+  { positionMs: 5_500, note: 'O dia da sessão' },
+  { positionMs: 22_500, note: 'Quem o levou: um amigo da construção' },
+  { positionMs: 45_500 },
 ] as const;
 
 async function speaker(
@@ -256,6 +260,32 @@ export async function seedPlayerWorld(): Promise<PlayerWorld> {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/**
+ * The transcriber the frames have: off since 10/11 11:29 (a test server has none paired, so
+ * its media say "nenhum transcritor pareado").
+ */
+function transcriberOff(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  const transcription = value['transcription'];
+  if (!isRecord(transcription) || transcription['transcriber'] !== 'none')
+    return value;
+  return {
+    ...value,
+    transcription: {
+      ...transcription,
+      transcriber: 'off',
+      transcriberOffSince: TRANSCRIBER_OFF_SINCE,
+    },
+  };
+}
+
+/** 11:29 today in São Paulo (14:29 UTC), as the frames' "desligado desde 11:29". */
+const TODAY_OFF_SINCE = (): string => {
+  const today = new Date();
+  today.setUTCHours(14, 29, 0, 0);
+  return today.toISOString();
+};
+
 /** The library's patches, and the term list of 28/10/2026 on every transcript. */
 export async function playerWorld(
   context: BrowserContext,
@@ -274,10 +304,48 @@ export async function playerWorld(
         return route.fulfill({ response });
       await route.fulfill({
         response,
-        json: withUploadDate(await response.json(), ids),
+        json: transcriberOff(withUploadDate(await response.json(), ids)),
       });
     },
   );
+  // The Caibalion's page has none of the library's bookmarks (media-player-transcribe-again*:
+  // "Nenhum marcador ainda"); "Meus marcadores" keeps counting them all.
+  await context.route(`**/api/v1/media/${w.byCode['LC']}/bookmarks`, (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: { items: [] } })
+      : route.continue(),
+  );
+  // "Transcrever de novo" answers the media as it is now: the same date and transcriber.
+  await context.route('**/api/v1/media/*/transcription', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    const response = await route.fetch();
+    if (!(response.headers()['content-type'] ?? '').includes('json'))
+      return route.fulfill({ response });
+    await route.fulfill({
+      response,
+      json: transcriberOff(withUploadDate(await response.json(), ids)),
+    });
+  });
+  // Where each media stands in the AI research, as the frames have it: waiting for the
+  // owner's Mac, off since 11:29 today (the line says the day only for another day).
+  await context.route('**/api/v1/media/*/publication', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    if (!(response.headers()['content-type'] ?? '').includes('json'))
+      return route.fulfill({ response });
+    const body = (await response.json()) as Record<string, unknown>;
+    // The lecture still without its transcript keeps its own ("Fora da pesquisa: …").
+    const own = !body['publication'] || body['mediaId'] === w.byCode['AS'];
+    await route.fulfill({
+      response,
+      json: own
+        ? body
+        : {
+            ...body,
+            publication: { state: 'waiting-mac', offSince: TODAY_OFF_SINCE() },
+          },
+    });
+  });
   await context.route('**/api/v1/media/*/transcript', async (route) => {
     if (route.request().method() !== 'GET') return route.continue();
     const response = await route.fetch();
@@ -409,14 +477,8 @@ export async function shoot(
     content:
       '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}',
   });
-  if (top)
-    await page.evaluate(() =>
-      document.querySelectorAll('*').forEach((node) => {
-        if (node.scrollTop > 0) node.scrollTop = 0;
-      }),
-    );
-  await page.waitForTimeout(300);
   if (width === 'desktop') await page.mouse.move(1, 1);
+  // The clock first: the transcript follows what plays, then goes back to its top.
   await page.evaluate(
     ([selector, seconds]) => {
       const media = document.querySelector<HTMLMediaElement>(selector);
@@ -424,6 +486,13 @@ export async function shoot(
     },
     [MEDIA, at] as const,
   );
+  await page.waitForTimeout(300);
+  if (top)
+    await page.evaluate(() =>
+      document.querySelectorAll('*').forEach((node) => {
+        if (node.scrollTop > 0) node.scrollTop = 0;
+      }),
+    );
   await page.waitForTimeout(150);
   await page.screenshot({
     path: `${shots}/${id}${width === 'phone' ? '@mobile' : ''}.png`,

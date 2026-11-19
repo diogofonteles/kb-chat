@@ -351,6 +351,9 @@
       var(--color-cover-ink)
     );
     --color-text: var(--color-on-cover);
+    /* The spoken word's underline in the card's light ink: 3:1 on the cover's colour in
+       every theme (KBC-045 AC-5); the theme's own accent can be as dark as the card. */
+    --color-accent-strong: var(--color-on-cover);
     /* The dim ink at 80 %: at 70 % the lighter covers fall under 4.5:1 for small text. */
     --color-on-cover-dim: color-mix(
       in srgb,
@@ -409,11 +412,16 @@
   }
 
   :host(.in-player) .head-row,
-  :host(.in-player) .made-with,
   :host(.in-player) .legend,
   :host(.in-player) .low-confidence,
   :host(.in-player) ::ng-deep [banner] {
     display: none;
+  }
+
+  /* The term list it was made with, for who edits (KBC-040 AC-5), small under the title. */
+  :host(.in-player) .made-with {
+    margin: 0;
+    color: var(--color-on-cover-dim);
   }
 
   :host(.in-player) .search {
@@ -571,4 +579,47 @@
 /* A restricted segment folded into the line of its part (KBC-106 review m2). */
 .segment[hidden] {
   display: none;
+}
+
+/* The player page's lines on a desktop (tLine): 56 a line — 7, the time and the voice on
+   one 14 line, 4, the words at 18/24, 7 — and the card of the line heard 14 inside. The
+   time keeps a 24 target (WCAG 2.5.8) around its 14 line. */
+@media (min-width: 1024px) {
+  :host(.in-player) .segment {
+    padding: 0.4375rem 0;
+  }
+
+  :host(.in-player) .segment.active {
+    padding: 0.875rem var(--space-4);
+  }
+
+  :host(.in-player) .segment + .segment {
+    margin-top: 0;
+  }
+
+  :host(.in-player) .mark {
+    top: 0.5625rem;
+  }
+
+  :host(.in-player) .segment.active .mark {
+    top: 1rem;
+  }
+
+  :host(.in-player) .time {
+    position: relative;
+    min-height: 0;
+    height: 0.875rem;
+    line-height: 0.875rem;
+  }
+
+  :host(.in-player) .time::after {
+    position: absolute;
+    inset: -0.3125rem 0;
+    content: '';
+  }
+
+  :host(.in-player) .voice {
+    height: 0.875rem;
+    line-height: 0.875rem;
+  }
 }

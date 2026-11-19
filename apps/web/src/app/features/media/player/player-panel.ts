@@ -61,6 +61,7 @@ interface Listed {
             aria-controls="player-tab-panel"
             [attr.aria-selected]="tabs.tab() === one.id"
             [attr.tabindex]="tabs.tab() === one.id ? 0 : -1"
+            [style.min-width.px]="lineOf(one.label)"
             (click)="tabs.tab.set(one.id)"
           >
             {{ one.label }}
@@ -71,6 +72,7 @@ interface Listed {
         uiIconButton
         type="button"
         class="close"
+        [size]="28"
         aria-label="Fechar o painel"
         i18n-aria-label="@@player.panel.close"
         (click)="panel.close()"
@@ -183,6 +185,11 @@ export class PlayerPanel {
       ? this.listed(this.home.value().recentlyPlayed, false)
       : [],
   );
+
+  /** The green line under a tab is as long as its letters (panelTabs: 8.2 px each). */
+  protected lineOf(label: string): number {
+    return Math.round(label.length * 8.2);
+  }
 
   protected pathOf(id: string): string {
     return mediaPagePath(id);

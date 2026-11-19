@@ -69,9 +69,9 @@ describe('TrackPublicationStatus (KBC-100 FR-3, BR-4, T22)', () => {
   });
 
   it.each([
-    ['no-folder', 'fora da pesquisa: o acervo ainda não tem pasta no kb'],
-    ['cap', 'fora da pesquisa: teto mensal da mídia'],
-    ['not-published', 'fora da pesquisa: ainda não publicada no acervo'],
+    ['no-folder', 'Fora da pesquisa: o acervo ainda não tem pasta no kb'],
+    ['cap', 'Fora da pesquisa: teto mensal da mídia'],
+    ['not-published', 'Fora da pesquisa: ainda não publicada no acervo'],
   ] as const)('AC-11/AC-12: out because of %s', async (reason, text) => {
     await renderIt({ state: 'out', reason });
     expect(status().textContent).toContain(text);

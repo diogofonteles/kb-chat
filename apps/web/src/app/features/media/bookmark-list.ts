@@ -26,10 +26,16 @@ import { UiIcon, UiIconButton } from '@ui/index.js';
   imports: [UiIcon, UiIconButton],
   template: `
     <section class="bookmarks" aria-labelledby="bookmarks-title">
+      <!-- One run of words, as the v2 panel draws it: "Seus marcadores aqui · 3". -->
       <h3 id="bookmarks-title" #heading tabindex="-1">
-        <span i18n="@@bookmarks.titleHere">Seus marcadores aqui</span>
         @if (bookmarks().length) {
-          <span class="count">· {{ bookmarks().length }}</span>
+          <ng-container i18n="@@bookmarks.titleHereCount"
+            >Seus marcadores aqui · {{ bookmarks().length }}</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@bookmarks.titleHere"
+            >Seus marcadores aqui</ng-container
+          >
         }
       </h3>
 

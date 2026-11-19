@@ -62,11 +62,10 @@
   line-height: 1rem;
 }
 
+/* One run of words, the recording's name a link inside it (pHeader: "Parte de: … · faixa 2
+   de 3"). */
 .part-of {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 0.3em;
+  display: block;
 }
 
 .part-of a {
@@ -141,6 +140,26 @@
 
 .note:empty {
   display: none;
+}
+
+/* A desktop keeps the pill and the AI-research line on one row, as drawn (pHeader): the
+   line may run into the page's side padding rather than wrap under the pill. */
+@media (min-width: 1024px) {
+  .note:has(> app-track-publication-status) {
+    flex-wrap: nowrap;
+    /* Its words never widen the head's column (the title keeps its 472 and its lines). */
+    width: 0;
+    min-width: 100%;
+  }
+
+  .note ::ng-deep app-track-publication-status .line {
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+
+  .note ::ng-deep app-track-publication-status .publication {
+    flex-wrap: nowrap;
+  }
 }
 
 .in-context {
@@ -220,6 +239,13 @@
   min-height: 22rem;
   padding: var(--space-2) var(--space-8) var(--space-8)
     calc(var(--space-8) + 28px);
+}
+
+/* A desktop's transcript runs to the panel's foot, as drawn (the line heard cut by it). */
+@media (min-width: 1024px) {
+  .with-transcript .body {
+    padding-bottom: 0;
+  }
 }
 
 .views {
@@ -498,7 +524,8 @@
   }
 
   .by-avatar,
-  .meta > :not(.by, .others) {
+  .meta > :not(.by, .others, .facts),
+  .facts > :not(.others) {
     display: none;
   }
 

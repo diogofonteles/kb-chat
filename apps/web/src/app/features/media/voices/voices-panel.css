@@ -288,3 +288,42 @@ button:disabled {
   margin: 0;
   font-weight: 600;
 }
+
+/* The player's Vozes view on a desktop (voicesView): "Vozes" 4 over its lead (19 lines),
+   16 to the count and to the rows; rows of 56, 16 apart — the dot 16 in, "Voz N" 12 after
+   it over its time, "Ouvir amostra" 140 at 566, the name's field 320 at 720. */
+@media (min-width: 1024px) {
+  .voices {
+    gap: var(--space-4);
+  }
+
+  .lead {
+    margin-top: -0.75rem;
+    line-height: 1.1875rem;
+  }
+
+  .voice-list {
+    gap: var(--space-4);
+  }
+
+  .voice {
+    grid-template-columns: 10rem 8.75rem 20rem;
+    justify-content: start;
+    padding: 0.625rem 0.75rem 0.625rem var(--space-4);
+  }
+
+  .voice-head app-voice-tag {
+    gap: 0.75rem;
+    line-height: 1.125rem;
+  }
+
+  .voice-head .spoken {
+    padding-left: 1.25rem;
+    line-height: 0.875rem;
+  }
+
+  .sample.secondary {
+    justify-content: center;
+    width: 8.75rem;
+  }
+}

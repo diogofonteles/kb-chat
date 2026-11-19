@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { CSRF, expect, ownerApi, test } from '../specs/fixtures.js';
 import {
+  MEDIA,
   WIDTHS,
   contextAt,
   go,
@@ -21,9 +22,10 @@ import {
  * (figma-recreation/tools/inventory/check.sh player). It only reaches each state and saves
  * it: the behaviour is proven by e2e/specs/media-*.spec.ts.
  *
- * A player frame opens its media's page (the bar below has that media, paused where it was);
- * every other frame has the interview playing at 0:22, started on its page and kept through
- * an in-app navigation. Needs a fresh E2E server. `KBC_FIDELITY_SHOTS=<dir>` saves
+ * A player frame opens its media's page and, where the frame draws ⏸, plays it there (the
+ * interview at 0:22, the others from 0:00); a page with nothing of its own to play (failed,
+ * not found) and every other frame has the interview playing at 0:22, started on its page
+ * and kept through an in-app navigation. Needs a fresh E2E server. `KBC_FIDELITY_SHOTS=<dir>` saves
  * `<state-id>[@mobile].png`.
  */
 
@@ -40,16 +42,38 @@ test.beforeAll(async () => {
 const heading = (page: Page, title: string) =>
   page.getByRole('heading', { name: title }).first();
 
-/** A media's page with its transcript drawn (or its state, when it has none). */
+/**
+ * A media's page with its transcript drawn (or its state, when it has none); `play`: it
+ * plays there, as the frames with ⏸ draw it (the shot puts the clock back on its time).
+ */
 async function openPlayer(
   page: Page,
   path: string,
   title: string,
+  play = false,
 ): Promise<void> {
   await page.goto(`/midia/${path}`);
   await expect(heading(page, title)).toBeVisible();
   await pauseAll(page);
+  if (!play) return;
+  await page
+    .locator('main')
+    .getByRole('button', { name: 'Tocar', exact: true })
+    .first()
+    .click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (selector) =>
+          document.querySelector<HTMLMediaElement>(selector)?.paused === false,
+        MEDIA,
+      ),
+    )
+    .toBe(true);
 }
+
+/** The interview heard at 0:22, its line of 0:22 (from 22.5 s) the one heard now. */
+const AT = 22.55;
 
 const more = (page: Page) =>
   page.getByRole('button', { name: 'Mais opções' }).first();
@@ -66,14 +90,14 @@ test('the interview: player, voices, speed, ⋯, shortcuts, a new note, the slee
   const title = 'Entrevista sobre a Tábua de Esmeralda';
   for (const width of WIDTHS) {
     const { context, page } = await contextAt(browser, width);
-    await openPlayer(page, es, title);
+    await openPlayer(page, es, title, true);
     await expect(
       page
         .getByText('Cheguei pela mão de um amigo')
         .and(page.locator(':visible'))
         .first(),
     ).toBeVisible();
-    await shoot(page, 'media-player', width);
+    await shoot(page, 'media-player', { width, at: AT });
 
     const voices = page
       .getByRole('group', { name: 'Ver' })
@@ -81,39 +105,39 @@ test('the interview: player, voices, speed, ⋯, shortcuts, a new note, the slee
     if (await voices.isVisible().catch(() => false)) {
       await voices.click();
       await expect(voices).toHaveAttribute('aria-pressed', 'true');
-      await shoot(page, 'media-player-voices', width);
+      await shoot(page, 'media-player-voices', { width, at: AT });
       await page
         .getByRole('group', { name: 'Ver' })
         .getByRole('button', { name: 'Transcrição', exact: true })
         .click();
-    } else await shoot(page, 'media-player-voices', width);
+    } else await shoot(page, 'media-player-voices', { width, at: AT });
 
     await page
       .getByRole('button', { name: /Velocidade/ })
       .first()
       .click();
     await expect(page.getByRole('menuitemradio').first()).toBeVisible();
-    await shoot(page, 'media-player-speed', width);
+    await shoot(page, 'media-player-speed', { width, at: AT });
     await page.keyboard.press('Escape');
 
     await more(page).click();
     await expect(
       page.getByRole('menuitem', { name: /Timer para dormir/ }),
     ).toBeVisible();
-    await shoot(page, 'media-player-more', width);
+    await shoot(page, 'media-player-more', { width, at: AT });
     await page.keyboard.press('Escape');
 
     await menuItem(page, /Atalhos de teclado/);
     const keys = page.getByRole('dialog', { name: /Atalhos/ });
     await expect(keys).toBeVisible();
-    await shoot(page, 'media-player-shortcuts', width);
+    await shoot(page, 'media-player-shortcuts', { width, at: AT });
     await page.keyboard.press('Escape');
     await expect(keys).toHaveCount(0);
 
-    await openPlayer(page, `${es}?t=23`, title);
-    await shoot(page, 'media-player-at', { width, top: false });
+    await openPlayer(page, `${es}?t=23`, title, true);
+    await shoot(page, 'media-player-at', { width, top: false, at: AT });
 
-    await openPlayer(page, `${es}?t=30`, title);
+    await openPlayer(page, `${es}?t=30`, title, true);
     const created = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
@@ -138,11 +162,11 @@ test('the interview: player, voices, speed, ⋯, shortcuts, a new note, the slee
       ).status(),
     ).toBeLessThan(300);
 
-    await openPlayer(page, es, title);
+    await openPlayer(page, es, title, true);
     await menuItem(page, /Timer para dormir/);
     const sleep = page.getByRole('dialog', { name: 'Timer para dormir' });
     await expect(sleep).toBeVisible();
-    await shoot(page, 'media-player-sleep-dialog', width);
+    await shoot(page, 'media-player-sleep-dialog', { width, at: AT });
     await sleep.getByText('No fim desta mídia').click();
     if (await sleep.isVisible().catch(() => false))
       await page.keyboard.press('Escape');
@@ -154,7 +178,7 @@ test('the interview: player, voices, speed, ⋯, shortcuts, a new note, the slee
         .first(),
     ).toBeVisible();
     await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
-    await shoot(page, 'media-player-sleep-on', width);
+    await shoot(page, 'media-player-sleep-on', { width, at: AT });
     await context.close();
   }
 });
@@ -168,6 +192,7 @@ test('other media: low confidence, waiting, failed, not found, a recording and i
       page,
       world.byCode['GR'] ?? '',
       'Gravação ruidosa do encontro',
+      true,
     );
     await expect(
       page
@@ -175,7 +200,7 @@ test('other media: low confidence, waiting, failed, not found, a recording and i
         .and(page.locator(':visible'))
         .first(),
     ).toBeVisible();
-    await shoot(page, 'media-player-low-confidence', width);
+    await shoot(page, 'media-player-low-confidence', { width, at: 0 });
 
     await openPlayer(
       page,
@@ -190,20 +215,24 @@ test('other media: low confidence, waiting, failed, not found, a recording and i
     ).toBeVisible();
     await shoot(page, 'media-player-waiting', width);
 
+    // Nothing of its own to play: the interview plays at 0:22 in the bar, as drawn.
     await openPlayer(
       page,
-      world.byCode['AC'] ?? '',
-      'Arquivo corrompido da reunião',
+      world.byCode['ES'] ?? '',
+      'Entrevista sobre a Tábua de Esmeralda',
+      true,
     );
+    await go(page, `/midia/${world.byCode['AC']}`);
+    await expect(heading(page, 'Arquivo corrompido da reunião')).toBeVisible();
     await expect(
       page
         .getByText(/não é um áudio válido/)
         .and(page.locator(':visible'))
         .first(),
     ).toBeVisible();
-    await shoot(page, 'media-player-failed', width);
+    await shoot(page, 'media-player-failed', { width, at: AT });
 
-    await page.goto('/midia/00000000-0000-4000-8000-000000000000');
+    await go(page, '/midia/00000000-0000-4000-8000-000000000000');
     await expect(
       page
         .getByText('Mídia não encontrada')
@@ -211,7 +240,7 @@ test('other media: low confidence, waiting, failed, not found, a recording and i
         .first(),
     ).toBeVisible();
     await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
-    await shoot(page, 'media-player-not-found', width);
+    await shoot(page, 'media-player-not-found', { width, at: AT });
 
     await openPlayer(
       page,
@@ -226,14 +255,14 @@ test('other media: low confidence, waiting, failed, not found, a recording and i
     ).toBeVisible();
     await shoot(page, 'media-player-recording-tracks', width);
 
-    await openPlayer(page, world.tracks[1] ?? '', 'Quem o levou até lá?');
+    await openPlayer(page, world.tracks[1] ?? '', 'Quem o levou até lá?', true);
     await expect(
       page
         .getByText(/Parte de/)
         .and(page.locator(':visible'))
         .first(),
     ).toBeVisible();
-    await shoot(page, 'media-player-track', width);
+    await shoot(page, 'media-player-track', { width, at: 0 });
     await context.close();
   }
 });
@@ -278,15 +307,15 @@ test('"Transcrever de novo": confirm, then queued', async ({ browser }) => {
   // Both widths confirm before the first one queues it for real.
   for (const width of WIDTHS) {
     const { context, page } = await contextAt(browser, width);
-    await openPlayer(page, lc, title);
+    await openPlayer(page, lc, title, true);
     await again(page);
     await expect(confirm(page)).toBeVisible();
-    await shoot(page, 'media-player-transcribe-again', width);
+    await shoot(page, 'media-player-transcribe-again', { width, at: 0 });
     await context.close();
   }
   for (const width of WIDTHS) {
     const { context, page } = await contextAt(browser, width);
-    await openPlayer(page, lc, title);
+    await openPlayer(page, lc, title, true);
     if (width === 'desktop') {
       await again(page);
       await expect(confirm(page)).toBeVisible();
@@ -302,7 +331,7 @@ test('"Transcrever de novo": confirm, then queued', async ({ browser }) => {
         .and(page.locator(':visible'))
         .first(),
     ).toBeVisible();
-    await shoot(page, 'media-player-transcribe-again-queued', width);
+    await shoot(page, 'media-player-transcribe-again-queued', { width, at: 0 });
     await context.close();
   }
 });
@@ -344,9 +373,15 @@ test('the mini player, "Meus marcadores" and the queue', async ({
     await playInterview(page, world);
     await go(page, '/biblioteca');
     await expect(page.locator('app-library-row').first()).toBeVisible();
-    if (!phone) await nowPlaying(page, true);
+    // The bar's Fila (green in the frame) opens the right panel on its Fila tab.
+    const queue = page.getByRole('button', { name: 'Fila', exact: true });
+    if (!phone) {
+      await nowPlaying(page, false);
+      await queue.click();
+      await expect(queue).toHaveAttribute('aria-pressed', 'true');
+    }
     await shoot(page, 'media-mini-player', { width, top: true });
-    if (!phone) await nowPlaying(page, false);
+    if (!phone) await queue.click();
 
     await go(page, '/midia/marcadores');
     await expect(

@@ -86,7 +86,7 @@ import { parseVoices } from '../voices/voices-panel.js';
       <div class="card">
         <h3 id="about-voices-title" i18n="@@voices.title">Vozes</h3>
         @if (voices().length) {
-          <p class="quiet" i18n="@@player.about.voicesFound">
+          <p class="quiet line" i18n="@@player.about.voicesFound">
             Vozes separadas: {{ voices().length }}
           </p>
           <ul class="voices">
@@ -121,10 +121,10 @@ import { parseVoices } from '../voices/voices-panel.js';
           } @else if (canRequest()) {
             <!-- pRight voicesCard 'none': the count and "Separar vozes" in the card. -->
             <form class="separate" novalidate (submit)="separate($event)">
+              <label for="about-voices-count" i18n="@@voices.countLabel"
+                >Número de vozes (opcional)</label
+              >
               <div class="count">
-                <label for="about-voices-count" i18n="@@voices.countLabel"
-                  >Número de vozes (opcional)</label
-                >
                 <input
                   id="about-voices-count"
                   type="text"
@@ -186,7 +186,7 @@ import { parseVoices } from '../voices/voices-panel.js';
           <div>
             <p class="person-name">{{ person.name }}</p>
             @if (authorCount(); as count) {
-              <p class="quiet">{{ count }}</p>
+              <p class="quiet line">{{ count }}</p>
             }
           </div>
         </div>

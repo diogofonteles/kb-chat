@@ -16,6 +16,7 @@ h3 {
   font-family: var(--font-ui);
   font-size: var(--text-item);
   font-weight: 700;
+  line-height: 1.125rem;
 }
 
 .count {
@@ -178,8 +179,28 @@ h3 {
   color: var(--color-text-muted);
 }
 
+/* The desktop panel's row (pRight bmRow): pill 44×24, the note 10 after it, ✎ and 🗑 as
+   16 icons 26 apart at the card's edge; each target 24 (WCAG 2.5.8), rows 12 apart. */
 @media (min-width: 1024px) {
+  .list {
+    gap: var(--space-3);
+  }
+
+  .item {
+    column-gap: 0.625rem;
+  }
+
   .time {
     min-height: 1.5rem;
+  }
+
+  .actions {
+    gap: 0.125rem;
+    margin-right: -0.25rem;
+  }
+
+  .actions button {
+    width: 1.5rem;
+    height: 1.5rem;
   }
 }

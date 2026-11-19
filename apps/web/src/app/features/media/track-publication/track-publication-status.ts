@@ -43,7 +43,8 @@ const ICON: Record<TrackPublicationState, IconName> = {
   updating: 'refresh',
   'waiting-mac': 'sparkle',
   failed: 'warn',
-  out: 'close',
+  // v2 · Mídia — Player (waiting): "✦ Fora da pesquisa: ainda não publicada no acervo".
+  out: 'sparkle',
 };
 
 const OUT_REASON: Record<PublicationOutReason, () => string> = {
@@ -95,12 +96,17 @@ export function publicationText(publication: TrackPublication): string {
         <p #line class="line" role="status" tabindex="-1">
           <ui-icon class="sign" [name]="iconOf(current)" [size]="14" />
           <!-- One run of words: "Pesquisa com IA: aguardando o Mac do dono". -->
-          <span class="words"
-            ><ng-container i18n="@@publication.label"
-              >Pesquisa com IA:</ng-container
+          <!-- Out of the research, its words say so alone ("Fora da pesquisa: …", as drawn). -->
+          @if (current.state === 'out') {
+            <span class="words">{{ wordsOf(current) }}</span>
+          } @else {
+            <span class="words"
+              ><ng-container i18n="@@publication.label"
+                >Pesquisa com IA:</ng-container
+              >
+              {{ wordsOf(current) }}</span
             >
-            {{ wordsOf(current) }}</span
-          >
+          }
           @if (notice()) {
             <span class="notice">{{ notice() }}</span>
           }
@@ -193,6 +199,7 @@ export class TrackPublicationStatus {
   /** The state's words after "Pesquisa com IA:", as a sentence goes on ("aguardando…"). */
   protected wordsOf(publication: TrackPublication): string {
     const text = publicationText(publication);
+    if (publication.state === 'out') return text;
     return text.charAt(0).toLocaleLowerCase('pt-BR') + text.slice(1);
   }
 
