@@ -46,3 +46,13 @@
     }
   }
 </div>
+<!-- Its ⋯ at the row's end (media-library-search): play now, next, its bookmarks. -->
+<app-menu-button
+  class="more"
+  [label]="menuLabel()"
+  [options]="options"
+  [sheetTitle]="item().title"
+  (chosen)="choose($event)"
+>
+  <ui-icon name="more" [size]="18" />
+</app-menu-button>

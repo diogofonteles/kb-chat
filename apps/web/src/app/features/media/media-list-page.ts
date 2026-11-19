@@ -24,7 +24,9 @@ import {
   mediaListSchema,
   type LibrarySort,
   type LibraryView,
+  type LibraryItem,
   type MediaItem,
+  type MediaListItem,
 } from '@kb-chat/contracts';
 import { formatClock, formatDuration, resumeFrom } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
@@ -74,6 +76,7 @@ import { injectOpenPreparations } from './preparation/open-preparations.js';
 import { PreparationEntry } from './preparation/preparation-entry.js';
 import { scrollPageByKey } from './page-keys.js';
 import { RowMenu } from './row-menu.js';
+import { TrackGroup } from './library/track-group.js';
 import { UploadPanel } from './upload-panel.js';
 import { UiBanner } from '@ui/banner.js';
 import { UiButton, UiChip, UiIconButton } from '@ui/button.js';
@@ -118,7 +121,10 @@ const shortFailureOf = (item: MediaItem): string =>
   item.failure ? SHORT_FAILURES[item.failure]() : '';
 
 /** The list in the order chosen on the phone's line (the library's words, BR-7). */
-function sortedBy(items: readonly MediaItem[], sort: LibrarySort): MediaItem[] {
+function sortedBy<T extends MediaItem>(
+  items: readonly T[],
+  sort: LibrarySort,
+): T[] {
   const list = [...items];
   if (sort === 'title')
     return list.sort((a, b) => collator.compare(a.title, b.title));
@@ -160,6 +166,7 @@ function sortedBy(items: readonly MediaItem[], sort: LibrarySort): MediaItem[] {
     MovedNotice,
     UploadPanel,
     RowMenu,
+    TrackGroup,
     PreparationEntry,
     UiBanner,
     UiButton,
@@ -270,8 +277,12 @@ export class MediaListPage {
   /** "Mestre Laércio e outros autores · 11 áudios · 6 min" (media-list's header). */
   protected readonly headerMeta = computed(() => {
     const items = this.items();
-    if (items.length === 0)
-      return $localize`:@@media.noneYet:nenhum áudio ainda`;
+    if (items.length === 0) {
+      // Its main author leads an empty collection too (media-list-empty).
+      const none = $localize`:@@media.noneYet:nenhum áudio ainda`;
+      const lead = this.topic()?.mainAuthor?.name;
+      return lead ? `${lead} · ${none}` : none;
+    }
     // The collection's main author leads, even with none of its audio (v2 · media-list).
     const main =
       this.topic()?.mainAuthor ??
@@ -526,6 +537,34 @@ export class MediaListPage {
       this.announcement.set(
         $localize`:@@library.playsNext:“${item.title}:title:” toca em seguida.`,
       );
+  }
+
+  /** The recordings whose tracks are open under them (v2 media-list, as the library). */
+  protected readonly openTracks = signal<ReadonlySet<string>>(new Set());
+
+  protected toggleTracks(id: string): void {
+    this.openTracks.update((open) => {
+      const next = new Set(open);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  protected tracksLabelOf(item: MediaListItem): string {
+    const count = item.tracks.length;
+    return count === 1
+      ? $localize`:@@library.tracksOne:1 faixa`
+      : $localize`:@@library.tracks:${count}:count: faixas`;
+  }
+
+  /** The library's track rows read a recording of the library: the same item, as audio. */
+  protected asRecording(item: MediaListItem): LibraryItem {
+    const audio = <T extends MediaItem>(one: T) => ({
+      ...one,
+      kind: 'audio' as const,
+      lastPlayedAt: one.positionUpdatedAt,
+    });
+    return { ...audio(item), tracks: item.tracks.map(audio) };
   }
 
   protected play(item: MediaItem): void {

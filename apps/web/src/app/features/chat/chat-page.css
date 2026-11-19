@@ -265,6 +265,13 @@
   color: var(--color-text);
 }
 
+/* v2 · media-list@mobile: the ← glyph 16 from the edge, the page's name 12 after it. */
+@media (max-width: 1023px) {
+  .menu.back {
+    margin-inline: -3px -3px;
+  }
+}
+
 /* The media pages keep the collection as their title (they draw their own v2 head below). */
 .topic {
   /* One line, whatever the panel leaves: a long title ends in "…" (M-1). */
@@ -516,6 +523,12 @@
      last row still scrolls above the foot (FR-4, AC-5). */
   .app-shell:has(app-library-page, app-media-list-page) > .layout {
     grid-row: 1 / -1;
+  }
+
+  /* While choosing, the selection's bar takes the navigation's place (media-library-
+     selection@mobile). */
+  .app-shell:has(.library.selecting) app-bottom-nav {
+    display: none;
   }
 
   .app-shell:has(app-library-page, app-media-list-page) > .shell-foot {

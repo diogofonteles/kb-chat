@@ -2,10 +2,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
   output,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import type { LibraryHit as Hit } from '@kb-chat/contracts';
@@ -13,6 +14,8 @@ import { formatClock, formatDuration } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
 import { textParts } from '@core/text/text-parts.js';
 import { playbackStartOf } from '../search-hit/passage-focus.js';
+import { MenuButton, type MenuOption } from '../menu-button.js';
+import { PlayNow } from './play-now.js';
 
 /**
  * One result of "Buscar na biblioteca" (KBC-096): ▶, the track's title, where it belongs and
@@ -20,7 +23,7 @@ import { playbackStartOf } from '../search-hit/passage-focus.js';
  */
 @Component({
   selector: 'app-library-hit',
-  imports: [RouterLink, UiCover, UiIcon],
+  imports: [RouterLink, MenuButton, UiCover, UiIcon],
   templateUrl: './library-hit.html',
   styleUrl: './library-hit.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -30,6 +33,40 @@ export class LibraryHit {
   readonly playing = input(false);
   readonly played = output();
   readonly opened = output();
+  private readonly playNow = inject(PlayNow);
+  private readonly router = inject(Router);
+
+  protected readonly options: readonly MenuOption[] = [
+    {
+      id: 'play',
+      label: $localize`:@@library.playNow:Tocar agora`,
+      icon: 'play',
+    },
+    {
+      id: 'play-next',
+      label: $localize`:@@library.playNext:Tocar em seguida`,
+      icon: 'queue',
+    },
+    {
+      id: 'bookmarks',
+      label: $localize`:@@library.seeBookmarks:Ver marcadores`,
+      icon: 'bookmark',
+    },
+  ];
+  protected readonly menuLabel = computed(
+    () =>
+      $localize`:@@media.moreActions:Mais ações para ${this.item().title}:title:`,
+  );
+
+  protected choose(id: string): void {
+    if (id === 'play') {
+      if (!this.playing()) this.played.emit();
+    } else if (id === 'play-next') this.playNow.playNext(this.item());
+    else if (id === 'bookmarks')
+      void this.router.navigate(['/midia', this.item().id], {
+        fragment: 'marcadores',
+      });
+  }
 
   protected readonly item = computed(() => this.hit().item);
   protected readonly passage = computed(() => this.hit().passage);

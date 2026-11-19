@@ -348,6 +348,7 @@
             class="row"
             [class.failed]="item.status === 'failed'"
             [class.playing]="playingId() === item.id"
+            [class.has-tracks]="item.tracks.length > 0"
           >
             <span class="lead" aria-hidden="true">{{ index + 1 }}</span>
             <ui-cover class="art" [title]="item.title" [size]="52" />
@@ -372,6 +373,15 @@
             }
             <span class="meta">
               <span class="byline">
+                @if (item.tracks.length > 0) {
+                  <!-- A recording (media-list@mobile): "3 faixas" before its author. -->
+                  <ui-pill
+                    class="tracks-pill"
+                    tone="muted"
+                    aria-hidden="true"
+                    >{{ tracksLabelOf(item) }}</ui-pill
+                  >
+                }
                 <span class="author">{{ authorOf(item) }}</span>
                 <!-- The phone's one line (media-list@mobile): "Outros autores · 0:16". -->
                 <span class="phone-byline"
@@ -440,8 +450,39 @@
                 (editChosen)="openEdit(item)"
                 (removeChosen)="askRemove(item)"
               />
+              @if (item.tracks.length > 0) {
+                <!-- The chevron at the row's end opens its tracks under it (as the library). -->
+                <button
+                  type="button"
+                  class="tracks-toggle"
+                  [attr.aria-label]="tracksLabelOf(item)"
+                  [attr.aria-expanded]="openTracks().has(item.id)"
+                  [attr.aria-controls]="
+                    openTracks().has(item.id) ? 'tracks-' + item.id : null
+                  "
+                  (click)="toggleTracks(item.id)"
+                >
+                  <ui-icon
+                    [name]="
+                      openTracks().has(item.id) ? 'chevDown' : 'chevRight'
+                    "
+                    [size]="phone() ? 20 : 18"
+                  />
+                </button>
+              }
             </span>
           </li>
+          @if (item.tracks.length > 0 && openTracks().has(item.id)) {
+            <li class="row-tracks">
+              <app-track-group
+                [item]="asRecording(item)"
+                [toggle]="false"
+                [open]="true"
+                [playingId]="playingId()"
+                (played)="play($event)"
+              />
+            </li>
+          }
         }
       </ul>
     }

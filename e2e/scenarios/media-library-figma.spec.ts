@@ -15,6 +15,7 @@ import {
   HELENA_COUNT,
   HELENA_NAME,
   OWNER,
+  PROGRESS,
   RECORDING,
   TITLES,
   TOPIC,
@@ -470,7 +471,9 @@ test('"Enviar mídia": empty, chosen, repeated, not audio, sending', async ({
     );
     await dialog.getByRole('button', { name: 'Enviar', exact: true }).click();
     const { id } = (await (await created).json()) as { id: string };
-    await expect(dialog.getByText(/Enviando/).first()).toBeVisible();
+    await expect(
+      dialog.locator('.meta span:visible', { hasText: /Enviando/ }).first(),
+    ).toBeVisible();
     await shoot(page, 'media-upload-sending', width);
     // The frames after this one have no such upload: the held one goes away.
     await page.unrouteAll({ behavior: 'ignoreErrors' });
@@ -521,6 +524,21 @@ test('/midia, the collection as an album for who has no library', async ({
       page.getByRole('heading', { name: `Acervo — ${TOPIC_TITLE}` }),
     ).toBeAttached();
     await shoot(page, 'media-list', width);
+
+    // The phone's menu frame (media-list-menu@mobile) draws the list as heard: the first three
+    // with their bars, most recent on top. The list frame before it draws none heard.
+    if (phone) {
+      for (const [code, positionMs] of PROGRESS) {
+        const saved = await page.request.put(
+          `/api/v1/media/${world.byCode[code]}/progress`,
+          { data: { positionMs, basedOn: null }, headers: CSRF },
+        );
+        expect(saved.status(), await saved.text()).toBe(200);
+      }
+      await playInterview(page, world);
+      await go(page, '/midia');
+      await expect(page.getByRole('link', { name: rita })).toBeVisible();
+    }
 
     const more = page.getByRole('button', { name: `Mais ações para ${rita}` });
     await more.click();

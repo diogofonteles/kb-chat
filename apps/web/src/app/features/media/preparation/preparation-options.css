@@ -532,3 +532,14 @@ legend {
     opacity: 0.5;
   }
 }
+
+/* The upload's cards say no minutes (media-upload-chosen): the estimate stays for a screen
+   reader; the preparation's page shows it. */
+:host(.compact) .estimate {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

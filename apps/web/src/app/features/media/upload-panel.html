@@ -92,15 +92,6 @@
                 </li>
               }
             </ul>
-            @if (stage() !== 'sending') {
-              <!-- No place in the frames: more files join the list from here (or a drop). -->
-              <button type="button" class="add-more" (click)="chooseFile()">
-                <ui-icon name="plus" [size]="16" />
-                <span i18n="@@media.upload.chooseOther"
-                  >Adicionar arquivos</span
-                >
-              </button>
-            }
           }
           <p
             class="rule"
@@ -190,6 +181,15 @@
         </p>
       }
     </div>
+
+    @if (uploads.entries().length > 0 && stage() !== 'sending') {
+      <!-- No place in the frames: more files join the list from here (or a drop), after
+           everything drawn so the drawn blocks keep their places. -->
+      <button type="button" class="add-more" (click)="chooseFile()">
+        <ui-icon name="plus" [size]="16" />
+        <span i18n="@@media.upload.chooseOther">Adicionar arquivos</span>
+      </button>
+    }
 
     <footer class="actions">
       @if (stage() === 'sending') {

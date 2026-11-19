@@ -93,6 +93,7 @@
       type="button"
       uiIconButton
       class="bar-search"
+      [class.on]="searching()"
       [size]="32"
       aria-label="Ir para a busca"
       i18n-aria-label="@@library.goToSearch"
@@ -469,6 +470,7 @@
                     [playing]="playingId() === item.id"
                     [master]="isMaster()"
                     [phone]="phone()"
+                    [choosing]="selecting()"
                     [selectAll]="
                       selecting() && !allSelected() ? selectAllText() : ''
                     "

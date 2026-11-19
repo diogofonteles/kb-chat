@@ -9,12 +9,20 @@
     [class.err]="tone() === 'err'"
   >
     <div class="top">
-      <span class="tile" [class.audio]="audio()" aria-hidden="true">
-        <ui-icon [name]="audio() ? 'music' : 'file'" [size]="20" />
-      </span>
+      <!-- The file's own cover, as each card of the frames draws it (media-upload-*). -->
+      <ui-cover
+        class="cover"
+        [title]="name()"
+        [size]="40"
+        [label]="false"
+        aria-hidden="true"
+      />
       <div class="names">
         <p class="name">{{ name() }}</p>
-        <p class="meta">{{ meta() }}</p>
+        <p class="meta">
+          <span class="wide">{{ meta() }}</span
+          ><span class="narrow">{{ metaShort() }}</span>
+        </p>
       </div>
       @if (cancellable()) {
         <button
@@ -68,11 +76,13 @@
       @case ('duplicate') {
         <p class="notice">
           <ui-icon name="warn" [size]="14" />
-          <ng-container i18n="@@media.upload.duplicate"
-            >Já está no acervo:</ng-container
-          >&ngsp;<a [routerLink]="mediaPagePath(state.media.id)">{{
-            state.media.title
-          }}</a>
+          <span
+            ><ng-container i18n="@@media.upload.duplicate"
+              >Já está no acervo:</ng-container
+            >&ngsp;<a [routerLink]="mediaPagePath(state.media.id)">{{
+              state.media.title
+            }}</a></span
+          >
         </p>
       }
       @case ('duplicate-hidden') {

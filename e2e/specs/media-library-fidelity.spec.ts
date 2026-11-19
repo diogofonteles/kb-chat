@@ -221,7 +221,9 @@ async function expectHeldSend(
   );
   await input.setInputFiles(makeMp3(`Envio parado ${uniqueTag()}`, 4));
   await send.click();
-  await expect(dialog.getByText(/Enviando/).first()).toBeVisible();
+  await expect(
+    dialog.locator('.meta span:visible', { hasText: /Enviando/ }).first(),
+  ).toBeVisible();
   await shoot(page, 'media-upload-sending', width);
   await page.unroute('**/api/v1/media/*/upload');
   await dialog

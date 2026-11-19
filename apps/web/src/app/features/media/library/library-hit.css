@@ -2,7 +2,7 @@
    with its time in green. */
 :host {
   display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr);
+  grid-template-columns: 4rem minmax(0, 1fr) auto;
   align-items: start;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-4);
@@ -172,5 +172,42 @@ mark {
   .title {
     min-height: var(--target);
     font-size: var(--text-item);
+  }
+}
+
+.more {
+  --menu-trigger-min: 1.125rem;
+  --menu-trigger-height: 1.125rem;
+}
+
+/* v2 · media-library-search at a desktop: 10 over and under, the cover 64 with the title 16/19
+   at its top, the line 13/16 4 under it, the passage's band 5 under that; ⋯ 18 at the end. */
+@media (min-width: 1024px) {
+  :host {
+    padding: 0.625rem var(--space-4) 0.5625rem;
+  }
+
+  .title {
+    min-height: 0;
+    line-height: 1.1875rem;
+  }
+
+  .meta {
+    line-height: 1rem;
+  }
+
+  .passage {
+    margin-top: 1px;
+  }
+}
+
+/* A phone draws no ⋯ on a result (media-library-search@mobile): the row is the way in. */
+@media (max-width: 1023px) {
+  :host {
+    grid-template-columns: 3.25rem minmax(0, 1fr);
+  }
+
+  .more {
+    display: none;
   }
 }

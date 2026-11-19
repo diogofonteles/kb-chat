@@ -71,7 +71,8 @@ export type RowAction =
     role: 'listitem',
     '[class.selected]': 'selected()',
     '[class.failed]': "item().status === 'failed'",
-    '[class.playing]': 'playing()',
+    '[class.playing]': 'playing() && !choosing()',
+    '[class.choosing]': 'choosing()',
     // Its ⋯ open: the row stays as under the pointer (media-library-row-menu).
     '[class.menu-open]': 'menuOpen()',
     '[class.has-tracks]': 'tracksLabel() !== ""',
@@ -98,6 +99,8 @@ export class LibraryRow {
    * (media-library-row-menu@mobile) — and the ⋯ says "Compartilhar".
    */
   readonly phone = input(false);
+  /** A selection is on: the one playing is drawn as the others (media-library-selection). */
+  readonly choosing = input(false);
   /**
    * During a selection on a phone, "Selecionar todas as N" (the table's box has no place
    * there): its words, or '' when there is nothing more to select.

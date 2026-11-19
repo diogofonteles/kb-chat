@@ -67,6 +67,40 @@ async function renderList(
 }
 
 describe('MediaListPage (T14)', () => {
+  it('v2 media-list: a recording says "N faixas" and its chevron opens its tracks under it', async () => {
+    const { answer, fixture } = await renderList({ features: ['media'] });
+    const recording = aMediaItem({ id: mediaId(1), title: 'Perguntas' });
+    const trackOf = (n: number, title: string) =>
+      aMediaItem({
+        id: mediaId(10 + n),
+        title,
+        parent: {
+          id: recording.id,
+          title: recording.title,
+          startMs: n * 1000,
+          endMs: n * 1000 + 500,
+          ordinal: n,
+          total: 2,
+          version: 1,
+          fileVersion: 1,
+        },
+      });
+    await answer([
+      {
+        ...recording,
+        tracks: [trackOf(1, 'Primeira'), trackOf(2, 'Segunda')],
+      } as MediaItem,
+    ]);
+    expect(screen.getByText('2 faixas')).toBeTruthy();
+    const toggle = screen.getByRole('button', { name: '2 faixas' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(toggle);
+    await fixture.whenStable();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const tracks = screen.getByRole('list', { name: 'Faixas de Perguntas' });
+    expect(within(tracks).getByRole('link', { name: 'Segunda' })).toBeTruthy();
+  });
+
   it('shows a skeleton while loading, then the items with status in words', async () => {
     const { answer } = await renderList();
     expect(screen.getByRole('list', { name: 'Carregando…' })).toBeTruthy();

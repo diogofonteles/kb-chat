@@ -55,6 +55,11 @@
   grid-area: 1 / 1;
 }
 
+/* The box at the column's start, the number at its end (media-library-selection). */
+.lead > .select {
+  justify-self: start;
+}
+
 /* Over the box in the same cell, they only show: a press there is the box's (WebKit can
    test the press before the hover hides them). */
 .number,
@@ -77,7 +82,7 @@
 :host(:hover) .select:not(:checked),
 :host(:focus-within) .select:not(:checked),
 :host-context(.selecting) .select:not(:checked) {
-  border-color: var(--color-text-muted);
+  border-color: var(--ui-check-edge);
 }
 
 :host(:hover) .number,
@@ -329,6 +334,16 @@ a.main ~ .cells .duration {
   opacity: 1;
 }
 
+/* While choosing, a row's focus is its box's: no ⋯ or 🔖 come out for it, only under the
+   pointer or on their own focus (media-library-selection). */
+@container library-table (min-width: 36.0625rem) {
+  :host(.choosing:not(:hover, .menu-open))
+    .actions
+    app-menu-button:not(:focus-within) {
+    opacity: 0;
+  }
+}
+
 .author {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -440,6 +455,23 @@ app-menu-button {
     height: 2rem;
     overflow: visible;
     clip-path: none;
+  }
+
+  :host(.choosing:not(:hover, .menu-open, :has(.row-bookmarks:focus))) {
+    grid-template-columns:
+      1.5rem 2.5rem minmax(0, 1fr)
+      11.25rem 13.75rem 2.75rem 1.125rem;
+    grid-template-areas:
+      'lead art title topic status duration actions'
+      'lead art byline topic status duration actions';
+  }
+
+  :host(.choosing:not(:hover, .menu-open)) .row-bookmarks:not(:focus) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
   }
 
   .row-bookmarks:hover {
@@ -593,7 +625,7 @@ app-menu-button {
      invisible box would take a tap on what looks like blank space. Still the edge, not
      opacity, as above (NFR-2). */
   .select:not(:checked) {
-    border-color: var(--color-text-muted);
+    border-color: var(--ui-check-edge);
   }
 
   .number,

@@ -1156,7 +1156,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           (_, node) =>
             node?.classList.contains('hint') === true &&
             node.textContent?.replace(/\s+/g, ' ').trim() ===
-              'Procuramos na fala, no título, no autor e nos assuntos. Na fala a busca é por palavra inteira: confira a escrita ou tente outra palavra.',
+              'Procuramos na fala, no título, no autor e nos assuntos. Na fala, a busca é por palavra inteira: confira a escrita ou tente outra palavra.',
         ),
       ).toBeTruthy();
       expect(

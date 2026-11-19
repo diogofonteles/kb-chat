@@ -251,6 +251,19 @@
   border-top: 0;
 }
 
+/* A sheet of actions (media-library-row-menu@mobile): 54 rows, 14 under the head, 56 of foot. */
+.menu.ui-overlay--sheet:not(.choices) {
+  padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+}
+
+.menu.ui-overlay--sheet:not(.choices) button {
+  min-height: 3.375rem;
+}
+
+.menu.ui-overlay--sheet:not(.choices) .sheet-head {
+  padding-bottom: calc(var(--space-3) + 2px);
+}
+
 /* A sheet of choices (media-library-sort@mobile): 47 px rows of words, the chosen one's ✓ 18
    at the end; the groups' names 13/16, 6 over their first row and 12 over the pills. */
 .menu.ui-overlay--sheet.choices button {
@@ -314,4 +327,12 @@
 .menu.ui-overlay--sheet .pills button.checked:focus-visible {
   background: var(--color-text);
   color: var(--color-bg);
+}
+
+/* A phone: the sheet covers the page, the ⋯ under it keeps its colour (media-library-row-menu@mobile). */
+@media (max-width: 1023px) {
+  .trigger:not(.chip)[aria-expanded='true'] {
+    background: transparent;
+    color: var(--menu-trigger-color, var(--color-text-muted));
+  }
 }

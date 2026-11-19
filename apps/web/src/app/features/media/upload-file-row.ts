@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { UiIcon } from '@ui/icon.js';
+import { UiCover } from '@ui/cover.js';
 import type { Topic } from '@kb-chat/contracts';
 import { mediaPagePath } from '@core/media/media-api.js';
 import type { UploadEntry } from './upload-entries.js';
@@ -19,7 +20,7 @@ const SPOKEN_STEP = 25;
 /** One file of the upload panel (screens.md T14, KBC-035): its title and where it stands. */
 @Component({
   selector: 'app-upload-file-row',
-  imports: [RouterLink, UiIcon],
+  imports: [RouterLink, UiCover, UiIcon],
   templateUrl: './upload-file-row.html',
   styleUrl: './upload-file-row.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -78,6 +79,16 @@ export class UploadFileRow {
     return state.kind === 'ready'
       ? $localize`:@@media.upload.accepted:${sizeOf(file.size)}:size: · áudio aceito`
       : sizeOf(file.size);
+  });
+  /** The phone's card says the size alone (media-upload-chosen@mobile). */
+  protected readonly metaShort = computed(() => {
+    const { file, state } = this.entry();
+    // While it goes, how far in a word (media-upload-sending@mobile: "Enviando… 0%").
+    if (state.kind === 'sending' && !state.offline)
+      return $localize`:@@media.upload.sendingPercent:Enviando… ${this.percent()}:percent:%`;
+    return this.audio() && state.kind === 'ready'
+      ? sizeOf(file.size)
+      : this.meta();
   });
   protected readonly progressLabel = computed(
     () =>
