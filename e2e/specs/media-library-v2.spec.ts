@@ -747,3 +747,39 @@ for (const theme of ['light', 'dark'] as const)
     expect(await seriousWcag22(page)).toEqual([]);
     await page.context().close();
   });
+
+test('the keyboard never stops on a control it cannot see: a phone has no 🔖 in the row, its ⋯ has Ver marcadores', async ({
+  browser,
+}) => {
+  const page = await listener(browser, [collection]);
+  await openLibrary(page, collection);
+  const row = rowOf(page, lecture(1));
+  const bookmarks = row.getByRole('button', {
+    name: `Ver marcadores de ${lecture(1).title}`,
+  });
+  if (desktop(page)) {
+    // The 🔖 comes out with the focus on the row (media-library-row-menu).
+    await row.getByRole('link', { name: lecture(1).title }).focus();
+    await page.keyboard.press('Tab');
+    await expect(bookmarks).toBeFocused();
+    const shown = await bookmarks.boundingBox();
+    expect(shown?.width ?? 0).toBeGreaterThanOrEqual(18);
+  } else {
+    await expect(bookmarks).toHaveCount(0);
+    // Each stop of a row, from its link to the next row, is on screen and drawn.
+    await row.getByRole('link', { name: lecture(1).title }).focus();
+    for (let stop = 0; stop < 3; stop += 1) {
+      await page.keyboard.press('Tab');
+      const size = await page.evaluate(() => {
+        const rect = document.activeElement?.getBoundingClientRect();
+        return [rect?.width ?? 0, rect?.height ?? 0];
+      });
+      expect(Math.min(...size)).toBeGreaterThan(1);
+    }
+    await row.getByRole('button', { name: /^Mais ações/ }).click();
+    await expect(
+      page.getByRole('menuitem', { name: 'Ver marcadores' }),
+    ).toBeVisible();
+  }
+  await page.context().close();
+});

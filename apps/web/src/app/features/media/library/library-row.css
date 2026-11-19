@@ -491,6 +491,12 @@ app-menu-button {
 
 /* A narrow table (the right panel open, a small window): the collection gives way first. */
 @container library-table (max-width: 52rem) {
+  /* No column brings the 🔖 out here, a phone has no hover: out of the tab order and the
+     accessibility tree, the row's ⋯ keeps Ver marcadores. */
+  .row-bookmarks {
+    display: none;
+  }
+
   :host {
     grid-template-columns:
       1.5rem 2.5rem minmax(0, 1fr)
