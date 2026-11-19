@@ -1,7 +1,12 @@
 :host {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
-  margin-top: var(--space-3);
+}
+
+.bounds {
+  gap: var(--space-2);
 }
 
 .line {
@@ -19,12 +24,6 @@
   display: none;
 }
 
-.history summary {
-  min-height: var(--target);
-  padding: var(--space-2) 0;
-  cursor: pointer;
-}
-
 .note a {
   margin-left: var(--space-2);
   color: var(--color-accent-strong);
@@ -36,5 +35,12 @@
   .line > .secondary,
   .line > .danger {
     flex: 1 1 100%;
+  }
+}
+
+/* A phone reaches it from the player's ⋯ (pMobile has no room in its row). */
+@media (max-width: 1023px) {
+  .bounds {
+    display: none;
   }
 }

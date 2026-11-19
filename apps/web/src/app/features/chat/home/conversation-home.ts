@@ -1,4 +1,3 @@
-import { DecimalPipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -13,24 +12,13 @@ import type {
   Conversation,
   ConversationKind,
   ConversationStatus,
-  SearchKind,
 } from '@kb-chat/contracts';
 import { HistoryStore } from '@core/history/history-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import type { SidebarAction } from '@features/sidebar/sidebar.js';
 import { PendingTranscriptions } from '@features/transcribers/pending-transcriptions.js';
-import {
-  UiBanner,
-  UiButton,
-  UiChip,
-  UiCover,
-  UiEmptyState,
-  UiIcon,
-  UiMenu,
-  UiMenuItem,
-} from '@ui/index.js';
+import { UiBanner, UiButton, UiCover, UiEmptyState } from '@ui/index.js';
 import { ChatStore } from '../chat-store.js';
-import { ALL_KINDS } from '../search-kinds.js';
 import { ViewStore } from '../view-store.js';
 import { homeTiles, type HomeTile } from './home-tiles.js';
 
@@ -38,9 +26,6 @@ import { homeTiles, type HomeTile } from './home-tiles.js';
 export interface HomeSubject {
   readonly concept: string;
 }
-
-/** The reach the scope chips pick: every kind, only the texts, or the AI research. */
-type Scope = 'all' | 'documents' | 'research';
 
 const KIND_LABELS: Record<ConversationKind, () => string> = {
   search: () => $localize`:@@home.kindSearch:Busca`,
@@ -60,18 +45,7 @@ const STATUS_LABELS: Record<ConversationStatus, () => string> = {
  */
 @Component({
   selector: 'app-conversation-home',
-  imports: [
-    DecimalPipe,
-    PendingTranscriptions,
-    UiBanner,
-    UiButton,
-    UiChip,
-    UiCover,
-    UiEmptyState,
-    UiIcon,
-    UiMenu,
-    UiMenuItem,
-  ],
+  imports: [PendingTranscriptions, UiBanner, UiButton, UiCover, UiEmptyState],
   templateUrl: './conversation-home.html',
   styleUrl: './conversation-home.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -98,18 +72,14 @@ export class ConversationHome {
   /** The same actions as the library's: the page moves the focus after them. */
   readonly acted = output<SidebarAction>();
 
-  protected readonly topic = this.store.topic;
-  protected readonly collections = computed(() =>
-    this.store.topicList().filter((topic) => topic.canOpen),
-  );
-  protected readonly scope = computed((): Scope => {
-    if (this.researching()) return 'research';
-    const kinds = this.store.kinds();
-    return kinds.length === 1 && kinds[0] === 'text' ? 'documents' : 'all';
+  protected readonly errorAgain = $localize`:@@message.errorText:Tente de novo.`;
+  /** The topics' error without its "Tente de novo.", which goes on the line under it. */
+  protected readonly topicsErrorTitle = computed(() => {
+    const text = this.topicsError();
+    return text.endsWith(` ${this.errorAgain}`)
+      ? text.slice(0, -this.errorAgain.length - 1)
+      : text;
   });
-  protected readonly showContent = computed(
-    () => !this.topicsError() && !this.noTopics(),
-  );
   /** The shortcuts with what each one says under its title. */
   protected readonly tiles = computed(() =>
     homeTiles(this.history.conversations(), this.store.topicList()).map(
@@ -133,17 +103,6 @@ export class ConversationHome {
         takeUntilDestroyed(),
       )
       .subscribe((conversation) => this.restoreLoaded(conversation));
-  }
-
-  protected chooseScope(scope: Scope): void {
-    if (scope === 'research') {
-      this.views.select('research');
-      return;
-    }
-    const kinds: readonly SearchKind[] =
-      scope === 'documents' ? ['text'] : ALL_KINDS;
-    this.store.setKinds(kinds);
-    this.views.select('search');
   }
 
   protected chooseCollection(slug: string): void {

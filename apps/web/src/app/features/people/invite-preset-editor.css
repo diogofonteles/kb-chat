@@ -1,8 +1,10 @@
-/* The preset sits inside the invitation or a profile: a quiet frame groups it (T9). */
-:host {
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+/* The preset fills the invitation's or the profile's modal: tabs, then the parts 28 under
+   them (person-editor.css); the third tab "Preferências iniciais" 43 after "IA e limites", as
+   the frames draw it. */
+@media (min-width: 1024px) {
+  .tab + .tab + .tab {
+    margin-left: 1.1875rem;
+  }
 }
 
 /* The default collection keeps its hint and notice close, apart from the next field (KBC-033). */
@@ -13,4 +15,139 @@
 
 .field-with-notes:has(.hint:not(.visually-hidden)) {
   margin-block-end: var(--space-2);
+}
+
+/* Preferências iniciais (v2 · Perfil de convite): the hint 20 under the tabs, then each line a
+   label at the left and its 220 select at the right, 70 apart. */
+@media (min-width: 1024px) {
+  .panel:has(.prefs-hint) {
+    padding-top: 1.25rem;
+  }
+
+  .panel .group:has(> .prefs-hint) {
+    gap: 1.375rem;
+  }
+
+  .prefs-hint {
+    font-size: var(--text-meta);
+    line-height: 1.1875rem;
+  }
+
+  .group:has(> .prefs-hint) .field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6);
+    max-width: none;
+    min-height: 2.5rem;
+    font-size: var(--text-item);
+    font-weight: 500;
+  }
+
+  .group:has(> .prefs-hint) .field + .field,
+  .group:has(> .prefs-hint) .field-with-notes + .field {
+    margin-top: 0.5rem;
+  }
+
+  .group:has(> .prefs-hint) .field > .select,
+  .group:has(> .prefs-hint) .field > label > .select {
+    flex: none;
+    width: 13.75rem;
+  }
+}
+
+/* A phone's preferences (v2 · Perfil de convite, celular): rows of a label, the choice under
+   it and a chevron, 71 apart; the select is the whole row, unseen. */
+@media (max-width: 1023px) {
+  .prefs-hint {
+    font-size: var(--text-meta);
+    line-height: 1.1875rem;
+  }
+
+  .group:has(> .prefs-hint) {
+    gap: 1.5rem;
+  }
+
+  .group:has(> .prefs-hint) .field {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 1.25rem;
+    align-items: center;
+    column-gap: var(--space-3);
+    row-gap: 0.1875rem;
+    max-width: none;
+    font-size: var(--text-item);
+    font-weight: 500;
+  }
+
+  .group:has(> .prefs-hint) .field > label > span:first-child {
+    grid-area: 1 / 1;
+    line-height: 1.125rem;
+  }
+
+  .group:has(> .prefs-hint) .field > .row-value {
+    display: block;
+    grid-area: 2 / 1;
+    color: var(--color-text-muted);
+    font-size: var(--text-meta);
+    font-weight: 400;
+    line-height: 1rem;
+  }
+
+  .group:has(> .prefs-hint) .field > .row-chevron {
+    display: inline-flex;
+    grid-area: 1 / 2 / span 2;
+    color: var(--color-text-muted);
+  }
+
+  .group:has(> .prefs-hint) .field > label > .select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+  }
+
+  .group:has(> .prefs-hint) .field:focus-within {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* A phone's preferences (v2 · Perfil de convite, celular): the hint 14 under the tabs, 24 to
+   the first row, the rows 34 apart. */
+@media (max-width: 1023px) {
+  .panel:has(.prefs-hint) {
+    padding-top: 0;
+  }
+
+  .group:has(> .prefs-hint) .field + .field,
+  .group:has(> .prefs-hint) .field-with-notes + .field {
+    margin-top: 0.625rem;
+  }
+}
+
+/* The invitation's wait over the AI tab: a phone's (13/16, 24 over the first row). */
+.lend-wait-top {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .lend-wait-top {
+    display: block;
+    margin: 0;
+    color: var(--color-warn);
+    font-size: var(--text-meta);
+    line-height: 1rem;
+  }
+
+  .panel:has(> .lend-wait-top) {
+    padding-top: 0;
+  }
+
+  /* The first row 24 under the wait. */
+  .lend-wait-top {
+    margin-bottom: 0.5rem;
+  }
 }

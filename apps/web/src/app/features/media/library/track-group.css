@@ -147,3 +147,155 @@ app-menu-button {
     white-space: normal;
   }
 }
+
+/* ---- In the table (media-library-tracks): the tracks are rows of it, under the recording's
+   row that holds their chevron. Desktop: ↳ n · cover 32 + title · "faixa n de 3" on the
+   status column · length · ⋯ (subTrack: 48 px, from 72 px). ---- */
+.art {
+  grid-area: play;
+}
+
+:host(.in-table) {
+  container-type: normal;
+}
+
+:host(.in-table) .tracks {
+  gap: 0;
+}
+
+:host(.in-table) .track {
+  grid-template-columns:
+    2rem 2rem minmax(0, 1fr)
+    13.75rem 2.75rem 2rem;
+  grid-template-areas: 'ordinal art title meta duration menu';
+  gap: 0 var(--space-4);
+  min-height: 3rem;
+  padding: 0 var(--space-4) 0 4.5rem;
+  border-radius: var(--radius-menu);
+}
+
+:host(.in-table) .ordinal {
+  text-align: left;
+}
+
+:host(.in-table) .art {
+  grid-area: art;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+}
+
+:host(.in-table) .art > * {
+  grid-area: 1 / 1;
+}
+
+/* ▶ over the cover under the pointer or the focus, as on a media row. */
+:host(.in-table) .play {
+  position: relative;
+  z-index: 1;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-cover);
+  background: var(--scrim);
+  opacity: 0;
+}
+
+:host(.in-table) .track:hover .play,
+:host(.in-table) .play:focus-visible,
+:host(.in-table) .play.on {
+  opacity: 1;
+}
+
+:host(.in-table) .title.playing {
+  color: var(--color-accent-text);
+}
+
+:host(.in-table) .meta {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.duration {
+  grid-area: duration;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+:host(.in-table) app-menu-button {
+  --menu-trigger-min: 2rem;
+  --menu-trigger-height: 2rem;
+
+  justify-self: end;
+}
+
+@container library-table (max-width: 52rem) {
+  :host(.in-table) .track {
+    grid-template-columns:
+      2rem 2rem minmax(0, 1fr)
+      10.625rem 2.75rem 2rem;
+  }
+}
+
+/* A phone (media-library-tracks@mobile): from 48 px, cover 36, the title and
+   "faixa n de 3 · 0:15" under it, ⋯. */
+@container library-table (max-width: 36rem) {
+  /* The title 17 and its line 14 centred in the 48 row; the cover and the ⋯ span both lines,
+     give up their height to them (the margins below) and sit centred, as the frame draws it. */
+  :host(.in-table) .track {
+    grid-template-columns: 2.25rem auto minmax(0, 1fr) 1.5rem;
+    grid-template-areas:
+      'art title title menu'
+      'art meta duration menu';
+    align-content: center;
+    gap: 0 var(--space-3);
+    min-height: 3rem;
+    padding: 0 0 0 2rem;
+  }
+
+  :host(.in-table) .art,
+  :host(.in-table) app-menu-button {
+    align-self: center;
+    margin-block: -1rem;
+  }
+
+  :host(.in-table) .title {
+    min-height: 0;
+    line-height: 1.0625rem;
+  }
+
+  :host(.in-table) .meta,
+  :host(.in-table) .duration {
+    line-height: 0.875rem;
+  }
+
+  :host(.in-table) .ordinal {
+    display: none;
+  }
+
+  :host(.in-table) .art,
+  :host(.in-table) .play {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  :host(.in-table) .art ui-cover {
+    --ui-cover-size: 36px !important;
+  }
+
+  :host(.in-table) .meta {
+    column-gap: var(--space-1);
+  }
+
+  :host(.in-table) .duration {
+    margin-inline-start: calc(-1 * var(--space-3) + var(--space-1));
+    text-align: left;
+  }
+
+  :host(.in-table) .duration:not(:empty)::before {
+    content: '· ';
+  }
+}

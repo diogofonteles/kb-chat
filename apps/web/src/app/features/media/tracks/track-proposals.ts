@@ -1,3 +1,4 @@
+import { UiIcon } from '@ui/index.js';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -55,7 +56,7 @@ type Asking =
  */
 @Component({
   selector: 'app-track-proposals',
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, UiIcon],
   templateUrl: './track-proposals.html',
   styleUrl: './track-proposals.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

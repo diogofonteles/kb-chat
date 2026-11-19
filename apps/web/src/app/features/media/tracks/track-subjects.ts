@@ -1,3 +1,4 @@
+import { UiIcon } from '@ui/index.js';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -82,7 +83,7 @@ const isDuplicate = (err: unknown): boolean => {
  */
 @Component({
   selector: 'app-track-subjects',
-  imports: [TrackSubjectRow],
+  imports: [TrackSubjectRow, UiIcon],
   templateUrl: './track-subjects.html',
   styleUrl: './track-subjects.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

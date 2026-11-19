@@ -26,7 +26,7 @@ async function renderChoice() {
 }
 
 describe('MenuButton (APG menu button)', () => {
-  it('lists choices as radio items with the current one checked, in text too', async () => {
+  it('lists choices as radio items with the current one checked, its check drawn', async () => {
     const { trigger, fixture } = await renderChoice();
     expect(trigger.getAttribute('aria-keyshortcuts')).toBe('Shift+. Shift+,');
     fireEvent.click(trigger);
@@ -34,7 +34,13 @@ describe('MenuButton (APG menu button)', () => {
     expect(screen.getByRole('menu', { name: 'Velocidade' })).toBeTruthy();
     const current = screen.getByRole('menuitemradio', { name: /1,5×/ });
     expect(current.getAttribute('aria-checked')).toBe('true');
-    expect(current.textContent).toContain('✓');
+    // A ✓ beside it, never the colour alone (UP-20); none beside the others.
+    expect(current.querySelector('.check ui-icon')).not.toBeNull();
+    expect(
+      screen
+        .getByRole('menuitemradio', { name: /^\s*2×/ })
+        .querySelector('.check ui-icon'),
+    ).toBeNull();
     expect(
       screen
         .getByRole('menuitemradio', { name: /^\s*2×/ })
@@ -74,6 +80,55 @@ describe('MenuButton (APG menu button)', () => {
     document.removeEventListener('keydown', outside);
     expect(outside).not.toHaveBeenCalled();
   });
+
+  it('hears the document only while open: a click outside closes it (NFR-2)', async () => {
+    const listening = vi.spyOn(document, 'addEventListener');
+    const { trigger, fixture } = await renderChoice();
+    // Closed, it listens to no click of the document (one ⋯ per row of 2 000).
+    expect(listening.mock.calls.some(([type]) => type === 'click')).toBe(false);
+    fireEvent.click(trigger);
+    await fixture.whenStable();
+    expect(screen.getByRole('menu')).toBeTruthy();
+    fireEvent.click(document.body);
+    await fixture.whenStable();
+    expect(screen.queryByRole('menu')).toBeNull();
+    const stopped = vi.spyOn(document, 'removeEventListener');
+    fireEvent.click(trigger);
+    await fixture.whenStable();
+    fireEvent.click(document.body);
+    await fixture.whenStable();
+    expect(stopped.mock.calls.some(([type]) => type === 'click')).toBe(true);
+    listening.mockRestore();
+    stopped.mockRestore();
+  });
+
+  it.each([
+    [
+      'Escape',
+      (menu: HTMLElement) => fireEvent.keyDown(menu, { key: 'Escape' }),
+    ],
+    ['Tab', (menu: HTMLElement) => fireEvent.keyDown(menu, { key: 'Tab' })],
+    [
+      'a choice',
+      () =>
+        fireEvent.click(screen.getByRole('menuitemradio', { name: /^\s*2×/ })),
+    ],
+  ])(
+    'stops hearing the document as soon as it closes by %s, with no click after',
+    async (_how, close) => {
+      const { trigger, fixture } = await renderChoice();
+      fireEvent.click(trigger);
+      await fixture.whenStable();
+      const stopped = vi.spyOn(document, 'removeEventListener');
+
+      close(screen.getByRole('menu'));
+      await fixture.whenStable();
+
+      expect(screen.queryByRole('menu')).toBeNull();
+      expect(stopped.mock.calls.some(([type]) => type === 'click')).toBe(true);
+      stopped.mockRestore();
+    },
+  );
 
   describe('stays on the screen, however wide its text', () => {
     const rectOf = (left: number, right: number) =>

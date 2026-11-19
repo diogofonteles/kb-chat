@@ -1,15 +1,15 @@
 :host {
   display: block;
-  /* The host is the container: the bar's own grid answers to its width. */
+  /* The host is the container: the subtitles answer to its width. */
   container: player / inline-size;
 }
 
-/* v2 action bar (KBC-129): no card; on a wide page the green play leads a row with the
-   skips, the speed pill, CC, volume, mark and ⋯, and the seek line runs under it. On a
-   phone it is the full-screen player's centred controls. */
+/* v2 action bar (player.js pActions): play 56 in green, "Continuar de", the skips and the
+   icons at 40, the speed in an outlined pill, mark, share and ⋯ in one row. The seek line,
+   the times, the volume and the moon are the player bar's on a desktop. */
 .player {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .alert {
@@ -27,73 +27,58 @@
   margin: 0;
 }
 
-.times {
+.row {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
   align-items: center;
-  margin-top: calc(-1 * var(--space-2));
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
+  gap: var(--space-5);
 }
 
-.right-time {
-  min-height: var(--target);
-  min-width: var(--target);
-  padding: 0 var(--space-1);
+.icon,
+.play,
+.retry,
+.again,
+.track-step {
   border: none;
-  background: transparent;
-  color: inherit;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
   cursor: pointer;
 }
 
-.right-time:disabled {
+.icon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+/* No hover left behind by a tap (touch screens have no hover). */
+@media (hover: hover) {
+  .icon:hover:not(:disabled) {
+    background: var(--overlay-2);
+    color: var(--color-text);
+  }
+}
+
+.icon:disabled {
+  opacity: 0.45;
   cursor: default;
 }
 
-.controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-6);
+.bookmark .when-on {
+  display: none;
 }
 
-.skip,
-.play,
-.retry,
-.again {
-  border: none;
-  cursor: pointer;
+/* The bar's moon, the phone's two extra buttons: not in the desktop row (player.js). */
+.moon,
+.marks-link,
+.about-link {
+  display: none;
 }
 
-.skip {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 3.25rem;
-  height: 3.25rem;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--color-text);
-}
-
-.skip:hover:not(:disabled) {
-  background: var(--overlay-2);
-}
-
-.skip-amount {
-  position: absolute;
-  top: 54%;
-  left: 50%;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  transform: translate(-50%, -50%);
-}
-
-/* The main control: the largest, in the middle, within thumb reach (MA-06, MA-07). */
 .play {
   display: grid;
   place-items: center;
@@ -102,15 +87,13 @@
   border-radius: 50%;
   background: var(--color-accent);
   color: var(--color-on-accent);
-  box-shadow: var(--shadow);
   transition: transform 120ms var(--ease);
 }
 
 .play:hover:not(:disabled) {
-  transform: scale(1.05);
+  transform: scale(1.04);
 }
 
-.skip:disabled,
 .play:disabled {
   opacity: 0.45;
   cursor: default;
@@ -131,6 +114,16 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+
+  .play {
+    transition: none;
+  }
+}
+
 .retry,
 .again {
   min-height: var(--target);
@@ -144,38 +137,57 @@
 }
 
 .again {
-  justify-self: center;
+  justify-self: start;
 }
 
-.options {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-4);
-}
-
-/* Menu triggers in the player read as text buttons: the speed shows its value. */
-.options app-menu-button {
-  --menu-trigger-padding: var(--space-3);
+/* "1×" in an outlined pill, 32 high (velocidade); its phone sheet 420 high (mOver). */
+.speed {
+  --menu-sheet-height: 26.25rem;
+  --menu-trigger-height: 2rem;
+  --menu-trigger-min: 2.75rem;
+  --menu-trigger-padding: 0.875rem;
   --menu-trigger-color: var(--color-text);
-  --menu-trigger-weight: 600;
-  --menu-trigger-size: var(--text-md);
+  --menu-trigger-weight: 700;
+  --menu-trigger-size: var(--text-meta);
 }
 
-/* The last control of the row: on a phone its menu opens to the left, inside the screen. */
-.options app-menu-button.more {
-  --menu-phone-left: auto;
-  --menu-phone-right: 0;
+.speed ::ng-deep .trigger {
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 35%);
 }
 
-/* The trigger lays its content out as a grid: one item keeps ☾ beside its time. */
+.speed ::ng-deep .trigger[aria-expanded='true'] {
+  box-shadow: inset 0 0 0 1px var(--color-text);
+}
+
+/* The timer on: a green chip "Para no fim" (timer ligado). */
+.sleep {
+  --menu-trigger-height: 2rem;
+  --menu-trigger-padding: 0.75rem;
+  --menu-trigger-color: var(--color-accent-text);
+  --menu-trigger-weight: 700;
+  --menu-trigger-size: var(--text-meta);
+}
+
+.sleep ::ng-deep .trigger {
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+}
+
 .sleep-face {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
   white-space: nowrap;
 }
 
-/* Subtitles over the media area (T15): dark translucent band, light text, two lines at
-   most; the same in every theme, so the contrast holds (>= 4.5:1). */
+/* ⋯: its phone sheet 700 high (mOver). */
+.more {
+  --menu-sheet-height: 43.75rem;
+  --menu-trigger-min: 2.5rem;
+  --menu-trigger-height: 2.5rem;
+}
+
+/* Subtitles (T15) when the transcript is not in view: dark translucent band, light text,
+   two lines at most; the same in every theme, so the contrast holds (>= 4.5:1). */
 .caption-area {
   display: grid;
   place-items: end center;
@@ -192,7 +204,6 @@
   color: #fffdf8;
   line-height: 1.4;
   text-align: center;
-  /* Never clipped: the cues already hold two lines of at most 42 characters. */
   white-space: pre-line;
   overflow-wrap: anywhere;
 }
@@ -207,185 +218,355 @@
   }
 }
 
-/* The low-confidence notice beside the subtitles: shown only where the transcript's own
-   notice may be out of sight (the page hides it when the column is beside the player). */
 .low-badge {
   display: var(--low-confidence-badge, block);
   justify-self: center;
 }
 
-.cc {
+/* The seek line and the times; on its own page a desktop has them in the player bar
+   under it (v2 · Mídia — Player), so they go there. */
+.seek {
   display: grid;
-  place-items: center;
-  min-width: var(--target);
-  height: var(--target);
-  padding: 0 var(--space-2);
-  border: 2px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text);
-  font: inherit;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-}
-
-.cc span {
-  padding: 0 var(--space-1);
-  border: 2px solid currentColor;
-  border-radius: 4px;
-  font-size: var(--text-sm);
-}
-
-/* On: filled, not only a colour change (UP-20). */
-.cc[aria-pressed='true'] span {
-  background: var(--color-text);
-  color: var(--color-surface);
-}
-
-.cc:hover:not(:disabled) {
-  background: var(--overlay-2);
-}
-
-.cc:disabled {
-  color: var(--color-text-muted);
-  cursor: default;
-}
-
-.volume {
-  display: flex;
-  align-items: center;
   gap: var(--space-1);
 }
 
-.bookmark,
-.mute {
-  display: grid;
-  place-items: center;
-  width: var(--target);
-  height: var(--target);
+@media (min-width: 1024px) {
+  :host(.beside-bar) .seek {
+    display: none;
+  }
+}
+
+.times {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.right-time {
+  min-height: 1.5rem;
+  padding: 0;
   border: none;
-  border-radius: 50%;
   background: transparent;
-  color: var(--color-text);
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 
-.bookmark:hover:not(:disabled),
-.mute:hover {
-  background: var(--overlay-2);
-}
-
-.bookmark:disabled {
-  color: var(--color-text-muted);
+.right-time:disabled {
   cursor: default;
 }
 
-.volume-slider {
-  width: 6rem;
-  accent-color: var(--color-accent);
-}
-
-/* The page's action bar: play first, everything in one row, the seek line under it. */
-@container player (min-width: 40rem) {
-  .player {
-    grid-template-columns: auto minmax(0, 1fr);
-    column-gap: var(--space-4);
-    align-items: center;
-  }
-
-  .player > :not(.controls, .options) {
-    grid-column: 1 / -1;
-  }
-
-  .controls {
-    order: -2;
-    justify-content: flex-start;
-    gap: var(--space-2);
-  }
-
-  .options {
-    order: -1;
-    justify-content: flex-start;
-    gap: var(--space-2);
-  }
-
-  .alert,
-  .low-badge,
-  .caption-area {
-    order: -3;
-  }
-
-  /* The play button leads: 56, then the skips at 40. */
-  .controls .play {
-    order: -1;
-    margin-right: var(--space-2);
-  }
-
-  .skip {
-    width: 2.5rem;
-    height: 2.5rem;
-  }
-}
-
-/* The track playing and its neighbours (KBC-066 FR-9). */
+/* "FAIXA 1 DE 3" with ‹ › and the segments (player.js trackBar). */
+/* The chips 22 under the rail's buttons (pScreen: the track row, then the views). */
 .track-nav {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--space-2);
+  display: flex;
   align-items: center;
+  gap: var(--space-3);
+  margin-bottom: calc(-1 * var(--space-2));
+}
+
+.track-step {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.track-step:first-child {
+  color: var(--color-text-muted);
+}
+
+.track-step:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .track-now {
   display: grid;
+  gap: 0.125rem;
+  min-width: 0;
   margin: 0;
-  font-size: var(--text-item);
-  font-weight: 700;
-  text-align: center;
-  overflow-wrap: anywhere;
 }
 
 .track-number {
   color: var(--color-text-muted);
   font-size: 0.6875rem;
   font-weight: 700;
+  line-height: 0.8125rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.track-step {
-  min-height: 2.25rem;
-  padding: 0 var(--space-3);
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: var(--overlay-3);
-  color: inherit;
-  font: inherit;
-  font-size: var(--text-meta);
+.track-title {
+  overflow: hidden;
+  font-size: var(--text-item);
   font-weight: 700;
-  cursor: pointer;
+  line-height: 1.125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.segments {
+  display: flex;
+  flex: 1;
+  gap: 3px;
+  padding-left: var(--space-3);
+}
+
+.segment {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: rgb(255 255 255 / 20%);
+}
+
+.segment.on {
+  background: var(--color-text);
+}
+
+/* A phone (player.js pMobile): the seek line, then 1× · ⟲ · ▶ 68 · ⟳ · ☾, then share ·
+   marks · about; mark beside the title and ⋯ in the head (the page places them). */
 @media (max-width: 1023px) {
+  /* pMobile's rhythm: the 4 px rail 12 under the title row (the 44 px touch box reaches
+     over it), the 11 px times 6 under the rail, the controls 8 + 4 under them, the second
+     row 16 under the first. */
+  .seek {
+    display: grid;
+    gap: var(--space-1);
+    margin-top: -1.4375rem;
+  }
+
+  .times {
+    margin-top: -0.75rem;
+  }
+
+  .row {
+    display: grid;
+    /* 1× · ⟲ · ▶ · ⟳ · ☾ spread as space-between: the skips centred in the room left, so the
+       play stays in the middle whatever the second row holds (the timer's chip). */
+    grid-template-columns: auto 1fr 4.25rem 1fr auto;
+    align-items: center;
+    justify-items: center;
+    gap: var(--space-4) 0;
+    margin-top: -0.375rem;
+  }
+
+  .speed,
+  .share {
+    justify-self: start;
+  }
+
+  .moon,
+  .about-link {
+    justify-self: end;
+  }
+
+  .row > ::ng-deep [resume] {
+    display: none;
+  }
+
+  /* The track's own row stays out of the full-screen player's (pMobile): its "Ajustar
+     início e fim" waits in ⋯, and its dialogs (Editar, Apagar, Histórico) still open. */
+  .row > ::ng-deep [trackActions] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .speed {
+    order: 1;
+    --menu-trigger-size: var(--text-md);
+    --menu-trigger-height: var(--target);
+    --menu-trigger-padding: 0;
+  }
+
+  .speed ::ng-deep .trigger {
+    box-shadow: none;
+  }
+
+  .back {
+    order: 2;
+  }
+
+  .play {
+    order: 3;
+    width: 4.25rem;
+    height: 4.25rem;
+    background: var(--color-text);
+    color: var(--color-bg);
+  }
+
+  .forward {
+    order: 4;
+  }
+
+  .moon,
+  .sleep {
+    order: 5;
+  }
+
+  .moon {
+    display: grid;
+  }
+
+  .moon.on {
+    color: var(--color-accent-text);
+  }
+
+  .share {
+    order: 6;
+  }
+
+  .marks-link {
+    display: grid;
+    order: 7;
+    justify-self: center;
+  }
+
+  .sleep {
+    order: 7;
+  }
+
+  .about-link {
+    display: grid;
+    order: 8;
+    grid-column: 5;
+  }
+
+  .icon {
+    width: var(--target);
+    height: var(--target);
+    color: var(--color-text);
+  }
+
+  .back,
+  .forward {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  .share,
+  .marks-link,
+  .about-link {
+    grid-row: 2;
+  }
+
+  .share {
+    grid-column: 1;
+  }
+
+  .marks-link,
+  .sleep {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  .sleep ~ .marks-link {
+    display: none;
+  }
+
+  /* Beside the title and in the head (the page's .page is the positioned box). */
+  .bookmark {
+    position: absolute;
+    top: var(--mark-top, 27.25rem);
+    /* Its glyph over the transport's right edge (pMobile: 24 from the screen's). */
+    right: var(--space-6);
+  }
+
+  .bookmark.marked {
+    color: var(--color-accent-text);
+  }
+
+  .bookmark.marked .when-off {
+    display: none;
+  }
+
+  .bookmark.marked .when-on {
+    display: block;
+  }
+
+  .more {
+    position: absolute;
+    /* In the head: its row 56 from the top, centred at 74 (pMobile). */
+    top: 3.375rem;
+    right: var(--space-4);
+    --menu-trigger-color: var(--color-text);
+  }
+
+  /* pMobile's track bar: right under the second row, 12 above the card. */
+  /* pMobile's track row: its ‹ › 16 from the screen's edges, the words 10 after ‹, 14 px. */
+  .track-nav {
+    gap: 0.625rem;
+    margin: 0.25rem calc(-1 * var(--space-2)) -0.5rem;
+    padding: 0;
+  }
+
+  .track-title {
+    font-size: var(--text-sm);
+    line-height: 1.0625rem;
+  }
+
   .track-step {
-    min-height: var(--target);
+    background: rgb(0 0 0 / 20%);
+  }
+
+  .segments {
+    display: none;
+  }
+
+  .track-now {
+    flex: 1;
   }
 }
 
-.track-step:disabled {
-  opacity: 0.6;
-  cursor: default;
+/* The menus' widths in the frames: ⋯ 300 (menu MORE), Velocidade 180 (speedMenu). */
+.more ::ng-deep .menu:not(.ui-overlay--sheet) {
+  min-width: 18.75rem;
 }
 
-/* The trigger may sit anywhere in the wrapped row: the row, not the trigger, bounds the
-   menu, so its long options break into lines instead of leaving the screen. */
-@media (max-width: 599px) {
-  .options {
-    position: relative;
+.speed ::ng-deep .menu:not(.ui-overlay--sheet) {
+  min-width: 11.25rem;
+}
+
+/* The chosen number inside the skip arrows (KBC-043 FR-2). */
+.skip-n {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  fill: currentColor;
+  font-family: var(--font-ui);
+  font-size: 7.5px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.skip {
+  position: relative;
+}
+
+/* The full-screen player's transport (pMobile): the skips 30, the ⏸/▶ 28 in its 68 circle. */
+@media (max-width: 1023px) {
+  .play ui-icon ::ng-deep svg {
+    width: 28px;
+    height: 28px;
   }
 
-  .options app-menu-button.more {
-    position: static;
-    --menu-item-wrap: normal;
+  .skip > ui-icon ::ng-deep svg,
+  .skip > .skip-n {
+    width: 30px;
+    height: 30px;
   }
 }

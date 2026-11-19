@@ -1,4 +1,9 @@
-<p class="status" role="status" [class.error]="status()?.kind === 'error'">
+<p
+  class="status"
+  role="status"
+  [class.idle]="!status()"
+  [class.error]="status()?.kind === 'error'"
+>
   @if (status(); as current) {
     <span aria-hidden="true">{{ current.kind === 'error' ? '⚠' : '✓' }}</span>
     {{ current.text }}
@@ -19,46 +24,59 @@
   </div>
 } @else if (view(); as current) {
   <section class="block account" aria-labelledby="house-account">
+    <!-- v2: cover · the title, its pill and the key under it · today's free requests. -->
     <div class="account-head">
-      <ui-cover icon="link" title="OpenRouter" [size]="48" />
-      <h3 id="house-account" class="block-title" i18n="@@house.account">
-        Conta OpenRouter da aplicação
-      </h3>
-      @if (current.connection) {
-        <ui-pill tone="ok" i18n="@@house.pillConnected">Conectada</ui-pill>
-      } @else {
-        <ui-pill tone="warn" i18n="@@house.pillDisconnected"
-          >Não conectada</ui-pill
-        >
-      }
-    </div>
-    @if (current.connection; as connection) {
-      <p class="saved-key">
-        <span class="connected">
-          <span i18n="@@house.connectedAs">Conectada</span>
-          <code class="masked">••••{{ connection.key.last4 }}</code>
-          <span class="hint"
-            ><ng-container i18n="@@house.connectedBy"
+      <ui-cover
+        icon="link"
+        title="OpenRouter"
+        from="var(--cover-provider-openrouter)"
+        to="var(--cover-people-dark)"
+        [size]="48"
+      />
+      <div class="account-text">
+        <div class="account-title-line">
+          <h3 id="house-account" class="block-title" i18n="@@house.account">
+            Conta OpenRouter da aplicação
+          </h3>
+          @if (current.connection) {
+            <ui-pill tone="ok" i18n="@@house.pillConnected">Conectada</ui-pill>
+          } @else {
+            <ui-pill tone="warn" i18n="@@house.pillDisconnected"
+              >Não conectada</ui-pill
+            >
+          }
+        </div>
+        @if (current.connection; as connection) {
+          <p class="saved-key hint">
+            <span class="visually-hidden" i18n="@@house.connectedAs"
+              >Conectada</span
+            >
+            <span class="masked">••••{{ connection.key.last4 }}</span>
+            ·
+            <ng-container i18n="@@house.connectedBy"
               >por {{ connection.connectedBy }} em
               {{ connection.connectedAt | date: 'dd/MM/yyyy' }}</ng-container
-            ></span
-          >
-        </span>
-      </p>
-      @if (current.freeUsage; as usage) {
-        <p class="hint" i18n="@@house.freeUsage">
-          Pedidos gratuitos hoje: {{ usage.used }} de {{ usage.limit }}
-        </p>
+            >
+          </p>
+        } @else {
+          <p class="hint" i18n="@@house.notConnected">
+            Não conectada. Sem ela, quem não tem IA própria fica só com a busca.
+          </p>
+        }
+      </div>
+      @if (current.connection && current.freeUsage; as usage) {
+        <div class="usage">
+          <p class="usage-text" i18n="@@house.freeUsage">
+            Pedidos gratuitos hoje: {{ usage.used }} de {{ usage.limit }}
+          </p>
+          <ui-progress [value]="usage.limit ? usage.used / usage.limit : 0" />
+        </div>
       }
-      @if (lowLimit()) {
-        <p class="hint" i18n="@@house.lowLimit">
-          Com US$ 10 em créditos comprados uma vez, o limite sobe para 1000
-          pedidos por dia.
-        </p>
-      }
-    } @else {
-      <p class="hint" i18n="@@house.notConnected">
-        Não conectada. Sem ela, quem não tem IA própria fica só com a busca.
+    </div>
+    @if (current.connection && lowLimit()) {
+      <p class="hint" i18n="@@house.lowLimit">
+        Com US$ 10 em créditos comprados uma vez, o limite sobe para 1000
+        pedidos por dia.
       </p>
     }
     <div class="row">
@@ -66,12 +84,15 @@
         type="button"
         [class.primary]="!current.connection"
         [class.secondary]="current.connection"
+        [class.white]="current.connection"
         [disabled]="busy()"
         (click)="connect()"
       >
+        <!-- The 🔗 leads "Conectar OpenRouter" only; "Conectar outra conta" is words. -->
         @if (current.connection) {
           <span i18n="@@house.reconnect">Conectar outra conta</span>
         } @else {
+          <ui-icon name="link" [size]="18" />
           <span i18n="@@house.connect">Conectar OpenRouter</span>
         }
       </button>
@@ -159,19 +180,24 @@
     }
   </section>
 
-  <section class="block" aria-labelledby="house-models">
+  <section class="block tail" aria-labelledby="house-models">
     <h3 id="house-models" class="block-title" i18n="@@house.models">
       Modelos gratuitos
     </h3>
-    <label class="check">
+    <label class="switch-row">
+      <span class="switch-text">
+        <span class="switch-label" i18n="@@house.auto"
+          >Escolher automaticamente (recomendado)</span
+        >
+      </span>
       <input
         #autoBox
         type="checkbox"
+        class="ui-switch"
         [checked]="auto()"
         [disabled]="busy()"
         (change)="setAuto(autoBox.checked)"
       />
-      <span i18n="@@house.auto">Escolher automaticamente (recomendado)</span>
     </label>
     @if (listInfo(); as info) {
       @if (info.items.length === 0) {
@@ -196,6 +222,7 @@
               <input
                 #modelBox
                 type="checkbox"
+                class="ui-check"
                 [checked]="auto() || model.checked"
                 (change)="toggleModel(model.id, modelBox.checked)"
               />
@@ -215,29 +242,35 @@
         }
       }
     }
-    <label class="check">
+    <label class="switch-row">
+      <span class="switch-text">
+        <span class="switch-label" i18n="@@house.router"
+          >Usar {{ router }} como última opção gratuita</span
+        >
+        <span class="hint" i18n="@@house.modelsHint">
+          Só modelos gratuitos que usam ferramentas; se um estiver ocupado, o
+          próximo responde. Ordem atual: {{ chainText() }}
+        </span>
+      </span>
       <input
         #routerBox
         type="checkbox"
+        class="ui-switch"
         [checked]="current.includeRouter"
         [disabled]="busy()"
         (change)="setRouter(routerBox.checked)"
       />
-      <span i18n="@@house.router"
-        >Usar {{ router }} como última opção gratuita</span
-      >
     </label>
-    <p class="hint" i18n="@@house.modelsHint">
-      Só modelos gratuitos que usam ferramentas; se um estiver ocupado, o
-      próximo responde. Ordem atual: {{ chainText() }}
-    </p>
   </section>
 
-  <section class="block" aria-labelledby="house-paid">
+  <section class="block tail" aria-labelledby="house-paid">
     <h3 id="house-paid" class="block-title" i18n="@@house.paid">
       Modelo pago de reserva (opcional)
     </h3>
-    <label class="field-label" for="house-paid-model" i18n="@@house.paidLabel"
+    <label
+      class="visually-hidden"
+      for="house-paid-model"
+      i18n="@@house.paidLabel"
       >Id do modelo (vazio = desligado)</label
     >
     <div class="row">
@@ -248,6 +281,8 @@
         autocomplete="off"
         spellcheck="false"
         list="house-paid-models"
+        placeholder="Id do modelo (vazio = desligado)"
+        i18n-placeholder="@@house.paidLabel"
         [value]="paidDraft()"
         (input)="paidDraft.set(paidInput.value)"
       />
@@ -266,98 +301,140 @@
         Salvar
       </button>
     </div>
-    <p class="hint" i18n="@@house.paidHint">
+    <p class="hint note" i18n="@@house.paidHint">
       Só entra para quem você liberar em Pessoas e permissões, até o teto mensal
       da pessoa. Desligado, a aplicação não gasta nada.
     </p>
   </section>
 
-  <section class="block" aria-labelledby="house-who">
+  <section class="block tail" aria-labelledby="house-who">
     <h3 id="house-who" class="block-title" i18n="@@house.who">Para quem</h3>
-    <fieldset class="models" [disabled]="busy()">
-      <legend class="field-label" i18n="@@house.defaultLegend">
+    <fieldset class="who" [disabled]="busy()">
+      <legend class="who-legend" i18n="@@house.defaultLegend">
         IA padrão para quem não tem atribuição (e para os próximos convidados)
       </legend>
-      <label class="check">
+      <!-- Two choice cards (v2), the radio at the right of each. -->
+      <label class="choice">
+        <span class="choice-title" i18n="@@house.defaultHouse"
+          >Plano da casa</span
+        >
         <input
           type="radio"
+          class="ui-radio"
           name="house-default"
           [checked]="current.defaultAppAi === 'house'"
           (change)="setDefaultAppAi('house')"
         />
-        <span i18n="@@house.defaultHouse">Plano da casa</span>
       </label>
-      <label class="check">
+      <label class="choice">
+        <span class="choice-text">
+          <span class="choice-title" i18n="@@house.defaultNoneTitle"
+            >Nenhuma</span
+          >
+          <span class="choice-desc" i18n="@@house.defaultNoneDesc"
+            >Só quem você atribuir em Pessoas e permissões</span
+          >
+        </span>
         <input
           type="radio"
+          class="ui-radio"
           name="house-default"
           [checked]="current.defaultAppAi === 'none'"
           (change)="setDefaultAppAi('none')"
         />
-        <span i18n="@@house.defaultNone"
-          >Nenhuma (só quem você atribuir em Pessoas e permissões)</span
-        >
       </label>
     </fieldset>
-    <label class="field-label" for="house-daily" i18n="@@house.dailyLabel"
-      >Pesquisas por dia (padrão)</label
-    >
-    <input
-      #dailyInput
-      id="house-daily"
-      class="input cap"
-      type="number"
-      inputmode="numeric"
-      min="0"
-      [attr.max]="maxDaily"
-      step="1"
-      [attr.aria-invalid]="dailyError() ? true : null"
-      [attr.aria-describedby]="
-        dailyError() ? 'house-daily-error house-daily-hint' : 'house-daily-hint'
-      "
-      [value]="defaultDaily()"
-      (change)="setDefaultDaily(dailyInput.value)"
-    />
+    <div class="switch-row">
+      <span class="switch-text">
+        <label class="switch-label" for="house-daily" i18n="@@house.dailyLabel"
+          >Pesquisas por dia (padrão)</label
+        >
+        <span id="house-daily-hint" class="hint" i18n="@@house.dailyHint">
+          Rápido conta 1, Profundo 2, Exaustivo 5. Cada pessoa pode ter outro
+          número.
+        </span>
+      </span>
+      <input
+        #dailyInput
+        id="house-daily"
+        class="input cap"
+        type="number"
+        inputmode="numeric"
+        min="0"
+        [attr.max]="maxDaily"
+        step="1"
+        [attr.aria-invalid]="dailyError() ? true : null"
+        [attr.aria-describedby]="
+          dailyError()
+            ? 'house-daily-error house-daily-hint'
+            : 'house-daily-hint'
+        "
+        [value]="defaultDaily()"
+        (change)="setDefaultDaily(dailyInput.value)"
+      />
+    </div>
     @if (dailyError(); as error) {
       <p id="house-daily-error" class="field-error" role="alert">
         <span aria-hidden="true">⚠</span> {{ error }}
       </p>
     }
-    <p id="house-daily-hint" class="hint" i18n="@@house.dailyHint">
-      Rápido conta 1, Profundo 2, Exaustivo 5. Cada pessoa pode ter outro
-      número.
-    </p>
   </section>
 
-  <section class="block" aria-labelledby="house-codex">
+  <section class="block tail" aria-labelledby="house-codex">
     <h3 id="house-codex" class="block-title" i18n="@@house.codex">
       Assinatura do ChatGPT (Codex)
     </h3>
-    <label class="check">
+    <!-- The switch's name is its label alone; the hint describes it. -->
+    <div class="switch-row">
+      <span class="switch-text">
+        <label
+          class="switch-label"
+          for="house-codex-switch"
+          i18n="@@house.codexToggle"
+          >Ligar a assinatura do ChatGPT (Codex)</label
+        >
+        <span id="house-codex-hint" class="hint" i18n="@@house.codexHint">
+          Ligada, você usa o ChatGPT em ⚙ Sua IA e pode cedê-lo em Pessoas e
+          permissões. O Codex roda num contêiner separado, sem acesso aos
+          segredos nem ao estado do servidor: ele lê o acervo só pelas
+          ferramentas da pesquisa, e a pergunta vai à OpenAI.
+        </span>
+      </span>
+      <!-- The state as the frame's pill; the line under it says it for readers. -->
+      @if (current.codex.enabled) {
+        <ui-pill tone="ok" aria-hidden="true" i18n="@@house.codexOn"
+          >Ligada</ui-pill
+        >
+      } @else {
+        <ui-pill aria-hidden="true" i18n="@@house.codexOff">Desligada</ui-pill>
+      }
       <input
         #codexBox
+        id="house-codex-switch"
         type="checkbox"
+        class="ui-switch"
         [checked]="current.codex.enabled"
         [disabled]="busy() || !current.codex.configured"
         aria-describedby="house-codex-status house-codex-hint"
         (change)="setCodex(codexBox.checked)"
       />
-      <span i18n="@@house.codexToggle"
-        >Ligar a assinatura do ChatGPT (Codex)</span
+    </div>
+    <p id="house-codex-status" class="codex-status hint">
+      <span class="visually-hidden">
+        @if (current.codex.enabled) {
+          <ng-container i18n="@@house.codexOn">Ligada</ng-container>
+        } @else {
+          <ng-container i18n="@@house.codexOff">Desligada</ng-container>
+        }
+        &ngsp;·&ngsp;</span
       >
-    </label>
-    <p id="house-codex-status" class="hint">
-      @if (current.codex.enabled) {
-        <strong i18n="@@house.codexOn">Ligada</strong> ·
-      } @else {
-        <strong i18n="@@house.codexOff">Desligada</strong> ·
-      }
       @if (!current.codex.configured) {
         <span i18n="@@house.codexNotConfigured"
           >O Codex não está configurado neste servidor (runbook, passo
           9c).</span
         >
       } @else if (current.codex.loggedIn === true) {
+        <ui-icon name="checkcircle" [size]="16" class="ok-icon" />
         <span i18n="@@house.codexLoggedIn">Logado no servidor.</span>
       } @else if (current.codex.loggedIn === false) {
         <span i18n="@@house.codexLoggedOut"
@@ -371,15 +448,9 @@
         >
       }
     </p>
-    <p id="house-codex-hint" class="hint" i18n="@@house.codexHint">
-      Ligada, você usa o ChatGPT em ⚙ Sua IA e pode cedê-lo em Pessoas e
-      permissões. O Codex roda num contêiner separado, sem acesso aos segredos
-      nem ao estado do servidor: ele lê o acervo só pelas ferramentas da
-      pesquisa, e a pergunta vai à OpenAI.
-    </p>
   </section>
 
-  <section class="block" aria-labelledby="house-management">
+  <section class="block tail" aria-labelledby="house-management">
     <h3 id="house-management" class="block-title" i18n="@@house.management">
       Chave de gerenciamento (opcional)
     </h3>
@@ -400,7 +471,7 @@
       </p>
     }
     <label
-      class="field-label"
+      class="visually-hidden"
       for="house-management-key"
       i18n="@@house.managementLabel"
       >Chave de gerenciamento do OpenRouter</label
@@ -413,6 +484,8 @@
         type="password"
         autocomplete="off"
         spellcheck="false"
+        placeholder="Chave de gerenciamento do OpenRouter"
+        i18n-placeholder="@@house.managementLabel"
         [value]="managementDraft()"
         (input)="managementDraft.set(managementInput.value)"
       />
@@ -426,7 +499,7 @@
         Salvar
       </button>
     </div>
-    <p class="hint" i18n="@@house.managementHint">
+    <p class="hint note" i18n="@@house.managementHint">
       Com ela, cada pessoa com reserva paga ganha uma chave com limite mensal no
       próprio OpenRouter (openrouter.ai/settings/management-keys).
     </p>

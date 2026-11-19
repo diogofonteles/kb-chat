@@ -37,6 +37,7 @@ test.beforeEach(async ({ page }) => {
 
 test('AC-1/AC-2: a new conversation clears the screen and the history brings the old one back', async ({
   page,
+  isMobile,
 }) => {
   const tag = uniqueTag();
   await ask(page, `ritmo ${tag}`);
@@ -49,7 +50,9 @@ test('AC-1/AC-2: a new conversation clears the screen and the history brings the
     history.getByRole('button', { name: new RegExp(tag) }),
   ).toHaveCount(2);
   const old = history.getByRole('button', { name: `ritmo ${tag}` });
-  await expect(old).toContainText('Busca');
+  // v2 · Sua biblioteca: a search's row says "Conversa · <when>"; the phone Menu (one list,
+  // v2 · Menu lateral aberto) says "Busca · <collection>".
+  await expect(old).toContainText(isMobile ? 'Busca' : 'Conversa');
   await old.click();
   // The restored conversation runs its search again; the other one is gone from the screen.
   await expect(page.locator('app-result-message .question')).toHaveText([
@@ -214,10 +217,13 @@ test('AC-8: shows today’s AI spend against the cap', async ({ page }) => {
   // The server starts the day at the seeded US$ 0.03 (e2e/server.ts) and a cap of US$ 1.
   expect(usd).toBeGreaterThanOrEqual(0.03);
   expect(capUsd).toBe(1);
+  // v2 · Casca: "US$ 0,03 de 1,00", the cap without its currency again.
+  const cap = new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(capUsd);
   await expect(
-    (await sidebar(page)).getByText(
-      new RegExp(`^${dollars(usd)} de ${dollars(capUsd)}$`),
-    ),
+    (await sidebar(page)).getByText(new RegExp(`^${dollars(usd)} de ${cap}$`)),
   ).toBeVisible();
 });
 
@@ -238,4 +244,71 @@ test('AC-9: on a phone the Menu drawer closes with Escape and focus returns to t
   await menu.click();
   await page.mouse.click(380, 400);
   await expect(drawer).toBeHidden();
+});
+
+/**
+ * Every text of the line that runs past its box ends in "…" (a block with ellipsis), never cut
+ * mid-letter: text-overflow does nothing on a flex container's own text.
+ */
+interface Listed {
+  slug: string;
+  canOpen?: boolean;
+  parent: string | null;
+}
+
+const clippedMidGlyph = (line: Element): string[] =>
+  [line, ...Array.from(line.querySelectorAll('*'))].flatMap((box) => {
+    if (box.scrollWidth <= box.clientWidth) return [];
+    const style = getComputedStyle(box);
+    const ellipsis =
+      style.textOverflow === 'ellipsis' &&
+      style.overflowX === 'hidden' &&
+      !/flex|grid/.test(style.display);
+    return ellipsis ? [] : [`${box.className}: ${box.textContent?.trim()}`];
+  });
+
+test('Sua biblioteca: a collection with many áudios and documentos ends its line in "…", the whole line in its name', async ({
+  page,
+}) => {
+  const title =
+    'Coletânea das palestras e estudos de alquimia prática do Mestre';
+  // The collection is known before the page asks: the counts may come back before the topics.
+  const listed = await page.request.get('/api/v1/topics', { headers: CSRF });
+  expect(listed.status(), await listed.text()).toBe(200);
+  const slug = ((await listed.json()) as { items: Listed[] }).items.find(
+    (topic) => topic.canOpen !== false && topic.parent === null,
+  )?.slug;
+  if (!slug) throw new Error('the fixture vault has no collection');
+  await page.route('**/api/v1/topics', async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const response = await route.fetch();
+    const body = (await response.json()) as { items: Listed[] };
+    const chosen = body.items.find((topic) => topic.slug === slug);
+    if (chosen) Object.assign(chosen, { title, documentCount: 2996 });
+    await route.fulfill({ response, json: body });
+  });
+  await page.route('**/api/v1/media/library/counts', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as {
+      total: number;
+      topics: Record<string, number>;
+    };
+    body.topics[slug] = 128;
+    await route.fulfill({ response, json: body });
+  });
+  await page.reload();
+  const panel = await sidebar(page);
+  const row = panel.getByRole('button', {
+    name: `${title} Acervo · 128 áudios · 2.996 documentos`,
+  });
+  await expect(row).toBeVisible();
+  const lines = row.locator('.ui-libitem__title, .ui-libitem__meta');
+  await expect(lines).toHaveCount(2);
+  for (const line of await lines.all())
+    expect(await line.evaluate(clippedMidGlyph)).toEqual([]);
+  // The whole line shows on hover too.
+  await expect(
+    row.getByTitle('Acervo · 128 áudios · 2.996 documentos', { exact: true }),
+  ).toBeVisible();
+  await expect(row.getByTitle(title, { exact: true })).toBeVisible();
 });

@@ -2,30 +2,32 @@
   <label class="label" [for]="inputId" i18n="@@media.upload.author"
     >Autor</label
   >
-  <p class="help" [id]="helpId" i18n="@@media.upload.authorHelp">
-    Escolha um autor do acervo ou digite um novo. Em branco, o áudio fica em
-    "Outros autores".
-  </p>
-  <input
-    type="text"
-    role="combobox"
-    autocomplete="off"
-    [attr.maxlength]="nameMax"
-    aria-autocomplete="list"
-    [id]="inputId"
-    [value]="name()"
-    [disabled]="disabled()"
-    [attr.aria-expanded]="expanded()"
-    [attr.aria-controls]="listId"
-    [attr.aria-activedescendant]="activeId()"
-    [attr.aria-describedby]="helpId + ' ' + statusId"
-    [attr.aria-invalid]="invalid() ? 'true' : null"
-    (focus)="load()"
-    (input)="typed($event)"
-    (click)="toggle()"
-    (keydown)="keydown($event)"
-    (blur)="close()"
-  />
+  <!-- Looks like the "Acervo" select beside it: blank reads "Outros autores", ▾ at the end. -->
+  <div class="field">
+    <input
+      type="text"
+      role="combobox"
+      autocomplete="off"
+      [attr.maxlength]="nameMax"
+      aria-autocomplete="list"
+      [id]="inputId"
+      [value]="name()"
+      [disabled]="disabled()"
+      [attr.aria-expanded]="expanded()"
+      [attr.aria-controls]="listId"
+      [attr.aria-activedescendant]="activeId()"
+      [attr.aria-describedby]="describedBy()"
+      [attr.aria-invalid]="invalid() ? 'true' : null"
+      (focus)="load()"
+      (input)="typed($event)"
+      (click)="toggle()"
+      (keydown)="keydown($event)"
+      placeholder="Outros autores"
+      i18n-placeholder="@@authorship.others"
+      (blur)="close()"
+    />
+    <ui-icon class="caret" name="chevDown" [size]="18" aria-hidden="true" />
+  </div>
   <ul
     class="options"
     role="listbox"
@@ -54,6 +56,14 @@
       </li>
     }
   </ul>
+  <!-- Small, under the field (media-library-edit); a phone's sheet shows none
+       (media-library-edit@mobile), and the field still describes itself with it. -->
+  @if (!helpId()) {
+    <p class="help" [id]="ownHelpId" i18n="@@media.edit.authorHelp">
+      Escolha um autor do acervo ou digite um novo. Em branco, fica em "Outros
+      autores".
+    </p>
+  }
   <div class="status" aria-live="polite" [id]="statusId">
     @if (invalid()) {
       <p class="error" i18n="@@media.author.invalid">

@@ -2,7 +2,14 @@
   <ui-icon name="chevLeft" [size]="18" />
   <span i18n="@@login.back">Voltar</span>
 </button>
-<h2 #title tabindex="-1" class="title" i18n="@@signUp.title">
+<!-- v2 · Auth "enviado": no title over the done mark; it stays for screen readers. -->
+<h2
+  #title
+  tabindex="-1"
+  class="title"
+  [class.visually-hidden]="step() === 'done'"
+  i18n="@@signUp.title"
+>
   Pedir acesso sem conta Google
 </h2>
 
@@ -21,7 +28,6 @@
           name="email"
           autocomplete="email"
           inputmode="email"
-          placeholder="nome@exemplo.com"
           [value]="form().email"
           [attr.aria-invalid]="errors().email ? 'true' : null"
           [attr.aria-describedby]="errors().email ? 'signup-email-error' : null"

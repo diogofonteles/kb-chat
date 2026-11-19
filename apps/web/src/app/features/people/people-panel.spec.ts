@@ -1332,3 +1332,63 @@ describe('PeoplePanel: a level for the selection (T9, KBC-109 AC-6)', () => {
     expect(document.activeElement).toBe(status);
   });
 });
+
+describe('PeoplePanel: a phone selects with a long press (v2 · Pessoas, celular; KBC-152)', () => {
+  // jsdom has no matchMedia: the window of a phone (or not) for this test.
+  const asPhone = (matches: boolean) =>
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: (query: string) =>
+        ({
+          matches,
+          media: query,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+        }) as unknown as MediaQueryList,
+    });
+
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'matchMedia');
+  });
+
+  it('selects a row from its context menu (a long press), then taps pick and unpick', async () => {
+    asPhone(true);
+    const { fixture } = await renderPanel();
+    const guest = row(/Guest/);
+    const box = () =>
+      screen.getByRole('checkbox', {
+        name: 'Selecionar guest@example.com',
+      }) as HTMLInputElement;
+    expect(box().checked).toBe(false);
+
+    fireEvent.contextMenu(guest);
+    await fixture.whenStable();
+    expect(box().checked).toBe(true);
+    expect(guest.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('list', { name: 'Pessoas' }).classList).toContain(
+      'selecting',
+    );
+
+    // During the selection a tap picks or unpicks; it opens no editor.
+    fireEvent.click(guest);
+    await fixture.whenStable();
+    expect(box().checked).toBe(false);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('keeps the browser menu and opens the editor on a desktop', async () => {
+    asPhone(false);
+    const { fixture } = await renderPanel();
+    const guest = row(/Guest/);
+    const menu = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+    });
+    guest.dispatchEvent(menu);
+    await fixture.whenStable();
+    expect(menu.defaultPrevented).toBe(false);
+    fireEvent.click(guest);
+    await fixture.whenStable();
+    expect(guest.getAttribute('aria-expanded')).toBe('true');
+  });
+});

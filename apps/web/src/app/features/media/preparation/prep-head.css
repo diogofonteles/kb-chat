@@ -1,23 +1,29 @@
-/* The v2 assistant head of "Preparar áudio", "Faixas" and "Limites" (KBC-130): a small
-   cover, the kicker, the 40 title and the tools on the right, then the four-bar stepper.
-   Shared by the preparation, the tracks editor and the bounds pages. */
+/* The v2 assistant head of "Preparar áudio", "Faixas" and "Limites" (KBC-130, prepare.js
+   prHeader/prmTop): on a desktop the 112 cover, the kicker, the 40 title in one line and the
+   tools on the right, bottom-aligned; on a phone "‹", the kicker over the 17 title and the
+   40 cover on the right. Shared by the preparation, the tracks editor and the bounds pages. */
 .v2-head {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3) var(--space-5);
+  gap: var(--space-5);
   align-items: flex-end;
+  min-width: 0;
+}
+
+.v2-head .head-back,
+.v2-head .head-cover-sm {
+  display: none;
 }
 
 .v2-head .head-cover {
   flex: none;
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-menu);
   box-shadow: var(--shadow);
 }
 
 .v2-head .head-text {
   display: grid;
-  flex: 1 1 18rem;
-  gap: var(--space-1);
+  flex: 1 1 0;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -29,12 +35,14 @@
 
 .v2-head .heading {
   margin: 0;
+  overflow: hidden;
   font-family: var(--font-ui);
-  font-size: clamp(1.75rem, 1rem + 2vw, 2.5rem);
+  font-size: 2.5rem;
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.2;
   letter-spacing: -0.03em;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .v2-head .heading:focus {
@@ -49,13 +57,78 @@
 
 .v2-head .head-tools {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  flex: none;
+  gap: 10px;
   align-items: center;
+  padding-bottom: 6px;
+}
+
+/* "Voltar à faixa" above the bounds' head. */
+.head-crumb {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-self: start;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.head-crumb:hover {
+  color: var(--color-text);
 }
 
 @media (max-width: 1023px) {
+  .v2-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: var(--space-3);
+    align-items: center;
+  }
+
+  .v2-head .head-back {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: var(--target);
+    margin-left: -4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-text);
+    cursor: pointer;
+  }
+
   .v2-head .head-cover {
     display: none;
+  }
+
+  .v2-head .head-cover-sm {
+    display: block;
+    border-radius: var(--radius-cover);
+  }
+
+  .v2-head .head-text {
+    gap: 2px;
+  }
+
+  .v2-head .kicker {
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
+  }
+
+  .v2-head .kicker-step,
+  .v2-head .head-tools,
+  .v2-head .sub,
+  .head-crumb {
+    display: none;
+  }
+
+  .v2-head .heading {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: 0;
   }
 }

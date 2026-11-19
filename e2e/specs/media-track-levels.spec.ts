@@ -10,6 +10,7 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { aCollection, uploadReady, uniqueTag } from './media-helpers.js';
+import { trackMenu } from './tracks-helpers.js';
 import { seedTranscript } from './voices-helpers.js';
 
 /**
@@ -169,8 +170,14 @@ test('AC-2, NFR-1: Ana hears the recording with track 2 skipped as "Trecho restr
   expect(span.endMs).toBeLessThanOrEqual(41_000);
 
   await page.goto(`/midia/${media.id}?t=12`);
-  const player = page.getByRole('region', { name: 'Player' });
-  const restricted = player.getByTestId('restricted');
+  const player = page.getByRole('region', { name: 'Player', exact: true });
+  // The seek line: the page's own on a phone; on a desktop the bar's, under the page
+  // (v2 · Mídia — Player draws no other one).
+  const line =
+    (viewport?.width ?? 0) >= 1024
+      ? page.getByRole('region', { name: 'Mini-player', exact: true })
+      : player;
+  const restricted = line.getByTestId('restricted');
   await expect(restricted.locator('.restricted')).toHaveCount(1);
   if ((viewport?.width ?? 0) >= 600)
     await expect(restricted.getByText('Trecho restrito')).toBeVisible();
@@ -252,6 +259,8 @@ test('AC-1, FR-5: the editor gives track 2 its own level on its row, offered fro
     .getByRole('listitem')
     .nth(1);
   await row.getByRole('button').first().click();
+  // The level waits in the track's details, opened from its ⋯ (v2 · Faixas, KBC-130).
+  await trackMenu(page, 'Tipo, nível e texto da faixa');
   const field = row.getByRole('combobox', { name: 'Nível' });
   await expect(field.locator('option')).toHaveText([
     'O da gravação (CI)',

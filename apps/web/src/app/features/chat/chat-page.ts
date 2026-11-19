@@ -1,4 +1,9 @@
-import { DOCUMENT, DecimalPipe, NgComponentOutlet } from '@angular/common';
+import {
+  DOCUMENT,
+  DecimalPipe,
+  NgComponentOutlet,
+  NgTemplateOutlet,
+} from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -24,7 +29,12 @@ import {
   toObservable,
   toSignal,
 } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import {
+  NavigationEnd,
+  Router,
+  RouterLink,
+  RouterOutlet,
+} from '@angular/router';
 import { Subject, filter, from, map, of, switchMap, take } from 'rxjs';
 import { suggestionListSchema } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
@@ -56,12 +66,15 @@ import {
   ResearchThread,
   type SourceOpening,
 } from '@features/research/research-thread.js';
-import { ViewStore, type ChatView } from './view-store.js';
-import { ViewSwitch } from './view-switch.js';
+import { ViewStore } from './view-store.js';
+import { ScopeBar } from './scope/scope-bar.js';
+import { RESEARCH_PROFILES } from '@kb-chat/contracts';
+import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { MiniPlayer } from '@features/media/player/mini-player.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { AudioPresence } from '@features/shell/audio-presence.js';
 import { BottomNav, navTabs, type NavTab } from '@features/shell/bottom-nav.js';
+import { PageHeader } from '@features/shell/page-header.js';
 import { RightPanel } from '@features/shell/right-panel.js';
 import { TopBar } from '@features/shell/top-bar.js';
 import { hasLibrary } from '@features/media/library/library-access.js';
@@ -72,16 +85,27 @@ import { UiIcon } from '@ui/icon.js';
 
 /** Where Sua biblioteca's collapsed state is kept (a per-viewer convenience). */
 const COLLAPSED_KEY = 'kb-chat.library-collapsed';
+import { ConversationHistory } from './home/conversation-history.js';
 import { ConversationHome } from './home/conversation-home.js';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
 /** The media pages: the list and player (T14, T15) and the library (T16, KBC-051). */
 /** A page that renders in place of the conversation: media pages and T24 (KBC-103). */
+const isSettingsUrl = (url: string): boolean =>
+  /^\/configuracoes(\/|\?|#|$)/.test(url);
+
 const isMediaUrl = (url: string): boolean =>
   /^\/(midia|biblioteca|fila|acervos|configuracoes|catalogo-ui)(\/|\?|#|$)/.test(
     url,
   );
+
+/**
+ * "Preparar áudio", the tracks editor and the bounds (KBC-130): a guided flow with its own
+ * head, so the main panel shows no collection header; on a phone it takes the whole screen.
+ */
+const isGuidedFlowPath = (path: string): boolean =>
+  /^\/midia\/[^/]+\/(preparar|faixas|limites)$/.test(path);
 
 /**
  * Chat page (screens.md): two views over one question box and document panel, the free
@@ -93,7 +117,7 @@ const isMediaUrl = (url: string): boolean =>
     Composer,
     ResultMessage,
     ResearchThread,
-    ViewSwitch,
+    ScopeBar,
     DocumentPanel,
     PassagePanel,
     TrackPassagePanel,
@@ -104,9 +128,12 @@ const isMediaUrl = (url: string): boolean =>
     TopBar,
     BottomNav,
     NgComponentOutlet,
+    NgTemplateOutlet,
+    RouterLink,
     UiAvatar,
     UiIcon,
     UiIconButton,
+    ConversationHistory,
     ConversationHome,
   ],
   providers: [
@@ -146,18 +173,23 @@ export class ChatPage {
   protected readonly desktop = signal(this.matchesDesktop());
 
   private readonly collectionHeading = inject(CollectionHeading);
+  /** A page with its own header (the library, a collection's album page): see PageHeader. */
+  protected readonly ownHeader = inject(PageHeader).current;
   /** Spoken from here: the page and the sidebar come and go, the layout stays. */
   protected readonly queue = inject(ProcessingQueueStore);
   /** The v2 audio rule (KBC-125 BR-2). */
   protected readonly audio = inject(AudioPresence);
   /** The shell's optional right panel, for the areas (KBC-125 FR-1). */
   protected readonly rightPanel = inject(RightPanel);
+  /** A routed page's colour under the phone's header row (v2 · celular). */
+  protected readonly pageChrome = inject(PageHeader);
   protected readonly me = this.session.me;
   private readonly topBar = viewChild(TopBar);
   /** The main panel's header (title, view switch): floating notices start under it. */
   private readonly pageHeader =
     viewChild<ElementRef<HTMLElement>>('pageHeader');
-  private readonly engineSource = inject(MediaEngine).source;
+  private readonly shellFoot = viewChild<ElementRef<HTMLElement>>('shellFoot');
+  protected readonly engineSource = inject(MediaEngine).source;
   /** The address without query or fragment, as the router last settled on it. */
   private readonly path = toSignal(
     inject(Router).events.pipe(
@@ -166,8 +198,21 @@ export class ChatPage {
     ),
     { initialValue: inject(Router).url.split(/[?#]/)[0] ?? '' },
   );
+  /**
+   * The page's name on a phone's header row (v2 · celular: the avatar, then "Biblioteca",
+   * "Fila de processamento"…): the routed page's title without the app's name.
+   */
+  protected readonly pageName = computed(() => {
+    this.path();
+    let route = this.router.routerState.snapshot.root;
+    while (route.firstChild) route = route.firstChild;
+    const title = route.title ?? '';
+    return title.split(' — ')[0]?.trim() ?? '';
+  });
   /** Sua biblioteca collapsed to its covers (desktop, FR-1). */
   protected readonly collapsed = signal(this.readCollapsed());
+  /** Sua biblioteca over the main panel ("Biblioteca expandida", ⤢), until an item opens. */
+  protected readonly expanded = signal(false);
   /** The media library's page, for who has it (Biblioteca, else Mídia). */
   protected readonly libraryPath = computed(() => {
     if (hasLibrary(this.session)) return '/biblioteca';
@@ -183,13 +228,29 @@ export class ChatPage {
         : null,
     ),
   );
-  protected readonly navActive = computed((): NavTab | null =>
-    !this.onMedia() && this.currentView() === 'search' && !this.isEmpty()
-      ? 'search'
-      : null,
+  /**
+   * A phone's tab: Conversas on the home opens the conversation list (chat-history@mobile),
+   * Buscar keeps its tab on while the search view waits for a question.
+   */
+  protected readonly phoneTab = signal<'history' | 'search' | null>(null);
+  protected readonly phoneHistory = computed(
+    () =>
+      this.phoneTab() === 'history' &&
+      this.isEmpty() &&
+      !this.desktop() &&
+      !this.onMedia(),
   );
+  protected readonly navActive = computed((): NavTab | null => {
+    if (this.onMedia() || this.phoneHistory()) return null;
+    const searching = this.currentView() === 'search';
+    return searching && (!this.isEmpty() || this.phoneTab() === 'search')
+      ? 'search'
+      : null;
+  });
   /** The main panel's gradient: the colour of the collection's cover (v2 pageHeader tint). */
   protected readonly tint = computed(() => {
+    if (!this.onMedia() && this.researching()) return 'var(--tint-research)';
+    if (!this.onMedia() && this.searchPage()) return 'var(--tint-search)';
     const title = this.topic()?.title;
     return title ? coverGradient(title)[0] : null;
   });
@@ -200,9 +261,17 @@ export class ChatPage {
   protected readonly playerShown = computed(() => {
     if (!this.audio.shown()) return false;
     const source = this.engineSource();
-    if (!source) return true;
+    if (!source || this.desktop()) return true;
     return this.path() !== `/midia/${encodeURIComponent(source.id)}`;
   });
+  /**
+   * The pages with a header of their own (v2 · Mídia — Player, Fila e Marcadores): the
+   * player names the collection ("Áudio · Alquimia Prática"), "Meus marcadores" and the
+   * Fila are lists of every collection, so the shell's collection title stays out.
+   */
+  protected readonly playerPage = computed(() =>
+    /^\/(midia\/[^/]+|fila)$/.test(this.path()),
+  );
   /**
    * On a phone the page of what plays is the full-screen player (KBC-129 FR-2, v2 · Mídia —
    * Player, celular): no navigation under it; its own "← Biblioteca" leads back.
@@ -215,6 +284,12 @@ export class ChatPage {
       this.path() === `/midia/${encodeURIComponent(source.id)}`
     );
   });
+  /** The guided flow of KBC-130 (v2 · Mídia — Preparar, Faixas e Limites). */
+  protected readonly guidedFlow = computed(() => isGuidedFlowPath(this.path()));
+  /** On a phone the guided flow covers the screen: no navigation and no mini player under it. */
+  protected readonly phoneFlow = computed(
+    () => !this.desktop() && this.guidedFlow(),
+  );
   /** The collection in the header: on a media page, the one that page shows (KBC-091). */
   protected readonly topic = computed(() => {
     if (!this.onMedia()) return this.store.topic();
@@ -250,6 +325,49 @@ export class ChatPage {
   protected readonly searchPage = computed(
     () => !this.researching() && !this.isEmpty(),
   );
+  /** The scope row (escopo): desktop everywhere but a search page; a phone on the home. */
+  protected readonly showScope = computed(() => {
+    if (this.onMedia()) return false;
+    if (this.desktop()) return !this.searchPage();
+    // (with no collection too: chat-no-topics@mobile keeps the chips over its empty state)
+    return this.isEmpty() && !this.researching() && !this.phoneHistory();
+  });
+  /** A phone's research home: the profiles at the top (cmHome, mode 'ia'). */
+  protected readonly showProfiles = computed(
+    () =>
+      !this.desktop() &&
+      !this.onMedia() &&
+      this.researching() &&
+      this.isEmpty() &&
+      !this.noTopics() &&
+      !this.phoneHistory(),
+  );
+  protected readonly profileOptions = RESEARCH_PROFILES.map((value) => ({
+    value,
+    label: PROFILE_COPY[value].label(),
+  }));
+  protected readonly exhaustiveHelp = PROFILE_COPY.exhaustive.help();
+  /** The phone's search pill shows the search on screen (cmResults); null elsewhere. */
+  protected readonly pillQuestion = computed(() =>
+    !this.desktop() && this.searchPage()
+      ? (this.messages().at(-1)?.question ?? null)
+      : null,
+  );
+  /** The desktop top bar's field holds the search on screen (chat-results). */
+  protected readonly topQuery = computed(() =>
+    this.desktop() && this.searchPage()
+      ? (this.messages().at(-1)?.question ?? '')
+      : '',
+  );
+  /** The phone's page name (cmHead): Conversas, Buscar or Pesquisa com IA. */
+  protected readonly pageTitle = computed(() => {
+    if (this.phoneHistory())
+      return $localize`:@@page.titleConversations:Conversas`;
+    if (this.researching())
+      return $localize`:@@page.titleResearch:Pesquisa com IA`;
+    if (this.searchPage()) return $localize`:@@page.titleSearch:Buscar`;
+    return $localize`:@@page.titleConversations:Conversas`;
+  });
   /** On phones the panel covers the conversation: make it inert so Tab stays in the panel. */
   private readonly router = inject(Router);
   /** The questions typed in the top bar's search, in order. */
@@ -262,10 +380,35 @@ export class ChatPage {
     ),
     { initialValue: isMediaUrl(this.router.url) },
   );
+  /**
+   * Configurações is a page with its own title and, on a phone, pushed screens with their
+   * own "‹" (v2 · Configurações): no shell title row over it, no tab bar under it.
+   */
+  protected readonly onSettings = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => isSettingsUrl(this.router.url)),
+    ),
+    { initialValue: isSettingsUrl(this.router.url) },
+  );
   /** The document panel belongs to the conversation: hidden on the media pages. */
   protected readonly panel = computed(() =>
     this.onMedia() ? null : this.opened(),
   );
+  /**
+   * A document opened from the search, on desktop: the document page takes the main panel
+   * and its "Sobre este documento" the right one (chat-document); a source of an answer
+   * stays the 460 panel beside it (Telas-chave, research with the source open).
+   */
+  protected readonly docPage = computed(() => {
+    const doc = this.panel();
+    return (
+      this.desktop() &&
+      doc !== null &&
+      !doc.sources?.length &&
+      this.rightPanel.content() === null
+    );
+  });
   /** A spoken passage in the reading panel instead of a document (KBC-039 FR-6). */
   protected readonly passage = computed(() =>
     this.onMedia() ? null : (this.store.openPassage()?.hit ?? null),
@@ -395,6 +538,31 @@ export class ChatPage {
       wasOnMedia = onMedia;
     });
     this.keepFloatTop();
+    this.keepFootHeight();
+  }
+
+  /**
+   * `--shell-foot-h`: how tall the phone's foot (mini player and navigation) is. A media page
+   * runs under it, as v2 draws it (media-library@mobile), and ends that much lower, so its
+   * last row still scrolls above the foot (FR-4, AC-5).
+   */
+  private keepFootHeight(): void {
+    const root = inject(DOCUMENT).documentElement;
+    let observer: ResizeObserver | null = null;
+    afterRenderEffect(() => {
+      const foot = this.shellFoot()?.nativeElement;
+      observer?.disconnect();
+      if (!foot || typeof ResizeObserver === 'undefined') return;
+      const measure = (): void =>
+        root.style.setProperty('--shell-foot-h', `${foot.offsetHeight}px`);
+      observer = new ResizeObserver(measure);
+      observer.observe(foot);
+      measure();
+    });
+    inject(DestroyRef).onDestroy(() => {
+      observer?.disconnect();
+      root.style.removeProperty('--shell-foot-h');
+    });
   }
 
   /**
@@ -457,6 +625,8 @@ export class ChatPage {
   }
 
   protected sidebarActed(action: SidebarAction): void {
+    // What opens from "Biblioteca expandida" shows in the main panel again.
+    this.expanded.set(false);
     // A conversation started or restored from the media pages shows the conversation.
     if (
       (action === 'new' || action === 'restore' || action === 'document') &&
@@ -479,11 +649,39 @@ export class ChatPage {
     this.store.setMode(mode);
   }
 
-  protected changeView(view: ChatView): void {
-    this.views.select(view);
+  /** Arrows in the phone's profile chips move the choice, as in a radio group. */
+  protected moveProfile(event: KeyboardEvent): void {
+    const step =
+      event.key === 'ArrowRight' || event.key === 'ArrowDown'
+        ? 1
+        : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+          ? -1
+          : 0;
+    if (!step) return;
+    event.preventDefault();
+    const values = this.profileOptions.map((option) => option.value);
+    const at = values.indexOf(this.research.profile());
+    const next = values[(at + step + values.length) % values.length];
+    if (!next) return;
+    this.research.chooseProfile(next);
+    const group = (event.currentTarget as HTMLElement | null)?.parentElement;
+    afterNextRender(
+      () =>
+        group
+          ?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')
+          ?.focus(),
+      { injector: this.injector },
+    );
+  }
+
+  /** "+" of the phone's Pesquisa com IA: a new research, ready to type into. */
+  protected startNewResearch(): void {
+    this.research.newConversation();
+    this.sidebarActed('new');
   }
 
   protected ask(question: string): void {
+    if (this.phoneTab() === 'history') this.phoneTab.set(null);
     if (this.researching()) this.askResearch(question);
     else this.store.ask(question);
   }
@@ -723,32 +921,47 @@ export class ChatPage {
     }
     if (isTyping(event.target)) return;
     event.preventDefault();
-    this.composer()?.focus();
+    const composer = this.composer();
+    // A desktop search page asks in the top bar's field (it has no question box).
+    if (composer) composer.focus();
+    else this.topBar()?.focusSearch();
   }
 
   /** Enter in the global search: the free search of the collection in use (FR-2). */
   protected globalSearch(query: string): void {
+    this.expanded.set(false);
     this.views.select('search');
     this.globalSearches.next(query);
   }
 
   /** ✦ in the top bar: the research view, ready to type into. */
   protected openResearch(): void {
+    this.expanded.set(false);
     if (this.views.researchAvailable()) this.views.select('research');
     this.showConversation();
   }
 
   protected goHome(): void {
+    this.expanded.set(false);
     this.showConversation();
   }
 
   /** A phone tab that acts instead of opening a page (Buscar, Acervos). */
   protected navChosen(tab: NavTab): void {
     if (tab === 'collections') this.openMenu();
-    else if (tab === 'search') {
+    else if (tab === 'conversations') {
+      // On the home Conversas lists the conversations, and from the list leads home again.
+      if (this.phoneHistory()) this.phoneTab.set(null);
+      else if (this.isEmpty() && !this.onMedia()) this.phoneTab.set('history');
+      // From a search page, Conversas is the AI research and its own conversation (the
+      // phone has no scope chips there: the v1 view switch's way back, KBC-008 AC-5).
+      else if (this.searchPage() && this.views.researchAvailable())
+        this.views.select('research');
+    } else if (tab === 'search') {
+      this.phoneTab.set('search');
       this.views.select('search');
       this.showConversation();
-    }
+    } else this.phoneTab.set(null);
   }
 
   protected toggleCollapsed(): void {

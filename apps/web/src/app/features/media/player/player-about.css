@@ -1,0 +1,172 @@
+/* "Sobre este áudio" (v2 · Mídia — Player): the 340 column's cards, #1f1f1f with 16 inside. */
+:host {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  min-width: 0;
+}
+
+.card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.card[hidden] {
+  display: none;
+}
+
+/* Nothing of the preparation to say under "3 faixas aplicadas": no gap for it. */
+.card app-track-preparation:has(.status:empty) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+h3 {
+  margin: 0;
+  font-size: var(--text-item);
+  font-weight: 700;
+  line-height: 1.125rem;
+}
+
+.quiet {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  line-height: 1.1875rem;
+}
+
+/* A count of one line (the voices found, the author's audios): 16 tall, as drawn. */
+.quiet.line {
+  line-height: 1rem;
+}
+
+.voices {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.voices li {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: var(--text-sm);
+}
+
+/* pRight voiceRow: the dot, 10, "Voz N"; the time of speech 10 before ▶. */
+.voices app-voice-tag {
+  flex: 1;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.spoken {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.applied {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.applied a {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.person-name {
+  margin: 0;
+  font-size: var(--text-item);
+  font-weight: 700;
+  line-height: 1.125rem;
+}
+
+.archived:empty {
+  display: none;
+}
+
+/* pRight voicesCard 'none': the label over the optional count and "Separar vozes". */
+.separate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.375rem var(--space-2);
+}
+
+.separate label {
+  grid-column: 1 / -1;
+  color: var(--color-text);
+  font-size: var(--text-meta);
+  font-weight: 700;
+  line-height: 1rem;
+}
+
+.count {
+  display: grid;
+  min-width: 0;
+}
+
+.separate button {
+  height: 2.25rem;
+}
+
+.count input {
+  width: 100%;
+  min-width: 0;
+  height: 2.25rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--overlay-line);
+  border-radius: var(--radius-sm);
+  background: var(--overlay-1);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.count input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.count input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.count input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-meta);
+}

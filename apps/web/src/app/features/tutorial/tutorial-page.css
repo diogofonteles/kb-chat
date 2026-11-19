@@ -39,17 +39,61 @@ h3 {
 }
 
 p {
-  margin: 0 0 var(--space-3);
+  margin: 0 0 0.875rem;
 }
 
 .lead {
   margin-bottom: var(--space-4);
 }
 
-section {
-  padding-top: var(--space-8);
-  margin-top: var(--space-8);
-  border-top: 1px solid var(--color-border);
+/* v2 · Públicas: the sections follow each other 44 apart, with no rule between them. */
+section + section {
+  margin-top: 2.75rem;
+}
+
+.modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* v2 · Públicas: each card as tall as its own text (129 and 149), not the row's */
+  align-items: start;
+  gap: var(--space-3);
+  margin: 0 0 0.875rem;
+  padding: 0;
+  list-style: none;
+}
+
+.mode {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--overlay-1);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.43;
+}
+
+.mode + .mode {
+  margin-top: 0;
+}
+
+.mode ui-icon {
+  justify-self: start;
+  color: var(--color-accent);
+}
+
+.mode strong {
+  color: var(--color-text);
+  font-size: var(--text-md);
+  line-height: 1.3;
+}
+
+@media (max-width: 1023px) {
+  .modes {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 ul,
@@ -204,6 +248,11 @@ thead th {
   .guide {
     font-size: var(--text-item);
     line-height: 1.55;
+  }
+
+  /* cmPublic: the paragraphs' lines 12 apart (their 23 lines carry 4 of it each side). */
+  p {
+    margin-bottom: 0.5rem;
   }
 
   h2 {

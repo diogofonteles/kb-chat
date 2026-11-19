@@ -7,7 +7,12 @@ import {
   SETTINGS_AXE,
   settingsSection,
 } from './settings-helpers.js';
-import { uniqueTag, uploadReady } from './media-helpers.js';
+import {
+  pageAction,
+  pageOffers,
+  uniqueTag,
+  uploadReady,
+} from './media-helpers.js';
 
 // KBC-037: "Groq de reserva" in Configurações and "Transcrever com Groq" on an audio. The
 // E2E server's Groq is a fake (a key ending in "valid" is accepted): nothing is paid. The
@@ -105,11 +110,13 @@ test('AC-2: "Transcrever com Groq" sends a waiting audio, and it comes back tran
   await owner.dispose();
   await page.goto(`/midia/${id}`);
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
-  const meta = page.locator('app-media-player-page .meta');
+  // Where the transcription is: the pill under the title (v2 · Mídia — Player).
+  const meta = page.locator('app-media-player-page .note');
   await expect(meta).toContainText('Aguardando o transcritor');
 
-  await page.getByRole('button', { name: 'Transcrever com Groq' }).click();
-  const question = page.getByRole('group', { name: /com o Groq agora/ });
+  await pageAction(page, 'Transcrever com Groq');
+  // Asked in a modal (a sheet on a phone) that opens on its safe answer (v2, KBC-129).
+  const question = page.getByRole('dialog', { name: 'Transcrever com Groq?' });
   await expect(
     question.getByRole('button', { name: 'Cancelar' }),
   ).toBeFocused();
@@ -123,4 +130,5 @@ test('AC-2: "Transcrever com Groq" sends a waiting audio, and it comes back tran
   await expect(
     page.getByRole('button', { name: 'Transcrever com Groq' }),
   ).toHaveCount(0);
+  expect(await pageOffers(page, 'Transcrever com Groq')).toBe(false);
 });

@@ -1,4 +1,4 @@
-import type { Topic } from '@kb-chat/contracts';
+import type { Topic, TopicList } from '@kb-chat/contracts';
 
 /** A sub-collection's indent in a native select, the only one a `<select>` keeps (ADR 0028). */
 const INDENT = '\u00a0'.repeat(4);
@@ -10,6 +10,22 @@ export const treeTitle = (topic: Pick<Topic, 'title' | 'parent'>): string =>
 /** Collections a person may pick: a parent shown only as a group title is left out. */
 export const openable = (topics: readonly Topic[]): readonly Topic[] =>
   topics.filter((topic) => topic.canOpen);
+
+/**
+ * The collection that opens when the person chose none ("O maior acervo"): the server's
+ * default (KB_TOPIC or the saved one), else the one with most documents that opens, the
+ * first listed on a tie. The one rule the chat opens with and the wizard shows chosen.
+ */
+export function defaultTopicOf(list: TopicList | null): string | null {
+  if (!list) return null;
+  if (list.defaultSlug) return list.defaultSlug;
+  const [first, ...rest] = openable(list.items);
+  if (!first) return null;
+  return rest.reduce(
+    (best, one) => (one.documentCount > best.documentCount ? one : best),
+    first,
+  ).slug;
+}
 
 /** A collection as a checkbox row of "Pessoas e permissões" and the invite profiles (FR-5). */
 export interface CollectionChoice extends Topic {

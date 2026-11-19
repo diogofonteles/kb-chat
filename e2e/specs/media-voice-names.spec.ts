@@ -100,7 +100,12 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await expect(listener.getByRole('heading', { name: 'Vozes' })).toHaveCount(
       0,
     );
-    await listener.getByRole('button', { name: 'Legendas' }).click();
+    // "Legendas" is in the player's ⋯ (v2 · Mídia — Player, KBC-038).
+    await listener
+      .getByRole('button', { name: 'Mais opções', exact: true })
+      .first()
+      .click();
+    await listener.getByRole('menuitem', { name: /^Legendas/ }).click();
     await expect(caption(listener)).toContainText('— ✦ Mestre Laércio:');
   });
 }

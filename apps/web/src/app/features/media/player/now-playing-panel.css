@@ -17,12 +17,38 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
+  /* v2: a 20 row (16/700 and two bare icons, 8 apart, the cover 16 under it); the 32 tall
+     targets overflow it evenly, as wide as their icons. */
+  height: 1.25rem;
 }
 
 .label {
+  flex: 1;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   font-size: var(--text-md);
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more {
+  --menu-trigger-min: 1.25rem;
+  --menu-trigger-height: 2rem;
+}
+
+.bar .open {
+  width: 1.125rem;
+}
+
+.mark {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.mark.on {
+  color: var(--color-accent);
 }
 
 .art {
@@ -35,21 +61,28 @@
 .head {
   display: flex;
   gap: var(--space-3);
-  align-items: flex-start;
+  align-items: center;
 }
 
+/* The title 22/26 with its author 15/18 right under it; ↗ and 🔖 bare, 12 apart, centred
+   on the two (v2 · Tocando agora). */
 .names {
   display: grid;
   flex: 1;
-  gap: var(--space-1);
+  gap: 0;
   min-width: 0;
+}
+
+.head .share,
+.head .mark {
+  width: 1.375rem;
 }
 
 .title {
   color: var(--color-text);
   font-size: var(--text-section);
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.625rem;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
@@ -67,18 +100,13 @@
 }
 
 .open {
-  display: grid;
   flex: none;
-  place-items: center;
-  width: var(--target);
-  height: var(--target);
-  border-radius: var(--radius-pill);
   color: var(--color-text-muted);
 }
 
-.open:hover {
-  background: var(--overlay-2);
-  color: var(--color-text);
+.names .author {
+  font-size: var(--text-item);
+  line-height: 1.125rem;
 }
 
 .card {
@@ -88,9 +116,20 @@
   border-radius: var(--radius-card);
   background: color-mix(
     in srgb,
-    var(--color-accent) 18%,
-    var(--color-elevated)
+    var(--card-tint, var(--color-accent)) 75%,
+    var(--color-bg)
   );
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-open {
+  margin: -0.5rem -0.5rem -0.5rem 0;
+  color: var(--color-text);
 }
 
 .card p {
@@ -100,18 +139,20 @@
 .card-title {
   font-size: var(--text-sm);
   font-weight: 700;
+  line-height: 1.0625rem;
 }
 
 .before,
 .line {
   font-size: 1.125rem;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.5rem;
   overflow-wrap: anywhere;
 }
 
 .before {
-  color: var(--color-text-muted);
+  /* The line already heard, dimmed on the card (v2: white at 65%, ≥ 4.5:1 there). */
+  color: color-mix(in srgb, var(--color-text) 80%, transparent);
 }
 
 .about {
@@ -122,9 +163,16 @@
   background: var(--color-surface);
 }
 
+/* "Sobre a autora" 15/18, the name 15/18 and the count 13/16 beside the 48 avatar. */
 .about h3 {
   margin: 0;
-  font-size: var(--text-md);
+  font-size: var(--text-item);
+  line-height: 1.125rem;
+}
+
+.about .person-meta {
+  font-size: var(--text-meta);
+  line-height: 1rem;
 }
 
 .person {
@@ -135,5 +183,137 @@
 
 .person-name {
   margin: 0;
+  font-size: var(--text-item);
   font-weight: 700;
+  line-height: 1.125rem;
+}
+
+.view {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.share {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+/* v2 · Fila: the tabs (16/700, the chosen one white with a 2 px green underline) and ×. */
+.tabs-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tabs {
+  display: flex;
+  flex: 1;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.tab {
+  position: relative;
+  min-height: 2rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tab[aria-selected='true'] {
+  color: var(--color-text);
+}
+
+.tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-accent);
+}
+
+.tab:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.close {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.list-head {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.items {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A row of the Fila: 48 cover, title 15 and the author 13 muted. */
+.item {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  min-height: 3.5rem;
+  padding: var(--space-1) 0;
+  border: 0;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.item:hover {
+  background: var(--overlay-2, rgb(255 255 255 / 6%));
+}
+
+.item:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.item-text {
+  display: grid;
+  min-width: 0;
+}
+
+.item-title,
+.item-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-title {
+  font-size: var(--text-item);
+  font-weight: 500;
+}
+
+.current .item-title {
+  color: var(--color-accent);
+}
+
+.item-meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
 }

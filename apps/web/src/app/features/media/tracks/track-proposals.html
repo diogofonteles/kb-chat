@@ -70,12 +70,14 @@
   } @else {
     <button
       type="button"
-      class="secondary"
+      class="secondary propose"
       [disabled]="busy() || blocked()"
       (click)="askEstimate()"
-      i18n="@@tracks.ai.propose"
     >
-      Propor faixas com IA
+      <ui-icon name="sparkle" [size]="18" />
+      <span class="propose-label" i18n="@@tracks.ai.proposeShort"
+        >Propor com IA</span
+      >
     </button>
     @if (cost()) {
       <p class="hint" i18n="@@tracks.ai.cost">Custou {{ cost() }}</p>

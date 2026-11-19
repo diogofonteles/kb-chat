@@ -74,11 +74,18 @@ describe('LoginPage (KBC-010, T8)', () => {
 
     expect(google.calls.clientId).toBe('client-123');
     expect(google.calls.rendered).toBeGreaterThan(0);
-    expect(screen.getByText('Fazer login com o Google')).toBeTruthy();
+    // Google's own button takes the click; the drawn v2 pill over it is only a picture.
+    const host = fixture.nativeElement.querySelector('.google-button');
+    expect(host?.textContent).toContain('Fazer login com o Google');
+    const face = fixture.nativeElement.querySelector('.google-face');
+    expect(face?.getAttribute('aria-hidden')).toBe('true');
+    expect(face?.textContent).toContain('Fazer login com o Google');
 
     google.calls.callback?.({ credential: 'google-id-token' });
     await fixture.whenStable();
     expect(screen.getByRole('status').textContent).toContain('Entrando');
+    // v2 · Auth "Entrando": the pill itself says it.
+    expect(face?.textContent).toContain('Entrando…');
     const login = http.expectOne('/api/v1/auth/google');
     expect(login.request.body).toEqual({ credential: 'google-id-token' });
     login.flush(aMe());

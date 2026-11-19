@@ -89,4 +89,19 @@ describe('UiMenu (KBC-125 D5, APG menu button)', () => {
       screen.getByRole('textbox', { name: 'Nome' }),
     );
   });
+
+  it('keeps an Escape to itself: the panel or dialog around it stays open', async () => {
+    const { view, trigger } = await setup();
+    const outer = vi.fn();
+    view.fixture.nativeElement.addEventListener('keydown', outer);
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    await view.fixture.whenStable();
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(outer).not.toHaveBeenCalled();
+    // A key the menu does not use still reaches the page.
+    fireEvent.click(trigger);
+    await view.fixture.whenStable();
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'x' });
+    expect(outer).toHaveBeenCalledTimes(1);
+  });
 });

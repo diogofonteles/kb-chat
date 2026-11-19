@@ -15,7 +15,14 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { makeMp3, uniqueTag, uploadReady } from './media-helpers.js';
-import { audioWithTracks, expectSaved, trackRow } from './tracks-helpers.js';
+import {
+  audioWithTracks,
+  expectSaved,
+  openPhoneDetails,
+  openPhoneTools,
+  trackMenu,
+  trackRow,
+} from './tracks-helpers.js';
 import {
   seedTranscript,
   separateVoices,
@@ -78,8 +85,9 @@ test('KBC-090: several files go to the queue, which says where each one is', asy
   await expect(
     page.getByRole('heading', { name: 'Fila de processamento' }),
   ).toBeVisible();
+  // The queue lists every collection: the page names itself, never a collection (v2).
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-    'Nova Alexandria',
+    'Fila de processamento',
   );
   const rows = page.locator('app-queue-row').filter({ hasText: tag });
   await expect(rows).toHaveCount(2, { timeout: 15_000 });
@@ -152,25 +160,39 @@ test('KBC-091: the library follows the collection, and the header never lies', a
     topic: 'alquimia',
   });
   await page.goto('/biblioteca');
-  const heading = page.getByRole('heading', { level: 1 });
-  await expect(heading).toContainText('Hermetismo');
+  // The header names the scope, the collection in use (owner, 2026-11-19): no removable
+  // chip; "Todas as mídias" is a choice of its own, kept by the address.
+  const scope = page.locator('app-library-page .hero .library-scope');
+  const meta = page.locator('app-library-page .hero .ui-page-header__meta');
+  await expect(scope).toHaveText('Hermetismo');
+  await expect(
+    page
+      .locator('app-library-controls')
+      .getByRole('button', { name: /^Ver todos os acervos/ }),
+  ).toHaveCount(0);
+  // A phone's box opens from the 🔍 of its top row (media-library-search@mobile).
+  if ((page.viewportSize()?.width ?? 0) < 1024)
+    await page.getByRole('button', { name: 'Abrir a busca' }).click();
   const search = page.getByLabel('Buscar na biblioteca');
   await search.fill(tag);
   await expect(page.getByRole('link', { name: here.title })).toBeVisible();
   await expect(page.getByRole('link', { name: there.title })).toHaveCount(0);
 
-  await page
-    .getByLabel('Acervo')
-    .last()
-    .selectOption({ label: 'Todos os acervos' });
-  await expect(heading).toHaveText('Todos os acervos');
+  await page.getByRole('button', { name: 'Ver todas as mídias' }).click();
+  await expect(page).toHaveURL(/acervos=todos/);
+  await expect(scope).toHaveText('Todas as mídias');
+  await expect(meta).toContainText('Todos os acervos');
   await expect(page.getByRole('link', { name: there.title })).toBeVisible();
 
   await page.reload();
-  await expect(heading).toHaveText('Todos os acervos');
+  await expect(meta).toContainText('Todos os acervos');
 
+  const heading = page.getByRole('heading', { level: 1 });
   await page.goto(`/midia/${there.id}`);
-  await expect(heading).toContainText('Alquimia');
+  await expect(heading).toHaveText(there.title);
+  await expect(page.getByRole('article', { name: there.title })).toContainText(
+    'Alquimia',
+  );
   await owner.dispose();
 });
 
@@ -202,9 +224,14 @@ async function proposedAudio(
 }
 
 async function correctVoice(page: Page, voice: number, name: string) {
-  await page
-    .getByRole('button', { name: `Corrigir o nome da Voz ${voice}` })
-    .click();
+  const correct = page.getByRole('button', {
+    name: `Corrigir o nome da Voz ${voice}`,
+  });
+  // Mid-screen: a phone's foot bar is fixed over the page's last lines.
+  await correct.evaluate((button) =>
+    button.scrollIntoView({ block: 'center' }),
+  );
+  await correct.click();
   const field = page.getByRole('combobox', { name: `Quem é a Voz ${voice}?` });
   await expect(field).toBeFocused();
   await field.fill(name);
@@ -252,6 +279,8 @@ test('KBC-090: a correction and a refusal reach the published track', async ({
 
   await page.getByRole('button', { name: 'Validar faixas' }).click();
   await expect(page).toHaveURL(/\/faixas$/);
+  // A phone keeps the voices (and their warning) behind one button (KBC-130).
+  await openPhoneTools(page);
   await expect(page.getByText(/Reveja estes títulos/)).toBeVisible();
   await expect(page.getByText(/Alguns títulos podem citar/)).toBeInViewport();
 
@@ -310,6 +339,8 @@ test('KBC-102: the "Reveja" warning goes once the title on screen no longer says
   await expect(warning).toBeVisible();
 
   await trackRow(page, 2).getByRole('button').first().click();
+  // A phone keeps the title in the track's details, opened from its ⋯ (KBC-130).
+  await openPhoneDetails(page);
   const title = page.getByRole('textbox', { name: 'Título' });
   await expect(title).toHaveValue(`Pergunta de ${refused}`);
   await title.fill(`Pergunta da plateia ${tag}`);
@@ -321,6 +352,7 @@ test('KBC-102: the "Reveja" warning goes once the title on screen no longer says
     tracks.some(({ title }) => title === `Pergunta da plateia ${tag}`),
   );
   await page.reload();
+  await openPhoneDetails(page);
   await expect(page.getByRole('textbox', { name: 'Título' })).toBeVisible();
   await expect(warning).toHaveCount(0);
   await owner.dispose();
@@ -372,6 +404,7 @@ test('KBC-090: a voice already accepted is corrected from step 3, and the focus 
   await page.goto(`/midia/${media.id}/preparar`);
   await page.getByRole('button', { name: 'Validar faixas' }).click();
   await expect(page).toHaveURL(/\/faixas$/);
+  await openPhoneTools(page);
 
   const accept = page.getByRole('button', {
     name: `Aceitar ${wrong} para a Voz 1`,
@@ -387,6 +420,8 @@ test('KBC-090: a voice already accepted is corrected from step 3, and the focus 
   const right = `Márcio da Rós ${tag}`;
   await correctVoice(page, 1, right);
   await expect(correction).toBeFocused();
+  // On a phone the track's people wait in its details, opened from its ⋯ (KBC-130).
+  await openPhoneDetails(page);
   await expect(
     page.getByRole('combobox', { name: 'Quem responde' }),
   ).toContainText(right);
@@ -405,6 +440,8 @@ test('KBC-090: the button that plays offers to stop, with nothing moving around 
   const media = await transcribedAudio(owner);
   await page.goto(`/midia/${media.id}/faixas`);
   await page.getByRole('button', { name: 'Nova faixa aqui' }).click();
+  // The listening buttons wait in the track's details, opened from its ⋯ (KBC-130).
+  await trackMenu(page, 'Tipo, nível e texto da faixa');
   const listen = page.getByRole('button', { name: '▶ Ouvir' });
   const end = page.getByRole('button', { name: 'Ouvir o fim' });
   await expect(listen).toBeVisible();
@@ -431,10 +468,12 @@ test('KBC-090: another row selected, the person can still stop, and Space stops'
   const media = await audioWithTracks(owner);
   await page.goto(`/midia/${media.id}/faixas`);
   await trackRow(page, 1).getByRole('button').first().click();
+  await trackMenu(page, 'Tipo, nível e texto da faixa');
   await page.getByRole('button', { name: '▶ Ouvir' }).click();
   await expect(page.getByRole('button', { name: '■ Parar' })).toBeVisible();
 
   await trackRow(page, 2).getByRole('button').first().click();
+  await trackMenu(page, 'Tipo, nível e texto da faixa');
   const stop = page.getByRole('button', { name: '■ Parar o que está tocando' });
   await expect(stop).toBeVisible();
   await trackRow(page, 2).getByRole('button').first().press('Space');

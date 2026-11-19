@@ -3,6 +3,21 @@
   gap: var(--space-4);
 }
 
+/* v2 · Pessoa (desktop): tabs, then the part 28 under them, the footer band at the bottom of
+   the modal's fixed height. */
+@media (min-width: 1024px) {
+  :host {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .panel {
+    padding-top: 1.75rem;
+  }
+}
+
 .note {
   margin: 0;
   color: var(--color-text-muted);
@@ -27,7 +42,7 @@
 .check {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 0.625rem;
   min-height: var(--target);
   cursor: pointer;
 }
@@ -199,15 +214,17 @@ button:disabled {
   border-bottom: 1px solid var(--overlay-line);
 }
 
+/* The words, 10 above the 2 px mark, the line under the row (v2 · Pessoa). */
 .tab {
-  min-height: 2.5rem;
-  padding: 0;
+  min-height: 0;
+  padding: 0 0 0.625rem;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--color-text-muted);
   font: inherit;
   font-size: var(--text-sm);
+  line-height: 1.0625rem;
   font-weight: 700;
   cursor: pointer;
 }
@@ -238,8 +255,53 @@ button:disabled {
   gap: var(--space-3);
   margin: 0 calc(-1 * var(--space-6)) calc(-1 * var(--space-5));
   padding: var(--space-4) var(--space-6);
-  background: var(--color-elevated);
-  box-shadow: inset 0 1px 0 var(--overlay-line);
+  /* The frame's footer band, a shade over the modal. */
+  background: color-mix(in srgb, var(--color-text) 3%, var(--color-elevated));
+}
+
+@media (min-width: 1024px) {
+  .foot {
+    margin-top: auto;
+  }
+}
+
+/* The phone's row only. */
+.apply-value,
+.apply-chevron {
+  display: none;
+}
+
+/* "Aplicar perfil": the legend at the left, the select and the button at the right. */
+.apply-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.apply-group {
+  margin-bottom: 0.625rem;
+}
+
+.group.apply-group > .legend {
+  margin: 0;
+  font-size: var(--text-item);
+  font-weight: 500;
+  line-height: 2.5rem;
+}
+
+.apply-group > .apply-row {
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.apply-group .select {
+  width: 10rem;
+  min-height: 2.5rem;
+  border: 0;
+  background-color: var(--color-surface-muted);
 }
 
 .foot-start,
@@ -247,7 +309,19 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
+}
+
+/* The frame's 36 px buttons with 14 px words, at both widths. */
+.foot .ui-btn {
+  min-height: 2.25rem;
+  padding-inline: 1.125rem;
+  font-size: var(--text-sm);
+}
+
+/* "Ver como", white with its 👁, a little wider (24 at its sides). */
+.foot [data-act-as] {
+  padding-inline: 1.5rem;
 }
 
 .danger-outline {
@@ -255,21 +329,228 @@ button:disabled {
   color: var(--color-danger);
 }
 
-/* The features two or three to a row, as checkboxes in a grid (v2 · Pessoas). */
+/* The features three to a row, 232 each and 12 apart, as checkboxes in a grid (v2 · Pessoas). */
 .group.grid {
-  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-  column-gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, 14.5rem);
+  column-gap: 0.75rem;
+  row-gap: 0;
+}
+
+.group.grid > .check > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .group.grid > .legend {
   grid-column: 1 / -1;
 }
 
+/* Papel: the title and what it means at the left, the switch at the right (stRow). */
+.role-row {
+  position: relative;
+}
+
+.role-legend {
+  padding: 0;
+  font-size: var(--text-item);
+  font-weight: 500;
+}
+
+.role-check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-top: -1.375rem;
+  padding-top: 1.375rem;
+  cursor: pointer;
+}
+
+.role-desc {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.role-check .ui-switch {
+  flex: none;
+  margin-top: -1.25rem;
+}
+
+/* Collections side by side, wrapping (v2 · Pessoas: Acervos). */
+.group.inline {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-5);
+}
+
+.group.inline > .level-field,
+.group.inline > .note {
+  flex-basis: 100%;
+}
+
+/* Its own line under its collection: the field's cap does not let it share the row. */
+.group.inline > .level-field {
+  max-width: none;
+}
+
+.group.inline > .level-field > .select {
+  max-width: 28rem;
+}
+
+.group.inline > .check,
+.group.grid > .check {
+  min-height: 1.875rem;
+  font-size: var(--text-sm);
+}
+
+.group > .legend {
+  margin-bottom: var(--space-1);
+  font-size: 1.0625rem;
+  line-height: 1.25rem;
+  font-weight: 700;
+}
+
+.group.inline {
+  row-gap: 0;
+}
+
 @media (max-width: 1023px) {
+  /* Two columns of 165, 12 apart (v2 · Pessoas, celular). */
+  .group.grid {
+    grid-template-columns: repeat(2, minmax(0, 10.3125rem));
+    column-gap: var(--space-3);
+  }
+
+  /* The person's actions, the chips and the part 14 apart; the part's first line 24 under the
+     chips. */
+  :host {
+    gap: 0.875rem;
+  }
+
+  .panel {
+    padding-top: 0.625rem;
+  }
+
+  /* Papel 22 under the chips, "Acervos" 26 under it (v2 · Convite, celular). */
+  .role-row {
+    margin: -0.25rem 0 0.5rem;
+  }
+
+  /* "Aplicar perfil" as one row: the words, the profile under them, a chevron; the select is
+     the whole row (transparent over it), so a tap chooses (v2 · Pessoas, celular). */
+  .apply-group {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 1.25rem;
+    align-items: center;
+    column-gap: var(--space-3);
+    row-gap: 0.1875rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .apply-group:focus-within {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .group.apply-group > .legend {
+    grid-area: 1 / 1;
+    line-height: 1.125rem;
+  }
+
+  .apply-value {
+    display: block;
+    grid-area: 2 / 1;
+    color: var(--color-text-muted);
+    font-size: var(--text-meta);
+    line-height: 1rem;
+  }
+
+  .apply-chevron {
+    display: inline-flex;
+    grid-area: 1 / 2 / span 2;
+    color: var(--color-text-muted);
+  }
+
+  .apply-group > .apply-row {
+    position: absolute;
+    inset: 0;
+  }
+
+  .apply-group > .apply-row > .field,
+  .apply-group > .apply-row .select {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+  }
+
+  .apply-group > .apply-row .select {
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .apply-group > .apply-row > button {
+    display: none;
+  }
+
+  /* While the question is open the unseen select stays off its buttons (Cancelar first). */
+  .apply-group:has(> .actions:not(.apply-row)) > .apply-row {
+    pointer-events: none;
+  }
+
+  /* Confirming: the question and its buttons under the row, in the flow. */
+  .apply-group > .actions:not(.apply-row) {
+    grid-column: 1 / -1;
+    margin-top: var(--space-3);
+  }
+
+  .group.grid > .check span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The phone's tabs as chips (segTabs, celular). */
+  .tabs {
+    gap: var(--space-2);
+    border-bottom: 0;
+  }
+
+  .tab {
+    min-height: 2rem;
+    padding: 0 0.75rem;
+    border: 0;
+    border-radius: var(--radius-pill);
+    font-weight: 500;
+  }
+
+  .tab[aria-selected='true'] {
+    background: var(--color-text);
+    color: var(--color-bg);
+  }
+
+  /* A phone (mEditor): the person's actions under their row, before the tabs, "Ver como"
+     first; no band at the bottom. */
   .foot {
-    bottom: calc(-1 * var(--space-8));
-    margin: 0 calc(-1 * var(--space-4)) calc(-1 * var(--space-8));
-    padding: var(--space-3) var(--space-4) var(--space-6);
+    position: static;
+    order: -1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .foot-end {
+    order: -1;
+    flex-direction: row-reverse;
+  }
+
+  .foot-start:empty {
+    display: none;
   }
 }
 
@@ -362,4 +643,357 @@ input.input {
 .select option {
   background: var(--color-elevated);
   color: var(--color-text);
+}
+
+/* The v2 select (Configurações): a filled field with its own chevron, never the native one. */
+:where(select).select {
+  appearance: none;
+  padding-right: 2.25rem;
+  border-color: transparent;
+  background-color: var(--color-surface-muted);
+  background-image: var(--settings-select-chevron, none);
+  background-position:
+    right 1.25rem center,
+    right 0.875rem center;
+  background-size: 0.375rem 0.375rem;
+  background-repeat: no-repeat;
+}
+
+/* ---------- IA e limites (v2): label at the left, control at the right, switches ---------- */
+.ai-tab {
+  gap: 0;
+}
+
+.ai-tab {
+  justify-items: stretch;
+}
+
+.ai-tab > .field,
+.ai-tab .limits > .field {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  min-height: 3.25rem;
+  font-size: var(--text-item);
+  font-weight: 500;
+}
+
+.ai-tab > .field:first-of-type {
+  min-height: 0;
+  padding-bottom: 1.375rem;
+  border-bottom: 1px solid var(--overlay-line);
+}
+
+/* With notes under the choice (a subscription to lend), they follow it, with no line. */
+.ai-tab > .field:first-of-type:has(+ .hint) {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.ai-tab > .field:first-of-type + .hint {
+  margin-top: 1.375rem;
+}
+
+.ai-tab .field > .select,
+.ai-tab .field > label > .select {
+  flex: none;
+  width: 17.5rem;
+  border: 0;
+  background-color: var(--color-surface-muted);
+}
+
+.ai-tab .field > .number {
+  flex: none;
+  width: 6rem;
+}
+
+.ai-tab .check,
+.ai-tab .limits .check {
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  gap: var(--space-6);
+  min-height: 3.25rem;
+  font-size: var(--text-item);
+}
+
+.ai-tab .check .ui-switch {
+  width: 2.5rem;
+  height: 1.375rem;
+}
+
+.ai-tab .limits {
+  gap: 0;
+}
+
+.ai-tab > .hint,
+.ai-tab > .lend-confirm {
+  margin: 0.4375rem 0;
+}
+
+.ai-tab > .hint {
+  line-height: 1.1875rem;
+}
+
+.history {
+  display: grid;
+  gap: 0.625rem;
+}
+
+/* The title's 20 px line, the changes 10 under it (v2 · IA e limites). */
+.history-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.25rem;
+  font-weight: 700;
+}
+
+.history ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) 0.875rem;
+  padding: 0.625rem var(--space-3);
+  border-radius: 6px;
+  background: var(--overlay-1);
+  font-size: var(--text-meta);
+  line-height: 1rem;
+}
+
+.history-when {
+  font-weight: 700;
+}
+
+.history-by {
+  color: var(--color-text-muted);
+}
+
+.history-what {
+  margin-left: auto;
+}
+
+/* Confirming "Aplicar perfil": the question takes the whole line under it. */
+.apply-group > .actions:not(.apply-row) {
+  flex-basis: 100%;
+}
+
+.ai-tab .field > span,
+.ai-tab .field > label > span {
+  flex: 1;
+}
+
+.ai-tab .hint {
+  font-size: var(--text-meta);
+}
+
+/* Lending a subscription (v2): an amber notice, "Ceder assim mesmo" white, Cancelar plain. */
+.lend-confirm {
+  gap: 0.625rem;
+  padding: var(--space-4);
+  border-color: color-mix(in srgb, var(--color-warn) 40%, transparent);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-warn) 10%, transparent);
+  font-size: var(--text-meta);
+}
+
+.lend-confirm .lend-title {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: var(--text-item);
+  font-weight: 700;
+}
+
+.lend-confirm .lend-title ui-icon {
+  flex: none;
+  color: var(--color-warn);
+}
+
+/* The notice as drawn: 17 in, the title 18 tall, 11 over the terms, 10 over the buttons. */
+.ai-tab .lend-confirm {
+  gap: 0.6875rem;
+  padding: 1.0625rem;
+}
+
+.lend-confirm .lend-title {
+  line-height: 1.125rem;
+}
+
+.lend-confirm .actions {
+  margin-top: -0.0625rem;
+}
+
+.lend-confirm .actions > .danger {
+  padding-inline: 1.375rem;
+}
+
+.lend-confirm .actions > .secondary:not(.danger) {
+  padding-inline: 0.875rem;
+}
+
+.lend-confirm .actions {
+  justify-content: flex-start;
+}
+
+.lend-confirm .actions > button {
+  flex: none;
+}
+
+.lend-confirm .actions > .danger {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.lend-confirm .actions > .secondary:not(.danger) {
+  border-color: transparent;
+  color: var(--color-text-muted);
+}
+
+/* A locked box with its label (the automatic free models, a master's collections): the row
+   dims as one and the tick keeps its green (v2 frames: cbx off, 50 %), not the shared grey. */
+.check:has(> .ui-check:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.check:has(> .ui-check:disabled) > .ui-check {
+  opacity: 1;
+}
+
+/* The lines under it 61 apart, the history 12 under the last (v2 · IA e limites). */
+.ai-tab > .field:not(:first-of-type),
+.ai-tab > .check,
+.ai-tab .limits > .field,
+.ai-tab .limits > .check {
+  min-height: 3.8125rem;
+}
+
+.history {
+  margin-top: 0.75rem;
+}
+
+/* The phone's row of a choice (v2 · IA e limites, celular): the words, the value under them,
+   a chevron; the select is the whole row, unseen. On a desktop only the select shows. The
+   label lays its words and its select out in the row (its words stay the select's name). */
+.row-value,
+.row-chevron {
+  display: none;
+}
+
+.field.which > label,
+.field.pref > label {
+  display: contents;
+}
+
+@media (max-width: 1023px) {
+  .ai-tab > .field.which {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 1.25rem;
+    align-items: center;
+    column-gap: var(--space-3);
+    row-gap: 0.1875rem;
+    min-height: 0;
+    margin-bottom: 0.1875rem;
+    padding-bottom: 1.375rem;
+  }
+
+  .ai-tab > .field.which:has(+ .hint) {
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .ai-tab > .field.which > label > span:first-child {
+    grid-area: 1 / 1;
+    line-height: 1.125rem;
+  }
+
+  .ai-tab > .field.which > .row-value {
+    display: block;
+    grid-area: 2 / 1;
+    color: var(--color-text-muted);
+    font-size: var(--text-meta);
+    font-weight: 400;
+    line-height: 1rem;
+  }
+
+  .ai-tab > .field.which > .row-chevron {
+    display: inline-flex;
+    grid-area: 1 / 2 / span 2;
+    color: var(--color-text-muted);
+  }
+
+  .ai-tab > .field.which > label > .select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+  }
+
+  .ai-tab > .field.which:focus-within {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* The history's change on two lines: when · who, then the AI. */
+  /* The sheet's own gap already keeps the history 12 under the last line. */
+  .history {
+    margin-top: 0;
+  }
+
+  .history li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-items: start;
+    row-gap: 0.375rem;
+  }
+
+  /* A switch's words on 18 px lines, the row 19.5 above and under them, so a two-line row
+     (Usar sempre a IA da aplicação…) grows as drawn (v2 · IA e limites, celular). */
+  .ai-tab > .check,
+  .ai-tab .limits > .check {
+    padding-block: 1.21875rem;
+    line-height: 1.125rem;
+  }
+
+  .history-what {
+    grid-column: 1 / -1;
+    margin-left: 0;
+  }
+}
+
+/* The notice's rhythm (v2 · Convite cedendo): 16 inside its line, the title's line 20 (its ⚠),
+   10 to the terms 13/19, 10 to the buttons; the next row 37 under it. */
+.ai-tab .lend-confirm {
+  gap: 0.625rem;
+  padding: var(--space-4);
+}
+
+.ai-tab > .lend-confirm {
+  margin-bottom: 0.1875rem;
+}
+
+.lend-confirm .lend-title {
+  min-height: 1.25rem;
+}
+
+.lend-confirm p:not(.lend-title) {
+  line-height: 1.1875rem;
+}
+
+.lend-confirm .actions {
+  margin-top: 0;
 }

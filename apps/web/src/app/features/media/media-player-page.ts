@@ -1,4 +1,10 @@
-import { DOCUMENT, DatePipe } from '@angular/common';
+import {
+  DOCUMENT,
+  DatePipe,
+  NgTemplateOutlet,
+  formatDate,
+} from '@angular/common';
+import { seenAtFormat } from '@core/i18n/date-formats.js';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -31,6 +37,7 @@ import {
   EMPTY_FILTERS,
   SEARCH_KINDS,
   mediaEditSchema,
+  mediaIdSchema,
   mediaItemSchema,
   mediaTranscriptSchema,
   type MediaItem,
@@ -60,9 +67,7 @@ import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
 import { TracksStore } from '@core/media/tracks-store.js';
 import { editPagePath, mediaEditUrl } from '@core/media/media-edit-api.js';
 import { TrackPublicationStatus } from './track-publication/track-publication-status.js';
-import { TrackPreparationStatus } from './tracks/track-preparation.js';
 import { preparationPagePath } from '@core/media/preparation-api.js';
-import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import {
   EMPTY,
   distinctUntilChanged,
@@ -70,6 +75,7 @@ import {
   interval,
   map,
   switchMap,
+  take,
 } from 'rxjs';
 import {
   pollEveryOf,
@@ -88,7 +94,6 @@ import { detailsSavedText, editDetailsLabel } from './edit-labels.js';
 import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
 import { hasLibrary } from './library/library-access.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
-import { BookmarkList } from './bookmark-list.js';
 import { MediaPlayer } from './player/media-player.js';
 import { cuesWithSpeakers } from './voices/speaker-names.js';
 import { VoicesPanel } from './voices/voices-panel.js';
@@ -99,18 +104,29 @@ import { TranscriptPanel } from './transcript/transcript-panel.js';
 import { TrackNavList } from './tracks/track-nav-list.js';
 import { TrackAboutView } from './track-about-view.js';
 import { TrackSubjectsView } from './track-subjects-view.js';
-import { ArchivedTracks } from './track-edit/archived-tracks.js';
 import { MovedBookmarksNotice } from './track-edit/moved-bookmarks-notice.js';
 import { TrackActions } from './track-edit/track-actions.js';
 import type { MenuOption } from './menu-button.js';
 import {
+  UiBanner,
   UiButton,
+  coverCode,
+  coverGradient,
+  NEUTRAL_COVER,
   UiChip,
   UiCover,
   UiIcon,
   UiPill,
   type Tone,
 } from '@ui/index.js';
+import { RightPanel } from '@features/shell/right-panel.js';
+import { BookmarksStore } from '@core/media/bookmarks-store.js';
+import { PlayerAbout } from './player/player-about.js';
+import { PlayerPanel } from './player/player-panel.js';
+import { PlayerPanelTabs } from './player/player-panel-tab.js';
+
+/** The v2 shell's desktop width (chat-page.ts): "Sobre" goes to the right panel there. */
+const DESKTOP_QUERY = '(min-width: 1024px)';
 
 /**
  * The body of the v2 player (KBC-129 FR-3): the transcript, the recording's tracks when it
@@ -124,16 +140,74 @@ export type PlayerView = 'transcript' | 'tracks' | 'voices';
  * "Continuar de" and "Começar do início". Leaving it while it plays keeps it playing in
  * the mini-player (FR-8); leaving it paused stops it.
  */
+/** Frames to wait for the panel beside the page to draw its bookmarks (about half a second). */
+const FOCUS_TRIES = 30;
+
+/** What the page says while a transcription waits for the transcriber (pBody o.waiting). */
+interface WaitingWords {
+  /** The empty state's and the banner's title. */
+  readonly title: string;
+  /** Since when it is off, or that none is paired, as a sentence; '' when it is on. */
+  readonly off: string;
+  /** The header's short pill (pHeader waitStatus, T21's 'Retranscrevendo'). */
+  readonly pill: string;
+  /** Beside the pill, in words, while there is no transcript yet. */
+  readonly why: string;
+}
+
+/** Since when the transcriber is off, or that none is paired: a sentence and short words. */
+function whyItWaits(
+  transcription: MediaItem['transcription'],
+  locale: string,
+): { readonly off: string; readonly short: string } {
+  const since = transcription.transcriberOffSince;
+  if (transcription.transcriber === 'off' && since) {
+    const date = formatDate(since, seenAtFormat(), locale);
+    return {
+      off: $localize`:@@player.transcriberOffSince:Desligado desde ${date}:date:.`,
+      short: $localize`:@@player.offSinceShort:desligado desde ${date}:date:`,
+    };
+  }
+  if (transcription.transcriber === 'none')
+    return {
+      off: $localize`:@@player.noTranscriber:Nenhum transcritor pareado.`,
+      short: $localize`:@@player.noTranscriberShort:nenhum transcritor pareado`,
+    };
+  return { off: '', short: '' };
+}
+
+function waitingWordsOf(media: MediaItem, locale: string): WaitingWords | null {
+  const transcription = media.transcription;
+  if (
+    media.status !== 'ready' ||
+    transcription.status !== 'waiting' ||
+    transcription.route !== 'transcriber'
+  )
+    return null;
+  const first = transcription.version === null;
+  const title = first
+    ? $localize`:@@media.transcription.waiting:Aguardando o transcritor`
+    : $localize`:@@player.retranscribingWaiting:Retranscrevendo: aguardando o transcritor`;
+  const { off, short } = whyItWaits(transcription, locale);
+  return {
+    title,
+    off,
+    pill: first
+      ? title
+      : $localize`:@@player.retranscribingPill:Retranscrevendo`,
+    why: first ? short : '',
+  };
+}
+
 @Component({
   selector: 'app-media-player-page',
   imports: [
     PreparationEntry,
     RouterLink,
     DatePipe,
-    TrackPreparationStatus,
-    AuthorshipBadge,
+    NgTemplateOutlet,
     MediaPlayer,
-    BookmarkList,
+    PlayerAbout,
     EditMediaDialog,
     TranscribeAgain,
     TranscribeWithGroq,
@@ -143,9 +217,9 @@ export type PlayerView = 'transcript' | 'tracks' | 'voices';
     TrackAboutView,
     TrackSubjectsView,
     TrackActions,
-    ArchivedTracks,
     MovedBookmarksNotice,
     TrackPublicationStatus,
+    UiBanner,
     UiButton,
     UiChip,
     UiCover,
@@ -169,6 +243,7 @@ export class MediaPlayerPage {
   protected readonly shortcuts = inject(PlayerShortcuts);
   private readonly title = inject(Title);
   private readonly route = inject(ActivatedRoute);
+  private readonly host: HTMLElement = inject(ElementRef).nativeElement;
   private readonly preferences = inject(TranscriptPreferences);
   private readonly listening = inject(ListeningPreferences);
   /** The collections the person sees, for "Editar informações" (KBC-050). */
@@ -181,7 +256,7 @@ export class MediaPlayerPage {
   protected readonly editing = signal(false);
   protected readonly announcement = signal('');
   private readonly tracks = inject(TracksStore);
-  private readonly id = toSignal(
+  protected readonly id = toSignal(
     this.route.paramMap.pipe(map((params) => params.get('id') ?? '')),
     { initialValue: '' },
   );
@@ -199,8 +274,15 @@ export class MediaPlayerPage {
     { initialValue: null },
   );
 
+  /**
+   * An address that is no media id (`/midia/fila`) is a media not found: the API would refuse
+   * it as invalid (400), which reads as a question that could not be sent.
+   */
+  private readonly malformedId = computed(
+    () => this.id() !== '' && !mediaIdSchema.safeParse(this.id()).success,
+  );
   protected readonly item = httpResource(
-    () => (this.id() ? mediaUrl(this.id()) : undefined),
+    () => (this.id() && !this.malformedId() ? mediaUrl(this.id()) : undefined),
     { parse: (body) => mediaItemSchema.parse(body) },
   );
   protected readonly media = computed<MediaItem | null>(() =>
@@ -343,13 +425,6 @@ export class MediaPlayerPage {
   protected readonly hasTracks = computed(
     () => this.tracks.tracks().length > 0,
   );
-  /**
-   * The chips Transcrição · Faixas · Vozes: "Faixas" with approved tracks, "Vozes" only for
-   * who edits recordings (the voices are theirs); one view alone needs no chips.
-   */
-  protected readonly hasViews = computed(
-    () => this.canEdit() || this.hasTracks(),
-  );
   /** The view chosen; back on the transcript for each media opened. */
   protected readonly chosenView = linkedSignal<string, PlayerView>({
     source: this.id,
@@ -371,31 +446,228 @@ export class MediaPlayerPage {
   );
   /** The situation's pill: done in green, a failure in red, the rest in waiting. */
   protected readonly transcriptionTone = computed((): Tone => {
+    // Transcribing again keeps a transcript: blue, as its banner (pill 'Retranscrevendo').
+    if (this.waitingFor() && this.hasTranscript()) return 'info';
     const status = this.media()?.transcription.status;
     if (status === 'done') return 'ok';
     if (status === 'failed') return 'err';
     return status === 'none' || status === undefined ? 'muted' : 'warn';
   });
+  /** The header's tint is the cover's colour (player.js P_TINT), not the collection's. */
+  protected readonly pageTint = computed(() => {
+    // Not found: the panel keeps the colour of what plays (pScreen o.notFound).
+    // A track wears its recording's cover, and so its colour (player.js: "Parte de").
+    const media = this.media();
+    const title =
+      media?.parent?.title ?? media?.title ?? this.engine.source()?.title;
+    if (this.failedMedia()) return NEUTRAL_COVER[0];
+    return title ? coverGradient(title)[0] : null;
+  });
+  /** A media that failed is grey: its cover and the header (player.js AC, "Falhou"). */
+  protected readonly failedMedia = computed(
+    () => this.media()?.status === 'failed',
+  );
+  protected readonly neutralCover = NEUTRAL_COVER;
+  /** The author's avatar (pageHeader o.by): the initials on the name's own colour. */
+  protected readonly authorInitials = computed(() =>
+    coverCode(this.media()?.author?.name ?? ''),
+  );
+  protected readonly authorTint = computed(() => {
+    const name = this.media()?.author?.name;
+    return name ? coverGradient(name)[0] : null;
+  });
+  /** Under the title in the phone's ⋯ sheet: "Irmã Helena Prado · Alquimia Prática". */
+  protected readonly sheetWhere = computed(() =>
+    [this.media()?.author?.name, this.collectionTitle()]
+      .filter(Boolean)
+      .join(' · '),
+  );
+  /** "Áudio · Alquimia Prática": the kind and the collection it is in (v2 header). */
+  protected readonly kicker = computed(() => {
+    const collection = this.collectionTitle();
+    const kind = $localize`:@@media.kicker:Áudio`;
+    return collection ? `${kind} · ${collection}` : kind;
+  });
+  private readonly collectionTitle = computed(() => {
+    const slug = this.media()?.topic;
+    return this.topics().find((topic) => topic.slug === slug)?.title ?? '';
+  });
+  /** The full-screen player's head (phone): "Tocando do acervo · Alquimia Prática". */
+  protected readonly playingFrom = computed(() => {
+    const parent = this.media()?.parent;
+    if (!parent) return $localize`:@@player.playingFrom:Tocando do acervo`;
+    const place = this.trackPlace();
+    const partOf = $localize`:@@player.playingFromTrack:Parte de`;
+    return place ? `${partOf} · ${place}` : partOf;
+  });
+  protected readonly playingWhere = computed(
+    () => this.media()?.parent?.title ?? this.collectionTitle(),
+  );
+  /** The media has bookmarks of the person: the mark is filled (v2 player). */
+  private readonly bookmarksStore = inject(BookmarksStore);
+  protected readonly bookmarked = computed(
+    () => this.bookmarksStore.bookmarks().length > 0,
+  );
+  /** A new transcription waits or runs while the current text stays (T21, "na fila"). */
+  protected readonly queuedNotice = computed(() => {
+    const media = this.media();
+    if (!media || media.status !== 'ready') return '';
+    const { status, version } = media.transcription;
+    const pending = status === 'waiting' || status === 'transcribing';
+    return pending && version !== null ? this.transcription() : '';
+  });
+  /**
+   * Waiting for the transcriber (pBody o.waiting, the queued banner): the title, and since
+   * when it is off, or that none is paired, as a sentence under it. Null otherwise.
+   */
+  private readonly waitingFor = computed(() => {
+    const media = this.media();
+    return media ? waitingWordsOf(media, this.locale) : null;
+  });
+  /** The header's pill: where the transcription is, short while it waits. */
+  protected readonly pillText = computed(
+    () => this.waitingFor()?.pill ?? this.transcription(),
+  );
+  protected readonly pillWhy = computed(() => this.waitingFor()?.why ?? '');
+  /** The empty transcript's title: where the transcription is ("Aguardando o transcritor"). */
+  protected readonly waitingTitle = computed(
+    () =>
+      this.waitingFor()?.title ||
+      this.transcription() ||
+      $localize`:@@transcript.none:Ainda sem transcrição`,
+  );
+  /** Under it: since when the transcriber is off, and when the text comes. */
+  protected readonly waitingText = computed(() => {
+    const waiting = this.waitingFor();
+    const later = $localize`:@@transcript.notYet:A transcrição aparece aqui quando ficar pronta.`;
+    if (!waiting?.off) return later;
+    const offline = this.media()?.transcription.transcriber === 'off';
+    return `${waiting.off} ${offline ? $localize`:@@player.transcriptWhenBack:A transcrição aparece aqui quando ele voltar.` : later}`;
+  });
+  /** The queued banner (T21): its title, and what stays meanwhile. */
+  protected readonly queuedTitle = computed(
+    () => this.waitingFor()?.title || this.queuedNotice(),
+  );
+  protected readonly queuedText = computed(() => {
+    const off = this.waitingFor()?.off;
+    const keep = $localize`:@@media.transcribing.keep:O texto atual continua até a nova versão ficar pronta.`;
+    return off ? `${off} ${keep}` : keep;
+  });
+  /** On a phone a banner or the track bar shares the screen: the cover gets smaller. */
+  protected readonly compactCover = computed(
+    () =>
+      this.hasTracks() ||
+      this.lowConfidence() ||
+      this.lowCaptions() ||
+      !!this.queuedNotice(),
+  );
+  private readonly desktopQuery =
+    inject(DOCUMENT).defaultView?.matchMedia?.(DESKTOP_QUERY) ?? null;
+  protected readonly desktop = signal(this.desktopQuery?.matches ?? true);
+  private readonly rightPanel = inject(RightPanel);
+  private readonly panelTabs = inject(PlayerPanelTabs);
+  private readonly again = viewChild(TranscribeAgain);
+  private readonly trackActions = viewChild(TrackActions);
+  private readonly groq = viewChild(TranscribeWithGroq);
   /** The page's actions at the top of the player's ⋯ (v2: they were loose buttons). */
   protected readonly pageOptions = computed<readonly MenuOption[]>(() => {
     const media = this.media();
     if (!media) return [];
+    return [
+      ...this.trackOptions(),
+      ...this.editOptions(media),
+      ...this.phoneViewOptions(),
+      ...(this.hasTranscript()
+        ? [
+            {
+              id: 'transcript',
+              icon: this.collapsed() ? ('eye' as const) : ('eyeOff' as const),
+              label: this.collapsed()
+                ? $localize`:@@transcript.show:Mostrar transcrição`
+                : $localize`:@@transcript.hide:Esconder transcrição`,
+            },
+          ]
+        : []),
+    ];
+  });
+
+  /** A track's own editing (KBC-073): "Ajustar início e fim" is in the row, the rest here. */
+  private trackOptions(): MenuOption[] {
+    if (!this.trackActions()?.editable()) return [];
+    return [
+      // A phone has no room for the link in its row (pMobile): it waits here.
+      ...(this.desktop()
+        ? []
+        : [
+            {
+              id: 'track-bounds',
+              icon: 'scissors' as const,
+              label: $localize`:@@trackEdit.bounds:Ajustar início e fim`,
+            },
+          ]),
+      {
+        id: 'track-edit',
+        icon: 'edit',
+        label: $localize`:@@trackEdit.editItem:Editar faixa`,
+      },
+      {
+        id: 'track-history',
+        icon: 'clock',
+        label: $localize`:@@trackEdit.historyItem:Histórico da faixa`,
+      },
+      {
+        id: 'track-delete',
+        icon: 'trash',
+        label: $localize`:@@trackEdit.delete:Apagar faixa`,
+        danger: true,
+      },
+    ];
+  }
+
+  /** The recording's editing, at the top of ⋯ (v2): edit, prepare, transcribe again. */
+  private editOptions(media: MediaItem): MenuOption[] {
     const options: MenuOption[] = [];
-    if (media.canEdit) options.push({ id: 'edit', label: this.editLabel });
+    if (media.canEdit)
+      options.push({ id: 'edit', icon: 'edit', label: this.editLabel });
     if (this.editEntry()?.state === 'new')
       options.push({
         id: 'prepare',
+        icon: 'scissors',
         label: $localize`:@@prep.entry.new:Preparar áudio`,
       });
-    if (this.hasTranscript())
+    if (media.canTranscribeAgain)
       options.push({
-        id: 'transcript',
-        label: this.collapsed()
-          ? $localize`:@@transcript.show:Mostrar transcrição`
-          : $localize`:@@transcript.hide:Esconder transcrição`,
+        id: 'again',
+        icon: 'refresh',
+        label: $localize`:@@transcribeAgain.open:Transcrever de novo`,
+      });
+    if (media.canUseGroq)
+      options.push({
+        id: 'groq',
+        icon: 'cpu',
+        label: $localize`:@@groqItem.open:Transcrever com Groq`,
       });
     return options;
-  });
+  }
+
+  /** The full-screen player has no view chips (pMobile): its views wait in ⋯. */
+  private phoneViewOptions(): MenuOption[] {
+    if (this.desktop()) return [];
+    const options: MenuOption[] = [];
+    if (this.hasTracks() && this.view() !== 'tracks')
+      options.push({
+        id: 'view-tracks',
+        icon: 'list',
+        label: $localize`:@@player.view.tracksItem:Ver faixas`,
+      });
+    if (this.canEdit() && this.view() !== 'voices')
+      options.push({
+        id: 'view-voices',
+        icon: 'people',
+        label: $localize`:@@player.view.voicesItem:Ver vozes`,
+      });
+    return options;
+  }
   /** The column shows: there is a transcript and the person did not hide it (FR-9). */
   protected readonly showTranscript = computed(
     () => this.hasTranscript() && !this.collapsed(),
@@ -424,11 +696,13 @@ export class MediaPlayerPage {
     return ms === null || ms === undefined ? '' : formatDuration(ms);
   });
   protected readonly loadError = computed(() => {
+    if (this.malformedId()) return errorMessage('MEDIA_NOT_FOUND');
     const err = this.item.error();
     return err ? errorMessage(toUiErrorCode(err)) : '';
   });
-  /** Removed, or not visible to this person: nothing to try again. */
+  /** Removed, not visible to this person, or no media id at all: nothing to try again. */
   protected readonly notFound = computed(() => {
+    if (this.malformedId()) return true;
     const err = this.item.error();
     return err !== undefined && toUiErrorCode(err) === 'MEDIA_NOT_FOUND';
   });
@@ -466,7 +740,43 @@ export class MediaPlayerPage {
   /** The edit dialog was opened from ⋯: closing it gives the focus back there. */
   private editFromMenu = false;
 
+  /**
+   * "Ver marcadores" of a library row (v2 media-library-row-menu) opens here with
+   * `#marcadores`: once the page is in, the focus (and the view) go to its bookmarks — on a
+   * desktop in the Sobre tab of the panel beside the page, which renders a moment later.
+   */
+  private followBookmarksLink(): void {
+    toObservable(this.ready)
+      .pipe(
+        filter(Boolean),
+        take(1),
+        filter(() => this.route.snapshot.fragment === 'marcadores'),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => {
+        this.panelTabs.tab.set('about');
+        afterNextRender(() => this.focusBookmarks(FOCUS_TRIES), {
+          injector: this.injector,
+        });
+      });
+  }
+
+  private focusBookmarks(tries: number): void {
+    const heading =
+      this.host.querySelector<HTMLElement>('app-bookmark-list h3') ??
+      this.document.querySelector<HTMLElement>('app-bookmark-list h3');
+    if (!heading) {
+      const view = this.document.defaultView;
+      if (tries > 0 && view)
+        view.requestAnimationFrame(() => this.focusBookmarks(tries - 1));
+      return;
+    }
+    heading.scrollIntoView({ block: 'start' });
+    heading.focus({ preventScroll: true });
+  }
+
   constructor() {
+    this.followBookmarksLink();
     inject(CollectionHeading).follow(
       computed<HeadingScope | null>(() => {
         const slug = this.media()?.topic;
@@ -486,6 +796,7 @@ export class MediaPlayerPage {
     inject(MediaSessionAdapter);
     inject(PlayerAnnouncer);
     this.followPlayback();
+    this.showAbout();
     this.destroyRef.onDestroy(() => {
       // Playing, it goes on in the mini-player; paused, leaving closes it (FR-8).
       if (!this.engine.playingOrAsked() && !this.engine.busy())
@@ -521,6 +832,31 @@ export class MediaPlayerPage {
     }
     if (id === 'prepare') void this.router.navigateByUrl(this.prepareLink());
     if (id === 'transcript') this.toggleTranscript();
+    if (id === 'view-tracks') this.chosenView.set('tracks');
+    if (id === 'track-bounds') {
+      const link = this.trackActions()?.boundsLink();
+      if (link) void this.router.navigateByUrl(link);
+    }
+    if (id === 'track-edit') this.trackActions()?.openEdit();
+    if (id === 'track-history') this.trackActions()?.openHistory();
+    if (id === 'track-delete') this.trackActions()?.openDelete();
+    if (id === 'view-voices') this.chosenView.set('voices');
+    if (id === 'again') this.again()?.ask();
+    if (id === 'groq') this.groq()?.ask();
+  }
+
+  private readonly aboutPart = viewChild('about', { read: ElementRef });
+
+  /** The phone's "Sobre este áudio" button: that part of the page comes into view. */
+  protected scrollToAbout(): void {
+    const about = this.aboutPart()?.nativeElement as HTMLElement | undefined;
+    about?.scrollIntoView({ block: 'start' });
+    about?.querySelector<HTMLElement>('h3')?.focus();
+  }
+
+  /** A dialog opened from ⋯ closed: the focus goes back there (WCAG 2.4.3). */
+  protected focusMore(): void {
+    this.player()?.focusMore();
   }
 
   /** "Continuar de 23:10": plays from where the person stopped. */
@@ -558,6 +894,57 @@ export class MediaPlayerPage {
     this.answered.set(true);
     this.engine.seek(0);
     this.engine.play();
+  }
+
+  /**
+   * "Sobre este áudio" (bookmarks, tracks, voices, the author) is the shell's right panel on
+   * a desktop, beside the page, as in the v2 frame; on a phone it follows the page inline.
+   * It goes with the page.
+   */
+  private showAbout(): void {
+    const query = this.desktopQuery;
+    if (query) {
+      const onChange = (event: MediaQueryListEvent) =>
+        this.desktop.set(event.matches);
+      query.addEventListener('change', onChange);
+      this.destroyRef.onDestroy(() =>
+        query.removeEventListener('change', onChange),
+      );
+    }
+    const about = computed(() => {
+      const media = this.media();
+      return this.desktop() && media && this.ready()
+        ? { media, canEdit: this.canEdit() }
+        : null;
+    });
+    toObservable(about)
+      .pipe(takeUntilDestroyed())
+      .subscribe((inputs) => this.openAbout(inputs));
+    this.destroyRef.onDestroy(() => this.closeAbout());
+  }
+
+  /** The media whose Sobre the panel shows; a new one opens on Sobre. */
+  private aboutShown: string | null = null;
+
+  private openAbout(
+    inputs: { media: MediaItem; canEdit: boolean } | null,
+  ): void {
+    // A reload of the same media keeps the tab chosen.
+    if (inputs && inputs.media.id !== this.aboutShown)
+      this.panelTabs.tab.set('about');
+    this.aboutShown = inputs?.media.id ?? null;
+    if (!inputs) return this.closeAbout();
+    this.rightPanel.open({
+      component: PlayerPanel,
+      inputs,
+      width: 'narrow',
+      label: $localize`:@@player.about:Sobre este áudio`,
+    });
+  }
+
+  private closeAbout(): void {
+    if (this.rightPanel.content()?.component === PlayerPanel)
+      this.rightPanel.close();
   }
 
   /** The tab's title says it plays ("▶ "), and the choice goes once playback starts. */
@@ -601,7 +988,9 @@ export class MediaPlayerPage {
     toObservable(this.notFound)
       .pipe(filter(Boolean), takeUntilDestroyed())
       .subscribe(() => {
-        this.engine.unload();
+        // Only what is gone stops: another media playing goes on in the bar (pScreen
+        // o.notFound keeps the player bar).
+        if (this.engine.source()?.id === this.id()) this.engine.unload();
         this.keepFocusOnPage();
       });
   }

@@ -78,6 +78,12 @@ async function waitForCut(owner: APIRequestContext, id: string) {
     .toBe('none');
 }
 
+/** The track's own editing is at the top of the player's ⋯ (v2 · Mídia — Player). */
+async function chooseInMore(page: Page, item: string): Promise<void> {
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  await page.getByRole('menuitem', { name: item }).click();
+}
+
 const editDialog = (page: Page) =>
   page.getByRole('dialog', { name: 'Editar faixa' });
 
@@ -108,7 +114,7 @@ test('AC-1, AC-12: the title changes on the same page and the history says so', 
   const { first } = await approvedTracks(owner);
   await page.goto(trackPage(first.id));
 
-  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  await chooseInMore(page, 'Editar faixa');
   const dialog = editDialog(page);
   await dialog
     .getByRole('textbox', { name: 'Título' })
@@ -120,7 +126,7 @@ test('AC-1, AC-12: the title changes on the same page and the history says so', 
     page.getByRole('heading', { name: 'Título corrigido' }),
   ).toBeVisible();
   await expect(page).toHaveURL(new RegExp(first.id));
-  await page.locator('summary', { hasText: 'Histórico' }).click();
+  await chooseInMore(page, 'Histórico da faixa');
   await expect(
     page.getByText(/Primeira pergunta → Título corrigido/),
   ).toBeVisible();
@@ -133,7 +139,7 @@ test('AC-13: who saves second sees the other title and keeps theirs', async ({
   const owner = await ownerApi();
   const { first } = await approvedTracks(owner);
   await page.goto(trackPage(first.id));
-  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  await chooseInMore(page, 'Editar faixa');
   const dialog = editDialog(page);
   await dialog.getByRole('textbox', { name: 'Título' }).fill('O meu título');
 
@@ -382,7 +388,10 @@ test('FR-6, AC-6: the editor of one track saves with the keyboard and stops at t
   const owner = await ownerApi();
   const { first } = await approvedTracks(owner);
   await page.goto(trackPage(first.id));
-  await page.getByRole('link', { name: 'Ajustar início e fim' }).click();
+  // A desktop has the link in the player's row; a phone keeps it in ⋯ (pMobile).
+  if ((page.viewportSize()?.width ?? 0) >= 1024)
+    await page.getByRole('link', { name: 'Ajustar início e fim' }).click();
+  else await chooseInMore(page, 'Ajustar início e fim');
   const end = page.getByRole('slider', { name: /Fim da faixa 1/ });
   await end.focus();
   await page.keyboard.press('Alt+ArrowRight');
@@ -408,7 +417,7 @@ test('AC-8: deleting says the impact, the track leaves the library, and it comes
   const { media, first } = await approvedTracks(owner);
   await page.goto(trackPage(first.id));
 
-  await page.getByRole('button', { name: 'Apagar faixa' }).click();
+  await chooseInMore(page, 'Apagar faixa');
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('restaurar em até 30 dias');
   await dialog.getByRole('button', { name: 'Apagar faixa' }).click();
@@ -423,7 +432,10 @@ test('AC-8: deleting says the impact, the track leaves the library, and it comes
 
   await page.goto(trackPage(first.id));
   await expect(page.getByText('Faixa removida da edição')).toBeHidden();
-  await expect(page.getByText('faixa 1 de 3')).toBeVisible();
+  // The phone's head says it too ("Parte de · faixa 1 de 3"), hidden on a desktop.
+  await expect(
+    page.getByText('faixa 1 de 3').and(page.locator(':visible')).first(),
+  ).toBeVisible();
   await owner.dispose();
 });
 
@@ -473,7 +485,7 @@ test('AC-11: the suggestion shows its cost, and nothing changes until "Usar" and
     );
   });
   await page.goto(trackPage(first.id));
-  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  await chooseInMore(page, 'Editar faixa');
   const dialog = editDialog(page);
   await dialog.getByRole('button', { name: 'Ver quanto custa' }).click();
   await expect(dialog).toContainText('0,0012');
@@ -614,12 +626,18 @@ test('AC-14: a listener sees none of it', async ({ browser, viewport }) => {
 
   await expect(page.getByRole('heading', { name: first.title })).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Editar', exact: true }),
-  ).toBeHidden();
-  await expect(
     page.getByRole('link', { name: 'Ajustar início e fim' }),
   ).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Apagar faixa' })).toBeHidden();
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  await expect(page.getByRole('menuitem').first()).toBeVisible();
+  for (const item of [
+    'Editar faixa',
+    'Histórico da faixa',
+    'Apagar faixa',
+    'Ajustar início e fim',
+  ])
+    await expect(page.getByRole('menuitem', { name: item })).toHaveCount(0);
+  await page.keyboard.press('Escape');
 });
 
 for (const theme of ['light', 'dark', 'esoteric'] as const) {
@@ -630,7 +648,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     const { first } = await approvedTracks(owner);
     await useTheme(page, theme);
     await page.goto(trackPage(first.id));
-    await page.getByRole('button', { name: 'Editar', exact: true }).click();
+    await chooseInMore(page, 'Editar faixa');
     await expect(editDialog(page)).toBeVisible();
     const dialog = await new AxeBuilder({ page })
       .include('dialog')
@@ -662,7 +680,7 @@ test('KBC-100 AC-15: the publication state is words in a status line, follows th
   const line = page.locator('app-track-publication-status').getByRole('status');
   // No Mac paired in the E2E: the document waits for it, and says so in words.
   await expect(line).toContainText('Pesquisa com IA:');
-  await expect(line).toContainText('Aguardando o Mac do dono');
+  await expect(line).toContainText('aguardando o Mac do dono');
 
   const ran = await owner.post('/api/e2e/kb-publish/run', {
     data: { topic },
@@ -670,8 +688,9 @@ test('KBC-100 AC-15: the publication state is words in a status line, follows th
   });
   expect(ran.status(), await ran.text()).toBe(200);
   await page.reload();
-  await expect(line).toContainText(/Na pesquisa · desde \d\d:\d\d/);
-  await expect(line.locator('[aria-hidden="true"]')).toHaveText('✓');
+  await expect(line).toContainText(/na pesquisa · desde \d\d:\d\d/);
+  // The state's sign beside its words (AC-15): the v2 check icon.
+  await expect(line.locator('ui-icon.sign')).toBeVisible();
 
   const fits = await page.evaluate(
     () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -697,7 +716,7 @@ test('KBC-100 AC-15: the publication state is words in a status line, follows th
   });
   expect(renamed.status(), await renamed.text()).toBe(200);
   await page.reload();
-  await expect(line).toContainText('Aguardando o Mac do dono');
+  await expect(line).toContainText('aguardando o Mac do dono');
   await page.screenshot({
     path: `../work/KBC-100/evidence/publication-waiting-${width}-${test.info().project.name}.png`,
   });
@@ -711,7 +730,7 @@ test('KBC-114 AC-6 (was KBC-100 AC-12): a collection with no folder in the kb st
   const { first } = await approvedTracks(owner);
   await page.goto(trackPage(first.id));
   const line = page.locator('app-track-publication-status').getByRole('status');
-  await expect(line).toContainText('Aguardando o Mac do dono');
+  await expect(line).toContainText('aguardando o Mac do dono');
   await expect(line).not.toContainText('ainda não tem pasta');
   await owner.dispose();
 });

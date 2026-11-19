@@ -54,28 +54,31 @@
   [attr.aria-labelledby]="tabsId + '-access'"
   [hidden]="tab() !== 'access'"
 >
-  <fieldset class="group" [disabled]="busy()">
-    <legend class="legend" i18n="@@preset.role">Papel</legend>
-    <label class="check">
+  <!-- Papel as a setting row (v2 · Pessoas): the title, what master means, a switch. -->
+  <fieldset class="group role-row" [disabled]="busy()">
+    <legend class="role-legend" i18n="@@preset.role">Papel</legend>
+    <label class="role-check">
+      <span class="role-desc" i18n="@@preset.master"
+        >Master (vê todos os acervos e usa todas as funcionalidades)</span
+      >
       <input
         #masterBox
         type="checkbox"
+        class="ui-switch"
         [checked]="isMaster()"
         (change)="setMaster(masterBox.checked)"
       />
-      <span i18n="@@preset.master"
-        >Master (vê todos os acervos e usa todas as funcionalidades)</span
-      >
     </label>
   </fieldset>
 
-  <fieldset class="group" [disabled]="busy() || isMaster()">
+  <fieldset class="group inline" [disabled]="busy() || isMaster()">
     <legend class="legend" i18n="@@preset.collections">Acervos</legend>
     @for (topic of collections(); track topic.slug) {
       <label class="check" [class.child]="topic.parent !== null">
         <input
           #box
           type="checkbox"
+          class="ui-check"
           [checked]="topic.checked"
           [disabled]="topic.inherited"
           (change)="toggleTopic(topic.slug, box.checked)"
@@ -162,13 +165,14 @@
     }
   </fieldset>
 
-  <fieldset class="group" [disabled]="busy() || isMaster()">
+  <fieldset class="group grid" [disabled]="busy() || isMaster()">
     <legend class="legend" i18n="@@preset.features">Funcionalidades</legend>
     @for (feature of features(); track feature.id) {
       <label class="check">
         <input
           #box
           type="checkbox"
+          class="ui-check"
           [checked]="feature.checked"
           (change)="toggleFeature(feature.id, box.checked)"
         />
@@ -184,23 +188,40 @@
   [attr.aria-labelledby]="tabsId + '-ai'"
   [hidden]="tab() !== 'ai'"
 >
-  <fieldset class="group" [disabled]="busy()">
-    <legend class="legend" i18n="@@preset.ai">IA da aplicação</legend>
-    <label class="field">
-      <span i18n="@@preset.appAi">Qual IA atende a pessoa</span>
-      <select
-        #appAiSelect
-        class="select"
-        [attr.aria-describedby]="appAiDescribedBy()"
-        (change)="chooseAppAi(appAiSelect.value)"
-      >
-        @for (option of appAis(); track option.id) {
-          <option [value]="option.id" [selected]="option.id === shownAppAi()">
-            {{ option.label }}
-          </option>
-        }
-      </select>
-    </label>
+  <!-- A phone draws the invitation's wait at the tab's top (v2 · Convite cedendo, celular); the
+       foot keeps it for readers, so this copy is only seen. -->
+  @if (mode() === 'invite' && confirmingLend() !== null) {
+    <p
+      class="hint lend-wait-top"
+      aria-hidden="true"
+      i18n="@@people.inviteLendWait"
+    >
+      Confirme ou cancele a cessão da assinatura em “IA da aplicação” para
+      convidar.
+    </p>
+  }
+  <!-- v2 · IA e limites: each line a label at the left and its control at the right. -->
+  <fieldset class="group ai-tab" [disabled]="busy()">
+    <legend class="visually-hidden" i18n="@@preset.ai">IA da aplicação</legend>
+    <div class="field which">
+      <span class="row-value" aria-hidden="true">{{ appAiWords() }}</span>
+      <ui-icon class="row-chevron" name="chevRight" [size]="20" />
+      <label>
+        <span i18n="@@preset.appAi">Qual IA atende a pessoa</span>
+        <select
+          #appAiSelect
+          class="select"
+          [attr.aria-describedby]="appAiDescribedBy()"
+          (change)="chooseAppAi(appAiSelect.value)"
+        >
+          @for (option of appAis(); track option.id) {
+            <option [value]="option.id" [selected]="option.id === shownAppAi()">
+              {{ option.label }}
+            </option>
+          }
+        </select>
+      </label>
+    </div>
     @if (canLend()) {
       <p [id]="uid + '-ai-hint'" class="hint" i18n="@@preset.aiHintOwner">
         As suas assinaturas aparecem aqui enquanto podem ser cedidas, sempre com
@@ -222,7 +243,7 @@
         [attr.aria-describedby]="uid + '-lend-terms'"
       >
         <p [id]="uid + '-lend-title'" class="lend-title">
-          {{ copy.toInvitee() }}
+          <ui-icon name="warn" [size]="20" />{{ copy.toInvitee() }}
         </p>
         <p [id]="uid + '-lend-terms'">{{ copy.terms() }}</p>
         <div class="actions">
@@ -272,6 +293,7 @@
         <input
           #enforcedBox
           type="checkbox"
+          class="ui-switch"
           [checked]="current.ai.enforced"
           (change)="setEnforced(enforcedBox.checked)"
         />
@@ -305,6 +327,7 @@
         <input
           #paidBox
           type="checkbox"
+          class="ui-switch"
           [checked]="current.ai.paidFallback.enabled"
           (change)="setPaid(paidBox.checked)"
         />
@@ -344,39 +367,46 @@
   [hidden]="tab() !== 'prefs'"
 >
   <fieldset class="group" [disabled]="busy()">
-    <legend class="legend" i18n="@@preset.preferences">
+    <!-- The tab already names the part: the legend is for readers (v2 · Perfil de convite). -->
+    <legend class="visually-hidden" i18n="@@preset.preferences">
       Preferências iniciais
     </legend>
-    <p class="hint" i18n="@@preset.preferencesHint">
+    <p class="hint prefs-hint" i18n="@@preset.preferencesHint">
       Valem até a pessoa salvar as dela em Configurações.
     </p>
     <!-- The hint and the notice stay with their field, apart from the next one. -->
     <div class="field-with-notes">
-      <label class="field">
-        <span i18n="@@preset.defaultTopic">Acervo padrão</span>
-        <select
-          #topicSelect
-          class="select"
-          [attr.aria-describedby]="defaultTopicDescribedBy()"
-          (change)="setDefaultTopic(topicSelect.value)"
-        >
-          <option
-            value=""
-            [selected]="!current.preferences.defaultTopic"
-            i18n="@@preset.noPreference"
+      <div class="field pref">
+        <span class="row-value" aria-hidden="true">{{
+          prefWords().topic
+        }}</span>
+        <ui-icon class="row-chevron" name="chevRight" [size]="20" />
+        <label>
+          <span i18n="@@preset.defaultTopic">Acervo padrão</span>
+          <select
+            #topicSelect
+            class="select"
+            [attr.aria-describedby]="defaultTopicDescribedBy()"
+            (change)="setDefaultTopic(topicSelect.value)"
           >
-            Sem preferência
-          </option>
-          @for (topic of defaultTopics(); track topic.slug) {
             <option
-              [value]="topic.slug"
-              [selected]="topic.slug === current.preferences.defaultTopic"
+              value=""
+              [selected]="!current.preferences.defaultTopic"
+              i18n="@@preset.noPreference"
             >
-              {{ treeTitle(topic) }}
+              Sem preferência
             </option>
-          }
-        </select>
-      </label>
+            @for (topic of defaultTopics(); track topic.slug) {
+              <option
+                [value]="topic.slug"
+                [selected]="topic.slug === current.preferences.defaultTopic"
+              >
+                {{ treeTitle(topic) }}
+              </option>
+            }
+          </select>
+        </label>
+      </div>
       @if (needsCollection()) {
         <p
           [id]="uid + '-default-topic-hint'"
@@ -396,59 +426,73 @@
         }
       </p>
     </div>
-    <label class="field">
-      <span i18n="@@preset.defaultView">Visão inicial</span>
-      <select
-        #viewSelect
-        class="select"
-        (change)="setDefaultView(viewSelect.value)"
-      >
-        <option value="" i18n="@@preset.noPreference">Sem preferência</option>
-        @for (view of views; track view.id) {
-          <option
-            [value]="view.id"
-            [selected]="view.id === current.preferences.defaultView"
-          >
-            {{ view.label }}
-          </option>
-        }
-      </select>
-    </label>
-    <label class="field">
-      <span i18n="@@preset.researchProfile">Perfil de pesquisa</span>
-      <select
-        #profileSelect
-        class="select"
-        (change)="setResearchProfile(profileSelect.value)"
-      >
-        <option value="" i18n="@@preset.noPreference">Sem preferência</option>
-        @for (profile of profiles; track profile.id) {
-          <option
-            [value]="profile.id"
-            [selected]="profile.id === current.preferences.researchProfile"
-          >
-            {{ profile.label }}
-          </option>
-        }
-      </select>
-    </label>
-    <label class="field">
-      <span i18n="@@preset.theme">Tema</span>
-      <select
-        #themeSelect
-        class="select"
-        (change)="setTheme(themeSelect.value)"
-      >
-        <option value="" i18n="@@preset.noPreference">Sem preferência</option>
-        @for (theme of themes; track theme.id) {
-          <option
-            [value]="theme.id"
-            [selected]="theme.id === current.preferences.theme"
-          >
-            {{ theme.label }}
-          </option>
-        }
-      </select>
-    </label>
+    <div class="field pref">
+      <span class="row-value" aria-hidden="true">{{ prefWords().view }}</span>
+      <ui-icon class="row-chevron" name="chevRight" [size]="20" />
+      <label>
+        <span i18n="@@preset.defaultView">Visão inicial</span>
+        <select
+          #viewSelect
+          class="select"
+          (change)="setDefaultView(viewSelect.value)"
+        >
+          <option value="" i18n="@@preset.noPreference">Sem preferência</option>
+          @for (view of views; track view.id) {
+            <option
+              [value]="view.id"
+              [selected]="view.id === current.preferences.defaultView"
+            >
+              {{ view.label }}
+            </option>
+          }
+        </select>
+      </label>
+    </div>
+    <div class="field pref">
+      <span class="row-value" aria-hidden="true">{{
+        prefWords().profile
+      }}</span>
+      <ui-icon class="row-chevron" name="chevRight" [size]="20" />
+      <label>
+        <span i18n="@@preset.researchProfile">Perfil de pesquisa</span>
+        <select
+          #profileSelect
+          class="select"
+          (change)="setResearchProfile(profileSelect.value)"
+        >
+          <option value="" i18n="@@preset.noPreference">Sem preferência</option>
+          @for (profile of profiles; track profile.id) {
+            <option
+              [value]="profile.id"
+              [selected]="profile.id === current.preferences.researchProfile"
+            >
+              {{ profile.label }}
+            </option>
+          }
+        </select>
+      </label>
+    </div>
+    <div class="field pref">
+      <span class="row-value" aria-hidden="true">{{ prefWords().theme }}</span>
+      <ui-icon class="row-chevron" name="chevRight" [size]="20" />
+      <label>
+        <span i18n="@@preset.theme">Tema</span>
+        <select
+          #themeSelect
+          class="select"
+          (change)="setTheme(themeSelect.value)"
+        >
+          <option value="" i18n="@@preset.noPreference">Sem preferência</option>
+          @for (theme of themes; track theme.id) {
+            <option
+              [value]="theme.id"
+              [selected]="theme.id === current.preferences.theme"
+            >
+              {{ theme.label }}
+            </option>
+          }
+        </select>
+      </label>
+    </div>
   </fieldset>
 </div>

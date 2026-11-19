@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { AUTHOR_NAME_MAX, authorListSchema } from '@kb-chat/contracts';
 import { authorsUrl } from '@core/media/authors-api.js';
+import { UiIcon } from '@ui/icon.js';
 import {
   closeMatch,
   isInvalidAuthorName,
@@ -34,6 +35,7 @@ let nextId = 0;
  */
 @Component({
   selector: 'app-author-combobox',
+  imports: [UiIcon],
   templateUrl: './author-combobox.html',
   styleUrl: './author-combobox.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -42,13 +44,21 @@ export class AuthorCombobox {
   /** The collection the audio goes to. */
   readonly topic = input.required<string>();
   readonly disabled = input(false);
+  /**
+   * The id of a help the host shows itself (the upload panel puts it under both fields,
+   * media-upload); without it the help sits under the label.
+   */
+  readonly helpId = input<string | null>(null);
   /** The author's name as typed or chosen. */
   readonly name = model('');
 
   private readonly id = `author-${nextId++}`;
   protected readonly inputId = `${this.id}-input`;
   protected readonly listId = `${this.id}-list`;
-  protected readonly helpId = `${this.id}-help`;
+  protected readonly ownHelpId = `${this.id}-help`;
+  protected readonly describedBy = computed(
+    () => `${this.helpId() ?? this.ownHelpId} ${this.statusId}`,
+  );
   protected readonly statusId = `${this.id}-status`;
   /** The API's limit (the shared contract): the field never takes more. */
   protected readonly nameMax = AUTHOR_NAME_MAX;

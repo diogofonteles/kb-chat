@@ -6,13 +6,15 @@
 .turn {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 /* The reader's question: a bubble on the right (v2 bubble, corner 4 at its foot). */
 .question {
   justify-self: end;
-  max-width: min(85%, 26rem);
+  /* v2 bubble: 456 wide on a desktop, the words from its start (convoMain). */
+  width: min(85%, 28.5rem);
+  max-width: min(85%, 28.5rem);
   margin: 0;
   padding: var(--space-3) var(--space-5);
   border-radius: 1.25rem 1.25rem 0.25rem 1.25rem;
@@ -88,8 +90,8 @@ p.steps {
   transition: transform 150ms var(--ease);
 }
 
-.steps:not([open]) .chev {
-  transform: rotate(-90deg);
+.steps[open] .chev {
+  transform: rotate(180deg);
 }
 
 .steps-text {
@@ -106,11 +108,28 @@ p.steps {
 .steps ol {
   display: grid;
   gap: 0.375rem;
-  margin: var(--space-2) 0 var(--space-2) 0.7rem;
-  padding-left: var(--space-5);
-  border-left: 2px solid var(--overlay-3);
+  margin: var(--space-1) 0;
+  /* convoMain's steps: the round 32 in, the words 46 in, 16 lines 6 apart. */
+  padding-left: 2.875rem;
   font-weight: 400;
+  line-height: 1rem;
   list-style: none;
+}
+
+/* steps: each one after a 6 px round. */
+.steps > ol > li {
+  position: relative;
+}
+
+.steps > ol > li::before {
+  content: '';
+  position: absolute;
+  top: 0.5em;
+  left: -0.875rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--overlay-5);
 }
 
 /* A sub-researcher's steps (KBC-018): a nested list under its delegation, quieter. */
@@ -125,25 +144,44 @@ p.steps {
   overflow-wrap: anywhere;
 }
 
-/* What the agent wrote before a tool call: kept, but quieter than the steps (ADR 0009). */
+/* What the agent wrote before a tool call ("Pensando: …"), in the steps' own voice (ADR 0009). */
 .steps li.thought {
-  font-style: italic;
   overflow-wrap: anywhere;
 }
 
-.working-row {
+/* The steps' line and, while the agent works, "Parar" beside it (pending). */
+.lead {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-2) 0.625rem;
+  min-width: 0;
 }
 
-.stop::before {
-  content: '';
-  display: inline-block;
-  width: 0.6em;
-  height: 0.6em;
-  border-radius: 2px;
-  background: currentColor;
+.lead:empty {
+  display: none;
+}
+
+.lead > .steps {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.stop {
+  min-height: 2rem;
+  padding-inline: 0.875rem;
+}
+
+/* pending: "Pesquisando no acervo…" at 15/700 in the text colour, a 28 white round. */
+.steps.working,
+.working summary {
+  color: var(--color-text);
+  font-size: 0.9375rem;
+}
+
+.working .steps-icon {
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 /* The answer's place while the agent works, a cursor at the end (chat-research-streaming). */
@@ -213,6 +251,12 @@ p.steps {
   gap: var(--space-2);
 }
 
+/* "Copiar" and "Refazer": 36 high outlined pills (convoMain). */
+.answer-actions button {
+  min-height: 2.25rem;
+  padding-inline: 1rem;
+}
+
 .banner-actions:empty {
   display: none;
 }
@@ -238,6 +282,7 @@ ui-banner .note {
 
 /* The exhaustive sweep (KBC-030): estimate and progress while it runs. */
 .sweep,
+/* cobertura: its lines 16, the 600 bar 8 under the head and 8 above the line (84 high). */
 .coverage {
   display: grid;
   gap: var(--space-2);
@@ -245,7 +290,12 @@ ui-banner .note {
   border-radius: var(--radius-card);
   background: var(--overlay-1);
   font-size: var(--text-meta);
+  line-height: 1rem;
   overflow-wrap: anywhere;
+}
+
+.coverage-bar {
+  max-width: 37.5rem;
 }
 
 .sweep p,
@@ -322,7 +372,7 @@ ui-banner .note {
   width: 100%;
   min-height: 3.5rem;
   padding: var(--space-2) var(--space-3);
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
   border-radius: var(--radius-menu);
   background: transparent;
   color: var(--color-text);
@@ -331,8 +381,12 @@ ui-banner .note {
   cursor: pointer;
 }
 
-.source:hover {
+.source {
   background: var(--overlay-2);
+}
+
+.source:hover {
+  background: var(--overlay-3);
 }
 
 .source.active {
@@ -382,6 +436,69 @@ span.source-art {
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* "✦ Mestre Laércio · Texto/apostila": one line of words (v2 sourceCard), its parts inline. */
+.source-meta {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.source-meta app-authorship-badge,
+.source-meta ::ng-deep .authorship-badge,
+.source-meta ::ng-deep .words {
+  display: inline;
+}
+
+.source-genre::before {
+  content: '\00a0· ';
+}
+
+.source-meta:not(:has(app-authorship-badge > *)) .source-genre::before {
+  content: none;
+}
+
+/* "FONTE n": the card's kicker on a phone; the table row says n in its round. */
+.source-kicker {
+  display: none;
+}
+
+.source-item {
+  position: relative;
+}
+
+/* The row's own button leaves room for ⋯, which sits over its right end (no button in a
+   button). */
+.source {
+  padding-inline-end: 3.25rem;
+}
+
+.source-more {
+  position: absolute;
+  top: 50%;
+  right: var(--space-1);
+  translate: 0 -50%;
+}
+
+.source-more ::ng-deep .source-more-trigger {
+  display: inline-grid;
+  place-items: center;
+  /* A 40 target around its 18 icon (WCAG 2.5.8). */
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.source-more ::ng-deep .source-more-trigger:hover {
+  color: var(--color-text);
 }
 
 .source-open {
@@ -448,13 +565,15 @@ span.source-art {
   content: '·';
 }
 
+/* The notice and "Sua IA · …": two 16 lines (v2 · answer footer). */
 .footer {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.125rem 0.4em;
+  gap: 0 0.4em;
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
+  line-height: 1rem;
 }
 
 /* "Resposta gerada por IA…" on its line, then "Sua IA · Respondido por … · Custo: …". */
@@ -462,14 +581,28 @@ span.source-art {
   flex-basis: 100%;
 }
 
-.footer > span:not(:first-child) + span::before {
-  content: '· ';
+.meta-line > span + span::before {
+  content: '\00a0· ';
+}
+
+.meta-line:empty {
+  display: none;
 }
 
 @media (max-width: 1023px) {
+  /* cmConvo's bubble: at most 282 (its words 250 between 16s). */
+  /* cmConvo: the steps' row is its 24 round. */
+  .steps summary,
+  p.steps {
+    min-height: 1.5rem;
+  }
+
   .question {
-    max-width: 85%;
-    padding: var(--space-2) var(--space-4);
+    width: auto;
+    max-width: min(85%, 17.625rem);
+    /* 16 under the page's head, its words 10 in from the top (cmConvo). */
+    margin-top: 0.125rem;
+    padding: 0.625rem var(--space-4);
     font-size: var(--text-item);
   }
 
@@ -477,11 +610,82 @@ span.source-art {
     font-size: 1.0625rem;
   }
 
-  .source {
-    min-height: var(--target);
+  /* sourceCard: a row of 216 px cards that scrolls sideways, each cover + FONTE n, the
+     title, then "autor · tipo". */
+  .sources-title {
+    font-size: 1rem;
   }
 
-  .source-open {
+  .sources ol.source-list {
+    display: flex;
+    gap: 0.625rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .source-item {
+    flex: none;
+    width: 13.5rem;
+  }
+
+  .source {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.625rem;
+    height: 100%;
+    min-height: var(--target);
+    padding: var(--space-3);
+    border-radius: 8px;
+    background: var(--overlay-3);
+  }
+
+  .source-item:first-child .source,
+  .source.active {
+    border-color: var(--color-accent);
+  }
+
+  .source-item:not(:first-child) .source:not(.active) {
+    border-color: transparent;
+  }
+
+  .source-n,
+  .source-open,
+  .source-more {
+    display: none;
+  }
+
+  .source-kicker {
+    display: block;
+    color: var(--color-accent-text);
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+
+  .source-body {
+    grid-column: 1 / -1;
+    gap: 0.625rem;
+  }
+
+  /* sourceCard: the title 14/17 and its line 12/14, 10 apart. */
+  .source-title {
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.0625rem;
+  }
+
+  .source-meta {
+    overflow: hidden;
+    flex-wrap: nowrap;
+    font-size: var(--text-xs);
+    line-height: 0.875rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .source-meta ::ng-deep .mark {
     display: none;
   }
 
@@ -504,5 +708,49 @@ span.source-art {
   .working .steps-icon,
   .pending span {
     animation: none;
+  }
+}
+
+/* chat-research-interrupted: the "interrompida" pill on the answer's last line. */
+.answer-block.with-pill {
+  display: block;
+}
+
+.answer-block.with-pill .answer,
+.answer-block.with-pill .answer ::ng-deep > :last-child {
+  display: inline;
+}
+
+.answer-block.with-pill .interrupted {
+  margin-inline-start: var(--space-2);
+  vertical-align: 0.15em;
+}
+
+.retry-below {
+  justify-self: start;
+}
+
+@media (max-width: 1023px) {
+  /* mAnswer: Copiar and Refazer as 36 rounds, the label said aloud only. */
+  /* cmConvo: two 36 rounds, filled, no edge. */
+  .answer-actions button {
+    width: 2.25rem;
+    min-width: 2.25rem;
+    height: 2.25rem;
+    min-height: 2.25rem;
+    padding: 0;
+    justify-content: center;
+    border-color: transparent;
+    border-radius: 50%;
+    background: var(--overlay-3);
+  }
+
+  .answer-actions .action-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 }

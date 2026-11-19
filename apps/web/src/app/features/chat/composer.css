@@ -3,11 +3,11 @@
 .composer {
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-5);
+  gap: 0.625rem;
+  padding: 0.875rem var(--space-3) var(--space-3) var(--space-5);
   border: 1px solid transparent;
   border-radius: 1.75rem;
   background: var(--color-surface-muted);
-  box-shadow: var(--shadow);
 }
 
 .composer:focus-within {
@@ -18,19 +18,21 @@
   position: relative;
 }
 
+/* "Pergunte qualquer coisa…" on a 19 line, the chips 10 under it (caixa de pergunta). */
 textarea {
+  display: block;
   width: 100%;
-  min-height: 2.5rem;
+  min-height: 1.1875rem;
   max-height: 12rem;
   resize: none;
   field-sizing: content;
-  padding: var(--space-2) 2.5rem var(--space-1) 0;
+  padding: 0 2.5rem 0 0;
   border: none;
   background: transparent;
   color: var(--color-text);
   font: inherit;
   font-size: var(--text-md);
-  line-height: 1.5;
+  line-height: 1.1875rem;
 }
 
 textarea::placeholder {
@@ -43,8 +45,9 @@ textarea:focus-visible {
 
 .clear {
   position: absolute;
-  top: 0;
+  top: 50%;
   right: 0;
+  transform: translateY(-50%);
   display: inline-grid;
   place-items: center;
   width: var(--target);
@@ -79,15 +82,17 @@ textarea:focus-visible {
   border: 0;
 }
 
-/* A 32 chip on a 44 target (MA-03): the pill is drawn behind the label's text. */
+/* v2 chips of the question box (Rápido · Profundo · Exaustivo, Tudo · Palavras · Significado):
+   32 high as drawn, on the box's own fill when off and white with black text when on; the 44
+   target reaching 6 above and below (the radio, MA-03). */
 .choice {
   position: relative;
-  z-index: 0;
   display: inline-flex;
   align-items: center;
-  min-height: var(--target);
+  min-height: 2rem;
   padding: 0 0.875rem;
   border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
   color: var(--color-text);
   font-size: var(--text-meta);
   font-weight: 500;
@@ -95,37 +100,26 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
-.choice::before {
-  content: '';
-  position: absolute;
-  inset: 0.375rem 0;
-  z-index: -1;
-  border-radius: var(--radius-pill);
-  background: var(--overlay-3);
-}
-
-.choice:hover::before {
-  background: var(--overlay-4);
+.choice:hover {
+  background-image: linear-gradient(var(--overlay-3), var(--overlay-3));
 }
 
 .choice.selected {
+  background: var(--color-text);
   color: var(--color-bg);
 }
 
-.choice.selected::before {
-  background: var(--color-text);
-}
-
-/* The native radio stays for keyboard and screen readers, drawn by its label. */
+/* The native radio stays for keyboard and screen readers, drawn by its label; it is the 44
+   target, 6 above and below the 32 chip. */
 .choice-radio {
   position: absolute;
-  inset: 0;
+  inset: -0.375rem 0;
   margin: 0;
   opacity: 0;
   cursor: pointer;
 }
 
-.choice:has(.choice-radio:focus-visible)::before {
+.choice:has(.choice-radio:focus-visible) {
   outline: 3px solid var(--color-focus);
   outline-offset: 2px;
 }
@@ -155,9 +149,17 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
+/* Figma draws the empty box with the button lit, with or without a collection (the hint says
+   why it does not send yet), and dims it only while an answer is on its way (desktop; the
+   phone's round button stays lit). */
 .send:disabled {
-  opacity: 0.45;
   cursor: not-allowed;
+}
+
+@media (min-width: 1024px) {
+  .send.blocked {
+    opacity: 0.4;
+  }
 }
 
 .send:not(:disabled):hover {
@@ -169,52 +171,53 @@ textarea:focus-visible {
   font-size: var(--text-xs);
 }
 
+/* Phones (cmComposer): a pill of 52 with the question and a round 40 button; the modes or
+   profiles open under the field once it is in use (focus or text). */
 @media (max-width: 1023px) {
-  .composer {
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  .composer.pill,
+  .composer.search {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0 var(--space-2);
+    /* 52 with its 1 px edge (cmComposer) */
+    box-sizing: border-box;
+    min-height: 3.25rem;
+    padding: 0.3125rem 0.3125rem 0.3125rem 1.125rem;
     border-radius: 1.625rem;
+    box-shadow: var(--shadow);
+  }
+
+  .composer .actions {
+    display: contents;
   }
 
   textarea {
-    min-height: 2.75rem;
+    min-height: 1.5rem;
+    font-size: var(--text-item);
   }
 
-  /* The help stays for screen readers; a phone shows the chips and send. */
-  .help {
-    position: absolute;
-    width: 1px;
-    height: 1px;
+  /* cmComposer: the empty pill says its hint on one line, cut with "…" (52 tall). */
+  textarea:placeholder-shown {
     overflow: hidden;
-    clip: rect(0 0 0 0);
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .actions {
-    flex-wrap: nowrap;
-  }
-
-  .actions:has(.help.always) {
-    flex-wrap: wrap;
-  }
-
-  .choices {
-    flex: 1 1 auto;
-    flex-wrap: nowrap;
+  .field {
+    grid-row: 1;
+    grid-column: 1;
     min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: none;
   }
 
-  .choice::before {
-    inset: 0;
-  }
-
-  /* Send is a round 44 button with its icon; the word stays for screen readers. */
+  /* Send: the round 40 button in the accent, its word for screen readers. */
   .send {
+    grid-row: 1;
+    grid-column: 2;
     flex: none;
     justify-content: center;
-    width: var(--target);
-    min-height: var(--target);
+    width: 2.5rem;
+    min-height: 2.5rem;
+    margin: 0;
     padding: 0;
   }
 
@@ -227,15 +230,100 @@ textarea:focus-visible {
     white-space: nowrap;
   }
 
-  /* The exhaustive profile's warning (it may take minutes) stays visible on phones. */
+  .choices,
+  .help,
+  .limit {
+    grid-column: 1 / -1;
+  }
+
+  /* The modes or profiles float over the page next to the pill while it is in use (focus):
+     the pill keeps its height, so nothing under a finger moves when it opens or closes (a
+     tap on a result or a source right after typing lands where it was aimed). The search
+     pill of a results page has none: the mode changes in the count's pill, under it, which
+     a floating row would cover. */
+  .composer.pill,
+  .composer.search {
+    position: relative;
+  }
+
+  .choices {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    display: none;
+    flex-wrap: nowrap;
+    min-width: 0;
+    padding: 0 var(--space-2);
+    overflow-x: auto;
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-muted);
+    box-shadow: var(--shadow);
+    scrollbar-width: none;
+  }
+
+  .composer.pill .choices {
+    bottom: calc(100% + var(--space-2));
+  }
+
+  .composer.pill:focus-within .choices {
+    display: inline-flex;
+  }
+
+  /* the row leaves the radios' 6 above and below inside it (it scrolls, so it clips) */
+  .choices {
+    padding-block: 0.375rem;
+  }
+
+  /* The help stays for screen readers; the exhaustive warning stays visible (it may take
+     minutes). */
+  .help {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
   .help.always {
     position: static;
-    order: 1;
-    flex-basis: 100%;
     width: auto;
     height: auto;
+    padding-bottom: var(--space-1);
     overflow: visible;
     clip: auto;
     white-space: normal;
+  }
+
+  /* cmResults: the search pill under "Buscar", 44 tall, the search icon first and ✕ last. */
+  .composer.search {
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 2.75rem;
+    padding: 0 var(--space-1) 0 var(--space-2);
+    border-color: color-mix(in srgb, var(--color-text) 60%, transparent);
+    border-radius: var(--radius-pill);
+    background: var(--overlay-3);
+    box-shadow: none;
+  }
+
+  .composer.search .field {
+    grid-column: 2;
+  }
+
+  .composer.search .send {
+    grid-column: 1;
+    width: 2rem;
+    min-height: 2.75rem;
+    background: transparent;
+    color: var(--color-text);
+  }
+
+  .composer.search .send:disabled {
+    opacity: 1;
+  }
+
+  .composer.search:focus-within {
+    border-radius: 1.375rem;
   }
 }

@@ -44,6 +44,22 @@ export const REFUSAL_TEXTS: Record<PlanRefusal, () => string> = {
     $localize`:@@prep.refusal.pastLimit:O áudio passa de 24 h, o limite da estimativa de custo. Para propor faixas com IA, envie menos horas de uma vez.`,
 };
 
+/** The same reasons in a word or two, on the pill of a card that cannot be chosen (v2). */
+export const REFUSAL_PILLS: Record<PlanRefusal, () => string> = {
+  permission: () => $localize`:@@prep.refusalPill.permission:Sem permissão`,
+  dependency: () =>
+    $localize`:@@prep.refusalPill.dependency:Depende de outra opção`,
+  unavailable: () => $localize`:@@prep.refusalPill.unavailable:Indisponível`,
+  'not-connected': () =>
+    $localize`:@@prep.refusalPill.notConnected:IA não conectada`,
+  'run-cap': () => $localize`:@@prep.refusalPill.runCap:Passa do teto`,
+  'monthly-cap': () =>
+    $localize`:@@prep.refusalPill.monthlyCap:Limite atingido`,
+  approved: () => $localize`:@@prep.refusalPill.approved:Já aprovadas`,
+  'no-estimate': () => $localize`:@@prep.refusalPill.noEstimate:Sem estimativa`,
+  'past-limit': () => $localize`:@@prep.refusalPill.pastLimit:Passa de 24 h`,
+};
+
 /** "US$ 0,0016", "US$ 1,20": small values keep the digits that say them. */
 export const usdText = (value: number, locale: string): string =>
   new Intl.NumberFormat(locale, {
@@ -96,13 +112,32 @@ const FAILURES: Record<StageFailure, () => string> = {
   'provider-unavailable': () =>
     $localize`:@@prep.failure.unavailable:Não consegui falar com o provedor de IA. Nada foi cobrado nesta tentativa.`,
   'estimate-rose': () =>
-    $localize`:@@prep.failure.estimateRose:A estimativa subiu, então a análise não rodou. Nada foi cobrado nesta tentativa.`,
+    $localize`:@@prep.failure.estimateRose:A estimativa de custo subiu e a análise não rodou. Nada foi cobrado.`,
   conflict: () =>
     $localize`:@@prep.failure.conflict:A gravação mudou enquanto a análise começava, então ela não rodou. Nada foi cobrado nesta tentativa.`,
 };
 
 export const failureText = (failure: StageFailure): string =>
   FAILURES[failure]();
+
+/** The failures that open with "Falhou:", said without it where a pill already says it. */
+const FAILURE_REASONS: Partial<Record<StageFailure, () => string>> = {
+  work: () =>
+    $localize`:@@prep.failure.work.reason:o trabalho não terminou no computador do transcritor.`,
+  provider: () =>
+    $localize`:@@prep.failure.provider.reason:o provedor de IA não respondeu.`,
+  'invalid-output': () =>
+    $localize`:@@prep.failure.invalidOutput.reason:a resposta da IA veio incompleta.`,
+  interrupted: () =>
+    $localize`:@@prep.failure.interrupted.reason:a análise foi interrompida.`,
+};
+
+/**
+ * Why a stage failed, beside a "Falhou" pill (v2 · Fila: "Conversão: o trabalho não
+ * terminou…"): the words without their own "Falhou:", so it is not said twice.
+ */
+export const failureReason = (failure: StageFailure): string =>
+  (FAILURE_REASONS[failure] ?? FAILURES[failure])();
 
 const STATUS_TEXTS: Record<TrackRowStatus, () => string> = {
   proposed: () => $localize`:@@prep.track.proposed:Proposta pela IA`,

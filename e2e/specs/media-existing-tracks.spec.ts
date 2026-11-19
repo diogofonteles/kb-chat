@@ -147,7 +147,9 @@ test('AC-16: a master publishes the tracks that already exist, sees the count an
     headers: CSRF,
   });
   expect(((await ran.json()) as { documents: number }).documents).toBe(2);
-  await page.reload();
+  // A fresh load of the app, from where the section was first opened (a reload would keep
+  // the settings page open where it was: the phone's Menu is not on it).
+  await page.goto('/biblioteca');
   const again = await openTranscribers(page);
   await expect(again.section).toContainText(
     `${title}: 0 na fila · 2 publicadas · 0 falharam`,

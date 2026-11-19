@@ -1,6 +1,12 @@
 import type { Page, Route } from '@playwright/test';
 import { expect, ownerApi, test } from './fixtures.js';
-import { approve, audioWithTracks, trackRow } from './tracks-helpers.js';
+import {
+  approve,
+  audioWithTracks,
+  openPhoneDetails,
+  trackMenu,
+  trackRow,
+} from './tracks-helpers.js';
 
 // KBC-094 and KBC-095. No save can make an overlap, so the draft an older proposal left is
 // answered here on the read; saves and approvals go to the real API.
@@ -75,9 +81,8 @@ test('KBC-094: "Aprovar faixas" answers where the person is, and one press close
   await expect(trackRow(page, 2).getByRole('button').first()).toBeFocused();
   await inView(page, 2);
 
-  await page
-    .getByRole('button', { name: 'Encostar na faixa anterior' })
-    .click();
+  // The one-press fix is in the track's ⋯ (KBC-130, prepare.js tkRow).
+  await trackMenu(page, 'Encostar na faixa anterior');
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.locator('.foot .saved')).toBeVisible();
   await page.getByRole('button', { name: 'Aprovar faixas' }).click();
@@ -109,6 +114,7 @@ test('KBC-094: a save refused for a track names it and does not pile up', async 
   const saves = countSaves(page, media.id);
   await page.goto(`/midia/${media.id}/faixas`);
 
+  await openPhoneDetails(page);
   const title = page.getByRole('textbox', { name: 'Título' });
   await title.fill('Primeira, renomeada');
   await title.press('Enter');
@@ -128,9 +134,8 @@ test('KBC-094: a save refused for a track names it and does not pile up', async 
   expect(saves.sent).toBe(1);
 
   await trackRow(page, 3).getByRole('button').first().click();
-  await page
-    .getByRole('button', { name: 'Encostar na faixa anterior' })
-    .click();
+  // The one-press fix is in the track's ⋯ (KBC-130, prepare.js tkRow).
+  await trackMenu(page, 'Encostar na faixa anterior');
   await expect(page.locator('.foot .saved')).toBeVisible();
   expect(saves.sent).toBe(2);
   await owner.dispose();

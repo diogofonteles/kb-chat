@@ -57,7 +57,8 @@ describe('MyBookmarksPage (KBC-042 FR-5)', () => {
     const open = screen.getByRole('link', {
       name: 'Palestra de 1998 12:38, tocar daqui',
     });
-    expect(open.textContent).toContain('12:38');
+    // The time is the row's green pill, beside the link (v2 · Marcadores).
+    expect(open.closest('li')?.textContent).toContain('12:38');
     expect(screen.getByText('lei do ritmo')).toBeTruthy();
     const router = TestBed.inject(Router);
     fireEvent.click(open);

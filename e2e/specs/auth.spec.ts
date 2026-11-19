@@ -16,6 +16,7 @@ import {
   signOut as shellSignOut,
 } from './shell-helpers.js';
 import { openPeople } from './settings-helpers.js';
+import { expectView } from './search-view.js';
 
 /**
  * KBC-010: Google sign-in (faked, see fixtures.ts) and permissions per person, at 1440 and
@@ -236,9 +237,7 @@ test('a master grants collections and features on "Pessoas e permissões"', asyn
 
   const guest = await pageAs(browser, email, page.viewportSize());
   await guest.goto('/');
-  await expect(
-    guest.getByRole('radio', { name: /Pesquisa com IA/ }),
-  ).toBeVisible();
+  await expectView(guest, 'research');
   await guest.context().close();
 });
 

@@ -24,6 +24,7 @@ describe('TurnResearchTools (the MCP side of the research tools)', () => {
       title: 'A Lei do Ritmo',
       authorship: 'mestre-laercio',
       author: 'José Laércio do Egito',
+      genre: 'article_or_essay',
     });
     const read = await tools.call('read_document', { document: '[1]' });
     expect(read.steps).toEqual([

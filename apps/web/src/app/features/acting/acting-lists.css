@@ -91,7 +91,9 @@ code {
     max-width: none;
   }
 
-  .table-head {
+  /* The rows carry their own labels on a phone; the audit's head, a grid too, goes as well. */
+  .table-head,
+  .table-head.audit-cols {
     display: none;
   }
 
@@ -119,5 +121,223 @@ code {
 
   .reason {
     display: block;
+    font-size: var(--text-sm);
+  }
+
+  /*
+   * A phone's access (celular): the avatar at the left of the name and the time, the
+   * changes pill at the right, the reason under them.
+   */
+  .access {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'avatar name writes'
+      'avatar when writes'
+      'reason reason reason';
+    column-gap: var(--space-3);
+    row-gap: 0.125rem;
+  }
+
+  .access .who {
+    display: contents;
+  }
+
+  .access .who ui-avatar {
+    --ui-avatar-size: 40px !important;
+    grid-area: avatar;
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .access .who strong {
+    grid-area: name;
+    align-self: end;
+    font-size: var(--text-item);
+  }
+
+  .access .when {
+    grid-area: when;
+    align-self: start;
+  }
+
+  .access .writes {
+    grid-area: writes;
+  }
+
+  .access .reason {
+    grid-area: reason;
+    margin-top: var(--space-2);
+  }
+
+  /* The event and who on one line, when · the detail on the next, the reason under them
+     ("Começou Dono como Ana Lima" / "09/11/2026 18:58:16 · voltou para a própria conta"). */
+  .audit-cols {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    align-items: center;
+    /* No row gap: the break below is a line of its own; each line sets its own space. */
+    gap: 0 var(--space-2);
+    padding: 0.875rem;
+  }
+
+  .audit-cols::before {
+    content: '';
+    order: 3;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .audit-cols .when,
+  .audit-cols .detail {
+    margin-top: 0.25rem;
+  }
+
+  .audit-cols .reason {
+    margin-top: 0.25rem;
+  }
+
+  .audit-cols .event {
+    order: 1;
+  }
+
+  .audit-cols .who {
+    flex: 1 1 0;
+    order: 2;
+    font-size: var(--text-sm);
+    font-weight: 700;
+  }
+
+  .audit-cols .when {
+    order: 4;
+    font-size: var(--text-xs);
+    font-variant-numeric: normal;
+  }
+
+  .audit-cols .detail {
+    display: block;
+    order: 5;
+    min-width: 0;
+    /* One space after the time, as in "18:58:16 · voltou". */
+    margin-left: calc(0.25rem - var(--space-2));
+    font-size: var(--text-xs);
+  }
+
+  .audit-cols .detail::before {
+    content: '· ' / '';
+  }
+
+  .audit-cols .detail:has([aria-hidden='true']) {
+    display: none;
+  }
+
+  .audit-cols .reason {
+    display: block;
+    flex-basis: 100%;
+    order: 6;
+    font-size: var(--text-meta);
+  }
+}
+
+/* v2 · Auditoria: one line a record of 41, the rest ends in "…"; the columns as drawn
+   (86 · 150 · 150 · 180 · 146, 16 apart), the rows right under the head's line. */
+@media (min-width: 1024px) {
+  .audit-cols {
+    grid-template-columns: 5.375rem 9.375rem 9.375rem 11.25rem minmax(0, 1fr);
+  }
+
+  .row.audit-cols {
+    min-height: 2.5625rem;
+  }
+
+  .table-head.audit-cols + .list {
+    margin-top: calc(-1 * var(--space-3));
+  }
+
+  .audit-cols .when {
+    font-variant-numeric: normal;
+  }
+
+  .audit-cols .who,
+  .audit-cols .detail,
+  .audit-cols .reason {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .audit-cols code {
+    font: inherit;
+  }
+}
+
+/* v2 · Acessos, vazio: the empty state in a soft card, the eye in a 64 circle. */
+:host ::ng-deep .ui-empty {
+  gap: var(--space-3);
+  padding: 2.5rem var(--space-4);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-text) 2.5%, transparent);
+}
+
+:host ::ng-deep .ui-empty__icon {
+  width: 4rem;
+  height: 4rem;
+}
+
+:host ::ng-deep .ui-empty__title {
+  font-size: 1.125rem;
+  letter-spacing: 0;
+}
+
+/* v2 · Acessos à sua conta (desktop): 14 from the lead to the head, the rows of 58 right under
+   its line; the name 14 in 700, the time without tabular figures, the reason 13/16. */
+@media (min-width: 1024px) {
+  :host {
+    gap: 0.875rem;
+  }
+
+  .table-head:not(.audit-cols) + .list {
+    margin-top: -0.875rem;
+  }
+
+  .row.access {
+    min-height: 3.625rem;
+  }
+
+  .access .who strong {
+    font-size: var(--text-sm);
+  }
+
+  .access .when {
+    font-variant-numeric: normal;
+  }
+
+  .access p {
+    line-height: 1rem;
+  }
+}
+
+/* The empty state's eye 28 in its 64 circle (v2 · Acessos, vazio). */
+:host ::ng-deep .ui-empty__icon svg {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+@media (max-width: 1023px) {
+  /* "Motivo: …" one text under the name and the time (the row's p is a flex line elsewhere). */
+  .row .reason {
+    display: block;
+    font-size: var(--text-meta);
+    line-height: 1rem;
+  }
+
+  .row.access .reason {
+    font-size: var(--text-sm);
+    line-height: 1.0625rem;
+  }
+
+  .access .when {
+    font-variant-numeric: normal;
   }
 }

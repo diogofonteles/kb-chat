@@ -161,7 +161,7 @@ test('AC-2: a person who only listens sees no voices and the API refuses them', 
   const page = await pageAs(browser, email, viewport);
   await page.goto(`/midia/${media.id}`);
   await expect(
-    page.getByRole('heading', { name: media.title, level: 2 }),
+    page.getByRole('heading', { name: media.title, level: 1 }),
   ).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Vozes' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Separar vozes/ })).toHaveCount(

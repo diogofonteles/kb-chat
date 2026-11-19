@@ -88,7 +88,7 @@ describe('CollectionDialog (KBC-048 FR-6, FR-2)', () => {
     const options = screen
       .getAllByRole('option')
       .map((option) => option.textContent?.trim());
-    expect(options).toEqual(['Nenhum (acervo principal)', 'UDV']);
+    expect(options).toEqual(['Nenhum acervo (no topo)', 'UDV']);
   });
 
   it('refuses a name with no letter or digit and keeps the focus on it', async () => {

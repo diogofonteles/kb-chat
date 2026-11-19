@@ -37,29 +37,23 @@
       </p>
     } @else if (current.connected) {
       <p class="connected">
-        <span aria-hidden="true">✓</span>
+        <ui-icon name="checkcircle" [size]="20" />
         <ng-container i18n="@@groq.isConnected"
           >Chave conectada. Ela fica cifrada e não aparece de
           novo.</ng-container
         >
       </p>
     }
-    <div class="field">
-      <label class="label" for="groq-key">
-        @if (current.connected) {
-          <ng-container i18n="@@groq.newKeyLabel"
-            >Trocar a chave da API do Groq</ng-container
-          >
-        } @else {
-          <ng-container i18n="@@groq.keyLabel"
-            >Chave da API do Groq</ng-container
-          >
-        }
-      </label>
-      <span class="hint" id="groq-key-hint" i18n="@@groq.keyHint"
-        >Crie em console.groq.com, em "API Keys", e cole aqui.</span
-      >
-    </div>
+    <!-- v2: the label, the field, the hint under it, then "Testar conexão". -->
+    <label class="label" for="groq-key">
+      @if (current.connected) {
+        <ng-container i18n="@@groq.newKeyLabel"
+          >Trocar a chave da API do Groq</ng-container
+        >
+      } @else {
+        <ng-container i18n="@@groq.keyLabel">Chave da API do Groq</ng-container>
+      }
+    </label>
     <input
       #keyInput
       id="groq-key"
@@ -68,14 +62,36 @@
       autocomplete="off"
       spellcheck="false"
       maxlength="500"
-      aria-describedby="groq-key-hint"
+      [attr.aria-describedby]="
+        noticeOf('key') ? 'groq-key-status groq-key-hint' : 'groq-key-hint'
+      "
       [value]="key()"
       (input)="editKey($event)"
     />
-    <div class="row">
+    <p
+      class="status key-status"
+      id="groq-key-status"
+      role="status"
+      [class.error]="noticeOf('key')?.kind === 'error'"
+      [class.empty]="busy() !== 'key' && !noticeOf('key')"
+    >
+      @if (busy() === 'key') {
+        <ng-container i18n="@@groq.testing">Testando…</ng-container>
+      } @else if (noticeOf('key'); as notice) {
+        <ui-icon
+          [name]="notice.kind === 'error' ? 'warn' : 'checkcircle'"
+          [size]="14"
+        />
+        {{ notice.text }}
+      }
+    </p>
+    <p class="hint" id="groq-key-hint" i18n="@@groq.keyHint">
+      Crie em console.groq.com, em "API Keys", e cole aqui.
+    </p>
+    <div class="row key-actions">
       <button
         type="submit"
-        class="primary"
+        class="secondary"
         [attr.aria-disabled]="busy() !== null ? 'true' : null"
         i18n="@@groq.test"
       >
@@ -84,7 +100,7 @@
       @if (current.connected) {
         <button
           type="button"
-          class="secondary"
+          class="link remove"
           [attr.aria-disabled]="busy() !== null ? 'true' : null"
           (click)="removeKey()"
           i18n="@@groq.remove"
@@ -93,20 +109,6 @@
         </button>
       }
     </div>
-    <p
-      class="status"
-      role="status"
-      [class.error]="noticeOf('key')?.kind === 'error'"
-    >
-      @if (busy() === 'key') {
-        <ng-container i18n="@@groq.testing">Testando…</ng-container>
-      } @else if (noticeOf('key'); as notice) {
-        <span aria-hidden="true">{{
-          notice.kind === 'error' ? '⚠' : '✓'
-        }}</span>
-        {{ notice.text }}
-      }
-    </p>
   </form>
 
   <form class="block" (submit)="saveMode($event)" novalidate>
@@ -114,13 +116,19 @@
       <legend class="legend block-title" i18n="@@groq.modeTitle">
         Quando usar o Groq
       </legend>
+      <!-- The idle hours live inside their card (v2 · Groq inválido): each card is a box with
+           a label stretched over it for the radio, and the field above that label. -->
       <div class="choices three">
         @for (option of options; track option.mode) {
-          <label class="choice-label">
+          <div class="choice-label">
             <ui-choice-card
               [title]="option.label()"
               [chosen]="mode() === option.mode"
             >
+              <label
+                class="choice-hit"
+                [for]="'groq-mode-radio-' + option.mode"
+              ></label>
               <span class="ui-choice__help" [id]="'groq-mode-' + option.mode">{{
                 option.hint()
               }}</span>
@@ -128,48 +136,58 @@
                 class="ui-radio choice-radio"
                 type="radio"
                 name="groq-mode"
+                [id]="'groq-mode-radio-' + option.mode"
                 [value]="option.mode"
                 [checked]="mode() === option.mode"
+                [attr.aria-label]="option.label()"
                 [attr.aria-describedby]="'groq-mode-' + option.mode"
                 (change)="chooseMode(option.mode)"
               />
+              @if (option.mode === 'idle' && mode() === 'idle') {
+                <div class="hours">
+                  <label class="label" for="groq-hours" i18n="@@groq.hoursLabel"
+                    >Horas parado</label
+                  >
+                  <input
+                    id="groq-hours"
+                    class="input"
+                    type="number"
+                    inputmode="numeric"
+                    [min]="hoursLimits.min"
+                    [max]="hoursLimits.max"
+                    step="1"
+                    [value]="idleHours()"
+                    [attr.aria-invalid]="hoursValid() ? null : 'true'"
+                    [attr.aria-describedby]="
+                      hoursValid()
+                        ? 'groq-hours-hint'
+                        : 'groq-hours-error groq-hours-hint'
+                    "
+                    (input)="editHours($event)"
+                  />
+                  @if (!hoursValid()) {
+                    <p class="field-error" id="groq-hours-error">
+                      <ui-icon name="warn" [size]="14" />
+                      <ng-container i18n="@@groq.hoursInvalid"
+                        >Use um número inteiro de {{ hoursLimits.min }} a
+                        {{ hoursLimits.max }}.</ng-container
+                      >
+                    </p>
+                  }
+                  <span
+                    class="hint"
+                    id="groq-hours-hint"
+                    i18n="@@groq.hoursHint"
+                    >De {{ hoursLimits.min }} a
+                    {{ hoursLimits.max }} horas.</span
+                  >
+                </div>
+              }
             </ui-choice-card>
-          </label>
+          </div>
         }
       </div>
     </fieldset>
-    @if (mode() === 'idle') {
-      <label class="field" for="groq-hours">
-        <span class="label" i18n="@@groq.hoursLabel">Horas parado</span>
-        <span class="hint" id="groq-hours-hint" i18n="@@groq.hoursHint"
-          >De {{ hoursLimits.min }} a {{ hoursLimits.max }} horas.</span
-        >
-      </label>
-      <input
-        id="groq-hours"
-        class="input cap"
-        type="number"
-        inputmode="numeric"
-        [min]="hoursLimits.min"
-        [max]="hoursLimits.max"
-        step="1"
-        [value]="idleHours()"
-        [attr.aria-invalid]="hoursValid() ? null : 'true'"
-        [attr.aria-describedby]="
-          hoursValid() ? 'groq-hours-hint' : 'groq-hours-hint groq-hours-error'
-        "
-        (input)="editHours($event)"
-      />
-      @if (!hoursValid()) {
-        <p class="field-error" id="groq-hours-error">
-          <span aria-hidden="true">⚠</span>
-          <ng-container i18n="@@groq.hoursInvalid"
-            >Use um número inteiro de {{ hoursLimits.min }} a
-            {{ hoursLimits.max }}.</ng-container
-          >
-        </p>
-      }
-    }
     @if (!current.connected && mode() !== 'never') {
       <ui-banner tone="warn">
         <p i18n="@@groq.needsKey">
@@ -189,6 +207,7 @@
       class="status"
       role="status"
       [class.error]="noticeOf('mode')?.kind === 'error'"
+      [class.empty]="!noticeOf('mode')"
     >
       @if (noticeOf('mode'); as notice) {
         <span aria-hidden="true">{{
@@ -203,16 +222,26 @@
     <h3 class="block-title" i18n="@@groq.monthTitle">
       Gasto com mídia neste mês
     </h3>
-    <p class="spent">{{ spentText() }}</p>
-    <p class="hint" i18n="@@groq.monthHint">
-      Inclui o Groq e a IA que propõe faixas e assuntos. Nada é enviado se
-      passar do teto.
-    </p>
+    @if (spentParts(); as parts) {
+      <div class="month">
+        <p class="spent">
+          <span class="spent-amount">{{ parts.spent }}</span
+          >&ngsp;<span class="spent-cap" i18n="@@groq.spentOf"
+            >de {{ parts.cap }}</span
+          >
+        </p>
+        <ui-progress [value]="parts.share" />
+        <p class="hint" i18n="@@groq.monthHint">
+          Inclui o Groq e a IA que propõe faixas e assuntos. Nada é enviado se
+          passar do teto.
+        </p>
+      </div>
+    }
     @if (current.canEditCap) {
       <label class="field" for="groq-cap">
         <span class="label" i18n="@@groq.capLabel">Teto mensal (US$)</span>
       </label>
-      <div class="row">
+      <div class="row cap-row">
         <input
           id="groq-cap"
           class="input cap"
@@ -237,7 +266,7 @@
       </div>
       @if (capInvalid()) {
         <p class="field-error" id="groq-cap-error">
-          <span aria-hidden="true">⚠</span>
+          <ui-icon name="warn" [size]="14" />
           <ng-container i18n="@@groq.capInvalid"
             >Use um valor de 0 a 1000 dólares.</ng-container
           >
@@ -250,6 +279,7 @@
       class="status"
       role="status"
       [class.error]="noticeOf('cap')?.kind === 'error'"
+      [class.empty]="!noticeOf('cap')"
     >
       @if (noticeOf('cap'); as notice) {
         <span aria-hidden="true">{{

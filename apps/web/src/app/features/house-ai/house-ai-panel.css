@@ -53,6 +53,16 @@
   color: var(--color-text);
 }
 
+/* No message: the live region stays but takes no room. */
+.status.idle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 .status.error {
   color: var(--color-danger);
   font-weight: 600;
@@ -62,11 +72,15 @@
   flex-basis: 100%;
 }
 
+/* The frame's green pill with the link icon (v2 · IA da aplicação). */
 .primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   min-height: var(--target);
-  padding: 0 var(--space-4);
+  padding: 0 1.25rem;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   background: var(--color-accent);
   color: var(--color-on-accent);
   font: inherit;
@@ -124,4 +138,398 @@ button:disabled {
 
 .push-end {
   margin-left: auto;
+}
+
+/* ---------- v2 · IA da aplicação: the account card, rows with the control at the right ---------- */
+:host {
+  gap: var(--space-4);
+}
+
+.block-title {
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.account {
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--overlay-1);
+}
+
+.account-head {
+  flex-wrap: nowrap;
+  gap: 0.875rem;
+}
+
+.account-text {
+  display: grid;
+  flex: 1;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.account-title-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.account .block-title {
+  font-size: var(--text-md);
+}
+
+.saved-key {
+  margin: 0;
+}
+
+.masked {
+  font: inherit;
+}
+
+.usage {
+  display: grid;
+  justify-items: end;
+  gap: 0.375rem;
+}
+
+.usage-text {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.usage ui-progress {
+  width: 11.25rem;
+}
+
+.account .link.danger {
+  border-color: transparent;
+}
+
+.white {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+/* A label (and its description) at the left, the control at the right (stRow). */
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-height: 2.75rem;
+  cursor: pointer;
+}
+
+.switch-text {
+  display: grid;
+  flex: 1;
+  gap: 0.1875rem;
+  min-width: 0;
+}
+
+.switch-label {
+  font-size: var(--text-item);
+  font-weight: 500;
+}
+
+.switch-text .hint {
+  font-size: var(--text-meta);
+}
+
+.models {
+  gap: 0;
+}
+
+.model {
+  min-height: 2.25rem;
+  opacity: 0.55;
+}
+
+.models:not(:disabled) .model {
+  opacity: 1;
+}
+
+.model-id {
+  font-family: inherit;
+  font-size: var(--text-xs);
+}
+
+/* Para quem: the two choices as cards, side by side. */
+.who {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.who-legend {
+  float: left;
+  grid-column: 1 / -1;
+  margin-bottom: var(--space-3);
+  padding: 0;
+  font-size: var(--text-sm);
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.875rem var(--space-4);
+  border: 1px solid var(--overlay-3);
+  border-radius: var(--radius-card);
+  background: var(--overlay-1);
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  border: 2px solid var(--color-accent);
+  background: var(--overlay-2);
+}
+
+.choice-text {
+  display: grid;
+  flex: 1;
+  gap: 0.375rem;
+}
+
+.choice > .choice-title {
+  flex: 1;
+}
+
+.choice-title {
+  font-size: var(--text-item);
+  font-weight: 700;
+}
+
+.choice-desc {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.input.cap {
+  flex: none;
+  width: 6rem;
+}
+
+.codex-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.ok-icon {
+  color: var(--color-accent);
+}
+
+@media (max-width: 1023px) {
+  /* The phone puts Salvar under the model's id (v2 · IA da aplicação, celular). */
+  .row .input {
+    flex-basis: 100%;
+  }
+
+  .who {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .usage {
+    justify-items: start;
+  }
+
+  .account-head {
+    flex-wrap: wrap;
+  }
+}
+
+/* A locked box with its label (the automatic free models, a master's collections): the row
+   dims as one and the tick keeps its green (v2 frames: cbx off, 50 %), not the shared grey. */
+.check:has(> .ui-check:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.check:has(> .ui-check:disabled) > .ui-check {
+  opacity: 1;
+}
+
+/* v2 · IA da aplicação (desktop and phone): the account's line 13/16, its buttons 36 with 14
+   words, "Desconectar" as words at the end; rows of a label and a switch 36 tall; the paid
+   model's id 10 from its 44 "Salvar". */
+.account .saved-key {
+  display: block;
+  font-size: var(--text-meta);
+  line-height: 1rem;
+}
+
+.account .saved-key .masked {
+  display: inline;
+}
+
+.account .row > button {
+  min-height: 2.25rem;
+  padding-inline: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.account .row > .link.danger {
+  padding-inline: 0;
+  color: var(--color-danger);
+}
+
+.switch-row {
+  min-height: 2.25rem;
+}
+
+.block > .row:has(> .input) {
+  gap: 0.625rem;
+}
+
+.block > .row:has(> .input) > button {
+  min-height: 2.75rem;
+  padding-inline: var(--space-4);
+}
+
+/* Para quem: each card as tall as its own words (v2 · IA da aplicação). */
+.who {
+  align-items: start;
+}
+
+/* ---------- v2 · IA da aplicação on a phone (KBC-152): the account card as drawn ---------- */
+@media (max-width: 1023px) {
+  /* The cover beside the title 16/19, the pill 4 under it and the key's line 4 under that;
+     today's requests on a line of their own 16 under them, the bar across the card. */
+  .account-head {
+    align-items: center;
+    row-gap: var(--space-4);
+  }
+
+  .account-title-line {
+    row-gap: var(--space-1);
+  }
+
+  .account .block-title {
+    line-height: 1.1875rem;
+  }
+
+  .usage {
+    flex-basis: 100%;
+    justify-items: stretch;
+  }
+
+  .usage-text {
+    line-height: 0.875rem;
+  }
+
+  .usage ui-progress {
+    width: 100%;
+  }
+
+  /* The buttons 8 apart; "Desconectar" as words on its own line, at the start. */
+  .account .row {
+    gap: var(--space-2);
+  }
+
+  .account .row > .link.danger.push-end {
+    margin-left: 0;
+    padding-inline: var(--space-2);
+  }
+}
+
+/* ---------- v2 · IA da aplicação: Para quem, Codex and the management key (KBC-152) ---------- */
+/* Modelos gratuitos, Modelo pago, Para quem, Codex, the management key: 30 from a block's last
+   line to the next title; 10 inside; a label-and-control row has 8 above and below its words
+   (15/18, then 13/18; the switch in their middle); the models' rows 36. */
+.block.tail {
+  gap: 0.625rem;
+  padding-top: 0.375rem;
+}
+
+.tail .block-title {
+  line-height: 1.25rem;
+}
+
+.tail .who {
+  row-gap: 0.625rem;
+}
+
+.tail .who-legend {
+  margin-bottom: 0;
+  line-height: 1.0625rem;
+}
+
+.tail .choice {
+  padding: 0.875rem var(--space-4);
+}
+
+.tail .choice-title,
+.tail .choice-desc {
+  line-height: 1.125rem;
+}
+
+.tail .switch-row {
+  min-height: 0;
+  padding: var(--space-2) 0;
+}
+
+.tail .switch-label,
+.tail .switch-text .hint {
+  line-height: 1.125rem;
+}
+
+.tail .input.cap {
+  height: 2.5rem;
+  min-height: 0;
+}
+
+.tail .codex-status {
+  font-size: var(--text-meta);
+  line-height: 1rem;
+}
+
+.tail .models .model {
+  min-height: 2.25rem;
+}
+
+.tail > .hint {
+  line-height: 0.875rem;
+}
+
+@media (max-width: 1023px) {
+  /* A phone: the words 12 from their switch. */
+  .tail .switch-row {
+    gap: var(--space-3);
+  }
+}
+
+/* The paid model's and the management key's note under their field: 13/19. */
+.tail > .hint.note {
+  font-size: var(--text-meta);
+  line-height: 1.1875rem;
+}
+
+/* Not connected: the account's line 13/16; "Conectar OpenRouter" 40 high, 24 a side. */
+.account-text > .hint {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: 1rem;
+}
+
+.account .row > button.primary {
+  min-height: 2.5rem;
+  padding-inline: var(--space-6, 1.5rem);
+}
+
+/* Between these blocks 30 (16 of the host's gap and 14 here); after one that ends in its
+   note, 28 (v2: Para quem under the paid model's note). */
+.tail + .tail {
+  padding-top: 0.875rem;
+}
+
+.tail:has(> .hint.note:last-child) + .tail {
+  padding-top: 0.75rem;
 }

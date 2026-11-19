@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import { UiBanner } from '@ui/banner.js';
 import { UiButton } from '@ui/button.js';
@@ -23,6 +24,7 @@ import type {
   Authorship,
   ResultFacets,
   SearchFilters,
+  SearchHit,
 } from '@kb-chat/contracts';
 import type { FacetKey } from '@core/i18n/facet-labels.js';
 import {
@@ -57,11 +59,15 @@ let nextBarId = 0;
  */
 @Component({
   selector: 'app-filter-bar',
-  imports: [UiBanner, UiButton, UiIcon, UiOverlay],
+  imports: [NgTemplateOutlet, UiBanner, UiButton, UiIcon, UiOverlay],
   templateUrl: './filter-bar.html',
   styleUrl: './filter-bar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(document:click)': 'closeOnOutsideClick($event)' },
+  host: {
+    '(document:click)': 'closeOnOutsideClick($event)',
+    // Safari leaves the focus on the page when a checkbox is clicked: Escape still closes.
+    '(document:keydown.escape)': 'closeOnEscape()',
+  },
 })
 export class FilterBar {
   private readonly host =
@@ -77,6 +83,8 @@ export class FilterBar {
   readonly hiddenOffTopic = input(0);
   /** The results the applied filters show: what the sheet offers while unchanged. */
   readonly total = input(0);
+  /** The results on screen, to count a narrower selection exactly ("Ver 2 resultados"). */
+  readonly items = input<readonly SearchHit[]>([]);
   /** Application order of the active filters ("facet:value", newest last). */
   readonly order = input<readonly string[]>([]);
   /** Names of the collections a parent's search spans (the "Sub-acervo" filter, KBC-048). */
@@ -87,6 +95,12 @@ export class FilterBar {
   protected readonly openKey = signal<FacetKey | null>(null);
   protected readonly expanded = signal<ReadonlySet<FacetKey>>(new Set());
   protected readonly sheetOpen = signal(false);
+  /**
+   * A phone's facet chip opens a sheet of that facet alone (chat-results-filter-popover
+   * @mobile: its title, its options and "Aplicar"); "Filtros" opens them all.
+   */
+  protected readonly sheetFacet = signal<FacetKey | null>(null);
+  private sheetTrigger: HTMLElement | null = null;
   /** Mobile sheet selection, discarded on Cancelar and reset when the applied filters change. */
   protected readonly draft = linkedSignal(() => this.filters());
 
@@ -96,6 +110,14 @@ export class FilterBar {
   protected readonly draftGroups = computed(() =>
     toFacetGroups(this.facets(), this.draft(), this.topicNames()),
   );
+  /** The sheet's groups: the one its chip opened, or every one from "Filtros". */
+  protected readonly sheetGroup = computed(
+    () => this.draftGroups().find((g) => g.key === this.sheetFacet()) ?? null,
+  );
+  protected readonly sheetGroups = computed(() => {
+    const only = this.sheetGroup();
+    return only ? [only] : this.draftGroups();
+  });
   /**
    * The authorship control shows a single choice (KBC-020): no removable chip repeats it.
    * Several groups (API or an edited saved search) read as "Todos" there, so they stay chips.
@@ -110,6 +132,10 @@ export class FilterBar {
   protected readonly authorships = computed(() =>
     authorshipOptions(this.facets(), this.filters(), this.labels()),
   );
+  /** The sheet's "Autoria" (filterSections): the draft's choice, applied with the rest. */
+  protected readonly draftAuthorships = computed(() =>
+    authorshipOptions(this.facets(), this.draft(), this.labels()),
+  );
   protected readonly barId = `filters-${nextBarId++}`;
   protected readonly activeCount = computed(() => countActive(this.filters()));
   protected readonly draftCount = computed(() =>
@@ -118,6 +144,7 @@ export class FilterBar {
       applied: this.filters(),
       draft: this.draft(),
       total: this.total(),
+      items: this.items(),
     }),
   );
 
@@ -138,12 +165,27 @@ export class FilterBar {
   }
 
   /** Desktop opens the facet's popover; phones open the sheet (no popovers at that width). */
-  protected openFacet(key: FacetKey): void {
+  protected openFacet(key: FacetKey, chip?: HTMLElement): void {
     if (this.isPhone()) {
-      this.openSheet(key);
+      this.openSheet(key, chip);
       return;
     }
+    // subjectsPopover: the ticks wait for "Aplicar" (the list behind does not change yet).
+    this.draft.set(this.filters());
     this.openKey.update((open) => (open === key ? null : key));
+  }
+
+  /** The popover's group as the draft has it (its ticks before "Aplicar"). */
+  protected draftGroup(key: FacetKey): FacetGroup | undefined {
+    return this.draftGroups().find((group) => group.key === key);
+  }
+
+  /** "Aplicar" in a facet's popover: its ticks apply, and the popover closes. */
+  protected applyPopover(chip: HTMLElement): void {
+    const draft = this.draft();
+    if (JSON.stringify(draft) !== JSON.stringify(this.filters()))
+      this.filtersChange.emit(draft);
+    this.closePopover(chip);
   }
 
   protected toggle(key: FacetKey, value: FacetValue): void {
@@ -168,10 +210,15 @@ export class FilterBar {
     target.focus();
   }
 
-  /** "Limpar" in a facet's popover: that facet's choices go, the popover stays. */
+  /** "Limpar" in a facet's popover: that facet's ticks go (applied with "Aplicar"). */
   protected clearFacet(key: FacetKey, chip: HTMLElement): void {
-    this.filtersChange.emit({ ...this.filters(), [key]: [] });
+    this.draft.update((filters) => ({ ...filters, [key]: [] }));
     chip.focus();
+  }
+
+  /** The sheet's "Autoria" radios: one group, or "Todos", in the draft. */
+  protected chooseDraftAuthorship(value: Authorship | null): void {
+    this.draft.update((filters) => withAuthorship(filters, value));
   }
 
   /** "Limpar filtros": every filter goes; the focus stays on the first facet's chip. */
@@ -198,8 +245,10 @@ export class FilterBar {
     this.draft.update((filters) => toggleFilter(filters, key, value));
   }
 
-  protected openSheet(facet?: FacetKey): void {
+  protected openSheet(facet?: FacetKey, trigger?: HTMLElement): void {
     this.draft.set(this.filters());
+    this.sheetFacet.set(facet ?? null);
+    this.sheetTrigger = trigger ?? null;
     this.sheetOpen.set(true);
     // showModal() makes the rest of the page inert, traps focus and closes on Escape;
     // opened from a chip, the sheet starts on that facet's first option.
@@ -209,6 +258,12 @@ export class FilterBar {
   private showSheet(facet: FacetKey | undefined): void {
     const dialog = this.sheet()?.nativeElement;
     dialog?.showModal();
+    // A folded facet with a filter on opens with the sheet (it stays as the person leaves it).
+    dialog
+      ?.querySelectorAll<HTMLDetailsElement>('details.sheet-facet')
+      .forEach((facetBox) => {
+        if (facetBox.querySelector('input:checked')) facetBox.open = true;
+      });
     if (!facet) return;
     const first = dialog?.querySelector<HTMLInputElement>(
       `[data-sheet-facet="${facet}"] input`,
@@ -229,7 +284,19 @@ export class FilterBar {
   /** Native "close" (Aplicar, Cancelar or Escape): unmount and return focus to "Filtros". */
   protected sheetClosed(): void {
     this.sheetOpen.set(false);
-    this.sheetButton().nativeElement.focus();
+    this.sheetFacet.set(null);
+    (this.sheetTrigger ?? this.sheetButton().nativeElement).focus();
+    this.sheetTrigger = null;
+  }
+
+  /** "Limpar" in the sheet's head: no filter in the draft (applied with "Ver resultados"). */
+  protected clearDraft(): void {
+    this.draft.set(NO_FILTERS);
+  }
+
+  /** A tap on the backdrop (the dialog itself, outside its content) cancels, as Escape does. */
+  protected backdropTapped(event: MouseEvent): void {
+    if (event.target === event.currentTarget) this.cancelSheet();
   }
 
   protected closePopover(chip: HTMLElement): void {
@@ -242,6 +309,14 @@ export class FilterBar {
   protected closeOnFocusOut(event: FocusEvent, facet: HTMLElement): void {
     const next = event.relatedTarget as Node | null;
     if (next && !facet.contains(next)) this.openKey.set(null);
+  }
+
+  protected closeOnEscape(): void {
+    const key = this.openKey();
+    if (!key) return;
+    const chip = this.host.querySelector<HTMLElement>(`[data-facet="${key}"]`);
+    this.openKey.set(null);
+    chip?.focus();
   }
 
   protected closeOnOutsideClick(event: MouseEvent): void {

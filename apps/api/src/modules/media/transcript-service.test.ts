@@ -140,3 +140,101 @@ describe('TranscriptService.segmentVoices (KBC-156 BR-4)', () => {
     expect(service.segmentVoices('other')).toBeNull();
   });
 });
+
+describe('the list a track was made with (KBC-040 AC-5)', () => {
+  it("names its recording's list: the track's text was cut from it", () => {
+    const { store } = fakeStore(['recording', 'track']);
+    const service = new TranscriptService({
+      transcripts: {
+        ...store,
+        transcripts: (mediaId) =>
+          mediaId === 'track'
+            ? [{ ...summaryOf('track', 1), termsVersion: 0 }]
+            : [{ ...summaryOf(mediaId, 1), termsVersion: 3 }],
+        termVersion: (version) =>
+          version === 3
+            ? {
+                version: 3,
+                createdAt: '2026-10-28T12:00:00.000Z',
+                authorName: null,
+                termCount: 1,
+              }
+            : null,
+      },
+      media: {
+        get: (_actor, id) => ({
+          archived: false,
+          parent: id === 'track' ? { id: 'recording' } : null,
+        }),
+      },
+    });
+    expect(
+      service.current(ACTOR, 'track', {
+        withVoices: false,
+        withNames: false,
+        withTermList: true,
+      }).termList,
+    ).toEqual({ version: 3, createdAt: '2026-10-28T12:00:00.000Z' });
+  });
+
+  const listAt = (version: number) => ({
+    version,
+    createdAt: `2026-10-${10 + version}T12:00:00.000Z`,
+    authorName: null,
+    termCount: 1,
+  });
+  const withTermList = {
+    withVoices: false,
+    withNames: false,
+    withTermList: true,
+  } as const;
+  const trackOf = (id: string) => ({
+    get: (_actor: MediaActor, mediaId: string) => ({
+      archived: false,
+      parent: mediaId === id ? { id: 'recording' } : null,
+    }),
+  });
+
+  it('names the version it was cut from, when the recording was transcribed again since', () => {
+    const { store } = fakeStore(['recording', 'track']);
+    const service = new TranscriptService({
+      transcripts: {
+        ...store,
+        transcripts: (mediaId) =>
+          mediaId === 'track'
+            ? [{ ...summaryOf('track', 1), model: 'rec-v1', termsVersion: 0 }]
+            : [
+                { ...summaryOf('rec-v2', 2), termsVersion: 4 },
+                { ...summaryOf('rec-v1', 1), termsVersion: 3 },
+              ],
+        termVersion: (version) =>
+          version === 3 || version === 4 ? listAt(version) : null,
+      },
+      media: trackOf('track'),
+    });
+    expect(service.current(ACTOR, 'track', withTermList).termList).toEqual({
+      version: 3,
+      createdAt: '2026-10-13T12:00:00.000Z',
+    });
+  });
+
+  it("reads the recording's versions only when the track has no list of its own", () => {
+    const { store } = fakeStore(['recording', 'track']);
+    const asked: string[] = [];
+    const service = new TranscriptService({
+      transcripts: {
+        ...store,
+        transcripts: (mediaId) => {
+          asked.push(mediaId);
+          return [{ ...summaryOf(mediaId, 1), termsVersion: 5 }];
+        },
+        termVersion: (version) => (version === 5 ? listAt(version) : null),
+      },
+      media: trackOf('track'),
+    });
+    expect(
+      service.current(ACTOR, 'track', withTermList).termList?.version,
+    ).toBe(5);
+    expect(asked).not.toContain('recording');
+  });
+});

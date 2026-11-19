@@ -6,6 +6,7 @@
   <button
     uiButton="ghost"
     size="sm"
+    class="skip"
     type="button"
     [disabled]="saving()"
     (click)="skip()"
@@ -57,7 +58,6 @@
   @if (index() > 0) {
     <button
       uiButton="outline"
-      size="lg"
       type="button"
       [disabled]="saving()"
       (click)="back()"
@@ -69,7 +69,6 @@
   @if (last()) {
     <button
       uiButton="white"
-      size="lg"
       class="next"
       type="button"
       [disabled]="saving()"
@@ -81,7 +80,6 @@
   } @else {
     <button
       uiButton="white"
-      size="lg"
       class="next"
       type="button"
       [disabled]="saving()"

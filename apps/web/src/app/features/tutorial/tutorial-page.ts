@@ -12,6 +12,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter } from 'rxjs';
+import { UiIcon } from '@ui/icon.js';
 import { TutorialFigure } from './tutorial-figure.js';
 import { TUTORIAL_SECTIONS } from './tutorial-sections.js';
 
@@ -23,7 +24,7 @@ import { TUTORIAL_SECTIONS } from './tutorial-sections.js';
  */
 @Component({
   selector: 'app-tutorial-page',
-  imports: [RouterLink, TutorialFigure, ReadingPage],
+  imports: [RouterLink, TutorialFigure, ReadingPage, UiIcon],
   templateUrl: './tutorial-page.html',
   styleUrl: './tutorial-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -34,7 +35,7 @@ export class TutorialPage {
 
   protected readonly sections = TUTORIAL_SECTIONS;
   protected readonly title = $localize`:@@tutorial.title:Como usar a Nova Alexandria`;
-  protected readonly intro = $localize`:@@tutorial.intro:Um passo a passo curto, com imagens das telas, de tudo o que dá para fazer na Nova Alexandria: entrar, buscar nos documentos, pesquisar com ajuda da inteligência artificial (IA) e ajustar o app do seu jeito. Leia na ordem ou pule direto para o que precisa. Nas imagens, as letras (A, B, C…) marcam o que a legenda logo abaixo explica.`;
+  protected readonly intro = $localize`:@@tutorial.intro:Um passo a passo curto, com imagens das telas, de tudo o que dá para fazer na Nova Alexandria: entrar, buscar nos documentos, pesquisar com ajuda da inteligência artificial (IA) e ajustar o app do seu jeito. Nas imagens, as letras (A, B, C…) marcam o que a legenda logo abaixo explica.`;
   protected readonly other: ReadingLink = {
     label: $localize`:@@reading.privacy:Privacidade`,
     path: '/privacidade',

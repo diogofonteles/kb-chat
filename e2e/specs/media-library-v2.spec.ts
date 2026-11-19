@@ -18,6 +18,7 @@ import {
   useTheme,
   type UploadedMedia,
 } from './media-helpers.js';
+import { longPressToSelect } from './v2-media-helpers.js';
 
 /**
  * KBC-128: the media library in v2 — the header with its cover, the track table, "Precisa
@@ -33,6 +34,9 @@ async function shoot(page: Page, name: string): Promise<void> {
       path: `${shots}/${name}-${page.viewportSize()?.width}.png`,
     });
 }
+
+/** `KBC_ATTENTION_SHOT=<path prefix>` saves the failed card (owner report, 2026-11-18). */
+const shotsOfCard = process.env['KBC_ATTENTION_SHOT'];
 
 const LIBRARY = ['search', 'media', 'media-library'];
 const viewportOf = () => test.info().project.use.viewport ?? null;
@@ -132,16 +136,28 @@ test('AC-1: the library is a playlist — cover, green ▶, the table, the one p
 }) => {
   const page = await pageAs(browser, OWNER_EMAIL, viewportOf());
   await openLibrary(page, collection);
-  await expect(page.locator('app-library-page')).toContainText(
-    'Tudo para ouvir',
+  // The header names the collection in use (owner, 2026-11-19).
+  await expect(page.locator('app-library-page .library-scope')).toHaveText(
+    /^Zz Acervo /,
   );
   await expect(all(page).getByRole('listitem')).toHaveCount(3);
-  const playAll = page.getByRole('button', {
-    name: 'Tocar a primeira da lista',
-  });
+  // A desktop's header has ▶ for the list; a phone's has none (media-library@mobile): a tap
+  // on a cover plays that one.
+  const first = all(page).locator('app-library-row').first();
+  const firstTitle =
+    (await first.locator('.title').textContent())?.trim() ?? '';
+  const playAll = desktop(page)
+    ? page.getByRole('button', { name: 'Tocar a primeira da lista' })
+    : first.getByRole('button', { name: `Tocar ${firstTitle}` });
+  if (!desktop(page))
+    await expect(
+      page.getByRole('button', { name: 'Tocar a primeira da lista' }),
+    ).toBeHidden();
   await shoot(page, 'media-library');
   await playAll.click();
-  const pauseAll = page.getByRole('button', { name: 'Pausar a lista' });
+  const pauseAll = desktop(page)
+    ? page.getByRole('button', { name: 'Pausar a lista' })
+    : first.getByRole('button', { name: `Pausar ${firstTitle}` });
   await expect(pauseAll).toBeVisible();
   const playing = all(page).locator('app-library-row.playing');
   await expect(playing).toHaveCount(1);
@@ -186,11 +202,29 @@ test('FR-3, D5: Ordenar e ver como and the ⋯ open whole on the screen, a sheet
     .click();
   const menu = page.getByRole('menu');
   await expectWholeOnTop(page, menu);
-  await expect(menu.getByRole('menuitem')).toHaveText([
-    'Marcar como ouvida',
-    'Editar informações',
-    'Remover',
-  ]);
+  // The frame's ⋯ (media-library-row-menu): play, play next, mark, the bookmarks, edit and
+  // copy the link on a desktop; a phone's sheet also starts a selection and shares instead
+  // of copying (a tap on the cover plays there).
+  await expect(menu.getByRole('menuitem')).toHaveText(
+    desktop(page)
+      ? [
+          'Tocar agora',
+          'Tocar em seguida',
+          'Marcar como ouvida',
+          'Ver marcadores',
+          'Editar informações',
+          'Copiar link',
+          'Remover',
+        ]
+      : [
+          'Tocar em seguida',
+          'Marcar como ouvida',
+          'Ver marcadores',
+          'Editar informações',
+          'Compartilhar',
+          'Remover',
+        ],
+  );
   await shoot(page, 'media-library-row-menu');
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
@@ -209,6 +243,9 @@ test('AC-6: the grid, the search with and without results, and the dialogs rende
   await chooseLibraryView(page, 'Lista');
   await expect(all(page).locator('app-library-row')).toHaveCount(3);
 
+  // A phone's box opens from the 🔍 of its top row (media-library-search@mobile).
+  if (!desktop(page))
+    await page.getByRole('button', { name: 'Abrir a busca' }).click();
   const search = page.getByLabel('Buscar na biblioteca');
   // Only lecture 2 has the word, whatever the tag is.
   await search.fill('dois');
@@ -248,7 +285,11 @@ test('AC-6: the grid, the search with and without results, and the dialogs rende
   await expectWholeOnTop(page, edit);
   await shoot(page, 'media-library-edit');
   await edit.getByRole('textbox', { name: 'Título' }).fill('');
-  await edit.getByRole('button', { name: 'Salvar' }).click();
+  await expect(edit.getByRole('button', { name: 'Salvar' })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  await edit.getByRole('button', { name: 'Salvar' }).click({ force: true });
   await expect(edit.getByText('Dê um título ao áudio.')).toBeVisible();
   await shoot(page, 'media-library-edit-errors');
   await edit.getByRole('button', { name: 'Cancelar' }).click();
@@ -277,14 +318,17 @@ test('AC-4: three selected — the bar takes the foot of the phone, and the mark
     all(page).getByRole('checkbox', {
       name: `Selecionar ${lecture(n).title}`,
     });
-  if (!desktop(page))
-    // No hover on a phone: the unchecked box shows its edge, or a tap on the blank lead
-    // column would select a row the person never saw a target for (KBC-128).
-    for (const n of [1, 2, 3])
-      await expect(boxOf(n)).not.toHaveCSS(
-        'border-top-color',
-        'rgba(0, 0, 0, 0)',
-      );
+  if (!desktop(page)) {
+    // A phone shows no box until a long press on a row starts a selection (its ⋯ has no
+    // "Selecionar": media-library-row-menu@mobile); then, with no hover, each unchecked box
+    // shows its edge, or a tap on the blank lead column would select a row never seen as a
+    // target (media-library-selection@mobile).
+    await expect(boxOf(2)).toBeHidden();
+    await longPressToSelect(page, rowOf(page, lecture(1)), boxOf(1));
+    for (const n of [2, 3])
+      // The edge is drawn inside the box's transparent 24 px target ring (WCAG 2.5.8).
+      await expect(boxOf(n)).not.toHaveCSS('box-shadow', 'none');
+  }
   for (const n of [1, 2, 3]) await boxOf(n).check();
   const bar = page.getByRole('region', { name: 'Seleção' });
   await expect(bar).toContainText('3 selecionadas');
@@ -292,11 +336,14 @@ test('AC-4: three selected — the bar takes the foot of the phone, and the mark
   if (!desktop(page)) {
     const box = await bar.boundingBox();
     const view = page.viewportSize();
-    // Full width at the foot, at least as tall as the bottom navigation it replaces.
-    expect(box?.x).toBe(0);
-    expect(box?.width).toBe(view?.width);
-    expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(view?.height);
-    expect(box?.height ?? 0).toBeGreaterThanOrEqual(68);
+    // A card 8 px in from the sides, 24 px over the foot, over the bottom navigation
+    // (media-library-selection@mobile: 374×56 at y 764).
+    expect(box?.x).toBe(8);
+    expect(box?.width).toBe((view?.width ?? 0) - 16);
+    expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(
+      (view?.height ?? 0) - 24,
+    );
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(56);
   }
   await shoot(page, 'media-library-selection');
   await bar.getByRole('button', { name: 'Marcar como ouvida' }).click();
@@ -318,7 +365,22 @@ test('AC-5: a member who may not edit sees neither Editar nor Remover in the ⋯
     .getByRole('button', { name: `Mais ações para ${lecture(2).title}` })
     .click();
   const menu = page.getByRole('menu');
-  await expect(menu.getByRole('menuitem')).toHaveText(['Marcar como ouvida']);
+  await expect(menu.getByRole('menuitem')).toHaveText(
+    desktop(page)
+      ? [
+          'Tocar agora',
+          'Tocar em seguida',
+          'Marcar como ouvida',
+          'Ver marcadores',
+          'Copiar link',
+        ]
+      : [
+          'Tocar em seguida',
+          'Marcar como ouvida',
+          'Ver marcadores',
+          'Compartilhar',
+        ],
+  );
   await expect(
     menu.getByRole('menuitem', { name: 'Editar informações' }),
   ).toHaveCount(0);
@@ -488,6 +550,110 @@ test('AC-1, AC-2, BR-3: on a phone one card sums up the attention, and the list 
   await page.context().close();
 });
 
+/** A failed card with a long title and a long reason (owner report, 2026-11-18). */
+const LONG_TITLE =
+  '02 - artistas e artesãos da tradição hermética no encontro de outono, segunda parte';
+const LONG_FAILURE = {
+  state: 'failed',
+  stage: 'tracks',
+  failure: 'estimate-rose',
+  action: 'retry',
+  retryStage: 'tracks',
+  title: LONG_TITLE,
+};
+
+/** How many lines a block of text takes, by its height and its line height. */
+const linesOf = (element: Locator) =>
+  element.evaluate((node) => {
+    const style = getComputedStyle(node);
+    return Math.round(
+      node.getBoundingClientRect().height / parseFloat(style.lineHeight),
+    );
+  });
+
+test('owner 2026-11-18: a failed card with a long title and reason keeps its text whole, its action out of the way', async ({
+  browser,
+}) => {
+  const page = await listener(
+    browser,
+    [collection],
+    [...LIBRARY, 'media-upload', 'media-edit'],
+  );
+  const waiting = { phase: 'next', state: 'queued', waitsForTranscriber: true };
+  await page.route('**/api/v1/media/processing', (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          queueLine(1, LONG_FAILURE),
+          queueLine(2, waiting),
+          queueLine(3, { phase: 'attention', action: 'validate', step: 3 }),
+        ],
+        active: 0,
+        transcriber: 'off',
+        transcriberOffSince: null,
+      },
+    }),
+  );
+  await openLibrary(page, collection);
+  if (!desktop(page)) {
+    // A phone sums it up in one card: its words take the card's width, on few lines.
+    const phone = page.getByRole('link', {
+      name: /3 itens precisam de atenção/,
+    });
+    await expect(phone).toBeVisible();
+    const text = phone.locator('.body');
+    const [card, body] = await Promise.all([
+      phone.boundingBox(),
+      text.boundingBox(),
+    ]);
+    expect(body?.width ?? 0).toBeGreaterThanOrEqual(0.6 * (card?.width ?? 0));
+    expect(await linesOf(phone.locator('.state'))).toBeLessThanOrEqual(3);
+    if (shotsOfCard) await phone.screenshot({ path: `${shotsOfCard}-390.png` });
+    await page.context().close();
+    return;
+  }
+  const attention = page.getByRole('region', {
+    name: 'Precisa da sua atenção',
+  });
+  const cards = attention.getByRole('listitem');
+  const failed = cards.filter({ hasText: 'Falhou' });
+  await expect(failed.getByText(LONG_TITLE)).toBeVisible();
+  await expect(
+    failed.getByText(
+      'Faixas com IA: A estimativa de custo subiu e a análise não rodou. Nada foi cobrado.',
+    ),
+  ).toBeVisible();
+  // The title: two lines at most; the reason: three at most, on the text's whole width.
+  expect(await linesOf(failed.locator('.name'))).toBeLessThanOrEqual(2);
+  expect(await linesOf(failed.locator('.line'))).toBeLessThanOrEqual(3);
+  const [card, body, action] = await Promise.all([
+    failed.boundingBox(),
+    failed.locator('.body').boundingBox(),
+    failed
+      .getByRole('link', { name: `Tentar de novo: ${LONG_TITLE}` })
+      .boundingBox(),
+  ]);
+  if (!card || !body || !action) throw new Error('no box to measure');
+  expect(body.width).toBeGreaterThanOrEqual(0.6 * card.width);
+  // The action beside the text or under it, never over it.
+  expect(
+    action.x >= body.x + body.width - 0.5 ||
+      action.y >= body.y + body.height - 0.5,
+  ).toBe(true);
+  expect(action.x + action.width).toBeLessThanOrEqual(
+    card.x + card.width + 0.5,
+  );
+  // The strip's cards keep one width.
+  const widths = await cards.evaluateAll((items) =>
+    items
+      .filter((item) => item.getBoundingClientRect().width > 0)
+      .map((item) => Math.round(item.getBoundingClientRect().width)),
+  );
+  expect(new Set(widths).size).toBe(1);
+  if (shotsOfCard) await failed.screenshot({ path: `${shotsOfCard}-1440.png` });
+  await page.context().close();
+});
+
 test('AC-6: an empty library says so, for who reads and for who sends', async ({
   browser,
 }) => {
@@ -500,9 +666,7 @@ test('AC-6: an empty library says so, for who reads and for who sends', async ({
     const sends = features.includes('media-upload');
     await expect(
       page.getByText(
-        sends
-          ? 'Ainda não há mídias nos seus acervos.'
-          : 'Ainda não há mídias nos acervos liberados para você.',
+        sends ? 'Comece enviando um áudio' : 'Ainda não há mídias para você',
       ),
     ).toBeVisible();
     if (sends)
@@ -525,7 +689,7 @@ test('/midia without the library is the collection as an album, with its table',
   await page.goto('/');
   await page.goto('/midia');
   // The collection chosen in the sidebar is this one (the only one the person sees).
-  await expect(page.getByRole('heading', { name: /^Mídia/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Acervo — / })).toBeVisible();
   for (const n of [1, 2, 3])
     await expect(
       page.getByRole('link', { name: lecture(n).title }),
@@ -548,3 +712,74 @@ for (const theme of ['light', 'dark', 'esoteric'] as const)
     expect(await seriousViolations(page)).toEqual([]);
     await page.context().close();
   });
+
+/** WCAG 2.2 AA too: axe leaves target-size (2.5.8) out unless its tag is asked for. */
+const seriousWcag22 = async (page: Page) =>
+  (
+    await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze()
+  ).violations.filter((violation) =>
+    ['serious', 'critical'].includes(violation.impact ?? ''),
+  );
+
+for (const theme of ['light', 'dark'] as const)
+  test(`WCAG 2.5.8 (${theme}): a short list's selection box is a 24 px target around its 18 px drawing`, async ({
+    browser,
+  }) => {
+    const page = await listener(browser, [collection]);
+    await useTheme(page, theme);
+    await openLibrary(page, collection);
+    const row = rowOf(page, lecture(1));
+    const box = all(page).getByRole('checkbox', {
+      name: `Selecionar ${lecture(1).title}`,
+    });
+    if (desktop(page)) await row.hover();
+    else await longPressToSelect(page, row, box);
+    await expect(box).toBeVisible();
+    const target = await box.boundingBox();
+    expect(target?.width ?? 0).toBeGreaterThanOrEqual(24);
+    expect(target?.height ?? 0).toBeGreaterThanOrEqual(24);
+    // What is drawn stays the frame's 18 px box (v2 · Componentes › Checkbox).
+    expect(
+      await box.evaluate((input) => [input.clientWidth, input.clientHeight]),
+    ).toEqual([18, 18]);
+    expect(await seriousWcag22(page)).toEqual([]);
+    await page.context().close();
+  });
+
+test('the keyboard never stops on a control it cannot see: a phone has no 🔖 in the row, its ⋯ has Ver marcadores', async ({
+  browser,
+}) => {
+  const page = await listener(browser, [collection]);
+  await openLibrary(page, collection);
+  const row = rowOf(page, lecture(1));
+  const bookmarks = row.getByRole('button', {
+    name: `Ver marcadores de ${lecture(1).title}`,
+  });
+  if (desktop(page)) {
+    // The 🔖 comes out with the focus on the row (media-library-row-menu).
+    await row.getByRole('link', { name: lecture(1).title }).focus();
+    await page.keyboard.press('Tab');
+    await expect(bookmarks).toBeFocused();
+    const shown = await bookmarks.boundingBox();
+    expect(shown?.width ?? 0).toBeGreaterThanOrEqual(18);
+  } else {
+    await expect(bookmarks).toHaveCount(0);
+    // Each stop of a row, from its link to the next row, is on screen and drawn.
+    await row.getByRole('link', { name: lecture(1).title }).focus();
+    for (let stop = 0; stop < 3; stop += 1) {
+      await page.keyboard.press('Tab');
+      const size = await page.evaluate(() => {
+        const rect = document.activeElement?.getBoundingClientRect();
+        return [rect?.width ?? 0, rect?.height ?? 0];
+      });
+      expect(Math.min(...size)).toBeGreaterThan(1);
+    }
+    await row.getByRole('button', { name: /^Mais ações/ }).click();
+    await expect(
+      page.getByRole('menuitem', { name: 'Ver marcadores' }),
+    ).toBeVisible();
+  }
+  await page.context().close();
+});

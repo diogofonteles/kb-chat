@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { Locator, Page, Route } from '@playwright/test';
 import { expect, ownerApi, test } from './fixtures.js';
 import { uniqueTag, uploadReady, useTheme } from './media-helpers.js';
-import { seedDraft, trackRow } from './tracks-helpers.js';
+import { seedDraft, trackMenu, trackRow } from './tracks-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
 
 // KBC-092: the track's text on steps 2 and 3 of "Preparar áudio", with the spoken word
@@ -162,11 +162,17 @@ async function openStep2(page: Page, media: Media, step: Step2) {
   await expect(audition(page)).toBeAttached();
 }
 
-/** Step 3 with `ordinal` selected. */
+/**
+ * Step 3 with `ordinal` selected and its details open: the text waits there, opened from the
+ * track's ⋯ (v2 · Faixas, KBC-130: each track one line).
+ */
 async function openStep3(page: Page, ordinal: number) {
   await page.goto(`/midia/${lecture.id}/faixas`);
   await trackRow(page, ordinal).getByRole('button').first().click();
+  await trackMenu(page, 'Tipo, nível e texto da faixa');
   await expect(textOf(page, ordinal)).toBeVisible();
+  // On a phone the details open under the row: its lines are drawn once in view.
+  await textOf(page, ordinal).scrollIntoViewIfNeeded();
 }
 
 const textOf = (page: Page, ordinal: number) =>

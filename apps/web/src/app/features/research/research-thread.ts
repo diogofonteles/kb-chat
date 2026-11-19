@@ -88,6 +88,7 @@ interface Reading {
         (trackOpened)="openTrack($event)"
         (stopped)="stopped.emit()"
         (retried)="retried.emit()"
+        (redone)="redone.emit()"
         (continued)="continued.emit()"
       />
     }
@@ -218,6 +219,7 @@ export class ResearchThread {
   readonly trackOpened = output<TrackOpening>();
   readonly stopped = output();
   readonly retried = output();
+  readonly redone = output();
   /** "Continuar varredura" on the last turn (KBC-030). */
   readonly continued = output();
 

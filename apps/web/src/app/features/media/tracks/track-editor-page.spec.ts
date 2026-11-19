@@ -195,16 +195,12 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
     expect(screen.getAllByText(/Passo 3 de 4/).length).toBeGreaterThan(0);
     expect(screen.getByText(/histórico de desfazer recomeçou/)).toBeTruthy();
     expect(screen.getByRole('button', { name: '2 faixas' })).toBeTruthy();
-    expect(
-      screen.queryByRole('button', { name: 'Propor faixas com IA' }),
-    ).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Propor com IA' })).toBeNull();
   });
 
   it('offers the AI only with `media-edit-ai` (KBC-067 AC-7)', async () => {
     await openPage(anEdit(), ['media', 'media-edit', 'media-edit-ai']);
-    expect(
-      screen.getByRole('button', { name: 'Propor faixas com IA' }),
-    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Propor com IA' })).toBeTruthy();
   });
 
   it('shows the empty state and creates a track at the cursor', async () => {
@@ -271,7 +267,13 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
       const { harness, http } = await openPage(OVERLAPPING);
       fireEvent.click(button('Aprovar faixas'));
       await harness.fixture.whenStable();
-      fireEvent.click(button('Encostar na faixa anterior'));
+      // From ⋯, where the frame keeps a track's actions (KBC-130, prepare.js tkRow).
+      fireEvent.click(button('Mais ações da faixa'));
+      fireEvent.click(
+        await screen.findByRole('menuitem', {
+          name: 'Encostar na faixa anterior',
+        }),
+      );
       await harness.fixture.whenStable();
       expect(screen.queryByRole('alert')).toBeNull();
       expect(screen.queryByText(/Sobreposta/)).toBeNull();
@@ -381,7 +383,7 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
       screen.getByText(/Os assuntos abaixo são salvos sozinhos/),
     ).toBeTruthy();
     expect(screen.getByTestId('step-text').textContent).toContain(
-      'Passo 4 de 4: Concluído',
+      'Passo 4 de 4 · Concluído',
     );
     expect(screen.getByTestId('step-text').textContent).not.toContain(
       'Aprovar',
@@ -448,7 +450,7 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
         'media-edit',
         'media-edit-ai',
       ]);
-      fireEvent.click(button('Propor faixas com IA'));
+      fireEvent.click(button('Propor com IA'));
       opened.http.expectOne(`${BASE}/edit/proposals`).flush(ESTIMATE);
       await opened.harness.fixture.whenStable();
       await deleteTrack(opened.harness);
@@ -762,7 +764,7 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
       ]);
       await deleteTrack(harness);
       await refuse(http, harness, { status: 409 });
-      expect(button('Propor faixas com IA').disabled).toBe(true);
+      expect(button('Propor com IA').disabled).toBe(true);
     });
 
     it('has no handles in a conflict, and Recarregar brings the other draft', async () => {

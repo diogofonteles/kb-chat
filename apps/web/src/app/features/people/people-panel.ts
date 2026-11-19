@@ -8,6 +8,7 @@ import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   LOCALE_ID,
@@ -17,6 +18,7 @@ import {
   inject,
   linkedSignal,
   signal,
+  type Signal,
   viewChild,
   viewChildren,
 } from '@angular/core';
@@ -67,7 +69,8 @@ import { InviteProfilesStore } from './invite-profiles-store.js';
 import { plainPreset } from './preset-defaults.js';
 import { withPresetLevels } from './level-rows.js';
 import { PeopleLevelBar, type PeopleLevelRequest } from './people-level-bar.js';
-import { UiAvatar, UiButton, UiDialog, UiIcon, UiPill } from '@ui/index.js';
+import { UiButton, UiDialog, UiIcon, UiPill } from '@ui/index.js';
+import { PersonAvatar } from './person-avatar.js';
 
 /** "Nenhum" in the invitation's "Perfil": today's plain invitation. */
 const NO_PROFILE = 'none';
@@ -85,6 +88,9 @@ interface Outcome<T> {
  * "Pessoas e permissões" (KBC-010 FR-3, screens.md T9): invite by e-mail, then per person
  * the collections, features and the master role; revoke at any time. Masters only.
  */
+/** How long a finger rests on a phone's row before it selects it. */
+const LONG_PRESS_MS = 500;
+
 @Component({
   selector: 'app-people-panel',
   imports: [
@@ -97,7 +103,7 @@ interface Outcome<T> {
     InviteProfilesPanel,
     DatePipe,
     NgTemplateOutlet,
-    UiAvatar,
+    PersonAvatar,
     UiButton,
     UiDialog,
     UiIcon,
@@ -115,6 +121,11 @@ export class PeoplePanel {
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
+  /**
+   * Below 1024 px the person's sheet shows their row at its top (mPerson); on a desktop the
+   * modal's head already does, so the row is not drawn twice.
+   */
+  protected readonly phone = phoneWidth(this.document);
   /** The invitation profiles (KBC-028), shared with the profiles section. */
   protected readonly profiles = inject(InviteProfilesStore);
   private readonly rows = viewChildren<ElementRef<HTMLButtonElement>>('row');
@@ -225,6 +236,12 @@ export class PeoplePanel {
   protected readonly draftStaleLevels = computed(
     () => this.profiles.find(this.setupChoice())?.staleLevels ?? {},
   );
+  /** The chosen profile's name, or "Nenhum" (the invitation bar's select). */
+  protected readonly profileFace = computed(
+    () =>
+      this.profiles.find(this.setupChoice())?.name ??
+      $localize`:@@people.noProfile:Nenhum`,
+  );
   /** What the invitation starts the person with, for the hint; '' is the plain invite. */
   protected readonly setupLabel = computed(() => {
     if (this.configuring())
@@ -243,6 +260,8 @@ export class PeoplePanel {
   );
   private readonly personDialog = viewChild<UiDialog>('personDialog');
   private readonly inviteDialog = viewChild<UiDialog>('inviteDialog');
+  private readonly emailField =
+    viewChild<ElementRef<HTMLInputElement>>('emailInput');
   /** "Configurar agora": the configured invitation opens in its modal once drawn. */
   private readonly opensInvite = afterRenderEffect(() => {
     if (this.configuring()) this.inviteDialog()?.open();
@@ -258,6 +277,53 @@ export class PeoplePanel {
   /** A failure stays said while the writes queued with it go on. */
   private failedInRun = false;
   protected readonly notice = signal<Notice>(null);
+
+  /**
+   * A phone's list draws no boxes (v2 · Pessoas, celular): a long press on a row (or its
+   * context menu: Android's long press, the menu key) selects it, and the boxes show while
+   * a selection is on. A box reached by keyboard shows as it takes the focus.
+   */
+  protected readonly selecting = computed(() => this.selected().size > 0);
+  private press: ReturnType<typeof setTimeout> | null = null;
+  /** A long press just selected: the click that ends it opens nothing. */
+  private pressedLong = false;
+
+  protected pressStarted(person: Person, event: PointerEvent): void {
+    this.pressEnded();
+    this.pressedLong = false;
+    if (!this.phone() || event.button !== 0) return;
+    this.press = setTimeout(() => {
+      this.press = null;
+      this.pressedLong = true;
+      this.select(person, !this.selected().has(person.id));
+    }, LONG_PRESS_MS);
+  }
+
+  protected pressEnded(): void {
+    if (this.press) clearTimeout(this.press);
+    this.press = null;
+  }
+
+  protected rowMenu(person: Person, event: MouseEvent): void {
+    if (!this.phone()) return;
+    event.preventDefault();
+    if (this.pressedLong) return;
+    this.pressEnded();
+    this.select(person, !this.selected().has(person.id));
+  }
+
+  /** The row's tap: during a selection on a phone it picks; else it opens the editor. */
+  protected rowClick(person: Person): void {
+    if (this.pressedLong) {
+      this.pressedLong = false;
+      return;
+    }
+    if (this.phone() && this.selecting()) {
+      this.select(person, !this.selected().has(person.id));
+      return;
+    }
+    this.toggle(person);
+  }
 
   protected toggle(person: Person): void {
     this.openId.update((id) => (id === person.id ? null : person.id));
@@ -361,10 +427,22 @@ export class PeoplePanel {
     this.lendPending.set(false);
   }
 
-  protected invite(event: Event): void {
-    event.preventDefault();
+  /** Convidar stays lit with no address (v2 · Pessoas): pressing it says what is missing. */
+  protected readonly inviteBlocked = computed(
+    () => this.busy() || (this.configuring() && this.presetInvalid()),
+  );
+
+  /** The form's submit, or the phone sheet's "Convidar" (no event then). */
+  protected invite(event?: Event): void {
+    event?.preventDefault();
     const email = this.email().trim();
-    if (!email) return;
+    if (!email) {
+      this.inviteError.set(
+        $localize`:@@people.inviteEmailMissing:Escreva o e-mail de quem você quer convidar.`,
+      );
+      this.emailField()?.nativeElement.focus();
+      return;
+    }
     const sendEmail = !this.skipEmail();
     const used = this.setupName();
     this.run(this.api.invite(email, sendEmail, this.inviteSetup()), {
@@ -501,11 +579,18 @@ export class PeoplePanel {
   protected readonly actingTarget = signal<Person | null>(null);
   private readonly actAsDialog = viewChild(ActAsDialog);
   private actAsOpener: HTMLElement | null = null;
+  /** The editor closed for "Ver como" on a desktop, to open again if it is cancelled. */
+  private editorBeforeActAs: string | null = null;
 
   protected askActAs(person: Person, opener?: HTMLElement): void {
     // The button pressed, not the focus: a click does not always move it (Safari, a modal).
     const active = opener ?? this.document.activeElement;
     this.actAsOpener = active instanceof HTMLElement ? active : null;
+    // v2 · Ver como: on a desktop the modal stands over the people list, not over the editor.
+    if (!this.phone() && this.openId() === person.id) {
+      this.editorBeforeActAs = person.id;
+      this.openId.set(null);
+    }
     this.actingTarget.set(person);
     afterNextRender(() => this.actAsDialog()?.open(), {
       injector: this.injector,
@@ -515,7 +600,27 @@ export class PeoplePanel {
   /** Esc or "Cancelar": the focus goes back to "Ver como" (NG-30). */
   protected actAsClosed(): void {
     this.actingTarget.set(null);
-    this.actAsOpener?.focus();
+    const editor = this.editorBeforeActAs;
+    this.editorBeforeActAs = null;
+    if (editor === null) {
+      this.actAsOpener?.focus();
+      return;
+    }
+    // Back where the person was: the editor again, the focus on its "Ver como".
+    this.openId.set(editor);
+    this.focusWhenShown('app-person-editor [data-act-as]');
+  }
+
+  /** Focuses `selector` once it is on screen (a modal opening takes a few frames). */
+  private focusWhenShown(selector: string, frames = 30): void {
+    const view = this.document.defaultView;
+    const look = (left: number) => {
+      const el = this.document.querySelector<HTMLElement>(selector);
+      if (el) el.focus();
+      else if (left > 0 && view)
+        view.requestAnimationFrame(() => look(left - 1));
+    };
+    afterNextRender(() => look(frames), { injector: this.injector });
   }
 
   protected change(person: Person, patch: PersonUpdate): void {
@@ -641,6 +746,12 @@ export class PeoplePanel {
       : $localize`:@@people.ai:IA: ${label}:label:`;
   }
 
+  /** "US$ 0,50", the column "Hoje" (the owner sees it); '' for anyone else. */
+  protected spendAmount(person: Person): string {
+    const usd = this.spendByEmail().get(person.email);
+    return usd === undefined ? '' : formatSpend(usd, this.locale);
+  }
+
   /** "Gasto de IA hoje: US$ 0,50" for the owner; '' for anyone else. */
   protected spendOf(person: Person): string {
     const usd = this.spendByEmail().get(person.email);
@@ -758,4 +869,17 @@ function inviteNotice(
       ? $localize`:@@people.invitedRecently:Convite criado sem e-mail: ${invited.email}:email: já recebeu um convite há pouco.`
       : $localize`:@@people.invited:Convite criado sem e-mail. ${invited.email}:email: já pode entrar com o Google ou com um código por e-mail.`,
   };
+}
+
+/** Whether the window is a phone's (below 1024 px), following it as it changes. */
+function phoneWidth(document: Document): Signal<boolean> {
+  const query = document.defaultView?.matchMedia?.('(max-width: 1023px)');
+  const phone = signal(query?.matches ?? false);
+  if (!query) return phone.asReadonly();
+  const onChange = (event: MediaQueryListEvent) => phone.set(event.matches);
+  query.addEventListener('change', onChange);
+  inject(DestroyRef).onDestroy(() =>
+    query.removeEventListener('change', onChange),
+  );
+  return phone.asReadonly();
 }

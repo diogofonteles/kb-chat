@@ -175,11 +175,17 @@ describe('first-run wizard (AC-1)', () => {
     TestBed.tick();
     http.expectOne('/api/v1/topics').flush(TOPICS);
     await fixture.whenStable();
-    fireEvent.click(screen.getByRole('radio', { name: /Hermetismo/ }));
+    // The largest collection opens now: its card is chosen until another is (v2 · passo 3).
+    expect(
+      (screen.getByRole('radio', { name: /Hermetismo/ }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: /Alquimia/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     await fixture.whenStable();
     expect(screen.getByText('Passo 4 de 4')).toBeTruthy();
-    fireEvent.click(screen.getByRole('radio', { name: 'Escuro' }));
+    // The wizard's three themes (v2): Claro, Escuro (the revised dark) and Esotérico.
+    fireEvent.click(screen.getByRole('radio', { name: 'Esotérico' }));
     fireEvent.click(screen.getByRole('button', { name: 'Concluir' }));
     const put = http.expectOne({ method: 'PUT', url: '/api/v1/settings' });
     expect(put.request.body).toEqual({
@@ -190,18 +196,18 @@ describe('first-run wizard (AC-1)', () => {
       },
       preferences: {
         searchMode: 'all',
-        theme: 'dark',
+        theme: 'esoteric',
         defaultView: 'search',
         researchProfile: 'fast',
         autoDeepen: true,
-        defaultTopic: 'hermetismo',
+        defaultTopic: 'alquimia',
       },
     });
     put.flush(
       aSettingsView({
         preferences: {
           searchMode: 'all',
-          theme: 'dark',
+          theme: 'esoteric',
           defaultView: 'search',
           researchProfile: 'fast',
           autoDeepen: true,
@@ -213,7 +219,35 @@ describe('first-run wizard (AC-1)', () => {
     flushAiStatus(http);
     await fixture.whenStable();
     expect(dialog()?.open).toBe(false);
-    expect(TestBed.inject(ThemeStore).theme()).toBe('dark');
+    expect(TestBed.inject(ThemeStore).theme()).toBe('esoteric');
+  });
+
+  it("v2 Assistente: the application's AI shows only its facts, with no guide and no panel", async () => {
+    const base = aProviderList();
+    const [first] = base.items;
+    if (!first) throw new Error('no provider in the list');
+    const list = {
+      ...base,
+      items: [
+        { ...first, id: 'app' as const, billing: 'free' as const },
+        ...base.items,
+      ],
+    };
+    const { fixture } = await renderHost(
+      aSettingsView({ exists: false }),
+      list,
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: /IA da aplicação/ }));
+    await fixture.whenStable();
+
+    const guide = screen.getByRole('region', { name: /IA da aplicação/ });
+    // The facts stay: cost, privacy, limits.
+    expect(within(guide).getByText('Gratuito para você.')).toBeTruthy();
+    // The guide's steps, the extra limit line and the bordered panel go.
+    expect(within(guide).queryByText(/Não precisa configurar nada/)).toBeNull();
+    expect(within(guide).queryByText(/A aplicação paga/)).toBeNull();
+    expect(guide.closest('.details')?.classList.contains('bare')).toBe(true);
   });
 
   it('stays closed once settings exist', async () => {

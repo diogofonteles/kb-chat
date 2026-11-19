@@ -1,17 +1,16 @@
 @if (store.count() > 0) {
   <section class="requests" aria-labelledby="requests-title">
-    <h3 id="requests-title" class="title">
-      <span i18n="@@requests.title"
-        >Solicitações pendentes ({{ store.count() }})</span
-      >
+    <!-- "Solicitações pendentes" and the count in a green badge (v2 · Pessoas). -->
+    <h3 id="requests-title" class="title" [attr.aria-label]="titleLabel()">
+      <span i18n="@@requests.titleWord">Solicitações pendentes</span>
+      <span class="badge" aria-hidden="true">{{ store.count() }}</span>
     </h3>
-    <p class="kicker" i18n="@@requests.attention">Precisa da sua atenção</p>
     <ul class="list">
       @for (row of rows(); track row.request.id) {
         @let request = row.request;
         <li class="request">
           <div class="who">
-            <ui-avatar [name]="row.name" [size]="44" />
+            <app-person-avatar [name]="row.name" [size]="44" />
             <span class="who-text">
               <span class="name">{{ row.name }}</span>
               <span class="detail">{{ request.email }}</span>
@@ -82,6 +81,8 @@
   titleId="refuse-dialog-title"
   [title]="refuseTitle()"
   [width]="480"
+  [lift]="52"
+  [confirm]="true"
   (closed)="cancelRefuse()"
 >
   <p class="confirm-text" i18n="@@requests.refuseText">

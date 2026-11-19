@@ -51,6 +51,8 @@ interface ProviderOption {
   readonly description: string;
   readonly billing: string;
   readonly icon: IconName;
+  /** The cover's colour (v2 · Configurações, PROV): a token per option. */
+  readonly cover: string;
   /** The price pill: free in green, subscriptions in blue, paid by use muted (KBC-131). */
   readonly tone: Tone;
   /** Why the card cannot be chosen and what to do (BR-3, AC-3); null when it can. */
@@ -85,6 +87,18 @@ const ICON_OF: Record<AiProvider, IconName> = {
   none: 'search',
 };
 
+/** The provider covers of the v2 frames: each option's colour fading to the cover's dark. */
+const COVER_OF: Record<AiProvider, string> = {
+  app: 'var(--cover-provider-app)',
+  openrouter: 'var(--cover-provider-openrouter)',
+  gemini: 'var(--cover-provider-gemini)',
+  anthropic: 'var(--cover-provider-anthropic)',
+  openai: 'var(--cover-provider-openai)',
+  'claude-subscription': 'var(--cover-provider-claude)',
+  'chatgpt-subscription': 'var(--cover-provider-chatgpt)',
+  none: 'var(--cover-provider-none)',
+};
+
 function toneOf(info: ProviderInfo, ownBilling: boolean): Tone {
   if (info.billing === 'subscription') return 'info';
   // OpenRouter and Gemini say "Gratuito ou por uso": they can be free.
@@ -100,6 +114,7 @@ const toOption = (info: ProviderInfo): ProviderOption => {
     description: copy.description(),
     billing: (copy.billing ?? BILLING_COPY[info.billing])(),
     icon: ICON_OF[info.id] ?? 'sparkle',
+    cover: COVER_OF[info.id] ?? 'var(--cover-provider-none)',
     tone: toneOf(info, copy.billing !== undefined),
     blocked: blockedBy(info),
   };
@@ -205,6 +220,10 @@ export class AiProviderForm {
     if (draft.provider === 'gemini') return draft.geminiTier === 'paid';
     return !this.ownFree() || draft.paidModel.trim() !== '';
   });
+  /** The daily cap field: paid by use, when the cap bounds something. */
+  protected readonly capShown = computed(
+    () => this.selected()?.info.billing === 'per-token' && this.capApplies(),
+  );
   /** Paid models with tools, for the paid fallback field (loaded only when needed). */
   private readonly models = rxResource({
     params: () => this.ownFree() || undefined,

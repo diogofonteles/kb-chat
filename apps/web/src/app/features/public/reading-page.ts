@@ -15,6 +15,9 @@ import { SessionStore } from '@core/auth/session-store.js';
 import { UiButton } from '@ui/button.js';
 import { UiLogo } from '@ui/logo.js';
 
+/** How long a section chosen in the index keeps its mark against the scroll it causes. */
+const CHOICE_HOLD_MS = 1000;
+
 /** A section of a reading page: the id of its h2 (its public anchor) and its index label. */
 export interface ReadingSection {
   readonly id: string;
@@ -55,6 +58,8 @@ export class ReadingPage {
   private readonly destroyRef = inject(DestroyRef);
   /** The section on screen (the index marks it, AC-7). */
   protected readonly active = signal<string | null>(null);
+  /** When a section was chosen in the index (performance.now()). */
+  private chosenAt = Number.NEGATIVE_INFINITY;
   protected readonly signedIn = computed(
     () => this.session.state().kind === 'signed-in',
   );
@@ -74,6 +79,9 @@ export class ReadingPage {
     const heading = page.ownerDocument.getElementById(id);
     if (!heading || !page.contains(heading)) return;
     this.active.set(id);
+    // The jump crosses other headings: the choice stands (a last section, near the end of
+    // the page, never reaches the top fifth and would lose its mark to the one above it).
+    this.chosenAt = performance.now();
     heading.scrollIntoView({ block: 'start' });
     heading.focus({ preventScroll: true });
   }
@@ -84,6 +92,7 @@ export class ReadingPage {
     if (!view || typeof view.IntersectionObserver === 'undefined') return;
     const observer = new view.IntersectionObserver(
       (entries) => {
+        if (performance.now() - this.chosenAt < CHOICE_HOLD_MS) return;
         const seen = entries.filter((entry) => entry.isIntersecting);
         const last = seen.at(-1)?.target.id;
         if (last) this.active.set(last);

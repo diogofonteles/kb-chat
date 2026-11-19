@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
+import { chooseView } from './search-view.js';
 
 /**
  * KBC-029: a question is in the history from the moment it is sent. The stub agent takes a
@@ -119,7 +120,7 @@ test('AC-3: a failed research stays in the history as "falhou", with "Tentar de 
 test('AC-1: a search question is in the history as soon as it is sent', async ({
   page,
 }) => {
-  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
+  await chooseView(page, 'search');
   const question = unique('ritmo');
   await ask(page, question, 'Buscar');
   await expect(entry(await history(page), question)).toBeVisible();

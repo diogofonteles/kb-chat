@@ -16,6 +16,7 @@ import {
   dragHandle,
   expectSaved,
   handle,
+  openPhoneTools,
   trackRow,
 } from './tracks-helpers.js';
 import { transcribedAudio } from './voices-helpers.js';
@@ -74,6 +75,7 @@ test('AC-2: a released handle snaps to the word, and saves', async ({
     { startMs: 18_000, endMs: 30_000, title: 'Faixa' },
   ]);
   await open(page, media.id);
+  await openPhoneTools(page);
   await page.getByRole('button', { name: 'Afastar' }).click();
   const view = 60_000;
   await dragHandle(page, {
@@ -191,6 +193,7 @@ test('AC-10: dividing makes two touching tracks, joining keeps the first title',
     { startMs: 0, endMs: 30_000, title: 'Duas perguntas' },
   ]);
   await open(page, media.id);
+  if (isMobile) await openPhoneTools(page);
   if (isMobile)
     await page
       .getByRole('button', { name: 'Transcrição', exact: true })
@@ -254,7 +257,7 @@ test('AC-14: on a phone, a finger moves the handle and "+0,5 s" too, and the tar
   const page = await pageAs(browser, email, viewport);
   await open(page, media.id);
   await expect(page.getByTestId('step-text')).toContainText(
-    '3/4 Validar faixas',
+    'Passo 3 de 4 · Validar faixas',
   );
   const start = handle(page, 'Início da faixa 1');
   const box = await start.boundingBox();
@@ -278,6 +281,7 @@ test('AC-14: on a phone, a finger moves the handle and "+0,5 s" too, and the tar
   await expectSaved(owner, media.id, (tracks) => (tracks[0]?.startMs ?? 0) > 0);
 
   const dragged = (await draftTracks(owner, media.id))[0]?.startMs ?? 0;
+  await openPhoneTools(page);
   await page.getByRole('button', { name: 'Mais 0,5 segundo' }).click();
   await expectSaved(
     owner,
@@ -335,7 +339,9 @@ test('AC-18: the whole step by keyboard, from an empty draft to the approval', a
   const owner = await ownerApi();
   const media = await transcribedAudio(owner);
   await page.goto(`/midia/${media.id}/faixas`);
-  await expect(page.getByText('Nenhuma faixa ainda.')).toBeVisible();
+  await expect(
+    page.getByText('Nenhuma faixa ainda', { exact: true }),
+  ).toBeVisible();
   const newTrack = page.getByRole('button', { name: 'Nova faixa aqui' });
   await newTrack.focus();
   await page.keyboard.press('Enter');

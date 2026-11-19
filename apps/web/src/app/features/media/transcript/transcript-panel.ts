@@ -55,6 +55,8 @@ import {
 } from 'rxjs';
 import { speakerChanges, type SpeakerShown } from '../voices/speaker-names.js';
 import { VoiceTag } from '../voices/voice-tag.js';
+import { BookmarksStore } from '@core/media/bookmarks-store.js';
+import { UiBanner, UiIcon, UiIconButton } from '@ui/index.js';
 import { SEARCH_HIGHLIGHTS } from './search-highlights.js';
 import { CARET_AT_POINT } from './text-caret.js';
 import { TranscriptWords, wordsPageOf } from './transcript-words.js';
@@ -118,7 +120,7 @@ const NO_WORDS: readonly SpokenWord[] = [];
  */
 @Component({
   selector: 'app-transcript-panel',
-  imports: [DatePipe, VoiceTag],
+  imports: [DatePipe, UiBanner, UiIcon, UiIconButton, VoiceTag],
   templateUrl: './transcript-panel.html',
   styleUrl: './transcript-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -128,6 +130,8 @@ const NO_WORDS: readonly SpokenWord[] = [];
     '(click)': 'clickSegment($event)',
     '(keydown)': 'moveWithKeys($event)',
     '(pointerdown)': 'pressList($event)',
+    '[class.in-player]': 'inPlayer()',
+    '[class.expanded]': 'expanded()',
   },
 })
 export class TranscriptPanel {
@@ -147,6 +151,20 @@ export class TranscriptPanel {
   readonly showSpeakers = input(true);
   /** "Destacar palavra a palavra" (KBC-045 FR-4). */
   readonly wordByWord = input(true);
+  /**
+   * The player page's body (v2): on a phone the list is the full-screen player's card,
+   * three lines around the one heard, with search and expand as round buttons.
+   */
+  readonly inPlayer = input(false);
+  /** The phone card shows the whole list (expand). */
+  protected readonly expanded = signal(false);
+  protected readonly expandLabel = computed(() =>
+    this.expanded()
+      ? $localize`:@@transcript.collapse:Mostrar menos da transcrição`
+      : $localize`:@@transcript.expand:Mostrar a transcrição inteira`,
+  );
+  /** The phone card's search field, opened by its round button. */
+  protected readonly searchOpen = signal(false);
 
   private readonly engine = inject(MediaEngine);
   private readonly clock = inject(PlaybackClock);
@@ -254,6 +272,10 @@ export class TranscriptPanel {
     source: this.hits,
     computation: () => 0,
   });
+  /** Words typed that no segment has. */
+  protected readonly noHits = computed(
+    () => this.query().trim() !== '' && this.hits().length === 0,
+  );
   protected readonly searchStatus = computed(() => {
     if (this.query().trim() === '') return '';
     const count = this.hits().length;
@@ -284,6 +306,40 @@ export class TranscriptPanel {
       speaker: changes.get(index) ?? null,
     }));
   });
+  /** Who speaks, once each in order of first speech (the chips over the list, tLine). */
+  protected readonly legend = computed(() => {
+    const seen = new Map<number, string | null>();
+    for (const segment of this.view())
+      if (segment.speaker && !seen.has(segment.speaker.voice))
+        seen.set(segment.speaker.voice, segment.speaker.name ?? null);
+    return seen.size > 1 || [...seen.values()].some((name) => name !== null)
+      ? [...seen].map(([voice, name]) => ({ voice, name }))
+      : [];
+  });
+  private readonly bookmarks = inject(BookmarksStore);
+  /** The segments holding one of the person's bookmarks: a green mark before the time. */
+  protected readonly marked = computed(() => {
+    const segments = this.segments();
+    const marked = new Set<number>();
+    if (this.bookmarks.mediaId() !== this.transcript().mediaId) return marked;
+    for (const at of this.bookmarks.positions()) {
+      const index = lastStartedAt(segments, at);
+      if (index >= 0) marked.add(index);
+    }
+    return marked;
+  });
+
+  /** The phone card's search button: opens the field and gives it the focus. */
+  protected toggleSearch(): void {
+    const open = !this.searchOpen();
+    this.searchOpen.set(open);
+    if (open)
+      afterNextRender(
+        () => this.document.getElementById('transcript-search')?.focus(),
+        { injector: this.injector },
+      );
+  }
+
   /** The segment of the current occurrence: its outline shows it in any browser. */
   protected readonly currentHitSegment = computed(
     () => this.hits()[this.currentHit()]?.segment ?? -1,
@@ -318,11 +374,23 @@ export class TranscriptPanel {
    * so the list stays on it, not on the segment at −2 s.
    */
   protected readonly shownActive = computed(() =>
-    this.holdingCited() ? -1 : this.activeIndex(),
+    this.holdingCited() || this.untouched() ? -1 : this.activeIndex(),
   );
   /** Who carries `aria-current`: the first cited segment, until something plays. */
   protected readonly currentIndex = computed(() =>
-    this.holdingCited() ? (this.citedIndexes()[0] ?? -1) : this.activeIndex(),
+    this.holdingCited()
+      ? (this.citedIndexes()[0] ?? -1)
+      : this.untouched()
+        ? -1
+        : this.activeIndex(),
+  );
+  /**
+   * Opened at the start (its first second) and not played yet: nothing is "now" (v2 ·
+   * Mídia — Player, the listener's frame paused at 0:00 marks no line); a play, or a seek
+   * or a resume further in, marks one.
+   */
+  private readonly untouched = computed(
+    () => !this.heard() && this.clock.positionMs() < 1000,
   );
 
   constructor() {
@@ -440,9 +508,11 @@ export class TranscriptPanel {
     const highlights = inject(SEARCH_HIGHLIGHTS);
     afterRenderEffect({
       write: () => {
-        const word = this.holdingCited()
-          ? undefined
-          : this.activeWords()[this.activeWord()];
+        // No word lit where no line is marked (a cited passage holds, or nothing played).
+        const word =
+          this.shownActive() < 0
+            ? undefined
+            : this.activeWords()[this.activeWord()];
         const range =
           word &&
           this.rangeOf({
@@ -788,6 +858,15 @@ export class TranscriptPanel {
     const list = this.list()?.nativeElement;
     const item = this.items()[index]?.nativeElement;
     if (!list || !item) return null;
+    // The phone card (pMobile): the line before on top, then the one heard, then the next.
+    if (this.inPlayer() && !this.expanded() && list.clientHeight < CARD_MAX) {
+      const before = this.items()
+        .slice(0, index)
+        .reverse()
+        .find((one) => !one.nativeElement.hidden)?.nativeElement;
+      const target = before ? before.offsetTop : item.offsetTop;
+      return Math.abs(list.scrollTop - target) < 1 ? null : target;
+    }
     const margin = list.clientHeight * COMFORT;
     const top = item.offsetTop;
     const bottom = top + item.offsetHeight;
@@ -813,6 +892,9 @@ export class TranscriptPanel {
     else list.scrollTop = target;
   }
 }
+
+/** Under this height the list is the phone card of three lines, not a column. */
+const CARD_MAX = 200;
 
 const COPY_FAILED = () =>
   $localize`:@@transcript.copyFailed:Não consegui copiar. Copie o trecho à mão.`;

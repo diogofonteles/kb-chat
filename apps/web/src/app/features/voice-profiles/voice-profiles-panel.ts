@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -14,7 +14,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { UiBanner, UiDialog, UiEmptyState } from '@ui/index.js';
+import { UiBanner, UiDialog, UiEmptyState, UiIcon } from '@ui/index.js';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   topicListSchema,
@@ -58,11 +58,13 @@ function recalculateErrorOf(err: unknown): string {
   selector: 'app-voice-profiles-panel',
   imports: [
     DatePipe,
+    NgTemplateOutlet,
     VoiceProfileForm,
     VoiceProfileReportView,
     UiBanner,
     UiDialog,
     UiEmptyState,
+    UiIcon,
   ],
   templateUrl: './voice-profiles-panel.html',
   styleUrls: ['../settings/settings-form.css', './voice-profiles.css'],
@@ -87,6 +89,19 @@ export class VoiceProfilesPanel {
       ? this.topicList.value().items.filter((topic) => topic.parent === null)
       : [],
   );
+  /** The chosen collection's name, as a phone's row draws it under "Acervo". */
+  protected readonly topicTitle = computed(
+    () =>
+      this.collections().find(({ slug }) => slug === this.topic())?.title ?? '',
+  );
+  /** The modal's kicker: "Perfil de voz · Alquimia Prática". */
+  protected readonly dialogStep = computed(() => {
+    const title = this.collections().find(
+      ({ slug }) => slug === this.topic(),
+    )?.title;
+    const word = $localize`:@@voiceProfiles.dialogStepOne:Perfil de voz`;
+    return title ? `${word} · ${title}` : word;
+  });
   /** Starts on the app's default collection, as the sidebar does. */
   protected readonly topic = linkedSignal(() => {
     const preferred = this.topicList.hasValue()

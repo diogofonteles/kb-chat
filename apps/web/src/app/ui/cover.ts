@@ -26,8 +26,10 @@ const GRADIENTS: readonly (readonly [string, string])[] = [
   ['#3a7a2f', '#0f240b'],
   ['#2f4f8a', '#0b1424'],
 ];
-const FALLBACK: readonly [string, string] = ['#5a5a5a', '#1a1a1a'];
-/** Short words that never make a cover's initials ("A Lei do Ritmo" → LR). */
+/** The grey of a cover with no colour of its own, and of a media that failed (lib.js AC). */
+export const NEUTRAL_COVER: readonly [string, string] = ['#5a5a5a', '#1a1a1a'];
+const FALLBACK = NEUTRAL_COVER;
+/** Short words that never make a cover's code ("A Lei do Ritmo" → LE). */
 const SKIPPED = new Set([
   'a',
   'o',
@@ -42,16 +44,17 @@ const SKIPPED = new Set([
   'the',
 ]);
 
-/** The two initials of a title: "Alquimia Prática" → AP, "Hermetismo" → HE. */
+/**
+ * A title's code, as the v2 frames draw it: the first two letters of its first word
+ * ("Alquimia Prática" → AL, "Cosmologia Espiritual" → CO, "Hermetismo" → HE), short words
+ * skipped ("A Lei do Ritmo" → LE).
+ */
 export function coverCode(title: string): string {
-  const words = title
+  const [first = ''] = title
     .split(/[\s/·—-]+/)
     .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ''))
     .filter((word) => word && !SKIPPED.has(word.toLowerCase()));
-  const [first = '', second = ''] = words;
-  if (!first) return '?';
-  if (!second) return first.slice(0, 2).toUpperCase();
-  return (first.charAt(0) + second.charAt(0)).toUpperCase();
+  return first ? first.slice(0, 2).toUpperCase() : '?';
 }
 
 /** The same title always gets the same gradient. */
@@ -98,11 +101,14 @@ export class UiCover {
   readonly from = input<string | null>(null);
   readonly to = input<string | null>(null);
   readonly label = input(true);
-  protected readonly code = computed(() => coverCode(this.title()));
+  /** The code and colours of another title (a track wears its recording's cover). */
+  readonly of = input<string | null>(null);
+  private readonly owner = computed(() => this.of() || this.title());
+  protected readonly code = computed(() => coverCode(this.owner()));
   protected readonly colors = computed((): readonly [string, string] => {
     const from = this.from();
     const to = this.to();
-    return from && to ? [from, to] : coverGradient(this.title());
+    return from && to ? [from, to] : coverGradient(this.owner());
   });
   protected readonly iconSize = computed(() => Math.round(this.size() * 0.42));
   protected readonly showLabel = computed(

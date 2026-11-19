@@ -17,6 +17,13 @@
   width: min(55rem, calc(100vw - 2rem));
 }
 
+/* At a desktop the modal hangs 70 px from the top, whatever it holds (media-upload*). */
+@media (min-width: 1024px) {
+  .panel.wide {
+    margin-top: 4.375rem;
+  }
+}
+
 .panel::backdrop {
   background: var(--scrim);
 }
@@ -65,7 +72,25 @@
 }
 
 .panel.wide .columns:has(> .options) {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 22.5rem);
+}
+
+/* While sending: the file and its data wider, the next steps' note beside (media-upload-sending). */
+.panel.wide .columns:has(> .next) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 18.75rem);
+}
+
+.next {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+/* Under "Acervo" and "Autor", as wide as both (media-upload). */
+.author-help {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 /* Editing: the cover beside the fields (media-library-edit). */
@@ -85,11 +110,45 @@
   min-width: 0;
 }
 
+/* "Acervo" and "Autor" side by side under the file (media-upload); the rest spans both. */
+.panel.wide .column:has(> app-author-combobox) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.panel.wide .column:has(> app-author-combobox) > * {
+  grid-column: 1 / -1;
+}
+
+.panel.wide .column > label.field,
+.panel.wide .column > app-author-combobox {
+  grid-column: auto;
+}
+
 /* No tint of its own: each choice inside is already a tinted row or card (KBC-130), and two
    tints over the modal take the muted hints under 4.5:1 in the dark theme. */
 .options {
-  padding: var(--space-4);
   border-radius: var(--radius-card);
+}
+
+/* The upload's modal is as tight as the frame (media-upload: 24 between the columns and
+   between the blocks, the footer close under them). */
+.panel.wide .body {
+  gap: var(--space-4);
+}
+
+.panel.wide .columns:has(> .options) {
+  column-gap: var(--space-6);
+}
+
+@media (min-width: 1024px) {
+  /* 20 under the title, the buttons 20 under the last card (media-upload). */
+  .panel.wide .columns {
+    margin-top: var(--space-1);
+  }
+
+  .panel.wide .actions {
+    padding-top: var(--space-1);
+  }
 }
 
 .kept {
@@ -132,8 +191,66 @@
   border-color: var(--color-danger);
 }
 
+/* Files chosen: their cards stand in the zone's place, with no dashes (media-upload-chosen). */
+.drop.filled {
+  justify-items: stretch;
+  gap: var(--space-3);
+  padding: 0;
+  border: none;
+  text-align: start;
+}
+
+.drop.filled.dragging {
+  outline: 1px dashed var(--color-accent);
+  outline-offset: var(--space-1);
+  background: none;
+}
+
+.drop .choose {
+  min-height: 2.25rem;
+  padding: 0 var(--space-5);
+  font-size: var(--text-sm);
+}
+
+.add-more {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-1);
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-meta);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.add-more:hover {
+  background: var(--overlay-2);
+  color: var(--color-text);
+}
+
 .drop p {
   margin: 0;
+}
+
+/* "PASSO 1 DE 4 · ENVIAR E ESCOLHER" over the title (media-upload). */
+.step-kicker {
+  order: -1;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.step-kicker .narrow {
+  display: none;
 }
 
 .rule,
@@ -158,6 +275,7 @@
 
 .field {
   display: grid;
+  align-content: start;
   gap: var(--space-1);
   margin: 0;
   padding: 0;
@@ -166,7 +284,7 @@
 
 .field input[type='text'],
 .field select {
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   padding: 0 var(--space-3);
   border: 1px solid transparent;
   border-radius: var(--radius-menu);
@@ -174,6 +292,32 @@
   color: var(--color-text);
   font: inherit;
   font-size: var(--text-sm);
+}
+
+/* The collection's select with the v2 ▾ of the other fields, not the browser's. */
+.select-box {
+  position: relative;
+  display: grid;
+}
+
+.select-box select {
+  appearance: none;
+  width: 100%;
+  padding-right: calc(var(--space-3) * 2 + 18px);
+}
+
+.select-box .caret {
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  color: var(--color-text-muted);
+  translate: 0 -50%;
+  pointer-events: none;
+}
+
+.author-help .narrow,
+.actions .narrow {
+  display: none;
 }
 
 .field select option {
@@ -238,6 +382,79 @@ button[type='submit']:disabled {
   cursor: progress;
 }
 
+/* v2 · media-upload at a desktop: the kicker 12/14 4 above the 22/26 title and the 36 ✕;
+   the dashed zone 150 tall (10 between its icon, words, button and rule); each field a 16
+   label 6 over its 44 box with a hairline, 12 between the two, the help 16 under them. */
+@media (min-width: 1024px) {
+  .panel.wide .titles {
+    gap: var(--space-1);
+  }
+
+  .panel.wide .step-kicker {
+    line-height: 0.875rem;
+  }
+
+  .panel.wide .head h2 {
+    line-height: 1.625rem;
+  }
+
+  .panel.wide .close {
+    width: 2.25rem;
+    height: 2.25rem;
+    margin: var(--space-1) 0 0;
+  }
+
+  /* The edge's pixel is inside the frame's 150 (10 over the icon, 8 under the rule). */
+  .panel.wide .drop:not(.filled) {
+    gap: 0.625rem;
+    padding: 0.5625rem var(--space-4) 0.5rem;
+  }
+
+  .panel.wide .drop .hint {
+    line-height: 1.1875rem;
+  }
+
+  .panel.wide .drop .rule {
+    line-height: 0.875rem;
+  }
+
+  .panel.wide .drop .choose {
+    padding: 0 var(--space-6);
+  }
+
+  .panel.wide .column {
+    column-gap: var(--space-3);
+  }
+
+  .panel.wide .field {
+    gap: 0.375rem;
+  }
+
+  .panel.wide .field .label,
+  .panel.wide .column ::ng-deep .combo .label {
+    margin: 0;
+    line-height: 1rem;
+  }
+
+  .panel.wide .column ::ng-deep .combo {
+    gap: 0.375rem;
+  }
+
+  .panel.wide .field select,
+  .panel.wide .column ::ng-deep .combo input {
+    border-color: color-mix(in srgb, var(--color-text) 12%, transparent);
+  }
+
+  .panel.wide .field select:focus,
+  .panel.wide .column ::ng-deep .combo input:focus {
+    border-color: var(--color-text);
+  }
+
+  .panel.wide .author-help {
+    line-height: 0.875rem;
+  }
+}
+
 @media (max-width: 1023px) {
   /* A tall sheet from the bottom (media-upload@mobile). */
   .panel,
@@ -255,33 +472,257 @@ button[type='submit']:disabled {
     padding: var(--space-5) var(--space-4) var(--space-4);
   }
 
-  .head h2 {
-    font-size: 1.25rem;
+  .panel.wide .columns:has(> .options),
+  .panel.wide .columns:has(> .next),
+  .columns:has(> .edit-cover),
+  .panel.wide .column:has(> app-author-combobox) {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .panel.wide .columns:has(> .options),
-  .columns:has(> .edit-cover) {
-    grid-template-columns: minmax(0, 1fr);
+  .panel.wide .column > label.field,
+  .panel.wide .column > app-author-combobox {
+    grid-column: 1 / -1;
   }
 
   .edit-cover {
     justify-self: center;
+    --ui-cover-size: 160px !important;
+  }
+
+  /* The sheet's cover sits close under its top row, the fields close under it
+     (media-library-edit@mobile: 30 px over the cover, 24 px to "Título"). */
+  .columns:has(> .edit-cover) {
+    gap: var(--space-4);
+  }
+
+  .author-help .wide,
+  .actions .wide {
+    display: none;
+  }
+
+  .author-help .narrow,
+  .actions .narrow {
+    display: inline;
+  }
+
+  .panel.wide .columns:has(> .options) {
+    row-gap: var(--space-4);
+  }
+
+  /* No note beside the file while sending (media-upload-sending@mobile). */
+  .next {
+    display: none;
+  }
+
+  /* The sheet's top row (mFull, media-upload@mobile, media-library-edit@mobile):
+     "Cancelar · <title> · Enviar|Salvar", the buttons as words; the ✕ is "Cancelar".
+     The title sets the row: 16 over it and 16 under it, the words centred on it, the first
+     block 20 under its last line (one line in "Editar informações", two with the step).
+     The title and the buttons share the first grid row, both held at the top on a scroll. */
+  .body,
+  .panel.wide .body {
+    position: relative;
+    row-gap: var(--space-1);
+    padding-top: 0;
+    padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom));
   }
 
   .actions {
-    bottom: calc(-1 * var(--space-4));
-    margin: 0 calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
-    padding: var(--space-3) var(--space-4)
-      calc(var(--space-3) + env(safe-area-inset-bottom));
+    grid-row: 1;
+    grid-column: 1;
+    position: sticky;
+    top: 0;
+    bottom: auto;
+    z-index: 3;
+    align-self: stretch;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 calc(-1 * var(--space-4));
+    padding: 0 var(--space-2);
+    background: none;
   }
 
-  .actions button {
-    flex: 1;
+  .actions button.ui-btn {
+    flex: none;
+    min-height: var(--target);
+    padding: 0 var(--space-2);
+    border: 0;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: var(--text-item);
+    font-weight: 500;
+  }
+
+  .actions button.ui-btn[type='submit'] {
+    color: var(--color-accent-text);
+    font-weight: 700;
+  }
+
+  /* Not yet: the word in white at about a third (media-upload@mobile). */
+  .actions button.ui-btn[type='submit']:disabled,
+  .actions button.ui-btn[type='submit'][aria-disabled='true'] {
+    color: var(--color-text);
+    opacity: 0.35;
+  }
+
+  .head {
+    grid-row: 1;
+    grid-column: 1;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    justify-content: center;
+    align-items: center;
+    margin: 0 calc(-1 * var(--space-4));
+    /* Centred between "Cancelar" and the word at the other end (or the edge, while sending:
+       media-upload-sending@mobile). */
+    padding: var(--space-4) 3.75rem var(--space-4) 4.75rem;
+    background: var(--color-elevated);
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .titles {
+    justify-items: center;
+    gap: 0;
+  }
+
+  .head h2 {
+    font-size: var(--text-md, 1rem);
+    line-height: 1.1875rem;
+  }
+
+  .close {
+    display: none;
+  }
+
+  .step-kicker {
+    font-size: 0.6875rem;
+    line-height: 0.8125rem;
+  }
+
+  /* The words only, as drawn (media-upload@mobile). */
+  .actions button.ui-btn[type='submit'] ui-icon {
+    display: none;
+  }
+
+  .step-kicker .wide {
+    display: none;
+  }
+
+  .step-kicker .narrow {
+    display: inline;
+  }
+
+  /* No dragging on a phone (media-upload@mobile): the button and the rule. */
+  .hint {
+    display: none;
   }
 
   .field input[type='text'],
   .field select {
     min-height: var(--target);
     font-size: var(--text-md);
+  }
+}
+
+.rule .narrow {
+  display: none;
+}
+
+/* v2 · media-upload@mobile: the dashed zone 140 tall (its 28 icon, the 40 button and the rule
+   10 apart), each field a 16 label 6 over its box, 16 between the blocks. */
+@media (max-width: 1023px) {
+  .panel.wide .drop:not(.filled) {
+    gap: 0.625rem;
+    padding: 1.125rem var(--space-4);
+  }
+
+  /* The help 6 under the author's box (media-upload@mobile). */
+  .panel.wide .author-help {
+    margin-top: -0.625rem;
+  }
+
+  .panel.wide .drop-icon ::ng-deep svg {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .panel.wide .drop .choose {
+    min-height: 2.5rem;
+    padding: 0 var(--space-6);
+  }
+
+  .panel.wide .drop .rule {
+    line-height: 0.875rem;
+  }
+
+  .panel.wide .column {
+    gap: var(--space-4);
+  }
+
+  .panel.wide .field,
+  .panel.wide .column ::ng-deep .combo {
+    gap: 0.375rem;
+  }
+
+  .panel.wide .field .label,
+  .panel.wide .column ::ng-deep .combo .label {
+    margin: 0;
+    line-height: 1rem;
+  }
+
+  .rule .wide {
+    display: none;
+  }
+
+  .rule .narrow {
+    display: inline;
+  }
+}
+
+/* While sending, the collection reads as chosen (media-upload-sending): locked, not faded. */
+.field select:disabled {
+  color: var(--color-text);
+  opacity: 1;
+}
+
+@media (max-width: 1023px) {
+  .body:has(> .actions > :only-child) > .head {
+    padding-right: var(--space-4);
+  }
+}
+
+/* At a desktop "Adicionar arquivos" sits at the start of the footer's row, so the drawn
+   blocks and buttons keep their places (media-upload-chosen). */
+@media (min-width: 1024px) {
+  .panel.wide .body > .actions,
+  .panel.wide .body > .add-more {
+    grid-row: 3;
+    grid-column: 1;
+  }
+
+  .panel.wide .body > .actions {
+    align-items: flex-start;
+    align-self: start;
+  }
+
+  .panel.wide .body > .add-more {
+    position: sticky;
+    bottom: calc(var(--space-4) - var(--space-6));
+    z-index: 2;
+    align-self: start;
+    margin-top: var(--space-1);
+  }
+
+  /* The frames draw no button for it (media-upload-chosen): a desktop adds files by a drop
+     on the cards; the button shows only to the keyboard, where it is the way. */
+  .panel.wide .body > .add-more:not(:focus-visible) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }

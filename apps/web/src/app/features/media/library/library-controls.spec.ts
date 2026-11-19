@@ -18,8 +18,6 @@ async function renderControls(
   subjects: readonly { key: string; name: string }[] = [],
 ) {
   const changes: FilterChange[] = [];
-  const sorts: string[] = [];
-  const views: string[] = [];
   const view = await render(LibraryControls, {
     providers: [provideZonelessChangeDetection()],
     inputs: {
@@ -33,8 +31,6 @@ async function renderControls(
         subjects: [...subjects],
       },
       filters,
-      sort: 'recently-played',
-      view: 'list',
       topics: [
         aTopic({ slug: 'alquimia', title: 'Alquimia' }),
         aTopic({ slug: 'hermetismo', title: 'Hermetismo' }),
@@ -48,11 +44,9 @@ async function renderControls(
     },
     on: {
       filtersChange: (value: FilterChange) => changes.push(value),
-      sortChange: (value: string) => sorts.push(value),
-      viewChange: (value: string) => views.push(value),
     },
   });
-  return { ...view, changes, sorts, views };
+  return { ...view, changes };
 }
 
 describe('LibraryControls (T16, SL-13/15/16)', () => {
@@ -81,42 +75,69 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
     expect(changes).toEqual([{ kind: 'clear' }]);
   });
 
-  it('chooses an author and a collection, the parent of a sub-collection included (AC-5)', async () => {
-    const { changes } = await renderControls();
-    const topic = screen.getByLabelText('Acervo') as HTMLSelectElement;
-    expect([...topic.options].map((option) => option.value)).toEqual([
-      '',
-      'alquimia',
-      'udv',
-      'udv/palavra-do-mestre',
-    ]);
-    fireEvent.change(topic, { target: { value: 'udv' } });
-    fireEvent.change(screen.getByLabelText('Autoria'), {
-      target: { value: 'mestre-laercio' },
+  it('chooses an author in "Autoria ▾"; a collection in force, a sub-collection included, has no chip (owner, 2026-11-19)', async () => {
+    const { changes, fixture } = await renderControls({
+      ...NONE,
+      topic: 'udv/palavra-do-mestre',
     });
-    expect(changes).toEqual([
-      { kind: 'topic', topic: 'udv' },
-      { kind: 'author', author: 'mestre-laercio' },
-    ]);
-  });
-
-  it('orders through a menu button and switches the view', async () => {
-    const { sorts, views, fixture } = await renderControls();
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Ordenar: Ouvidas recentemente' }),
-    );
-    await fixture.whenStable();
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /Duração/ }));
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Ordenar: Ouvidas recentemente' }),
-    );
+    // The collection is the page's scope (its header), never a removable filter here.
+    expect(
+      screen.queryByRole('button', { name: /^Ver todos os acervos/ }),
+    ).toBeNull();
+    expect(document.body.textContent).not.toContain('Acervo:');
+    fireEvent.click(screen.getByRole('button', { name: 'Autoria' }));
     await fixture.whenStable();
     expect(
-      screen.getByRole('group', { name: 'Ver como' }).textContent,
-    ).toContain('✓');
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /Grade/ }));
-    expect(sorts).toEqual(['duration']);
-    expect(views).toEqual(['grid']);
+      screen
+        .getAllByRole('menuitemradio')
+        .map((item) => item.textContent?.trim()),
+    ).toEqual(['Mestre Laércio, principal', 'Outros autores']);
+    fireEvent.click(
+      screen.getByRole('menuitemradio', { name: /Mestre Laércio, principal/ }),
+    );
+    expect(changes).toEqual([{ kind: 'author', author: 'mestre-laercio' }]);
+  });
+
+  it('shows a chosen author as a chip that clears it', async () => {
+    const { changes } = await renderControls({
+      ...NONE,
+      authors: ['mestre-laercio'],
+    });
+    expect(screen.queryByRole('button', { name: 'Autoria' })).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Tirar o filtro de autoria: Mestre Laércio',
+      }),
+    );
+    expect(changes).toEqual([{ kind: 'author', author: null }]);
+  });
+});
+
+describe('LibraryControls "Autoria" with nothing to tell apart (v2 media-library-empty-*)', () => {
+  it('keeps the chip, its one choice every authorship', async () => {
+    const changes: FilterChange[] = [];
+    const { fixture } = await render(LibraryControls, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        facets: {
+          states: [],
+          authors: [],
+          otherAuthors: false,
+          topics: [],
+          subjects: [],
+        },
+        filters: NONE,
+      },
+      on: { filtersChange: (value: FilterChange) => changes.push(value) },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Autoria' }));
+    await fixture.whenStable();
+    const all = screen.getByRole('menuitemradio', {
+      name: /Todas as autorias/,
+    });
+    expect(all.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(all);
+    expect(changes).toEqual([{ kind: 'author', author: null }]);
   });
 });
 
@@ -125,26 +146,36 @@ describe('LibraryControls "Assunto" (KBC-070 FR-4)', () => {
 
   it('is absent with no subject to offer', async () => {
     await renderControls();
-    expect(screen.queryByRole('combobox', { name: 'Assunto' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Assunto' })).toBeNull();
   });
 
   it('offers the subjects and says which was chosen', async () => {
-    const { changes } = await renderControls(NONE, [CABALA]);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Assunto' }), {
-      target: { value: CABALA.key },
-    });
+    const { changes, fixture } = await renderControls(NONE, [CABALA]);
+    fireEvent.click(screen.getByRole('button', { name: 'Assunto' }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Cabala/ }));
     expect(changes).toEqual([{ kind: 'subject', subject: CABALA.key }]);
   });
 
   it('keeps a chosen subject that left, to be cleared', async () => {
-    await renderControls({ ...NONE, subject: 'free:gone' }, [CABALA]);
-    expect(
-      screen.getByRole('option', { name: 'Assunto indisponível' }),
-    ).toBeTruthy();
+    const { changes } = await renderControls(
+      { ...NONE, subject: 'free:gone' },
+      [CABALA],
+    );
+    const chosen = screen.getByRole('button', {
+      name: 'Tirar o filtro de assunto: Assunto indisponível',
+    });
+    fireEvent.click(chosen);
+    expect(changes).toEqual([{ kind: 'subject', subject: null }]);
     expect(screen.getByRole('button', { name: 'Limpar filtros' })).toBeTruthy();
   });
 
-  it('keeps the collection in force on the list, even with no media (KBC-091)', async () => {
+  it('"Limpar filtros" never shows for the collection alone: it is not a filter (owner, 2026-11-19)', async () => {
+    await renderControls({ ...NONE, topic: 'alquimia' });
+    expect(screen.queryByRole('button', { name: 'Limpar filtros' })).toBeNull();
+  });
+
+  it("names no collection: the page's header does (owner, 2026-11-19)", async () => {
     await render(LibraryControls, {
       providers: [provideZonelessChangeDetection()],
       inputs: {
@@ -156,13 +187,15 @@ describe('LibraryControls "Assunto" (KBC-070 FR-4)', () => {
           subjects: [],
         },
         filters: { ...NONE, topic: 'alquimia' },
-        sort: 'recently-played',
-        view: 'list',
-        topics: [aTopic({ slug: 'alquimia', title: 'Alquimia' })],
+        topics: [
+          aTopic({ slug: 'alquimia', title: 'Alquimia' }),
+          aTopic({ slug: 'hermetismo', title: 'Hermetismo' }),
+        ],
       },
     });
+    expect(screen.queryByText(/Acervo: Alquimia/)).toBeNull();
     expect(
-      screen.getByRole<HTMLSelectElement>('combobox', { name: /Acervo/ }).value,
-    ).toBe('alquimia');
+      screen.queryByRole('button', { name: /Ver todos os acervos/ }),
+    ).toBeNull();
   });
 });

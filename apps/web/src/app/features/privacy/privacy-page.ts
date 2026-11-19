@@ -12,6 +12,7 @@ import {
 import { rxResource } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { AuthApi } from '@core/auth/auth-api.js';
+import { UiIcon } from '@ui/icon.js';
 
 /**
  * The public privacy policy (KBC-016): what Nova Alexandria keeps, why, who takes part,
@@ -20,7 +21,7 @@ import { AuthApi } from '@core/auth/auth-api.js';
  */
 @Component({
   selector: 'app-privacy-page',
-  imports: [RouterLink, ReadingPage],
+  imports: [RouterLink, ReadingPage, UiIcon],
   templateUrl: './privacy-page.html',
   styleUrl: './privacy-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

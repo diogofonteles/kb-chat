@@ -13,7 +13,7 @@ export {
 export { UiCard } from './card.js';
 export { UiChoiceCard } from './choice-card.js';
 export { UiCodeInput } from './code-input.js';
-export { UiCover, coverCode, coverGradient } from './cover.js';
+export { UiCover, NEUTRAL_COVER, coverCode, coverGradient } from './cover.js';
 export { UiDialog } from './dialog.js';
 export { UiEmptyState } from './empty-state.js';
 export { UiField, fieldDescribedBy } from './field.js';

@@ -71,6 +71,17 @@ function setup(selectedId: string, extra: object = {}) {
   }).then((rendered) => ({ ...rendered, spies }));
 }
 
+/** The details (type, level, listening, the text) open from ⋯ (KBC-130, prepare.js tkRow). */
+async function openDetails(): Promise<void> {
+  fireEvent.click(screen.getByRole('button', { name: 'Mais ações da faixa' }));
+  fireEvent.click(
+    await screen.findByRole('menuitem', {
+      name: 'Tipo, nível e texto da faixa',
+    }),
+  );
+  await screen.findByRole('combobox', { name: 'Tipo' });
+}
+
 describe('TrackRowList (KBC-066)', () => {
   it('has one Tab stop; the arrows move and only the selected row has its fields', async () => {
     const { spies } = await setup(IDS.one);
@@ -136,6 +147,7 @@ describe('TrackRowList (KBC-066)', () => {
     const { spies } = await setup(IDS.one, {
       problems: [{ trackId: IDS.one, ordinal: 1, problem: 'title' }],
     });
+    await openDetails();
     expect(screen.getByText('Sem título')).toBeTruthy();
     fireEvent.change(screen.getByRole('combobox', { name: 'Tipo' }), {
       target: { value: 'talk' },
@@ -166,6 +178,7 @@ describe('TrackRowList (KBC-066)', () => {
 
   it('turns only the button that plays into a stop, in words', async () => {
     const { spies } = await setup(IDS.one, { playing: 'start' });
+    await openDetails();
     const stop = screen.getByRole('button', { name: 'Parar o início' });
     expect(stop.textContent).toContain('Parar o início');
     expect(screen.getByRole('button', { name: '▶ Ouvir' })).toBeTruthy();
@@ -176,6 +189,7 @@ describe('TrackRowList (KBC-066)', () => {
 
   it('offers to stop what another row plays', async () => {
     const { spies } = await setup(IDS.one, { playingElsewhere: true });
+    await openDetails();
     fireEvent.click(
       screen.getByRole('button', { name: '■ Parar o que está tocando' }),
     );
@@ -184,12 +198,14 @@ describe('TrackRowList (KBC-066)', () => {
 
   it('says "■ Parar" on the track that plays', async () => {
     await setup(IDS.one, { playing: 'track' });
+    await openDetails();
     expect(screen.getByRole('button', { name: '■ Parar' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '▶ Ouvir' })).toBeNull();
   });
 
   it('shows the selected track’s text below its fields (AC-4, FR-2)', async () => {
     const { fixture } = await setup(IDS.two);
+    await openDetails();
     TestBed.inject(TrackTextSource).follow(
       signal({ mediaId: MEDIA, status: 'done', key: '1' }),
     );
@@ -240,6 +256,7 @@ describe('TrackRowList (KBC-066)', () => {
       choices: [{ id: 'cdc', code: 'CDC' }],
     };
     const { spies, rerender } = await setup(IDS.one, { levels });
+    await openDetails();
     const field = screen.getByRole('combobox', { name: 'Nível' });
     expect(
       [...(field as HTMLSelectElement).options].map((one) => one.text.trim()),
@@ -275,6 +292,7 @@ describe('TrackRowList (KBC-066)', () => {
       levels,
       levelError: 'Este nível está acima do seu. Escolha o seu ou um abaixo.',
     });
+    await openDetails();
     const field = screen.getByRole<HTMLSelectElement>('combobox', {
       name: 'Nível',
     });

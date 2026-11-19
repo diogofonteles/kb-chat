@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   inject,
+  input,
 } from '@angular/core';
 import type { ApprovedTrack } from '@kb-chat/contracts';
 import { formatClock, formatDuration } from '@kb-chat/player-core';
@@ -16,9 +17,7 @@ import { MediaLevelBadge } from '../media-level-badge.js';
   template: `
     @if (rows().length) {
       <section aria-labelledby="track-nav-title">
-        <h3 id="track-nav-title" class="title" i18n="@@tracks.nav.title">
-          Faixas
-        </h3>
+        <h3 id="track-nav-title" class="title">{{ heading() }}</h3>
         <ol class="rows">
           @for (row of rows(); track row.track.id) {
             <li>
@@ -102,10 +101,50 @@ import { MediaLevelBadge } from '../media-level-badge.js';
       font-size: var(--text-sm);
       font-variant-numeric: tabular-nums;
     }
+    /* "Faixas desta gravação" in "Sobre" (pRight): one line each, number 13, title 14,
+       the time 12, the one playing in the accent. */
+    /* pRight: the titles 12 apart on their 17 px lines; each row a 29 target around them. */
+    :host-context(app-player-about) .title {
+      margin-bottom: 0;
+      line-height: 1.125rem;
+    }
+    :host-context(app-player-about) .rows {
+      gap: 0;
+      margin: 6px 0 -6px;
+    }
+    :host-context(app-player-about) .row {
+      grid-template-columns: 0.875rem minmax(0, 1fr) auto;
+      gap: 0.625rem;
+      align-items: center;
+      min-height: 1.8125rem;
+      padding: 0 var(--space-1);
+      margin: 0 calc(-1 * var(--space-1));
+      width: calc(100% + 2 * var(--space-1));
+    }
+    :host-context(app-player-about) .name {
+      overflow: hidden;
+      font-size: var(--text-sm);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    :host-context(app-player-about) .row[aria-current] {
+      font-weight: 400;
+    }
+    :host-context(app-player-about) .row[aria-current] .number {
+      color: var(--color-accent-text);
+    }
+    :host-context(app-player-about) .number {
+      font-size: var(--text-meta);
+    }
+    :host-context(app-player-about) .time {
+      font-size: var(--text-xs);
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TrackNavList {
+  /** The list's title: "Faixas" as the body's view, "Faixas desta gravação" in "Sobre". */
+  readonly heading = input($localize`:@@tracks.nav.title:Faixas`);
   private readonly store = inject(TracksStore);
 
   protected readonly rows = computed(() => {

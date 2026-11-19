@@ -1,20 +1,32 @@
 import { DatePipe } from '@angular/common';
+import { UiIcon } from '@ui/icon.js';
+import { UiPill } from '@ui/pill.js';
 import {
   ChangeDetectionStrategy,
+  booleanAttribute,
   Component,
   LOCALE_ID,
   computed,
   inject,
   input,
+  signal,
 } from '@angular/core';
 import { PLAN_ESTIMATE_TOLERANCE, type TrackChoice } from '@kb-chat/contracts';
 import { PlanForm } from './plan-form.js';
 import {
+  REFUSAL_PILLS,
   REFUSAL_TEXTS,
   usdText,
   usdUpText,
   type PlanRefusal,
 } from './preparation-labels.js';
+
+/** The phone's row names the division chosen with the words of its choice. */
+const TRACK_CHOICE_LABELS: Record<TrackChoice, () => string> = {
+  none: () => $localize`:@@prep.option.none:Não dividir agora`,
+  manual: () => $localize`:@@prep.option.manual:Vou marcar as faixas eu mesmo`,
+  ai: () => $localize`:@@prep.option.ai:Propor as faixas com IA`,
+};
 
 /** A choice, its id for `aria-describedby` and why it is off. */
 type Refusable = 'speakers' | 'manual' | 'ai' | 'subjects';
@@ -26,10 +38,11 @@ type Refusable = 'speakers' | 'manual' | 'ai' | 'subjects';
  */
 @Component({
   selector: 'app-preparation-options',
-  imports: [DatePipe],
+  imports: [DatePipe, UiIcon, UiPill],
   templateUrl: './preparation-options.html',
   styleUrl: './preparation-options.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.compact]': 'compact()', '[class.flow]': 'flow()' },
 })
 export class PreparationOptions {
   private readonly locale = inject(LOCALE_ID);
@@ -38,8 +51,29 @@ export class PreparationOptions {
   readonly locked = input(false);
   /** The choices are for several files at once: the estimates add them up. */
   readonly several = input(false);
+  /**
+   * The upload panel's column (media-upload): smaller words, the division as one card with
+   * a plain list of choices, only the one that cannot be chosen saying why.
+   */
+  readonly compact = input(false);
+  /**
+   * The upload has no readable new file yet: with nothing to estimate, the AI's choice asks
+   * for one first (v2 · media-upload, -duplicate, -bad-type).
+   */
+  readonly noFile = input(false);
+  /**
+   * "Preparar áudio" (KBC-130, v2 · Mídia — Preparar): the cards with their round icon, the
+   * chosen one with a check, one that cannot be chosen with its reason in a pill; the page
+   * writes the summary beside its buttons.
+   */
+  readonly flow = input(false, { transform: booleanAttribute });
 
   protected readonly choices = this.form.choices;
+  /** The phone's "Dividir em faixas ›" row opened on its three choices. */
+  protected readonly tracksOpen = signal(false);
+  protected readonly tracksChoice = computed(() =>
+    TRACK_CHOICE_LABELS[this.choices().tracks](),
+  );
   protected readonly offer = this.form.offer;
   protected readonly transcriberOff = computed(
     () => this.offer()?.transcriber === 'off',
@@ -79,7 +113,27 @@ export class PreparationOptions {
 
   protected refusal(id: Refusable): string {
     const refusal: PlanRefusal | null = this.form.refusalOf(id);
+    // The upload's card says it short (v2 · media-upload, media-upload-chosen).
+    if (this.compact() && id === 'ai' && refusal !== null) {
+      if (this.noFile())
+        return $localize`:@@prep.refusal.noFileShort:Escolha um arquivo legível para ver a estimativa de custo.`;
+      if (refusal === 'not-connected')
+        return $localize`:@@prep.refusal.notConnectedShort:A IA da aplicação não está conectada. Peça a um master.`;
+    }
     return refusal ? REFUSAL_TEXTS[refusal]() : '';
+  }
+
+  /** A phone's card says the missing AI short (v2 · Mídia — Preparar, celular). */
+  protected refusalNarrow(id: Refusable): string {
+    return this.form.refusalOf(id) === 'not-connected'
+      ? $localize`:@@prep.refusal.notConnectedShort:A IA da aplicação não está conectada. Peça a um master.`
+      : this.refusal(id);
+  }
+
+  /** The reason in a word or two, on the pill of a card that cannot be chosen. */
+  protected refusalPill(id: Refusable): string {
+    const refusal: PlanRefusal | null = this.form.refusalOf(id);
+    return refusal ? REFUSAL_PILLS[refusal]() : '';
   }
 
   protected isOff(id: Refusable): boolean {
@@ -110,8 +164,28 @@ export class PreparationOptions {
     usdUpText(value, this.locale);
 }
 
+/** The summary's "(≈ 12 min, ≈ US$ 0,02)": the transcriber's minutes and the AI's estimate. */
+function costsOf(form: PlanForm, usd: (value: number) => string): string[] {
+  const { transcribe, speakers, tracks } = form.choices();
+  const minutes =
+    (transcribe ? (form.option('transcribe').minutes ?? 0) : 0) +
+    (speakers ? (form.option('speakers').minutes ?? 0) : 0);
+  const estimate = form.offer()?.aiEstimateUsd ?? null;
+  return [
+    minutes > 0
+      ? $localize`:@@prep.summary.minutes:≈ ${minutes}:minutes: min`
+      : '',
+    tracks === 'ai' && estimate !== null
+      ? $localize`:@@prep.summary.usd:≈ ${usd(estimate)}:value:`
+      : '',
+  ].filter(Boolean);
+}
+
 /** "Depois do envio: transcrever, indicar quem fala…": changes with the choices (UP-01). */
-function summaryOf(form: PlanForm, usd: (value: number) => string): string {
+export function summaryOf(
+  form: PlanForm,
+  usd: (value: number) => string,
+): string {
   const { transcribe, speakers, tracks } = form.choices();
   const asked = [
     transcribe ? $localize`:@@prep.summary.transcribe:transcrever` : '',
@@ -123,18 +197,7 @@ function summaryOf(form: PlanForm, usd: (value: number) => string): string {
   ].filter(Boolean);
   if (asked.length === 0)
     return $localize`:@@prep.summary.nothing:Depois do envio: só guardar o áudio.`;
-  const minutes =
-    (transcribe ? (form.option('transcribe').minutes ?? 0) : 0) +
-    (speakers ? (form.option('speakers').minutes ?? 0) : 0);
-  const estimate = form.offer()?.aiEstimateUsd ?? null;
-  const costs = [
-    minutes > 0
-      ? $localize`:@@prep.summary.minutes:≈ ${minutes}:minutes: min`
-      : '',
-    tracks === 'ai' && estimate !== null
-      ? $localize`:@@prep.summary.usd:≈ ${usd(estimate)}:value:`
-      : '',
-  ].filter(Boolean);
+  const costs = costsOf(form, usd);
   const list = asked.join(', ');
   const cost = costs.length > 0 ? ` (${costs.join(', ')})` : '';
   return tracks === 'none'

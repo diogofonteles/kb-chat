@@ -1,6 +1,73 @@
+/* Step 4 (KBC-130, prepare.js finishedMain): "Assuntos" and its line on the left, "Sugerir
+   assuntos com IA" on the right, the tracks as quiet cards, the note under them. */
 .subjects {
   display: grid;
-  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--space-4);
+  align-items: center;
+}
+
+.subjects > :not(h3, .intro, .ai) {
+  grid-column: 1 / -1;
+}
+
+h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.5rem;
+}
+
+.intro {
+  grid-column: 1;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  line-height: 1rem;
+}
+
+.ai {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  justify-items: end;
+}
+
+.secondary.suggest {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 34px;
+  padding: 0 var(--space-6);
+  border-color: var(--color-text-muted);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+.narrow {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .subjects {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai {
+    grid-column: 1;
+    grid-row: auto;
+    justify-items: start;
+  }
+
+  .suggest {
+    min-height: var(--target);
+  }
+
+  .wide {
+    display: none;
+  }
+
+  .narrow {
+    display: inline;
+  }
 }
 
 h3,
@@ -68,7 +135,13 @@ p {
 }
 
 .tracks {
-  margin: 0;
+  display: grid;
+  gap: 10px;
+  margin: var(--space-2) 0 0;
   padding: 0;
   list-style: none;
+}
+
+.saved-alone {
+  font-size: var(--text-meta);
 }

@@ -69,12 +69,24 @@ describe('BookmarkList (KBC-042 FR-3, FR-4)', () => {
     const items = screen.getAllByRole('listitem');
     expect(
       items.map((item) => item.textContent?.replace(/\s+/g, ' ').trim()),
-    ).toEqual([
-      '0:05 Sem nota Editar Apagar',
-      '12:38 lei do ritmo Editar Apagar',
-    ]);
+    ).toEqual(['0:05 Sem nota', '12:38 lei do ritmo']);
+    // Edit and delete are icon buttons (player.js: edit, trash), named by the time.
+    for (const [index, time] of ['0:05', '12:38'].entries()) {
+      const item = items[index] as HTMLElement;
+      expect(
+        within(item).getByRole('button', {
+          name: `Editar a nota do marcador em ${time}`,
+        }),
+      ).toBeTruthy();
+      expect(
+        within(item).getByRole('button', {
+          name: `Apagar o marcador em ${time}`,
+        }),
+      ).toBeTruthy();
+    }
     expect(
-      screen.getByRole('heading', { name: /Marcadores/ }).textContent,
+      screen.getByRole('heading', { name: /^Seus marcadores aqui/ })
+        .textContent,
     ).toContain('2');
   });
 
@@ -175,7 +187,7 @@ describe('BookmarkList (KBC-042 FR-3, FR-4)', () => {
       TestBed.tick();
       expect(screen.queryByRole('button', { name: 'Desfazer' })).toBeNull();
       expect(document.activeElement).toBe(
-        screen.getByRole('heading', { name: /Marcadores/ }),
+        screen.getByRole('heading', { name: /^Seus marcadores aqui/ }),
       );
     } finally {
       vi.useRealTimers();

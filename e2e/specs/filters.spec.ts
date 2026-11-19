@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { startInSearchView } from './search-view.js';
+import { startInSearchView, modeRadio, expectSummary } from './search-view.js';
 
 test.beforeEach(startInSearchView);
 
@@ -13,7 +13,7 @@ async function askSemantic(page: Page, question: string): Promise<void> {
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
     'Hermetismo',
   );
-  await page.getByRole('radio', { name: 'Por significado' }).check();
+  await (await modeRadio(page, 'Por significado')).check();
   await page.getByLabel('Sua pergunta').fill(question);
   await page.getByRole('button', { name: 'Buscar' }).click();
 }
@@ -28,33 +28,36 @@ test.describe('desktop filters', () => {
     page,
   }) => {
     await askSemantic(page, 'natureza');
-    await expect(
-      page.getByText(/3 documentos · Por significado/),
-    ).toBeVisible();
+    await expectSummary(page, /3 documentos/, 'Por significado');
     await page.getByRole('button', { name: /^Assuntos/ }).click();
     await expect(page.getByRole('checkbox', { name: /Cabala/ })).toBeVisible();
     await page.getByRole('checkbox', { name: /Cabala/ }).check();
-    await expect(
-      page.getByText(/2 documentos · Por significado/),
-    ).toBeVisible();
+    // The tick waits for "Aplicar" (subjectsPopover).
+    await expectSummary(page, /3 documentos/, 'Por significado');
+    await page.getByRole('button', { name: 'Aplicar' }).click();
+    await expectSummary(page, /2 documentos/, 'Por significado');
     await expect(page.locator('app-result-message')).toHaveCount(1);
-    await page.keyboard.press('Escape');
     await page
       .getByRole('button', { name: 'Remover Assuntos: Cabala' })
       .click();
-    await expect(
-      page.getByText(/3 documentos · Por significado/),
-    ).toBeVisible();
+    await expectSummary(page, /3 documentos/, 'Por significado');
   });
 
   test('AC-6: copies are grouped in one card and can be opened', async ({
     page,
   }) => {
     await askSemantic(page, 'sétupla');
+    // One result for the document: its copy is no card of its own.
     await expect(
-      page.getByRole('button', { name: /A Natureza Sétupla/ }),
+      page
+        .locator('app-result-card')
+        .filter({ hasText: /A Natureza Sétupla/i }),
     ).toHaveCount(1);
-    await page.getByRole('button', { name: '+1 cópia' }).click();
+    // A lone best result: its copy in "Cópia deste documento" beside it, "+1 cópia" a pill.
+    await expect(page.getByText('+1 cópia')).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Cópia deste documento' }),
+    ).toBeVisible();
     await page
       .getByRole('button', { name: /a-natureza-s-tupla-5\.md/ })
       .click();
@@ -73,6 +76,7 @@ test.describe('desktop filters', () => {
     ).toHaveCount(0);
     await page.getByRole('button', { name: /^Ligação com o tema/ }).click();
     await page.getByRole('checkbox', { name: /Fora do tema/ }).check();
+    await page.getByRole('button', { name: 'Aplicar' }).click();
     await expect(
       page.getByRole('button', { name: /Torta de pêssego/ }),
     ).toBeVisible();
@@ -85,7 +89,7 @@ test.describe('mobile filter sheet', () => {
     'the sheet is the mobile layout',
   );
 
-  test('AC-10: Cancelar keeps the filters and "Ver resultados" applies them', async ({
+  test('AC-10: dismissing the sheet keeps the filters and "Ver resultados" applies them', async ({
     page,
   }) => {
     await askSemantic(page, 'natureza');
@@ -93,7 +97,9 @@ test.describe('mobile filter sheet', () => {
     await page.getByRole('button', { name: 'Filtros', exact: true }).click();
     const sheet = page.getByRole('dialog', { name: 'Filtros' });
     await sheet.getByRole('checkbox', { name: /Cabala/ }).check();
-    await sheet.getByRole('button', { name: 'Cancelar' }).click();
+    // filterSections has no Cancelar: Escape (or the backdrop) leaves the filters as they were.
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
     await expect(page.getByText(/3 documentos ·/)).toBeVisible();
     await page.getByRole('button', { name: 'Filtros', exact: true }).click();
     await sheet.getByRole('checkbox', { name: /Cabala/ }).check();
@@ -143,19 +149,20 @@ test.describe('paging and empty filters', () => {
       });
     });
     const phone = (viewport?.width ?? 0) < 1024;
+    // "Tipo de texto": its popover on desktop, its own sheet on a phone (cmResults).
+    await page.getByRole('button', { name: /^Tipo de texto/ }).click();
+    await page.getByRole('checkbox', { name: /Texto\/apostila/ }).check();
+    await page.getByRole('button', { name: 'Aplicar' }).click();
+    await expect(
+      page.getByText('Nada encontrado para “ritmo” com estes filtros.'),
+    ).toBeVisible();
+    // cmEmpty: a phone's shorter "Remover o filtro de tipo".
     await page
       .getByRole('button', {
-        name: phone ? 'Filtros' : /^Tipo de texto/,
-        exact: phone,
+        name: phone
+          ? 'Remover o filtro de tipo'
+          : 'Remover Tipo de texto: Texto/apostila',
       })
-      .click();
-    await page.getByRole('checkbox', { name: /Texto\/apostila/ }).check();
-    if (phone) await page.getByRole('button', { name: VIEW_RESULTS }).click();
-    await expect(
-      page.getByText('Nada encontrado para "ritmo" com estes filtros.'),
-    ).toBeVisible();
-    await page
-      .getByRole('button', { name: 'Remover Tipo de texto: Texto/apostila' })
       .last()
       .click();
     await expect(page.locator('app-result-card').first()).toBeVisible();
@@ -182,10 +189,14 @@ test.describe('paging and empty filters', () => {
     await page
       .getByRole('checkbox', { name: /Cosmologia Espiritual e Metafísica/ })
       .check();
-    if (phone) await page.getByRole('button', { name: VIEW_RESULTS }).click();
-    await expect(
-      page.getByRole('button', { name: /Remover Assuntos/ }),
-    ).toBeVisible();
+    await page
+      .getByRole('button', { name: phone ? VIEW_RESULTS : 'Aplicar' })
+      .click();
+    // A phone has no strip of applied filters (cmResults): "Filtros (1)" says it.
+    if (!phone)
+      await expect(
+        page.getByRole('button', { name: /Remover Assuntos/ }),
+      ).toBeVisible();
     expect(await overflow()).toBeLessThanOrEqual(0);
     if (phone)
       await expect(
@@ -223,9 +234,7 @@ test.describe('authorship (KBC-020)', () => {
     page,
   }) => {
     await askSemantic(page, 'natureza');
-    await expect(
-      page.getByText(/3 documentos · Por significado/),
-    ).toBeVisible();
+    await expectSummary(page, /3 documentos/, 'Por significado');
     const control = page.getByRole('radiogroup', { name: 'Autoria' });
     await expect(
       control.getByRole('radio', { name: /^Todos 3/ }),
@@ -235,15 +244,18 @@ test.describe('authorship (KBC-020)', () => {
     ).toBeVisible();
     const cards = page.locator('app-result-card');
     await expect(cards).toHaveCount(3);
-    await expect(cards.getByText('Mestre Laércio')).toHaveCount(1);
-    await expect(cards.getByText('Outros autores')).toHaveCount(2);
+    // Each card draws its authorship once: the badge on the best card, the name in text on
+    // a row of the table (the other form is in the DOM for the other layout, not shown).
+    const shownAuthor = (name: string) =>
+      cards.locator('app-authorship-badge:visible', { hasText: name });
+    await expect(shownAuthor('Mestre Laércio')).toHaveCount(1);
+    await expect(shownAuthor('Outros autores')).toHaveCount(2);
 
     await control.getByRole('radio', { name: /Outros autores/ }).check();
-    await expect(
-      page.getByText(/2 documentos · Por significado/),
-    ).toBeVisible();
+    await expectSummary(page, /2 documentos/, 'Por significado');
     await expect(page.locator('app-result-message')).toHaveCount(1);
     await expect(cards).toHaveCount(2);
+    await expect(shownAuthor('Mestre Laércio')).toHaveCount(0);
     await expect(cards.getByText('Mestre Laércio')).toHaveCount(0);
 
     await control.getByRole('radio', { name: /Mestre Laércio/ }).check();
@@ -255,7 +267,10 @@ test.describe('authorship (KBC-020)', () => {
     });
     await expect(about.getByText('Mestre Laércio')).toBeVisible();
     await expect(about.getByText('José Laércio do Egito')).toBeVisible();
-    await panel.getByRole('button', { name: /Fechar/ }).click();
+    await panel
+      .getByRole('button', { name: 'Fechar', exact: true })
+      .first()
+      .click();
 
     await control.getByRole('radio', { name: /^Todos/ }).check();
     await expect(cards).toHaveCount(3);

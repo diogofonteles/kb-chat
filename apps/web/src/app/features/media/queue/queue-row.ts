@@ -14,7 +14,7 @@ import type {
   QueueAction,
   RetryStage,
 } from '@kb-chat/contracts';
-import { UiCover, UiPill, type Tone } from '@ui/index.js';
+import { NEUTRAL_COVER, UiCover, UiPill, type Tone } from '@ui/index.js';
 import { mediaPagePath } from '@core/media/media-api.js';
 import { editPagePath } from '@core/media/media-edit-api.js';
 import { preparationPagePath } from '@core/media/preparation-api.js';
@@ -136,7 +136,13 @@ export class QueueRow {
     if (step === null || !this.canEdit()) return mediaPagePath(mediaId);
     return step === 3 ? editPagePath(mediaId) : preparationPagePath(mediaId);
   });
-  protected readonly stateText = computed(() => queueStateText(this.item()));
+  /** Beside its "Falhou" pill, a failure says only why (v2 · Fila). */
+  protected readonly stateText = computed(() =>
+    queueStateText(this.item(), { pillSaysFailed: this.failed() }),
+  );
+  /** A row that failed has the grey cover (queue.js: "Arquivo corrompido"). */
+  protected readonly failed = computed(() => this.status() === 'failed');
+  protected readonly neutral = NEUTRAL_COVER;
   private readonly status = computed(() => queueStatus(this.item()));
   protected readonly tone = computed(() => STATUS_TONE[this.status()]);
   protected readonly toneWord = computed(() => STATUS_WORD[this.status()]());

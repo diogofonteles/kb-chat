@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { CSRF, expect, test } from './fixtures.js';
 import { startNewConversation } from './shell-helpers.js';
+import { chooseView, expectView } from './search-view.js';
 
 /**
  * "Pesquisa com IA" (KBC-008) against the stub agent (KB_CHAT_LLM=stub): it searches, finds
@@ -45,18 +46,14 @@ test.beforeEach(async ({ page }) => {
 test('opens in the research view with the provider configured, and remembers the choice', async ({
   page,
 }) => {
-  await expect(
-    page.getByRole('radio', { name: /Pesquisa com IA/ }),
-  ).toBeChecked();
+  await expectView(page, 'research');
   await expect(
     page.getByText('O que você quer pesquisar no acervo?'),
   ).toBeVisible();
   await expect(page.getByRole('group', { name: 'Como buscar' })).toHaveCount(0);
-  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
+  await chooseView(page, 'search');
   await page.reload();
-  await expect(
-    page.getByRole('radio', { name: 'Buscar documentos' }),
-  ).toBeChecked();
+  await expectView(page, 'search');
 });
 
 test('KBC-011: "Rápido | Profundo" picks the profile of the next question and is remembered', async ({
@@ -74,6 +71,9 @@ test('KBC-011: "Rápido | Profundo" picks the profile of the next question and i
     'deep',
   );
   await page.reload();
+  // On a phone the conversation's profiles float over the box while it is in use.
+  if ((page.viewportSize()?.width ?? 1440) < 1024)
+    await page.getByLabel('Sua pergunta').focus();
   await expect(page.getByRole('radio', { name: 'Profundo' })).toBeChecked();
 });
 
@@ -94,10 +94,19 @@ test('KBC-017 AC-9: "Exaustivo" explains itself, asks with the exhaustive profil
   await expect(
     page.getByText(/Varre o acervo inteiro.*pode levar vários minutos/),
   ).toBeVisible();
+  // The question box's chip is drawn 32 high (v2), its radio the 44 target around it; the
+  // phone's chips are 32 buttons whose ::after reaches the 44 target (MA-03).
   const option = await page
     .locator('.profile-option')
     .last()
-    .evaluate((el) => el.getBoundingClientRect().height);
+    .evaluate((el) => {
+      const radio = el.querySelector('.profile-radio');
+      if (radio) return radio.getBoundingClientRect().height;
+      const after = getComputedStyle(el, '::after');
+      const top = parseFloat(after.top) || 0;
+      const bottom = parseFloat(after.bottom) || 0;
+      return el.getBoundingClientRect().height - top - bottom;
+    });
   expect(option).toBeGreaterThanOrEqual(44);
   const asked = page.waitForRequest(
     (request) =>
@@ -275,7 +284,13 @@ test('ADR 0009: text written before a tool call leaves the answer and shows amon
 }) => {
   const answer = await research(page, 'natureza sétupla');
   await expect(answer.locator('.answer')).not.toContainText('confiro');
-  await answer.getByText(/Pesquisou 2 vezes · leu 1 documento/).click();
+  await expect(
+    answer.getByText(/Pesquisou 2 vezes · leu 1 documento/),
+  ).toBeVisible();
+  // The latest answer's steps open by themselves on desktop (chat-research-answer).
+  const steps = answer.locator('details.steps');
+  if ((await steps.getAttribute('open')) === null)
+    await steps.locator('summary').click();
   await expect(
     answer.getByText(
       'Pensando: Um dos documentos parece tratar disso; confiro o trecho.',
@@ -333,14 +348,14 @@ test('AC-5: each view keeps its conversation when switching back and forth', asy
   page,
 }) => {
   await research(page, 'natureza sétupla');
-  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
+  await chooseView(page, 'search');
   await page.getByLabel('Sua pergunta').fill('ritmo');
   await page.getByRole('button', { name: 'Buscar' }).click();
   await expect(page.locator('app-result-card').first()).toBeVisible();
-  await page.getByRole('radio', { name: /Pesquisa com IA/ }).check();
+  await chooseView(page, 'research');
   await expect(page.getByText(/Segundo o acervo/)).toBeVisible();
   await expect(page.locator('app-result-card')).toHaveCount(0);
-  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
+  await chooseView(page, 'search');
   await expect(page.locator('app-result-card').first()).toBeVisible();
 });
 
@@ -348,13 +363,13 @@ test('AC-6: the search view never calls the AI, and the research view shows no c
   page,
 }) => {
   const researchCalls = countResearchCalls(page);
-  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
+  await chooseView(page, 'search');
   await page.getByLabel('Sua pergunta').fill('ritmo');
   await page.getByRole('button', { name: 'Buscar' }).click();
   await expect(page.locator('app-result-card').first()).toBeVisible();
   expect(researchCalls()).toBe(0);
   await expect(page.getByText(/Resposta gerada por IA/)).toHaveCount(0);
-  await page.getByRole('radio', { name: /Pesquisa com IA/ }).check();
+  await chooseView(page, 'research');
   await research(page, 'ritmo');
   expect(researchCalls()).toBe(1);
   await expect(page.locator('app-result-card')).toHaveCount(0);

@@ -27,6 +27,7 @@ import {
   type LibraryPage as LibraryAnswer,
   type LibrarySearch,
   type ListeningPreferences,
+  type Topic,
 } from '@kb-chat/contracts';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { filter, firstValueFrom, take } from 'rxjs';
@@ -38,6 +39,7 @@ import { UsageLog } from '@core/usage/usage-log.js';
 import { By } from '@angular/platform-browser';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { CollectionHeading } from '@features/chat/collection-heading.js';
+import { aTopic } from '../../../testing/fixtures.js';
 import { answeringLevels } from '../../../testing/level-fixtures.js';
 import { UploadPanel } from '../upload-panel.js';
 import {
@@ -50,6 +52,7 @@ import {
   mediaId,
   sessionAs,
 } from '../../../testing/media-fixtures.js';
+import { LibraryControls } from './library-controls.js';
 import { LibraryPage, SEARCH_DEBOUNCE_MS } from './library-page.js';
 
 const PREFS = '/api/v1/media/preferences';
@@ -114,7 +117,8 @@ const PREFERENCES: ListeningPreferences = {
   skipSilences: false,
   wordHighlight: true,
   ...DEFAULT_LIBRARY_PREFERENCES,
-  // Most of this file is about the list itself: every collection, by choice (KBC-091).
+  // Most of this file is about the list itself: every collection, by the address's choice
+  // ("Todas as mídias", `all` below); the account's `allTopics` no longer opens it so.
   libraryFilters: {
     ...DEFAULT_LIBRARY_PREFERENCES.libraryFilters,
     allTopics: true,
@@ -128,6 +132,8 @@ async function renderLibrary(
     acervo?: string;
     busca?: string;
     routes?: Routes;
+    /** "Todas as mídias" in the address (the "Ver todas as mídias" button); false: the collection in use. */
+    all?: boolean;
   } = {},
 ) {
   const media: FakeMedia = fakeMediaElement();
@@ -151,6 +157,9 @@ async function renderLibrary(
           snapshot: {
             queryParamMap: new Map([
               ...(options.acervo ? [['acervo', options.acervo] as const] : []),
+              ...((options.all ?? !options.acervo)
+                ? [['acervos', 'todos'] as const]
+                : []),
               ...(options.busca ? [['busca', options.busca] as const] : []),
             ]),
           },
@@ -159,6 +168,9 @@ async function renderLibrary(
     ],
   });
   const http = TestBed.inject(HttpTestingController);
+  // The address says it too: the router's own navigations read the scope from it.
+  if (options.all ?? !options.acervo)
+    await TestBed.inject(Router).navigateByUrl('/?acervos=todos');
   const settle = () => view.fixture.whenStable();
   /** Runs effects and change detection, so a resource sends its request (no waiting). */
   const tick = async () => {
@@ -285,9 +297,11 @@ describe('LibraryPage (T16, KBC-051)', () => {
       .expectOne('/api/v1/media/library?state=in-progress&sort=recently-played')
       .flush(aPage([anItem(1, { positionMs: 5 })]));
     await settle();
-    fireEvent.change(screen.getByLabelText('Autoria'), {
-      target: { value: 'mestre-laercio' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Autoria' }));
+    await settle();
+    fireEvent.click(
+      screen.getByRole('menuitemradio', { name: /Mestre Laércio, principal/ }),
+    );
     await tick();
     http
       .expectOne(
@@ -307,7 +321,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
         states: ['in-progress'],
         authors: ['mestre-laercio'],
         topic: null,
-        allTopics: true,
+        allTopics: false,
         subject: null,
       },
     });
@@ -342,7 +356,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
         subject: null,
       },
     });
-    expect(screen.getByText('Nenhuma mídia com estes filtros.')).toBeTruthy();
+    expect(screen.getByText('Nenhuma mídia com estes filtros')).toBeTruthy();
     expect(
       screen.getAllByRole('button', { name: 'Limpar filtros' }).length,
     ).toBeGreaterThan(0);
@@ -361,8 +375,11 @@ describe('LibraryPage (T16, KBC-051)', () => {
     });
     const reader = await renderLibrary();
     await reader.open(empty);
+    expect(screen.getByText('Ainda não há mídias para você')).toBeTruthy();
     expect(
-      screen.getByText('Ainda não há mídias nos acervos liberados para você.'),
+      screen.getByText(
+        'Os áudios dos acervos liberados para você aparecem aqui assim que forem enviados.',
+      ),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Enviar mídia' })).toBeNull();
     reader.fixture.destroy();
@@ -372,9 +389,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       features: ['media', 'media-library', 'media-upload'],
     });
     await sender.open(empty);
-    expect(
-      screen.getByText('Ainda não há mídias nos seus acervos.'),
-    ).toBeTruthy();
+    expect(screen.getByText('Comece enviando um áudio')).toBeTruthy();
     expect(
       screen.getAllByRole('button', { name: 'Enviar mídia' }),
     ).toHaveLength(2);
@@ -412,6 +427,23 @@ describe('LibraryPage (T16, KBC-051)', () => {
     pressed.mockReturnValue(false);
     fireEvent.focusIn(link);
     expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+  });
+
+  it("marks the page's root while a selection is on, for the shell to hide the phone's navigation", async () => {
+    const { open, settle } = await renderLibrary();
+    await open(aPage([anItem(1), anItem(2)]));
+    const root = document.documentElement;
+    expect(root.hasAttribute('data-choosing')).toBe(false);
+
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar Palestra 1' }),
+    );
+    await settle();
+    expect(root.hasAttribute('data-choosing')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar seleção' }));
+    await settle();
+    expect(root.hasAttribute('data-choosing')).toBe(false);
   });
 
   it('marks the selected media as heard and says so (AC-7)', async () => {
@@ -558,7 +590,12 @@ describe('LibraryPage (T16, KBC-051)', () => {
     const { open, http, settle, tick } = await renderLibrary();
     const played = anItem(1, { lastPlayedAt: '2026-11-01T10:00:00.000Z' });
     await open(aPage([played]), aHome({ recentlyPlayed: [played] }));
-    fireEvent.click(screen.getByRole('button', { name: 'Limpar recentes' }));
+    // Nothing to continue: "Limpar recentes" is in the header's ⋯ (media-library).
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mais ações da Biblioteca' }),
+    );
+    await settle();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Limpar recentes' }));
     await settle();
     expect(
       screen.getByText(
@@ -574,7 +611,21 @@ describe('LibraryPage (T16, KBC-051)', () => {
       .expectOne(HOME)
       .flush(aHome({ recentsClearedAt: '2026-11-03T10:00:00.000Z' }));
     await settle();
-    expect(screen.getByText('Nada ouvido desde que você limpou.')).toBeTruthy();
+    expect(
+      screen
+        .getAllByRole('status')
+        .some((region) =>
+          region.textContent?.includes('Ouvidas recentemente foram limpas.'),
+        ),
+    ).toBe(true);
+    // Nothing is left to clear: the ⋯ no longer offers it.
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mais ações da Biblioteca' }),
+    );
+    await settle();
+    expect(
+      screen.queryByRole('menuitem', { name: 'Limpar recentes' }),
+    ).toBeNull();
   });
 
   it('switches to the grid and keeps the choice in the account (AC-10)', async () => {
@@ -664,7 +715,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: ['in-progress'],
           authors: [],
           topic: null,
-          allTopics: true,
+          allTopics: false,
           subject: 'concept:cabala',
         },
       });
@@ -875,8 +926,15 @@ describe('LibraryPage (T16, KBC-051)', () => {
 
     it('moves through "Limpar recentes": into the confirmation, back, and to the section', async () => {
       const { open, http, settle } = await renderLibrary();
-      const played = anItem(1, { lastPlayedAt: '2026-11-01T10:00:00.000Z' });
-      await open(aPage([played]), aHome({ recentlyPlayed: [played] }));
+      // Something to continue: "Continuar ouvindo" holds the link.
+      const played = anItem(1, {
+        lastPlayedAt: '2026-11-01T10:00:00.000Z',
+        positionMs: 60_000,
+      });
+      await open(
+        aPage([played]),
+        aHome({ recentlyPlayed: [played], continueListening: [played] }),
+      );
 
       fireEvent.click(screen.getByRole('button', { name: 'Limpar recentes' }));
       await settle();
@@ -897,8 +955,9 @@ describe('LibraryPage (T16, KBC-051)', () => {
       http
         .expectOne({ method: 'DELETE', url: '/api/v1/media/library/recents' })
         .flush(null);
+      // The section that asked may go: the focus waits on the list's heading.
       expect(document.activeElement).toBe(
-        screen.getByRole('button', { name: 'Ouvidas recentemente' }),
+        screen.getByRole('heading', { name: 'Todas' }),
       );
     });
 
@@ -1019,7 +1078,9 @@ describe('LibraryPage (T16, KBC-051)', () => {
       await library.settle();
 
       expect(screen.queryByText('Continuar ouvindo')).toBeNull();
-      expect(screen.queryByText('Ouvidas recentemente')).toBeNull();
+      expect(
+        screen.queryByRole('region', { name: 'Ouvidas recentemente' }),
+      ).toBeNull();
       expect(screen.queryByRole('heading', { name: 'Todas' })).toBeNull();
       expect(screen.queryByRole('link', { name: 'Palestra 1' })).toBeNull();
       expect(screen.queryByRole('group', { name: 'Visão' })).toBeNull();
@@ -1038,7 +1099,11 @@ describe('LibraryPage (T16, KBC-051)', () => {
     it('AC-1: a result shows the passage with the word marked and its time', async () => {
       await found({ features: SPEAKER }, anAnswer([aHit(1)]));
 
-      expect(screen.getByRole('heading', { name: '1 resultado' })).toBeTruthy();
+      expect(
+        screen.getByRole('heading', {
+          name: '1 resultado para “padre orlando”',
+        }),
+      ).toBeTruthy();
       const row = screen.getByRole('listitem');
       expect(row.querySelector('mark')?.textContent).toBe('Orlando');
       expect(within(row).getByText('8:15')).toBeTruthy();
@@ -1067,10 +1132,13 @@ describe('LibraryPage (T16, KBC-051)', () => {
           aHit(2, { trackCount: 23, match: 'title', passage: null }),
         ]),
       );
+      // One muted line each: the place first, then the author and the length.
       expect(
-        screen.getByText('Entrevista de 1985 · faixa 3 de 23'),
+        screen.getByText(/^Entrevista de 1985 · faixa 3 de 23 · .+$/),
       ).toBeTruthy();
-      expect(screen.getByText('Gravação completa · 23 faixas')).toBeTruthy();
+      expect(
+        screen.getByText(/^Gravação completa · 23 faixas · .+$/),
+      ).toBeTruthy();
     });
 
     it('AC-8: ▶ plays 2 s before the passage, and the title opens there', async () => {
@@ -1108,8 +1176,25 @@ describe('LibraryPage (T16, KBC-051)', () => {
       await found({ features: SPEAKER }, anAnswer([]), 'conselheira');
 
       expect(
+        screen.getByText('Nada encontrado para “conselheira”'),
+      ).toBeTruthy();
+      // Each width words it as its frame does (media-library-search-empty and its @mobile).
+      const hint = (cls: string, words: string) =>
         screen.getByText(
-          "Nada encontrado para 'conselheira' na fala, no título, no autor ou nos assuntos.",
+          (_, node) =>
+            node?.classList.contains(cls) === true &&
+            node.textContent?.replace(/\s+/g, ' ').trim() === words,
+        );
+      expect(
+        hint(
+          'wide',
+          'Procuramos na fala, no título, no autor e nos assuntos. Na fala a busca é por palavra inteira: confira a escrita ou tente outra palavra.',
+        ),
+      ).toBeTruthy();
+      expect(
+        hint(
+          'narrow',
+          'Na fala, a busca é por palavra inteira: confira a escrita ou tente outra palavra.',
         ),
       ).toBeTruthy();
       expect(
@@ -1127,14 +1212,13 @@ describe('LibraryPage (T16, KBC-051)', () => {
         'conselheira',
       );
       expect(
-        screen.getByText(
-          "Nada encontrado para 'conselheira' no título, no autor ou nos assuntos.",
-        ),
+        screen.getByText('Procuramos no título, no autor e nos assuntos.'),
       ).toBeTruthy();
+      expect(screen.queryByText(/na fala/)).toBeNull();
     });
 
-    it('AC-6: the filters in force go with the words, and only Acervo stays on screen', async () => {
-      const library = await renderLibrary({ features: SPEAKER });
+    it('AC-6: the filters in force go with the words, and their chips stay pressed over the results', async () => {
+      const library = await renderLibrary({ features: SPEAKER, all: false });
       await library.open(aPage([anItem(1)]), aHome(), {
         ...PREFERENCES,
         libraryFilters: {
@@ -1151,15 +1235,19 @@ describe('LibraryPage (T16, KBC-051)', () => {
       request.flush(anAnswer([]));
       await library.settle();
 
-      expect(screen.queryByRole('button', { name: /Ouvidas/ })).toBeNull();
-      expect(screen.getByText('1 filtro em uso')).toBeTruthy();
+      // The chips stay over the results (media-library-search): the one in force pressed.
+      expect(
+        screen
+          .getByRole('button', { name: /^Ouvidas$/ })
+          .getAttribute('aria-pressed'),
+      ).toBe('true');
       expect(
         screen.getAllByRole('button', { name: 'Limpar filtros' }).length,
       ).toBeGreaterThan(0);
     });
 
-    it('KBC-091 QA I-10: nothing found in one collection offers every collection, and the focus follows', async () => {
-      const library = await renderLibrary({ features: SPEAKER });
+    it('nothing found in one collection: the search stays in it, no chip takes the collection out (owner, 2026-11-19)', async () => {
+      const library = await renderLibrary({ features: SPEAKER, all: false });
       await library.open(aPage([anItem(1)]), aHome(), {
         ...PREFERENCES,
         libraryFilters: {
@@ -1177,38 +1265,15 @@ describe('LibraryPage (T16, KBC-051)', () => {
       expect(
         screen.queryByRole('button', { name: 'Limpar filtros' }),
       ).toBeNull();
-
-      fireEvent.click(
-        screen.getByRole('button', { name: 'Buscar em todos os acervos' }),
-      );
-      await library.tick();
-
-      const save = library.http.expectOne({ method: 'PUT', url: PREFS });
-      expect(save.request.body).toEqual({
-        libraryFilters: { ...NO_LIBRARY_FILTERS, allTopics: true },
-      });
-      save.flush(PREFERENCES);
-      await library.tick();
-      library.http.expectOne(HOME).flush(aHome());
-      library.http.expectOne(FIRST).flush(aPage([anItem(1)]));
-      const everywhere = library.http.expectOne(
-        (request) =>
-          request.url.startsWith(`${SEARCH}?`) &&
-          request.url.includes('q=orlando'),
-      );
-      expect(everywhere.request.url).not.toContain('topic=');
-      everywhere.flush(anAnswer([aHit(2)]));
-      await library.settle();
-      expect(screen.getByRole('link', { name: 'Faixa 2' })).toBeTruthy();
-      expect(document.activeElement).toBe(
-        screen.getByRole('heading', { name: /resultado/, level: 3 }),
-      );
+      expect(
+        screen.queryByRole('button', { name: /^Ver todos os acervos/ }),
+      ).toBeNull();
     });
 
     it('KBC-091 QA I-10: across every collection, nothing found has no such way out', async () => {
       await found({ features: SPEAKER }, anAnswer([]), 'conselheira');
       expect(
-        screen.queryByRole('button', { name: 'Buscar em todos os acervos' }),
+        screen.queryByRole('button', { name: /^Ver todos os acervos/ }),
       ).toBeNull();
     });
 
@@ -1245,7 +1310,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       expect(screen.getByRole('link', { name: 'Faixa 1' })).toBeTruthy();
       expect(
         screen
-          .getByRole('region', { name: '1 resultado' })
+          .getByRole('region', { name: /^1 resultado para/ })
           .getAttribute('aria-busy'),
       ).toBe('true');
       newer.flush(anAnswer([]));
@@ -1260,7 +1325,9 @@ describe('LibraryPage (T16, KBC-051)', () => {
         anAnswer([aHit(1)], { nextCursor: '50', total: 200, capped: true }),
       );
       expect(
-        screen.getByRole('heading', { name: 'Mais de 200 resultados' }),
+        screen.getByRole('heading', {
+          name: 'Mais de 200 resultados para “padre orlando”',
+        }),
       ).toBeTruthy();
       fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais' }));
       await library.tick();
@@ -1293,13 +1360,19 @@ describe('LibraryPage (T16, KBC-051)', () => {
     });
 
     it('keeps the words in the address, and comes back with them', async () => {
-      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const library = await found(
+        { features: SPEAKER, all: false },
+        anAnswer([aHit(1)]),
+      );
       await library.settle();
       expect(TestBed.inject(Router).url).toBe('/?busca=padre%20orlando');
     });
 
     it('follows the address: "Biblioteca" in the sidebar leaves the search', async () => {
-      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const library = await found(
+        { features: SPEAKER, all: false },
+        anAnswer([aHit(1)]),
+      );
       await TestBed.inject(Router).navigateByUrl('/');
       await library.settle();
       expect((box() as HTMLInputElement).value).toBe('');
@@ -1307,7 +1380,10 @@ describe('LibraryPage (T16, KBC-051)', () => {
     });
 
     it('takes one value from a repeated address param', async () => {
-      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const library = await found(
+        { features: SPEAKER, all: false },
+        anAnswer([aHit(1)]),
+      );
       await TestBed.inject(Router).navigateByUrl('/?busca=manaus&busca=outra');
       await library.tick();
       expect((box() as HTMLInputElement).value).toBe('manaus');
@@ -1387,6 +1463,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       const library = await renderLibrary({
         features: SPEAKER,
         routes: [{ path: 'outra', children: [] }],
+        all: false,
       });
       await library.open(aPage([anItem(1)]));
       const router = TestBed.inject(Router);
@@ -1402,7 +1479,10 @@ describe('LibraryPage (T16, KBC-051)', () => {
     });
 
     it('writes the address again when the same words come back after it moved', async () => {
-      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const library = await found(
+        { features: SPEAKER, all: false },
+        anAnswer([aHit(1)]),
+      );
       const router = TestBed.inject(Router);
       await router.navigateByUrl('/');
       await library.tick();
@@ -1514,7 +1594,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       '/api/v1/media/library?topic=hermetismo&sort=recently-played';
 
     async function following() {
-      const library = await renderLibrary();
+      const library = await renderLibrary({ all: false });
       library.http.expectOne(PREFS).flush(FOLLOWS);
       await library.tick();
       library.http.expectOne(`${HOME}?topic=hermetismo`).flush(aHome());
@@ -1529,64 +1609,153 @@ describe('LibraryPage (T16, KBC-051)', () => {
         kind: 'topic',
         slug: 'hermetismo',
       });
+      // The collection is the page's scope, named in its header, never a removable chip nor
+      // a filter "Limpar filtros" takes out (owner, 2026-11-19).
       expect(
         screen.queryByRole('button', { name: 'Limpar filtros' }),
       ).toBeNull();
+      expect(
+        screen.queryByRole('button', {
+          name: /^Ver todos os acervos \(tirar /,
+        }),
+      ).toBeNull();
+      expect(
+        document.querySelector('.library-scope')?.textContent?.trim(),
+      ).toBe('Hermetismo');
     });
 
-    it('"Todos os acervos" is a choice kept in the account, and the header drops the name', async () => {
+    it('a parent says its sub-collections in the header: the list holds them too (ADR 0028 §6)', async () => {
+      const { http, settle } = await following();
+      http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await settle();
+      const meta = () =>
+        document.querySelector('.ui-page-header__meta')?.textContent ?? '';
+      expect(meta()).toMatch(/^Acervo · /);
+      const list = TestBed.inject(ChatStore).topicList as WritableSignal<
+        Topic[]
+      >;
+      list.set([
+        ...list(),
+        aTopic({
+          slug: 'hermetismo/temas',
+          title: 'Temas',
+          parent: 'hermetismo',
+        }),
+      ]);
+      await settle();
+      expect(meta()).toMatch(/^Acervo com Temas · /);
+    });
+
+    it('"Todos os acervos" kept in the account no longer opens the library mixed (owner, 2026-11-19)', async () => {
+      const library = await renderLibrary({ all: false });
+      library.http.expectOne(PREFS).flush(PREFERENCES);
+      await library.tick();
+      library.http.expectOne(`${HOME}?topic=hermetismo`).flush(aHome());
+      library.http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await library.settle();
+      expect(TestBed.inject(CollectionHeading).scope()).toEqual({
+        kind: 'topic',
+        slug: 'hermetismo',
+      });
+    });
+
+    it('"Todas as mídias" is the address\'s choice (the "Ver todas as mídias" button): the header says it', async () => {
       const { http, settle, tick } = await following();
       http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
       await settle();
-      fireEvent.change(screen.getByLabelText('Acervo'), {
-        target: { value: '' },
-      });
+      await TestBed.inject(Router).navigateByUrl('/?acervos=todos');
       await tick();
-      const save = http.expectOne({ method: 'PUT', url: PREFS });
-      expect(save.request.body).toEqual({
-        libraryFilters: { ...NO_LIBRARY_FILTERS, allTopics: true },
-      });
-      save.flush(PREFERENCES);
       http.expectOne(HOME).flush(aHome());
       http.expectOne(FIRST).flush(aPage([anItem(1)]));
       await settle();
       expect(TestBed.inject(CollectionHeading).scope()).toEqual({
         kind: 'all',
       });
+      expect(
+        document.querySelector('.library-scope')?.textContent?.trim(),
+      ).toBe('Todas as mídias');
     });
 
-    it('a collection chosen in the sidebar ends "Todos os acervos" in the account too', async () => {
+    it('"Ver todas as mídias" is the explicit way to every collection, and "Ver só" the way back', async () => {
       const { http, settle, tick } = await following();
       http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
       await settle();
-      fireEvent.change(screen.getByLabelText('Acervo'), {
-        target: { value: '' },
-      });
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Ver todas as mídias' }),
+      );
       await tick();
-      http.expectOne({ method: 'PUT', url: PREFS }).flush(PREFERENCES);
+      expect(TestBed.inject(Router).url).toBe('/?acervos=todos');
+      // "Todas as mídias" lives in the address: the account's old flag is never set.
+      const toAll = http.expectOne({ method: 'PUT', url: PREFS });
+      expect(toAll.request.body).toMatchObject({
+        libraryFilters: { topic: null, allTopics: false },
+      });
+      toAll.flush(PREFERENCES);
+      http.expectOne(HOME).flush(aHome());
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+      expect(
+        document.querySelector('.library-scope')?.textContent?.trim(),
+      ).toBe('Todas as mídias');
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Ver só Hermetismo' }),
+      );
+      await tick();
+      expect(TestBed.inject(Router).url).toBe('/');
+      // One write, the collection's: nothing more to clear on the way back.
+      const back = http.expectOne({ method: 'PUT', url: PREFS });
+      expect(back.request.body).toMatchObject({
+        libraryFilters: { topic: 'hermetismo', allTopics: false },
+      });
+      back.flush(PREFERENCES);
+      http.expectOne(`${HOME}?topic=hermetismo`).flush(aHome());
+      http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await settle();
+      expect(
+        document.querySelector('.library-scope')?.textContent?.trim(),
+      ).toBe('Hermetismo');
+    });
+
+    it('a collection chosen in the sidebar ends "Todas as mídias": the list is that one\'s', async () => {
+      const { http, settle, tick } = await renderLibrary();
+      http.expectOne(PREFS).flush(FOLLOWS);
+      await tick();
       http.expectOne(HOME).flush(aHome());
       http.expectOne(FIRST).flush(aPage([anItem(1)]));
       await settle();
       (TestBed.inject(ChatStore).topicSlug as WritableSignal<string>).set(
         'alquimia',
       );
+      // The sidebar takes "Todas as mídias" out of the address with it.
+      await TestBed.inject(Router).navigateByUrl('/');
       await tick();
-      expect(
-        http.expectOne({ method: 'PUT', url: PREFS }).request.body,
-      ).toEqual({ libraryFilters: NO_LIBRARY_FILTERS });
+      http.expectOne(`${HOME}?topic=alquimia`).flush(aHome());
+      http
+        .expectOne('/api/v1/media/library?topic=alquimia&sort=recently-played')
+        .flush(aPage([anItem(1)]));
+      await settle();
+      expect(TestBed.inject(CollectionHeading).scope()).toEqual({
+        kind: 'topic',
+        slug: 'alquimia',
+      });
     });
 
     it('choosing a collection here selects it in the sidebar too', async () => {
-      const { http, settle, tick, chat } = await following();
+      const { http, settle, tick, chat, fixture } = await following();
       const page = aPage([anItem(1)]);
       http.expectOne(OF_TOPIC).flush({
         ...page,
         facets: { ...page.facets, topics: ['alquimia', 'hermetismo'] },
       });
       await settle();
-      fireEvent.change(screen.getByLabelText('Acervo'), {
-        target: { value: 'alquimia' },
-      });
+      // A collection is chosen in the sidebar (D5) or by a moved audio's notice: the
+      // filters' change reaches the page the same way.
+      fixture.debugElement
+        .query(By.directive(LibraryControls))
+        .componentInstance.filtersChange.emit({
+          kind: 'topic',
+          topic: 'alquimia',
+        });
       await tick();
       expect(chat.selectTopic).toHaveBeenCalledWith('alquimia');
       expect(
@@ -1627,7 +1796,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
         facets: { ...aPage([]).facets, topics: ['alquimia'] },
       });
       await settle();
-      expect(screen.getByText('Nenhuma mídia neste acervo.')).toBeTruthy();
+      expect(screen.getByText('Nenhuma mídia neste acervo')).toBeTruthy();
       expect(
         screen.getByRole('button', { name: 'Ver todos os acervos' }),
       ).toBeTruthy();
@@ -1636,6 +1805,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
     it('says where an audio sent to another collection went, with the way there', async () => {
       const library = await renderLibrary({
         features: ['media', 'media-library', 'media-upload'],
+        all: false,
       });
       const { fixture, http, settle, tick } = library;
       http.expectOne(PREFS).flush(FOLLOWS);
@@ -1683,7 +1853,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       http.expectNone(PREFS);
     });
 
-    it('keeps it in the account when a chip, the order or "Limpar filtros" write', async () => {
+    it('keeps it in the account when a chip, the order or "Limpar filtros" write (and clears the old "all" flag)', async () => {
       const { http, settle, start, tick } = await renderLibrary();
       await start(aHome(), {
         ...PREFERENCES,
@@ -1706,7 +1876,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: ['in-progress'],
           authors: [],
           topic: 'perdido',
-          allTopics: true,
+          allTopics: false,
           subject: null,
         },
       });
@@ -1734,7 +1904,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: [],
           authors: [],
           topic: 'perdido',
-          allTopics: true,
+          allTopics: false,
           subject: null,
         },
       });
@@ -1823,6 +1993,70 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(screen.getByRole('status').textContent).toContain(
       'Palestra 1 foi removido.',
     );
+  });
+
+  it('gives a failed file a box; chosen alone, a master removes it from the bar (media-library-selection@mobile)', async () => {
+    const { open, http, settle, tick } = await renderLibrary({ master: true });
+    await open(
+      aPage([
+        anItem(1),
+        anItem(2, { status: 'failed', durationMs: null }),
+        anItem(3, { status: 'failed', durationMs: null }),
+      ]),
+    );
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar Palestra 2' }),
+    );
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar Palestra 3' }),
+    );
+    await settle();
+    const bar = screen.getByRole('region', { name: 'Seleção' });
+    // Nothing to hear in a failed file: no marks, "Remover" instead.
+    expect(
+      within(bar).queryByRole('button', { name: 'Marcar como ouvida' }),
+    ).toBeNull();
+    fireEvent.click(within(bar).getByRole('button', { name: 'Remover' }));
+    await settle();
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Remover 2 áudios?')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remover' }));
+    http
+      .expectOne({ method: 'DELETE', url: `/api/v1/media/${mediaId(2)}` })
+      .flush(null);
+    http
+      .expectOne({ method: 'DELETE', url: `/api/v1/media/${mediaId(3)}` })
+      .flush(null);
+    await tick();
+    http.expectOne(FIRST).flush(aPage([anItem(1)]));
+    http.expectOne(HOME).flush(aHome());
+    await settle();
+    expect(screen.getByRole('status').textContent).toContain(
+      '2 áudios foram removidos.',
+    );
+    expect(screen.queryByRole('region', { name: 'Seleção' })).toBeNull();
+  });
+
+  it('marks only the ready ones of a mixed choice, and offers no "Remover" (nor to one who is not a master)', async () => {
+    const { open, http, settle } = await renderLibrary();
+    await open(
+      aPage([anItem(1), anItem(2, { status: 'failed', durationMs: null })]),
+    );
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar Palestra 2' }),
+    );
+    await settle();
+    const bar = screen.getByRole('region', { name: 'Seleção' });
+    expect(within(bar).queryByRole('button', { name: 'Remover' })).toBeNull();
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar Palestra 1' }),
+    );
+    await settle();
+    fireEvent.click(
+      within(bar).getByRole('button', { name: 'Marcar como ouvida' }),
+    );
+    const put = http.expectOne('/api/v1/media/played');
+    expect(put.request.body).toEqual({ ids: [mediaId(1)], played: true });
   });
 });
 

@@ -4,6 +4,19 @@
   display: block;
   min-height: 0;
   overflow-y: auto;
+  /* What takes the focus is never hidden under the phone's mini player (KBC-041 AC-16). */
+  scroll-padding-bottom: 5rem;
+}
+
+/* A phone's page runs under the foot (mini player and navigation, chat-page.css): what takes
+   the focus stops above all of it (KBC-041 AC-16). */
+@media (max-width: 1023px) {
+  :host {
+    scroll-padding-bottom: max(
+      5rem,
+      calc(var(--shell-foot-h, 0px) + var(--space-4))
+    );
+  }
 }
 
 .media {
@@ -29,14 +42,22 @@
 
 .hero-text {
   display: grid;
-  gap: var(--space-2);
   min-width: 0;
 }
 
 .hero-text h2 {
   display: grid;
-  gap: var(--space-2);
   margin: 0;
+}
+
+/* v2 · pageHeader: the kicker 13/16, 10 above the 64 title, the meta 10 under its line. */
+.hero .kicker {
+  margin-bottom: 0.625rem;
+  line-height: 1rem;
+}
+
+.hero .summary {
+  margin-top: 0.125rem;
 }
 
 .hero-text h2:focus {
@@ -48,6 +69,15 @@
   outline-offset: 2px;
 }
 
+/* The frame's title is 64 at 1440 (pageHeader size 64), on one line. */
+.hero .name {
+  font-size: clamp(2.25rem, 1rem + 3.4vw, 4rem);
+  padding-bottom: 0.12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* No collection chosen: the word alone is the title. */
 .kicker:only-child {
   font-size: var(--text-hero);
@@ -56,78 +86,86 @@
   line-height: 1.02;
 }
 
+/* The action bar (media-list actionBar): ▶ 56, shuffle, the two buttons, ⋯, then the title
+   filter (240) and "Autoria ▾" at the end. */
+/* v2 · media-list actionBar: everything 20 apart, the 28 icons bare, the table 16 under. */
 .actions-bar {
-  gap: var(--space-3);
+  gap: var(--space-5);
+  padding-bottom: var(--space-4);
 }
 
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  margin-left: auto;
+.actions-bar .ui-btn--outline {
+  border-color: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 
-.filter {
+.bar-icon {
+  color: var(--color-text-muted);
+}
+
+/* The bar's two text buttons are 36 px tall, 24 px in (media-list). */
+.actions-bar .ui-btn--sm {
+  min-height: 2.25rem;
+  padding: 0 var(--space-6);
+  font-size: var(--text-sm);
+}
+
+.bar-icon:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.bar-icon:disabled,
+.play-all:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.bar-more {
+  --menu-trigger-min: 1.75rem;
+  --menu-trigger-height: 1.75rem;
+  color: var(--color-text-muted);
+}
+
+.bar-space {
+  flex: 1 1 auto;
+}
+
+.actions-bar .filter {
   width: 15rem;
+  min-height: 2.5rem;
 }
 
 .filter input::-webkit-search-cancel-button {
   appearance: none;
 }
 
-.choice {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-height: 2rem;
-  padding: 0 var(--space-3) 0 var(--space-4);
-  border-radius: var(--radius-pill);
-  background: var(--overlay-3);
-  color: var(--color-text);
-  font-size: var(--text-sm);
-}
-
-.choice.on {
-  background: var(--color-text);
-  color: var(--color-bg);
-}
-
-.choice:focus-within {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-.choice .label {
-  font-weight: 600;
-}
-
-.choice select {
-  max-width: 14rem;
-  min-height: 2rem;
-  padding: 0 1.25rem 0 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  appearance: none;
-  cursor: pointer;
-}
-
-.choice select:focus {
-  outline: none;
-}
-
-.choice select option {
-  background: var(--color-elevated);
+.phone-action {
+  --ui-icon-btn-size: var(--target) !important;
   color: var(--color-text);
 }
 
-.caret {
-  position: absolute;
-  right: var(--space-3);
-  pointer-events: none;
+.phone-action.on {
+  color: var(--color-accent-text);
+}
+
+/* v2 · media-list@mobile: 🔍 and ⬆ 36 apart at the row's end, each still 44 tall. */
+@media (max-width: 1023px) {
+  .phone-action {
+    min-width: 2.25rem;
+    width: 2.25rem;
+  }
+
+  /* Side by side (the row's 4 gap taken back), the last glyph 16 from the screen's edge. */
+  .phone-action + .phone-action {
+    margin-left: -0.25rem;
+  }
+
+  .phone-action:last-child {
+    margin-right: -0.375rem;
+  }
+}
+
+.phone-tools {
+  display: none;
 }
 
 .content {
@@ -135,23 +173,29 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-2) var(--space-8) 0;
+  padding: 0 var(--space-8);
 }
 
-/* ---------- The track table: # · title · sent on · status · length · ⋯ ---------- */
+/* ---------- The track table: # · title · sent on · status · ⏱ · ⋯ ---------- */
 
+/* v2 · media-list: # 24 · title · sent 110 · status 260 · length 44 · ⋯ 18, 16 apart; the
+   head's own columns are drawn 28 to the right of the rows' (its clock over the length). */
 .table-head,
 .row {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr) 7rem 16rem 3.5rem 8rem;
+  grid-template-columns:
+    1.5rem minmax(0, 1fr)
+    6.875rem 16.25rem 2.75rem 1.125rem;
   column-gap: var(--space-4);
   padding: 0 var(--space-4);
 }
 
 .table-head {
+  grid-template-columns: 1.5rem minmax(0, 1fr) 6.875rem 16.25rem 1rem 1.125rem;
   grid-template-areas: 'lead title date status duration actions';
   align-items: center;
   min-height: 2.25rem;
+  margin-bottom: var(--space-2);
   border-bottom: 1px solid var(--overlay-line);
   color: var(--color-text-muted);
   font-size: var(--text-meta);
@@ -174,12 +218,43 @@
   grid-area: status;
 }
 
+.col-duration {
+  grid-area: duration;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .rows {
   display: flex;
   flex-direction: column;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* The first row 9 under the head's box (v2 · media-list), not the column's 16 + 8. */
+.table-head + .rows {
+  margin-top: -0.9375rem;
+}
+
+/* The title 15/18 and its author 13/16 right under it, centred in the 56 row (media-list). */
+@media (min-width: 1024px) {
+  .row:not(.table-head) {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .row .main {
+    margin-bottom: -1px;
+  }
+
+  .row .title {
+    line-height: 1.125rem;
+  }
+
+  .row .byline {
+    margin-top: 1px;
+    line-height: 1rem;
+  }
 }
 
 .row {
@@ -194,7 +269,8 @@
 }
 
 .row:hover,
-.row:focus-within {
+.row:focus-within,
+.row:has([aria-expanded='true']) {
   background: var(--overlay-2);
 }
 
@@ -206,6 +282,7 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The desktop table has no cover (media-list rowA); the phone's rows do. */
 .art {
   display: none;
 }
@@ -214,7 +291,6 @@
   grid-area: title;
   align-self: end;
   min-width: 0;
-  padding-top: var(--space-2);
   color: var(--color-text);
   text-decoration: none;
 }
@@ -249,6 +325,10 @@ a.main:hover .title {
   white-space: nowrap;
 }
 
+.row.playing .title {
+  color: var(--color-accent-text);
+}
+
 .row.failed .title {
   color: var(--color-text-muted);
 }
@@ -263,12 +343,26 @@ a.main:hover .title {
   grid-area: byline;
   align-self: start;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0 var(--space-2);
-  padding-bottom: var(--space-2);
+  min-width: 0;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
+}
+
+.author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.byline > :empty {
+  display: none;
+}
+
+/* The phone's words (media-list@mobile) only show in its one line. */
+.phone-duration {
+  display: none;
 }
 
 .date,
@@ -290,11 +384,18 @@ a.main:hover .title {
 .states {
   grid-area: status;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1) var(--space-2);
+  gap: var(--space-2);
   min-width: 0;
+  overflow: hidden;
   font-size: var(--text-meta);
+  white-space: nowrap;
+}
+
+.states ui-pill {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .states app-preparation-entry,
@@ -304,28 +405,9 @@ a.main:hover .title {
   z-index: 1;
 }
 
-.transcription {
-  color: var(--color-text-muted);
-}
-
-/* The transcription's state (KBC-036): words first; the low notice adds a sign, not red
-   (UP-19, UP-20). */
-.transcription.low {
-  color: var(--color-text);
-  font-weight: 600;
-}
-
-.transcription.low::before {
-  content: '⚠ ' / '';
-}
-
 .position {
-  width: 4rem;
-}
-
-.resume {
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
+  flex: none;
+  width: 3rem;
 }
 
 .actions {
@@ -333,44 +415,82 @@ a.main:hover .title {
   position: relative;
   z-index: 1;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
 }
 
-/* ---------- Messages ---------- */
-
-.empty {
-  display: grid;
-  justify-items: center;
-  gap: var(--space-3);
-  padding: var(--space-8) var(--space-4);
-  text-align: center;
-}
-
-.empty-icon {
-  display: grid;
-  place-items: center;
-  width: 4.5rem;
-  height: 4.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--overlay-3);
+/* The 32 ⋯ over its 18 column, the glyph in the column. */
+app-row-menu {
+  --menu-trigger-min: 2rem;
+  --menu-trigger-height: 2rem;
+  margin-inline: -0.4375rem;
   color: var(--color-text-muted);
 }
 
-.empty p {
+.row:hover app-row-menu,
+.row:has([aria-expanded='true']) app-row-menu {
+  color: var(--color-text);
+}
+
+/* ---------- The phone's grid (media-list@mobile, "Grade") ---------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
   margin: 0;
-  overflow-wrap: anywhere;
+  padding: 0;
+  list-style: none;
 }
 
-.empty-title {
-  font-size: var(--text-section);
+.card {
+  position: relative;
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.card-art {
+  --ui-cover-size: 100% !important;
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.card-title {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: var(--text-meta);
   font-weight: 700;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-ui-empty-state {
-  padding-block: var(--space-8);
+a.card-title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.card-meta {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs, 0.75rem);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Messages ---------- */
+
+/* At a desktop the component's own 72 over the icon (media-library-empty-*, media-list-empty). */
+
+/* A phone's empty list sits lower, nearer the middle of what is left (emptyM: 24 + 48 over
+   the icon, @mobile). */
+@media (max-width: 1023px) {
+  ui-empty-state {
+    padding-block: 4.5rem 0;
+  }
 }
 
 .sent-elsewhere {
@@ -421,6 +541,26 @@ ui-empty-state {
   background: var(--scrim);
 }
 
+.confirm-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.confirm-head h2 {
+  flex: 1;
+}
+
+.confirm-close {
+  flex: none;
+  margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2)) 0 0;
+  color: var(--color-text-muted);
+}
+
+.confirm .handle {
+  display: none;
+}
+
 .confirm h2 {
   margin: 0 0 var(--space-3);
   font-size: var(--text-section);
@@ -452,7 +592,7 @@ ui-empty-state {
 @container media-table (max-width: 52rem) {
   .table-head,
   .row {
-    grid-template-columns: 2rem minmax(0, 1fr) 14rem 3.5rem auto;
+    grid-template-columns: 1.5rem minmax(0, 1fr) 12rem 2.75rem 1.125rem;
   }
 
   .table-head {
@@ -471,20 +611,104 @@ ui-empty-state {
   }
 }
 
-/* A phone (media-list@mobile): cover 52, the title, one line with the rest. */
-@container media-table (max-width: 36rem) {
+/* ---------- Phone (media-list@mobile: the library's rows) ---------- */
+
+@media (max-width: 1023px) {
+  /* The phone's tint is a short band under the top row: it ends 260 px from the frame's
+     top, the row (with its status bar's room) being the first 100. */
+  .media {
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--media-tint) 70%, transparent) 0,
+        transparent 10rem
+      )
+      no-repeat;
+  }
+
+  /* The phone's header is the shell's top row (PageHeader): "← Alquimia Prática 🔍 ⬆". The
+     hero stays for a screen reader (its heading), out of sight; the action bar has no place
+     in the frame. */
+  .hero {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .actions-bar {
+    display: none;
+  }
+
+  .content {
+    gap: var(--space-3);
+    padding: 0 var(--space-4);
+  }
+
+  .phone-tools {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .phone-filter {
+    min-height: var(--target);
+  }
+
+  /* The chips in one line that scrolls sideways (the frame cuts the last one). */
+  .chips {
+    display: flex;
+    gap: var(--space-2);
+    margin: 0 calc(-1 * var(--space-4));
+    padding: 0 var(--space-4);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .chips > * {
+    flex: none;
+  }
+
+  .phone-sort {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    /* Its 44 targets overflow the frame's row (the order 21 under the card, the first
+       cover 27 under the order's middle): the column's gaps are taken back. */
+    margin: calc(-1 * var(--space-3)) 0 calc(-0.8125rem);
+  }
+
+  .phone-view {
+    --ui-icon-btn-size: var(--target) !important;
+    margin-right: calc(-1 * var(--space-3));
+    color: var(--color-text);
+  }
+
   .table-head {
     display: none;
   }
 
+  /* The first cover 15 under the order's line (media-list@mobile). */
+  .table-head + .rows {
+    margin-top: -0.25rem;
+  }
+
   .row {
-    grid-template-columns: 3.25rem minmax(0, 1fr) auto;
+    grid-template-columns: calc(3.25rem + var(--space-3)) minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
     grid-template-areas:
       'art title actions'
       'art meta actions';
-    column-gap: var(--space-3);
+    column-gap: 0;
     min-height: 4rem;
-    padding: var(--space-1) var(--space-2);
+    padding: 0;
+  }
+
+  .row:hover,
+  .row:focus-within {
+    background: transparent;
   }
 
   .lead {
@@ -496,66 +720,62 @@ ui-empty-state {
     display: inline-flex;
   }
 
+  .main {
+    padding-top: var(--space-1);
+  }
+
+  /* One line: the status, then "author · length"; no date (mRow). */
   .meta {
     grid-area: meta;
     align-self: start;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: var(--space-1) var(--space-2);
-    padding-bottom: var(--space-2);
-  }
-
-  .byline,
-  .states {
-    padding: 0;
+    gap: var(--space-2);
+    min-width: 0;
+    padding-bottom: var(--space-1);
+    overflow: hidden;
+    white-space: nowrap;
   }
 
   .states {
+    flex: none;
     order: -1;
+    overflow: visible;
   }
 
-  .date {
-    display: inline;
-  }
-}
-
-@media (max-width: 1023px) {
-  .hero {
-    flex-direction: row;
-    align-items: center;
-    padding: var(--space-4) var(--space-4) var(--space-2);
-  }
-
-  .hero-art {
+  .states:not(:has(ui-pill, ui-progress, app-preparation-entry)) {
     display: none;
   }
 
-  .hero-text h2 .name,
-  .kicker:only-child {
-    font-size: 1.5rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
+  .byline {
+    flex: 0 1 auto;
+    overflow: hidden;
   }
 
-  .filters {
-    flex: 1 1 100%;
-    margin-left: 0;
+  .date {
+    display: none;
   }
 
-  .filter {
-    flex: 1 1 12rem;
-    width: auto;
-    min-height: var(--target);
+  .duration {
+    flex: none;
+    margin-inline-start: calc(-1 * var(--space-1));
   }
 
-  .choice,
-  .choice select {
-    min-height: var(--target);
+  /* "Outros autores · 0:16" in one text. */
+  .duration {
+    display: none;
   }
 
-  .content {
-    padding: var(--space-2) var(--space-4) 0;
+  .phone-duration {
+    display: inline;
+  }
+
+  /* The 20 ⋯ on the row's end (16 from the screen's edge), its 44 target past it. */
+  app-row-menu {
+    --menu-trigger-min: var(--target);
+    --menu-trigger-height: var(--target);
+    margin-inline: 0 -0.75rem;
   }
 
   .confirm {
@@ -571,7 +791,104 @@ ui-empty-state {
     flex-direction: column-reverse;
   }
 
+  /* The sheet: its handle, no ✕ (Cancelar is there), the tracks in plain words
+     (media-library-remove-tracks@mobile). */
+  .confirm {
+    padding-top: var(--space-3);
+  }
+
+  .confirm .handle {
+    display: block;
+    width: 2.25rem;
+    height: 0.25rem;
+    margin: 0 auto var(--space-3);
+    border-radius: var(--radius-pill);
+    background: var(--overlay-line);
+  }
+
+  .confirm-close {
+    display: none;
+  }
+
+  .confirm h2 {
+    margin-bottom: var(--space-2);
+  }
+
+  .confirm-actions {
+    margin-top: var(--space-3);
+  }
+
+  .confirm .remove-tracks {
+    padding: 0;
+    background: none;
+    color: var(--color-text-muted);
+  }
+
   .confirm-actions button {
     width: 100%;
+  }
+}
+
+/* On a phone the page runs under the foot (chat-page.css): it ends that much lower. */
+@media (max-width: 1023px) {
+  .media {
+    padding-bottom: calc(var(--space-8) + var(--shell-foot-h, 0px));
+  }
+}
+
+/* A recording (v2 media-list, as the library's rows): "3 faixas" before its author, the
+   chevron at the row's end; its ⋯ comes out under the pointer or the focus (a phone: the
+   keyboard), its tracks open under it. */
+.tracks-pill {
+  flex: none;
+}
+
+.tracks-toggle {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.tracks-toggle:hover {
+  color: var(--color-text);
+}
+
+.tracks-toggle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.row.has-tracks:not(:hover, :focus-within) app-row-menu {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.row-tracks {
+  list-style: none;
+}
+
+@media (max-width: 1023px) {
+  .row.has-tracks app-row-menu:not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .tracks-toggle {
+    height: var(--target);
   }
 }

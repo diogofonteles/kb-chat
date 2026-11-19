@@ -2,63 +2,130 @@
   display: block;
 }
 
+/* Folded: one row "› Perfis de convite (2)"; open: the card with the profiles (v2 · Pessoas). */
 .profiles {
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--overlay-1);
 }
 
+.profiles:has(.body) {
+  padding-bottom: var(--space-4);
+}
+
+/* Folded, the card is the row: 47 tall, the chevron 16 in, 10 between the parts. */
 .toggle {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 0.625rem;
   width: 100%;
-  min-height: var(--target);
+  min-height: 2.9375rem;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-weight: 600;
+  font-size: var(--text-item);
+  font-weight: 700;
   text-align: left;
   cursor: pointer;
 }
 
-.body {
-  display: grid;
-  gap: var(--space-3);
-  margin-top: var(--space-3);
+.chevron {
+  color: var(--color-text-muted);
 }
 
-.count {
-  color: var(--color-text-muted);
-  font-weight: 400;
+.toggle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.body {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
+.body > * {
+  justify-self: stretch;
+}
+
+.body > .new {
+  justify-self: start;
+}
+
+/* The open profile's form only hosts its modal: it takes no room in the card. */
+.body > .draft {
+  position: absolute;
+}
+
+.hint {
+  font-size: var(--text-meta);
 }
 
 .list {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* A profile: cover · name · Padrão · the actions as text links (Editar · Tornar padrão · Apagar). */
 .profile {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--color-border);
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: 6px;
+  background: var(--overlay-1);
+}
+
+.profile > .actions {
+  gap: 1.75rem;
+  margin-left: auto;
+}
+
+/* The actions as words (13; Apagar 14 in red), 28 apart, 20 from the row's end (v2 · Perfis). */
+.profile {
+  min-height: 3.5rem;
+  padding: var(--space-2) 1.25rem var(--space-2) var(--space-3);
+}
+
+.profile > .actions > .link {
+  min-height: 2.25rem;
+  padding: 0;
+  font-size: var(--text-meta);
+}
+
+.profile > .actions > .link.danger-text {
+  font-size: var(--text-sm);
+}
+
+.profile-cover {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 6px;
+  background: linear-gradient(
+    135deg,
+    var(--cover-provider-openrouter),
+    var(--cover-people-dark)
+  );
 }
 
 .name {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-  font-weight: 600;
+  gap: var(--space-3);
+  font-size: var(--text-item);
+  font-weight: 700;
   overflow-wrap: anywhere;
 }
 
@@ -118,6 +185,16 @@
   color: var(--color-danger);
 }
 
+/* No message: the live region stays but takes no room. */
+.notice.idle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 .alert p {
   margin: 0 0 var(--space-2);
 }
@@ -131,4 +208,117 @@
 
 .levels-failed p {
   margin: 0;
+}
+
+/* The modal's top: the name (320) and the default switch on one line. */
+.draft-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-6);
+}
+
+.draft-name {
+  flex: 0 1 20rem;
+}
+
+.field-label {
+  font-size: var(--text-meta);
+  font-weight: 700;
+  line-height: 1rem;
+}
+
+.draft-name .text {
+  min-height: 2.75rem;
+  border: 1px solid var(--overlay-4);
+  border-radius: 4px;
+  background: var(--overlay-2);
+}
+
+.draft-default {
+  display: flex;
+  flex: 1 1 16rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 2.75rem;
+  font-size: var(--text-item);
+  cursor: pointer;
+}
+
+.draft-foot {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin: 0 calc(-1 * var(--space-6)) calc(-1 * var(--space-6));
+  padding: var(--space-4) var(--space-6);
+  background: var(--overlay-1);
+}
+
+/* Cancelar · Salvar perfil, 40 tall (v2 · Perfil de convite). */
+@media (min-width: 1024px) {
+  .draft-foot button {
+    min-height: 2.5rem;
+  }
+}
+
+@media (max-width: 1023px) {
+  .draft-name {
+    flex-basis: 100%;
+  }
+}
+
+/* Desktop: the actions as words; a phone: one ⋯ that opens them (v2 · Perfis, celular). */
+.phone-more {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .profile {
+    flex-wrap: nowrap;
+    padding-right: var(--space-3);
+  }
+
+  .profile > .actions:not(:has(.danger)) {
+    display: none;
+  }
+
+  .phone-more {
+    display: inline-flex;
+    margin-left: auto;
+    color: var(--color-text-muted);
+  }
+}
+
+/* The phone's sheet (v2 · Perfil de convite, celular): the name's field, 11 to the default's
+   row (44), 11 to the tabs. */
+@media (max-width: 1023px) {
+  .draft {
+    gap: 0.6875rem;
+  }
+
+  .draft-top {
+    row-gap: 0.6875rem;
+  }
+
+  /* The sheet's body keeps 20 between its parts; the tabs sit 11 under the switch. */
+  .draft-top ~ app-invite-preset-editor {
+    margin-top: -0.5625rem;
+  }
+}
+
+/* The open card (v2 · Pessoas): the title row 17 from the top, the hint 47 from it on
+   19 px lines. */
+.profiles:has(.body) .toggle {
+  align-items: flex-start;
+  padding: 1.0625rem 0 0;
+}
+
+.profiles:has(.body) .toggle > span {
+  line-height: 1.125rem;
+}
+
+.hint {
+  line-height: 1.1875rem;
 }

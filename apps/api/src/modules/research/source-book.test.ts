@@ -24,4 +24,14 @@ describe('SourceBook', () => {
     listed.pop();
     expect(book.list()).toHaveLength(1);
   });
+
+  it('keeps the catalog text kind of a source, and leaves it out when the catalog has none', () => {
+    const book = new SourceBook();
+    book.number({ id: 'a.md', title: 'A', genre: 'article_or_essay' });
+    book.number({ id: 'b.md', title: 'B', genre: null });
+    expect(book.list()).toEqual([
+      { n: 1, id: 'a.md', title: 'A', genre: 'article_or_essay' },
+      { n: 2, id: 'b.md', title: 'B' },
+    ]);
+  });
 });

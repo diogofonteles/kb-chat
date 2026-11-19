@@ -1,3 +1,4 @@
+import { UiIcon } from '@ui/index.js';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -29,9 +30,12 @@ export interface SubjectDecisionEvent {
 }
 
 /** One track of step 4: its title, and the column "Assuntos" (KBC-069 FR-4). */
+/** Ids of the summary fields on the page. */
+let nextRow = 0;
+
 @Component({
   selector: 'app-track-subject-row',
-  imports: [SubjectPicker],
+  imports: [SubjectPicker, UiIcon],
   templateUrl: './track-subject-row.html',
   styleUrl: './track-subject-row.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -51,6 +55,15 @@ export class TrackSubjectRow {
   readonly summary = output<string>();
 
   protected readonly summaryMax = TRACK_SUMMARY_MAX;
+  /** "Resumo" opens the field (prepare.js finishedMain: a link on the row). */
+  protected readonly summaryOpen = signal<boolean | null>(null);
+  /** Open by itself when there is a summary, or one to decide on. */
+  protected readonly summaryShown = computed(
+    () =>
+      this.summaryOpen() ??
+      Boolean(this.track().summary || this.track().suggestedSummary),
+  );
+  protected readonly summaryId = `track-summary-${(nextRow += 1)}`;
   /** "Até 5 assuntos por faixa" (AC-3). */
   protected readonly full = signal(false);
   private refocus = false;

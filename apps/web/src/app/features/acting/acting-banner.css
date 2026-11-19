@@ -40,7 +40,12 @@ button {
   padding: 0 0.875rem;
   border: 0;
   border-radius: var(--radius-pill);
+  /* A veil of the colour opposite to the ink (lighter under black ink, darker under white),
+     so the words keep 4.5:1 in every theme. */
   background: rgb(0 0 0 / 15%);
+  background: rgb(
+    from var(--color-on-info) calc(255 - r) calc(255 - g) calc(255 - b) / 30%
+  );
   color: var(--color-on-info);
   font: inherit;
   font-size: var(--text-meta);
@@ -52,32 +57,50 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-/* On a phone: text on the left (two short lines), the button on the right, one band. */
+/* The wide band's words; a phone's band says "Vendo como Ana Lima · 25:00   Voltar". */
+.narrow {
+  display: none;
+}
+
 @media (max-width: 599px) {
+  /* cmActing: the band 52 from the top, over the page's own top room (the page under it keeps
+     its place: the band takes the 48 it took at the top). */
   .band {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
     flex-wrap: nowrap;
-    padding: var(--space-1) var(--space-3);
+    min-height: 2.5rem;
+    margin: 3.25rem var(--space-2) -2.75rem;
+    padding: 0 var(--space-3);
   }
 
-  .what {
-    display: grid;
-    gap: 0;
-    font-size: var(--text-sm);
+  .wide {
+    display: none;
   }
 
-  .what > span:first-child {
+  .narrow {
+    display: block;
     overflow: hidden;
+    font-size: var(--text-meta);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  /* "Voltar" as an underlined word; its name stays "Voltar para a minha conta". */
   button {
-    max-width: 9.5rem;
-    padding: var(--space-1) var(--space-2);
-    font-size: var(--text-sm);
-    line-height: 1.2;
+    min-height: 2.5rem;
+    padding: 0;
+    background: none;
+    font-size: var(--text-meta);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .back-rest {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 }
 

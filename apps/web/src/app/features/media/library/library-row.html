@@ -4,7 +4,7 @@
   } @else if (position()) {
     <span class="number" aria-hidden="true">{{ position() }}</span>
   }
-  @if (ready()) {
+  @if (selectable()) {
     <input
       type="checkbox"
       class="select ui-check"
@@ -42,15 +42,35 @@
 }
 <span class="cells">
   <span class="byline">
-    <app-authorship-badge [mediaAuthor]="item().author" />
+    @if (tracksLabel()) {
+      <ui-pill class="tracks-pill" tone="muted" aria-hidden="true">{{
+        tracksLabel()
+      }}</ui-pill>
+    }
+    <!-- Plain and muted (media-library); the collection's main author keeps its ✦. -->
+    <span class="author">
+      @if (item().author?.main) {
+        <span class="main-mark" aria-hidden="true">✦ </span>
+      }
+      {{
+        authorName()
+      }}<!-- The phone's one line (media-library@mobile): "Irmã Helena Prado · 1:00", the
+      author's words once (the length joins them on a phone). --><span
+        class="phone-duration"
+        >&ngsp;· {{ duration() }}</span
+      ></span
+    >
     <app-media-level-badge [level]="item().level" [shown]="master()" />
   </span>
   <span class="topic">{{ topicTitle() }}</span>
   <span class="status">
     @if (status()) {
-      <ui-pill [tone]="item().status === 'failed' ? 'err' : 'info'">{{
-        status()
-      }}</ui-pill>
+      <ui-pill
+        [tone]="item().status === 'failed' ? 'err' : 'info'"
+        [attr.title]="status()"
+        >{{ statusWord()
+        }}<span class="visually-hidden">{{ statusRest() }}</span></ui-pill
+      >
     }
     @if (resume()) {
       <ui-progress class="position" [value]="percent() / 100" />
@@ -58,31 +78,74 @@
     } @else if (state()) {
       <span class="state">{{ state() }}</span>
     }
+    @if (transcriptionWaits()) {
+      <ui-pill class="waiting-pill" tone="warn"
+        ><span class="desk-words" i18n="@@media.pill.waitingTranscriber"
+          >Aguardando o transcritor</span
+        ><span class="phone-words" i18n="@@queue.pill.waiting"
+          >Aguardando</span
+        ></ui-pill
+      >
+    }
     @if (paused(); as step) {
       <app-preparation-entry [mediaId]="item().id" [step]="step" />
-    }
-    @if (master() && item().canRetry) {
-      <button
-        type="button"
-        uiButton="outline"
-        size="sm"
-        (click)="retried.emit()"
-        i18n="@@media.retry"
+      <!-- The phone's pill in its place (media-library@mobile: "Passo 2"). -->
+      <ui-pill class="step-pill" tone="info" i18n="@@library.pausedStep"
+        >Passo {{ step }}</ui-pill
       >
-        Tentar de novo
-      </button>
     }
   </span>
   <span class="duration">{{ duration() }}</span>
 </span>
-<span class="actions">
-  @if (options().length > 0) {
-    <app-menu-button
-      [label]="menuLabel()"
-      [options]="options()"
-      (chosen)="choose($event)"
-    >
-      <ui-icon name="more" [size]="18" />
-    </app-menu-button>
-  }
-</span>
+@if (ready()) {
+  <!-- Under the pointer (or the focus) a ready row offers its bookmarks before the length
+       (media-library-row-menu); the row's columns make room for it. -->
+  <button
+    type="button"
+    class="row-bookmarks"
+    [attr.aria-label]="bookmarksLabel()"
+    (click)="bookmarks()"
+  >
+    <ui-icon name="bookmark" [size]="18" />
+  </button>
+}
+<ng-template #menu>
+  <app-menu-button
+    [label]="menuLabel()"
+    [options]="options()"
+    [sheetTitle]="item().title"
+    [sheetMeta]="sheetMeta()"
+    (chosen)="choose($event)"
+  >
+    <ui-icon name="more" [size]="18" />
+  </app-menu-button>
+</ng-template>
+@if (tracksLabel()) {
+  <!-- A recording (media-library-tracks): the chevron takes the ⋯'s place at the row's end;
+       its ⋯ comes out where the length is, under the pointer or the focus (a phone: beside). -->
+  <span class="end">
+    @if (options().length > 0) {
+      <span class="more">
+        <ng-container [ngTemplateOutlet]="menu" />
+      </span>
+    }
+    <span class="actions">
+      <button
+        type="button"
+        class="tracks-toggle"
+        [attr.aria-label]="tracksLabel()"
+        [attr.aria-expanded]="tracksOpen()"
+        [attr.aria-controls]="tracksOpen() ? tracksId() : null"
+        (click)="tracksToggled.emit()"
+      >
+        <ui-icon [name]="tracksOpen() ? 'chevDown' : 'chevRight'" [size]="18" />
+      </button>
+    </span>
+  </span>
+} @else {
+  <span class="actions">
+    @if (options().length > 0) {
+      <ng-container [ngTemplateOutlet]="menu" />
+    }
+  </span>
+}

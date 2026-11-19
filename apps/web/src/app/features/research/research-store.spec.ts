@@ -370,6 +370,20 @@ describe('ResearchStore', () => {
     expect(store.turns()[0]?.phase).toBe('streaming');
   });
 
+  it('"Refazer" asks the last answered question again, as a new turn', () => {
+    const { store, streams } = setup();
+    store.ask('quais são?');
+    const [stream] = streams;
+    if (!stream) throw new Error('no stream');
+    answer(stream, 'São sete.');
+    store.redo();
+    expect(store.turns()).toHaveLength(2);
+    expect(store.turns()[1]).toMatchObject({
+      question: 'quais são?',
+      phase: 'streaming',
+    });
+  });
+
   it('treats a finished answer without text, or a stream cut short, as a failure', () => {
     const { store, streams } = setup();
     store.ask('a');

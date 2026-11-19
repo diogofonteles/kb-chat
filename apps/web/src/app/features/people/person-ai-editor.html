@@ -1,23 +1,32 @@
 @let current = ai();
-<fieldset class="group" [disabled]="busy()">
-  <legend class="legend" i18n="@@personAi.legend">IA da aplicação</legend>
-  <label class="field">
-    <span i18n="@@personAi.which">Qual IA atende esta pessoa</span>
-    <select
-      #appAiSelect
-      class="select"
-      [attr.aria-describedby]="
-        unavailableNote() ? 'lend-unavailable-person' : null
-      "
-      (change)="chooseAppAi(appAiSelect.value)"
-    >
-      @for (option of options(); track option.id) {
-        <option [value]="option.id" [selected]="option.id === current.appAi">
-          {{ option.label }}
-        </option>
-      }
-    </select>
-  </label>
+<!-- v2 · IA e limites: each line a label at the left and its control at the right. -->
+<fieldset class="group ai-tab" [disabled]="busy()">
+  <legend class="visually-hidden" i18n="@@personAi.legend">
+    IA da aplicação
+  </legend>
+  <!-- A phone's row: the AI under the words, a chevron; the select covers the row (the
+       label's words stay its name: the value and the chevron sit beside the label). -->
+  <div class="field which">
+    <span class="row-value" aria-hidden="true">{{ chosenLabel() }}</span>
+    <ui-icon class="row-chevron" name="chevRight" [size]="20" />
+    <label>
+      <span i18n="@@personAi.which">Qual IA atende esta pessoa</span>
+      <select
+        #appAiSelect
+        class="select"
+        [attr.aria-describedby]="
+          unavailableNote() ? 'lend-unavailable-person' : null
+        "
+        (change)="chooseAppAi(appAiSelect.value)"
+      >
+        @for (option of options(); track option.id) {
+          <option [value]="option.id" [selected]="option.id === current.appAi">
+            {{ option.label }}
+          </option>
+        }
+      </select>
+    </label>
+  </div>
   @if (unavailableNote(); as note) {
     <p id="lend-unavailable-person" class="hint">{{ note }}</p>
   }
@@ -28,7 +37,9 @@
       aria-labelledby="lend-title-person"
       aria-describedby="lend-terms-person"
     >
-      <p id="lend-title-person" class="lend-title">{{ copy.toPerson() }}</p>
+      <p id="lend-title-person" class="lend-title">
+        <ui-icon name="warn" [size]="20" />{{ copy.toPerson() }}
+      </p>
       <p id="lend-terms-person">{{ copy.terms() }}</p>
       <div class="actions">
         <button
@@ -61,6 +72,7 @@
   <label class="check">
     <input
       #enforcedBox
+      class="ui-switch"
       [disabled]="lentForOthers()"
       [attr.aria-describedby]="lentForOthers() ? 'lend-owner-only' : null"
       type="checkbox"
@@ -102,6 +114,7 @@
   <label class="check">
     <input
       #paidBox
+      class="ui-switch"
       [disabled]="lentForOthers()"
       [attr.aria-describedby]="lentForOthers() ? 'lend-owner-only' : null"
       type="checkbox"
@@ -142,25 +155,32 @@
   }
 </fieldset>
 @if (history().length > 0) {
-  <details class="history">
-    <summary i18n="@@personAi.history">Histórico da IA</summary>
+  <section class="history" aria-labelledby="person-ai-history">
+    <h3 id="person-ai-history" class="history-title" i18n="@@personAi.history">
+      Histórico da IA
+    </h3>
     <ul>
       @for (change of history(); track change.at + change.by) {
         <li>
-          {{ change.at | date: 'dd/MM/yyyy HH:mm' }} · {{ change.by }} ·
-          {{ change.label }}
-          @if (change.enforced) {
-            <ng-container i18n="@@personAi.historyEnforced"
-              >(sempre)</ng-container
-            >
-          }
-          @if (change.termsAccepted) {
-            <ng-container i18n="@@personAi.historyTerms"
-              >(termos confirmados)</ng-container
-            >
-          }
+          <span class="history-when">{{
+            change.at | date: 'dd/MM/yyyy HH:mm'
+          }}</span>
+          <span class="history-by">{{ change.by }}</span>
+          <ui-pill tone="ok" class="history-what"
+            >{{ change.label }}
+            @if (change.enforced) {
+              <ng-container i18n="@@personAi.historyEnforced"
+                >(sempre)</ng-container
+              >
+            }
+            @if (change.termsAccepted) {
+              <ng-container i18n="@@personAi.historyTerms"
+                >(termos confirmados)</ng-container
+              >
+            }
+          </ui-pill>
         </li>
       }
     </ul>
-  </details>
+  </section>
 }

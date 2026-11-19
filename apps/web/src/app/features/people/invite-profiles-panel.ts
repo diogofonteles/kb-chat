@@ -5,6 +5,7 @@ import {
   ElementRef,
   Injector,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   input,
@@ -26,6 +27,14 @@ import {
   type UiErrorCode,
 } from '@core/api/api-error.js';
 import type { Observable } from 'rxjs';
+import {
+  UiButton,
+  UiDialog,
+  UiIcon,
+  UiMenu,
+  UiMenuItem,
+  UiPill,
+} from '@ui/index.js';
 import { InvitePresetEditor } from './invite-preset-editor.js';
 import { InviteProfilesStore } from './invite-profiles-store.js';
 import { plainPreset } from './preset-defaults.js';
@@ -58,7 +67,15 @@ type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
  */
 @Component({
   selector: 'app-invite-profiles-panel',
-  imports: [InvitePresetEditor],
+  imports: [
+    InvitePresetEditor,
+    UiButton,
+    UiDialog,
+    UiIcon,
+    UiMenu,
+    UiMenuItem,
+    UiPill,
+  ],
   templateUrl: './invite-profiles-panel.html',
   styleUrls: ['./person-editor.css', './invite-profiles-panel.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -81,6 +98,11 @@ export class InviteProfilesPanel {
     viewChild<ElementRef<HTMLInputElement>>('nameInput');
   private readonly newButton =
     viewChild<ElementRef<HTMLButtonElement>>('newButton');
+  private readonly draftDialog = viewChild<UiDialog>('draftDialog');
+  /** A draft opened (Novo perfil, Editar): its modal opens once drawn. */
+  private readonly opensDraft = afterRenderEffect(() => {
+    if (this.draft()) this.draftDialog()?.open();
+  });
 
   /** The section starts folded under the invitation (screens.md T9). */
   protected readonly expanded = signal(false);
@@ -92,6 +114,26 @@ export class InviteProfilesPanel {
     const id = this.draft()?.id;
     return id ? (this.store.find(id)?.name ?? '') : '';
   });
+  /** The modal's title: "Editar o perfil "Aluno"" or "Novo perfil". */
+  protected readonly draftTitle = computed(() =>
+    this.draft()?.id
+      ? $localize`:@@profiles.editTitle:Editar o perfil "${this.editingName()}:name:"`
+      : $localize`:@@profiles.newTitle:Novo perfil`,
+  );
+  /** The phone sheet's shorter title (v2 · Editar perfil, celular). */
+  protected readonly draftPhoneTitle = computed(() =>
+    this.draft()?.id
+      ? $localize`:@@profiles.phoneTitle:Perfil "${this.editingName()}:name:"`
+      : $localize`:@@profiles.newTitle:Novo perfil`,
+  );
+  /** "Salvar perfil" waits for the preset's numbers and the collections' levels. */
+  protected readonly saveBlocked = computed(
+    () =>
+      this.busy() ||
+      this.presetInvalid() ||
+      this.scalesFailed() ||
+      this.levelsPending(),
+  );
   protected readonly confirmingDelete = signal<string | null>(null);
   protected readonly nameError = signal('');
   /** A number typed in the preset is not kept yet: saving waits (design D4). */
@@ -147,8 +189,14 @@ export class InviteProfilesPanel {
     this.focusAfterRender(() => this.newButton());
   }
 
-  protected save(event: Event): void {
-    event.preventDefault();
+  /** Escape or ✕ closed the modal: the draft is dropped, as with Cancelar. */
+  protected dialogClosed(): void {
+    if (this.draft()) this.cancel();
+  }
+
+  /** The form's submit, or the phone sheet's "Salvar perfil" (no event then). */
+  protected save(event?: Event): void {
+    event?.preventDefault();
     const draft = this.draft();
     if (!draft) return;
     const name = draft.name.trim();

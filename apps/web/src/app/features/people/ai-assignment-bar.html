@@ -2,50 +2,53 @@
   <p id="assign-title" class="title" i18n="@@assign.title">
     IA da aplicação para várias pessoas
   </p>
-  <label class="field">
-    <span i18n="@@assign.which">IA</span>
-    <select
-      #which
-      class="select"
-      [attr.aria-describedby]="
-        unavailableNote() ? 'lend-unavailable-bulk' : null
-      "
-      (change)="choose(which.value)"
-    >
-      @for (option of options(); track option.id) {
-        <option [value]="option.id" [selected]="option.id === appAi()">
-          {{ option.label }}
-        </option>
+  <!-- The frame's one line: the AI · Aplicar às selecionadas · Aplicar a todos. -->
+  <div class="line">
+    <label class="field">
+      <span class="visually-hidden" i18n="@@assign.which">IA</span>
+      <select
+        #which
+        class="select"
+        [attr.aria-describedby]="
+          unavailableNote() ? 'lend-unavailable-bulk' : null
+        "
+        (change)="choose(which.value)"
+      >
+        @for (option of options(); track option.id) {
+          <option [value]="option.id" [selected]="option.id === appAi()">
+            {{ option.label }}
+          </option>
+        }
+      </select>
+    </label>
+    <div class="actions">
+      <button
+        #selectedButton
+        type="button"
+        class="secondary"
+        [disabled]="busy() || selectedCount() === 0"
+        (click)="applyTo('selected')"
+        i18n="@@assign.selected"
+      >
+        Aplicar às selecionadas ({{ selectedCount() }})
+      </button>
+      @if (!confirmingAll()) {
+        <button
+          #allButton
+          type="button"
+          class="secondary"
+          [disabled]="busy()"
+          (click)="askAll()"
+          i18n="@@assign.all"
+        >
+          Aplicar a todos os usuários
+        </button>
       }
-    </select>
-  </label>
+    </div>
+  </div>
   @if (unavailableNote(); as note) {
     <p id="lend-unavailable-bulk" class="note">{{ note }}</p>
   }
-  <div class="actions">
-    <button
-      #selectedButton
-      type="button"
-      class="secondary"
-      [disabled]="busy() || selectedCount() === 0"
-      (click)="applyTo('selected')"
-      i18n="@@assign.selected"
-    >
-      Aplicar às selecionadas ({{ selectedCount() }})
-    </button>
-    @if (!confirmingAll()) {
-      <button
-        #allButton
-        type="button"
-        class="secondary"
-        [disabled]="busy()"
-        (click)="askAll()"
-        i18n="@@assign.all"
-      >
-        Aplicar a todos os usuários
-      </button>
-    }
-  </div>
   @if (confirmingAll()) {
     <div class="confirm" role="alert">
       <p i18n="@@assign.confirm">
@@ -109,6 +112,7 @@
     <input
       #defaultBox
       type="checkbox"
+      class="ui-check"
       [checked]="alsoDefault() && canSetDefault()"
       [disabled]="!canSetDefault()"
       [attr.aria-describedby]="noDefaultNote() ? 'lend-no-default' : null"

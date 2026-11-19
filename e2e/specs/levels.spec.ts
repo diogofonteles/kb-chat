@@ -11,6 +11,7 @@ import {
 } from './fixtures.js';
 import { chooseCollectionSlug } from './shell-helpers.js';
 import { openPeople } from './settings-helpers.js';
+import { chooseView, expectView } from './search-view.js';
 
 /**
  * KBC-103 (ADR 0036, screens.md T24, T9, T3, T4): a master builds the scale of a collection,
@@ -53,7 +54,12 @@ async function addLevel(page: Page, code: string): Promise<void> {
 }
 
 async function searchFor(page: Page, words: string): Promise<void> {
-  const box = page.getByLabel('Sua pergunta');
+  // A desktop search page has no question box (v2 · chat-results): its field is the top
+  // bar's, which searches the collection in use the same way.
+  const question = page.getByLabel('Sua pergunta');
+  const top = page.getByRole('searchbox', { name: 'Buscar no acervo em uso' });
+  await expect(question.or(top).first()).toBeVisible();
+  const box = (await question.isVisible()) ? question : top;
   await box.fill(words);
   await box.press('Enter');
 }
@@ -147,7 +153,7 @@ async function changeOnPanel(page: Page, slug: string): Promise<void> {
   await page.goto('/');
   await chooseCollectionSlug(page, slug);
   // The master researches here as before (BR-10); the badge is on the search's documents.
-  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
+  await chooseView(page, 'search');
   await searchFor(page, 'orvalho');
   await expect(results(page)).toHaveCount(3);
   await page
@@ -169,9 +175,7 @@ async function changeOnPanel(page: Page, slug: string): Promise<void> {
  */
 async function researchAtHerLevel(member: Page): Promise<void> {
   await member.goto('/');
-  await expect(
-    member.getByRole('radio', { name: /Pesquisa com IA/ }),
-  ).toBeChecked();
+  await expectView(member, 'research');
   await expect(
     member.getByText('A pesquisa com IA ainda não está disponível'),
   ).toHaveCount(0);
@@ -209,7 +213,7 @@ test('AC-2, AC-14, AC-17, FR-11, KBC-104 AC-8: the scale on T24, the member at C
 
   const member = await pageAs(browser, email, page.viewportSize());
   await researchAtHerLevel(member);
-  await member.getByRole('radio', { name: 'Buscar documentos' }).check();
+  await chooseView(member, 'search');
   await searchFor(member, 'orvalho');
   await expect(results(member)).toHaveCount(2);
   await expect(member.getByText('Orvalho Velado')).toHaveCount(0);

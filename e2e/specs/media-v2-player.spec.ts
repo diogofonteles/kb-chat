@@ -1,7 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, ownerApi, test } from './fixtures.js';
+import { CSRF, expect, ownerApi, test } from './fixtures.js';
 import type { Page } from '@playwright/test';
-import { audioState, uniqueTag, uploadReady } from './media-helpers.js';
+import {
+  audioState,
+  newListener,
+  uniqueTag,
+  uploadReady,
+} from './media-helpers.js';
 import { desktop } from './shell-helpers.js';
 import { capture, expectInsideViewport } from './v2-media-helpers.js';
 
@@ -42,17 +47,35 @@ test('KBC-129: the editing actions are at the top of ⋯, whole on screen, and "
 });
 
 test('KBC-129 AC-6: "Meus marcadores" and the queue show their v2 states and pass axe', async ({
+  browser,
   page,
+  viewport,
 }, info) => {
-  await page.goto('/midia/marcadores');
+  // A person of this test alone: no one else's bookmarks, so each state is set here.
+  const owner = await ownerApi();
+  const media = await uploadReady(owner, {
+    title: `Marcadores ${uniqueTag()}`,
+    seconds: 3,
+  });
+  await owner.dispose();
+  const { page: listener } = await newListener(browser, { viewport });
+  await listener.goto('/midia/marcadores');
   await expect(
-    page.getByRole('heading', { name: 'Meus marcadores' }),
+    listener.getByRole('heading', { name: 'Meus marcadores' }),
   ).toBeVisible();
-  await expect(
-    page.getByText(/\d+ marcador|Nenhum marcador ainda/),
-  ).toBeVisible();
-  await capture(page, 'bookmarks', info.project.name);
-  const bookmarksAxe = await new AxeBuilder({ page })
+  // The page's own summary: Sua biblioteca's "Lista · N marcadores" is another place.
+  const main = listener.getByRole('main');
+  const summary = (text: RegExp) =>
+    main.getByText(text).and(listener.locator(':visible'));
+  // With none, a phone draws no count, only the empty state (media-bookmarks-empty@mobile);
+  // a desktop says so in its header (media-bookmarks-empty).
+  await expect(main.getByText('Seus marcadores aparecem aqui')).toBeVisible();
+  if (desktop(listener))
+    await expect(summary(/^Nenhum marcador ainda$/)).toBeVisible();
+  else
+    await expect(summary(/\d+ marcador|Nenhum marcador ainda/)).toHaveCount(0);
+  await capture(listener, 'bookmarks', info.project.name);
+  const bookmarksAxe = await new AxeBuilder({ page: listener })
     .include('.page')
     .analyze();
   expect(
@@ -61,11 +84,26 @@ test('KBC-129 AC-6: "Meus marcadores" and the queue show their v2 states and pas
     ),
   ).toEqual([]);
 
+  // One bookmark: the summary counts it, once, at either width.
+  const created = await listener.request.post(
+    `/api/v1/media/${media.id}/bookmarks`,
+    { headers: CSRF, data: { id: crypto.randomUUID(), positionMs: 1_000 } },
+  );
+  expect(created.status(), await created.text()).toBe(201);
+  await listener.reload();
+  await expect(summary(/^1 marcador em 1 áudio$/)).toHaveCount(1);
+  await expect(main.getByText('Seus marcadores aparecem aqui')).toHaveCount(0);
+  await listener.context().close();
+
   await page.goto('/fila');
   await expect(
     page.getByRole('heading', { name: 'Fila de processamento' }),
   ).toBeVisible();
-  await expect(page.getByText('Processamento', { exact: true })).toBeVisible();
+  // The kicker is the desktop header's (pageHeader); a phone has "‹ Fila de processamento".
+  if (desktop(page))
+    await expect(
+      page.getByText('Processamento', { exact: true }),
+    ).toBeVisible();
   await capture(page, 'queue', info.project.name);
   const queueAxe = await new AxeBuilder({ page }).include('.queue').analyze();
   expect(
@@ -128,8 +166,15 @@ test('KBC-129 AC-2: the player bar\'s transcript button opens "Tocando agora" on
   for (const box of await rows.evaluateAll((items) =>
     items.map((item) => {
       const rect = item.getBoundingClientRect();
+      // A strip that scrolls sideways ("Continuar ouvindo") shows its cards up to its own
+      // edge: what is seen of a card ends there.
+      const list = item.parentElement;
+      const strip =
+        list && getComputedStyle(list).overflowX !== 'visible'
+          ? list.getBoundingClientRect().right
+          : Number.POSITIVE_INFINITY;
       return {
-        right: rect.right,
+        right: Math.min(rect.right, strip),
         clipped: item.scrollWidth > item.clientWidth,
       };
     }),
@@ -193,4 +238,48 @@ test('KBC-129 AC-3: on a phone, a tap on the mini player opens the full-screen p
   await expect(
     page.getByRole('navigation', { name: 'Navegação' }),
   ).toBeVisible();
+});
+
+test('a very long title stops at three lines in the player header, whole in its name and on hover', async ({
+  page,
+}, info) => {
+  const owner = await ownerApi();
+  const media = await uploadReady(owner, {
+    title: `Uma palestra sobre o caminho espiritual da União do Vegetal e a palavra do Mestre na sessão de escala de março, parte dois, com perguntas ${uniqueTag()}`,
+    seconds: 3,
+  });
+  // The frame's own title, which fits its three lines.
+  const fits = await uploadReady(owner, {
+    title: 'Entrevista sobre a Tábua de Esmeralda',
+    seconds: 3,
+  });
+  await owner.dispose();
+  await page.goto(`/midia/${media.id}`);
+  const heading = page.getByRole('heading', { level: 1, name: media.title });
+  await expect(heading).toBeVisible();
+  await expect(heading).toHaveAttribute('title', media.title);
+  const { lines, clipped } = await heading.evaluate((h1) => {
+    const style = getComputedStyle(h1);
+    return {
+      lines: Math.round(h1.clientHeight / parseFloat(style.lineHeight)),
+      // What does not fit ends in "…": a clamp of lines, or one line's ellipsis.
+      clipped:
+        h1.scrollHeight > h1.clientHeight + 1 || h1.scrollWidth > h1.clientWidth
+          ? style.webkitLineClamp !== 'none' ||
+            style.textOverflow === 'ellipsis'
+          : true,
+    };
+  });
+  // v2 · Mídia — Player: the 56 px title in at most three lines beside the cover.
+  expect(lines).toBeLessThanOrEqual(3);
+  expect(clipped).toBe(true);
+  await capture(page, 'player-long-title', info.project.name);
+
+  // A title that fits its three lines is not cut: its glyphs stay inside the clip.
+  await page.goto(`/midia/${fits.id}`);
+  const whole = page.getByRole('heading', { level: 1, name: fits.title });
+  await expect(whole).toBeVisible();
+  expect(
+    await whole.evaluate((h1) => h1.scrollHeight - h1.clientHeight),
+  ).toBeLessThanOrEqual(0);
 });

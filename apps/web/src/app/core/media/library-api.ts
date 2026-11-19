@@ -36,6 +36,7 @@ export const libraryHomeUrlOf = (topic: string | null): string =>
     ? `${LIBRARY_HOME_URL}?${new URLSearchParams({ topic }).toString()}`
     : LIBRARY_HOME_URL;
 export const LIBRARY_RECENTS_URL = `${LIBRARY_URL}/recents`;
+export const LIBRARY_COUNTS_URL = `${LIBRARY_URL}/counts`;
 export const MARK_PLAYED_URL = '/api/v1/media/played';
 
 /** What the library asks for (KBC-051 FR-1): filters and order. */

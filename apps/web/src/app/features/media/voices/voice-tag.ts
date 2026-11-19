@@ -16,7 +16,7 @@ import { voiceLookOf } from './voice-changes.js';
   selector: 'app-voice-tag',
   template: `<span
       class="mark"
-      [attr.data-shape]="look().shape"
+      [attr.data-shape]="round() ? 'circle' : look().shape"
       [class.hollow]="look().hollow"
       [style.--voice-color]="color()"
       aria-hidden="true"
@@ -36,6 +36,11 @@ export class VoiceTag {
   readonly voice = input.required<number>();
   /** Who it is (KBC-065 FR-4); without it, "Voz N". */
   readonly name = input<string | null>(null);
+  /**
+   * A plain dot (the Figma's "Vozes" card in the Sobre panel): there the "Voz N" text and
+   * its time of speech tell the voices apart, so the shape is not the only carrier.
+   */
+  readonly round = input(false);
   /** The collection's main author: ✦ before the name (BR-2). */
   readonly main = input(false);
   protected readonly look = computed(() => voiceLookOf(this.voice()));
