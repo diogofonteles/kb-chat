@@ -414,7 +414,9 @@ test('the mini player, "Meus marcadores" and the queue', async ({
     const { context, page } = await contextAt(browser, width);
     await onlyInterviewBookmarks(page, es);
     await playInterview(page, world);
-    await go(page, '/biblioteca');
+    // Every collection, as the frame draws the library behind the mini player: the collection
+    // in use (Hermetismo, with no media of the world) is /biblioteca's scope (owner, 2026-11-19).
+    await go(page, '/biblioteca?acervos=todos');
     await expect(page.locator('app-library-row').first()).toBeVisible();
     // The bar's Fila (green in the frame) opens the right panel on its Fila tab.
     const queue = page.getByRole('button', { name: 'Fila', exact: true });
