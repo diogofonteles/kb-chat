@@ -33,7 +33,12 @@ export async function middleOf(
   };
 }
 
-/** Marks the element under `point`; its top on screen tells whether the text moved. */
+/**
+ * Marks the element under `point`; its top on screen tells whether the text moved. A point
+ * between two lines (a list's gap, a page's padding) hits the scrolling box itself, which
+ * stays put while its content moves under it: then the probe is the child nearest the point,
+ * down to an element that moves with the text.
+ */
 async function probe(
   page: Page,
   point: { x: number; y: number },
@@ -42,7 +47,20 @@ async function probe(
     document
       .querySelectorAll('[data-scroll-probe]')
       .forEach((old) => old.removeAttribute('data-scroll-probe'));
-    document.elementFromPoint(x, y)?.setAttribute('data-scroll-probe', '');
+    const scrolls = (element: Element) =>
+      element.scrollHeight > element.clientHeight + 1 &&
+      /auto|scroll|hidden/.test(getComputedStyle(element).overflowY);
+    const distance = (element: Element) => {
+      const { top, bottom } = element.getBoundingClientRect();
+      return y < top ? top - y : y > bottom ? y - bottom : 0;
+    };
+    let hit = document.elementFromPoint(x, y);
+    while (hit && scrolls(hit) && hit.firstElementChild) {
+      hit = Array.from(hit.children).reduce((best, child) =>
+        distance(child) < distance(best) ? child : best,
+      );
+    }
+    hit?.setAttribute('data-scroll-probe', '');
   }, point);
   const marked = page.locator('[data-scroll-probe]');
   return async () => (await marked.boundingBox())?.y ?? Number.NaN;
@@ -141,6 +159,46 @@ export async function expectScrolls(
   await expect.poll(top).toBeLessThan(before - MOVED);
 }
 
+/** Frames without a move that end a key's scroll (its animation moves on every frame). */
+const STILL_FRAMES = 10;
+
+/**
+ * Until no box on the page has scrolled for STILL_FRAMES frames in a row. A key's scroll is
+ * animated, and WebKit on Linux drops a keyboard scroll that starts while the one before is
+ * still running (a person reads before pressing again), so each key waits for the last.
+ */
+async function untilStill(page: Page): Promise<void> {
+  await page.evaluate(
+    (frames) =>
+      new Promise<void>((resolve) => {
+        const positions = () =>
+          [
+            document.scrollingElement,
+            ...Array.from(document.querySelectorAll('*')),
+          ]
+            .map((element) => element?.scrollTop ?? 0)
+            .join(',');
+        let last = positions();
+        let still = 0;
+        const frame = () => {
+          const now = positions();
+          still = now === last ? still + 1 : 0;
+          last = now;
+          if (still >= frames) resolve();
+          else requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+      }),
+    STILL_FRAMES,
+  );
+}
+
+/** One key, then its scroll to its end. */
+async function pressAndWait(page: Page, key: string): Promise<void> {
+  await page.keyboard.press(key);
+  await untilStill(page);
+}
+
 /**
  * The keyboard on desktop: with the focus on `start` (a non-editable element), Page Down and
  * Space move the text up, Page Up and Shift+Space bring it back down.
@@ -151,15 +209,16 @@ export async function expectKeyboardScrolls(
 ): Promise<void> {
   if (!desktop(page)) return;
   await start.click();
+  await untilStill(page);
   const point = await middleOf(page, start);
   const top = await probe(page, point);
   const before = await top();
-  await page.keyboard.press('PageDown');
-  await page.keyboard.press('Space');
+  await pressAndWait(page, 'PageDown');
+  await pressAndWait(page, 'Space');
   await expect.poll(top).toBeLessThan(before - MOVED);
   const down = await top();
-  await page.keyboard.press('PageUp');
-  await page.keyboard.press('Shift+Space');
+  await pressAndWait(page, 'PageUp');
+  await pressAndWait(page, 'Shift+Space');
   await expect.poll(top).toBeGreaterThan(down + MOVED);
 }
 
