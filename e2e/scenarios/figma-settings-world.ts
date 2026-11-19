@@ -358,6 +358,15 @@ export async function seedSettingsWorld(): Promise<SettingsWorld> {
     }),
     'house',
   );
+  // A voice named in Alquimia Prática, so "Novo perfil de voz" has someone to register
+  // (settings-voice-profile-add: the empty "Pessoa" field, no "Ninguém para cadastrar").
+  await ok(
+    owner.post('/api/v1/topics/alquimia/speakers', {
+      data: { name: 'Rita Moraes' },
+      headers: CSRF,
+    }),
+    'speaker Rita Moraes',
+  );
   // The owner's Preferências as the frames show them: "Acervo padrão · Hermetismo".
   await ok(
     owner.put('/api/v1/settings', {

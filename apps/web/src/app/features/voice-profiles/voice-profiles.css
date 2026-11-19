@@ -543,3 +543,308 @@
     grid-row: 3;
   }
 }
+
+/* ---------- v2 · Perfis de voz, the frame's numbers (KBC-152) ---------- */
+/* The lead 14/20; 22 to the collection's row (its select 40) and 22 to the banner; the list's
+   title 17/20 24 under it and 10 over the empty card (28 inside: the 56 circle with the mic 26,
+   12 to its words 16/19, 12 to "Cadastrar perfil" 40); the report 28 under the card, no line. */
+.panel {
+  gap: 0.625rem;
+}
+
+.panel > .lead {
+  font-size: var(--text-sm);
+  line-height: 1.25rem;
+}
+
+.panel > .lead + .field,
+.panel > .field + ui-banner {
+  margin-top: 0.75rem;
+}
+
+.panel > .field .input {
+  height: 2.5rem;
+  min-height: 0;
+}
+
+.panel > ui-banner + .block-title {
+  margin-top: 0.875rem;
+}
+
+.block-title {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+}
+
+.banner-text strong {
+  font-size: var(--text-sm);
+  line-height: 1.0625rem;
+}
+
+.banner-text span:not(.visually-hidden) {
+  font-size: var(--text-meta);
+  line-height: 1rem;
+}
+
+:host ::ng-deep .ui-empty {
+  gap: var(--space-3);
+  padding: 1.75rem var(--space-4);
+}
+
+:host ::ng-deep .ui-empty__icon {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+:host ::ng-deep .ui-empty__icon svg {
+  width: 1.625rem;
+  height: 1.625rem;
+}
+
+:host ::ng-deep .ui-empty__title {
+  line-height: 1.1875rem;
+}
+
+.profiles:empty {
+  display: none;
+}
+
+.panel > app-voice-profile-report {
+  margin-top: 1.125rem;
+}
+
+.report {
+  gap: 0.625rem;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.report .hint {
+  line-height: 1.0625rem;
+}
+
+.empty-add {
+  min-height: 2.5rem;
+}
+
+/* The collection's value and chevron are a phone's (selRow). */
+.panel > .field .select-value,
+.panel > .field .select-chevron {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  /* "Acervo" over the collection (15/18, 3, 13/16), › at the right; the select, unseen,
+     covers the row. */
+  .panel > .lead + .field {
+    margin-top: 0.875rem;
+  }
+
+  .panel > .field {
+    position: relative;
+    display: block;
+    padding: 0 2rem 0 0;
+  }
+
+  .panel > .field .label {
+    display: block;
+    line-height: 1.125rem;
+  }
+
+  .panel > .field .select-value {
+    position: static;
+    display: block;
+    margin-top: 0.1875rem;
+    color: var(--color-text-muted);
+    font-size: var(--text-meta);
+    line-height: 1rem;
+  }
+
+  .panel > .field .select-chevron {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    display: inline-flex;
+    color: var(--color-text-muted);
+    transform: translateY(-50%);
+  }
+
+  .panel > .field .input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .panel > .field:has(.input:focus-visible) {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* ---------- v2 · Novo perfil de voz, the frame's numbers (KBC-152) ---------- */
+/* Pessoa 480 wide, "Quem é" 12 after it with its radios on the field's line; the consent 16
+   under (its title 17/20, 10 to the text: 16 inside, the title 15/18, the paragraphs 13/19 8
+   apart, 190 high and scrolled); the signature's note 13/16 10 under, "Copiar texto" 36 on
+   its line; the three fields 18 under (13/16 labels, 6, 44), 10 apart; "Prova do aceite"
+   14 under, its chips 10 under, the drop 10 under (17 inside, ↑ 22, 6, 13/16); the box 18
+   under it. */
+@media (min-width: 1024px) {
+  .top-row {
+    grid-template-columns: 30rem minmax(0, 1fr);
+    column-gap: var(--space-3);
+  }
+
+  .top-row .group {
+    align-items: center;
+    column-gap: var(--space-4);
+  }
+
+  .top-row .group > .check {
+    min-height: 2.75rem;
+  }
+
+  .top-row .group > legend {
+    margin-bottom: 0.375rem;
+    line-height: 1rem;
+  }
+}
+
+.top-row .label,
+.facts-row .label {
+  line-height: 1rem;
+}
+
+.consent {
+  gap: 0.625rem;
+}
+
+.consent-title {
+  font-size: 1.0625rem;
+  line-height: 1.25rem;
+}
+
+.consent-box {
+  gap: var(--space-2);
+  max-height: 11.875rem;
+  padding: var(--space-4);
+  font-size: var(--text-meta);
+  line-height: 1.1875rem;
+}
+
+.consent-box .consent-lead {
+  font-size: 0.9375rem;
+  line-height: 1.125rem;
+}
+
+.consent-foot {
+  align-items: flex-start;
+}
+
+.consent-foot .consent-note {
+  font-size: var(--text-meta);
+  line-height: 1rem;
+}
+
+.copy {
+  padding: 0 var(--space-4);
+}
+
+.facts-row {
+  gap: 0.625rem;
+}
+
+.facts-row .field {
+  gap: 0.375rem;
+}
+
+.proof {
+  gap: var(--space-2);
+}
+
+.proof > legend {
+  margin-bottom: 0.625rem;
+  line-height: 1.25rem;
+  font-size: 1.0625rem;
+}
+
+.drop {
+  gap: 0.375rem;
+  padding: 1.0625rem var(--space-4);
+}
+
+.drop .label {
+  line-height: 1rem;
+}
+
+@media (min-width: 1024px) {
+  /* The form 20 under the modal's head (36 from the title). */
+  form.block {
+    padding-top: 1.25rem;
+  }
+
+  .top-row {
+    row-gap: 0.375rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .top-row:not(:has(> .hint)) > .group {
+    grid-row: 1;
+  }
+
+  .proof > legend {
+    margin-bottom: 0.125rem;
+  }
+
+  /* The foot: a bar across the modal with its line, 16 round "Cancelar" (a ghost 40, 12 a
+     side) and "Continuar" (40, 20 a side), 12 apart. */
+  .form-foot {
+    margin: -1.5rem -1.5rem -1.5rem;
+    padding: var(--space-4) 1.5rem;
+    border-top: 1px solid var(--overlay-line);
+  }
+  /* The foot: "Cancelar" a ghost 40 (12 a side), "Continuar" 40 with 20 a side, 12 apart. */
+  .form-foot .link {
+    min-height: 2.5rem;
+    padding: 0 var(--space-3);
+  }
+
+  .form-foot .primary {
+    min-height: 2.5rem;
+    padding: 0 var(--space-5);
+  }
+}
+
+.consent + .facts-row {
+  margin-top: 0.375rem;
+}
+
+@media (max-width: 1023px) {
+  /* The phone's sheet: Pessoa, "Quem é" 12 under it (its radios on a 44 line 8 under), the
+     consent 14 under them; the consent's text 240 high. */
+  .top-row {
+    row-gap: var(--space-3);
+    margin-bottom: 0.1875rem;
+  }
+
+  .top-row:not(:has(> .hint)) > .group {
+    grid-row: 2;
+  }
+
+  .top-row .group > legend {
+    margin-bottom: var(--space-2);
+    line-height: 1rem;
+  }
+
+  .top-row .group > .check {
+    min-height: 2.75rem;
+  }
+
+  .consent-box {
+    max-height: 15rem;
+  }
+}

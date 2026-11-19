@@ -10,6 +10,10 @@
       i18n="@@voiceProfiles.collection"
       >Acervo</label
     >
+    <!-- A phone draws the collection under the word, with a chevron (selRow); the select over
+         the row chooses. -->
+    <span class="select-value" aria-hidden="true">{{ topicTitle() }}</span>
+    <ui-icon class="select-chevron" name="chevRight" [size]="20" />
     <select
       id="voice-profiles-collection"
       class="input"
@@ -179,6 +183,7 @@
         i18n-title="@@voiceProfiles.newTitle"
         title="Novo perfil de voz"
         [width]="800"
+        [top]="34"
         i18n-cancelLabel="@@voiceConsent.cancel"
         cancelLabel="Cancelar"
         [primaryLabel]="profileForm.phoneAction()"

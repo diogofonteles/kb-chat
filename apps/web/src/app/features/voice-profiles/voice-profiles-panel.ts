@@ -89,6 +89,11 @@ export class VoiceProfilesPanel {
       ? this.topicList.value().items.filter((topic) => topic.parent === null)
       : [],
   );
+  /** The chosen collection's name, as a phone's row draws it under "Acervo". */
+  protected readonly topicTitle = computed(
+    () =>
+      this.collections().find(({ slug }) => slug === this.topic())?.title ?? '',
+  );
   /** The modal's kicker: "Perfil de voz · Alquimia Prática". */
   protected readonly dialogStep = computed(() => {
     const title = this.collections().find(
