@@ -47,12 +47,7 @@
     display: none;
   }
 
-  /* The phone's order (media-library@mobile): Todas, Em andamento, Autoria, the collection
-     (its name alone, media-library-collection-empty@mobile), Não ouvidas. */
-  .topic-prefix {
-    display: none;
-  }
-
+  /* The phone's order (media-library@mobile): Todas, Em andamento, Autoria, Não ouvidas. */
   .all-chip {
     order: 0;
   }
@@ -63,10 +58,6 @@
 
   .authorship {
     order: 2;
-  }
-
-  .topic {
-    order: 3;
   }
 
   [data-state='unheard'],

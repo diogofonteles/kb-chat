@@ -636,9 +636,11 @@
   background: var(--overlay-3);
 }
 
-/* The page you are on (Biblioteca) says it in green; the chosen collection or the open
-   conversation only by the overlay, its title white (v2 · Conversa). */
-.ui-libitem-row[aria-current='page'] .ui-libitem__title {
+/* The page you are on (Biblioteca) and the collection in use say it in green, on every
+   page (owner, 2026-11-19: "não fica claro qual está"; v2 · Conversa draws that title white,
+   Figma to update); the open conversation only by the overlay, its title white. */
+.ui-libitem-row[aria-current='page'] .ui-libitem__title,
+.ui-libitem-row--collection[aria-current] .ui-libitem__title {
   color: var(--color-accent-text);
 }
 

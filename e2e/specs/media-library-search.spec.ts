@@ -175,7 +175,13 @@ async function chooseCollection(page: Page, slug: string) {
   await (await library(page)).locator(`button[data-slug="${slug}"]`).click();
 }
 
-/** "Acervo: <nome> ✕": one collection is in force; its ✕ goes back to every one. */
+/**
+ * "Ver todas as mídias": the explicit way from the collection in use to every collection
+ * (owner, 2026-11-19: the collection is the page's scope, not a removable chip).
+ */
+const allMedia = (page: Page) =>
+  page.getByRole('button', { name: 'Ver todas as mídias' });
+/** The old chip of the collection in force: gone. */
 const topicChip = (page: Page) =>
   page
     .locator('app-library-controls')
@@ -330,9 +336,11 @@ test('AC-6: a recording found by title is one row, and the Acervo stays in reach
   await owner.dispose();
   const page = await pageAs(browser, email, viewportOf());
   await openLibrary(page);
-  // The library opens on the selected collection (KBC-091): its chip takes it back to all.
-  await topicChip(page).click();
+  // The library opens on the selected collection (KBC-091), no chip for it:
+  // "Ver todas as mídias" is the way to every collection.
   await expect(topicChip(page)).toHaveCount(0);
+  await allMedia(page).click();
+  await expect(page).toHaveURL(/acervos=todos/);
   await box(page).fill(interview.title);
   await expect(results(page)).toHaveCount(2);
   await expect(
@@ -340,16 +348,16 @@ test('AC-6: a recording found by title is one row, and the Acervo stays in reach
   ).toHaveCount(1);
 
   await chooseCollection(page, other);
-  await expect(topicChip(page)).toBeVisible();
+  await expect(page).not.toHaveURL(/acervos=todos/);
   await expect(box(page)).toHaveValue(interview.title);
   await expect(results(page)).toHaveCount(1);
   await expect(results(page).first()).toContainText(`Outra ${interview.title}`);
-  await topicChip(page).click();
+  await allMedia(page).click();
   await expect(results(page)).toHaveCount(2);
   await page.context().close();
 });
 
-test('KBC-091 QA I-10: nothing found in one collection, its chip finds it in another', async ({
+test('KBC-091 QA I-10: nothing found in one collection, "Ver todas as mídias" finds it in another', async ({
   browser,
 }) => {
   const owner = await ownerApi();
@@ -365,7 +373,7 @@ test('KBC-091 QA I-10: nothing found in one collection, its chip finds it in ano
   const page = await pageAs(browser, email, viewportOf());
   await openLibrary(page);
   await chooseCollection(page, collection);
-  await expect(topicChip(page)).toBeVisible();
+  await expect(topicChip(page)).toHaveCount(0);
   await box(page).fill(elsewhere);
   await expect(
     page.getByText(`Nada encontrado para “${elsewhere}”`, { exact: false }),
@@ -374,16 +382,15 @@ test('KBC-091 QA I-10: nothing found in one collection, its chip finds it in ano
     page.getByRole('button', { name: 'Limpar filtros' }),
   ).toHaveCount(0);
 
-  // Only "Limpar busca" under the words (media-library-search-empty): the collection's
-  // chip over the results is the way to every collection.
+  // Only "Limpar busca" under the words (media-library-search-empty); every collection
+  // only by the explicit "Ver todas as mídias" (owner, 2026-11-19).
   await expect(
     page.getByRole('button', { name: 'Buscar em todos os acervos' }),
   ).toHaveCount(0);
-  await topicChip(page).click();
+  await allMedia(page).click();
 
   await expect(results(page)).toHaveCount(1);
   await expect(results(page).first()).toContainText(elsewhere);
-  await expect(topicChip(page)).toHaveCount(0);
   await expect(
     page.locator('app-library-search-results').getByRole('heading', {
       level: 3,

@@ -911,6 +911,100 @@ class ResettingStub {
   }
 }
 
+describe('ChatPage: the collection in use, marked on every page (owner, 2026-11-19)', () => {
+  const OWNER_TOPICS: TopicList = {
+    items: [
+      aTopic({ slug: 'hermetismo', title: 'Hermetismo', documentCount: 10 }),
+      aTopic({ slug: 'udv', title: 'UDV', documentCount: 30 }),
+      aTopic({
+        slug: 'udv/palavra-do-mestre',
+        title: 'Palavra do Mestre',
+        parent: 'udv',
+        documentCount: 20,
+      }),
+    ],
+    defaultSlug: 'hermetismo',
+  };
+
+  async function openAt(url: string) {
+    localStorage.clear();
+    localStorage.setItem('kb-chat.view', 'search');
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([fakeStartRequests])),
+        provideHttpClientTesting(),
+        FAKE_ANSWERS,
+        { provide: UsageLog, useValue: usage },
+        provideRouter([
+          {
+            path: '',
+            component: ChatPage,
+            children: [
+              { path: '', children: [] },
+              { path: 'biblioteca', component: MediaStub },
+              { path: 'midia/:id', component: MediaStub },
+            ],
+          },
+        ]),
+      ],
+    });
+    const harness = await RouterTestingHarness.create(url);
+    TestBed.inject(HttpTestingController)
+      .match('/api/v1/topics')
+      .forEach((request) => request.flush(OWNER_TOPICS));
+    await harness.fixture.whenStable();
+    return harness;
+  }
+
+  const marked = () =>
+    collectionButtons()
+      .concat([
+        ...document.querySelectorAll<HTMLButtonElement>(
+          'li.child button.ui-libitem-row',
+        ),
+      ])
+      .filter((button) => button.getAttribute('aria-current') === 'true')
+      .map((button) => button.dataset['slug']);
+
+  it.each(['/', '/biblioteca', '/midia/0b6e8c8e-5f0c-4f4e-9a59-1f2a3b4c5d6e'])(
+    'on %s the chosen collection is the one row marked',
+    async (url) => {
+      const harness = await openAt(url);
+      expect(marked()).toEqual(['hermetismo']);
+      const chosen = document.querySelector('[data-slug="hermetismo"]');
+      expect(chosen?.classList).toContain('ui-libitem-row--collection');
+      // Choosing UDV moves the mark: one row at a time.
+      fireEvent.click(
+        document.querySelector('[data-slug="udv"]') as HTMLElement,
+      );
+      await harness.fixture.whenStable();
+      expect(marked()).toEqual(['udv']);
+    },
+  );
+
+  it("Hermetismo is a top-level row, never inside UDV's branch", async () => {
+    await openAt('/biblioteca');
+    const branch = document.querySelector('ul.children');
+    expect(
+      [...(branch?.querySelectorAll('[data-slug]') ?? [])].map(
+        (row) => (row as HTMLElement).dataset['slug'],
+      ),
+    ).toEqual(['udv/palavra-do-mestre']);
+    expect(collectionButtons().map((button) => button.dataset['slug'])).toEqual(
+      expect.arrayContaining(['hermetismo', 'udv']),
+    );
+  });
+
+  it('choosing a collection on the library leaves "Todas as mídias" (the address drops it)', async () => {
+    await openAt('/biblioteca?acervos=todos&busca=ritmo');
+    const router = TestBed.inject(Router);
+    fireEvent.click(document.querySelector('[data-slug="udv"]') as HTMLElement);
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(router.url).toBe('/biblioteca?busca=ritmo');
+  });
+});
+
 describe('ChatPage on the media pages (no question box)', () => {
   async function openMediaWith(scope: HeadingScope | null) {
     TestBed.configureTestingModule({

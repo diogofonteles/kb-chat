@@ -295,30 +295,39 @@
           <ul [id]="ns() + '-pinned'" class="items">
             @for (item of pinned(); track item.key) {
               <li>
-                <a
-                  class="ui-libitem-row"
-                  [routerLink]="item.path"
-                  routerLinkActive="active"
-                  ariaCurrentWhenActive="page"
-                  [routerLinkActiveOptions]="activeOptions"
-                  [attr.aria-label]="item.title"
-                  [attr.aria-describedby]="'pinned-' + item.key"
-                  (click)="openMedia()"
-                >
-                  <ui-library-item
-                    [title]="item.title"
-                    [meta]="item.meta"
-                    [metaId]="'pinned-' + item.key"
-                    [pinned]="true"
+                @if (item.current !== undefined) {
+                  <!-- Biblioteca: the library of the collection in use; current only while it
+                       lists every collection ("Todas as mídias"), else the collection's row is. -->
+                  <a
+                    class="ui-libitem-row"
+                    [routerLink]="item.path"
+                    [attr.aria-current]="item.current ? 'page' : null"
+                    [attr.aria-label]="item.title"
+                    [attr.aria-describedby]="'pinned-' + item.key"
+                    (click)="openMedia()"
                   >
-                    <ui-cover
-                      [icon]="item.icon"
-                      [from]="item.colors[0]"
-                      [to]="item.colors[1]"
-                      [size]="48"
+                    <ng-container
+                      [ngTemplateOutlet]="pinnedContent"
+                      [ngTemplateOutletContext]="{ item }"
                     />
-                  </ui-library-item>
-                </a>
+                  </a>
+                } @else {
+                  <a
+                    class="ui-libitem-row"
+                    [routerLink]="item.path"
+                    routerLinkActive="active"
+                    ariaCurrentWhenActive="page"
+                    [routerLinkActiveOptions]="activeOptions"
+                    [attr.aria-label]="item.title"
+                    [attr.aria-describedby]="'pinned-' + item.key"
+                    (click)="openMedia()"
+                  >
+                    <ng-container
+                      [ngTemplateOutlet]="pinnedContent"
+                      [ngTemplateOutletContext]="{ item }"
+                    />
+                  </a>
+                }
                 @if (expanded()) {
                   <ui-menu
                     class="row-more"
@@ -778,10 +787,26 @@
     }
   </ng-template>
 
+  <ng-template #pinnedContent let-item="item">
+    <ui-library-item
+      [title]="item.title"
+      [meta]="item.meta"
+      [metaId]="'pinned-' + item.key"
+      [pinned]="true"
+    >
+      <ui-cover
+        [icon]="item.icon"
+        [from]="item.colors[0]"
+        [to]="item.colors[1]"
+        [size]="48"
+      />
+    </ui-library-item>
+  </ng-template>
+
   <ng-template #collectionRow let-entry="entry" let-size="size">
     <button
       type="button"
-      class="ui-libitem-row"
+      class="ui-libitem-row ui-libitem-row--collection"
       [disabled]="!entry.topic.canOpen"
       [attr.data-slug]="entry.topic.slug"
       [attr.aria-current]="entry.lit ? 'true' : null"

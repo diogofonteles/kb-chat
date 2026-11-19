@@ -75,17 +75,16 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
     expect(changes).toEqual([{ kind: 'clear' }]);
   });
 
-  it('chooses an author in "Autoria ▾", and the chip of the collection in force, a sub-collection included, takes it away (AC-5)', async () => {
+  it('chooses an author in "Autoria ▾"; a collection in force, a sub-collection included, has no chip (owner, 2026-11-19)', async () => {
     const { changes, fixture } = await renderControls({
       ...NONE,
       topic: 'udv/palavra-do-mestre',
     });
-    // The collection is chosen in the sidebar (D5); here it is named, with its ✕.
-    const topic = screen.getByRole('button', {
-      name: /^Ver todos os acervos \(tirar .*Palavra do Mestre\)$/,
-    });
-    expect(topic.textContent).toContain('Acervo:');
-    fireEvent.click(topic);
+    // The collection is the page's scope (its header), never a removable filter here.
+    expect(
+      screen.queryByRole('button', { name: /^Ver todos os acervos/ }),
+    ).toBeNull();
+    expect(document.body.textContent).not.toContain('Acervo:');
     fireEvent.click(screen.getByRole('button', { name: 'Autoria' }));
     await fixture.whenStable();
     expect(
@@ -96,10 +95,7 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
     fireEvent.click(
       screen.getByRole('menuitemradio', { name: /Mestre Laércio, principal/ }),
     );
-    expect(changes).toEqual([
-      { kind: 'topic', topic: null },
-      { kind: 'author', author: 'mestre-laercio' },
-    ]);
+    expect(changes).toEqual([{ kind: 'author', author: 'mestre-laercio' }]);
   });
 
   it('shows a chosen author as a chip that clears it', async () => {
@@ -174,13 +170,12 @@ describe('LibraryControls "Assunto" (KBC-070 FR-4)', () => {
     expect(screen.getByRole('button', { name: 'Limpar filtros' })).toBeTruthy();
   });
 
-  it('"Limpar filtros" with the collection alone takes it out (media-library-collection-empty)', async () => {
-    const { changes } = await renderControls({ ...NONE, topic: 'alquimia' });
-    fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros' }));
-    expect(changes).toEqual([{ kind: 'topic', topic: null }]);
+  it('"Limpar filtros" never shows for the collection alone: it is not a filter (owner, 2026-11-19)', async () => {
+    await renderControls({ ...NONE, topic: 'alquimia' });
+    expect(screen.queryByRole('button', { name: 'Limpar filtros' })).toBeNull();
   });
 
-  it('keeps the collection in force on the list, even with no media (KBC-091)', async () => {
+  it("names no collection: the page's header does (owner, 2026-11-19)", async () => {
     await render(LibraryControls, {
       providers: [provideZonelessChangeDetection()],
       inputs: {
@@ -198,10 +193,9 @@ describe('LibraryControls "Assunto" (KBC-070 FR-4)', () => {
         ],
       },
     });
+    expect(screen.queryByText(/Acervo: Alquimia/)).toBeNull();
     expect(
-      screen.getByRole('button', {
-        name: 'Ver todos os acervos (tirar Alquimia)',
-      }).textContent,
-    ).toContain('Acervo: Alquimia');
+      screen.queryByRole('button', { name: /Ver todos os acervos/ }),
+    ).toBeNull();
   });
 });

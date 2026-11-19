@@ -672,10 +672,11 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
 
     // The frame's regions, in its order.
     if (phone) {
+      // The top row names the scope, the collection in use (owner, 2026-11-19).
       await expect(
         page
           .locator('header.topbar')
-          .getByRole('heading', { name: 'Biblioteca' }),
+          .getByRole('heading', { name: data.topicTitle }),
       ).toBeVisible();
       await expect(
         page.getByRole('link', { name: /itens precisam de atenção/ }),
@@ -688,7 +689,8 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
           .and(page.locator(':visible')),
       ).toHaveCount(0);
     } else {
-      await expect(page.getByText('Tudo para ouvir')).toBeVisible();
+      // The hero names the collection in use (owner, 2026-11-19), not "Tudo para ouvir".
+      await expect(page.locator('.library-scope')).toBeVisible();
       await expect(
         page.getByRole('heading', { name: 'Precisa da sua atenção' }),
       ).toBeVisible();

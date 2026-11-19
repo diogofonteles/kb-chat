@@ -27,6 +27,7 @@ import {
   type LibraryPage as LibraryAnswer,
   type LibrarySearch,
   type ListeningPreferences,
+  type Topic,
 } from '@kb-chat/contracts';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { filter, firstValueFrom, take } from 'rxjs';
@@ -38,6 +39,7 @@ import { UsageLog } from '@core/usage/usage-log.js';
 import { By } from '@angular/platform-browser';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { CollectionHeading } from '@features/chat/collection-heading.js';
+import { aTopic } from '../../../testing/fixtures.js';
 import { answeringLevels } from '../../../testing/level-fixtures.js';
 import { UploadPanel } from '../upload-panel.js';
 import {
@@ -115,7 +117,8 @@ const PREFERENCES: ListeningPreferences = {
   skipSilences: false,
   wordHighlight: true,
   ...DEFAULT_LIBRARY_PREFERENCES,
-  // Most of this file is about the list itself: every collection, by choice (KBC-091).
+  // Most of this file is about the list itself: every collection, by the address's choice
+  // ("Todas as mídias", `all` below); the account's `allTopics` no longer opens it so.
   libraryFilters: {
     ...DEFAULT_LIBRARY_PREFERENCES.libraryFilters,
     allTopics: true,
@@ -129,6 +132,8 @@ async function renderLibrary(
     acervo?: string;
     busca?: string;
     routes?: Routes;
+    /** "Todas as mídias" in the address (the Biblioteca pin); false: the collection in use. */
+    all?: boolean;
   } = {},
 ) {
   const media: FakeMedia = fakeMediaElement();
@@ -152,6 +157,9 @@ async function renderLibrary(
           snapshot: {
             queryParamMap: new Map([
               ...(options.acervo ? [['acervo', options.acervo] as const] : []),
+              ...((options.all ?? !options.acervo)
+                ? [['acervos', 'todos'] as const]
+                : []),
               ...(options.busca ? [['busca', options.busca] as const] : []),
             ]),
           },
@@ -160,6 +168,9 @@ async function renderLibrary(
     ],
   });
   const http = TestBed.inject(HttpTestingController);
+  // The address says it too: the router's own navigations read the scope from it.
+  if (options.all ?? !options.acervo)
+    await TestBed.inject(Router).navigateByUrl('/?acervos=todos');
   const settle = () => view.fixture.whenStable();
   /** Runs effects and change detection, so a resource sends its request (no waiting). */
   const tick = async () => {
@@ -1190,7 +1201,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
     });
 
     it('AC-6: the filters in force go with the words, and their chips stay pressed over the results', async () => {
-      const library = await renderLibrary({ features: SPEAKER });
+      const library = await renderLibrary({ features: SPEAKER, all: false });
       await library.open(aPage([anItem(1)]), aHome(), {
         ...PREFERENCES,
         libraryFilters: {
@@ -1218,8 +1229,8 @@ describe('LibraryPage (T16, KBC-051)', () => {
       ).toBeGreaterThan(0);
     });
 
-    it('KBC-091 QA I-10: nothing found in one collection, its chip leads to every collection, and the focus follows', async () => {
-      const library = await renderLibrary({ features: SPEAKER });
+    it('nothing found in one collection: the search stays in it, no chip takes the collection out (owner, 2026-11-19)', async () => {
+      const library = await renderLibrary({ features: SPEAKER, all: false });
       await library.open(aPage([anItem(1)]), aHome(), {
         ...PREFERENCES,
         libraryFilters: {
@@ -1237,37 +1248,9 @@ describe('LibraryPage (T16, KBC-051)', () => {
       expect(
         screen.queryByRole('button', { name: 'Limpar filtros' }),
       ).toBeNull();
-
-      // The frame has only "Limpar busca" (media-library-search-empty): the way out is the
-      // collection's chip, still over the results.
       expect(
-        screen.queryByRole('button', { name: 'Buscar em todos os acervos' }),
+        screen.queryByRole('button', { name: /^Ver todos os acervos/ }),
       ).toBeNull();
-      fireEvent.click(
-        screen.getByRole('button', { name: /^Ver todos os acervos \(tirar / }),
-      );
-      await library.tick();
-
-      const save = library.http.expectOne({ method: 'PUT', url: PREFS });
-      expect(save.request.body).toEqual({
-        libraryFilters: { ...NO_LIBRARY_FILTERS, allTopics: true },
-      });
-      save.flush(PREFERENCES);
-      await library.tick();
-      library.http.expectOne(HOME).flush(aHome());
-      library.http.expectOne(FIRST).flush(aPage([anItem(1)]));
-      const everywhere = library.http.expectOne(
-        (request) =>
-          request.url.startsWith(`${SEARCH}?`) &&
-          request.url.includes('q=orlando'),
-      );
-      expect(everywhere.request.url).not.toContain('topic=');
-      everywhere.flush(anAnswer([aHit(2)]));
-      await library.settle();
-      expect(screen.getByRole('link', { name: 'Faixa 2' })).toBeTruthy();
-      expect(document.activeElement).toBe(
-        screen.getByRole('heading', { name: /resultado/, level: 3 }),
-      );
     });
 
     it('KBC-091 QA I-10: across every collection, nothing found has no such way out', async () => {
@@ -1360,13 +1343,19 @@ describe('LibraryPage (T16, KBC-051)', () => {
     });
 
     it('keeps the words in the address, and comes back with them', async () => {
-      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const library = await found(
+        { features: SPEAKER, all: false },
+        anAnswer([aHit(1)]),
+      );
       await library.settle();
       expect(TestBed.inject(Router).url).toBe('/?busca=padre%20orlando');
     });
 
     it('follows the address: "Biblioteca" in the sidebar leaves the search', async () => {
-      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const library = await found(
+        { features: SPEAKER, all: false },
+        anAnswer([aHit(1)]),
+      );
       await TestBed.inject(Router).navigateByUrl('/');
       await library.settle();
       expect((box() as HTMLInputElement).value).toBe('');
@@ -1374,7 +1363,10 @@ describe('LibraryPage (T16, KBC-051)', () => {
     });
 
     it('takes one value from a repeated address param', async () => {
-      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const library = await found(
+        { features: SPEAKER, all: false },
+        anAnswer([aHit(1)]),
+      );
       await TestBed.inject(Router).navigateByUrl('/?busca=manaus&busca=outra');
       await library.tick();
       expect((box() as HTMLInputElement).value).toBe('manaus');
@@ -1454,6 +1446,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       const library = await renderLibrary({
         features: SPEAKER,
         routes: [{ path: 'outra', children: [] }],
+        all: false,
       });
       await library.open(aPage([anItem(1)]));
       const router = TestBed.inject(Router);
@@ -1469,7 +1462,10 @@ describe('LibraryPage (T16, KBC-051)', () => {
     });
 
     it('writes the address again when the same words come back after it moved', async () => {
-      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const library = await found(
+        { features: SPEAKER, all: false },
+        anAnswer([aHit(1)]),
+      );
       const router = TestBed.inject(Router);
       await router.navigateByUrl('/');
       await library.tick();
@@ -1581,7 +1577,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       '/api/v1/media/library?topic=hermetismo&sort=recently-played';
 
     async function following() {
-      const library = await renderLibrary();
+      const library = await renderLibrary({ all: false });
       library.http.expectOne(PREFS).flush(FOLLOWS);
       await library.tick();
       library.http.expectOne(`${HOME}?topic=hermetismo`).flush(aHome());
@@ -1596,55 +1592,125 @@ describe('LibraryPage (T16, KBC-051)', () => {
         kind: 'topic',
         slug: 'hermetismo',
       });
-      // The collection is not a filter (KBC-091), but the frame's "Limpar filtros" sits by its
-      // chip (media-library-collection-empty), and takes the collection out like its ✕.
+      // The collection is the page's scope, named in its header, never a removable chip nor
+      // a filter "Limpar filtros" takes out (owner, 2026-11-19).
       expect(
-        screen.getByRole('button', { name: 'Limpar filtros' }),
-      ).toBeTruthy();
+        screen.queryByRole('button', { name: 'Limpar filtros' }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole('button', {
+          name: /^Ver todos os acervos \(tirar /,
+        }),
+      ).toBeNull();
+      expect(
+        document.querySelector('.library-scope')?.textContent?.trim(),
+      ).toBe('Hermetismo');
     });
 
-    it('"Todos os acervos" is a choice kept in the account, and the header drops the name', async () => {
+    it('a parent says its sub-collections in the header: the list holds them too (ADR 0028 §6)', async () => {
+      const { http, settle } = await following();
+      http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await settle();
+      const meta = () =>
+        document.querySelector('.ui-page-header__meta')?.textContent ?? '';
+      expect(meta()).toMatch(/^Acervo · /);
+      const list = TestBed.inject(ChatStore).topicList as WritableSignal<
+        Topic[]
+      >;
+      list.set([
+        ...list(),
+        aTopic({
+          slug: 'hermetismo/temas',
+          title: 'Temas',
+          parent: 'hermetismo',
+        }),
+      ]);
+      await settle();
+      expect(meta()).toMatch(/^Acervo com Temas · /);
+    });
+
+    it('"Todos os acervos" kept in the account no longer opens the library mixed (owner, 2026-11-19)', async () => {
+      const library = await renderLibrary({ all: false });
+      library.http.expectOne(PREFS).flush(PREFERENCES);
+      await library.tick();
+      library.http.expectOne(`${HOME}?topic=hermetismo`).flush(aHome());
+      library.http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await library.settle();
+      expect(TestBed.inject(CollectionHeading).scope()).toEqual({
+        kind: 'topic',
+        slug: 'hermetismo',
+      });
+    });
+
+    it('"Todas as mídias" is the address\'s choice (the Biblioteca pin): the header says it', async () => {
       const { http, settle, tick } = await following();
       http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
       await settle();
-      // The chip of the collection in force: its ✕ is "Ver todos os acervos".
-      fireEvent.click(
-        screen.getByRole('button', { name: /^Ver todos os acervos \(tirar / }),
-      );
+      await TestBed.inject(Router).navigateByUrl('/?acervos=todos');
       await tick();
-      const save = http.expectOne({ method: 'PUT', url: PREFS });
-      expect(save.request.body).toEqual({
-        libraryFilters: { ...NO_LIBRARY_FILTERS, allTopics: true },
-      });
-      save.flush(PREFERENCES);
       http.expectOne(HOME).flush(aHome());
       http.expectOne(FIRST).flush(aPage([anItem(1)]));
       await settle();
       expect(TestBed.inject(CollectionHeading).scope()).toEqual({
         kind: 'all',
       });
+      expect(
+        document.querySelector('.library-scope')?.textContent?.trim(),
+      ).toBe('Todas as mídias');
     });
 
-    it('a collection chosen in the sidebar ends "Todos os acervos" in the account too', async () => {
+    it('"Ver todas as mídias" is the explicit way to every collection, and "Ver só" the way back', async () => {
       const { http, settle, tick } = await following();
       http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
       await settle();
-      // The chip of the collection in force: its ✕ is "Ver todos os acervos".
       fireEvent.click(
-        screen.getByRole('button', { name: /^Ver todos os acervos \(tirar / }),
+        screen.getByRole('button', { name: 'Ver todas as mídias' }),
       );
       await tick();
+      expect(TestBed.inject(Router).url).toBe('/?acervos=todos');
       http.expectOne({ method: 'PUT', url: PREFS }).flush(PREFERENCES);
+      http.expectOne(HOME).flush(aHome());
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+      expect(
+        document.querySelector('.library-scope')?.textContent?.trim(),
+      ).toBe('Todas as mídias');
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Ver só Hermetismo' }),
+      );
+      await tick();
+      expect(TestBed.inject(Router).url).toBe('/');
+      http.expectOne({ method: 'PUT', url: PREFS }).flush(PREFERENCES);
+      http.expectOne(`${HOME}?topic=hermetismo`).flush(aHome());
+      http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await settle();
+      expect(
+        document.querySelector('.library-scope')?.textContent?.trim(),
+      ).toBe('Hermetismo');
+    });
+
+    it('a collection chosen in the sidebar ends "Todas as mídias": the list is that one\'s', async () => {
+      const { http, settle, tick } = await renderLibrary();
+      http.expectOne(PREFS).flush(FOLLOWS);
+      await tick();
       http.expectOne(HOME).flush(aHome());
       http.expectOne(FIRST).flush(aPage([anItem(1)]));
       await settle();
       (TestBed.inject(ChatStore).topicSlug as WritableSignal<string>).set(
         'alquimia',
       );
+      // The sidebar takes "Todas as mídias" out of the address with it.
+      await TestBed.inject(Router).navigateByUrl('/');
       await tick();
-      expect(
-        http.expectOne({ method: 'PUT', url: PREFS }).request.body,
-      ).toEqual({ libraryFilters: NO_LIBRARY_FILTERS });
+      http.expectOne(`${HOME}?topic=alquimia`).flush(aHome());
+      http
+        .expectOne('/api/v1/media/library?topic=alquimia&sort=recently-played')
+        .flush(aPage([anItem(1)]));
+      await settle();
+      expect(TestBed.inject(CollectionHeading).scope()).toEqual({
+        kind: 'topic',
+        slug: 'alquimia',
+      });
     });
 
     it('choosing a collection here selects it in the sidebar too', async () => {
@@ -1712,6 +1778,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
     it('says where an audio sent to another collection went, with the way there', async () => {
       const library = await renderLibrary({
         features: ['media', 'media-library', 'media-upload'],
+        all: false,
       });
       const { fixture, http, settle, tick } = library;
       http.expectOne(PREFS).flush(FOLLOWS);

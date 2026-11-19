@@ -158,3 +158,53 @@ describe('savedWhen (v2 · Sua biblioteca, a conversation row)', () => {
     expect(savedWhen(at(2025, 2, 3, 12, 0), now)).toBe('03/03/2025');
   });
 });
+
+describe("the owner's collections (2026-11-19: Hermetismo drawn under UDV)", () => {
+  // As GET /api/v1/topics answers on the owner's state: top level by title, each followed
+  // by its sub-collections (UDV › Palavra do Mestre); Hermetismo is a top level of its own.
+  const owner = [
+    aTopic({ slug: 'hermetismo', title: 'Hermetismo' }),
+    aTopic({ slug: 'udv', title: 'UDV' }),
+    aTopic({
+      slug: 'udv/palavra-do-mestre',
+      title: 'Palavra do Mestre',
+      parent: 'udv',
+    }),
+  ];
+  const tree = (lastUse: Record<string, number>, order: 'recent' | 'alpha') =>
+    collectionTree(
+      orderCollections(owner, view({ order }), lastUse).map((topic) => ({
+        topic,
+      })),
+    ).map((node) => [
+      node.entry.topic.slug,
+      node.children.map((child) => child.topic.slug),
+    ]);
+
+  it('"Recentes" with UDV used last: UDV and its sub-collection first, Hermetismo a top of its own', () => {
+    expect(tree({ udv: 30, hermetismo: 10 }, 'recent')).toEqual([
+      ['udv', ['udv/palavra-do-mestre']],
+      ['hermetismo', []],
+    ]);
+  });
+
+  it('a sub-collection used last brings UDV up; Hermetismo never joins its branch', () => {
+    expect(
+      tree({ 'udv/palavra-do-mestre': 40, hermetismo: 20 }, 'recent'),
+    ).toEqual([
+      ['udv', ['udv/palavra-do-mestre']],
+      ['hermetismo', []],
+    ]);
+  });
+
+  it('never used and alphabetical keep the same two tops', () => {
+    expect(tree({}, 'recent')).toEqual([
+      ['hermetismo', []],
+      ['udv', ['udv/palavra-do-mestre']],
+    ]);
+    expect(tree({ udv: 1 }, 'alpha')).toEqual([
+      ['hermetismo', []],
+      ['udv', ['udv/palavra-do-mestre']],
+    ]);
+  });
+});

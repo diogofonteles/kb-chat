@@ -88,38 +88,18 @@
       </app-menu-button>
     }
   }
-  @if (topicName(); as name) {
-    <button
-      type="button"
-      uiChip
-      class="topic"
-      [selected]="true"
-      [attr.aria-label]="clearTopicLabel()"
-      (click)="clearTopic()"
-    >
-      <!-- "Acervo: Hermetismo" on a desktop; a phone's chip is the name alone
-           (media-library-collection-empty@mobile). -->
-      <span
-        ><span class="topic-prefix" i18n="@@library.topicChipPrefix"
-          >Acervo: </span
-        >{{ name }}</span
-      >
-      <ui-icon name="close" [size]="14" />
-    </button>
-  }
   @if (compact() && hiddenActive() > 0) {
     <span class="hidden-filters">{{ hiddenText() }}</span>
   }
-  <!-- With the collection alone in force too (media-library-collection-empty): then it takes
-       the collection out, as its chip's ✕ does. Not over a search: there the chip is the way
-       out (media-library-search-empty). -->
-  @if (active() > 0 || (topicName() && !searching())) {
+  <!-- The collection is the page's scope (its header), not a filter: "Limpar filtros" never
+       takes it out (owner, 2026-11-19). -->
+  @if (active() > 0) {
     <button
       type="button"
       uiButton="ghost"
       size="sm"
       class="clear"
-      (click)="active() > 0 ? clear() : clearTopic()"
+      (click)="clear()"
       i18n="@@library.clearFilters"
     >
       Limpar filtros

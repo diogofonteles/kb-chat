@@ -294,16 +294,22 @@
   padding: 0;
 }
 
+/*
+ * A sub-collection sits a step further in than any top-level collection: past the caret
+ * column AND past its parent's cover edge. With the caret column alone, a top-level
+ * collection without sub-collections (its caret gap) lined up with the sub-collections and
+ * read as one of them (owner, 2026-11-19: Hermetismo drawn "under" UDV).
+ */
 .child .row {
-  padding-left: 1.5rem;
+  padding-left: 2.5rem;
 }
 
-/* The tree's guide: a thin line from the parent's caret down its sub-collections. */
+/* The tree's guide: a thin line down the sub-collections, inside the parent's cover edge. */
 .branch-line {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 0.75rem;
+  left: 2.25rem;
   width: 1px;
   background: var(--overlay-4);
 }
@@ -532,12 +538,13 @@
     width: 2rem;
   }
 
+  /* Past the 2rem caret column and the parent's cover edge, as on a desktop. */
   .child .row {
-    padding-left: 2rem;
+    padding-left: 3rem;
   }
 
   .branch-line {
-    left: 1rem;
+    left: 2.75rem;
   }
 }
 
