@@ -10,7 +10,7 @@ export const hasLibrary = (session: SessionStore): boolean =>
   session.can('media-library');
 
 /**
- * "Todas as mídias" (the Biblioteca pin): the library of every collection, only by that
+ * "Todas as mídias" (the "Ver todas as mídias" button): the library of every collection, only by that
  * explicit choice and only while the address says so (`/biblioteca?acervos=todos`). Without
  * it the library is the chosen collection's, with its sub-collections (ADR 0028 §6); the
  * account never brings "every collection" back by itself (owner, 2026-11-19).

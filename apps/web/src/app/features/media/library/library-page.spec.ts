@@ -132,7 +132,7 @@ async function renderLibrary(
     acervo?: string;
     busca?: string;
     routes?: Routes;
-    /** "Todas as mídias" in the address (the Biblioteca pin); false: the collection in use. */
+    /** "Todas as mídias" in the address (the "Ver todas as mídias" button); false: the collection in use. */
     all?: boolean;
   } = {},
 ) {
@@ -321,7 +321,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
         states: ['in-progress'],
         authors: ['mestre-laercio'],
         topic: null,
-        allTopics: true,
+        allTopics: false,
         subject: null,
       },
     });
@@ -715,7 +715,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: ['in-progress'],
           authors: [],
           topic: null,
-          allTopics: true,
+          allTopics: false,
           subject: 'concept:cabala',
         },
       });
@@ -1659,7 +1659,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       });
     });
 
-    it('"Todas as mídias" is the address\'s choice (the Biblioteca pin): the header says it', async () => {
+    it('"Todas as mídias" is the address\'s choice (the "Ver todas as mídias" button): the header says it', async () => {
       const { http, settle, tick } = await following();
       http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
       await settle();
@@ -1685,7 +1685,12 @@ describe('LibraryPage (T16, KBC-051)', () => {
       );
       await tick();
       expect(TestBed.inject(Router).url).toBe('/?acervos=todos');
-      http.expectOne({ method: 'PUT', url: PREFS }).flush(PREFERENCES);
+      // "Todas as mídias" lives in the address: the account's old flag is never set.
+      const toAll = http.expectOne({ method: 'PUT', url: PREFS });
+      expect(toAll.request.body).toMatchObject({
+        libraryFilters: { topic: null, allTopics: false },
+      });
+      toAll.flush(PREFERENCES);
       http.expectOne(HOME).flush(aHome());
       http.expectOne(FIRST).flush(aPage([anItem(1)]));
       await settle();
@@ -1697,7 +1702,12 @@ describe('LibraryPage (T16, KBC-051)', () => {
       );
       await tick();
       expect(TestBed.inject(Router).url).toBe('/');
-      http.expectOne({ method: 'PUT', url: PREFS }).flush(PREFERENCES);
+      // One write, the collection's: nothing more to clear on the way back.
+      const back = http.expectOne({ method: 'PUT', url: PREFS });
+      expect(back.request.body).toMatchObject({
+        libraryFilters: { topic: 'hermetismo', allTopics: false },
+      });
+      back.flush(PREFERENCES);
       http.expectOne(`${HOME}?topic=hermetismo`).flush(aHome());
       http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
       await settle();
@@ -1843,7 +1853,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       http.expectNone(PREFS);
     });
 
-    it('keeps it in the account when a chip, the order or "Limpar filtros" write', async () => {
+    it('keeps it in the account when a chip, the order or "Limpar filtros" write (and clears the old "all" flag)', async () => {
       const { http, settle, start, tick } = await renderLibrary();
       await start(aHome(), {
         ...PREFERENCES,
@@ -1866,7 +1876,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: ['in-progress'],
           authors: [],
           topic: 'perdido',
-          allTopics: true,
+          allTopics: false,
           subject: null,
         },
       });
@@ -1894,7 +1904,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: [],
           authors: [],
           topic: 'perdido',
-          allTopics: true,
+          allTopics: false,
           subject: null,
         },
       });

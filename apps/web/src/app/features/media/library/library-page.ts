@@ -88,7 +88,6 @@ import {
   forkJoin,
   map,
   of,
-  pairwise,
   share,
   take,
 } from 'rxjs';
@@ -173,7 +172,8 @@ interface Choices {
 /**
  * Where the list is (KBC-091): one named by a link, or, by default, the one selected in the
  * sidebar (each with its sub-collections, ADR 0028 §6); every collection only while the
- * address says "Todas as mídias" (`?acervos=todos`, the Biblioteca pin), never from the
+ * address says "Todas as mídias" (`?acervos=todos`, from the "Ver todas as mídias" button; the
+ * Biblioteca pin is `/biblioteca`, the collection in use), never from the
  * account (owner, 2026-11-19: "os acervos não deveriam se misturar").
  */
 type Scope =
@@ -342,7 +342,6 @@ export class LibraryPage {
     const filters = {
       ...kept.filters,
       topic: this.topicInForce(),
-      allTopics: this.scope().kind === 'all',
       subject: this.lostSubject() ? null : kept.filters.subject,
     };
     return { ...kept, filters };
@@ -931,16 +930,6 @@ export class LibraryPage {
     toObservable(this.chat.topicsKnown)
       .pipe(filter(Boolean), take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.selectArrivedTopic());
-    // The sidebar took the list out of "Todos os acervos": the account forgets it too.
-    toObservable(this.scope)
-      .pipe(
-        pairwise(),
-        filter(
-          ([before, after]) => before.kind === 'all' && after.kind !== 'all',
-        ),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe(() => this.leaveAllTopics());
   }
 
   /** The words and the address, each following the other (KBC-096). */
@@ -977,7 +966,7 @@ export class LibraryPage {
       });
   }
 
-  /** The Biblioteca pin ("Todas as mídias") or a collection of the sidebar: the scope follows. */
+  /** "Ver todas as mídias" (`?acervos=todos`) or a collection of the sidebar: the scope follows. */
   private followAllInAddress(): void {
     this.router.events
       .pipe(
@@ -1136,7 +1125,7 @@ export class LibraryPage {
     this.keepAllInAddress(topic === null);
     this.scope.set(topic ? { kind: 'topic', slug: topic } : { kind: 'all' });
     if (topic && this.canOpen(topic)) this.chat.selectTopic(topic);
-    this.saveChoice({ ...filters, topic, allTopics: topic === null });
+    this.saveChoice({ ...filters, topic });
   }
 
   /** "Todas as mídias" goes into the address (or out of it): Back and a reload keep it. */
@@ -1162,24 +1151,23 @@ export class LibraryPage {
     );
   }
 
-  private leaveAllTopics(): void {
-    const kept = this.kept()?.filters;
-    if (kept?.allTopics) this.saveChoice({ ...kept, allTopics: false });
-  }
-
   /** Any change but the collection's: what is kept of it stays. */
   private saveFilters(chosen: LibraryFilters): void {
     const kept = this.kept()?.filters;
     this.saveChoice({
       ...chosen,
       topic: kept?.topic ?? null,
-      allTopics: kept?.allTopics ?? false,
     });
   }
 
+  /**
+   * `allTopics` is always written false: "Todas as mídias" lives in the address only, and
+   * nothing reads the account's flag any more (owner, 2026-11-19). The field stays in the
+   * strict contract so the choices already stored still parse; any write clears an old true.
+   */
   private saveChoice(chosen: LibraryFilters): void {
     const subject = chosen.subject ?? this.lostSubject();
-    const filters = { ...chosen, subject };
+    const filters = { ...chosen, subject, allTopics: false };
     this.choose({ filters }, { libraryFilters: filters });
   }
 
