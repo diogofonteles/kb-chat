@@ -231,7 +231,12 @@ export interface World {
   readonly emptyUploader: string;
 }
 
-const rawOf = (lines: readonly Line[], seconds: number, low: boolean) => ({
+/** What the transcriber sends for `lines` (the e2e transcript route's `raw`). */
+export const rawOf = (
+  lines: readonly Line[],
+  seconds: number,
+  low: boolean,
+) => ({
   chunks: [
     {
       offset: 0,
@@ -385,7 +390,11 @@ export async function seedWorld(options: SeedOptions = {}): Promise<World> {
 
   const listing = ['search', 'media', 'media-upload', 'media-edit'];
   const lister = PEOPLE.lister;
-  await invite(owner, lister, { topics: [TOPIC], features: listing });
+  // The /midia frames draw the recording's "3 faixas" (media-list@mobile): who lists sees tracks.
+  await invite(owner, lister, {
+    topics: [TOPIC],
+    features: [...listing, 'media-tracks'],
+  });
   const listerApi = await request.newContext({ baseURL: WEB_ORIGIN });
   await signIn(listerApi, lister);
 
@@ -485,6 +494,17 @@ export async function seedWorld(options: SeedOptions = {}): Promise<World> {
       headers: CSRF,
       data: { id: randomUUID(), positionMs },
     });
+    expect(marked.status(), await marked.text()).toBeLessThan(300);
+  }
+  // The /midia frames are the lister's, and draw the playing interview's filled 🔖
+  // (media-list, media-list@mobile). Not its positions: they would reorder the phone's list.
+  for (const [code, positionMs] of BOOKMARKS.filter(
+    ([code]) => code === 'ES',
+  )) {
+    const marked = await listerApi.post(
+      `/api/v1/media/${byCode[code]}/bookmarks`,
+      { headers: CSRF, data: { id: randomUUID(), positionMs } },
+    );
     expect(marked.status(), await marked.text()).toBeLessThan(300);
   }
 

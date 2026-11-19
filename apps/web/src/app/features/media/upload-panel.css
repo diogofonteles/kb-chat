@@ -574,7 +574,9 @@ button[type='submit']:disabled {
     justify-content: center;
     align-items: center;
     margin: 0 calc(-1 * var(--space-4));
-    padding: var(--space-4) 6.5rem;
+    /* Centred between "Cancelar" and the word at the other end (or the edge, while sending:
+       media-upload-sending@mobile). */
+    padding: var(--space-4) 3.75rem var(--space-4) 4.75rem;
     background: var(--color-elevated);
     text-align: center;
     pointer-events: none;
@@ -676,5 +678,51 @@ button[type='submit']:disabled {
 
   .rule .narrow {
     display: inline;
+  }
+}
+
+/* While sending, the collection reads as chosen (media-upload-sending): locked, not faded. */
+.field select:disabled {
+  color: var(--color-text);
+  opacity: 1;
+}
+
+@media (max-width: 1023px) {
+  .body:has(> .actions > :only-child) > .head {
+    padding-right: var(--space-4);
+  }
+}
+
+/* At a desktop "Adicionar arquivos" sits at the start of the footer's row, so the drawn
+   blocks and buttons keep their places (media-upload-chosen). */
+@media (min-width: 1024px) {
+  .panel.wide .body > .actions,
+  .panel.wide .body > .add-more {
+    grid-row: 3;
+    grid-column: 1;
+  }
+
+  .panel.wide .body > .actions {
+    align-items: flex-start;
+    align-self: start;
+  }
+
+  .panel.wide .body > .add-more {
+    position: sticky;
+    bottom: calc(var(--space-4) - var(--space-6));
+    z-index: 2;
+    align-self: start;
+    margin-top: var(--space-1);
+  }
+
+  /* The frames draw no button for it (media-upload-chosen): a desktop adds files by a drop
+     on the cards; the button shows only to the keyboard, where it is the way. */
+  .panel.wide .body > .add-more:not(:focus-visible) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }

@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import type { Browser, BrowserContext, Page } from '@playwright/test';
+import type { Browser, BrowserContext, Locator, Page } from '@playwright/test';
 import {
   CSRF,
   WEB_ORIGIN,
@@ -9,21 +9,19 @@ import {
   test,
 } from '../specs/fixtures.js';
 import { modeRadio } from '../specs/search-view.js';
-import {
-  chooseCollectionSlug,
-  library,
-  startNewCollection,
-} from '../specs/shell-helpers.js';
+import { library, startNewCollection } from '../specs/shell-helpers.js';
 import {
   ANA,
   CONVERSATIONS,
-  HERMETISMO,
   LISTED,
   LISTED_PHONE,
   NO_TOPICS,
   OWNER,
   chatWorld,
+  resetChatWorld,
   seedChatWorld,
+  signInNamed,
+  withFramesTime,
   type ChatOptions,
   type ChatWorld,
 } from './figma-chat-world.js';
@@ -50,6 +48,7 @@ async function contextAt(
   options: ChatOptions = {},
 ): Promise<{ context: BrowserContext; page: Page }> {
   const phone = width === 'phone';
+  await resetChatWorld(world);
   const context = await browser.newContext({
     baseURL: WEB_ORIGIN,
     viewport: phone ? PHONE : DESKTOP,
@@ -60,16 +59,24 @@ async function contextAt(
     timezoneId: 'America/Sao_Paulo',
   });
   await chatWorld(context, world, {
-    listed: phone ? LISTED_PHONE : LISTED,
+    listed: LISTED,
     ...options,
   });
   const page = await context.newPage();
   await fakeGoogle(page);
-  await signIn(page.request, options.email ?? OWNER);
+  if (options.name)
+    await signInNamed(page.request, options.email ?? OWNER, options.name);
+  else await signIn(page.request, options.email ?? OWNER);
   return { context, page };
 }
 
-async function shoot(page: Page, id: string, width: Width): Promise<void> {
+/** `hover`: what the frame draws under the pointer (the first document's row), on a desktop. */
+async function shoot(
+  page: Page,
+  id: string,
+  width: Width,
+  hover?: Locator,
+): Promise<void> {
   if (!shots) return;
   await page.addStyleTag({
     content:
@@ -79,11 +86,28 @@ async function shoot(page: Page, id: string, width: Width): Promise<void> {
     await page.evaluate(() =>
       document.querySelectorAll('*').forEach((node) => {
         if (node.scrollTop > 0) node.scrollTop = 0;
+        // a row of chips scrolled to the one pressed starts again at its first, as drawn
+        if (node.scrollLeft > 0) node.scrollLeft = 0;
       }),
     );
     await page.waitForTimeout(300);
   }
   await page.mouse.move(1, 1);
+  // The frames draw the question box at rest: no focus ring, no profiles floating over it.
+  // So do the collection dialogs (the name field without its focus ring) and the box's chips.
+  await page.evaluate(() => {
+    const focused = document.activeElement;
+    if (
+      focused instanceof HTMLTextAreaElement ||
+      (focused instanceof HTMLInputElement &&
+        focused.closest('dialog, app-composer'))
+    )
+      focused.blur();
+  });
+  if (hover && width === 'desktop') {
+    await hover.hover();
+    await page.waitForTimeout(200);
+  }
   await page.screenshot({
     path: `${shots}/${id}${width === 'phone' ? '@mobile' : ''}.png`,
   });
@@ -118,6 +142,8 @@ async function search(
 }
 
 const cards = (page: Page) => page.locator('app-result-card');
+/** The first row of "Documentos", beside the best result (the frames draw it hovered). */
+const firstDocument = (page: Page) => cards(page).nth(1);
 
 /** A conversation of "Sua biblioteca" (the phone's Menu), by its title. */
 async function openConversation(page: Page, title: string): Promise<void> {
@@ -153,13 +179,21 @@ test('the home: empty, history, research, profiles, the library, the collection 
 }) => {
   for (const width of WIDTHS) {
     const phone = width === 'phone';
-    const { context, page } = await contextAt(browser, width);
+    let { context, page } = await contextAt(browser, width);
     await home(page);
     await expect(
       page.getByRole('navigation', { name: 'Recentes' }),
     ).toBeVisible();
     await shoot(page, 'chat-empty', width);
+    if (!phone) await shoot(page, 'chat-history', width);
 
+    // The phone's Conversas and the Menu (both widths) list the Alquimia Prática search too.
+    await context.close();
+    ({ context, page } = await contextAt(browser, width, {
+      listed: LISTED_PHONE,
+      name: 'Helena Prado',
+    }));
+    await home(page);
     if (phone) {
       await page
         .getByRole('navigation', { name: 'Navegação' })
@@ -170,7 +204,7 @@ test('the home: empty, history, research, profiles, the library, the collection 
       ).toBeVisible();
       await shoot(page, 'chat-history', width);
       await home(page);
-    } else await shoot(page, 'chat-history', width);
+    }
 
     // The Menu (phone) or Sua biblioteca widened (desktop).
     if (phone) {
@@ -182,12 +216,9 @@ test('the home: empty, history, research, profiles, the library, the collection 
         .click();
     }
     await shoot(page, 'chat-sidebar-drawer-mobile', width);
-    if (phone) await page.keyboard.press('Escape');
-    else
-      await page
-        .getByRole('button', { name: 'Ampliar Sua biblioteca' })
-        .click();
+    await context.close();
 
+    ({ context, page } = await contextAt(browser, width));
     await home(page);
     await startNewCollection(page);
     const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
@@ -258,10 +289,6 @@ test('the home without collections: an error, none in the vault, none granted, o
           : page.getByText(text).first();
       await expect(ready.or(skip)).toBeVisible();
       await skipWizard(page);
-      // The app opens on a collection with texts: Hermetismo is chosen by hand.
-      await (id === 'chat-empty-topic'
-        ? chooseCollectionSlug(page, HERMETISMO)
-        : Promise.resolve());
       await expect(page.getByText(text).first()).toBeVisible();
       await shoot(page, id, width);
       await context.close();
@@ -275,9 +302,9 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
   for (const width of WIDTHS) {
     const phone = width === 'phone';
     let { context, page } = await contextAt(browser, width);
-    const fresh = async () => {
+    const fresh = async (options: ChatOptions = {}) => {
       await context.close();
-      ({ context, page } = await contextAt(browser, width));
+      ({ context, page } = await contextAt(browser, width, options));
       await home(page);
     };
     await home(page);
@@ -292,9 +319,11 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
     await page.unroute(/\/searches$/);
 
     await fresh();
-    await search(page, 'lei do ritmo', 'Tudo');
+    // The frames' "lei do ritmo" is the conversation of "Sua biblioteca", opened (it searches
+    // again and stays in its place, the one open), not a new one.
+    await openConversation(page, CONVERSATIONS.search);
     await expect(cards(page).first()).toBeVisible();
-    await shoot(page, 'chat-results', width);
+    await shoot(page, 'chat-results', width, firstDocument(page));
 
     await fresh();
     await page.route(/\/searches$/, (route) =>
@@ -314,7 +343,7 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
     await search(page, 'ritmo', 'Tudo');
     const more = page.getByRole('button', { name: 'Mostrar mais' });
     await expect(more).toBeVisible();
-    await shoot(page, 'chat-results-more', width);
+    await shoot(page, 'chat-results-more', width, firstDocument(page));
 
     await fresh();
     await search(page, 'xqzw kplvm', 'Tudo');
@@ -326,7 +355,7 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
     await fresh();
     await search(page, 'natureza', 'Por significado');
     await expect(cards(page).first()).toBeVisible();
-    await shoot(page, 'chat-results-semantic', width);
+    await shoot(page, 'chat-results-semantic', width, firstDocument(page));
 
     // A popover on desktop, its own sheet on a phone.
     await page.getByRole('button', { name: /^Assuntos/ }).click();
@@ -334,17 +363,23 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
       ? page.getByRole('dialog', { name: 'Assuntos' })
       : page.getByRole('group', { name: 'Assuntos' });
     await expect(place).toBeVisible();
-    await shoot(page, 'chat-results-filter-popover', width);
+    // The frames draw Cabala chosen, not yet applied ("Limpar" beside "Aplicar").
     await place
       .getByRole('checkbox', { name: /Cabala/ })
       .first()
       .check();
+    await shoot(
+      page,
+      'chat-results-filter-popover',
+      width,
+      firstDocument(page),
+    );
     await place
       .getByRole('button', { name: /^(Aplicar|Ver \d+ resultados?)$/ })
       .click();
     await expect(place).toBeHidden();
     await expect(page.getByText(/^2 documentos/).first()).toBeVisible();
-    await shoot(page, 'chat-results-filtered', width);
+    await shoot(page, 'chat-results-filtered', width, firstDocument(page));
 
     await fresh();
     await search(page, 'natureza', 'Por significado');
@@ -369,11 +404,10 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
     await expect(cards(page)).toHaveCount(1);
     await shoot(page, 'chat-results-authorship', width);
 
-    await fresh();
+    await fresh({ tookMs: 100 });
     await search(page, 'sétupla', 'Por significado');
     await expect(cards(page).first()).toBeVisible();
-    const copy = page.getByRole('button', { name: /\+1 cópia/ }).first();
-    if (await copy.isVisible()) await copy.click();
+    // The lone best result shows its copy beside it by itself (copy-column): nothing to open.
     await shoot(page, 'chat-results-off-topic', width);
 
     // No text/apostila on "ritmo" (the frame): the filtered search answers nothing.
@@ -383,11 +417,22 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
         filters?: { genres?: string[] };
       };
       const response = await route.fetch();
-      if (!asked.filters?.genres?.length) return route.fulfill({ response });
+      if (!asked.filters?.genres?.length)
+        return route.fulfill({
+          response,
+          json: withFramesTime(
+            (await response.json()) as Record<string, unknown>,
+          ),
+        });
       const body = (await response.json()) as Record<string, unknown>;
       await route.fulfill({
         response,
-        json: { ...body, items: [], total: 0, nextOffset: null },
+        json: withFramesTime({
+          ...body,
+          items: [],
+          total: 0,
+          nextOffset: null,
+        }),
       });
     });
     await search(page, 'ritmo', 'Por significado');
@@ -452,8 +497,9 @@ test('the document: open, loading, error, a subject of "Veja também"', async ({
 
     await page.route(/\/documents\//, (route) =>
       route.fulfill({
-        status: 503,
-        json: { error: { code: 'SEARCH_UNAVAILABLE', message: 'down' } },
+        // chat-document-error: "Algo deu errado do nosso lado." (the server's own fault)
+        status: 500,
+        json: { error: { code: 'INTERNAL', message: 'down' } },
       }),
     );
     await search(page, 'natureza sétupla', 'Por significado');
@@ -554,7 +600,7 @@ test('AI research: answering, the answer, failed, interrupted, the sweep to go o
 
     const sweep = await contextAt(browser, width, {
       view: 'research',
-      listed: [...(phone ? LISTED_PHONE : LISTED), CONVERSATIONS.sweep],
+      listed: [...LISTED, CONVERSATIONS.sweep],
     });
     await home(sweep.page);
     await openConversation(sweep.page, CONVERSATIONS.sweep);

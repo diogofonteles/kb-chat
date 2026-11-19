@@ -6,13 +6,15 @@
 .turn {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 /* The reader's question: a bubble on the right (v2 bubble, corner 4 at its foot). */
 .question {
   justify-self: end;
-  max-width: min(85%, 26rem);
+  /* v2 bubble: 456 wide on a desktop, the words from its start (convoMain). */
+  width: min(85%, 28.5rem);
+  max-width: min(85%, 28.5rem);
   margin: 0;
   padding: var(--space-3) var(--space-5);
   border-radius: 1.25rem 1.25rem 0.25rem 1.25rem;
@@ -107,8 +109,10 @@ p.steps {
   display: grid;
   gap: 0.375rem;
   margin: var(--space-1) 0;
-  padding-left: var(--space-8);
+  /* convoMain's steps: the round 32 in, the words 46 in, 16 lines 6 apart. */
+  padding-left: 2.875rem;
   font-weight: 400;
+  line-height: 1rem;
   list-style: none;
 }
 
@@ -247,6 +251,12 @@ p.steps {
   gap: var(--space-2);
 }
 
+/* "Copiar" and "Refazer": 36 high outlined pills (convoMain). */
+.answer-actions button {
+  min-height: 2.25rem;
+  padding-inline: 1rem;
+}
+
 .banner-actions:empty {
   display: none;
 }
@@ -272,6 +282,7 @@ ui-banner .note {
 
 /* The exhaustive sweep (KBC-030): estimate and progress while it runs. */
 .sweep,
+/* cobertura: its lines 16, the 600 bar 8 under the head and 8 above the line (84 high). */
 .coverage {
   display: grid;
   gap: var(--space-2);
@@ -279,7 +290,12 @@ ui-banner .note {
   border-radius: var(--radius-card);
   background: var(--overlay-1);
   font-size: var(--text-meta);
+  line-height: 1rem;
   overflow-wrap: anywhere;
+}
+
+.coverage-bar {
+  max-width: 37.5rem;
 }
 
 .sweep p,
@@ -422,19 +438,23 @@ span.source-art {
   white-space: nowrap;
 }
 
+/* "✦ Mestre Laércio · Texto/apostila": one line of words (v2 sourceCard), its parts inline. */
 .source-meta {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: 0.3em;
+  display: inline-block;
   min-width: 0;
   max-width: 100%;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
 }
 
+.source-meta app-authorship-badge,
+.source-meta ::ng-deep .authorship-badge,
+.source-meta ::ng-deep .words {
+  display: inline;
+}
+
 .source-genre::before {
-  content: '· ';
+  content: '\00a0· ';
 }
 
 .source-meta:not(:has(app-authorship-badge > *)) .source-genre::before {
@@ -545,13 +565,15 @@ span.source-art {
   content: '·';
 }
 
+/* The notice and "Sua IA · …": two 16 lines (v2 · answer footer). */
 .footer {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.125rem 0.4em;
+  gap: 0 0.4em;
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
+  line-height: 1rem;
 }
 
 /* "Resposta gerada por IA…" on its line, then "Sua IA · Respondido por … · Custo: …". */
@@ -559,14 +581,28 @@ span.source-art {
   flex-basis: 100%;
 }
 
-.footer > span:not(:first-child) + span::before {
-  content: '· ';
+.meta-line > span + span::before {
+  content: '\00a0· ';
+}
+
+.meta-line:empty {
+  display: none;
 }
 
 @media (max-width: 1023px) {
+  /* cmConvo's bubble: at most 282 (its words 250 between 16s). */
+  /* cmConvo: the steps' row is its 24 round. */
+  .steps summary,
+  p.steps {
+    min-height: 1.5rem;
+  }
+
   .question {
-    max-width: 85%;
-    padding: var(--space-2) var(--space-4);
+    width: auto;
+    max-width: min(85%, 17.625rem);
+    /* 16 under the page's head, its words 10 in from the top (cmConvo). */
+    margin-top: 0.125rem;
+    padding: 0.625rem var(--space-4);
     font-size: var(--text-item);
   }
 
@@ -633,15 +669,18 @@ span.source-art {
     gap: 0.625rem;
   }
 
+  /* sourceCard: the title 14/17 and its line 12/14, 10 apart. */
   .source-title {
     font-size: 0.875rem;
     font-weight: 700;
+    line-height: 1.0625rem;
   }
 
   .source-meta {
     overflow: hidden;
     flex-wrap: nowrap;
     font-size: var(--text-xs);
+    line-height: 0.875rem;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
@@ -693,6 +732,7 @@ span.source-art {
 
 @media (max-width: 1023px) {
   /* mAnswer: Copiar and Refazer as 36 rounds, the label said aloud only. */
+  /* cmConvo: two 36 rounds, filled, no edge. */
   .answer-actions button {
     width: 2.25rem;
     min-width: 2.25rem;
@@ -700,7 +740,9 @@ span.source-art {
     min-height: 2.25rem;
     padding: 0;
     justify-content: center;
+    border-color: transparent;
     border-radius: 50%;
+    background: var(--overlay-3);
   }
 
   .answer-actions .action-label {

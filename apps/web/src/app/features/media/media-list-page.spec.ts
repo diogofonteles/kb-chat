@@ -67,6 +67,40 @@ async function renderList(
 }
 
 describe('MediaListPage (T14)', () => {
+  it('v2 media-list: a recording says "N faixas" and its chevron opens its tracks under it', async () => {
+    const { answer, fixture } = await renderList({ features: ['media'] });
+    const recording = aMediaItem({ id: mediaId(1), title: 'Perguntas' });
+    const trackOf = (n: number, title: string) =>
+      aMediaItem({
+        id: mediaId(10 + n),
+        title,
+        parent: {
+          id: recording.id,
+          title: recording.title,
+          startMs: n * 1000,
+          endMs: n * 1000 + 500,
+          ordinal: n,
+          total: 2,
+          version: 1,
+          fileVersion: 1,
+        },
+      });
+    await answer([
+      {
+        ...recording,
+        tracks: [trackOf(1, 'Primeira'), trackOf(2, 'Segunda')],
+      } as MediaItem,
+    ]);
+    expect(screen.getByText('2 faixas')).toBeTruthy();
+    const toggle = screen.getByRole('button', { name: '2 faixas' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(toggle);
+    await fixture.whenStable();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const tracks = screen.getByRole('list', { name: 'Faixas de Perguntas' });
+    expect(within(tracks).getByRole('link', { name: 'Segunda' })).toBeTruthy();
+  });
+
   it('shows a skeleton while loading, then the items with status in words', async () => {
     const { answer } = await renderList();
     expect(screen.getByRole('list', { name: 'Carregando…' })).toBeTruthy();
@@ -339,8 +373,8 @@ describe('MediaListPage (T14)', () => {
     );
   });
 
-  it('gives no master actions to a member', async () => {
-    const { answer } = await renderList({
+  it("gives no master actions to a member: a failed audio's ⋯ has its link only", async () => {
+    const { answer, fixture } = await renderList({
       features: ['search', 'media-upload'],
     });
     await answer([
@@ -351,10 +385,12 @@ describe('MediaListPage (T14)', () => {
         canEdit: false,
       }),
     ]);
-    expect(
-      screen.queryByRole('button', { name: /^Mais ações para/ }),
-    ).toBeNull();
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Mais ações para/ }));
+    await fixture.whenStable();
+    expect(
+      screen.getAllByRole('menuitem').map((one) => one.textContent?.trim()),
+    ).toEqual(['Copiar link']);
   });
 
   it('puts the new item on top and focuses it after an upload (UP-01)', async () => {
@@ -629,14 +665,16 @@ describe('MediaListPage: "Editar informações" (KBC-050)', () => {
     ).toEqual(['Tocar agora', 'Tocar em seguida', 'Copiar link']);
   });
 
-  it('FR-2: shows no menu on an audio not ready to who may not edit', async () => {
-    const { answer } = await renderList({ features: ['media'] });
+  it('FR-2: an audio not ready offers who may not edit its link only', async () => {
+    const { answer, fixture } = await renderList({ features: ['media'] });
     await answer([
       aMediaItem({ status: 'queued', durationMs: null, canEdit: false }),
     ]);
+    fireEvent.click(screen.getByRole('button', { name: /^Mais ações para/ }));
+    await fixture.whenStable();
     expect(
-      screen.queryByRole('button', { name: /^Mais ações para/ }),
-    ).toBeNull();
+      screen.getAllByRole('menuitem').map((one) => one.textContent?.trim()),
+    ).toEqual(['Copiar link']);
   });
 
   it('FR-2: who sent it edits but does not remove', async () => {

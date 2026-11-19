@@ -96,6 +96,7 @@ const NO_AUTHOR = '';
         } @else {
           <button
             uiIconButton
+            [size]="36"
             type="button"
             class="head-close"
             aria-label="Fechar"
@@ -110,14 +111,14 @@ const NO_AUTHOR = '';
       <form id="collection-form" (submit)="$event.preventDefault(); save()">
         <div class="columns">
           <!-- The cover is the collection's initials over its colour (v2 · Capa): decorative. -->
-          <div class="cover-slot" aria-hidden="true">
+          <div class="initials-slot" aria-hidden="true">
             <!-- A new collection shows the empty slot until it exists (modal "Capa pela sigla"). -->
             @if (editing() && name().trim()) {
               <ui-cover [title]="name()" [size]="180" />
             } @else {
-              <span class="cover-empty">
+              <span class="initials-empty">
                 <ui-icon name="folder" [size]="40" />
-                <span class="cover-hint" i18n="@@collection.coverHint"
+                <span class="initials-hint" i18n="@@collection.coverHint"
                   >Capa pela sigla</span
                 >
               </span>
@@ -148,7 +149,8 @@ const NO_AUTHOR = '';
                 >
               </p>
             }
-            <p id="collection-address" class="hint">
+            <!-- The error takes the identifier's line (chat-collection-invalid). -->
+            <p id="collection-address" class="hint" [hidden]="invalid()">
               @if (address(); as where) {
                 <ng-container i18n="@@collection.address"
                   >Identificador (não muda depois):
@@ -264,6 +266,7 @@ const NO_AUTHOR = '';
                   <select
                     #parentSelect
                     id="collection-parent"
+                    [class.unchosen]="parent() === topLevel"
                     (change)="parent.set(parentSelect.value)"
                   >
                     <option

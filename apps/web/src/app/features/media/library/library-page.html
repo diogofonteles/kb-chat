@@ -93,6 +93,7 @@
       type="button"
       uiIconButton
       class="bar-search"
+      [class.on]="searching()"
       [size]="32"
       aria-label="Ir para a busca"
       i18n-aria-label="@@library.goToSearch"
@@ -195,11 +196,12 @@
         </div>
         <div class="strip" role="list" #strip>
           @for (item of continueItems(); track item.id) {
+            <!-- ▶ on every shortcut, the one playing too: it goes on from the point
+                 (v2 · media-library-sort). -->
             <app-library-card
               [item]="item"
               [tile]="true"
-              [playing]="playingId() === item.id"
-              (played)="play(item)"
+              (played)="resume(item)"
             />
           }
         </div>
@@ -468,6 +470,7 @@
                     [playing]="playingId() === item.id"
                     [master]="isMaster()"
                     [phone]="phone()"
+                    [choosing]="selecting() && playingId() === item.id"
                     [selectAll]="
                       selecting() && !allSelected() ? selectAllText() : ''
                     "
@@ -526,18 +529,29 @@
         </p>
       }
       <span class="selection-count">{{ selectedText() }}</span>
-      <button type="button" class="bar-action" (click)="markSelected(true)">
-        <ui-icon name="checkcircle" [size]="20" />
-        <span class="bar-words" i18n="@@library.markPlayed"
-          >Marcar como ouvida</span
+      @if (selectedReady().length > 0) {
+        <button type="button" class="bar-action" (click)="markSelected(true)">
+          <ui-icon name="checkcircle" [size]="20" />
+          <span class="bar-words" i18n="@@library.markPlayed"
+            >Marcar como ouvida</span
+          >
+        </button>
+        <button type="button" class="bar-action" (click)="markSelected(false)">
+          <ui-icon name="eyeOff" [size]="20" />
+          <span class="bar-words" i18n="@@library.markUnplayed"
+            >Marcar como não ouvida</span
+          >
+        </button>
+      } @else if (selectedFailedOnly() && isMaster()) {
+        <button
+          type="button"
+          class="bar-action danger"
+          (click)="removeSelected()"
         >
-      </button>
-      <button type="button" class="bar-action" (click)="markSelected(false)">
-        <ui-icon name="eyeOff" [size]="20" />
-        <span class="bar-words" i18n="@@library.markUnplayed"
-          >Marcar como não ouvida</span
-        >
-      </button>
+          <ui-icon name="trash" [size]="20" />
+          <span class="bar-words" i18n="@@media.remove">Remover</span>
+        </button>
+      }
       <button
         type="button"
         class="bar-close"
@@ -582,9 +596,13 @@
     <!-- The sheet's handle on a phone; the ✕ beside the title on a desktop (media-library-remove). -->
     <span class="handle" aria-hidden="true"></span>
     <div class="confirm-head">
-      <h2 id="remove-title" i18n="@@media.removeTitle">
-        Remover "{{ item.title }}"?
-      </h2>
+      @if (removingMany().length > 1) {
+        <h2 id="remove-title">{{ removingManyTitle() }}</h2>
+      } @else {
+        <h2 id="remove-title" i18n="@@media.removeTitle">
+          Remover "{{ item.title }}"?
+        </h2>
+      }
       <button
         type="button"
         uiIconButton

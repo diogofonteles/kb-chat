@@ -4,7 +4,8 @@
 :host {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-5);
+  /* homeMain: the hint's words 16 over the tiles, the tiles 20 over "Comece por um assunto" */
+  gap: var(--space-4);
   text-align: start;
 }
 
@@ -21,10 +22,13 @@
   letter-spacing: -0.03em;
 }
 
+.hint > * + *::before {
+  content: '\00a0';
+}
+
 .hint {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 0.35em;
+  /* "Pergunte em linguagem natural. Dica: …": one line of words (homeMain). */
+  display: block;
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
@@ -118,14 +122,22 @@
   margin: 0 calc(-1 * var(--space-3));
 }
 
+.subjects {
+  margin-top: var(--space-1);
+}
+
 .subjects .ui-section-title {
   margin: 0;
   padding: 0 var(--space-3);
   font-size: 1.25rem;
+  line-height: 1.5rem;
 }
 
+/* The cards stand on the row's middle: a one-line card sits 8 lower than a two-line one
+   (v2 · Conversa, "Comece por um assunto"). */
 .subject-list {
   display: flex;
+  align-items: center;
   gap: var(--space-1);
   margin: 0;
   padding: 0;
@@ -139,7 +151,8 @@
   align-content: start;
   gap: var(--space-2);
   width: calc(150px + var(--space-6));
-  height: 100%;
+  /* each card as tall as its own title (one or two 17 lines) */
+  height: auto;
   padding: var(--space-3);
   border: 0;
   border-radius: var(--radius-card);
@@ -163,6 +176,7 @@
   overflow: hidden;
   font-size: var(--text-sm);
   font-weight: 700;
+  line-height: 1.0625rem;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -171,6 +185,11 @@
 @media (max-width: 1023px) {
   :host {
     gap: var(--space-4);
+  }
+
+  /* cmHome: the banner of an empty collection 12 over the tiles. */
+  ui-banner.state:has(+ .recents) {
+    margin-bottom: calc(-1 * var(--space-1));
   }
 
   .greeting {
@@ -194,6 +213,7 @@
   .subjects .ui-section-title {
     padding: 0;
     font-size: 1.125rem;
+    line-height: 1.375rem;
   }
 
   .subject-list {
@@ -207,6 +227,11 @@
     width: 140px;
     padding: 0;
     background: transparent;
+  }
+
+  /* cmHome's titles on lines of 16 (one or two). */
+  .subject-title {
+    line-height: 1rem;
   }
 
   .subject:hover {

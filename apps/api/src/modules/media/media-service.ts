@@ -10,6 +10,7 @@ import {
   type LevelChoice,
   type MediaAuthor,
   type MediaItem,
+  type MediaListItem,
   type MediaLevelChoices,
   type TrackParent,
   type PreparationPlan,
@@ -604,7 +605,7 @@ export class MediaService {
     }
   }
 
-  list(actor: MediaActor, topic: string): MediaItem[] {
+  list(actor: MediaActor, topic: string): MediaListItem[] {
     this.assertTopic(topic);
     const scope = this.deps.scopeOf?.(topic) ?? [topic];
     const records = scope
@@ -620,11 +621,29 @@ export class MediaService {
       records.map((record) => record.id),
     );
     const presence = this.deps.presence?.();
-    return records.map((record) =>
-      this.itemOf(record, actor, {
+    return records.map((record) => ({
+      ...this.itemOf(record, actor, {
         progress: progress.get(record.id),
         presence,
       }),
+      tracks: this.tracksOf(actor, record),
+    }));
+  }
+
+  /** A recording's tracks in force, as the library lists them (v2 media-list, FR-5). */
+  private tracksOf(actor: MediaActor, record: MediaRecord): MediaItem[] {
+    if (!actor.seesTracks || record.track || record.status !== 'ready')
+      return [];
+    const tracks = this.deps.store
+      .listTracks(record.id)
+      .filter((track) => seesMedia(actor, track));
+    if (tracks.length === 0) return [];
+    const progress = this.deps.listening.progressOf(
+      actor.principal,
+      tracks.map((track) => track.id),
+    );
+    return tracks.map((track) =>
+      this.itemOf(track, actor, this.view(progress.get(track.id))),
     );
   }
 

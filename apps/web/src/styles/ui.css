@@ -55,7 +55,8 @@
 .ui-btn--outline {
   --ui-btn-bg: transparent;
   --ui-btn-fg: var(--color-text);
-  --ui-btn-border: var(--color-text-muted);
+  /* v2 · Componentes draws the edge #878787 on #121212: the text halfway into the page. */
+  --ui-btn-border: color-mix(in srgb, var(--color-text) 50%, var(--color-bg));
 }
 
 .ui-btn--outline:hover:not(:disabled) {
@@ -265,6 +266,7 @@
 }
 
 .ui-banner__icon {
+  display: flex;
   flex: none;
   color: var(--ui-banner-tone);
 }
@@ -334,6 +336,8 @@
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
+  /* v2 · Componentes › Estado vazio: 24/29, 12 under the icon; the words 15/18, 12 under it. */
+  line-height: 1.8125rem;
   letter-spacing: -0.02em;
 }
 
@@ -342,6 +346,7 @@
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-item);
+  line-height: 1.125rem;
 }
 
 .ui-empty__actions {
@@ -366,8 +371,28 @@
     height: 4rem;
   }
 
+  /* emptyM: the icon 28 in its 64, the title 20/24, the way out a 40 pill, 12 apart. */
+  .ui-empty__icon svg {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
   .ui-empty__title {
     font-size: 1.25rem;
+    line-height: 1.5rem;
+  }
+
+  .ui-empty__text {
+    font-size: var(--text-sm);
+    line-height: 1.0625rem;
+  }
+
+  .ui-empty__actions {
+    padding-top: 0;
+  }
+
+  .ui-empty__actions > * {
+    min-height: 2.5rem;
   }
 }
 
@@ -605,7 +630,9 @@
   background: var(--overlay-3);
 }
 
-.ui-libitem-row[aria-current] .ui-libitem__title {
+/* The page you are on (Biblioteca) says it in green; the chosen collection or the open
+   conversation only by the overlay, its title white (v2 · Conversa). */
+.ui-libitem-row[aria-current='page'] .ui-libitem__title {
   color: var(--color-accent-text);
 }
 
@@ -779,11 +806,13 @@ select.ui-input option {
 }
 
 .ui-check {
+  /* v2 · Componentes › Checkbox: the empty box's edge white at half (≥ 3:1, WCAG 1.4.11). */
+  --ui-check-edge: color-mix(in srgb, var(--color-text) 50%, transparent);
   display: inline-grid;
   place-content: center;
   width: 1.125rem;
   height: 1.125rem;
-  border: 1px solid var(--color-text-muted);
+  border: 1px solid var(--ui-check-edge);
   border-radius: 4px;
 }
 
@@ -805,7 +834,8 @@ select.ui-input option {
 .ui-radio {
   width: 1.125rem;
   height: 1.125rem;
-  border: 1px solid var(--color-text-muted);
+  /* the checkbox's edge: white at half (v2 · Componentes › Radio, ≥ 3:1) */
+  border: 1px solid color-mix(in srgb, var(--color-text) 50%, transparent);
   border-radius: var(--radius-pill);
 }
 

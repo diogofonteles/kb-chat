@@ -1,9 +1,11 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { render, screen } from '@testing-library/angular';
 import { describe, expect, it } from 'vitest';
 import { aQueueItem, MEDIA_ID } from '../../../testing/preparation-fixtures.js';
 import { SessionStore } from '@core/auth/session-store.js';
+import { UploadsInFlight } from '@core/media/uploads-in-flight.js';
 import { ProcessingQueueStore } from './processing-queue-store.js';
 import { QueueSummary } from './queue-summary.js';
 
@@ -207,5 +209,26 @@ describe('QueueSummary (KBC-090)', () => {
     const compact = phoneCard();
     expect(compact?.textContent).toMatch(/2 áudios em processamento/);
     expect(compact?.textContent).toContain('2 em processamento');
+  });
+});
+
+describe('QueueSummary: what this browser sends (v2 media-upload-sending)', () => {
+  it('counts it among those at work and shows it first, how far it has gone', async () => {
+    const view = await setup([{ ...item(1), phase: 'attention' }], 0);
+    TestBed.inject(UploadsInFlight).report('panel', [
+      { key: 'panel-1', title: 'Palestra', loaded: 25, total: 100 },
+    ]);
+    await view.fixture.whenStable();
+    expect(
+      screen.getByRole('heading', { name: '1 áudio em processamento' }),
+    ).toBeTruthy();
+    const cards = screen.getAllByRole('listitem');
+    expect(cards[0]?.textContent).toContain('Palestra');
+    expect(cards[0]?.textContent).toContain('Enviando · 25%');
+    TestBed.inject(UploadsInFlight).report('panel', []);
+    await view.fixture.whenStable();
+    expect(
+      screen.getByRole('heading', { name: 'Precisa da sua atenção' }),
+    ).toBeTruthy();
   });
 });

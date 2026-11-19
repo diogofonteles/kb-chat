@@ -92,9 +92,14 @@ export async function expectSummary(
 ): Promise<void> {
   const message = page.locator('app-result-message').last();
   await expect(message.locator('.summary .found')).toHaveText(count);
-  await expect(
-    message.getByRole('button', { name: `Modo da busca: ${mode}` }),
-  ).toBeVisible();
+  const pill = message.getByRole('button', { name: `Modo da busca: ${mode}` });
+  if (mode === 'Tudo' && (page.viewportSize()?.width ?? 1440) < 1024) {
+    // chat-results@mobile: a phone says the mode only when it is "Por significado"; the
+    // question box's chips change it.
+    await expect(pill).toBeHidden();
+    return;
+  }
+  await expect(pill).toBeVisible();
 }
 
 /**

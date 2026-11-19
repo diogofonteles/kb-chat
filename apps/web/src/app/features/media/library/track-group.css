@@ -243,14 +243,33 @@ app-menu-button {
 /* A phone (media-library-tracks@mobile): from 48 px, cover 36, the title and
    "faixa n de 3 · 0:15" under it, ⋯. */
 @container library-table (max-width: 36rem) {
+  /* The title 17 and its line 14 centred in the 48 row; the cover and the ⋯ span both lines,
+     give up their height to them (the margins below) and sit centred, as the frame draws it. */
   :host(.in-table) .track {
     grid-template-columns: 2.25rem auto minmax(0, 1fr) 1.5rem;
     grid-template-areas:
       'art title title menu'
       'art meta duration menu';
+    align-content: center;
     gap: 0 var(--space-3);
     min-height: 3rem;
-    padding: var(--space-1) 0 var(--space-1) 2rem;
+    padding: 0 0 0 2rem;
+  }
+
+  :host(.in-table) .art,
+  :host(.in-table) app-menu-button {
+    align-self: center;
+    margin-block: -1rem;
+  }
+
+  :host(.in-table) .title {
+    min-height: 0;
+    line-height: 1.0625rem;
+  }
+
+  :host(.in-table) .meta,
+  :host(.in-table) .duration {
+    line-height: 0.875rem;
   }
 
   :host(.in-table) .ordinal {

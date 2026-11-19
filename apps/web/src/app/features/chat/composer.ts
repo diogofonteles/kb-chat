@@ -49,6 +49,8 @@ export class Composer {
   private readonly draftOwner = inject(DRAFT_OWNER);
 
   readonly disabled = input(false);
+  /** An answer on its way (a research streaming): the button dims, as v2 draws it. */
+  readonly busy = input(false);
   readonly research = input(false);
   readonly mode = model.required<SearchMode>();
   readonly profile = model<ResearchProfile>('fast');

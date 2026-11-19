@@ -16,46 +16,64 @@
         @if (refreshing()) {
           <span i18n="@@message.refreshing">Atualizando…</span>
         } @else {
+          <!-- "10 de 15 documentos  Tudo  0,0 s", 8 apart with no dots drawn (chat-results);
+               a reader still hears them apart. -->
           <span class="found">{{ found() }}</span>
-          <span class="sep" aria-hidden="true"> · </span>
-          <!-- The mode's pill opens the modes: the search runs again in the one chosen
-               (a desktop search page has no question box to choose it in). -->
-          <ui-menu
-            class="mode-menu"
-            label="Como buscar"
-            i18n-label="@@composer.mode"
-            [triggerLabel]="modeMenuLabel()"
-            [menuId]="headingId('mode')"
-            align="end"
-          >
-            <ui-pill
-              uiMenuTrigger
-              [class.muted-mode]="message().mode !== 'semantic'"
-              [tone]="message().mode === 'semantic' ? 'info' : 'muted'"
-              >{{ modeName() }}</ui-pill
-            >
-            @for (option of modes; track option.value) {
-              <button
-                uiMenuItem
-                type="button"
-                [checked]="option.value === message().mode"
-                (click)="chooseMode(option.value)"
-              >
-                {{ option.label }}
-              </button>
-            }
-          </ui-menu>
-          <span class="sep" aria-hidden="true"> · </span>
+          <span class="visually-hidden"> · </span>
+          <ng-container [ngTemplateOutlet]="modeMenu" />
+          <span class="visually-hidden"> · </span>
           <span class="took">{{ seconds() | number: '1.1-1' }} s</span>
         }
       </p>
+    } @else if (message().status === 'error') {
+      <!-- The mode and how long it tried, where the count would be (chat-results-error). -->
+      <p class="summary status">
+        <ng-container [ngTemplateOutlet]="modeMenu" />
+        <span class="visually-hidden"> · </span>
+        <span class="took">{{ elapsed() | number: '1.1-1' }} s</span>
+      </p>
     } @else if (message().status === 'loading') {
-      <!-- Where the count will be, at the end of the title's row (chat-results-loading). -->
-      <p class="summary status" i18n="@@message.searching">
-        Buscando em {{ topicTitle() }}…
+      <!-- Where the count will be, at the end of the title's row, with the mode and the
+           time so far (chat-results-loading). -->
+      <p class="summary status">
+        <span i18n="@@message.searching">Buscando em {{ topicTitle() }}…</span>
+        <span class="visually-hidden"> · </span>
+        <ng-container [ngTemplateOutlet]="modeMenu" />
+        <span class="visually-hidden"> · </span>
+        <span class="took">{{ elapsed() | number: '1.1-1' }} s</span>
       </p>
     }
   </header>
+
+  <ng-template #modeMenu>
+    <!-- The mode's pill opens the modes: the search runs again in the one chosen
+         (a desktop search page has no question box to choose it in). -->
+    <ui-menu
+      class="mode-menu"
+      label="Como buscar"
+      i18n-label="@@composer.mode"
+      [triggerLabel]="modeMenuLabel()"
+      [menuId]="headingId('mode')"
+      align="end"
+    >
+      <ui-pill
+        uiMenuTrigger
+        [class.muted-mode]="message().mode !== 'semantic'"
+        [tone]="message().mode === 'semantic' ? 'info' : 'muted'"
+        >{{ modeName() }}</ui-pill
+      >
+      @for (option of modes; track option.value) {
+        <button
+          uiMenuItem
+          type="button"
+          [checked]="option.value === message().mode"
+          (click)="chooseMode(option.value)"
+        >
+          {{ option.label }}
+        </button>
+      }
+    </ui-menu>
+  </ng-template>
 
   @if (message().status === 'error') {
     <div class="answer error" role="alert">

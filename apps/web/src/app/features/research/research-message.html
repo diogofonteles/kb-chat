@@ -172,7 +172,7 @@
             {{ coverage.line }}</span
           >&ngsp;<span class="coverage-target"
             ><span i18n="@@sweep.target">Conjunto:</span>
-            {{ coverage.target }}</span
+            {{ coverage.target }}.</span
           >
         </p>
       </div>
@@ -514,28 +514,33 @@
             fontes.</span
           >
         }
-        @if (planLabel()) {
-          <span>{{ planLabel() }}</span>
-        }
-        @if (modelLabel()) {
-          <span i18n="@@ai.answeredBy">Respondido por {{ modelLabel() }}</span>
-        }
-        @if (lentSubscription()) {
-          <span i18n="@@ai.lentSubscription"
-            >Incluído na assinatura do administrador</span
-          >
-        } @else if (subscription()) {
-          <span i18n="@@ai.subscription">Incluído na sua assinatura</span>
-        } @else if (free()) {
-          <span i18n="@@ai.free">Gratuito</span>
-        } @else if (costLabel()) {
-          <span i18n="@@ai.cost">Custo: {{ costLabel() }}</span>
-        }
-        @if (remaining() !== null) {
-          <span i18n="@@ai.remainingToday"
-            >Pesquisas restantes hoje: {{ remaining() }}</span
-          >
-        }
+        <!-- "Sua IA · Respondido por … · Custo: …" on one line of words (v2 · answer footer). -->
+        <span class="meta-line">
+          @if (planLabel()) {
+            <span>{{ planLabel() }}</span>
+          }
+          @if (modelLabel()) {
+            <span i18n="@@ai.answeredBy"
+              >Respondido por {{ modelLabel() }}</span
+            >
+          }
+          @if (lentSubscription()) {
+            <span i18n="@@ai.lentSubscription"
+              >Incluído na assinatura do administrador</span
+            >
+          } @else if (subscription()) {
+            <span i18n="@@ai.subscription">Incluído na sua assinatura</span>
+          } @else if (free()) {
+            <span i18n="@@ai.free">Gratuito</span>
+          } @else if (costLabel()) {
+            <span i18n="@@ai.cost">Custo: {{ costLabel() }}</span>
+          }
+          @if (remaining() !== null) {
+            <span i18n="@@ai.remainingToday"
+              >Pesquisas restantes hoje: {{ remaining() }}</span
+            >
+          }
+        </span>
       </p>
     }
 

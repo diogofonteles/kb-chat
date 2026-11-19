@@ -15,6 +15,7 @@ import {
   HELENA_COUNT,
   HELENA_NAME,
   OWNER,
+  PROGRESS,
   RECORDING,
   TITLES,
   TOPIC,
@@ -116,7 +117,13 @@ async function holdAt(page: Page): Promise<void> {
   await page.waitForTimeout(150);
 }
 
-async function shoot(page: Page, id: string, width: Width): Promise<void> {
+async function shoot(
+  page: Page,
+  id: string,
+  width: Width,
+  /** What the frame draws under the pointer (media-library-search: the first result). */
+  hover?: Locator,
+): Promise<void> {
   if (!shots) return;
   await page.addStyleTag({
     content:
@@ -131,6 +138,7 @@ async function shoot(page: Page, id: string, width: Width): Promise<void> {
     await page.waitForTimeout(300);
   }
   await page.mouse.move(1, 1);
+  if (hover) await hover.hover();
   await holdAt(page);
   await page.screenshot({
     path: `${shots}/${id}${width === 'phone' ? '@mobile' : ''}.png`,
@@ -251,6 +259,17 @@ test('the ⋯ of a row, the selection and the dialogs', async ({ browser }) => {
   for (const width of WIDTHS) {
     const phone = width === 'phone';
     const { context, page } = await contextAt(browser, width);
+    // The row-menu frame's data: nothing to continue (its page has no "Continuar ouvindo");
+    // the later frames (edit, remove) have it back.
+    const home = '**/api/v1/media/library/home*';
+    await page.route(home, async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as Record<string, unknown>;
+      await route.fulfill({
+        response,
+        json: { ...body, continueListening: [] },
+      });
+    });
     await openLibrary(page, world);
     const row = rowNamed(page, second);
     const more = row.getByRole('button', { name: `Mais ações para ${second}` });
@@ -261,6 +280,12 @@ test('the ⋯ of a row, the selection and the dialogs', async ({ browser }) => {
     await shoot(page, 'media-library-row-menu', width);
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
+    await page.unroute(home);
+    await openLibrary(page, world);
+    if (!phone)
+      await expect(
+        page.getByRole('heading', { name: 'Continuar ouvindo' }),
+      ).toBeVisible();
 
     const box = (title: string) =>
       rowNamed(page, title).getByRole('checkbox', {
@@ -325,7 +350,14 @@ test('the search, with and without results, and a collection with nothing', asyn
     await expect(
       page.getByRole('heading', { name: /resultados? para “vegetal”/ }),
     ).toBeVisible();
-    await shoot(page, 'media-library-search', width);
+    await shoot(
+      page,
+      'media-library-search',
+      width,
+      width === 'desktop'
+        ? page.locator('app-library-hit').first().locator('.meta')
+        : undefined,
+    );
     await search.fill('xilofone');
     await expect(
       page.getByText('Nada encontrado para “xilofone”'),
@@ -363,8 +395,14 @@ test('a recording opens its tracks, and removing it names them', async ({
     // The removal frame draws the recording closed, the page's sections back above the list.
     await toggle.click();
     await expect(tracks).toBeHidden();
-    await recording.hover();
-    await more.click();
+    // A phone draws only the chevron: its ⋯ comes out on the long press, or the keyboard.
+    if (width === 'phone') {
+      await more.focus();
+      await page.keyboard.press('Enter');
+    } else {
+      await recording.hover();
+      await more.click();
+    }
     await page.getByRole('menuitem', { name: 'Remover' }).click();
     const remove = page.getByRole('dialog', {
       name: `Remover "${RECORDING}"?`,
@@ -447,7 +485,9 @@ test('"Enviar mídia": empty, chosen, repeated, not audio, sending', async ({
     );
     await dialog.getByRole('button', { name: 'Enviar', exact: true }).click();
     const { id } = (await (await created).json()) as { id: string };
-    await expect(dialog.getByText(/Enviando/).first()).toBeVisible();
+    await expect(
+      dialog.locator('.meta span:visible', { hasText: /Enviando/ }).first(),
+    ).toBeVisible();
     await shoot(page, 'media-upload-sending', width);
     // The frames after this one have no such upload: the held one goes away.
     await page.unrouteAll({ behavior: 'ignoreErrors' });
@@ -498,6 +538,21 @@ test('/midia, the collection as an album for who has no library', async ({
       page.getByRole('heading', { name: `Acervo — ${TOPIC_TITLE}` }),
     ).toBeAttached();
     await shoot(page, 'media-list', width);
+
+    // The phone's menu frame (media-list-menu@mobile) draws the list as heard: the first three
+    // with their bars, most recent on top. The list frame before it draws none heard.
+    if (phone) {
+      for (const [code, positionMs] of PROGRESS) {
+        const saved = await page.request.put(
+          `/api/v1/media/${world.byCode[code]}/progress`,
+          { data: { positionMs, basedOn: null }, headers: CSRF },
+        );
+        expect(saved.status(), await saved.text()).toBe(200);
+      }
+      await playInterview(page, world);
+      await go(page, '/midia');
+      await expect(page.getByRole('link', { name: rita })).toBeVisible();
+    }
 
     const more = page.getByRole('button', { name: `Mais ações para ${rita}` });
     await more.click();

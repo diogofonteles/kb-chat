@@ -3,9 +3,12 @@
     ><span class="visually-hidden" i18n="@@authorship.prefix"
       >Autoria:&nbsp;</span
     >
-    @if (mestre()) {
-      <span class="mark" aria-hidden="true">✦</span>
-    }
-    {{ label() }}</span
+    <!-- The mark and the name in one line of text, "✦ Mestre Laércio", as v2 draws it. -->
+    <span class="words">
+      @if (mestre()) {
+        <span class="mark" aria-hidden="true">✦</span>&nbsp;
+      }
+      {{ label() }}</span
+    ></span
   >
 }

@@ -7,6 +7,7 @@ import {
   inject,
   input,
   output,
+  viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -70,7 +71,11 @@ export type RowAction =
     role: 'listitem',
     '[class.selected]': 'selected()',
     '[class.failed]': "item().status === 'failed'",
-    '[class.playing]': 'playing()',
+    '[class.playing]': 'playing() && !choosing()',
+    // A ready row has its 🔖 under the pointer (a class, not :has(), over 2 000 rows: NFR-2).
+    '[class.ready]': 'ready()',
+    // Its ⋯ open: the row stays as under the pointer (media-library-row-menu).
+    '[class.menu-open]': 'menuOpen()',
     '[class.has-tracks]': 'tracksLabel() !== ""',
     '(pointerdown)': 'pressStarted($event)',
     '(pointermove)': 'pressMoved($event)',
@@ -96,6 +101,11 @@ export class LibraryRow {
    */
   readonly phone = input(false);
   /**
+   * The one playing while a selection is on: drawn as the others (media-library-selection).
+   * Set on that row alone: a class on all 2 000 rows doubled a selection's latency (NFR-2).
+   */
+  readonly choosing = input(false);
+  /**
    * During a selection on a phone, "Selecionar todas as N" (the table's box has no place
    * there): its words, or '' when there is nothing more to select.
    */
@@ -108,6 +118,10 @@ export class LibraryRow {
   readonly tracksToggled = output();
   readonly selectedChange = output<boolean>();
   readonly acted = output<RowAction>();
+  private readonly menuButton = viewChild(MenuButton);
+  protected readonly menuOpen = computed(
+    () => this.menuButton()?.isOpen() ?? false,
+  );
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   /** The long press under way: where it started and its timer. */
@@ -150,6 +164,13 @@ export class LibraryRow {
   });
   protected readonly tracksId = computed(() => `tracks-${this.item().id}`);
   protected readonly ready = computed(() => this.item().status === 'ready');
+  /**
+   * A box for the ready ones and for a file that failed (media-library-selection@mobile): a
+   * failed one, chosen, is removed from the selection's bar.
+   */
+  protected readonly selectable = computed(
+    () => this.ready() || this.item().status === 'failed',
+  );
   protected readonly duration = computed(() => {
     const ms = this.item().durationMs;
     // v2 · media-library: "—" where the length is not known (a file that failed).
@@ -195,6 +216,13 @@ export class LibraryRow {
       .filter((part) => part !== '')
       .join(' · '),
   );
+  protected readonly bookmarksLabel = computed(
+    () =>
+      $localize`:@@library.rowBookmarks:Ver marcadores de ${this.item().title}:title:`,
+  );
+  protected bookmarks(): void {
+    this.acted.emit('bookmarks');
+  }
   protected readonly menuLabel = computed(
     () =>
       $localize`:@@media.moreActions:Mais ações para ${this.item().title}:title:`,
@@ -226,7 +254,7 @@ export class LibraryRow {
   protected pressStarted(event: PointerEvent): void {
     this.pressEnded();
     this.pressedLong = false;
-    if (!this.phone() || !this.ready() || event.button !== 0) return;
+    if (!this.phone() || !this.selectable() || event.button !== 0) return;
     // Not from the row's own controls: the ⋯, ▶, the box and the chevron keep their tap.
     if (onControl(event)) return;
     this.press = {
@@ -235,7 +263,7 @@ export class LibraryRow {
       timer: setTimeout(() => {
         this.press = null;
         this.pressedLong = true;
-        this.acted.emit('select');
+        this.longPressed();
       }, LONG_PRESS_MS),
     };
   }
@@ -257,11 +285,21 @@ export class LibraryRow {
 
   /** The context menu on a phone's row selects it (no browser menu over the row). */
   protected contextMenu(event: MouseEvent): void {
-    if (!this.phone() || !this.ready() || onControl(event)) return;
+    if (!this.phone() || !this.selectable() || onControl(event)) return;
     event.preventDefault();
     if (this.pressedLong) return;
     this.pressEnded();
-    this.acted.emit('select');
+    this.longPressed();
+  }
+
+  /**
+   * A phone recording draws only its chevron (media-library-tracks@mobile): its ⋯ (where it is
+   * removed, media-library-remove-tracks@mobile) opens on the long press, the other rows select.
+   */
+  private longPressed(): void {
+    const menu = this.tracksLabel() ? this.menuButton() : undefined;
+    if (menu) menu.openMenu();
+    else this.acted.emit('select');
   }
 
   /** The keyboard's context menu (the menu key, Shift+F10) selects it too, on a phone. */
@@ -270,7 +308,7 @@ export class LibraryRow {
       event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10');
     if (!menuKey || !this.phone() || !this.ready() || onControl(event)) return;
     event.preventDefault();
-    this.acted.emit('select');
+    this.longPressed();
   }
 
   protected toggleSelected(event: Event): void {

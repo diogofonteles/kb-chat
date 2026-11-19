@@ -291,6 +291,7 @@
               [profile]="research.profile()"
               (profileChange)="research.chooseProfile($event)"
               [disabled]="!topic()"
+              [busy]="researching() && research.streaming()"
               [compact]="!desktop()"
               [profilesAbove]="showProfiles()"
               [searchPill]="searchPage()"
@@ -362,6 +363,7 @@
   -->
   @if (audio.shown() || !desktop()) {
     <div
+      #shellFoot
       class="shell-foot"
       [class.bare]="fullScreenPlayer() || (onSettings() && !audio.shown())"
     >

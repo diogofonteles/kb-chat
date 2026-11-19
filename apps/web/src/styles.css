@@ -195,13 +195,16 @@ app-document-panel .body mark.current {
 app-research-message .answer a.cite {
   display: inline-grid;
   place-items: center;
-  min-width: 1.5em;
-  height: 1.5em;
-  margin-inline: 0.1em;
+  /* v2 · convoMain: a 17 × 20 chip. */
+  min-width: 1.0625rem;
+  height: 1.25rem;
+  /* 5 after the word, the period 2 after it (convoMain). */
+  margin-inline: 0.3125rem 0.125rem;
   padding: 0 0.3em;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
-  color: var(--color-accent-text);
+  /* v2 · convoMain: the [n] a green chip with its number dark. */
+  background: var(--color-accent);
+  color: var(--color-on-accent);
   font-family: var(--font-ui);
   font-size: 0.68em;
   font-weight: 800;
@@ -216,12 +219,12 @@ app-research-message .answer a.cite .cite-mark {
 }
 
 app-research-message .answer a.cite:hover {
-  background: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  background: var(--color-accent-strong, var(--color-accent));
 }
 
+/* The [n] of the source open beside: ringed (the chip is green already). */
 app-research-message .answer a.cite.active {
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+  box-shadow: 0 0 0 2px var(--color-text);
 }
 
 /* A track's citation (KBC-150 item 7): a pill with the wave and its number, then "título ·
@@ -233,6 +236,8 @@ app-research-message .answer a.cite.cite-audio {
   min-width: 0;
   max-width: 100%;
   padding: 0;
+  background: none;
+  color: var(--color-accent-text);
   font-size: 0.8125rem;
   font-weight: 600;
   line-height: 1.6;
@@ -279,6 +284,7 @@ app-research-message .answer a.cite-audio:hover .cite-where {
 app-research-message .answer a.cite-audio.active {
   background: none;
   color: var(--color-accent-text);
+  box-shadow: none;
 }
 
 app-research-message .answer a.cite-audio.active .cite-n {
@@ -334,6 +340,8 @@ app-research-message .answer .cite-group a.cite.cite-time {
   position: relative;
   min-width: 0;
   padding: 0;
+  background: none;
+  color: inherit;
   font-size: 1em;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -350,6 +358,13 @@ app-research-message .answer .cite-group a.cite.cite-time::after {
   height: 1.5rem;
   translate: 0 -50%;
   content: '';
+}
+
+/* The open time keeps its fill (KBC-155). */
+app-research-message .answer .cite-group a.cite.cite-time.active {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  box-shadow: none;
 }
 
 app-research-message .answer .cite-group a.cite.cite-time:hover {

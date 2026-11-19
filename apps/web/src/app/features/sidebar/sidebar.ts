@@ -83,6 +83,11 @@ const KIND_LABELS: Record<ConversationKind, () => string> = {
   search: () => $localize`:@@sidebar.kindConversation:Conversa`,
   research: () => $localize`:@@sidebar.kindResearch:Pesquisa com IA`,
 };
+/** The kind as the wide list's Tipo and the phone Menu's line say it (v2 · Menu lateral). */
+const FLAT_KIND_LABELS: Record<ConversationKind, () => string> = {
+  search: () => $localize`:@@sidebar.kindSearch:Busca`,
+  research: () => $localize`:@@sidebar.kindResearch:Pesquisa com IA`,
+};
 
 const CHIPS: readonly { kind: LibraryKind; label: () => string }[] = [
   {
@@ -397,6 +402,16 @@ export class Sidebar {
     search: KIND_LABELS.search(),
     research: KIND_LABELS.research(),
   };
+  protected readonly flatKindLabels: Record<ConversationKind, string> = {
+    search: FLAT_KIND_LABELS.search(),
+    research: FLAT_KIND_LABELS.research(),
+  };
+  /**
+   * The wide list (⤢) and the phone Menu draw one list (v2 · Menu lateral aberto): no section
+   * heads to fold (each section keeps its name for screen readers), a conversation's cover
+   * says its kind and its line names its collection.
+   */
+  protected readonly flat = computed(() => this.expanded() || this.mobile());
   /** "Novo acervo" and "Editar acervo" (KBC-048 FR-6): only with "Criar acervos". */
   protected readonly canCreateCollections = computed(() =>
     this.session.can('collection-create'),
@@ -418,6 +433,7 @@ export class Sidebar {
 
   /** Whether a section (or a collection's branch) shows its items. */
   protected isOpen(key: string): boolean {
+    if (this.flat() && key.startsWith('section:')) return true;
     return this.filtering() || !this.folded().has(key);
   }
 

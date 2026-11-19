@@ -32,22 +32,6 @@
   gap: var(--space-3);
 }
 
-.tile {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius-cover);
-  background: var(--overlay-4);
-  color: var(--color-text);
-}
-
-.tile.audio {
-  background: var(--color-accent-strong, var(--color-accent));
-  color: var(--color-on-accent);
-}
-
 .names {
   display: grid;
   flex: 1;
@@ -141,8 +125,10 @@
   border-color: var(--color-danger);
 }
 
+/* While it goes, the title stays as written (media-upload-sending): locked, not faded. */
 .field input:disabled {
-  color: var(--color-text-muted);
+  color: var(--color-text);
+  cursor: default;
 }
 
 .error,
@@ -217,4 +203,130 @@
   font-size: var(--text-xs, 0.75rem);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+/* v2 · media-upload-chosen, -duplicate, -bad-type, -sending: the card at 5 %, 12 in (its
+   edge inside), the file's cover 40, the name 14/17 4 under its top and the line 12/14 2
+   under it; "Tirar" grey on a 32 line; what stands in its way 8 under the cover, 12/14 after
+   its 14 icon; the title's label 16 under the card, its box 6 under the label. */
+.file {
+  gap: var(--space-2);
+  padding: calc(var(--space-3) - 1px);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+.cover {
+  flex: none;
+}
+
+.top {
+  align-items: flex-start;
+}
+
+.names {
+  padding-top: var(--space-1);
+}
+
+.name {
+  line-height: 1.0625rem;
+}
+
+.meta {
+  line-height: 0.875rem;
+}
+
+.meta .narrow {
+  display: none;
+}
+
+.remove {
+  align-self: flex-start;
+  min-height: 2rem;
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+}
+
+.error,
+.notice,
+.status {
+  line-height: 0.875rem;
+}
+
+.error ui-icon,
+.notice ui-icon {
+  margin-right: 0.125rem;
+}
+
+.field {
+  gap: 0.375rem;
+}
+
+.label {
+  line-height: 1rem;
+}
+
+@media (max-width: 1023px) {
+  .meta .wide {
+    display: none;
+  }
+
+  .meta .narrow {
+    display: inline;
+  }
+
+  .top {
+    align-items: center;
+  }
+
+  .names {
+    padding-top: 0;
+  }
+
+  /* The ✕ 18, 12 from the card's edge (media-upload-chosen@mobile). */
+  .remove {
+    align-self: center;
+    min-width: 1.5rem;
+    min-height: var(--target);
+    margin: 0 -3px 0 0;
+  }
+}
+
+/* The phone's card says how far in its line; the bar alone under the cover. */
+@media (max-width: 1023px) {
+  .percent {
+    display: none;
+  }
+}
+
+/* What refuses a file in one line beside its ✕ icon (media-upload-bad-type); a phone says it
+   shorter, without the icon (…@mobile: "Não é um áudio aceito…"). */
+.error.refused {
+  flex-wrap: nowrap;
+}
+
+.refused-words {
+  white-space: nowrap;
+}
+
+.refused-words.narrow {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .error.refused ui-icon,
+  .notice ui-icon {
+    display: none;
+  }
+
+  .refused-words {
+    white-space: normal;
+  }
+
+  .refused-words.wide {
+    display: none;
+  }
+
+  .refused-words.narrow {
+    display: inline;
+  }
 }

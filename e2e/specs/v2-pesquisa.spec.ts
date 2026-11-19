@@ -163,10 +163,10 @@ test('AC-3: on a phone [1] opens the reading sheet on "Fonte 1"; dragging it dow
     sheet.getByRole('heading', { name: 'A Lei do Ritmo' }),
   ).toBeVisible();
   await expect(sheet.locator('.body mark').first()).toBeVisible();
-  // 85% of the screen: the answer is still there, under it.
+  // 120 px of the answer left above it (cmSheet): the answer is still there, under it.
   const box = await sheet.boundingBox();
   const height = viewport?.height ?? 0;
-  expect(Math.round(box?.height ?? 0)).toBe(Math.round(height * 0.85));
+  expect(Math.round(box?.height ?? 0)).toBe(Math.round(height - 120));
   await shot(page, 'chat-research-answer-source');
 
   // The APG tabs: one Tab stop, arrows move the selection and the focus, and the panel is

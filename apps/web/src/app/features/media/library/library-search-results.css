@@ -66,12 +66,13 @@
   font-size: var(--text-sm);
 }
 
-/* Nothing found (v2 · Componentes › Estado vazio): the icon, the words, the ways out. */
+/* Nothing found (v2 · Componentes › Estado vazio, as `ui-empty-state`): the 72 icon 72 under
+   the filters, the title 24/29 and the words 15/18 12 apart, the way out 24 under them. */
 .empty {
   display: grid;
   justify-items: center;
   gap: var(--space-3);
-  padding: var(--space-8) var(--space-4);
+  padding: 4.5rem var(--space-4) var(--space-8);
   text-align: center;
 }
 
@@ -81,25 +82,35 @@
   width: 4.5rem;
   height: 4.5rem;
   border-radius: var(--radius-pill);
-  background: var(--overlay-3);
+  background: var(--overlay-2);
   color: var(--color-text-muted);
 }
 
 .empty p {
-  max-width: 34rem;
+  max-width: 28.75rem;
   margin: 0;
   overflow-wrap: anywhere;
 }
 
 .empty-title {
-  font-size: var(--text-section);
+  font-size: 1.5rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  line-height: 1.8125rem;
+  letter-spacing: -0.02em;
 }
 
 .hint {
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-item);
+  line-height: 1.125rem;
+}
+
+.hint.narrow {
+  display: none;
+}
+
+.empty > :is(button, a):last-child {
+  margin-top: var(--space-3);
 }
 
 .notice {
@@ -178,13 +189,48 @@
     font-size: var(--text-md);
   }
 
+  /* emptyM (media-library-search-empty@mobile): 64 with its 28 icon, 20/24, 14/17. */
+  .empty-icon {
+    width: 4rem;
+    height: 4rem;
+  }
+
+  .empty-icon ui-icon ::ng-deep svg {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
   .empty-title {
     font-size: 1.25rem;
+    line-height: 1.5rem;
+  }
+
+  .hint {
+    font-size: var(--text-sm);
+    line-height: 1.0625rem;
+  }
+
+  .empty > :is(button, a):last-child {
+    min-height: 2.5rem;
+    margin-top: 0;
   }
 
   /* The phone's empty state keeps the advice only (media-library-search-empty@mobile). */
-  .hint-where {
+  .hint.wide {
     display: none;
+  }
+
+  .hint.narrow {
+    display: block;
+  }
+
+  /* The way out 12 under the words, 40 tall, as emptyM draws it. */
+  .actions {
+    margin-top: 0;
+  }
+
+  .actions > button {
+    min-height: 2.5rem;
   }
 
   /* The phone's head is the count alone (media-library-search@mobile); where it looked stays
@@ -196,5 +242,32 @@
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+}
+
+/* v2 · media-library-search at a desktop: "N resultados" 12 under the filters on its 24
+   line, the results 12 under it, 4 apart. */
+@media (min-width: 1024px) {
+  .results {
+    gap: var(--space-3);
+  }
+
+  .head {
+    min-height: 1.5rem;
+  }
+}
+
+/* The phone: the count 12 under the chips, a result every 68 (media-library-search@mobile). */
+@media (max-width: 1023px) {
+  .results {
+    gap: var(--space-3);
+  }
+
+  .head {
+    min-height: 1.1875rem;
+  }
+
+  .hits {
+    gap: var(--space-2);
   }
 }

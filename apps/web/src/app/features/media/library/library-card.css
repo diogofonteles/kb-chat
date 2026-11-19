@@ -118,7 +118,7 @@ a.title:focus-visible::after {
 }
 
 /* How far, along the cover's foot (v2 Cartão: 4 px, accent over a dark track). */
-.cover-bar {
+.cover-progress {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -129,7 +129,7 @@ a.title:focus-visible::after {
   background: rgb(0 0 0 / 50%);
 }
 
-.cover-bar span {
+.cover-progress span {
   display: block;
   height: 100%;
   background: var(--color-accent);
@@ -211,10 +211,21 @@ a.title:focus-visible::after {
 /* A phone's grid (media-library-grid@mobile): the bare cover, its title and author; ▶ only
    on the one playing (a tap on the card opens it). */
 @media (max-width: 1023px) {
+  /* v2 grid (mobile): the cover, then the title 13/16 and the author 12/14, 6 apart. */
   :host(:not(.tile)) {
-    gap: var(--space-1);
+    gap: 0.375rem;
     padding: 0;
     background: transparent;
+  }
+
+  :host(:not(.tile)) .body {
+    gap: 0.375rem;
+  }
+
+  /* The phone's covers carry no bar (media-library-grid@mobile); how far stays in words for a
+     screen reader (the resume line). */
+  :host(:not(.tile)) .cover-progress {
+    display: none;
   }
 
   :host(:not(.tile):hover),
@@ -231,11 +242,14 @@ a.title:focus-visible::after {
   }
 
   :host(:not(.tile)) .title {
+    display: block;
     font-size: var(--text-meta);
+    line-height: 1rem;
   }
 
   :host(:not(.tile)) .meta {
     font-size: var(--text-xs);
+    line-height: 0.875rem;
   }
 
   :host(:not(.tile)) .duration,

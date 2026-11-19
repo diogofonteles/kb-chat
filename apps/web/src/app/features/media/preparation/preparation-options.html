@@ -30,8 +30,8 @@
           legendas. Grátis, no computador do transcritor.</ng-container
         >
         @if (transcribeMinutes(); as minutes) {
-          &ngsp;<ng-container i18n="@@prep.option.minutes"
-            >Estimativa: cerca de {{ minutes }} min.</ng-container
+          &ngsp;<span class="estimate" i18n="@@prep.option.minutes"
+            >Estimativa: cerca de {{ minutes }} min.</span
           >
         }
       </p>
@@ -80,8 +80,8 @@
             Você confirma. Grátis.</ng-container
           >
           @if (speakersMinutes(); as minutes) {
-            &ngsp;<ng-container i18n="@@prep.option.minutes"
-              >Estimativa: cerca de {{ minutes }} min.</ng-container
+            &ngsp;<span class="estimate" i18n="@@prep.option.minutes"
+              >Estimativa: cerca de {{ minutes }} min.</span
             >
           }
         }

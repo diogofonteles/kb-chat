@@ -219,9 +219,29 @@
   list-style: none;
 }
 
-/* The first row 8 under the head's line (v2 · media-list), not the column's 16 + 8. */
+/* The first row 9 under the head's box (v2 · media-list), not the column's 16 + 8. */
 .table-head + .rows {
-  margin-top: -0.5rem;
+  margin-top: -0.9375rem;
+}
+
+/* The title 15/18 and its author 13/16 right under it, centred in the 56 row (media-list). */
+@media (min-width: 1024px) {
+  .row:not(.table-head) {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .row .main {
+    margin-bottom: -1px;
+  }
+
+  .row .title {
+    line-height: 1.125rem;
+  }
+
+  .row .byline {
+    margin-top: 1px;
+    line-height: 1rem;
+  }
 }
 
 .row {
@@ -450,15 +470,13 @@ a.card-title::after {
 
 /* ---------- Messages ---------- */
 
-ui-empty-state {
-  padding-block: var(--space-8);
-}
+/* At a desktop the component's own 72 over the icon (media-library-empty-*, media-list-empty). */
 
 /* A phone's empty list sits lower, nearer the middle of what is left (emptyM: 24 + 48 over
    the icon, @mobile). */
 @media (max-width: 1023px) {
   ui-empty-state {
-    padding-block: 4.25rem 0;
+    padding-block: 4.5rem 0;
   }
 }
 
@@ -659,6 +677,11 @@ ui-empty-state {
     display: none;
   }
 
+  /* The first cover 15 under the order's line (media-list@mobile). */
+  .table-head + .rows {
+    margin-top: -0.25rem;
+  }
+
   .row {
     grid-template-columns: calc(3.25rem + var(--space-3)) minmax(0, 1fr) auto;
     grid-template-rows: auto auto;
@@ -794,5 +817,69 @@ ui-empty-state {
 
   .confirm-actions button {
     width: 100%;
+  }
+}
+
+/* On a phone the page runs under the foot (chat-page.css): it ends that much lower. */
+@media (max-width: 1023px) {
+  .media {
+    padding-bottom: calc(var(--space-8) + var(--shell-foot-h, 0px));
+  }
+}
+
+/* A recording (v2 media-list, as the library's rows): "3 faixas" before its author, the
+   chevron at the row's end; its ⋯ comes out under the pointer or the focus (a phone: the
+   keyboard), its tracks open under it. */
+.tracks-pill {
+  flex: none;
+}
+
+.tracks-toggle {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.tracks-toggle:hover {
+  color: var(--color-text);
+}
+
+.tracks-toggle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.row.has-tracks:not(:hover, :focus-within) app-row-menu {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.row-tracks {
+  list-style: none;
+}
+
+@media (max-width: 1023px) {
+  .row.has-tracks app-row-menu:not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .tracks-toggle {
+    height: var(--target);
   }
 }

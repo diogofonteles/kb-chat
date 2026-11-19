@@ -274,7 +274,9 @@
   grid-auto-flow: column;
   grid-auto-columns: calc((100% - 2 * var(--space-3)) / 3);
   gap: var(--space-3);
-  margin: 0;
+  /* The 4 under the cards keeps their focus ring in the scroller; it takes no room below
+     (the filters 32 under the cards, v2 · media-library-sort). */
+  margin: 0 0 calc(-1 * var(--space-1));
   padding: 0 0 var(--space-1);
   overflow-x: auto;
   scroll-snap-type: x mandatory;
@@ -359,7 +361,7 @@
 .table-head:hover .select-all,
 .select-all:focus-visible,
 .selecting .select-all {
-  border-color: var(--color-text-muted);
+  border-color: var(--ui-check-edge);
 }
 
 .table-head:hover .number-head,
@@ -387,11 +389,12 @@
 }
 
 /* A flex column: grid track sizing over 2 000 rows costs a frame at every layout (NFR-2).
-   The first row starts 8 under the head's line (v2 · media-library). */
+   The first row starts 8 under the head's 1 px line (v2 · media-library: the line at the
+   head's last pixel, the rows of 56 from 9 under its box). */
 .rows {
   display: flex;
   flex-direction: column;
-  margin: var(--space-2) 0 0;
+  margin: calc(var(--space-2) + 1px) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -402,7 +405,8 @@
      leaves the rest empty (media-library-grid). */
   grid-template-columns: repeat(auto-fill, 11.25rem);
   gap: var(--space-2);
-  margin: var(--space-2) 0 0;
+  /* The cards' 12 of padding reach 8 past the column's edge, the covers 4 inside it. */
+  margin: var(--space-2) 0 0 calc(-1 * var(--space-2));
   padding: 0;
   list-style: none;
 }
@@ -438,11 +442,14 @@
   flex-wrap: wrap;
   align-items: center;
   align-self: center;
-  gap: var(--space-2) var(--space-3);
-  width: min(40rem, calc(100% - 2 * var(--space-8)));
+  /* v2 · media-library-selection: the count 15/700, two 40 pills 16 apart, ✕ 36; as wide as
+     they are (24 in, 12 at the end). */
+  gap: var(--space-2) var(--space-4);
+  width: fit-content;
+  max-width: calc(100% - 2 * var(--space-8));
   min-height: 3.5rem;
   margin-top: var(--space-6);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-6);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-6);
   border-radius: var(--radius-pill);
   background: var(--color-text);
   color: var(--color-bg);
@@ -450,7 +457,6 @@
 }
 
 .selection-count {
-  flex: 1;
   font-size: var(--text-item);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -461,10 +467,10 @@
   align-items: center;
   gap: var(--space-2);
   min-height: 2.5rem;
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-6);
   border: none;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-bg) 8%, transparent);
+  background: rgb(0 0 0 / 6%);
   color: inherit;
   font: inherit;
   font-size: var(--text-sm);
@@ -484,8 +490,8 @@
 .bar-close {
   display: grid;
   place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.25rem;
+  height: 2.25rem;
   padding: 0;
   border: none;
   border-radius: var(--radius-pill);
@@ -515,15 +521,13 @@
 
 /* ---------- Messages, empty states, loading ---------- */
 
-ui-empty-state {
-  padding-block: var(--space-8);
-}
+/* At a desktop the component's own 72 over the icon (media-library-empty-*, media-list-empty). */
 
 /* A phone's empty list sits lower, nearer the middle of what is left (emptyM: 24 + 48 over
    the icon, @mobile). */
 @media (max-width: 1023px) {
   ui-empty-state {
-    padding-block: 4.25rem 0;
+    padding-block: 4.5rem 0;
   }
 
   /* The phone's rows start right under the order's line (media-library@mobile). */
@@ -791,22 +795,24 @@ ui-empty-state {
     min-width: 0;
   }
 
+  /* A 40 field (media-library-search@mobile); its ✕ keeps a 40 target inside it. */
   .search-box {
-    min-height: var(--target);
+    min-height: 2.5rem;
+    height: 2.5rem;
   }
 
   .clear-search {
-    width: var(--target);
-    height: var(--target);
+    width: 2.5rem;
+    height: 2.5rem;
   }
 
   .phone-sort {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    /* Its 44 targets overflow the frame's row (the order 21 under the card, the first
-       cover 27 under the order's middle): the column's gaps are taken back. */
-    margin: calc(-1 * var(--space-3)) 0 calc(-0.8125rem);
+    /* Its 44 targets overflow the frame's row (the order 21 under the card, the first row
+       18 under the order's foot): the column's gaps are taken back. */
+    margin: calc(-1 * var(--space-3)) 0 calc(-0.875rem);
   }
 
   .phone-view {
@@ -819,11 +825,12 @@ ui-empty-state {
     min-height: var(--target);
   }
 
-  /* Two covers a row, right under the order's row (media-library-grid@mobile). */
+  /* Two covers a row of 171, 12 apart, right under the order's row (media-library-grid@mobile). */
   .grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 10.6875rem));
     gap: var(--space-3);
     margin-top: 0;
+    margin-left: 0;
   }
 
   .skeleton-strip {
@@ -839,15 +846,29 @@ ui-empty-state {
     left: var(--space-2);
     z-index: 60;
     width: auto;
+    max-width: none;
     min-height: 3.5rem;
     margin: 0;
-    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+    padding: var(--space-1) var(--space-4);
     border-radius: var(--radius-card);
-    gap: var(--space-1);
+    gap: 0;
+  }
+
+  /* v2 · media-library-selection@mobile: the count, then ✓ ⊘ ✕ 22 each, 12 apart. */
+  .selection-count {
+    flex: 1;
+  }
+
+  .bar-action ui-icon,
+  .bar-close ui-icon,
+  .bar-action ui-icon ::ng-deep svg,
+  .bar-close ui-icon ::ng-deep svg {
+    width: 22px;
+    height: 22px;
   }
 
   .bar-action {
-    width: var(--target);
+    width: 2.125rem;
     height: var(--target);
     padding: 0;
     justify-content: center;
@@ -868,12 +889,15 @@ ui-empty-state {
   }
 
   .bar-close {
-    width: var(--target);
+    width: 1.375rem;
     height: var(--target);
+    margin-left: 0.375rem;
   }
 
   .library.selecting {
-    padding-bottom: calc(var(--shell-mobile-nav) + var(--space-8));
+    padding-bottom: calc(
+      var(--shell-foot-h, var(--shell-mobile-nav)) + var(--space-8)
+    );
   }
 
   .confirm {
@@ -912,8 +936,20 @@ ui-empty-state {
     display: none;
   }
 
+  /* The title 20/24, the words 14/17, the tracks 13/16 and the two 44 buttons, 12 apart; the
+     buttons end 82 over the screen's foot (media-library-remove@mobile). */
+  .confirm {
+    padding-bottom: calc(5.125rem + env(safe-area-inset-bottom));
+  }
+
   .confirm h2 {
-    margin-bottom: var(--space-2);
+    margin-bottom: var(--space-3);
+    line-height: 1.5rem;
+  }
+
+  .confirm p {
+    margin-bottom: 0;
+    line-height: 1.0625rem;
   }
 
   .confirm-actions {
@@ -921,9 +957,14 @@ ui-empty-state {
   }
 
   .confirm .remove-tracks {
-    margin-top: 0;
+    margin-top: var(--space-3);
     padding: 0;
     background: none;
+  }
+
+  .confirm .remove-tracks-text {
+    font-size: var(--text-meta);
+    line-height: 1rem;
   }
 
   .confirm .remove-tracks-text {
@@ -941,5 +982,39 @@ ui-empty-state {
 
   .confirm-actions button {
     width: 100%;
+  }
+}
+
+/* On a phone the page runs under the foot (chat-page.css): it ends that much lower. */
+@media (max-width: 1023px) {
+  .library {
+    padding-bottom: calc(var(--space-8) + var(--shell-foot-h, 0px));
+  }
+}
+
+/* While a search is on, its 🔍 in the action bar is white (media-library-search). */
+.bar-search.on {
+  color: var(--color-text);
+}
+
+/* v2 · media-library-selection at a desktop: the bar at the panel's foot, 164 in from the
+   panel's edge (as drawn), not centred. */
+@media (min-width: 1024px) {
+  .selection-bar {
+    bottom: 0;
+    align-self: flex-start;
+    margin-left: 10.25rem;
+  }
+
+  /* The count's own room, as drawn (137 for "2 selecionadas"), so the bar does not jump. */
+  .selection-count {
+    min-width: 8.5625rem;
+  }
+}
+
+/* A tablet's grid: as many 171 covers as fit (the phone's two, media-library-grid@mobile). */
+@media (min-width: 600px) and (max-width: 1023px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, 10.6875rem);
   }
 }

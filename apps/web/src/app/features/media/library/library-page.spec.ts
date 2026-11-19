@@ -1150,13 +1150,23 @@ describe('LibraryPage (T16, KBC-051)', () => {
       expect(
         screen.getByText('Nada encontrado para “conselheira”'),
       ).toBeTruthy();
-      // One sentence lives in a span the phone hides (media-library-search-empty@mobile).
-      expect(
+      // Each width words it as its frame does (media-library-search-empty and its @mobile).
+      const hint = (cls: string, words: string) =>
         screen.getByText(
           (_, node) =>
-            node?.classList.contains('hint') === true &&
-            node.textContent?.replace(/\s+/g, ' ').trim() ===
-              'Procuramos na fala, no título, no autor e nos assuntos. Na fala a busca é por palavra inteira: confira a escrita ou tente outra palavra.',
+            node?.classList.contains(cls) === true &&
+            node.textContent?.replace(/\s+/g, ' ').trim() === words,
+        );
+      expect(
+        hint(
+          'wide',
+          'Procuramos na fala, no título, no autor e nos assuntos. Na fala a busca é por palavra inteira: confira a escrita ou tente outra palavra.',
+        ),
+      ).toBeTruthy();
+      expect(
+        hint(
+          'narrow',
+          'Na fala, a busca é por palavra inteira: confira a escrita ou tente outra palavra.',
         ),
       ).toBeTruthy();
       expect(
@@ -1889,6 +1899,70 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(screen.getByRole('status').textContent).toContain(
       'Palestra 1 foi removido.',
     );
+  });
+
+  it('gives a failed file a box; chosen alone, a master removes it from the bar (media-library-selection@mobile)', async () => {
+    const { open, http, settle, tick } = await renderLibrary({ master: true });
+    await open(
+      aPage([
+        anItem(1),
+        anItem(2, { status: 'failed', durationMs: null }),
+        anItem(3, { status: 'failed', durationMs: null }),
+      ]),
+    );
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar Palestra 2' }),
+    );
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar Palestra 3' }),
+    );
+    await settle();
+    const bar = screen.getByRole('region', { name: 'Seleção' });
+    // Nothing to hear in a failed file: no marks, "Remover" instead.
+    expect(
+      within(bar).queryByRole('button', { name: 'Marcar como ouvida' }),
+    ).toBeNull();
+    fireEvent.click(within(bar).getByRole('button', { name: 'Remover' }));
+    await settle();
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Remover 2 áudios?')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remover' }));
+    http
+      .expectOne({ method: 'DELETE', url: `/api/v1/media/${mediaId(2)}` })
+      .flush(null);
+    http
+      .expectOne({ method: 'DELETE', url: `/api/v1/media/${mediaId(3)}` })
+      .flush(null);
+    await tick();
+    http.expectOne(FIRST).flush(aPage([anItem(1)]));
+    http.expectOne(HOME).flush(aHome());
+    await settle();
+    expect(screen.getByRole('status').textContent).toContain(
+      '2 áudios foram removidos.',
+    );
+    expect(screen.queryByRole('region', { name: 'Seleção' })).toBeNull();
+  });
+
+  it('marks only the ready ones of a mixed choice, and offers no "Remover" (nor to one who is not a master)', async () => {
+    const { open, http, settle } = await renderLibrary();
+    await open(
+      aPage([anItem(1), anItem(2, { status: 'failed', durationMs: null })]),
+    );
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar Palestra 2' }),
+    );
+    await settle();
+    const bar = screen.getByRole('region', { name: 'Seleção' });
+    expect(within(bar).queryByRole('button', { name: 'Remover' })).toBeNull();
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar Palestra 1' }),
+    );
+    await settle();
+    fireEvent.click(
+      within(bar).getByRole('button', { name: 'Marcar como ouvida' }),
+    );
+    const put = http.expectOne('/api/v1/media/played');
+    expect(put.request.body).toEqual({ ids: [mediaId(1)], played: true });
   });
 });
 

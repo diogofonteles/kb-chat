@@ -417,7 +417,7 @@ test.describe('the collection dialog', () => {
     if (desktop(page))
       await expect(dialog.getByText('Capa pela sigla')).toBeVisible();
     else {
-      await expect(dialog.locator('.cover-empty')).toBeVisible();
+      await expect(dialog.locator('.initials-empty')).toBeVisible();
       await expect(dialog.getByText('Capa pela sigla')).toBeHidden();
     }
     await dialog.getByLabel('Nome').fill('!!!');

@@ -71,7 +71,7 @@ const VIEW_LABELS: Record<LibraryDisplay, () => string> = {
       }
       <span class="words">{{ (phone() && summary()) || sortName() }}</span>
       @if (!phone()) {
-        <ui-icon [name]="icons[view()]" [size]="18" />
+        <ui-icon class="view-icon" [name]="icons[view()]" [size]="18" />
       }
     </app-menu-button>
   `,
@@ -85,6 +85,8 @@ const VIEW_LABELS: Record<LibraryDisplay, () => string> = {
       --menu-trigger-size: var(--text-sm);
       --menu-trigger-padding: 0;
       --menu-trigger-height: 2rem;
+      /* media-library-sort: the words turn white, no pill behind them, while it is open */
+      --menu-trigger-open-bg: transparent;
     }
 
     :host(.phone) app-menu-button {
@@ -97,6 +99,11 @@ const VIEW_LABELS: Record<LibraryDisplay, () => string> = {
 
     .words {
       white-space: nowrap;
+    }
+
+    /* The words white, the view's icon grey (media-library-sort). */
+    .view-icon {
+      color: var(--color-text-muted);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

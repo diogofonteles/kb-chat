@@ -181,6 +181,7 @@ export class ChatPage {
   /** The main panel's header (title, view switch): floating notices start under it. */
   private readonly pageHeader =
     viewChild<ElementRef<HTMLElement>>('pageHeader');
+  private readonly shellFoot = viewChild<ElementRef<HTMLElement>>('shellFoot');
   private readonly engineSource = inject(MediaEngine).source;
   /** The address without query or fragment, as the router last settled on it. */
   private readonly path = toSignal(
@@ -307,12 +308,8 @@ export class ChatPage {
   protected readonly showScope = computed(() => {
     if (this.onMedia()) return false;
     if (this.desktop()) return !this.searchPage();
-    return (
-      this.isEmpty() &&
-      !this.researching() &&
-      !this.noTopics() &&
-      !this.phoneHistory()
-    );
+    // (with no collection too: chat-no-topics@mobile keeps the chips over its empty state)
+    return this.isEmpty() && !this.researching() && !this.phoneHistory();
   });
   /** A phone's research home: the profiles at the top (cmHome, mode 'ia'). */
   protected readonly showProfiles = computed(
@@ -520,6 +517,31 @@ export class ChatPage {
       wasOnMedia = onMedia;
     });
     this.keepFloatTop();
+    this.keepFootHeight();
+  }
+
+  /**
+   * `--shell-foot-h`: how tall the phone's foot (mini player and navigation) is. A media page
+   * runs under it, as v2 draws it (media-library@mobile), and ends that much lower, so its
+   * last row still scrolls above the foot (FR-4, AC-5).
+   */
+  private keepFootHeight(): void {
+    const root = inject(DOCUMENT).documentElement;
+    let observer: ResizeObserver | null = null;
+    afterRenderEffect(() => {
+      const foot = this.shellFoot()?.nativeElement;
+      observer?.disconnect();
+      if (!foot || typeof ResizeObserver === 'undefined') return;
+      const measure = (): void =>
+        root.style.setProperty('--shell-foot-h', `${foot.offsetHeight}px`);
+      observer = new ResizeObserver(measure);
+      observer.observe(foot);
+      measure();
+    });
+    inject(DestroyRef).onDestroy(() => {
+      observer?.disconnect();
+      root.style.removeProperty('--shell-foot-h');
+    });
   }
 
   /**

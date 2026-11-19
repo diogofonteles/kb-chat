@@ -48,8 +48,9 @@ test('KBC-129 AC-6: "Meus marcadores" and the queue show their v2 states and pas
   await expect(
     page.getByRole('heading', { name: 'Meus marcadores' }),
   ).toBeVisible();
+  // The page's own count (the sidebar's "Meus marcadores" says one too).
   await expect(
-    page.getByText(/\d+ marcador|Nenhum marcador ainda/),
+    page.locator('.page').getByText(/\d+ marcador|Nenhum marcador ainda/),
   ).toBeVisible();
   await capture(page, 'bookmarks', info.project.name);
   const bookmarksAxe = await new AxeBuilder({ page })

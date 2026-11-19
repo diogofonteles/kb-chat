@@ -194,6 +194,19 @@ function toConversation(
   };
 }
 
+/** What a conversation asked, in order: its id, collection, questions, modes and filters. */
+function askedKey(conversation: SearchConversation): string {
+  return JSON.stringify([
+    conversation.id,
+    conversation.topic,
+    conversation.asks.map(({ question, mode, filters }) => [
+      question,
+      mode,
+      filters,
+    ]),
+  ]);
+}
+
 /** Conversation state of the chat page (provided on the page, NG-16). */
 @Injectable()
 export class ChatStore {
@@ -209,6 +222,8 @@ export class ChatStore {
   private nextId = 1;
   private nextRev = 1;
   private rememberedKey = '';
+  /** What a conversation brought back from the history asked, until it asks something else. */
+  private restoredKey = '';
 
   readonly topics = httpResource(topicsUrl, {
     parse: (body) => topicListSchema.parse(body),
@@ -307,6 +322,10 @@ export class ChatStore {
     ]);
     if (key === this.rememberedKey) return;
     this.rememberedKey = key;
+    // A conversation opened again runs its searches anew, which is no new question: it keeps
+    // its place and time in "Sua biblioteca" (chat-results: "lei do ritmo" open, third).
+    if (askedKey(conversation) === this.restoredKey) return;
+    this.restoredKey = '';
     this.history.save(conversation);
   }
 
@@ -350,6 +369,7 @@ export class ChatStore {
     this.topicNoticeState.set(null);
     const { id, createdAt } = conversation;
     this.conversationState.set({ id, createdAt });
+    this.restoredKey = askedKey(conversation);
     for (const saved of conversation.asks)
       this.ask(saved.question, {
         mode: saved.mode,
@@ -554,6 +574,7 @@ export class ChatStore {
   private reset(): void {
     // A restored conversation is saved again (and moves to the top) once its searches settle.
     this.rememberedKey = '';
+    this.restoredKey = '';
     this.close();
     this.conversationState.set(freshConversation());
     this.resets.next({ type: 'reset' });

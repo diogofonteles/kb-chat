@@ -123,6 +123,28 @@ a.ref {
   border: none;
 }
 
+/* docRight's "Veja também": its items right under the title (the group's name for screen
+   readers), each a 40 miniItem on the card's own edge. */
+:host-context(.about) h4 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+:host-context(.about) .ref.doc {
+  min-height: 2.5rem;
+  padding: 0;
+}
+
+/* docMain's column: the 40 cover on the column's edge, the title 10 after it. */
+:host(.compact:not(.shelf)) .ref.doc {
+  gap: 0.625rem;
+  padding-inline: 0;
+}
+
 /* docMain's column: "VEJA TAMBÉM" in small caps, the groups as quiet labels. */
 :host(.compact) .see-also {
   margin: 0;
@@ -161,6 +183,33 @@ a.ref {
   gap: var(--space-2);
 }
 
+@media (min-width: 1024px) {
+  /* pageShelf: the shelves 16 apart, each title 4 over its cards */
+  :host(.shelf) .see-also {
+    gap: var(--space-4);
+  }
+
+  :host(.shelf) .group {
+    gap: var(--space-1);
+  }
+
+  :host(.shelf) h4 {
+    margin: 0;
+  }
+
+  :host(.shelf) .ref.doc ui-cover {
+    display: block;
+  }
+
+  :host(.shelf) .ref-title {
+    line-height: 1.0625rem;
+  }
+
+  :host(.shelf) .ref.doc .ref-facets {
+    line-height: 1rem;
+  }
+}
+
 :host(.shelf) h4 {
   color: var(--color-text);
   font-size: 1.25rem;
@@ -175,18 +224,27 @@ a.ref {
 }
 
 @media (min-width: 1024px) {
+  /* pageShelf: the cards' covers on the page's edge (each card 12 around its cover), on the
+     page's faint card fill (#ffffff08), the title 8 under the cover and the facets 8 under it. */
   :host(.shelf) ul {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-1);
+    margin-inline: calc(-1 * var(--space-3));
   }
 
   :host(.shelf) .ref.doc {
     flex-direction: column;
     align-items: flex-start;
+    gap: var(--space-2);
     width: calc(150px + 2 * var(--space-3));
     padding: var(--space-3);
     border-radius: var(--radius-card);
+    background: color-mix(in srgb, var(--color-text) 3%, transparent);
+  }
+
+  :host(.shelf) .ref-text {
+    gap: var(--space-2);
   }
 
   :host(.shelf) .ref.doc ui-cover {
@@ -220,13 +278,42 @@ a.ref {
     display: none;
   }
 
+  /* cmRow: "Outros autores" and "· Aula ou palestra", 6 apart. */
   :host(.shelf) .ref.doc .ref-byline {
-    display: block;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.375rem;
   }
 
-  /* cmRow: the 52 cover on the page's own 16 px edge. */
+  /* cmRow: the 52 cover on the page's own 16 px edge, the rows 52 tall; each shelf's title (16
+     on a 20 line) 16 over its rows, the shelves 16 apart. */
   :host(.shelf) .ref.doc {
-    padding-inline: 0;
+    padding: 0;
+  }
+
+  :host(.shelf) .see-also {
+    gap: var(--space-4);
+  }
+
+  :host(.shelf) .group {
+    gap: var(--space-4);
+  }
+
+  :host(.shelf) h4 {
+    margin: 0;
+    line-height: 1.25rem;
+  }
+
+  :host(.shelf) .ref-title {
+    line-height: 1.125rem;
+  }
+
+  :host(.shelf) .ref-text {
+    gap: 0.1875rem;
+  }
+
+  :host(.shelf) .ref.doc .ref-facets {
+    line-height: 1rem;
   }
 
   :host(.shelf) ::ng-deep .ui-cover__label {

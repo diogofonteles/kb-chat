@@ -85,3 +85,34 @@
     padding-top: 0;
   }
 }
+
+/* A field's problem under it, 12/14 (media-library-edit-errors). */
+.field .error {
+  font-size: var(--text-xs);
+  line-height: 0.875rem;
+}
+
+/* v2 · media-library-edit@mobile: each field a 16 label 6 over its 44 box with a hairline,
+   16 from the next. */
+@media (max-width: 1023px) {
+  .column {
+    gap: var(--space-4);
+  }
+
+  .column .field,
+  .column ::ng-deep .combo {
+    gap: 0.375rem;
+  }
+
+  .column .label,
+  .column ::ng-deep .label {
+    margin: 0;
+    line-height: 1rem;
+  }
+
+  .column .field input[type='text'],
+  .column .field select,
+  .column ::ng-deep .combo input {
+    border-color: color-mix(in srgb, var(--color-text) 12%, transparent);
+  }
+}

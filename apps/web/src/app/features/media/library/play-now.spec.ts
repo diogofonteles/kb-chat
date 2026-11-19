@@ -110,3 +110,14 @@ describe('PlayNow: "Tocar em seguida" (v2 media-library-row-menu)', () => {
     expect(playNow.upNext()).toEqual([]);
   });
 });
+
+describe('PlayNow: "Continuar ouvindo"\'s ▶ (v2 media-library)', () => {
+  it('never pauses the one playing, and plays it when it is not', () => {
+    const { playNow, engine } = setUp();
+    playNow.resume(FIRST);
+    expect(engine.load).toHaveBeenCalledTimes(1);
+    playNow.resume(FIRST);
+    expect(engine.toggle).not.toHaveBeenCalled();
+    expect(engine.load).toHaveBeenCalledTimes(1);
+  });
+});
