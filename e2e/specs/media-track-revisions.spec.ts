@@ -669,7 +669,7 @@ test('KBC-100 AC-15: the publication state is words in a status line, follows th
   const line = page.locator('app-track-publication-status').getByRole('status');
   // No Mac paired in the E2E: the document waits for it, and says so in words.
   await expect(line).toContainText('Pesquisa com IA:');
-  await expect(line).toContainText('Aguardando o Mac do dono');
+  await expect(line).toContainText('aguardando o Mac do dono');
 
   const ran = await owner.post('/api/e2e/kb-publish/run', {
     data: { topic },
@@ -677,8 +677,9 @@ test('KBC-100 AC-15: the publication state is words in a status line, follows th
   });
   expect(ran.status(), await ran.text()).toBe(200);
   await page.reload();
-  await expect(line).toContainText(/Na pesquisa · desde \d\d:\d\d/);
-  await expect(line.locator('[aria-hidden="true"]')).toHaveText('✓');
+  await expect(line).toContainText(/na pesquisa · desde \d\d:\d\d/);
+  // The state's sign beside its words (AC-15): the v2 check icon.
+  await expect(line.locator('ui-icon.sign')).toBeVisible();
 
   const fits = await page.evaluate(
     () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -704,7 +705,7 @@ test('KBC-100 AC-15: the publication state is words in a status line, follows th
   });
   expect(renamed.status(), await renamed.text()).toBe(200);
   await page.reload();
-  await expect(line).toContainText('Aguardando o Mac do dono');
+  await expect(line).toContainText('aguardando o Mac do dono');
   await page.screenshot({
     path: `../work/KBC-100/evidence/publication-waiting-${width}-${test.info().project.name}.png`,
   });
@@ -718,7 +719,7 @@ test('KBC-114 AC-6 (was KBC-100 AC-12): a collection with no folder in the kb st
   const { first } = await approvedTracks(owner);
   await page.goto(trackPage(first.id));
   const line = page.locator('app-track-publication-status').getByRole('status');
-  await expect(line).toContainText('Aguardando o Mac do dono');
+  await expect(line).toContainText('aguardando o Mac do dono');
   await expect(line).not.toContainText('ainda não tem pasta');
   await owner.dispose();
 });

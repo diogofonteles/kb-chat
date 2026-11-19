@@ -1084,7 +1084,10 @@ select.ui-input option {
      far from the middle on any height and never off it; it does not move when its content
      grows. */
   .ui-dialog[style*='--ui-dialog-top'] {
-    --ui-dialog-top-at: max(var(--space-8), calc(50dvh - 450px + var(--ui-dialog-top)));
+    --ui-dialog-top-at: max(
+      var(--space-8),
+      calc(50dvh - 450px + var(--ui-dialog-top))
+    );
     margin-top: var(--ui-dialog-top-at);
     margin-bottom: auto;
     max-height: calc(100dvh - 2 * var(--ui-dialog-top-at));

@@ -107,7 +107,7 @@
         <p class="meta">
           @if (current.author; as author) {
             <span
-              class="by-avatar"
+              class="by-avatar avatar"
               aria-hidden="true"
               [style.background]="authorTint()"
               >{{ authorInitials() }}</span
@@ -126,11 +126,15 @@
               >Outros autores</span
             >
           }
-          @if (duration()) {
-            <span class="duration">· {{ duration() }}</span>
-          }
-          <span i18n="@@media.sentOn"
-            >· enviado em {{ current.createdAt | date: 'dd/MM/yyyy' }}</span
+          <!-- One line of facts after the name (v2 · Mídia — Player: "· 1:00 · enviado em …"). -->
+          <span class="facts">
+            @if (duration()) {
+              <span class="duration">· {{ duration() }}</span
+              >&ngsp;
+            }
+            <span i18n="@@media.sentOn"
+              >· enviado em {{ current.createdAt | date: 'dd/MM/yyyy' }}</span
+            ></span
           >
         </p>
         <div class="note">

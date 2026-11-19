@@ -112,7 +112,10 @@ async function profileAction(
     await section
       .getByRole('button', { name: `Mais ações de ${name}` })
       .click();
-    await section.page().getByRole('menuitem', { name: action, exact: true }).click();
+    await section
+      .page()
+      .getByRole('menuitem', { name: action, exact: true })
+      .click();
     return;
   }
   await section.getByRole('button', { name: `${action} ${name}` }).click();

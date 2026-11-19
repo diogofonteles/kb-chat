@@ -24,6 +24,8 @@ import {
   TrackDocumentsApi,
   publicationUrl,
 } from '@core/media/transcribers-api.js';
+import { UiIcon } from '@ui/icon.js';
+import type { IconName } from '@ui/icons.js';
 import { publicationTime } from './publication-time.js';
 
 /** It changes by itself (the Mac, the sync): read again this often while it is not settled. */
@@ -32,13 +34,16 @@ const REFRESH_MS = 30_000;
 /** States that change only when someone acts: nothing to read again. */
 const SETTLED: ReadonlySet<TrackPublicationState> = new Set(['live', 'out']);
 
-/** Never only color (AC-15): each state has its sign, beside its words. */
-const ICON: Record<TrackPublicationState, string> = {
-  live: '✓',
-  updating: '↻',
-  'waiting-mac': '⏸',
-  failed: '⚠',
-  out: '⊘',
+/**
+ * Never only color (AC-15): each state has its sign, beside its words; drawn as the v2 icons
+ * (v2 · Mídia — Player: the ✦ before "Pesquisa com IA: aguardando o Mac do dono").
+ */
+const ICON: Record<TrackPublicationState, IconName> = {
+  live: 'check',
+  updating: 'refresh',
+  'waiting-mac': 'sparkle',
+  failed: 'warn',
+  out: 'close',
 };
 
 const OUT_REASON: Record<PublicationOutReason, () => string> = {
@@ -83,13 +88,19 @@ export function publicationText(publication: TrackPublication): string {
  */
 @Component({
   selector: 'app-track-publication-status',
+  imports: [UiIcon],
   template: `
     @if (publication(); as current) {
       <div class="publication" [attr.data-state]="current.state">
         <p #line class="line" role="status" tabindex="-1">
-          <span class="sign" aria-hidden="true">{{ iconOf(current) }}</span>
-          <span class="label" i18n="@@publication.label">Pesquisa com IA:</span>
-          <span class="text">{{ textOf(current) }}</span>
+          <ui-icon class="sign" [name]="iconOf(current)" [size]="14" />
+          <!-- One run of words: "Pesquisa com IA: aguardando o Mac do dono". -->
+          <span class="words"
+            ><ng-container i18n="@@publication.label"
+              >Pesquisa com IA:</ng-container
+            >
+            {{ wordsOf(current) }}</span
+          >
           @if (notice()) {
             <span class="notice">{{ notice() }}</span>
           }
@@ -120,15 +131,17 @@ export function publicationText(publication: TrackPublication): string {
     .line {
       display: flex;
       flex-wrap: wrap;
-      gap: var(--space-1);
+      align-items: center;
+      gap: 0.375rem;
       margin: 0;
       min-width: 0;
       color: var(--color-text-muted);
-      font-size: var(--text-sm);
+      font-size: var(--text-meta);
+      line-height: 1rem;
       overflow-wrap: anywhere;
     }
-    .label {
-      font-weight: 600;
+    .sign {
+      flex: none;
     }
     [data-state='failed'] .line {
       color: var(--color-danger);
@@ -173,12 +186,14 @@ export class TrackPublicationStatus {
     });
   }
 
-  protected iconOf(publication: TrackPublication): string {
+  protected iconOf(publication: TrackPublication): IconName {
     return ICON[publication.state];
   }
 
-  protected textOf(publication: TrackPublication): string {
-    return publicationText(publication);
+  /** The state's words after "Pesquisa com IA:", as a sentence goes on ("aguardando…"). */
+  protected wordsOf(publication: TrackPublication): string {
+    const text = publicationText(publication);
+    return text.charAt(0).toLocaleLowerCase('pt-BR') + text.slice(1);
   }
 
   protected retry(): void {

@@ -171,7 +171,9 @@ describe('TranscriberStatus (KBC-114 AC-12, AC-13, AC-14)', () => {
       null,
       true,
     );
-    expect(screen.queryByRole('button', { name: /trabalho parado/ })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /trabalho parado/ }),
+    ).toBeNull();
     expect(
       screen.getByRole('button', { name: 'Transcritor: desligado' }),
     ).toBeTruthy();

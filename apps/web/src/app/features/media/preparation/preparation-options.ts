@@ -164,6 +164,23 @@ export class PreparationOptions {
     usdUpText(value, this.locale);
 }
 
+/** The summary's "(≈ 12 min, ≈ US$ 0,02)": the transcriber's minutes and the AI's estimate. */
+function costsOf(form: PlanForm, usd: (value: number) => string): string[] {
+  const { transcribe, speakers, tracks } = form.choices();
+  const minutes =
+    (transcribe ? (form.option('transcribe').minutes ?? 0) : 0) +
+    (speakers ? (form.option('speakers').minutes ?? 0) : 0);
+  const estimate = form.offer()?.aiEstimateUsd ?? null;
+  return [
+    minutes > 0
+      ? $localize`:@@prep.summary.minutes:≈ ${minutes}:minutes: min`
+      : '',
+    tracks === 'ai' && estimate !== null
+      ? $localize`:@@prep.summary.usd:≈ ${usd(estimate)}:value:`
+      : '',
+  ].filter(Boolean);
+}
+
 /** "Depois do envio: transcrever, indicar quem fala…": changes with the choices (UP-01). */
 export function summaryOf(
   form: PlanForm,
@@ -180,18 +197,7 @@ export function summaryOf(
   ].filter(Boolean);
   if (asked.length === 0)
     return $localize`:@@prep.summary.nothing:Depois do envio: só guardar o áudio.`;
-  const minutes =
-    (transcribe ? (form.option('transcribe').minutes ?? 0) : 0) +
-    (speakers ? (form.option('speakers').minutes ?? 0) : 0);
-  const estimate = form.offer()?.aiEstimateUsd ?? null;
-  const costs = [
-    minutes > 0
-      ? $localize`:@@prep.summary.minutes:≈ ${minutes}:minutes: min`
-      : '',
-    tracks === 'ai' && estimate !== null
-      ? $localize`:@@prep.summary.usd:≈ ${usd(estimate)}:value:`
-      : '',
-  ].filter(Boolean);
+  const costs = costsOf(form, usd);
   const list = asked.join(', ');
   const cost = costs.length > 0 ? ` (${costs.join(', ')})` : '';
   return tracks === 'none'
