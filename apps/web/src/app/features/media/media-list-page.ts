@@ -255,7 +255,11 @@ export class MediaListPage {
   );
   /** Shown when the list has two or more authorships to tell apart. */
   protected readonly showAuthorFilter = computed(
-    () => this.authorOptions().length >= 2,
+    () => this.authorOptions().length >= 2 || this.emptyLoaded(),
+  );
+  /** A collection with nothing yet keeps its filter and "Autoria" (media-list-empty). */
+  private readonly emptyLoaded = computed(
+    () => this.list.hasValue() && this.items().length === 0,
   );
   protected readonly visible = computed(() => {
     const listening = this.listening();
@@ -272,7 +276,7 @@ export class MediaListPage {
     );
   });
   protected readonly showFilter = computed(
-    () => this.items().length >= FILTER_FROM,
+    () => this.items().length >= FILTER_FROM || this.emptyLoaded(),
   );
   /** "Mestre Laércio e outros autores · 11 áudios · 6 min" (media-list's header). */
   protected readonly headerMeta = computed(() => {

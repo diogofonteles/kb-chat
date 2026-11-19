@@ -2,6 +2,7 @@ import {
   DestroyRef,
   Injectable,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -14,6 +15,7 @@ import {
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaApi } from '@core/media/media-api.js';
 import { PreparationApi } from '@core/media/preparation-api.js';
+import { UploadsInFlight } from '@core/media/uploads-in-flight.js';
 import {
   EMPTY,
   Subject,
@@ -141,6 +143,29 @@ export class UploadEntries {
   private lastKey = 0;
 
   readonly entries = this.list.asReadonly();
+  private readonly inFlight = inject(UploadsInFlight);
+  private readonly source = `upload-${Math.random().toString(36).slice(2)}`;
+  /** What goes now, said to the library's block (media-upload-sending); nothing once gone. */
+  private readonly reporting = effect(() =>
+    this.inFlight.report(
+      this.source,
+      this.list().flatMap(({ key, title, file, state }) =>
+        state.kind === 'sending'
+          ? [
+              {
+                key: `${this.source}-${key}`,
+                title: title || file.name,
+                loaded: state.loaded,
+                total: state.total,
+              },
+            ]
+          : [],
+      ),
+    ),
+  );
+  private readonly unreport = inject(DestroyRef).onDestroy(() =>
+    this.inFlight.report(this.source, []),
+  );
   readonly checking = computed(() =>
     this.list().some(({ state }) => state.kind === 'checking'),
   );

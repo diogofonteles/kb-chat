@@ -80,13 +80,22 @@ export class UploadFileRow {
       ? $localize`:@@media.upload.accepted:${sizeOf(file.size)}:size: · áudio aceito`
       : sizeOf(file.size);
   });
+  /** The phone's shorter refusal of a file that is not audio (media-upload-bad-type@mobile). */
+  protected readonly problemShort = computed(() => {
+    const { file, state } = this.entry();
+    if (state.kind !== 'refused') return '';
+    return hasAcceptedAudioExtension(file.name)
+      ? state.problem
+      : $localize`:@@media.upload.badTypeShort:Não é um áudio aceito. Envie mp3, m4a, wav, flac, ogg ou opus.`;
+  });
   /** The phone's card says the size alone (media-upload-chosen@mobile). */
   protected readonly metaShort = computed(() => {
     const { file, state } = this.entry();
     // While it goes, how far in a word (media-upload-sending@mobile: "Enviando… 0%").
     if (state.kind === 'sending' && !state.offline)
       return $localize`:@@media.upload.sendingPercent:Enviando… ${this.percent()}:percent:%`;
-    return this.audio() && state.kind === 'ready'
+    // A refused file says its size too (media-upload-bad-type@mobile: "0,3 MB").
+    return (this.audio() && state.kind === 'ready') || state.kind === 'refused'
       ? sizeOf(file.size)
       : this.meta();
   });

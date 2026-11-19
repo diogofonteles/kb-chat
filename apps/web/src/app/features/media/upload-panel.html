@@ -20,18 +20,18 @@
           </p>
         }
       </div>
-      @if (stage() !== 'sending') {
-        <button
-          type="button"
-          uiIconButton
-          class="close"
-          aria-label="Fechar"
-          i18n-aria-label="@@ui.dialog.close"
-          (click)="close()"
-        >
-          <ui-icon name="close" [size]="20" />
-        </button>
-      }
+      <!-- The ✕ stays while sending too (media-upload-sending): closing stops the send, as
+           Escape does. -->
+      <button
+        type="button"
+        uiIconButton
+        class="close"
+        aria-label="Fechar"
+        i18n-aria-label="@@ui.dialog.close"
+        (click)="close()"
+      >
+        <ui-icon name="close" [size]="20" />
+      </button>
     </header>
 
     <div class="columns">

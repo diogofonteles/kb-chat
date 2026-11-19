@@ -297,3 +297,36 @@
     display: none;
   }
 }
+
+/* What refuses a file in one line beside its ✕ icon (media-upload-bad-type); a phone says it
+   shorter, without the icon (…@mobile: "Não é um áudio aceito…"). */
+.error.refused {
+  flex-wrap: nowrap;
+}
+
+.refused-words {
+  white-space: nowrap;
+}
+
+.refused-words.narrow {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .error.refused ui-icon,
+  .notice ui-icon {
+    display: none;
+  }
+
+  .refused-words {
+    white-space: normal;
+  }
+
+  .refused-words.wide {
+    display: none;
+  }
+
+  .refused-words.narrow {
+    display: inline;
+  }
+}

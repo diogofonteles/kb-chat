@@ -16,6 +16,12 @@ import {
 import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import { UiPill, type Tone } from '@ui/pill.js';
+import { UiProgress } from '@ui/progress.js';
+import {
+  UploadsInFlight,
+  percentOfUpload,
+  type UploadInFlight,
+} from '@core/media/uploads-in-flight.js';
 import {
   TranscribeWithGroq,
   type GroqCandidate,
@@ -36,7 +42,14 @@ const SHOWN = 3;
  */
 @Component({
   selector: 'app-queue-summary',
-  imports: [RouterLink, TranscribeWithGroq, UiCover, UiIcon, UiPill],
+  imports: [
+    RouterLink,
+    TranscribeWithGroq,
+    UiCover,
+    UiIcon,
+    UiPill,
+    UiProgress,
+  ],
   template: `
     @if (lines().length > 0) {
       <section class="summary" aria-labelledby="queue-summary-title">
@@ -66,6 +79,10 @@ const SHOWN = 3;
               <span class="body">
                 <span class="name">{{ line.title }}</span>
                 <span class="line">
+                  @if (line.sending !== null) {
+                    <!-- What this browser sends now (media-upload-sending). -->
+                    <ui-progress class="sending" [value]="line.sending / 100" />
+                  }
                   @if (line.pill) {
                     <ui-pill [tone]="line.tone">{{ line.pill }}</ui-pill>
                   }
@@ -292,6 +309,18 @@ const SHOWN = 3;
       background: var(--overlay-4);
     }
 
+    /* The send's bar, then how far, on one line (media-upload-sending). */
+    .line:has(.sending) {
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .sending {
+      flex: none;
+      width: 7.5rem;
+    }
+
     .action.strong {
       background: var(--color-text);
       color: var(--color-bg);
@@ -340,41 +369,39 @@ export class QueueSummary {
     ];
   });
   private readonly canEdit = computed(() => this.session.can('media-edit'));
-  protected readonly lines = computed(() =>
-    this.shown()
-      .slice(0, SHOWN)
-      .map((item) => {
-        const { pill, tone } = pillOf(item);
-        const action = actionTextOf(item);
-        return {
-          id: item.mediaId,
-          title: item.title,
-          state: cardStateOf(item, this.store.queue()?.transcriber ?? null),
-          pill,
-          tone,
-          link: linkOf(item, this.canEdit()),
-          action,
-          actionLabel: `${action}: ${item.title}`,
-          strong: item.action === 'validate' || item.action === 'conclude',
-          hasAction: item.action !== null,
-          groq: groqOf(item),
-        };
-      }),
-  );
+  private readonly sending = inject(UploadsInFlight).items;
+  protected readonly lines = computed(() => [
+    ...this.sending().map(sendingLine),
+    ...this.shown()
+      .slice(0, Math.max(0, SHOWN - this.sending().length))
+      .map((item) =>
+        queueLine(
+          item,
+          this.store.queue()?.transcriber ?? null,
+          this.canEdit(),
+        ),
+      ),
+  ]);
   /** The phone's card: how many, then what each needs (media-library@mobile). */
   protected readonly compactTitle = computed(() => {
-    const active = this.store.active();
+    const active = this.store.active() + this.sending().length;
     if (active > 0) return this.titleText();
     const count = this.shown().length;
     return count === 1
       ? $localize`:@@queue.summary.attentionOne:1 item precisa de atenção`
       : $localize`:@@queue.summary.attentionMany:${count}:count: itens precisam de atenção`;
   });
-  protected readonly compactParts = computed(() =>
-    partsOf(this.shown()).join(' · '),
-  );
+  protected readonly compactParts = computed(() => {
+    const sending = this.sending().length;
+    return [
+      ...(sending > 0
+        ? [$localize`:@@queue.part.sending:Enviando ${sending}:count:`]
+        : []),
+      ...partsOf(this.shown()),
+    ].join(' · ');
+  });
   protected readonly titleText = computed(() => {
-    const active = this.store.active();
+    const active = this.store.active() + this.sending().length;
     if (active === 0)
       return $localize`:@@queue.summary.waiting:Precisa da sua atenção`;
     return active === 1
@@ -386,6 +413,65 @@ export class QueueSummary {
   protected refresh(): void {
     this.store.refresh();
   }
+}
+
+/** A card of the block: an audio of the queue, or a file this browser sends now. */
+interface Line {
+  readonly id: string;
+  readonly title: string;
+  readonly state: string;
+  readonly pill: string;
+  readonly tone: Tone;
+  readonly link: string;
+  readonly action: string;
+  readonly actionLabel: string;
+  readonly strong: boolean;
+  readonly hasAction: boolean;
+  readonly groq: GroqCandidate | null;
+  /** How far a send has gone, in percent; null for the queue's own. */
+  readonly sending: number | null;
+}
+
+/** What this browser sends, first (media-upload-sending: "Enviando · 0%" and its bar). */
+function sendingLine(upload: UploadInFlight): Line {
+  const percent = percentOfUpload(upload);
+  return {
+    id: upload.key,
+    title: upload.title,
+    state: $localize`:@@queue.card.sending:Enviando · ${percent}:percent:%`,
+    pill: '',
+    tone: 'muted',
+    link: QUEUE_PAGE_PATH,
+    action: '',
+    actionLabel: upload.title,
+    strong: false,
+    hasAction: false,
+    groq: null,
+    sending: percent,
+  };
+}
+
+function queueLine(
+  item: ProcessingQueueItem,
+  transcriber: string | null,
+  canEdit: boolean,
+): Line {
+  const { pill, tone } = pillOf(item);
+  const action = actionTextOf(item);
+  return {
+    id: item.mediaId,
+    title: item.title,
+    state: cardStateOf(item, transcriber),
+    pill,
+    tone,
+    link: linkOf(item, canEdit),
+    action,
+    actionLabel: `${action}: ${item.title}`,
+    strong: item.action === 'validate' || item.action === 'conclude',
+    hasAction: item.action !== null,
+    groq: groqOf(item),
+    sending: null,
+  };
 }
 
 /** Groq may take this one now (KBC-037): the card offers it in place of the details. */

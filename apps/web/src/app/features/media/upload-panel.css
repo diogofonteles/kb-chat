@@ -714,4 +714,15 @@ button[type='submit']:disabled {
     align-self: start;
     margin-top: var(--space-1);
   }
+
+  /* The frames draw no button for it (media-upload-chosen): a desktop adds files by a drop
+     on the cards; the button shows only to the keyboard, where it is the way. */
+  .panel.wide .body > .add-more:not(:focus-visible) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }

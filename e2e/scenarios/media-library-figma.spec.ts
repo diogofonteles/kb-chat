@@ -117,7 +117,13 @@ async function holdAt(page: Page): Promise<void> {
   await page.waitForTimeout(150);
 }
 
-async function shoot(page: Page, id: string, width: Width): Promise<void> {
+async function shoot(
+  page: Page,
+  id: string,
+  width: Width,
+  /** What the frame draws under the pointer (media-library-search: the first result). */
+  hover?: Locator,
+): Promise<void> {
   if (!shots) return;
   await page.addStyleTag({
     content:
@@ -132,6 +138,7 @@ async function shoot(page: Page, id: string, width: Width): Promise<void> {
     await page.waitForTimeout(300);
   }
   await page.mouse.move(1, 1);
+  if (hover) await hover.hover();
   await holdAt(page);
   await page.screenshot({
     path: `${shots}/${id}${width === 'phone' ? '@mobile' : ''}.png`,
@@ -343,7 +350,14 @@ test('the search, with and without results, and a collection with nothing', asyn
     await expect(
       page.getByRole('heading', { name: /resultados? para “vegetal”/ }),
     ).toBeVisible();
-    await shoot(page, 'media-library-search', width);
+    await shoot(
+      page,
+      'media-library-search',
+      width,
+      width === 'desktop'
+        ? page.locator('app-library-hit').first().locator('.meta')
+        : undefined,
+    );
     await search.fill('xilofone');
     await expect(
       page.getByText('Nada encontrado para “xilofone”'),

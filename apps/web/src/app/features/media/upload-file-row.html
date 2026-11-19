@@ -69,8 +69,10 @@
         }
       }
       @case ('refused') {
-        <p class="error" role="alert">
-          <ui-icon name="xcircle" [size]="14" /> {{ state.problem }}
+        <p class="error refused" role="alert">
+          <ui-icon name="xcircle" [size]="14" />
+          <span class="refused-words wide">{{ state.problem }}</span
+          ><span class="refused-words narrow">{{ problemShort() }}</span>
         </p>
       }
       @case ('duplicate') {

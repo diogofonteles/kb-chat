@@ -996,3 +996,13 @@
 .bar-search.on {
   color: var(--color-text);
 }
+
+/* v2 · media-library-selection at a desktop: the bar at the panel's foot, 164 in from the
+   panel's edge (as drawn), not centred. */
+@media (min-width: 1024px) {
+  .selection-bar {
+    bottom: 0;
+    align-self: flex-start;
+    margin-left: 10.25rem;
+  }
+}
