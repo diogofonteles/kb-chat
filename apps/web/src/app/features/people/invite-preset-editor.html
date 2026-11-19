@@ -78,6 +78,7 @@
         <input
           #box
           type="checkbox"
+          class="ui-check"
           [checked]="topic.checked"
           [disabled]="topic.inherited"
           (change)="toggleTopic(topic.slug, box.checked)"
@@ -171,6 +172,7 @@
         <input
           #box
           type="checkbox"
+          class="ui-check"
           [checked]="feature.checked"
           (change)="toggleFeature(feature.id, box.checked)"
         />

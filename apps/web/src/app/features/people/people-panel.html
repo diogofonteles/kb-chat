@@ -19,7 +19,8 @@
       i18n-phoneTitle="@@people.inviteKicker"
       phoneTitle="Convite"
       [width]="800"
-      [height]="728"
+      [height]="747"
+      [top]="40"
       [closeOnBackdrop]="false"
       i18n-primaryLabel="@@people.invite"
       primaryLabel="Convidar"
@@ -132,6 +133,8 @@
           >
           <ui-icon name="chevDown" [size]="16" />
         </span>
+        <!-- A phone's row (selRow): the profile's name under "Perfil", as drawn. -->
+        <span class="select-value" aria-hidden="true">{{ profileFace() }}</span>
         <ui-icon class="select-chevron" name="chevRight" [size]="20" />
       </div>
     }

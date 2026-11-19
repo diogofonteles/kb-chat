@@ -1062,8 +1062,11 @@ select.ui-input option {
     padding-top: var(--space-4);
   }
 
+  /* A column: what it holds keeps its own height, the last part may take the rest. */
   .ui-dialog[style*='--ui-dialog-height'] .ui-dialog__body {
+    display: flex;
     flex: 1;
+    flex-direction: column;
   }
 }
 

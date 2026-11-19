@@ -395,9 +395,11 @@ export async function seedSettingsWorld(): Promise<SettingsWorld> {
       data: {
         name: 'Aluno',
         isDefault: true,
+        // The invitation configured from it (settings-people-invite-setup): both
+        // collections, "Buscar documentos", "Pesquisa com IA", "Configurações de IA próprias".
         preset: {
-          topics: ['hermetismo'],
-          features: [...READER],
+          topics: ['hermetismo', 'alquimia'],
+          features: [...READER, 'own-ai-settings'],
           ai: { appAi: 'house', dailyResearches: 5 },
           preferences: { defaultTopic: 'hermetismo', defaultView: 'research' },
         },
@@ -570,6 +572,12 @@ export interface SettingsOptions {
   readonly groqConnected?: boolean;
   /** The first-run wizard: the browser sees a person without settings. */
   readonly firstRun?: boolean;
+  /**
+   * Without "Cosmologia Espiritual" and "Cabala" (only the server's collections): the phone's
+   * people frames, which have no "Sua biblioteca" and whose editors list Alquimia Prática and
+   * Hermetismo only.
+   */
+  readonly servedCollectionsOnly?: boolean;
 }
 
 /** The response patches listed in the header, on a browser context. */
@@ -626,11 +634,13 @@ export async function settingsWorld(
     });
     return {
       ...body,
-      items: [
-        ...items,
-        extra('cosmologia-espiritual', 'Cosmologia Espiritual', 6),
-        extra('cabala', 'Cabala', 9),
-      ],
+      items: options.servedCollectionsOnly
+        ? items
+        : [
+            ...items,
+            extra('cosmologia-espiritual', 'Cosmologia Espiritual', 6),
+            extra('cabala', 'Cabala', 9),
+          ],
     };
   });
   await patchGet(context, '**/api/v1/spend/people', (body) => ({

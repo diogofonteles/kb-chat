@@ -3,6 +3,15 @@
   gap: var(--space-3);
 }
 
+/* The page's blocks as drawn: the profiles 14 under the invitation, the requests 24 under them. */
+app-invite-profiles-panel {
+  margin-top: 0.125rem;
+}
+
+app-access-requests-list {
+  margin-top: 0.75rem;
+}
+
 .invite {
   display: grid;
   gap: var(--space-3);
@@ -14,7 +23,13 @@
 .invite-title {
   margin: 0;
   font-size: var(--text-md);
+  line-height: 1.1875rem;
   font-weight: 700;
+}
+
+/* The bar's hint, 12 on a 17 line (v2 · Pessoas). */
+.invite > .invite-notes .hint {
+  line-height: 1.0625rem;
 }
 
 /* The invitation bar (v2 · Pessoas): e-mail · Perfil · Configurar agora · Convidar. */
@@ -28,12 +43,36 @@
   gap: var(--space-3) 0.625rem;
 }
 
-/* In the modal: e-mail · Perfil · Descartar, then the profile hint and the box. */
+/* In the modal: e-mail · Perfil · Descartar (376 · 180 · 176, 10 apart), then the profile
+   hint and the box 10 under them; the tabs 16 under that (v2 · Convite). */
 .invite-fields.in-dialog {
-  grid-template-columns: minmax(0, 1fr) 11.25rem auto;
+  grid-template-columns: minmax(0, 1fr) 11.25rem 11rem;
   grid-template-areas:
     'email setup configure'
-    'hint hint skip';
+    'hint skip skip';
+  row-gap: 0.625rem;
+}
+
+@media (min-width: 1024px) {
+  .invite-fields.in-dialog + .preset {
+    margin-top: -0.25rem;
+  }
+
+  .invite-fields.in-dialog .configure {
+    padding-inline: var(--space-2);
+  }
+
+  .invite-fields.in-dialog .skip {
+    justify-self: end;
+    min-height: 0;
+    font-size: var(--text-sm);
+    line-height: 1.0625rem;
+  }
+
+  .invite-fields.in-dialog .setup-hint {
+    font-size: var(--text-xs);
+    line-height: 0.875rem;
+  }
 }
 
 .email-field {
@@ -59,6 +98,10 @@
 
 .skip {
   grid-area: skip;
+  gap: 0.625rem;
+  min-height: 0;
+  font-size: var(--text-sm);
+  line-height: 1.0625rem;
 }
 
 .setup-hint {
@@ -100,7 +143,8 @@
   min-height: 2.75rem;
 }
 
-.select-chevron {
+.select-chevron,
+.select-value {
   display: none;
 }
 
@@ -147,7 +191,7 @@
   font-size: var(--text-xs);
 }
 
-/* The modal's foot: the hint at the left, Convidar at the right. */
+/* The modal's foot: the hint at the left (440, 12/14), Convidar 40 at the right, 16 around. */
 .invite-foot {
   display: flex;
   flex: 1;
@@ -155,12 +199,22 @@
   justify-content: space-between;
   gap: var(--space-4);
   margin: 0 calc(-1 * var(--space-6)) calc(-1 * var(--space-6));
-  padding: var(--space-5) var(--space-6);
+  padding: var(--space-4) var(--space-6);
   background: var(--overlay-1);
 }
 
 .invite-foot .invite-notes {
-  max-width: 26rem;
+  max-width: 27.5rem;
+}
+
+.invite-foot .invite-notes .hint {
+  line-height: 0.875rem;
+}
+
+@media (min-width: 1024px) {
+  .invite-foot .invite-send {
+    min-height: 2.5rem;
+  }
 }
 
 .field {
@@ -200,7 +254,8 @@
     position: static;
     width: auto;
     height: auto;
-    margin-bottom: var(--space-1);
+    margin-bottom: 0.125rem;
+    line-height: 1rem;
     overflow: visible;
     clip-path: none;
     font-size: var(--text-meta);
@@ -209,9 +264,19 @@
 
   /* The phone's Perfil row (selRow): label, the profile under it, a chevron; the native
      select covers the row and opens the list. */
+  /* Perfil 24 under the e-mail, the box 24 under the profile (v2 · Convite, celular). */
   .setup-field {
-    min-height: 3.5rem;
-    padding: 0.625rem 2rem 0.625rem 0;
+    gap: 0;
+    min-height: 0;
+    padding: 0.75rem 2rem 0.75rem 0;
+  }
+
+  .invite-fields .skip {
+    min-height: 0;
+  }
+
+  .invite-fields.in-dialog + .preset {
+    margin-top: -0.5rem;
   }
 
   .setup-field .label {
@@ -244,8 +309,29 @@
     display: none;
   }
 
+  /* The native select covers the row unseen; the row draws the profile's name. */
   .setup-field .select {
-    opacity: 1;
+    opacity: 0;
+  }
+
+  .select-value {
+    display: block;
+    margin-top: 0.1875rem;
+    line-height: 1rem;
+    color: var(--color-text-muted);
+    font-size: var(--text-meta);
+    line-height: 1rem;
+  }
+
+  /* The sheet's foot hint is for readers only on a phone (the e-mail field's description). */
+  .invite-fields.in-dialog ~ * .invite-foot .hint,
+  .invite-foot #invite-hint {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .select-chevron {
@@ -671,7 +757,7 @@ input[aria-invalid='true'] {
     grid-template-columns: 2.75rem auto minmax(0, 1fr) 1.25rem;
     gap: 0.1875rem var(--space-3);
     min-height: 0;
-    padding: 0.65625rem 0;
+    padding: 0.625rem 0;
   }
 
   /* No boxes until a selection is on (a long press on a row starts it); a box reached by

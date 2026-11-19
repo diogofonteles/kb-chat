@@ -98,8 +98,11 @@ export function scrollTargetFor(
 }
 /** How far below the page's top a section title counts as read (under the strip). */
 const READING_LINE = 96;
-/** Room left above a section reached from the index, for the compact strip. */
-const SECTION_GAP = 60;
+/**
+ * Room left above a section reached from the index, for the compact strip: its title 70 under
+ * the panel's top (v2 · Configurações: Transcritores, IA da aplicação, Sobre…).
+ */
+const SECTION_GAP = 55;
 /** How close to the end of the page counts as "cannot scroll any further". */
 const BOTTOM_SLACK = 2;
 /** What a person does to scroll the page themselves (the wheel, a touch, the keyboard). */

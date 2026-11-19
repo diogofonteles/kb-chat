@@ -424,6 +424,11 @@ button:disabled {
     padding-top: 0.625rem;
   }
 
+  /* Papel 22 under the chips, "Acervos" 26 under it (v2 · Convite, celular). */
+  .role-row {
+    margin: -0.25rem 0 0.5rem;
+  }
+
   /* "Aplicar perfil" as one row: the words, the profile under them, a chevron; the select is
      the whole row (transparent over it), so a tap chooses (v2 · Pessoas, celular). */
   .apply-group {

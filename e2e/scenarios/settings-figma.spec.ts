@@ -284,12 +284,20 @@ test('Pessoas e permissões: invitation, list, requests, editors, profiles, Ver 
 }) => {
   for (const width of WIDTHS) {
     const phone = width === 'phone';
-    const { context, page } = await contextAt(browser, width);
+    const { context, page } = await contextAt(browser, width, {
+      servedCollectionsOnly: phone,
+    });
     const people = async () => {
       const settings = await section(page, 'pessoas');
       await expect(
         settings.getByRole('button', { name: /carla\.mendes@exemplo\.test/ }),
       ).toBeVisible();
+      // These frames draw the section's title 62 under the panel's top (8 above the others').
+      if (!phone)
+        await place(settings.getByRole('heading', { name: 'Pessoas e permissões' }), {
+          desktop: 134,
+          phone: 0,
+        });
       return settings;
     };
     const toList = (settings: Locator) =>
@@ -368,6 +376,8 @@ test('Pessoas e permissões: invitation, list, requests, editors, profiles, Ver 
     await toList(settings);
     await settings.getByRole('button', { name: 'Configurar agora' }).click();
     editor = modal();
+    // The button sits over the list: the page under the modal back at the list, as drawn.
+    await toList(settings);
     // The desktop modal has "Descartar configuração"; a phone's sheet has the tabs only.
     await expect(
       phone

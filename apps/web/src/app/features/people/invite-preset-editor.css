@@ -1,6 +1,10 @@
-/* The preset fills the invitation's or the profile's modal: tabs, then the parts (v2). */
-:host {
-  gap: var(--space-5);
+/* The preset fills the invitation's or the profile's modal: tabs, then the parts 28 under
+   them (person-editor.css); the third tab "Preferências iniciais" 43 after "IA e limites", as
+   the frames draw it. */
+@media (min-width: 1024px) {
+  .tab + .tab + .tab {
+    margin-left: 1.1875rem;
+  }
 }
 
 /* The default collection keeps its hint and notice close, apart from the next field (KBC-033). */
