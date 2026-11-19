@@ -1044,3 +1044,41 @@ select.input option {
     row-gap: 0.875rem;
   }
 }
+
+/* ---------- v2 · Preferências (KBC-152): the page's rhythm as drawn ---------- */
+/* Each card as tall as its own words; a group's title 17/20, 10 over its cards; 14 between the
+   rows (and the rule), 28 between the groups, 18 from the cards to the first row. */
+.choices {
+  align-items: start;
+}
+
+.group-title {
+  margin-bottom: 0.625rem;
+  line-height: 1.25rem;
+}
+
+:host(:not(.in-wizard)) {
+  gap: 0.875rem;
+}
+
+:host(:not(.in-wizard)) > .group + .group {
+  margin-top: 0.875rem;
+}
+
+:host(:not(.in-wizard)) > .group + ui-setting-row {
+  margin-top: 0.25rem;
+}
+
+/* A row 8 above and below its words: the label 15/18, 3 to its description 13/18. */
+:host(:not(.in-wizard)) > ui-setting-row {
+  padding: var(--space-2) 0;
+}
+
+:host(:not(.in-wizard)) > ui-setting-row ::ng-deep .ui-setting__text {
+  gap: 0.1875rem;
+}
+
+:host(:not(.in-wizard)) > ui-setting-row ::ng-deep .ui-setting__label,
+:host(:not(.in-wizard)) > ui-setting-row ::ng-deep .ui-setting__description {
+  line-height: 1.125rem;
+}

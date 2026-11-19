@@ -235,7 +235,6 @@ test('Sua IA: the owner, OpenRouter, a refused key, a member with the house plan
 
 test('Preferências, Acessos à sua conta, Sobre', async ({ browser }) => {
   for (const width of WIDTHS) {
-    const phone = width === 'phone';
     const { context, page } = await contextAt(browser, width);
     let settings = await section(page, 'preferencias');
     await expect(
@@ -271,7 +270,7 @@ test('Preferências, Acessos à sua conta, Sobre', async ({ browser }) => {
 
     // A member without her own AI: Preferências opens with who answers her.
     const eduardo = await contextAt(browser, width, { email: EDUARDO });
-    await section(eduardo.page, phone ? 'preferencias' : 'conta');
+    await section(eduardo.page, 'preferencias');
     settings = settingsOf(eduardo.page);
     await expect(settings.getByText('Quem atende você agora')).toBeVisible();
     await shoot(eduardo.page, 'settings-preferences-member', width);

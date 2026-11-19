@@ -479,8 +479,16 @@
   border: 0;
 }
 
-/* Sua IA's screen starts 16 under the header (v2 · Sua IA, celular: 110 from the top). */
-.screen .section[data-section='ai'] {
+/* Preferências' first title 24 under who answers (a member's card), 26 under a phone's header
+   (v2 · Preferências). */
+app-ai-status-card + app-preferences-form,
+.screen .section > app-preferences-form:first-child {
+  margin-top: 0.625rem;
+}
+
+/* Sua IA's and Preferências' screens start 16 under the header (v2, celular: 110 from the top). */
+.screen .section[data-section='ai'],
+.screen .section[data-section='preferences'] {
   padding-top: var(--space-4);
 }
 

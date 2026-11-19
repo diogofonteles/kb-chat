@@ -358,6 +358,14 @@ export async function seedSettingsWorld(): Promise<SettingsWorld> {
     }),
     'house',
   );
+  // The owner's Preferências as the frames show them: "Acervo padrão · Hermetismo".
+  await ok(
+    owner.put('/api/v1/settings', {
+      data: { preferences: { theme: 'auto', defaultTopic: 'hermetismo' } },
+      headers: CSRF,
+    }),
+    'owner settings',
+  );
 
   const ids: Record<string, string> = {};
   for (const person of PEOPLE) {
@@ -608,7 +616,10 @@ export async function settingsWorld(
       // The AI's history in the frames: the change of 09/11/2026 18:58 (settings-people-editor-ai).
       const ai = stamped['ai'];
       return isRecord(ai) && Array.isArray(ai['history'])
-        ? { ...stamped, ai: { ...ai, history: restamp(ai['history'], sp(AI_CHANGED_AT)) } }
+        ? {
+            ...stamped,
+            ai: { ...ai, history: restamp(ai['history'], sp(AI_CHANGED_AT)) },
+          }
         : stamped;
     }),
   }));
@@ -728,14 +739,14 @@ export async function settingsWorld(
     const now = Date.now();
     return {
       ...body,
-      items: ((body['items'] as Record<string, unknown>[] | undefined) ?? []).map(
-        (one) => {
-          const at = new Date(
-            one['title'] === SEARCH ? now - 24 * 3_600_000 : now,
-          ).toISOString();
-          return { ...one, createdAt: at, updatedAt: at };
-        },
-      ),
+      items: (
+        (body['items'] as Record<string, unknown>[] | undefined) ?? []
+      ).map((one) => {
+        const at = new Date(
+          one['title'] === SEARCH ? now - 24 * 3_600_000 : now,
+        ).toISOString();
+        return { ...one, createdAt: at, updatedAt: at };
+      }),
     };
   });
   // "Sua biblioteca" in the frames' "Recentes" order: Hermetismo, Cabala, Cosmologia.
@@ -750,9 +761,10 @@ export async function settingsWorld(
   await context.addInitScript(
     ([keys, value]) => {
       for (const key of keys as string[])
-        if (!localStorage.getItem(key)) localStorage.setItem(key, value as string);
+        if (!localStorage.getItem(key))
+          localStorage.setItem(key, value as string);
     },
-    [[OWNER, ANA_SOUZA].map(recentsKey), recents] as const,
+    [[OWNER, ANA_SOUZA, EDUARDO].map(recentsKey), recents] as const,
   );
   if (options.firstRun)
     await patchGet(context, '**/api/v1/settings', (body) => ({

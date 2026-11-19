@@ -1,4 +1,4 @@
-import { DecimalPipe, formatNumber } from '@angular/common';
+import { formatNumber } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -54,9 +54,10 @@ const ALL_FIELDS: readonly PreferenceField[] = [
  */
 @Component({
   selector: 'app-preferences-form',
-  imports: [DecimalPipe, UiChoiceCard, UiCover, UiIcon, UiSettingRow],
+  imports: [UiChoiceCard, UiCover, UiIcon, UiSettingRow],
   templateUrl: './preferences-form.html',
   styleUrl: './settings-form.css',
+  host: { '[class.in-wizard]': 'wizard()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PreferencesForm {
@@ -174,7 +175,7 @@ export class PreferencesForm {
     const slug = this.preferences().defaultTopic;
     const topic = this.topics().find((one) => one.slug === slug);
     if (!topic) return $localize`:@@prefs.topicAuto:O maior acervo`;
-    return `${treeTitle(topic)} (${formatNumber(topic.documentCount, this.locale)})`;
+    return treeTitle(topic);
   });
   protected readonly modeValue = computed(
     () =>
