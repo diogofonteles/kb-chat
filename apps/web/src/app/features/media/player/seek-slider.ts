@@ -61,6 +61,8 @@ export class SeekSlider {
   private readonly dragMs = signal<number | null>(null);
   private readonly hoverMs = signal<number | null>(null);
   protected readonly focused = signal(false);
+  /** A finger or the pointer drags the thumb: the bookmarks show under it. */
+  protected readonly dragging = computed(() => this.dragMs() !== null);
   private readonly announcer = inject(PlayerAnnouncer);
   private lastDragSeek = 0;
 

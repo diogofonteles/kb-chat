@@ -1,32 +1,21 @@
+/* The phone sheet's height in the frame (player.js mOver). */
+ui-dialog {
+  --ui-sheet-height: 20rem;
+}
+
 :host {
-  display: grid;
-  gap: var(--space-2);
-  justify-items: start;
+  display: contents;
 }
 
-:host(:focus) {
-  outline: none;
-}
-
-.confirm {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-muted);
-}
-
-.confirm p,
+.question,
 .error,
 .warning-notice {
   margin: 0;
 }
 
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+.question {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .error {
@@ -34,64 +23,20 @@
   font-weight: 600;
 }
 
-/* v2 pills (KBC-129): the editing entries under the action bar. */
-.primary,
-.secondary {
-  min-height: var(--target);
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 700;
-  cursor: pointer;
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-3);
 }
 
-@media (min-width: 1024px) {
-  .primary,
-  .secondary {
-    min-height: 2.25rem;
+@media (max-width: 1023px) {
+  .actions {
+    flex-direction: column-reverse;
+    width: 100%;
   }
-}
 
-.primary {
-  border: none;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-}
-
-.secondary {
-  border: 1px solid var(--overlay-4);
-  background: none;
-  color: var(--color-text);
-}
-
-button:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-/* As a card's action (TranscribeWithGroq in the library, KBC-128): the card's pill. */
-:host(.compact) .secondary,
-:host(.compact) .primary {
-  min-height: var(--target-desktop);
-  border: none;
-  border-radius: var(--radius-pill);
-  font-size: var(--text-meta);
-  font-weight: 700;
-}
-
-:host(.compact) .secondary {
-  background: var(--overlay-3);
-}
-
-:host(.compact) .secondary:hover {
-  background: var(--overlay-4);
-}
-
-:host(.compact) .confirm {
-  padding: var(--space-3);
-  border: none;
-  border-radius: var(--radius-card);
-  background: var(--overlay-2);
-  font-size: var(--text-sm);
+  .actions button {
+    width: 100%;
+  }
 }

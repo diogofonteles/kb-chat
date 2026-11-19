@@ -14,4 +14,17 @@ describe('VoiceTag (KBC-064 AC-8)', () => {
     expect(mark?.getAttribute('data-shape')).toBe('square');
     expect(mark?.classList.contains('hollow')).toBe(true);
   });
+
+  it('draws a plain dot when asked (the Sobre panel), keeping the text and the tone', async () => {
+    const { container } = await render(VoiceTag, {
+      inputs: { voice: 2, round: true },
+      providers: [provideZonelessChangeDetection()],
+    });
+    expect(container.textContent?.trim()).toBe('Voz 2');
+    const mark = container.querySelector<HTMLElement>('.mark');
+    expect(mark?.getAttribute('data-shape')).toBe('circle');
+    expect(mark?.style.getPropertyValue('--voice-color')).toBe(
+      'var(--color-voice-2)',
+    );
+  });
 });

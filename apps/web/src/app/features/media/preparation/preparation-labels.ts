@@ -104,6 +104,25 @@ const FAILURES: Record<StageFailure, () => string> = {
 export const failureText = (failure: StageFailure): string =>
   FAILURES[failure]();
 
+/** The failures that open with "Falhou:", said without it where a pill already says it. */
+const FAILURE_REASONS: Partial<Record<StageFailure, () => string>> = {
+  work: () =>
+    $localize`:@@prep.failure.work.reason:o trabalho não terminou no computador do transcritor.`,
+  provider: () =>
+    $localize`:@@prep.failure.provider.reason:o provedor de IA não respondeu.`,
+  'invalid-output': () =>
+    $localize`:@@prep.failure.invalidOutput.reason:a resposta da IA veio incompleta.`,
+  interrupted: () =>
+    $localize`:@@prep.failure.interrupted.reason:a análise foi interrompida.`,
+};
+
+/**
+ * Why a stage failed, beside a "Falhou" pill (v2 · Fila: "Conversão: o trabalho não
+ * terminou…"): the words without their own "Falhou:", so it is not said twice.
+ */
+export const failureReason = (failure: StageFailure): string =>
+  (FAILURE_REASONS[failure] ?? FAILURES[failure])();
+
 const STATUS_TEXTS: Record<TrackRowStatus, () => string> = {
   proposed: () => $localize`:@@prep.track.proposed:Proposta pela IA`,
   manual: () => $localize`:@@prep.track.manual:Criada por você`,

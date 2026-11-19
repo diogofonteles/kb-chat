@@ -447,6 +447,7 @@ async function desktopFlow(member: Page): Promise<void> {
   // The source panel holds the right panel: the avatar's menu closes the player.
   await closePlayer(member, 'account');
   await expect(bar).toBeHidden();
+  await expect(panel).toBeVisible();
   await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
   await expect.poll(() => playing(member)).toBe(true);
   await expect(bar).toContainText(TITLE);

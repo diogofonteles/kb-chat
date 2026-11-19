@@ -183,7 +183,13 @@
   cursor: pointer;
 }
 
-.ui-chip:hover:not(:disabled) {
+/* Only an off chip lightens: an on one keeps its ink on hover (4.5:1). */
+.ui-chip:hover:not(
+    :disabled,
+    [aria-pressed='true'],
+    [aria-current='page'],
+    .ui-chip--on
+  ) {
   background: color-mix(
     in srgb,
     var(--color-surface-muted) 80%,
@@ -1074,12 +1080,14 @@ select.ui-input option {
     height: min(var(--ui-dialog-height), calc(100dvh - 4rem));
   }
 
-  /* A tall modal the frames draw from the top (v2 · Configurações: 40 under the screen's
-     edge), not centred: it does not move when its content grows. */
+  /* A frame's own top (modal o.y on a 900 px screen: 40 for Configurações' tall modals), as
+     far from the middle on any height and never off it; it does not move when its content
+     grows. */
   .ui-dialog[style*='--ui-dialog-top'] {
-    margin-top: var(--ui-dialog-top);
+    --ui-dialog-top-at: max(var(--space-8), calc(50dvh - 450px + var(--ui-dialog-top)));
+    margin-top: var(--ui-dialog-top-at);
     margin-bottom: auto;
-    max-height: calc(100dvh - 2 * var(--ui-dialog-top));
+    max-height: calc(100dvh - 2 * var(--ui-dialog-top-at));
   }
 
   /* A small modal the frames draw above the middle (Ver como, Recusar, Revogar). */
@@ -1189,6 +1197,59 @@ select.ui-input option {
     max-height: none;
     margin: auto 0 0;
     border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  }
+
+  /* As tall as its content, at the foot: a fixed box with both insets would stretch. */
+  .ui-dialog--short {
+    top: auto;
+    height: auto;
+    /* A frame's sheet height (sheet(kids, h)), when it is taller than the content. */
+    min-height: min(var(--ui-sheet-height, 0px), calc(100dvh - var(--space-6)));
+    max-height: calc(100dvh - var(--space-6));
+  }
+
+  /* The sheet's name (mTitle): 18/700. */
+  .ui-dialog--short .ui-dialog__title {
+    font-size: 1.125rem;
+  }
+
+  .ui-dialog--short::before {
+    display: block;
+    flex: none;
+    width: 2.25rem;
+    height: 0.25rem;
+    margin: var(--space-3) auto 0;
+    border-radius: var(--radius-pill);
+    background: var(--overlay-4);
+    content: '';
+  }
+
+  .ui-dialog--short .ui-dialog__head {
+    padding: var(--space-4) var(--space-5) 0;
+  }
+
+  .ui-dialog--short .ui-dialog__body {
+    padding: var(--space-2) var(--space-5) var(--space-4);
+  }
+
+  /* The frames' sheets have no ✕ (mOver): it stays for assistive tech and the keyboard,
+     out of sight until it has the focus. */
+  .ui-dialog--short .ui-dialog__close {
+    position: absolute;
+    top: var(--space-3);
+    right: var(--space-4);
+  }
+
+  .ui-dialog--short .ui-dialog__close:not(:focus-visible) {
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .ui-dialog--short .ui-dialog__footer {
+    padding: 0 var(--space-5) calc(var(--space-6) + env(safe-area-inset-bottom));
   }
 
   /* The words sit 25 px under the sheet's top, as the frame; the targets keep 44 px. */

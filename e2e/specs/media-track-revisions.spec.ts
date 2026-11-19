@@ -78,6 +78,12 @@ async function waitForCut(owner: APIRequestContext, id: string) {
     .toBe('none');
 }
 
+/** The track's own editing is at the top of the player's ⋯ (v2 · Mídia — Player). */
+async function chooseInMore(page: Page, item: string): Promise<void> {
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  await page.getByRole('menuitem', { name: item }).click();
+}
+
 const editDialog = (page: Page) =>
   page.getByRole('dialog', { name: 'Editar faixa' });
 
@@ -108,7 +114,7 @@ test('AC-1, AC-12: the title changes on the same page and the history says so', 
   const { first } = await approvedTracks(owner);
   await page.goto(trackPage(first.id));
 
-  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  await chooseInMore(page, 'Editar faixa');
   const dialog = editDialog(page);
   await dialog
     .getByRole('textbox', { name: 'Título' })
@@ -120,7 +126,7 @@ test('AC-1, AC-12: the title changes on the same page and the history says so', 
     page.getByRole('heading', { name: 'Título corrigido' }),
   ).toBeVisible();
   await expect(page).toHaveURL(new RegExp(first.id));
-  await page.locator('summary', { hasText: 'Histórico' }).click();
+  await chooseInMore(page, 'Histórico da faixa');
   await expect(
     page.getByText(/Primeira pergunta → Título corrigido/),
   ).toBeVisible();
@@ -133,7 +139,7 @@ test('AC-13: who saves second sees the other title and keeps theirs', async ({
   const owner = await ownerApi();
   const { first } = await approvedTracks(owner);
   await page.goto(trackPage(first.id));
-  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  await chooseInMore(page, 'Editar faixa');
   const dialog = editDialog(page);
   await dialog.getByRole('textbox', { name: 'Título' }).fill('O meu título');
 
@@ -408,7 +414,7 @@ test('AC-8: deleting says the impact, the track leaves the library, and it comes
   const { media, first } = await approvedTracks(owner);
   await page.goto(trackPage(first.id));
 
-  await page.getByRole('button', { name: 'Apagar faixa' }).click();
+  await chooseInMore(page, 'Apagar faixa');
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('restaurar em até 30 dias');
   await dialog.getByRole('button', { name: 'Apagar faixa' }).click();
@@ -473,7 +479,7 @@ test('AC-11: the suggestion shows its cost, and nothing changes until "Usar" and
     );
   });
   await page.goto(trackPage(first.id));
-  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  await chooseInMore(page, 'Editar faixa');
   const dialog = editDialog(page);
   await dialog.getByRole('button', { name: 'Ver quanto custa' }).click();
   await expect(dialog).toContainText('0,0012');
@@ -614,12 +620,13 @@ test('AC-14: a listener sees none of it', async ({ browser, viewport }) => {
 
   await expect(page.getByRole('heading', { name: first.title })).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Editar', exact: true }),
-  ).toBeHidden();
-  await expect(
     page.getByRole('link', { name: 'Ajustar início e fim' }),
   ).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Apagar faixa' })).toBeHidden();
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  await expect(page.getByRole('menuitem').first()).toBeVisible();
+  for (const item of ['Editar faixa', 'Histórico da faixa', 'Apagar faixa'])
+    await expect(page.getByRole('menuitem', { name: item })).toHaveCount(0);
+  await page.keyboard.press('Escape');
 });
 
 for (const theme of ['light', 'dark', 'esoteric'] as const) {
@@ -630,7 +637,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     const { first } = await approvedTracks(owner);
     await useTheme(page, theme);
     await page.goto(trackPage(first.id));
-    await page.getByRole('button', { name: 'Editar', exact: true }).click();
+    await chooseInMore(page, 'Editar faixa');
     await expect(editDialog(page)).toBeVisible();
     const dialog = await new AxeBuilder({ page })
       .include('dialog')

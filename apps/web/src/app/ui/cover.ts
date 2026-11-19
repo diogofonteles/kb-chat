@@ -26,7 +26,9 @@ const GRADIENTS: readonly (readonly [string, string])[] = [
   ['#3a7a2f', '#0f240b'],
   ['#2f4f8a', '#0b1424'],
 ];
-const FALLBACK: readonly [string, string] = ['#5a5a5a', '#1a1a1a'];
+/** The grey of a cover with no colour of its own, and of a media that failed (lib.js AC). */
+export const NEUTRAL_COVER: readonly [string, string] = ['#5a5a5a', '#1a1a1a'];
+const FALLBACK = NEUTRAL_COVER;
 /** Short words that never make a cover's code ("A Lei do Ritmo" → LE). */
 const SKIPPED = new Set([
   'a',

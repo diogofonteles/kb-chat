@@ -31,6 +31,26 @@ describe('the queue in words (KBC-090)', () => {
     expect(queueStateText(failed)).toContain('Vozes: Falhou');
   });
 
+  it('says only why it failed beside a pill that says "Falhou" (v2 · Fila)', () => {
+    const failed = aQueueItem({
+      stage: 'convert',
+      state: 'failed',
+      failure: 'work',
+    });
+    expect(queueStateText(failed, { pillSaysFailed: true })).toBe(
+      'Conversão: o trabalho não terminou no computador do transcritor.',
+    );
+    // A failure with no "Falhou:" of its own keeps its words.
+    const capped = aQueueItem({
+      stage: 'tracks',
+      state: 'failed',
+      failure: 'monthly-cap',
+    });
+    expect(queueStateText(capped, { pillSaysFailed: true })).toContain(
+      'O limite mensal da mídia foi atingido.',
+    );
+  });
+
   it('says a running or failed stage on step 3 too', () => {
     const running = aQueueItem({
       step: 3,

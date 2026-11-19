@@ -14,6 +14,7 @@ import { MEDIA_BOOKMARK_NOTE_MAX } from '@kb-chat/contracts';
 import { formatClock } from '@kb-chat/player-core';
 import { BookmarksStore } from '@core/media/bookmarks-store.js';
 import { MediaEngine } from '@core/media/media-engine.js';
+import { UiIcon, UiIconButton } from '@ui/index.js';
 
 /**
  * "Marcadores" (screens.md T15, KBC-042 FR-3, FR-4): the person's bookmarks in this media,
@@ -22,12 +23,13 @@ import { MediaEngine } from '@core/media/media-engine.js';
  */
 @Component({
   selector: 'app-bookmark-list',
+  imports: [UiIcon, UiIconButton],
   template: `
     <section class="bookmarks" aria-labelledby="bookmarks-title">
       <h3 id="bookmarks-title" #heading tabindex="-1">
-        <span i18n="@@bookmarks.title">Marcadores</span>
+        <span i18n="@@bookmarks.titleHere">Seus marcadores aqui</span>
         @if (bookmarks().length) {
-          <span class="count">{{ bookmarks().length }}</span>
+          <span class="count">· {{ bookmarks().length }}</span>
         }
       </h3>
 
@@ -49,8 +51,8 @@ import { MediaEngine } from '@core/media/media-engine.js';
 
       @if (bookmarks().length === 0) {
         <p class="empty" i18n="@@bookmarks.empty">
-          Nenhum marcador ainda. Use 🔖 ou a tecla B para marcar um trecho
-          enquanto ouve.
+          Nenhum marcador ainda. Use o marcador ou a tecla B para marcar um
+          trecho enquanto ouve.
         </p>
       } @else {
         <ol class="list">
@@ -103,21 +105,21 @@ import { MediaEngine } from '@core/media/media-engine.js';
                 </p>
                 <div class="actions">
                   <button
+                    uiIconButton
                     type="button"
                     [attr.data-edit]="bookmark.id"
                     [attr.aria-label]="editLabel(bookmark.positionMs)"
                     (click)="startEdit(bookmark.id)"
-                    i18n="@@bookmarks.edit"
                   >
-                    Editar
+                    <ui-icon name="edit" [size]="16" />
                   </button>
                   <button
+                    uiIconButton
                     type="button"
                     [attr.aria-label]="deleteLabel(bookmark.positionMs)"
                     (click)="remove(bookmark.id)"
-                    i18n="@@bookmarks.delete"
                   >
-                    Apagar
+                    <ui-icon name="trash" [size]="16" />
                   </button>
                 </div>
               }

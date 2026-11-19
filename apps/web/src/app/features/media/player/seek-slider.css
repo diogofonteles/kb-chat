@@ -17,11 +17,12 @@
 .rail {
   position: absolute;
   inset: 50% 0 auto;
-  height: 0.3rem;
+  height: 0.25rem;
   transform: translateY(-50%);
   overflow: hidden;
   border-radius: 999px;
-  background: var(--color-border);
+  /* The v2 bar (lib.js playerBar, pMobile): white 30% under white. */
+  background: color-mix(in srgb, var(--color-text) 30%, transparent);
 }
 
 .buffered,
@@ -35,13 +36,28 @@
 }
 
 .played {
-  background: var(--color-accent);
+  background: var(--color-text);
 }
 
 .marks {
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+
+/*
+ * The v2 line is smooth at rest (lib.js playerBar, pMobile): the bookmarks and the track
+ * starts (KBC-042 FR-3, KBC-066 FR-9) show on it while the pointer is over it, the focus is
+ * on its thumb or a finger drags it, which is when a person aims at a time.
+ */
+.ticks {
+  visibility: hidden;
+}
+
+.track:hover .ticks,
+.track:focus-within .ticks,
+.track.engaged .ticks {
+  visibility: visible;
 }
 
 /* A thin tick across the rail, readable over the played and the unplayed part. */
@@ -59,11 +75,10 @@
 .thumb {
   position: absolute;
   top: 50%;
-  width: 1.125rem;
-  height: 1.125rem;
+  width: 0.75rem;
+  height: 0.75rem;
   border-radius: 50%;
-  background: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-surface);
+  background: var(--color-text);
   transform: translate(-50%, -50%);
   transition: transform 120ms var(--ease);
 }
@@ -71,6 +86,20 @@
 .track:not(.disabled):hover .thumb,
 .thumb:focus-visible {
   transform: translate(-50%, -50%) scale(1.15);
+}
+
+/* The desktop bar shows the knob only under the pointer or the focus (playerBar). */
+:host-context(app-mini-player) .thumb {
+  opacity: 0;
+}
+
+:host-context(app-mini-player) .track:hover .thumb,
+:host-context(app-mini-player) .thumb:focus-visible {
+  opacity: 1;
+}
+
+:host-context(app-mini-player) .track:hover .played {
+  background: var(--color-accent);
 }
 
 .track.disabled .thumb {

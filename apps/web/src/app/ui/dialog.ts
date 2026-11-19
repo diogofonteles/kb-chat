@@ -33,6 +33,7 @@ import { UiIcon } from './icon.js';
       [class.ui-dialog--actions]="sheetHead()"
       [class.ui-dialog--confirm]="confirm()"
       [class.ui-dialog--wide]="width() >= 800"
+      [class.ui-dialog--short]="short()"
       [style.--ui-dialog-width.px]="width()"
       [style.--ui-dialog-height.px]="height() || null"
       [style.--ui-dialog-top.px]="top() || null"
@@ -106,7 +107,11 @@ export class UiDialog {
   readonly width = input(560);
   /** A fixed height (the wide modals with tabs keep theirs from tab to tab); 0 fits. */
   readonly height = input(0);
-  /** At a desktop, the modal's distance from the screen's top (the frame's); 0 centres it. */
+  /**
+   * Where a desktop frame puts the dialog's top on a 900 px high screen (modal o.y); kept
+   * from the middle on other heights, and never off it; it does not move when its content
+   * grows. 0 centres it.
+   */
   readonly top = input(0);
   /** At a desktop, how far above the screen's middle the modal sits (the frames' 52); 0 centres it. */
   readonly lift = input(0);
@@ -137,6 +142,11 @@ export class UiDialog {
    * set up (a configured invitation): only ✕, Cancelar and Escape close it then.
    */
   readonly closeOnBackdrop = input(true);
+  /**
+   * A short question (a confirmation): below 1024 px a sheet as tall as its content, with
+   * the handle on top and the actions across it, no ✕ (v2 · Mídia — Player, celular).
+   */
+  readonly short = input(false);
   readonly primary = output();
   readonly closed = output();
   private readonly dialog =

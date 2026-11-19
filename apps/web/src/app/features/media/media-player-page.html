@@ -1,30 +1,61 @@
-<!-- v2 player (KBC-129): "Tocando agora" expanded. The cover header, the action bar (the
-     player, with the page's editing actions at the top of ⋯), the views in chips and the
-     synced transcript as the body, and "Sobre" (bookmarks, tracks, removed tracks) beside it. -->
+<!-- v2 player (KBC-129, v2 · Mídia — Player): "Tocando agora" expanded. The cover header
+     over the panel's tint, the action row (the player; the page's editing actions at the top
+     of ⋯), the views in chips with the synced transcript as the body, and "Sobre" in the
+     shell's right panel (inline on a phone, under the full-screen player). -->
 <article
   class="page"
-  [class.with-about]="ready()"
-  [class.with-transcript]="transcriptInView()"
   [class.failed]="!!loadError()"
+  [class.waiting]="!!media() && !ready()"
+  [class.compact]="compactCover()"
+  [class.failed-media]="failedMedia()"
+  [class.with-transcript]="transcriptInView()"
+  [style.--page-tint]="pageTint()"
   aria-labelledby="media-item-title"
 >
-  <div class="top">
+  <!-- The full-screen player's head (phone): back, where it plays from. -->
+  <div class="phone-head">
     @if (backToLibrary()) {
-      <a class="back" routerLink="/biblioteca" i18n="@@library.back"
-        >← Biblioteca</a
+      <a
+        class="back"
+        routerLink="/biblioteca"
+        aria-label="← Biblioteca"
+        i18n-aria-label="@@library.back"
       >
+        <ui-icon [name]="ready() ? 'chevDown' : 'chevLeft'" [size]="26" />
+        @if (!ready()) {
+          <span class="back-label" aria-hidden="true" i18n="@@library.title"
+            >Biblioteca</span
+          >
+        }
+      </a>
     } @else {
-      <a class="back" routerLink="/midia" i18n="@@media.back">← Mídia</a>
+      <a
+        class="back"
+        routerLink="/midia"
+        aria-label="← Mídia"
+        i18n-aria-label="@@media.back"
+      >
+        <ui-icon [name]="ready() ? 'chevDown' : 'chevLeft'" [size]="26" />
+        @if (!ready()) {
+          <span class="back-label" aria-hidden="true" i18n="@@media.title"
+            >Mídia</span
+          >
+        }
+      </a>
+    }
+    @if (ready()) {
+      <p class="playing-from">
+        <span class="from">{{ playingFrom() }}</span>
+        <span class="where">{{ playingWhere() }}</span>
+      </p>
     }
   </div>
 
   @if (loadError()) {
     <div class="notice page-empty" role="alert">
-      <ui-icon
-        class="empty-icon"
-        [name]="notFound() ? 'music' : 'xcircle'"
-        [size]="28"
-      />
+      <span class="empty-icon">
+        <ui-icon [name]="notFound() ? 'music' : 'xcircle'" [size]="32" />
+      </span>
       @if (notFound()) {
         <p class="empty-title" i18n="@@media.notFoundTitle">
           Mídia não encontrada
@@ -53,7 +84,13 @@
     </div>
   } @else if (media(); as current) {
     <header class="hero">
-      <ui-cover class="art" [title]="current.title" [size]="208" />
+      <ui-cover
+        class="art"
+        [title]="current.title"
+        [size]="208"
+        [from]="failedMedia() ? neutralCover[0] : null"
+        [to]="failedMedia() ? neutralCover[1] : null"
+      />
       <div class="hero-text">
         @if (current.parent; as parent) {
           <p class="part-of">
@@ -62,35 +99,69 @@
             @if (trackPlace()) {
               <span>· {{ trackPlace() }}</span>
             }
-            ·
-            <a
-              [routerLink]="['/midia', parent.id]"
-              [queryParams]="contextParams()"
-              i18n="@@tracks.inContext"
-              >Ouvir no contexto</a
-            >
           </p>
         } @else {
-          <p class="kicker" i18n="@@media.kicker">Áudio</p>
+          <p class="kicker">{{ kicker() }}</p>
         }
-        <h2 id="media-item-title">{{ current.title }}</h2>
+        <h1 id="media-item-title">{{ current.title }}</h1>
         <p class="meta">
-          <app-authorship-badge [mediaAuthor]="current.author" />
+          @if (current.author; as author) {
+            <span
+              class="by-avatar"
+              aria-hidden="true"
+              [style.background]="authorTint()"
+              >{{ authorInitials() }}</span
+            >
+            <span class="by">
+              @if (author.main) {
+                <span aria-hidden="true">✦ </span
+                ><span class="visually-hidden" i18n="@@media.author.mainPrefix"
+                  >Autor principal:&nbsp;</span
+                >
+              }
+              {{ author.name }}</span
+            >
+          } @else {
+            <span class="others" i18n="@@authorship.others"
+              >Outros autores</span
+            >
+          }
           @if (duration()) {
-            <span class="duration">{{ duration() }}</span>
+            <span class="duration">· {{ duration() }}</span>
           }
           <span i18n="@@media.sentOn"
-            >enviado em {{ current.createdAt | date: 'dd/MM/yyyy' }}</span
+            >· enviado em {{ current.createdAt | date: 'dd/MM/yyyy' }}</span
           >
-          @if (transcription(); as text) {
+        </p>
+        <div class="note">
+          @if (current.parent; as parent) {
+            <a
+              uiButton="outline"
+              size="sm"
+              class="in-context"
+              [routerLink]="['/midia', parent.id]"
+              [queryParams]="contextParams()"
+            >
+              <ui-icon name="arrowRight" [size]="16" />
+              <span i18n="@@tracks.inContext">Ouvir no contexto</span>
+            </a>
+          }
+          @if (failedMedia()) {
+            <ui-pill class="transcription" tone="err" i18n="@@media.failedPill"
+              >Falhou</ui-pill
+            >
+          } @else if (pillText(); as text) {
             <ui-pill class="transcription" [tone]="transcriptionTone()">{{
               text
             }}</ui-pill>
+            @if (pillWhy(); as why) {
+              <span class="pill-why">{{ why }}</span>
+            }
           }
-        </p>
-        @if (canEdit() || canEditTrack()) {
-          <app-track-publication-status [mediaId]="current.id" />
-        }
+          @if (canEdit() || canEditTrack()) {
+            <app-track-publication-status [mediaId]="current.id" />
+          }
+        </div>
       </div>
     </header>
 
@@ -105,21 +176,33 @@
       @if (canSeeSubjects()) {
         <app-track-subjects-view [mediaId]="current.id" />
       }
-      @if (lowConfidence()) {
-        <p
-          class="warning-notice low-confidence"
-          i18n="@@media.transcription.lowNotice"
+      @if (lowConfidence() || (lowCaptions() && !desktop())) {
+        <ui-banner
+          class="low-confidence"
+          tone="warn"
+          title="Transcrição automática de baixa confiança"
+          i18n-title="@@media.transcription.low"
         >
-          Transcrição automática de baixa confiança: pode haver trechos errados.
-        </p>
+          <span i18n="@@media.transcription.lowText"
+            >Pode haver trechos errados.</span
+          >
+        </ui-banner>
       }
-      @if (canEditTrack()) {
-        <app-moved-bookmarks-notice [mediaId]="current.id" />
-        <app-track-actions [media]="current" (changed)="trackChanged($event)" />
-      } @else if (current.parent) {
+      @if (queuedNotice() && !desktop() && ready()) {
+        <!-- The phone shows the card's notices over it (pMobile o.banner). -->
+        <ui-banner
+          class="low-confidence"
+          tone="info"
+          iconName="refresh"
+          [title]="queuedTitle()"
+        >
+          <span>{{ queuedText() }}</span>
+        </ui-banner>
+      }
+      @if (canEditTrack() || current.parent) {
         <app-moved-bookmarks-notice [mediaId]="current.id" />
       }
-      @if (current.canEdit && !ready()) {
+      @if (!ready() && current.canEdit) {
         <button
           #editButton
           uiButton="outline"
@@ -135,20 +218,32 @@
     </div>
 
     @if (ready()) {
-      <div class="action-bar">
+      <app-media-player
+        class="actions beside-bar"
+        [cues]="cues()"
+        [captionsAvailable]="hasTranscript()"
+        [speakersAvailable]="canSeeSpeakers()"
+        [lowConfidence]="lowCaptions()"
+        [pageOptions]="pageOptions()"
+        [marked]="bookmarked()"
+        (pageChosen)="choosePageAction($event)"
+        (aboutAsked)="scrollToAbout()"
+      >
+        <div class="sheet-title" sheetHead aria-hidden="true">
+          <ui-cover [title]="current.title" [size]="48" />
+          <span class="sheet-words">
+            <span class="sheet-name">{{ current.title }}</span>
+            <span class="sheet-where">{{ sheetWhere() }}</span>
+          </span>
+        </div>
         @if (resumeAt() !== null) {
-          <div class="resume">
-            <button
-              uiButton="primary"
-              type="button"
-              class="resume-from"
-              (click)="resume()"
-            >
+          <div class="resume" resume>
+            <button type="button" class="resume-from" (click)="resume()">
               {{ resumeLabel() }}
             </button>
             <button
-              uiButton="ghost"
               type="button"
+              class="start-over"
               (click)="startOver()"
               i18n="@@player.startOver"
             >
@@ -156,85 +251,38 @@
             </button>
           </div>
         }
-        <app-media-player
-          [cues]="cues()"
-          [captionsAvailable]="hasTranscript()"
-          [speakersAvailable]="canSeeSpeakers()"
-          [lowConfidence]="lowCaptions()"
-          [pageOptions]="pageOptions()"
-          (pageChosen)="choosePageAction($event)"
-        />
-        @if (editEntry(); as entry) {
-          @if (entry.state !== 'new') {
-            <p class="edit-entry">
-              @switch (entry.state) {
-                @case ('paused') {
-                  <app-preparation-entry [mediaId]="id()" [step]="entry.step" />
-                }
-                @case ('approved') {
-                  <span>{{ appliedText() }}</span>
-                  ·
-                  <a [routerLink]="editLink()" i18n="@@tracks.entry.see"
-                    >Ver edição</a
-                  >
-                  <app-track-preparation [mediaId]="id()" />
-                }
-              }
-            </p>
-          }
-        }
-        <div class="edit-tools">
-          <app-transcribe-again [media]="current" (queued)="item.set($event)" />
-          <app-transcribe-with-groq
+        @if (canEditTrack()) {
+          <app-track-actions
+            trackActions
             [media]="current"
-            (sent)="item.set($event)"
-            (capped)="reload()"
+            (changed)="trackChanged($event)"
+            (closed)="focusMore()"
           />
-        </div>
-      </div>
-
-      <div class="body">
-        @if (hasViews()) {
-          <div
-            class="views"
-            role="group"
-            aria-label="Ver"
-            i18n-aria-label="@@player.views"
-          >
-            <button
-              uiChip
-              type="button"
-              [selected]="view() === 'transcript'"
-              (click)="chosenView.set('transcript')"
-              i18n="@@player.view.transcript"
-            >
-              Transcrição
-            </button>
-            @if (hasTracks()) {
-              <button
-                uiChip
-                type="button"
-                [selected]="view() === 'tracks'"
-                (click)="chosenView.set('tracks')"
-                i18n="@@player.view.tracks"
-              >
-                Faixas
-              </button>
-            }
-            @if (canEdit()) {
-              <button
-                uiChip
-                type="button"
-                [selected]="view() === 'voices'"
-                (click)="chosenView.set('voices')"
-                i18n="@@player.view.voices"
-              >
-                Vozes
-              </button>
-            }
-          </div>
         }
+      </app-media-player>
+      @if (editEntry(); as entry) {
+        @if (entry.state === 'paused') {
+          <p class="edit-entry">
+            <app-preparation-entry [mediaId]="id()" [step]="entry.step" />
+          </p>
+        }
+      }
+      <app-transcribe-again
+        #again
+        [media]="current"
+        (queued)="item.set($event)"
+        (closed)="focusMore()"
+      />
+      <app-transcribe-with-groq
+        #groq
+        [inMenu]="true"
+        [media]="current"
+        (sent)="item.set($event)"
+        (capped)="reload()"
+        (closed)="focusMore()"
+      />
 
+      <div class="body" [class.transcript-view]="view() === 'transcript'">
         @if (view() === 'transcript') {
           @if (showTranscript()) {
             <section
@@ -249,8 +297,24 @@
                   [title]="current.title"
                   [showSpeakers]="speakersOn()"
                   [wordByWord]="wordHighlight()"
-                />
+                  [inPlayer]="true"
+                >
+                  <ng-container views>
+                    <ng-container *ngTemplateOutlet="viewChips" />
+                  </ng-container>
+                  @if (queuedNotice()) {
+                    <ui-banner
+                      banner
+                      tone="info"
+                      iconName="refresh"
+                      [title]="queuedTitle()"
+                    >
+                      <span>{{ queuedText() }}</span>
+                    </ui-banner>
+                  }
+                </app-transcript-panel>
               } @else if (transcriptError()) {
+                <ng-container *ngTemplateOutlet="viewChips" />
                 <div class="notice" role="alert">
                   <p>{{ transcriptError() }}</p>
                   <div class="notice-actions">
@@ -265,6 +329,7 @@
                   </div>
                 </div>
               } @else {
+                <ng-container *ngTemplateOutlet="viewChips" />
                 <div class="side-skeleton" aria-busy="true">
                   <span class="visually-hidden" i18n="@@transcript.loading"
                     >Carregando a transcrição…</span
@@ -273,17 +338,26 @@
               }
             </section>
           } @else if (hasTranscript()) {
+            <ng-container *ngTemplateOutlet="viewChips" />
             <p class="hidden-note" i18n="@@transcript.hiddenNote">
               Transcrição escondida. Mostre de novo em ⋯ Mais opções.
             </p>
-          } @else if (hasViews()) {
-            <p class="hidden-note" i18n="@@transcript.notYet">
-              A transcrição aparece aqui quando ficar pronta.
-            </p>
+          } @else {
+            <ng-container *ngTemplateOutlet="viewChips" />
+            <div class="waiting-card">
+              <p class="card-title" i18n="@@transcript.title">Transcrição</p>
+              <span class="empty-icon"
+                ><ui-icon name="clock" [size]="32"
+              /></span>
+              <p class="empty-title">{{ waitingTitle() }}</p>
+              <p>{{ waitingText() }}</p>
+            </div>
           }
         } @else if (view() === 'tracks') {
+          <ng-container *ngTemplateOutlet="viewChips" />
           <app-track-nav-list class="tracks-view" />
         } @else if (canEdit()) {
+          <ng-container *ngTemplateOutlet="viewChips" />
           <app-voices-panel
             class="voices"
             [mediaId]="current.id"
@@ -294,30 +368,29 @@
         }
       </div>
 
-      <aside
-        class="about"
-        aria-label="Sobre este áudio"
-        i18n-aria-label="@@player.about"
-      >
-        <app-bookmark-list class="bookmarks" />
-        @if (view() !== 'tracks') {
-          <app-track-nav-list />
-        }
-        @if (canEdit()) {
-          <app-archived-tracks class="archived" [recordingId]="current.id" />
-        }
-      </aside>
+      @if (!desktop()) {
+        <!-- A landmark of its own under the full-screen player, as before v2. -->
+        <aside
+          #about
+          class="about"
+          aria-label="Sobre este áudio"
+          i18n-aria-label="@@player.about"
+        >
+          <app-player-about [media]="current" [canEdit]="canEdit()" />
+        </aside>
+      }
     } @else if (current.archived) {
       <div class="notice" role="status">
         <p i18n="@@tracks.removedFromEdit">Faixa removida da edição</p>
       </div>
     } @else {
       <div class="not-ready" role="status">
-        <ui-icon
-          class="empty-icon"
-          [name]="current.status === 'failed' ? 'xcircle' : 'clock'"
-          [size]="28"
-        />
+        <span class="empty-icon">
+          <ui-icon
+            [name]="current.status === 'failed' ? 'xcircle' : 'clock'"
+            [size]="32"
+          />
+        </span>
         <p class="status">{{ status() }}</p>
         <p i18n="@@media.notReady">
           Ela aparece aqui para ouvir assim que estiver pronta.
@@ -333,6 +406,47 @@
   }
   <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
 </article>
+
+<ng-template #viewChips>
+  <div
+    class="views"
+    role="group"
+    aria-label="Ver"
+    i18n-aria-label="@@player.views"
+  >
+    <button
+      uiChip
+      type="button"
+      [selected]="view() === 'transcript'"
+      (click)="chosenView.set('transcript')"
+      i18n="@@player.view.transcript"
+    >
+      Transcrição
+    </button>
+    @if (hasTracks()) {
+      <button
+        uiChip
+        type="button"
+        [selected]="view() === 'tracks'"
+        (click)="chosenView.set('tracks')"
+        i18n="@@player.view.tracks"
+      >
+        Faixas
+      </button>
+    }
+    @if (canEdit()) {
+      <button
+        uiChip
+        type="button"
+        [selected]="view() === 'voices'"
+        (click)="chosenView.set('voices')"
+        i18n="@@player.view.voices"
+      >
+        Vozes
+      </button>
+    }
+  </div>
+</ng-template>
 
 @if (editing() && media(); as current) {
   <app-edit-media-dialog

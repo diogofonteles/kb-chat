@@ -24,19 +24,22 @@
     border-color 120ms var(--ease);
 }
 
-.secondary:hover:not(:disabled) {
-  border-color: var(--color-text);
-  transform: scale(1.03);
-}
-
 .primary {
   border-color: transparent;
   background: var(--color-accent);
   color: var(--color-on-accent);
 }
 
-.primary:hover:not(:disabled) {
-  transform: scale(1.03);
+/* Only with a pointer that hovers: a tap on a phone leaves no button grown (sticky hover). */
+@media (hover: hover) {
+  .secondary:hover:not(:disabled) {
+    border-color: var(--color-text);
+    transform: scale(1.03);
+  }
+
+  .primary:hover:not(:disabled) {
+    transform: scale(1.03);
+  }
 }
 
 .secondary:disabled,

@@ -60,6 +60,7 @@ import type { SpeakerChoice } from './speaker-suggestions.js';
 import { voiceChangeOf, type VoiceChange } from './voice-change.js';
 import { sampleOf } from './voice-changes.js';
 import { VoiceSample } from './voice-sample.js';
+import { UiIcon } from '@ui/index.js';
 import { VoiceTag } from './voice-tag.js';
 
 type Label = (speakers: MediaSpeakers, locale: string) => string;
@@ -101,7 +102,7 @@ function voiceOf(event: Event): number | null {
 }
 
 /** "3", "", or null when the field holds something that is not 1 to 10 (MA-23). */
-function parseVoices(text: string): number | null | 'invalid' {
+export function parseVoices(text: string): number | null | 'invalid' {
   const trimmed = text.trim();
   if (trimmed === '') return null;
   const value = Number(trimmed);
@@ -125,7 +126,7 @@ function fieldTextOf(label: VoiceLabel | undefined): string {
  */
 @Component({
   selector: 'app-voices-panel',
-  imports: [CollectionSpeakers, SpeakerCombobox, VoiceTag],
+  imports: [CollectionSpeakers, SpeakerCombobox, UiIcon, VoiceTag],
   providers: [VoiceSample],
   templateUrl: './voices-panel.html',
   styleUrl: './voices-panel.css',
@@ -275,6 +276,12 @@ export class VoicesPanel {
 
   protected reload(): void {
     this.speakers.reload();
+  }
+
+  protected sampleLabel(voice: number): string {
+    return this.sample.playing() === voice
+      ? $localize`:@@voices.sampleStop:Parar amostra da Voz ${voice}:voice:`
+      : $localize`:@@voices.sample:Ouvir amostra da Voz ${voice}:voice:`;
   }
 
   protected playSample(voice: number): void {

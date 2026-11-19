@@ -15,7 +15,13 @@ import {
 import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import type { IconName } from '@ui/icons.js';
-import { UiOverlay, outsideBox, type OverlayAlign } from '@ui/overlay.js';
+import {
+  UiOverlay,
+  outsideBox,
+  type OverlayAlign,
+  type OverlayOffset,
+  type OverlaySide,
+} from '@ui/overlay.js';
 
 /** One item of a menu: an action, or one of the choices with the current one checked. */
 export interface MenuOption {
@@ -33,6 +39,13 @@ export interface MenuOption {
   readonly pill?: boolean;
   /** An action among the choices of a `kind="choice"` menu: no ✓, no radio role. */
   readonly action?: boolean;
+  /**
+   * A short state after the words, at the right ("ligado"); the item's name is
+   * "<label>: <trail>", so it says the state in words (UP-20).
+   */
+  readonly trail?: string;
+  /** A key that does it, shown at the right ("?"); the item's name stays its words. */
+  readonly keyHint?: string;
 }
 
 /** Items under the name of their group, in the order given. */
@@ -81,6 +94,8 @@ const SHEET_BELOW_PX = 1024;
         tabindex="-1"
         [uiOverlay]="trigger"
         [overlayAlign]="align()"
+        [overlaySide]="side()"
+        [overlayOffset]="offset()"
         [overlaySheetBelow]="sheetBelow"
         [attr.aria-label]="menuLabel() || label()"
         (keydown)="onMenuKey($event)"
@@ -98,6 +113,12 @@ const SHEET_BELOW_PX = 1024;
               }
             </span>
           </div>
+        }
+        <!-- What the sheet is about, given by the page (player.js mOver: the cover and title). -->
+        <div class="sheet-slot"><ng-content select="[sheetHead]" /></div>
+        @if (titled()) {
+          <!-- The menu's name over its items (speedMenu, mTitle): read as its label. -->
+          <p class="title" aria-hidden="true">{{ menuLabel() || label() }}</p>
         }
         @for (group of groups(); track $index) {
           <div
@@ -123,6 +144,11 @@ const SHEET_BELOW_PX = 1024;
                   [attr.aria-checked]="
                     radio(entry.option) ? (entry.option.checked ?? false) : null
                   "
+                  [attr.aria-label]="
+                    entry.option.trail
+                      ? entry.option.label + ': ' + entry.option.trail
+                      : null
+                  "
                   [class.danger]="entry.option.danger"
                   [class.checked]="entry.option.checked"
                   (focus)="focused.set(entry.index)"
@@ -132,6 +158,11 @@ const SHEET_BELOW_PX = 1024;
                     <ui-icon [name]="icon" [size]="18" />
                   }
                   <span class="words">{{ entry.option.label }}</span>
+                  @if (entry.option.trail; as trail) {
+                    <span class="trail" aria-hidden="true">{{ trail }}</span>
+                  } @else if (entry.option.keyHint; as key) {
+                    <span class="trail" aria-hidden="true">{{ key }}</span>
+                  }
                   @if (radio(entry.option)) {
                     <!-- v2 menus: the chosen one's ✓ drawn as the check icon. -->
                     <span class="check" aria-hidden="true">
@@ -177,6 +208,11 @@ export class MenuButton {
   readonly sheetTitle = input('');
   /** Under that title ("Irmã Helena Prado · Alquimia Prática"). */
   readonly sheetMeta = input('');
+  /** Below the button, or over its row from `offset` (the v2 player's menus). */
+  readonly side = input<OverlaySide>('below');
+  readonly offset = input<OverlayOffset | null>(null);
+  /** The menu's name shown over its items (the speed menu of the v2 player). */
+  readonly titled = input(false);
   readonly chosen = output<string>();
 
   protected readonly sheetBelow = SHEET_BELOW_PX;

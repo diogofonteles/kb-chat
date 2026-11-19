@@ -2,6 +2,7 @@
   #track
   class="track"
   [class.disabled]="disabled() || !loaded()"
+  [class.engaged]="dragging()"
   (pointerdown)="onPointerDown($event)"
   (pointermove)="onPointerMove($event)"
   (pointerup)="onPointerUp($event)"
@@ -33,8 +34,9 @@
     }}</span>
   }
   @if (markPercents().length) {
-    <!-- Bookmarks (KBC-042): seen here, reached by the keyboard in the list. -->
-    <div class="marks" aria-hidden="true">
+    <!-- Bookmarks (KBC-042): seen here while the line is used, reached by the keyboard in
+         the list. -->
+    <div class="marks ticks" aria-hidden="true" data-testid="bookmark-marks">
       @for (percent of markPercents(); track $index) {
         <span class="mark" [style.left.%]="percent"></span>
       }
@@ -42,7 +44,7 @@
   }
   @if (trackMarkPercents().length) {
     <!-- Tracks (KBC-066): taller than bookmarks, so no color alone tells them; reached in the list. -->
-    <div class="marks" aria-hidden="true" data-testid="track-marks">
+    <div class="marks ticks" aria-hidden="true" data-testid="track-marks">
       @for (percent of trackMarkPercents(); track $index) {
         <span class="track-mark" [style.left.%]="percent"></span>
       }

@@ -108,13 +108,14 @@ textarea {
    underline of the shorthand when there is a colour or thickness in it. */
 ::highlight(transcript-word),
 ::highlight(track-word) {
-  color: var(--color-text);
+  /* Green as in the v2 frames (tLine o.word); the underline keeps it from colour alone. */
+  color: var(--color-accent-text);
   text-decoration-line: underline;
   text-decoration-color: var(--color-accent-strong);
   text-decoration-thickness: 3px;
   text-shadow:
-    0.022em 0 0 var(--color-text),
-    -0.022em 0 0 var(--color-text);
+    0.022em 0 0 var(--color-accent-text),
+    -0.022em 0 0 var(--color-accent-text);
 }
 
 @media (forced-colors: active) {

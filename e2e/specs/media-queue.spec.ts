@@ -78,8 +78,9 @@ test('KBC-090: several files go to the queue, which says where each one is', asy
   await expect(
     page.getByRole('heading', { name: 'Fila de processamento' }),
   ).toBeVisible();
+  // The queue lists every collection: the page names itself, never a collection (v2).
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-    'Nova Alexandria',
+    'Fila de processamento',
   );
   const rows = page.locator('app-queue-row').filter({ hasText: tag });
   await expect(rows).toHaveCount(2, { timeout: 15_000 });
@@ -178,7 +179,10 @@ test('KBC-091: the library follows the collection, and the header never lies', a
 
   const heading = page.getByRole('heading', { level: 1 });
   await page.goto(`/midia/${there.id}`);
-  await expect(heading).toContainText('Alquimia');
+  await expect(heading).toHaveText(there.title);
+  await expect(page.getByRole('article', { name: there.title })).toContainText(
+    'Alquimia',
+  );
   await owner.dispose();
 });
 

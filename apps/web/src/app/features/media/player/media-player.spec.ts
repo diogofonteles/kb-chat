@@ -19,7 +19,10 @@ import {
   fakeMediaElement,
   type FakeMedia,
 } from '../../../testing/fake-media-element.js';
+import { RightPanel } from '@features/shell/right-panel.js';
 import { MediaPlayer } from './media-player.js';
+import { NowPlayingPanel } from './now-playing-panel.js';
+import { PlayerPanel } from './player-panel.js';
 
 const SOURCE = { id: 'm1', title: 'Palestra', src: '/api/v1/media/m1/stream' };
 
@@ -129,12 +132,17 @@ describe('MediaPlayer (T15 basic controls)', () => {
     media.emit('timeupdate');
     await fixture.whenStable();
     expect(container.querySelector('.elapsed')?.textContent).toBe('23:10');
-    const right = screen.getByRole('button', { name: /Tempo restante/ });
+    const right = screen.getByRole('button', {
+      name: /Tempo restante/,
+      hidden: true,
+    });
     expect(right.textContent?.trim()).toBe('-39:05');
     fireEvent.click(right);
     await fixture.whenStable();
     expect(
-      screen.getByRole('button', { name: /Duração total/ }).textContent?.trim(),
+      screen
+        .getByRole('button', { name: /Duração total/, hidden: true })
+        .textContent?.trim(),
     ).toBe('1:02:15');
   });
 
@@ -152,14 +160,17 @@ describe('MediaPlayer (T15 basic controls)', () => {
     expect(container.querySelector('.elapsed')?.textContent).toBe('2:00');
     expect(
       screen
-        .getByRole('button', { name: /Tempo restante/ })
+        .getByRole('button', { name: /Tempo restante/, hidden: true })
         .textContent?.trim(),
     ).toBe('-0:00');
   });
 
   it('seeks from the slider, stepping from the live position on fast keys (AC-11)', async () => {
     const { media } = await renderPlayer(loaded);
-    const slider = screen.getByRole('slider', { name: 'Posição' });
+    const slider = screen.getByRole('slider', {
+      name: 'Posição',
+      hidden: true,
+    });
     // Three presses with no render between them, as a held-down arrow does.
     fireEvent.keyDown(slider, { key: 'ArrowRight' });
     fireEvent.keyDown(slider, { key: 'ArrowRight' });
@@ -270,35 +281,24 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
 
   it('remembers on the account whether the right time is remaining or total', async () => {
     const { fixture, http } = await renderPlayer(loaded);
-    fireEvent.click(screen.getByRole('button', { name: /Tempo restante/ }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /Tempo restante/, hidden: true }),
+    );
     await fixture.whenStable();
     expect(
       http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
     ).toEqual({ showRemaining: false });
-    expect(screen.getByRole('button', { name: /Duração total/ })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Duração total/, hidden: true }),
+    ).toBeTruthy();
   });
 
-  it('offers mute and volume in percent where the browser allows it (AC-13)', async () => {
-    const { fixture, media } = await renderPlayer(loaded);
+  it('leaves the volume to the player bar: none of its own, and says so once known (AC-13, v2)', async () => {
+    const { fixture } = await renderPlayer(loaded);
     await fixture.whenStable();
-    const volume = screen.getByRole('slider', { name: 'Volume' });
-    expect(volume.getAttribute('aria-valuetext')).toBe('100%');
-    fireEvent.input(volume, { target: { value: '40' } });
-    await fixture.whenStable();
-    expect(media.element.volume).toBe(0.4);
-    expect(volume.getAttribute('aria-valuetext')).toBe('40%');
-    expect(localStorage.getItem('kb-chat.player.volume')).toBe('0.4');
-    const mute = screen.getByRole('button', { name: 'Silenciar' });
-    expect(mute.getAttribute('aria-keyshortcuts')).toBe('M');
-    fireEvent.click(mute);
-    await fixture.whenStable();
-    expect(media.element.muted).toBe(true);
-    // One name, and the pressed state says it is on (not a name that also changes).
-    expect(
-      screen
-        .getByRole('button', { name: 'Silenciar' })
-        .getAttribute('aria-pressed'),
-    ).toBe('true');
+    expect(screen.queryByRole('slider', { name: 'Volume' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Silenciar' })).toBeNull();
+    expect(fixture.nativeElement.getAttribute('data-volume')).toBe('off');
   });
 
   it('has no volume control where the volume is read-only (iPhone, AC-13)', async () => {
@@ -330,13 +330,19 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     expect(dialog.textContent).toContain('Voltar 15 segundos');
     // KBC-042: B marks this point, and the list says so.
     expect(dialog.textContent).toMatch(/B\s*Marcar este trecho/);
-    const toggle = screen.getByRole('checkbox', {
-      name: 'Usar atalhos de uma tecla',
-    }) as HTMLInputElement;
-    expect(toggle.checked).toBe(true);
+    // A switch (lib.js toggle), on by default.
+    const toggle = within(dialog).getByRole('switch', {
+      name: /^Usar atalhos de uma tecla/,
+    });
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(toggle);
+    await fixture.whenStable();
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
     expect(localStorage.getItem('kb-chat.player.single-key')).toBe('off');
-    fireEvent.click(screen.getByRole('button', { name: 'Fechar' }));
+    // ✕ in the corner and "Fechar" in the footer: both close it.
+    const closes = within(dialog).getAllByRole('button', { name: 'Fechar' });
+    expect(closes).toHaveLength(2);
+    fireEvent.click(closes[1] as HTMLElement);
     await fixture.whenStable();
     expect(document.activeElement).toBe(more);
   });
@@ -357,8 +363,8 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     expect(
       http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
     ).toEqual({ skipBackSec: 5 });
+    // The v2 buttons are icons (player.js): the number is in the name.
     const button = screen.getByRole('button', { name: 'Voltar 5 segundos' });
-    expect(button.textContent).toContain('5');
     media.setCurrentTime(60);
     media.emit('timeupdate');
     fireEvent.click(button);
@@ -514,13 +520,13 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     ).toBeNull();
   });
 
-  it('says "No fim" for the end of the media, with nothing to add (KBC-046 AC-4)', async () => {
+  it('says "Para no fim" for the end of the media, with nothing to add (KBC-046 AC-4)', async () => {
     const { fixture } = await renderPlayer(loaded);
     await chooseSleep(fixture, 'No fim desta mídia');
     const moon = screen.getByRole('button', {
       name: 'Timer para dormir: no fim desta mídia',
     });
-    expect(moon.textContent).toContain('No fim');
+    expect(moon.textContent).toContain('Para no fim');
     fireEvent.click(moon);
     await fixture.whenStable();
     expect(
@@ -529,6 +535,51 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     expect(
       screen.getByRole('menuitem', { name: 'Desligar timer' }),
     ).toBeTruthy();
+  });
+});
+
+describe('MediaPlayer "Fechar o player" (KBC-041 AC-11, v2)', () => {
+  it('closes from ⋯: stops, saves the position, lets the media go and takes "Tocando agora" along', async () => {
+    const { media, engine, http, fixture } = await renderPlayer(loaded);
+    media.setCurrentTime(150);
+    media.emit('timeupdate');
+    const panel = TestBed.inject(RightPanel);
+    panel.open({
+      component: NowPlayingPanel,
+      width: 'narrow',
+      label: 'Tocando agora',
+    });
+    await fixture.whenStable();
+    const more = screen.getByRole('button', { name: 'Mais opções' });
+    fireEvent.click(more);
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Fechar o player' }));
+    await fixture.whenStable();
+    expect(media.calls).toContain('pause');
+    expect(
+      http.expectOne({ method: 'PUT', url: '/api/v1/media/m1/progress' })
+        .request.body,
+    ).toEqual({ positionMs: 150_000, basedOn: null });
+    expect(engine.source()).toBeNull();
+    expect(panel.content()).toBeNull();
+    // The focus stays on the page's ⋯, not on <body> (WCAG 2.4.3).
+    expect(document.activeElement).toBe(more);
+  });
+
+  it('keeps the player page\'s own "Sobre" open when it closes', async () => {
+    const { fixture } = await renderPlayer(loaded);
+    const panel = TestBed.inject(RightPanel);
+    panel.open({
+      component: PlayerPanel,
+      width: 'narrow',
+      label: 'Sobre este áudio',
+      inputs: { media: { id: 'm1' } },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Fechar o player' }));
+    await fixture.whenStable();
+    expect(panel.content()?.component).toBe(PlayerPanel);
   });
 });
 
@@ -657,18 +708,29 @@ function pressEnter(field: HTMLElement): void {
   fireEvent.keyDown(field, { key: 'Enter' });
 }
 
+/** "Legendas" in ⋯ (v2: the bar's CC opens "Tocando agora"), from the state it says now. */
+async function toggleCaptions(
+  fixture: { whenStable(): Promise<unknown> },
+  now: 'ligado' | 'desligado',
+): Promise<void> {
+  fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+  await fixture.whenStable();
+  fireEvent.click(screen.getByRole('menuitem', { name: `Legendas: ${now}` }));
+  await fixture.whenStable();
+}
+
 describe('MediaPlayer subtitles and minute link (KBC-038)', () => {
   const CUES = [
     { startMs: 1_000, endMs: 3_000, text: 'Existia um rei\ndenominado Inca.' },
     { startMs: 4_000, endMs: 5_000, text: 'Fim.' },
   ];
 
-  it('keeps CC off and unusable while the media has no transcript', async () => {
-    await renderPlayer(loaded);
-    const cc = screen.getByRole('button', { name: 'CC, legendas' });
-    expect(cc.hasAttribute('disabled')).toBe(true);
-    expect(cc.getAttribute('aria-pressed')).toBe('false');
-    expect(cc.getAttribute('aria-keyshortcuts')).toBe('C');
+  it('offers no subtitles in ⋯ while the media has no transcript', async () => {
+    const { fixture } = await renderPlayer(loaded);
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+    await fixture.whenStable();
+    expect(screen.getByRole('menuitem', { name: 'Pulos' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /^Legendas/ })).toBeNull();
   });
 
   it('shows the cue being heard once CC is on, and nothing in a gap (AC-1, AC-4)', async () => {
@@ -676,13 +738,8 @@ describe('MediaPlayer subtitles and minute link (KBC-038)', () => {
       inputs: { cues: CUES, captionsAvailable: true },
     });
     expect(container.querySelector('.caption-area')).toBeNull();
-    const cc = screen.getByRole('button', { name: 'CC, legendas' });
-    fireEvent.click(cc);
-    await fixture.whenStable();
-    expect(cc.getAttribute('aria-pressed')).toBe('true');
+    await toggleCaptions(fixture, 'desligado');
     expect(localStorage.getItem('kb-chat.player.captions')).toBe('on');
-    // Visible text first in the name (WCAG 2.5.3).
-    expect(cc.textContent?.trim()).toBe('CC');
     const area = container.querySelector('.caption-area');
     expect(area?.getAttribute('aria-hidden')).toBe('true');
     media.setCurrentTime(1.5);
@@ -695,9 +752,8 @@ describe('MediaPlayer subtitles and minute link (KBC-038)', () => {
     media.emit('timeupdate');
     await fixture.whenStable();
     expect(container.querySelector('.caption')).toBeNull();
-    fireEvent.click(cc);
-    await fixture.whenStable();
-    expect(cc.getAttribute('aria-pressed')).toBe('false');
+    await toggleCaptions(fixture, 'ligado');
+    expect(localStorage.getItem('kb-chat.player.captions')).toBe('off');
     expect(container.querySelector('.caption-area')).toBeNull();
   });
 
@@ -706,8 +762,7 @@ describe('MediaPlayer subtitles and minute link (KBC-038)', () => {
       inputs: { cues: CUES, captionsAvailable: true, lowConfidence: true },
     });
     expect(container.querySelector('.low-badge')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'CC, legendas' }));
-    await fixture.whenStable();
+    await toggleCaptions(fixture, 'desligado');
     expect(container.querySelector('.low-badge')?.textContent?.trim()).toBe(
       'Legendas de baixa confiança: podem ter trechos errados.',
     );
@@ -719,7 +774,7 @@ describe('MediaPlayer subtitles and minute link (KBC-038)', () => {
       inputs: { cues: [], captionsAvailable: true },
       frames,
     });
-    fireEvent.click(screen.getByRole('button', { name: 'CC, legendas' }));
+    await toggleCaptions(fixture, 'desligado');
     fireEvent.click(screen.getByRole('button', { name: 'Tocar' }));
     media.emit('playing');
     await fixture.whenStable();

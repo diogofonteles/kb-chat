@@ -48,9 +48,11 @@ test('KBC-129 AC-6: "Meus marcadores" and the queue show their v2 states and pas
   await expect(
     page.getByRole('heading', { name: 'Meus marcadores' }),
   ).toBeVisible();
-  // The page's own count (the sidebar's "Meus marcadores" says one too).
+  // The summary shows once: the header's on a desktop, the phone's under the title.
   await expect(
-    page.locator('.page').getByText(/\d+ marcador|Nenhum marcador ainda/),
+    page
+      .getByText(/\d+ marcador|Nenhum marcador ainda/)
+      .and(page.locator(':visible')),
   ).toBeVisible();
   await capture(page, 'bookmarks', info.project.name);
   const bookmarksAxe = await new AxeBuilder({ page })
@@ -66,7 +68,11 @@ test('KBC-129 AC-6: "Meus marcadores" and the queue show their v2 states and pas
   await expect(
     page.getByRole('heading', { name: 'Fila de processamento' }),
   ).toBeVisible();
-  await expect(page.getByText('Processamento', { exact: true })).toBeVisible();
+  // The kicker is the desktop header's (pageHeader); a phone has "‹ Fila de processamento".
+  if (desktop(page))
+    await expect(
+      page.getByText('Processamento', { exact: true }),
+    ).toBeVisible();
   await capture(page, 'queue', info.project.name);
   const queueAxe = await new AxeBuilder({ page }).include('.queue').analyze();
   expect(
@@ -129,8 +135,15 @@ test('KBC-129 AC-2: the player bar\'s transcript button opens "Tocando agora" on
   for (const box of await rows.evaluateAll((items) =>
     items.map((item) => {
       const rect = item.getBoundingClientRect();
+      // A strip that scrolls sideways ("Continuar ouvindo") shows its cards up to its own
+      // edge: what is seen of a card ends there.
+      const list = item.parentElement;
+      const strip =
+        list && getComputedStyle(list).overflowX !== 'visible'
+          ? list.getBoundingClientRect().right
+          : Number.POSITIVE_INFINITY;
       return {
-        right: rect.right,
+        right: Math.min(rect.right, strip),
         clipped: item.scrollWidth > item.clientWidth,
       };
     }),

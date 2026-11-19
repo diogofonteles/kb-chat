@@ -71,6 +71,7 @@
       [class.covered]="panelOpen()"
       [class.media]="onMedia()"
       [class.bare]="onSettings()"
+      [class.player-page]="playerPage()"
       [class.empty]="isEmpty() && !onMedia()"
       [class.research]="researching()"
       [attr.inert]="covered() ? '' : null"
@@ -370,6 +371,7 @@
       <app-mini-player
         class="player"
         [shownElsewhere]="playerInPanel()"
+        [desktop]="desktop()"
         [idle]="audio.collectionHasAudio() && !audio.playing()"
         [idleLink]="libraryPath()"
       />

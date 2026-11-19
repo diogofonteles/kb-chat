@@ -211,6 +211,15 @@
   overflow-y: auto;
 }
 
+/* The player page names its collection in its own header (v2 · Mídia — Player). */
+.conversation.player-page {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.conversation.player-page > .topbar {
+  display: none;
+}
+
 /* v2 · Conversa: the scope row (or the results' head), the page, the question box at the
    foot, all with 32 at the sides (homeMain, convoMain, resultsMain). */
 .topbar {

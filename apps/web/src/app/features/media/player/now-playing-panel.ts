@@ -88,7 +88,10 @@ export type NowPlayingView = 'now' | 'fila' | 'ouvidas';
     UiTablist,
   ],
   template: `
-    <section class="now" aria-labelledby="now-playing-title">
+    <section
+      class="now"
+      [attr.aria-labelledby]="embedded() ? null : 'now-playing-title'"
+    >
       @if (tabbed()) {
         <!-- v2 · Fila: Sobre · Fila · Ouvidas with the green underline, and ×. -->
         <div class="tabs-row">
@@ -131,7 +134,7 @@ export type NowPlayingView = 'now' | 'fila' | 'ouvidas';
             <ui-icon name="close" [size]="20" />
           </button>
         </div>
-      } @else {
+      } @else if (!embedded()) {
         <!-- v2 · Tocando agora: the collection's name, ⋯ and ⤢ (the player page). -->
         <div class="bar">
           <h2
@@ -347,6 +350,8 @@ export class NowPlayingPanel {
   protected readonly playNow = inject(PlayNow);
   private readonly announcer = inject(PlayerAnnouncer);
   private readonly document = inject(DOCUMENT);
+  /** In the player panel's Sobre tab: the tabs name it and hold the ✕. */
+  readonly embedded = input(false);
   private readonly engine = inject(MediaEngine);
   protected readonly panel = inject(RightPanel);
   private readonly closer = inject(ClosePlayer);

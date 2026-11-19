@@ -254,9 +254,17 @@ export class ChatPage {
   protected readonly playerShown = computed(() => {
     if (!this.audio.shown()) return false;
     const source = this.engineSource();
-    if (!source) return true;
+    if (!source || this.desktop()) return true;
     return this.path() !== `/midia/${encodeURIComponent(source.id)}`;
   });
+  /**
+   * The pages with a header of their own (v2 · Mídia — Player, Fila e Marcadores): the
+   * player names the collection ("Áudio · Alquimia Prática"), "Meus marcadores" and the
+   * Fila are lists of every collection, so the shell's collection title stays out.
+   */
+  protected readonly playerPage = computed(() =>
+    /^\/(midia\/[^/]+|fila)$/.test(this.path()),
+  );
   /**
    * On a phone the page of what plays is the full-screen player (KBC-129 FR-2, v2 · Mídia —
    * Player, celular): no navigation under it; its own "← Biblioteca" leads back.

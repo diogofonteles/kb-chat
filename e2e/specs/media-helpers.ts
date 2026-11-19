@@ -371,3 +371,21 @@ export async function closePlayer(
     .click();
   await page.getByRole('menuitem', { name: 'Fechar o player' }).click();
 }
+
+/**
+ * Leaves the player page for the media list inside the app, as the person would (KBC-129,
+ * v2 · Mídia — Player): the full-screen player's "← Mídia" on a phone; on a desktop the
+ * player has no back link of its own, so the "Mídia" row pinned in "Sua biblioteca".
+ */
+export async function leaveToMediaList(page: Page): Promise<void> {
+  const from = page.url();
+  const back = page.getByRole('link', { name: '← Mídia' });
+  if (await back.isVisible()) await back.click();
+  else
+    await page
+      .getByRole('complementary', { name: 'Sua biblioteca' })
+      .getByRole('link', { name: 'Mídia', exact: true })
+      .click();
+  // Away from the player page before the next step looks at the bar.
+  await page.waitForURL((url) => url.href !== from);
+}
