@@ -31,6 +31,7 @@ import { HistoryStore } from '@core/history/history-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import { EMPTY, Subject, catchError, filter, map, switchMap } from 'rxjs';
 import { SpendStore } from '@core/spend/spend-store.js';
+import { CollectionHeading } from '@features/chat/collection-heading.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
 import { ResearchStore } from '@features/research/research-store.js';
@@ -216,6 +217,19 @@ export class Sidebar {
    * Biblioteca is, and no collection).
    */
   private readonly onConversation = computed(() => this.path() === '/');
+  /**
+   * A recording's own pages (its player, "Preparar áudio", its tracks): its collection is the
+   * current row (v2 · Mídia — Player, Preparar: "Alquimia Prática" lit).
+   */
+  /** The collection the recording's page names (its player, "Preparar áudio"). */
+  private readonly itemTopic = computed(() => {
+    const scope = this.heading.scope();
+    return scope?.kind === 'topic' ? scope.slug : null;
+  });
+  private readonly heading = inject(CollectionHeading);
+  private readonly onMediaItem = computed(() =>
+    /^\/midia\/[0-9a-f-]{36}(\/|$)/.test(this.path()),
+  );
   /** A pinned page stays the current row with its query (/biblioteca?busca=…, -search). */
   protected readonly activeOptions = {
     paths: 'exact',
@@ -317,6 +331,10 @@ export class Sidebar {
           topic,
           meta: this.collectionMeta(topic),
           active: this.onConversation() && topic.slug === this.chat.topicSlug(),
+          /** The current row: the conversation's collection, or the recording's own. */
+          lit: this.onConversation()
+            ? topic.slug === this.chat.topicSlug()
+            : this.onMediaItem() && topic.slug === this.itemTopic(),
         }))
       : [],
   );

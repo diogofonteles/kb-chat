@@ -784,7 +784,7 @@
       class="ui-libitem-row"
       [disabled]="!entry.topic.canOpen"
       [attr.data-slug]="entry.topic.slug"
-      [attr.aria-current]="entry.active ? 'true' : null"
+      [attr.aria-current]="entry.lit ? 'true' : null"
       (click)="changeTopic(entry.topic.slug)"
     >
       <ui-library-item [title]="entry.topic.title" [meta]="entry.meta">

@@ -230,11 +230,17 @@ export class TranscriberStatus {
       this.attention().length > 0,
   );
   protected readonly icon = computed(() =>
-    this.unavailable() || this.stalled() ? '⚠' : ICON[this.state()],
+    this.unavailable() || (this.stalled() && !this.compact())
+      ? '⚠'
+      : ICON[this.state()],
   );
   protected readonly text = computed(() => {
     if (this.unavailable())
       return $localize`:@@transcriberStatus.unavailable:Transcritor: status indisponível`;
+    // The guided flow's small pill says the transcriber's state, as drawn ("Transcritor:
+    // desligado", paired or not); the waiting work is the page's to say (v2 · Mídia — Preparar).
+    if (this.compact() && this.offline())
+      return $localize`:@@transcriberStatus.compactOff:Transcritor: desligado`;
     if (this.stalled())
       return $localize`:@@transcriberStatus.stalled:Transcritor: trabalho parado`;
     // A row's transcriber the status has not caught up with yet (just paired): off.

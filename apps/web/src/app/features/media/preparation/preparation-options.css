@@ -545,8 +545,19 @@ legend {
 }
 
 /* ---------- The guided flow (KBC-130, prepare.js chooseMain / mChoice) ---------- */
-.short {
+.short,
+.narrow-words {
   display: none;
+}
+
+@media (max-width: 1023px) {
+  .wide-words {
+    display: none;
+  }
+
+  .narrow-words {
+    display: inline;
+  }
 }
 
 :host(.flow) {
@@ -572,7 +583,9 @@ legend {
 }
 
 :host(.flow) .tracks legend {
-  margin-bottom: var(--space-4);
+  /* The cards 16 under the 24 px line of "Dividir em faixas…". */
+  margin-bottom: 0.8125rem;
+  line-height: 1.5rem;
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: 0;
@@ -614,6 +627,16 @@ legend {
   padding-right: 0;
 }
 
+/* A row of 68 (prepare.js chooseMain): 16 round the name's 18 px line and the help's 16. */
+:host(.flow) .option.row .name,
+:host(.flow) .option.row .choice > span {
+  line-height: 1.125rem;
+}
+
+:host(.flow) .option.row .hint {
+  line-height: 1rem;
+}
+
 :host(.flow) .option.subjects {
   background: color-mix(in srgb, var(--color-text) 2%, transparent);
 }
@@ -648,6 +671,8 @@ legend {
 :host(.flow) .option.card .choice {
   min-height: 0;
   font-size: var(--text-md);
+  /* The name's 19 px line, its help 10 under it. */
+  line-height: 1.1875rem;
 }
 
 :host(.flow) .option.card .choice input {

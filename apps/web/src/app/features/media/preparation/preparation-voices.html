@@ -11,7 +11,7 @@
 <ul class="voices">
   @for (row of rows(); track row.voice) {
     <li [style.--voice]="'var(--color-voice-' + row.tone + ')'">
-      <span class="mark" aria-hidden="true">{{ row.initials }}</span>
+      <span class="mark avatar" aria-hidden="true">{{ row.initials }}</span>
       <p class="line">
         <span class="who">{{ row.who }}</span>
         <span class="sep"> — </span>

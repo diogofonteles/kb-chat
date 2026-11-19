@@ -66,11 +66,18 @@
       <span>{{ line.state }}</span>
     </p>
     @if (leftText(line.stage); as left) {
-      <p class="detail">{{ left }}</p>
+      @if (leftTextNarrow(line.stage); as narrow) {
+        @if (narrow !== left) {
+          <p class="detail wide-only">{{ left }}</p>
+          <p class="detail narrow-only">{{ narrow }}</p>
+        } @else {
+          <p class="detail">{{ left }}</p>
+        }
+      }
     }
     @if (line.stage.canRetry) {
       @if (retryCost(line.stage); as cost) {
-        <p class="detail">{{ cost }}</p>
+        <p class="detail wide-only">{{ cost }}</p>
       }
     }
     <div class="failure-actions">

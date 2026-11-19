@@ -231,3 +231,19 @@ h3 {
   font-size: var(--text-xs);
   font-weight: 600;
 }
+
+/* Its state as an 8 px dot before the words (prepare.js transcriberPill). */
+:host(.compact) .sign {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 50%;
+  background: currentColor;
+  font-size: 0;
+}
+
+:host(.compact) .chip[data-state='working'] .sign,
+:host(.compact) .chip[data-state='idle'] .sign {
+  background: var(--color-accent);
+}

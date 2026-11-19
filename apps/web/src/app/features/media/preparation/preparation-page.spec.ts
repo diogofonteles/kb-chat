@@ -172,7 +172,7 @@ describe('PreparationPage (T20, step 2)', () => {
     );
     expect(
       screen.getByText('1 Enviar e escolher').closest('li')?.textContent,
-    ).toContain('✓');
+    ).toContain('concluído');
     expect(
       screen
         .getByText('2 Processar')

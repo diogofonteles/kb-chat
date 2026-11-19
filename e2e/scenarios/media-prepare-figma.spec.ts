@@ -213,7 +213,10 @@ test('"Preparar áudio": step 1, step 2 in its four moments, nothing left, no pe
     });
     await reopen(page, ap);
     await expect(
-      page.getByText(/o provedor de IA não respondeu/).first(),
+      page
+        .getByText(/o provedor de IA não respondeu/)
+        .and(page.locator(':visible'))
+        .first(),
     ).toBeVisible();
     await shoot(page, 'media-prepare-failed', { width, top: true });
     await context.close();
@@ -222,7 +225,10 @@ test('"Preparar áudio": step 1, step 2 in its four moments, nothing left, no pe
     await playInterview(listener.page, world);
     await go(listener.page, ap);
     await expect(
-      listener.page.getByText(/não tem permissão para editar/).first(),
+      listener.page
+        .getByText(/não tem permissão para editar/)
+        .and(listener.page.locator(':visible'))
+        .first(),
     ).toBeVisible();
     await shoot(listener.page, 'media-prepare-forbidden', { width, top: true });
     await listener.context.close();

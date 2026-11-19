@@ -123,6 +123,13 @@ export class PreparationOptions {
     return refusal ? REFUSAL_TEXTS[refusal]() : '';
   }
 
+  /** A phone's card says the missing AI short (v2 · Mídia — Preparar, celular). */
+  protected refusalNarrow(id: Refusable): string {
+    return this.form.refusalOf(id) === 'not-connected'
+      ? $localize`:@@prep.refusal.notConnectedShort:A IA da aplicação não está conectada. Peça a um master.`
+      : this.refusal(id);
+  }
+
   /** The reason in a word or two, on the pill of a card that cannot be chosen. */
   protected refusalPill(id: Refusable): string {
     const refusal: PlanRefusal | null = this.form.refusalOf(id);

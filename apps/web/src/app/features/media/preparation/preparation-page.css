@@ -30,7 +30,7 @@
 }
 
 .top {
-  padding-top: 2.125rem;
+  padding-top: 1.75rem;
 }
 
 .progress {
@@ -72,7 +72,7 @@ a.primary,
 
 .lone {
   align-self: center;
-  padding-bottom: 6rem;
+  padding-bottom: 3rem;
 }
 
 .choose {
@@ -91,6 +91,7 @@ a.primary,
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
+  line-height: 1rem;
 }
 
 .actions .why {
@@ -132,6 +133,7 @@ a.primary,
   margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
+  line-height: 1.5rem;
 }
 
 .side app-preparation-stage-list {
@@ -140,7 +142,6 @@ a.primary,
 
 .end {
   align-items: center;
-  margin-top: var(--space-3);
 }
 
 .end-count {
@@ -149,6 +150,7 @@ a.primary,
 
 .end-action {
   gap: var(--space-2);
+  min-height: 2.25rem;
 }
 
 .main {
@@ -198,19 +200,27 @@ a.primary,
   }
 
   .top {
-    padding-top: 3.25rem;
+    padding-top: 3.375rem;
   }
 
   .bare .v2-head {
     display: grid;
   }
 
+  /* "Sem permissão" on a phone (prepare.js mForbidden): the mark 68 under the head, the
+     words across the screen in one line. */
   .lone {
     align-self: start;
-    padding: var(--space-8) var(--space-6);
+    padding: 3.625rem 1.1875rem var(--space-8);
   }
 
+  .lone .ui-empty__text {
+    max-width: none;
+  }
+
+  /* "Nada a preparar" on a phone: the mark 94 under the step's label (prepare.js mNothing). */
   .nothing {
+    padding-top: 1.875rem;
     background: none;
   }
 
@@ -222,9 +232,22 @@ a.primary,
     display: none;
   }
 
-  /* Why the next step is closed stays in words on a phone too (AC-5). */
+  /* While the AI proposes the tracks, or failed to, a phone shows the tracks alone: the voices
+     are named in the next step (v2 · Mídia — Preparar, celular: proposing, failed). */
+  .ai-at-work app-preparation-voices {
+    display: none;
+  }
+
+  /* Why the next step is closed (KBC-072 AC-5): a phone draws the closed steps as bars and
+     "Passo 2 de 4 · Processar" only (v2 · Mídia — Preparar, celular), so the words stay for
+     assistive tech, not on screen. */
   .side > .why {
-    order: -1;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .side app-preparation-stage-list {

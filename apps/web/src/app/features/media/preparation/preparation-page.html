@@ -248,14 +248,17 @@
           </button>
         } @else if (failedStage(); as stage) {
           @if (prep.canSwitchToManual) {
+            <!-- The phone's short words (prmBar: "Marcar eu mesmo"); the whole name stays. -->
             <button
               uiButton="outline"
               type="button"
+              aria-label="Marcar as faixas eu mesmo"
+              i18n-aria-label="@@prep.markByHand"
               [disabled]="busy()"
               (click)="markByHand()"
-              i18n="@@prep.markByHand"
+              i18n="@@prep.markByHandShort"
             >
-              Marcar as faixas eu mesmo
+              Marcar eu mesmo
             </button>
           }
           @if (stage.canRetry) {

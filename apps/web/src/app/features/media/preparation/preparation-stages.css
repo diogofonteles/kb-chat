@@ -31,7 +31,8 @@
 }
 
 .dot {
-  grid-row: 1;
+  /* Over the words' line and what runs under it (the bar), so the 28 mark sets no row. */
+  grid-row: 1 / span 2;
   align-self: start;
   display: grid;
   place-items: center;
@@ -70,9 +71,11 @@
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 0 var(--space-2);
-  min-height: 1.75rem;
-  align-items: center;
+  /* The words on the mark's top line, 18 tall: with a bar under them the row keeps 52
+     (prepare.js stage: 18 + 6 + 4 = the 28 mark). */
+  align-items: baseline;
   margin: 0;
+  line-height: 1.125rem;
 }
 
 .name {
@@ -84,6 +87,16 @@
 .detail {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+
+/* The stage's state 13/16 at the right ("Feito"); the failure's lines 13/16. */
+.state {
+  font-size: var(--text-meta);
+  line-height: 1rem;
+}
+
+.failure .detail {
+  line-height: 1rem;
 }
 
 .failed .state {
@@ -121,8 +134,10 @@
   justify-self: start;
 }
 
-/* A failed stage (prepare.js): a red card with what was left, its cost and the two ways on. */
+/* A failed stage (prepare.js): a red card with what was left, its cost and the two ways on,
+   16 under the last mark (4 under its row). */
 .failure {
+  margin-top: -0.5rem;
   display: grid;
   gap: 10px;
   width: 100%;
@@ -157,6 +172,24 @@
 .failure-actions .ui-btn {
   min-height: 36px;
   gap: var(--space-2);
+  /* 14 px words, 20 at the sides (prepare.js failed: 163 and 211 wide). */
+  padding: 0 1.25rem;
+  font-size: var(--text-sm);
+}
+
+/* What was left and the cost: two lines on a desktop, one on a phone. */
+.narrow-only {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .wide-only {
+    display: none;
+  }
+
+  .narrow-only {
+    display: block;
+  }
 }
 
 /* A phone: while the AI proposes, only its stage stays; a failure keeps its card, without
@@ -168,6 +201,7 @@
   }
 
   .failure {
+    margin-top: 0;
     gap: var(--space-2);
     padding: 14px;
   }

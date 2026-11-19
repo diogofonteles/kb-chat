@@ -30,7 +30,7 @@ test('KBC-130 AC-1: on step 2 the stepper marks step 1 done and step 2 current, 
   await expect(steps.getByRole('listitem').nth(0)).toContainText(
     '1 Enviar e escolher',
   );
-  await expect(steps.getByRole('listitem').nth(0)).toContainText('✓');
+  await expect(steps.getByRole('listitem').nth(0)).toContainText('concluído');
   await expect(steps.getByRole('listitem').nth(1)).toHaveAttribute(
     'aria-current',
     'step',

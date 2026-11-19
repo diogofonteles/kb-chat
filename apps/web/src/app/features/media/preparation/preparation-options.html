@@ -81,10 +81,18 @@
         @if (refusal('speakers'); as reason) {
           {{ reason }}
         } @else {
-          <ng-container i18n="@@prep.option.speakersHint"
-            >Separa as vozes e sugere os nomes pelo que já sabemos do acervo.
-            Você confirma. Grátis.</ng-container
-          >
+          @if (flow()) {
+            <ng-container i18n="@@prep.option.speakersHintFlow"
+              >Separa as vozes (Voz 1, Voz 2…) e sugere os nomes pelo que já
+              sabemos do acervo, como o autor da gravação. Você confirma os
+              nomes. Grátis.</ng-container
+            >
+          } @else {
+            <ng-container i18n="@@prep.option.speakersHint"
+              >Separa as vozes e sugere os nomes pelo que já sabemos do acervo.
+              Você confirma. Grátis.</ng-container
+            >
+          }
           @if (speakersMinutes(); as minutes) {
             &ngsp;<span class="estimate" i18n="@@prep.option.minutes"
               >Estimativa: cerca de {{ minutes }} min.</span
@@ -232,7 +240,12 @@
       </label>
       <p class="hint" id="prep-ai-hint">
         @if (refusal('ai'); as reason) {
-          {{ reason }}
+          @if (flow()) {
+            <span class="wide-words">{{ reason }}</span
+            ><span class="narrow-words">{{ refusalNarrow('ai') }}</span>
+          } @else {
+            {{ reason }}
+          }
         } @else {
           <ng-container i18n="@@prep.option.aiHint"
             >A IA propõe as faixas, os títulos e quem pergunta e responde. Você

@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   booleanAttribute,
@@ -10,6 +11,7 @@ import { RouterLink } from '@angular/router';
 import type { PreparationStep } from '@kb-chat/contracts';
 import { preparationPagePath } from '@core/media/preparation-api.js';
 import { editPagePath } from '@core/media/media-edit-api.js';
+import { UiIcon } from '@ui/icon.js';
 
 const WHOLE: Record<PreparationStep, () => string> = {
   1: () => $localize`:@@prep.step.text1:Passo 1 de 4: Enviar e escolher`,
@@ -72,7 +74,7 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
  */
 @Component({
   selector: 'app-preparation-steps',
-  imports: [RouterLink],
+  imports: [RouterLink, NgTemplateOutlet, UiIcon],
   template: `
     @if (!flow()) {
       <p class="step-text" data-testid="step-text">
@@ -89,8 +91,14 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
         Ver os passos
       </button>
     }
+    <!-- A done step: the frame's 14 px check, and the word for who does not see it (UP-20). -->
+    <ng-template #doneMark>
+      <ui-icon class="check" name="check" [size]="14" />
+      <span class="visually-hidden" i18n="@@prep.step.doneWord">concluído</span>
+    </ng-template>
+    <!-- The four bars are the flow's progress (on a phone, nothing else of the list shows). -->
     <ol
-      class="steps"
+      class="steps step-progress"
       [class.open]="expanded() || flow()"
       aria-label="Preparar áudio"
       i18n-aria-label="@@tracks.flow"
@@ -101,7 +109,7 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
       >
         <span i18n="@@prep.step.name1">1 Enviar e escolher</span>
         @if (step() > 1 || allDone()) {
-          <span class="check">✓</span>
+          <ng-container [ngTemplateOutlet]="doneMark" />
         }
       </li>
       <li
@@ -116,7 +124,7 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
           <span i18n="@@prep.step.name2">2 Processar</span>
         }
         @if (step() > 2 || allDone()) {
-          <span class="check">✓</span>
+          <ng-container [ngTemplateOutlet]="doneMark" />
         }
       </li>
       <li
@@ -130,11 +138,11 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
           <a [routerLink]="validateLink()" i18n="@@tracks.step3"
             >3 Validar faixas</a
           >
-          <span class="check">✓</span>
+          <ng-container [ngTemplateOutlet]="doneMark" />
         } @else {
           <span i18n="@@tracks.step3">3 Validar faixas</span>
           @if (allDone()) {
-            <span class="check">✓</span>
+            <ng-container [ngTemplateOutlet]="doneMark" />
           }
         }
       </li>
@@ -144,7 +152,7 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
       >
         @if (finished() || allDone()) {
           <span i18n="@@tracks.step4Finished">4 Concluído</span>
-          <span class="check">✓</span>
+          <ng-container [ngTemplateOutlet]="doneMark" />
         } @else if (skipped()) {
           <span i18n="@@prep.step.conclude">4 Concluir</span>
         } @else {
