@@ -69,7 +69,7 @@ test('AC-1: a research question shows at the top of the history at once, selecte
   );
 });
 
-test('AC-2: a reload during the research brings the conversation back and shows the answer when it ends', async ({
+test('AC-2: a reload during the research lands on a new conversation (KBC-164); the one running opens from the history and shows the answer when it ends', async ({
   page,
 }) => {
   const question = unique('natureza sétupla [lento]');
@@ -77,6 +77,11 @@ test('AC-2: a reload during the research brings the conversation back and shows 
   await expect(page.getByRole('button', { name: 'Parar' })).toBeVisible();
   await page.reload();
   const thread = page.locator('app-research-message');
+  await expect(
+    page.getByText('O que você quer pesquisar no acervo?'),
+  ).toBeVisible();
+  await expect(thread).toHaveCount(0);
+  await entry(await history(page), question).click();
   await expect(thread.getByText(question)).toBeVisible();
   await expect(thread.getByText(/Segundo o acervo/)).toBeVisible({
     timeout: 30_000,
@@ -95,12 +100,14 @@ test('AC-3: a stopped research stays in the history as "interrompida", also afte
   );
   await closeMenu(page);
   await page.reload();
+  // A reload lands on a new conversation (KBC-164): the stopped one is in the history.
+  await expect(page.locator('app-research-message')).toHaveCount(0);
+  const stopped = entry(await history(page), question);
+  await expect(stopped).toContainText('interrompida');
+  await stopped.click();
   await expect(
     page.getByRole('button', { name: 'Tentar de novo' }),
   ).toBeVisible();
-  await expect(entry(await history(page), question)).toContainText(
-    'interrompida',
-  );
 });
 
 test('AC-3: a failed research stays in the history as "falhou", with "Tentar de novo"', async ({

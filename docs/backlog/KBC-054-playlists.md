@@ -79,7 +79,7 @@ Nenhuma.
 
 
 ## Redesign v2 (2026-11-15)
-Prioridade do dono junto do redesign v2 (`docs/design/redesign-v2.md`). Na v2, este item entra por o "+ Criar" da Sua biblioteca (KBC-125) e a tela no padrão de cabeçalho com capa e tabela (v2 · Mídia — Biblioteca e lista). Ao implementar, siga a casca e os componentes da v2 (KBC-124, KBC-125) em vez das telas da v1.
+Prioridade do dono junto do redesign v2 (`docs/design/redesign-v2.md`). Na v2, este item entra pela biblioteca ("Nova playlist" na seção "Playlists" da Biblioteca; o "+ Criar" da Sua biblioteca deixou de existir com o KBC-164) e a tela no padrão de cabeçalho com capa e tabela (v2 · Mídia — Biblioteca e lista). Ao implementar, siga a casca e os componentes da v2 (KBC-124, KBC-125) em vez das telas da v1.
 
 ## Definition of ready
 - [x] Story, scope and outcome stated

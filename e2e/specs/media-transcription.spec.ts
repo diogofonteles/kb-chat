@@ -17,7 +17,7 @@ import { uniqueTag, uploadReady, useTheme } from './media-helpers.js';
 
 async function openMedia(page: Page) {
   await page.goto('/');
-  // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
+  // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or beside its filter before any audio).
   await openMediaFromLibrary(page);
   await expect(
     page.getByRole('heading', { name: /Acervo — Hermetismo/ }),
