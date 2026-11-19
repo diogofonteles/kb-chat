@@ -690,7 +690,9 @@ test('the library lists, plays and scrolls at both widths (media-library, -grid,
       ).toHaveCount(0);
     } else {
       // The hero names the collection in use (owner, 2026-11-19), not "Tudo para ouvir".
-      await expect(page.locator('.library-scope')).toBeVisible();
+      await expect(page.locator('app-library-page .library-scope')).toHaveText(
+        data.topicTitle,
+      );
       await expect(
         page.getByRole('heading', { name: 'Precisa da sua atenção' }),
       ).toBeVisible();
