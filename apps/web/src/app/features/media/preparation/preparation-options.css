@@ -527,8 +527,9 @@ legend {
     background: color-mix(in srgb, var(--color-text) 1.5%, transparent);
   }
 
-  :host(.compact) .option.row.subjects .name,
-  :host(.compact) .option.row.subjects .hint {
+  /* The name of the switch that cannot be used yet is dimmed with it; its help stays in the
+     muted text colour, which keeps 4.5:1 in every theme (at half opacity it fell to 2.2:1). */
+  :host(.compact) .option.row.subjects .name {
     opacity: 0.5;
   }
 }
