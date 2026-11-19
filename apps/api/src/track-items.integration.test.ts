@@ -219,6 +219,32 @@ describe('Approved tracks become items (KBC-068)', () => {
     expect(found.json().items).toHaveLength(1);
   });
 
+  it("v2 media-list: a recording's row carries its tracks in order, as the library; none without media-tracks", async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { recording, tracks } = await published(world);
+    const url = `/api/v1/topics/${recording.topic}/media`;
+    const [row] = (await media.owner('GET', url)).json().items as {
+      id: string;
+      tracks: MediaItem[];
+    }[];
+    expect(row?.tracks.map((track) => track.id)).toEqual(
+      tracks.map((track) => track.id),
+    );
+    expect(row?.tracks.map((track) => track.parent?.ordinal)).toEqual(
+      tracks.map((_, at) => at + 1),
+    );
+    const person = await member(media, {
+      email: 'sem-faixas@example.com',
+      topics: ['hermetismo'],
+      features: ['media'],
+    });
+    const [plain] = (await person.call('GET', url)).json().items as {
+      tracks: MediaItem[];
+    }[];
+    expect(plain?.tracks).toEqual([]);
+  });
+
   it('BR-3 home: a track being heard is in "Continuar ouvindo" with its own title', async () => {
     const world = await startWorld();
     const { tracks } = await published(world);

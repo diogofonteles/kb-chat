@@ -298,6 +298,8 @@ export interface MediaStorePort {
   topicsWithAuthor(author: string): string[];
   /** How many tracks the recording has in force. */
   trackTotal(parentId: string): number;
+  /** The tracks in force of a recording, in their order (v2 media-list). */
+  listTracks(parentId: string): MediaRecord[];
   /** Every media item, any collection (the library filters what the person sees). */
   listLibrary(): LibraryRecord[];
   /** The upload arrived: the item waits in the queue with a new `transcode` job. */

@@ -291,6 +291,17 @@ export class SqliteMediaStore implements MediaStorePort {
     return Number(row?.['n'] ?? 0);
   }
 
+  listTracks(parentId: string): MediaRecord[] {
+    return this.db
+      .prepare(
+        `SELECT ${MEDIA_COLUMNS} FROM media
+         WHERE parent_media_id = ? AND status = 'ready' AND archived_at IS NULL
+         ORDER BY track_ordinal, parent_start_ms, id`,
+      )
+      .all(parentId)
+      .map(toMediaRecord);
+  }
+
   listLibrary(): LibraryRecord[] {
     return this.db
       .prepare(`SELECT ${MEDIA_COLUMNS}, kind FROM media`)
