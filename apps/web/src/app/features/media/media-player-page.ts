@@ -37,6 +37,7 @@ import {
   EMPTY_FILTERS,
   SEARCH_KINDS,
   mediaEditSchema,
+  mediaIdSchema,
   mediaItemSchema,
   mediaTranscriptSchema,
   type MediaItem,
@@ -273,8 +274,15 @@ export class MediaPlayerPage {
     { initialValue: null },
   );
 
+  /**
+   * An address that is no media id (`/midia/fila`) is a media not found: the API would refuse
+   * it as invalid (400), which reads as a question that could not be sent.
+   */
+  private readonly malformedId = computed(
+    () => this.id() !== '' && !mediaIdSchema.safeParse(this.id()).success,
+  );
   protected readonly item = httpResource(
-    () => (this.id() ? mediaUrl(this.id()) : undefined),
+    () => (this.id() && !this.malformedId() ? mediaUrl(this.id()) : undefined),
     { parse: (body) => mediaItemSchema.parse(body) },
   );
   protected readonly media = computed<MediaItem | null>(() =>
@@ -688,11 +696,13 @@ export class MediaPlayerPage {
     return ms === null || ms === undefined ? '' : formatDuration(ms);
   });
   protected readonly loadError = computed(() => {
+    if (this.malformedId()) return errorMessage('MEDIA_NOT_FOUND');
     const err = this.item.error();
     return err ? errorMessage(toUiErrorCode(err)) : '';
   });
-  /** Removed, or not visible to this person: nothing to try again. */
+  /** Removed, not visible to this person, or no media id at all: nothing to try again. */
   protected readonly notFound = computed(() => {
+    if (this.malformedId()) return true;
     const err = this.item.error();
     return err !== undefined && toUiErrorCode(err) === 'MEDIA_NOT_FOUND';
   });

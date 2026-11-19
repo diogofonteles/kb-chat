@@ -181,6 +181,22 @@ describe('MediaPlayerPage (T15)', () => {
     ).toBe('/midia');
   });
 
+  it('says "Mídia não encontrada" for an address that is no media id, asking nothing', async () => {
+    const { harness, http } = await openPage('/midia/fila');
+    await harness.fixture.whenStable();
+    // Nothing is asked of the API for it (it would answer 400, VALIDATION_FAILED).
+    http.verify();
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('Mídia não encontrada');
+    expect(alert.textContent).toContain(
+      'Esta mídia não está mais no acervo ou você não tem acesso a ela.',
+    );
+    expect(alert.textContent).not.toContain('pergunta');
+    expect(
+      screen.getByRole('link', { name: 'Voltar à Mídia' }).getAttribute('href'),
+    ).toBe('/midia');
+  });
+
   it('stops the audio when leaving the page', async () => {
     const { harness, http, media } = await openPage();
     http.expectOne(ITEM_URL).flush(ITEM);
