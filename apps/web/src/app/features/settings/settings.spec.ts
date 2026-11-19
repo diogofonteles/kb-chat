@@ -222,6 +222,34 @@ describe('first-run wizard (AC-1)', () => {
     expect(TestBed.inject(ThemeStore).theme()).toBe('esoteric');
   });
 
+  it("v2 Assistente: the application's AI shows only its facts, with no guide and no panel", async () => {
+    const base = aProviderList();
+    const [first] = base.items;
+    if (!first) throw new Error('no provider in the list');
+    const list = {
+      ...base,
+      items: [
+        { ...first, id: 'app' as const, billing: 'free' as const },
+        ...base.items,
+      ],
+    };
+    const { fixture } = await renderHost(
+      aSettingsView({ exists: false }),
+      list,
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: /IA da aplicação/ }));
+    await fixture.whenStable();
+
+    const guide = screen.getByRole('region', { name: /IA da aplicação/ });
+    // The facts stay: cost, privacy, limits.
+    expect(within(guide).getByText('Gratuito para você.')).toBeTruthy();
+    // The guide's steps, the extra limit line and the bordered panel go.
+    expect(within(guide).queryByText(/Não precisa configurar nada/)).toBeNull();
+    expect(within(guide).queryByText(/A aplicação paga/)).toBeNull();
+    expect(guide.closest('.details')?.classList.contains('bare')).toBe(true);
+  });
+
   it('stays closed once settings exist', async () => {
     await renderHost();
     expect(dialog()?.open).toBe(false);

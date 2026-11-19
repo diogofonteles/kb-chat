@@ -57,6 +57,8 @@ export class SleepTimerService {
   private countedAt = 0;
   private wasPlaying = false;
   private fallback: ReturnType<typeof setTimeout> | null = null;
+  /** The media ended because "No fim desta mídia" waited for it (see `stopsAtEnd`). */
+  private endedByTimer = false;
 
   readonly timer = this.state.asReadonly();
   /** What the person chose for the running timer (null while off). */
@@ -83,16 +85,28 @@ export class SleepTimerService {
         takeUntilDestroyed(),
       )
       .subscribe(() => this.stop());
-    // "No fim desta mídia": the end pauses the media; the timer has done its job.
+    // "No fim desta mídia": the end pauses the media; the timer has done its job. That end
+    // stays the timer's until the media moves again, whoever hears it after this.
     toObservable(computed(() => this.engine.playback().phase))
-      .pipe(
-        filter((phase) => phase === 'ended'),
-        takeUntilDestroyed(),
-      )
-      .subscribe(() => {
-        if (this.state().kind === 'end-of-media') this.finish(false);
+      .pipe(takeUntilDestroyed())
+      .subscribe((phase) => {
+        if (phase !== 'ended') {
+          this.endedByTimer = false;
+          return;
+        }
+        if (this.state().kind !== 'end-of-media') return;
+        this.endedByTimer = true;
+        this.finish(false);
       });
     inject(DestroyRef).onDestroy(() => this.clearFallback());
+  }
+
+  /**
+   * True when the end of what plays is where the person asked to stop ("No fim desta
+   * mídia"), before or after the timer heard it: nothing else starts by itself then.
+   */
+  stopsAtEnd(): boolean {
+    return this.state().kind === 'end-of-media' || this.endedByTimer;
   }
 
   start(choice: SleepMinutes | 'end-of-media'): void {

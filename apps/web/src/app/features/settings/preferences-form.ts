@@ -23,7 +23,11 @@ import {
 import { LibraryCounts } from '@features/sidebar/library-counts.js';
 import { topicsUrl } from '@core/api/kb-api.js';
 import { MODE_OPTIONS } from '@core/i18n/facet-labels.js';
-import { openable, treeTitle } from '@core/topics/topic-tree.js';
+import {
+  defaultTopicOf,
+  openable,
+  treeTitle,
+} from '@core/topics/topic-tree.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { THEME_CHOICES, shownTheme } from '@core/theme/theme-store.js';
 import { THEME_COPY, VIEW_COPY } from './provider-copy.js';
@@ -81,22 +85,10 @@ export class PreferencesForm {
   protected readonly treeTitle = treeTitle;
   private readonly counts = inject(LibraryCounts);
   private readonly locale = inject(LOCALE_ID);
-  /**
-   * The collection that opens when none is chosen ("O maior acervo"): the server's default,
-   * else the one with most documents.
-   */
-  private readonly largestSlug = computed(() => {
-    const topics = this.topics();
-    if (topics.length === 0) return null;
-    const configured = this.topicList.hasValue()
-      ? this.topicList.value().defaultSlug
-      : null;
-    if (configured && topics.some((one) => one.slug === configured))
-      return configured;
-    return topics.reduce((best, one) =>
-      one.documentCount > best.documentCount ? one : best,
-    ).slug;
-  });
+  /** The collection that opens when none is chosen ("O maior acervo"), as the chat opens it. */
+  private readonly largestSlug = computed(() =>
+    this.topicList.hasValue() ? defaultTopicOf(this.topicList.value()) : null,
+  );
   /**
    * The wizard's collections (v2 · Assistente, passo 3): one card each, the one that opens
    * now first and chosen while the person chose none.

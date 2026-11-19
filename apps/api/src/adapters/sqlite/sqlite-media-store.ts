@@ -184,6 +184,7 @@ const TRANSCRIBER_ROUTE = 'transcriber';
 export class SqliteMediaStore implements MediaStorePort {
   /** Prepared once: a search checks every track it meets (KBC-101 NFR-3). */
   private byId: StatementSync | null = null;
+  private tracksOfParents: StatementSync | null = null;
 
   constructor(private readonly db: DatabaseSync) {}
 
@@ -291,15 +292,24 @@ export class SqliteMediaStore implements MediaStorePort {
     return Number(row?.['n'] ?? 0);
   }
 
-  listTracks(parentId: string): MediaRecord[] {
-    return this.db
-      .prepare(
-        `SELECT ${MEDIA_COLUMNS} FROM media
-         WHERE parent_media_id = ? AND status = 'ready' AND archived_at IS NULL
-         ORDER BY track_ordinal, parent_start_ms, id`,
-      )
-      .all(parentId)
-      .map(toMediaRecord);
+  listTracksOf(
+    parentIds: readonly string[],
+  ): ReadonlyMap<string, readonly MediaRecord[]> {
+    const byParent = new Map<string, MediaRecord[]>();
+    if (parentIds.length === 0) return byParent;
+    this.tracksOfParents ??= this.db.prepare(
+      `SELECT ${MEDIA_COLUMNS} FROM media
+       WHERE parent_media_id IN (SELECT value FROM json_each(?))
+         AND status = 'ready' AND archived_at IS NULL
+       ORDER BY parent_media_id, track_ordinal, parent_start_ms, id`,
+    );
+    for (const row of this.tracksOfParents.all(JSON.stringify(parentIds))) {
+      const parent = String(row['parent_media_id']);
+      const tracks = byParent.get(parent) ?? [];
+      tracks.push(toMediaRecord(row));
+      byParent.set(parent, tracks);
+    }
+    return byParent;
   }
 
   listLibrary(): LibraryRecord[] {

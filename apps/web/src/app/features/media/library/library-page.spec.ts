@@ -418,6 +418,23 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
   });
 
+  it("marks the page's root while a selection is on, for the shell to hide the phone's navigation", async () => {
+    const { open, settle } = await renderLibrary();
+    await open(aPage([anItem(1), anItem(2)]));
+    const root = document.documentElement;
+    expect(root.hasAttribute('data-choosing')).toBe(false);
+
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar Palestra 1' }),
+    );
+    await settle();
+    expect(root.hasAttribute('data-choosing')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar seleção' }));
+    await settle();
+    expect(root.hasAttribute('data-choosing')).toBe(false);
+  });
+
   it('marks the selected media as heard and says so (AC-7)', async () => {
     const { open, http, settle, tick } = await renderLibrary();
     await open(aPage([anItem(1, { positionMs: 5_000 }), anItem(2), anItem(3)]));
