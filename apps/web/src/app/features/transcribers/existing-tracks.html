@@ -30,24 +30,46 @@
   } @else if (!overview.hasValue()) {
     <p class="hint" i18n="@@existingTracks.loading">Carregando…</p>
   } @else {
-    @if (queue(); as current) {
-      <div class="queue">
-        <p class="hint">{{ queueLine() }}</p>
+    <!-- v2: what the Mac works on in a card — the collection's cover, what waits, each
+         collection's counts, then the sync, what failed and that the rest is queued. -->
+    @if (queue() || progress().length > 0) {
+      <div class="queue-card">
+        <div class="queue-head">
+          @if (coverTitle(); as cover) {
+            <ui-cover [title]="cover" [size]="48" />
+          }
+          <div class="queue-words">
+            @if (queueLine()) {
+              <p class="queue-title">{{ queueLine() }}</p>
+            }
+            @if (progress().length > 0) {
+              <ul
+                class="progress"
+                aria-label="Andamento da publicação"
+                i18n-aria-label="@@existingTracks.progressLabel"
+              >
+                @for (collection of progress(); track collection.topic) {
+                  <li>{{ progressOf(collection) }}</li>
+                }
+              </ul>
+            }
+          </div>
+        </div>
         @if (syncLine()) {
-          <p [class.field-error]="syncFailed()" [class.hint]="!syncFailed()">
+          <p [class.field-error]="syncFailed()" [class.note]="!syncFailed()">
             @if (syncFailed()) {
               <span aria-hidden="true">⚠</span>
             }
             {{ syncLine() }}
           </p>
         }
-        @if (current.failed.length > 0) {
+        @if (queue()?.failed?.length) {
           <ul
             class="failed"
             aria-label="Faixas que falharam ao publicar"
             i18n-aria-label="@@publicationQueue.failedLabel"
           >
-            @for (failed of current.failed; track failed.mediaId) {
+            @for (failed of queue()?.failed ?? []; track failed.mediaId) {
               <li>
                 <span aria-hidden="true">⚠</span>
                 <span class="what">{{ failedLabelOf(failed) }}</span>
@@ -65,16 +87,19 @@
             }
           </ul>
         }
+        @if (offered().length === 0 && anyQueued()) {
+          <p class="note" i18n="@@existingTracks.allQueued">
+            As faixas que faltavam estão na fila para o Mac.
+          </p>
+        }
       </div>
     }
-    @if (offered().length === 0 && anyQueued()) {
-      <p class="hint" i18n="@@existingTracks.allQueued">
-        As faixas que faltavam estão na fila para o Mac.
-      </p>
-    } @else if (offered().length === 0) {
-      <p class="hint" i18n="@@existingTracks.allIn">
-        Todas as faixas publicadas já estão no acervo.
-      </p>
+    @if (offered().length === 0) {
+      @if (!anyQueued()) {
+        <p class="hint" i18n="@@existingTracks.allIn">
+          Todas as faixas publicadas já estão no acervo.
+        </p>
+      }
     } @else if (!choosing()) {
       <button
         #action
@@ -129,17 +154,6 @@
           </button>
         </div>
       </fieldset>
-    }
-    @if (progress().length > 0) {
-      <ul
-        class="progress"
-        aria-label="Andamento da publicação"
-        i18n-aria-label="@@existingTracks.progressLabel"
-      >
-        @for (collection of progress(); track collection.topic) {
-          <li>{{ progressOf(collection) }}</li>
-        }
-      </ul>
     }
   }
   <p class="status" role="status" [class.empty]="!notice()">

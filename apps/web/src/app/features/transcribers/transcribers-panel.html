@@ -4,35 +4,30 @@
   computador fica aberto para a internet.
 </p>
 
-<!-- v2: the name above its field, "Parear transcritor" beside it, the hint under it. -->
+<!-- v2: the name above its field, "Parear transcritor" beside it (under the hint on a phone),
+     the hint under the field. -->
 <form class="block pair" (submit)="pair($event)" novalidate>
   <label class="label" for="transcriber-name" i18n="@@transcribers.nameLabel"
     >Nome do transcritor</label
   >
-  <div class="row">
-    <input
-      #nameInput
-      id="transcriber-name"
-      class="input"
-      type="text"
-      maxlength="60"
-      autocomplete="off"
-      placeholder="Mac do escritório"
-      i18n-placeholder="@@transcribers.namePlaceholder"
-      [value]="name()"
-      [attr.aria-invalid]="nameProblem() ? 'true' : null"
-      [attr.aria-describedby]="
-        nameProblem()
-          ? 'transcriber-name-hint transcriber-name-error'
-          : 'transcriber-name-hint'
-      "
-      (input)="editName($event)"
-    />
-    <button #pairButton type="submit" class="primary" [disabled]="busy()">
-      <ui-icon name="link" [size]="18" />
-      <span i18n="@@transcribers.pair">Parear transcritor</span>
-    </button>
-  </div>
+  <input
+    #nameInput
+    id="transcriber-name"
+    class="input"
+    type="text"
+    maxlength="60"
+    autocomplete="off"
+    placeholder="Mac do escritório"
+    i18n-placeholder="@@transcribers.namePlaceholder"
+    [value]="name()"
+    [attr.aria-invalid]="nameProblem() ? 'true' : null"
+    [attr.aria-describedby]="
+      nameProblem()
+        ? 'transcriber-name-hint transcriber-name-error'
+        : 'transcriber-name-hint'
+    "
+    (input)="editName($event)"
+  />
   <p class="hint" id="transcriber-name-hint" i18n="@@transcribers.nameHint">
     Para reconhecer o computador na lista, como "Mac do escritório".
   </p>
@@ -61,6 +56,10 @@
       {{ current.text }}
     }
   </p>
+  <button #pairButton type="submit" class="primary" [disabled]="busy()">
+    <ui-icon name="link" [size]="18" />
+    <span i18n="@@transcribers.pair">Parear transcritor</span>
+  </button>
 </form>
 
 @if (paired(); as current) {
@@ -85,6 +84,7 @@
     </p>
     <ol class="steps">
       <li>
+        <span class="step-n" aria-hidden="true">1</span>
         <span i18n="@@transcribers.stepCommand"
           >No Mac, na pasta do repositório, rode:</span
         >
@@ -117,6 +117,7 @@
         </div>
       </li>
       <li>
+        <span class="step-n" aria-hidden="true">2</span>
         <span i18n="@@transcribers.stepToken"
           >Quando ele pedir, cole o token:</span
         >
@@ -144,9 +145,12 @@
           </button>
         </div>
       </li>
-      <li i18n="@@transcribers.stepAuto">
-        Pronto: daí em diante ele liga sozinho no Mac quando há áudio para
-        transcrever e desliga quando termina; o status aparece aqui.
+      <li>
+        <span class="step-n" aria-hidden="true">3</span>
+        <span i18n="@@transcribers.stepAuto"
+          >Pronto: daí em diante ele liga sozinho no Mac quando há áudio para
+          transcrever e desliga quando termina; o status aparece aqui.</span
+        >
       </li>
     </ol>
     <button

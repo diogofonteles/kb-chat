@@ -314,8 +314,10 @@ export class TranscribersPanel {
     this.paired.set(paired);
     this.name.set('');
     this.settle(null);
-    // The box takes the focus, so a screen reader reads the token and the steps (UP-01).
-    this.focusAfterRender(() => this.pairedBox()?.nativeElement);
+    // The box takes the focus, so a screen reader reads the token and the steps (UP-01); the
+    // page stays where it is while the box's top shows (the phone's frame: the pairing card
+    // above it, the box running on under the screen's foot).
+    this.focusAfterRender(() => this.pairedBox()?.nativeElement, true);
   }
 
   /** A name already in use is the field's problem (MA-23); anything else, the status's. */
@@ -387,7 +389,21 @@ export class TranscribersPanel {
     return this.host.nativeElement.querySelector<HTMLElement>(selector);
   }
 
-  private focusAfterRender(target: () => HTMLElement | null | undefined): void {
-    afterNextRender(() => target()?.focus(), { injector: this.injector });
+  private focusAfterRender(
+    target: () => HTMLElement | null | undefined,
+    stayWhenTopShows = false,
+  ): void {
+    afterNextRender(
+      () => {
+        const element = target();
+        if (!element) return;
+        const top = element.getBoundingClientRect().top;
+        element.focus({
+          preventScroll:
+            stayWhenTopShows && top >= 0 && top < window.innerHeight / 2,
+        });
+      },
+      { injector: this.injector },
+    );
   }
 }

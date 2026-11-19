@@ -186,15 +186,28 @@ h3 {
   font-weight: 600;
 }
 
-/* In a table row (v2 · Transcritores): a small pill with the state word, still a button. */
+:host(.pill) {
+  display: inline-flex;
+}
+
+/* In a table row (v2 · Transcritores): a small pill with the state word (19 high, 11 on 13,
+   as ui-pill), still a button whose target reaches 24 (WCAG 2.5.8). */
 :host(.pill) .chip {
-  min-height: 1.5rem;
+  position: relative;
+  min-height: 1.1875rem;
   padding: 0 var(--space-2);
+  line-height: 0.8125rem;
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--overlay-3);
   font-size: 0.6875rem;
   font-weight: 700;
+}
+
+:host(.pill) .chip::after {
+  content: '';
+  position: absolute;
+  inset: -0.15625rem 0;
 }
 
 :host(.pill) .chip[data-state='working'],

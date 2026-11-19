@@ -25,6 +25,7 @@ import {
   TrackDocumentsApi,
   trackDocumentsUrl,
 } from '@core/media/transcribers-api.js';
+import { UiCover } from '@ui/index.js';
 
 /** While the Mac works on them, the counts are read again this often. */
 const REFRESH_MS = 20_000;
@@ -74,6 +75,7 @@ const resultText = ({ queued, skipped }: PublishExistingTracksResult) =>
  */
 @Component({
   selector: 'app-existing-tracks',
+  imports: [UiCover],
   templateUrl: './existing-tracks.html',
   styleUrls: ['../settings/settings-form.css', './transcribers-panel.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -105,6 +107,11 @@ export class ExistingTracks {
       (one) => one.queued + one.published + one.failed > 0,
     ),
   );
+  /** The card's cover: the collection the Mac works on, when it is one (v2 · Transcritores). */
+  protected readonly coverTitle = computed(() => {
+    const working = this.progress();
+    return working.length === 1 ? (working[0]?.title ?? null) : null;
+  });
   protected readonly anyQueued = computed(() =>
     this.collections().some((one) => one.queued > 0),
   );
