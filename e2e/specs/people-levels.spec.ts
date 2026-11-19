@@ -85,7 +85,8 @@ test('AC-1, AC-6, AC-7: a profile at CI, the invitation made with it, the bulk b
   await level.selectOption('ci');
   await expectAccessible(page);
   await shoot(page, 'profile-level', section);
-  await section.getByRole('button', { name: 'Salvar perfil' }).click();
+  // "Salvar perfil" in the modal's foot; a phone's sheet says "Salvar" in its header.
+  await section.getByRole('button', { name: /^Salvar( perfil)?$/ }).click();
   await expect(section.getByText(`Perfil "${name}" salvo.`)).toBeVisible();
 
   await dialog
@@ -105,6 +106,11 @@ test('AC-1, AC-6, AC-7: a profile at CI, the invitation made with it, the bulk b
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   // AC-6: two members and the owner selected; the owner is a master and is left out.
+  // A phone's list shows its boxes once a selection is on (a long press on a row).
+  if ((page.viewportSize()?.width ?? 0) < 1024)
+    await dialog
+      .getByRole('button', { name: new RegExp(ana) })
+      .dispatchEvent('contextmenu');
   for (const email of [ana, bia, OWNER_EMAIL])
     await dialog.getByRole('checkbox', { name: `Selecionar ${email}` }).check();
   const bar = dialog.getByRole('group', { name: 'Nível para várias pessoas' });

@@ -390,6 +390,15 @@ button:disabled {
   flex-basis: 100%;
 }
 
+/* Its own line under its collection: the field's cap does not let it share the row. */
+.group.inline > .level-field {
+  max-width: none;
+}
+
+.group.inline > .level-field > .select {
+  max-width: 28rem;
+}
+
 .group.inline > .check,
 .group.grid > .check {
   min-height: 1.875rem;
@@ -485,6 +494,11 @@ button:disabled {
 
   .apply-group > .apply-row > button {
     display: none;
+  }
+
+  /* While the question is open the unseen select stays off its buttons (Cancelar first). */
+  .apply-group:has(> .actions:not(.apply-row)) > .apply-row {
+    pointer-events: none;
   }
 
   /* Confirming: the question and its buttons under the row, in the flow. */

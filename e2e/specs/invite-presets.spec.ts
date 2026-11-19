@@ -88,7 +88,8 @@ async function createAluno(dialog: Locator, name: string): Promise<void> {
   await section.getByLabel('Perfil de pesquisa').selectOption('fast');
   await section.getByLabel('Tema').selectOption('dark');
   await expectAccessible(section.page());
-  await section.getByRole('button', { name: 'Salvar perfil' }).click();
+  // "Salvar perfil" in the modal's foot; a phone's sheet says "Salvar" in its header.
+  await section.getByRole('button', { name: /^Salvar( perfil)?$/ }).click();
   await expect(section.getByText(`Perfil "${name}" salvo.`)).toBeVisible();
 }
 
@@ -98,9 +99,28 @@ async function expectAccessible(page: Page): Promise<void> {
   expect(axe.violations).toEqual([]);
 }
 
+/**
+ * A profile's action: the words on its row on a desktop; on a phone they are in its ⋯ menu
+ * (v2 · Perfis, celular).
+ */
+async function profileAction(
+  section: Locator,
+  action: 'Editar' | 'Apagar' | 'Tornar padrão',
+  name: string,
+): Promise<void> {
+  if ((section.page().viewportSize()?.width ?? 0) < 1024) {
+    await section
+      .getByRole('button', { name: `Mais ações de ${name}` })
+      .click();
+    await section.page().getByRole('menuitem', { name: action, exact: true }).click();
+    return;
+  }
+  await section.getByRole('button', { name: `${action} ${name}` }).click();
+}
+
 async function removeProfile(dialog: Locator, name: string): Promise<void> {
   const section = profiles(dialog);
-  await section.getByRole('button', { name: `Apagar ${name}` }).click();
+  await profileAction(section, 'Apagar', name);
   await section.getByRole('button', { name: 'Apagar', exact: true }).click();
   await expect(section.getByText(`Perfil "${name}" apagado.`)).toBeVisible();
 }
@@ -215,7 +235,7 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
 
   // The profile kept its own numbers.
   const section = profiles(dialog);
-  await section.getByRole('button', { name: `Editar ${name}` }).click();
+  await profileAction(section, 'Editar', name);
   await showTab(section, 'IA e limites');
   await expect(
     section.getByLabel('Pesquisas por dia (vazio = padrão)'),
@@ -226,7 +246,9 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
   await dialog
     .locator('app-person-editor select[name="applyProfile"]')
     .selectOption({ label: name });
-  await dialog.getByRole('button', { name: 'Aplicar perfil' }).click();
+  // A phone's "Aplicar perfil" is one row: choosing the profile already asks to apply it.
+  if ((page.viewportSize()?.width ?? 0) >= 1024)
+    await dialog.getByRole('button', { name: 'Aplicar perfil' }).click();
   await expect(
     dialog.getByText(`Aplicar o perfil "${name}" a ${existing}?`),
   ).toBeVisible();
