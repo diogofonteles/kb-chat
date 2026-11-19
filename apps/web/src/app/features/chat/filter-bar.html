@@ -25,14 +25,17 @@
           [disabled]="option.count === 0 && !option.selected"
           (change)="chooseAuthorship(option.value)"
         />
+        <!-- "✓ Todos 15", "✦ Mestre Laércio 13": one line of words after the ✓ (v2 chips). -->
         <span class="segment-text">
           @if (option.selected) {
             <ui-icon class="check" name="check" [size]="14" />
           }
-          @if (option.mestre) {
-            <span class="mark" aria-hidden="true">✦</span>
-          }
-          <span class="segment-label">{{ option.label }}</span>
+          <span class="segment-label">
+            @if (option.mestre) {
+              <span class="mark" aria-hidden="true">✦</span>&nbsp;
+            }
+            {{ option.label }}</span
+          >
         </span>
         <span class="segment-count">{{ option.count }}</span>
       </label>

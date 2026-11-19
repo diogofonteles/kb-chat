@@ -581,6 +581,12 @@
     padding-bottom: var(--space-3);
   }
 
+  /* The 32 avatar at 16 and the name 12 after it (cmHead): the 44 target overflows the
+     avatar's sides evenly. */
+  .topbar .menu {
+    margin-inline: calc((2rem - var(--target)) / 2);
+  }
+
   .topic:not(.visually-hidden) {
     flex: 1 1 0;
     font-size: 1.375rem;

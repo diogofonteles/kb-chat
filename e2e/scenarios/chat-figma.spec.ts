@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import type { Browser, BrowserContext, Page } from '@playwright/test';
+import type { Browser, BrowserContext, Locator, Page } from '@playwright/test';
 import {
   CSRF,
   WEB_ORIGIN,
@@ -69,7 +69,13 @@ async function contextAt(
   return { context, page };
 }
 
-async function shoot(page: Page, id: string, width: Width): Promise<void> {
+/** `hover`: what the frame draws under the pointer (the first document's row), on a desktop. */
+async function shoot(
+  page: Page,
+  id: string,
+  width: Width,
+  hover?: Locator,
+): Promise<void> {
   if (!shots) return;
   await page.addStyleTag({
     content:
@@ -84,6 +90,10 @@ async function shoot(page: Page, id: string, width: Width): Promise<void> {
     await page.waitForTimeout(300);
   }
   await page.mouse.move(1, 1);
+  if (hover && width === 'desktop') {
+    await hover.hover();
+    await page.waitForTimeout(200);
+  }
   await page.screenshot({
     path: `${shots}/${id}${width === 'phone' ? '@mobile' : ''}.png`,
   });
@@ -118,6 +128,8 @@ async function search(
 }
 
 const cards = (page: Page) => page.locator('app-result-card');
+/** The first row of "Documentos", beside the best result (the frames draw it hovered). */
+const firstDocument = (page: Page) => cards(page).nth(1);
 
 /** A conversation of "Sua biblioteca" (the phone's Menu), by its title. */
 async function openConversation(page: Page, title: string): Promise<void> {
@@ -292,9 +304,11 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
     await page.unroute(/\/searches$/);
 
     await fresh();
-    await search(page, 'lei do ritmo', 'Tudo');
+    // The frames' "lei do ritmo" is the conversation of "Sua biblioteca", opened (it searches
+    // again and stays in its place, the one open), not a new one.
+    await openConversation(page, CONVERSATIONS.search);
     await expect(cards(page).first()).toBeVisible();
-    await shoot(page, 'chat-results', width);
+    await shoot(page, 'chat-results', width, firstDocument(page));
 
     await fresh();
     await page.route(/\/searches$/, (route) =>

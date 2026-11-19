@@ -8,7 +8,7 @@
 
 .exchange {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .results-head {
@@ -36,7 +36,8 @@
   margin: 0;
   font-size: 2.5rem;
   font-weight: 800;
-  line-height: 1.05;
+  /* resultsMain: 40 on a 48 line, the filters 12 under it. */
+  line-height: 1.2;
   letter-spacing: -0.03em;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -71,6 +72,11 @@
   min-width: 0;
 }
 
+/* With nothing to say it takes no gap: the columns 12 under the filters (chat-results). */
+.answer > app-search-level-change:empty {
+  display: none;
+}
+
 .answer.refreshing .results {
   opacity: 0.6;
 }
@@ -101,9 +107,15 @@
   gap: var(--space-3);
 }
 
+/* "Documentos" 4 above its first row (resultsMain). */
+.rest-column {
+  gap: var(--space-1);
+}
+
 .column-title {
   margin: 0;
   font-size: 1.25rem;
+  line-height: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -244,10 +256,17 @@
     font-size: var(--text-meta);
   }
 
-  /* The mode's pill stays, also for "Tudo": it is where a phone changes the mode. */
+  /* A phone says the mode only when it is "Por significado" (chat-results@mobile,
+     -semantic@mobile); the question box's chips change it. */
   .summary .took,
-  .summary .sep {
+  .summary .mode-menu:has(.muted-mode) {
     display: none;
+  }
+
+  /* cmRow: 68 rows one after the other, the best result first (chat-results@mobile). */
+  .results,
+  .cards {
+    gap: 0;
   }
 }
 

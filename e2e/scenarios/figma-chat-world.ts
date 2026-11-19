@@ -70,6 +70,8 @@ export interface ChatWorld {
   readonly anaId: string;
   /** Conversation id by title. */
   readonly conversations: Record<string, string>;
+  /** When each was saved as seeded: opening one again (a search re-runs) saves it anew. */
+  readonly savedAt: Record<string, { createdAt: string; updatedAt: string }>;
 }
 
 const NO_FILTERS = {
@@ -185,6 +187,23 @@ async function conversationIds(
   return Object.fromEntries(items.map((one) => [one.title, one.id]));
 }
 
+async function conversationTimes(
+  api: APIRequestContext,
+): Promise<Record<string, { createdAt: string; updatedAt: string }>> {
+  const listed = await api.get('/api/v1/conversations');
+  const { items } = (await listed.json()) as {
+    items: { title: string; createdAt: string; updatedAt: string }[];
+  };
+  return Object.fromEntries(
+    [...items]
+      .reverse()
+      .map((one) => [
+        one.title,
+        { createdAt: one.createdAt, updatedAt: one.updatedAt },
+      ]),
+  );
+}
+
 async function personId(api: APIRequestContext, email: string) {
   const listed = await api.get('/api/v1/people');
   const body = (await listed.json()) as {
@@ -260,6 +279,7 @@ export async function seedChatWorld(): Promise<ChatWorld> {
     cosmologia: slugOf(COSMOLOGIA),
     anaId: await personId(owner, ANA.email),
     conversations: await conversationIds(owner),
+    savedAt: await conversationTimes(owner),
   };
   await owner.dispose();
   return world;
@@ -360,14 +380,46 @@ export async function chatWorld(
     if (route.request().method() !== 'GET') return route.continue();
     const response = await route.fetch();
     const body = (ownersList ?? (await response.json())) as {
-      items: { title: string }[];
+      items: Listed[];
     };
     await route.fulfill({
       response,
-      json: {
-        ...body,
-        items: body.items.filter((one) => listed.has(one.title)),
-      },
+      json: { ...body, items: framesList(body.items, listed, w.savedAt) },
     });
   });
+}
+
+type Listed = { title: string; createdAt?: string; updatedAt?: string };
+
+/**
+ * The frames' conversations, each once and at its seeded time: a state that asks or opens one
+ * of them again (chat-results opens "lei do ritmo") saves it anew, or a new one of the same
+ * title, which is the one open. It keeps the seeded one's place and time, so the list reads as
+ * the frames draw it.
+ */
+function framesList<T extends Listed>(
+  items: T[],
+  listed: Set<string>,
+  savedAt: ChatWorld['savedAt'],
+): T[] {
+  const kept = items.filter((one) => listed.has(one.title));
+  const byTitle = new Map<string, T[]>();
+  for (const one of kept)
+    byTitle.set(one.title, [...(byTitle.get(one.title) ?? []), one]);
+  const out: T[] = [];
+  for (const one of kept) {
+    const same = byTitle.get(one.title) ?? [one];
+    const oldest = same[same.length - 1] ?? one;
+    if (one !== oldest) continue;
+    const newest = same[0] ?? one;
+    const times = savedAt[one.title] ?? {
+      createdAt: oldest.createdAt,
+      updatedAt: oldest.updatedAt,
+    };
+    out.push({ ...newest, ...times });
+  }
+  // newest first, as the server lists them
+  return out.sort((a, b) =>
+    String(b.updatedAt).localeCompare(String(a.updatedAt)),
+  );
 }

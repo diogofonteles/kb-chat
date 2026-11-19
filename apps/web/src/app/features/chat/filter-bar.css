@@ -77,12 +77,16 @@
 .segment-text {
   display: inline-flex;
   align-items: center;
+  gap: 0.375rem;
+}
+
+/* The count a space after the name, as the chip's one line of words draws it. */
+.segment {
   gap: 0.25rem;
 }
 
 .segment-count {
   color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
 }
 
 .segment.on,
@@ -357,12 +361,6 @@ legend {
 }
 
 @media (max-width: 1023px) {
-  .segment,
-  .chip,
-  .active-chip {
-    min-height: 2.25rem;
-  }
-
   /* Phones: one row that scrolls, "Filtros" first, then the authorship (chat-results@mobile). */
   .row {
     flex-wrap: nowrap;
