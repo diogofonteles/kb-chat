@@ -30,6 +30,7 @@ import {
 import { answeringLevels } from '../../testing/level-fixtures.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaPlayerPage } from './media-player-page.js';
+import { PlayerPanelTabs } from './player/player-panel-tab.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
 import { ANIMATION_FRAMES } from '@core/media/playback-clock.js';
@@ -404,6 +405,19 @@ describe('MediaPlayerPage opened from "Meus marcadores" (KBC-042 FR-5)', () => {
     http.expectOne(ITEM_URL).flush(ITEM);
     await harness.fixture.whenStable();
     expect(media.calls).not.toContain('play');
+  });
+});
+
+describe('MediaPlayerPage opened with #marcadores (v2 media-library-row-menu)', () => {
+  it('shows the Sobre tab, where the bookmarks are, once the media is in', async () => {
+    const { harness, http } = await openPage(`/midia/${ITEM.id}#marcadores`);
+    const tabs = TestBed.inject(PlayerPanelTabs);
+    tabs.tab.set('queue');
+
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+
+    expect(tabs.tab()).toBe('about');
   });
 });
 

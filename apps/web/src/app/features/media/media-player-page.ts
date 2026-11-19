@@ -74,6 +74,7 @@ import {
   interval,
   map,
   switchMap,
+  take,
 } from 'rxjs';
 import {
   pollEveryOf,
@@ -735,16 +736,19 @@ export class MediaPlayerPage {
    * desktop in the Sobre tab of the panel beside the page, which renders a moment later.
    */
   private followBookmarksLink(): void {
-    let done = false;
-    effect(() => {
-      if (done || !this.ready()) return;
-      if (this.route.snapshot.fragment !== 'marcadores') return;
-      done = true;
-      this.panelTabs.tab.set('about');
-      afterNextRender(() => this.focusBookmarks(FOCUS_TRIES), {
-        injector: this.injector,
+    toObservable(this.ready)
+      .pipe(
+        filter(Boolean),
+        take(1),
+        filter(() => this.route.snapshot.fragment === 'marcadores'),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => {
+        this.panelTabs.tab.set('about');
+        afterNextRender(() => this.focusBookmarks(FOCUS_TRIES), {
+          injector: this.injector,
+        });
       });
-    });
   }
 
   private focusBookmarks(tries: number): void {
