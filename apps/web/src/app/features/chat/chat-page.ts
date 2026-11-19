@@ -1,4 +1,4 @@
-import { DOCUMENT, DecimalPipe } from '@angular/common';
+import { DOCUMENT, DecimalPipe, NgComponentOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -13,15 +13,19 @@ import {
   viewChild,
 } from '@angular/core';
 import type {
-  DocumentRef,
+  AnswerSource,
   SearchFilters,
   SearchKind,
   SearchMode,
 } from '@kb-chat/contracts';
 import { httpResource } from '@angular/common/http';
-import { toSignal } from '@angular/core/rxjs-interop';
+import {
+  takeUntilDestroyed,
+  toObservable,
+  toSignal,
+} from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
-import { filter, map } from 'rxjs';
+import { Subject, filter, from, map, of, switchMap, take } from 'rxjs';
 import { suggestionListSchema } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { suggestionsUrl } from '@core/api/kb-api.js';
@@ -48,18 +52,36 @@ import {
   type TriggerPlace,
 } from '@features/research/trigger-place.js';
 import { ResearchStore } from '@features/research/research-store.js';
-import { ResearchThread } from '@features/research/research-thread.js';
+import {
+  ResearchThread,
+  type SourceOpening,
+} from '@features/research/research-thread.js';
 import { ViewStore, type ChatView } from './view-store.js';
 import { ViewSwitch } from './view-switch.js';
 import { MiniPlayer } from '@features/media/player/mini-player.js';
-import { PendingTranscriptions } from '@features/transcribers/pending-transcriptions.js';
+import { MediaEngine } from '@core/media/media-engine.js';
+import { AudioPresence } from '@features/shell/audio-presence.js';
+import { BottomNav, navTabs, type NavTab } from '@features/shell/bottom-nav.js';
+import { RightPanel } from '@features/shell/right-panel.js';
+import { TopBar } from '@features/shell/top-bar.js';
+import { hasLibrary } from '@features/media/library/library-access.js';
+import { UiAvatar } from '@ui/avatar.js';
+import { UiIconButton } from '@ui/button.js';
+import { coverGradient } from '@ui/cover.js';
+import { UiIcon } from '@ui/icon.js';
+
+/** Where Sua biblioteca's collapsed state is kept (a per-viewer convenience). */
+const COLLAPSED_KEY = 'kb-chat.library-collapsed';
+import { ConversationHome } from './home/conversation-home.js';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
 /** The media pages: the list and player (T14, T15) and the library (T16, KBC-051). */
 /** A page that renders in place of the conversation: media pages and T24 (KBC-103). */
 const isMediaUrl = (url: string): boolean =>
-  /^\/(midia|biblioteca|fila|acervos)(\/|\?|#|$)/.test(url);
+  /^\/(midia|biblioteca|fila|acervos|configuracoes|catalogo-ui)(\/|\?|#|$)/.test(
+    url,
+  );
 
 /**
  * Chat page (screens.md): two views over one question box and document panel, the free
@@ -79,18 +101,25 @@ const isMediaUrl = (url: string): boolean =>
     DecimalPipe,
     RouterOutlet,
     MiniPlayer,
-    PendingTranscriptions,
+    TopBar,
+    BottomNav,
+    NgComponentOutlet,
+    UiAvatar,
+    UiIcon,
+    UiIconButton,
+    ConversationHome,
   ],
   providers: [
     ChatStore,
     ViewStore,
     ResearchStore,
+    AudioPresence,
     provideResearchRestorer(RESEARCH_RESTORER),
   ],
   templateUrl: './chat-page.html',
   styleUrl: './chat-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(document:keydown)': 'focusOnSlash($event)' },
+  host: { '(document:keydown)': 'shortcut($event)' },
 })
 export class ChatPage {
   protected readonly store = inject(ChatStore);
@@ -119,6 +148,73 @@ export class ChatPage {
   private readonly collectionHeading = inject(CollectionHeading);
   /** Spoken from here: the page and the sidebar come and go, the layout stays. */
   protected readonly queue = inject(ProcessingQueueStore);
+  /** The v2 audio rule (KBC-125 BR-2). */
+  protected readonly audio = inject(AudioPresence);
+  /** The shell's optional right panel, for the areas (KBC-125 FR-1). */
+  protected readonly rightPanel = inject(RightPanel);
+  protected readonly me = this.session.me;
+  private readonly topBar = viewChild(TopBar);
+  /** The main panel's header (title, view switch): floating notices start under it. */
+  private readonly pageHeader =
+    viewChild<ElementRef<HTMLElement>>('pageHeader');
+  private readonly engineSource = inject(MediaEngine).source;
+  /** The address without query or fragment, as the router last settled on it. */
+  private readonly path = toSignal(
+    inject(Router).events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map((event) => event.urlAfterRedirects.split(/[?#]/)[0] ?? ''),
+    ),
+    { initialValue: inject(Router).url.split(/[?#]/)[0] ?? '' },
+  );
+  /** Sua biblioteca collapsed to its covers (desktop, FR-1). */
+  protected readonly collapsed = signal(this.readCollapsed());
+  /** The media library's page, for who has it (Biblioteca, else Mídia). */
+  protected readonly libraryPath = computed(() => {
+    if (hasLibrary(this.session)) return '/biblioteca';
+    return this.audio.listens() && this.store.topicSlug() !== null
+      ? '/midia'
+      : null;
+  });
+  /** The phone tabs under the audio rule (BR-2). */
+  protected readonly navTabs = computed(() =>
+    navTabs(
+      this.audio.shown()
+        ? { queue: this.queue.allowed(), library: this.libraryPath() }
+        : null,
+    ),
+  );
+  protected readonly navActive = computed((): NavTab | null =>
+    !this.onMedia() && this.currentView() === 'search' && !this.isEmpty()
+      ? 'search'
+      : null,
+  );
+  /** The main panel's gradient: the colour of the collection's cover (v2 pageHeader tint). */
+  protected readonly tint = computed(() => {
+    const title = this.topic()?.title;
+    return title ? coverGradient(title)[0] : null;
+  });
+  /**
+   * The player bar row (FR-3): with audio (BR-2), except on the page of what plays, where the
+   * full player shows it.
+   */
+  protected readonly playerShown = computed(() => {
+    if (!this.audio.shown()) return false;
+    const source = this.engineSource();
+    if (!source) return true;
+    return this.path() !== `/midia/${encodeURIComponent(source.id)}`;
+  });
+  /**
+   * On a phone the page of what plays is the full-screen player (KBC-129 FR-2, v2 · Mídia —
+   * Player, celular): no navigation under it; its own "← Biblioteca" leads back.
+   */
+  protected readonly fullScreenPlayer = computed(() => {
+    const source = this.engineSource();
+    return (
+      !this.desktop() &&
+      source !== null &&
+      this.path() === `/midia/${encodeURIComponent(source.id)}`
+    );
+  });
   /** The collection in the header: on a media page, the one that page shows (KBC-091). */
   protected readonly topic = computed(() => {
     if (!this.onMedia()) return this.store.topic();
@@ -136,6 +232,11 @@ export class ChatPage {
   );
   protected readonly messages = this.store.messages;
   protected readonly opened = this.store.openDocument;
+  /** The source of an AI answer open in the panel: marked in its answer. */
+  protected readonly openSourceId = computed(() => {
+    const open = this.opened();
+    return open?.sources ? open.id : null;
+  });
   protected readonly currentView = this.views.current;
   protected readonly researching = computed(
     () => this.currentView() === 'research',
@@ -145,8 +246,14 @@ export class ChatPage {
       ? this.research.turns().length === 0
       : this.messages().length === 0,
   );
+  /** Search results are a page in the main panel, wider than the reading column (KBC-126). */
+  protected readonly searchPage = computed(
+    () => !this.researching() && !this.isEmpty(),
+  );
   /** On phones the panel covers the conversation: make it inert so Tab stays in the panel. */
   private readonly router = inject(Router);
+  /** The questions typed in the top bar's search, in order. */
+  private readonly globalSearches = new Subject<string>();
   /** /midia and /midia/:id render in this layout instead of the conversation (T14, T15). */
   protected readonly onMedia = toSignal(
     this.router.events.pipe(
@@ -177,10 +284,9 @@ export class ChatPage {
     const hit = this.passage();
     return hit ? passageKey(hit) : null;
   });
-  /** The panel's full player shows this media: no mini-player for it meanwhile. */
+  /** A spoken passage's full player shows this media: no mini-player for it meanwhile. */
   protected readonly playerInPanel = computed(
-    () =>
-      this.passage()?.mediaId ?? this.track()?.source.media?.mediaId ?? null,
+    () => this.passage()?.mediaId ?? null,
   );
   protected readonly panelOpen = computed(
     () =>
@@ -225,11 +331,41 @@ export class ChatPage {
     return `${last.question}: ${outcome}`;
   });
 
+  /**
+   * Enter in the global search (FR-2). From a page in the conversation's place it asks once
+   * the conversation is back, so what the leaving page does to the collection in use lands
+   * before the question, not over it; and it waits for the collection in use to be known
+   * (the search can be typed before the list of collections arrives). A newer search
+   * replaces one still waiting.
+   */
+  private askGlobalSearches(): void {
+    const collectionKnown = toObservable(this.store.topicSlug).pipe(
+      filter((slug) => slug !== null),
+      take(1),
+    );
+    this.globalSearches
+      .pipe(
+        switchMap((query) =>
+          (this.onMedia()
+            ? from(this.router.navigateByUrl('/'))
+            : of(true)
+          ).pipe(
+            filter((moved) => moved),
+            switchMap(() => collectionKnown),
+            map(() => query),
+          ),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe((query) => this.store.ask(query));
+  }
+
   private matchesDesktop(): boolean {
     return this.view?.matchMedia?.(DESKTOP_QUERY).matches ?? true;
   }
 
   constructor() {
+    this.askGlobalSearches();
     const query = this.view?.matchMedia?.(DESKTOP_QUERY);
     const onChange = (event: MediaQueryListEvent) => {
       const drawer = this.drawer()?.nativeElement;
@@ -257,6 +393,39 @@ export class ChatPage {
       const onMedia = this.onMedia();
       if (wasOnMedia && !onMedia && this.desktop()) this.composer()?.focus();
       wasOnMedia = onMedia;
+    });
+    this.keepFloatTop();
+  }
+
+  /**
+   * `--float-top`: where a floating notice (the new-version notice, KBC-123) starts, the
+   * bottom edge of the main panel's header as it really is: in the v2 shell it sits under
+   * the top bar on desktop and wraps to two rows on narrow phones.
+   */
+  private keepFloatTop(): void {
+    const root = inject(DOCUMENT).documentElement;
+    let observer: ResizeObserver | null = null;
+    const measure = (): void => {
+      const header = this.pageHeader()?.nativeElement;
+      if (header)
+        root.style.setProperty(
+          '--float-top',
+          `${Math.round(header.getBoundingClientRect().bottom)}px`,
+        );
+    };
+    afterRenderEffect(() => {
+      const header = this.pageHeader()?.nativeElement;
+      observer?.disconnect();
+      if (!header || typeof ResizeObserver === 'undefined') return;
+      observer = new ResizeObserver(measure);
+      observer.observe(header);
+      measure();
+    });
+    this.view?.addEventListener('resize', measure);
+    inject(DestroyRef).onDestroy(() => {
+      observer?.disconnect();
+      this.view?.removeEventListener('resize', measure);
+      root.style.removeProperty('--float-top');
     });
   }
 
@@ -289,7 +458,10 @@ export class ChatPage {
 
   protected sidebarActed(action: SidebarAction): void {
     // A conversation started or restored from the media pages shows the conversation.
-    if ((action === 'new' || action === 'restore') && this.onMedia())
+    if (
+      (action === 'new' || action === 'restore' || action === 'document') &&
+      this.onMedia()
+    )
       void this.router.navigateByUrl('/');
     // A new conversation (or another collection) is ready to type into.
     const typing = action === 'new' || (action === 'topic' && !this.onMedia());
@@ -345,17 +517,78 @@ export class ChatPage {
     });
   }
 
-  /** A cited source opens in the same document panel (AC-3). */
-  protected openSource(doc: DocumentRef): void {
+  /**
+   * A cited source opens in the document panel beside the answer, on the answer's words,
+   * with the answer's other sources at hand (KBC-127 FR-1).
+   */
+  protected openSource({ doc, question, sources }: SourceOpening): void {
     const topic = this.store.topicSlug();
-    if (topic) this.store.open(topic, doc);
+    if (topic) this.store.openSource(topic, doc, { question, sources });
+  }
+
+  /**
+   * "Perguntar à IA" on a document (KBC-127): the research view, with a question about it
+   * ready in the box to finish and send (nothing is asked, nor spent, before that).
+   */
+  protected askAiAbout(title: string): void {
+    this.views.select('research');
+    this.closeDocument();
+    afterNextRender(
+      () =>
+        this.composer()?.fill(
+          $localize`:@@research.aboutDocument:O que “${title}:title:” diz sobre `,
+        ),
+      { injector: this.injector },
+    );
   }
 
   /** A cited track opens on its passage, paused, in the reading panel (KBC-099 FR-8). */
-  protected openTrack({ source, at, trigger }: TrackOpening): void {
+  protected openTrack({
+    source,
+    at,
+    trigger,
+    sources,
+    question,
+  }: TrackOpening): void {
     this.trackTrigger = trigger;
     this.triggerPlace = placeOf(trigger, this.host);
-    this.store.openTrackPassage({ source, at });
+    this.store.openTrackPassage({
+      source,
+      at,
+      ...(sources ? { sources } : {}),
+      ...(question === undefined ? {} : { question }),
+    });
+  }
+
+  /**
+   * ‹ › on the audio source (KBC-150): another source of the same answer in the same place, a
+   * track on its first cited passage, a text in the document panel with the answer's texts.
+   */
+  protected chooseSource(source: AnswerSource): void {
+    const open = this.track();
+    const sources = open?.sources ?? [];
+    const question = open?.question ?? '';
+    if (source.media) {
+      this.store.openTrackPassage({
+        source,
+        at: source.passages?.[0]?.at ?? '',
+        sources,
+        question,
+      });
+      return;
+    }
+    const topic = this.store.topicSlug();
+    if (!topic) return;
+    this.store.openSource(
+      topic,
+      { id: source.id, title: source.title },
+      {
+        question,
+        sources: sources
+          .filter((one) => !one.media)
+          .map(({ n, id, title }) => ({ n, id, title })),
+      },
+    );
   }
 
   /** "Parar" disappears with the answer in flight: focus moves to the question box. */
@@ -458,20 +691,97 @@ export class ChatPage {
     this.store.topics.reload();
   }
 
+  /** The page's keys: "/" for the question box, ⌘K / Ctrl K for the global search. */
+  protected shortcut(event: KeyboardEvent): void {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k')
+      this.focusGlobalSearch(event);
+    else this.focusOnSlash(event);
+  }
+
+  /**
+   * ⌘K / Ctrl K focuses the global search from anywhere (KBC-125 FR-2, AC-2), except while
+   * typing in a field, which keeps the key. On a phone it is "Buscar".
+   */
+  private focusGlobalSearch(event: KeyboardEvent): void {
+    if (isTyping(event.target)) return;
+    event.preventDefault();
+    const bar = this.topBar();
+    if (bar) bar.focusSearch();
+    else this.navChosen('search');
+  }
+
   /**
    * "/" focuses the question box. Pressed in the box while it is still empty (it has focus
    * on load), it does nothing, so following the hint never types "/" (M-9); in any other
    * field it types as usual.
    */
-  protected focusOnSlash(event: KeyboardEvent): void {
+  private focusOnSlash(event: KeyboardEvent): void {
     if (event.key !== '/') return;
     if (this.composer()?.isEmptyField(event.target)) {
       event.preventDefault();
       return;
     }
-    const target = event.target as HTMLElement | null;
-    if (target?.closest('input, textarea, select, [contenteditable]')) return;
+    if (isTyping(event.target)) return;
     event.preventDefault();
     this.composer()?.focus();
   }
+
+  /** Enter in the global search: the free search of the collection in use (FR-2). */
+  protected globalSearch(query: string): void {
+    this.views.select('search');
+    this.globalSearches.next(query);
+  }
+
+  /** ✦ in the top bar: the research view, ready to type into. */
+  protected openResearch(): void {
+    if (this.views.researchAvailable()) this.views.select('research');
+    this.showConversation();
+  }
+
+  protected goHome(): void {
+    this.showConversation();
+  }
+
+  /** A phone tab that acts instead of opening a page (Buscar, Acervos). */
+  protected navChosen(tab: NavTab): void {
+    if (tab === 'collections') this.openMenu();
+    else if (tab === 'search') {
+      this.views.select('search');
+      this.showConversation();
+    }
+  }
+
+  protected toggleCollapsed(): void {
+    const next = !this.collapsed();
+    this.collapsed.set(next);
+    try {
+      this.view?.localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0');
+    } catch {
+      // Storage unavailable: the choice lasts for this page only.
+    }
+  }
+
+  private readCollapsed(): boolean {
+    try {
+      return this.view?.localStorage.getItem(COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  /** The conversation on screen, its question box focused. */
+  private showConversation(): void {
+    if (this.onMedia()) void this.router.navigateByUrl('/');
+    afterNextRender(() => this.composer()?.focus(), {
+      injector: this.injector,
+    });
+  }
+}
+
+/** A key pressed while typing in a field belongs to the field. */
+function isTyping(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    target.closest('input, textarea, select, [contenteditable]') !== null
+  );
 }

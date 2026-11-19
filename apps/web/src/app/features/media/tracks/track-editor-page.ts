@@ -2,6 +2,7 @@ import {
   CollectionHeading,
   type HeadingScope,
 } from '@features/chat/collection-heading.js';
+import { UiButton, UiCover, UiIcon } from '@ui/index.js';
 import { httpResource } from '@angular/common/http';
 import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import {
@@ -213,9 +214,12 @@ function copyableLine(
     PreparationVoices,
     TrackPreparationStatus,
     TrackSubjects,
+    UiButton,
+    UiCover,
+    UiIcon,
   ],
   templateUrl: './track-editor-page.html',
-  styleUrl: './track-editor-page.css',
+  styleUrls: ['../preparation/prep-head.css', './track-editor-page.css'],
   providers: [TrackDraft, TrackAudition, TrackTextSource],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown)': 'pageKey($event)' },
@@ -609,6 +613,13 @@ export class TrackEditorPage {
     this.chosenId.set(id);
     const track = this.draft.tracks().find((one) => one.id === id);
     if (track) this.cursor.set(track.startMs);
+  }
+
+  /** A track picked on the waveform: its row is selected and shown (KBC-130 FR-2). */
+  protected chooseOnWave(id: string): void {
+    this.choose(id);
+    this.tab.set('tracks');
+    this.list()?.showRow();
   }
 
   protected moveHandle(move: {

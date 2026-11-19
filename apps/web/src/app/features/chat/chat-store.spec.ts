@@ -274,3 +274,41 @@ describe('ChatStore and spoken passages (KBC-039)', () => {
     });
   });
 });
+
+describe('ChatStore and the sources of an AI answer (KBC-127 FR-1)', () => {
+  const sources = [
+    { n: 1, id: 'a.md', title: 'A' },
+    { n: 2, id: 'b.md', title: 'B' },
+  ];
+
+  it("opens a source on the answer's question, steps between the sources and leaves them", async () => {
+    const { store } = await setup();
+    store.openSource(
+      'hermetismo',
+      { id: 'b.md', title: 'B' },
+      { question: 'ritmo', sources },
+    );
+    expect(store.openDocument()).toEqual({
+      topic: 'hermetismo',
+      id: 'b.md',
+      title: 'B',
+      messageId: null,
+      question: 'ritmo',
+      sources,
+    });
+    store.switchSource({ id: 'a.md', title: 'A' });
+    expect(store.openDocument()?.id).toBe('a.md');
+    expect(store.canGoBack()).toBe(false);
+    store.leaveSources();
+    expect(store.openDocument()).toEqual({
+      topic: 'hermetismo',
+      id: 'a.md',
+      title: 'A',
+      messageId: null,
+      question: 'ritmo',
+    });
+    // A search result has no sources to step between.
+    store.switchSource({ id: 'b.md', title: 'B' });
+    expect(store.openDocument()?.id).toBe('a.md');
+  });
+});

@@ -14,14 +14,21 @@ const declarations = (theme) =>
     .map(([name, token]) => `  --color-${name}: ${token.$value};`)
     .join('\n');
 
+// The revised theme (v2, KBC-124) is the default: no data-theme, "auto" (not chosen) and
+// "revised". "system" follows the operating system between light and dark (v1's automatic).
 const css = `/* Generated from tokens.json by scripts/tokens.mjs — do not edit by hand. */
 :root,
-[data-theme='light'] {
+[data-theme='revised'] {
+${declarations('revised')}
+}
+
+[data-theme='light'],
+[data-theme='system'] {
 ${declarations('light')}
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']):not([data-theme='esoteric']) {
+  [data-theme='system'] {
 ${declarations('dark').replace(/^/gm, '  ')}
   }
 }

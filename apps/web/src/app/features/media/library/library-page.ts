@@ -100,6 +100,11 @@ import { LibraryRow, type RowAction } from './library-row.js';
 import { LibrarySearchResults } from './library-search-results.js';
 import { NearEnd } from './near-end.js';
 import { PlayNow } from './play-now.js';
+import { UiBanner } from '@ui/banner.js';
+import { UiButton, UiIconButton } from '@ui/button.js';
+import { UiCover } from '@ui/cover.js';
+import { UiEmptyState } from '@ui/empty-state.js';
+import { UiIcon } from '@ui/icon.js';
 
 /** "Buscar na biblioteca" waits this long after the last key (T16). */
 export const SEARCH_DEBOUNCE_MS = 200;
@@ -143,7 +148,8 @@ interface MorePages {
 }
 
 /**
- * "Biblioteca" (screens.md T16, KBC-051): only the media, Spotify-like. "Continuar ouvindo"
+ * "Biblioteca" (screens.md T16, KBC-051; v2 KBC-128): only the media, as a playlist — the
+ * header with its cover, the green ▶, "Precisa da sua atenção", the track table or the grid. "Continuar ouvindo"
  * resumes in one click, "Ouvidas recentemente" shows the last plays, and "Todas" holds the
  * media of the selected collection (KBC-091), or of all of them by choice, with chips,
  * search, order, list or grid and "Marcar como ouvida". The choices go to the account.
@@ -161,6 +167,12 @@ interface MorePages {
     NearEnd,
     QueueSummary,
     TrackGroup,
+    UiBanner,
+    UiButton,
+    UiCover,
+    UiEmptyState,
+    UiIcon,
+    UiIconButton,
     UploadPanel,
   ],
   templateUrl: './library-page.html',
@@ -523,6 +535,42 @@ export class LibraryPage {
   protected readonly playingId = computed(() =>
     this.engine.playing() ? (this.engine.source()?.id ?? null) : null,
   );
+  /** The header's line: where the list is and what it holds (v2 media-library). */
+  protected readonly headerMeta = computed(() => {
+    const topic = this.choices()?.filters.topic ?? null;
+    const where = topic
+      ? (this.titles().get(topic) ?? topic)
+      : $localize`:@@library.allCollections:Todos os acervos`;
+    const count = this.countText();
+    return count ? `${where} · ${count}` : where;
+  });
+  /** What the green ▶ plays: the first ready media of the list on screen. */
+  protected readonly firstPlayable = computed(
+    () => this.items().find((item) => item.status === 'ready') ?? null,
+  );
+  /** A media of the list is playing: the green ▶ pauses it. */
+  private readonly playingItem = computed(() => {
+    const id = this.playingId();
+    return id === null
+      ? null
+      : (this.items().find((item) => item.id === id) ?? null);
+  });
+  protected readonly listPlaying = computed(() => this.playingItem() !== null);
+  protected readonly playAllLabel = computed(() =>
+    this.listPlaying()
+      ? $localize`:@@library.pauseList:Pausar a lista`
+      : $localize`:@@library.playList:Tocar a primeira da lista`,
+  );
+  protected readonly nothingFoundTitle = computed(() =>
+    this.filtered()
+      ? $localize`:@@library.filtersEmpty:Nenhuma mídia com estes filtros.`
+      : $localize`:@@library.collectionEmpty:Nenhuma mídia neste acervo.`,
+  );
+  protected readonly nothingFoundText = computed(() =>
+    this.filtered()
+      ? ''
+      : $localize`:@@library.collectionEmptyText:Quando alguém enviar um áudio para este acervo, ele aparece aqui.`,
+  );
 
   constructor() {
     this.followCollection();
@@ -684,6 +732,12 @@ export class LibraryPage {
 
   protected play(item: MediaItem): void {
     this.playNow.play(item);
+  }
+
+  /** The header's ▶: pauses what of this list plays, or plays its first ready media. */
+  protected playAll(): void {
+    const item = this.playingItem() ?? this.firstPlayable();
+    if (item) this.playNow.play(item);
   }
 
   /* ---------- Choices (BR-7) ---------- */

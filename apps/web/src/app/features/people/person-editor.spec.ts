@@ -1,4 +1,5 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { ApplicationRef, provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { DEFAULT_PERSON_AI, type Person } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { TOPICS, aTopic } from '../../testing/fixtures.js';
@@ -62,6 +63,34 @@ async function renderEditor(person: Person) {
   });
   return { changed };
 }
+
+describe('PersonEditor: the tabs by keyboard (KBC-132 FR-2, APG Tabs)', () => {
+  const settle = () => TestBed.inject(ApplicationRef).whenStable();
+
+  it('moves the choice and the focus with the arrows, Home and End', async () => {
+    await renderEditor(ana());
+    const access = screen.getByRole('tab', { name: 'Acessos' });
+    const ai = screen.getByRole('tab', { name: 'IA e limites' });
+    access.focus();
+    fireEvent.keyDown(access, { key: 'ArrowRight' });
+    await settle();
+    expect(ai.getAttribute('aria-selected')).toBe('true');
+    expect(ai.getAttribute('tabindex')).toBe('0');
+    expect(document.activeElement).toBe(ai);
+    // Past the last tab, back to the first.
+    fireEvent.keyDown(ai, { key: 'ArrowRight' });
+    await settle();
+    expect(access.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(access);
+    fireEvent.keyDown(access, { key: 'End' });
+    await settle();
+    expect(document.activeElement).toBe(ai);
+    fireEvent.keyDown(ai, { key: 'Home' });
+    await settle();
+    expect(document.activeElement).toBe(access);
+    expect(access.getAttribute('aria-selected')).toBe('true');
+  });
+});
 
 describe('PersonEditor: "Nível em <acervo>" (T9, KBC-103 FR-3)', () => {
   it('BR-5: offers the levels of each collection with levels she reaches, the lowest by default', async () => {

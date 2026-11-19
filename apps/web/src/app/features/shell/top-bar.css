@@ -1,0 +1,134 @@
+/* The v2 top bar (56): three columns, the search in the middle. */
+:host {
+  display: grid;
+  grid-template-columns: 1fr minmax(0, auto) 1fr;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--shell-topbar);
+  padding: 0 var(--space-2);
+}
+
+.start,
+.end {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.end {
+  justify-content: flex-end;
+  gap: var(--space-4);
+}
+
+.center {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.home {
+  color: var(--color-text-muted);
+}
+
+.home:hover {
+  color: var(--color-text);
+  transform: scale(1.04);
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: min(30rem, 38vw);
+  min-height: 3rem;
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.search:hover {
+  background: color-mix(in srgb, var(--color-surface) 85%, var(--color-text));
+}
+
+.search:focus-within {
+  border-color: var(--color-text);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--text-item);
+}
+
+.search input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.search input:focus {
+  outline: none;
+}
+
+.search input::-webkit-search-cancel-button {
+  filter: grayscale(1);
+}
+
+.divider {
+  width: 1px;
+  height: 1.5rem;
+  background: var(--overlay-4);
+}
+
+.people {
+  position: relative;
+}
+
+.dot {
+  position: absolute;
+  top: 0.125rem;
+  right: 0.125rem;
+  width: 0.5625rem;
+  height: 0.5625rem;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
+::ng-deep .avatar-trigger {
+  border-radius: var(--radius-pill);
+}
+
+.avatar-ring {
+  display: inline-flex;
+  padding: 0.25rem;
+  border: 1px solid var(--overlay-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-shell);
+}
+
+.avatar-ring:hover {
+  transform: scale(1.04);
+}
+
+.who {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.who-name {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.who-email {
+  overflow: hidden;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

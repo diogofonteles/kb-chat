@@ -293,3 +293,31 @@ export const listenerTest = base.extend<{ page: Page }>({
     await page.context().close();
   },
 });
+
+/** The library's "Ver como" choice (KBC-128 FR-3): in the order's menu, a sheet on a phone. */
+export type LibraryView = 'Lista' | 'Grade';
+
+async function openLibraryViews(page: Page) {
+  await page.getByRole('button', { name: /^Ordenar:/ }).click();
+  return page
+    .getByRole('group', { name: 'Ver como' })
+    .getByRole('menuitemradio');
+}
+
+/** Switches the library to the list or the grid through its menu. */
+export async function chooseLibraryView(page: Page, view: LibraryView) {
+  const items = await openLibraryViews(page);
+  await items.filter({ hasText: view }).click();
+  await expect(page.getByRole('menu')).toHaveCount(0);
+}
+
+/** The view the menu says is on (aria-checked), then the menu closed again. */
+export async function expectLibraryView(page: Page, view: LibraryView) {
+  const items = await openLibraryViews(page);
+  await expect(items.filter({ hasText: view })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toHaveCount(0);
+}

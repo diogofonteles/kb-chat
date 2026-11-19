@@ -1,4 +1,4 @@
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -30,6 +30,12 @@ import { mixReferences, passageKey } from './references.js';
 import { ResultCard, type OpenedHit } from './result-card.js';
 import { describeMediaCount, describeResultCount } from './result-count.js';
 import { SearchLevelChange } from './search-level-change.js';
+import { UiButton } from '@ui/button.js';
+import { UiEmptyState } from '@ui/empty-state.js';
+import { UiPill } from '@ui/pill.js';
+
+/** Each message's own ids (its column headings). */
+let nextMessage = 0;
 
 /** A spoken passage opened, with its place among the results (KBC-039 FR-4). */
 export interface OpenedPassage {
@@ -37,7 +43,12 @@ export interface OpenedPassage {
   readonly position: number;
 }
 
-/** The system's answer to one question: summary, filters, cards and every state (screens.md T2). */
+/**
+ * The system's answer to one question: summary, filters, cards and every state (screens.md
+ * T2). v2 (KBC-126 FR-2): a search page, "Resultados para “…”" with the count, the mode and
+ * the time, the first result as the "Melhor resultado" card (BR-4: the order is the
+ * search's) and the others in the "Documentos" table.
+ */
 @Component({
   selector: 'app-result-message',
   imports: [
@@ -46,7 +57,11 @@ export interface OpenedPassage {
     KindsChoice,
     FilterBar,
     DecimalPipe,
+    NgTemplateOutlet,
     SearchLevelChange,
+    UiButton,
+    UiEmptyState,
+    UiPill,
   ],
   templateUrl: './result-message.html',
   styleUrl: './result-message.css',
@@ -145,6 +160,22 @@ export class ResultMessage {
   );
   protected readonly refreshing = computed(
     () => this.message().status === 'loading' && this.response() !== null,
+  );
+
+  /** The first of the search's own order (BR-4) and the rest, for the table. */
+  protected readonly best = computed(() => this.references()[0] ?? null);
+  protected readonly rest = computed(() => this.references().slice(1));
+  private readonly messageId = nextMessage++;
+  protected readonly headingId = (part: string) =>
+    `results-${this.messageId}-${part}`;
+  protected readonly skeletonRows = [0, 1, 2, 3, 4];
+  protected readonly emptyTitle = computed(
+    () =>
+      $localize`:@@message.empty:Nada encontrado para "${this.message().question}:question:".`,
+  );
+  protected readonly emptyFilteredTitle = computed(
+    () =>
+      $localize`:@@message.emptyFiltered:Nada encontrado para "${this.message().question}:question:" com estes filtros.`,
   );
 
   protected readonly passageKey = passageKey;

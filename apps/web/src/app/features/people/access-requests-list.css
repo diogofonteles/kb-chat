@@ -1,21 +1,29 @@
+/* Pending requests as cards, "Precisa da sua atenção" (KBC-132): Aprovar in green, Recusar apart. */
 :host {
   display: block;
 }
 
 .requests {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .title {
   margin: 0;
-  font-size: var(--text-md);
-  font-weight: 600;
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.kicker {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
 }
 
 .list {
   display: grid;
-  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -23,84 +31,70 @@
 
 .request {
   display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  align-content: start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
 }
 
 .who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.who-text {
   display: grid;
-  gap: var(--space-1);
+  gap: 0.125rem;
   min-width: 0;
 }
 
 .name {
-  font-weight: 600;
+  font-size: var(--text-item);
+  font-weight: 700;
   overflow-wrap: anywhere;
 }
 
 .detail {
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   overflow-wrap: anywhere;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
-.confirm,
 .error {
   margin: 0;
-}
-
-.error {
   color: var(--color-danger);
+  font-size: var(--text-sm);
 }
 
-.primary,
-.secondary,
-.danger,
-.link {
-  min-height: var(--target);
-  padding: 0 var(--space-6);
-  border-radius: var(--radius-sm);
-  font: inherit;
-  cursor: pointer;
+.confirm-text {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
 }
 
-.primary {
-  border: 0;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-weight: 600;
+.footer-actions {
+  display: contents;
 }
 
-.secondary {
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
-}
-
-.danger {
-  border: 1px solid var(--color-danger);
-  background: var(--color-surface);
-  color: var(--color-danger);
-  font-weight: 600;
-}
-
-.link {
-  border: 0;
-  background: transparent;
-  color: var(--color-text);
-  text-decoration: underline;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: default;
+@media (max-width: 1023px) {
+  .list {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

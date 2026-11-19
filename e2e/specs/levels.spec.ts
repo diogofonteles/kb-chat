@@ -9,6 +9,8 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { chooseCollectionSlug } from './shell-helpers.js';
+import { openPeople } from './settings-helpers.js';
 
 /**
  * KBC-103 (ADR 0036, screens.md T24, T9, T3, T4): a master builds the scale of a collection,
@@ -39,7 +41,7 @@ async function sidebar(page: Page): Promise<Locator> {
   if (!desktop(page) && !(await drawer.isVisible()))
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
   return desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
+    ? page.getByRole('complementary', { name: 'Sua biblioteca' })
     : drawer;
 }
 
@@ -132,9 +134,7 @@ async function place(
 /** T9: the member's "Nível em <acervo>" shows CI. */
 async function seePersonLevel(page: Page, title: string, email: string) {
   await page.goto('/');
-  const side = await sidebar(page);
-  await side.getByRole('button', { name: /Pessoas e permissões/ }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
+  const dialog = await openPeople(page);
   await dialog.getByRole('button', { name: new RegExp(email) }).click();
   const select = dialog.getByRole('combobox', { name: `Nível em ${title}` });
   await expect(select).toHaveValue('ci');
@@ -145,12 +145,7 @@ async function seePersonLevel(page: Page, title: string, email: string) {
 /** T3: the master opens the CDC document, sees its badge and moves it to CI. */
 async function changeOnPanel(page: Page, slug: string): Promise<void> {
   await page.goto('/');
-  const select = (await sidebar(page)).getByRole('combobox', {
-    name: 'Acervo',
-    exact: true,
-  });
-  await select.selectOption(slug);
-  if (!desktop(page)) await page.keyboard.press('Escape');
+  await chooseCollectionSlug(page, slug);
   // The master researches here as before (BR-10); the badge is on the search's documents.
   await page.getByRole('radio', { name: 'Buscar documentos' }).check();
   await searchFor(page, 'orvalho');
@@ -296,7 +291,7 @@ function storedAnswer(slug: string, question: string) {
 async function openFromHistory(page: Page, question: string): Promise<void> {
   const side = await sidebar(page);
   await side
-    .getByRole('navigation', { name: 'Histórico' })
+    .getByRole('navigation', { name: 'Conversas' })
     .getByRole('button', { name: new RegExp(question) })
     .click();
 }

@@ -3,16 +3,27 @@
 // In process, over a synthetic enlarged collection whose texts use the words of the 20 real
 // questions of the latency fitness function (`latency-queries.ts`), ranked by a deterministic
 // in-memory index (CI has no QMD; QMD's own time per call is added on top of the app's).
-// (With --qmd, the recall column is an upper bound, see qmdIndexes.)
 // Oracle: the same member's search with an unlimited budget (every hit, filtered by the
 // view), the master's ranking restricted to what the member sees.
 // With `--qmd <index>` the same searches run on a real `qmd mcp` over a named QMD index of the
 // same texts (written by `--write-vault <dir>`, then `qmd --index <index> collection add
 // <dir>/hermetismo --name hermetismo` and `qmd --index <index> embed`), so QMD's own time and
-// the deeper call are measured too.
+// the deeper call are measured too; `--qmd-bin <path>` runs another qmd than the one on PATH
+// (e.g. one patched by deploy/qmd/candidates-per-subsearch.mjs, KBC-120). The oracle is then
+// QMD's own ranking of every text (limit and candidateLimit = all texts): a true oracle only on
+// a patched QMD (a stock one caps it at 20 hits per sub-search, and every recall reads 1), so
+// `--oracle-bin <path>` takes the oracle from another qmd (the patched one, to measure a stock
+// QMD against the whole ranking).
+// `--top10-out <file.json>` saves the 100 % slice's first pages; `--same-as <file.json>` counts
+// how many of the exact and semantic ones are identical to a saved run (KBC-120 BR-2: whoever
+// sees everything keeps those; the hybrid mode now matches the fusion over every text).
+// Verdict (KBC-120, revised 2026-11-16): recall@10 per slice as NFR-1, ≥ 0.95 for the 100 %
+// slice in the hybrid mode, and p95 ≤ 250 ms in every slice and mode.
 // Usage: tsx src/scripts/levels-recall.ts [--texts 4000] [--runs 3] [--out <file.md>]
-//          [--write-vault <dir>] [--qmd <index>]
-import { mkdirSync, writeFileSync } from 'node:fs';
+//          [--write-vault <dir>] [--qmd <index>] [--qmd-bin <path>] [--oracle-bin <path>]
+//          [--top10-out <file.json>] [--same-as <file.json>]
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { QmdMcpAdapter } from '../adapters/qmd-mcp-adapter.js';
 import type { SearchMode } from '@kb-chat/contracts';
@@ -41,6 +52,10 @@ const text = (name: string): string | undefined => {
 const OUT = text('--out');
 const WRITE_VAULT = text('--write-vault');
 const QMD_INDEX = text('--qmd');
+const QMD_BIN = text('--qmd-bin') ?? 'qmd';
+const ORACLE_BIN = text('--oracle-bin') ?? QMD_BIN;
+const TOP10_OUT = text('--top10-out');
+const SAME_AS = text('--same-as');
 const TEXTS = arg('--texts', 4_000);
 const RUNS = arg('--runs', 3);
 const TOPIC = 'hermetismo';
@@ -51,7 +66,12 @@ const NFR1: Readonly<Record<number, number>> = {
   0.2: 0.95,
   0.05: 0.9,
 };
-const NFR2_FACTOR = 1.25;
+/** Whoever sees all in the hybrid mode gets the fusion over every text too (KBC-120 BR-2). */
+const WHOLE_HYBRID_RECALL = 0.95;
+/** KBC-120 AC-2 (revised by the owner, 2026-11-16): one ceiling for every slice and mode. */
+const P95_CEILING_MS = 250;
+/** Modes whose 100 % first pages stay as the index ranks them (KBC-120 BR-2). */
+const SAME_MODES: readonly SearchMode[] = ['exact', 'semantic'];
 
 /** A stable number per text (FNV-1a). */
 function hashOf(text: string): number {
@@ -138,8 +158,11 @@ function indexOf(docs: ReadonlyMap<string, string>, unlimited: boolean) {
   };
 }
 
-/** How often the app asked the index and for how many candidates (the deeper call shows). */
-const calls = { count: 0, candidates: 0 };
+/**
+ * How often the app asked the index, for how many candidates and how deep per sub-search
+ * (the deeper call shows; a call with no depth counts the index's default as 0).
+ */
+const calls = { count: 0, candidates: 0, depth: 0 };
 
 function counted<
   T extends { search(query: IndexQuery): Promise<readonly IndexHit[]> },
@@ -147,6 +170,8 @@ function counted<
   const search = (query: IndexQuery) => {
     calls.count += 1;
     calls.candidates += query.limit;
+    calls.depth +=
+      query.depth === undefined ? 0 : Math.max(query.limit, query.depth);
     return index.search(query);
   };
   return Object.assign(Object.create(index) as T, { search });
@@ -232,10 +257,14 @@ interface Row {
   readonly visible: number;
   readonly recall: number;
   readonly p95: number;
-  /** Index calls and candidates asked, per search. */
+  /** Index calls, candidates asked and depth per sub-search (0: the index's own), per search. */
   readonly calls: number;
   readonly candidates: number;
+  readonly depth: number;
 }
+
+/** The 100 % slice's first page per mode and question (BR-2 of KBC-120). */
+const firstPages: Record<string, string[]> = {};
 
 /** The first answer and every run's time of one question. */
 async function timed(search: SearchService, asked: Asked) {
@@ -262,10 +291,8 @@ async function measure(
     const truth = await top10(searchers.oracle, { q, mode, view });
     const got = await timed(searchers.budgeted, { q, mode, view });
     samples.push(...got.samples);
-    // QMD's ranking is not the in-memory one: count how many of the page it fills.
-    hits += QMD_INDEX
-      ? Math.min(got.first.length, truth.length)
-      : truth.filter((id) => got.first.includes(id)).length;
+    if (share === 1) firstPages[`${mode}\t${q}`] = got.first;
+    hits += truth.filter((id) => got.first.includes(id)).length;
     wanted += truth.length;
   }
   const searches = LATENCY_QUERIES.length * RUNS;
@@ -276,6 +303,7 @@ async function measure(
     p95: p95(samples),
     calls: (calls.count - before.count) / searches,
     candidates: (calls.candidates - before.candidates) / searches,
+    depth: (calls.depth - before.depth) / searches,
   };
 }
 
@@ -298,21 +326,39 @@ async function sliceRows(
 }
 
 /**
- * The real QMD as the app calls it. QMD 2.8.3 cannot give an unlimited ranking (its `query`
- * tool takes 20 hits per sub-search whatever the limit), so the oracle stays the in-memory one
- * and the recall column is an upper bound: how much of the first page QMD's hits can fill.
+ * The real QMD as the app calls it. The oracle is QMD's own ranking of every text (the
+ * master's order, the same for every slice, so asked once per question and mode); only a
+ * QMD patched to size its sub-searches by `candidateLimit` gives it whole (KBC-120).
  */
-async function qmdIndexes(name: string, docs: ReadonlyMap<string, string>) {
-  const qmd = new QmdMcpAdapter({
-    command: 'qmd',
-    args: ['--index', name, 'mcp'],
-  });
-  await qmd.start();
-  return {
-    budgeted: qmd,
-    oracle: indexOf(docs, true),
-    close: () => qmd.close(),
+async function qmdIndexes(name: string) {
+  const open = async (command: string) => {
+    const adapter = new QmdMcpAdapter({
+      command,
+      args: ['--index', name, 'mcp'],
+    });
+    await adapter.start();
+    return adapter;
   };
+  const qmd = await open(QMD_BIN);
+  const whole = ORACLE_BIN === QMD_BIN ? qmd : await open(ORACLE_BIN);
+  const ranked = new Map<string, Promise<readonly IndexHit[]>>();
+  const oracle = {
+    status: () => 'ok' as const,
+    close: async () => undefined,
+    search: (query: IndexQuery): Promise<readonly IndexHit[]> => {
+      const key = `${query.collection}\t${query.mode}\t${query.q}`;
+      const known = ranked.get(key);
+      if (known) return known;
+      const all = whole.search({ ...query, limit: TEXTS, depth: TEXTS });
+      ranked.set(key, all);
+      return all;
+    },
+  };
+  const close = async () => {
+    await qmd.close();
+    if (whole !== qmd) await whole.close();
+  };
+  return { budgeted: qmd, oracle, close };
 }
 
 function memoryIndexes(docs: ReadonlyMap<string, string>) {
@@ -328,7 +374,7 @@ async function rowsOf(): Promise<Row[]> {
   const catalog = new CatalogRegistry(vault);
   await catalog.load();
   const indexes = QMD_INDEX
-    ? await qmdIndexes(QMD_INDEX, vault.docs)
+    ? await qmdIndexes(QMD_INDEX)
     : memoryIndexes(vault.docs);
   const searchers = {
     budgeted: new SearchService({
@@ -348,20 +394,21 @@ async function rowsOf(): Promise<Row[]> {
 function report(rows: readonly Row[]): { text: string; ok: boolean } {
   let ok = true;
   const lines = [
-    `| Modo | Fatia | Visível | Recall@10 | Limite | p95 (ms) | Limite p95 (ms) | Chamadas ao índice | Candidatos pedidos | Resultado |`,
-    `|---|---|---|---|---|---|---|---|---|---|`,
+    `| Modo | Fatia | Visível | Recall@10 | Limite | p95 (ms) | Limite p95 (ms) | Chamadas ao índice | Candidatos pedidos | Profundidade por sub-busca | Resultado |`,
+    `|---|---|---|---|---|---|---|---|---|---|---|`,
   ];
   for (const row of rows) {
-    const base = rows.find((one) => one.mode === row.mode && one.share === 1);
-    const recallMin = NFR1[row.share];
-    const p95Max =
-      row.share === 0.2 && base ? base.p95 * NFR2_FACTOR : undefined;
+    const recallMin =
+      row.share === 1 && row.mode === 'all'
+        ? WHOLE_HYBRID_RECALL
+        : NFR1[row.share];
     const pass =
       (recallMin === undefined || row.recall >= recallMin) &&
-      (p95Max === undefined || row.p95 <= p95Max);
+      row.p95 <= P95_CEILING_MS;
     ok &&= pass;
+    const depth = row.depth > 0 ? `${Math.round(row.depth)}` : 'do índice';
     lines.push(
-      `| ${row.mode} | ${row.share * 100} % | ${(row.visible * 100).toFixed(1)} % | ${row.recall.toFixed(3)} | ${recallMin ?? '—'} | ${row.p95.toFixed(2)} | ${p95Max?.toFixed(2) ?? '—'} | ${row.calls.toFixed(2)} | ${Math.round(row.candidates)} | ${pass ? 'OK' : 'FALHA'} |`,
+      `| ${row.mode} | ${row.share * 100} % | ${(row.visible * 100).toFixed(1)} % | ${row.recall.toFixed(3)} | ${recallMin ?? '—'} | ${row.p95.toFixed(2)} | ${P95_CEILING_MS} | ${row.calls.toFixed(2)} | ${Math.round(row.candidates)} | ${depth} | ${pass ? 'OK' : 'FALHA'} |`,
     );
   }
   return { text: lines.join('\n'), ok };
@@ -384,13 +431,37 @@ if (WRITE_VAULT) {
   process.exit(0);
 }
 const rows = await rowsOf();
-const { text: table, ok } = report(rows);
+const reported = report(rows);
+const table = reported.text;
+let ok = reported.ok;
+const qmdVersion = (bin: string): string =>
+  `${execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim()} em ${bin}`;
 const index = QMD_INDEX
-  ? `QMD 2.8.3 real (índice "${QMD_INDEX}", sem rerank)`
+  ? `QMD real ${qmdVersion(QMD_BIN)} (índice "${QMD_INDEX}", sem rerank; oráculo: o ranking de todos os textos pelo ${ORACLE_BIN === QMD_BIN ? 'mesmo QMD' : `QMD ${qmdVersion(ORACLE_BIN)}`})`
   : 'índice em memória determinístico';
 const header = `Coleção sintética: ${TEXTS} textos, ${index}, ${LATENCY_QUERIES.length} perguntas reais por modo, ${RUNS} medições por pergunta (p95 sobre ${LATENCY_QUERIES.length * RUNS}), Node ${process.version}, ${new Date().toISOString()}.`;
-process.stdout.write(
-  `${header}\n\n${table}\n\n${ok ? 'NFR-1 e NFR-2: OK' : 'NFR-1 ou NFR-2: FALHA'}\n`,
-);
+process.stdout.write(`${header}\n\n${table}\n\n`);
 if (OUT) writeFileSync(OUT, `${header}\n\n${table}\n`);
+if (TOP10_OUT) writeFileSync(TOP10_OUT, JSON.stringify(firstPages, null, 1));
+if (SAME_AS) {
+  const saved = JSON.parse(readFileSync(SAME_AS, 'utf8')) as Record<
+    string,
+    string[]
+  >;
+  const keys = Object.keys(firstPages);
+  const same = keys.filter(
+    (key) => JSON.stringify(saved[key]) === JSON.stringify(firstPages[key]),
+  );
+  for (const mode of SAME_MODES) {
+    const ofMode = keys.filter((key) => key.startsWith(`${mode}\t`));
+    const sameOfMode = ofMode.filter((key) => same.includes(key));
+    process.stdout.write(
+      `BR-2 ${mode}: ${sameOfMode.length}/${ofMode.length} first pages identical to ${SAME_AS}\n`,
+    );
+    ok &&= sameOfMode.length === ofMode.length;
+  }
+}
+process.stdout.write(
+  `${ok ? 'Recall, p95 e BR-2: OK' : 'Recall, p95 ou BR-2: FALHA'}\n`,
+);
 process.exit(ok ? 0 : 1);

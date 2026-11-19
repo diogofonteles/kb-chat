@@ -31,8 +31,10 @@ import {
 import { assignmentLabel } from '@features/house-ai/app-ai-labels.js';
 import { parseCap, parseDaily } from '@features/house-ai/number-fields.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
+import { THEME_CHOICES } from '@core/theme/theme-store.js';
 import { THEME_COPY, VIEW_COPY } from '@features/settings/provider-copy.js';
 import { collectionChoices, treeTitle } from '@core/topics/topic-tree.js';
+import { UiTablist } from '@ui/index.js';
 import { FEATURE_LABELS } from './feature-labels.js';
 import {
   CHOOSE_LEVEL,
@@ -70,8 +72,12 @@ let nextId = 0;
  * app AI and its limits, and the initial preferences. Presentational: each change goes up as
  * the whole preset; the invitation or the profile keeps it.
  */
+/** A page-unique id for each editor's tabs. */
+let presetEditors = 0;
+
 @Component({
   selector: 'app-invite-preset-editor',
+  imports: [UiTablist],
   templateUrl: './invite-preset-editor.html',
   styleUrls: ['./person-editor.css', './invite-preset-editor.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -82,6 +88,9 @@ export class InvitePresetEditor {
   /** The house default app AI (KBC-022), named in the "Padrão" option. */
   readonly defaultAppAi = input<AppAi | null>(null);
   readonly busy = input(false);
+  /** The parts of the preset as tabs (KBC-132): Acessos · IA e limites · Preferências iniciais. */
+  protected readonly tab = signal<'access' | 'ai' | 'prefs'>('access');
+  protected readonly tabsId = `preset-tabs-${(presetEditors += 1)}`;
   /**
    * The owner's subscriptions this invitation may lend (KBC-031); a profile never gets any,
    * so its editor keeps the default (none).
@@ -241,7 +250,7 @@ export class InvitePresetEditor {
     id,
     label: PROFILE_COPY[id].label(),
   }));
-  protected readonly themes = THEMES.map((id) => ({
+  protected readonly themes = THEME_CHOICES.map((id) => ({
     id,
     label: THEME_COPY[id](),
   }));

@@ -1,127 +1,182 @@
 @if (shows('view')) {
-  <fieldset class="providers">
-    <legend class="legend" i18n="@@prefs.view">
+  <fieldset class="group">
+    <legend class="group-title" i18n="@@prefs.view">
       Ao abrir a Nova Alexandria
     </legend>
-    @for (view of views; track view.value) {
-      <label
-        class="card"
-        [class.selected]="view.value === preferences().defaultView"
-      >
-        <input
-          type="radio"
-          name="pref-view"
-          class="radio"
-          [value]="view.value"
-          [checked]="view.value === preferences().defaultView"
-          (change)="setView(view.value)"
-        />
-        <span class="card-body">
-          <span class="card-title">{{ view.label }}</span>
-          <span class="card-hint">
-            @if (view.value === 'research') {
-              <ng-container i18n="@@prefs.viewResearchHint"
-                >Pergunte e a IA pesquisa o acervo e responde com as
-                fontes.</ng-container
-              >
-            } @else {
-              <ng-container i18n="@@prefs.viewSearchHint"
-                >Busca sem IA: cartões, filtros e o documento ao
-                lado.</ng-container
-              >
-            }
-          </span>
-        </span>
-      </label>
-    }
+    <div class="choices two">
+      @for (view of views; track view.value) {
+        <label class="choice-label">
+          <ui-choice-card
+            [title]="view.label"
+            [help]="view.help"
+            [icon]="view.icon"
+            [chosen]="view.value === preferences().defaultView"
+          >
+            <input
+              type="radio"
+              name="pref-view"
+              class="ui-radio choice-radio"
+              [value]="view.value"
+              [checked]="view.value === preferences().defaultView"
+              (change)="setView(view.value)"
+            />
+          </ui-choice-card>
+        </label>
+      }
+    </div>
   </fieldset>
 }
 
 @if (shows('profile')) {
-  <fieldset class="providers">
-    <legend class="legend" i18n="@@prefs.profile">
+  <fieldset class="group">
+    <legend class="group-title" i18n="@@prefs.profile">
       Pesquisa com IA, por padrão
     </legend>
-    @for (profile of profiles; track profile.value) {
-      <label
-        class="card"
-        [class.selected]="profile.value === preferences().researchProfile"
-      >
-        <input
-          type="radio"
-          name="pref-profile"
-          class="radio"
-          [value]="profile.value"
-          [checked]="profile.value === preferences().researchProfile"
-          (change)="setProfile(profile.value)"
-        />
-        <span class="card-body">
-          <span class="card-title">{{ profile.label }}</span>
-          <span class="card-hint">{{ profile.help }}</span>
-        </span>
-      </label>
-    }
+    <div class="choices three">
+      @for (profile of profiles; track profile.value) {
+        <label class="choice-label">
+          <ui-choice-card
+            [title]="profile.label"
+            [help]="profile.help"
+            [chosen]="profile.value === preferences().researchProfile"
+          >
+            <input
+              type="radio"
+              name="pref-profile"
+              class="ui-radio choice-radio"
+              [value]="profile.value"
+              [checked]="profile.value === preferences().researchProfile"
+              (change)="setProfile(profile.value)"
+            />
+          </ui-choice-card>
+        </label>
+      }
+    </div>
   </fieldset>
 }
 
 @if (shows('deepen')) {
-  <div class="field">
-    <label class="check">
-      <input
-        type="checkbox"
-        [checked]="preferences().autoDeepen"
-        (change)="setAutoDeepen(deepenBox.checked)"
-        aria-describedby="pref-deepen-hint"
-        #deepenBox
-      />
-      <span i18n="@@prefs.autoDeepen">Aprofundar automaticamente</span>
-    </label>
-    <p id="pref-deepen-hint" class="hint" i18n="@@prefs.autoDeepenHint">
-      Quando a pesquisa rápida não basta para responder pelo acervo, a IA
-      continua com a pesquisa profunda na mesma resposta. Com uma chave paga por
-      uso, isso usa o modelo profundo, que custa mais.
-    </p>
-  </div>
+  <ui-setting-row
+    i18n-label="@@prefs.autoDeepen"
+    label="Aprofundar automaticamente"
+    for="pref-deepen"
+    descriptionId="pref-deepen-hint"
+    i18n-description="@@prefs.autoDeepenHint"
+    description="Quando a pesquisa rápida não basta para responder pelo acervo, a IA continua com a pesquisa profunda na mesma resposta. Com uma chave paga por uso, isso usa o modelo profundo, que custa mais."
+  >
+    <input
+      #deepenBox
+      id="pref-deepen"
+      type="checkbox"
+      class="ui-switch"
+      [checked]="preferences().autoDeepen"
+      (change)="setAutoDeepen(deepenBox.checked)"
+      aria-describedby="pref-deepen-hint"
+    />
+  </ui-setting-row>
 }
 
 @if (shows('topic')) {
-  <div class="field">
-    <label class="field-label" for="pref-topic" i18n="@@prefs.topic"
-      >Acervo padrão</label
-    >
-    <select
-      id="pref-topic"
-      class="input"
-      #topicSelect
-      (change)="setTopic(topicSelect.value)"
-    >
-      <option
-        value=""
-        [selected]="!preferences().defaultTopic"
-        i18n="@@prefs.topicAuto"
-      >
-        O maior acervo
-      </option>
-      @for (topic of topics(); track topic.slug) {
-        <option
-          [value]="topic.slug"
-          [selected]="topic.slug === preferences().defaultTopic"
+  @if (wizard()) {
+    <fieldset class="group">
+      <legend class="visually-hidden" i18n="@@prefs.topic">
+        Acervo padrão
+      </legend>
+      <div class="choices covers">
+        <label
+          class="cover-choice"
+          [class.chosen]="!preferences().defaultTopic"
         >
-          {{ treeTitle(topic) }} ({{ topic.documentCount | number }})
+          <ui-cover icon="library" [size]="160" class="cover-art" />
+          <span class="cover-line">
+            <span class="cover-title" i18n="@@prefs.topicAuto"
+              >O maior acervo</span
+            >
+            <input
+              type="radio"
+              name="pref-topic"
+              class="ui-radio"
+              value=""
+              [checked]="!preferences().defaultTopic"
+              (change)="setTopic('')"
+            />
+          </span>
+        </label>
+        @for (topic of topics(); track topic.slug) {
+          <label
+            class="cover-choice"
+            [class.chosen]="topic.slug === preferences().defaultTopic"
+          >
+            <ui-cover
+              [title]="topic.title"
+              [size]="160"
+              [label]="false"
+              class="cover-art"
+            />
+            <span class="cover-line">
+              <span class="cover-title">{{ treeTitle(topic) }}</span>
+              <input
+                type="radio"
+                name="pref-topic"
+                class="ui-radio"
+                [value]="topic.slug"
+                [checked]="topic.slug === preferences().defaultTopic"
+                (change)="setTopic(topic.slug)"
+              />
+            </span>
+            <span
+              class="cover-meta"
+              i18n="@@prefs.topicCount"
+              >{topic.documentCount, plural,
+                =1 {1 documento}
+                other {{{ topic.documentCount | number }} documentos}
+              }</span
+            >
+          </label>
+        }
+      </div>
+    </fieldset>
+  } @else {
+    <ui-setting-row
+      i18n-label="@@prefs.topic"
+      label="Acervo padrão"
+      for="pref-topic"
+    >
+      <select
+        id="pref-topic"
+        class="ui-input select"
+        #topicSelect
+        (change)="setTopic(topicSelect.value)"
+      >
+        <option
+          value=""
+          [selected]="!preferences().defaultTopic"
+          i18n="@@prefs.topicAuto"
+        >
+          O maior acervo
         </option>
-      }
-    </select>
-  </div>
+        @for (topic of topics(); track topic.slug) {
+          <option
+            [value]="topic.slug"
+            [selected]="topic.slug === preferences().defaultTopic"
+          >
+            {{ treeTitle(topic) }} ({{ topic.documentCount | number }})
+          </option>
+        }
+      </select>
+    </ui-setting-row>
+  }
 }
 
 @if (shows('mode')) {
-  <div class="field">
-    <label class="field-label" for="pref-mode" i18n="@@prefs.mode"
-      >Como buscar, por padrão</label
-    >
+  <ui-setting-row
+    i18n-label="@@prefs.mode"
+    label="Como buscar, por padrão"
+    for="pref-mode"
+  >
     <select
       id="pref-mode"
-      class="input"
+      class="ui-input select"
       #modeSelect
       (change)="setMode(modeSelect.value)"
     >
@@ -134,28 +189,65 @@
         </option>
       }
     </select>
-  </div>
+  </ui-setting-row>
 }
 
 @if (shows('theme')) {
-  <div class="field">
-    <label class="field-label" for="pref-theme" i18n="@@prefs.theme"
-      >Tema</label
-    >
-    <select
-      id="pref-theme"
-      class="input"
-      #themeSelect
-      (change)="setTheme(themeSelect.value)"
-    >
-      @for (theme of themes; track theme.value) {
-        <option
-          [value]="theme.value"
-          [selected]="theme.value === preferences().theme"
-        >
-          {{ theme.label }}
-        </option>
-      }
-    </select>
-  </div>
+  @if (wizard()) {
+    <fieldset class="group">
+      <legend class="visually-hidden" i18n="@@prefs.theme">Tema</legend>
+      <div class="choices themes">
+        @for (theme of themes; track theme.value) {
+          <label
+            class="theme-choice"
+            [class.chosen]="theme.value === shownTheme()"
+          >
+            <!-- The preview draws the theme's own tokens (data-theme scopes them). -->
+            <span
+              class="preview"
+              aria-hidden="true"
+              [attr.data-theme]="theme.value"
+            >
+              <span class="preview-side"></span>
+              <span class="preview-main">
+                <span class="preview-line strong"></span>
+                <span class="preview-line"></span>
+                <span class="preview-line"></span>
+                <span class="preview-pill"></span>
+              </span>
+            </span>
+            <span class="cover-line">
+              <span class="cover-title">{{ theme.label }}</span>
+              <input
+                type="radio"
+                name="pref-theme"
+                class="ui-radio"
+                [value]="theme.value"
+                [checked]="theme.value === shownTheme()"
+                (change)="setTheme(theme.value)"
+              />
+            </span>
+          </label>
+        }
+      </div>
+    </fieldset>
+  } @else {
+    <ui-setting-row i18n-label="@@prefs.theme" label="Tema" for="pref-theme">
+      <select
+        id="pref-theme"
+        class="ui-input select"
+        #themeSelect
+        (change)="setTheme(themeSelect.value)"
+      >
+        @for (theme of themes; track theme.value) {
+          <option
+            [value]="theme.value"
+            [selected]="theme.value === shownTheme()"
+          >
+            {{ theme.label }}
+          </option>
+        }
+      </select>
+    </ui-setting-row>
+  }
 }

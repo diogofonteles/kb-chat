@@ -1,8 +1,11 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   computed,
+  effect,
+  inject,
   input,
   output,
   signal,
@@ -14,6 +17,7 @@ import {
   type CollectionSubjects,
   type SubjectRef,
 } from '@kb-chat/contracts';
+import { anchorOverlay } from '@ui/overlay.js';
 
 /** What a person picked: an existing subject or a name to create. */
 export type SubjectChoice =
@@ -50,12 +54,27 @@ export class SubjectPicker {
   readonly chosen = output<SubjectChoice>();
 
   private readonly field = viewChild<ElementRef<HTMLInputElement>>('field');
+  private readonly list = viewChild<ElementRef<HTMLElement>>('list');
   private readonly id = `subject-${nextId++}`;
   protected readonly inputId = `${this.id}-input`;
   protected readonly listId = `${this.id}-list`;
   protected readonly nameMax = SUBJECT_NAME_MAX;
 
   private returning = false;
+
+  constructor() {
+    // The open list rises to the top layer under the field (D5): no panel clips it.
+    let release: (() => void) | null = null;
+    effect(() => {
+      const list = this.list()?.nativeElement;
+      const field = this.field()?.nativeElement;
+      release?.();
+      release = null;
+      if (this.expanded() && list && field)
+        release = anchorOverlay(list, field, { matchWidth: true });
+    });
+    inject(DestroyRef).onDestroy(() => release?.());
+  }
 
   protected readonly text = signal('');
   protected readonly open = signal(false);

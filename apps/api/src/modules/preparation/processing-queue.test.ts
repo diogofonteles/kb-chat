@@ -120,6 +120,32 @@ describe('queueItemOf (KBC-090)', () => {
     expect(queueItemOf(converting).waitsForTranscriber).toBe(false);
   });
 
+  it('offers Groq only to a transcription waiting for the transcriber that Groq may take', () => {
+    const queued = [stage('transcribe', 'queued')];
+    const item = { id: 'a', title: 'Áudio', topic: 'udv', durationMs: 60_000 };
+    const off = facts({
+      stages: queued,
+      transcriberOn: () => false,
+      item: { ...item, canUseGroq: true },
+    });
+    expect(queueItemOf(off)).toMatchObject({
+      canUseGroq: true,
+      durationMs: 60_000,
+    });
+    // No key or not a master: the item says so.
+    expect(
+      queueItemOf({ ...off, item: { ...item, canUseGroq: false } }).canUseGroq,
+    ).toBe(false);
+    // The transcriber is on: it takes it, no need to pay.
+    expect(queueItemOf({ ...off, transcriberOn: () => true }).canUseGroq).toBe(
+      false,
+    );
+    // The voices wait: Groq does not separate them.
+    expect(
+      queueItemOf({ ...off, stages: [stage('speakers', 'queued')] }).canUseGroq,
+    ).toBe(false);
+  });
+
   it('retries a failed stage where it is', () => {
     const failed = stage('speakers', 'failed', {
       canRetry: true,

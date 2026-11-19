@@ -10,6 +10,7 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { makeMp3, uniqueTag, useTheme } from './media-helpers.js';
+import { chooseCollectionSlug, openMediaFromLibrary } from './shell-helpers.js';
 
 /** KBC-049: free authors per collection, with a main author (ADR 0030). */
 
@@ -57,9 +58,8 @@ async function memberOnMedia(
   await member.goto('/');
   const skip = member.getByRole('button', { name: 'Pular' });
   if (await skip.isVisible().catch(() => false)) await skip.click();
-  if (!desktop(member))
-    await member.getByRole('button', { name: 'Menu', exact: true }).click();
-  await member.getByRole('link', { name: 'Mídia' }).click();
+  // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
+  await openMediaFromLibrary(member);
   await expect(
     member.getByRole('heading', { name: new RegExp(`Mídia — ${udv.name}`) }),
   ).toBeVisible();
@@ -210,16 +210,13 @@ async function sidebar(page: Page): Promise<Locator> {
   if (!desktop(page) && !(await drawer.isVisible()))
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
   return desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
+    ? page.getByRole('complementary', { name: 'Sua biblioteca' })
     : drawer;
 }
 
 /** "Editar acervo" of `slug`, choosing its main author by name, checked with axe. */
 async function chooseMainAuthor(page: Page, slug: string, name: string) {
-  const panel = await sidebar(page);
-  await panel
-    .getByRole('combobox', { name: 'Acervo', exact: true })
-    .selectOption({ value: slug });
+  await chooseCollectionSlug(page, slug);
   const again = await sidebar(page);
   await again.getByRole('button', { name: 'Editar acervo' }).click();
   const dialog = page.getByRole('dialog', { name: 'Editar acervo' });

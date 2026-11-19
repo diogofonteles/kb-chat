@@ -7,13 +7,15 @@
   gap: var(--space-3);
 }
 
+/* v2 "Sobre" section (KBC-129): the time in a green pill, the note, then the actions. */
 h3 {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
   margin: 0;
-  font-family: var(--font-reading);
-  font-size: var(--text-lg);
+  font-family: var(--font-ui);
+  font-size: var(--text-item);
+  font-weight: 700;
 }
 
 .count {
@@ -26,6 +28,7 @@ h3 {
 .empty {
   margin: 0;
   color: var(--color-text-muted);
+  font-size: var(--text-meta);
 }
 
 .list {
@@ -43,25 +46,26 @@ h3 {
   align-items: center;
   gap: var(--space-1) var(--space-3);
   padding: var(--space-1) 0;
-  border-bottom: 1px solid var(--color-border);
 }
 
 .time {
-  min-width: 4.5rem;
+  min-width: 3.5rem;
   min-height: var(--target);
-  padding: 0 var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent-text);
   font: inherit;
-  font-weight: 600;
+  font-size: var(--text-meta);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 
 .note {
   margin: 0;
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 
@@ -88,18 +92,32 @@ h3 {
   min-height: var(--target);
   padding: 0 var(--space-3);
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--color-text);
+  color: var(--color-text-muted);
   font: inherit;
+  font-size: var(--text-meta);
+  font-weight: 700;
   cursor: pointer;
 }
 
 .actions button:hover,
 .edit button:hover,
 .undo button:hover {
-  border-color: var(--color-border);
-  background: var(--color-surface-muted);
+  background: var(--overlay-2);
+  color: var(--color-text);
+}
+
+@media (min-width: 1024px) {
+  .time {
+    min-height: 1.75rem;
+  }
+
+  .actions button,
+  .edit button,
+  .undo button {
+    min-height: 2rem;
+  }
 }
 
 .edit {
@@ -113,9 +131,9 @@ h3 {
   min-width: 0;
   min-height: var(--target);
   padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-menu);
+  background: var(--overlay-3);
   color: var(--color-text);
   font: inherit;
 }
@@ -127,13 +145,13 @@ h3 {
   justify-content: space-between;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
 }
 
 .undo button {
-  border-color: var(--color-border);
-  font-weight: 600;
+  border-color: var(--overlay-4);
+  color: var(--color-text);
 }
 
 @media (max-width: 599px) {

@@ -19,6 +19,10 @@ import {
 } from '@core/api/api-error.js';
 import { AccessApi } from '@core/auth/access-api.js';
 import type { Observable } from 'rxjs';
+import { UiBanner } from '@ui/banner.js';
+import { UiButton } from '@ui/button.js';
+import { UiCodeInput } from '@ui/code-input.js';
+import { UiIcon } from '@ui/icon.js';
 import {
   codeError,
   digitsOf,
@@ -31,6 +35,8 @@ import {
 type Step = 'form' | 'code' | 'done';
 type Field = 'email' | 'firstName' | 'lastName' | 'phone';
 type Errors = Partial<Record<Field | 'code', string>>;
+/** The fields in screen order: the first wrong one takes the focus. */
+const FIELDS: readonly Field[] = ['email', 'firstName', 'lastName', 'phone'];
 
 const failureOf = (code: UiErrorCode): string =>
   code === 'ALREADY_INVITED'
@@ -43,6 +49,7 @@ const failureOf = (code: UiErrorCode): string =>
  */
 @Component({
   selector: 'app-sign-up-form',
+  imports: [UiBanner, UiButton, UiCodeInput, UiIcon],
   templateUrl: './sign-up-form.html',
   styleUrl: './login-form.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -53,8 +60,24 @@ export class SignUpForm {
   private readonly injector = inject(Injector);
   readonly back = output();
 
-  private readonly codeInput =
-    viewChild<ElementRef<HTMLInputElement>>('codeInput');
+  private readonly codeInput = viewChild(UiCodeInput);
+  private readonly emailInput =
+    viewChild<ElementRef<HTMLInputElement>>('emailInput');
+  private readonly firstNameInput =
+    viewChild<ElementRef<HTMLInputElement>>('firstNameInput');
+  private readonly lastNameInput =
+    viewChild<ElementRef<HTMLInputElement>>('lastNameInput');
+  private readonly phoneInput =
+    viewChild<ElementRef<HTMLInputElement>>('phoneInput');
+  private readonly fields: Record<
+    Field,
+    () => ElementRef<HTMLInputElement> | undefined
+  > = {
+    email: this.emailInput,
+    firstName: this.firstNameInput,
+    lastName: this.lastNameInput,
+    phone: this.phoneInput,
+  };
   private readonly title = viewChild<ElementRef<HTMLElement>>('title');
 
   constructor() {
@@ -95,13 +118,18 @@ export class SignUpForm {
       phone: phoneError(phone),
     };
     this.errors.set(errors);
-    if (Object.values(errors).some(Boolean)) return;
+    const firstWrong = FIELDS.find((field) => errors[field]);
+    if (firstWrong) {
+      // The first field with an error takes the focus (KBC-124 AC-5).
+      this.fields[firstWrong]()?.nativeElement.focus();
+      return;
+    }
     this.run(
       this.api.signUp({ email: email.trim(), firstName, lastName, phone }),
       () => {
         this.step.set('code');
         this.code.set('');
-        afterNextRender(() => this.codeInput()?.nativeElement.focus(), {
+        afterNextRender(() => this.codeInput()?.focus(), {
           injector: this.injector,
         });
       },

@@ -10,6 +10,8 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { account } from './shell-helpers.js';
+import { settingsPage } from './settings-helpers.js';
 
 /**
  * KBC-014: ask for access (form or Google), a master decides, and an approved person signs
@@ -20,7 +22,7 @@ const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 async function sidebar(page: Page): Promise<Locator> {
   if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
   return desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
+    ? page.getByRole('complementary', { name: 'Sua biblioteca' })
     : page.getByRole('dialog', { name: 'Menu' });
 }
 
@@ -36,11 +38,14 @@ async function shoot(page: Page, name: string): Promise<void> {
 /** The owner's "Pessoas e permissões", opened from the sidebar entry with the badge. */
 async function openPeople(owner: Page): Promise<Locator> {
   await owner.goto('/');
-  const side = await sidebar(owner);
+  // v2 (KBC-125): the top bar's button on desktop, the Menu's entry on a phone.
+  const side = desktop(owner)
+    ? owner.locator('app-top-bar')
+    : await sidebar(owner);
   const entry = side.getByRole('button', { name: /Pessoas e permissões/ });
   await expect(entry).toHaveAccessibleName(/solicita(ção|ções) pendentes?/);
   await entry.click();
-  return owner.getByRole('dialog', { name: 'Configurações' });
+  return settingsPage(owner);
 }
 
 const requestItem = (dialog: Locator, email: string) =>
@@ -87,7 +92,9 @@ test.describe('without a session', () => {
     await expect(
       page.getByText('Se o e-mail puder ser usado, enviamos um código'),
     ).toBeVisible();
-    await page.getByLabel('Código').fill(await codeSentTo(page.request, email));
+    await page
+      .getByLabel('Dígito 1 de 6')
+      .fill(await codeSentTo(page.request, email));
     await page.getByRole('button', { name: 'Confirmar' }).click();
     await expect(page.getByText(/Solicitação enviada/)).toBeVisible();
     await shoot(page, 'signup-done');
@@ -119,15 +126,15 @@ test.describe('without a session', () => {
     await page.getByRole('button', { name: 'Enviar código' }).click();
     await shoot(page, 'code-sent');
     const code = await codeSentTo(page.request, email, 2);
-    await page.getByLabel('Código').fill(code);
+    await page.getByLabel('Dígito 1 de 6').fill(code);
     await page.getByRole('button', { name: 'Entrar' }).click();
     // Approved with the invite defaults: signed in, search on no collection yet (BR-6).
     await expect(
       page.getByText('Nenhum acervo foi liberado para você ainda'),
     ).toBeVisible();
     await shoot(page, 'signed-in-with-code');
-    const side = await sidebar(page);
-    await expect(side.getByText(email)).toBeVisible();
+    // v2 (KBC-125): the account is named in the avatar menu (desktop) or the phone's Menu.
+    await expect((await account(page)).getByText(email)).toBeVisible();
   });
 
   test('Google without an invite → "Solicitar acesso" → pending for the masters', async ({
@@ -182,10 +189,20 @@ test('a master refuses a request, and the person is told when to ask again', asy
   const dialog = await openPeople(page);
   const item = requestItem(dialog, email);
   await item.getByRole('button', { name: 'Recusar' }).click();
+  // The refusal asks first, in a modal (KBC-132 FR-4).
+  const confirm = page.getByRole('dialog', {
+    name: /^Recusar a solicitação de /,
+  });
   await expect(
-    item.getByText(/só poderá pedir de novo em 24 horas/),
+    confirm.getByText(/só poderá pedir de novo em 24 horas/),
   ).toBeVisible();
+  await shoot(page, 'refuse-request');
+  // KBC-132 AC-2: "Cancelar" changes nothing.
+  await confirm.getByRole('button', { name: 'Cancelar' }).click();
+  await expect(confirm).toBeHidden();
+  await expect(item).toBeVisible();
   await item.getByRole('button', { name: 'Recusar' }).click();
+  await confirm.getByRole('button', { name: 'Recusar' }).click();
   await expect(requestItem(dialog, email)).toHaveCount(0);
 
   const context = await browser.newContext({

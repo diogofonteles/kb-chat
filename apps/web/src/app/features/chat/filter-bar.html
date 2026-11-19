@@ -5,7 +5,7 @@
     [attr.aria-labelledby]="barId + '-authorship'"
   >
     <span
-      class="authorship-title"
+      class="visually-hidden"
       [id]="barId + '-authorship'"
       i18n="@@filters.authorship"
       >Autoria</span
@@ -27,7 +27,7 @@
         />
         <span class="segment-text">
           @if (option.selected) {
-            <span class="check" aria-hidden="true">✓</span>
+            <ui-icon class="check" name="check" [size]="14" />
           }
           @if (option.mestre) {
             <span class="mark" aria-hidden="true">✦</span>
@@ -38,6 +38,7 @@
       </label>
     }
   </div>
+  <span class="divider" aria-hidden="true"></span>
   <div
     class="bar"
     role="group"
@@ -52,7 +53,7 @@
             type="button"
             class="chip"
             [attr.data-facet]="group.key"
-            [class.on]="group.selectedCount > 0"
+            [class.on]="group.selectedCount > 0 || openKey() === group.key"
             [attr.aria-expanded]="openKey() === group.key"
             [attr.aria-controls]="
               openKey() === group.key ? 'facet-' + group.key : null
@@ -64,20 +65,23 @@
             @if (group.selectedCount > 0) {
               <span>({{ group.selectedCount }})</span>
             }
-            <span aria-hidden="true">▾</span>
+            <ui-icon name="chevDown" [size]="14" />
           </button>
           @if (openKey() === group.key) {
             <div
               class="popover"
+              [uiOverlay]="chip"
               [id]="'facet-' + group.key"
               role="group"
               [attr.aria-label]="group.title"
               (keydown.escape)="closePopover(chip)"
             >
+              <p class="popover-title" aria-hidden="true">{{ group.title }}</p>
               @for (option of visibleOptions(group); track option.value) {
-                <label class="option">
+                <label class="option" [class.on]="option.selected">
                   <input
                     type="checkbox"
+                    class="ui-check"
                     [checked]="option.selected"
                     (change)="toggle(group.key, option.value)"
                   />
@@ -95,6 +99,19 @@
                   Ver todos ({{ group.options.length }})
                 </button>
               }
+              @if (group.selectedCount > 0) {
+                <div class="popover-foot">
+                  <button
+                    uiButton="ghost"
+                    size="sm"
+                    type="button"
+                    (click)="clearFacet(group.key, chip)"
+                    i18n="@@filters.clearFacet"
+                  >
+                    Limpar
+                  </button>
+                </div>
+              }
             </div>
           }
         </div>
@@ -104,45 +121,72 @@
       #sheetButton
       type="button"
       class="chip sheet-button"
+      [class.on]="activeCount() > 0"
       (click)="openSheet()"
     >
+      <ui-icon name="filter" [size]="14" />
       <span i18n="@@filters.open">Filtros</span>
       @if (activeCount() > 0) {
         <span>({{ activeCount() }})</span>
       }
     </button>
-    @if (hiddenOffTopic() > 0) {
-      <span
-        class="hidden-note"
-        i18n="@@filters.hiddenOffTopic"
-        >{hiddenOffTopic(), plural,
-          =1 {1 oculto (fora do tema)}
-          other {{{ hiddenOffTopic() }} ocultos (fora do tema)}
-        }</span
-      >
-    }
   </div>
 </div>
 
 @if (active().length > 0) {
-  <ul
-    class="active"
-    aria-label="Filtros ativos"
-    i18n-aria-label="@@filters.active"
-  >
-    @for (filter of active(); track filter.label) {
-      <li>
-        <button
-          type="button"
-          class="active-chip"
-          (click)="remove(filter)"
-          [attr.aria-label]="filter.removeLabel"
-        >
-          {{ filter.label }} <span aria-hidden="true">×</span>
-        </button>
-      </li>
-    }
-  </ul>
+  <div class="active-row">
+    <ul
+      class="active"
+      aria-label="Filtros ativos"
+      i18n-aria-label="@@filters.active"
+    >
+      @for (filter of active(); track filter.label) {
+        <li>
+          <button
+            type="button"
+            class="active-chip"
+            (click)="remove(filter)"
+            [attr.aria-label]="filter.removeLabel"
+          >
+            {{ filter.label }} <ui-icon name="close" [size]="14" />
+          </button>
+        </li>
+      }
+    </ul>
+    <button
+      uiButton="ghost"
+      size="sm"
+      type="button"
+      class="clear-all"
+      (click)="clearAll()"
+      i18n="@@filters.clearAll"
+    >
+      Limpar filtros
+    </button>
+  </div>
+}
+
+@if (hiddenOffTopic() > 0) {
+  <ui-banner class="hidden-banner" tone="info">
+    <span
+      class="hidden-note"
+      i18n="@@filters.hiddenOffTopic"
+      >{hiddenOffTopic(), plural,
+        =1 {1 oculto (fora do tema)}
+        other {{{ hiddenOffTopic() }} ocultos (fora do tema)}
+      }</span
+    >
+    <button
+      uiBannerAction
+      uiButton="ghost"
+      size="sm"
+      type="button"
+      (click)="showOffTopic()"
+      i18n="@@filters.showOffTopic"
+    >
+      Mostrar
+    </button>
+  </ui-banner>
 }
 
 @if (sheetOpen()) {
@@ -152,6 +196,7 @@
     aria-labelledby="filters-sheet-title"
     (close)="sheetClosed()"
   >
+    <span class="handle" aria-hidden="true"></span>
     <header class="sheet-head">
       <h2 id="filters-sheet-title" i18n="@@filters.sheetTitle">Filtros</h2>
       @if (hiddenOffTopic() > 0) {
@@ -173,6 +218,7 @@
             <label class="option">
               <input
                 type="checkbox"
+                class="ui-check"
                 [checked]="option.selected"
                 (change)="toggleDraft(group.key, option.value)"
               />
@@ -195,6 +241,7 @@
     </div>
     <footer class="sheet-foot">
       <button
+        uiButton="ghost"
         type="button"
         class="cancel"
         (click)="cancelSheet()"
@@ -203,12 +250,19 @@
         Cancelar
       </button>
       <button
+        uiButton="white"
         type="button"
         class="apply"
         (click)="applySheet()"
-        i18n="@@filters.apply"
       >
-        Aplicar
+        @if (draftCount(); as count) {
+          <span i18n="@@filters.applyCount">{count, plural,
+            =1 {Ver 1 resultado}
+            other {Ver {{ count }} resultados}
+          }</span>
+        } @else {
+          <span i18n="@@filters.applyResults">Ver resultados</span>
+        }
       </button>
     </footer>
   </dialog>

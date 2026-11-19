@@ -1,3 +1,4 @@
+import { UiIcon } from '@ui/index.js';
 import { DatePipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
@@ -37,7 +38,7 @@ interface StageLine {
  */
 @Component({
   selector: 'app-preparation-stage-list',
-  imports: [DatePipe],
+  imports: [DatePipe, UiIcon],
   templateUrl: './preparation-stages.html',
   styleUrls: ['./preparation-buttons.css', './preparation-stages.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,

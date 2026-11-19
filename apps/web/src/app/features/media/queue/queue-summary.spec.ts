@@ -3,11 +3,22 @@ import { provideRouter } from '@angular/router';
 import { render, screen } from '@testing-library/angular';
 import { describe, expect, it } from 'vitest';
 import { aQueueItem, MEDIA_ID } from '../../../testing/preparation-fixtures.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { ProcessingQueueStore } from './processing-queue-store.js';
 import { QueueSummary } from './queue-summary.js';
 
 const item = (n: number) =>
   aQueueItem({ mediaId: `${MEDIA_ID}${n}`, title: `Áudio ${n}` });
+
+/** The phone's single card: shown only on a phone, so not in the accessible tree here. */
+const phoneCard = () =>
+  screen
+    .getAllByRole('link', { hidden: true })
+    .find(
+      (link) =>
+        link.getAttribute('href') === '/fila' &&
+        link.textContent?.trim() !== 'Ver a fila',
+    );
 
 async function setup(items: ReturnType<typeof item>[], active: number) {
   return render(QueueSummary, {
@@ -16,8 +27,13 @@ async function setup(items: ReturnType<typeof item>[], active: number) {
       provideRouter([]),
       {
         provide: ProcessingQueueStore,
-        useValue: { items: signal(items), active: signal(active) },
+        useValue: {
+          items: signal(items),
+          active: signal(active),
+          refresh: () => undefined,
+        },
       },
+      { provide: SessionStore, useValue: { can: () => true } },
     ],
   });
 }
@@ -30,7 +46,9 @@ describe('QueueSummary (KBC-090)', () => {
 
   it('shows the first ones, how many more, and the way to the queue', async () => {
     await setup([item(1), item(2), item(3), item(4)], 2);
-    expect(screen.getByText('2 áudios em processamento')).toBeTruthy();
+    expect(
+      screen.getByRole('heading', { name: '2 áudios em processamento' }),
+    ).toBeTruthy();
     expect(screen.getByText('Áudio 3')).toBeTruthy();
     expect(screen.queryByText('Áudio 4')).toBeNull();
     expect(screen.getByText('e mais 1')).toBeTruthy();
@@ -55,11 +73,87 @@ describe('QueueSummary (KBC-090)', () => {
 
   it('counts one in the singular', async () => {
     await setup([item(1)], 1);
-    expect(screen.getByText('1 áudio em processamento')).toBeTruthy();
+    expect(
+      screen.getByRole('heading', { name: '1 áudio em processamento' }),
+    ).toBeTruthy();
   });
 
   it('says when only a person is awaited', async () => {
     await setup([item(1)], 0);
-    expect(screen.getByText('Áudios esperando por você')).toBeTruthy();
+    expect(screen.getByText('Precisa da sua atenção')).toBeTruthy();
+  });
+
+  it('gives each audio its state in a word and its direct action (KBC-128 FR-2)', async () => {
+    await setup(
+      [
+        { ...item(1), phase: 'attention', state: 'failed', action: null },
+        { ...item(2), waitsForTranscriber: true, action: null },
+        { ...item(3), phase: 'attention', action: 'validate', step: 3 },
+      ],
+      1,
+    );
+    expect(screen.getByText('Falhou')).toBeTruthy();
+    expect(screen.getByText('Aguardando')).toBeTruthy();
+    expect(screen.getByText('Para validar')).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: 'Ver detalhes: Áudio 1' }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: 'Validar: Áudio 3' })
+        .getAttribute('href'),
+    ).toContain(MEDIA_ID + '3');
+  });
+
+  it('offers Groq to an audio waiting for the transcriber when Groq may take it (KBC-128 AC-2)', async () => {
+    await setup(
+      [
+        { ...item(1), phase: 'next', waitsForTranscriber: true },
+        {
+          ...item(2),
+          phase: 'next',
+          waitsForTranscriber: true,
+          canUseGroq: true,
+        },
+      ],
+      2,
+    );
+    expect(
+      screen.getByRole('button', { name: 'Transcrever com Groq: Áudio 2' }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('link', { name: 'Ver detalhes: Áudio 2' }),
+    ).toBeNull();
+    // Without Groq, the way stays the audio's page.
+    expect(
+      screen.getByRole('link', { name: 'Ver detalhes: Áudio 1' }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Transcrever com Groq: Áudio 1' }),
+    ).toBeNull();
+  });
+
+  it('sums everything up in one way to the queue for a phone (media-library@mobile)', async () => {
+    await setup(
+      [
+        { ...item(1), phase: 'attention', state: 'failed', action: 'retry' },
+        { ...item(2), phase: 'next', waitsForTranscriber: true },
+        { ...item(3), phase: 'attention', action: 'validate', step: 3 },
+      ],
+      0,
+    );
+    const compact = phoneCard();
+    expect(compact?.textContent).toMatch(/3 itens precisam de atenção/);
+    expect(compact?.getAttribute('href')).toBe('/fila');
+    expect(compact?.textContent).toContain(
+      '1 para validar · 1 falhou · 1 aguardando',
+    );
+  });
+
+  it('counts what is at work in the phone summary', async () => {
+    await setup([item(1), { ...item(2), phase: 'next' }], 2);
+    const compact = phoneCard();
+    expect(compact?.textContent).toMatch(/2 áudios em processamento/);
+    expect(compact?.textContent).toContain('2 em processamento');
   });
 });

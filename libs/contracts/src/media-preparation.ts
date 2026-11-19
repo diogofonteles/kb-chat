@@ -336,6 +336,13 @@ export const processingQueueItemSchema = z.object({
   nextStage: preparationStageIdSchema.nullable(),
   /** Nothing moves because no transcriber is on. */
   waitsForTranscriber: z.boolean(),
+  /**
+   * Waiting for the transcriber, Groq may take it now for this person (KBC-037, masters with
+   * Groq on): the library's attention card offers "Transcrever com Groq" (KBC-128 AC-2).
+   */
+  canUseGroq: z.boolean().default(false),
+  /** Its length, for the Groq estimate; null while not measured. */
+  durationMs: z.number().int().min(0).nullable().default(null),
   action: queueActionSchema.nullable(),
   /** "Tentar de novo" can happen right here; null when it takes the audio's page. */
   retryStage: retryStageSchema.nullable(),

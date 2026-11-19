@@ -18,11 +18,15 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-accent-strong);
+  color: var(--color-text-muted);
   font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: var(--text-meta);
+  font-weight: 700;
   cursor: pointer;
+}
+
+.toggle:hover {
+  color: var(--color-text);
 }
 
 .toggle:focus-visible,
@@ -33,7 +37,8 @@
 }
 
 .chevron {
-  display: inline-block;
+  display: inline-flex;
+  transition: transform 0.15s var(--ease);
 }
 
 .chevron.open {
@@ -57,7 +62,13 @@
   align-items: center;
   gap: 0 var(--space-2);
   padding: var(--space-1) var(--space-2);
-  border-left: 2px solid var(--color-border);
+  border-radius: var(--radius-menu);
+  color: var(--color-text);
+}
+
+.track:hover,
+.track:focus-within {
+  background: var(--overlay-2);
 }
 
 /* The row's end, not its start as on a media row (T14): the menu opens to the left of it. */
@@ -71,8 +82,13 @@ app-menu-button {
   grid-area: ordinal;
   min-width: 1.5em;
   text-align: right;
-  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
   font-variant-numeric: tabular-nums;
+}
+
+.ordinal::before {
+  content: '↳ ';
 }
 
 .play {
@@ -84,8 +100,12 @@ app-menu-button {
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: var(--color-accent-strong);
+  color: var(--color-text);
   cursor: pointer;
+}
+
+.play:hover {
+  color: var(--color-accent-text);
 }
 
 .title {
@@ -93,7 +113,8 @@ app-menu-button {
   min-height: 1.5rem;
   overflow: hidden;
   color: inherit;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: 500;
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -108,11 +129,8 @@ app-menu-button {
   display: flex;
   flex-wrap: wrap;
   gap: 0 var(--space-2);
-  font-size: var(--text-sm);
-}
-
-.state {
-  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
 }
 
 /* A card of the grid: beside ▶ the title would keep three letters. */

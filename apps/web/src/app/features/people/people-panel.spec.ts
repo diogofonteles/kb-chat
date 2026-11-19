@@ -117,6 +117,15 @@ describe('PeoplePanel: levels in the list (T9, KBC-103)', () => {
   });
 });
 
+/** The editors' parts are tabs (KBC-132): Acessos · IA e limites (· Preferências iniciais). */
+async function show(
+  tab: string,
+  fixture: { whenStable(): Promise<unknown> },
+): Promise<void> {
+  fireEvent.click(screen.getByRole('tab', { name: tab }));
+  await fixture.whenStable();
+}
+
 describe('PeoplePanel (KBC-010 FR-3)', () => {
   it('lists people with role, collections and last sign-in', async () => {
     await renderPanel();
@@ -368,6 +377,7 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     ]);
     fireEvent.click(row(/Guest/));
     await fixture.whenStable();
+    await show('IA e limites', fixture);
     const url = '/api/v1/people/11111111-1111-4111-8111-111111111111';
     const field = screen.getByRole('textbox', { name: 'Cota de mídia (GB)' });
     expect(screen.getByText('Em branco, vale o padrão de 5 GB.')).toBeTruthy();
@@ -407,6 +417,7 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     ]);
     fireEvent.click(row(/Guest/));
     await fixture.whenStable();
+    await show('IA e limites', fixture);
     const field = screen.getByRole<HTMLInputElement>('textbox', {
       name: 'Cota de mídia (GB)',
     });
@@ -998,12 +1009,19 @@ describe('PeoplePanel invitation profiles (KBC-028)', () => {
     expect(configure.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(configure);
     await fixture.whenStable();
-    expect(configure.getAttribute('aria-expanded')).toBe('true');
+    // The configured invitation opens in its modal, the invitation's fields with it.
+    expect(
+      screen
+        .getByRole('button', { name: 'Descartar configuração' })
+        .getAttribute('aria-expanded'),
+    ).toBe('true');
+    await show('IA e limites', fixture);
     const daily = screen.getByLabelText(
       'Pesquisas por dia (vazio = padrão)',
     ) as HTMLInputElement;
     expect(daily.value).toBe('3');
     fireEvent.change(daily, { target: { value: '5' } });
+    await show('Preferências iniciais', fixture);
     fireEvent.change(screen.getByLabelText('Tema'), {
       target: { value: 'light' },
     });
@@ -1024,7 +1042,11 @@ describe('PeoplePanel invitation profiles (KBC-028)', () => {
       'Perfil: configuração própria.',
     );
     // The invitation starts over closed, from the default profile.
-    expect(configure.getAttribute('aria-expanded')).toBe('false');
+    expect(
+      screen
+        .getByRole('button', { name: 'Configurar agora' })
+        .getAttribute('aria-expanded'),
+    ).toBe('false');
   });
 
   it('AC-4: applies a profile to an existing person after a confirmation', async () => {
@@ -1068,6 +1090,29 @@ describe('PeoplePanel invitation profiles (KBC-028)', () => {
     expect(screen.getByRole('button', { name: 'Aplicar perfil' })).toBeTruthy();
     http.expectNone(`/api/v1/people/${guest.id}/profile`);
   });
+  it('a click on the backdrop keeps the configured invitation (KBC-132 review)', async () => {
+    const { fixture } = await renderPanel([owner], [aluno]);
+    fireEvent.click(screen.getByRole('button', { name: 'Configurar agora' }));
+    await fixture.whenStable();
+    await show('IA e limites', fixture);
+    fireEvent.change(
+      screen.getByLabelText('Pesquisas por dia (vazio = padrão)'),
+      { target: { value: '5' } },
+    );
+    const modal = document.querySelector('dialog') as HTMLDialogElement;
+    fireEvent.pointerDown(modal);
+    fireEvent.click(modal);
+    await fixture.whenStable();
+    expect(modal.open).toBe(true);
+    expect(
+      (
+        screen.getByLabelText(
+          'Pesquisas por dia (vazio = padrão)',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe('5');
+  });
+
   it('"Descartar configuração" closes the preset, and a bad number holds the invitation', async () => {
     const { fixture } = await renderPanel([owner], [aluno]);
     fireEvent.input(screen.getByLabelText('Convidar por e-mail'), {
@@ -1076,6 +1121,7 @@ describe('PeoplePanel invitation profiles (KBC-028)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Configurar agora' }));
     await fixture.whenStable();
     expect(screen.getByText(/Trocar o perfil recomeça/)).toBeTruthy();
+    await show('IA e limites', fixture);
     fireEvent.change(
       screen.getByLabelText('Pesquisas por dia (vazio = padrão)'),
       { target: { value: '-3' } },
@@ -1089,7 +1135,11 @@ describe('PeoplePanel invitation profiles (KBC-028)', () => {
       screen.getByRole('button', { name: 'Descartar configuração' }),
     );
     await fixture.whenStable();
-    expect(send.disabled).toBe(false);
+    // The modal is gone: the invitation's own "Convidar" is back in the bar.
+    const sendAgain = screen.getByRole('button', {
+      name: 'Convidar',
+    }) as HTMLButtonElement;
+    expect(sendAgain.disabled).toBe(false);
     expect(
       screen.queryByLabelText('Pesquisas por dia (vazio = padrão)'),
     ).toBeNull();
@@ -1102,6 +1152,7 @@ describe('PeoplePanel invitation profiles (KBC-028)', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Configurar agora' }));
     await fixture.whenStable();
+    await show('IA e limites', fixture);
     fireEvent.change(
       screen.getByLabelText('Pesquisas por dia (vazio = padrão)'),
       { target: { value: '-3' } },

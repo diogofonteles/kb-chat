@@ -39,6 +39,10 @@ export interface ShelfRow {
 export interface ShelfSegment {
   readonly startMs: number;
   readonly endMs: number;
+  /** What it says: where its sentence starts and ends (KBC-156). */
+  readonly text: string;
+  /** Who speaks it in the current separation; null without one: a change ends a passage (KBC-156 BR-4). */
+  readonly voice?: number | null;
 }
 
 /**

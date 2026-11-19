@@ -15,6 +15,10 @@ import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { errorMessage } from '@core/api/api-error.js';
 import { AuthApi } from '@core/auth/auth-api.js';
+import { UiBanner } from '@ui/banner.js';
+import { UiButton } from '@ui/button.js';
+import { UiIcon } from '@ui/icon.js';
+import { UiLogo } from '@ui/logo.js';
 import {
   GoogleIdentity,
   type GoogleAccountsId,
@@ -23,6 +27,7 @@ import { SessionStore } from '@core/auth/session-store.js';
 import { CodeSignIn } from './code-sign-in.js';
 import { GoogleAccessRequest } from './google-access-request.js';
 import { SignUpForm } from './sign-up-form.js';
+import { googleProfileOf, type GoogleProfile } from './google-profile.js';
 
 /** What the login card shows: the sign-in options, a code sign-in or the sign-up form. */
 type Mode = 'start' | 'code' | 'signup';
@@ -33,7 +38,16 @@ type Mode = 'start' | 'code' | 'signup';
  */
 @Component({
   selector: 'app-login-page',
-  imports: [CodeSignIn, GoogleAccessRequest, SignUpForm, RouterLink],
+  imports: [
+    CodeSignIn,
+    GoogleAccessRequest,
+    SignUpForm,
+    RouterLink,
+    UiBanner,
+    UiButton,
+    UiIcon,
+    UiLogo,
+  ],
   templateUrl: './login-page.html',
   styleUrl: './login-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -56,6 +70,8 @@ export class LoginPage {
   });
   protected readonly signingIn = signal(false);
   protected readonly mode = signal<Mode>('start');
+  /** The account Google signed in with, for the not-invited screen's account row. */
+  protected readonly account = signal<GoogleProfile | null>(null);
 
   protected readonly clientId = computed(() =>
     this.config.hasValue() ? this.config.value().googleClientId : undefined,
@@ -121,11 +137,12 @@ export class LoginPage {
       text: 'signin_with',
       shape: 'pill',
       locale: 'pt-BR',
-      width: Math.min(320, host.clientWidth || 320),
+      width: Math.min(356, host.clientWidth || 356),
     });
   }
 
   private signIn(credential: string): void {
+    this.account.set(googleProfileOf(credential));
     this.signingIn.set(true);
     this.session
       .signIn(credential)

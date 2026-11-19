@@ -1,6 +1,6 @@
 @if (confirming()) {
-  <div class="confirm" role="group" aria-labelledby="groq-item-question">
-    <p id="groq-item-question" i18n="@@groqItem.question">
+  <div class="confirm" role="group" [attr.aria-labelledby]="questionId">
+    <p [id]="questionId" i18n="@@groqItem.question">
       Transcrever este áudio com o Groq agora? Custa cerca de
       {{ estimate() }}, descontado do teto mensal da mídia.
     </p>
@@ -30,6 +30,7 @@
     #openButton
     type="button"
     class="secondary"
+    [attr.aria-label]="openLabel()"
     (click)="ask()"
     i18n="@@groqItem.open"
   >

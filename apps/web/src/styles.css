@@ -1,5 +1,33 @@
 @import './styles/colors.generated.css';
 @import './styles/tokens.css';
+@import './styles/ui.css';
+
+/* Figtree (OFL, public/fonts/figtree): variable weight 300–900, Latin and Latin Extended. */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 900;
+  src: url('/fonts/figtree/figtree-latin-ext-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 900;
+  src: url('/fonts/figtree/figtree-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
 
 *,
 *::before,
@@ -161,14 +189,162 @@ app-document-panel .body mark.current {
   outline-offset: 1px;
 }
 
-/* AI answer text is rendered with [innerHTML]: citation links styled globally. */
+/* AI answer text is rendered with [innerHTML]: citation links styled globally. v2 (KBC-127):
+   a small green [n]; the one whose source is open is filled (FR-1, AC-1). */
 app-research-message .answer a.cite {
-  color: var(--color-accent-strong);
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0 0.3em;
+  border-radius: var(--radius-pill);
+  color: var(--color-accent-text);
   font-family: var(--font-ui);
-  font-size: 0.8em;
-  font-weight: 600;
+  font-size: 0.75em;
+  font-weight: 800;
+  line-height: 1.5;
+  text-align: center;
   text-decoration: none;
   vertical-align: super;
+}
+
+app-research-message .answer a.cite:hover {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+app-research-message .answer a.cite.active {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+/* A track's citation (KBC-150 item 7): a pill with the wave and its number, then "título ·
+   tempo" in the accent, on the line rather than raised, apart from a text's [n]. */
+app-research-message .answer a.cite.cite-audio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.6;
+  text-align: start;
+  vertical-align: baseline;
+}
+
+app-research-message .answer a.cite.cite-audio:hover {
+  background: none;
+}
+
+app-research-message .answer a.cite-audio .cite-n {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.375rem;
+  padding: 0 0.4375rem;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: var(--color-accent-text);
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
+
+app-research-message .answer a.cite-audio .cite-n::before {
+  content: '';
+  width: 0.75rem;
+  height: 0.75rem;
+  background: currentcolor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+app-research-message .answer a.cite-audio .cite-where {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+app-research-message .answer a.cite-audio:hover .cite-where {
+  text-decoration: underline;
+}
+
+app-research-message .answer a.cite-audio.active {
+  background: none;
+  color: var(--color-accent-text);
+}
+
+app-research-message .answer a.cite-audio.active .cite-n {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+/* The same track cited side by side (KBC-155): one pill, "título · 1:16, 1:21", each time a
+   link of its own; the open one filled in the accent. */
+app-research-message .answer .cite-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+  color: var(--color-accent-text);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.6;
+  vertical-align: baseline;
+}
+
+app-research-message .answer .cite-group .cite-n {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.375rem;
+  padding: 0 0.4375rem;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
+
+app-research-message .answer .cite-group .cite-n::before {
+  content: '';
+  width: 0.75rem;
+  height: 0.75rem;
+  background: currentcolor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+app-research-message .answer .cite-group .cite-where {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* No inline padding: the comma and the period sit right after the time ("0:50, 0:41."). */
+app-research-message .answer .cite-group a.cite.cite-time {
+  position: relative;
+  min-width: 0;
+  padding: 0;
+  font-size: 1em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  vertical-align: baseline;
+}
+
+/* A target of 24 px at least (WCAG 2.5.8) around a time that reads at the line's height. */
+app-research-message .answer .cite-group a.cite.cite-time::after {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1.5rem;
+  translate: 0 -50%;
+  content: '';
+}
+
+app-research-message .answer .cite-group a.cite.cite-time:hover {
+  text-decoration: underline;
 }
 
 /* A citation of a restricted source (KBC-110): the number as plain text, no link. */

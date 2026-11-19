@@ -14,6 +14,13 @@ const LAERCIO = {
 };
 
 describe('buildResearchMessages', () => {
+  it('KBC-156 AC-8: asks for the anchor where the sentence that supports the claim starts', () => {
+    const text = researchSystemPrompt('Hermetismo');
+    expect(text).toContain(
+      'com a âncora do parágrafo onde começa a frase que sustenta a afirmação',
+    );
+  });
+
   it('tells the model to grep with find_text and variants before concluding absence, within 15 steps', () => {
     const [system] = buildResearchMessages({
       topicTitle: 'Hermetismo',

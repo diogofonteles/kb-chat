@@ -1,21 +1,17 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page } from '@playwright/test';
 import { expect, ownerApi, test } from './fixtures.js';
+import { openSection, openSettings, SETTINGS_AXE } from './settings-helpers.js';
 import { newListener, uniqueTag, uploadReady } from './media-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
 
 // KBC-040: the term list a master edits and "Transcrever de novo" on a media.
 
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
-
 /** The API is shared with the other projects, which may save the one list meanwhile. */
 async function openTerms(page: Page): Promise<Locator> {
   await page.goto('/biblioteca');
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await dialog.getByRole('button', { name: 'Termos da transcrição' }).click();
+  const dialog = await openSettings(page);
+  await openSection(dialog, 'Termos da transcrição');
   await expect(dialog.getByText(/\d+ de 224 do limite/)).toBeVisible();
   return dialog;
 }
@@ -27,7 +23,7 @@ async function addTerms(dialog: Locator, lines: string) {
 
 const seriousViolations = async (page: Page) =>
   (
-    await new AxeBuilder({ page }).include('dialog').analyze()
+    await new AxeBuilder({ page }).include(SETTINGS_AXE).analyze()
   ).violations.filter((violation) =>
     ['serious', 'critical'].includes(violation.impact ?? ''),
   );
@@ -74,11 +70,10 @@ test('AC-3: a list past the limit is refused with the numbers, and nothing is sa
   await expect(dialog.getByRole('alert')).toContainText(
     /A lista passou do limite do transcritor \(\d+ de 224\)\. Remova alguns termos\./,
   );
-  await dialog.getByRole('button', { name: 'Salvar lista' }).click();
-  // The list's own live region: "Aprendido das correções" (KBC-113) has one after it.
+  // KBC-132 AC-6: past the limit "Salvar lista" waits, so nothing can be saved.
   await expect(
-    dialog.locator('app-terms-panel').getByRole('status').last(),
-  ).toContainText('A lista passou do limite');
+    dialog.getByRole('button', { name: 'Salvar lista' }),
+  ).toBeDisabled();
   await expect(dialog.getByText(version)).toBeVisible();
   await dialog.getByRole('button', { name: 'Descartar mudanças' }).click();
   await expect(dialog.getByRole('alert')).toHaveCount(0);

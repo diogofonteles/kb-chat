@@ -62,6 +62,10 @@ KBC-049 (autores livres por acervo; PR #47), KBC-051 (filtros e ordenação), KB
 ## Open questions
 Nenhuma.
 
+
+## Redesign v2 (2026-11-15)
+Prioridade do dono junto do redesign v2 (`docs/design/redesign-v2.md`). Na v2, este item entra por "Sobre a autora" no painel Tocando agora (KBC-129) leva a esta página; o botão Seguir vem no KBC-135. Ao implementar, siga a casca e os componentes da v2 (KBC-124, KBC-125) em vez das telas da v1.
+
 ## Definition of ready
 - [x] Story, scope and outcome stated
 - [x] Every BR and FR covered by at least one AC; negative and edge cases present

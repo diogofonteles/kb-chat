@@ -1,4 +1,5 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { ApplicationRef, provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import type { InvitationPreset } from '@kb-chat/contracts';
 import { TOPICS } from '../../testing/fixtures.js';
@@ -21,6 +22,31 @@ async function renderEditor(
   return { ...view, changed, invalidChange, lendPending };
 }
 
+/** The preset's parts are tabs (KBC-132): Acessos · IA e limites · Preferências iniciais. */
+async function show(tab: string): Promise<void> {
+  fireEvent.click(screen.getByRole('tab', { name: tab }));
+  await TestBed.inject(ApplicationRef).whenStable();
+}
+
+describe('InvitePresetEditor: the tabs by keyboard (KBC-132 FR-2, APG Tabs)', () => {
+  it('reaches every part with the arrows, the focus on the chosen tab', async () => {
+    await renderEditor();
+    const settle = () => TestBed.inject(ApplicationRef).whenStable();
+    const access = screen.getByRole('tab', { name: 'Acessos' });
+    const prefs = screen.getByRole('tab', { name: 'Preferências iniciais' });
+    access.focus();
+    fireEvent.keyDown(access, { key: 'ArrowLeft' });
+    await settle();
+    expect(prefs.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(prefs);
+    fireEvent.keyDown(prefs, { key: 'ArrowLeft' });
+    await settle();
+    const ai = screen.getByRole('tab', { name: 'IA e limites' });
+    expect(ai.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(ai);
+  });
+});
+
 const OWNER_LENDS_CLAUDE: Lending = {
   canLend: true,
   lendable: { 'claude-subscription': true, 'chatgpt-subscription': false },
@@ -34,6 +60,7 @@ const optionsOf = (select: HTMLElement) =>
 describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', () => {
   it('offers only what the owner can lend now (AC-7)', async () => {
     await renderEditor(plainPreset(), OWNER_LENDS_CLAUDE);
+    await show('IA e limites');
     expect(optionsOf(screen.getByLabelText('Qual IA atende a pessoa'))).toEqual(
       ['default', 'house', 'claude-subscription', 'none'],
     );
@@ -44,6 +71,7 @@ describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', 
       plainPreset(),
       OWNER_LENDS_CLAUDE,
     );
+    await show('IA e limites');
     const select = screen.getByLabelText(
       'Qual IA atende a pessoa',
     ) as HTMLSelectElement;
@@ -88,6 +116,7 @@ describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', 
       },
       OWNER_LENDS_CLAUDE,
     );
+    await show('IA e limites');
     expect(
       screen.getAllByRole('status').map((status) => status.textContent),
     ).toContainEqual(
@@ -102,14 +131,17 @@ describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', 
       plainPreset(),
       OWNER_LENDS_CLAUDE,
     );
+    await show('IA e limites');
     const select = screen.getByLabelText(
       'Qual IA atende a pessoa',
     ) as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'claude-subscription' } });
     await fixture.whenStable();
+    await show('Acessos');
     fireEvent.click(screen.getByRole('checkbox', { name: 'Hermetismo' }));
     fixture.componentRef.setInput('preset', last(changed));
     await fixture.whenStable();
+    await show('IA e limites');
     expect(select.value).toBe('claude-subscription');
     expect(
       screen.getByRole('group', { name: /Ceder a assinatura do Claude/ }),
@@ -130,6 +162,7 @@ describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', 
       plainPreset(),
       OWNER_LENDS_CLAUDE,
     );
+    await show('IA e limites');
     const select = screen.getByLabelText(
       'Qual IA atende a pessoa',
     ) as HTMLSelectElement;
@@ -170,6 +203,7 @@ describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', 
       canLend: false,
       lendable: { 'claude-subscription': true, 'chatgpt-subscription': true },
     });
+    await show('IA e limites');
     expect(optionsOf(screen.getByLabelText('Qual IA atende a pessoa'))).toEqual(
       ['default', 'house', 'none'],
     );
@@ -227,6 +261,7 @@ describe('InvitePresetEditor (KBC-028 AC-2)', () => {
 
   it('never offers a subscription (BR-2) and keeps the AI limits', async () => {
     const { changed } = await renderEditor();
+    await show('IA e limites');
     const select = screen.getByLabelText('Qual IA atende a pessoa');
     const options = within(select)
       .getAllByRole('option')
@@ -254,6 +289,7 @@ describe('InvitePresetEditor (KBC-028 AC-2)', () => {
       ...preset,
       ai: { ...preset.ai, paidFallback: { enabled: true, monthlyCapUsd: 2 } },
     });
+    await show('IA e limites');
     const daily = screen.getByLabelText('Pesquisas por dia (vazio = padrão)');
     fireEvent.change(daily, { target: { value: '2.5' } });
     await fixture.whenStable();
@@ -276,6 +312,7 @@ describe('InvitePresetEditor (KBC-028 AC-2)', () => {
       ...plainPreset(),
       topics: ['hermetismo'],
     });
+    await show('Preferências iniciais');
     const topic = screen.getByLabelText('Acervo padrão');
     expect(
       within(topic)
@@ -320,9 +357,11 @@ describe('InvitePresetEditor (KBC-028 AC-2)', () => {
       role: 'master',
       preferences: { defaultTopic: 'alquimia' },
     });
+    await show('Preferências iniciais');
     expect(
       within(screen.getByLabelText('Acervo padrão')).getAllByRole('option'),
     ).toHaveLength(3);
+    await show('Acessos');
     fireEvent.click(screen.getByRole('checkbox', { name: /^Master/ }));
     expect(last(changed).role).toBe('member');
     expect(last(changed).preferences).toEqual({});
@@ -345,6 +384,7 @@ describe('InvitePresetEditor (KBC-028 AC-2)', () => {
   it('turns the AI limits off with "Nenhuma" and says why', async () => {
     const preset = plainPreset();
     await renderEditor({ ...preset, ai: { ...preset.ai, appAi: 'none' } });
+    await show('IA e limites');
     const limits = screen.getByRole('group', {
       name: 'Limites da IA da aplicação',
     }) as HTMLFieldSetElement;
@@ -395,16 +435,18 @@ async function renderKept(preset: InvitationPreset) {
 }
 
 const HINT =
-  'Marque ao menos um acervo em “Acervos” acima para escolher o padrão.';
+  'Marque ao menos um acervo em “Acervos”, na aba Acessos, para escolher o padrão.';
 const CLEARED =
   'O acervo padrão foi limpo porque ele não está mais entre os acervos marcados.';
 
 describe('InvitePresetEditor explains the default collection (KBC-033)', () => {
   it('says why only "Sem preferência" is offered while no collection is checked (AC-1)', async () => {
     const { settle, defaultTopic } = await renderKept(plainPreset());
+    await show('Preferências iniciais');
     expect(optionsOf(defaultTopic())).toEqual(['']);
     const hint = screen.getByText(HINT);
     expect(defaultTopic().getAttribute('aria-describedby')).toBe(hint.id);
+    await show('Acessos');
     fireEvent.click(screen.getByRole('checkbox', { name: 'Hermetismo' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Alquimia' }));
     await settle();

@@ -113,6 +113,8 @@ describe('GET /media/processing (KBC-090)', () => {
       state: 'queued',
       position: 1,
       waitsForTranscriber: true,
+      // No Groq key in this app: the library offers only the details (KBC-128 AC-2).
+      canUseGroq: false,
     });
   });
 

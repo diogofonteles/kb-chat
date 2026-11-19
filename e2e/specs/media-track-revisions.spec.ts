@@ -13,6 +13,8 @@ import {
   aCollection,
   aCollectionInVault,
   audioState,
+  chooseLibraryView,
+  expectLibraryView,
   useTheme,
 } from './media-helpers.js';
 import { approve, audioWithTracks, openCollection } from './tracks-helpers.js';
@@ -533,9 +535,8 @@ test("the ⋯ of a track in the library's grid stays on its card", async ({
   await owner.dispose();
   const page = await pageAs(browser, email, viewport);
   await openCollection(page, topic);
-  const grid = page.getByRole('button', { name: 'Ver em grade' });
-  await grid.click();
-  await expect(grid).toHaveAttribute('aria-pressed', 'true');
+  await chooseLibraryView(page, 'Grade');
+  await expectLibraryView(page, 'Grade');
   await page.getByRole('button', { name: '3 faixas' }).click();
 
   // On the title's line: below it there is a blank line, beside the time it covers the time.
@@ -587,8 +588,8 @@ test('the ⋯ of a track stays on screen with a wide font, in the grid and the l
 
   for (const width of [viewport?.width ?? 390, 320]) {
     await page.setViewportSize({ width, height: 800 });
-    for (const view of ['Ver em grade', 'Ver em lista']) {
-      await page.getByRole('button', { name: view }).click();
+    for (const view of ['Grade', 'Lista'] as const) {
+      await chooseLibraryView(page, view);
       await page.getByRole('button', { name: '3 faixas' }).click();
       await actions.click();
       await expectInsideTheScreen(page);

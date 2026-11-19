@@ -1,85 +1,63 @@
-:host {
-  display: block;
-  min-height: 100dvh;
-  background: var(--color-bg);
-  color: var(--color-text);
-}
-
-.privacy {
-  padding: var(--space-8) var(--space-4);
-  box-sizing: border-box;
-}
-
+/* The policy's text in the reading page's 720 column (v2 · Públicas): 28/700 titles, items
+   with the label in bold and a green dot. */
 .policy {
-  width: min(100%, 42rem);
-  margin: 0 auto;
-  font-family: var(--font-reading);
+  color: color-mix(in srgb, var(--color-text) 85%, transparent);
   font-size: var(--text-md);
-  line-height: 1.6;
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--target);
-  color: var(--color-text-muted);
-  text-decoration: none;
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: 600;
-}
-
-.brand:hover {
-  color: var(--color-text);
-  text-decoration: underline;
-}
-
-h1 {
-  margin: var(--space-1) 0 var(--space-4);
-  font-family: var(--font-display);
-  font-size: clamp(2rem, 6vw, 2.5rem);
-  font-weight: 600;
-  line-height: 1.1;
-}
-
-h2 {
-  margin: var(--space-6) 0 var(--space-2);
-  font-family: var(--font-ui);
-  font-size: var(--text-lg);
-  font-weight: 600;
+  line-height: 1.625;
 }
 
 .lead {
-  margin: 0;
+  margin: 0 0 var(--space-6);
+}
+
+h2 {
+  margin: var(--space-8) 0 var(--space-3);
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  scroll-margin-top: var(--space-6);
+}
+
+section:first-of-type h2 {
+  margin-top: 0;
 }
 
 ul {
   margin: 0;
-  padding-left: var(--space-6);
+  padding: 0;
+  list-style: none;
 }
 
-li + li {
-  margin-top: var(--space-2);
+li {
+  position: relative;
+  padding: 0.625rem 0 0.625rem 1.125rem;
+}
+
+li::before {
+  content: '';
+  position: absolute;
+  top: 1.25rem;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
+strong {
+  color: var(--color-text);
 }
 
 section p {
-  margin: 0 0 var(--space-2);
+  margin: 0 0 var(--space-3);
 }
 
 a {
-  color: var(--color-accent-strong);
+  color: var(--color-accent);
   text-underline-offset: 2px;
-}
-
-a:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
-
-.updated {
-  margin: var(--space-8) 0 var(--space-4);
-  color: var(--color-text-muted);
 }
 
 .pending {
@@ -90,12 +68,24 @@ a:focus-visible {
   display: inline-flex;
   align-items: center;
   min-height: var(--target);
-  font-family: var(--font-ui);
+  font-weight: 700;
 }
 
 .links {
   display: flex;
   flex-wrap: wrap;
   gap: 0 var(--space-6);
-  margin: 0;
+  margin: var(--space-8) 0 0;
+}
+
+@media (max-width: 1023px) {
+  .policy {
+    font-size: var(--text-item);
+    line-height: 1.55;
+  }
+
+  h2 {
+    font-size: 1.375rem;
+    scroll-margin-top: 4rem;
+  }
 }

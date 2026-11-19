@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import {
   fakeMediaElement,
   type FakeMedia,
@@ -74,6 +75,16 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(engine.playing()).toBe(false);
     media.emit('playing');
     expect(engine.playing()).toBe(true);
+  });
+
+  it('is in progress for a new version only while it plays (KBC-123 AC-2)', () => {
+    const work = TestBed.inject(BusyWork);
+    ready();
+    expect(work.busy()).toBe(false);
+    media.emit('playing');
+    expect(work.busy()).toBe(true);
+    media.emit('pause');
+    expect(work.busy()).toBe(false);
   });
 
   it('follows a pause the system makes (headphones, a call)', () => {

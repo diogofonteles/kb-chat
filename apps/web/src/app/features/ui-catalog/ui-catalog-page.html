@@ -1,0 +1,345 @@
+<!-- Development only: the component names are the Figma set names, not product copy. -->
+<div class="catalog">
+  <header class="ui-page-header">
+    <div>
+      <p class="ui-page-header__kicker">v2 · Componentes</p>
+      <h1 class="ui-page-header__title">Componentes</h1>
+      <p class="ui-page-header__meta">
+        A biblioteca de UI da v2 (KBC-124), nos quatro temas.
+      </p>
+    </div>
+  </header>
+
+  <section aria-labelledby="set-button">
+    <h2 id="set-button" class="ui-section-title">Botão</h2>
+    <div class="row">
+      <button uiButton type="button">Salvar</button>
+      <button uiButton="white" type="button">Continuar</button>
+      <button uiButton="outline" type="button">Cancelar</button>
+      <button uiButton="ghost" type="button">Voltar</button>
+      <button uiButton="danger" type="button">Revogar</button>
+      <button uiButton="dark" type="button">
+        <ui-icon name="plus" [size]="18" />Criar
+      </button>
+      <button uiButton type="button" disabled>Desabilitado</button>
+      <button uiButton="white" size="sm" type="button">Pequeno</button>
+      <button uiButton size="lg" type="button">Grande</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="set-icon-button">
+    <h2 id="set-icon-button" class="ui-section-title">Botão de ícone</h2>
+    <div class="row">
+      <button uiIconButton type="button" aria-label="Mais opções">
+        <ui-icon name="more" />
+      </button>
+      <button uiIconButton="play" [size]="52" type="button" aria-label="Tocar">
+        <ui-icon name="play" [size]="22" />
+      </button>
+      <button
+        uiIconButton="circle"
+        [size]="40"
+        type="button"
+        aria-label="Adicionar"
+      >
+        <ui-icon name="plus" />
+      </button>
+      <button
+        uiIconButton
+        type="button"
+        aria-label="Marcador"
+        aria-pressed="true"
+      >
+        <ui-icon name="bookmarkFill" />
+      </button>
+    </div>
+  </section>
+
+  <section aria-labelledby="set-chip">
+    <h2 id="set-chip" class="ui-section-title">Chip</h2>
+    <div class="row" role="group" aria-label="Escopo">
+      @for (label of chips; track label) {
+        <button
+          uiChip
+          type="button"
+          [selected]="chip() === label"
+          (click)="chip.set(label)"
+        >
+          @if (label === 'Pesquisa com IA') {
+            <ui-icon name="sparkleFill" [size]="14" />
+          }
+          {{ label }}
+        </button>
+      }
+      <button uiChip type="button" aria-haspopup="menu">
+        Assuntos <ui-icon name="chevDown" [size]="14" />
+      </button>
+      <button
+        uiChip
+        type="button"
+        [selected]="true"
+        aria-label="Tirar o filtro Cabala"
+      >
+        Cabala <ui-icon name="close" [size]="14" />
+      </button>
+    </div>
+  </section>
+
+  <section aria-labelledby="set-pill">
+    <h2 id="set-pill" class="ui-section-title">Pill</h2>
+    <div class="row">
+      <ui-pill>Desligado</ui-pill>
+      <ui-pill tone="ok">Conectada</ui-pill>
+      <ui-pill tone="warn">Em análise</ui-pill>
+      <ui-pill tone="err">Recusada</ui-pill>
+      <ui-pill tone="info">Convite enviado</ui-pill>
+    </div>
+  </section>
+
+  <section aria-labelledby="set-field">
+    <h2 id="set-field" class="ui-section-title">Campo</h2>
+    <div class="grid">
+      <ui-field label="E-mail" for="cat-email">
+        <input
+          id="cat-email"
+          class="ui-input"
+          type="email"
+          placeholder="nome@exemplo.test"
+        />
+      </ui-field>
+      <ui-field
+        label="E-mail"
+        for="cat-email-error"
+        error="Digite um e-mail válido, como nome@exemplo.com."
+      >
+        <input
+          id="cat-email-error"
+          class="ui-input"
+          type="email"
+          value="ana.lima@"
+          aria-invalid="true"
+          aria-describedby="cat-email-error-error"
+        />
+      </ui-field>
+      <ui-field label="Acervo" for="cat-select">
+        <select id="cat-select" class="ui-input">
+          <option>Hermetismo</option>
+          <option>Cabala</option>
+        </select>
+      </ui-field>
+      <ui-field label="Celular" for="cat-phone" hint="Com DDD.">
+        <input
+          id="cat-phone"
+          class="ui-input"
+          type="tel"
+          placeholder="(81) 99999-0000"
+          aria-describedby="cat-phone-hint"
+        />
+      </ui-field>
+      <ui-field label="Desabilitado" for="cat-disabled">
+        <input
+          id="cat-disabled"
+          class="ui-input"
+          disabled
+          value="Somente leitura"
+        />
+      </ui-field>
+    </div>
+  </section>
+
+  <section aria-labelledby="set-search">
+    <h2 id="set-search" class="ui-section-title">Busca</h2>
+    <label class="ui-search search">
+      <ui-icon name="search" [size]="18" />
+      <span class="visually-hidden">Buscar</span>
+      <input type="search" placeholder="Buscar" />
+    </label>
+  </section>
+
+  <section aria-labelledby="set-selection">
+    <h2 id="set-selection" class="ui-section-title">Seleção</h2>
+    <div class="row">
+      <label class="pair">
+        <input
+          class="ui-switch"
+          type="checkbox"
+          role="switch"
+          [checked]="toggled()"
+          (change)="toggled.set(!toggled())"
+        />
+        Aprofundar automaticamente
+      </label>
+      <label class="pair"
+        ><input class="ui-check" type="checkbox" checked /> Caixa marcada</label
+      >
+      <label class="pair"
+        ><input class="ui-check" type="checkbox" /> Caixa livre</label
+      >
+      <label class="pair"
+        ><input class="ui-radio" type="radio" name="cat-radio" checked /> Rádio
+        1</label
+      >
+      <label class="pair"
+        ><input class="ui-radio" type="radio" name="cat-radio" /> Rádio 2</label
+      >
+    </div>
+  </section>
+
+  <section aria-labelledby="set-banner">
+    <h2 id="set-banner" class="ui-section-title">Banner</h2>
+    <div class="stack">
+      <ui-banner tone="err" title="Algo deu errado do nosso lado.">
+        <p>Tente de novo.</p>
+        <button uiBannerAction uiButton="white" size="sm" type="button">
+          Tentar de novo
+        </button>
+      </ui-banner>
+      <ui-banner
+        tone="warn"
+        title="Sem uma chave conectada, o Groq não é usado."
+      />
+      <ui-banner
+        tone="info"
+        title="Este acervo ainda não tem textos para buscar."
+      />
+      <ui-banner tone="ok" title="Chave conectada." />
+    </div>
+  </section>
+
+  <section aria-labelledby="set-cover">
+    <h2 id="set-cover" class="ui-section-title">Capa e cartão</h2>
+    <div class="row">
+      <ui-cover title="Hermetismo" [size]="48" />
+      <ui-cover title="Cabala" [size]="160" />
+      <ui-cover icon="library" from="#7a3d22" to="#2a120a" [size]="48" />
+      <ui-card title="Hermetismo" subtitle="Acervo · 22 documentos" />
+      <ui-card
+        title="Entrevista sobre a Tábua de Esmeralda"
+        subtitle="Irmã Helena Prado"
+        [progress]="0.37"
+      />
+    </div>
+  </section>
+
+  <section aria-labelledby="set-libitem">
+    <h2 id="set-libitem" class="ui-section-title">Item da biblioteca</h2>
+    <div class="libitems">
+      <button type="button" class="ui-libitem-row">
+        <ui-library-item title="Hermetismo" meta="Acervo · 22 documentos">
+          <ui-cover title="Hermetismo" />
+        </ui-library-item>
+      </button>
+      <button type="button" class="ui-libitem-row" aria-current="true">
+        <ui-library-item title="Alquimia Prática" meta="Acervo · 11 áudios">
+          <ui-cover title="Alquimia Prática" />
+        </ui-library-item>
+      </button>
+      <button type="button" class="ui-libitem-row">
+        <ui-library-item
+          title="Biblioteca"
+          meta="Todas as mídias · 11"
+          [pinned]="true"
+        >
+          <ui-cover icon="library" from="#7a3d22" to="#2a120a" />
+        </ui-library-item>
+      </button>
+    </div>
+  </section>
+
+  <section aria-labelledby="set-empty">
+    <h2 id="set-empty" class="ui-section-title">Estado vazio</h2>
+    <ui-empty-state icon="search" title="Nada encontrado para “xqzw kplvm”.">
+      <button uiButton="white" type="button">Buscar por significado</button>
+    </ui-empty-state>
+  </section>
+
+  <section aria-labelledby="set-settings">
+    <h2 id="set-settings" class="ui-section-title">
+      Linha de configuração e escolha
+    </h2>
+    <div class="stack">
+      <ui-setting-row
+        label="Aprofundar automaticamente"
+        description="Quando a pesquisa rápida não basta, a IA continua com a profunda."
+        for="cat-deepen"
+      >
+        <input
+          id="cat-deepen"
+          class="ui-switch"
+          type="checkbox"
+          role="switch"
+          checked
+        />
+      </ui-setting-row>
+      <div class="row">
+        <ui-choice-card
+          title="Pesquisa com IA"
+          help="Pergunte e a IA pesquisa o acervo e responde com as fontes."
+          icon="sparkle"
+          [chosen]="true"
+        />
+        <ui-choice-card
+          title="Buscar documentos"
+          help="Busca sem IA: cartões, filtros e o documento ao lado."
+          icon="search"
+        />
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="set-overlays">
+    <h2 id="set-overlays" class="ui-section-title">
+      Menu, modal, folha e código
+    </h2>
+    <div class="row">
+      <ui-menu label="Conta" menuId="cat-menu" triggerLabel="Conta">
+        <span uiMenuTrigger class="trigger">
+          <ui-avatar name="Dono" [size]="32" />
+        </span>
+        <button uiMenuItem type="button">
+          <ui-icon name="settings" [size]="18" />Configurações
+        </button>
+        <button uiMenuItem type="button">
+          <ui-icon name="people" [size]="18" />Pessoas e permissões
+        </button>
+        <hr class="ui-menu__divider" />
+        <button uiMenuItem [danger]="true" type="button">
+          <ui-icon name="trash" [size]="18" />Apagar
+        </button>
+      </ui-menu>
+      <button uiButton="outline" type="button" (click)="openDialog()">
+        Abrir modal
+      </button>
+      <button uiButton="outline" type="button" (click)="openSheet()">
+        Abrir folha
+      </button>
+      <ui-logo [size]="40" />
+      <ui-progress class="progress" [value]="0.4" />
+    </div>
+    <div class="code">
+      <span id="cat-code-label" class="ui-field__label">Código</span>
+      <ui-code-input labelledBy="cat-code-label" [(value)]="code" />
+    </div>
+  </section>
+
+  <ui-dialog
+    title="Editar detalhes"
+    titleId="cat-dialog-title"
+    step="Passo 1 de 4 · Detalhes"
+    primaryLabel="Salvar"
+  >
+    <ui-field label="Nome" for="cat-dialog-name">
+      <input id="cat-dialog-name" class="ui-input" value="Hermetismo" />
+    </ui-field>
+    <ng-container uiDialogFooter>
+      <button uiButton="ghost" type="button">Cancelar</button>
+      <button uiButton="white" type="button">Salvar</button>
+    </ng-container>
+  </ui-dialog>
+  <ui-sheet label="Folha de exemplo">
+    <div class="sheet-body">
+      <p class="ui-section-title">Folha do celular</p>
+      <p>Menus viram folha no celular.</p>
+    </div>
+  </ui-sheet>
+</div>

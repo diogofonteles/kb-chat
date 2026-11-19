@@ -94,7 +94,8 @@ async function renderApp(appRoutes: Routes = []) {
 describe('SessionShell (KBC-010 BR-1)', () => {
   it('waits for /me, then shows the app to a signed-in person', async () => {
     const { container, http, fixture } = await renderApp();
-    expect(screen.getByRole('status').textContent).toContain('Carregando');
+    // The update notice's live region is always there too, empty (KBC-123).
+    expect(screen.getByText('Carregando…').getAttribute('role')).toBe('status');
 
     http.expectOne('/api/v1/me').flush(anOwner());
     await fixture.whenStable();
@@ -141,6 +142,21 @@ describe('SessionShell (KBC-010 BR-1)', () => {
       screen.queryByRole('heading', { level: 1, name: 'Nova Alexandria' }),
     ).toBeNull();
     expect(probeBuilt).toBe(0);
+  });
+
+  it('says so when a deferred public page cannot load, and offers to reload (KBC-123 AC-5)', async () => {
+    const { http, fixture } = await renderApp(probeRoutes);
+    signOut(http);
+    await fixture.whenStable();
+    await TestBed.inject(Router).navigateByUrl('/privacidade');
+    TestBed.tick();
+    for (const block of await fixture.getDeferBlocks())
+      await block.render(DeferBlockState.Error);
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Não consegui abrir esta página.',
+    );
+    expect(screen.getByRole('button', { name: 'Recarregar' })).toBeTruthy();
   });
 
   it('shows the tutorial at /tutorial without a session (KBC-032 AC-1)', async () => {

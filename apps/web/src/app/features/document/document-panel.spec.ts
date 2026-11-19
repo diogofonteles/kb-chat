@@ -5,7 +5,7 @@ import {
 } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { fireEvent, render, screen } from '@testing-library/angular';
+import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { aDocument } from '../../testing/fixtures.js';
 import { DocumentPanel } from './document-panel.js';
 
@@ -29,6 +29,10 @@ async function renderPanel() {
   return { ...view, closed, http: TestBed.inject(HttpTestingController) };
 }
 
+/** "Sobre este documento", where the authorship is told in full. */
+const about = (): HTMLElement =>
+  screen.getByRole('complementary', { name: 'Sobre este documento' });
+
 describe('DocumentPanel', () => {
   it('shows the card title while loading and focuses it', async () => {
     const view = await renderPanel();
@@ -36,7 +40,12 @@ describe('DocumentPanel', () => {
       screen.getByRole('heading', { name: 'Título do cartão' }),
     ).toBeTruthy();
     expect(screen.getByRole('status').textContent).toMatch(/Carregando/);
-    expect(document.activeElement?.id).toBe('document-title');
+    expect(document.activeElement?.id).toBe(
+      (view.fixture.nativeElement as HTMLElement).getAttribute(
+        'aria-labelledby',
+      ),
+    );
+    expect(document.activeElement?.id).toMatch(/^document-title-/);
     view.http.expectOne(URL).flush(aDocument());
   });
 
@@ -81,7 +90,10 @@ describe('DocumentPanel', () => {
       .flush(aDocument({ id: 'b.md', title: 'Outro documento' }));
     await view.fixture.whenStable();
     expect(host.scrollTop).toBe(0);
-    expect(document.activeElement?.id).toBe('document-title');
+    expect(document.activeElement?.id).toBe(
+      host.getAttribute('aria-labelledby'),
+    );
+    expect(document.activeElement?.id).toMatch(/^document-title-/);
     expect(
       screen.getByRole('heading', { name: 'Outro documento' }),
     ).toBeTruthy();
@@ -171,13 +183,13 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
 
   it('shows the authorship badge with the author (KBC-020 AC-3)', async () => {
     await renderWith({}, aDocument());
-    expect(screen.getByText(/Mestre Laércio/)).toBeTruthy();
-    expect(screen.getByText('José Laércio do Egito')).toBeTruthy();
+    expect(within(about()).getByText(/Mestre Laércio/)).toBeTruthy();
+    expect(within(about()).getByText('José Laércio do Egito')).toBeTruthy();
   });
 
   it('labels a synthesis of the collection without an author', async () => {
     await renderWith({}, aDocument({ authorship: 'sintese', author: null }));
-    expect(screen.getByText(/Síntese do acervo/)).toBeTruthy();
+    expect(within(about()).getByText(/Síntese do acervo/)).toBeTruthy();
     expect(screen.queryByText('José Laércio do Egito')).toBeNull();
   });
 
@@ -192,7 +204,7 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
       screen.getByRole('button', { name: 'Filtrar a conversa por Cabala' }),
     );
     expect(view.conceptSelected).toHaveBeenCalledWith('Cabala');
-    fireEvent.click(screen.getByRole('button', { name: '← Voltar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }));
     expect(view.back).toHaveBeenCalledOnce();
   });
 

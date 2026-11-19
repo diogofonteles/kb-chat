@@ -1,12 +1,14 @@
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { formatNumber } from '@angular/common';
+import { DOCUMENT, NgTemplateOutlet, formatNumber } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  LOCALE_ID,
   computed,
   inject,
-  LOCALE_ID,
+  input,
   output,
+  signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
@@ -16,33 +18,46 @@ import type {
   ConversationSummary,
   Topic,
 } from '@kb-chat/contracts';
-import { treeTitle } from '@core/topics/topic-tree.js';
 import { CollectionDialog } from '@features/collections/collection-dialog.js';
 import { UnassignedNotice } from '@features/collections/unassigned-notice.js';
 import { HistoryStore } from '@core/history/history-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import { EMPTY, Subject, catchError, switchMap } from 'rxjs';
 import { SpendStore } from '@core/spend/spend-store.js';
-import { THEMES, ThemeStore, type Theme } from '@core/theme/theme-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
 import { ResearchStore } from '@features/research/research-store.js';
 import { AccessRequestsStore } from '@core/auth/access-requests-store.js';
 import { SettingsButton } from '@features/settings/settings-button.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
-import { GoogleIdentity } from '@core/auth/google-identity.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { hasLibrary } from '@features/media/library/library-access.js';
 import { ProcessingQueueStore } from '@features/media/queue/processing-queue-store.js';
+import { AudioPresence } from '@features/shell/audio-presence.js';
+import { LibraryRecents } from '@features/shell/library-recents.js';
+import { SignOut } from '@features/shell/sign-out.js';
+import { UiAvatar } from '@ui/avatar.js';
+import { UiChip, UiIconButton } from '@ui/button.js';
+import { UiCover } from '@ui/cover.js';
+import { UiIcon } from '@ui/icon.js';
+import { UiLibraryItem } from '@ui/library-item.js';
+import { UiMenu, UiMenuItem } from '@ui/menu.js';
+import { UiProgress } from '@ui/progress.js';
+import {
+  collectionTree,
+  groupByRecency,
+  inVisibleCollections,
+  orderByTitle,
+  orderCollections,
+  shows,
+  type RecencyGroup,
+  type LibraryKind,
+  type LibraryOrder,
+  type LibraryView,
+} from './library-list.js';
 
-export type SidebarAction = 'new' | 'restore' | 'topic' | 'media' | 'levels';
-
-const THEME_LABELS: Record<Theme, () => string> = {
-  auto: () => $localize`:@@theme.auto:Automático (claro/escuro)`,
-  light: () => $localize`:@@theme.light:Claro`,
-  dark: () => $localize`:@@theme.dark:Escuro`,
-  esoteric: () => $localize`:@@theme.esoteric:Esotérico`,
-};
+export type SidebarAction =
+  'new' | 'restore' | 'topic' | 'media' | 'levels' | 'document';
 
 /** How a conversation stands, in words (KBC-029): never color alone. */
 const STATUS_LABELS: Record<ConversationStatus, () => string> = {
@@ -56,23 +71,77 @@ const KIND_LABELS: Record<ConversationKind, () => string> = {
   research: () => $localize`:@@sidebar.kindResearch:IA`,
 };
 
+const CHIPS: readonly { kind: LibraryKind; label: () => string }[] = [
+  {
+    kind: 'collections',
+    label: () => $localize`:@@library.chipCollections:Acervos`,
+  },
+  { kind: 'audio', label: () => $localize`:@@library.chipAudio:Áudios` },
+  {
+    kind: 'conversations',
+    label: () => $localize`:@@library.chipConversations:Conversas`,
+  },
+  {
+    kind: 'documents',
+    label: () => $localize`:@@library.chipDocuments:Documentos`,
+  },
+];
+
+/** The sections of the list (D5), each with its own heading, count and caret. */
+export type LibrarySection =
+  'pinned' | 'collections' | 'conversations' | 'documents';
+
+/** Which sections and sub-collection branches the viewer folded (a per-viewer convenience). */
+const FOLDED_KEY = 'kb-chat.library-folded';
+
+const RECENCY_LABELS: Record<RecencyGroup, () => string> = {
+  today: () => $localize`:@@library.today:Hoje`,
+  week: () => $localize`:@@library.lastWeek:Últimos 7 dias`,
+  older: () => $localize`:@@library.older:Mais antigas`,
+};
+
+/** A pinned media item of the list (Biblioteca, Meus marcadores, Fila de processamento). */
+interface PinnedItem {
+  readonly key: string;
+  readonly title: string;
+  readonly meta: string;
+  readonly path: string;
+  readonly icon: 'library' | 'bookmarkFill' | 'upload';
+  readonly colors: readonly [string, string];
+}
+
 /**
- * Side panel: new conversation, the complete history on this computer, collection, theme and spend (screens.md T5).
- * A container of the chat page: it works on the page-scoped ChatStore, shown both as a column
- * and inside the phone drawer, so passing a dozen inputs and outputs through ChatPage would not help.
+ * "Sua biblioteca" (v2 shell, KBC-125): "+ Criar", the chips, its own search and "Recentes",
+ * then sections that never mix (D5): "Fixados" (the pinned media items, audio rule BR-2),
+ * "Acervos" (the v1 collection selector, BR-4, as a tree with carets), "Conversas" (the v1
+ * history, compact rows grouped by recency) and, on its chip, "Documentos"; each with its own
+ * heading, count and caret. At the foot, the day's AI spend. As the phone's "Menu" it
+ * also carries the account and what the desktop has in the avatar menu.
+ * A container of the chat page: it works on the page-scoped ChatStore.
  */
 @Component({
   selector: 'app-sidebar',
   imports: [
+    NgTemplateOutlet,
     SettingsButton,
     RouterLink,
     RouterLinkActive,
     CollectionDialog,
     UnassignedNotice,
+    UiAvatar,
+    UiChip,
+    UiCover,
+    UiIcon,
+    UiIconButton,
+    UiLibraryItem,
+    UiMenu,
+    UiMenuItem,
+    UiProgress,
   ],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.collapsed]': 'collapsed()' },
 })
 export class Sidebar {
   protected readonly chat = inject(ChatStore);
@@ -80,6 +149,59 @@ export class Sidebar {
   private readonly research = inject(ResearchStore);
   protected readonly history = inject(HistoryStore);
   protected readonly spend = inject(SpendStore);
+  protected readonly session = inject(SessionStore);
+  /** The count of "Pessoas e permissões" (masters, KBC-014). */
+  protected readonly requests = inject(AccessRequestsStore);
+  /** "Fila de processamento" (KBC-090), with a count while anything runs. */
+  protected readonly queue = inject(ProcessingQueueStore);
+  protected readonly audio = inject(AudioPresence);
+  private readonly recents = inject(LibraryRecents);
+  private readonly settings = inject(SettingsStore);
+  private readonly signOutAction = inject(SignOut);
+  private readonly locale = inject(LOCALE_ID);
+  /** Research conversations go to the research view (KBC-008 FR-6), shown as saved. */
+  private readonly restorer = inject(RESEARCH_RESTORER);
+  /** A newer click cancels the load of the previous one. */
+  private readonly opens = new Subject<string>();
+
+  /** The phone's "Menu": the account and the avatar menu's entries come along. */
+  readonly mobile = input(false);
+  /** Collapsed to its covers (desktop, FR-1). */
+  readonly collapsed = input(false);
+  /** The parent closes the drawer and moves focus after each action. */
+  readonly acted = output<SidebarAction>();
+  readonly collapseToggled = output();
+
+  protected readonly createLabel = $localize`:@@library.create:Criar`;
+  protected readonly collapseLabel = $localize`:@@library.collapse:Recolher Sua biblioteca`;
+  protected readonly expandLabel = $localize`:@@library.expand:Expandir Sua biblioteca`;
+  protected readonly pinnedLabel = $localize`:@@library.pinned:Fixados`;
+  protected readonly collectionsLabel = $localize`:@@library.chipCollections:Acervos`;
+  protected readonly conversationsLabel = $localize`:@@library.chipConversations:Conversas`;
+  protected readonly documentsLabel = $localize`:@@library.chipDocuments:Documentos`;
+  protected readonly kind = signal<LibraryKind | null>(null);
+  protected readonly order = signal<LibraryOrder>('recent');
+  protected readonly query = signal('');
+  protected readonly searching = signal(false);
+  /** Folded sections and collection branches ("section:<id>", "branch:<slug>"). */
+  private readonly document = inject(DOCUMENT);
+  private readonly folded = signal<ReadonlySet<string>>(this.readFolded());
+  private readonly view = computed((): LibraryView => ({
+    kind: this.kind(),
+    order: this.order(),
+    query: this.query(),
+  }));
+  protected readonly chips = computed(() =>
+    CHIPS.filter((chip) => chip.kind !== 'audio' || this.audio.shown()).map(
+      (chip) => ({ kind: chip.kind, label: chip.label() }),
+    ),
+  );
+  protected readonly orderLabel = computed(() =>
+    this.order() === 'recent'
+      ? $localize`:@@library.recent:Recentes`
+      : $localize`:@@library.alpha:Ordem alfabética`,
+  );
+
   /** One's own AI on free models or a free tier (KBC-023): no spend in US$ to show. */
   protected readonly ownFree = computed(() => {
     const status = this.settings.aiStatus.hasValue()
@@ -87,10 +209,7 @@ export class Sidebar {
       : null;
     return status?.source === 'own' && status.free;
   });
-  /**
-   * Served by the app's AI (KBC-022): its researches left instead of a spend in US$ the person
-   * does not pay; null otherwise.
-   */
+  /** Served by the app's AI (KBC-022): its researches left instead of a spend in US$. */
   protected readonly appServed = computed(() => {
     const status = this.settings.aiStatus.hasValue()
       ? this.settings.aiStatus.value()
@@ -101,41 +220,69 @@ export class Sidebar {
       daily: status.dailyResearches ?? status.remainingToday,
     };
   });
-  private readonly themes = inject(ThemeStore);
-  protected readonly session = inject(SessionStore);
-  /** The count badge on "Pessoas e permissões" (masters, KBC-014). */
-  protected readonly requests = inject(AccessRequestsStore);
-  /** "Fila" (KBC-090): always reachable, with a count while anything runs. */
-  protected readonly queue = inject(ProcessingQueueStore);
-  private readonly google = inject(GoogleIdentity);
-  private readonly settings = inject(SettingsStore);
-  /** Research conversations go to the research view (KBC-008 FR-6), shown as saved. */
-  private readonly restorer = inject(RESEARCH_RESTORER);
-  /** A newer click cancels the load of the previous one. */
-  private readonly opens = new Subject<string>();
-  /** The parent closes the drawer and moves focus after each action. */
-  readonly acted = output<SidebarAction>();
 
-  protected readonly theme = this.themes.theme;
-  /** "Biblioteca" (T16, KBC-051 BR-1): in the place of "Mídia", for who has it. */
-  protected readonly libraryOn = computed(() => hasLibrary(this.session));
-  /** "Mídia" (T14): when the server has the media library on and a collection is chosen. */
-  protected readonly mediaOn = computed(
-    () =>
-      !this.libraryOn() &&
-      this.session.me()?.media === true &&
-      this.session.can('media') &&
-      this.chat.topicSlug() !== null,
-  );
-  /** The signed-in person's initial, when Google gave no picture. */
-  protected readonly initial = computed(() => {
-    const me = this.session.me();
-    return (me?.name || me?.email || '?').charAt(0).toUpperCase();
+  /** "Biblioteca" (T16, KBC-051 BR-1), else "Mídia" (T14) with a collection chosen. */
+  private readonly mediaLink = computed(() => {
+    if (hasLibrary(this.session))
+      return {
+        title: $localize`:@@sidebar.library:Biblioteca`,
+        path: '/biblioteca',
+      };
+    return this.audio.listens() && this.chat.topicSlug() !== null
+      ? { title: $localize`:@@sidebar.media:Mídia`, path: '/midia' }
+      : null;
   });
-  protected readonly themeOptions = THEMES.map((value) => ({
-    value,
-    label: THEME_LABELS[value](),
-  }));
+  /** The pinned items, all under the audio rule (BR-2). */
+  protected readonly pinned = computed((): PinnedItem[] => {
+    if (!this.audio.shown() || !shows(this.kind(), 'audio')) return [];
+    return [this.libraryItem(), this.bookmarksItem(), this.queueItem()].filter(
+      (item): item is PinnedItem => item !== null,
+    );
+  });
+  /**
+   * Without audio the pinned items hide; the media library stays one choice away in "+ Criar"
+   * for who has it (no v1 action is lost, BR-1).
+   */
+  protected readonly mediaFallback = computed(() =>
+    this.audio.shown() ? null : this.mediaLink(),
+  );
+
+  protected readonly collections = computed(() =>
+    shows(this.kind(), 'collections')
+      ? orderCollections(
+          this.chat.topicList(),
+          this.view(),
+          this.recents.collections(),
+        ).map((topic) => ({
+          topic,
+          meta: this.collectionMeta(topic),
+          active: topic.slug === this.chat.topicSlug(),
+        }))
+      : [],
+  );
+  /** The collections as a tree: each group's top and its sub-collections (D5). */
+  protected readonly collectionNodes = computed(() =>
+    collectionTree(this.collections()),
+  );
+  /** Whether any collection has a caret: only then the others keep its place, aligned. */
+  protected readonly hasBranches = computed(() =>
+    this.collectionNodes().some((node) => node.children.length > 0),
+  );
+  protected readonly pinnedCount = computed(() => this.pinned().length);
+  protected readonly documents = computed(() =>
+    shows(this.kind(), 'documents')
+      ? orderByTitle(
+          inVisibleCollections(this.recents.documents(), this.titles()),
+          this.view(),
+        ).map((doc) => ({
+          ...doc,
+          meta: this.titles().get(doc.topic) ?? doc.topic,
+        }))
+      : [],
+  );
+  protected readonly showsConversations = computed(() =>
+    shows(this.kind(), 'conversations'),
+  );
   /** The conversation on screen: the one of the current view (KBC-008 FR-5). */
   protected readonly currentId = computed(() =>
     this.views.current() === 'research'
@@ -154,13 +301,33 @@ export class Sidebar {
     const researching = this.research.streaming()
       ? this.research.conversationId()
       : null;
-    return this.history.conversations().map((conversation) => {
+    const list = this.history.conversations().map((conversation) => {
       const running =
         conversation.id === searching || conversation.id === researching;
       const status = running ? 'pending' : conversation.status;
       return { ...conversation, status };
     });
+    return orderByTitle(list, this.view());
   });
+  /** The conversations by recency (D5): Hoje, Últimos 7 dias, Mais antigas. */
+  protected readonly conversationGroups = computed(() =>
+    groupByRecency(this.entries(), new Date()).map(({ group, items }) => ({
+      group,
+      label: RECENCY_LABELS[group](),
+      items,
+    })),
+  );
+  /** A search shows every match: folded sections and branches open while it is typed. */
+  private readonly filtering = computed(() => this.query().trim() !== '');
+  /** Nothing of any section matches the library's own search. */
+  protected readonly nothingFound = computed(
+    () =>
+      this.filtering() &&
+      this.pinned().length === 0 &&
+      this.collections().length === 0 &&
+      this.documents().length === 0 &&
+      (!this.showsConversations() || this.entries().length === 0),
+  );
   protected readonly statusLabels: Record<ConversationStatus, string> = {
     pending: STATUS_LABELS.pending(),
     interrupted: STATUS_LABELS.interrupted(),
@@ -170,6 +337,10 @@ export class Sidebar {
     search: KIND_LABELS.search(),
     research: KIND_LABELS.research(),
   };
+  /** "Novo acervo" and "Editar acervo" (KBC-048 FR-6): only with "Criar acervos". */
+  protected readonly canCreateCollections = computed(() =>
+    this.session.can('collection-create'),
+  );
 
   constructor() {
     this.opens
@@ -181,7 +352,34 @@ export class Sidebar {
       .subscribe((conversation) => this.restoreLoaded(conversation));
   }
 
-  /** "+ Nova conversa" starts over in the current view; the other one keeps its conversation. */
+  protected chooseKind(kind: LibraryKind): void {
+    this.kind.update((current) => (current === kind ? null : kind));
+  }
+
+  /** Whether a section (or a collection's branch) shows its items. */
+  protected isOpen(key: string): boolean {
+    return this.filtering() || !this.folded().has(key);
+  }
+
+  /** The caret of a collection with sub-collections. */
+  protected branchLabel(title: string): string {
+    return $localize`:@@library.branch:Sub-acervos de ${title}:title:`;
+  }
+
+  protected toggleFold(key: string): void {
+    const next = new Set(this.folded());
+    if (this.isOpen(key)) next.add(key);
+    else next.delete(key);
+    this.folded.set(next);
+    this.writeFolded(next);
+  }
+
+  protected toggleSearch(): void {
+    this.searching.update((on) => !on);
+    if (!this.searching()) this.query.set('');
+  }
+
+  /** "Nova conversa" starts over in the current view; the other one keeps its conversation. */
   protected startNew(): void {
     if (this.views.current() === 'research') this.research.newConversation();
     else this.chat.newConversation();
@@ -191,6 +389,15 @@ export class Sidebar {
   /** Loads the whole conversation, then restores it by kind. */
   protected open(summary: ConversationSummary): void {
     this.opens.next(summary.id);
+  }
+
+  protected openDocument(doc: {
+    topic: string;
+    id: string;
+    title: string;
+  }): void {
+    this.chat.open(doc.topic, { id: doc.id, title: doc.title });
+    this.acted.emit('document');
   }
 
   /**
@@ -214,33 +421,16 @@ export class Sidebar {
     this.acted.emit('levels');
   }
 
-  /** "Novo acervo" and "Editar acervo" (KBC-048 FR-6): only with "Criar acervos". */
-  protected readonly canCreateCollections = computed(() =>
-    this.session.can('collection-create'),
-  );
-  private readonly locale = inject(LOCALE_ID);
-  /**
-   * The selector as a tree (KBC-048 FR-4): sub-collections indented with their counts; a parent
-   * shown only as the title of its group is disabled and says so in words (BR-3).
-   */
-  protected readonly topicOptions = computed(() =>
-    this.chat.topicList().map((topic) => ({
-      slug: topic.slug,
-      canOpen: topic.canOpen,
-      label: topic.canOpen
-        ? `${treeTitle(topic)} (${formatNumber(topic.documentCount, this.locale)})`
-        : $localize`:@@sidebar.groupOnly:${topic.title}:title: — só os sub-acervos abaixo`,
-    })),
-  );
-
   /** A new collection opens at once (≤ 2 s, NFR-1); a renamed one keeps its place. */
   protected collectionSaved(topic: Topic): void {
     this.chat.putTopic(topic);
     if (topic.slug !== this.chat.topicSlug()) this.changeTopic(topic.slug);
   }
 
+  /** A collection of the list becomes the one in use, as the v1 selector did (BR-4, AC-7). */
   protected changeTopic(slug: string): void {
     this.chat.selectTopic(slug);
+    this.recents.noteCollection(slug);
     this.acted.emit('topic');
   }
 
@@ -250,13 +440,87 @@ export class Sidebar {
   }
 
   protected signOut(): void {
-    this.google.disableAutoSelect();
-    // The page starts over at the login screen once the session is gone (SessionStore).
-    this.session.signOut().subscribe();
+    this.signOutAction.run();
   }
 
-  protected changeTheme(value: string): void {
-    const theme = THEMES.find((t) => t === value);
-    if (theme) this.themes.set(theme);
+  private readFolded(): ReadonlySet<string> {
+    try {
+      const raw = this.storage()?.getItem(FOLDED_KEY);
+      const list: unknown = raw ? JSON.parse(raw) : [];
+      return new Set(
+        Array.isArray(list)
+          ? list.filter((key): key is string => typeof key === 'string')
+          : [],
+      );
+    } catch {
+      return new Set();
+    }
+  }
+
+  private writeFolded(keys: ReadonlySet<string>): void {
+    try {
+      this.storage()?.setItem(FOLDED_KEY, JSON.stringify([...keys]));
+    } catch {
+      // Blocked storage: the fold lasts until the page reloads.
+    }
+  }
+
+  private storage(): Storage | null {
+    try {
+      return this.document.defaultView?.localStorage ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private collectionMeta(topic: Topic): string {
+    if (!topic.canOpen)
+      return $localize`:@@library.groupOnly:Só os sub-acervos abaixo`;
+    const documents = formatNumber(topic.documentCount, this.locale);
+    return topic.documentCount === 1
+      ? $localize`:@@library.collectionOne:Acervo · 1 documento`
+      : $localize`:@@library.collectionMany:Acervo · ${documents}:count: documentos`;
+  }
+
+  private libraryItem(): PinnedItem | null {
+    const link = this.mediaLink();
+    return link
+      ? {
+          key: 'library',
+          title: link.title,
+          meta: $localize`:@@library.allMedia:Todas as mídias`,
+          path: link.path,
+          icon: 'library',
+          colors: ['#7a3d22', '#2a120a'],
+        }
+      : null;
+  }
+
+  private bookmarksItem(): PinnedItem | null {
+    return this.audio.listens()
+      ? {
+          key: 'bookmarks',
+          title: $localize`:@@library.bookmarks:Meus marcadores`,
+          meta: $localize`:@@library.bookmarksMeta:Lista`,
+          path: '/midia/marcadores',
+          icon: 'bookmarkFill',
+          colors: ['#5b3fd1', '#9ad1ff'],
+        }
+      : null;
+  }
+
+  private queueItem(): PinnedItem | null {
+    if (!this.queue.allowed()) return null;
+    const active = this.queue.active();
+    return {
+      key: 'queue',
+      title: $localize`:@@library.queue:Fila de processamento`,
+      meta: active
+        ? $localize`:@@library.queueActive:${active}:count: em processamento`
+        : $localize`:@@library.queueIdle:Nada em processamento`,
+      path: '/fila',
+      icon: 'upload',
+      colors: ['#1f9c56', '#0b3d22'],
+    };
   }
 }

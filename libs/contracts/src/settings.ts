@@ -72,7 +72,18 @@ export function isAllowedModel(
   return allowed === undefined || allowed.includes(model);
 }
 
-export const THEMES = ['auto', 'light', 'dark', 'esoteric'] as const;
+/**
+ * "auto" is "not chosen": the app's default, the revised theme since v2 (KBC-124, D2).
+ * "revised" chooses it explicitly; "system" follows the operating system (light or dark).
+ */
+export const THEMES = [
+  'auto',
+  'revised',
+  'system',
+  'light',
+  'dark',
+  'esoteric',
+] as const;
 export const themeSchema = z.enum(THEMES);
 export type Theme = z.infer<typeof themeSchema>;
 

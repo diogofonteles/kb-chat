@@ -102,6 +102,21 @@ import { TrackSubjectsView } from './track-subjects-view.js';
 import { ArchivedTracks } from './track-edit/archived-tracks.js';
 import { MovedBookmarksNotice } from './track-edit/moved-bookmarks-notice.js';
 import { TrackActions } from './track-edit/track-actions.js';
+import type { MenuOption } from './menu-button.js';
+import {
+  UiButton,
+  UiChip,
+  UiCover,
+  UiIcon,
+  UiPill,
+  type Tone,
+} from '@ui/index.js';
+
+/**
+ * The body of the v2 player (KBC-129 FR-3): the transcript, the recording's tracks when it
+ * has approved ones, or, for who edits, the voices.
+ */
+export type PlayerView = 'transcript' | 'tracks' | 'voices';
 
 /**
  * One media item (screens.md T15): its title, authorship and length, and the player once
@@ -131,6 +146,11 @@ import { TrackActions } from './track-edit/track-actions.js';
     ArchivedTracks,
     MovedBookmarksNotice,
     TrackPublicationStatus,
+    UiButton,
+    UiChip,
+    UiCover,
+    UiIcon,
+    UiPill,
   ],
   templateUrl: './media-player-page.html',
   styleUrl: './media-player-page.css',
@@ -259,11 +279,12 @@ export class MediaPlayerPage {
       ? $localize`:@@tracks.entry.appliedOne:1 faixa aplicada`
       : $localize`:@@tracks.entry.applied:${count}:count: faixas aplicadas`;
   });
-  /** Who speaks is for `media-speakers`, and for whoever names the voices (KBC-065 BR-4). */
+  /**
+   * Who speaks is for everyone who may listen (KBC-151 BR-0): the API sends confirmed names
+   * only, and the separation only to whoever names the voices (KBC-065 BR-3, ADR 0032).
+   */
   protected readonly canSeeSpeakers = computed(
-    () =>
-      this.session.me() !== null &&
-      (this.session.can('media-speakers') || this.session.can('media-edit')),
+    () => this.session.me() !== null,
   );
   /** "Mostrar quem fala" (FR-4): on by default. */
   protected readonly speakersOn = computed(
@@ -318,6 +339,63 @@ export class MediaPlayerPage {
       ? cuesWithSpeakers(this.parsedCues(), this.transcript.value())
       : this.parsedCues(),
   );
+  /** The recording has approved tracks: "Faixas" is one of the views. */
+  protected readonly hasTracks = computed(
+    () => this.tracks.tracks().length > 0,
+  );
+  /**
+   * The chips Transcrição · Faixas · Vozes: "Faixas" with approved tracks, "Vozes" only for
+   * who edits recordings (the voices are theirs); one view alone needs no chips.
+   */
+  protected readonly hasViews = computed(
+    () => this.canEdit() || this.hasTracks(),
+  );
+  /** The view chosen; back on the transcript for each media opened. */
+  protected readonly chosenView = linkedSignal<string, PlayerView>({
+    source: this.id,
+    computation: () => 'transcript',
+  });
+  /**
+   * The view shown: the one chosen while it is still offered, else the transcript (the
+   * tracks went away, or the person may no longer edit), so a chip is always selected.
+   */
+  protected readonly view = computed((): PlayerView => {
+    const chosen = this.chosenView();
+    if (chosen === 'tracks' && !this.hasTracks()) return 'transcript';
+    if (chosen === 'voices' && !this.canEdit()) return 'transcript';
+    return chosen;
+  });
+  /** The transcript is the body now: its own low-confidence notice is in view (BR-2). */
+  protected readonly transcriptInView = computed(
+    () => this.showTranscript() && this.view() === 'transcript',
+  );
+  /** The situation's pill: done in green, a failure in red, the rest in waiting. */
+  protected readonly transcriptionTone = computed((): Tone => {
+    const status = this.media()?.transcription.status;
+    if (status === 'done') return 'ok';
+    if (status === 'failed') return 'err';
+    return status === 'none' || status === undefined ? 'muted' : 'warn';
+  });
+  /** The page's actions at the top of the player's ⋯ (v2: they were loose buttons). */
+  protected readonly pageOptions = computed<readonly MenuOption[]>(() => {
+    const media = this.media();
+    if (!media) return [];
+    const options: MenuOption[] = [];
+    if (media.canEdit) options.push({ id: 'edit', label: this.editLabel });
+    if (this.editEntry()?.state === 'new')
+      options.push({
+        id: 'prepare',
+        label: $localize`:@@prep.entry.new:Preparar áudio`,
+      });
+    if (this.hasTranscript())
+      options.push({
+        id: 'transcript',
+        label: this.collapsed()
+          ? $localize`:@@transcript.show:Mostrar transcrição`
+          : $localize`:@@transcript.hide:Esconder transcrição`,
+      });
+    return options;
+  });
   /** The column shows: there is a transcript and the person did not hide it (FR-9). */
   protected readonly showTranscript = computed(
     () => this.hasTranscript() && !this.collapsed(),
@@ -384,6 +462,9 @@ export class MediaPlayerPage {
     viewChild<ElementRef<HTMLAnchorElement>>('backToList');
   private readonly editButton =
     viewChild<ElementRef<HTMLButtonElement>>('editButton');
+  private readonly player = viewChild(MediaPlayer);
+  /** The edit dialog was opened from ⋯: closing it gives the focus back there. */
+  private editFromMenu = false;
 
   constructor() {
     inject(CollectionHeading).follow(
@@ -427,7 +508,19 @@ export class MediaPlayerPage {
   /** Safari leaves a clicked button unfocused, so the dialog has nothing to give back. */
   protected editClosed(): void {
     this.editing.set(false);
-    this.editButton()?.nativeElement.focus();
+    if (this.editFromMenu) this.player()?.focusMore();
+    else this.editButton()?.nativeElement.focus();
+    this.editFromMenu = false;
+  }
+
+  /** A page action chosen in the player's ⋯. */
+  protected choosePageAction(id: string): void {
+    if (id === 'edit') {
+      this.editFromMenu = true;
+      this.editing.set(true);
+    }
+    if (id === 'prepare') void this.router.navigateByUrl(this.prepareLink());
+    if (id === 'transcript') this.toggleTranscript();
   }
 
   /** "Continuar de 23:10": plays from where the person stopped. */

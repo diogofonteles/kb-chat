@@ -16,7 +16,8 @@
       "@kb-chat/contracts": ["libs/contracts/src/index.ts"],
       "@kb-chat/player-core": ["libs/player-core/src/index.ts"],
       "@core/*": ["apps/web/src/app/core/*"],
-      "@features/*": ["apps/web/src/app/features/*"]
+      "@features/*": ["apps/web/src/app/features/*"],
+      "@ui/*": ["apps/web/src/app/ui/*"]
     }
   },
   "exclude": ["node_modules", "tmp", "dist"]

@@ -1,11 +1,14 @@
 @if (forbidden()) {
   <div class="page">
-    <p class="banner" role="alert" i18n="@@tracks.forbidden">
-      Você não tem permissão para editar esta gravação.
-    </p>
-    <a class="secondary" [routerLink]="mediaLink()" i18n="@@tracks.backToAudio"
-      >Voltar ao áudio</a
-    >
+    <div class="empty-state" role="alert">
+      <ui-icon class="empty-icon" name="lock" [size]="28" />
+      <p class="empty-title" i18n="@@tracks.forbidden">
+        Você não tem permissão para editar esta gravação.
+      </p>
+      <a uiButton="white" [routerLink]="mediaLink()" i18n="@@tracks.backToAudio"
+        >Voltar ao áudio</a
+      >
+    </div>
   </div>
 } @else if (loadError()) {
   <div class="page">
@@ -27,26 +30,34 @@
   </div>
 } @else {
   <div class="page">
-    <header class="top">
-      <h2 class="heading">{{ title() }}</h2>
-      <app-preparation-steps
-        class="progress"
-        [step]="step()"
-        [finished]="step() === 4"
-        [mediaId]="id()"
-      />
+    <header class="top v2-head">
+      <ui-cover class="head-cover" [title]="title()" [size]="112" />
+      <div class="head-text">
+        <p class="kicker" i18n="@@prep.kicker">Preparar áudio</p>
+        <h2 class="heading">{{ title() }}</h2>
+      </div>
       @if (step() === 3) {
-        <button
-          type="button"
-          class="secondary leave"
-          [disabled]="draft.busy()"
-          (click)="leave()"
-          i18n="@@tracks.leave"
-        >
-          Sair e continuar depois
-        </button>
+        <div class="head-tools">
+          <button
+            uiButton="outline"
+            size="sm"
+            type="button"
+            class="leave"
+            [disabled]="draft.busy()"
+            (click)="leave()"
+            i18n="@@tracks.leave"
+          >
+            Sair e continuar depois
+          </button>
+        </div>
       }
     </header>
+    <app-preparation-steps
+      class="progress"
+      [step]="step()"
+      [finished]="step() === 4"
+      [mediaId]="id()"
+    />
 
     <audio
       #auditionElement
@@ -247,7 +258,7 @@
         [cursorMs]="cursorMs()"
         [playheadMs]="audition.positionMs()"
         [readOnly]="readOnly()"
-        (selectTrack)="choose($event)"
+        (selectTrack)="chooseOnWave($event)"
         (moved)="moveHandle($event)"
         (cursorChange)="placeCursor($event)"
         (listen)="listenByKey($event)"
@@ -406,6 +417,7 @@
           i18n-aria-label="@@tracks.listRegion"
         >
           @if (count() === 0) {
+            <ui-icon class="empty-icon" name="scissors" [size]="28" />
             <p class="empty" i18n="@@tracks.empty">
               Nenhuma faixa ainda. Selecione a pergunta e a resposta na
               transcrição ou use Nova faixa aqui.
@@ -459,10 +471,9 @@
 
       <footer class="foot">
         <p class="foot-summary">
-          <span>{{ countText() }}</span>
+          <span class="foot-count">{{ countText() }}</span>
           @if (warningCount()) {
-            ·
-            <span i18n="@@tracks.footWarnings"
+            <span class="foot-warn" i18n="@@tracks.footWarnings"
               >{{ warningCount() }} com aviso</span
             >
           }

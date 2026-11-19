@@ -14,26 +14,28 @@ import {
   flushAiStatus,
 } from '../../testing/settings-fixtures.js';
 import { aMe, anOwner } from '../../testing/session-fixtures.js';
-import { SettingsHost } from './settings-host.js';
+import { provideRouter } from '@angular/router';
+import { SettingsPage } from './settings-page.js';
 import { SettingsStore } from './settings-store.js';
 import { LEND_NONE } from '../../testing/lending-fixtures.js';
 
-async function openSettingsAs(me: Me, section: 'people' | null = null) {
+/** Configurações as a page (KBC-131): every section the person may see, one after the other. */
+async function openSettingsAs(me: Me) {
   localStorage.clear();
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
+      provideRouter([]),
       { provide: RELOAD_PAGE, useValue: () => undefined },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
   TestBed.inject(SessionStore).signIn('credential').subscribe();
   http.expectOne('/api/v1/auth/google').flush(me);
-  const fixture = TestBed.createComponent(SettingsHost);
+  const fixture = TestBed.createComponent(SettingsPage);
   document.body.appendChild(fixture.nativeElement);
-  TestBed.inject(SettingsStore).openSettings(section);
   TestBed.tick();
   http.expectOne('/api/v1/settings').flush(aSettingsView());
   flushAiStatus(http);
@@ -43,7 +45,7 @@ async function openSettingsAs(me: Me, section: 'people' | null = null) {
 
 const sectionNames = () =>
   within(screen.getByRole('navigation', { name: 'Seções' }))
-    .getAllByRole('button')
+    .getAllByRole('link')
     .map((b) => b.textContent?.trim());
 
 describe('Configurações per permission (KBC-010)', () => {
@@ -53,49 +55,55 @@ describe('Configurações per permission (KBC-010)', () => {
     );
     TestBed.tick();
     for (const request of http.match('/api/v1/topics')) request.flush(TOPICS);
+    for (const request of http.match('/api/v1/me/accesses')) request.flush([]);
     await fixture.whenStable();
 
     // Everyone sees who acted as them (KBC-060 BR-7); the audit only with the grant.
     expect(sectionNames()).toEqual([
+      'Conta',
       'Preferências',
       'Acessos à sua conta',
       'Sobre',
     ]);
     expect(
-      screen.getByRole('heading', { name: 'Preferências', level: 3 }),
+      screen.getByRole('heading', { name: 'Preferências', level: 2 }),
     ).toBeTruthy();
     http.expectNone('/api/v1/ai/providers');
     expect(TestBed.inject(SettingsStore).firstRun()).toBe(false);
   });
 
-  it('opens "Pessoas e permissões" for a master from the sidebar entry', async () => {
-    const { http, fixture } = await openSettingsAs(anOwner(), 'people');
+  it('shows "Pessoas e permissões" to a master, grouped under Administração', async () => {
+    const { http, fixture } = await openSettingsAs(anOwner());
     http.expectOne('/api/v1/ai/providers').flush({ items: [], active: 'none' });
     flushAiStatus(http);
     TestBed.tick();
 
     expect(sectionNames()).toEqual([
+      'Conta',
       'Sua IA',
-      'IA da aplicação',
       'Preferências',
-      'Pessoas e permissões',
-      'Auditoria do Ver como',
       'Acessos à sua conta',
+      'Pessoas e permissões',
+      'IA da aplicação',
+      'Auditoria do Ver como',
       'Sobre',
     ]);
+    expect(screen.getByText('Administração')).toBeTruthy();
     expect(
-      screen.getByRole('heading', { name: 'Pessoas e permissões', level: 3 }),
+      screen.getByRole('heading', { name: 'Pessoas e permissões', level: 2 }),
     ).toBeTruthy();
     http
       .expectOne('/api/v1/house-ai/default')
       .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
     http.expectOne('/api/v1/people').flush({ items: [] });
-    http.expectOne('/api/v1/topics').flush({ items: [], defaultSlug: null });
+    for (const request of http.match('/api/v1/topics'))
+      request.flush({ items: [], defaultSlug: null });
     http.expectOne('/api/v1/spend/people').flush({ items: [] });
     http.expectOne('/api/v1/access-requests').flush({ items: [] });
     http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
     // The collections with access levels (KBC-103): none here.
     http.expectOne('/api/v1/levels').flush({ items: [] });
+    for (const request of http.match(() => true)) request.flush({});
     await fixture.whenStable();
   });
 
@@ -109,8 +117,9 @@ describe('Configurações per permission (KBC-010)', () => {
     TestBed.tick();
     expect(sectionNames()).toContain('Transcritores');
     expect(sectionNames()).toContain('Termos da transcrição');
+    // Mídia comes after Administração (Auditoria do Ver como is its last entry).
     expect(sectionNames().indexOf('Transcritores')).toBe(
-      sectionNames().indexOf('Pessoas e permissões') + 1,
+      sectionNames().indexOf('Auditoria do Ver como') + 1,
     );
     for (const request of http.match(() => true)) request.flush({});
     await fixture.whenStable();

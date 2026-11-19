@@ -207,11 +207,13 @@ describe('ResearchMessage', () => {
     expect(view.opened).toHaveBeenCalledWith({
       id: 'raw/b.md',
       title: 'O Caibalion',
+      trigger: expect.any(HTMLElement),
     });
     fireEvent.click(screen.getByRole('button', { name: 'Os Princípios' }));
     expect(view.opened).toHaveBeenLastCalledWith({
       id: 'raw/a.md',
       title: 'Os Princípios',
+      trigger: expect.any(HTMLElement),
     });
     // Only the documents the answer cites are listed as sources.
     expect(screen.queryByRole('button', { name: 'Não citado' })).toBeNull();
@@ -294,10 +296,14 @@ describe('ResearchMessage', () => {
       /O que é o ritmo\?\s*Palestra de 12\/03\/2017\s*·\s*0:41\s*\+1 trecho/,
     );
     fireEvent.click(chip);
+    // KBC-150: the answer's cited sources and question ride along, for "Fonte n de N" and ‹ ›.
+    const cited = [SOURCES[0], TRACK];
     expect(trackOpened).toHaveBeenLastCalledWith({
       source: TRACK,
       at: '0:41',
       trigger: chip,
+      sources: cited,
+      question: expect.any(String),
     });
     const second = screen.getByRole('link', {
       name: 'Fonte 4, faixa O que é o ritmo?, aos 1 minuto e 10 segundos',
@@ -307,8 +313,84 @@ describe('ResearchMessage', () => {
       source: TRACK,
       at: '1:10',
       trigger: second,
+      sources: cited,
+      question: expect.any(String),
     });
     expect(opened).not.toHaveBeenCalled();
+  });
+
+  it('KBC-150 item 7: a track’s citation has the wave and "título · tempo"; the open one is filled', async () => {
+    const view = await renderMessage(
+      aTurn({
+        text: 'O ritmo [4@0:41] e o pêndulo [4@1:10]. São sete [1].',
+        sources: [...SOURCES, TRACK],
+      }),
+    );
+    const audio = screen.getByRole('link', {
+      name: 'Fonte 4, faixa O que é o ritmo?, aos 41 segundos',
+    });
+    expect(audio.classList).toContain('cite-audio');
+    expect(audio.textContent).toBe('4O que é o ritmo? · 0:41');
+    const text = screen.getByRole('link', { name: /^Fonte 1:/ });
+    expect(text.classList).not.toContain('cite-audio');
+    const again = screen.getByRole('link', {
+      name: 'Fonte 4, faixa O que é o ritmo?, aos 1 minuto e 10 segundos',
+    });
+    view.fixture.componentRef.setInput('activeSource', 4);
+    view.fixture.componentRef.setInput('activeAt', '0:41');
+    await view.fixture.whenStable();
+    // Only the citation open is filled, not the track's other one nor the text.
+    expect(audio.classList).toContain('active');
+    expect(again.classList).not.toContain('active');
+    expect(text.classList).not.toContain('active');
+  });
+
+  it('KBC-155 AC-6: a pill of grouped times opens each passage, and only the open time is filled', async () => {
+    const view = await renderMessage(
+      aTurn({
+        text: 'O ritmo [4@0:41], [4@1:10]. São sete [1].',
+        sources: [...SOURCES, TRACK],
+      }),
+    );
+    const first = screen.getByRole('link', {
+      name: 'Ouvir O que é o ritmo? aos 41 segundos',
+    });
+    const second = screen.getByRole('link', {
+      name: 'Ouvir O que é o ritmo? aos 1 minuto e 10 segundos',
+    });
+    fireEvent.click(second);
+    expect(view.trackOpened).toHaveBeenLastCalledWith(
+      expect.objectContaining({ source: TRACK, at: '1:10', trigger: second }),
+    );
+    view.fixture.componentRef.setInput('activeSource', 4);
+    view.fixture.componentRef.setInput('activeAt', '1:10');
+    await view.fixture.whenStable();
+    expect(second.classList).toContain('active');
+    expect(first.classList).not.toContain('active');
+  });
+
+  it('KBC-155 AC-6: the track open with no time fills none of the grouped times', async () => {
+    const view = await renderMessage(
+      aTurn({
+        text: 'O ritmo [4@0:41], [4@1:10]. São sete [1].',
+        sources: [...SOURCES, TRACK],
+      }),
+    );
+    view.fixture.componentRef.setInput('activeSource', 4);
+    view.fixture.componentRef.setInput('activeAt', null);
+    await view.fixture.whenStable();
+    const times = [
+      screen.getByRole('link', {
+        name: 'Ouvir O que é o ritmo? aos 41 segundos',
+      }),
+      screen.getByRole('link', {
+        name: 'Ouvir O que é o ritmo? aos 1 minuto e 10 segundos',
+      }),
+    ];
+    expect(times.map((one) => one.classList.contains('active'))).toEqual([
+      false,
+      false,
+    ]);
   });
 
   it('KBC-099 AC-15: an answer saved before the tracks keeps its sources as they were', async () => {
@@ -317,6 +399,7 @@ describe('ResearchMessage', () => {
     expect(opened).toHaveBeenCalledWith({
       id: 'raw/a.md',
       title: 'Os Princípios',
+      trigger: expect.any(HTMLElement),
     });
     expect(trackOpened).not.toHaveBeenCalled();
     expect(document.querySelector('.track-mark')).toBeNull();
@@ -498,7 +581,8 @@ describe('ResearchMessage', () => {
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
     view.fixture.componentRef.setInput('turn', aTurn({ interrupted: true }));
     await view.fixture.whenStable();
-    expect(screen.getByText('(interrompida)')).toBeTruthy();
+    expect(screen.getByText('interrompida')).toBeTruthy();
+    expect(screen.getByText('A resposta foi interrompida.')).toBeTruthy();
   });
 });
 
@@ -759,7 +843,8 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
 
     it('still marks an answer cut short after a complete sweep, with its partial cost (review round 3)', async () => {
       await renderMessage(aTurn({ interrupted: true, coverage }));
-      expect(screen.getByText('(interrompida)')).toBeTruthy();
+      expect(screen.getByText('interrompida')).toBeTruthy();
+      expect(screen.getByText('A resposta foi interrompida.')).toBeTruthy();
       expect(
         screen.getByText(
           'O custo do que já foi processado entra no gasto do dia.',

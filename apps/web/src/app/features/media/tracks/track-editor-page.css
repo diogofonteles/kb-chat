@@ -5,45 +5,56 @@
   overflow-y: auto;
 }
 
+/* v2 (KBC-130): the assistant head and stepper, the waveform in a soft panel, compact
+   pill tools, rows of 46 and the approve bar fixed at the foot of the main panel. */
 .page {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
   width: 100%;
-  max-width: 90rem;
-  margin: 0 auto;
-  padding: var(--space-4) var(--space-4) 0;
-}
-
-.top {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-  align-items: center;
-}
-
-.heading {
-  flex-basis: 100%;
-  margin: 0;
-  font-family: var(--font-reading);
-  overflow-wrap: anywhere;
+  padding: var(--space-8) var(--space-8) 0;
 }
 
 .progress {
-  flex: 1 1 18rem;
   min-width: 0;
-}
-
-.leave {
-  margin-left: auto;
 }
 
 .banner {
   margin: 0;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-left: 4px solid var(--color-accent);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
+  font-size: var(--text-sm);
+}
+
+.banner[role='alert'] {
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+}
+
+/* "Sem permissão": an empty state of the page. */
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--overlay-1);
+  text-align: center;
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
+  color: var(--color-text-muted);
+}
+
+.empty-title {
+  max-width: 28rem;
+  margin: 0;
+  font-weight: 700;
 }
 
 .banner p {
@@ -63,9 +74,9 @@
 
 .copy textarea {
   width: 100%;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  border: 1px solid var(--overlay-line);
+  border-radius: var(--radius-menu);
+  background: var(--overlay-2);
   color: var(--color-text);
   font: inherit;
 }
@@ -73,7 +84,7 @@
 .hint {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
 }
 
 .link {
@@ -81,9 +92,9 @@
   padding: 0 var(--space-1);
   border: 0;
   background: none;
-  color: var(--color-accent-strong);
+  color: var(--color-accent-text);
   font: inherit;
-  font-weight: 600;
+  font-weight: 700;
   text-decoration: underline;
   cursor: pointer;
 }
@@ -107,54 +118,86 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  gap: var(--space-1);
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--overlay-4);
+  border-radius: var(--radius-pill);
   background: none;
-  color: inherit;
+  color: var(--color-text);
   font: inherit;
+  font-size: var(--text-meta);
+  font-weight: 700;
   text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
 }
 
+.secondary:hover:not(:disabled) {
+  border-color: var(--color-text);
+}
+
 .primary {
-  border-color: var(--color-accent);
-  background: var(--color-accent-strong);
+  border-color: transparent;
+  background: var(--color-accent);
   color: var(--color-on-accent);
-  font-weight: 600;
 }
 
 .secondary:disabled,
 .primary:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: default;
 }
 
-.zoom {
-  min-width: 44px;
+/* The compact tools: "Nova faixa aqui" in white, the rest as soft round pills. */
+.toolbar .secondary {
+  min-height: 2.125rem;
+  border-color: transparent;
+  background: var(--overlay-2);
 }
 
+.toolbar .secondary:first-child {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.zoom {
+  min-width: 2.125rem;
+  padding: 0;
+}
+
+@media (max-width: 1023px) {
+  .toolbar .secondary {
+    min-height: var(--target);
+  }
+
+  .zoom {
+    min-width: var(--target);
+  }
+}
+
+/* On a phone the list and the text are two chips (v2 chips, pressed in white). */
 .tabs {
   display: flex;
-  gap: var(--space-1);
-  border-bottom: 1px solid var(--color-border);
+  gap: var(--space-2);
 }
 
 .tabs button {
-  flex: 1;
-  min-height: 48px;
+  min-height: var(--target);
+  padding: 0 var(--space-4);
   border: 0;
-  border-bottom: 3px solid transparent;
-  background: none;
-  color: inherit;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
+  color: var(--color-text);
   font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
   cursor: pointer;
 }
 
 .tabs [aria-pressed='true'] {
-  border-bottom-color: var(--color-accent);
-  font-weight: 700;
+  background: var(--color-text);
+  color: var(--color-bg);
 }
 
 .columns {
@@ -171,29 +214,60 @@
   display: none;
 }
 
+.column > .empty-icon {
+  margin: var(--space-6) auto 0;
+}
+
 .empty {
   margin: 0;
   padding: var(--space-4);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-weight: 700;
+  text-align: center;
 }
 
+.column > .empty ~ .hint {
+  padding: 0 var(--space-4) var(--space-6);
+  text-align: center;
+}
+
+/* The approve bar: fixed at the foot of the panel, the last row whole above it (FR-3). */
 .foot {
   position: sticky;
   bottom: 0;
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--space-2) var(--space-3);
   align-items: center;
   justify-content: space-between;
-  margin-inline: calc(-1 * var(--space-4));
-  padding: var(--space-2) var(--space-4);
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg);
+  margin-inline: calc(-1 * var(--space-8));
+  padding: var(--space-3) var(--space-8);
+  border-top: 1px solid var(--overlay-line);
+  background: var(--color-elevated);
 }
 
 .foot-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
   margin: 0;
+  font-size: var(--text-sm);
+}
+
+.foot-count {
+  font-size: var(--text-item);
+  font-weight: 700;
+}
+
+.foot-warn {
+  padding: 0.125rem var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-pill);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  font-weight: 700;
 }
 
 .saved {
@@ -201,16 +275,22 @@
 }
 
 .unsaved {
-  font-weight: 600;
+  color: var(--color-danger);
+  font-weight: 700;
 }
 
+/* Step 4: the ok banner with "Ver no player" and "Reabrir edição". */
 .summary {
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+
+.summary h3 {
+  font-size: var(--text-item);
+  font-weight: 700;
 }
 
 .summary h3,
@@ -226,8 +306,8 @@
 }
 
 .skeleton {
-  border-radius: var(--radius-md);
-  background: var(--color-surface-muted);
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
 }
 
 .overview-skeleton {
@@ -248,7 +328,8 @@
   }
 
   .columns {
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 20rem);
+    gap: var(--space-5);
     align-items: start;
   }
 
@@ -265,14 +346,33 @@
 }
 
 .voice-names {
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
 }
 
 .voice-names summary {
   min-height: var(--target);
   align-content: center;
-  font-weight: 600;
+  font-size: var(--text-item);
+  font-weight: 700;
   cursor: pointer;
+}
+
+.column.text {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+@media (max-width: 1023px) {
+  .page {
+    padding: var(--space-4) var(--space-4) 0;
+  }
+
+  .foot {
+    margin-inline: calc(-1 * var(--space-4));
+    padding: var(--space-3) var(--space-4)
+      calc(var(--space-3) + var(--shell-mobile-foot));
+  }
 }

@@ -1,54 +1,65 @@
+/* The v2 player bar (KBC-125): on desktop the 72 row at the foot of the shell (now playing,
+   the controls with the timeline, the extras); below 1024 px the mini player, a 56 card above
+   the navigation with a thin progress line. The shell places the host; it never covers what
+   has the focus (WCAG 2.4.11): it has a row of its own. */
 :host {
-  display: contents;
+  display: block;
 }
 
-/* 64 px at the foot of the main area: its own row, so it never covers what has the focus
-   (WCAG 2.4.11, FR-11). */
-.mini {
-  position: relative;
+.bar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 38.75rem) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--shell-player);
+  padding: 0 var(--space-2);
+  color: var(--color-text);
+}
+
+.bar.idle {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.now {
+  display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: 4rem;
-  padding: var(--space-2) var(--space-4);
-  border-top: 1px solid var(--color-border);
-  background: var(--color-surface);
-  /* The main area's last row is kept for it in every layout (chat-page.css). */
-  grid-row: -2 / -1;
+  min-width: 0;
 }
 
-/* Phones: above the question box, which takes the last row instead. */
-@media (max-width: 1023px) {
-  .mini.above-composer {
-    grid-row: -3 / -2;
-  }
-}
-
-.progress {
-  position: absolute;
-  inset: -1px 0 auto;
-  height: 3px;
-  background: var(--color-border);
-}
-
-.played {
-  display: block;
-  height: 100%;
-  background: var(--color-accent);
+.text {
+  display: grid;
+  min-width: 0;
 }
 
 .title {
-  min-width: 0;
   overflow: hidden;
   color: var(--color-text);
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: 500;
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.title:hover {
+a.title:hover {
+  text-decoration: underline;
+}
+
+.subtitle {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subtitle.link {
+  text-decoration: none;
+}
+
+.subtitle.link:hover {
+  color: var(--color-text);
   text-decoration: underline;
 }
 
@@ -59,81 +70,115 @@
   gap: var(--space-2);
   min-width: 0;
   margin: 0;
-  font-weight: 600;
-}
-
-.retry {
-  min-height: var(--target);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.icon:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.time {
-  color: var(--color-text-muted);
   font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
-.sleep {
-  margin-left: var(--space-2);
-  white-space: nowrap;
+.controls {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
 }
 
-.actions {
+.buttons {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 1.375rem;
 }
 
-.icon {
+.skip {
   position: relative;
-  display: grid;
-  place-items: center;
-  width: var(--target);
-  height: var(--target);
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--color-text);
-  cursor: pointer;
-}
-
-.icon:hover {
-  background: var(--color-surface-muted);
-}
-
-.play {
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-}
-
-.play:hover {
-  background: var(--color-accent);
-  filter: brightness(1.08);
 }
 
 .skip-amount {
   position: absolute;
-  top: 54%;
+  top: 56%;
   left: 50%;
-  font-size: 0.6rem;
-  font-weight: 700;
+  font-size: 0.5rem;
+  font-weight: 800;
   transform: translate(-50%, -50%);
 }
 
+.play {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-text);
+  color: var(--color-bg);
+  cursor: pointer;
+}
+
+.play:hover:not(:disabled) {
+  transform: scale(1.06);
+}
+
+.play:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.timeline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.time,
+.total {
+  flex: none;
+  min-width: 2.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.time {
+  text-align: right;
+}
+
+.sleep {
+  margin-left: var(--space-1);
+  white-space: nowrap;
+}
+
+.progress {
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-4);
+}
+
+.played {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-text);
+}
+
+.bar:hover .played {
+  background: var(--color-accent);
+}
+
+.extras {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+/* "Tocando agora" open in the right panel: the transcript button in green (v2 player bar). */
+.now-playing.on {
+  color: var(--color-accent);
+}
+
 .spinner {
-  width: 1.1rem;
-  height: 1.1rem;
+  width: 1rem;
+  height: 1rem;
   border-radius: 50%;
   border: 2px solid currentColor;
   border-right-color: transparent;
@@ -143,6 +188,94 @@
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1023px) {
+  /* The mini player: cover, title, play and close; the line of progress at its foot. */
+  .bar {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    gap: var(--space-2);
+    min-height: var(--shell-mini-player);
+    padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+    border-radius: var(--radius-card);
+    background: color-mix(
+      in srgb,
+      var(--color-accent) 18%,
+      var(--color-surface)
+    );
+    overflow: hidden;
+  }
+
+  .bar.idle {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cover {
+    --ui-cover-size: 40px !important;
+  }
+
+  .controls {
+    display: contents;
+  }
+
+  .buttons {
+    grid-row: 1;
+    gap: var(--space-1);
+  }
+
+  .forward,
+  .now-playing {
+    display: none;
+  }
+
+  /* A tap anywhere on the mini player opens the full-screen player (KBC-129 FR-2, AC-3):
+     the title's link covers the card; the buttons stay above it. */
+  a.title::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  .buttons,
+  .extras,
+  .retry {
+    position: relative;
+    z-index: 1;
+  }
+
+  .timeline {
+    display: contents;
+  }
+
+  .total {
+    display: none;
+  }
+
+  .time {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .buttons {
+    grid-column: 3;
+  }
+
+  .progress {
+    position: absolute;
+    right: var(--space-2);
+    bottom: 0;
+    left: var(--space-2);
+    height: 2px;
+  }
+
+  .play {
+    width: var(--target);
+    height: var(--target);
+    background: transparent;
+    color: var(--color-text);
   }
 }
 

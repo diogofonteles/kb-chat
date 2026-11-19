@@ -1,0 +1,372 @@
+<section
+  class="settings"
+  aria-label="Configurações"
+  i18n-aria-label="@@settings.title"
+>
+  @if (!phone()) {
+    <div class="layout">
+      <nav
+        class="index"
+        aria-label="Seções"
+        i18n-aria-label="@@settings.sections"
+      >
+        @for (group of groups(); track group.group) {
+          @if (group.label) {
+            <p class="index-group">{{ group.label }}</p>
+          } @else {
+            <hr class="index-rule" />
+          }
+          @for (item of group.items; track item.id) {
+            <a
+              class="index-item"
+              [routerLink]="['/configuracoes', item.slug]"
+              [attr.aria-current]="item.id === active() ? 'location' : null"
+              (click)="$event.preventDefault(); go(item.id)"
+              >{{ item.label }}</a
+            >
+          }
+        } @empty {
+          <p class="index-none" role="status" i18n="@@settings.searchNone">
+            Nenhuma seção encontrada.
+          </p>
+        }
+      </nav>
+
+      <div class="content">
+        <div class="strip" [class.shown]="scrolled()" aria-hidden="true">
+          <span class="strip-root" i18n="@@settings.title">Configurações</span>
+          <ui-icon name="chevRight" [size]="16" />
+          <span class="strip-section">{{ activeLabel() }}</span>
+        </div>
+        <header #headEl class="head">
+          <h1 class="title" i18n="@@settings.title">Configurações</h1>
+          <ng-container *ngTemplateOutlet="search" />
+        </header>
+        @if (loadFailed()) {
+          <ng-container *ngTemplateOutlet="failed" />
+        } @else if (!settings()) {
+          <p class="muted" i18n="@@settings.loading">Carregando…</p>
+        } @else {
+          @for (item of items(); track item.id) {
+            <section
+              #sectionEl
+              class="section"
+              [attr.data-section]="item.id"
+              [attr.aria-labelledby]="'settings-' + item.id"
+            >
+              <h2 class="section-title" [id]="'settings-' + item.id">
+                {{ item.label }}
+              </h2>
+              @for (visit of [visits()[item.id] ?? 0]; track visit) {
+                <ng-container
+                  *ngTemplateOutlet="body; context: { $implicit: item.id }"
+                />
+              }
+            </section>
+          }
+        }
+      </div>
+    </div>
+  } @else if (requested(); as current) {
+    <!-- A phone: the section as a pushed screen, "‹" back to the root (FR-3). -->
+    <div class="screen">
+      <header class="screen-head">
+        <button
+          uiIconButton
+          [size]="44"
+          type="button"
+          aria-label="Voltar às configurações"
+          i18n-aria-label="@@settings.back"
+          (click)="back()"
+        >
+          <ui-icon name="chevLeft" [size]="26" />
+        </button>
+        <!-- The page's title stays for screen readers; the section is the one in sight. -->
+        <h1 class="visually-hidden" i18n="@@settings.title">Configurações</h1>
+        <!-- Focus lands here when the screen is pushed (WCAG 2.4.3). -->
+        <h2 class="screen-title" tabindex="-1" [id]="'settings-' + current.id">
+          {{ current.label }}
+        </h2>
+        <span class="screen-spacer" aria-hidden="true"></span>
+      </header>
+      @if (loadFailed()) {
+        <ng-container *ngTemplateOutlet="failed" />
+      } @else if (!settings()) {
+        <p class="muted" i18n="@@settings.loading">Carregando…</p>
+      } @else {
+        <section
+          class="section"
+          [attr.data-section]="current.id"
+          [attr.aria-labelledby]="'settings-' + current.id"
+        >
+          <ng-container
+            *ngTemplateOutlet="body; context: { $implicit: current.id }"
+          />
+        </section>
+      }
+    </div>
+  } @else {
+    <!-- A phone at the root: who is signed in and the groups, each section with "›". -->
+    <div class="root">
+      <h1 class="screen-title root-title" i18n="@@settings.title">
+        Configurações
+      </h1>
+      <ng-container *ngTemplateOutlet="search" />
+      @if (me(); as person) {
+        <a class="root-profile" [routerLink]="['/configuracoes', 'conta']">
+          <ui-avatar
+            [name]="person.name || person.email"
+            [picture]="person.picture"
+            [size]="64"
+          />
+          <span class="root-who">
+            <span class="root-name">{{ person.name || person.email }}</span>
+            <span class="root-email"
+              >{{ roleLabel() }} · {{ person.email }}</span
+            >
+          </span>
+          <ui-icon name="chevRight" [size]="20" />
+        </a>
+      }
+      <nav
+        class="root-groups"
+        aria-label="Seções"
+        i18n-aria-label="@@settings.sections"
+      >
+        @for (group of groups(); track group.group) {
+          @if (group.label) {
+            <h2 class="root-group">{{ group.label }}</h2>
+          } @else {
+            <hr class="index-rule" />
+          }
+          @for (item of group.items; track item.id) {
+            <a
+              class="root-item"
+              [attr.data-slug]="item.slug"
+              [routerLink]="['/configuracoes', item.slug]"
+            >
+              <span class="root-label">{{ item.label }}</span>
+              <ui-icon name="chevRight" [size]="20" />
+            </a>
+          }
+        } @empty {
+          <p class="index-none" role="status" i18n="@@settings.searchNone">
+            Nenhuma seção encontrada.
+          </p>
+        }
+      </nav>
+    </div>
+  }
+</section>
+
+<ng-template #search>
+  <form class="search" role="search" (submit)="goToFirst($event)">
+    <label class="ui-search">
+      <ui-icon name="search" [size]="18" />
+      <span class="visually-hidden" i18n="@@settings.searchLabel"
+        >Buscar nas configurações</span
+      >
+      <input
+        #searchInput
+        type="search"
+        autocomplete="off"
+        placeholder="Buscar nas configurações"
+        i18n-placeholder="@@settings.searchLabel"
+        [value]="query()"
+        (input)="setQuery(searchInput.value)"
+      />
+    </label>
+  </form>
+</ng-template>
+
+<ng-template #failed>
+  <ui-banner
+    tone="err"
+    role="alert"
+    i18n-title="@@settings.loadFailedTitle"
+    title="Não consegui carregar as configurações."
+  >
+    <p i18n="@@settings.loadFailed">
+      Não consegui carregar as configurações. Verifique se o servidor está
+      rodando.
+    </p>
+    <button
+      uiBannerAction
+      uiButton="white"
+      size="sm"
+      type="button"
+      (click)="retry()"
+      i18n="@@settings.retry"
+    >
+      Tentar de novo
+    </button>
+  </ui-banner>
+</ng-template>
+
+<ng-template #body let-id>
+  @switch (id) {
+    @case ('account') {
+      @if (me(); as person) {
+        <div class="account">
+          <ui-avatar
+            [name]="person.name || person.email"
+            [picture]="person.picture"
+            [size]="48"
+          />
+          <div class="account-who">
+            <p class="account-name">
+              {{ person.name || person.email }}
+              @if (person.name) {
+                · {{ person.email }}
+              }
+            </p>
+            <p class="muted">{{ roleLabel() }}</p>
+          </div>
+          <button
+            uiButton="outline"
+            size="sm"
+            type="button"
+            (click)="signOut()"
+            i18n="@@sidebar.signOut"
+          >
+            Sair
+          </button>
+        </div>
+      }
+    }
+    @case ('ai') {
+      @if (ownOutcome(); as outcome) {
+        @if (outcome === 'connected') {
+          <ui-banner tone="ok" role="status">
+            <p i18n="@@settings.ownConnected">✓ Conta conectada.</p>
+          </ui-banner>
+        } @else {
+          <ui-banner tone="err" role="status">
+            <p i18n="@@settings.ownConnectFailed">
+              ⚠ Não consegui conectar. Tente de novo.
+            </p>
+          </ui-banner>
+        }
+      }
+      <app-ai-status-card (configureOwn)="focusOptions()" />
+      <p class="lead" i18n="@@settings.aiLead">
+        Escolha quem responde na Pesquisa com IA. Vale para a próxima resposta,
+        sem reiniciar nada.
+      </p>
+      @if (aiDraft(); as draft) {
+        <!-- An unsaved choice holds a new version's reload, as a form would (KBC-123). -->
+        <app-ai-provider-form
+          data-edit-scope
+          [draft]="draft"
+          (draftChange)="editAi($event)"
+        />
+      }
+      <!-- Salvar stays at the foot while Sua IA is on screen (KBC-131). -->
+      <div class="save-bar">
+        <p class="save-status" role="status">
+          @if (aiSave() === 'saved') {
+            <span i18n="@@settings.saved">Salvo.</span>
+          } @else if (aiSave() === 'invalid') {
+            <span class="error" i18n="@@settings.fixModel"
+              >Corrija o modelo indicado acima.</span
+            >
+          } @else if (aiSave() === 'failed') {
+            <span class="error" i18n="@@settings.saveFailed"
+              >Não consegui salvar. Tente de novo.</span
+            >
+          }
+        </p>
+        <button
+          uiButton="primary"
+          class="save"
+          type="button"
+          [disabled]="aiSave() === 'saving'"
+          (click)="saveAi()"
+          i18n="@@settings.save"
+        >
+          Salvar
+        </button>
+      </div>
+    }
+    @case ('house') {
+      <p class="lead" i18n="@@settings.houseLead">
+        A IA que a aplicação empresta a quem não tem a própria: gratuita, com um
+        limite de pesquisas por dia para cada pessoa.
+      </p>
+      <app-house-ai-panel [outcome]="houseOutcome()" />
+    }
+    @case ('preferences') {
+      @if (!ownAi()) {
+        <app-ai-status-card [canConfigureOwn]="false" />
+      }
+      @if (preferences(); as current) {
+        <app-preferences-form
+          [preferences]="current"
+          (preferencesChange)="savePreferences($event)"
+        />
+      }
+      <p class="save-status" role="status">
+        @if (preferencesSave() === 'saved') {
+          <span i18n="@@settings.savedAuto">Salvo automaticamente.</span>
+        } @else if (preferencesSave() === 'failed') {
+          <span class="error" i18n="@@settings.saveFailed"
+            >Não consegui salvar. Tente de novo.</span
+          >
+        }
+      </p>
+    }
+    @case ('people') {
+      <app-people-panel />
+    }
+    @case ('transcribers') {
+      <app-transcribers-panel />
+      <app-existing-tracks />
+    }
+    @case ('terms') {
+      <app-terms-panel />
+      <app-learning-panel />
+    }
+    @case ('groq') {
+      <app-groq-panel />
+    }
+    @case ('voice-profiles') {
+      <app-voice-profiles-panel />
+    }
+    @case ('audit') {
+      <app-act-as-audit />
+    }
+    @case ('accesses') {
+      <app-my-accesses />
+    }
+    @default {
+      <div class="about">
+        <div class="about-card">
+          <ui-icon name="lock" [size]="24" />
+          <p i18n="@@settings.aboutData">
+            Suas conversas e configurações ficam no servidor da Nova Alexandria.
+            As chaves de API ficam num arquivo que só o servidor lê; a API nunca
+            as devolve ao navegador.
+          </p>
+        </div>
+        <div class="about-card">
+          <ui-icon name="cpu" [size]="24" />
+          <p i18n="@@settings.aboutSubscription">
+            Com uma assinatura, a Nova Alexandria usa o Claude Code ou o Codex
+            já logados no servidor. Ela nunca recebe a sua senha nem a sua
+            conta.
+          </p>
+        </div>
+      </div>
+      <button
+        uiButton="outline"
+        size="sm"
+        type="button"
+        class="wizard"
+        (click)="reopenWizard()"
+      >
+        <ui-icon name="refresh" [size]="16" />
+        <span i18n="@@settings.reopenWizard">Rever o assistente de início</span>
+      </button>
+    }
+  }
+</ng-template>

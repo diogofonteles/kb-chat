@@ -1,4 +1,5 @@
 import { DOCUMENT } from '@angular/common';
+import { UiIcon } from '@ui/icon.js';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -25,9 +26,11 @@ const ONE_MINUTE_MS = 60_000;
  */
 @Component({
   selector: 'app-acting-banner',
+  imports: [UiIcon],
   template: `
     @if (acting(); as current) {
       <div class="band">
+        <ui-icon class="eye" name="eye" [size]="18" />
         <p class="what">
           <span i18n="@@acting.as"
             >Você está vendo como <strong>{{ personName() }}</strong></span

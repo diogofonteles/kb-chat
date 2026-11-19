@@ -7,11 +7,14 @@ import {
   ElementRef,
   Injector,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   linkedSignal,
   signal,
+  viewChild,
 } from '@angular/core';
+import { UiBanner, UiDialog, UiEmptyState } from '@ui/index.js';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   topicListSchema,
@@ -53,7 +56,14 @@ function recalculateErrorOf(err: unknown): string {
  */
 @Component({
   selector: 'app-voice-profiles-panel',
-  imports: [DatePipe, VoiceProfileForm, VoiceProfileReportView],
+  imports: [
+    DatePipe,
+    VoiceProfileForm,
+    VoiceProfileReportView,
+    UiBanner,
+    UiDialog,
+    UiEmptyState,
+  ],
   templateUrl: './voice-profiles-panel.html',
   styleUrls: ['../settings/settings-form.css', './voice-profiles.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -116,6 +126,11 @@ export class VoiceProfilesPanel {
   protected readonly statusOf = (profile: VoiceProfile): string =>
     STATUS_LABELS[profile.status]();
   protected readonly adding = signal(false);
+  private readonly formDialog = viewChild<UiDialog>('formDialog');
+  /** "Cadastrar perfil": the form opens in its modal once drawn. */
+  private readonly opensForm = afterRenderEffect(() => {
+    if (this.adding()) this.formDialog()?.open();
+  });
   protected readonly confirming = signal<string | null>(null);
   protected readonly busy = signal(false);
   protected readonly notice = signal<Notice | null>(null);

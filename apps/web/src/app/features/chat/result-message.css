@@ -1,17 +1,68 @@
+/* v2 · Conversa, chat-results*: each question is a search page in the main panel. */
+:host {
+  display: block;
+  /* The results' columns follow the column they get, not the window (the panel narrows it);
+     the cards read the same container (result-card.css) to draw the best one as a card. */
+  container: results / inline-size;
+}
+
 .exchange {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
+}
+
+.results-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.titles {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.kicker {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  font-weight: 700;
 }
 
 .question {
-  justify-self: end;
-  max-width: 85%;
   margin: 0;
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm)
-    var(--radius-lg);
-  background: var(--color-surface-muted);
+  font-size: 2.5rem;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.query::before {
+  content: '“' / '';
+}
+
+.query::after {
+  content: '”' / '';
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.took {
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
 }
 
 .answer {
@@ -20,87 +71,144 @@
   min-width: 0;
 }
 
-.status,
-.summary {
+.answer.refreshing .results {
+  opacity: 0.6;
+}
+
+.status {
   margin: 0;
-  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* "Melhor resultado" (400) at the left, "Documentos" in a table at the right. */
+.results {
+  display: grid;
+  grid-template-columns: minmax(16rem, 25rem) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-6);
+}
+
+.best-column,
+.rest-column {
+  position: relative;
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.best-column {
+  gap: var(--space-3);
+}
+
+.column-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .cards {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-1);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.skeletons {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.skeletons span {
-  height: 5.5rem;
-  border-radius: var(--radius-md);
-  background: linear-gradient(
-    90deg,
-    var(--color-surface-muted),
-    var(--color-surface),
-    var(--color-surface-muted)
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.4s linear infinite;
-}
-
-@keyframes shimmer {
-  to {
-    background-position: -200% 0;
-  }
-}
-
-.error p {
-  margin: 0;
-  padding-left: var(--space-3);
-  border-left: 3px solid var(--color-danger);
-}
-
-.empty {
-  display: grid;
-  justify-items: start;
-  gap: var(--space-2);
-}
-
-.empty p {
-  margin: 0;
-}
-
-.secondary {
-  min-height: var(--target);
-  padding: 0 var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  cursor: pointer;
-}
-
-.secondary:hover {
-  border-color: var(--color-accent);
-}
-
 .more {
   justify-self: center;
-  min-width: 12rem;
-}
-
-.suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 
 .more-error {
   margin: 0;
   padding-left: var(--space-3);
   border-left: 3px solid var(--color-danger);
+}
+
+.empty,
+.error {
+  padding: var(--space-6) 0;
+}
+
+.skeletons {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.skeleton-row {
+  display: flex;
+  gap: 0.875rem;
+  padding: var(--space-2) var(--space-3);
+}
+
+.skeleton-art {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-cover);
+  background: var(--overlay-3);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-lines {
+  display: grid;
+  gap: var(--space-2);
+  align-content: center;
+}
+
+.skeleton-lines span {
+  max-width: 100%;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--overlay-3);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-lines span + span {
+  width: 180px;
+  height: 10px;
+  background: var(--overlay-2);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-art,
+  .skeleton-lines span {
+    animation: none;
+  }
+}
+
+/* A column too narrow for two (390, or the source panel open): one under the other. */
+@container results (max-width: 46rem) {
+  .results {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+
+  /* One list, as v2 draws it on a phone: the headings stay for screen readers. */
+  .column-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .question {
+    font-size: 1.75rem;
+  }
+}
+
+@media (max-width: 1023px) {
+  .question {
+    font-size: 1.5rem;
+  }
 }

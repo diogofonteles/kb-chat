@@ -1,0 +1,124 @@
+:host {
+  display: grid;
+  /* A wide answer (a table) scrolls in its own box, never widens the thread. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-8);
+}
+
+/* v2 · Telas-chave, chat-research-answer@mobile-source: the source in a reading sheet of
+   85% over the answer, a tab per source (KBC-127 FR-2). */
+.reading-sheet {
+  box-sizing: border-box;
+  position: fixed;
+  inset: auto 0 0;
+  width: 100vw;
+  max-width: none;
+  height: 85dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  /* clip, not hidden: scrolling the reader to its mark never scrolls the head away. */
+  overflow: clip;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow);
+  transition: height 200ms var(--ease);
+}
+
+.reading-sheet[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.reading-sheet.full {
+  height: 100dvh;
+  border-radius: 0;
+}
+
+.reading-sheet::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+
+.sheet-head {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-2);
+  touch-action: none;
+  cursor: grab;
+}
+
+.handle {
+  justify-self: center;
+  width: 2.25rem;
+  height: 0.25rem;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-4);
+}
+
+.tabs-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.tabs {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 0.375rem;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tab[aria-selected='true'] {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.sheet-tool {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: var(--target);
+  height: var(--target);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.sheet-tool[aria-pressed='true'] {
+  background: var(--overlay-3);
+  color: var(--color-text);
+}
+
+.sheet-reader {
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reading-sheet {
+    transition: none;
+  }
+}

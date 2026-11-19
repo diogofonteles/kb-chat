@@ -36,6 +36,7 @@ import {
   type Toggle,
 } from './pending-changes.js';
 import { PersonAiEditor } from './person-ai-editor.js';
+import { UiButton, UiIcon, UiTablist } from '@ui/index.js';
 
 const BYTES_PER_GB = 1024 ** 3;
 
@@ -51,7 +52,7 @@ const quotaFormat = new Intl.NumberFormat('pt-BR', {
  */
 @Component({
   selector: 'app-person-editor',
-  imports: [PersonAiEditor],
+  imports: [PersonAiEditor, UiButton, UiIcon, UiTablist],
   templateUrl: './person-editor.html',
   styleUrl: './person-editor.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -81,7 +82,8 @@ export class PersonEditor {
   readonly changed = output<PersonUpdate>();
   /** A box of "Acervos" or "Funcionalidades": the panel builds the change when it goes out. */
   readonly toggled = output<Toggle>();
-  readonly actAs = output();
+  /** "Ver como", with the button pressed: the focus goes back to it (NG-30). */
+  readonly actAs = output<HTMLElement>();
   readonly revoked = output();
   /** "Aplicar perfil", once confirmed: the profile's id. */
   readonly profileApplied = output<string>();
@@ -96,6 +98,9 @@ export class PersonEditor {
     viewChild<ElementRef<HTMLButtonElement>>('applyButton');
 
   protected readonly confirming = signal(false);
+
+  /** The editor's tabs (KBC-132 FR-2): Acessos, then IA e limites. */
+  protected readonly tab = signal<'access' | 'ai'>('access');
   /** The profile picked in "Aplicar perfil"; the first one until another is chosen. */
   protected readonly chosenProfileId = signal<string | null>(null);
   protected readonly chosenProfile = computed(
@@ -210,6 +215,11 @@ export class PersonEditor {
 
   protected toggleFeature(feature: Feature, on: boolean): void {
     this.toggled.emit({ field: 'features', value: feature, on });
+  }
+
+  protected pressActAs(event: Event): void {
+    if (event.currentTarget instanceof HTMLElement)
+      this.actAs.emit(event.currentTarget);
   }
 
   protected toggleMaster(): void {

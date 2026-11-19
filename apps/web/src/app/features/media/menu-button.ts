@@ -12,6 +12,9 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
+import { UiIcon } from '@ui/icon.js';
+import type { IconName } from '@ui/icons.js';
+import { UiOverlay, outsideBox, type OverlayAlign } from '@ui/overlay.js';
 
 /** One item of a menu: an action, or one of the choices with the current one checked. */
 export interface MenuOption {
@@ -19,19 +22,34 @@ export interface MenuOption {
   readonly label: string;
   readonly checked?: boolean;
   readonly danger?: boolean;
+  /** A v2 menu icon before the words (decorative: the words carry the meaning). */
+  readonly icon?: IconName;
+  /** The group it belongs to ("Ordenar por", "Ver como"): named once, above its first item. */
+  readonly group?: string;
+  /** A line above it, to set it apart (a destructive action goes last, after one). */
+  readonly divider?: boolean;
 }
 
-/** The least gap a menu keeps from the edges of the screen. */
-const SCREEN_MARGIN_PX = 8;
+/** Items under the name of their group, in the order given. */
+interface MenuGroup {
+  readonly name: string;
+  readonly items: readonly { option: MenuOption; index: number }[];
+}
+
+/** Below this width the menu is a sheet from the bottom (the shell's phone layout, D5). */
+const SHEET_BELOW_PX = 1024;
 
 /**
  * A button that opens a menu (APG menu button): Enter/Space/↓ opens on the first item (or
  * the checked one), ↑ on the last, ↑/↓ move, Escape closes and Tab leaves, and the focus
  * goes back to the button. `kind="choice"` makes the items radio items with the current
- * one checked by a ✓ and `aria-checked`, never by color alone (UP-20).
+ * one checked by a ✓ and `aria-checked`, never by color alone (UP-20). The list lives in
+ * the top layer, anchored to the button and kept inside the screen (redesign v2, D5);
+ * below 1024 px it is a sheet from the bottom.
  */
 @Component({
   selector: 'app-menu-button',
+  imports: [UiIcon, UiOverlay],
   template: `
     <button
       #trigger
@@ -53,30 +71,50 @@ const SCREEN_MARGIN_PX = 8;
         class="menu"
         role="menu"
         tabindex="-1"
-        [style.translate]="nudge()"
+        [uiOverlay]="trigger"
+        [overlayAlign]="align()"
+        [overlaySheetBelow]="sheetBelow"
         [attr.aria-label]="menuLabel() || label()"
         (keydown)="onMenuKey($event)"
         (focusout)="onFocusOut($event)"
       >
-        @for (option of options(); track option.id; let index = $index) {
-          <button
-            #item
-            type="button"
-            [attr.role]="kind() === 'choice' ? 'menuitemradio' : 'menuitem'"
-            [attr.aria-checked]="
-              kind() === 'choice' ? (option.checked ?? false) : null
-            "
-            [class.danger]="option.danger"
-            (focus)="focused.set(index)"
-            (click)="choose(option.id)"
+        @for (group of groups(); track $index) {
+          <div
+            class="group"
+            [attr.role]="group.name ? 'group' : null"
+            [attr.aria-label]="group.name || null"
           >
-            @if (kind() === 'choice') {
-              <span class="check" aria-hidden="true">{{
-                option.checked ? '✓' : ''
-              }}</span>
+            @if (group.name) {
+              <p class="heading" aria-hidden="true">{{ group.name }}</p>
             }
-            {{ option.label }}
-          </button>
+            @for (entry of group.items; track entry.option.id) {
+              @if (entry.option.divider) {
+                <hr class="divider" aria-hidden="true" />
+              }
+              <button
+                #item
+                type="button"
+                [attr.role]="kind() === 'choice' ? 'menuitemradio' : 'menuitem'"
+                [attr.aria-checked]="
+                  kind() === 'choice' ? (entry.option.checked ?? false) : null
+                "
+                [class.danger]="entry.option.danger"
+                [class.checked]="entry.option.checked"
+                (focus)="focused.set(entry.index)"
+                (click)="choose(entry.option.id)"
+              >
+                @if (entry.option.icon; as icon) {
+                  <ui-icon [name]="icon" [size]="18" />
+                }
+                <span class="words">{{ entry.option.label }}</span>
+                @if (kind() === 'choice') {
+                  <span class="check" aria-hidden="true">{{
+                    entry.option.checked ? '✓' : ''
+                  }}</span>
+                }
+              </button>
+            }
+          </div>
         }
       </div>
     }
@@ -102,13 +140,24 @@ export class MenuButton {
   readonly kind = input<'action' | 'choice'>('action');
   readonly keyshortcuts = input<string | null>(null);
   readonly disabled = input(false);
+  /** Which edge of the button the list lines up with. */
+  readonly align = input<OverlayAlign>('end');
   readonly chosen = output<string>();
 
+  protected readonly sheetBelow = SHEET_BELOW_PX;
   protected readonly open = signal(false);
   /** The item that has the focus, as the items report it. */
   protected readonly focused = signal(0);
-  /** What brings the menu back on screen: its width is its text's, in whatever font came. */
-  protected readonly nudge = signal<string | null>(null);
+  protected readonly groups = computed<readonly MenuGroup[]>(() => {
+    const groups: { name: string; items: MenuGroup['items'][number][] }[] = [];
+    this.options().forEach((option, index) => {
+      const name = option.group ?? '';
+      const last = groups.at(-1);
+      if (last && last.name === name) last.items.push({ option, index });
+      else groups.push({ name, items: [{ option, index }] });
+    });
+    return groups;
+  });
   private readonly checkedIndex = computed(() =>
     Math.max(
       0,
@@ -146,13 +195,12 @@ export class MenuButton {
     if (next instanceof Node && !this.host.contains(next)) this.open.set(false);
   }
 
+  /** A click outside, or on the phone sheet's scrim (the list's own backdrop). */
   protected closeOnOutside(event: MouseEvent): void {
-    if (
-      this.open() &&
-      event.target instanceof Node &&
-      !this.host.contains(event.target)
-    )
-      this.open.set(false);
+    if (!this.open() || !(event.target instanceof Node)) return;
+    const menu = this.menu()?.nativeElement;
+    const onScrim = event.target === menu && outsideBox(menu, event);
+    if (onScrim || !this.host.contains(event.target)) this.open.set(false);
   }
 
   protected choose(id: string): void {
@@ -161,27 +209,8 @@ export class MenuButton {
   }
 
   private openOn(index: number): void {
-    this.nudge.set(null);
     this.open.set(true);
-    afterNextRender(
-      () => {
-        this.keepOnScreen();
-        this.focusItem(index);
-      },
-      { injector: this.injector },
-    );
-  }
-
-  /** The left edge wins: that is where the text starts. */
-  private keepOnScreen(): void {
-    const box = this.menu()?.nativeElement.getBoundingClientRect();
-    if (!box) return;
-    const screenWidth = this.host.ownerDocument.documentElement.clientWidth;
-    const shift = Math.max(
-      SCREEN_MARGIN_PX - box.left,
-      Math.min(0, screenWidth - SCREEN_MARGIN_PX - box.right),
-    );
-    if (shift !== 0) this.nudge.set(`${shift}px`);
+    afterNextRender(() => this.focusItem(index), { injector: this.injector });
   }
 
   private move(step: number): void {

@@ -24,6 +24,7 @@ import { GO_TO_URL } from '@core/routing/go-to-url.js';
 import { parseDaily } from './number-fields.js';
 import { TEST_COPY } from '@features/settings/provider-copy.js';
 import type { Observable } from 'rxjs';
+import { UiCover, UiPill } from '@ui/index.js';
 
 type Status = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
 
@@ -40,7 +41,7 @@ const SAVE_FAILED = () =>
  */
 @Component({
   selector: 'app-house-ai-panel',
-  imports: [DatePipe],
+  imports: [DatePipe, UiCover, UiPill],
   templateUrl: './house-ai-panel.html',
   styleUrls: ['../settings/settings-form.css', './house-ai-panel.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,

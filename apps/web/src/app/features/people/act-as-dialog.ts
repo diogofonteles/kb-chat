@@ -12,6 +12,8 @@ import type { Person } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { ActAsApi, RESTART_APP } from '@core/auth/act-as-api.js';
 
+import { UiButton, UiIcon } from '@ui/index.js';
+
 const REASON_MIN = 3;
 const REASON_MAX = 500;
 
@@ -22,6 +24,7 @@ const REASON_MAX = 500;
  */
 @Component({
   selector: 'app-act-as-dialog',
+  imports: [UiButton, UiIcon],
   template: `
     <dialog
       #dialog
@@ -42,6 +45,7 @@ const REASON_MAX = 500;
         <textarea
           #reason
           id="act-as-reason"
+          class="ui-input"
           rows="3"
           [attr.maxlength]="reasonMax"
           [attr.aria-invalid]="invalid() ? 'true' : null"
@@ -50,8 +54,11 @@ const REASON_MAX = 500;
         ></textarea>
       </label>
       @if (invalid()) {
-        <p id="act-as-reason-error" class="error" i18n="@@actAs.reasonRequired">
-          Escreva o motivo (pelo menos 3 letras).
+        <p id="act-as-reason-error" class="error">
+          <ui-icon name="xcircle" [size]="14" />
+          <span i18n="@@actAs.reasonRequired"
+            >Escreva o motivo (pelo menos 3 letras).</span
+          >
         </p>
       }
       @if (failure(); as message) {
@@ -59,21 +66,21 @@ const REASON_MAX = 500;
       }
       <div class="actions">
         <button
+          uiButton="ghost"
           type="button"
-          class="secondary"
           (click)="close()"
           i18n="@@actAs.cancel"
         >
           Cancelar
         </button>
         <button
+          uiButton="white"
           type="button"
-          class="primary"
           [disabled]="busy()"
           (click)="start(reason.value)"
-          i18n="@@actAs.start"
         >
-          Ver como esta pessoa
+          <ui-icon name="eye" [size]="18" />
+          <span i18n="@@actAs.start">Ver como esta pessoa</span>
         </button>
       </div>
     </dialog>

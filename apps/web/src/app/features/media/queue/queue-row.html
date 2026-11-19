@@ -1,6 +1,22 @@
+<div class="item">
+  <ui-cover class="cover" [title]="item().title" [size]="48" />
+  <div class="names">
+    <a #title class="title" [routerLink]="link()">{{ item().title }}</a>
+    <p class="topic">{{ topicTitle() }}</p>
+  </div>
+</div>
+<ol class="steps" aria-label="Etapas" i18n-aria-label="@@prep.stages">
+  @for (step of steps(); track $index) {
+    <li
+      [class]="step.state"
+      [attr.aria-current]="step.state === 'current' ? 'step' : null"
+    >
+      {{ step.name }}
+    </li>
+  }
+</ol>
 <div class="main">
-  <a #title class="title" [routerLink]="link()">{{ item().title }}</a>
-  <p class="topic">{{ topicTitle() }}</p>
+  <ui-pill class="pill" [tone]="tone()">{{ toneWord() }}</ui-pill>
   <p class="state">{{ stateText() }}</p>
   @if (showBar()) {
     <div

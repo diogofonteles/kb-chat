@@ -1,6 +1,11 @@
 <ol class="rows" aria-label="Faixas" i18n-aria-label="@@tracks.list">
   @for (row of rows(); track row.track.id) {
-    <li class="row" [class.selected]="row.selected">
+    <li
+      class="row"
+      [class.selected]="row.selected"
+      [class.flawed]="row.warnings.length > 0"
+      [attr.data-hue]="row.hue"
+    >
       <button
         #rowButton
         type="button"

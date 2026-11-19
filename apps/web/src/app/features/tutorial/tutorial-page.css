@@ -1,53 +1,22 @@
-:host {
-  display: block;
-  min-height: 100dvh;
-  background: var(--color-bg);
-  color: var(--color-text);
-}
-
-.tutorial {
-  padding: var(--space-8) var(--space-4);
-  box-sizing: border-box;
-}
-
+/* The guide's text in the reading page's 720 column (v2 · Públicas). */
 .guide {
-  width: min(100%, 48rem);
-  margin: 0 auto;
-  font-family: var(--font-reading);
+  color: color-mix(in srgb, var(--color-text) 85%, transparent);
   font-size: var(--text-md);
-  line-height: 1.65;
+  line-height: 1.625;
 }
 
-.brand {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--target);
-  color: var(--color-text-muted);
-  text-decoration: none;
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: 600;
-}
-
-.brand:hover {
+strong {
   color: var(--color-text);
-  text-decoration: underline;
-}
-
-h1 {
-  margin: var(--space-1) 0 var(--space-4);
-  font-family: var(--font-display);
-  font-size: clamp(2rem, 6vw, 2.5rem);
-  font-weight: 600;
-  line-height: 1.1;
 }
 
 h2 {
   margin: 0 0 var(--space-3);
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: 600;
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-size: 1.75rem;
+  font-weight: 700;
   line-height: 1.2;
+  letter-spacing: -0.02em;
   scroll-margin-top: var(--space-6);
 }
 
@@ -117,16 +86,16 @@ li + li {
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 50%;
-  background: var(--color-accent-strong);
+  background: var(--color-accent);
   color: var(--color-on-accent);
   font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: var(--text-meta);
+  font-weight: 800;
   line-height: 1;
 }
 
 a {
-  color: var(--color-accent-strong);
+  color: var(--color-accent);
   text-underline-offset: 2px;
 }
 
@@ -134,48 +103,6 @@ a:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
-}
-
-.toc {
-  margin: var(--space-6) 0 0;
-  padding: var(--space-4) var(--space-6);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-}
-
-.toc h2 {
-  margin-bottom: var(--space-2);
-  font-family: var(--font-ui);
-  font-size: var(--text-md);
-  color: var(--color-text-muted);
-}
-
-.toc ol {
-  margin: 0;
-  padding-left: var(--space-6);
-  font-family: var(--font-ui);
-}
-
-.toc li + li {
-  margin-top: 0;
-}
-
-.toc a {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--target);
-}
-
-@media (min-width: 720px) {
-  .toc ol {
-    columns: 2;
-    column-gap: var(--space-8);
-  }
-
-  .toc li {
-    break-inside: avoid;
-  }
 }
 
 .note {
@@ -271,4 +198,16 @@ thead th {
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border);
   font-family: var(--font-ui);
+}
+
+@media (max-width: 1023px) {
+  .guide {
+    font-size: var(--text-item);
+    line-height: 1.55;
+  }
+
+  h2 {
+    font-size: 1.375rem;
+    scroll-margin-top: 4rem;
+  }
 }

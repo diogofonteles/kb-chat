@@ -68,6 +68,10 @@ Tela: `docs/design/screens.md` T16 e T15 · ADR: [0022](../adr/0022-media-librar
 ## Open questions
 Nenhuma.
 
+
+## Redesign v2 (2026-11-15)
+Prioridade do dono junto do redesign v2 (`docs/design/redesign-v2.md`). Na v2, este item entra por "Salvos" e o item fixado na Sua biblioteca (KBC-125). Ao implementar, siga a casca e os componentes da v2 (KBC-124, KBC-125) em vez das telas da v1.
+
 ## Definition of ready
 - [x] Story, scope and outcome stated
 - [x] Every BR and FR covered by at least one AC; negative and edge cases present

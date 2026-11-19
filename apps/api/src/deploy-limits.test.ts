@@ -42,6 +42,14 @@ describe('the web edge never lets a browser keep an old app (KBC-122)', () => {
     );
   });
 
+  it('revalidates version.json, which a tab reads to know it runs an old app (KBC-123)', () => {
+    const hashed = new RegExp(bundle);
+    expect(hashed.test('/version.json')).toBe(false);
+    expect(hashed.test('/main-ABCD1234.js')).toBe(true);
+    // Not hashed, so the @unhashed matcher (no-cache) is the one that applies to it.
+    expect(edge).toMatch(/header @unhashed Cache-Control "no-cache"/);
+  });
+
   it('answers a bundle from an older build with 404, not the shell', () => {
     // try_files takes no matcher: bundles get a handle of their own, without the fallback.
     expect(edge).toMatch(

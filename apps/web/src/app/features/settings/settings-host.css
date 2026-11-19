@@ -1,12 +1,13 @@
+/* The wizard (KBC-131): a 920 card over the dimmed app; a whole screen on a phone. */
 .dialog {
-  width: min(56rem, calc(100vw - 2rem));
-  height: min(44rem, calc(100dvh - 2rem));
+  width: min(57.5rem, calc(100vw - 2rem));
+  height: min(51.25rem, calc(100dvh - 5rem));
   max-width: none;
   max-height: none;
   padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg);
+  border: 0;
+  border-radius: var(--radius-sheet);
+  background: var(--color-elevated);
   color: var(--color-text);
   box-shadow: var(--shadow);
   overflow: hidden;
@@ -17,15 +18,13 @@
 }
 
 .dialog::backdrop {
-  background: rgb(20 18 16 / 45%);
+  background: var(--scrim);
 }
 
-/* Phones: a full-height page (KBC-007 FR-6), not a floating box. */
-@media (max-width: 47.99rem) {
+@media (max-width: 1023px) {
   .dialog {
     width: 100vw;
     height: 100dvh;
-    border: 0;
     border-radius: 0;
   }
 }

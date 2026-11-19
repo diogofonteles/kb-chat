@@ -18,10 +18,20 @@
     </button>
   </div>
 } @else if (view(); as current) {
-  <section class="block" aria-labelledby="house-account">
-    <h4 id="house-account" class="block-title" i18n="@@house.account">
-      Conta OpenRouter da aplicação
-    </h4>
+  <section class="block account" aria-labelledby="house-account">
+    <div class="account-head">
+      <ui-cover icon="link" title="OpenRouter" [size]="48" />
+      <h3 id="house-account" class="block-title" i18n="@@house.account">
+        Conta OpenRouter da aplicação
+      </h3>
+      @if (current.connection) {
+        <ui-pill tone="ok" i18n="@@house.pillConnected">Conectada</ui-pill>
+      } @else {
+        <ui-pill tone="warn" i18n="@@house.pillDisconnected"
+          >Não conectada</ui-pill
+        >
+      }
+    </div>
     @if (current.connection; as connection) {
       <p class="saved-key">
         <span class="connected">
@@ -109,7 +119,7 @@
         } @else {
           <button
             type="button"
-            class="link danger"
+            class="link danger push-end"
             (click)="confirmingDisconnect.set(true)"
             i18n="@@house.disconnect"
           >
@@ -150,9 +160,9 @@
   </section>
 
   <section class="block" aria-labelledby="house-models">
-    <h4 id="house-models" class="block-title" i18n="@@house.models">
+    <h3 id="house-models" class="block-title" i18n="@@house.models">
       Modelos gratuitos
-    </h4>
+    </h3>
     <label class="check">
       <input
         #autoBox
@@ -224,9 +234,9 @@
   </section>
 
   <section class="block" aria-labelledby="house-paid">
-    <h4 id="house-paid" class="block-title" i18n="@@house.paid">
+    <h3 id="house-paid" class="block-title" i18n="@@house.paid">
       Modelo pago de reserva (opcional)
-    </h4>
+    </h3>
     <label class="field-label" for="house-paid-model" i18n="@@house.paidLabel"
       >Id do modelo (vazio = desligado)</label
     >
@@ -263,7 +273,7 @@
   </section>
 
   <section class="block" aria-labelledby="house-who">
-    <h4 id="house-who" class="block-title" i18n="@@house.who">Para quem</h4>
+    <h3 id="house-who" class="block-title" i18n="@@house.who">Para quem</h3>
     <fieldset class="models" [disabled]="busy()">
       <legend class="field-label" i18n="@@house.defaultLegend">
         IA padrão para quem não tem atribuição (e para os próximos convidados)
@@ -320,9 +330,9 @@
   </section>
 
   <section class="block" aria-labelledby="house-codex">
-    <h4 id="house-codex" class="block-title" i18n="@@house.codex">
+    <h3 id="house-codex" class="block-title" i18n="@@house.codex">
       Assinatura do ChatGPT (Codex)
-    </h4>
+    </h3>
     <label class="check">
       <input
         #codexBox
@@ -370,9 +380,9 @@
   </section>
 
   <section class="block" aria-labelledby="house-management">
-    <h4 id="house-management" class="block-title" i18n="@@house.management">
+    <h3 id="house-management" class="block-title" i18n="@@house.management">
       Chave de gerenciamento (opcional)
-    </h4>
+    </h3>
     @if (current.managementKey; as management) {
       <p class="saved-key">
         <span

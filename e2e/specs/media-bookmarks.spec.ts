@@ -9,6 +9,12 @@ import {
   useTheme,
   type UploadedMedia,
 } from './media-helpers.js';
+import {
+  comeBack,
+  notice,
+  playDeploys,
+  shipNewVersion,
+} from './app-version-helpers.js';
 
 let lecture: UploadedMedia;
 
@@ -206,7 +212,11 @@ test('FR-5: "Meus marcadores" opens the media playing from the bookmark', async 
 }) => {
   await seed(page, [30_000]);
   await page.goto('/midia');
-  await page.getByRole('link', { name: 'Meus marcadores' }).click();
+  // The media page's own link (Sua biblioteca pins one too, KBC-125).
+  await page
+    .getByRole('main')
+    .getByRole('link', { name: 'Meus marcadores' })
+    .click();
   await page
     .getByRole('link', {
       name: `${lecture.title} 0:30, tocar daqui`,
@@ -370,3 +380,21 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     expect(await serious()).toEqual([]);
   });
 }
+
+test("KBC-123 (QA BUG-1): a note typed and not saved holds a new version's reload, and is still there", async ({
+  page,
+}) => {
+  const deploy = await playDeploys(page);
+  await openPlayer(page);
+  await page.getByRole('button', { name: 'Marcar este trecho' }).click();
+  const note = page.getByRole('textbox', { name: /Nota do marcador/ });
+  await note.fill('rever o trecho sobre o ritmo');
+
+  shipNewVersion(deploy);
+  const asked = page.waitForResponse('**/version.json');
+  await comeBack(page);
+  await asked;
+  await expect(notice(page).text).toBeVisible();
+  expect(deploy.loads).toBe(1);
+  await expect(note).toHaveValue('rever o trecho sobre o ritmo');
+});

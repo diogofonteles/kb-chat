@@ -107,7 +107,14 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
     );
     await fixture.whenStable();
     fireEvent.click(screen.getByRole('menuitemradio', { name: /Duração/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Ver em grade' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ordenar: Ouvidas recentemente' }),
+    );
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('group', { name: 'Ver como' }).textContent,
+    ).toContain('✓');
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Grade/ }));
     expect(sorts).toEqual(['duration']);
     expect(views).toEqual(['grid']);
   });

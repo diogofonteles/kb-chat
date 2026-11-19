@@ -13,16 +13,18 @@ import {
 import {
   aCollection,
   audioState,
+  chooseLibraryView,
+  expectLibraryView,
   uniqueTag,
   uploadReady,
   useTheme,
   type UploadedMedia,
 } from './media-helpers.js';
+import { library } from './shell-helpers.js';
 
 /** KBC-051 (screens.md T16): the media library home. */
 
 const LIBRARY = ['search', 'media', 'media-library'];
-const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 const viewportOf = () => test.info().project.use.viewport ?? null;
 
 /** A new person with the library on this spec's collection: positions are theirs alone. */
@@ -40,9 +42,12 @@ async function libraryListener(
 /** "Biblioteca" in the sidebar, or in the phone's menu. */
 async function openLibrary(page: Page) {
   await page.goto('/');
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('link', { name: 'Biblioteca' }).click();
+  // v2 (KBC-125): the pinned "Biblioteca" of Sua biblioteca (the column, or the phone's Menu).
+  await (
+    await library(page)
+  )
+    .getByRole('link', { name: 'Biblioteca', exact: true })
+    .click();
   await expect(
     page.getByRole('heading', { name: 'Biblioteca', level: 2 }),
   ).toBeVisible();
@@ -105,9 +110,12 @@ test('AC-1: with the library, the sidebar shows Biblioteca and /midia leads to i
   const { page } = await libraryListener(browser);
   await openLibrary(page);
   await expect(page).toHaveURL(/\/biblioteca/);
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Mídia' })).toHaveCount(0);
+  await expect(
+    (await library(page)).getByRole('link', { name: 'Mídia', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('link', { name: 'Mídia', exact: true }),
+  ).toHaveCount(0);
   await page.goto('/midia');
   await expect(page).toHaveURL(`/biblioteca?acervo=${collection}`);
   await expect(
@@ -121,10 +129,12 @@ test('AC-2: with only "Ouvir mídia", the person keeps Mídia and the library is
 }) => {
   const { page } = await libraryListener(browser, ['search', 'media']);
   await page.goto('/');
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Mídia' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Biblioteca' })).toHaveCount(0);
+  await expect(
+    (await library(page)).getByRole('link', { name: 'Mídia', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Biblioteca', exact: true }),
+  ).toHaveCount(0);
   await page.goto('/biblioteca');
   await expect(page).toHaveURL(/\/$/);
   expect((await page.request.get('/api/v1/media/library')).status()).toBe(403);
@@ -369,10 +379,8 @@ test('AC-10: the order and the grid follow the account to another browser', asyn
     .getByRole('button', { name: 'Ordenar: Ouvidas recentemente' })
     .click();
   await page.getByRole('menuitemradio', { name: /Duração/ }).click();
-  await page.getByRole('button', { name: 'Ver em grade' }).click();
-  await expect(
-    page.getByRole('button', { name: 'Ver em grade' }),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await chooseLibraryView(page, 'Grade');
+  await expectLibraryView(page, 'Grade');
   await expect
     .poll(
       async () =>
@@ -391,9 +399,7 @@ test('AC-10: the order and the grid follow the account to another browser', asyn
   await expect(
     other.getByRole('button', { name: 'Ordenar: Duração' }),
   ).toBeVisible();
-  await expect(
-    other.getByRole('button', { name: 'Ver em grade' }),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await expectLibraryView(other, 'Grade');
   await other.context().close();
   await page.context().close();
 });
@@ -477,7 +483,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
       .getByRole('checkbox', { name: `Selecionar ${lecture(3).title}` })
       .check();
     expect(await seriousViolations(page)).toEqual([]);
-    await page.getByRole('button', { name: 'Ver em grade' }).click();
+    await chooseLibraryView(page, 'Grade');
     await expect(all(page).getByRole('checkbox')).toHaveCount(0);
     expect(await seriousViolations(page)).toEqual([]);
     await page.context().close();

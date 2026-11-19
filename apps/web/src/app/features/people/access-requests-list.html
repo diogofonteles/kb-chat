@@ -1,16 +1,31 @@
 @if (store.count() > 0) {
   <section class="requests" aria-labelledby="requests-title">
-    <h4 id="requests-title" class="title" i18n="@@requests.title">
-      Solicitações pendentes ({{ store.count() }})
-    </h4>
+    <h3 id="requests-title" class="title">
+      <span i18n="@@requests.title"
+        >Solicitações pendentes ({{ store.count() }})</span
+      >
+    </h3>
+    <p class="kicker" i18n="@@requests.attention">Precisa da sua atenção</p>
     <ul class="list">
       @for (row of rows(); track row.request.id) {
         @let request = row.request;
         <li class="request">
           <div class="who">
-            <span class="name">{{ row.name }}</span>
-            <span class="detail">{{ request.email }}</span>
-            <span class="detail">
+            <ui-avatar [name]="row.name" [size]="44" />
+            <span class="who-text">
+              <span class="name">{{ row.name }}</span>
+              <span class="detail">{{ request.email }}</span>
+            </span>
+          </div>
+          <div class="facts">
+            <ui-pill tone="info">
+              @if (request.source === 'google') {
+                <ng-container i18n="@@requests.google">Google</ng-container>
+              } @else {
+                <ng-container i18n="@@requests.form">Cadastro</ng-container>
+              }
+            </ui-pill>
+            <ui-pill>
               @if (row.phone) {
                 {{ row.phone }}
               } @else {
@@ -18,64 +33,35 @@
                   >sem celular</ng-container
                 >
               }
-              ·
-              @if (request.source === 'google') {
-                <ng-container i18n="@@requests.google">Google</ng-container>
-              } @else {
-                <ng-container i18n="@@requests.form">Cadastro</ng-container>
-              }
-              · {{ request.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+            </ui-pill>
+            <span class="detail">
+              {{ request.createdAt | date: 'dd/MM/yyyy HH:mm' }}
             </span>
           </div>
-          @if (confirmingId() === request.id) {
-            <p class="confirm" i18n="@@requests.confirmRefuse">
-              Recusar a solicitação de {{ row.name }}? A pessoa só poderá pedir
-              de novo em 24 horas.
-            </p>
-            <div class="actions">
-              <button
-                #confirmRefuse
-                type="button"
-                class="danger"
-                [disabled]="busyId() === request.id"
-                (click)="refuse(request)"
-                i18n="@@requests.refuse"
-              >
-                Recusar
-              </button>
-              <button
-                type="button"
-                class="link"
-                (click)="cancelRefuse()"
-                i18n="@@people.cancel"
-              >
-                Cancelar
-              </button>
-            </div>
-          } @else {
-            <div class="actions">
-              <button
-                type="button"
-                class="primary"
-                [disabled]="busyId() === request.id"
-                (click)="approve(request)"
-                i18n="@@requests.approve"
-              >
-                Aprovar
-              </button>
-              <button
-                #refuseButton
-                type="button"
-                class="secondary"
-                [attr.data-id]="request.id"
-                [disabled]="busyId() === request.id"
-                (click)="askRefuse(request)"
-                i18n="@@requests.refuse"
-              >
-                Recusar
-              </button>
-            </div>
-          }
+          <div class="actions">
+            <button
+              uiButton="primary"
+              size="sm"
+              type="button"
+              [disabled]="busyId() === request.id"
+              (click)="approve(request)"
+              i18n="@@requests.approve"
+            >
+              Aprovar
+            </button>
+            <button
+              #refuseButton
+              uiButton="outline"
+              size="sm"
+              type="button"
+              [attr.data-id]="request.id"
+              [disabled]="busyId() === request.id"
+              (click)="askRefuse(request)"
+              i18n="@@requests.refuse"
+            >
+              Recusar
+            </button>
+          </div>
           @if (error()?.id === request.id) {
             <p class="error" role="alert">
               <span class="visually-hidden" i18n="@@people.errorPrefix"
@@ -89,3 +75,38 @@
     </ul>
   </section>
 }
+
+<!-- Refusing asks first, in a small modal (KBC-132 FR-4, BR-4). -->
+<ui-dialog
+  #refuseDialog
+  titleId="refuse-dialog-title"
+  [title]="refuseTitle()"
+  [width]="480"
+  (closed)="cancelRefuse()"
+>
+  <p class="confirm-text" i18n="@@requests.refuseText">
+    A pessoa só poderá pedir de novo em 24 horas.
+  </p>
+  <div uiDialogFooter class="footer-actions">
+    <button
+      uiButton="ghost"
+      type="button"
+      (click)="refuseDialog.close()"
+      i18n="@@people.cancel"
+    >
+      Cancelar
+    </button>
+    @if (refusing(); as request) {
+      <button
+        #confirmRefuse
+        uiButton="danger"
+        type="button"
+        [disabled]="busyId() === request.id"
+        (click)="refuse(request)"
+        i18n="@@requests.refuse"
+      >
+        Recusar
+      </button>
+    }
+  </div>
+</ui-dialog>

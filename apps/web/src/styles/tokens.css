@@ -1,48 +1,127 @@
 /* Non-color tokens and per-theme settings; colors come from tokens.json (colors.generated.css).
-   Design tokens as CSS custom properties (docs/design/screens.md, "Temas e tokens"); the DTCG file comes with the theme switcher (KBC-005). */
+   Design tokens as CSS custom properties (docs/design/screens.md, "Temas e tokens"; v2:
+   docs/design/redesign-v2.md and docs/design/v2-implementation-notes.md). */
 :root {
-  --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Figtree is the v2 type (KBC-124 FR-1), served from /fonts (styles.css), never a CDN. */
+  --font-ui: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-reading: 'Source Serif 4', Georgia, 'Times New Roman', serif;
   --font-display: var(--font-reading);
+  --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-md: 1rem;
   --text-lg: 1.375rem;
+  /* v2 type scale: item 15/500, meta 13, label 11–12/700, section 20–24/700, page title 64–72/800. */
+  --text-meta: 0.8125rem;
+  --text-item: 0.9375rem;
+  --text-section: 1.375rem;
+  --text-hero: clamp(2.25rem, 1rem + 4vw, 4.5rem);
+  --weight-hero: 800;
+  --tracking-hero: -0.04em;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
+  --space-5: 1.25rem;
   --space-6: 1.5rem;
   --space-8: 2rem;
   --radius-sm: 0.5rem;
   --radius-md: 0.875rem;
   --radius-lg: 1.25rem;
+  /* v2 radii: pills (buttons, chips), menus 6, cards and panels 8, covers 4–6, sheet tops 16. */
+  --radius-pill: 999px;
+  --radius-menu: 6px;
+  --radius-card: 8px;
+  --radius-cover: 4px;
+  --radius-sheet: 16px;
   --column: 45rem;
   --panel: 40rem;
   --sidebar: 16rem;
+  /* Touch targets: 44 on phones; 32 is the desktop floor of the v2 icon buttons. */
   --target: 2.75rem;
+  --target-desktop: 2rem;
   --ease: cubic-bezier(0.2, 0, 0, 1);
+  /* White (or the theme's text) over the surface, for hover, selected and fields (v2 overlays). */
+  --overlay-1: color-mix(in srgb, var(--color-text) 5%, transparent);
+  --overlay-2: color-mix(in srgb, var(--color-text) 7%, transparent);
+  --overlay-3: color-mix(in srgb, var(--color-text) 10%, transparent);
+  --overlay-4: color-mix(in srgb, var(--color-text) 20%, transparent);
+  --overlay-line: color-mix(in srgb, var(--color-text) 12%, transparent);
+  --scrim: rgb(0 0 0 / 70%);
+  /* Text over a cover's own colour (the cited passage while it plays, KBC-150): always light,
+     the cover being dark in every theme; the unspoken words keep 4.5:1 over the darkest. */
+  --color-on-cover: #ffffff;
+  --color-on-cover-dim: rgb(255 255 255 / 70%);
+  /* The ink of a white button over a cover's colour. */
+  --color-cover-ink: #000000;
+  /* How much of a cover's colour a playing card keeps (the rest is black). */
+  --cover-card-share: 55%;
+  /* The accent as text over a tint (a pill, the active item of a list). */
+  --color-accent-text: var(--color-accent);
+  /* The v2 shell (KBC-125): panels with an 8 gap over the shell backdrop. */
+  --shell-gap: 0.5rem;
+  --shell-topbar: 3.5rem;
+  --shell-sidebar: 18.75rem;
+  --shell-sidebar-collapsed: 4.5rem;
+  --shell-right: 21.25rem;
+  --shell-source: 28.75rem;
+  --shell-player: 4.5rem;
+  --shell-mobile-nav: 4.25rem;
+  --shell-mini-player: 3.5rem;
+  /* The space a phone page leaves at its foot for the mini player and the nav (FR-4). The
+     v2 shell lays them out in its own grid row under the main panel, so nothing scrolls under
+     them and a page's sticky bar needs no room for them (KBC-125). */
+  --shell-mobile-foot: 0px;
+  /* The shell's top bar (its min-height): what floats under it starts from here (KBC-123). */
+  --topbar-height: calc(var(--shell-topbar) + var(--shell-gap));
+}
+
+@media (max-width: 1023px) {
+  :root {
+    /* The phone header: avatar, title and the view switch. */
+    --topbar-height: 3.5rem;
+  }
 }
 
 :root,
-[data-theme='light'] {
+[data-theme='revised'] {
+  color-scheme: dark;
+  --font-reading: var(--font-ui);
+  --font-display: var(--font-ui);
+  --shadow: 0 16px 48px rgb(0 0 0 / 50%);
+}
+
+[data-theme='light'],
+[data-theme='system'] {
   color-scheme: light;
+  /* The accent as text over a tint (pills, the active item): the darker one keeps 4.5:1. */
+  --color-accent-text: var(--color-accent-strong);
+  --font-reading: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-display: var(--font-reading);
   --shadow: 0 1px 2px rgb(31 30 28 / 6%), 0 8px 24px rgb(31 30 28 / 6%);
+  --scrim: rgb(31 30 28 / 45%);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']):not([data-theme='esoteric']) {
+  [data-theme='system'] {
     color-scheme: dark;
+    --color-accent-text: var(--color-accent);
     --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 25%);
+    --scrim: rgb(0 0 0 / 60%);
   }
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
+  --font-reading: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-display: var(--font-reading);
   --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 25%);
+  --scrim: rgb(0 0 0 / 60%);
 }
 
 [data-theme='esoteric'] {
   color-scheme: dark;
+  --font-reading: 'Source Serif 4', Georgia, 'Times New Roman', serif;
   --font-display: 'Cormorant Garamond', var(--font-reading);
   --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 10px 30px rgb(0 0 0 / 35%);
+  --scrim: rgb(0 0 0 / 60%);
 }

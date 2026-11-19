@@ -5,6 +5,7 @@ import {
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import type { MediaItem, MediaTranscriptWords } from '@kb-chat/contracts';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { SessionEvents } from '@core/auth/session-events.js';
 import {
   MediaApi,
@@ -128,6 +129,20 @@ describe('MediaApi', () => {
       { kind: 'progress', loaded: 1, total: 3 },
       { kind: 'done', item: ITEM },
     ]);
+  });
+
+  it('marks the upload as in progress until it ends, failed or stopped (KBC-123 AC-2)', () => {
+    const { api, tus } = setup();
+    const work = TestBed.inject(BusyWork);
+    api.upload(ITEM.id, new Blob(['a'])).subscribe({ error: () => undefined });
+    const failing = tus.last;
+    const stopped = api.upload(ITEM.id, new Blob(['b'])).subscribe();
+    expect(work.busy()).toBe(true);
+    failing.fail(500);
+    // The other one still sends: only its own end releases it.
+    expect(work.busy()).toBe(true);
+    stopped.unsubscribe();
+    expect(work.busy()).toBe(false);
   });
 
   it('asks about a file before sending it', () => {

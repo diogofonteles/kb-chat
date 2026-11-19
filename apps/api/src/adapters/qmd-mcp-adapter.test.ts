@@ -111,6 +111,35 @@ describe('QmdMcpAdapter', () => {
     expect(types).toEqual(['lex', 'vec']);
   });
 
+  it('asks each sub-search as deep as the depth, never below the limit, only when one is set (KBC-120)', async () => {
+    const logFile = join(
+      await mkdtemp(join(tmpdir(), 'kbchat-qmd-')),
+      'queries.jsonl',
+    );
+    adapter = new QmdMcpAdapter({
+      command: process.execPath,
+      args: [fakeQmd, logFile],
+    });
+    await adapter.start();
+    await adapter.search({ ...query, limit: 300, depth: 300 });
+    await adapter.search({ ...query, limit: 60, depth: 100 });
+    await adapter.search({ ...query, limit: 60, depth: 20 });
+    await adapter.search({ ...query, limit: 60 });
+    const [partial, hybrid, shallow, plain] = (await readFile(logFile, 'utf8'))
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    expect(partial).toMatchObject({
+      limit: 300,
+      candidateLimit: 300,
+      rerank: false,
+    });
+    expect(hybrid).toMatchObject({ limit: 60, candidateLimit: 100 });
+    expect(shallow).toMatchObject({ limit: 60, candidateLimit: 60 });
+    expect(plain).toMatchObject({ limit: 60, rerank: false });
+    expect(plain).not.toHaveProperty('candidateLimit');
+  });
+
   it('does not keep a process alive when closed during a reconnect', async () => {
     adapter = new QmdMcpAdapter({ command: process.execPath, args: [fakeQmd] });
     const starting = adapter.start();

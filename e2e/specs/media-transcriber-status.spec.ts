@@ -9,6 +9,8 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
+import { collectionItem } from './shell-helpers.js';
+import { openSection, openSettings } from './settings-helpers.js';
 import { aCollection, uniqueTag, uploadReady } from './media-helpers.js';
 import { approve, seedDraft } from './tracks-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
@@ -143,28 +145,15 @@ async function sidebar(page: Page): Promise<Locator> {
   if (!desktop(page) && !(await drawer.isVisible()))
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
   return desktop(page)
-    ? page.getByRole('complementary', { name: 'Lateral' })
+    ? page.getByRole('complementary', { name: 'Sua biblioteca' })
     : drawer;
 }
 
 async function openCollection(page: Page, title: string): Promise<void> {
-  const select = (await sidebar(page)).getByRole('combobox', {
-    name: 'Acervo',
-    exact: true,
-  });
   // The list comes with the page: wait for this test's collection in it.
-  let label: string | undefined;
-  await expect
-    .poll(async () => {
-      label = (await select.locator('option').allTextContents())
-        .map((text) => text.trim())
-        .find((text) => text.startsWith(title));
-      return label;
-    })
-    .toBeTruthy();
-  if (!label) throw new Error(`no option for ${title}`);
-  await select.selectOption({ label });
-  if (!desktop(page)) await page.keyboard.press('Escape');
+  const item = collectionItem(await sidebar(page), title);
+  await expect(item).toBeVisible();
+  await item.click();
   await expect(page.getByRole('heading', { level: 1 })).toContainText(title);
 }
 
@@ -310,11 +299,8 @@ async function sendStatus(
 }
 
 async function openTranscribers(page: Page): Promise<Locator> {
-  if (!desktop(page))
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: 'Configurações' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Configurações' });
-  await dialog.getByRole('button', { name: 'Transcritores' }).click();
+  const dialog = await openSettings(page);
+  await openSection(dialog, 'Transcritores');
   return dialog;
 }
 

@@ -59,6 +59,10 @@ const volume = (page: Page) =>
     .locator('[data-media-engine]')
     .evaluate((element) => (element as HTMLMediaElement).volume);
 
+/** The player's live announcer (the page also keeps the new-version notice's region, KBC-123). */
+const announcer = (page: Page) =>
+  page.locator('app-mini-player').getByRole('status');
+
 test('AC-1: after 5 min playing the sound goes down, it pauses, the sound comes back and the position is kept', async ({
   page,
 }) => {
@@ -86,7 +90,7 @@ test('AC-1: after 5 min playing the sound goes down, it pauses, the sound comes 
           .positionMs,
     )
     .toBeGreaterThan(currentTime * 1000 - 1000);
-  await expect(page.getByRole('status')).toContainText('Pausado pelo timer');
+  await expect(announcer(page)).toContainText('Pausado pelo timer');
   await expect(moon(page)).toHaveCount(0);
 });
 
@@ -139,7 +143,7 @@ test('AC-4: "No fim desta mídia" stops at the end, and nothing else plays', asy
     })
     .toBe(true);
   await expect(moon(page)).toHaveCount(0);
-  await expect(page.getByRole('status')).toContainText('Pausado pelo timer');
+  await expect(announcer(page)).toContainText('Pausado pelo timer');
   expect((await audioState(page)).paused).toBe(true);
 });
 
@@ -222,11 +226,16 @@ test('the timer is chosen and turned off with the keyboard only', async ({
   await openPlayer(page);
   const more = page.getByRole('button', { name: 'Mais opções' });
   await more.focus();
-  // ↑ on the trigger opens the menu on its last item ("Atalhos de teclado"); ↑ again
-  // reaches "Timer para dormir".
+  // ↑ on the trigger opens the menu on its last item ("Atalhos de teclado"); ↑ walks up
+  // to "Timer para dormir".
   await page.keyboard.press('ArrowUp');
   await expect(
     page.getByRole('menuitem', { name: 'Atalhos de teclado' }),
+  ).toBeFocused();
+  // Everyone who may listen sees who speaks (KBC-151 BR-0), so its choice sits in between.
+  await page.keyboard.press('ArrowUp');
+  await expect(
+    page.getByRole('menuitem', { name: /^Mostrar quem fala/ }),
   ).toBeFocused();
   await page.keyboard.press('ArrowUp');
   await expect(
@@ -250,6 +259,11 @@ test('the timer is chosen and turned off with the keyboard only', async ({
   await page.keyboard.press('ArrowUp');
   await expect(
     page.getByRole('menuitem', { name: 'Atalhos de teclado' }),
+  ).toBeFocused();
+  // Everyone who may listen sees who speaks (KBC-151 BR-0), so its choice sits in between.
+  await page.keyboard.press('ArrowUp');
+  await expect(
+    page.getByRole('menuitem', { name: /^Mostrar quem fala/ }),
   ).toBeFocused();
   await page.keyboard.press('ArrowUp');
   await expect(
@@ -275,7 +289,7 @@ test('the timer is chosen and turned off with the keyboard only', async ({
   await page.keyboard.press('Enter');
   await expect(moon(page)).toHaveCount(0);
   await expect(more).toBeFocused();
-  await expect(page.getByRole('status')).toContainText('Timer desligado');
+  await expect(announcer(page)).toContainText('Timer desligado');
 });
 
 test('BR-2: opening another media in the app turns the timer off, silently', async ({
@@ -289,7 +303,7 @@ test('BR-2: opening another media in the app turns the timer off, silently', asy
   await expect(page.getByRole('heading', { name: short.title })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Tocar' })).toBeEnabled();
   await expect(moon(page)).toHaveCount(0);
-  await expect(page.getByRole('status')).not.toContainText('Timer desligado');
+  await expect(announcer(page)).not.toContainText('Timer desligado');
 });
 
 for (const theme of ['light', 'dark', 'esoteric'] as const) {

@@ -1,0 +1,61 @@
+/* The v2 assistant head of "Preparar áudio", "Faixas" and "Limites" (KBC-130): a small
+   cover, the kicker, the 40 title and the tools on the right, then the four-bar stepper.
+   Shared by the preparation, the tracks editor and the bounds pages. */
+.v2-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  align-items: flex-end;
+}
+
+.v2-head .head-cover {
+  flex: none;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+}
+
+.v2-head .head-text {
+  display: grid;
+  flex: 1 1 18rem;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.v2-head .kicker {
+  margin: 0;
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+.v2-head .heading {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: clamp(1.75rem, 1rem + 2vw, 2.5rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+
+.v2-head .heading:focus {
+  outline: none;
+}
+
+.v2-head .sub {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.v2-head .head-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+@media (max-width: 1023px) {
+  .v2-head .head-cover {
+    display: none;
+  }
+}
