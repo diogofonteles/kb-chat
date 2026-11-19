@@ -299,8 +299,9 @@
         }
       </div>
 
-      <!-- On a phone the selection takes the attention card's place (media-library-selection@mobile). -->
-      @if (showQueue() && phone() && !selecting()) {
+      <!-- On a phone the selection takes the attention card's place (media-library-selection@mobile):
+           hidden by the page's style while it lasts, not destroyed (library-page.css). -->
+      @if (showQueue() && phone()) {
         <app-queue-summary class="phone-queue" />
       }
 

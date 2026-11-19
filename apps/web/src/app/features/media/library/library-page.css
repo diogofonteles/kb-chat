@@ -37,6 +37,13 @@
     no-repeat;
 }
 
+/* On a phone the selection takes the attention card's place (media-library-selection@mobile):
+   the card stays alive, hidden, so ending a selection does not build it again (its styles,
+   its reads) over 2 000 rows. */
+.library.selecting .phone-queue {
+  display: none;
+}
+
 /* Room under the last row while the selection bar is at the foot. */
 .library.selecting {
   padding-bottom: 8rem;
@@ -440,6 +447,16 @@
 @container library-table (max-width: 36rem) {
   .table-head {
     display: none;
+  }
+
+  /* Out of a selection the rows' box column (library-row.css) lies left of the list, out of
+     view; a selection brings it in by this one margin (NFR-2: no row changes its columns). */
+  .library:not(.selecting) .rows {
+    margin-inline-start: calc(-1 * (1.5rem + var(--space-3)));
+  }
+
+  .library:not(.selecting) .rows > .row-tracks {
+    margin-inline-start: calc(1.5rem + var(--space-3));
   }
 }
 

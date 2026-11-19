@@ -493,13 +493,15 @@ app-menu-button {
    author and the length (media-library@mobile). The box stays in reach, with no hover. */
 @container library-table (max-width: 36rem) {
   :host {
-    /* The cover's column holds its 12 px to the title (mRow: cover 52, gap 12). */
+    /* The box's column (24, then 12) and the cover's (52, then 12 to the title: mRow) are
+       always there: out of a selection the list holds the box's column out of view
+       (library-page.css), so starting or ending one moves one box, not 2 000 rows' columns. */
     grid-template-columns:
-      0 calc(3.25rem + var(--space-3)) minmax(0, 1fr)
+      1.5rem var(--space-3) 3.25rem var(--space-3) minmax(0, 1fr)
       var(--row-end, 1.5rem);
     grid-template-areas:
-      'lead art title actions'
-      'lead art cells actions';
+      'lead . art . title actions'
+      'lead . art . cells actions';
     /* The title and its line centred in the 64 row, 4 apart: a line with a pill is taller and
        lifts the title, as mRow draws it (media-library-selection@mobile). What spans both
        lines (the box, the cover, the row's end) gives up its height to them (the margins
@@ -604,13 +606,10 @@ app-menu-button {
     visibility: hidden;
   }
 
-  :host-context(.selecting) {
-    grid-template-columns: 1.5rem 3.25rem minmax(0, 1fr) var(--row-end, 1.5rem);
-    column-gap: var(--space-3);
-  }
-
-  :host-context(.selecting) .art {
-    justify-self: stretch;
+  /* During a selection the title and its line end 12 before the row's end, as drawn. */
+  :host-context(.selecting) .title,
+  :host-context(.selecting) .cells {
+    margin-inline-end: var(--space-3);
   }
 
   :host-context(.selecting) .lead {
