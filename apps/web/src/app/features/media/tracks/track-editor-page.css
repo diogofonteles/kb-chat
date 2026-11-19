@@ -33,7 +33,8 @@
 }
 
 .top {
-  padding-top: 2.125rem;
+  /* The cover 28 under the panel's top (tracksMain), as Preparar áudio's. */
+  padding-top: 1.75rem;
 }
 
 .progress {
@@ -116,6 +117,7 @@
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-menu);
   font-size: var(--text-meta);
+  line-height: 1rem;
 }
 
 .banner.info > ui-icon {

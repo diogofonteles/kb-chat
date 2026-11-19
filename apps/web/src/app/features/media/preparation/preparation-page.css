@@ -325,9 +325,17 @@ a.primary,
 /* A master's phone keeps the transcriber's pill beside the steps (KBC-114 AC-16): the
    head's other tool ("Sair e continuar depois") is in the foot bar there. */
 @media (max-width: 1023px) {
+  /* On the step line's right (free: "Passo 2 de 4 · Processar" ends at 191), so nothing
+     under the head moves. */
+  :host .page {
+    position: relative;
+  }
+
   :host .v2-head .head-tools:has(.transcriber) {
+    position: absolute;
+    top: 7.0625rem;
+    right: var(--space-4);
     display: flex;
-    grid-column: 1 / -1;
     padding-bottom: 0;
   }
 
