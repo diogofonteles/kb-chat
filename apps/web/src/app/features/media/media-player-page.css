@@ -91,6 +91,10 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   line-clamp: 3;
+  /* The 56 px glyphs reach 5 px under the 57 px lines: room for them inside the clip, so a
+     title that fits is not cut (its place unchanged). */
+  margin-bottom: -0.375rem;
+  padding-bottom: 0.375rem;
 }
 
 .meta {
@@ -589,6 +593,8 @@
 
   .hero h1 {
     display: block;
+    margin-bottom: 0;
+    padding-bottom: 0;
     overflow: hidden;
     -webkit-line-clamp: none;
     line-clamp: none;

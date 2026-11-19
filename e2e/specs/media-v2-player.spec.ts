@@ -248,6 +248,11 @@ test('a very long title stops at three lines in the player header, whole in its 
     title: `Uma palestra sobre o caminho espiritual da União do Vegetal e a palavra do Mestre na sessão de escala de março, parte dois, com perguntas ${uniqueTag()}`,
     seconds: 3,
   });
+  // The frame's own title, which fits its three lines.
+  const fits = await uploadReady(owner, {
+    title: 'Entrevista sobre a Tábua de Esmeralda',
+    seconds: 3,
+  });
   await owner.dispose();
   await page.goto(`/midia/${media.id}`);
   const heading = page.getByRole('heading', { level: 1, name: media.title });
@@ -269,4 +274,12 @@ test('a very long title stops at three lines in the player header, whole in its 
   expect(lines).toBeLessThanOrEqual(3);
   expect(clipped).toBe(true);
   await capture(page, 'player-long-title', info.project.name);
+
+  // A title that fits its three lines is not cut: its glyphs stay inside the clip.
+  await page.goto(`/midia/${fits.id}`);
+  const whole = page.getByRole('heading', { level: 1, name: fits.title });
+  await expect(whole).toBeVisible();
+  expect(
+    await whole.evaluate((h1) => h1.scrollHeight - h1.clientHeight),
+  ).toBeLessThanOrEqual(0);
 });
