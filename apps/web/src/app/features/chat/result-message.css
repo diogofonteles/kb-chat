@@ -265,8 +265,11 @@
     display: none;
   }
 
-  /* chat-results-error@mobile: its circle 60 under the question box (no chips between). */
-  .error {
+  /* chat-results-error@mobile: its circle 60 under the question box (no chips between); the
+     error is a box of its own (an answer's parts are laid out in the page). */
+  .answer.error {
+    display: block;
+    order: 2;
     padding-top: 0.875rem;
   }
 

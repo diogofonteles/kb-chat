@@ -104,6 +104,7 @@
     <button
       type="submit"
       class="send"
+      [class.blocked]="busy()"
       [disabled]="!canSend()"
       [attr.aria-describedby]="canSend() ? null : 'send-hint'"
     >

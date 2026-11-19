@@ -9,21 +9,19 @@ import {
   test,
 } from '../specs/fixtures.js';
 import { modeRadio } from '../specs/search-view.js';
-import {
-  chooseCollectionSlug,
-  library,
-  startNewCollection,
-} from '../specs/shell-helpers.js';
+import { library, startNewCollection } from '../specs/shell-helpers.js';
 import {
   ANA,
   CONVERSATIONS,
-  HERMETISMO,
   LISTED,
   LISTED_PHONE,
   NO_TOPICS,
   OWNER,
   chatWorld,
+  resetChatWorld,
   seedChatWorld,
+  signInNamed,
+  withFramesTime,
   type ChatOptions,
   type ChatWorld,
 } from './figma-chat-world.js';
@@ -50,6 +48,7 @@ async function contextAt(
   options: ChatOptions = {},
 ): Promise<{ context: BrowserContext; page: Page }> {
   const phone = width === 'phone';
+  await resetChatWorld(world);
   const context = await browser.newContext({
     baseURL: WEB_ORIGIN,
     viewport: phone ? PHONE : DESKTOP,
@@ -60,12 +59,14 @@ async function contextAt(
     timezoneId: 'America/Sao_Paulo',
   });
   await chatWorld(context, world, {
-    listed: phone ? LISTED_PHONE : LISTED,
+    listed: LISTED,
     ...options,
   });
   const page = await context.newPage();
   await fakeGoogle(page);
-  await signIn(page.request, options.email ?? OWNER);
+  if (options.name)
+    await signInNamed(page.request, options.email ?? OWNER, options.name);
+  else await signIn(page.request, options.email ?? OWNER);
   return { context, page };
 }
 
@@ -93,9 +94,15 @@ async function shoot(
   }
   await page.mouse.move(1, 1);
   // The frames draw the question box at rest: no focus ring, no profiles floating over it.
+  // So do the collection dialogs (the name field without its focus ring) and the box's chips.
   await page.evaluate(() => {
     const focused = document.activeElement;
-    if (focused instanceof HTMLTextAreaElement) focused.blur();
+    if (
+      focused instanceof HTMLTextAreaElement ||
+      (focused instanceof HTMLInputElement &&
+        focused.closest('dialog, app-composer'))
+    )
+      focused.blur();
   });
   if (hover && width === 'desktop') {
     await hover.hover();
@@ -172,13 +179,21 @@ test('the home: empty, history, research, profiles, the library, the collection 
 }) => {
   for (const width of WIDTHS) {
     const phone = width === 'phone';
-    const { context, page } = await contextAt(browser, width);
+    let { context, page } = await contextAt(browser, width);
     await home(page);
     await expect(
       page.getByRole('navigation', { name: 'Recentes' }),
     ).toBeVisible();
     await shoot(page, 'chat-empty', width);
+    if (!phone) await shoot(page, 'chat-history', width);
 
+    // The phone's Conversas and the Menu (both widths) list the Alquimia Prática search too.
+    await context.close();
+    ({ context, page } = await contextAt(browser, width, {
+      listed: LISTED_PHONE,
+      name: 'Helena Prado',
+    }));
+    await home(page);
     if (phone) {
       await page
         .getByRole('navigation', { name: 'Navegação' })
@@ -189,7 +204,7 @@ test('the home: empty, history, research, profiles, the library, the collection 
       ).toBeVisible();
       await shoot(page, 'chat-history', width);
       await home(page);
-    } else await shoot(page, 'chat-history', width);
+    }
 
     // The Menu (phone) or Sua biblioteca widened (desktop).
     if (phone) {
@@ -201,12 +216,9 @@ test('the home: empty, history, research, profiles, the library, the collection 
         .click();
     }
     await shoot(page, 'chat-sidebar-drawer-mobile', width);
-    if (phone) await page.keyboard.press('Escape');
-    else
-      await page
-        .getByRole('button', { name: 'Ampliar Sua biblioteca' })
-        .click();
+    await context.close();
 
+    ({ context, page } = await contextAt(browser, width));
     await home(page);
     await startNewCollection(page);
     const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
@@ -277,10 +289,6 @@ test('the home without collections: an error, none in the vault, none granted, o
           : page.getByText(text).first();
       await expect(ready.or(skip)).toBeVisible();
       await skipWizard(page);
-      // The app opens on a collection with texts: Hermetismo is chosen by hand.
-      await (id === 'chat-empty-topic'
-        ? chooseCollectionSlug(page, HERMETISMO)
-        : Promise.resolve());
       await expect(page.getByText(text).first()).toBeVisible();
       await shoot(page, id, width);
       await context.close();
@@ -294,9 +302,9 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
   for (const width of WIDTHS) {
     const phone = width === 'phone';
     let { context, page } = await contextAt(browser, width);
-    const fresh = async () => {
+    const fresh = async (options: ChatOptions = {}) => {
       await context.close();
-      ({ context, page } = await contextAt(browser, width));
+      ({ context, page } = await contextAt(browser, width, options));
       await home(page);
     };
     await home(page);
@@ -396,7 +404,7 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
     await expect(cards(page)).toHaveCount(1);
     await shoot(page, 'chat-results-authorship', width);
 
-    await fresh();
+    await fresh({ tookMs: 100 });
     await search(page, 'sétupla', 'Por significado');
     await expect(cards(page).first()).toBeVisible();
     // The lone best result shows its copy beside it by itself (copy-column): nothing to open.
@@ -409,11 +417,22 @@ test('the results: all, loading, error, more, by meaning, filters, authorship, c
         filters?: { genres?: string[] };
       };
       const response = await route.fetch();
-      if (!asked.filters?.genres?.length) return route.fulfill({ response });
+      if (!asked.filters?.genres?.length)
+        return route.fulfill({
+          response,
+          json: withFramesTime(
+            (await response.json()) as Record<string, unknown>,
+          ),
+        });
       const body = (await response.json()) as Record<string, unknown>;
       await route.fulfill({
         response,
-        json: { ...body, items: [], total: 0, nextOffset: null },
+        json: withFramesTime({
+          ...body,
+          items: [],
+          total: 0,
+          nextOffset: null,
+        }),
       });
     });
     await search(page, 'ritmo', 'Por significado');
@@ -581,7 +600,7 @@ test('AI research: answering, the answer, failed, interrupted, the sweep to go o
 
     const sweep = await contextAt(browser, width, {
       view: 'research',
-      listed: [...(phone ? LISTED_PHONE : LISTED), CONVERSATIONS.sweep],
+      listed: [...LISTED, CONVERSATIONS.sweep],
     });
     await home(sweep.page);
     await openConversation(sweep.page, CONVERSATIONS.sweep);

@@ -140,9 +140,11 @@
       (click)="openSheet()"
     >
       <ui-icon name="filter" [size]="14" />
-      <span i18n="@@filters.open">Filtros</span>
+      <!-- "Filtros (1)": one line of words after the icon (v2 chip). -->
       @if (activeCount() > 0) {
-        <span>({{ activeCount() }})</span>
+        <span i18n="@@filters.openCount">Filtros ({{ activeCount() }})</span>
+      } @else {
+        <span i18n="@@filters.open">Filtros</span>
       }
     </button>
   </div>

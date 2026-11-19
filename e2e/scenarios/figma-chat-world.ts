@@ -29,7 +29,8 @@ import {
  * - GET /api/v1/topics has the frames' three collections only (the E2E server's "Zz …" level
  *   collections and Alquimia Prática are left out), "Cabala" with 9 documents and "Cosmologia
  *   Espiritual" with 6 (documents come from the kb vault, which no API writes); a state may
- *   make it fail, empty, or Hermetismo without texts;
+ *   make it fail, empty, or Hermetismo without texts (then the default, as KB_TOPIC would);
+ * - POST …/searches answers with the frames' time ("0,0 s", the off-topic one's "0,1 s");
  * - GET /api/v1/conversations lists the frames' conversations only (a state's own turn, like
  *   the one asked live in chat-research-answer, stays off the list), and for the member with
  *   no collection, who can keep none, it is the owner's list.
@@ -72,6 +73,8 @@ export interface ChatWorld {
   readonly conversations: Record<string, string>;
   /** When each was saved as seeded: opening one again (a search re-runs) saves it anew. */
   readonly savedAt: Record<string, { createdAt: string; updatedAt: string }>;
+  /** The owner's seeded conversations as stored, put back by `resetChatWorld`. */
+  readonly originals: readonly Record<string, unknown>[];
 }
 
 const NO_FILTERS = {
@@ -215,7 +218,7 @@ async function personId(api: APIRequestContext, email: string) {
 }
 
 /** Signs a standalone context in as `email`, with the name Google would give. */
-async function signInNamed(
+export async function signInNamed(
   api: APIRequestContext,
   email: string,
   name: string,
@@ -276,15 +279,50 @@ export async function seedChatWorld(): Promise<ChatWorld> {
   }
   const slugOf = (title: string) =>
     topics.find((one) => one.title === title)?.slug ?? '';
+  const conversations = await conversationIds(owner);
+  const originals: Record<string, unknown>[] = [];
+  for (const id of Object.values(conversations)) {
+    const read = await owner.get(`/api/v1/conversations/${id}`);
+    expect(read.status(), await read.text()).toBe(200);
+    originals.push((await read.json()) as Record<string, unknown>);
+  }
   world = {
     cabala: slugOf(CABALA),
     cosmologia: slugOf(COSMOLOGIA),
     anaId: await personId(owner, ANA.email),
-    conversations: await conversationIds(owner),
+    conversations,
     savedAt: await conversationTimes(owner),
+    originals,
   };
   await owner.dispose();
   return world;
+}
+
+/**
+ * Every state starts from the frames' data: the conversations an earlier state asked or opened
+ * (a search re-runs and is saved anew, a question is saved as a new conversation) are deleted,
+ * and the seeded ones are put back as they were stored.
+ */
+export async function resetChatWorld(w: ChatWorld): Promise<void> {
+  const owner = await ownerApi();
+  const kept = new Set(w.originals.map((one) => String(one['id'])));
+  const listed = await owner.get('/api/v1/conversations');
+  const { items } = (await listed.json()) as { items: { id: string }[] };
+  for (const one of items) {
+    if (kept.has(one.id)) continue;
+    const removed = await owner.delete(`/api/v1/conversations/${one.id}`, {
+      headers: CSRF,
+    });
+    expect(removed.status(), await removed.text()).toBe(204);
+  }
+  for (const one of w.originals) {
+    const put = await owner.put(`/api/v1/conversations/${String(one['id'])}`, {
+      data: one,
+      headers: CSRF,
+    });
+    expect(put.status(), await put.text()).toBe(200);
+  }
+  await owner.dispose();
 }
 
 /** LibraryRecents' key: FNV-1a of the address (apps/web/src/app/features/shell/library-recents.ts). */
@@ -300,6 +338,8 @@ function recentsKey(email: string): string {
 export interface ChatOptions {
   /** Who signs in (the recent collections are kept per address). */
   readonly email?: string;
+  /** The name Google gives who signs in (the phone Menu's "Helena Prado"). */
+  readonly name?: string;
   /** "Buscar documentos" or "Pesquisa com IA" on the home (remembered in kb-chat.view). */
   readonly view?: 'search' | 'research';
   /** What GET /api/v1/topics answers: the frames' list, an error, none, Hermetismo empty. */
@@ -310,6 +350,16 @@ export interface ChatOptions {
   readonly ownersList?: boolean;
   /** Whose recent collections are set (Ana Lima's, when the owner acts as her). */
   readonly recentsOf?: string;
+  /** How long each search took, as the frames write it ("0,0 s"; off-topic's "0,1 s"). */
+  readonly tookMs?: number;
+}
+
+/** A search's answer with the frame's time ("0,0 s"): the E2E server's own varies. */
+export function withFramesTime<T extends Record<string, unknown>>(
+  body: T,
+  tookMs = 0,
+): T {
+  return { ...body, tookMs };
 }
 
 /** The response patches listed in the header, and the browser's remembered choices. */
@@ -352,7 +402,11 @@ export async function chatWorld(
     const response = await route.fetch();
     const body = (await response.json()) as {
       items: Record<string, unknown>[];
+      defaultSlug?: string | null;
     };
+    // The frame opens on Hermetismo, its texts still to come: the server's KB_TOPIC says so (the
+    // app would otherwise open the largest collection and say "Nova conversa em Hermetismo").
+    if (topics === 'empty-hermetismo') body.defaultSlug = HERMETISMO;
     body.items =
       topics === 'none'
         ? []
@@ -371,6 +425,16 @@ export async function chatWorld(
                 : topic;
             });
     await route.fulfill({ response, json: body });
+  });
+  await context.route(/\/searches$/, async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    const response = await route.fetch();
+    if (!response.ok()) return route.fulfill({ response });
+    const body = (await response.json()) as Record<string, unknown>;
+    await route.fulfill({
+      response,
+      json: withFramesTime(body, options.tookMs ?? 0),
+    });
   });
   let ownersList: unknown = null;
   if (options.ownersList) {
