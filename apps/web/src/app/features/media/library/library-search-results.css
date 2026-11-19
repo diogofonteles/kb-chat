@@ -239,3 +239,18 @@
     min-height: 1.5rem;
   }
 }
+
+/* The phone: the count 12 under the chips, a result every 68 (media-library-search@mobile). */
+@media (max-width: 1023px) {
+  .results {
+    gap: var(--space-3);
+  }
+
+  .head {
+    min-height: 1.1875rem;
+  }
+
+  .hits {
+    gap: var(--space-2);
+  }
+}

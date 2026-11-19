@@ -118,7 +118,7 @@ a.title:focus-visible::after {
 }
 
 /* How far, along the cover's foot (v2 Cartão: 4 px, accent over a dark track). */
-.cover-bar {
+.cover-progress {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -129,7 +129,7 @@ a.title:focus-visible::after {
   background: rgb(0 0 0 / 50%);
 }
 
-.cover-bar span {
+.cover-progress span {
   display: block;
   height: 100%;
   background: var(--color-accent);

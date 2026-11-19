@@ -144,7 +144,7 @@ mark {
   :host {
     grid-template-columns: 3.25rem minmax(0, 1fr);
     gap: var(--space-3);
-    padding: var(--space-2);
+    padding: var(--space-1) 0;
   }
 
   .art {
@@ -169,9 +169,36 @@ mark {
     opacity: 1;
   }
 
+  /* media-library-search@mobile: the title 15/18 at the cover's top, the passage's band 4
+     under it on one line (24, 4/8 in, 13/16); the place has no room on a phone. */
   .title {
-    min-height: var(--target);
+    min-height: 0;
     font-size: var(--text-item);
+    line-height: 1.125rem;
+  }
+
+  .meta {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .passage {
+    justify-self: stretch;
+    margin: 0;
+    padding: var(--space-1) var(--space-2);
+    overflow: hidden;
+    font-size: var(--text-meta);
+    line-height: 1rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .clock {
+    font-size: var(--text-xs);
   }
 }
 
