@@ -54,6 +54,8 @@ section + section {
 .modes {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* v2 · Públicas: each card as tall as its own text (129 and 149), not the row's */
+  align-items: start;
   gap: var(--space-3);
   margin: 0 0 0.875rem;
   padding: 0;
@@ -78,6 +80,7 @@ section + section {
 }
 
 .mode ui-icon {
+  justify-self: start;
   color: var(--color-accent);
 }
 

@@ -57,9 +57,9 @@ export const UPLOADED_AT = '2026-11-09T15:00:00.000Z';
 export const TRANSCRIBER_OFF_SINCE = '2026-11-10T14:29:00.000Z';
 export const SEARCH_CHAT_AT = '2026-11-12T15:00:00.000Z';
 
-type Line = readonly [start: number, end: number, text: string];
+export type Line = readonly [start: number, end: number, text: string];
 /** The E2E interview minute (voices-helpers): "vegetal" at 0:40, the frames' search hits. */
-const MINUTE: readonly Line[] = [
+export const MINUTE: readonly Line[] = [
   [0, 5, 'Mestre, o senhor está lembrado daquele dia?'],
   [5.5, 15, 'Eu lembro sim, foi numa sessão em mil novecentos e sessenta.'],
   [15.5, 22, 'E como foi que o senhor chegou lá?'],
@@ -335,9 +335,20 @@ async function seededWorld(owner: APIRequestContext): Promise<World | null> {
   return { ids, byCode, repeated: REPEATED, cosmologia, ...PEOPLE };
 }
 
+/** What another area's world adds to this one (figma-player-world.ts), as it is seeded. */
+export interface SeedOptions {
+  /** The transcript a media gets in place of its MEDIA lines, by its cover code. */
+  readonly lines?: Readonly<Record<string, readonly Line[]>>;
+  /** Runs after the transcripts, before the recording's tracks are cut and approved. */
+  readonly beforeTracks?: (
+    owner: APIRequestContext,
+    byCode: Readonly<Record<string, string>>,
+  ) => Promise<void>;
+}
+
 /** Once per worker; seeds a fresh server (tools/inventory/servers.sh start), else finds it. */
 let world: World | null = null;
-export async function seedWorld(): Promise<World> {
+export async function seedWorld(options: SeedOptions = {}): Promise<World> {
   if (world) return world;
   const owner = await ownerApi();
   const found = await seededWorld(owner);
@@ -413,16 +424,19 @@ export async function seedWorld(): Promise<World> {
       .toMatch(/^(ready|failed)$/);
 
   for (const media of MEDIA) {
-    if (!media.lines) continue;
+    const lines = options.lines?.[media.code] ?? media.lines;
+    if (!lines) continue;
     const seeded = await owner.post(
       `/api/e2e/media/${byCode[media.code]}/transcript`,
       {
-        data: { raw: rawOf(media.lines, media.seconds, !!media.low) },
+        data: { raw: rawOf(lines, media.seconds, !!media.low) },
         headers: CSRF,
       },
     );
     expect(seeded.status(), `${media.code}: ${await seeded.text()}`).toBe(204);
   }
+
+  await options.beforeTracks?.(owner, byCode);
 
   // The recording, cut in its three tracks, approved and published (KBC-068).
   const recording = byCode['PR'] ?? '';
@@ -643,7 +657,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * order they were sent in (the minutes and seconds of the hour they were seeded in): the
  * album page goes as sent, newest first (media-list).
  */
-function withUploadDate(value: unknown, ids: ReadonlySet<string>): unknown {
+export function withUploadDate(
+  value: unknown,
+  ids: ReadonlySet<string>,
+): unknown {
   if (Array.isArray(value)) return value.map((one) => withUploadDate(one, ids));
   if (!isRecord(value)) return value;
   const out: Record<string, unknown> = {};

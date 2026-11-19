@@ -47,9 +47,10 @@
   color: var(--color-text);
 }
 
-/* v2 · Públicas: "Entrar" is a 36 white pill, 14/700. */
+/* v2 · Públicas: "Entrar" is a 36 white pill, 14/700, 24 at its sides (88 wide). */
 .enter {
   min-height: 2.25rem;
+  padding: 0 var(--space-6);
   font-size: var(--text-sm);
 }
 

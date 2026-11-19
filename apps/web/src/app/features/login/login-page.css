@@ -221,6 +221,8 @@
   /* The 24 targets overflow the drawn 16 line evenly. */
   margin: -0.25rem 0;
   color: var(--color-text-muted);
+  /* the "·" between the links is 13 too, as drawn */
+  font-size: var(--text-meta);
 }
 
 .footer-link {
@@ -265,10 +267,19 @@
 
   .foot {
     margin-top: auto;
+    /* a form longer than the screen keeps the foot 57 under it (v2 · Auth, mobile: the
+       column's 28 and 29 more) */
+    padding-top: 1.8125rem;
   }
 
   .logo {
     --ui-logo-size: 56px !important;
+  }
+
+  /* the 56 mark's sparkle is 28 (v2 · Auth, mobile), half of it as on desktop */
+  :host ::ng-deep .logo svg {
+    width: 1.75rem;
+    height: 1.75rem;
   }
 
   .tagline {
