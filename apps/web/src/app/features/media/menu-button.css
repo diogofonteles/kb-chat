@@ -23,9 +23,13 @@
   cursor: pointer;
 }
 
-.trigger:hover,
-.trigger[aria-expanded='true'] {
+.trigger:hover {
   background: var(--overlay-3);
+  color: var(--color-text);
+}
+
+.trigger[aria-expanded='true'] {
+  background: var(--menu-trigger-open-bg, var(--overlay-3));
   color: var(--color-text);
 }
 

@@ -85,6 +85,8 @@ const VIEW_LABELS: Record<LibraryDisplay, () => string> = {
       --menu-trigger-size: var(--text-sm);
       --menu-trigger-padding: 0;
       --menu-trigger-height: 2rem;
+      /* media-library-sort: the words turn white, no pill behind them, while it is open */
+      --menu-trigger-open-bg: transparent;
     }
 
     :host(.phone) app-menu-button {
