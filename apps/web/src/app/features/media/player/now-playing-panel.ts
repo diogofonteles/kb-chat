@@ -123,10 +123,12 @@ export type NowPlayingView = 'now' | 'fila' | 'ouvidas';
               </button>
             }
           </div>
+          <!-- pRight: the ✕ in a 28 circle at the tabs' end. -->
           <button
             uiIconButton
             type="button"
             class="close"
+            [size]="28"
             aria-label="Fechar o painel"
             i18n-aria-label="@@nowPlaying.closePanel"
             (click)="panel.close()"

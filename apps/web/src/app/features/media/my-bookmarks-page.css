@@ -80,7 +80,7 @@
 
 .sort ::ng-deep .trigger {
   min-height: 2rem;
-  padding: 0 var(--space-1);
+  padding: 0;
   border: 0;
   background: none;
   color: var(--color-text-muted);
@@ -105,11 +105,22 @@
   padding: 0 var(--space-8);
 }
 
+/* Nothing moved: the notice takes no row (the table 16 under the action bar). */
+.body > app-moved-bookmarks-notice:empty {
+  display: none;
+}
+
+/* The ⋯ on the 18 px column (bookmarksScreen), its 44 target reaching over the gap. */
+.row-more {
+  justify-self: center;
+  margin-inline: -0.8125rem;
+}
+
 /* # 24 · áudio · tempo 64 · nota 360 · ⋯ 18, 16 apart (bookmarksScreen). */
 .columns,
 .item {
   display: grid;
-  grid-template-columns: 1.5rem minmax(0, 1fr) 4rem minmax(0, 22.5rem) 2rem;
+  grid-template-columns: 1.5rem minmax(0, 1fr) 4rem minmax(0, 22.5rem) 1.125rem;
   gap: var(--space-4);
   align-items: center;
 }
@@ -262,6 +273,12 @@
 .empty-title {
   font-size: 1.5rem;
   font-weight: 700;
+  line-height: 1.8125rem;
+}
+
+/* emptyState: the words on 18 px lines. */
+.empty-text {
+  line-height: 1.125rem;
 }
 
 .empty-text {
@@ -359,6 +376,12 @@
     --ui-icon-btn-size: 48px !important;
   }
 
+  /* bookmarksMobile: the ▶ glyph 20 in the 48 circle. */
+  .play ::ng-deep svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
   .spacer,
   .search-button,
   .search-pill,
@@ -447,6 +470,12 @@
   .empty-icon {
     width: 4rem;
     height: 4rem;
+  }
+
+  /* qmEmpty: the 64 circle around a 28 glyph. */
+  .empty-icon ::ng-deep svg {
+    width: 1.75rem;
+    height: 1.75rem;
   }
 
   .empty-title {

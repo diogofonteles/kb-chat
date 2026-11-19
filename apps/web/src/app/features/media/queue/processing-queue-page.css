@@ -41,9 +41,10 @@
   outline: none;
 }
 
+/* queueScreen: each part 16 under the last (its col's 16 at the foot). */
 .body {
   display: grid;
-  gap: var(--space-6);
+  gap: var(--space-4);
   padding: 0 var(--space-8);
 }
 
@@ -99,25 +100,27 @@
   margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
+  line-height: 1.5rem;
   letter-spacing: -0.01em;
 }
 
 /* The table's head: the same columns as the rows (queue-row.css). */
 .columns {
   display: grid;
-  grid-template-columns:
-    minmax(12rem, 1.4fr) minmax(16rem, 1.4fr) minmax(12rem, 1fr)
-    9rem;
+  /* qRow/qHead: the item fills, the stepper 4 × 84, the situation 240, the action 140. */
+  grid-template-columns: minmax(0, 1fr) 21.75rem 15rem 8.75rem;
   gap: var(--space-5);
   padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--overlay-line);
   color: var(--color-text-muted);
   font-size: var(--text-meta);
+  /* qHead: a 32 row of 16 px words over its hairline. */
+  line-height: 1rem;
 }
 
 .rows {
   display: grid;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 .notice {
@@ -162,6 +165,12 @@
   color: var(--color-text);
   font-size: 1.5rem;
   font-weight: 700;
+  line-height: 1.8125rem;
+}
+
+/* emptyState: the words on 18 px lines. */
+.empty p:not(.empty-title) {
+  line-height: 1.125rem;
 }
 
 .skeleton {
@@ -235,6 +244,12 @@
   .empty-icon {
     width: 4rem;
     height: 4rem;
+  }
+
+  /* qmEmpty: the 64 circle around a 28 glyph. */
+  .empty-icon ::ng-deep svg {
+    width: 1.75rem;
+    height: 1.75rem;
   }
 
   .empty-title {

@@ -72,7 +72,9 @@
       </div>
     } @else if (empty()) {
       <div class="empty">
-        <ui-icon class="empty-icon" name="checkcircle" [size]="28" />
+        <span class="empty-icon"
+          ><ui-icon name="checkcircle" [size]="32"
+        /></span>
         <p class="empty-title" i18n="@@queue.emptyTitle">Nada processando</p>
         <p i18n="@@queue.empty">Nada sendo processado agora.</p>
         <a uiButton="white" routerLink="/biblioteca" i18n="@@queue.toLibrary"

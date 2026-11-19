@@ -23,7 +23,13 @@
 </ol>
 <div class="main">
   <ui-pill class="pill" [tone]="tone()">{{ toneWord() }}</ui-pill>
-  <p class="state">{{ stateText() }}</p>
+  <!-- Its place in the line joins the words (qRow: "… · 1º na fila do transcritor"). -->
+  <p class="state">
+    {{ stateText() }}
+    @if (positionText(); as place) {
+      · {{ place }}
+    }
+  </p>
   @if (showBar()) {
     <div
       class="bar"
@@ -37,14 +43,9 @@
       <span [style.width.%]="item().percent"></span>
     </div>
   }
-  @if (positionText() || nextText()) {
+  @if (nextText(); as after) {
     <p class="detail">
-      @if (positionText(); as place) {
-        <span>{{ place }}</span>
-      }
-      @if (nextText(); as after) {
-        <span>{{ after }}</span>
-      }
+      <span>{{ after }}</span>
     </p>
   }
 </div>

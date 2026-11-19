@@ -604,9 +604,21 @@ function queueOf(w: World) {
   };
   return {
     items: [
-      line('AP', { action: 'validate', stage: 'tracks' }),
-      line('AC', { state: 'failed', failure: 'work', stage: 'convert' }),
-      line('AS', { state: 'waiting', waitsForTranscriber: true }),
+      // The frame: AP processed, its tracks to validate; AC failed, to continue; AS next,
+      // first in the transcriber's line.
+      line('AP', { action: 'validate', stage: null, state: null }),
+      line('AC', {
+        state: 'failed',
+        failure: 'work',
+        stage: 'convert',
+        action: 'continue',
+      }),
+      line('AS', {
+        phase: 'next',
+        state: 'waiting',
+        waitsForTranscriber: true,
+        position: 1,
+      }),
     ],
     active: 0,
     transcriber: 'off',

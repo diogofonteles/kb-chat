@@ -153,7 +153,9 @@ export interface PlayFromState {
         } @else if (list.hasValue()) {
           @if (items().length === 0) {
             <div class="empty">
-              <ui-icon class="empty-icon" name="bookmark" [size]="28" />
+              <span class="empty-icon"
+                ><ui-icon name="bookmark" [size]="32"
+              /></span>
               <p class="empty-title" i18n="@@bookmarks.mineEmptyTitle">
                 Seus marcadores aparecem aqui
               </p>
@@ -208,7 +210,9 @@ export interface PlayFromState {
                     <span class="title">{{ bookmark.mediaTitle }}</span>
                   </a>
                   <span class="when" aria-hidden="true">
-                    <span class="time">{{ clock(bookmark.positionMs) }}</span>
+                    <span class="time time-pill">{{
+                      clock(bookmark.positionMs)
+                    }}</span>
                   </span>
                   <p class="note" [class.none]="bookmark.note === null">
                     {{ bookmark.note ?? noNote }}

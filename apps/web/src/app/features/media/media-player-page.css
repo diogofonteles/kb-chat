@@ -725,7 +725,7 @@
   }
 
   /* emptyState on a phone: the 64 circle around a 28 glyph. */
-  .empty-icon ui-icon {
+  .empty-icon ::ng-deep svg {
     width: 1.75rem;
     height: 1.75rem;
   }
