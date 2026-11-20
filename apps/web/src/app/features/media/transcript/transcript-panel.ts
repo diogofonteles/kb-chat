@@ -105,6 +105,12 @@ const HIT_STEPS: Readonly<Record<string, number>> = {
 /** The active segment is kept within this share of the list from its top and bottom. */
 const COMFORT = 0.15;
 
+/**
+ * A scroll of the list this soon after a wheel or a touch over it is the person's (FR-3). A
+ * wheel's momentum keeps sending wheels, so the window only has to cover one frame or two.
+ */
+const GESTURE_MS = 300;
+
 /** This close to the end of a page of words, the next one is asked for (KBC-045). */
 const NEXT_PAGE_SEGMENTS = 5;
 
@@ -229,6 +235,11 @@ export class TranscriptPanel {
   } | null>();
   /** Off once the person scrolls or moves through the list themselves (FR-3). */
   private readonly tracking = signal(true);
+  /** When a wheel or a touch last moved over the list: it may be about to scroll it. */
+  private gestureAt = Number.NEGATIVE_INFINITY;
+  /** The list's own scroll in flight (following, a search hit): its scroll events. */
+  private selfScroll: { readonly from: number; readonly to: number } | null =
+    null;
   /** What is in the search field now. */
   protected readonly typed = signal('');
   /** Enter and Esc apply the field at once, without waiting for the pause. */
@@ -607,21 +618,27 @@ export class TranscriptPanel {
   }
 
   /**
-   * Wheel and touch only read where the person scrolls: passive, so scrolling never waits
-   * for the page (no host binding offers that). The selection is read from the document.
+   * Wheel, touch and the list's scroll only read where the person scrolls: passive, so
+   * scrolling never waits for the page (no host binding offers that). The list's scroll is
+   * caught on its way down (it does not bubble), since the list comes and goes with the
+   * transcript. The selection is read from the document.
    */
   private listenPassively(destroyRef: DestroyRef): void {
     const renderer = inject(Renderer2);
     const host = inject(ElementRef<HTMLElement>).nativeElement;
     const passive = { passive: true };
     const stops = [
-      renderer.listen(host, 'wheel', (e: Event) => this.scrolledIn(e), passive),
+      renderer.listen(host, 'wheel', (e: Event) => this.aimedAt(e), passive),
       renderer.listen(
         host,
         'touchmove',
-        (e: Event) => this.scrolledIn(e),
+        (e: Event) => this.aimedAt(e),
         passive,
       ),
+      renderer.listen(host, 'scroll', (e: Event) => this.listScrolled(e), {
+        capture: true,
+        passive: true,
+      }),
       renderer.listen('document', 'selectionchange', () =>
         this.readSelection(),
       ),
@@ -667,10 +684,43 @@ export class TranscriptPanel {
     this.times()[target]?.nativeElement.focus();
   }
 
-  /** Wheel or touch over the list: the person reads elsewhere (FR-3). */
-  private scrolledIn(event: Event): void {
+  /**
+   * A wheel or a touch over the list. Not yet a scroll of it: the page may be the one that
+   * moves (a wheel that started over the page keeps scrolling it as the list slides under
+   * the pointer, KBC-162); only the list's own scroll that follows stops the following.
+   */
+  private aimedAt(event: Event): void {
     if (this.segmentOf(event.target) !== null || this.isList(event.target))
-      this.stopFollowing();
+      this.gestureAt = this.now();
+  }
+
+  /** The list scrolled: by the person's wheel or touch, the person reads elsewhere (FR-3). */
+  private listScrolled(event: Event): void {
+    const list = this.list()?.nativeElement;
+    if (!list || event.target !== list) return;
+    if (this.ownScroll(list.scrollTop)) return;
+    if (this.now() - this.gestureAt <= GESTURE_MS) this.stopFollowing();
+  }
+
+  /**
+   * Whether the list's scroll is still the one this panel asked for: between where it was
+   * and where it goes. Anything else (the person took over) ends it.
+   */
+  private ownScroll(top: number): boolean {
+    const own = this.selfScroll;
+    if (!own) return false;
+    const low = Math.min(own.from, own.to) - 1;
+    const high = Math.max(own.from, own.to) + 1;
+    if (top < low || top > high) {
+      this.selfScroll = null;
+      return false;
+    }
+    if (Math.abs(top - own.to) < 1) this.selfScroll = null;
+    return true;
+  }
+
+  private now(): number {
+    return this.document.defaultView?.performance.now() ?? Date.now();
   }
 
   /** A press on the list itself (not on a segment) is its scroll bar. */
@@ -867,13 +917,43 @@ export class TranscriptPanel {
       const target = before ? before.offsetTop : item.offsetTop;
       return Math.abs(list.scrollTop - target) < 1 ? null : target;
     }
-    const margin = list.clientHeight * COMFORT;
+    const band = this.shownBand(list, item.offsetHeight);
+    const margin = band.height * COMFORT;
     const top = item.offsetTop;
     const bottom = top + item.offsetHeight;
     const inView =
-      top >= list.scrollTop + margin &&
-      bottom <= list.scrollTop + list.clientHeight - margin;
-    return inView ? null : Math.max(0, top - list.clientHeight / 3);
+      top >= band.start + margin && bottom <= band.start + band.height - margin;
+    return inView
+      ? null
+      : Math.max(0, top - (band.start - list.scrollTop) - band.height / 3);
+  }
+
+  /**
+   * The part of the list on the screen, in its scroll coordinates. The page's own scroller
+   * (the main panel) can cut the list off below the fold, and a line in the list's upper
+   * third would then be off the screen (KBC-162). The whole list when it all shows, or when
+   * not even a line of it does (nothing better without scrolling the page).
+   */
+  private shownBand(
+    list: HTMLElement,
+    lineHeight: number,
+  ): { readonly start: number; readonly height: number } {
+    const whole = { start: list.scrollTop, height: list.clientHeight };
+    const view = this.document.defaultView;
+    if (!view) return whole;
+    const inner = list.getBoundingClientRect().top + list.clientTop;
+    let top = Math.max(inner, 0);
+    let bottom = Math.min(inner + list.clientHeight, view.innerHeight);
+    for (let at = list.parentElement; at; at = at.parentElement) {
+      if (view.getComputedStyle(at).overflowY === 'visible') continue;
+      const clip = at.getBoundingClientRect();
+      top = Math.max(top, clip.top);
+      bottom = Math.min(bottom, clip.bottom);
+    }
+    const height = bottom - top;
+    return height >= list.clientHeight - 1 || height < lineHeight
+      ? whole
+      : { start: list.scrollTop + top - inner, height };
   }
 
   /** Scrolls only the list (never the page), smooth unless reduced motion is asked. */
@@ -883,6 +963,14 @@ export class TranscriptPanel {
   ): void {
     const list = this.list()?.nativeElement;
     if (!list || target === null) return;
+    // Where the list can really go (the browser stops there), so its scroll is known as
+    // this panel's until it lands, and the person's after.
+    const to = Math.max(
+      0,
+      Math.min(target, list.scrollHeight - list.clientHeight),
+    );
+    this.selfScroll =
+      Math.abs(list.scrollTop - to) < 1 ? null : { from: list.scrollTop, to };
     const reduced =
       this.document.defaultView?.matchMedia?.(
         '(prefers-reduced-motion: reduce)',

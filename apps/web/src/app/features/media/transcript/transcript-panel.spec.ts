@@ -269,7 +269,9 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
       screen.queryByRole('button', { name: 'Voltar ao trecho atual' }),
     ).toBeNull();
     const list = screen.getByRole('list', { name: 'Trechos da transcrição' });
+    // The wheel over the list, and the list's scroll it makes.
     fireEvent.wheel(list);
+    fireEvent.scroll(list);
     await view.fixture.whenStable();
     const back = screen.getByRole('button', { name: 'Voltar ao trecho atual' });
     // Still stopped later on, whatever plays (no automatic return).
@@ -306,10 +308,150 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
       screen.queryByRole('button', { name: 'Voltar ao trecho atual' }),
     ).toBeNull();
     fireEvent.touchMove(list);
+    fireEvent.scroll(list);
     await view.fixture.whenStable();
     expect(
       screen.getByRole('button', { name: 'Voltar ao trecho atual' }),
     ).toBeTruthy();
+  });
+
+  it('keeps following when a wheel or a touch over the list scrolls the page, not the list (KBC-162)', async () => {
+    const { media, view } = await renderPanel();
+    await at(media, 6, view);
+    const list = screen.getByRole('list', { name: 'Trechos da transcrição' });
+    // The wheel lands on a line while the page is what scrolls: the list never moves.
+    fireEvent.wheel(screen.getByText('Ele tinha uma conselheira.'));
+    fireEvent.touchMove(list);
+    await view.fixture.whenStable();
+    expect(
+      screen.queryByRole('button', { name: 'Voltar ao trecho atual' }),
+    ).toBeNull();
+    // Nor does a scroll of the list long after the gesture (its own following).
+    const later = vi
+      .spyOn(performance, 'now')
+      .mockReturnValue(performance.now() + 1_000);
+    try {
+      fireEvent.scroll(list);
+      await view.fixture.whenStable();
+      expect(
+        screen.queryByRole('button', { name: 'Voltar ao trecho atual' }),
+      ).toBeNull();
+    } finally {
+      later.mockRestore();
+    }
+  });
+
+  it('takes its own scroll for its own, even right after a wheel, and a scroll elsewhere for the person (KBC-162)', async () => {
+    const tops = new Map<Element, number>();
+    const restore = [
+      vi
+        .spyOn(Element.prototype, 'scrollTop', 'get')
+        .mockImplementation(function (this: Element) {
+          return tops.get(this) ?? 0;
+        }),
+      vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(2_000),
+      vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(200),
+      vi
+        .spyOn(HTMLElement.prototype, 'offsetTop', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return Number(this.dataset['index'] ?? 0) * 300;
+        }),
+      vi
+        .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+        .mockReturnValue(40),
+    ];
+    const original = Element.prototype.scrollTo;
+    const asked: number[] = [];
+    Element.prototype.scrollTo = function (
+      this: Element,
+      options?: ScrollToOptions | number,
+    ) {
+      if (typeof options === 'object') asked.push(options.top ?? 0);
+    } as typeof Element.prototype.scrollTo;
+    try {
+      const { media, view } = await renderPanel();
+      const list = screen.getByRole('list', {
+        name: 'Trechos da transcrição',
+      });
+      // The fourth segment (20:00) is heard: the list goes to 900 − 200 / 3.
+      await at(media, 1_201, view);
+      await vi.waitFor(() => expect(asked.at(-1)).toBeCloseTo(833.33, 1));
+      // A wheel over the list (the page scrolls) while the list's smooth scroll runs.
+      fireEvent.wheel(list);
+      tops.set(list, 400);
+      fireEvent.scroll(list);
+      tops.set(list, 833.33);
+      fireEvent.scroll(list);
+      await view.fixture.whenStable();
+      expect(
+        screen.queryByRole('button', { name: 'Voltar ao trecho atual' }),
+      ).toBeNull();
+      // Then the person's wheel moves it elsewhere: that one stops the following.
+      fireEvent.wheel(list);
+      tops.set(list, 500);
+      fireEvent.scroll(list);
+      await view.fixture.whenStable();
+      expect(
+        screen.getByRole('button', { name: 'Voltar ao trecho atual' }),
+      ).toBeTruthy();
+    } finally {
+      Element.prototype.scrollTo = original;
+      restore.forEach((one) => one.mockRestore());
+    }
+  });
+
+  it('keeps the line heard in the part of the list the page leaves on screen (KBC-162)', async () => {
+    const restore = [
+      vi.spyOn(Element.prototype, 'scrollTop', 'get').mockReturnValue(0),
+      vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(2_000),
+      vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(400),
+      vi
+        .spyOn(HTMLElement.prototype, 'offsetTop', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return Number(this.dataset['index'] ?? 0) * 300;
+        }),
+      vi
+        .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+        .mockReturnValue(40),
+    ];
+    // The list starts at 500 on the screen; the page's scroller shows down to 620.
+    const rects = vi
+      .spyOn(Element.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: Element) {
+        const scroller = this.hasAttribute('data-page-scroller');
+        const list = this.matches('ol');
+        const top = list ? 500 : 0;
+        const bottom = scroller ? 620 : list ? 900 : 2_000;
+        return DOMRect.fromRect({
+          x: 0,
+          y: top,
+          width: 800,
+          height: bottom - top,
+        });
+      });
+    const original = Element.prototype.scrollTo;
+    const asked: number[] = [];
+    Element.prototype.scrollTo = function (
+      this: Element,
+      options?: ScrollToOptions | number,
+    ) {
+      if (typeof options === 'object') asked.push(options.top ?? 0);
+    } as typeof Element.prototype.scrollTo;
+    try {
+      const { media, view } = await renderPanel();
+      const host = view.fixture.nativeElement as HTMLElement;
+      const scroller = host.parentElement ?? host;
+      scroller.setAttribute('data-page-scroller', '');
+      scroller.style.overflowY = 'auto';
+      // The third segment (0:10, at 600 in the list) is heard: only 120 px of the list
+      // shows, so it goes to 600 − 120 / 3, not to 600 − 400 / 3.
+      await at(media, 11, view);
+      await vi.waitFor(() => expect(asked.at(-1)).toBe(560));
+    } finally {
+      Element.prototype.scrollTo = original;
+      rects.mockRestore();
+      restore.forEach((one) => one.mockRestore());
+    }
   });
 
   it('searches without accents or case, walks the occurrences and plays from one (AC-9)', async () => {

@@ -662,6 +662,7 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
           name: 'Trechos da transcrição',
         });
         fireEvent.wheel(list);
+        fireEvent.scroll(list);
         scrolled.mockClear();
         media.setCurrentTime(41);
         media.emit('timeupdate');
