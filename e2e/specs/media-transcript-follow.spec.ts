@@ -177,7 +177,10 @@ const wheelsOnList = (page: Page) =>
  * the list under the pointer, so the wheel lands on its lines while it is the page that
  * scrolls. Stops once a wheel landed on the list (more would scroll the list itself).
  */
-async function scrollThePageOverTheList(page: Page, list: Locator) {
+async function scrollThePageOverTheList(
+  page: Page,
+  list: Locator,
+): Promise<boolean> {
   const box = await list.boundingBox();
   if (!box) throw new Error('the list has no box');
   await page.mouse.move(box.x + box.width / 2, Math.max(4, box.y - 24));
@@ -198,10 +201,9 @@ async function scrollThePageOverTheList(page: Page, list: Locator) {
       message: 'the page scrolled',
     })
     .toBeGreaterThan(before.top);
-  expect(
-    await list.evaluate((element) => element.scrollTop),
-    'the wheel scrolled the page, not the list',
-  ).toBe(listAt);
+  // Chromium and Safari keep the wheel on the page that started scrolling; Linux WebKit hands
+  // it to the list under the pointer. Says which one moved, for the caller to expect its rule.
+  return (await list.evaluate((element) => element.scrollTop)) === listAt;
 }
 
 for (const size of WIDTHS) {
@@ -221,9 +223,17 @@ for (const size of WIDTHS) {
       test.setTimeout(120_000);
       const list = await playFrom441(page);
       await countWheelsOnList(list);
-      await scrollThePageOverTheList(page, list);
-      // Scrolling the page is not scrolling the list: it keeps following.
-      await expect(backToCurrent(page)).toHaveCount(0);
+      const onlyThePage = await scrollThePageOverTheList(page, list);
+      if (onlyThePage) {
+        // Scrolling the page is not scrolling the list: it keeps following.
+        await expect(backToCurrent(page)).toHaveCount(0);
+      } else {
+        // This browser scrolled the list itself: the person's scroll stops following (FR-3),
+        // and a skip in the player brings it back before the minute below.
+        await expect(backToCurrent(page)).toBeVisible();
+        await page.getByRole('button', { name: FORWARD }).first().click();
+        await expect(backToCurrent(page)).toHaveCount(0);
+      }
       const pageAt = (await pageScroll(list)).top;
 
       // A minute and more of speech at 4× (the engine leaves the element's rate alone).
