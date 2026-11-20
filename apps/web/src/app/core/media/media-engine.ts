@@ -86,6 +86,11 @@ const END_TOLERANCE_MS = 50;
 /** Waiting shorter than this is not shown (no flicker on each network pause). */
 export const BUFFERING_DEBOUNCE_MS = 300;
 
+/** Forward ticks of the clock that end a wait with no `playing` event (KBC-162). */
+const WAIT_OVER_TICKS = 2;
+/** Media time gained since the wait began that ends it with no `playing` event. */
+const WAIT_OVER_MS = 500;
+
 /**
  * Waiting this long means the connection is gone: browsers keep waiting forever without an
  * error, so the engine stops and reports a network error the person can retry (AC-12).
@@ -110,6 +115,8 @@ export class MediaEngine {
   private readonly createElement = inject(MEDIA_ELEMENT_FACTORY);
   private readonly stallTimeoutMs = inject(MEDIA_STALL_TIMEOUT_MS);
   private stallTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Where the clock was when the element began waiting, and its forward ticks since. */
+  private waitFrom: { readonly atMs: number; ticks: number } | null = null;
   private readonly state = signal<PlaybackState>(INITIAL_PLAYBACK);
   private readonly current = signal<PlayableSource | null>(null);
   private element: HTMLMediaElement | null = null;
@@ -165,6 +172,7 @@ export class MediaEngine {
     const element = this.ensureElement();
     this.clearBuffering();
     this.loads++;
+    this.waitFrom = null;
     this.current.set(source);
     this.playedSinceLoad.set(false);
     this.pendingStartMs = startAtMs > 0 ? startAtMs : null;
@@ -392,6 +400,7 @@ export class MediaEngine {
 
   private onWaiting(): void {
     const loadId = this.loads;
+    this.waitFrom = { atMs: (this.element?.currentTime ?? 0) * 1000, ticks: 0 };
     this.dispatch({ type: 'waiting', loadId });
     this.clearBuffering();
     this.bufferingTimer = setTimeout(
@@ -423,12 +432,42 @@ export class MediaEngine {
     const before = this.state().currentMs;
     this.dispatch({ type: 'time', loadId: this.loads, currentMs });
     this.onBuffered(element);
+    // A seek in flight still tells the old position: its ticks say nothing of playback.
+    const { userSeeking, waiting } = this.state();
+    if (element.paused || element.seeking || userSeeking || currentMs <= before)
+      return;
     // The clock moving on an element that is not paused is playing, even if its `playing`
-    // event never comes (it can be lost after a seek from the end).
-    if (!element.paused && currentMs > before && !this.playing()) {
+    // event never comes (it can be lost after a seek from the end). Moving on, it is no
+    // longer waiting either: after a skip, Linux WebKit can send `waiting` once the seek
+    // has landed and never `canplay` nor `playing`, so the stall timer would stop playback
+    // and report the network 12 s into audio that plays (KBC-162).
+    if (
+      !this.playing() ||
+      (waiting && this.waitIsOver(element, before, currentMs))
+    ) {
+      this.waitFrom = null;
       this.playedSinceLoad.set(true);
       this.settle({ type: 'playing', loadId: this.loads });
     }
+  }
+
+  /**
+   * A wait ends by the clock only when it really plays on: data ahead again, or a sustained
+   * move since the wait began. One tick forward is not enough: after a real stall the
+   * element can still play a few decoded milliseconds, and the network error must come.
+   */
+  private waitIsOver(
+    element: HTMLMediaElement,
+    before: number,
+    currentMs: number,
+  ): boolean {
+    this.waitFrom ??= { atMs: before, ticks: 0 };
+    this.waitFrom.ticks++;
+    return (
+      element.readyState >= element.HAVE_FUTURE_DATA ||
+      this.waitFrom.ticks >= WAIT_OVER_TICKS ||
+      currentMs - this.waitFrom.atMs >= WAIT_OVER_MS
+    );
   }
 
   /** The end of the buffered range that holds the current position. */
