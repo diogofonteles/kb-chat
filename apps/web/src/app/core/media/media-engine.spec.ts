@@ -354,6 +354,65 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     });
   });
 
+  it('keeps the network error of a backward skip that never lands (AC-12)', () => {
+    vi.useFakeTimers();
+    ready();
+    engine.play();
+    media.emit('playing');
+    media.setCurrentTime(40);
+    media.emit('timeupdate');
+    engine.seek(10_000);
+    media.setSeeking(true);
+    media.emit('seeking');
+    media.emit('waiting');
+    // The network is gone: the element still tells the old position, past the target.
+    media.setCurrentTime(40);
+    media.emit('timeupdate');
+    vi.advanceTimersByTime(12_000);
+    expect(engine.playback()).toMatchObject({
+      phase: 'error',
+      error: 'network',
+    });
+  });
+
+  it('keeps the network error when one tick moves after the wait and the clock stops (AC-12)', () => {
+    vi.useFakeTimers();
+    ready();
+    engine.play();
+    media.emit('playing');
+    media.setCurrentTime(10);
+    media.emit('timeupdate');
+    media.emit('waiting');
+    // What was decoded plays on for a moment, then nothing more comes.
+    media.setCurrentTime(10.05);
+    media.emit('timeupdate');
+    vi.advanceTimersByTime(6_000);
+    media.emit('timeupdate');
+    vi.advanceTimersByTime(6_000);
+    expect(engine.playback()).toMatchObject({
+      phase: 'error',
+      error: 'network',
+    });
+  });
+
+  it('ends the wait at one tick once the element has data ahead again', () => {
+    vi.useFakeTimers();
+    ready();
+    engine.play();
+    media.emit('playing');
+    media.setCurrentTime(10);
+    media.emit('timeupdate');
+    media.emit('waiting');
+    media.setReadyState(HTMLMediaElement.HAVE_FUTURE_DATA);
+    media.setCurrentTime(10.05);
+    media.emit('timeupdate');
+    vi.advanceTimersByTime(12_000);
+    expect(engine.playback()).toMatchObject({
+      phase: 'playing',
+      waiting: false,
+    });
+  });
+
   it('does not take a requested seek for playback', () => {
     ready();
     engine.play();

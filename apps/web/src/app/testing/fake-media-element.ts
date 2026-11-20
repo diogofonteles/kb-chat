@@ -15,6 +15,10 @@ export interface FakeMedia {
   setError(code: number | null): void;
   /** What `paused` says: `play()` clears it and `pause()` sets it, as in browsers. */
   setPaused(paused: boolean): void;
+  /** What `seeking` says (a seek the browser has not landed yet). */
+  setSeeking(seeking: boolean): void;
+  /** What `readyState` says (HAVE_NOTHING by default, as jsdom). */
+  setReadyState(state: number): void;
 }
 
 interface FakeValues {
@@ -23,6 +27,8 @@ interface FakeValues {
   buffered: (readonly [number, number])[];
   error: MediaError | null;
   paused: boolean;
+  seeking: boolean;
+  readyState: number;
 }
 
 export function fakeMediaElement(tag: 'audio' | 'video' = 'audio'): FakeMedia {
@@ -33,6 +39,8 @@ export function fakeMediaElement(tag: 'audio' | 'video' = 'audio'): FakeMedia {
     buffered: [],
     error: null,
     paused: true,
+    seeking: false,
+    readyState: 0,
   };
   const fake: FakeMedia = {
     element,
@@ -46,6 +54,8 @@ export function fakeMediaElement(tag: 'audio' | 'video' = 'audio'): FakeMedia {
       (values.error =
         code === null ? null : ({ code, message: '' } as MediaError)),
     setPaused: (paused) => (values.paused = paused),
+    setSeeking: (seeking) => (values.seeking = seeking),
+    setReadyState: (state) => (values.readyState = state),
   };
   defineTimeProperties(fake, values);
   fakePlayback(fake, values);
@@ -71,6 +81,8 @@ function defineTimeProperties(fake: FakeMedia, values: FakeValues): void {
     },
     error: { get: () => values.error },
     paused: { get: () => values.paused },
+    seeking: { get: () => values.seeking },
+    readyState: { get: () => values.readyState },
   });
 }
 
