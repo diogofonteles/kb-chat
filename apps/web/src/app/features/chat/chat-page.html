@@ -120,19 +120,18 @@
           </button>
           @if (!onMedia()) {
             <p class="page-title" aria-hidden="true">{{ pageTitle() }}</p>
-            @if (researching()) {
-              <button
-                uiIconButton
-                [size]="40"
-                type="button"
-                class="new-research"
-                aria-label="Nova conversa"
-                i18n-aria-label="@@sidebar.new"
-                (click)="startNewResearch()"
-              >
-                <ui-icon name="plus" [size]="24" />
-              </button>
-            }
+            <!-- "+ Nova conversa" in both views (KBC-164 FR-1): a new one in the view on screen. -->
+            <button
+              uiIconButton
+              [size]="40"
+              type="button"
+              class="new-conversation"
+              aria-label="Nova conversa"
+              i18n-aria-label="@@sidebar.new"
+              (click)="startNewConversation()"
+            >
+              <ui-icon name="plus" [size]="24" />
+            </button>
           }
         }
         @if (ownHeader(); as own) {

@@ -20,11 +20,10 @@ import {
   SAVE_RESEARCH,
   type ResearchConversation,
 } from './research-history.js';
-import {
-  OPEN_RESEARCH_KEY,
-  ResearchStore,
-  STOP_SETTLE_MS,
-} from './research-store.js';
+import { ResearchStore, STOP_SETTLE_MS } from './research-store.js';
+
+/** The key of the research reopened after a reload, until KBC-164 dropped it. */
+const OLD_OPEN_RESEARCH_KEY = 'kb-chat.open-research';
 import { citedSources } from './research-turn.js';
 
 const SOURCE = { n: 1, id: 'raw/a.md', title: 'Os Princípios' };
@@ -576,9 +575,8 @@ describe('ResearchStore', () => {
         title: 'quais são?',
         turns: [{ id: turnId, question: 'quais são?', status: 'pending' }],
       });
-      expect(sessionStorage.getItem(OPEN_RESEARCH_KEY)).toBe(
-        store.conversationId(),
-      );
+      // A reload lands on a new conversation (KBC-164 BR-1): nothing marks this one to reopen.
+      expect(sessionStorage.getItem(OLD_OPEN_RESEARCH_KEY)).toBeNull();
     });
 
     it('saves a turn that failed, with its code', () => {
@@ -686,15 +684,20 @@ describe('ResearchStore', () => {
       store.newConversation();
       expect(streams[0]?.observed).toBe(false);
       expect(api.stopTurn).not.toHaveBeenCalled();
-      expect(sessionStorage.getItem(OPEN_RESEARCH_KEY)).toBeNull();
+      expect(sessionStorage.getItem(OLD_OPEN_RESEARCH_KEY)).toBeNull();
     });
 
-    it('brings back, after a reload, the research conversation that was on screen', () => {
-      sessionStorage.setItem(OPEN_RESEARCH_KEY, CONVERSATION);
-      const { store, api } = setup({ stored: conversation([savedTurn()]) });
+    it('starts on a new conversation after a reload, never the one that was on screen (KBC-164 AC-1)', () => {
+      // What an older version left in this tab is not read either.
+      sessionStorage.setItem(OLD_OPEN_RESEARCH_KEY, CONVERSATION);
+      const { store, api, load } = setup({
+        stored: conversation([savedTurn()]),
+      });
       TestBed.tick();
-      expect(store.conversationId()).toBe(CONVERSATION);
-      expect(api.follow).toHaveBeenCalledWith(TURN);
+      expect(store.conversationId()).not.toBe(CONVERSATION);
+      expect(store.turns()).toEqual([]);
+      expect(load).not.toHaveBeenCalled();
+      expect(api.follow).not.toHaveBeenCalled();
     });
   });
 

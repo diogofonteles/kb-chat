@@ -14,7 +14,7 @@ Como quem cuida de um acervo, quero enviar um PDF, um livro em EPUB, um link ou 
 
 ## Scope
 **In:**
-- no "+ Criar" da v2, a opção "Enviar documento ou link", com arquivo (envio retomável, como o da mídia, ADR 0033) ou URL;
+- nas ações da biblioteca (o "+ Criar" da v2 deixou de existir: KBC-164 separou "+ Nova conversa" e o "+" de Acervos), a opção "Enviar documento ou link", com arquivo (envio retomável, como o da mídia, ADR 0033) ou URL;
 - a fila "Documentos em processamento", na Fila de processamento, com os estados: recebido, convertendo, classificando, no mapa, pronto ou falhou;
 - um job novo para o Mac (`doc-ingest`) que roda o `kb-map convert` (KBC-148), depois `kb ingest`, `classify`, `link`, `kb-map update` e o sync, o mesmo caminho do `kb-publish`;
 - o YouTube passa pelo transcritor como uma mídia, e daí pelo mesmo tratamento (KBC-142 BR-5).
@@ -36,7 +36,7 @@ Como quem cuida de um acervo, quero enviar um PDF, um livro em EPUB, um link ou 
 
 ## Acceptance criteria
 - AC-1 (FR-1, FR-2): Given Ana com permissão, When envia um PDF, Then ele passa pelos estados até "pronto" e aparece na busca e no mapa.
-- AC-2 (BR-1, negativo): Given Beto sem permissão, When tenta enviar, Then a API responde 403 e o "+ Criar" não mostra a opção.
+- AC-2 (BR-1, negativo): Given Beto sem permissão, When tenta enviar, Then a API responde 403 e as ações da biblioteca não mostram a opção.
 - AC-3 (BR-3): Given um PDF que já está no acervo, When reenviado, Then a pessoa vê "Este documento já está no acervo" com o link.
 - AC-4 (FR-2): Given uma URL que não converte, When o job roda, Then o estado é "falhou" com o motivo, e nada entra no acervo.
 
@@ -48,7 +48,7 @@ Como quem cuida de um acervo, quero enviar um PDF, um livro em EPUB, um link ou 
 | AC-4 | integração | Conversor fake |
 
 ## References
-`docs/research/2026-11-16-source-to-raw.md` · ADR 0033 (envio retomável), 0035 (kb-publish) · KBC-148, KBC-142 · `docs/design/redesign-v2.md` ("+ Criar")
+`docs/research/2026-11-16-source-to-raw.md` · ADR 0033 (envio retomável), 0035 (kb-publish) · KBC-148, KBC-142 · `docs/design/redesign-v2.md` · KBC-164 (fim do "+ Criar")
 
 ## Definition of ready
 - [x] Story, scope and outcome stated

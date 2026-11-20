@@ -50,6 +50,7 @@
   min-height: 2rem;
   margin: 0;
   padding: 0;
+  overflow: hidden;
   border: 0;
   background: transparent;
   color: var(--color-text);
@@ -57,6 +58,8 @@
   font-size: var(--text-md);
   font-weight: 700;
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -76,23 +79,28 @@
   color: var(--color-text);
 }
 
-.create ::ng-deep .create-trigger {
+/* "+ Nova conversa" (KBC-164): the pill v2 draws for "+ Criar", its words and sides smaller
+   so "Sua biblioteca" (whole), the pill and ⤢ share the 300 column's line. */
+.new-conversation {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
   min-height: 2rem;
-  padding: 0 0.875rem 0 0.625rem;
+  padding: 0 0.5rem 0 0.375rem;
+  border: 0;
   border-radius: var(--radius-pill);
   background: var(--overlay-2);
-  font-size: var(--text-sm);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-xs);
   font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-.create ::ng-deep .create-trigger:hover {
+.new-conversation:hover {
   background: var(--overlay-3);
-}
-
-.create-content {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
 }
 
 .body {
@@ -137,6 +145,20 @@
   justify-content: space-between;
   min-height: 1.5rem;
   padding: 0 var(--space-2) 0 var(--space-3);
+}
+
+.tools-start {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.media-fallback {
+  color: var(--color-text-muted);
+}
+
+.media-fallback:hover {
+  color: var(--color-text);
 }
 
 .tools ::ng-deep .order-trigger {
@@ -186,6 +208,26 @@
   font-size: inherit;
 }
 
+/* Acervos' head with its "+" (KBC-164): the head takes the line, the "+" its end. */
+.section-head-line {
+  display: flex;
+  align-items: center;
+}
+
+.section-head-line > .section-head {
+  flex: 1;
+  min-width: 0;
+}
+
+.section-add {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.section-add:hover {
+  color: var(--color-text);
+}
+
 /* The Menu and Biblioteca expandida: one list, the sections one after the other with no head
    or hairline between them (v2 · Menu lateral aberto); the chosen collection in green, as the
    page you are on. */
@@ -209,6 +251,27 @@
 
 :host(:not(.mobile):not(.expanded)) .section + .section .section-head {
   border-top: 1px solid var(--overlay-3);
+}
+
+/* With the "+", the line carries the head's margin and hairline, so both run over the "+". */
+:host(:not(.mobile):not(.expanded)) .section-head-line {
+  margin: 0 var(--space-2);
+}
+
+:host(:not(.mobile):not(.expanded)) .section-head-line > .section-head {
+  margin: 0;
+}
+
+:host(:not(.mobile):not(.expanded)) .section + .section .section-head-line {
+  border-top: 1px solid var(--overlay-3);
+}
+
+:host(:not(.mobile):not(.expanded))
+  .section
+  + .section
+  .section-head-line
+  > .section-head {
+  border-top: 0;
 }
 
 :host(:not(.mobile):not(.expanded)) .section-toggle {
@@ -473,7 +536,8 @@
 
 /* Collapsed (desktop): only the covers, the names stay for screen readers. */
 :host(.collapsed) .title,
-:host(.collapsed) .create-text,
+:host(.collapsed) .new-conversation-text,
+:host(.collapsed) .section-add,
 :host(.collapsed) .chips,
 :host(.collapsed) .tools,
 :host(.collapsed) .search,
@@ -492,6 +556,13 @@
 :host(.collapsed) .head {
   flex-direction: column;
   padding: var(--space-3) var(--space-2);
+}
+
+/* Folded, "+ Nova conversa" is its "+" alone, a round 32. */
+:host(.collapsed) .new-conversation {
+  justify-content: center;
+  width: 2rem;
+  padding: 0;
 }
 
 :host(.collapsed) .ui-libitem-row,
@@ -700,6 +771,11 @@
 
 :host(.mobile) .section-head {
   padding: 0 var(--space-2);
+}
+
+/* The "+" 44 target ends its 20 icon 16 from the edge, under the rows' covers' line. */
+:host(.mobile) .section-head-line {
+  padding-right: 0.25rem;
 }
 
 :host(.mobile) .menu-actions {

@@ -31,7 +31,8 @@ Um app de streaming de conhecimento. O que se ouve ou se lê é um item com capa
   - busca global com ⌘K e o atalho da Pesquisa com IA;
   - à direita, notificações, Pessoas e o avatar (Configurações, Pessoas e permissões, Ver como, Como usar, Sair).
 - **Sua biblioteca (300):**
-  - "+ Criar" e os chips Acervos, Áudios, Conversas e Documentos;
+  - "+ Nova conversa" (botão próprio; antes o menu "+ Criar", separado por decisão do dono em 2026-11-19, KBC-164) e os chips Acervos, Áudios, Conversas e Documentos;
+  - o "+" de "Novo acervo" no cabeçalho da seção Acervos (coluna e Menu do celular), para quem pode criar acervos;
   - "Recentes";
   - itens fixados com o alfinete verde (Biblioteca, Meus marcadores, Fila de processamento);
   - acervos e conversas;
@@ -77,7 +78,7 @@ O player, o mini player, a Biblioteca de mídia, a Fila de processamento, os Meu
    - as telas sem sessão (Entrar e páginas públicas) são as primeiras a migrar, porque não dependem da casca.
 2. **Casca (KBC-125):** troca a lateral e o topo de todas as telas de uma vez. Telas que ainda não migraram rodam dentro da casca nova, com o conteúdo antigo no tema novo.
 3. **Áreas:** Conversa e busca (126), Documento e Pesquisa com IA (127), Biblioteca (128), Player, Fila e Marcadores (129), Preparar (130), Configurações (131 e 132). Cada área sai inteira, em desktop e celular, com todos os estados da página v2 correspondente.
-4. **Funcionalidades novas:** KBC-133 a KBC-137, mais os itens que já existiam e a v2 desenhou (KBC-052, 053, 054, 055 e 059). Entram depois da casca, porque dependem dela: sino, busca global, painel direito, "+ Criar" e itens fixados.
+4. **Funcionalidades novas:** KBC-133 a KBC-137, mais os itens que já existiam e a v2 desenhou (KBC-052, 053, 054, 055 e 059). Entram depois da casca, porque dependem dela: sino, busca global, painel direito e itens fixados (o "+ Criar" virou "+ Nova conversa" e o "+" de Acervos, KBC-164).
 
 ## Barra de qualidade (soma-se à definição de pronto global)
 
@@ -93,7 +94,7 @@ O player, o mini player, a Biblioteca de mídia, a Fila de processamento, os Meu
 - **D3:** os textos fora da captura listados em `figma-recreation/redesign/REPORT.md` entram como estão desenhados. O dono pode trocá-los na revisão de cada item.
 - **D4:** a página `v2 ★ Telas-chave redesenhadas` não é referência. Vale a `v2 · Telas-chave`.
 - **D5 (dono, 16/11/2026, a partir das capturas do trabalho em andamento; vale sobre o Figma onde conflitar):**
-  1. **Menus nunca cortados.** Todo menu, popover, dica e lista de seleção sobe para a camada de cima (top layer, API de popover) ancorado no seu gatilho. Ele vira para cima quando não cabe embaixo e se desloca para dentro da tela em 1440 e em 390. Nenhum contêiner (a lateral, um painel com rolagem, a folha do celular) pode cortá-lo ou cobri-lo. No celular, o menu continua virando folha de baixo. Exemplo: o "+ Criar" (Nova conversa, Novo acervo) da Sua biblioteca, que antes saía cortado pela lateral.
+  1. **Menus nunca cortados.** Todo menu, popover, dica e lista de seleção sobe para a camada de cima (top layer, API de popover) ancorado no seu gatilho. Ele vira para cima quando não cabe embaixo e se desloca para dentro da tela em 1440 e em 390. Nenhum contêiner (a lateral, um painel com rolagem, a folha do celular) pode cortá-lo ou cobri-lo. No celular, o menu continua virando folha de baixo. Exemplo: o antigo menu "+ Criar" (Nova conversa, Novo acervo) da Sua biblioteca, que antes saía cortado pela lateral (hoje são dois botões, KBC-164).
   2. **Sua biblioteca em seções que não se misturam.** A lista tem seções separadas, cada uma com título, contagem e seta para recolher:
      - **Fixados:** Biblioteca, Meus marcadores e Fila de processamento, só quando o acervo tem áudio (regra de áudio).
      - **Acervos:** com as capas. Os sub-acervos aparecem como árvore visível, com recuo, linha-guia e seta no acervo pai.

@@ -46,7 +46,7 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 **Objetivo do usuário:** fazer a primeira pergunta sem precisar saber nada do kb. **Contexto:** estudo em casa, sem pressa, no desktop. **Sucesso:** a primeira busca sai em 1 passo (digitar e Enter).
 
 ### Fluxo
-1. Abre o app → saudação "O que você quer estudar hoje?" + caixa de pergunta em foco + o acervo atual ("Hermetismo · 4.235 documentos").
+1. Abre o app, entra (login) ou recarrega a página em `/` → sempre a home de uma conversa nova do acervo em uso: saudação "O que você quer estudar hoje?" (na Pesquisa com IA, "O que você quer pesquisar no acervo?") + caixa de pergunta em foco + o acervo atual ("Hermetismo · 4.235 documentos"). Nada da conversa anterior aparece; ela fica a um clique em Sua biblioteca › Conversas. A visão lembrada (Buscar ou Pesquisa com IA) continua. Um link direto para outra página (`/midia/<id>`, `/configuracoes/…`, um link compartilhado) abre essa página (KBC-164).
 2. Abaixo, 4 a 6 sugestões clicáveis, tiradas dos 6 maiores **Assuntos** (ex.: "Cabala", "Corpos Sutis e Energia"). O clique busca o assunto já filtrado por ele (UP-12: ajuda em contexto, sem tutorial).
 
 ### Caixa de pergunta (SL-01, SL-04 a SL-07)

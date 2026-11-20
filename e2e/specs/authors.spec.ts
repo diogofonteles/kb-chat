@@ -58,7 +58,7 @@ async function memberOnMedia(
   await member.goto('/');
   const skip = member.getByRole('button', { name: 'Pular' });
   if (await skip.isVisible().catch(() => false)) await skip.click();
-  // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or in "+ Criar" before any audio).
+  // v2 (KBC-125): "Mídia" of Sua biblioteca (pinned, or beside its filter before any audio).
   await openMediaFromLibrary(member);
   await expect(
     member.getByRole('heading', { name: new RegExp(`Acervo — ${udv.name}`) }),
