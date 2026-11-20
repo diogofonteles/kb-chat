@@ -82,7 +82,8 @@ function defineTimeProperties(fake: FakeMedia, values: FakeValues): void {
     error: { get: () => values.error },
     paused: { get: () => values.paused },
     seeking: { get: () => values.seeking },
-    readyState: { get: () => values.readyState },
+    // Configurable: specs that predate setReadyState still define their own readyState.
+    readyState: { get: () => values.readyState, configurable: true },
   });
 }
 
