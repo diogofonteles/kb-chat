@@ -1,4 +1,3 @@
-import { DOCUMENT } from '@angular/common';
 import {
   DestroyRef,
   Injectable,
@@ -7,7 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   continuationQuestion,
   originalSweepQuestion,
@@ -26,12 +25,8 @@ import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
 import {
-  EMPTY,
-  catchError,
-  filter,
   finalize,
   switchMap,
-  take,
   timer,
   type Observable,
   type Subscription,
@@ -54,12 +49,6 @@ import {
 
 /** The server records a stopped answer's cost a moment after the request is aborted. */
 export const STOP_SETTLE_MS = 1000;
-
-/**
- * The research conversation on screen in this tab (KBC-029): a reload brings it back and
- * follows its turn if it is still running.
- */
-export const OPEN_RESEARCH_KEY = 'kb-chat.open-research';
 
 interface ConversationState {
   readonly id: string;
@@ -89,15 +78,6 @@ const cutShort = (turn: ResearchTurn): ResearchTurn =>
     ? { ...turn, phase: 'done', interrupted: true }
     : turn;
 
-/** sessionStorage access itself can throw (blocked site data). */
-function safeSession(view: Window | null): Storage | undefined {
-  try {
-    return view?.sessionStorage;
-  } catch {
-    return undefined;
-  }
-}
-
 /** Where a turn's events come from: the request that asked it, or following it again. */
 interface TurnRun {
   readonly id: number;
@@ -122,7 +102,6 @@ export class ResearchStore {
   private readonly settings = inject(SettingsStore);
   private readonly saveConversation = inject(SAVE_RESEARCH);
   private readonly injector = inject(Injector);
-  private readonly session = safeSession(inject(DOCUMENT).defaultView);
   private readonly destroyRef = inject(DestroyRef);
   private subscription: Subscription | null = null;
   /** Leaving the page completes the streams: nothing to follow or record then. */
@@ -154,7 +133,6 @@ export class ResearchStore {
       ),
       this.destroyRef,
     );
-    this.reopenAfterReload();
   }
 
   chooseProfile(profile: ResearchProfile): void {
@@ -176,7 +154,6 @@ export class ResearchStore {
     const turn = startTurn(this.nextId++, trimmed, { profile, turnId });
     this.state.update((s) => ({ ...s, turns: [...s.turns, turn] }));
     this.persist();
-    this.remember(this.state().id);
     const request: ResearchRequest = {
       question: trimmed,
       history,
@@ -221,7 +198,6 @@ export class ResearchStore {
     };
     this.state.update((s) => ({ ...s, turns: [...turns, turn] }));
     this.persist();
-    this.remember(this.state().id);
     // The model gets the question itself, without the continuation's label.
     const request = this.continuation(original, { turns, cursor: last.cursor });
     const events = this.api.research(topic, {
@@ -296,7 +272,6 @@ export class ResearchStore {
    */
   newConversation(): void {
     this.detach();
-    this.forget();
     this.state.set(emptyConversation(this.chat.topicSlug()));
   }
 
@@ -308,10 +283,9 @@ export class ResearchStore {
     this.detach();
     this.chat.selectTopic(conversation.topic);
     this.views.select('research');
-    this.remember(conversation.id);
-    // The same conversation brought back again (the history and the reopening after a
-    // reload may both do it) keeps its turns' ids, so the answers on screen are not drawn
-    // anew under the person's focus (KBC-099 QA BUG-2).
+    // The same conversation brought back again (from the history twice in a row) keeps its
+    // turns' ids, so the answers on screen are not drawn anew under the person's focus
+    // (KBC-099 QA BUG-2).
     const shown = this.state().id === conversation.id ? this.state().turns : [];
     const turns = conversation.turns.map((t, index) =>
       fromSavedTurn(shown[index]?.id ?? this.nextId++, t),
@@ -469,51 +443,6 @@ export class ResearchStore {
     const turn = this.state().turns.find((t) => t.id === id);
     const short = !turn || turn.phase === 'streaming' || turn.interrupted;
     this.spend.refresh(short ? STOP_SETTLE_MS : 0);
-  }
-
-  /**
-   * After a reload in the research view, brings back the conversation that was on screen
-   * once the collections are known (restoring before would lose its collection).
-   */
-  private reopenAfterReload(): void {
-    const id = this.readOpen();
-    if (!id || this.views.current() !== 'research') return;
-    toObservable(this.chat.topicSlug)
-      .pipe(
-        filter((slug) => slug !== null),
-        take(1),
-        switchMap(() => this.load(id)),
-        catchError(() => EMPTY),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe((conversation) => {
-        if (conversation.kind === 'research' && this.state().turns.length === 0)
-          this.restore(conversation);
-      });
-  }
-
-  private readOpen(): string | null {
-    try {
-      return this.session?.getItem(OPEN_RESEARCH_KEY) ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  private remember(id: string): void {
-    try {
-      this.session?.setItem(OPEN_RESEARCH_KEY, id);
-    } catch {
-      // Blocked storage: a reload just starts a new conversation, as before.
-    }
-  }
-
-  private forget(): void {
-    try {
-      this.session?.removeItem(OPEN_RESEARCH_KEY);
-    } catch {
-      // Same as above.
-    }
   }
 
   private patch(id: number, change: (turn: ResearchTurn) => ResearchTurn) {

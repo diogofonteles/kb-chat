@@ -18,9 +18,10 @@
   <div class="head">
     <!--
       v2 · Casca: "Sua biblioteca" (its name folds the column, as the title does in the
-      reference player), "+ Criar" and ⤢ (the library over the main panel, "Biblioteca
-      expandida"). Folded, the library icon opens it again. Not a heading: the pages' own
-      h2 ("Biblioteca") stay the only ones of the outline.
+      reference player), "+ Nova conversa" and ⤢ (the library over the main panel,
+      "Biblioteca expandida"). Folded, the library icon opens it again. Not a heading: the
+      pages' own h2 ("Biblioteca") stay the only ones of the outline. A new collection is
+      the Acervos head's "+" (KBC-164: a conversation and a collection are created apart).
     -->
     @if (collapsed()) {
       <button
@@ -76,7 +77,17 @@
         }
       }
     } @else {
-      <ng-container [ngTemplateOutlet]="createMenuTpl" />
+      <button
+        type="button"
+        class="new-conversation"
+        [attr.aria-label]="collapsed() ? newConversationLabel : null"
+        (click)="startNew()"
+      >
+        <ui-icon name="plus" [size]="14" />
+        <span class="new-conversation-text" i18n="@@sidebar.new"
+          >Nova conversa</span
+        >
+      </button>
     }
     @if (!collapsed() && !expanded()) {
       <button
@@ -93,44 +104,6 @@
     }
   </div>
 }
-
-<ng-template #createMenuTpl>
-  <ui-menu
-    #createMenu
-    class="create"
-    label="Criar"
-    i18n-label="@@library.createMenu"
-    menuId="library-create"
-    triggerClass="create-trigger"
-    [triggerLabel]="collapsed() ? createLabel : ''"
-  >
-    <span uiMenuTrigger class="create-content">
-      <ui-icon name="plus" [size]="16" />
-      <span class="create-text" i18n="@@library.create">Criar</span>
-    </span>
-    <button uiMenuItem type="button" (click)="startNew()">
-      <ui-icon name="chat" [size]="18" />
-      <span i18n="@@sidebar.new">Nova conversa</span>
-    </button>
-    @if (canCreateCollections()) {
-      <!-- The menu gives the focus back to "Criar" first: the dialog returns it there. -->
-      <button
-        uiMenuItem
-        type="button"
-        (click)="createMenu.close(); collectionDialog.openNew()"
-      >
-        <ui-icon name="folder" [size]="18" />
-        <span i18n="@@library.newCollection">Novo acervo</span>
-      </button>
-    }
-    @if (mediaFallback(); as link) {
-      <a uiMenuItem [routerLink]="link.path" (click)="openMedia()">
-        <ui-icon name="music" [size]="18" />
-        <span>{{ link.title }}</span>
-      </a>
-    }
-  </ui-menu>
-</ng-template>
 
 <div [id]="ns() + '-body'" class="body">
   <div class="chip-line">
@@ -179,7 +152,23 @@
     </div>
   } @else if (!mobile()) {
     <div class="tools">
-      <ng-container [ngTemplateOutlet]="filterButton" />
+      <span class="tools-start">
+        <ng-container [ngTemplateOutlet]="filterButton" />
+        @if (mediaFallback(); as link) {
+          <!-- Without audio the pinned items hide: the media library stays one click away. -->
+          <a
+            uiIconButton
+            class="media-fallback"
+            [size]="24"
+            [routerLink]="link.path"
+            [attr.aria-label]="link.title"
+            [title]="link.title"
+            (click)="openMedia()"
+          >
+            <ui-icon name="music" [size]="16" />
+          </a>
+        }
+      </span>
       <ng-container [ngTemplateOutlet]="orderMenu" />
     </div>
   }
@@ -363,15 +352,32 @@
         role="group"
         [attr.aria-labelledby]="ns() + '-collections-head'"
       >
-        <ng-container
-          [ngTemplateOutlet]="sectionHead"
-          [ngTemplateOutletContext]="{
-            key: 'collections',
-            id: ns() + '-collections',
-            label: collectionsLabel,
-            count: collections().length,
-          }"
-        />
+        <!-- "+" of the Acervos head: a new collection (KBC-164 FR-2), apart from a conversation. -->
+        <div class="section-head-line">
+          <ng-container
+            [ngTemplateOutlet]="sectionHead"
+            [ngTemplateOutletContext]="{
+              key: 'collections',
+              id: ns() + '-collections',
+              label: collectionsLabel,
+              count: collections().length,
+            }"
+          />
+          @if (canCreateCollections() && !headless()) {
+            <button
+              uiIconButton
+              type="button"
+              class="section-add"
+              [size]="mobile() ? 44 : 28"
+              aria-label="Novo acervo"
+              i18n-aria-label="@@library.newCollection"
+              [title]="newCollectionLabel"
+              (click)="collectionDialog.openNew()"
+            >
+              <ui-icon name="plus" [size]="mobile() ? 20 : 16" />
+            </button>
+          }
+        </div>
         @if (isOpen('section:collections')) {
           <ul [id]="ns() + '-collections'" class="items tree">
             @for (node of collectionNodes(); track node.entry.topic.slug) {
@@ -882,14 +888,7 @@
     <!-- v2 · Menu: the drawn rows stay in reach at the sheet's foot however long the list. -->
     <div class="menu-actions drawn">
       @if (canCreateCollections()) {
-        <button
-          type="button"
-          class="action"
-          (click)="collectionDialog.openNew()"
-        >
-          <ui-icon name="plus" [size]="20" />
-          <span i18n="@@library.newCollection">Novo acervo</span>
-        </button>
+        <!-- "Novo acervo" is the "+" of the Acervos head above (KBC-164 FR-2). -->
         @if (chat.topic(); as current) {
           @if (current.canRename) {
             <button
@@ -930,8 +929,8 @@
       }
     </div>
     <ng-container [ngTemplateOutlet]="spendLine" />
-    <!-- v1 actions the drawn Menu has no row for ("+ Criar", its search and order on the
-         desktop column) come after the drawn ones. -->
+    <!-- v1 actions the drawn Menu has no row for ("+ Nova conversa", the search and order of
+         the desktop column) come after the drawn ones. -->
     <div class="menu-actions more">
       <button type="button" class="action" (click)="startNew()">
         <ui-icon name="chat" [size]="20" />

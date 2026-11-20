@@ -138,7 +138,7 @@ interface PinnedItem {
 }
 
 /**
- * "Sua biblioteca" (v2 shell, KBC-125): "+ Criar", the chips, its own search and "Recentes",
+ * "Sua biblioteca" (v2 shell, KBC-125): "+ Nova conversa", the chips, its own search and "Recentes",
  * then sections that never mix (D5): "Fixados" (the pinned media items, audio rule BR-2),
  * "Acervos" (the v1 collection selector, BR-4, as a tree with carets), "Conversas" (the v1
  * history, compact rows grouped by recency) and, on its chip, "Documentos"; each with its own
@@ -258,7 +258,8 @@ export class Sidebar {
   readonly collapseToggled = output();
   readonly expandToggled = output();
 
-  protected readonly createLabel = $localize`:@@library.create:Criar`;
+  protected readonly newConversationLabel = $localize`:@@sidebar.new:Nova conversa`;
+  protected readonly newCollectionLabel = $localize`:@@library.newCollection:Novo acervo`;
   protected readonly collapseLabel = $localize`:@@library.collapse:Recolher Sua biblioteca`;
   protected readonly expandLabel = $localize`:@@library.expand:Expandir Sua biblioteca`;
   protected readonly widenLabel = $localize`:@@library.widen:Ampliar Sua biblioteca`;
@@ -327,8 +328,8 @@ export class Sidebar {
     );
   });
   /**
-   * Without audio the pinned items hide; the media library stays one choice away in "+ Criar"
-   * for who has it (no v1 action is lost, BR-1).
+   * Without audio the pinned items hide; the media library stays one click away beside the
+   * filter for who has it (no v1 action is lost, BR-1).
    */
   protected readonly mediaFallback = computed(() =>
     this.audio.shown() ? null : this.mediaLink(),
@@ -567,10 +568,17 @@ export class Sidebar {
     this.acted.emit('levels');
   }
 
-  /** A new collection opens at once (≤ 2 s, NFR-1); a renamed one keeps its place. */
+  /**
+   * A new collection joins the list at once (≤ 2 s, KBC-048 NFR-1), at the top of "Recentes"
+   * where it is seen; a renamed one keeps its place. Neither changes the collection in use nor
+   * the conversation (KBC-164 BR-3): the new one is in use only once the person picks it.
+   */
   protected collectionSaved(topic: Topic): void {
+    const created = !this.chat
+      .topicList()
+      .some((known) => known.slug === topic.slug);
     this.chat.putTopic(topic);
-    if (topic.slug !== this.chat.topicSlug()) this.changeTopic(topic.slug);
+    if (created) this.recents.noteCollection(topic.slug);
   }
 
   /** A collection of the list becomes the one in use, as the v1 selector did (BR-4, AC-7). */

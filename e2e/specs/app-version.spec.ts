@@ -144,7 +144,7 @@ test('AC-1: a dialog typed in and closed with Esc no longer holds the reload ("N
   const deploy = await playDeploys(page);
   await page.goto('/');
   await expect(page.getByLabel('Sua pergunta')).toBeVisible();
-  // v2 (KBC-125): "+ Criar" › "Novo acervo", in the phone's Menu too.
+  // KBC-164: the "+" of the Acervos head, in the phone's Menu too.
   await startNewCollection(page);
   const dialog = page.getByRole('dialog', { name: 'Novo acervo' });
   await dialog.getByRole('textbox', { name: 'Nome' }).fill('Alquimia');

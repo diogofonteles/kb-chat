@@ -54,6 +54,9 @@ Como quem estuda, quero começar pelo que usei por último ou por um assunto, e 
 ## References
 Figma: [v2 · Conversa](https://www.figma.com/design/au1MI6z2Vwy9tnqOv2vrfH/?node-id=376-2) (`chat-empty*`, `chat-results*`, `chat-filters-sheet-mobile`) · Plano: `docs/design/redesign-v2.md` · Telas v1: T1, T2 · KBC-002, KBC-006, KBC-020, KBC-029
 
+## Notes
+- Decisão do dono (2026-11-19, KBC-164): a home é sempre a de uma conversa nova. Abrir o app, entrar ou recarregar em `/` mostra a saudação e a caixa em foco do acervo em uso, nunca a conversa anterior (a Pesquisa com IA deixou de reabrir a última depois de recarregar); a conversa anterior fica a um clique em Sua biblioteca › Conversas. Um link direto para outra página continua abrindo essa página. "+ Nova conversa" é um botão próprio na Sua biblioteca e no cabeçalho do celular, nas duas visões.
+
 ## Definition of ready
 - [x] Story, scope and outcome stated
 - [x] Every BR and FR covered by at least one AC; negative and edge cases present

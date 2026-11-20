@@ -97,13 +97,13 @@ async function ask(
   await view.fixture.whenStable();
 }
 
-/** "+ Criar" › "Nova conversa" (v2 shell, KBC-125). */
+/** "+ Nova conversa" in the head of Sua biblioteca (KBC-164 FR-1). */
 async function startNewConversation(
   view: Awaited<ReturnType<typeof renderPage>>,
 ) {
-  fireEvent.click(screen.getByRole('button', { name: 'Criar' }));
-  await view.fixture.whenStable();
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Nova conversa' }));
+  fireEvent.click(
+    within(sidebar()).getByRole('button', { name: 'Nova conversa' }),
+  );
   await view.fixture.whenStable();
 }
 
@@ -674,11 +674,59 @@ describe('ChatPage side panel (KBC-005)', () => {
     expect(screen.getByRole('button', { name: 'Editar acervo' })).toBeTruthy();
   });
 
-  it('creates a collection from the sidebar and switches to it at once (KBC-048 AC-1)', async () => {
+  it('"+ Nova conversa" is a button of its own, with no "Criar" menu (KBC-164 FR-1, AC-4)', async () => {
     const view = await renderPage();
-    fireEvent.click(screen.getByRole('button', { name: 'Criar' }));
+    await ask('lei do ritmo', view);
+    view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Novo acervo' }));
+    expect(
+      within(sidebar()).queryByRole('button', { name: 'Criar' }),
+    ).toBeNull();
+    const start = within(sidebar()).getByRole('button', {
+      name: 'Nova conversa',
+    });
+    expect(start.getAttribute('aria-haspopup')).toBeNull();
+    fireEvent.click(start);
+    await view.fixture.whenStable();
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.getByText('O que você quer estudar hoje?')).toBeTruthy();
+  });
+
+  it('a phone header offers "+ Nova conversa" in the search view too (KBC-164 FR-1, AC-4)', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: () => ({
+        matches: false,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }),
+    });
+    try {
+      const view = await renderPage();
+      await ask('lei do ritmo', view);
+      view.http.expectOne(SEARCH_URL).flush(aResponse());
+      await view.fixture.whenStable();
+      const header = view.container.querySelector('header.topbar');
+      if (!(header instanceof HTMLElement)) throw new Error('no header');
+      fireEvent.click(
+        within(header).getByRole('button', { name: 'Nova conversa' }),
+      );
+      await view.fixture.whenStable();
+      expect(screen.getByText('O que você quer estudar hoje?')).toBeTruthy();
+    } finally {
+      Reflect.deleteProperty(window, 'matchMedia');
+    }
+  });
+
+  it('creates a collection from the Acervos "+" without a new conversation or another collection in use (KBC-164 FR-2, BR-3, AC-5)', async () => {
+    const view = await renderPage();
+    await ask('lei do ritmo', view);
+    view.http.expectOne(SEARCH_URL).flush(aResponse());
+    await view.fixture.whenStable();
+    const acervos = screen.getByRole('group', { name: /^Acervos/ });
+    fireEvent.click(
+      within(acervos).getByRole('button', { name: 'Novo acervo' }),
+    );
     await view.fixture.whenStable();
     fireEvent.input(screen.getByRole('textbox', { name: 'Nome' }), {
       target: { value: 'UDV' },
@@ -704,10 +752,18 @@ describe('ChatPage side panel (KBC-005)', () => {
       'Alquimia Acervo · 1 documento',
       'Hermetismo Acervo · 4.235 documentos',
     ]);
-    expect(items[0]?.getAttribute('aria-current')).toBe('true');
+    // The collection in use and the conversation on screen stay as they were.
     expect(
-      screen.getByText(/Este acervo ainda não tem textos para buscar/),
-    ).toBeTruthy();
+      items.map((item) => item.getAttribute('aria-current') === 'true'),
+    ).toEqual([false, false, true]);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
+      'Hermetismo',
+    );
+    expect(summaryText()).toMatch(/^1 documento · Tudo/);
+    expect(screen.queryByText(/Nova conversa em/)).toBeNull();
+    // It is in use once the person picks it.
+    fireEvent.click(items[0] as HTMLElement);
+    await view.fixture.whenStable();
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
       'UDV',
     );

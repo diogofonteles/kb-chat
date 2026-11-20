@@ -602,13 +602,14 @@
     padding-bottom: var(--space-3);
   }
 
-  /* cmHead with "+" (the research): its row is the 40 "+" from 56, the avatar in its middle. */
-  .topbar:has(.new-research) {
+  /* cmHead with "+" in the research: its row is the 40 "+" from 56, the avatar in its middle.
+     The search view's row keeps its own place, the "+" in its middle (KBC-164). */
+  .research .topbar:has(.new-conversation) {
     padding-top: 3.375rem;
   }
 
   /* cmHead's "+" is white (an action of the page, not a quiet tool). */
-  .topbar .new-research {
+  .topbar .new-conversation {
     color: var(--color-text);
   }
 

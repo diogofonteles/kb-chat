@@ -674,9 +674,14 @@ export class ChatPage {
     );
   }
 
-  /** "+" of the phone's Pesquisa com IA: a new research, ready to type into. */
-  protected startNewResearch(): void {
-    this.research.newConversation();
+  /**
+   * "+" of the phone's header (KBC-164 FR-1): a new conversation in the view on screen, the
+   * other view keeping its own; from the conversation list, back to the home to type into.
+   */
+  protected startNewConversation(): void {
+    if (this.researching()) this.research.newConversation();
+    else this.store.newConversation();
+    this.phoneTab.set(null);
     this.sidebarActed('new');
   }
 

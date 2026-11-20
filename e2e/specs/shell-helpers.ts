@@ -87,30 +87,23 @@ export async function signOut(page: Page): Promise<void> {
   await (await accountEntry(page, 'Sair')).click();
 }
 
-/** "+ Criar" › "Nova conversa" (desktop); the Menu's row on a phone (v2: no "+ Criar"). */
+/** "+ Nova conversa" of Sua biblioteca's head (desktop); the Menu's row on a phone (KBC-164). */
 export async function startNewConversation(page: Page): Promise<void> {
-  const side = await library(page);
-  if (!desktop(page)) {
-    await side
-      .getByRole('button', { name: 'Nova conversa', exact: true })
-      .click();
-    return;
-  }
-  await side.getByRole('button', { name: 'Criar', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Nova conversa' }).click();
+  await (
+    await library(page)
+  )
+    .getByRole('button', { name: 'Nova conversa', exact: true })
+    .click();
 }
 
-/** "+ Criar" › "Novo acervo" (desktop); the Menu's row on a phone. */
+/** The "+" of the Acervos head, in the column and in the phone's Menu (KBC-164 FR-2). */
 export async function startNewCollection(page: Page): Promise<void> {
-  const side = await library(page);
-  if (!desktop(page)) {
-    await side
-      .getByRole('button', { name: 'Novo acervo', exact: true })
-      .click();
-    return;
-  }
-  await side.getByRole('button', { name: 'Criar', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Novo acervo' }).click();
+  await (
+    await library(page)
+  )
+    .getByRole('group', { name: /^Acervos/ })
+    .getByRole('button', { name: 'Novo acervo', exact: true })
+    .click();
 }
 
 /** A collection's own button in the "Acervos" tree (D5: a row with its caret and edit). */
@@ -162,8 +155,8 @@ export async function collectionTitles(side: Locator): Promise<string[]> {
 
 /**
  * Opens Mídia (or Biblioteca) from Sua biblioteca: the pinned item when the collection has
- * audio, else "+ Criar" › "Mídia", where the audio rule keeps it for a collection without
- * any audio yet (KBC-125 BR-2: no v1 action is lost).
+ * audio, else the link beside the filter (the Menu's row on a phone), where the audio rule
+ * keeps it for a collection without any audio yet (KBC-125 BR-2: no v1 action is lost).
  */
 export async function openMediaFromLibrary(
   page: Page,
@@ -174,7 +167,7 @@ export async function openMediaFromLibrary(
   await page.waitForLoadState('networkidle');
   const pinned = side.getByRole('link', { name, exact: true });
   // Under load the collection's media list can answer after the network went quiet: a
-  // collection with audio pins its link within moments; only then is "+ Criar" the way.
+  // collection with audio pins its link within moments; only then is the fallback the way.
   await pinned
     .first()
     .waitFor({ timeout: 5_000 })
@@ -183,10 +176,5 @@ export async function openMediaFromLibrary(
     await pinned.click();
     return;
   }
-  if (!desktop(page)) {
-    await side.getByRole('link', { name, exact: true }).click();
-    return;
-  }
-  await side.getByRole('button', { name: 'Criar', exact: true }).click();
-  await page.getByRole('menuitem', { name, exact: true }).click();
+  await side.getByRole('link', { name, exact: true }).click();
 }
