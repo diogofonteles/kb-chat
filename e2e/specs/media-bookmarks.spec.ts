@@ -88,6 +88,11 @@ test('AC-1: B marks 2 s back while it plays, with the note, and the audio goes o
   });
   await expect(note).toBeFocused();
   await note.fill('lei do ritmo');
+  // The note goes after its bookmark, in one queue: the reload below waits for it to land,
+  // or it would cut the creation or the note on its way (a slow CI runner, KBC-163).
+  const noted = page.waitForResponse(
+    (response) => response.request().method() === 'PATCH' && response.ok(),
+  );
   await note.press('Enter');
   await expect(note).toBeHidden();
   const item = list(page).first();
@@ -100,6 +105,7 @@ test('AC-1: B marks 2 s back while it plays, with the note, and the audio goes o
   expect(minutes * 60 + seconds).toBeGreaterThanOrEqual(Math.floor(before) - 3);
   expect(minutes * 60 + seconds).toBeLessThanOrEqual(Math.floor(before) - 1);
   expect((await audioState(page)).paused).toBe(false);
+  await noted;
   await page.reload();
   await expect(list(page).first()).toContainText('lei do ritmo');
 });
