@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, ownerApi, test } from './fixtures.js';
-import { uniqueTag, uploadReady, type UploadedMedia } from './media-helpers.js';
+import { uploadReady, type UploadedMedia } from './media-helpers.js';
 import { approve, seedDraft } from './tracks-helpers.js';
 import { rawOf, seedTranscript } from './transcript-helpers.js';
 
@@ -22,7 +22,11 @@ test.beforeAll(async () => {
   test.setTimeout(300_000);
   const owner = await ownerApi();
   media = await uploadReady(owner, {
-    title: `Aula que segue ${uniqueTag()}`,
+    // Eight digits: the title always takes the same two lines at 1440. `uniqueTag` starts
+    // with the clock in base 36, whose letters change width over the day: "mwowwx6q-v7uim"
+    // wrapped to three lines and pushed the list under the main panel's fold, less than a
+    // line of it in view, where no scroll of the list alone can show a line.
+    title: `Aula que segue ${String(Math.random()).slice(2, 10).padEnd(8, '0')}`,
     seconds: 720,
     bitrate: '32k',
   });
