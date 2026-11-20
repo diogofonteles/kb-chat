@@ -341,6 +341,18 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
     }
   });
 
+  it('stops following when the list itself has the focus and its keys scroll it (KBC-162 QA BUG-1)', async () => {
+    const { media, view } = await renderPanel();
+    await at(media, 6, view);
+    const list = screen.getByRole('list', { name: 'Trechos da transcrição' });
+    list.focus();
+    fireEvent.keyDown(list, { key: 'PageDown' });
+    await view.fixture.whenStable();
+    expect(
+      screen.getByRole('button', { name: 'Voltar ao trecho atual' }),
+    ).toBeTruthy();
+  });
+
   it('no longer takes a scroll for its own once its smooth scroll stopped short and its time passed (KBC-162)', async () => {
     const tops = new Map<Element, number>();
     const restore = [

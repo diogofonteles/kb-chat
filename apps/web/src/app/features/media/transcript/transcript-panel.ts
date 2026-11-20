@@ -677,7 +677,12 @@ export class TranscriptPanel {
   /** ↑/↓, PageUp/PageDown, Home/End move the one Tab stop (FR-7); the list stops following. */
   protected moveWithKeys(event: KeyboardEvent): void {
     const from = this.segmentOf(event.target);
-    if (from === null) return;
+    if (from === null) {
+      // The list itself has the focus: its keys scroll it, the person reads elsewhere (FR-3).
+      if (this.isList(event.target) && LIST_SCROLL_KEYS.has(event.key))
+        this.stopFollowing();
+      return;
+    }
     // From the segment with the focus, not the one playing (it may have moved on).
     const target = this.targetOf(event.key, from);
     if (target === null) return;
@@ -990,6 +995,17 @@ export class TranscriptPanel {
     else list.scrollTop = target;
   }
 }
+
+/** The keys that scroll the list when it has the focus itself. */
+const LIST_SCROLL_KEYS = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'PageUp',
+  'PageDown',
+  'Home',
+  'End',
+  ' ',
+]);
 
 /** The longest a smooth scroll of the list takes; past it, a scroll is the person's. */
 const SELF_SCROLL_MS = 1_500;

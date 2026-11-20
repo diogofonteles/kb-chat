@@ -264,6 +264,15 @@ for (const size of WIDTHS) {
         .poll(() => list.evaluate((element) => element.scrollTop))
         .toBeLessThan(listAt);
       // Stopped: the list stays where the person left it while the next line is marked.
+      // The audio must really be moving first (a cold first run may still be loading it), and
+      // at 4× the next 10 s line comes in under 3 s instead of up to 10.
+      await page
+        .locator('[data-media-engine]')
+        .evaluate(
+          (element) => ((element as HTMLMediaElement).playbackRate = 4),
+        );
+      const playingAt = await mediaTime(page);
+      await expect.poll(() => mediaTime(page)).toBeGreaterThan(playingAt + 1);
       const left = await list.evaluate((element) => element.scrollTop);
       const before = (await heard(page).getAttribute('data-index')) ?? '';
       await expect
@@ -296,6 +305,17 @@ for (const size of WIDTHS) {
         await expect(backToCurrent(page)).toHaveCount(0);
         await expect.poll(() => heardOnScreen(page)).toBe(true);
       }
+
+      // The keys on the list itself scroll it and stop following too (QA BUG-1).
+      await list.evaluate((element) => {
+        element.setAttribute('tabindex', '-1');
+        element.focus();
+      });
+      await page.keyboard.press('PageDown');
+      await expect(backToCurrent(page)).toBeVisible();
+      await list.evaluate((element) => element.removeAttribute('tabindex'));
+      await page.getByRole('button', { name: FORWARD }).first().click();
+      await expect(backToCurrent(page)).toHaveCount(0);
 
       // Typing a search stops it too, until the field is cleared.
       const field = page.getByLabel('Buscar na transcrição');
