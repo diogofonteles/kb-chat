@@ -341,6 +341,64 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
     }
   });
 
+  it('no longer takes a scroll for its own once its smooth scroll stopped short and its time passed (KBC-162)', async () => {
+    const tops = new Map<Element, number>();
+    const restore = [
+      vi
+        .spyOn(Element.prototype, 'scrollTop', 'get')
+        .mockImplementation(function (this: Element) {
+          return tops.get(this) ?? 0;
+        }),
+      vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(2_000),
+      vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(200),
+      vi
+        .spyOn(HTMLElement.prototype, 'offsetTop', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return Number(this.dataset['index'] ?? 0) * 300;
+        }),
+      vi
+        .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+        .mockReturnValue(40),
+    ];
+    const original = Element.prototype.scrollTo;
+    const asked: number[] = [];
+    Element.prototype.scrollTo = function (
+      this: Element,
+      options?: ScrollToOptions | number,
+    ) {
+      if (typeof options === 'object') asked.push(options.top ?? 0);
+    } as typeof Element.prototype.scrollTo;
+    try {
+      const { media, view } = await renderPanel();
+      const list = screen.getByRole('list', {
+        name: 'Trechos da transcrição',
+      });
+      await at(media, 1_201, view);
+      await vi.waitFor(() => expect(asked.at(-1)).toBeCloseTo(833.33, 1));
+      // The smooth scroll stops at 400 and never lands on 833.
+      tops.set(list, 400);
+      fireEvent.scroll(list);
+      // Two seconds later the person wheels the list to 600, inside the old range.
+      const later = vi
+        .spyOn(performance, 'now')
+        .mockReturnValue(performance.now() + 2_000);
+      try {
+        fireEvent.wheel(list);
+        tops.set(list, 600);
+        fireEvent.scroll(list);
+        await view.fixture.whenStable();
+        expect(
+          screen.getByRole('button', { name: 'Voltar ao trecho atual' }),
+        ).toBeTruthy();
+      } finally {
+        later.mockRestore();
+      }
+    } finally {
+      Element.prototype.scrollTo = original;
+      restore.forEach((one) => one.mockRestore());
+    }
+  });
+
   it('takes its own scroll for its own, even right after a wheel, and a scroll elsewhere for the person (KBC-162)', async () => {
     const tops = new Map<Element, number>();
     const restore = [

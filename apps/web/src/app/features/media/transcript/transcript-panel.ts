@@ -238,8 +238,11 @@ export class TranscriptPanel {
   /** When a wheel or a touch last moved over the list: it may be about to scroll it. */
   private gestureAt = Number.NEGATIVE_INFINITY;
   /** The list's own scroll in flight (following, a search hit): its scroll events. */
-  private selfScroll: { readonly from: number; readonly to: number } | null =
-    null;
+  private selfScroll: {
+    readonly from: number;
+    readonly to: number;
+    readonly until: number;
+  } | null = null;
   /** What is in the search field now. */
   protected readonly typed = signal('');
   /** Enter and Esc apply the field at once, without waiting for the pause. */
@@ -709,6 +712,11 @@ export class TranscriptPanel {
   private ownScroll(top: number): boolean {
     const own = this.selfScroll;
     if (!own) return false;
+    // A smooth scroll that stopped short never lands: past its time it is no longer ours.
+    if (this.now() > own.until) {
+      this.selfScroll = null;
+      return false;
+    }
     const low = Math.min(own.from, own.to) - 1;
     const high = Math.max(own.from, own.to) + 1;
     if (top < low || top > high) {
@@ -970,7 +978,9 @@ export class TranscriptPanel {
       Math.min(target, list.scrollHeight - list.clientHeight),
     );
     this.selfScroll =
-      Math.abs(list.scrollTop - to) < 1 ? null : { from: list.scrollTop, to };
+      Math.abs(list.scrollTop - to) < 1
+        ? null
+        : { from: list.scrollTop, to, until: this.now() + SELF_SCROLL_MS };
     const reduced =
       this.document.defaultView?.matchMedia?.(
         '(prefers-reduced-motion: reduce)',
@@ -980,6 +990,9 @@ export class TranscriptPanel {
     else list.scrollTop = target;
   }
 }
+
+/** The longest a smooth scroll of the list takes; past it, a scroll is the person's. */
+const SELF_SCROLL_MS = 1_500;
 
 /** Under this height the list is the phone card of three lines, not a column. */
 const CARD_MAX = 200;
