@@ -312,6 +312,48 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(engine.playing()).toBe(true);
   });
 
+  it('is no longer waiting once the clock moves after a skip, though no playing event comes (WebKit on Linux)', () => {
+    vi.useFakeTimers();
+    ready();
+    engine.play();
+    media.emit('playing');
+    engine.seek(30_000);
+    media.emit('seeking');
+    // Linux WebKit: the wait comes after the seek lands, and no canplay/playing follows it,
+    // though the element plays on (its readyState stays at HAVE_CURRENT_DATA).
+    media.emit('seeked');
+    media.emit('waiting');
+    for (let second = 1; second <= 20; second++) {
+      vi.advanceTimersByTime(1_000);
+      media.setCurrentTime(30 + second);
+      media.emit('timeupdate');
+    }
+    expect(engine.playback()).toMatchObject({
+      phase: 'playing',
+      error: null,
+      waiting: false,
+      bufferingVisible: false,
+    });
+    expect(media.calls).not.toContain('pause');
+  });
+
+  it('still reports the network when the clock stops after the wait (AC-12)', () => {
+    vi.useFakeTimers();
+    ready();
+    engine.play();
+    media.emit('playing');
+    media.setCurrentTime(10);
+    media.emit('timeupdate');
+    media.emit('waiting');
+    // A tick that does not move is no playback: the wait goes on to the error.
+    media.emit('timeupdate');
+    vi.advanceTimersByTime(12_000);
+    expect(engine.playback()).toMatchObject({
+      phase: 'error',
+      error: 'network',
+    });
+  });
+
   it('does not take a requested seek for playback', () => {
     ready();
     engine.play();

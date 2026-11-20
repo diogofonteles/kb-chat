@@ -424,8 +424,15 @@ export class MediaEngine {
     this.dispatch({ type: 'time', loadId: this.loads, currentMs });
     this.onBuffered(element);
     // The clock moving on an element that is not paused is playing, even if its `playing`
-    // event never comes (it can be lost after a seek from the end).
-    if (!element.paused && currentMs > before && !this.playing()) {
+    // event never comes (it can be lost after a seek from the end). It is no longer waiting
+    // either: after a skip, Linux WebKit can send `waiting` once the seek has landed and
+    // never `canplay` nor `playing`, so the stall timer would stop playback and report the
+    // network 12 s into audio that plays (KBC-162).
+    if (
+      !element.paused &&
+      currentMs > before &&
+      (!this.playing() || this.state().waiting)
+    ) {
       this.playedSinceLoad.set(true);
       this.settle({ type: 'playing', loadId: this.loads });
     }
