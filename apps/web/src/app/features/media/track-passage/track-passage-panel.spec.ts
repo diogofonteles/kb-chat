@@ -1025,6 +1025,37 @@ describe('TrackPassagePanel: "Ouvir o trecho" stops at the passage end (KBC-160)
     expect(media.calls).not.toContain('pause');
   });
 
+  it('FR-1: paused mid-passage and resumed from the sheet, the track plays on past the end, no longer "Tocando o trecho citado"', async () => {
+    const { media } = await openReady({
+      source: SOURCE,
+      at: '0:41',
+      inSheet: true,
+    });
+    listen();
+    media.setCurrentTime(50);
+    media.emit('playing');
+    media.emit('timeupdate');
+    const player = await screen.findByRole('group', { name: 'Player' });
+    expect(
+      await within(player).findByText('Tocando o trecho citado · 0:50'),
+    ).toBeTruthy();
+    fireEvent.click(within(player).getByRole('button', { name: 'Pausar' }));
+    media.emit('pause');
+    const engine = TestBed.inject(MediaEngine);
+    expect(engine.stopAtMs()).toBeNull();
+    fireEvent.click(
+      await within(player).findByRole('button', { name: 'Tocar' }),
+    );
+    media.emit('playing');
+    media.setCurrentTime(75);
+    media.emit('timeupdate');
+    expect(media.calls.filter((call) => call === 'pause')).toHaveLength(1);
+    expect(
+      await within(player).findByText('Tocando a faixa · 1:15'),
+    ).toBeTruthy();
+    expect(within(player).queryByText(/^Tocando o trecho citado/)).toBeNull();
+  });
+
   it('AC-7: "Faixa toda" plays the track with no stop at the passage', async () => {
     const { media } = await listening(50);
     media.emit('pause');

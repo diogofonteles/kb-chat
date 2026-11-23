@@ -1070,6 +1070,30 @@ test('KBC-160: "Ouvir o trecho" stops at the passage end; off, or after a seek o
     await expect(card.getByText(/^Para às/)).toHaveCount(0);
     await pauseOnTheControl(member, panel);
 
+    // FR-1: paused mid-passage, the stop goes; resumed on the player, the track plays on past
+    // the end, and the player says the track, not the cited passage, once it is out of it.
+    await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
+    await expect.poll(() => playing(member)).toBe(true);
+    await seekTo(member, endMs / 1000 - 1.5);
+    await expect(card.getByText(/^Para às/)).toBeVisible();
+    await pauseOnTheControl(member, panel);
+    await expect(card.getByText(/^Para às/)).toHaveCount(0);
+    const control = theControl(member);
+    await control.getByRole('button', { name: /^Tocar/ }).click();
+    await expect
+      .poll(async () => (await audioState(member)).currentTime, {
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(endMs / 1000 + 1);
+    expect(await playing(member)).toBe(true);
+    if (!isDesktop(member)) {
+      await expect(
+        control.getByText(/^Tocando a faixa · 0:\d\d/),
+      ).toBeVisible();
+    }
+    await expect(control.getByText(/Tocando o trecho citado/)).toHaveCount(0);
+    await pauseOnTheControl(member, panel);
+
     // AC-4, BR-5: off, saved on the account; "Ouvir o trecho" plays on past the end.
     const saved = member.waitForResponse(
       (response) =>

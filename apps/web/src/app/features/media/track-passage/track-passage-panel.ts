@@ -98,7 +98,8 @@ const sameTarget = (a: Target, b: Target): boolean =>
 
 /**
  * Pressed this close to the passage's end (stopped there, KBC-160), "Ouvir o trecho" starts it
- * again (BR-3): the stop pauses within its 250 ms tolerance, maybe a few ms short of the end.
+ * again (BR-3). The engine pauses up to 30 ms short of the end (`STOP_EARLY_MS`); this margin
+ * is wider, a `timeupdate` tick (~250 ms), and stays within BR-1's 250 ms tolerance.
  */
 const AT_END_MS = 250;
 

@@ -306,6 +306,36 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
       expect(engine.playback().error).toBeNull();
     });
 
+    it('waits through a stall in its span without stopping, and stops at the end once it plays on (KBC-162)', () => {
+      const onStop = playingToStop();
+      media.setCurrentTime(90);
+      media.emit('timeupdate');
+      // The network holds the element at 1:30, not paused: its timer only checks again.
+      media.emit('waiting');
+      vi.advanceTimersByTime(8_000);
+      media.emit('timeupdate');
+      expect(onStop).not.toHaveBeenCalled();
+      expect(media.calls).not.toContain('pause');
+      expect(engine.stopAtMs()).toBe(95_000);
+      expect(engine.playback()).toMatchObject({ waiting: true, error: null });
+      // Data comes back: the clock moves on with no `playing` event and the wait is over.
+      media.setReadyState(HTMLMediaElement.HAVE_FUTURE_DATA);
+      media.setCurrentTime(90.25);
+      media.emit('timeupdate');
+      expect(engine.playback()).toMatchObject({
+        phase: 'playing',
+        waiting: false,
+      });
+      media.setCurrentTime(94.99);
+      vi.advanceTimersByTime(4_735);
+      expect(onStop).toHaveBeenCalledTimes(1);
+      expect(media.calls.at(-1)).toBe('pause');
+      media.emit('pause');
+      // The stall timer is gone with the wait: no network error after the stop.
+      vi.advanceTimersByTime(12_000);
+      expect(engine.playback()).toMatchObject({ phase: 'paused', error: null });
+    });
+
     it('is disarmed by a pause, another load and the end of the media', () => {
       const onStop = playingToStop();
       engine.pause();
