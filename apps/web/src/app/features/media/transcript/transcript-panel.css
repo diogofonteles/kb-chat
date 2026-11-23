@@ -335,7 +335,10 @@
   line-height: 2.1875rem;
 }
 
-.segment.active ~ .segment .text {
+/* The lines after the one heard, marked by the panel near the list's view (fadeUpcoming).
+   Not a sibling selector: a new line heard would restyle every line after it, ~4 500
+   elements of a 2 h transcript in one frame (KBC-038 NFR-2, KBC-163). */
+.segments > .segment.upcoming .text {
   color: color-mix(in srgb, var(--color-text-muted) 80%, transparent);
 }
 
@@ -524,7 +527,7 @@
   }
 
   /* The frame dims the next line to black 60%: kept light, for 4.5:1 on the card. */
-  :host(.in-player) .segment.active ~ .segment .text {
+  :host(.in-player) .segments > .segment.upcoming .text {
     color: var(--color-on-cover-dim);
   }
 }
