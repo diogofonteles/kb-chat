@@ -35,6 +35,7 @@ import {
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
 } from '@core/media/media-engine.js';
+import { MARK_PLAYED_BATCH } from '@core/media/library-api.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { By } from '@angular/platform-browser';
 import { ChatStore } from '@features/chat/chat-store.js';
@@ -135,6 +136,8 @@ async function renderLibrary(
     routes?: Routes;
     /** "Todas as mídias" in the address (the "Ver todas as mídias" button); false: the collection in use. */
     all?: boolean;
+    /** How many ids one "marcar como ouvida" request carries (the API's 200 by default). */
+    batch?: number;
   } = {},
 ) {
   const media: FakeMedia = fakeMediaElement();
@@ -145,6 +148,9 @@ async function renderLibrary(
       provideZonelessChangeDetection(),
       provideHttpClient(withInterceptors([answeringLevels()])),
       provideHttpClientTesting(),
+      ...(options.batch
+        ? [{ provide: MARK_PLAYED_BATCH, useValue: options.batch }]
+        : []),
       provideRouter(options.routes ?? []),
       { ...chatStore, useValue: { ...chatStore.useValue, ...chat } },
       sessionAs({
@@ -483,70 +489,60 @@ describe('LibraryPage (T16, KBC-051)', () => {
   const idsFrom = (start: number, end: number) =>
     Array.from({ length: end - start + 1 }, (_, n) => mediaId(start + n));
 
-  // These two render 250 rows, past the API's batch of 200: 1.6 s here with coverage, 7 to 9 s
-  // on a CI runner beside the other test files. The limit is the runner's, no product budget.
-  const BULK_TEST_MS = 20_000;
+  // The batching itself (200 ids a request) is proven on LibraryApi (library-api.spec.ts);
+  // here a batch of 2 shows it from the page with five rows instead of 250.
+  it('marks more than one request takes at once, batch after batch, from "Selecionar todas" (FR-3)', async () => {
+    const { open, http, settle, tick } = await renderLibrary({ batch: 2 });
+    await open(aPage(manyItems(5)));
+    fireEvent.click(screen.getByLabelText('Selecionar todas as 5'));
+    await settle();
+    fireEvent.click(screen.getByText('Marcar como ouvida'));
 
-  it(
-    'marks more than the API takes at once in batches of 200, from "Selecionar todas" (FR-3)',
-    async () => {
-      const { open, http, settle, tick } = await renderLibrary();
-      await open(aPage(manyItems(250)));
-      fireEvent.click(screen.getByLabelText('Selecionar todas as 250'));
-      await settle();
-      fireEvent.click(screen.getByText('Marcar como ouvida'));
-
-      const first = http.expectOne('/api/v1/media/played');
-      expect(first.request.body).toEqual({
-        ids: idsFrom(1, 200),
+    for (const [start, end] of [
+      [1, 2],
+      [3, 4],
+      [5, 5],
+    ] as const) {
+      const request = http.expectOne('/api/v1/media/played');
+      expect(request.request.body).toEqual({
+        ids: idsFrom(start, end),
         played: true,
       });
-      first.flush(marked(idsFrom(1, 200)));
-      const second = http.expectOne('/api/v1/media/played');
-      expect(second.request.body).toEqual({
-        ids: idsFrom(201, 250),
-        played: true,
-      });
-      second.flush(marked(idsFrom(201, 250)));
-      await tick();
-      http.expectOne(HOME).flush(aHome());
-      await settle();
+      request.flush(marked(idsFrom(start, end)));
+    }
+    await tick();
+    http.expectOne(HOME).flush(aHome());
+    await settle();
 
-      expect(
-        screen.getByRole('status', { hidden: true }).textContent,
-      ).toContain('250 mídias marcadas como ouvidas.');
-      expect(
-        screen.queryByRole('region', { name: 'Seleção', hidden: true }),
-      ).toBeNull();
-    },
-    BULK_TEST_MS,
-  );
+    expect(screen.getByRole('status', { hidden: true }).textContent).toContain(
+      '5 mídias marcadas como ouvidas.',
+    );
+    expect(
+      screen.queryByRole('region', { name: 'Seleção', hidden: true }),
+    ).toBeNull();
+  });
 
-  it(
-    'says how many were marked and keeps the rest selected when a later batch fails (FR-3)',
-    async () => {
-      const { open, http, settle, tick } = await renderLibrary();
-      await open(aPage(manyItems(250)));
-      fireEvent.click(screen.getByLabelText('Selecionar todas as 250'));
-      await settle();
-      fireEvent.click(screen.getByText('Marcar como ouvida'));
+  it('says how many were marked and keeps the rest selected when a later batch fails (FR-3)', async () => {
+    const { open, http, settle, tick } = await renderLibrary({ batch: 2 });
+    await open(aPage(manyItems(5)));
+    fireEvent.click(screen.getByLabelText('Selecionar todas as 5'));
+    await settle();
+    fireEvent.click(screen.getByText('Marcar como ouvida'));
 
-      http.expectOne('/api/v1/media/played').flush(marked(idsFrom(1, 200)));
-      http
-        .expectOne('/api/v1/media/played')
-        .flush(null, { status: 500, statusText: 'x' });
-      await tick();
-      http.expectOne(HOME).flush(aHome());
-      await settle();
+    http.expectOne('/api/v1/media/played').flush(marked(idsFrom(1, 2)));
+    http
+      .expectOne('/api/v1/media/played')
+      .flush(null, { status: 500, statusText: 'x' });
+    await tick();
+    http.expectOne(HOME).flush(aHome());
+    await settle();
 
-      const bar = screen.getByRole('region', { name: 'Seleção', hidden: true });
-      expect(within(bar).getByRole('alert').textContent).toContain(
-        '200 mídias marcadas como ouvidas. Faltaram 50: tente de novo.',
-      );
-      expect(within(bar).getByText('50 selecionadas')).toBeTruthy();
-    },
-    BULK_TEST_MS,
-  );
+    const bar = screen.getByRole('region', { name: 'Seleção', hidden: true });
+    expect(within(bar).getByRole('alert').textContent).toContain(
+      '2 mídias marcadas como ouvidas. Faltaram 3: tente de novo.',
+    );
+    expect(within(bar).getByText('3 selecionadas')).toBeTruthy();
+  });
 
   it('marks one heard media as not heard from its ⋯ (AC-8)', async () => {
     const { open, http, settle } = await renderLibrary();
