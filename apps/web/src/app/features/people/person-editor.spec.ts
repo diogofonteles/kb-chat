@@ -133,6 +133,21 @@ describe('PersonEditor: "Classificar nível de conteúdo" (T9, KBC-107 FR-3)', (
   });
 });
 
+describe('PersonEditor: the retired "Ver quem fala na transcrição" (KBC-159 AC-5)', () => {
+  it('no longer lists it, and the media features keep their order', async () => {
+    await renderEditor(ana());
+    expect(
+      screen.queryByRole('checkbox', { name: 'Ver quem fala na transcrição' }),
+    ).toBeNull();
+    const names = screen
+      .getAllByRole('checkbox')
+      .map((box) => box.closest('label')?.textContent?.trim() ?? '');
+    const library = names.indexOf('Biblioteca de mídia');
+    expect(library).toBeGreaterThan(-1);
+    expect(names[library + 1]).toBe('Navegar por faixas');
+  });
+});
+
 describe('PersonEditor: the level right under its collection (T9, KBC-109 AC-7)', () => {
   it('places "Nível em Hermetismo" after Hermetismo and its sub-collection, before Alquimia', async () => {
     await renderEditor(ana());

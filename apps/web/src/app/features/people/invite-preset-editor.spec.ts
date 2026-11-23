@@ -57,6 +57,18 @@ const optionsOf = (select: HTMLElement) =>
     .getAllByRole('option')
     .map((option) => (option as HTMLOptionElement).value);
 
+describe('InvitePresetEditor: the retired "Ver quem fala na transcrição" (KBC-159 FR-3)', () => {
+  it('no longer offers it in a profile or an invitation', async () => {
+    await renderEditor(plainPreset());
+    expect(
+      screen.getByRole('checkbox', { name: 'Navegar por faixas' }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('checkbox', { name: 'Ver quem fala na transcrição' }),
+    ).toBeNull();
+  });
+});
+
 describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', () => {
   it('offers only what the owner can lend now (AC-7)', async () => {
     await renderEditor(plainPreset(), OWNER_LENDS_CLAUDE);

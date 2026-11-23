@@ -9,6 +9,8 @@ depends_on: [KBC-064, KBC-049]
 
 # KBC-065 — Dar nome às vozes de uma gravação
 
+> **Nota (KBC-159, 2026-11-23):** a permissão `media-speakers` ("Ver quem fala na transcrição") foi aposentada. Desde o KBC-151 BR-0 todo ouvinte vê os nomes confirmados; as menções a ela em BR-4, FR-4, AC-1 e AC-4 são históricas. Nomear e juntar vozes continua com `media-edit`.
+
 ## Story
 Como quem edita, quero dizer que a "Voz 1" é o Mestre e a "Voz 2" é uma pergunta da plateia, para que todos que ouvem saibam quem está falando em cada trecho.
 

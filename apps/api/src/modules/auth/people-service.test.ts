@@ -207,6 +207,111 @@ describe('PeopleService and features it does not know (KBC-107 QA-2)', () => {
   });
 });
 
+/** A people.json in memory that counts its writes (KBC-159 FR-2: one write, then none). */
+class CountingPeopleStore extends MemoryPeopleStore {
+  writes = 0;
+
+  override async write(value: object): Promise<void> {
+    this.writes += 1;
+    await super.write(value);
+  }
+}
+
+/** A people.json where one invited person, not signed in yet, was granted `media-speakers`. */
+async function withRetiredGrant(): Promise<CountingPeopleStore> {
+  const store = new CountingPeopleStore();
+  const people = service(store);
+  const ana = await people.invite('ana@example.com', OWNER);
+  const raw = (await store.read()) as {
+    people: { id: string; features: string[] }[];
+  };
+  await store.write({
+    version: 1,
+    people: raw.people.map((one) =>
+      one.id === ana.id
+        ? { ...one, features: ['media', 'media-speakers', 'search'] }
+        : one,
+    ),
+  });
+  store.writes = 0;
+  return store;
+}
+
+const featuresIn = async (store: MemoryPeopleStore) =>
+  ((await store.read()) as { people: { features: string[] }[] }).people.map(
+    (one) => one.features,
+  );
+
+describe('PeopleService and the retired `media-speakers` (KBC-159)', () => {
+  it('AC-1: loads a person granted it with the rest of her features, without warning', async () => {
+    const store = await withRetiredGrant();
+    const warn = vi.fn();
+    const people = new PeopleService({
+      store,
+      ownerEmail: OWNER,
+      log: { warn },
+    });
+
+    const ana = (await people.list()).find(
+      (p) => p.email === 'ana@example.com',
+    );
+
+    expect(ana?.features).toEqual(['media', 'search']);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('keeps the API up when the cleanup write fails: it warns, and the grant stays ignored (KBC-159 review)', async () => {
+    const store = await withRetiredGrant();
+    vi.spyOn(store, 'write').mockRejectedValueOnce(new Error('disk full'));
+    const warn = vi.fn();
+    const people = new PeopleService({
+      store,
+      ownerEmail: OWNER,
+      log: { warn, info: vi.fn() },
+    });
+
+    const ana = (await people.list()).find(
+      (p) => p.email === 'ana@example.com',
+    );
+
+    expect(ana?.features).toEqual(['media', 'search']);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Error: disk full' }),
+      expect.stringContaining('could not be rewritten'),
+    );
+  });
+
+  it('AC-2: rewrites people.json without it in one write, and a second start writes nothing', async () => {
+    const store = await withRetiredGrant();
+    const info = vi.fn();
+    const log = { warn: vi.fn(), info };
+
+    await new PeopleService({ store, ownerEmail: OWNER, log }).list();
+    expect(store.writes).toBe(1);
+    expect((await featuresIn(store)).flat()).not.toContain('media-speakers');
+    expect(info).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith(
+      { features: ['media-speakers'], people: 1 },
+      expect.stringContaining('retired'),
+    );
+
+    await new PeopleService({ store, ownerEmail: OWNER, log }).list();
+    expect(store.writes).toBe(1);
+    expect(info).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC-6: a pending invitation that held it signs in with her other features', async () => {
+    const store = await withRetiredGrant();
+    const people = service(store);
+
+    const ana = await people.signIn(identity('ana@example.com'));
+
+    expect(ana.features).toEqual(['media', 'search']);
+    expect(ana.lastLoginAt).not.toBeNull();
+    expect((await featuresIn(store)).flat()).not.toContain('media-speakers');
+  });
+});
+
 describe('PeopleService.setLevels (KBC-109 NFR-1)', () => {
   it('changes the level of everyone kept in one write, and says what each held before', async () => {
     const store = new MemoryPeopleStore();

@@ -168,6 +168,50 @@ test('AC-1, AC-2: checking boxes with the keyboard keeps focus and every change'
   await api.dispose();
 });
 
+test('KBC-159 AC-5: the person modal no longer lists "Ver quem fala na transcrição"; the rest keeps its order', async ({
+  page,
+}) => {
+  const api = await ownerApi();
+  const email = uniqueEmail('retired');
+  const id = await invite(api, email);
+
+  const dialog = await openPeople(page);
+  await dialog.getByRole('button', { name: new RegExp(email) }).click();
+  const features = dialog
+    .locator(`#person-${id}`)
+    .getByRole('group', { name: 'Funcionalidades' });
+  await expect(
+    features.getByRole('checkbox', { name: 'Navegar por faixas' }),
+  ).toBeVisible();
+  await expect(
+    features.getByRole('checkbox', { name: 'Ver quem fala na transcrição' }),
+  ).toHaveCount(0);
+  const names = (await features.locator('label').allInnerTexts()).map((name) =>
+    name.trim(),
+  );
+  const library = names.indexOf('Biblioteca de mídia');
+  expect(library, names.join(' · ')).toBeGreaterThan(-1);
+  expect(names[library + 1]).toBe('Navegar por faixas');
+  // Every row stays inside the group, one under the other (no gap or overlap left behind).
+  const group = await features.boundingBox();
+  const rows = await features.locator('label').evaluateAll((labels) =>
+    labels.map((label) => {
+      const box = label.getBoundingClientRect();
+      return { left: box.left, right: box.right, top: box.top };
+    }),
+  );
+  for (const row of rows) {
+    expect(row.left).toBeGreaterThanOrEqual((group?.x ?? 0) - 1);
+    expect(row.right).toBeLessThanOrEqual(
+      (group?.x ?? 0) + (group?.width ?? 0) + 1,
+    );
+  }
+  const tops = rows.map((row) => row.top);
+  expect(tops).toEqual([...tops].sort((a, b) => a - b));
+  await expectAccessible(page);
+  await api.dispose();
+});
+
 test('BUG-1: closing and reopening the person while a change saves keeps it', async ({
   page,
 }) => {

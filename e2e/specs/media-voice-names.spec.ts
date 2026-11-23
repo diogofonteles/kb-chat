@@ -89,10 +89,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await expect(transcriptList(page)).toContainText('Mestre Laércio');
     expect(await seriousViolations(page, 'app-transcript-panel')).toEqual([]);
 
-    const listener = await listenerPage(browser, viewport, [
-      'media',
-      'media-speakers',
-    ]);
+    const listener = await listenerPage(browser, viewport, ['media']);
     await listener.goto(`/midia/${media.id}?t=6`);
     await expect(transcriptList(listener)).toContainText('✦');
     await expect(transcriptList(listener)).toContainText('Mestre Laércio');
@@ -200,10 +197,7 @@ test('AC-6: a new separation keeps the names and asks to confirm them', async ({
   await expect(block).toContainText('Confirme os nomes das vozes');
   await expect(whoIs(page, 2)).toHaveValue('Mestre Laércio');
 
-  const listener = await listenerPage(browser, viewport, [
-    'media',
-    'media-speakers',
-  ]);
+  const listener = await listenerPage(browser, viewport, ['media']);
   await listener.goto(`/midia/${media.id}`);
   await expect(transcriptList(listener)).toContainText(
     'Falante não identificado',
@@ -236,10 +230,7 @@ test('AC-4, AC-5: whoever only listens sees who speaks but names nothing (KBC-15
   );
   expect(refused.status()).toBe(403);
 
-  const listener = await listenerPage(browser, viewport, [
-    'media',
-    'media-speakers',
-  ]);
+  const listener = await listenerPage(browser, viewport, ['media']);
   await listener.goto(`/midia/${media.id}`);
   await expect(transcriptList(listener)).toContainText(
     'Falante não identificado',

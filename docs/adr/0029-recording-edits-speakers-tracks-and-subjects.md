@@ -68,3 +68,7 @@ Three things are hard to reverse once data exists: how a track is represented (c
 - **New bounds land alone.** A cut asked for one track (`media_tracks.cut_alone`) publishes that track when it lands; a sibling's dead cut holds nothing. An approval's cuts still publish together, and a candidate behind a dead sibling reads as failed, with the retry reaching the sibling. Deleting the track of a failed cut lets what waited for it publish.
 - **Bookmarks that leave** get a row in `media_moved_bookmarks` until their owner acknowledges it, including one made on a replaced cut that falls outside the new bounds. The notice follows the recording's collection: who no longer sees it, or lost `media-tracks`, is not told.
 - **One suggestion.** `POST /media/{id}/suggestions` is a synchronous single call on the media ledger (`track-suggestion`); it writes nothing but the spend.
+
+## Amendment: `media-speakers` retired (KBC-159, 2026-11-23)
+
+Decision §9's `media-speakers` guards nothing since KBC-151 BR-0 (everyone who may listen sees the confirmed names), so it is removed from the feature list rather than renamed. New input refuses it; people.json and invite-profiles.json that still name it load without it and are rewritten once without it (`RETIRED_FEATURES` in `@kb-chat/contracts`). The `media_speakers` table and its migration stay.

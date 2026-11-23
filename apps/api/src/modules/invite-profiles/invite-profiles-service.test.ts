@@ -44,6 +44,39 @@ describe('InviteProfilesService (KBC-109)', () => {
     expect(profiles.find(ID).name).toBe('Aluna');
   });
 
+  it('drops the retired `media-speakers` from a stored profile in one write, then none (KBC-159 FR-2)', async () => {
+    const store = new MemoryDocumentStore();
+    await store.write(stored(['media', 'media-speakers', 'search']));
+    const write = vi.spyOn(store, 'write');
+    const warn = vi.fn();
+    const info = vi.fn();
+
+    await new InviteProfilesService({ store, warn, info }).load();
+    const again = new InviteProfilesService({ store, warn, info });
+    await again.load();
+
+    expect(again.find(ID).preset.features).toEqual(['media', 'search']);
+    expect(JSON.stringify(await store.read())).not.toContain('media-speakers');
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('loads anyway when the cleanup write fails, warning and ignoring the retired grant (KBC-159 review)', async () => {
+    const store = new MemoryDocumentStore();
+    await store.write(stored(['media', 'media-speakers', 'search']));
+    vi.spyOn(store, 'write').mockRejectedValueOnce(new Error('disk full'));
+    const warn = vi.fn();
+    const profiles = new InviteProfilesService({ store, warn, info: vi.fn() });
+
+    await expect(profiles.load()).resolves.toBeUndefined();
+
+    expect(profiles.find(ID).preset.features).toEqual(['media', 'search']);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('could not be rewritten'),
+    );
+  });
+
   it('writes no levels key for a preset without levels, and keeps the levels given', async () => {
     const store = new MemoryDocumentStore();
     const profiles = new InviteProfilesService({ store, newId: () => ID });
