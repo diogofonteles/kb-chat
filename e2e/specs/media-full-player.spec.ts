@@ -90,6 +90,11 @@ test('AC-1: the speed chosen plays on the next media and follows the account to 
 test('AC-2, AC-5: the API refuses a speed off the menu and a position outside the media', async ({
   page,
 }) => {
+  // One width (KBC-169): the phone project would only repeat it.
+  test.skip(
+    test.info().project.name === 'media-mobile',
+    'not about the layout: the API answers the same at any width',
+  );
   const api = page.request;
   const headers = { 'x-requested-with': 'kb-chat' };
   const speed = await api.put('/api/v1/media/preferences', {
@@ -252,6 +257,11 @@ test('AC-3: a page only opened (not played) never sends its old position over a 
 test('BR-2: two people in one browser never see each other’s position', async ({
   browser,
 }) => {
+  // One width (KBC-169): the phone project would only repeat it.
+  test.skip(
+    test.info().project.name === 'media-mobile',
+    'not about the layout: whose position this browser keeps and sends',
+  );
   const { page, email } = await newListener(browser, { viewport: null });
   // Saves fail for the first person: the position stays in this browser, unsent.
   await page.route('**/progress', (route) =>

@@ -508,6 +508,11 @@ test('AC-5: ?t=754 starts at 12:34; someone without access gets "not found"', as
   browser,
   viewport,
 }) => {
+  // One width (KBC-169): the phone project would only repeat it.
+  test.skip(
+    test.info().project.name === 'media-mobile',
+    'not about the layout: where a link starts, and who may open it',
+  );
   await openPlayer(page, lecture, '?t=754');
   await expect
     .poll(async () => (await audioState(page)).currentTime)
