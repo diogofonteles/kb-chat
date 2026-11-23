@@ -35,6 +35,7 @@ import { toUiErrorCode } from '@core/api/api-error.js';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { speak } from '@core/i18n/spoken-time.js';
 import { BookmarksStore } from '@core/media/bookmarks-store.js';
+import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import {
   mediaPagePath,
@@ -95,6 +96,16 @@ const withinTopic = (topic: string, conversation: string): boolean =>
 const sameTarget = (a: Target, b: Target): boolean =>
   a.media.id === b.media.id && a.startMs === b.startMs;
 
+/**
+ * Pressed this close to the passage's end (stopped there, KBC-160), "Ouvir o trecho" starts it
+ * again (BR-3). The engine pauses up to 30 ms short of the end (`STOP_EARLY_MS`); this margin
+ * is wider, a `timeupdate` tick (~250 ms), and stays within BR-1's 250 ms tolerance.
+ */
+const AT_END_MS = 250;
+
+const PASSAGE_END = (): string =>
+  $localize`:@@trackPassage.passageEnd:Fim do trecho`;
+
 const LINK_NOT_COPIED = (): string =>
   $localize`:@@trackPassage.linkFailed:Não foi possível copiar o link.`;
 
@@ -134,6 +145,7 @@ export class TrackPassagePanel {
   private readonly saver = inject(ProgressSaver);
   private readonly bookmarks = inject(BookmarksStore);
   private readonly announcer = inject(PlayerAnnouncer);
+  private readonly listening = inject(ListeningPreferences);
   private readonly document = inject(DOCUMENT);
   private readonly injector = inject(Injector);
   private readonly host =
@@ -354,6 +366,15 @@ export class TrackPassagePanel {
   protected readonly offersListen = computed(
     () => !this.playing() || !this.inPassage(),
   );
+  /** "Parar no fim do trecho" (KBC-160 FR-4): the account's choice, on by default. */
+  protected readonly stopAtEnd = computed(
+    () => this.listening.value().stopAtPassageEnd,
+  );
+  /** "Para às 1:10": while the stop "Ouvir o trecho" armed on this track waits (FR-5). */
+  protected readonly stopsAt = computed(() => {
+    const at = this.engine.stopAtMs();
+    return this.ours() && at !== null ? formatClock(at) : '';
+  });
   /** The sheet's player: "Tocar" or "Pausar", as the bar's own button says. */
   protected readonly toggleLabel = computed(() =>
     this.playing()
@@ -516,6 +537,7 @@ export class TrackPassagePanel {
   protected readonly playable = computed(() => this.target() !== null);
 
   constructor() {
+    this.listening.load();
     toObservable(this.target)
       .pipe(
         filter((one): one is Target => one !== null),
@@ -578,16 +600,29 @@ export class TrackPassagePanel {
 
   /**
    * "Ouvir o trecho": from 2 s before it, on the app's player; it only starts or leads back to
-   * the passage, never pauses (the bar does, KBC-155).
+   * the passage, never pauses (the bar does, KBC-155). With "Parar no fim do trecho" on, the
+   * player pauses at its end (KBC-160 BR-1); stopped there, it starts it again (BR-3).
    */
   protected listen(): void {
     this.focusOnPlayer = true;
     const passage = this.passage();
     const from = passage ? playbackStartOf(passage) : 0;
     const now = this.nowMs();
-    if (!this.recue(from) && passage && !(now >= from && now < passage.endMs))
-      this.engine.seek(from);
+    const within =
+      passage !== null && now >= from && now < passage.endMs - AT_END_MS;
+    if (!this.recue(from) && passage && !within) this.engine.seek(from);
     this.play();
+    this.armStop(passage);
+  }
+
+  /** The card's switch: kept on the account; it arms or drops the stop of what plays now. */
+  protected setStopAtEnd(on: boolean): void {
+    this.listening.setStopAtPassageEnd(on);
+    if (!on) {
+      if (this.ours()) this.engine.stopAt(null);
+      return;
+    }
+    if (this.playing() && this.inPassage()) this.armStop(this.passage());
   }
 
   /** The sheet's player (a phone): plays on from where it is, or pauses. */
@@ -620,6 +655,8 @@ export class TrackPassagePanel {
     this.chosen.set(index);
     const at = playbackStartOf(passage);
     if (!this.recue(at)) this.engine.seek(at);
+    // Playing on into that passage, it stops at its end as "Ouvir o trecho" would (BR-1).
+    if (this.playing()) this.armStop(this.passage());
   }
 
   /** A bookmark at the passage's start (KBC-042, item 3), on this track. */
@@ -701,6 +738,16 @@ export class TrackPassagePanel {
     if (this.ours() || !target) return false;
     this.load(target.media, atMs);
     return true;
+  }
+
+  /** The player pauses at the passage's end, saying "Fim do trecho" (BR-1, BR-6). */
+  private armStop(passage: TrackPassage | null): void {
+    if (!passage || !this.stopAtEnd() || !this.ours()) return;
+    this.engine.stopAt({
+      fromMs: playbackStartOf(passage),
+      toMs: passage.endMs,
+      onStop: () => this.announcer.sayOnNextPause(PASSAGE_END()),
+    });
   }
 
   /** Plays only this track: nothing when it could not be put back on the player. */

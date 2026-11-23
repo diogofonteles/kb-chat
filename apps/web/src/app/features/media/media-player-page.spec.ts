@@ -252,6 +252,7 @@ describe('MediaPlayerPage (T15)', () => {
           skipForwardSec: 30,
           skipSilences: false,
           wordHighlight: true,
+          stopAtPassageEnd: true,
         });
       TestBed.tick();
       expect(

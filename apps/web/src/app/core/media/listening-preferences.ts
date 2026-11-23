@@ -21,6 +21,7 @@ const DEFAULTS: MediaPreferences = {
   skipForwardSec: 30,
   skipSilences: false,
   wordHighlight: true,
+  stopAtPassageEnd: true,
 };
 
 export type SkipBackSeconds = (typeof MEDIA_SKIP_BACK_SECONDS)[number];
@@ -99,6 +100,11 @@ export class ListeningPreferences {
   /** "Destacar palavra a palavra" (KBC-045), for every media and device: starts on. */
   setWordHighlight(wordHighlight: boolean): void {
     this.save({ wordHighlight });
+  }
+
+  /** "Parar no fim do trecho" (KBC-160), for every media and device: starts on (BR-4). */
+  setStopAtPassageEnd(stopAtPassageEnd: boolean): void {
+    this.save({ stopAtPassageEnd });
   }
 
   toggleShowRemaining(): void {

@@ -23,6 +23,7 @@ const PREFS = {
   skipForwardSec: 30,
   skipSilences: false,
   wordHighlight: true,
+  stopAtPassageEnd: true,
 };
 
 const aRequest = {

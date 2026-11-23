@@ -50,6 +50,7 @@ import {
 import { AiStatusCard } from './ai-status-card.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { PROVIDER_COPY, VIEW_COPY } from './provider-copy.js';
+import { ListeningSettings } from './listening-settings.js';
 import { PreferencesForm } from './preferences-form.js';
 import {
   GROUP_LABELS,
@@ -126,6 +127,7 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
     NgTemplateOutlet,
     RouterLink,
     AiProviderForm,
+    ListeningSettings,
     PreferencesForm,
     AiStatusCard,
     PeoplePanel,
