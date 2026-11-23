@@ -212,64 +212,6 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
     expect(lines()).toEqual(after(1));
   });
 
-  it('keeps right only the lines near the view and those around the one heard, others as they come near (KBC-163)', async () => {
-    let seen: IntersectionObserverCallback = () => undefined;
-    const watched: Element[] = [];
-    class FakeObserver {
-      constructor(callback: IntersectionObserverCallback) {
-        seen = callback;
-      }
-      observe(target: Element) {
-        watched.push(target);
-      }
-      disconnect() {
-        watched.length = 0;
-      }
-    }
-    vi.stubGlobal('IntersectionObserver', FakeObserver);
-    try {
-      const { media, view } = await renderPanel(
-        transcriptOf({
-          segments: Array.from({ length: 120 }, (_, i) => ({
-            startMs: i * 1_000,
-            endMs: i * 1_000 + 900,
-            text: `Linha ${i}.`,
-          })),
-        }),
-      );
-      const items = [
-        ...screen
-          .getByRole('list', { name: 'Trechos da transcrição' })
-          .querySelectorAll('li'),
-      ];
-      expect(watched).toHaveLength(120);
-      const faint = (line: number) =>
-        items[line]?.classList.contains('upcoming');
-      const comeNear = (line: number, isIntersecting = true) => {
-        const entry: Partial<IntersectionObserverEntry> = {
-          target: items[line],
-          isIntersecting,
-        };
-        seen([entry as IntersectionObserverEntry], {} as IntersectionObserver);
-      };
-      await at(media, 2.5, view);
-      expect([faint(2), faint(3), faint(18)]).toEqual([false, true, true]);
-      // Far from the view: left alone until it comes near.
-      expect(faint(100)).toBe(false);
-      comeNear(100);
-      expect(faint(100)).toBe(true);
-      // Near the view, it follows the line heard; once gone, it no longer does.
-      comeNear(60);
-      await at(media, 70.5, view);
-      expect([faint(60), faint(100)]).toEqual([false, true]);
-      comeNear(60, false);
-      await at(media, 5.5, view);
-      expect([faint(60), faint(100)]).toEqual([false, true]);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
   it('plays from a phrase of minute 20 when it is clicked, and marks it (AC-2)', async () => {
     const { media, view } = await renderPanel();
     fireEvent.click(screen.getByText('No minuto vinte, o vegetal.'));
@@ -1217,5 +1159,238 @@ describe('TranscriptPanel: word by word (KBC-045)', () => {
     http().expectNone((request) => request.url.endsWith('/transcript/words'));
     await at(media, 95.5, view);
     await answerWords(view, 100, []);
+  });
+});
+
+describe('TranscriptPanel: the lines after the one heard, with an observer (KBC-163)', () => {
+  /** An IntersectionObserver the test drives: what it watches, and its reports. */
+  class FakeObserver {
+    static made: FakeObserver[] = [];
+    readonly watched: Element[] = [];
+    disconnected = false;
+    constructor(
+      readonly report: IntersectionObserverCallback,
+      readonly options: IntersectionObserverInit = {},
+    ) {
+      FakeObserver.made.push(this);
+    }
+    observe(target: Element) {
+      this.watched.push(target);
+    }
+    disconnect() {
+      this.disconnected = true;
+    }
+    /** Lines coming into (or leaving) the list's view and its margin. */
+    near(lines: readonly Element[], isIntersecting = true) {
+      this.report(
+        lines.map(
+          (target) => ({ target, isIntersecting }) as IntersectionObserverEntry,
+        ),
+        this as unknown as IntersectionObserver,
+      );
+    }
+  }
+  /** The background pass, held until the test lets it run. */
+  let idle: (() => void)[] = [];
+  const runIdle = () => {
+    while (idle.length > 0) idle.shift()?.();
+  };
+
+  const lineSegments = (count: number, rare: number | null = null) =>
+    Array.from({ length: count }, (_, i) => ({
+      startMs: i * 1_000,
+      endMs: i * 1_000 + 900,
+      text: i === rare ? 'Palavra rara.' : `Linha ${i}.`,
+    }));
+  const items = () => [
+    ...screen
+      .getByRole('list', { name: 'Trechos da transcrição' })
+      .querySelectorAll('li'),
+  ];
+  const faint = (line: number) =>
+    items()[line]?.classList.contains('upcoming') ?? false;
+  const faintIn = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, i) => faint(from + i));
+  /** Every line right for `heard`: those after it fainter, the others not. */
+  const allRight = (heard: number) =>
+    items().every(
+      (line, at) => line.classList.contains('upcoming') === at > heard,
+    );
+  const latest = () => FakeObserver.made.at(-1) as FakeObserver;
+
+  /** A list 200 px tall of lines 40 px tall, one under the other. */
+  function layOut(): () => void {
+    const restore = [
+      vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(4_800),
+      vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(200),
+      vi
+        .spyOn(HTMLElement.prototype, 'offsetTop', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return Number(this.dataset['index'] ?? 0) * 40;
+        }),
+      vi
+        .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+        .mockReturnValue(40),
+    ];
+    return () => restore.forEach((one) => one.mockRestore());
+  }
+
+  let scrolls: ScrollToOptions[] = [];
+  const original = Element.prototype.scrollTo;
+
+  beforeEach(() => {
+    FakeObserver.made = [];
+    idle = [];
+    scrolls = [];
+    vi.stubGlobal('IntersectionObserver', FakeObserver);
+    vi.stubGlobal('requestIdleCallback', (task: () => void) => idle.push(task));
+    vi.stubGlobal('cancelIdleCallback', () => undefined);
+    Element.prototype.scrollTo = function (
+      this: Element,
+      options?: ScrollToOptions | number,
+    ) {
+      if (typeof options === 'object') scrolls.push(options);
+    } as typeof Element.prototype.scrollTo;
+  });
+  afterEach(() => {
+    Element.prototype.scrollTo = original;
+    vi.unstubAllGlobals();
+  });
+
+  it('watches every line, sets at once those near the view, and the others before they can show', async () => {
+    const { media, view } = await renderPanel(
+      transcriptOf({ segments: lineSegments(120) }),
+    );
+    const observer = latest();
+    expect(observer.watched).toEqual(items());
+    expect(observer.options).toMatchObject({
+      root: screen.getByRole('list', { name: 'Trechos da transcrição' }),
+      rootMargin: '50% 0px',
+    });
+    observer.near(items().slice(0, 10));
+    await at(media, 2.5, view);
+    // In the same frame: the lines near the view.
+    expect(faintIn(0, 9)).toEqual(faintIn(0, 9).map((_, at) => at > 2));
+    // Line 100 comes after the one heard: fainter by the time it can show.
+    runIdle();
+    expect(faint(100)).toBe(true);
+    expect(allRight(2)).toBe(true);
+    // A line reported near follows the line heard at once; one that left waits for the pass.
+    observer.near([items()[60] as Element]);
+    observer.near([items()[61] as Element]);
+    observer.near([items()[61] as Element], false);
+    await at(media, 70.5, view);
+    expect([faint(60), faint(61)]).toEqual([false, true]);
+    runIdle();
+    expect(allRight(70)).toBe(true);
+  });
+
+  it('sets the lines where a search sends the list in the frame that scrolls it, a view short of a long glide', async () => {
+    const restore = layOut();
+    try {
+      const { media, view } = await renderPanel(
+        transcriptOf({ segments: lineSegments(120, 100) }),
+      );
+      await at(media, 2.5, view);
+      // The pass is held: only what can show is set.
+      const field = screen.getByLabelText('Buscar na transcrição');
+      await typeQuery(field, 'palavra rara', view);
+      expect(document.querySelector('li.current-hit')?.textContent).toContain(
+        'Palavra rara.',
+      );
+      // 100 × 40 − 200 / 3: a jump to a view short of it, then the glide.
+      expect(scrolls.slice(-2)).toEqual([
+        { top: expect.closeTo(3_733.33, 1), behavior: 'instant' },
+        { top: expect.closeTo(3_933.33, 1), behavior: 'smooth' },
+      ]);
+      // The way and the landing, half a view either side, before any report.
+      expect(faintIn(90, 105).every(Boolean)).toBe(true);
+      expect(faint(60)).toBe(false);
+      runIdle();
+      expect(allRight(2)).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('sets the lines around a cited passage in the frame that brings it into view', async () => {
+    const restore = layOut();
+    try {
+      const segments = lineSegments(120);
+      const { media, view } = await renderPanel(transcriptOf({ segments }));
+      await at(media, 2.5, view);
+      fireEvent.click(timeButtons()[2] as HTMLElement);
+      await at(media, 2.5, view);
+      // Line 110 has not been set yet: only the pass would.
+      expect(faint(110)).toBe(false);
+      await view.rerender({
+        inputs: {
+          revealPassage: true,
+          passage: { mediaId: MEDIA, startMs: 110_000, endMs: 110_900 },
+        },
+        partialUpdate: true,
+      });
+      await view.fixture.whenStable();
+      expect(scrolls.at(-1)?.top).toBeCloseTo(4_333.33, 1);
+      expect(faintIn(100, 115).every(Boolean)).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('sets the lines at once with reduced motion, and on "Voltar ao trecho atual"', async () => {
+    const restore = layOut();
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string) =>
+        ({ matches: query.includes('reduce') }) as MediaQueryList,
+    );
+    try {
+      const { media, view } = await renderPanel(
+        transcriptOf({ segments: lineSegments(120, 100) }),
+      );
+      await at(media, 2.5, view);
+      const field = screen.getByLabelText('Buscar na transcrição');
+      await typeQuery(field, 'palavra rara', view);
+      expect(scrolls.at(-1)).toEqual({
+        top: expect.closeTo(3_933.33, 1),
+        behavior: 'instant',
+      });
+      expect(faintIn(96, 105).every(Boolean)).toBe(true);
+      // Heard further down, the list held by the search: where it went stays right.
+      await at(media, 110.5, view);
+      expect(faintIn(96, 105).some(Boolean)).toBe(false);
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Voltar ao trecho atual' }),
+      );
+      await view.fixture.whenStable();
+      expect(scrolls.at(-1)).toEqual({
+        top: expect.closeTo(4_333.33, 1),
+        behavior: 'instant',
+      });
+      expect(faintIn(105, 110).some(Boolean)).toBe(false);
+      expect(faintIn(111, 115).every(Boolean)).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('watches the new lines of a new transcript, and stops watching when it goes', async () => {
+    const { view } = await renderPanel(
+      transcriptOf({ segments: lineSegments(30) }),
+    );
+    const first = latest();
+    await view.rerender({
+      inputs: { transcript: transcriptOf({ segments: lineSegments(40) }) },
+      partialUpdate: true,
+    });
+    await view.fixture.whenStable();
+    const second = latest();
+    expect(second).not.toBe(first);
+    expect(first.disconnected).toBe(true);
+    expect(second.watched).toEqual(items());
+    expect(second.watched).toHaveLength(40);
+    view.fixture.destroy();
+    expect(second.disconnected).toBe(true);
   });
 });

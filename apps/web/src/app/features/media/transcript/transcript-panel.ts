@@ -60,7 +60,7 @@ import { UiBanner, UiIcon, UiIconButton } from '@ui/index.js';
 import { SEARCH_HIGHLIGHTS } from './search-highlights.js';
 import { CARET_AT_POINT } from './text-caret.js';
 import { TranscriptWords, wordsPageOf } from './transcript-words.js';
-import { UpcomingLines } from './upcoming-lines.js';
+import { type Later, linesWithin, UpcomingLines } from './upcoming-lines.js';
 
 /** One segment as the list shows it. */
 interface SegmentView {
@@ -181,6 +181,10 @@ export class TranscriptPanel {
   private readonly caretAt = inject(CARET_AT_POINT);
   private readonly mediaApi = inject(MediaApi);
   private readonly list = viewChild<ElementRef<HTMLOListElement>>('list');
+  private readonly upcoming = new UpcomingLines(
+    this.document.defaultView?.IntersectionObserver,
+    laterOn(this.document.defaultView),
+  );
   private readonly items = viewChildren<ElementRef<HTMLLIElement>>('item');
   private readonly times = viewChildren<ElementRef<HTMLButtonElement>>('time');
 
@@ -413,6 +417,8 @@ export class TranscriptPanel {
     this.clock.follow(() => true, destroyRef);
     this.listenPassively(destroyRef);
     this.followAgain();
+    // First: its write sets the lines on screen before any scroll of this frame settles more.
+    this.fadeUpcoming(destroyRef);
     // Measure, then scroll: one layout per change, never a read after a write.
     afterRenderEffect({
       earlyRead: () => {
@@ -434,7 +440,6 @@ export class TranscriptPanel {
     this.paintSearch(destroyRef);
     this.paintPassage(destroyRef);
     this.paintWord(destroyRef);
-    this.fadeUpcoming(destroyRef);
     this.loadNeededWords(destroyRef);
     this.landOnPendingWord();
   }
@@ -544,25 +549,44 @@ export class TranscriptPanel {
 
   /** The lines after the one heard, fainter (v2 tLine), kept right near the view (KBC-163). */
   private fadeUpcoming(destroyRef: DestroyRef): void {
-    const upcoming = new UpcomingLines(
-      this.document.defaultView?.IntersectionObserver,
-    );
     let items: readonly ElementRef<HTMLLIElement>[] = [];
+    let list: HTMLOListElement | undefined;
     afterRenderEffect({
       write: () => {
         const heard = this.shownActive();
         const now = this.items();
-        if (now !== items) {
+        // The list itself is compared too: a new <ol> is another root for the observer.
+        const root = this.list()?.nativeElement;
+        if (now !== items || root !== list) {
           items = now;
-          upcoming.watch(
+          list = root;
+          this.upcoming.watch(
             items.map((item) => item.nativeElement),
-            untracked(this.list)?.nativeElement,
+            list,
           );
+          // The observer reports the lines on screen only after the frame that shows them.
+          if (list) this.settleUpcoming(list, list.scrollTop, list.scrollTop);
         }
-        upcoming.show(heard);
+        this.upcoming.show(heard);
       },
     });
-    destroyRef.onDestroy(() => upcoming.stop());
+    destroyRef.onDestroy(() => this.upcoming.stop());
+  }
+
+  /**
+   * Before the list scrolls from `from` to `to`: the lines on its way and where it lands,
+   * with half a view either side (the observer's margin), set in this frame (KBC-163).
+   */
+  private settleUpcoming(list: HTMLElement, from: number, to: number): void {
+    untracked(() => {
+      const view = list.clientHeight;
+      const lines = linesWithin(
+        this.items().map((item) => item.nativeElement),
+        Math.min(from, to) - view / 2,
+        Math.max(from, to) + view * 1.5,
+      );
+      if (lines) this.upcoming.settle(this.shownActive(), lines.from, lines.to);
+    });
   }
 
   /**
@@ -1015,10 +1039,45 @@ export class TranscriptPanel {
       this.document.defaultView?.matchMedia?.(
         '(prefers-reduced-motion: reduce)',
       ).matches ?? false;
-    if (typeof list.scrollTo === 'function')
-      list.scrollTo({ top: target, behavior: reduced ? 'instant' : behavior });
-    else list.scrollTop = target;
+    const smooth = behavior === 'smooth' && !reduced;
+    const start = smooth ? glideStart(list, to) : to;
+    this.settleUpcoming(list, start, to);
+    if (typeof list.scrollTo !== 'function') {
+      list.scrollTop = target;
+      return;
+    }
+    if (smooth && start !== list.scrollTop)
+      list.scrollTo({ top: start, behavior: 'instant' });
+    list.scrollTo({ top: target, behavior: smooth ? 'smooth' : 'instant' });
   }
+}
+
+/**
+ * Runs a task off the frame that asked: when the browser is idle (at most 100 ms later),
+ * or on the next task where there is no idle callback (Safari).
+ */
+function laterOn(view: (Window & typeof globalThis) | null): Later {
+  return (task) => {
+    const idle = view?.requestIdleCallback?.bind(view);
+    const cancel = view?.cancelIdleCallback?.bind(view);
+    if (idle && cancel) {
+      const id = idle(task, { timeout: 100 });
+      return () => cancel(id);
+    }
+    const id = setTimeout(task);
+    return () => clearTimeout(id);
+  };
+}
+
+/**
+ * Where a smooth scroll of the list to `to` starts: where the list is, or, when that is
+ * more than a view away, a view short of `to` (it jumps there and glides the rest). One
+ * that crossed the list would show, a frame each, lines nobody set yet (KBC-163).
+ */
+function glideStart(list: HTMLElement, to: number): number {
+  const from = list.scrollTop;
+  const glide = list.clientHeight;
+  return Math.abs(to - from) > glide ? to - Math.sign(to - from) * glide : from;
 }
 
 /** The keys that scroll the list when it has the focus itself. */
