@@ -359,6 +359,28 @@ h2:focus-visible {
   color: var(--color-text);
 }
 
+/* "Parar no fim do trecho" (KBC-160 FR-4): the label is the switch's target, 44 px tall. */
+.stop-at-end {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  min-height: var(--target);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* "Para às 1:10" by the passage's time, while the stop is armed (FR-5). */
+.stops-at {
+  flex: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Other passages of the track (KBC-155, the timeline's marks before) ---------- */
 
 .others {

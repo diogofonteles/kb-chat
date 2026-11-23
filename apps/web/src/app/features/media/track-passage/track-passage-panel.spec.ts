@@ -11,6 +11,7 @@ import {
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
 } from '@core/media/media-engine.js';
+import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
 import type { AnswerSource, Topic } from '@kb-chat/contracts';
 import {
@@ -329,6 +330,10 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
       screen.queryByRole('button', { name: /^Trecho citado aos/ }),
     ).toBeNull();
     expect(screen.getByRole('button', { name: 'Faixa toda' })).toBeTruthy();
+    // Heard on past the passage below: "Parar no fim do trecho" off (KBC-160 BR-5).
+    fireEvent.click(
+      screen.getByRole('switch', { name: 'Parar no fim do trecho' }),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Ouvir o trecho' }));
     media.setCurrentTime(43.5);
     media.emit('playing');
@@ -565,6 +570,10 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
       const opened = await openReady(
         { source: OPENING, at: '0:00' },
         EVERY_FIVE,
+      );
+      // The track heard on past the passage: "Parar no fim do trecho" off (KBC-160 BR-5).
+      fireEvent.click(
+        screen.getByRole('switch', { name: 'Parar no fim do trecho' }),
       );
       fireEvent.click(screen.getByRole('button', { name: 'Ouvir o trecho' }));
       opened.media.setCurrentTime(seconds);
@@ -900,6 +909,149 @@ describe('TrackPassagePanel (KBC-150, v2 audio source; KBC-099 T22)', () => {
         'Transcrição automática de baixa confiança: pode haver trechos errados.',
       ),
     ).toBeTruthy();
+  });
+});
+
+describe('TrackPassagePanel: "Ouvir o trecho" stops at the passage end (KBC-160)', () => {
+  afterEach(() => TestBed.inject(MediaEngine).unload());
+
+  const PREFERENCES_URL = '/api/v1/media/preferences';
+  const stopSwitch = () =>
+    screen.getByRole('switch', {
+      name: 'Parar no fim do trecho',
+    }) as HTMLInputElement;
+  const listen = () =>
+    fireEvent.click(screen.getByRole('button', { name: 'Ouvir o trecho' }));
+
+  /** "Ouvir o trecho" pressed and the element playing at `seconds`. */
+  async function listening(seconds = 39.3) {
+    const opened = await openReady();
+    listen();
+    opened.media.setCurrentTime(seconds);
+    opened.media.emit('playing');
+    opened.media.emit('timeupdate');
+    return opened;
+  }
+
+  it('AC-5, AC-9: the switch is on by default, with its name, on the card', async () => {
+    await openReady();
+    const card = screen.getByRole('region', { name: 'Trecho · 0:41–1:10' });
+    expect(
+      within(card).getByRole('switch', { name: 'Parar no fim do trecho' }),
+    ).toBe(stopSwitch());
+    expect(stopSwitch().checked).toBe(true);
+  });
+
+  it('AC-1, AC-9: plays from 2 s before and pauses at the end, saying "Fim do trecho"', async () => {
+    const { media } = await listening();
+    const engine = TestBed.inject(MediaEngine);
+    expect(engine.stopAtMs()).toBe(70_000);
+    expect(await screen.findByText('Para às 1:10')).toBeTruthy();
+    expect(engine.playback().currentMs).toBe(39_300);
+    media.setCurrentTime(70);
+    media.emit('timeupdate');
+    expect(media.calls.at(-1)).toBe('pause');
+    media.emit('pause');
+    await vi.waitFor(() =>
+      expect(TestBed.inject(PlayerAnnouncer).message()).toBe('Fim do trecho'),
+    );
+    await vi.waitFor(() =>
+      expect(screen.queryByText('Para às 1:10')).toBeNull(),
+    );
+  });
+
+  it('AC-6: stopped at the end, "Ouvir o trecho" goes back to 2 s before and stops again', async () => {
+    const { media } = await listening();
+    media.setCurrentTime(69.98);
+    media.emit('timeupdate');
+    media.emit('pause');
+    const engine = TestBed.inject(MediaEngine);
+    expect(engine.stopAtMs()).toBeNull();
+    listen();
+    expect(media.calls.at(-1)).toBe('play');
+    expect(media.calls).toContain('seek:39.3');
+    expect(engine.stopAtMs()).toBe(70_000);
+  });
+
+  it('AC-4, BR-5: off, "Ouvir o trecho" plays on past the end, and the choice goes to the account', async () => {
+    const { media, http } = await openReady();
+    fireEvent.click(stopSwitch());
+    expect(stopSwitch().checked).toBe(false);
+    expect(
+      http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
+    ).toEqual({ stopAtPassageEnd: false });
+    listen();
+    media.emit('playing');
+    expect(TestBed.inject(MediaEngine).stopAtMs()).toBeNull();
+    media.setCurrentTime(80);
+    media.emit('timeupdate');
+    expect(media.calls).not.toContain('pause');
+    expect(screen.queryByText(/^Para às/)).toBeNull();
+  });
+
+  it('reads the choice from the account', async () => {
+    const { http } = await openReady();
+    http.expectOne({ method: 'GET', url: PREFERENCES_URL }).flush({
+      speed: 1,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+      skipSilences: false,
+      wordHighlight: true,
+      stopAtPassageEnd: false,
+    });
+    await vi.waitFor(() => expect(stopSwitch().checked).toBe(false));
+  });
+
+  it('turned off while the passage plays, the stop goes; on again, it comes back', async () => {
+    await listening(50);
+    const engine = TestBed.inject(MediaEngine);
+    fireEvent.click(stopSwitch());
+    expect(engine.stopAtMs()).toBeNull();
+    fireEvent.click(stopSwitch());
+    expect(engine.stopAtMs()).toBe(70_000);
+  });
+
+  it('AC-2, AC-3: a seek inside the passage keeps the stop; one out of it lets the track play on', async () => {
+    const { media } = await listening(50);
+    const engine = TestBed.inject(MediaEngine);
+    engine.seek(60_000);
+    expect(engine.stopAtMs()).toBe(70_000);
+    engine.seek(120_000);
+    media.emit('seeked');
+    expect(engine.stopAtMs()).toBeNull();
+    media.setCurrentTime(121);
+    media.emit('timeupdate');
+    expect(media.calls).not.toContain('pause');
+  });
+
+  it('AC-7: "Faixa toda" plays the track with no stop at the passage', async () => {
+    const { media } = await listening(50);
+    media.emit('pause');
+    fireEvent.click(screen.getByRole('button', { name: 'Faixa toda' }));
+    expect(TestBed.inject(MediaEngine).stopAtMs()).toBeNull();
+    expect(media.calls).toContain('seek:0');
+  });
+
+  it('BR-1: "Outro trecho citado" while playing stops at the end of that passage', async () => {
+    const twice: AnswerSource = {
+      ...SOURCE,
+      passages: [
+        { at: '0:41', startMs: 41_300, endMs: 70_000 },
+        { at: '1:10', startMs: 70_000, endMs: 95_000 },
+      ],
+    };
+    const { media } = await openReady({
+      source: twice,
+      at: '0:41',
+      sources: [twice],
+    });
+    listen();
+    media.emit('playing');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Outro trecho citado, em 1:10' }),
+    );
+    expect(TestBed.inject(MediaEngine).stopAtMs()).toBe(95_000);
   });
 });
 

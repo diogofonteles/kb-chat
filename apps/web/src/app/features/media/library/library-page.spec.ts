@@ -116,6 +116,7 @@ const PREFERENCES: ListeningPreferences = {
   skipForwardSec: 30,
   skipSilences: false,
   wordHighlight: true,
+  stopAtPassageEnd: true,
   ...DEFAULT_LIBRARY_PREFERENCES,
   // Most of this file is about the list itself: every collection, by the address's choice
   // ("Todas as mídias", `all` below); the account's `allTopics` no longer opens it so.

@@ -208,6 +208,142 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(engine.playback().bufferingVisible).toBe(false);
   });
 
+  describe('stop at a time (KBC-160 FR-1)', () => {
+    /** Ready, playing from 68 s, with a stop armed at 95 s (the passage 1:10–1:35). */
+    function playingToStop(onStop = vi.fn()) {
+      vi.useFakeTimers();
+      ready();
+      media.setDuration(180);
+      media.emit('durationchange');
+      engine.seek(68_000);
+      media.emit('seeked');
+      engine.play();
+      media.emit('playing');
+      engine.stopAt({ fromMs: 68_000, toMs: 95_000, onStop });
+      return onStop;
+    }
+
+    it('pauses by itself at the stop, between time updates, and says so first (AC-1, BR-6)', () => {
+      const onStop = playingToStop();
+      expect(engine.stopAtMs()).toBe(95_000);
+      media.setCurrentTime(94.99);
+      vi.advanceTimersByTime(26_985);
+      expect(media.calls.at(-1)).toBe('pause');
+      expect(onStop).toHaveBeenCalledTimes(1);
+      expect(engine.stopAtMs()).toBeNull();
+      media.emit('pause');
+      expect(engine.playback().phase).toBe('paused');
+    });
+
+    it('waits on the clock that is: a timer early only checks again', () => {
+      const onStop = playingToStop();
+      vi.advanceTimersByTime(26_985);
+      expect(onStop).not.toHaveBeenCalled();
+      expect(media.calls).not.toContain('pause');
+      media.setCurrentTime(95);
+      media.emit('timeupdate');
+      expect(onStop).toHaveBeenCalledTimes(1);
+      expect(media.calls.at(-1)).toBe('pause');
+    });
+
+    it('goes back to the stop when it is found past it (a timer held back)', () => {
+      playingToStop();
+      media.setCurrentTime(96);
+      media.emit('timeupdate');
+      expect(media.calls.slice(-2)).toEqual(['pause', 'seek:95']);
+    });
+
+    it('waits half as long at twice the speed', () => {
+      const onStop = playingToStop();
+      engine.setSpeed(2);
+      media.setCurrentTime(94.99);
+      vi.advanceTimersByTime(13_485);
+      expect(onStop).toHaveBeenCalledTimes(1);
+    });
+
+    it('is disarmed by a seek outside its span, and the track plays on (AC-2)', () => {
+      const onStop = playingToStop();
+      engine.seek(120_000);
+      media.emit('seeked');
+      expect(engine.stopAtMs()).toBeNull();
+      media.setCurrentTime(121);
+      media.emit('timeupdate');
+      vi.advanceTimersByTime(60_000);
+      expect(onStop).not.toHaveBeenCalled();
+      expect(media.calls.at(-1)).not.toBe('pause');
+    });
+
+    it('is disarmed by a seek the element made by itself out of its span', () => {
+      const onStop = playingToStop();
+      media.setCurrentTime(5.2);
+      media.emit('seeked');
+      expect(engine.stopAtMs()).toBeNull();
+      media.setCurrentTime(95);
+      media.emit('timeupdate');
+      expect(onStop).not.toHaveBeenCalled();
+    });
+
+    it('is disarmed by a seek before its span', () => {
+      playingToStop();
+      engine.seek(10_000);
+      expect(engine.stopAtMs()).toBeNull();
+    });
+
+    it('stays armed through a seek inside its span (AC-3)', () => {
+      const onStop = playingToStop();
+      engine.seek(80_000);
+      media.setSeeking(true);
+      media.setCurrentTime(80);
+      media.emit('waiting');
+      media.setSeeking(false);
+      media.emit('seeked');
+      expect(engine.stopAtMs()).toBe(95_000);
+      media.setCurrentTime(95);
+      media.emit('timeupdate');
+      expect(onStop).toHaveBeenCalledTimes(1);
+      // A lone `waiting` after the seek is no stall (KBC-162): no network error.
+      vi.advanceTimersByTime(12_000);
+      expect(engine.playback().error).toBeNull();
+    });
+
+    it('is disarmed by a pause, another load and the end of the media', () => {
+      const onStop = playingToStop();
+      engine.pause();
+      media.emit('pause');
+      expect(engine.stopAtMs()).toBeNull();
+      engine.stopAt({ fromMs: 0, toMs: 95_000 });
+      engine.load(OTHER);
+      expect(engine.stopAtMs()).toBeNull();
+      ready();
+      engine.play();
+      media.emit('playing');
+      engine.stopAt({ fromMs: 0, toMs: 95_000 });
+      media.emit('ended');
+      expect(engine.stopAtMs()).toBeNull();
+      media.setCurrentTime(95);
+      media.emit('timeupdate');
+      expect(onStop).not.toHaveBeenCalled();
+    });
+
+    it('is disarmed by null, and arms nothing with no media', () => {
+      playingToStop();
+      engine.stopAt(null);
+      expect(engine.stopAtMs()).toBeNull();
+      engine.unload();
+      engine.stopAt({ fromMs: 0, toMs: 1_000 });
+      expect(engine.stopAtMs()).toBeNull();
+    });
+
+    it('does not count its own way back to the stop as a seek of the person', () => {
+      playingToStop();
+      const asked = engine.seeksAsked();
+      media.setCurrentTime(97);
+      media.emit('timeupdate');
+      media.emit('seeked');
+      expect(engine.seeksAsked()).toBe(asked);
+    });
+  });
+
   it('stops and reports a network error when the wait never ends (AC-12)', () => {
     vi.useFakeTimers();
     ready();

@@ -22,6 +22,7 @@ const ACCOUNT = {
   skipForwardSec: 30,
   skipSilences: false,
   wordHighlight: true,
+  stopAtPassageEnd: true,
 };
 
 function setup() {
@@ -58,6 +59,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipForwardSec: 30,
       skipSilences: false,
       wordHighlight: true,
+      stopAtPassageEnd: true,
     });
     expect(preferences.value()).toEqual({
       speed: 1.25,
@@ -66,6 +68,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipForwardSec: 30,
       skipSilences: false,
       wordHighlight: true,
+      stopAtPassageEnd: true,
     });
     expect(engine.speed()).toBe(1.25);
   });
@@ -83,6 +86,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipForwardSec: 30,
       skipSilences: false,
       wordHighlight: true,
+      stopAtPassageEnd: true,
     });
   });
 
@@ -135,6 +139,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipForwardSec: 30,
       skipSilences: false,
       wordHighlight: true,
+      stopAtPassageEnd: true,
     });
     expect(preferences.value().speed).toBe(2);
     expect(engine.speed()).toBe(2);
@@ -153,6 +158,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipForwardSec: 30,
       skipSilences: false,
       wordHighlight: true,
+      stopAtPassageEnd: true,
     });
     const second = http.expectOne({ method: 'PUT', url: PREFERENCES_URL });
     expect(second.request.body).toEqual({ speed: 1.5 });
@@ -168,6 +174,29 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
     ).toEqual({ wordHighlight: false });
   });
 
+  it('saves "Parar no fim do trecho" to the account, on until turned off (KBC-160 AC-5)', () => {
+    const { preferences, http } = setup();
+    expect(preferences.value().stopAtPassageEnd).toBe(true);
+    preferences.setStopAtPassageEnd(false);
+    expect(preferences.value().stopAtPassageEnd).toBe(false);
+    expect(
+      http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
+    ).toEqual({ stopAtPassageEnd: false });
+  });
+
+  it('keeps "Parar no fim do trecho" for the session when the save fails, and sends it again with the next change (KBC-160 AC-8)', () => {
+    const { preferences, http } = setup();
+    preferences.setStopAtPassageEnd(false);
+    http
+      .expectOne({ method: 'PUT', url: PREFERENCES_URL })
+      .flush(null, { status: 500, statusText: 'x' });
+    expect(preferences.value().stopAtPassageEnd).toBe(false);
+    preferences.setSpeed(1.25);
+    expect(
+      http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
+    ).toEqual({ stopAtPassageEnd: false, speed: 1.25 });
+  });
+
   it('leaves a choice saved elsewhere alone when another one changes here (KBC-045 F-1)', () => {
     const { preferences, http } = setup();
     preferences.load();
@@ -178,6 +207,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipForwardSec: 30,
       skipSilences: true,
       wordHighlight: true,
+      stopAtPassageEnd: true,
     });
     // Another tab or device turned the highlight off after this one read the account.
     preferences.setSpeed(1.5);
@@ -212,6 +242,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipForwardSec: 30,
       skipSilences: true,
       wordHighlight: false,
+      stopAtPassageEnd: true,
     });
     expect(preferences.value()).toMatchObject({
       speed: 1.5,

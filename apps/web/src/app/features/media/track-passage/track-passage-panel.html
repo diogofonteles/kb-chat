@@ -146,6 +146,11 @@
               >
             }
           </h3>
+          @if (stopsAt(); as at) {
+            <span class="stops-at" i18n="@@trackPassage.stopsAt"
+              >Para às {{ at }}</span
+            >
+          }
         </div>
         @if (!inSheet() && speaker(); as who) {
           <p class="who">
@@ -221,6 +226,18 @@
             <ui-icon name="share" [size]="20" />
           </button>
         </div>
+        <!-- KBC-160: where the choice is made; the bar serves every media and knows no passage. -->
+        <label class="stop-at-end">
+          <input
+            #stopBox
+            type="checkbox"
+            role="switch"
+            class="ui-switch"
+            [checked]="stopAtEnd()"
+            (change)="setStopAtEnd(stopBox.checked)"
+          />
+          <span i18n="@@trackPassage.stopAtEnd">Parar no fim do trecho</span>
+        </label>
       </section>
     } @else {
       <div class="actions plain">
