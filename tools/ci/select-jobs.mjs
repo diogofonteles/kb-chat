@@ -12,12 +12,18 @@
 // asks for the full suite (`full`, with the reason) or names what the path touches. A path
 // no rule matches runs the full suite: the safe answer to "this script does not know it".
 //
+// The web app's media code (core/media, features/media and the two settings sections only
+// the media specs open) is read, not listed: the script walks up its imports to the media
+// pages they end in, and runs the media specs that open those pages (see MEDIA_PAGES and
+// mediaWalk; KBC-169). Anything it is not sure of runs every media spec.
+//
 //   node tools/ci/select-jobs.mjs --explain [--base main] <path>...   prints the choice for
 //   those paths in a pull request into develop (or into the base given)
 
 import { execFileSync } from 'node:child_process';
-import { appendFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { appendFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, normalize, relative } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /** Every E2E spec of a group. */
 const ALL = 'all';
@@ -31,6 +37,267 @@ const chromeE2e = (specs = ALL) => ({ chrome: specs });
 /** The media specs in Google Chrome and in WebKit: what the browser itself plays or draws. */
 const mediaE2e = (specs = ALL) => ({ chrome: specs, webkit: specs });
 const everyE2e = { app: ALL, chrome: ALL, webkit: ALL };
+
+/**
+ * The web app's media code, from its services (core/media) to its pages, and the two
+ * settings sections that only the media specs open. Its unit tests (`.spec.ts`) take the
+ * rule above it.
+ */
+/** An upload through the page's file field moves on to the preparation or the queue. */
+const UPLOAD = ['input[type="file"]', 'setInputFiles'];
+
+const MEDIA_CODE =
+  /^apps\/web\/src\/app\/(core\/media|features\/(media|transcribers|voice-profiles))\//;
+
+/**
+ * Where a walk up the imports may pass through: the media code, and the settings that host
+ * two of its panels. Any other importer (the shell, the sidebar, the chat page, the router)
+ * shows the file on every media page: the walk stops there and runs every media spec.
+ */
+const WALKABLE =
+  /^apps\/web\/src\/app\/(core\/media|features\/(media|transcribers|voice-profiles|settings))\//;
+
+/**
+ * The media pages, and what in a spec (or in a helper it calls) says it opens one: the
+ * page's URL, the names of the controls that lead to it, what sends a person there by
+ * itself (an upload through the file field opens the preparation or the queue), and always
+ * the page's own component selector, read from the page. `also`: the pages that move on to
+ * this one by themselves, whose specs it takes too. `ALL`: the player, which nearly every
+ * media spec opens, and the media list for who has no library: a change under them runs
+ * every media spec.
+ *
+ * What this cannot see is a spec that reaches a page by a control named only by data (a
+ * queue card names the media's title): such a spec is chosen by the page it starts from, as
+ * the leaf rules always did, and the push to develop runs every spec anyway.
+ */
+export const MEDIA_PAGES = {
+  'features/media/library/library-page.ts': {
+    markers: ['/biblioteca', "'/midia'", 'Biblioteca', 'Mídia'],
+  },
+  'features/media/queue/processing-queue-page.ts': {
+    markers: ['/fila', 'Fila', 'processamento', 'atenção', ...UPLOAD],
+  },
+  'features/media/preparation/preparation-page.ts': {
+    // "Preparar áudio" (the player's ⋯), "Preparação parada no passo 2 · Continuar"
+    markers: [
+      '/preparar',
+      'Preparar',
+      'reparação',
+      'Parada no passo',
+      ...UPLOAD,
+    ],
+    also: ['features/media/tracks/track-editor-page.ts'],
+  },
+  'features/media/tracks/track-editor-page.ts': {
+    // "Abrir a edição", "Ver edição", "Continuar validando", the queue's "Validar"
+    markers: ['/faixas', 'edição', 'validando', 'Validar'],
+    also: ['features/media/preparation/preparation-page.ts'],
+  },
+  'features/media/track-edit/track-bounds-page.ts': {
+    markers: ['/limites', 'Ajustar início e fim'],
+  },
+  'features/media/my-bookmarks-page.ts': {
+    markers: ['/midia/marcadores', 'marcadores'],
+  },
+  'features/settings/settings-page.ts': {
+    markers: [
+      '/configuracoes',
+      'Configurações',
+      'Pessoas e permissões',
+      'Conectar a minha IA',
+    ],
+  },
+  'features/media/media-player-page.ts': ALL,
+  'features/media/media-list-page.ts': ALL,
+  'features/media/library/media-redirect.ts': ALL,
+};
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const WEB_SRC = 'apps/web/src';
+const APP = `${WEB_SRC}/app/`;
+const ALIASES = { '@core/': 'core/', '@features/': 'features/', '@ui/': 'ui/' };
+const IMPORT = /(?:\bfrom|\bimport\(?)\s*['"]([^'"]+)['"]/g;
+const sourceOf = (path) => readFileSync(join(ROOT, path), 'utf8');
+
+/** A specifier of `from`, relative or aliased, as a path from the root; null for packages. */
+function resolved(from, specifier) {
+  const alias = Object.keys(ALIASES).find((key) => specifier.startsWith(key));
+  const target = alias
+    ? `${APP}${ALIASES[alias]}${specifier.slice(alias.length)}`
+    : specifier.startsWith('.')
+      ? normalize(join(dirname(from), specifier))
+      : null;
+  return target && `${target.replace(/\.js$/, '')}.ts`;
+}
+
+let importersCache;
+/** Who imports each file of the web app (its unit tests and test helpers left out). */
+function importers() {
+  if (importersCache) return importersCache;
+  importersCache = new Map();
+  const files = readdirSync(join(ROOT, WEB_SRC), { recursive: true })
+    .map((file) => `${WEB_SRC}/${file}`)
+    .filter(
+      (path) =>
+        path.endsWith('.ts') &&
+        !path.endsWith('.spec.ts') &&
+        !path.startsWith(`${APP}testing/`),
+    );
+  for (const file of files)
+    for (const [, specifier] of sourceOf(file).matchAll(IMPORT)) {
+      const target = resolved(file, specifier);
+      if (!target) continue;
+      if (!importersCache.has(target)) importersCache.set(target, new Set());
+      importersCache.get(target).add(file);
+    }
+  return importersCache;
+}
+
+const SPECS = 'e2e/specs';
+/** A top-level declaration of an E2E module, at the start of a line. */
+const DECLARATION =
+  /^(?:export\s+)?(?:async\s+)?(?:function\*?|const|let|class)\s+([A-Za-z_$][\w$]*)/gm;
+const mentions = (text, name) =>
+  new RegExp(`(?<![\\w$.])${name.replace(/\$/g, '\\$')}(?![\\w$])`).test(text);
+
+let modulesCache;
+/**
+ * The E2E specs and their local helpers, each cut into its top-level declarations, with the
+ * names it imports from other local modules (`local name → [module, exported name]`).
+ */
+function e2eModules() {
+  if (modulesCache) return modulesCache;
+  modulesCache = new Map();
+  for (const file of readdirSync(join(ROOT, SPECS)).filter((f) =>
+    f.endsWith('.ts'),
+  )) {
+    const path = `${SPECS}/${file}`;
+    const source = sourceOf(path);
+    const starts = [...source.matchAll(DECLARATION)];
+    const parts = starts.map((found, index) => ({
+      name: found[1],
+      text: source.slice(found.index, starts[index + 1]?.index),
+    }));
+    const imported = new Map();
+    for (const [, names, from] of source.matchAll(
+      /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+'(\.\/[^']+)'/g,
+    ))
+      for (const entry of names.split(',')) {
+        const [name, alias = name] = entry
+          .replace(/^\s*type\s+/, '')
+          .split(/\s+as\s+/)
+          .map((part) => part.trim());
+        if (name) imported.set(alias, [resolved(path, from), name]);
+      }
+    modulesCache.set(path, { source, parts, imported });
+  }
+  return modulesCache;
+}
+
+/**
+ * The media specs that open a page: the spec names its URL or component, or calls a helper
+ * whose declaration does (or calls one that does, through any number of helpers). A helper
+ * module only imported, its other functions unused, does not count.
+ */
+export function specsOpening(page, seen = new Set([page])) {
+  const entry = MEDIA_PAGES[page];
+  if (entry === ALL) return ALL;
+  const selector = /selector: '([^']+)'/.exec(sourceOf(`${APP}${page}`))?.[1];
+  const all = selector ? [...entry.markers, selector] : entry.markers;
+  const modules = e2eModules();
+  /** `module path → declared names that reach the page`, grown until it stops growing. */
+  const reaching = new Map(
+    [...modules.keys()].map((path) => [path, new Set()]),
+  );
+  const reaches = (path, text) => {
+    const { parts, imported } = modules.get(path);
+    return (
+      all.some((marker) => text.includes(marker)) ||
+      parts.some(
+        ({ name }) => reaching.get(path).has(name) && mentions(text, name),
+      ) ||
+      [...imported].some(
+        ([alias, [from, name]]) =>
+          reaching.get(from)?.has(name) && mentions(text, alias),
+      )
+    );
+  };
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [path, { parts }] of modules)
+      for (const { name, text } of parts)
+        if (!reaching.get(path).has(name) && reaches(path, text)) {
+          reaching.get(path).add(name);
+          grew = true;
+        }
+  }
+  const opening = new Set(
+    [...modules]
+      .map(([path, { source }]) => [
+        /^e2e\/specs\/(media-[a-z0-9-]+)\.spec\.ts$/.exec(path)?.[1],
+        reaches(path, source),
+      ])
+      .filter(([spec, opens]) => spec && opens)
+      .map(([spec]) => spec),
+  );
+  for (const from of entry.also ?? []) {
+    if (seen.has(from)) continue;
+    seen.add(from);
+    const theirs = specsOpening(from, seen);
+    if (theirs === ALL) return ALL;
+    for (const spec of theirs) opening.add(spec);
+  }
+  return [...opening].sort();
+}
+
+/**
+ * The media specs a change to `path` needs (`specs`), and why it is every one (`why`): walk
+ * up the web app's imports from it and take the specs of every media page reached. Fails
+ * safe, to every media spec (`ALL`), when the file is gone or is a template or style no
+ * component of the same name loads, when the walk meets an importer outside the media code
+ * (see WALKABLE) or a file nothing imports, and when a page reached has no spec that opens
+ * it.
+ */
+export function mediaWalk(path) {
+  const every = (why) => ({ specs: ALL, why });
+  let start = path;
+  if (/\.(html|css)$/.test(path)) {
+    start = path.replace(/\.(html|css)$/, '.ts');
+    const name = path.slice(path.lastIndexOf('/') + 1);
+    if (
+      !existsSync(join(ROOT, start)) ||
+      !sourceOf(start).includes(`./${name}`)
+    )
+      return every('no component of its name loads it');
+  }
+  if (!start.endsWith('.ts') || !existsSync(join(ROOT, start)))
+    return every('not in the tree');
+  const specs = new Set();
+  const seen = new Set([start]);
+  const queue = [start];
+  while (queue.length) {
+    const file = queue.shift();
+    const page = relative(APP, file);
+    if (page in MEDIA_PAGES) {
+      const opened = specsOpening(page);
+      if (opened === ALL) return every(`reaches ${page}`);
+      if (opened.length === 0) return every(`no spec opens ${page}`);
+      for (const spec of opened) specs.add(spec);
+      continue;
+    }
+    if (!WALKABLE.test(file)) return every(`imported by ${file}`);
+    const by = importers().get(file) ?? new Set();
+    if (by.size === 0) return every(`nothing imports ${file}`);
+    for (const importer of by)
+      if (!seen.has(importer)) {
+        seen.add(importer);
+        queue.push(importer);
+      }
+  }
+  return { specs: [...specs].sort() };
+}
+
+export const mediaSpecsOf = (path) => mediaWalk(path).specs;
 
 const webFeature = (feature, e2e) => ({
   match: new RegExp(`^apps/web/src/app/features/${feature}/`),
@@ -84,36 +351,19 @@ export const RULES = [
   // The player's engine, used only by the web app's media pages.
   { match: /^libs\/player-core\//, unit: ['libs', 'web'], ...mediaE2e() },
 
-  // Web: a leaf feature runs its specs. Anything else in the app can reach any page.
-  webFeature(
-    'media/library',
-    mediaE2e(['media-library', 'media-library-home']),
-  ),
-  webFeature('media/preparation', mediaE2e(['media-preparation'])),
-  webFeature('media/search-hit', mediaE2e(['media-search'])),
-  webFeature(
-    'media/tracks',
-    mediaE2e([
-      'media-track-items',
-      'media-track-subjects',
-      'media-tracks-editor',
-      'media-tracks-listen',
-      'media-tracks-proposals',
-      'media-tracks-recovery',
-    ]),
-  ),
-  webFeature(
-    'media/transcript',
-    mediaE2e(['media-terms', 'media-transcript', 'media-transcription']),
-  ),
-  webFeature(
-    'media/voices',
-    mediaE2e(['media-voice-names', 'media-voice-profiles', 'media-voices']),
-  ),
-  webFeature('voice-profiles', mediaE2e(['media-voice-profiles'])),
-  webFeature('transcribers', mediaE2e(['media-transcription'])),
-  webFeature('media', mediaE2e()),
-  { match: /^apps\/web\/src\/app\/core\/media\//, ...web, ...mediaE2e() },
+  // Web: the media code runs the media specs of the pages that import it (see mediaSpecsOf,
+  // KBC-169). A leaf feature runs its specs. Anything else in the app can reach any page.
+  {
+    match: MEDIA_CODE,
+    ...web,
+    selects: ({ input }) => {
+      const { specs, why } = mediaWalk(input);
+      return {
+        ...mediaE2e(specs),
+        note: why && `${input}: every media spec, ${why}`,
+      };
+    },
+  },
   webFeature('acting', appE2e(['act-as'])),
   webFeature('authorship', appE2e(['authors'])),
   webFeature('collections', appE2e(['collections'])),
@@ -266,10 +516,13 @@ export function selectJobs({ event, base, paths }) {
   for (const group of Object.keys(GROUPS))
     for (const rule of rules)
       if (rule[group]) e2e[group] = merged(e2e[group], rule[group]);
-  const waits = 'webkit' in e2e;
+  const notes = [
+    ...rules.flatMap((rule) => rule.note ?? []),
+    ...('webkit' in e2e ? [WEBKIT_WAITS] : []),
+  ];
   return selection({
     full: false,
-    reason: `${paths.length} changed path(s)${waits ? `; ${WEBKIT_WAITS}` : ''}`,
+    reason: [`${paths.length} changed path(s)`, ...notes].join('; '),
     unit: Object.keys(UNITS).filter((name) =>
       rules.some((rule) => rule.unit?.includes(name)),
     ),
