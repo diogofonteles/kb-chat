@@ -30,6 +30,7 @@ describe('ListeningApi (KBC-041)', () => {
       skipForwardSec: 30,
       skipSilences: false,
       wordHighlight: true,
+      stopAtPassageEnd: true,
     });
     await expect(read).resolves.toEqual({
       speed: 1.5,
@@ -38,6 +39,7 @@ describe('ListeningApi (KBC-041)', () => {
       skipForwardSec: 30,
       skipSilences: false,
       wordHighlight: true,
+      stopAtPassageEnd: true,
     });
     const saved = firstValueFrom(api.savePreferences({ speed: 2 }));
     const put = http.expectOne({ method: 'PUT', url: PREFERENCES_URL });
@@ -49,6 +51,7 @@ describe('ListeningApi (KBC-041)', () => {
       skipForwardSec: 30,
       skipSilences: false,
       wordHighlight: true,
+      stopAtPassageEnd: true,
     });
     await expect(saved).resolves.toEqual({
       speed: 2,
@@ -57,6 +60,7 @@ describe('ListeningApi (KBC-041)', () => {
       skipForwardSec: 30,
       skipSilences: false,
       wordHighlight: true,
+      stopAtPassageEnd: true,
     });
   });
 
@@ -70,6 +74,7 @@ describe('ListeningApi (KBC-041)', () => {
       skipForwardSec: 30,
       skipSilences: false,
       wordHighlight: true,
+      stopAtPassageEnd: true,
     });
     await expect(read).rejects.toThrow();
   });

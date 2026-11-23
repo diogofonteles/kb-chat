@@ -216,12 +216,14 @@ describe('Silence skipping preference (KBC-044 BR-2)', () => {
       ...base,
       skipSilences: false,
       wordHighlight: true,
+      stopAtPassageEnd: true,
       ...DEFAULT_LIBRARY_PREFERENCES,
     });
     await media.owner('PUT', '/api/v1/media/preferences', {
       ...base,
       skipSilences: true,
       wordHighlight: true,
+      stopAtPassageEnd: true,
     });
     const older = await media.owner('PUT', '/api/v1/media/preferences', {
       ...base,
@@ -232,6 +234,7 @@ describe('Silence skipping preference (KBC-044 BR-2)', () => {
       speed: 1.5,
       skipSilences: true,
       wordHighlight: true,
+      stopAtPassageEnd: true,
       ...DEFAULT_LIBRARY_PREFERENCES,
     });
     expect(
@@ -241,6 +244,7 @@ describe('Silence skipping preference (KBC-044 BR-2)', () => {
       speed: 1.5,
       skipSilences: true,
       wordHighlight: true,
+      stopAtPassageEnd: true,
       ...DEFAULT_LIBRARY_PREFERENCES,
     });
   });
