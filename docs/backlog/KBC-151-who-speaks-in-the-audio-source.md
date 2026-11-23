@@ -11,6 +11,8 @@ depends_on: [KBC-150]
 
 Pendência registrada no KBC-150 (redesign da fonte de áudio, 2026-11-17).
 
+> **Nota (KBC-159, 2026-11-23):** com este item a permissão `media-speakers` deixou de proteger qualquer coisa e foi aposentada (contrato, tela Pessoas e dados guardados).
+
 ## Story
 Como estudante que pesquisa com IA, quando abro a citação de uma entrevista, quero ver quem fala no trecho citado e nas falas em volta, para saber se a frase é do entrevistado ou de quem pergunta.
 

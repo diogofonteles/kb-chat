@@ -508,6 +508,28 @@ describe('permissions per person (FR-4)', () => {
     expect(response.statusCode).toBe(400);
   });
 
+  it('KBC-159 AC-3: refuses a grant of the retired `media-speakers`, also in an invitation', async () => {
+    const started = await start();
+    const owner = await signIn(started, OWNER_EMAIL);
+    const as = call(started.app, owner);
+    const id = await invite(started, owner, { email: 'guest@example.com' });
+
+    const patch = await as('PATCH', `/api/v1/people/${id}`, {
+      features: ['media', 'media-speakers'],
+    });
+    const invited = await as('POST', '/api/v1/people', {
+      email: 'other@example.com',
+      preset: { features: ['media', 'media-speakers'] },
+    });
+
+    expect(patch.statusCode).toBe(400);
+    expect(invited.statusCode).toBe(400);
+    const guest = (await as('GET', '/api/v1/people'))
+      .json<{ items: { id: string; features: string[] }[] }>()
+      .items.find((person) => person.id === id);
+    expect(guest?.features).toEqual(['search']);
+  });
+
   it('AC-4: revoking a guest ends their session on the next call', async () => {
     const started = await start();
     const owner = await signIn(started, OWNER_EMAIL);

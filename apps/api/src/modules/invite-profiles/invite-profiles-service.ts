@@ -9,6 +9,7 @@ import {
   type InviteProfileUpdate,
   inviteProfileCreateSchema,
   inviteProfileUpdateSchema,
+  RETIRED_FEATURES,
 } from '@kb-chat/contracts';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
@@ -33,17 +34,20 @@ const rawProfilesSchema = z
   .loose();
 
 const isKnownFeature = (name: string) => featureSchema.safeParse(name).success;
+const isRetired = (name: string) => RETIRED_FEATURES.includes(name);
 
 /**
  * The file without the feature names this image does not know (a newer image wrote them),
- * and those names, to warn about: as people.json since KBC-107, a profile still loads.
+ * and those names, to warn about: as people.json since KBC-107, a profile still loads. A
+ * retired name (KBC-159) is dropped too, but reported apart: the file is rewritten without it.
  */
 function withKnownFeatures(raw: unknown): {
   readonly raw: unknown;
   readonly unknown: string[];
+  readonly retired: string[];
 } {
   const parsed = rawProfilesSchema.safeParse(raw);
-  if (!parsed.success) return { raw, unknown: [] };
+  if (!parsed.success) return { raw, unknown: [], retired: [] };
   const names = parsed.data.profiles.flatMap((one) => one.preset.features);
   const profiles = parsed.data.profiles.map((one) => ({
     ...one,
@@ -52,8 +56,12 @@ function withKnownFeatures(raw: unknown): {
       features: one.preset.features.filter(isKnownFeature),
     },
   }));
-  const unknown = [...new Set(names.filter((name) => !isKnownFeature(name)))];
-  return { raw: { ...parsed.data, profiles }, unknown };
+  const dropped = [...new Set(names.filter((name) => !isKnownFeature(name)))];
+  return {
+    raw: { ...parsed.data, profiles },
+    unknown: dropped.filter((name) => !isRetired(name)),
+    retired: dropped.filter(isRetired),
+  };
 }
 
 /** No levels is no key: a profile without levels reads in an older image (KBC-109). */
@@ -68,6 +76,7 @@ export interface InviteProfilesDeps {
   readonly store: DocumentStorePort;
   readonly newId?: () => string;
   readonly warn?: (message: string) => void;
+  readonly info?: (message: string) => void;
 }
 
 /** Only one default (BR-3): marking one clears the others. */
@@ -90,7 +99,7 @@ export class InviteProfilesService {
   constructor(private readonly deps: InviteProfilesDeps) {}
 
   async load(): Promise<void> {
-    const { raw, unknown } = withKnownFeatures(
+    const { raw, unknown, retired } = withKnownFeatures(
       (await this.deps.store.read()) ?? {},
     );
     if (unknown.length > 0)
@@ -104,6 +113,13 @@ export class InviteProfilesService {
         'invite-profiles.json is invalid; profiles are off and the file is kept as it is',
       );
     this.document = parsed.success ? parsed.data : { version: 1, profiles: [] };
+    // KBC-159 FR-2: one rewrite without the retired grants; the next load finds none.
+    if (parsed.success && retired.length > 0) {
+      await this.deps.store.write(this.document);
+      this.deps.info?.(
+        `invite-profiles.json granted retired features; they were removed: ${retired.join(', ')}`,
+      );
+    }
   }
 
   list(): readonly InviteProfile[] {

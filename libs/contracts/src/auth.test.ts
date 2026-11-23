@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   actAsRequestSchema,
   DEFAULT_INVITE_FEATURES,
+  FEATURES,
+  RETIRED_FEATURES,
   inviteRequestSchema,
   meReplySchema,
   meSchema,
@@ -40,6 +42,26 @@ describe('auth contracts', () => {
     expect(personUpdateSchema.safeParse({ features: ['admin'] }).success).toBe(
       false,
     );
+  });
+
+  it('no longer knows `media-speakers` (KBC-159 FR-1, AC-3): refused on input, dropped on /me', () => {
+    expect(FEATURES).not.toContain('media-speakers');
+    expect(RETIRED_FEATURES).toContain('media-speakers');
+    expect(
+      personUpdateSchema.safeParse({ features: ['media', 'media-speakers'] })
+        .success,
+    ).toBe(false);
+    const me = {
+      email: 'a@example.com',
+      name: 'A',
+      picture: null,
+      role: 'member',
+      features: ['media', 'media-speakers'],
+      topics: [],
+      isOwner: false,
+      media: true,
+    };
+    expect(meReplySchema.parse(me).features).toEqual(['media']);
   });
 
   it('describes who is signed in with visible collections as slugs', () => {

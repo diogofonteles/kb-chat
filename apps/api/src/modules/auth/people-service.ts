@@ -12,6 +12,7 @@ import {
   OWNER_PRINCIPAL,
   isMaster,
   peopleDocumentSchema,
+  retiredFeaturesIn,
   unknownFeaturesIn,
   type StoredPerson,
   type Viewer,
@@ -30,7 +31,10 @@ export interface PeopleServiceDeps {
   readonly now?: () => Date;
   readonly newId?: () => string;
   /** Told when people.json names features this image does not know (they are ignored). */
-  readonly log?: { warn(fields: object, message: string): void };
+  readonly log?: {
+    warn(fields: object, message: string): void;
+    info?(fields: object, message: string): void;
+  };
 }
 
 interface Loaded {
@@ -263,7 +267,7 @@ export class PeopleService {
     return this.reload();
   }
 
-  /** Reads the file, adds the owner when missing and saves that once. */
+  /** Reads the file, adds the owner when missing or drops a retired grant, and saves that once. */
   private async reload(): Promise<Loaded> {
     const raw = await this.deps.store.read();
     const parsed = peopleDocumentSchema.safeParse(raw ?? undefined);
@@ -275,7 +279,14 @@ export class PeopleService {
       ownerEmail: this.ownerEmail,
       ...this.context(),
     });
-    if (people !== stored) await this.persist(people);
+    // KBC-159 FR-2: a retired grant goes in the same single write as a missing owner.
+    const retired = retiredFeaturesIn(raw);
+    if (people !== stored || retired.people > 0) await this.persist(people);
+    if (retired.people > 0)
+      this.deps.log?.info?.(
+        retired,
+        'people.json granted retired features; they were removed',
+      );
     this.loaded = { people, at: Date.now() };
     return this.loaded;
   }

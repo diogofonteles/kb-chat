@@ -68,7 +68,7 @@ describe('Refusing a suggested name: who may, and on what (KBC-090)', () => {
     const { call } = await member(media, {
       email: 'ouve@example.com',
       topics: ['hermetismo'],
-      features: ['media', 'media-speakers'],
+      features: ['media'],
     });
     const answer = await call('POST', refuseUrl(mediaId, 1), { version: 1 });
     expect(answer.statusCode).toBe(403);
@@ -81,7 +81,7 @@ describe('Refusing a suggested name: who may, and on what (KBC-090)', () => {
     const { call } = await member(media, {
       email: 'fora@example.com',
       topics: [],
-      features: ['media', 'media-speakers', 'media-edit'],
+      features: ['media', 'media-edit'],
     });
     const answer = await call('POST', refuseUrl(mediaId, 1), { version: 1 });
     expect(answer.statusCode).toBe(404);

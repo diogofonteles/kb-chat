@@ -10,6 +10,7 @@ import {
   mediaQuotaSchema,
   personLevelsSchema,
   MEDIA_DEFAULT_QUOTA_BYTES,
+  RETIRED_FEATURES,
   roleSchema,
   topicSlugSchema,
   type Feature,
@@ -38,19 +39,47 @@ const storedFeaturesSchema = z
     ),
   );
 
-/** The feature names of a raw people.json this image does not know (to warn about them). */
-export function unknownFeaturesIn(raw: unknown): string[] {
+const isRetired = (name: string): boolean => RETIRED_FEATURES.includes(name);
+
+/** The feature lists of a raw people.json, one per person; none when it has no such shape. */
+function featureListsIn(raw: unknown): string[][] {
   const people = z
     .object({
       people: z.array(z.object({ features: z.array(z.string()) }).loose()),
     })
     .loose()
     .safeParse(raw);
-  if (!people.success) return [];
-  const names = people.data.people.flatMap((one) => one.features);
+  return people.success ? people.data.people.map((one) => one.features) : [];
+}
+
+/**
+ * The feature names of a raw people.json this image does not know (to warn about them): a
+ * retired one (KBC-159) is known and dropped on purpose, so it is not among them.
+ */
+export function unknownFeaturesIn(raw: unknown): string[] {
+  const names = featureListsIn(raw).flat();
   return [
-    ...new Set(names.filter((name) => !featureSchema.safeParse(name).success)),
+    ...new Set(
+      names.filter(
+        (name) => !featureSchema.safeParse(name).success && !isRetired(name),
+      ),
+    ),
   ];
+}
+
+/**
+ * The retired features a raw people.json still grants (KBC-159 FR-2), and to how many people:
+ * the loader drops them, and this says whether the file needs its one rewrite.
+ */
+export function retiredFeaturesIn(raw: unknown): {
+  readonly features: string[];
+  readonly people: number;
+} {
+  const lists = featureListsIn(raw).map((names) => names.filter(isRetired));
+  return {
+    features: [...new Set(lists.flat())],
+    people: lists.filter((names) => names.length > 0).length,
+  };
 }
 
 export const storedPersonSchema = z.object({

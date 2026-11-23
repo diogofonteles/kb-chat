@@ -15,9 +15,9 @@ import { personLevelsSchema } from './access-levels.js';
  * a collection (KBC-009), keep their own AI settings and keys, listen to the media of the
  * collections they see and upload audio to them (KBC-034), create collections and
  * sub-collections (KBC-048), edit recordings (`media-edit`), ask the app's AI to propose
- * their tracks (`media-edit-ai`, KBC-067, ADR 0029 §9), use the media library (KBC-051),
- * see who speaks in a recording (`media-speakers`, KBC-065) and navigate a recording by its
- * approved tracks (`media-tracks`, KBC-066). Every feature is granted per
+ * their tracks (`media-edit-ai`, KBC-067, ADR 0029 §9), use the media library (KBC-051)
+ * and navigate a recording by its approved tracks (`media-tracks`, KBC-066). Every feature is
+ * granted per
  * person (owner's rule, 2026-10-28): a new feature never comes on for everyone by itself.
  * Voice profiles (`media-voice-profiles`, KBC-071, ADR 0032) stay with masters, see below.
  */
@@ -33,7 +33,6 @@ export const FEATURES = [
   'media-edit-ai',
   /** "Biblioteca de mídia" (KBC-051 BR-1): needs `media` as well. */
   'media-library',
-  'media-speakers',
   'media-tracks',
   /** "Classificar mídia por assunto" (KBC-069, ADR 0029 §9). */
   'media-classify',
@@ -58,6 +57,14 @@ export const FEATURES = [
 ] as const;
 export const featureSchema = z.enum(FEATURES);
 export type Feature = z.infer<typeof featureSchema>;
+
+/**
+ * Features that existed and were retired (KBC-159 BR-1): new input refuses them, while a stored
+ * list (people.json, invite-profiles.json) that still names one loads without it and is
+ * rewritten once without it. `media-speakers` ("Ver quem fala na transcrição", KBC-065) guards
+ * nothing since KBC-151 BR-0: everyone who may listen sees who speaks.
+ */
+export const RETIRED_FEATURES: readonly string[] = ['media-speakers'];
 
 /**
  * Features that stay with the master role (ADR 0032): a master has them like any other, and
