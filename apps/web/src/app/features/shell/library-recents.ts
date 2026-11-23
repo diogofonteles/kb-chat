@@ -1,5 +1,6 @@
 import { DOCUMENT } from '@angular/common';
 import { Injectable, computed, inject, linkedSignal } from '@angular/core';
+import { personStorageKey } from '@core/auth/person-key.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { z } from 'zod';
 
@@ -37,9 +38,7 @@ export class LibraryRecents {
   private readonly session = inject(SessionStore);
   private readonly key = computed(() => {
     const email = this.session.me()?.email;
-    return email
-      ? `${STORAGE_PREFIX}:${fingerprint(email.toLowerCase())}`
-      : null;
+    return email ? personStorageKey(STORAGE_PREFIX, email) : null;
   });
   private readonly state = linkedSignal(() => this.read(this.key()));
   readonly collections = () => this.state().collections;
@@ -92,19 +91,6 @@ export class LibraryRecents {
       return EMPTY;
     }
   }
-}
-
-/**
- * A short stand-in for the address in the storage key (FNV-1a), so the next person in the
- * same browser does not read who used it before. Not a secret: only a name for the list.
- */
-function fingerprint(text: string): string {
-  let hash = 0x811c9dc5;
-  for (const char of text) {
-    hash ^= char.codePointAt(0) ?? 0;
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(36);
 }
 
 function storageOf(view: Window | null): Storage | undefined {
