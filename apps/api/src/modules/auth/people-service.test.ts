@@ -260,6 +260,27 @@ describe('PeopleService and the retired `media-speakers` (KBC-159)', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it('keeps the API up when the cleanup write fails: it warns, and the grant stays ignored (KBC-159 review)', async () => {
+    const store = await withRetiredGrant();
+    vi.spyOn(store, 'write').mockRejectedValueOnce(new Error('disk full'));
+    const warn = vi.fn();
+    const people = new PeopleService({
+      store,
+      ownerEmail: OWNER,
+      log: { warn, info: vi.fn() },
+    });
+
+    const ana = (await people.list()).find(
+      (p) => p.email === 'ana@example.com',
+    );
+
+    expect(ana?.features).toEqual(['media', 'search']);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Error: disk full' }),
+      expect.stringContaining('could not be rewritten'),
+    );
+  });
+
   it('AC-2: rewrites people.json without it in one write, and a second start writes nothing', async () => {
     const store = await withRetiredGrant();
     const info = vi.fn();

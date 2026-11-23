@@ -62,6 +62,21 @@ describe('InviteProfilesService (KBC-109)', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it('loads anyway when the cleanup write fails, warning and ignoring the retired grant (KBC-159 review)', async () => {
+    const store = new MemoryDocumentStore();
+    await store.write(stored(['media', 'media-speakers', 'search']));
+    vi.spyOn(store, 'write').mockRejectedValueOnce(new Error('disk full'));
+    const warn = vi.fn();
+    const profiles = new InviteProfilesService({ store, warn, info: vi.fn() });
+
+    await expect(profiles.load()).resolves.toBeUndefined();
+
+    expect(profiles.find(ID).preset.features).toEqual(['media', 'search']);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('could not be rewritten'),
+    );
+  });
+
   it('writes no levels key for a preset without levels, and keeps the levels given', async () => {
     const store = new MemoryDocumentStore();
     const profiles = new InviteProfilesService({ store, newId: () => ID });

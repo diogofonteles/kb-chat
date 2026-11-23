@@ -281,14 +281,32 @@ export class PeopleService {
     });
     // KBC-159 FR-2: a retired grant goes in the same single write as a missing owner.
     const retired = retiredFeaturesIn(raw);
-    if (people !== stored || retired.people > 0) await this.persist(people);
-    if (retired.people > 0)
+    if (people !== stored) await this.persist(people);
+    else if (retired.people > 0) await this.dropRetired(people, retired);
+    this.loaded = { people, at: Date.now() };
+    return this.loaded;
+  }
+
+  /**
+   * The cleanup write alone (KBC-159): the grants are already left out in memory, so a write
+   * that fails only warns, and the next read tries again; it never stops the API.
+   */
+  private async dropRetired(
+    people: readonly StoredPerson[],
+    retired: object,
+  ): Promise<void> {
+    try {
+      await this.persist(people);
       this.deps.log?.info?.(
         retired,
         'people.json granted retired features; they were removed',
       );
-    this.loaded = { people, at: Date.now() };
-    return this.loaded;
+    } catch (error) {
+      this.deps.log?.warn(
+        { ...retired, error: String(error) },
+        'people.json granted retired features; they are ignored, the file could not be rewritten',
+      );
+    }
   }
 
   /** Once per set of names: a rollback to an older image would otherwise warn on every read. */

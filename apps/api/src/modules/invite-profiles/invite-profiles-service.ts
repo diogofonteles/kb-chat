@@ -114,11 +114,18 @@ export class InviteProfilesService {
       );
     this.document = parsed.success ? parsed.data : { version: 1, profiles: [] };
     // KBC-159 FR-2: one rewrite without the retired grants; the next load finds none.
+    // A failed cleanup only warns: the grants are already ignored, and the next load retries.
     if (parsed.success && retired.length > 0) {
-      await this.deps.store.write(this.document);
-      this.deps.info?.(
-        `invite-profiles.json granted retired features; they were removed: ${retired.join(', ')}`,
-      );
+      try {
+        await this.deps.store.write(this.document);
+        this.deps.info?.(
+          `invite-profiles.json granted retired features; they were removed: ${retired.join(', ')}`,
+        );
+      } catch (error) {
+        this.deps.warn?.(
+          `invite-profiles.json granted retired features (${retired.join(', ')}); they are ignored, the file could not be rewritten: ${String(error)}`,
+        );
+      }
     }
   }
 
