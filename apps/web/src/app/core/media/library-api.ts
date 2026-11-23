@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { InjectionToken, Injectable, inject } from '@angular/core';
 import {
   MARK_PLAYED_MAX,
   libraryPageSchema,
@@ -57,11 +57,26 @@ export interface MarkOutcome {
   readonly unsent: readonly string[];
 }
 
+/**
+ * How many ids one "marcar como ouvida" request carries: the API's limit (FR-3). A page's
+ * tests set a small one, so a few rows show the batching without rendering hundreds.
+ */
+export const MARK_PLAYED_BATCH = new InjectionToken<number>(
+  'MARK_PLAYED_BATCH',
+  {
+    providedIn: 'root',
+    factory: () => MARK_PLAYED_MAX,
+  },
+);
+
 /** The ids in batches the API takes at once (FR-3). */
-function batchesOf(ids: readonly string[]): readonly (readonly string[])[] {
+export function batchesOf(
+  ids: readonly string[],
+  size: number = MARK_PLAYED_MAX,
+): readonly (readonly string[])[] {
   const batches: (readonly string[])[] = [];
-  for (let start = 0; start < ids.length; start += MARK_PLAYED_MAX)
-    batches.push(ids.slice(start, start + MARK_PLAYED_MAX));
+  for (let start = 0; start < ids.length; start += size)
+    batches.push(ids.slice(start, start + size));
   return batches;
 }
 
@@ -105,6 +120,7 @@ export function librarySearchUrlOf(
 @Injectable({ providedIn: 'root' })
 export class LibraryApi {
   private readonly http = inject(HttpClient);
+  private readonly batch = inject(MARK_PLAYED_BATCH);
 
   page(request: LibraryRequest, cursor: string): Observable<LibraryPage> {
     return this.http
@@ -138,7 +154,7 @@ export class LibraryApi {
     ids: readonly string[],
     played: boolean,
   ): Observable<MarkOutcome> {
-    return from(batchesOf(ids)).pipe(
+    return from(batchesOf(ids, this.batch)).pipe(
       concatMap((batch) =>
         this.markPlayed(batch, played).pipe(
           map(({ marks }) => ({ batch, marks })),
