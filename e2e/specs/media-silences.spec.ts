@@ -114,6 +114,19 @@ const jumpsIn = (samples: readonly number[]): [number, number][] =>
     return next !== undefined && next - now > 500 ? [[now, next]] : [];
   });
 
+/**
+ * The slider's → once: 5 s, a second before the first pause (6–9 s). What is measured starts
+ * there, so the test plays its 4 s of real audio and not the 9 s before them as well.
+ */
+async function startAtFive(page: Page) {
+  const slider = page.getByRole('slider', { name: 'Posição' });
+  await slider.focus();
+  await slider.press('ArrowRight');
+  await expect
+    .poll(async () => Math.round((await audioState(page)).currentTime))
+    .toBe(5);
+}
+
 async function playUntil(page: Page, seconds: number) {
   await page.getByRole('button', { name: 'Tocar' }).click();
   await expect
@@ -130,6 +143,7 @@ test('AC-2 and NFR-2: on, the 3 s pause is jumped 0.15 s in, to 0.15 s before it
   const [first] = await pausesOf(page);
   if (!first) throw new Error('the lecture has no pause');
   await turnOn(page);
+  await startAtFive(page);
   await startSampling(page);
   await playUntil(page, first.endMs / 1000 + 0.5);
   const [jump] = jumpsIn(await samplesOf(page));
@@ -162,6 +176,7 @@ test('AC-3: off, playing goes through the pauses with no jump', async ({
     dialog.getByRole('checkbox', { name: 'Encurtar silêncios' }),
   ).not.toBeChecked();
   await page.keyboard.press('Escape');
+  await startAtFive(page);
   await startSampling(page);
   await playUntil(page, first.endMs / 1000 + 0.3);
   expect(jumpsIn(await samplesOf(page))).toEqual([]);
@@ -196,6 +211,8 @@ test('AC-7: with silences shortened, the bar, the times and the saved position s
 }) => {
   await openPlayer(page);
   await turnOn(page);
+  // From 5 s through the first pause (6–9 s), which is skipped.
+  await startAtFive(page);
   await playUntil(page, 10);
   await page.getByRole('button', { name: 'Pausar' }).click();
   const at = (await audioState(page)).currentTime;

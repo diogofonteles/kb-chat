@@ -70,6 +70,11 @@ const approvalStatus = async (owner: APIRequestContext, id: string) => {
 test('BR-1: Aprovar in a conflict does nothing, then or after a reload and a save', async ({
   page,
 }) => {
+  // One width (KBC-169): the phone project would only repeat it.
+  test.skip(
+    test.info().project.name === 'media-mobile',
+    'not about the layout: what the draft keeps and what the server applies',
+  );
   const owner = await ownerApi();
   const media = await audioWithTracks(owner);
   await open(page, media.id);
@@ -95,6 +100,11 @@ for (const status of [500, 429, 503]) {
   test(`BR-1: a save refused with ${status} approves nothing and says so`, async ({
     page,
   }) => {
+    // One width (KBC-169): the phone project would only repeat it.
+    test.skip(
+      test.info().project.name === 'media-mobile',
+      'not about the layout: what the draft keeps and what the server applies',
+    );
     const owner = await ownerApi();
     const media = await audioWithTracks(owner);
     await open(page, media.id);
@@ -168,6 +178,11 @@ test('UP-04: "Sair e continuar depois" leaves a conflict, and the tracks are the
 test('BR-6: going back within the save delay keeps the change', async ({
   page,
 }) => {
+  // One width (KBC-169): the phone project would only repeat it.
+  test.skip(
+    test.info().project.name === 'media-mobile',
+    'not about the layout: what the draft keeps and what the server applies',
+  );
   const owner = await ownerApi();
   const media = await audioWithTracks(owner);
   await page.goto(`/midia/${media.id}`);
@@ -182,6 +197,11 @@ test('BR-6: going back within the save delay keeps the change', async ({
 test('BR-6: reloading within the save delay keeps the change', async ({
   page,
 }) => {
+  // One width (KBC-169): the phone project would only repeat it.
+  test.skip(
+    test.info().project.name === 'media-mobile',
+    'not about the layout: what the draft keeps and what the server applies',
+  );
   const owner = await ownerApi();
   const media = await audioWithTracks(owner);
   await open(page, media.id);
@@ -199,6 +219,11 @@ test('BR-6: closing the tab within the save delay keeps the change', async ({
   context,
   browserName,
 }) => {
+  // One width (KBC-169): the phone project would only repeat it.
+  test.skip(
+    test.info().project.name === 'media-mobile',
+    'not about the layout: what the draft keeps and what the server applies',
+  );
   const owner = await ownerApi();
   const media = await audioWithTracks(owner);
   await open(page, media.id);

@@ -10,7 +10,9 @@
         "{workspaceRoot}/tools/heavy.sh",
         "{workspaceRoot}/tools/test-temp.mjs",
         "{workspaceRoot}/tools/check-node.mjs",
-        "{workspaceRoot}/.nvmrc"
+        "{workspaceRoot}/.nvmrc",
+        "{workspaceRoot}/apps/web/src/**/*.ts",
+        "{workspaceRoot}/e2e/specs/**/*"
       ]
     }
   }

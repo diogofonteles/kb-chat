@@ -101,6 +101,11 @@ test('with Hermetismo chosen, the answer cites only Hermetismo sources', async (
 test("Hermetismo's API refuses Alquimia's document by id or path", async ({
   page,
 }) => {
+  // One width (KBC-169): the phone project would only repeat it.
+  test.skip(
+    test.info().project.name === 'mobile',
+    'not about the layout: the API answers the same at any width',
+  );
   for (const id of [ALQUIMIA_ID, `../alquimia/${ALQUIMIA_ID}`]) {
     const read = await page.request.get(
       `/api/v1/topics/hermetismo/documents/${encodeURIComponent(id)}`,

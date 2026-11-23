@@ -90,6 +90,11 @@ test('AC-1: the speed chosen plays on the next media and follows the account to 
 test('AC-2, AC-5: the API refuses a speed off the menu and a position outside the media', async ({
   page,
 }) => {
+  // One width (KBC-169): the phone project would only repeat it.
+  test.skip(
+    test.info().project.name === 'media-mobile',
+    'not about the layout: the API answers the same at any width',
+  );
   const api = page.request;
   const headers = { 'x-requested-with': 'kb-chat' };
   const speed = await api.put('/api/v1/media/preferences', {
@@ -252,6 +257,11 @@ test('AC-3: a page only opened (not played) never sends its old position over a 
 test('BR-2: two people in one browser never see each other’s position', async ({
   browser,
 }) => {
+  // One width (KBC-169): the phone project would only repeat it.
+  test.skip(
+    test.info().project.name === 'media-mobile',
+    'not about the layout: whose position this browser keeps and sends',
+  );
   const { page, email } = await newListener(browser, { viewport: null });
   // Saves fail for the first person: the position stays in this browser, unsent.
   await page.route('**/progress', (route) =>
@@ -299,6 +309,13 @@ test('AC-4: heard to the end, the media has no position to continue and counts a
   page,
 }) => {
   await openPlayer(page, short);
+  // The slider's → once: 5 s of the 6, so only the last second plays for real.
+  const slider = page.getByRole('slider', { name: 'Posição' });
+  await slider.focus();
+  await slider.press('ArrowRight');
+  await expect
+    .poll(async () => Math.round((await audioState(page)).currentTime))
+    .toBe(5);
   await page.getByRole('button', { name: 'Tocar' }).click();
   await expect(page.getByRole('button', { name: 'Ouvir de novo' })).toBeVisible(
     {
@@ -594,26 +611,52 @@ test('NFR-2: at most one saved position every 10 s while playing', async ({
 }, testInfo) => {
   test.skip(
     testInfo.project.name !== 'media-desktop',
-    'one project measures it: 35 s of real playback',
+    'one project measures it: a timing of the saver, the same at any width',
   );
-  test.setTimeout(90_000);
-  const saves: number[] = [];
-  page.on('request', (request) => {
-    if (request.method() === 'PUT' && request.url().endsWith('/progress'))
-      saves.push(Date.now());
+  // The page's clock is Playwright's: the saver's timers and Date run 35 s in steps of one,
+  // while the audio plays on for real between the steps (no 35 s of real playback to wait
+  // for). Each save is logged with the page's time as it leaves, and the next step waits
+  // for it to land.
+  await page.clock.install();
+  await page.addInitScript(() => {
+    const log = { sentAt: [] as number[], open: 0 };
+    Object.assign(window, { kbcSaves: log });
+    const send = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      const method =
+        init?.method ?? (input instanceof Request ? input.method : 'GET');
+      if (method !== 'PUT' || !url.endsWith('/progress'))
+        return send(input, init);
+      log.sentAt.push(Date.now());
+      log.open++;
+      return send(input, init).finally(() => log.open--);
+    };
   });
+  type Saves = { sentAt: number[]; open: number };
+  const saves = () =>
+    page.evaluate(() => (window as unknown as { kbcSaves: Saves }).kbcSaves);
   await openPlayer(page, lecture);
   await page.getByRole('button', { name: 'Tocar' }).click();
   await expect
-    .poll(async () => (await audioState(page)).currentTime, {
-      timeout: 60_000,
-      intervals: [1_000],
-    })
-    .toBeGreaterThanOrEqual(35);
-  expect(saves.length).toBeGreaterThanOrEqual(3);
-  expect(saves.length).toBeLessThanOrEqual(4);
-  for (let i = 1; i < saves.length; i++)
-    expect((saves[i] ?? 0) - (saves[i - 1] ?? 0)).toBeGreaterThan(9_000);
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThan(0.2);
+  const startedAt = await page.evaluate(() => Date.now());
+  for (let second = 0; second < 35; second++) {
+    // Still playing: the position moves (a little, for real) before each page second.
+    const at = (await audioState(page)).currentTime;
+    await expect
+      .poll(async () => (await audioState(page)).currentTime)
+      .toBeGreaterThan(at);
+    await page.clock.runFor(1_000);
+    await expect.poll(async () => (await saves()).open).toBe(0);
+  }
+  expect((await audioState(page)).paused).toBe(false);
+  const sentAt = (await saves()).sentAt.map((at) => at - startedAt);
+  expect(sentAt.length).toBeGreaterThanOrEqual(3);
+  expect(sentAt.length).toBeLessThanOrEqual(4);
+  for (let i = 1; i < sentAt.length; i++)
+    expect((sentAt[i] ?? 0) - (sentAt[i - 1] ?? 0)).toBeGreaterThan(9_000);
 });
 
 test('NFR-4: playing, skipping and the speed respond within 200 ms (INP)', async ({

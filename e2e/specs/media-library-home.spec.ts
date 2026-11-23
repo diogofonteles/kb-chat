@@ -861,12 +861,40 @@ async function pressOften(page: Page, target: Locator, presses: number) {
   }
 }
 
+/**
+ * Pauses the test's trace, if one is recording, until the returned call resumes it.
+ *
+ * Retry-safe (KBC-169): a retry must measure what the first try measured. The data is the
+ * same on every try (the API is intercepted, the person is new), but the config traces the
+ * first retry (`trace: 'on-first-retry'`), and a trace snapshots the page at every action:
+ * over 2 000 rows that alone took the input median from 24 ms to 433 ms locally and from
+ * ~500 ms to ~4.6 s on CI's WebKit (2026-11-23), so a retry failed what the first try
+ * passed, or passed only because WebKit reports the median. The measured part runs with no
+ * trace; the runner's own trace resumes for the rest, and a failure prints the numbers.
+ */
+async function untraced(page: Page): Promise<() => Promise<void>> {
+  const { project, retry } = test.info();
+  const option = project.use.trace;
+  const mode = typeof option === 'object' ? option.mode : (option ?? 'off');
+  const recording =
+    mode === 'on' ||
+    mode === 'retain-on-failure' ||
+    (mode === 'retain-on-first-failure' && retry === 0) ||
+    (mode === 'on-first-retry' && retry === 1) ||
+    (mode === 'on-all-retries' && retry > 0);
+  if (!recording) return async () => undefined;
+  const { tracing } = page.context();
+  await tracing.stopChunk();
+  return () => tracing.startChunk();
+}
+
 test('NFR-2: 2 000 media scroll by wheel without stalling, react within 200 ms, and a chip updates the list within 500 ms', async ({
   browser,
   browserName,
 }) => {
   test.setTimeout(240_000);
   const { page } = await libraryListener(browser);
+  const traceAgain = await untraced(page);
   await serveManyMedia(page);
   await page.addInitScript(installListProbe);
   await openLibrary(page);
@@ -943,6 +971,7 @@ test('NFR-2: 2 000 media scroll by wheel without stalling, react within 200 ms, 
 
   const chip = all(page).getByRole('button', { name: 'Em andamento' });
   const toUpdate = await clickUntilCount(page, chip, '667 mídias');
+  await traceAgain();
 
   console.info(
     `NFR-2 ${test.info().project.name}: input median ${median(latencies).toFixed(0)} ms, worst ${Math.max(...latencies).toFixed(0)} ms; ` +

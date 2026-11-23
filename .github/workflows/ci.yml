@@ -12,7 +12,9 @@ concurrency:
 
 jobs:
   # What this change needs (tools/ci/select-jobs.mjs): on a pull request only what its paths
-  # touch, anything else in full. `verdict`, at the end, reads the result of all of it.
+  # touch, anything else in full. WebKit runs on the push to develop and main and on pull
+  # requests into main, not on pull requests into develop (KBC-169). `verdict`, at the end,
+  # reads the result of all of it.
   changes:
     name: Select jobs
     runs-on: ubuntu-latest

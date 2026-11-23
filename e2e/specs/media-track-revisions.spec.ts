@@ -207,6 +207,11 @@ test('AC-4, AC-5, AC-6: the bounds move, with the track in the bar limited by it
 test("BR-3, BR-4: a position saved on the old cut is translated by the browser's own save", async ({
   page,
 }) => {
+  // One width (KBC-169): the phone project would only repeat it.
+  test.skip(
+    test.info().project.name === 'media-mobile',
+    'not about the layout: the position the browser sends and the server translates',
+  );
   const owner = await ownerApi();
   const { first } = await approvedTracks(owner);
   await page.goto(trackPage(first.id));
