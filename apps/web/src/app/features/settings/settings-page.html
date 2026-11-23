@@ -385,6 +385,7 @@
           (preferencesChange)="savePreferences($event)"
         />
       }
+      <app-listening-settings />
       <p class="save-status" role="status">
         @if (preferencesSave() === 'saved') {
           <span i18n="@@settings.savedAuto">Salvo automaticamente.</span>

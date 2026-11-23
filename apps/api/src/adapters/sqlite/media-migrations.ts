@@ -1515,4 +1515,14 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       ALTER TABLE media_draft_tracks ADD COLUMN level TEXT;
     `,
   },
+  {
+    // KBC-160: "Parar no fim do trecho", on until the person turns it off (BR-4). Expand
+    // only: the previous image ignores the column, and its saves leave it as it is.
+    version: 34,
+    name: 'stop-at-passage-end',
+    sql: `
+      ALTER TABLE media_preferences ADD COLUMN stop_at_passage_end INTEGER NOT NULL DEFAULT 1
+        CHECK (stop_at_passage_end IN (0, 1));
+    `,
+  },
 ];

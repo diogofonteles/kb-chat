@@ -80,6 +80,23 @@ function createMediaElement(
   return element;
 }
 
+/**
+ * Where playing stops by itself (KBC-160 FR-1): at `toMs`, unless the person seeks outside
+ * `fromMs`–`toMs` first. `onStop` runs just before the pause (the announcement).
+ */
+export interface PlaybackStop {
+  readonly fromMs: number;
+  readonly toMs: number;
+  readonly onStop?: () => void;
+}
+
+/** The stop's timer wakes this much before it (timers are a little late). */
+const STOP_LEAD_MS = 15;
+/** A check this close before the stop counts as reaching it. */
+const STOP_EARLY_MS = 30;
+/** Past the stop by more than this (a late timer, a jump over it), it goes back to it. */
+const STOP_OVERSHOOT_MS = 100;
+
 /** How close to the end a paused seek counts as the end (browsers stop a few ms short). */
 const END_TOLERANCE_MS = 50;
 
@@ -134,6 +151,9 @@ export class MediaEngine {
   private readonly landedSeeks = signal(0);
   private readonly askedSeeks = signal(0);
   private readonly playedSinceLoad = signal(false);
+  private stop: PlaybackStop | null = null;
+  private stopTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly stopAtValue = signal<number | null>(null);
 
   readonly playback = this.state.asReadonly();
   readonly source = this.current.asReadonly();
@@ -160,6 +180,8 @@ export class MediaEngine {
   readonly seeksAsked = this.askedSeeks.asReadonly();
   /** The current source played at least once since it was loaded. */
   readonly hasPlayed = this.playedSinceLoad.asReadonly();
+  /** Where playing will pause by itself, while a stop is armed (KBC-160 FR-5). */
+  readonly stopAtMs = this.stopAtValue.asReadonly();
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.unload());
@@ -171,6 +193,7 @@ export class MediaEngine {
   load(source: PlayableSource, startAtMs = 0): void {
     const element = this.ensureElement();
     this.clearBuffering();
+    this.disarmStop();
     this.loads++;
     this.waitFrom = null;
     this.current.set(source);
@@ -195,6 +218,22 @@ export class MediaEngine {
   setSpeed(speed: PlaybackSpeed): void {
     this.speedValue.set(speed);
     if (this.element) this.applySpeed(this.element);
+    this.checkStop();
+  }
+
+  /**
+   * Pauses by itself at `stop.toMs` (KBC-160 FR-1), checked on the element's own clock with
+   * a timer of its own, so it stops on time between `timeupdate`s. A seek outside the
+   * stop's span, another load, a pause or the end of the media disarm it; null disarms.
+   */
+  stopAt(stop: PlaybackStop | null): void {
+    if (!stop || !this.current()) {
+      this.disarmStop();
+      return;
+    }
+    this.stop = stop;
+    this.stopAtValue.set(stop.toMs);
+    this.checkStop();
   }
 
   /** Sets the volume (0–1); raising it from silence unmutes (FR-9). */
@@ -250,6 +289,8 @@ export class MediaEngine {
    */
   seek(ms: number, fast = false): void {
     this.askedSeeks.update((count) => count + 1);
+    // Out of the stop's span, the person listens on: the stop goes (KBC-160 BR-2).
+    this.disarmStopOutside(ms);
     this.moveTo(ms, fast);
   }
 
@@ -303,6 +344,7 @@ export class MediaEngine {
   /** Stops and releases the source without an error or a request to the page URL. */
   unload(): void {
     this.clearBuffering();
+    this.disarmStop();
     const element = this.element;
     if (element) {
       element.pause();
@@ -350,17 +392,23 @@ export class MediaEngine {
     on('playing', () => {
       this.playedSinceLoad.set(true);
       this.settle({ type: 'playing', loadId: this.loads });
+      this.checkStop();
     });
     // Events are queued: a pause the element no longer is in (the end's own, arriving after
     // "Ouvir de novo" played again, as WebKit on Linux does) is stale and dropped.
     on('pause', () => {
-      if (element.paused) this.settle({ type: 'pause', loadId: this.loads });
+      if (!element.paused) return;
+      this.disarmStop();
+      this.settle({ type: 'pause', loadId: this.loads });
     });
     on('waiting', () => this.onWaiting());
     on('seeked', () => this.onSeeked(element));
     on('timeupdate', () => this.onTime(element));
     on('progress', () => this.onBuffered(element));
-    on('ended', () => this.settle({ type: 'ended', loadId: this.loads }));
+    on('ended', () => {
+      this.disarmStop();
+      this.settle({ type: 'ended', loadId: this.loads });
+    });
     on('error', () => this.onError(element));
     on('volumechange', () => this.syncVolume(element));
   }
@@ -387,9 +435,13 @@ export class MediaEngine {
   private onSeeked(element: HTMLMediaElement): void {
     // Only the person's skips count: opening at a saved position is not one (FR-3, FR-10).
     const asked = this.state().userSeeking && !this.ownSeek;
+    // A seek the element made with no word from the engine (devtools, a native control)
+    // lands out of the stop's span: the person listens on there too (KBC-160 BR-2).
+    if (!this.ownSeek) this.disarmStopOutside(element.currentTime * 1000);
     this.ownSeek = false;
     this.settle({ type: 'seeked', loadId: this.loads });
     if (asked) this.landedSeeks.update((count) => count + 1);
+    this.checkStop();
     const { durationMs } = this.state();
     const atEnd =
       durationMs !== null &&
@@ -432,6 +484,7 @@ export class MediaEngine {
     const before = this.state().currentMs;
     this.dispatch({ type: 'time', loadId: this.loads, currentMs });
     this.onBuffered(element);
+    this.checkStop();
     // A seek in flight still tells the old position: its ticks say nothing of playback.
     const { userSeeking, waiting } = this.state();
     if (element.paused || element.seeking || userSeeking || currentMs <= before)
@@ -468,6 +521,52 @@ export class MediaEngine {
       this.waitFrom.ticks >= WAIT_OVER_TICKS ||
       currentMs - this.waitFrom.atMs >= WAIT_OVER_MS
     );
+  }
+
+  /**
+   * Pauses at the armed stop once playing reached it, otherwise waits for it by a timer
+   * (re-armed on every tick, seek and change of speed, so a late one only checks again).
+   */
+  private checkStop(): void {
+    if (this.stopTimer) clearTimeout(this.stopTimer);
+    this.stopTimer = null;
+    const { stop, element } = this;
+    if (!stop || !element || element.paused || element.seeking) return;
+    const nowMs = element.currentTime * 1000;
+    if (nowMs >= stop.toMs - STOP_EARLY_MS) {
+      this.reachStop(stop, element, nowMs);
+      return;
+    }
+    const wait = (stop.toMs - nowMs) / this.speedValue() - STOP_LEAD_MS;
+    this.stopTimer = setTimeout(() => this.checkStop(), Math.max(0, wait));
+  }
+
+  private reachStop(
+    stop: PlaybackStop,
+    element: HTMLMediaElement,
+    nowMs: number,
+  ): void {
+    this.disarmStop();
+    stop.onStop?.();
+    element.pause();
+    // Paused at the stop, not past it (BR-1): a jump over it, or a timer held back.
+    if (nowMs > stop.toMs + STOP_OVERSHOOT_MS) {
+      this.ownSeek = true;
+      this.moveTo(stop.toMs);
+    }
+  }
+
+  private disarmStopOutside(ms: number): void {
+    const stop = this.stop;
+    if (stop && (ms < stop.fromMs - STOP_EARLY_MS || ms >= stop.toMs))
+      this.disarmStop();
+  }
+
+  private disarmStop(): void {
+    if (this.stopTimer) clearTimeout(this.stopTimer);
+    this.stopTimer = null;
+    this.stop = null;
+    this.stopAtValue.set(null);
   }
 
   /** The end of the buffered range that holds the current position. */

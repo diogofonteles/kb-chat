@@ -89,6 +89,11 @@ async function openConversation(
   );
   expect(put.status(), await put.text()).toBe(200);
   await member.reload();
+  await showConversation(member);
+}
+
+/** Opens the conversation from "Conversas", as a reader does. */
+async function showConversation(member: Page): Promise<void> {
   const skip = member.getByRole('button', { name: 'Pular' });
   if (await skip.isVisible().catch(() => false)) await skip.click();
   if (!isDesktop(member))
@@ -890,6 +895,234 @@ test('KBC-156 AC-7: a citation saved on a 1 s fragment opens the whole sentences
     await expect(quote).toContainText('cresci na roça ouvindo as histórias');
     await expect(quote).not.toContainText('pêndulo');
     await shot(member, 'kbc156-whole-sentence');
+    await member.context().close();
+  }
+});
+
+/** KBC-160: sentences with their full stops, so the passage at 0:41 ends where its own does. */
+const STOP_SPEECH = [
+  { at: 2, text: 'Pergunta sobre o ritmo de tudo.' },
+  { at: 41, text: 'O ritmo é a lei do pêndulo que tudo governa.' },
+  { at: 50, text: 'Tudo flui para fora e para dentro.' },
+  { at: 55, text: 'Outra pergunta sobre a polaridade.' },
+];
+
+/** A real research turn, saved again as the member's conversation citing the passage at 0:41. */
+async function answerCitingThePassage(member: Page): Promise<void> {
+  await ask(member);
+  let saved: Conversation | undefined;
+  await expect
+    .poll(
+      async () => {
+        const list = await member.request.get(
+          '/api/v1/conversations?kind=research',
+        );
+        const { items } = (await list.json()) as { items: { id: string }[] };
+        const [first] = items;
+        if (!first) return 0;
+        const one = await member.request.get(
+          `/api/v1/conversations/${first.id}`,
+        );
+        saved = (await one.json()) as Conversation;
+        return saved.turns[0]?.sources.length ?? 0;
+      },
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThan(0);
+  const turn = saved?.turns[0];
+  const track = turn?.sources.find((one) => one.media);
+  if (!saved || !turn || !track) throw new Error('no track cited');
+  const now = new Date().toISOString();
+  const conversation = {
+    ...saved,
+    id: crypto.randomUUID(),
+    title: QUESTION,
+    createdAt: now,
+    updatedAt: now,
+    turns: [
+      {
+        ...turn,
+        id: crypto.randomUUID(),
+        at: now,
+        question: QUESTION,
+        answer: 'O pêndulo governa tudo [1@0:41].',
+        sources: [
+          {
+            ...track,
+            n: 1,
+            passages: [{ at: '0:41', startMs: 41_000, endMs: 44_000 }],
+          },
+        ],
+      },
+    ],
+  };
+  await openConversation(member, conversation);
+}
+
+/** The citation opens the audio source: beside the answer, or in the phone's sheet. */
+async function openTheSource(member: Page): Promise<Locator> {
+  await member
+    .getByRole('link', { name: `Fonte 1, faixa ${TITLE}, aos 41 segundos` })
+    .first()
+    .click();
+  const panel = audioSource(member);
+  await expect(panel.getByRole('heading', { name: TITLE })).toBeFocused();
+  return panel;
+}
+
+/**
+ * Where the passage ends, in ms: the card says it to the second ("0:41–0:43"), the track's
+ * transcript to the millisecond (the end of a segment in that second).
+ */
+async function passageEndMs(member: Page, panel: Locator): Promise<number> {
+  const name = await panel
+    .getByRole('region', { name: /0:41–/ })
+    .evaluate(
+      (card) =>
+        document.getElementById(card.getAttribute('aria-labelledby') ?? '')
+          ?.textContent ?? '',
+    );
+  const [, minutes, seconds] = /0:41–(\d+):(\d\d)/.exec(name) ?? [];
+  const second = (Number(minutes) * 60 + Number(seconds)) * 1000;
+  const href = await panel
+    .locator('a[href*="/midia/"]')
+    .first()
+    .getAttribute('href');
+  const id = /\/midia\/([0-9a-f-]+)/.exec(href ?? '')?.[1];
+  const read = await member.request.get(`/api/v1/media/${id}/transcript`);
+  const { segments } = (await read.json()) as {
+    segments: { endMs: number }[];
+  };
+  const end = segments
+    .map(({ endMs }) => endMs)
+    .find((endMs) => endMs >= second && endMs < second + 1_000);
+  if (end === undefined) throw new Error(`no segment ends at ${name}`);
+  return end;
+}
+
+const STOP_TOLERANCE_MS = 250;
+
+test('KBC-160: "Ouvir o trecho" stops at the passage end; off, or after a seek out of it, the track plays on; the choice survives a reload', async ({
+  page,
+}, info) => {
+  test.setTimeout(240_000);
+  const owner = await ownerApi();
+  const topic = await publishedTrack(owner, STOP_SPEECH);
+  await owner.dispose();
+  for (const viewport of viewports(page, info)) {
+    const member = await researcher(page, topic, { viewport });
+    await answerCitingThePassage(member);
+    let panel = await openTheSource(member);
+    const card = panel.getByRole('region', { name: /0:41–/ });
+    const toggle = card.getByRole('switch', { name: 'Parar no fim do trecho' });
+    // AC-5, AC-9, AC-10: on for a new account, named, inside the card, a 44 px target.
+    await expect(toggle).toBeChecked();
+    const label = card.locator('label.stop-at-end');
+    const cardBox = await card.boundingBox();
+    const labelBox = await label.boundingBox();
+    if (!cardBox || !labelBox) throw new Error('the card is not laid out');
+    expect(labelBox.height).toBeGreaterThanOrEqual(44);
+    expect(labelBox.x).toBeGreaterThanOrEqual(cardBox.x);
+    expect(labelBox.x + labelBox.width).toBeLessThanOrEqual(
+      cardBox.x + cardBox.width,
+    );
+    // Reached by the keyboard after the card's last button, with its focus ring.
+    await card.getByRole('button', { name: 'Copiar o link do trecho' }).focus();
+    await member.keyboard.press('Tab');
+    await expect(toggle).toBeFocused();
+    expect(
+      await toggle.evaluate((el) => getComputedStyle(el).outlineStyle),
+    ).not.toBe('none');
+    expect(await seriousAxe(member)).toEqual([]);
+    await shot(member, 'kbc160-stop-on');
+    const endMs = await passageEndMs(member, panel);
+
+    // AC-1, AC-3, AC-9: from 2 s before; a seek inside keeps the stop; it pauses at the end.
+    await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
+    await expect.poll(() => playing(member)).toBe(true);
+    await expect(card.getByText(/^Para às 0:4\d$/)).toBeVisible();
+    await shot(member, 'kbc160-stop-armed');
+    expect((await audioState(member)).currentTime).toBeLessThan(42);
+    await seekTo(member, endMs / 1000 - 1.2);
+    await expect.poll(() => playing(member), { timeout: 10_000 }).toBe(false);
+    const stoppedAt = (await audioState(member)).currentTime * 1000;
+    expect(Math.abs(stoppedAt - endMs)).toBeLessThanOrEqual(STOP_TOLERANCE_MS);
+    await expect(
+      member.getByText('Fim do trecho', { exact: true }),
+    ).toBeAttached();
+    await expect(card.getByText(/^Para às/)).toHaveCount(0);
+
+    // AC-6 and AC-2: again, it starts 2 s before; a line after it plays on past the end.
+    await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
+    await expect.poll(() => playing(member)).toBe(true);
+    expect((await audioState(member)).currentTime).toBeLessThan(42);
+    await panel
+      .getByRole('list', { name: 'Em volta do trecho' })
+      .getByRole('button', { name: /^Ouvir a partir de/ })
+      .last()
+      .click();
+    await expect
+      .poll(async () => (await audioState(member)).currentTime, {
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(endMs / 1000 + 1);
+    expect(await playing(member)).toBe(true);
+    await expect(card.getByText(/^Para às/)).toHaveCount(0);
+    await pauseOnTheControl(member, panel);
+
+    // FR-1: paused mid-passage, the stop goes; resumed on the player, the track plays on past
+    // the end, and the player says the track, not the cited passage, once it is out of it.
+    await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
+    await expect.poll(() => playing(member)).toBe(true);
+    await seekTo(member, endMs / 1000 - 1.5);
+    await expect(card.getByText(/^Para às/)).toBeVisible();
+    await pauseOnTheControl(member, panel);
+    await expect(card.getByText(/^Para às/)).toHaveCount(0);
+    const control = theControl(member);
+    await control.getByRole('button', { name: /^Tocar/ }).click();
+    await expect
+      .poll(async () => (await audioState(member)).currentTime, {
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(endMs / 1000 + 1);
+    expect(await playing(member)).toBe(true);
+    if (!isDesktop(member)) {
+      await expect(
+        control.getByText(/^Tocando a faixa · 0:\d\d/),
+      ).toBeVisible();
+    }
+    await expect(control.getByText(/Tocando o trecho citado/)).toHaveCount(0);
+    await pauseOnTheControl(member, panel);
+
+    // AC-4, BR-5: off, saved on the account; "Ouvir o trecho" plays on past the end.
+    const saved = member.waitForResponse(
+      (response) =>
+        response.request().method() === 'PUT' &&
+        new URL(response.url()).pathname === '/api/v1/media/preferences',
+    );
+    await toggle.click();
+    expect((await saved).status()).toBe(200);
+    await expect(toggle).not.toBeChecked();
+    await shot(member, 'kbc160-stop-off');
+    await panel.getByRole('button', { name: 'Ouvir o trecho' }).click();
+    await expect.poll(() => playing(member)).toBe(true);
+    await expect(card.getByText(/^Para às/)).toHaveCount(0);
+    await seekTo(member, endMs / 1000 - 1);
+    await expect
+      .poll(async () => (await audioState(member)).currentTime, {
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(endMs / 1000 + 1);
+    expect(await playing(member)).toBe(true);
+    await pauseOnTheControl(member, panel);
+
+    // AC-4: the choice is the account's, read again after a reload.
+    await member.reload();
+    await showConversation(member);
+    panel = await openTheSource(member);
+    await expect(
+      panel.getByRole('switch', { name: 'Parar no fim do trecho' }),
+    ).not.toBeChecked();
     await member.context().close();
   }
 });

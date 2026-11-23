@@ -563,6 +563,7 @@ describe('Media library: choices in the account (FR-5, BR-7)', () => {
       skipForwardSec: 30,
       skipSilences: false,
       wordHighlight: true,
+      stopAtPassageEnd: true,
       librarySort: 'duration',
       libraryView: 'grid',
       libraryFilters: {
