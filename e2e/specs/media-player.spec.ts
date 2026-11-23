@@ -165,11 +165,27 @@ test('AC-12: when the network drops mid-playback, the player says so and resumes
     'no way to drop a WebKit media connection mid-playback',
   );
   const restore = await dropConnection(page);
+  // The page's clock is Playwright's: the 12 s the engine gives a stalled connection pass
+  // at once (time flows as usual otherwise; the audio plays its bytes for real).
+  await page.clock.install();
   await openPlayer(page, lecture);
   await play(page);
+  // Past the start, the element runs out of the bytes it got and waits for more.
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThan(0.5);
+  await page
+    .locator('[data-media-engine]')
+    .evaluate(
+      (element: HTMLMediaElement) =>
+        element.readyState < element.HAVE_FUTURE_DATA ||
+        new Promise((resolve) =>
+          element.addEventListener('waiting', resolve, { once: true }),
+        ),
+    );
+  await page.clock.fastForward('00:12');
   await expect(page.getByRole('alert')).toContainText(
     'Não consegui carregar o áudio. Verifique a conexão.',
-    { timeout: 30_000 },
   );
   const stoppedAt = Number(
     await page
