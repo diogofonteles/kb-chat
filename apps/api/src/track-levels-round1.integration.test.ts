@@ -30,7 +30,6 @@ const EDITOR = [
   'media-edit',
   'media-edit-ai',
   'media-tracks',
-  'media-speakers',
   'media-correct',
 ];
 

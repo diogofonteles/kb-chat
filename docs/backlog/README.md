@@ -43,6 +43,7 @@ Pedido do dono: levar o app inteiro para a UI/UX v2 desenhada no Figma ("Nova Al
 | [KBC-151](KBC-151-who-speaks-in-the-audio-source.md) | Quem fala na fonte de áudio para quem só ouve (pendência do KBC-150) | ui-v2-areas | draft | KBC-150 |
 | [KBC-155](KBC-155-audio-source-one-control.md) | Fonte de áudio com um controle só (a barra do player) e citações da mesma faixa agrupadas | ui-v2-areas | ready | KBC-150, KBC-154 |
 | [KBC-156](KBC-156-cited-passage-whole-sentence.md) | Trecho citado de uma faixa cobre a frase inteira (≥ 8 s ou ≥ 12 palavras, até 45 s), nunca um pedaço de 1 s | complete-answers | ready | KBC-099, KBC-150 |
+| [KBC-159](KBC-159-media-speakers-permission-retire.md) | Aposentar a permissão "Ver quem fala na transcrição" (`media-speakers`), sem efeito desde o KBC-151 | ui-v2-areas | ready | KBC-151 |
 | [KBC-161](KBC-161-search-several-collections.md) | Buscar e pesquisar em vários acervos de uma vez, só por escolha explícita (padrão: o acervo em uso, KBC-152) | ui-v2-areas | draft | KBC-152 |
 | [KBC-164](KBC-164-land-on-new-conversation-and-split-create.md) | Entrar sempre numa conversa nova (abrir, entrar, recarregar) e separar "+ Nova conversa" do "+" de "Novo acervo" em Acervos | ui-v2-areas | ready | KBC-125, KBC-126 |
 

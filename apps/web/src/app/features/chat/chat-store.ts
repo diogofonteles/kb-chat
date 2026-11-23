@@ -7,6 +7,7 @@ import {
   inject,
   linkedSignal,
   signal,
+  untracked,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import {
@@ -23,6 +24,7 @@ import {
   type TopicList,
 } from '@kb-chat/contracts';
 import { toUiErrorCode } from '@core/api/api-error.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { HistoryStore } from '@core/history/history-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { LibraryRecents } from '@features/shell/library-recents.js';
@@ -53,6 +55,11 @@ import {
 import { readModePreference, writeModePreference } from './mode-preference.js';
 import { mixReferences } from './references.js';
 import { readKindsPreference, writeKindsPreference } from './search-kinds.js';
+import {
+  readTopicPreference,
+  topicPreferenceKey,
+  writeTopicPreference,
+} from './topic-preference.js';
 
 /** Chip clicks within this window become one search (QA-7). */
 const REFINE_DEBOUNCE_MS = 250;
@@ -200,6 +207,11 @@ function askedKey(conversation: SearchConversation): string {
 export class ChatStore {
   private readonly api = inject(KbApi);
   private readonly storage = safeStorage(inject(DOCUMENT).defaultView);
+  private readonly session = inject(SessionStore);
+  /** Where this person's collection in use is kept in this browser (KBC-157 BR-1). */
+  private readonly topicKey = computed(() =>
+    topicPreferenceKey(this.session.me()?.email),
+  );
   private readonly history = inject(HistoryStore);
   private readonly usage = inject(UsageLog);
   /** "Documentos" in Sua biblioteca: the documents last opened (KBC-125). */
@@ -225,15 +237,23 @@ export class ChatStore {
   readonly topicsKnown = computed(
     () => this.topics.hasValue() || this.topics.error() !== undefined,
   );
-  /** The chosen collection survives a reload of the list (a collection created, KBC-048). */
+  /**
+   * The chosen collection survives a reload of the list (a collection created, KBC-048) and
+   * of the page (KBC-157 BR-2): the one in use, else the one this person last chose in this
+   * browser, else the default; each only while it is in the list and opens.
+   */
   readonly topicSlug = linkedSignal<TopicList | null, string | null>({
     source: this.topicData,
     computation: (list, previous) => {
+      const opens = (slug: string | null | undefined): slug is string =>
+        !!slug &&
+        !!list?.items.some((topic) => topic.slug === slug && topic.canOpen);
       const kept = previous?.value;
-      const stillThere = list?.items.some(
-        (topic) => topic.slug === kept && topic.canOpen,
+      if (opens(kept)) return kept;
+      const remembered = untracked(() =>
+        readTopicPreference(this.storage, this.topicKey()),
       );
-      return stillThere && kept ? kept : defaultTopicOf(list);
+      return opens(remembered) ? remembered : defaultTopicOf(list);
     },
   });
   readonly topic = computed(
@@ -344,6 +364,7 @@ export class ChatStore {
 
   /** Another collection starts a new conversation, with an inline notice (FR-3, BR-2). */
   selectTopic(slug: string): void {
+    this.rememberTopic(slug);
     if (slug === this.topicSlug()) return;
     this.topicSlug.set(slug);
     this.reset();
@@ -352,6 +373,7 @@ export class ChatStore {
 
   /** Brings a search conversation back from the history and runs its searches again (FR-2). */
   restore(conversation: SearchConversation): void {
+    this.rememberTopic(conversation.topic);
     this.topicSlug.set(conversation.topic);
     this.reset();
     this.topicNoticeState.set(null);
@@ -364,6 +386,14 @@ export class ChatStore {
         filters: saved.filters,
         origin: 'restore',
       });
+  }
+
+  /**
+   * Only a collection the person chose is kept for the next reload (KBC-157 FR-1, BR-3): a
+   * fall back to the default leaves the remembered one for when it opens again.
+   */
+  private rememberTopic(slug: string): void {
+    writeTopicPreference(this.storage, this.topicKey(), slug);
   }
 
   setMode(mode: SearchMode): void {

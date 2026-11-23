@@ -766,7 +766,7 @@ async function voicedRecording(
   expect(named.status(), await named.text()).toBe(200);
 }
 
-test('KBC-151 AC-1: a researcher who only listens (no media-edit, no media-speakers) sees who speaks in the audio source', async ({
+test('KBC-151 AC-1: a researcher who only listens (no media-edit) sees who speaks in the audio source', async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -775,7 +775,7 @@ test('KBC-151 AC-1: a researcher who only listens (no media-edit, no media-speak
     voicedRecording(owner, id, collection),
   );
   await owner.dispose();
-  // The researcher's features: no `media-edit`, no `media-speakers` (KBC-151 BR-0).
+  // The researcher's features: no `media-edit` (KBC-151 BR-0).
   const member = await researcher(page, topic);
   await answerWithTwoTracks(member);
   await member

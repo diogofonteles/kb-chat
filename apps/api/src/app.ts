@@ -1688,9 +1688,7 @@ async function registerPeople(
 ) {
   const { deps, topics, invitations } = wiring;
   const { house, auth } = deps;
-  const profiles = await loadInviteProfiles(deps, (message) =>
-    app.log.warn(message),
-  );
+  const profiles = await loadInviteProfiles(deps, app.log);
   await app.register(
     peopleRoutes({
       ...auth,
@@ -1720,10 +1718,11 @@ const presetsOf = (deps: FullDeps, profiles: InviteProfilesService) => ({
 /** "Perfis de convite" (KBC-028): invite-profiles.json in the state folder. */
 async function loadInviteProfiles(
   deps: FullDeps,
-  warn: (message: string) => void,
+  log: { warn(message: string): void; info(message: string): void },
 ) {
   const profiles = new InviteProfilesService({
-    warn,
+    warn: (message) => log.warn(message),
+    info: (message) => log.info(message),
     store: new JsonDocumentStore(
       join(deps.config.KB_CHAT_STATE_DIR, 'invite-profiles.json'),
     ),
