@@ -2,11 +2,18 @@
 // Which CI jobs a pull request needs, from the paths it changes. The workflow calls this in
 // its `changes` job; `push` to develop and main always runs the full suite.
 //
+// WebKit (the media WebKit shards) runs on `push` to develop and main and on a pull request
+// into main (a promotion), never on a pull request into develop: there Chromium (the app
+// specs) and Google Chrome (the media specs) carry the change, and the push of its merge to
+// develop runs WebKit in full before anything is promoted (KBC-169). The CI verdict passes
+// a pull request whose WebKit shards were not selected: they are simply not in the matrix.
+//
 // Reading the table: each changed path takes the FIRST rule that matches. A rule either
 // asks for the full suite (`full`, with the reason) or names what the path touches. A path
 // no rule matches runs the full suite: the safe answer to "this script does not know it".
 //
-//   node tools/ci/select-jobs.mjs --explain <path>...   prints the choice for those paths
+//   node tools/ci/select-jobs.mjs --explain [--base main] <path>...   prints the choice for
+//   those paths in a pull request into develop (or into the base given)
 
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
@@ -216,47 +223,59 @@ function e2eMatrix(e2e) {
 const selection = ({ reason, full, unit, transcriber, codex, e2e }) => ({
   full,
   reason,
+  webkit: 'webkit' in e2e,
   unit: { include: unit.map((name) => UNITS[name]) },
   transcriber,
   codex,
   e2e: { include: e2eMatrix(e2e) },
 });
 
-const fullSuite = (reason) =>
+/** On a pull request into develop the WebKit group stays out (see the header). */
+const withoutWebkit = (e2e) =>
+  Object.fromEntries(
+    Object.entries(e2e).filter(([group]) => group !== 'webkit'),
+  );
+const WEBKIT_WAITS = 'WebKit waits for the push to develop';
+
+const fullSuite = (reason, { webkit = true } = {}) =>
   selection({
     full: true,
-    reason,
+    reason: webkit ? reason : `${reason}; ${WEBKIT_WAITS}`,
     unit: Object.keys(UNITS),
     transcriber: true,
     codex: true,
-    e2e: everyE2e,
+    e2e: webkit ? everyE2e : withoutWebkit(everyE2e),
   });
 
 /**
  * What a change runs. `paths` null means they could not be read, and no paths at all is as
  * doubtful (a pull request changes something): both run everything. A pull request into
- * anything but develop is a release, and a release runs everything.
+ * anything but develop is a release, and a release runs everything, WebKit included.
  */
 export function selectJobs({ event, base, paths }) {
   if (event !== 'pull_request') return fullSuite(`${event} runs everything`);
   if (base !== 'develop') return fullSuite(`release into ${base}`);
-  if (!paths?.length) return fullSuite('the changed paths are unknown');
+  const intoDevelop = { webkit: false };
+  if (!paths?.length)
+    return fullSuite('the changed paths are unknown', intoDevelop);
   const rules = paths.map(ruleFor);
   const reasons = rules.flatMap((rule) => rule.full ?? []);
-  if (reasons.length) return fullSuite([...new Set(reasons)].join('; '));
+  if (reasons.length)
+    return fullSuite([...new Set(reasons)].join('; '), intoDevelop);
   const e2e = {};
   for (const group of Object.keys(GROUPS))
     for (const rule of rules)
       if (rule[group]) e2e[group] = merged(e2e[group], rule[group]);
+  const waits = 'webkit' in e2e;
   return selection({
     full: false,
-    reason: `${paths.length} changed path(s)`,
+    reason: `${paths.length} changed path(s)${waits ? `; ${WEBKIT_WAITS}` : ''}`,
     unit: Object.keys(UNITS).filter((name) =>
       rules.some((rule) => rule.unit?.includes(name)),
     ),
     transcriber: rules.some((rule) => rule.transcriber),
     codex: rules.some((rule) => rule.codex),
-    e2e,
+    e2e: withoutWebkit(e2e),
   });
 }
 
@@ -287,11 +306,18 @@ function writeOutputs(chosen) {
   appendFileSync(process.env['GITHUB_OUTPUT'], `${lines.join('\n')}\n`);
 }
 
+/** `--explain [--base <branch>] <path>...`: a pull request into develop unless told. */
+function explained(args) {
+  const base = args[0] === '--base' ? args[1] : 'develop';
+  const paths = args[0] === '--base' ? args.slice(2) : args;
+  return { event: 'pull_request', base, paths };
+}
+
 function main(argv) {
   const explain = argv[0] === '--explain';
   const chosen = selectJobs(
     explain
-      ? { event: 'pull_request', base: 'develop', paths: argv.slice(1) }
+      ? explained(argv.slice(1))
       : {
           event: process.env['GITHUB_EVENT_NAME'],
           base: process.env['GITHUB_BASE_REF'],

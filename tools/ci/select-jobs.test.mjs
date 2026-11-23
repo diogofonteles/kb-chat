@@ -26,24 +26,45 @@ const FULL_E2E = [
   'media WebKit 4/4',
 ];
 
-function assertFull(chosen) {
+/** What a pull request into develop runs at most: WebKit waits for the push (KBC-169). */
+const PR_E2E = FULL_E2E.filter((shard) => !shard.startsWith('media WebKit'));
+
+/** Everything; on a pull request into develop, everything but WebKit. */
+function assertFull(chosen, { webkit = false } = {}) {
   assert.equal(chosen.full, true);
   assert.deepEqual(unitNames(chosen), ['api', 'web', 'libs']);
   assert.equal(chosen.transcriber, true);
   assert.equal(chosen.codex, true);
-  assert.deepEqual(e2eShards(chosen), FULL_E2E);
+  assert.equal(chosen.webkit, webkit);
+  assert.deepEqual(e2eShards(chosen), webkit ? FULL_E2E : PR_E2E);
   assert.ok(chosen.e2e.include.every((job) => job.specs === ''));
 }
 
 for (const event of ['push', 'workflow_dispatch', 'schedule'])
-  test(`${event} runs everything`, () => {
-    assertFull(selectJobs({ event, base: '', paths: [] }));
+  test(`${event} runs everything, WebKit included`, () => {
+    assertFull(selectJobs({ event, base: '', paths: [] }), { webkit: true });
   });
 
-test('a pull request into main is a release and runs everything', () => {
-  assertFull(
-    selectJobs({ event: 'pull_request', base: 'main', paths: ['docs/a.md'] }),
-  );
+test('a pull request into main is a release and runs everything, WebKit included', () => {
+  for (const paths of [['docs/a.md'], ['e2e/specs/media-player.spec.ts']])
+    assertFull(selectJobs({ event: 'pull_request', base: 'main', paths }), {
+      webkit: true,
+    });
+});
+
+test('a pull request into develop never runs WebKit, and says it waits', () => {
+  for (const paths of [
+    ['e2e/specs/media-player.spec.ts'],
+    ['apps/api/src/modules/media/serve-media.ts'],
+    ['libs/player-core/src/index.ts'],
+    ['pnpm-lock.yaml'],
+  ]) {
+    const chosen = onPullRequest(...paths);
+    assert.equal(chosen.webkit, false);
+    assert.ok(chosen.e2e.include.every((job) => job.browser !== 'webkit'));
+    assert.match(chosen.reason, /WebKit waits for the push to develop/);
+  }
+  assert.doesNotMatch(onPullRequest('docs/a.md').reason, /WebKit/);
 });
 
 test('unknown changed paths run everything', () => {
@@ -154,9 +175,9 @@ test('an E2E spec runs itself, by its full path', () => {
   assert.deepEqual(unitNames(chosen), []);
 });
 
-test('a media E2E spec runs in Chrome and in WebKit', () => {
+test('a media E2E spec runs in Chrome (WebKit on the push)', () => {
   const chosen = onPullRequest('e2e/specs/media-player.spec.ts');
-  assert.deepEqual(e2eShards(chosen), ['media Chrome 1/1', 'media WebKit 1/1']);
+  assert.deepEqual(e2eShards(chosen), ['media Chrome 1/1']);
 });
 
 test('a leaf web feature runs its unit tests and its specs', () => {
@@ -164,7 +185,7 @@ test('a leaf web feature runs its unit tests and its specs', () => {
     'apps/web/src/app/features/media/library/library-page.ts',
   );
   assert.deepEqual(unitNames(chosen), ['web']);
-  assert.deepEqual(e2eShards(chosen), ['media Chrome 1/1', 'media WebKit 1/1']);
+  assert.deepEqual(e2eShards(chosen), ['media Chrome 1/1']);
   assert.equal(
     e2eSpecs(chosen, 'media Chrome'),
     'specs/media-library.spec.ts specs/media-library-home.spec.ts',
@@ -176,13 +197,13 @@ test('the rest of the media pages run every media spec', () => {
     'apps/web/src/app/features/media/player/media-player.ts',
     'apps/web/src/app/core/media/media-engine.ts',
   ])
-    assert.deepEqual(e2eShards(onPullRequest(path)), FULL_E2E.slice(2));
+    assert.deepEqual(e2eShards(onPullRequest(path)), PR_E2E.slice(2));
 });
 
 test('the player core runs its tests, the web app and every media spec', () => {
   const chosen = onPullRequest('libs/player-core/src/index.ts');
   assert.deepEqual(unitNames(chosen), ['web', 'libs']);
-  assert.deepEqual(e2eShards(chosen), FULL_E2E.slice(2));
+  assert.deepEqual(e2eShards(chosen), PR_E2E.slice(2));
 });
 
 test('any other web file runs every E2E, not the other unit suites', () => {
@@ -194,7 +215,7 @@ test('any other web file runs every E2E, not the other unit suites', () => {
   ]) {
     const chosen = onPullRequest(path);
     assert.deepEqual(unitNames(chosen), ['web']);
-    assert.deepEqual(e2eShards(chosen), FULL_E2E);
+    assert.deepEqual(e2eShards(chosen), PR_E2E);
     assert.equal(chosen.full, false);
   }
 });
@@ -202,11 +223,19 @@ test('any other web file runs every E2E, not the other unit suites', () => {
 test('media API code runs the Chrome specs; WebKit only for the bytes it reads', () => {
   assert.deepEqual(
     e2eShards(onPullRequest('apps/api/src/media-worker/ffmpeg.ts')),
-    FULL_E2E.slice(2, 7),
+    PR_E2E.slice(2),
   );
   assert.deepEqual(
     e2eShards(onPullRequest('apps/api/src/modules/media/serve-media.ts')),
-    FULL_E2E.slice(2),
+    PR_E2E.slice(2),
+  );
+  assert.match(
+    onPullRequest('apps/api/src/modules/media/serve-media.ts').reason,
+    /WebKit waits/,
+  );
+  assert.doesNotMatch(
+    onPullRequest('apps/api/src/media-worker/ffmpeg.ts').reason,
+    /WebKit/,
   );
 });
 
@@ -222,7 +251,7 @@ test('the rest of the API runs every E2E', () => {
     'apps/api/src/app.ts',
     'apps/api/src/config.ts',
   ])
-    assert.deepEqual(e2eShards(onPullRequest(path)), FULL_E2E);
+    assert.deepEqual(e2eShards(onPullRequest(path)), PR_E2E);
 });
 
 test('specs add up across paths, and "all" wins', () => {
@@ -246,12 +275,7 @@ test("a longer list of specs takes more shards, up to its group's most", () => {
   const chosen = onPullRequest(
     'apps/web/src/app/features/media/tracks/track-group.ts',
   );
-  assert.deepEqual(e2eShards(chosen), [
-    'media Chrome 1/2',
-    'media Chrome 2/2',
-    'media WebKit 1/2',
-    'media WebKit 2/2',
-  ]);
+  assert.deepEqual(e2eShards(chosen), ['media Chrome 1/2', 'media Chrome 2/2']);
 });
 
 test('every spec the table names exists', () => {
