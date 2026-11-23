@@ -60,6 +60,7 @@ import { UiBanner, UiIcon, UiIconButton } from '@ui/index.js';
 import { SEARCH_HIGHLIGHTS } from './search-highlights.js';
 import { CARET_AT_POINT } from './text-caret.js';
 import { TranscriptWords, wordsPageOf } from './transcript-words.js';
+import { UpcomingLines } from './upcoming-lines.js';
 
 /** One segment as the list shows it. */
 interface SegmentView {
@@ -433,6 +434,7 @@ export class TranscriptPanel {
     this.paintSearch(destroyRef);
     this.paintPassage(destroyRef);
     this.paintWord(destroyRef);
+    this.fadeUpcoming(destroyRef);
     this.loadNeededWords(destroyRef);
     this.landOnPendingWord();
   }
@@ -538,6 +540,29 @@ export class TranscriptPanel {
       },
     });
     destroyRef.onDestroy(() => highlights.clear('transcript-word'));
+  }
+
+  /** The lines after the one heard, fainter (v2 tLine), kept right near the view (KBC-163). */
+  private fadeUpcoming(destroyRef: DestroyRef): void {
+    const upcoming = new UpcomingLines(
+      this.document.defaultView?.IntersectionObserver,
+    );
+    let items: readonly ElementRef<HTMLLIElement>[] = [];
+    afterRenderEffect({
+      write: () => {
+        const heard = this.shownActive();
+        const now = this.items();
+        if (now !== items) {
+          items = now;
+          upcoming.watch(
+            items.map((item) => item.nativeElement),
+            untracked(this.list)?.nativeElement,
+          );
+        }
+        upcoming.show(heard);
+      },
+    });
+    destroyRef.onDestroy(() => upcoming.stop());
   }
 
   /**

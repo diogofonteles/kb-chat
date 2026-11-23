@@ -184,6 +184,92 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
     expect(current()?.classList).toContain('active');
   });
 
+  it('makes the lines after the one heard fainter (KBC-163)', async () => {
+    const { media, view } = await renderPanel(
+      transcriptOf({
+        segments: Array.from({ length: 120 }, (_, i) => ({
+          startMs: i * 1_000,
+          endMs: i * 1_000 + 900,
+          text: `Linha ${i}.`,
+        })),
+      }),
+    );
+    const lines = () =>
+      [
+        ...screen
+          .getByRole('list', { name: 'Trechos da transcrição' })
+          .querySelectorAll('li'),
+      ].map((line) => line.classList.contains('upcoming'));
+    const after = (heard: number) => lines().map((_, i) => i > heard);
+    // Nothing heard yet: no line is fainter.
+    expect(lines().some(Boolean)).toBe(false);
+    await at(media, 2.5, view);
+    expect(lines()).toEqual(after(2));
+    // A jump over most of the list, and back.
+    await at(media, 100.5, view);
+    expect(lines()).toEqual(after(100));
+    await at(media, 1.5, view);
+    expect(lines()).toEqual(after(1));
+  });
+
+  it('keeps right only the lines near the view and those around the one heard, others as they come near (KBC-163)', async () => {
+    let seen: IntersectionObserverCallback = () => undefined;
+    const watched: Element[] = [];
+    class FakeObserver {
+      constructor(callback: IntersectionObserverCallback) {
+        seen = callback;
+      }
+      observe(target: Element) {
+        watched.push(target);
+      }
+      disconnect() {
+        watched.length = 0;
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', FakeObserver);
+    try {
+      const { media, view } = await renderPanel(
+        transcriptOf({
+          segments: Array.from({ length: 120 }, (_, i) => ({
+            startMs: i * 1_000,
+            endMs: i * 1_000 + 900,
+            text: `Linha ${i}.`,
+          })),
+        }),
+      );
+      const items = [
+        ...screen
+          .getByRole('list', { name: 'Trechos da transcrição' })
+          .querySelectorAll('li'),
+      ];
+      expect(watched).toHaveLength(120);
+      const faint = (line: number) =>
+        items[line]?.classList.contains('upcoming');
+      const comeNear = (line: number, isIntersecting = true) => {
+        const entry: Partial<IntersectionObserverEntry> = {
+          target: items[line],
+          isIntersecting,
+        };
+        seen([entry as IntersectionObserverEntry], {} as IntersectionObserver);
+      };
+      await at(media, 2.5, view);
+      expect([faint(2), faint(3), faint(18)]).toEqual([false, true, true]);
+      // Far from the view: left alone until it comes near.
+      expect(faint(100)).toBe(false);
+      comeNear(100);
+      expect(faint(100)).toBe(true);
+      // Near the view, it follows the line heard; once gone, it no longer does.
+      comeNear(60);
+      await at(media, 70.5, view);
+      expect([faint(60), faint(100)]).toEqual([false, true]);
+      comeNear(60, false);
+      await at(media, 5.5, view);
+      expect([faint(60), faint(100)]).toEqual([false, true]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('plays from a phrase of minute 20 when it is clicked, and marks it (AC-2)', async () => {
     const { media, view } = await renderPanel();
     fireEvent.click(screen.getByText('No minuto vinte, o vegetal.'));
