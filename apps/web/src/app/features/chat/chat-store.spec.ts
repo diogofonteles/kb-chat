@@ -3,29 +3,54 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { ApplicationRef, provideZonelessChangeDetection } from '@angular/core';
+import {
+  ApplicationRef,
+  provideZonelessChangeDetection,
+  signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   EMPTY_FILTERS,
   type SearchConversation,
   type SearchFilters,
   type SearchResponse,
+  type TopicList,
 } from '@kb-chat/contracts';
+import { SessionStore } from '@core/auth/session-store.js';
 import { KbApi } from '@core/api/kb-api.js';
 import { HistoryStore } from '@core/history/history-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { Subject } from 'rxjs';
 import { FakeConversationsServer } from '../../testing/fake-conversations.js';
-import { TOPICS, aHit, aMediaHit, aResponse } from '../../testing/fixtures.js';
+import {
+  TOPICS,
+  aHit,
+  aMediaHit,
+  aResponse,
+  aTopic,
+} from '../../testing/fixtures.js';
 import { ChatStore } from './chat-store.js';
+import { topicPreferenceKey } from './topic-preference.js';
 
 const GENRE: SearchFilters = { ...EMPTY_FILTERS, genres: ['paper'] };
 
 const usage = { track: vi.fn() };
 
-async function setup() {
+interface SetupOptions {
+  /** The list /topics answers. */
+  readonly topics?: TopicList;
+  /** Who is signed in (null: nobody, as before /me answers). */
+  readonly email?: string | null;
+  /** Keeps what this browser already stored (a reload). */
+  readonly keepStorage?: boolean;
+}
+
+const ANA = 'ana@example.com';
+
+async function setup(options: SetupOptions = {}) {
+  const { topics = TOPICS, email = ANA, keepStorage = false } = options;
   usage.track.mockClear();
-  localStorage.clear();
+  if (!keepStorage) localStorage.clear();
   const server = new FakeConversationsServer();
   const searches: {
     topic: string;
@@ -40,6 +65,10 @@ async function setup() {
       provideHttpClientTesting(),
       ChatStore,
       { provide: UsageLog, useValue: usage },
+      {
+        provide: SessionStore,
+        useValue: { me: signal(email === null ? null : { email }) },
+      },
       {
         provide: KbApi,
         useValue: {
@@ -58,9 +87,11 @@ async function setup() {
   const store = TestBed.inject(ChatStore);
   // The topics resource sends its request on the first change detection.
   TestBed.tick();
+  // Nothing is in use before the list arrives, not even the default (KBC-157 AC-1).
+  expect(store.topicSlug()).toBeNull();
   TestBed.inject(HttpTestingController)
     .expectOne('/api/v1/topics')
-    .flush(TOPICS);
+    .flush(topics);
   await TestBed.inject(ApplicationRef).whenStable();
   const history = TestBed.inject(HistoryStore);
   const answer = (index: number, response = aResponse()) => {
@@ -338,5 +369,142 @@ describe('ChatStore and the sources of an AI answer (KBC-127 FR-1)', () => {
     // A search result has no sources to step between.
     store.switchSource({ id: 'b.md', title: 'B' });
     expect(store.openDocument()?.id).toBe('a.md');
+  });
+});
+
+describe('ChatStore: the collection in use survives a reload (KBC-157)', () => {
+  const keyOf = (email: string) => topicPreferenceKey(email) ?? '';
+  const remember = (email: string, slug: string) =>
+    localStorage.setItem(keyOf(email), slug);
+  const THREE: TopicList = {
+    items: [
+      ...TOPICS.items,
+      aTopic({ slug: 'cabala', title: 'Cabala', documentCount: 9 }),
+    ],
+    defaultSlug: null,
+  };
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('FR-1: choosing a collection keeps it for this person in this browser', async () => {
+    const { store } = await setup();
+    expect(localStorage.getItem(keyOf(ANA))).toBeNull();
+    store.selectTopic('alquimia');
+    expect(localStorage.getItem(keyOf(ANA))).toBe('alquimia');
+    // The key names the person without showing the address (BR-1).
+    expect(keyOf(ANA)).toMatch(/^kb-chat\.topic:/);
+    expect(keyOf(ANA)).not.toContain('ana');
+    expect(keyOf('ANA@example.com')).toBe(keyOf(ANA));
+  });
+
+  it('AC-1 (FR-2): a reload opens on the remembered collection once the list arrives', async () => {
+    remember(ANA, 'alquimia');
+    const { store } = await setup({ keepStorage: true });
+    expect(store.topicSlug()).toBe('alquimia');
+    expect(store.topic()?.title).toBe('Alquimia');
+    // A reload starts a new conversation, with no "switched" notice (KBC-164).
+    expect(store.messages()).toEqual([]);
+    expect(store.topicNotice()).toBeNull();
+  });
+
+  it("BR-2: the remembered collection wins over the person's default", async () => {
+    remember(ANA, 'cabala');
+    const { store } = await setup({
+      keepStorage: true,
+      topics: { ...THREE, defaultSlug: 'alquimia' },
+    });
+    expect(store.topicSlug()).toBe('cabala');
+  });
+
+  it('AC-2: a removed collection falls back to the default, then the largest, without error', async () => {
+    remember(ANA, 'apagado');
+    const first = await setup({
+      keepStorage: true,
+      topics: { ...THREE, defaultSlug: 'cabala' },
+    });
+    expect(first.store.topicSlug()).toBe('cabala');
+    TestBed.resetTestingModule();
+    const second = await setup({ keepStorage: true });
+    expect(second.store.topicSlug()).toBe('hermetismo');
+  });
+
+  it('AC-3 (BR-3): a collection no longer open falls back without being forgotten', async () => {
+    remember(ANA, 'alquimia');
+    const closed: TopicList = {
+      items: TOPICS.items.map((one) =>
+        one.slug === 'alquimia' ? { ...one, canOpen: false } : one,
+      ),
+      defaultSlug: null,
+    };
+    const first = await setup({ keepStorage: true, topics: closed });
+    expect(first.store.topicSlug()).toBe('hermetismo');
+    // The fallback is not a choice: it does not write over the remembered one.
+    expect(localStorage.getItem(keyOf(ANA))).toBe('alquimia');
+    TestBed.resetTestingModule();
+    const gone = await setup({
+      keepStorage: true,
+      topics: { items: TOPICS.items.slice(0, 1), defaultSlug: null },
+    });
+    expect(gone.store.topicSlug()).toBe('hermetismo');
+    expect(localStorage.getItem(keyOf(ANA))).toBe('alquimia');
+    // The access comes back: so does the collection.
+    TestBed.resetTestingModule();
+    const back = await setup({ keepStorage: true });
+    expect(back.store.topicSlug()).toBe('alquimia');
+  });
+
+  it('AC-4 (BR-1): the next person in the same browser gets their own collection', async () => {
+    remember(ANA, 'alquimia');
+    const { store } = await setup({
+      keepStorage: true,
+      email: 'bia@example.com',
+    });
+    expect(store.topicSlug()).toBe('hermetismo');
+    store.selectTopic('alquimia');
+    store.selectTopic('hermetismo');
+    expect(localStorage.getItem(keyOf('bia@example.com'))).toBe('hermetismo');
+    expect(localStorage.getItem(keyOf(ANA))).toBe('alquimia');
+  });
+
+  it('nobody signed in: nothing is read or kept', async () => {
+    const { store } = await setup({ email: null });
+    store.selectTopic('alquimia');
+    expect(store.topicSlug()).toBe('alquimia');
+    expect(localStorage.length).toBe(
+      Object.keys(localStorage).filter((k) => !k.startsWith('kb-chat.topic'))
+        .length,
+    );
+  });
+
+  it('AC-5 (BR-4): a storage that throws leaves the default and the choice for the session', async () => {
+    remember(ANA, 'alquimia');
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    const { store } = await setup({ keepStorage: true });
+    expect(store.topicSlug()).toBe('hermetismo');
+    store.selectTopic('alquimia');
+    expect(store.topicSlug()).toBe('alquimia');
+  });
+
+  it('AC-6 (FR-3): opening a conversation of another collection keeps that collection', async () => {
+    const { store, answer } = await setup();
+    const conversation: SearchConversation = {
+      kind: 'search',
+      id: 'c-1',
+      topic: 'alquimia',
+      title: 'pedra',
+      createdAt: '2026-11-01T00:00:00.000Z',
+      updatedAt: '2026-11-01T00:00:00.000Z',
+      asks: [
+        { question: 'pedra', mode: 'all', filters: EMPTY_FILTERS, total: 1 },
+      ],
+    };
+    store.restore(conversation);
+    answer(0);
+    expect(localStorage.getItem(keyOf(ANA))).toBe('alquimia');
   });
 });

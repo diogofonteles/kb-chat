@@ -102,11 +102,11 @@ const listener = (media: Media, email = 'ouve@example.com') =>
   member(media, {
     email,
     topics: ['hermetismo'],
-    features: ['media', 'media-speakers'],
+    features: ['media'],
   });
 
 describe('Naming the voices (KBC-065 AC-1, FR-2, FR-4)', () => {
-  it('AC-1: a listener with `media-speakers` reads the main author and the audience', async () => {
+  it('AC-1: the main author and the audience are named', async () => {
     const media = await startMedia();
     const { mediaId } = await separated(media);
     const master = await aSpeaker(media, 'Mestre', 'mestre-laercio');
@@ -374,7 +374,7 @@ describe('Joining two voices (KBC-065 AC-3, FR-2)', () => {
 });
 
 describe('Who may see and change names (KBC-065 AC-4, AC-5, BR-4, BR-6)', () => {
-  it('AC-4: without `media-speakers` names still show (KBC-151 BR-0); without `media-edit`, 403', async () => {
+  it('AC-4: whoever may listen sees the names (KBC-151 BR-0, KBC-159 AC-4); without `media-edit`, 403', async () => {
     const media = await startMedia();
     const { mediaId } = await separated(media);
     const gabriel = await aSpeaker(media, 'Mestre Gabriel');
@@ -406,10 +406,14 @@ describe('Who may see and change names (KBC-065 AC-4, AC-5, BR-4, BR-6)', () => 
       ).statusCode,
     ).toBe(403);
     expect((await withNames.call('GET', SPEAKERS)).statusCode).toBe(403);
+    expect(
+      (await call('GET', '/api/v1/topics/hermetismo/voice-profiles'))
+        .statusCode,
+    ).toBe(403);
     const noAudio = await member(media, {
       email: 'sem-audio@example.com',
       topics: ['hermetismo'],
-      features: ['media-speakers'],
+      features: ['search'],
     });
     expect(
       (await noAudio.call('GET', `/api/v1/media/${mediaId}/transcript`))
@@ -426,7 +430,7 @@ describe('Who may see and change names (KBC-065 AC-4, AC-5, BR-4, BR-6)', () => 
     expect(names?.every(({ kind }) => kind === 'unnamed')).toBe(true);
   });
 
-  it('an editor without `media-speakers` sees the names too', async () => {
+  it('an editor sees the names too, and the separation', async () => {
     const media = await startMedia();
     const { mediaId } = await separated(media);
     const gabriel = await aSpeaker(media, 'Mestre Gabriel');
@@ -447,7 +451,7 @@ describe('Who may see and change names (KBC-065 AC-4, AC-5, BR-4, BR-6)', () => 
     const { call } = await member(media, {
       email: 'fora@example.com',
       topics: [],
-      features: ['media', 'media-speakers', 'media-edit'],
+      features: ['media', 'media-edit'],
     });
     const read = await call('GET', `/api/v1/media/${mediaId}/transcript`);
     expect(read.statusCode).toBe(404);

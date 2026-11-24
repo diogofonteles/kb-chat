@@ -60,6 +60,7 @@ async function renderPlayer(
     skipForwardSec: 30,
     skipSilences: false,
     wordHighlight: true,
+    stopAtPassageEnd: true,
   });
   prepare(media, engine);
   await view.fixture.whenStable();

@@ -252,6 +252,7 @@ describe('MediaPlayerPage (T15)', () => {
           skipForwardSec: 30,
           skipSilences: false,
           wordHighlight: true,
+          stopAtPassageEnd: true,
         });
       TestBed.tick();
       expect(
@@ -866,7 +867,7 @@ describe('MediaPlayerPage: the transcript reads its voices again (KBC-064 FR-5)'
     localStorage.setItem('kb-chat.player.captions', 'on');
     localStorage.setItem('kb-chat.player.transcript-collapsed', 'on');
     const { harness, http } = await openPage(undefined, {
-      features: ['media', 'media-speakers'],
+      features: ['media'],
     });
     http.expectOne(ITEM_URL).flush(VOICED_ITEM);
     await settle();

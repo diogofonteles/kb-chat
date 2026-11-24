@@ -408,16 +408,23 @@ export const mediaPreferencesSchema = z.strictObject({
    * the partial PUT would then fill it in and turn a saved choice back on.
    */
   wordHighlight: z.boolean(),
+  /**
+   * "Parar no fim do trecho" (KBC-160): "Ouvir o trecho" pauses at the cited passage's end;
+   * on until the person turns it off. No `.default()`, as `wordHighlight` (BR-4).
+   */
+  stopAtPassageEnd: z.boolean(),
 });
 export type MediaPreferences = z.infer<typeof mediaPreferencesSchema>;
 
 /**
- * PUT /api/v1/media/preferences. `skipSilences` and `wordHighlight` may be absent (a client
- * from before KBC-044 or KBC-045): the account then keeps its stored choice.
+ * PUT /api/v1/media/preferences. `skipSilences`, `wordHighlight` and `stopAtPassageEnd` may
+ * be absent (a client from before KBC-044, KBC-045 or KBC-160): the account then keeps its
+ * stored choice.
  */
 export const saveMediaPreferencesRequestSchema = mediaPreferencesSchema.extend({
   skipSilences: z.boolean().optional(),
   wordHighlight: z.boolean().optional(),
+  stopAtPassageEnd: z.boolean().optional(),
 });
 export type SaveMediaPreferencesRequest = z.infer<
   typeof saveMediaPreferencesRequestSchema

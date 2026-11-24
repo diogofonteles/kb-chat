@@ -102,3 +102,17 @@ describe('levels in presets (KBC-109)', () => {
     expect(inviteProfileViewSchema.parse(profile).staleLevels).toEqual({});
   });
 });
+
+describe('retired features in presets (KBC-159 FR-1)', () => {
+  it('refuses `media-speakers` in a new profile or invitation', () => {
+    expect(
+      invitePresetSchema.safeParse({ features: ['media', 'media-speakers'] })
+        .success,
+    ).toBe(false);
+    expect(
+      invitationPresetSchema.safeParse({
+        features: ['media', 'media-speakers'],
+      }).success,
+    ).toBe(false);
+  });
+});

@@ -45,10 +45,11 @@ Pedido do dono: levar o app inteiro para a UI/UX v2 desenhada no Figma ("Nova Al
 | [KBC-156](KBC-156-cited-passage-whole-sentence.md) | Trecho citado de uma faixa cobre a frase inteira (≥ 8 s ou ≥ 12 palavras, até 45 s), nunca um pedaço de 1 s | complete-answers | ready | KBC-099, KBC-150 |
 | [KBC-157](KBC-157-collection-in-use-survives-reload.md) | O acervo em uso sobrevive a recarregar a página (por pessoa, no navegador) | ui-v2-areas | ready | KBC-125 |
 | [KBC-158](KBC-158-answer-key-review-screen.md) | Revisão do gabarito dentro do app (só master): aprovar, editar, remover, acrescentar aspecto; export para o JSON versionado | complete-answers | ready (aguarda a branch da trilha de pesquisa) | KBC-138 |
-| [KBC-159](KBC-159-media-speakers-permission-retire.md) | Aposentar a permissão `media-speakers`, sem efeito desde o KBC-151 (dados antigos seguem legíveis) | ui-v2-areas | ready | KBC-151 |
+| [KBC-159](KBC-159-media-speakers-permission-retire.md) | Aposentar a permissão "Ver quem fala na transcrição" (`media-speakers`), sem efeito desde o KBC-151 | ui-v2-areas | ready | KBC-151 |
 | [KBC-160](KBC-160-listen-to-passage-stops-at-end.md) | "Ouvir o trecho" para no fim do trecho citado, com opção de ligar e desligar (padrão ligada, na conta) | complete-answers | ready | KBC-155, KBC-156 |
 | [KBC-161](KBC-161-search-several-collections.md) | Buscar e pesquisar em vários acervos de uma vez, só por escolha explícita (padrão: o acervo em uso, KBC-152) | ui-v2-areas | draft | KBC-152 |
 | [KBC-164](KBC-164-land-on-new-conversation-and-split-create.md) | Entrar sempre numa conversa nova (abrir, entrar, recarregar) e separar "+ Nova conversa" do "+" de "Novo acervo" em Acervos | ui-v2-areas | ready | KBC-125, KBC-126 |
+| [KBC-171](KBC-171-collection-context-everywhere.md) | O acervo em uso vale no app inteiro: filtros (Autoria, Assunto), listas, contagens e sugestões só do acervo escolhido; revisão completa das telas | ui-v2-areas | ready | KBC-152, KBC-157 |
 
 Itens que já existiam e que a v2 desenhou (sobem de prioridade junto, na ordem: KBC-052, KBC-053, KBC-054, KBC-055, KBC-059): ver a seção "Fase 2" abaixo. Cada um ganhou a nota "Redesign v2" com o ponto de entrada na casca nova.
 
