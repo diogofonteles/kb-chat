@@ -811,16 +811,37 @@ describe('WebSearchService: as many as are asked for (QA IMP-2 and IMP-4)', () =
     };
   }
 
+  /** An address of the site asked, one for each number. */
+  const addressOn = (site: string | null, n: number): string =>
+    ({
+      'youtube.com': `https://www.youtube.com/watch?v=${String(n).padStart(11, 'a')}`,
+      'vimeo.com': `https://vimeo.com/${1_000 + n}`,
+      'soundcloud.com': `https://soundcloud.com/alguem/${n}`,
+      'podcasts.apple.com': `https://podcasts.apple.com/br/podcast/x/id1?i=${1_000 + n}`,
+    })[site ?? ''] ?? `https://exemplo.org/${n}`;
+
+  /** Ten new pages for each query, two of them with the very words asked in their titles. */
+  function titled() {
+    const page = endless();
+    return (query: string, site: string | null): Hit[] =>
+      page(`${query} ${site}`).map((hit, at) => ({
+        ...hit,
+        url: addressOn(site, Number(hit.url.split('/').at(-1))),
+        title: at < 2 ? `${query}: ${hit.title}` : hit.title,
+      }));
+  }
+
   /** Presses until what is wanted came, the search ended, or it was pressed too often. */
   async function pressUntil(
     service: ReturnType<typeof build>['service'],
     wanted: number,
+    request: WebSearchRequest = TEXTS,
   ) {
     const urls = new Set<string>();
     let exhausted = false;
     let refused = 0;
     for (let press = 0; press < 60; press += 1) {
-      const answer = await service.search(TEXTS, NEW).catch(() => null);
+      const answer = await service.search(request, NEW).catch(() => null);
       if (answer === null) refused += 1;
       for (const { url } of answer?.results ?? []) urls.add(url);
       exhausted = answer?.exhausted ?? exhausted;
@@ -839,6 +860,26 @@ describe('WebSearchService: as many as are asked for (QA IMP-2 and IMP-4)', () =
     const queries = firecrawl.searches.map(({ body }) => body['query']);
     expect(new Set(queries).size).toBe(queries.length);
   });
+
+  it.each(['text', 'audio', 'video'] as const)(
+    'goes on past its own words when the titles found have them too: %s',
+    async (kind) => {
+      const { service, firecrawl, later } = build();
+      await service.connect('fc-house-key-valid', 'owner');
+      firecrawl.searchWith(titled());
+      const request = { ...TEXTS, kinds: [kind] };
+      const half = await pressUntil(service, 250, request);
+      // What was paid for is kept for half an hour only: nothing is asked twice after it.
+      later(31 * 60_000);
+      const rest = await pressUntil(service, 250, request);
+      expect(half.found + rest.found).toBeGreaterThanOrEqual(500);
+      expect(rest.exhausted).toBe(false);
+      const asked = firecrawl.searches.map(({ body }) =>
+        JSON.stringify([body['query'], body['includeDomains']]),
+      );
+      expect(new Set(asked).size).toBe(asked.length);
+    },
+  );
 
   it('ends when nothing new comes, whatever the words', async () => {
     const { service, firecrawl } = build();
@@ -859,6 +900,44 @@ describe('WebSearchService: as many as are asked for (QA IMP-2 and IMP-4)', () =
     const { found, refused } = await pressUntil(service, 300);
     expect(found).toBeGreaterThanOrEqual(300);
     expect(refused).toBeLessThan(4);
+  });
+
+  it.each([0, 6, 11])(
+    'an engine away for many presses, after %i answers, loses no wording',
+    async (answers) => {
+      const { service, firecrawl } = build();
+      await service.connect(KEY, 'owner');
+      // Nothing in the titles to go on with: the plan's own words are all there is to ask.
+      firecrawl.searchWith((query) => [
+        {
+          url: `https://exemplo.org/${firecrawl.searches.length}`,
+          title: query.includes('hermetismo') ? 'Hermetismo' : '',
+          description: '',
+        },
+      ]);
+      const some = { ...TEXTS, sources: Math.max(1, answers) };
+      if (answers > 0) await service.search(some, NEW);
+      firecrawl.goDown();
+      for (let press = 0; press < 20; press += 1)
+        expect(await codeOf(service.search(TEXTS, NEW))).toBe(
+          'WEB_SEARCH_UNAVAILABLE',
+        );
+      firecrawl.comeBack();
+      const { exhausted } = await pressUntil(service, 100);
+      expect(exhausted).toBe(true);
+      const queries = firecrawl.searches.map(({ body }) => body['query']);
+      expect([new Set(queries).size, queries.length]).toEqual([12, 12]);
+    },
+  );
+
+  it('a last wording the engine never answers ends with the others', async () => {
+    const { service, firecrawl } = build();
+    await service.connect(KEY, 'owner');
+    const page = endless();
+    firecrawl.searchWith((query) => (/pdf/.test(query) ? null : page(query)));
+    const { found, refused } = await pressUntil(service, 300);
+    expect(found).toBeGreaterThanOrEqual(300);
+    expect(refused).toBeLessThan(3);
   });
 
   it('rounds nobody answered say nothing of what is left (I3)', async () => {

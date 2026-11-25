@@ -1,7 +1,12 @@
 import type { WebSearchRequest } from '@kb-chat/contracts';
 import { pageKey, type Candidate } from './candidates.js';
 import { isKin, telling } from './relevance.js';
-import { groupsOf, hasOwnWords, type SearchGroup } from './search-plan.js';
+import {
+  groupsOf,
+  hasOwnWords,
+  ownWords,
+  type SearchGroup,
+} from './search-plan.js';
 import type { Searcher } from './seen-links.js';
 
 /** A search left alone this long is forgotten. */
@@ -27,6 +32,8 @@ export class SearchSession {
   private fresh = 0;
   /** A search of the round under way was answered. */
   private answered = false;
+  /** A search of the request under way was answered. */
+  private spoken = false;
   private queue: SearchGroup[] = [];
   private readonly retried = new Set<SearchGroup>();
   /** Silent before, with nothing else heard then. */
@@ -79,12 +86,15 @@ export class SearchSession {
     if (this.queue.length === 0) this.ended = true;
   }
 
-  /** Past the words of each kind: the one most titles found have, not used yet. */
+  /**
+   * Past the words of each kind: the one most titles found have, not used yet. The plan's own
+   * words are used: what was asked for with them has them in its titles.
+   */
   private wordFound(): string | null {
     const { kinds, query, authors } = this.request;
     if (hasOwnWords(kinds, this.round)) return null;
     const asked = [
-      ...telling([query, ...authors].join(' ')),
+      ...telling([query, ...authors, ...ownWords(kinds)].join(' ')),
       ...this.usedWords,
     ];
     const [best] = [...this.words]
@@ -126,13 +136,22 @@ export class SearchSession {
   /** The engine answers others: what was kept apart is asked once more, then let go. */
   heard(): void {
     this.answered = true;
+    this.spoken = true;
     for (const group of this.aside.splice(0)) this.retryLater(group);
   }
 
-  /** The request ends: what was kept apart waits, unless nothing else is left to ask. */
+  /**
+   * The request ends: what was kept apart waits. With nothing else left to ask it is let go,
+   * unless nothing was heard at all: then it is the engine that is away, and all is still due.
+   */
   rest(): void {
     const apart = this.aside.splice(0);
-    if (!this.ended || this.queue.length > 0) this.putBack(apart);
+    const isLast = this.ended && this.queue.length === 0;
+    const letGo = isLast && this.spoken;
+    this.spoken = false;
+    if (letGo || apart.length === 0) return;
+    this.putBack(apart);
+    this.ended = false;
   }
 
   /** It did not answer: asked once more, after the others; then it is let go. */

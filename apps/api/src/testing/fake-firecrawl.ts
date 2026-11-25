@@ -12,6 +12,9 @@ export interface Hit {
   readonly description: string;
 }
 
+/** What an engine finds for a query, on one site or on any; null: it never answers. */
+type Engine = (query: string, site: string | null) => readonly Hit[] | null;
+
 const CREDITS_PER_SEARCH = 2;
 const PLAN_CREDITS = 1_000;
 const PERIOD_END = '2026-12-15T12:00:00.000Z';
@@ -90,6 +93,14 @@ const kindOf = (body: Readonly<Record<string, unknown>>): WebSearchKind => {
   return video.some((site) => domains.includes(site)) ? 'video' : 'audio';
 };
 
+const usualHits = (kind: WebSearchKind, query: string): Hit[] =>
+  query.includes('vazio') ? [] : HITS[kind](query);
+
+const siteOf = (body: Readonly<Record<string, unknown>>): string | null => {
+  const domains = body['includeDomains'];
+  return Array.isArray(domains) ? String(domains[0]) : null;
+};
+
 /**
  * Firecrawl's search and account without the network (KBC-185): a key ending in "valid" is
  * accepted, any other gets 401. The key also says what its account has: one with "low" 42
@@ -104,7 +115,7 @@ export class FakeFirecrawl {
   private down = false;
   private limited = 0;
   private readonly broken = new Set<WebSearchKind>();
-  private engine: ((query: string) => readonly Hit[] | null) | null = null;
+  private engine: Engine | null = null;
 
   /** Every key is refused from now on, as if revoked in Firecrawl's dashboard. */
   revokeKeys(): void {
@@ -131,7 +142,7 @@ export class FakeFirecrawl {
   }
 
   /** Another engine's answers; null: that query is never answered. */
-  searchWith(engine: (query: string) => readonly Hit[] | null): void {
+  searchWith(engine: Engine): void {
     this.engine = engine;
   }
 
@@ -188,24 +199,19 @@ export class FakeFirecrawl {
         { status: 402 },
       );
     const query = String(body['query']);
-    if (this.engine?.(query) === null)
-      return new Response('bad query', { status: 400 });
-    return this.found(key, { kind, query });
+    const hits = this.engine
+      ? this.engine(query, siteOf(body))
+      : usualHits(kind, query);
+    return hits === null
+      ? new Response('bad query', { status: 400 })
+      : this.found(key, hits);
   }
 
-  private hitsOf(kind: WebSearchKind, query: string): readonly Hit[] {
-    if (this.engine) return this.engine(query) ?? [];
-    return query.includes('vazio') ? [] : HITS[kind](query);
-  }
-
-  private found(
-    key: string,
-    { kind, query }: { kind: WebSearchKind; query: string },
-  ): Response {
+  private found(key: string, web: readonly Hit[]): Response {
     this.spent.set(key, (this.spent.get(key) ?? 0) + CREDITS_PER_SEARCH);
     return Response.json({
       success: true,
-      data: { web: this.hitsOf(kind, query) },
+      data: { web },
       creditsUsed: CREDITS_PER_SEARCH,
     });
   }

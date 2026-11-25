@@ -97,6 +97,10 @@ export const hasOwnWords = (
   round: number,
 ): boolean => kinds.every((kind) => round < WORDINGS[kind].length);
 
+/** The words these kinds are asked with by the plan itself, one by one. */
+export const ownWords = (kinds: readonly WebSearchKind[]): string[] =>
+  kinds.flatMap((kind) => WORDINGS[kind].map(({ word }) => word));
+
 const oneLine = (parts: readonly string[]): string =>
   parts.filter((part) => part !== '').join(' ');
 
