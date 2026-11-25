@@ -225,6 +225,7 @@ export const NO_CONTENT: Readonly<Record<string, string>> = {
   'GET /api/v1/media/:id/edit/proposals/:runId':
     'needs a paid AI run; behind the edit rule, which refuses Ana on this recording (403 EDIT_ABOVE_YOUR_LEVEL)',
   'GET /api/v1/media-worker/terms': WORKER,
+  'GET /api/v1/media-worker/jobs/:id/document': WORKER,
   'GET /api/v1/media-worker/jobs/:id/audio': WORKER,
   'GET /api/v1/media-worker/jobs/:id/audio/:mediaId': WORKER,
   'GET /api/v1/media-worker/jobs/:id/voice-profiles': WORKER,
