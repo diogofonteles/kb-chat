@@ -27,7 +27,8 @@ from typing import Protocol
 from urllib.parse import urlsplit
 
 from .kb_publish import KbPublisher, KbStepFailed
-from .recording_file import NotARecording, TooLarge, fetch_file, is_known_site
+from .known_links import is_short, known_address
+from .recording_file import NotARecording, TooLarge, fetch_file, led_to
 
 # kb-map's project, next to this one in the repository (tools/kb-map).
 KB_MAP_PROJECT = Path(__file__).resolve().parents[3] / "kb-map"
@@ -39,8 +40,8 @@ LIST_TIMEOUT_S = 5 * 60
 LIST_MAX = 5_000
 OUTPUT_CHARS = 2_000
 # The only extractors yt-dlp may use, each of one site: any other (the generic one, or one that
-# takes any host, reached through a site's own forwarding page) follows an address anywhere,
-# this Mac's network included.
+# takes any host) follows an address anywhere, this Mac's network included. And each is given
+# only a recording's or a list's own address (known_links.py).
 EXTRACTORS = (
     r"youtube.*,-youtube:consent,vimeo.*,instagram.*,soundcloud.*,apple:podcasts"
     r",archive\.org,facebook,facebook:reel"
@@ -321,17 +322,18 @@ class YtDlp:
         return [self.binary, "--ignore-config", *own, *runtime, *args]
 
     def download(self, url: str, folder: Path) -> Path:
-        # Any other site is fetched by this Mac itself, never by yt-dlp (recording_file.py).
-        if not is_known_site(url):
+        address = known_address(self._shared(url) if is_short(url) else url)
+        # Any other is fetched by this Mac itself, never by yt-dlp (recording_file.py).
+        if address is None:
             return self._file(url, folder)
-        if (urlsplit(url).hostname or "").endswith(PODCASTS):
-            return self._episode(url, folder)
+        if urlsplit(address).hostname == PODCASTS:
+            return self._episode(address, folder)
         # Named after the recording: the app takes its title from the file's name.
         template = str(folder / "%(title).120B [%(id)s].%(ext)s")
         command = self._command("--no-playlist", "--playlist-items", "1")
         # A live stream never ends; a file larger than the app takes back is not fetched.
         command += ["--match-filter", "!is_live", "--max-filesize", "2G"]
-        command += ["-x", "--audio-format", "m4a", "-o", template, "--", url]
+        command += ["-x", "--audio-format", "m4a", "-o", template, "--", address]
         # A site refuses now and then what it gives a moment later (403, 429, a timeout).
         for wait in (*DOWNLOAD_WAITS_S, None):
             done = self._run(command, RECORDING_TIMEOUT_S)
@@ -344,6 +346,18 @@ class YtDlp:
             log.warning("yt-dlp was refused, again in %d s", wait)
             time.sleep(wait)
         raise AssertionError("unreachable")
+
+    @staticmethod
+    def _shared(url: str) -> str:
+        """The recording a share button's address leads to."""
+        try:
+            found = led_to(url, known_address)
+        except NotARecording as err:
+            raise DocIngestFailed("conversion-failed", str(err)) from err
+        if found is None:
+            detail = "the site does not say where this link leads: send the recording's own"
+            raise DocIngestFailed("conversion-failed", detail)
+        return found
 
     def _episode(self, url: str, folder: Path) -> Path:
         """The publisher's file, whatever the server: fetched by this Mac, as any other file."""
@@ -366,10 +380,11 @@ class YtDlp:
             raise DocIngestFailed("conversion-failed", str(err)) from err
 
     def entries(self, url: str) -> list[dict]:
-        if not is_known_site(url):
+        address = known_address(url)
+        if address is None:
             raise DocIngestFailed("conversion-failed", "not a list of a known site")
         command = self._command("--flat-playlist", "-J")
-        command += ["--playlist-end", str(LIST_MAX), "--", url]
+        command += ["--playlist-end", str(LIST_MAX), "--", address]
         done = self._run(command, LIST_TIMEOUT_S)
         if done.returncode != 0:
             output = (done.stdout + done.stderr).strip()

@@ -1,43 +1,24 @@
 """A recording that is a file: never from inside the owner's network, whatever the address says."""
 
+import subprocess
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from transcriber import recording_file
+from transcriber import doc_ingest, recording_file
 from transcriber.doc_ingest import DocIngestFailed, YtDlp
+from transcriber.known_links import known_address
 from transcriber.recording_file import (
     NotARecording,
     TooLarge,
     fetch_file,
-    is_known_site,
+    led_to,
     public_address,
 )
 
 PUBLIC = "93.184.216.34"
-
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "https://www.youtube.com/watch?v=x",
-        "https://youtu.be/x",
-        "https://m.soundcloud.com/a/b",
-        "https://archive.org/details/x",
-    ],
-)
-def test_known_sites_are_yt_dlps(url):
-    assert is_known_site(url)
-
-
-@pytest.mark.parametrize(
-    "url",
-    ["https://notyoutube.com/x", "https://youtube.com.evil.org/x", "http://127.0.0.1.nip.io/x.mp3"],
-)
-def test_a_lookalike_is_not(url):
-    assert not is_known_site(url)
 
 
 @pytest.mark.parametrize(
@@ -55,21 +36,31 @@ def test_yt_dlp_never_gets_an_address_of_another_site(tmp_path, monkeypatch):
     for url in ("http://127.0.0.1.nip.io:3000/x.mp3", "https://roteador.local/a.mp4"):
         with pytest.raises(DocIngestFailed, match="not a public address"):
             YtDlp().download(url, tmp_path)
-    with pytest.raises(DocIngestFailed, match="known site"):
-        YtDlp().entries("https://a.org/playlist")
+    # Nor a known site's page that forwards: it is fetched here, where each hop is checked.
+    with pytest.raises(DocIngestFailed, match="not a public address"):
+        YtDlp().download("https://www.youtube.com/redirect/videos?q=http%3A%2F%2Fx", tmp_path)
+    for url in ("https://a.org/playlist", "https://www.youtube.com/redirect?q=http%3A%2F%2Fx"):
+        with pytest.raises(DocIngestFailed, match="known site"):
+            YtDlp().entries(url)
 
 
 def fake_dns(address):
     return lambda host, *_args, **_kwargs: [(2, 1, 6, "", (address, 0))]
 
 
+# Where an address leads, instead of answering.
+SENT = {
+    "/away": "http://interno.example/a.mp3",
+    "/abc": "/meio",
+    "/meio": "https://www.facebook.com/watch/?v=12&ref=sharing",
+    "/apagado": "https://www.facebook.com/watch/",
+    "/interno": "http://interno.example/admin",
+    "/roda": "/roda",
+}
+
+
 class Site(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == "/away":
-            self.send_response(302)
-            self.send_header("Location", "http://interno.example/a.mp3")
-            self.end_headers()
-            return
         body = b"ID3 som"
         if self.path.endswith("corta.mp3"):
             self.send_response(200)
@@ -113,6 +104,11 @@ class Site(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "audio/mpeg")
             self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if self.path in SENT:
+            self.send_response(302)
+            self.send_header("Location", SENT[self.path])
             self.end_headers()
             return
         if self.path == "/acento":
@@ -232,3 +228,31 @@ def test_the_file_takes_the_title_that_is_known(site, tmp_path):
 def test_a_private_address_inside_another_is_refused(address):
     with pytest.raises(NotARecording, match="not a public address"):
         public_address("x.example", lambda _host: [address])
+
+
+def test_a_share_buttons_address_gives_the_recordings_own(site):
+    to = names(fb=PUBLIC, www=PUBLIC, interno="192.168.0.1")
+    assert led_to("http://fb.watch/abc", known_address, to) == "https://www.facebook.com/watch?v=12"
+    assert led_to("http://fb.watch/ep.mp3", known_address, to) is None
+    assert led_to("http://fb.watch/roda", known_address, to) is None
+    # Into the owner's network, it is not followed.
+    with pytest.raises(NotARecording, match="not a public address"):
+        led_to("http://fb.watch/interno", known_address, to)
+
+
+def test_a_share_buttons_address_is_followed_before_yt_dlp(tmp_path, monkeypatch):
+    given = []
+
+    def run(command, _timeout):
+        given.append(command[-1])
+        (tmp_path / "Aula [x].m4a").write_bytes(b"m4a")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(YtDlp, "_run", staticmethod(run))
+    leads = {"https://fb.watch/abc": "https://www.facebook.com/watch?v=12"}
+    monkeypatch.setattr(doc_ingest, "led_to", lambda url, _known: leads.get(url))
+    YtDlp().download("https://fb.watch/abc", tmp_path)
+    assert given == ["https://www.facebook.com/watch?v=12"]
+    with pytest.raises(DocIngestFailed, match="where this link leads"):
+        YtDlp().download("https://fb.watch/outro", tmp_path)
+    assert len(given) == 1

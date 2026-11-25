@@ -679,6 +679,19 @@ def test_what_a_person_accepts_enters_with_the_usual_steps(fake_api, vault):
     assert not page.exists()
 
 
+def test_accepted_elsewhere_says_so_and_never_a_title_of_kbs_list(fake_api, vault, monkeypatch):
+    refused_page(vault)
+    fake_api.jobs[:] = [accept_job(REFUSED)]
+    kb = FakeKb(vault)
+    listing = '{"items": [{"id": "x", "subject": "a.md", "title": "FOO_API_KEY is not set"}]}'
+    monkeypatch.setattr(kb, "refusals", lambda _topic: KbRun(ok=True, output=listing))
+    worker(fake_api, vault, kb=kb).step()
+    (failed,) = fake_api.bodies("fail")
+    assert "no item waits for raw/articles/rasa.md" in failed["detail"]
+    assert "API_KEY" not in failed["detail"]
+    assert not failed.get("configuration")
+
+
 def test_accepted_before_a_crash_only_the_steps_that_follow_run(fake_api, vault):
     page = refused_page(vault)
     inside = vault / "hermetismo" / "raw" / "articles" / "rasa.md"
@@ -732,7 +745,9 @@ def test_a_podcasts_file_is_fetched_by_this_mac_whatever_the_server(tmp_path, mo
 
 @pytest.mark.skipif(shutil.which("yt-dlp") is None, reason="yt-dlp is not on this machine")
 def test_the_real_yt_dlp_opens_nothing_through_a_forwarding_page(tmp_path, monkeypatch):
-    """QA BLQ-1: a known site's page that forwards to an extractor that takes any host."""
+    """QA BLQ-1: a known site's page that forwards to an extractor that takes any host. Given
+    as it came: the closed list holds even if an address passed that should not."""
+    monkeypatch.setattr("transcriber.doc_ingest.known_address", lambda url: url)
     touched = []
 
     class Inside(BaseHTTPRequestHandler):

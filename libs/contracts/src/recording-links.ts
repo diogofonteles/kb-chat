@@ -62,7 +62,11 @@ const FACEBOOK: Site = {
       return matches(url, /^\/[\w-]+$/) ? 'recording' : null;
     if (path(url) === '/watch')
       return url.searchParams.get('v') ? 'recording' : null;
-    return matches(url, /^(\/[^/]+\/videos(\/[^/]+)?\/\d+|\/reel\/\d+)$/)
+    return matches(
+      url,
+      // The last one is what its share button gives: the Mac asks where it leads.
+      /^(\/[^/]+\/videos(\/[^/]+)?\/\d+|\/reel\/\d+|\/share\/[vr]\/[\w-]+)$/,
+    )
       ? 'recording'
       : null;
   },

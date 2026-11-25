@@ -382,9 +382,12 @@ class KbPublisher:
     def accept(self, topic: str, document: str) -> None:
         """The document kb refused, back in the collection, by its item in kb's review queue."""
         listed = self.kb.refusals(topic)
-        item = review_item_of(listed.output, document) if listed.ok else None
+        if not listed.ok:
+            raise KbStepFailed("review", listed.output)
+        item = review_item_of(listed.output, document)
         if item is None:
-            raise KbStepFailed("review", listed.output or f"no item for {document}")
+            # Never the listing itself: the titles in it are anyone's words, not kb's.
+            raise KbStepFailed("review", f"no item waits for {document}")
         done = self.kb.accept(topic, item)
         if not done.ok:
             raise KbStepFailed("review accept", done.output)

@@ -2,7 +2,7 @@
 
 The address is a person's, and this Mac sits in the owner's home network: only a public address
 is ever connected to, each redirect is checked again, and the name is resolved once, so what
-was checked is what is connected to. Known sites are yt-dlp's (`is_known_site`).
+was checked is what is connected to. Recordings of known sites are yt-dlp's (`known_links.py`).
 """
 
 import contextlib
@@ -12,21 +12,9 @@ import socket
 import ssl
 import threading
 import urllib.parse
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
-# Where yt-dlp is let loose: each with its own extractor.
-KNOWN_SITES = (
-    "youtube.com",
-    "youtu.be",
-    "vimeo.com",
-    "instagram.com",
-    "soundcloud.com",
-    "podcasts.apple.com",
-    "archive.org",
-    "facebook.com",
-    "fb.watch",
-)
 EXTENSIONS = frozenset(
     ["mp3", "m4a", "wav", "flac", "ogg", "opus", "mp4", "mov", "m4v", "webm", "mkv", "avi"],
 )
@@ -48,11 +36,6 @@ class NotARecording(Exception):
 
 class TooLarge(NotARecording):
     """The file passes what the app takes back."""
-
-
-def is_known_site(url: str) -> bool:
-    host = (urllib.parse.urlsplit(url).hostname or "").lower()
-    return any(host == site or host.endswith(f".{site}") for site in KNOWN_SITES)
 
 
 def resolve(host: str) -> list[str]:
@@ -146,28 +129,75 @@ def _as_sent(header: str) -> str:
         return header
 
 
+def _ask(url: str, resolving: Resolve, deadline: Deadline) -> http.client.HTTPResponse:
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise NotARecording("not a web address")
+    connection = _connection(parts, public_address(parts.hostname, resolving))
+    # As typed, an address may have accents and spaces: the wire has none.
+    path = urllib.parse.quote(parts.path or "/", safe="/%:@!$&'()*+,;=~-._")
+    query = urllib.parse.quote(parts.query, safe="/%:@!$&'()*+,;=~-._?")
+    target = urllib.parse.urlunsplit(("", "", path, query, ""))
+    connection.connect()
+    deadline.watch(connection.sock)
+    connection.request("GET", target, headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"})
+    return connection.getresponse()
+
+
+def _sent_to(response: http.client.HTTPResponse, url: str) -> str | None:
+    """Where the answer sends whoever asked; None when it is the answer itself."""
+    if response.status not in (301, 302, 303, 307, 308):
+        return None
+    where = response.getheader("Location")
+    response.close()
+    if not where:
+        raise NotARecording("a redirect to nowhere")
+    return urllib.parse.urljoin(url, _as_sent(where))
+
+
 def _open(url: str, resolving: Resolve, deadline: Deadline) -> tuple[http.client.HTTPResponse, str]:
     for _hop in range(MAX_REDIRECTS):
-        parts = urllib.parse.urlsplit(url)
-        if parts.scheme not in ("http", "https") or not parts.hostname:
-            raise NotARecording("not a web address")
-        connection = _connection(parts, public_address(parts.hostname, resolving))
-        # As typed, an address may have accents and spaces: the wire has none.
-        path = urllib.parse.quote(parts.path or "/", safe="/%:@!$&'()*+,;=~-._")
-        query = urllib.parse.quote(parts.query, safe="/%:@!$&'()*+,;=~-._?")
-        target = urllib.parse.urlunsplit(("", "", path, query, ""))
-        connection.connect()
-        deadline.watch(connection.sock)
-        connection.request("GET", target, headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"})
-        response = connection.getresponse()
-        if response.status not in (301, 302, 303, 307, 308):
+        response = _ask(url, resolving, deadline)
+        where = _sent_to(response, url)
+        if where is None:
             return response, url
-        where = response.getheader("Location")
-        response.close()
-        if not where:
-            raise NotARecording("a redirect to nowhere")
-        url = urllib.parse.urljoin(url, _as_sent(where))
+        url = where
     raise NotARecording("too many redirects")
+
+
+@contextlib.contextmanager
+def _within(seconds: float) -> Iterator[Deadline]:
+    """The time of all that is asked inside, and what the network says as what it means."""
+    deadline = Deadline(seconds)
+    try:
+        with deadline:
+            yield deadline
+            # What ended early for the clock may look whole, or be refused for something else.
+            if deadline.passed:
+                raise NotARecording("the site took too long")
+    # ValueError: an address http.client cannot take (a port out of range, a broken host).
+    except (OSError, http.client.HTTPException, ValueError) as err:
+        late = deadline.passed
+        why = "the site took too long" if late else f"it could not be fetched: {err}"
+        raise NotARecording(why) from err
+
+
+def led_to(
+    url: str, known: Callable[[str], str | None], resolving: Resolve = resolve
+) -> str | None:
+    """Where a share button's address leads: the first one `known` takes, none asked for."""
+    with _within(TIMEOUT_S) as deadline:
+        for _hop in range(MAX_REDIRECTS):
+            response = _ask(url, resolving, deadline)
+            where = _sent_to(response, url)
+            if where is None:
+                response.close()
+                return None
+            found = known(where)
+            if found:
+                return found
+            url = where
+    return None
 
 
 # What a file served with no name of its own is called.
@@ -207,18 +237,8 @@ def fetch_file(
 ) -> Path:
     """The file at `url`, in `folder` (named `title`, when it is known); refused when it is not
     one, or is too large."""
-    deadline = Deadline(DEADLINE_S)
-    try:
-        with deadline:
-            found = _fetch(url, folder, resolving, deadline)
-            # What ended early for the clock may look whole, or be refused for something else.
-            if deadline.passed:
-                raise NotARecording("the site took too long")
-    # ValueError: an address http.client cannot take (a port out of range, a broken host).
-    except (OSError, http.client.HTTPException, ValueError) as err:
-        late = deadline.passed
-        why = "the site took too long" if late else f"it could not be fetched: {err}"
-        raise NotARecording(why) from err
+    with _within(DEADLINE_S) as deadline:
+        found = _fetch(url, folder, resolving, deadline)
     if not title:
         return found
     named = found.with_name(f"{_printable(title)[:120]}{found.suffix}")
