@@ -10,7 +10,7 @@ import {
   type CreateDocumentUploadRequest,
   type CreateDocumentUploadResponse,
   type DocumentBatch,
-  type DocumentUpload,
+  type DocumentUploadList,
 } from '@kb-chat/contracts';
 import { BusyWork } from '@core/app-version/busy-work.js';
 import { CSRF } from '@core/auth/auth-interceptor.js';
@@ -23,8 +23,6 @@ export const documentUploadsUrl = (): string => '/api/v1/document-uploads';
 export const contentCostsUrl = (): string => `${documentUploadsUrl()}/costs`;
 export const documentsUrl = (topic: string): string =>
   `/api/v1/topics/${encodeURIComponent(topic)}/documents`;
-export const parseDocumentUploads = (body: unknown) =>
-  documentUploadListSchema.parse(body).items;
 
 /** Retries of a part that did not arrive, as the media library's (ADR 0033). */
 const RETRY_DELAYS_MS = [0, 1_000, 3_000, 5_000, 10_000, 20_000, 30_000];
@@ -46,10 +44,18 @@ export class DocumentUploadsApi {
   private sends = 0;
 
   /** "Documentos em processamento": one's own sent documents (masters: everyone's). */
-  list(): Observable<DocumentUpload[]> {
+  list(): Observable<DocumentUploadList> {
     return this.http
       .get(documentUploadsUrl())
-      .pipe(map((body) => parseDocumentUploads(body)));
+      .pipe(map((body) => documentUploadListSchema.parse(body)));
+  }
+
+  /** What is ready leaves the list (it stays in the collection). */
+  clearReady(topic: string | null): Observable<unknown> {
+    return this.http.post(
+      `${documentUploadsUrl()}/clear-ready`,
+      topic === null ? {} : { topic },
+    );
   }
 
   /** A file announced (its bytes go by `send`) or a link; or what is already there (BR-3). */

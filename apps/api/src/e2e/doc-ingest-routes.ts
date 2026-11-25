@@ -13,7 +13,11 @@ const WORKER = 'transcriber:e2e-mac';
 /** A link whose host says so does not convert (KBC-149 AC-4). */
 const BROKEN_HOST = /quebrado/;
 
-const topicBody = z.object({ topic: z.string().min(1) });
+const runBody = z.object({
+  topic: z.string().min(1),
+  /** Takes one and stays at it: what the screen shows meanwhile (KBC-184). */
+  hold: z.boolean().default(false),
+});
 
 const slugOf = (name: string): string =>
   name
@@ -45,18 +49,14 @@ export function registerDocIngestMac(
     '/api/e2e/doc-ingest/run',
     { config: { access: PUBLIC } },
     async (request, reply) => {
-      const { topic } = topicBody.parse(request.body);
+      const { topic, hold } = runBody.parse(request.body);
       const queue = input.queue();
       if (!queue) return reply.code(404).send();
-      let done = 0;
-      for (
-        let job = queue.lease(WORKER, topic);
-        job;
-        job = queue.lease(WORKER, topic)
-      ) {
-        await ingest(queue, { job, vault: input.vault });
-        done += 1;
+      if (hold) {
+        await takeAndHold(queue, topic);
+        return reply.code(200).send({ done: 0 });
       }
+      const done = await ingestAll(queue, { topic, vault: input.vault });
       await input.catalog.refresh(topic);
       return reply.code(200).send({ done });
     },
@@ -64,6 +64,29 @@ export function registerDocIngestMac(
 }
 
 type Owner = Parameters<DocIngestQueue['step']>[0];
+
+async function ingestAll(
+  queue: DocIngestQueue,
+  { topic, vault }: { topic: string; vault: string },
+): Promise<number> {
+  let done = 0;
+  for (
+    let job = queue.lease(WORKER, topic);
+    job;
+    job = queue.lease(WORKER, topic)
+  ) {
+    await ingest(queue, { job, vault });
+    done += 1;
+  }
+  return done;
+}
+
+async function takeAndHold(queue: DocIngestQueue, topic: string) {
+  const job = queue.lease(WORKER, topic);
+  if (!job) return;
+  const owner = { jobId: job.id, worker: WORKER, leaseId: job.leaseId };
+  await queue.step(owner, { ...owner, state: 'classifying' });
+}
 
 async function ingest(
   queue: DocIngestQueue,

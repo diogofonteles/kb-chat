@@ -9,6 +9,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   DOCUMENT_BATCH_MAX_USD,
   type DocumentUpload,
+  type DocumentUploadList,
+  type DocumentWork,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { DocumentUploadsApi } from '@core/documents/document-uploads-api.js';
@@ -32,6 +34,9 @@ import { isSettled } from './upload-labels.js';
 /** A folder sends many at once: the list is read at most this often, and once at the end. */
 export const REFRESH_MS = 1_500;
 
+/** What `busyId` says while the ready ones are cleared. */
+const CLEARING = 'clear-ready';
+
 /** How much more one press of "Aumentar o teto" gives an inclusion. */
 export const RAISE_STEP_USD = 0.5;
 
@@ -48,12 +53,18 @@ export class DocumentUploadsStore {
   private readonly pollMs = inject(MEDIA_POLL_MS);
   private readonly asked = new Subject<void>();
   private readonly reading = signal<readonly DocumentUpload[]>([]);
+  private readonly macReading = signal<DocumentWork | null>(null);
+  private readonly readAt = signal(Date.now());
   private readonly read = signal(false);
   private readonly lost = signal(false);
   private readonly acting = signal<string | null>(null);
   private readonly problem = signal('');
 
   readonly items = this.reading.asReadonly();
+  /** The Mac, as the last reading said it; null when it was not said. */
+  readonly work = this.macReading.asReadonly();
+  /** When the last reading came: "há 1 min" is measured to it. */
+  readonly now = this.readAt.asReadonly();
   readonly failed = this.lost.asReadonly();
   /** The item a press is on: one at a time (PD-02). */
   readonly busyId = this.acting.asReadonly();
@@ -78,8 +89,10 @@ export class DocumentUploadsStore {
       ),
     )
       .pipe(takeUntilDestroyed())
-      .subscribe((items) => {
+      .subscribe(({ items, work }) => {
         this.reading.set(items);
+        this.macReading.set(work);
+        this.readAt.set(Date.now());
         this.read.set(true);
         this.lost.set(false);
       });
@@ -115,7 +128,12 @@ export class DocumentUploadsStore {
     this.act(upload.id, this.api.retry(upload.id));
   }
 
-  private list(): Observable<DocumentUpload[]> {
+  /** What is ready leaves the list, of one collection or of all. */
+  clearReady(topic: string | null): void {
+    this.act(CLEARING, this.api.clearReady(topic));
+  }
+
+  private list(): Observable<DocumentUploadList> {
     return this.api.list().pipe(
       catchError(() => {
         this.lost.set(true);

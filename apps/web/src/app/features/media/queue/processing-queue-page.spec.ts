@@ -7,7 +7,11 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { render, screen, within } from '@testing-library/angular';
-import type { MediaPreparation, ProcessingQueue } from '@kb-chat/contracts';
+import type {
+  DocumentUpload,
+  MediaPreparation,
+  ProcessingQueue,
+} from '@kb-chat/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { sessionAs } from '../../../testing/media-fixtures.js';
@@ -270,5 +274,51 @@ describe('ProcessingQueuePage (T23, KBC-090)', () => {
         .getByRole('link', { name: 'Palestra de 1998' })
         .getAttribute('href'),
     ).toBe(`/midia/${MEDIA_ID}`);
+  });
+
+  it('counts the sent documents with the audios under the title', async () => {
+    const { http, fixture } = await open(
+      aQueue({ active: 1, items: [aQueueItem({ phase: 'attention' })] }),
+    );
+    const sent = (state: DocumentUpload['state']): DocumentUpload => ({
+      id: crypto.randomUUID(),
+      topic: 'hermetismo',
+      kind: 'url',
+      name: 'https://a.example',
+      state,
+      failure: null,
+      detail: null,
+      document: null,
+      mediaId: null,
+      bytes: null,
+      received: null,
+      uploadUrl: null,
+      batch: null,
+      heldBy: null,
+      review: false,
+      entries: [],
+      retriable: false,
+      progress: {
+        startedAt: null,
+        position: null,
+        startsInSeconds: null,
+        takesSeconds: null,
+        media: null,
+      },
+      createdAt: '2026-11-25T10:00:00.000Z',
+      updatedAt: '2026-11-25T10:00:00.000Z',
+    });
+    http.expectOne('/api/v1/document-uploads').flush({
+      items: [
+        sent('received'),
+        sent('received'),
+        sent('failed'),
+        sent('ready'),
+      ],
+    });
+    await settle(fixture);
+    expect(
+      screen.getByText('4 itens · 2 precisam de você · 2 a seguir'),
+    ).toBeTruthy();
   });
 });

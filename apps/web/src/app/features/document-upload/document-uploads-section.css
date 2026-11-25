@@ -1,6 +1,25 @@
-.group h3 {
-  margin: 0 0 var(--space-3);
+.group {
+  display: grid;
+  gap: var(--space-3);
+}
+
+h3 {
+  margin: 0;
   font-size: var(--text-md);
+}
+
+h3:focus {
+  outline: none;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.filters button {
+  min-height: 2.75rem;
 }
 
 .rows {
@@ -11,108 +30,17 @@
   list-style: none;
 }
 
-.row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
-  padding: var(--space-3) var(--space-2);
-  border-radius: var(--radius-menu);
-}
-
-.row:hover {
-  background: var(--overlay-2);
-}
-
-/* On a phone: the cross beside the name, the state and what can be done under it. */
-.actions {
-  display: contents;
-}
-
-.row > ui-pill {
-  grid-column: 2 / -1;
-  justify-self: start;
-}
-
-.actions button {
-  grid-column: 2 / -1;
-  justify-self: start;
-  min-height: 2.75rem;
-}
-
-.actions .remove {
-  grid-column: 3;
-  grid-row: 1;
-}
-
-.art {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-cover);
-  background: var(--color-elevated);
-  color: var(--color-text-muted);
-}
-
-.text {
-  min-width: 0;
-}
-
-.text p {
+.none {
   margin: 0;
-}
-
-.name {
-  overflow-wrap: anywhere;
-  color: var(--color-text);
-  font-size: var(--text-item);
-}
-
-.meta,
-.hint,
-.detail {
   color: var(--color-text-muted);
-  font-size: var(--text-meta);
 }
 
-.detail {
-  overflow-wrap: anywhere;
-  font-family: ui-monospace, monospace;
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
-.why {
-  color: var(--color-danger);
-  font-size: var(--text-meta);
-}
-
-@media (min-width: 1024px) {
-  .row {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-  }
-
-  .row > ui-pill {
-    grid-column: auto;
-  }
-
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    align-items: center;
-    justify-content: flex-end;
-  }
-
-  .actions:empty {
-    display: none;
-  }
-}
-
-.more {
+.foot button {
   min-height: 2.75rem;
-}
-
-.chooser {
-  grid-column: 1 / -1;
-  min-width: 0;
 }
