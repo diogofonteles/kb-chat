@@ -9,6 +9,7 @@ import type { AppConfig } from './config.js';
 import type { MediaDeps } from './media-factory.js';
 import type { MediaDocuments } from './media-documents-factory.js';
 import {
+  KB_LOW_BALANCE_USD,
   TRANSCRIBER_STATUS_STALE_MS,
   sameLinkKey,
   type DocumentWork,
@@ -74,6 +75,7 @@ export interface DocumentUploadsWiring {
     readonly lastSeenAt: () => string | null;
     /** What else it does now (it takes one thing at a time). */
     readonly doing: () => DocumentWork['mac']['doing'];
+    readonly kbBalanceUsd: () => number | null;
     readonly percentOf: (mediaId: string) => number | null;
   };
 }
@@ -283,7 +285,9 @@ function mediaStepOf(
 /** Seen in the last minutes is on: it runs only while it has work, and says so every 30 s. */
 function macNow(mac: DocumentUploadsWiring['mac']): DocumentWork['mac'] {
   const lastSeenAt = mac.lastSeenAt();
-  if (!mac.isPaired()) return { state: 'none', lastSeenAt: null, doing: null };
+  const lowBalanceUsd = lowOf(mac.kbBalanceUsd());
+  if (!mac.isPaired())
+    return { state: 'none', lastSeenAt: null, doing: null, lowBalanceUsd };
   const age =
     lastSeenAt === null
       ? Number.POSITIVE_INFINITY
@@ -292,8 +296,12 @@ function macNow(mac: DocumentUploadsWiring['mac']): DocumentWork['mac'] {
     state: age <= TRANSCRIBER_STATUS_STALE_MS ? 'on' : 'off',
     lastSeenAt,
     doing: mac.doing(),
+    lowBalanceUsd,
   };
 }
+
+const lowOf = (usd: number | null): number | null =>
+  usd !== null && usd < KB_LOW_BALANCE_USD ? usd : null;
 
 /** ADR 0036 §5: the document is placed at its level before it arrives (audited). */
 async function placeLevel(

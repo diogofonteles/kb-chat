@@ -1373,6 +1373,7 @@ const macOf = (
   isPaired: () => transcribers.presence('kb-publish').transcriber !== 'none',
   lastSeenAt: () => transcribers.lastSeenAt('kb-publish'),
   doing: () => boardNow()?.doing() ?? null,
+  kbBalanceUsd: () => boardNow()?.kbBalanceUsd() ?? null,
   percentOf: (id) => boardNow()?.percentOf(id) ?? null,
 });
 

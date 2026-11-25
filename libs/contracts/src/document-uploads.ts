@@ -59,6 +59,9 @@ export const documentLinkSchema = z
     return parsed.username === '' && parsed.password === '';
   }, 'A link with credentials is refused');
 
+/** Under this the masters are warned that kb's account is ending (KBC-009 BR-3). */
+export const KB_LOW_BALANCE_USD = 1;
+
 /* ---------- One inclusion (batch) and its ceiling (KBC-009 R3) ---------- */
 
 /** What one inclusion may spend when the person does not say. */
@@ -245,6 +248,8 @@ export const documentWorkSchema = z.object({
     lastSeenAt: z.iso.datetime().nullable(),
     /** What else it does now: it takes one thing at a time. */
     doing: z.enum(['recording', 'publishing']).nullable().default(null),
+    /** What kb's OpenRouter account has left, when low: masters only, and when it is known. */
+    lowBalanceUsd: z.number().nullable().optional(),
   }),
   /** The Mac has an item now, whoever sent it. */
   busy: z.boolean(),

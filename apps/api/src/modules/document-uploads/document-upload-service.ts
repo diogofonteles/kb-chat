@@ -606,7 +606,10 @@ export class DocumentUploadService {
       records.map((one) => this.viewOf(one, actor, moment)),
     );
     const { busy, waiting } = moment.line;
-    return { items, work: { mac: moment.mac, busy, waiting } };
+    // What kb's account has is the masters' to know.
+    const { state, lastSeenAt, doing } = moment.mac;
+    const mac = actor.isMaster ? moment.mac : { state, lastSeenAt, doing };
+    return { items, work: { mac, busy, waiting } };
   }
 
   private visibleTo(actor: UploadActor): DocumentUploadRecord[] {

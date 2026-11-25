@@ -110,7 +110,8 @@ def run(args: argparse.Namespace) -> int:
         print(str(err), file=sys.stderr)
         return 2
     vault = os.environ.get("KB_CHAT_VAULT") or config.get("vault_path")
-    from .kb_keys import kb_env, kb_problems
+    from .kb_balance import KbBalance
+    from .kb_keys import REQUIRED_KEY, kb_env, kb_problems
 
     # KBC-117: the kb's AI keys from the Keychain, for kb's own environment only.
     env = {} if args.no_kb_publish else kb_env(keys_of())
@@ -120,6 +121,8 @@ def run(args: argparse.Namespace) -> int:
         logging.getLogger("transcriber").error("kb-publish off: %s", problem["detail"])
     kb = publisher.kb if publisher else None
     status = status_of(publisher)
+    if publisher:
+        status.kb_balance = KbBalance({**os.environ, **env}.get(REQUIRED_KEY)).read
     reporter = StatusReporter(api)
     announce_preparing(status, reporter)
     model, count = _mlx()

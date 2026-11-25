@@ -643,6 +643,23 @@ describe('the third review (review C)', () => {
     });
   });
 
+  it("what kb's account has left is the masters' to know (KBC-009 BR-3)", async () => {
+    const { service } = await world({
+      deps: {
+        mac: () => ({
+          state: 'on',
+          lastSeenAt: null,
+          doing: null,
+          lowBalanceUsd: 0.4,
+        }),
+      },
+    });
+    expect((await service.list(master)).work?.mac.lowBalanceUsd).toBe(0.4);
+    expect((await service.list(ana)).work?.mac).not.toHaveProperty(
+      'lowBalanceUsd',
+    );
+  });
+
   it('nobody knows when the next starts while the Mac is at something else (I8)', async () => {
     const { service } = await world({
       deps: {
