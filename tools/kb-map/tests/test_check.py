@@ -105,3 +105,20 @@ def test_broken_coverage_and_orphans_fail(vault):
 
     kinds = _kinds(run_check(topic))
     assert {"sections", "orphan", "tree"} <= set(kinds)
+
+
+def test_what_a_person_took_out_keeps_its_place_in_the_map(vault):
+    """KBC-187: it may come back, and the map is whole meanwhile."""
+    topic, _layout, _model = _complete_map(vault)
+    assert run_check(topic) == []
+    inside = vault / TOPIC / "raw/articles/ritmo-ml.md"
+    apart = vault / TOPIC / "raw/_quarantine/articles/ritmo-ml.md"
+    apart.parent.mkdir(parents=True)
+    text = inside.read_text(encoding="utf-8")
+    marks = "---\ntriage: quarantined\ntriage_reason: removed_by_person\n"
+    apart.write_text(text.replace("---\n", marks, 1), encoding="utf-8")
+    inside.unlink()
+    assert run_check(topic) == []
+    # What kb itself refused, or what is nowhere, is an orphan as ever.
+    apart.write_text(text.replace("---\n", "---\ntriage_reason: thin\n", 1), encoding="utf-8")
+    assert "orphan" in _kinds(run_check(topic))

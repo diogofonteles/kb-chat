@@ -20,11 +20,11 @@ import {
   type DocumentRemovalList,
   type DocumentRemovalState,
 } from '@kb-chat/contracts';
-import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import {
   DocumentRemovalsApi,
   documentRemovalsUrl,
 } from '@core/documents/document-removals-api.js';
+import { problemOf } from './removal-problem.js';
 import { UiButton, UiPill, type Tone } from '@ui/index.js';
 import { finalize, type Observable } from 'rxjs';
 
@@ -207,7 +207,7 @@ export class RemovedDocuments {
       .subscribe({
         next: () => this.settled(),
         error: (err: unknown) => {
-          this.problem.set(errorMessage(toUiErrorCode(err)));
+          this.problem.set(problemOf(err));
           this.removals.reload();
         },
       });

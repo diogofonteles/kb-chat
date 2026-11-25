@@ -439,7 +439,7 @@ export class DocumentPanel {
     this.pendingSection.set({ id: headingId(section.title) });
   }
 
-  /** ⋯ "Sobre este documento": where the text ends, its authorship, subjects and copies. */
+  /** ⋯ "Remover do acervo" (KBC-187): asked first. */
   protected askRemoval(doc: KbDocument): void {
     // What is named is what leaves, whatever the panel reads by then.
     const [topic, id] = [this.topic(), this.documentId()];
@@ -447,6 +447,7 @@ export class DocumentPanel {
     afterNextRender(() => this.removal()?.open(), { injector: this.injector });
   }
 
+  /** ⋯ "Sobre este documento": where the text ends, its authorship, subjects and copies. */
   protected goToAbout(): void {
     const about = this.host.querySelector<HTMLElement>('.about');
     about?.scrollIntoView({ block: 'start' });

@@ -12,9 +12,9 @@ import {
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { DocumentRemovalsApi } from '@core/documents/document-removals-api.js';
 import { UiButton, UiDialog } from '@ui/index.js';
+import { problemOf } from './removal-problem.js';
 import { finalize, type Observable } from 'rxjs';
 
 /**
@@ -35,7 +35,14 @@ import { finalize, type Observable } from 'rxjs';
       [closeOnBackdrop]="!busy()"
       (closed)="left()"
     >
-      @if (removalId()) {
+      @if (returning()) {
+        <p #done class="text" tabindex="-1" role="status">
+          <span i18n="@@removal.returning"
+            >“{{ title() }}” está voltando ao acervo {{ collection() }}. O Mac
+            já tinha movido o arquivo: ele aparece quando o Mac o trouxer.</span
+          >
+        </p>
+      } @else if (removalId()) {
         <p #done class="text" tabindex="-1" role="status">
           <span i18n="@@removal.done"
             >“{{ title() }}” saiu do acervo {{ collection() }}. Você o traz de
@@ -60,7 +67,11 @@ import { finalize, type Observable } from 'rxjs';
         <p class="error" role="alert">{{ message }}</p>
       }
       <div uiDialogFooter class="actions">
-        @if (removalId(); as id) {
+        @if (returning()) {
+          <button uiButton="white" type="button" (click)="close()">
+            <span i18n="@@removal.close">Concluir</span>
+          </button>
+        } @else if (removalId(); as id) {
           <button
             uiButton="ghost"
             type="button"
@@ -138,10 +149,13 @@ export class RemoveDocumentDialog {
   protected readonly failure = signal('');
   /** Out of the collection: what brings it back. */
   protected readonly removalId = signal<string | null>(null);
+  /** Asked back, and the Mac has to bring it. */
+  protected readonly returning = signal(false);
 
   open(): void {
     this.failure.set('');
     this.removalId.set(null);
+    this.returning.set(false);
     this.dialog().open();
   }
 
@@ -166,14 +180,24 @@ export class RemoveDocumentDialog {
         this.removed.emit();
         return;
       }
-      afterNextRender(() => this.done()?.nativeElement.focus(), {
-        injector: this.injector,
-      });
+      this.focusDone();
+    });
+  }
+
+  private focusDone(): void {
+    afterNextRender(() => this.done()?.nativeElement.focus(), {
+      injector: this.injector,
     });
   }
 
   protected bringBack(id: string): void {
-    this.act(this.api.restore(id), () => {
+    this.act(this.api.restore(id), (removal) => {
+      // The Mac had moved it: it is not there to be read until the Mac brings it back.
+      if (removal) {
+        this.returning.set(true);
+        this.focusDone();
+        return;
+      }
       this.removalId.set(null);
       this.close();
     });
@@ -190,8 +214,7 @@ export class RemoveDocumentDialog {
       )
       .subscribe({
         next: then,
-        error: (err: unknown) =>
-          this.failure.set(errorMessage(toUiErrorCode(err))),
+        error: (err: unknown) => this.failure.set(problemOf(err)),
       });
   }
 }

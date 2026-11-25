@@ -41,13 +41,7 @@ export async function registerDocumentRemovals(
   wiring: DocumentRemovalsWiring,
 ): Promise<DocIngestWork> {
   const { records, catalog, uploads } = wiring;
-  const service = new RemovalService({
-    records,
-    catalog,
-    levelOf: (topic, id) =>
-      wiring.levels.directory.placementsOf(topic)[id]?.level ?? null,
-    placeLevel: (record) => placeLevel(app, wiring, record),
-  });
+  const service = removalService(app, wiring);
   await app.register(
     documentRemovalRoutes({
       service,
@@ -68,15 +62,33 @@ export async function registerDocumentRemovals(
   return jobs;
 }
 
+const removalService = (
+  app: FastifyInstance,
+  wiring: DocumentRemovalsWiring,
+): RemovalService =>
+  new RemovalService({
+    records: wiring.records,
+    catalog: wiring.catalog,
+    levelOf: (topic, id) =>
+      wiring.levels.directory.placementsOf(topic)[id]?.level ?? null,
+    placeLevel: (record) => placeLevel(app, wiring, record),
+    done: (what, record, by) =>
+      app.log.info(
+        { what, by, topic: record.topic, document: record.document.id },
+        'document removal',
+      ),
+  });
+
 /** A master: what they see is theirs to take out. */
 function actorOf(
   app: FastifyInstance,
   request: FastifyRequest,
   catalog: CatalogRegistry,
 ): RemovalActor {
-  const { person } = viewerOf(request);
+  const { person, principal } = viewerOf(request);
   const parentOf = app.topicParentOf ?? NO_PARENT;
   return {
+    principal,
     email: person.email,
     name: person.name ?? '',
     canSee: (topic) => canSeeTopic(person, topic, parentOf),
@@ -103,7 +115,9 @@ async function placeLevel(
   { levels }: Pick<DocumentRemovalsWiring, 'levels'>,
   { topic, document, level, by }: RemovalRecord,
 ): Promise<void> {
-  if (level === null) return;
+  // It still has it, or was placed anew: nothing to say in the levels' audit.
+  const now = levels.directory.placementsOf(topic)[document.id]?.level;
+  if (level === null || now !== undefined) return;
   await levels.documents.placeArriving(
     { actor: { by: by.email }, log: app.log },
     { topic, id: document.id, level },

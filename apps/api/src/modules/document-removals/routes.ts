@@ -1,6 +1,7 @@
 import {
   documentRemovalListSchema,
   documentRemovalSchema,
+  documentRestoreSchema,
   topicSlugSchema,
 } from '@kb-chat/contracts';
 import type {
@@ -65,10 +66,7 @@ function registerRestore(app: FastifyInstance, deps: DocumentRemovalRouteDeps) {
       config,
       schema: {
         params: removalParams,
-        // Null: the Mac never took it out, and it is back already.
-        response: {
-          200: z.object({ removal: documentRemovalSchema.nullable() }),
-        },
+        response: { 200: documentRestoreSchema },
       },
     },
     async (request) => ({

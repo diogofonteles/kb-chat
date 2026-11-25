@@ -6,6 +6,7 @@ a Mac that cannot tell says nothing, and nothing here is ever logged.
 
 import http.client
 import json
+import math
 import threading
 import time
 import urllib.request
@@ -39,7 +40,9 @@ def ask_with(key: str) -> Ask:
 
 
 def _number(value: object) -> float | None:
-    return float(value) if isinstance(value, int | float) else None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value) if math.isfinite(value) else None
 
 
 def account_left(answer: dict) -> float | None:

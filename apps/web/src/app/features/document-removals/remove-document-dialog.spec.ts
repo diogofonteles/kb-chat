@@ -136,4 +136,38 @@ describe('RemoveDocumentDialog (KBC-187)', () => {
     await fixture.whenStable();
     expect(document.activeElement).toBe(button);
   });
+
+  it('the Mac had moved it already: it says it is on its way, and is read no more (IMP-3)', async () => {
+    const { http, fixture, removed } = await opened();
+    press('Remover do acervo');
+    http.expectOne(URL).flush(REMOVAL);
+    await fixture.whenStable();
+    press('Trazer de volta');
+    http
+      .expectOne(`/api/v1/document-removals/${ID}/restore`)
+      .flush({ removal: { ...REMOVAL, state: 'restoring', asked: 'present' } });
+    await fixture.whenStable();
+    expect(screen.getByText(/está voltando ao acervo Hermetismo/)).toBeTruthy();
+    press('Concluir');
+    await fixture.whenStable();
+    expect(removed).toHaveBeenCalledOnce();
+  });
+
+  it('another master was first: it says that', async () => {
+    const { http, fixture } = await opened();
+    press('Remover do acervo');
+    http.expectOne(URL).flush(REMOVAL);
+    await fixture.whenStable();
+    press('Trazer de volta');
+    http
+      .expectOne(`/api/v1/document-removals/${ID}/restore`)
+      .flush(
+        { error: { code: 'NOT_FOUND', message: 'x' } },
+        { status: 404, statusText: 'x' },
+      );
+    await fixture.whenStable();
+    expect(screen.getByRole('alert', { hidden: true }).textContent).toContain(
+      'Isto mudou enquanto você agia',
+    );
+  });
 });

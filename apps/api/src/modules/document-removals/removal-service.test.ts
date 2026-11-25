@@ -38,6 +38,7 @@ function vaultOf(gate: { wait?: Promise<void> } = {}): VaultReaderPort {
 }
 
 const master = {
+  principal: 'dono',
   email: 'dono@example.com',
   name: 'Dono',
   canSee: () => true,
@@ -149,7 +150,7 @@ describe('VaultJobs (KBC-187)', () => {
       docs: {
         leasableJobs: () => docs.leasable,
         isHeldBy: () => docs.held,
-        lease: () => null,
+        lease: () => ({ id: 'doc' }),
         isJob: (id: string) => id === 'doc',
         complete: () => Promise.resolve(),
       } as never,
@@ -163,7 +164,9 @@ describe('VaultJobs (KBC-187)', () => {
     const { id } = await service.remove(master, 'hermetismo', 'raw/livro.md');
     expect(made.leasableJobs()).toBe(1);
     expect(made.isHeldBy('mac')).toBe(false);
+    // It costs nothing and takes seconds: before what was sent.
     expect(made.lease('mac')?.id).toBe(id);
+    expect(made.lease('other')?.id).toBe('doc');
     expect(made.isHeldBy('mac')).toBe(true);
     expect([made.isJob(id), made.isJob('doc'), made.isJob('x')]).toEqual([
       true,

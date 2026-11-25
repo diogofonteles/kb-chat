@@ -48,6 +48,8 @@ def read(balance):
         (http.client.IncompleteRead(b""), {}, None),
         ({"data": None}, {}, None),
         ([], {"data": {"limit_remaining": "x"}}, None),
+        ({"data": {"total_credits": True, "total_usage": 0}}, {}, None),
+        (ACCOUNT, {"data": {"limit_remaining": float("nan")}}, 0.75),
     ],
 )
 def test_it_is_the_lowest_known_and_none_when_nothing_tells(credits, key, left):

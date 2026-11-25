@@ -8,6 +8,7 @@ import type { RemovalRecords } from './removal-records.js';
 
 /** A master, as the removal keeps them. */
 export interface RemovalActor {
+  readonly principal: string;
   readonly email: string;
   readonly name: string;
   readonly canSee: (topic: string) => boolean;
@@ -18,6 +19,12 @@ export interface RemovalServiceDeps {
   readonly records: RemovalRecords;
   readonly catalog: CatalogRegistry;
   readonly levelOf: (topic: string, id: string) => string | null;
+  /** Who asked for what: the record itself ends when it is back. */
+  readonly done?: (
+    what: 'remove' | 'restore' | 'retry',
+    record: RemovalRecord,
+    by: string,
+  ) => void;
   /** Back, it has the level it had (ADR 0036 §5). */
   readonly placeLevel?: (record: RemovalRecord) => Promise<void>;
   readonly now?: () => Date;
@@ -68,6 +75,7 @@ export class RemovalService {
     };
     await this.deps.records.put(record);
     this.deps.catalog.hide(home);
+    this.deps.done?.('remove', record, actor.principal);
     return this.toRemoval(record);
   }
 
@@ -107,6 +115,7 @@ export class RemovalService {
       detail: null,
     }));
     if (!asked) throw notFound();
+    this.deps.done?.('restore', asked, actor.principal);
     // No Mac was ever asked to take it: there is nothing to move back.
     const nothingToMove = !isPending(asked) && asked.lease === null;
     if (nothingToMove) {
@@ -127,6 +136,7 @@ export class RemovalService {
       detail: null,
     }));
     if (!again) throw notFound();
+    this.deps.done?.('retry', again, actor.principal);
     return this.toRemoval(again);
   }
 

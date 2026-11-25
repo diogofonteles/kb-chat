@@ -190,7 +190,11 @@ export class DocumentWorkCard {
   protected readonly lowBalance = computed(() => {
     const usd = this.work()?.mac.lowBalanceUsd ?? null;
     if (usd === null) return '';
-    const left = formatNumber(Math.max(0, usd), this.locale, '1.2-2');
+    const left = formatNumber(
+      Math.floor(Math.max(0, usd) * 100) / 100,
+      this.locale,
+      '1.2-2',
+    );
     return $localize`:@@docProgress.lowBalance:A conta da OpenRouter do kb está no fim: US$ ${left}:usd:. Sem saldo, o Mac não consegue incluir documentos.`;
   });
 

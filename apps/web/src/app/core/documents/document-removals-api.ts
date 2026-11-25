@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
   documentRemovalSchema,
+  documentRestoreSchema,
   type DocumentRemoval,
 } from '@kb-chat/contracts';
 import { documentUrl } from '@core/api/kb-api.js';
@@ -24,8 +25,11 @@ export class DocumentRemovalsApi {
       .pipe(map((body) => documentRemovalSchema.parse(body)));
   }
 
-  restore(id: string): Observable<unknown> {
-    return this.http.post(removalUrl(id, 'restore'), {});
+  /** Null: it is back; else the Mac has to bring it. */
+  restore(id: string): Observable<DocumentRemoval | null> {
+    return this.http
+      .post(removalUrl(id, 'restore'), {})
+      .pipe(map((body) => documentRestoreSchema.parse(body).removal));
   }
 
   /** The Mac gave up on it. */

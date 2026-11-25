@@ -283,7 +283,7 @@ function mediaStepOf(
 }
 
 /** Seen in the last minutes is on: it runs only while it has work, and says so every 30 s. */
-function macNow(mac: DocumentUploadsWiring['mac']): DocumentWork['mac'] {
+export function macNow(mac: DocumentUploadsWiring['mac']): DocumentWork['mac'] {
   const lastSeenAt = mac.lastSeenAt();
   const lowBalanceUsd = lowOf(mac.kbBalanceUsd());
   if (!mac.isPaired())

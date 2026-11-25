@@ -35,6 +35,11 @@ export const documentRemovalSchema = z.object({
 });
 export type DocumentRemoval = z.infer<typeof documentRemovalSchema>;
 
+/** Null: no Mac was asked to take it, and it is back already. */
+export const documentRestoreSchema = z.object({
+  removal: documentRemovalSchema.nullable(),
+});
+
 export const documentRemovalListSchema = z.object({
   items: z.array(documentRemovalSchema),
 });

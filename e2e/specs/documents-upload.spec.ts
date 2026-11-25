@@ -703,6 +703,12 @@ test('KBC-187: a master takes a document out of the collection, gone for everyon
       .analyze()
   ).violations.filter((v) => ['serious', 'critical'].includes(v.impact ?? ''));
   expect(serious).toEqual([]);
+  // Escape is the question's: the document stays open.
+  await master.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(panel.getByRole('heading').first()).toBeVisible();
+  await panel.getByRole('button', { name: 'Mais opções' }).first().click();
+  await master.getByRole('menuitem', { name: 'Remover do acervo' }).click();
   await dialog.getByRole('button', { name: 'Remover do acervo' }).click();
   await expect(dialog.getByText(/saiu do acervo/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Concluir' }).click();

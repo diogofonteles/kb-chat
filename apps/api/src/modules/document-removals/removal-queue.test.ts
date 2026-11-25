@@ -129,6 +129,7 @@ describe('RemovalQueue (KBC-187)', () => {
 
 describe('a Mac that moved it and never said so (B-1)', () => {
   const master = {
+    principal: 'dono',
     email: 'dono@example.com',
     name: 'Dono',
     canSee: () => true,

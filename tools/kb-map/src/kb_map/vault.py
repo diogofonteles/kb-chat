@@ -21,6 +21,8 @@ from .textutil import sha256_text
 
 FRONTMATTER = re.compile(r"^---\r?\n([\s\S]*?)\r?\n---\r?\n?")
 EXCLUDED_SEGMENT = "_quarantine"
+# The reason kb writes on what a person took out (the transcriber's `REMOVED`).
+TAKEN_OUT = "removed_by_person"
 # Kept originals (KBC-148) are never sources, whatever their extension.
 ORIGINALS_SEGMENT = "_originals"
 
@@ -101,6 +103,15 @@ class Topic:
                 continue
             ids.append(relative.as_posix())
         return sorted(ids)
+
+    def was_taken_out(self, doc_id: str) -> bool:
+        """A person took it out of the collection in the app (KBC-187): it is in kb's quarantine
+        as they left it, and may come back."""
+        apart = self.resolve(doc_id.replace("raw/", f"raw/{EXCLUDED_SEGMENT}/", 1))
+        if not apart.is_file():
+            return False
+        split = split_frontmatter(apart.read_text(encoding="utf-8"))
+        return split.data.get("triage_reason") == TAKEN_OUT
 
     def read(self, doc_id: str) -> Document:
         path = self.resolve(doc_id)
