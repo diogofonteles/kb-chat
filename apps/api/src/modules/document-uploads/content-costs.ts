@@ -35,9 +35,13 @@ export const costKindOf = (
   return IMAGE.test(record.name) ? 'image' : 'document';
 };
 
-/** Done on the Mac as a new document (one already there was not judged). */
+/**
+ * Done on the Mac as a new document (one already there was not judged); a recording, once it
+ * was published: what that spent is on it (`bookRecording`).
+ */
 const isSample = (record: DocumentUploadRecord): boolean =>
-  record.state === 'mapped' && record.detail === null;
+  (record.state === 'mapped' && record.detail === null) ||
+  (record.state === 'transcribing' && record.spentUsd > 0);
 
 function atShare(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b);

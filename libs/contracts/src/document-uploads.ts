@@ -64,7 +64,7 @@ export const documentLinkSchema = z
 /** What one inclusion may spend when the person does not say. */
 export const DOCUMENT_BATCH_DEFAULT_USD = 0.5;
 export const DOCUMENT_BATCH_MIN_USD = 0.05;
-export const DOCUMENT_BATCH_MAX_USD = 5;
+export const DOCUMENT_BATCH_MAX_USD = 100;
 
 const batchCapSchema = z
   .number()
@@ -98,18 +98,6 @@ export type ChangeDocumentBatchRequest = z.infer<
 export const DOCUMENT_WAITING_MAX_BYTES = 5 * 1024 ** 3;
 /** The disk keeps at least this free: the rest of the app lives there too. */
 export const DOCUMENT_DISK_RESERVE_BYTES = 5 * 1024 ** 3;
-
-const TRACKING = /^(utm_\w+|fbclid|gclid|igsh|si)$/i;
-
-/** The same page under another address (its fragment, a campaign's marks) is one link. */
-export function sameLinkKey(link: string): string {
-  if (!URL.canParse(link)) return link;
-  const url = new URL(link);
-  url.hash = '';
-  for (const name of [...url.searchParams.keys()])
-    if (TRACKING.test(name)) url.searchParams.delete(name);
-  return url.toString();
-}
 
 /**
  * POST /api/v1/topics/:topic/documents (FR-1): a file announced (its bytes go by tus to the
@@ -177,6 +165,10 @@ export type DocumentUploadState = z.infer<typeof documentUploadStateSchema>;
 export const DOCUMENT_UPLOAD_FAILURES = [
   /** The converter could not read it (an unreadable PDF, a page that would not load). */
   'conversion-failed',
+  /** A live stream: there is no end to wait for. */
+  'live',
+  /** A recording past what the app takes back (2 GB). */
+  'too-large',
   /** It converted to nothing usable (BR-3 of KBC-148). */
   'empty',
   /** kb refused or sent it to review (quarantine, quality). */
@@ -199,7 +191,7 @@ export const uploadedDocumentRefSchema = z.object({
 export type UploadedDocumentRef = z.infer<typeof uploadedDocumentRefSchema>;
 
 /** The most of a channel or playlist the Mac lists for the person to choose from. */
-export const RECORDING_LIST_MAX = 200;
+export const RECORDING_LIST_MAX = 5_000;
 
 /** One recording of a list (KBC-186 R7), to be chosen before anything enters. */
 export const recordingEntrySchema = z.object({

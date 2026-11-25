@@ -2,6 +2,7 @@ import {
   documentLinkSchema,
   isMediaHost,
   mediaLinkOf,
+  sameLinkKey,
   type MediaLinkKind,
   type WebSearchKind,
   type WebSearchResult,
@@ -111,19 +112,8 @@ function toCandidate(
   };
 }
 
-/** What a link carries about who shared it, not about what it is. */
-const TRACKING = /^(utm_\w+|fbclid|gclid|igshid|mc_cid|mc_eid|ref_src)$/;
-
-/** The same page, whatever the scheme, the `www.`, the place in it or who shared it. */
-export function pageKey(url: string): string {
-  const { hostname, port, pathname, searchParams } = new URL(url);
-  const kept = [...searchParams]
-    .filter(([name]) => !TRACKING.test(name))
-    .map(([name, value]) => `${name}=${value}`)
-    .sort();
-  const host = hostname.replace(/^www\./, '');
-  return `${host}:${port}${pathname.replace(/\/+$/, '')}?${kept.join('&')}`;
-}
+/** The same page: one key for everything that says so (the collection's too). */
+export const pageKey = sameLinkKey;
 
 /**
  * The candidates of every search, the closest first and, as close, one of each search in

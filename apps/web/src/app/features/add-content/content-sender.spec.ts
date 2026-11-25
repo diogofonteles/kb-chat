@@ -85,6 +85,13 @@ class FakeMedia {
     return of(this.verdict);
   }
 
+  readonly updated: object[] = [];
+
+  update(id: string, request: object) {
+    this.updated.push({ id, ...request });
+    return of({ id });
+  }
+
   create(_topic: string, request: object) {
     this.created.push(request);
     return of({ id: 'media-1' });
@@ -255,6 +262,18 @@ describe('ContentSender (KBC-184)', () => {
       expect(media.created).toEqual([]);
     },
   );
+
+  it('an audio that stopped half-way goes on at the level chosen now', async () => {
+    const { media, sender } = setup();
+    media.verdict = { verdict: 'resume', media: { id: 'media-9' }, offset: 2 };
+    const file = new File(['ID3'], 'a.mp3');
+    sender.add([{ kind: 'audio', file, path: 'a.mp3' }], {
+      ...TARGET,
+      level: 'ci',
+    });
+    await vi.waitFor(() => expect(media.uploaded).toEqual(['media-9']));
+    expect(media.updated).toEqual([{ id: 'media-9', level: 'ci' }]);
+  });
 
   it('the account always closes, the failed go again together, and what ended well is cleared', () => {
     const { api, sender } = setup();

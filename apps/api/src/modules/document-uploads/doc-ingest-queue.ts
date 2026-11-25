@@ -94,6 +94,8 @@ export class DocIngestQueue {
       (WORKING_STATES.has(record.state) &&
         record.lease !== null &&
         !isWorking(record, this.now()));
+    // Taken off the list: cancelled, whatever its attempts already spent.
+    if (record.dismissed) return false;
     return waiting && ledger.leftFor(record) >= MIN_LEASE_USD;
   }
 
@@ -325,6 +327,18 @@ export class DocIngestQueue {
       await this.ended(record.id, { state: 'failed', ...failure });
       return null;
     }
+  }
+
+  /** What publishing a recording spent counts in its inclusion, as a page's does (R3). */
+  async bookRecording(mediaId: string, usd: number): Promise<void> {
+    const record = this.deps.records
+      .all()
+      .find((one) => one.mediaId === mediaId);
+    if (!record) return;
+    await this.deps.records.update(record.id, (one) => ({
+      ...one,
+      spentUsd: one.spentUsd + usd,
+    }));
   }
 
   private async ended(

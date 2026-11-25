@@ -56,6 +56,10 @@ export const STATE_LABELS: Record<
 export const FAILURE_TEXTS: Record<DocumentUploadFailure, () => string> = {
   'conversion-failed': () =>
     $localize`:@@docUploads.failure.conversion:Não consegui converter. Confira se o arquivo abre ou se o link está no ar, e envie de novo.`,
+  live: () =>
+    $localize`:@@docUploads.failure.live:É uma transmissão ao vivo. Envie o link depois que ela terminar.`,
+  'too-large': () =>
+    $localize`:@@docUploads.failure.tooLarge:A gravação passa de 2 GB. Envie só o áudio dela.`,
   empty: () =>
     $localize`:@@docUploads.failure.empty:A conversão saiu vazia ou ilegível. Um escaneado muito apagado? Tente um arquivo melhor.`,
   'not-accepted': () =>

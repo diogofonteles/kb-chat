@@ -31,7 +31,11 @@ import {
   viewerOf,
   type PeopleService,
 } from './modules/auth/index.js';
-import type { CatalogEntry, CatalogRegistry } from './modules/catalog/index.js';
+import type {
+  CatalogEntry,
+  CatalogRegistry,
+  TopicCatalog,
+} from './modules/catalog/index.js';
 import {
   DocIngestQueue,
   DocumentUploadService,
@@ -92,7 +96,17 @@ export async function registerDocumentUploads(
       createPerMinute: wiring.config.DOCUMENT_CREATE_RATE_LIMIT,
     }),
   );
-  return { queue: ingestQueue(app, wiring, { records, files }), service };
+  const queue = ingestQueue(app, wiring, { records, files });
+  wiring.documents.kb.onSpent((mediaId, usd) => {
+    // A track's spend is its recording's.
+    const parent = wiring.media.store.getMedia(mediaId)?.track?.parentId;
+    queue
+      .bookRecording(parent ?? mediaId, usd)
+      .catch((err: unknown) =>
+        app.log.error({ err }, 'document uploads: a spend was not kept'),
+      );
+  });
+  return { queue, service };
 }
 
 /** What is old leaves by itself (PD-11), at the start and then now and then. */
@@ -179,17 +193,41 @@ function findExisting(
   scope: readonly string[],
   key: { readonly sha256: string | null; readonly url: string | null },
 ): ExistingDocument | null {
-  const same = (entry: CatalogEntry) =>
-    (key.sha256 !== null && entry.original?.sha256 === key.sha256) ||
-    (key.url !== null &&
-      entry.sourcePath !== null &&
-      sameLinkKey(entry.sourcePath) === key.url);
   for (const topic of scope) {
-    const entries = [...(catalog.get(topic)?.entries.values() ?? [])];
-    const entry = entries.find(same);
+    const loaded = catalog.get(topic);
+    if (!loaded) continue;
+    const index = originIndexOf(loaded);
+    const entry =
+      (key.sha256 !== null && index.byHash.get(key.sha256)) ||
+      (key.url !== null && index.byLink.get(key.url));
     if (entry) return { topic, document: { id: entry.id, title: entry.title } };
   }
   return null;
+}
+
+interface OriginIndex {
+  readonly byHash: ReadonlyMap<string, CatalogEntry>;
+  readonly byLink: ReadonlyMap<string, CatalogEntry>;
+}
+
+/** Built once per load of a collection (each load is another object): thousands of links. */
+const originIndexes = new WeakMap<TopicCatalog, OriginIndex>();
+
+function originIndexOf(catalog: TopicCatalog): OriginIndex {
+  const kept = originIndexes.get(catalog);
+  if (kept) return kept;
+  const byHash = new Map<string, CatalogEntry>();
+  const byLink = new Map<string, CatalogEntry>();
+  for (const entry of catalog.entries.values()) {
+    const hash = entry.original?.sha256;
+    if (hash && !byHash.has(hash)) byHash.set(hash, entry);
+    if (!entry.sourcePath) continue;
+    const link = sameLinkKey(entry.sourcePath);
+    if (!byLink.has(link)) byLink.set(link, entry);
+  }
+  const index = { byHash, byLink };
+  originIndexes.set(catalog, index);
+  return index;
 }
 
 /** A recording link's media item: failed, live in the collection (ready), or on its way. */

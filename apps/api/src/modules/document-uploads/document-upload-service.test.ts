@@ -411,3 +411,144 @@ describe('the Mac, its line and how far each item is', () => {
     expect(records.get(gone)?.dismissed).toBe(true);
   });
 });
+
+describe('the second review (review B)', () => {
+  it('an item taken off the list after an attempt that spent is cancelled (B1)', async () => {
+    const { service, queue, records } = await world();
+    const sent = await send(service, ana, link('https://a.example/1'));
+    const job = queue.lease('mac');
+    await queue.fail(
+      { jobId: sent.id, worker: 'mac', leaseId: job?.leaseId ?? '' },
+      { detail: 'kb classify: 502', spendUsd: 0.01 },
+    );
+    expect(queue.leasableJobs()).toBe(1);
+    await service.remove(ana, sent.id);
+    expect(queue.leasableJobs()).toBe(0);
+    expect(queue.lease('mac')).toBeNull();
+    // Its spend is kept, and the same link is another upload.
+    expect(records.get(sent.id)?.spentUsd).toBeCloseTo(0.01);
+    const again = await send(service, ana, link('https://a.example/1'));
+    expect(again.id).not.toBe(sent.id);
+  });
+
+  it('what several announce at once adds up: the quota and the disk hold (I8)', async () => {
+    const big = (n: number) =>
+      file({ bytes: 300 * 1024 ** 2, sha256: String(n).padStart(64, '0') });
+    const accepted = async (who: UploadActor, free: number, many: number) => {
+      const { service } = await world({ free });
+      const answers = await Promise.allSettled(
+        Array.from({ length: many }, (_, n) =>
+          service.create(who, 'hermetismo', big(n)),
+        ),
+      );
+      return answers.filter(({ status }) => status === 'fulfilled').length;
+    };
+    expect(await accepted(ana, 100 * GB, 40)).toBe(17);
+    // 6 GB free, 5 of reserve: three of 300 MB, whoever asks.
+    expect(await accepted(master, 6 * GB, 40)).toBe(3);
+  });
+
+  it('a recording that failed, or left the library, can go again (QA BUG-11)', async () => {
+    for (const progress of [{ state: 'failed', step: null }, null] as const) {
+      const { service, records, queue } = await world({
+        deps: { mediaProgressOf: () => progress },
+      });
+      const sent = await send(service, ana, link('https://youtu.be/abc'));
+      await records.update(sent.id, (one) => ({
+        ...one,
+        state: 'transcribing',
+        mediaId: '11111111-1111-4111-8111-111111111111',
+      }));
+      const [seen] = await service.list(ana).then(({ items }) => items);
+      expect(seen).toMatchObject({ state: 'failed', retriable: true });
+      expect((await service.retry(ana, sent.id)).state).toBe('received');
+      expect(queue.leasableJobs()).toBe(1);
+    }
+  });
+
+  it('a recording in the library is remembered, whatever the days: it is not sent twice (I4)', async () => {
+    const { service, records, clock } = await world({
+      deps: { mediaProgressOf: () => ({ state: 'ready', step: null }) },
+    });
+    const sent = await send(service, ana, link('https://youtu.be/abc'));
+    await records.update(sent.id, (one) => ({
+      ...one,
+      state: 'transcribing',
+      mediaId: '11111111-1111-4111-8111-111111111111',
+    }));
+    await service.remove(ana, sent.id);
+    clock.now = new Date(clock.now.getTime() + DOCUMENT_UPLOAD_KEEP_MS * 2);
+    await service.sweep();
+    const again = await service.create(
+      ana,
+      'hermetismo',
+      link('https://m.youtube.com/watch?v=abc'),
+    );
+    expect(records.get(sent.id)).toBeDefined();
+    expect(again.outcome).toBe('created');
+    const same = await service.create(
+      ana,
+      'hermetismo',
+      link('https://youtu.be/abc'),
+    );
+    expect(same.outcome).toBe('duplicate');
+  });
+
+  it('what has not ended is never cut from the list (I15)', async () => {
+    const old = { createdAt: '2026-01-01T00:00:00.000Z' };
+    const { service, records } = await world();
+    const waiting = await send(service, ana, link('https://a.example/espera'));
+    await records.update(waiting.id, (one) => ({ ...one, ...old }));
+    const template = records.get(waiting.id);
+    if (!template) throw new Error('no record');
+    await records.put(
+      ...Array.from({ length: 1_200 }, (_, n) => ({
+        ...template,
+        id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+        state: 'mapped' as const,
+        createdAt: '2026-11-25T12:00:00.000Z',
+      })),
+    );
+    const { items } = await service.list(ana);
+    expect(items.some((one) => one.id === waiting.id)).toBe(true);
+  });
+
+  it('what publishing a recording spent is its inclusion’s, and the estimate’s (I7)', async () => {
+    const { service, records, queue } = await world({
+      deps: { mediaProgressOf: () => ({ state: 'ready', step: null }) },
+    });
+    for (let n = 0; n < 6; n += 1) {
+      const sent = await send(
+        service,
+        ana,
+        link(`https://youtu.be/v${n}`, { batch: BATCH }),
+      );
+      const mediaId = `11111111-1111-4111-8111-11111111111${n}`;
+      await records.update(sent.id, (one) => ({
+        ...one,
+        state: 'transcribing',
+        mediaId,
+      }));
+      await queue.bookRecording(mediaId, 0.1);
+    }
+    const waits = await send(
+      service,
+      ana,
+      link('https://a.example/1', { batch: BATCH }),
+    );
+    expect(waits.heldBy).toBe('batch-cap');
+    expect(service.costs().recording).toMatchObject({ samples: 6, usd: 0.1 });
+  });
+
+  it('an inclusion that reached the old maximum can be raised (I9)', async () => {
+    const { service } = await world();
+    const sent = await send(
+      service,
+      ana,
+      link('https://a.example/1', { batch: { ...BATCH, capUsd: 5 } }),
+    );
+    const raised = await service.changeBatch(ana, BATCH.id, 20);
+    expect(raised.capUsd).toBe(20);
+    expect(sent.batch?.capUsd).toBe(5);
+  });
+});

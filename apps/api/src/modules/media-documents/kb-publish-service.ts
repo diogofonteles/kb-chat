@@ -58,6 +58,9 @@ const ownerOf = (job: LeasedKbJob, worker: string): LeaseOwner => ({
  * kb's spend on the media ledger. The API never writes to the vault (Q7).
  */
 export class KbPublishService {
+  private readonly spentListeners: ((mediaId: string, usd: number) => void)[] =
+    [];
+
   private readonly now: () => Date;
 
   constructor(private readonly deps: KbPublishServiceDeps) {
@@ -169,6 +172,11 @@ export class KbPublishService {
       .filter((one): one is TrackRender => one?.topic === topic);
   }
 
+  /** Told what publishing each document spent (a sent recording's inclusion counts it). */
+  onSpent(listener: (mediaId: string, usd: number) => void): void {
+    this.spentListeners.push(listener);
+  }
+
   isJob(jobId: string): boolean {
     return this.deps.documents.isJob(jobId);
   }
@@ -252,6 +260,8 @@ export class KbPublishService {
     usd: number;
     now: Date;
   }): void {
+    for (const listener of this.spentListeners)
+      listener(spend.mediaId, spend.usd);
     const id = randomUUID();
     this.deps.spend.reserve({
       id,

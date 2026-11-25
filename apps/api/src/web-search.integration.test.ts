@@ -67,7 +67,7 @@ describe('Who searches the web (KBC-185, KBC-009 R4)', () => {
       already: null,
     });
     const uploads = await call('GET', '/api/v1/document-uploads');
-    expect(uploads.json()).toEqual({ items: [] });
+    expect(uploads.json()).toMatchObject({ items: [] });
   });
 
   it('finds by author, up to the sources wanted, and tells the balance to masters only', async () => {

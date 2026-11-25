@@ -37,6 +37,9 @@ const audioQuery = leaseQuery.extend({
   name: z.string().min(1).max(255),
 });
 
+/** A channel's thousands of titles and addresses. */
+const LIST_MAX_BYTES = 16 * 1024 * 1024;
+
 const posted = <T extends z.ZodType>(body: T) => ({
   config: { access: PUBLIC },
   schema: { params: jobParams, body, response: { 204: z.undefined() } },
@@ -129,7 +132,7 @@ function registerEntries(
     .withTypeProvider<ZodTypeProvider>()
     .post(
       '/api/v1/media-worker/jobs/:id/doc-entries',
-      posted(docIngestEntriesRequestSchema),
+      { ...posted(docIngestEntriesRequestSchema), bodyLimit: LIST_MAX_BYTES },
       async (request, reply) => {
         const jobId = request.params.id;
         deps.assertDocWorker(request, jobId);

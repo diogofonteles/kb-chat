@@ -618,7 +618,7 @@ describe('One inclusion and its ceiling (KBC-009 R2, R3)', () => {
       { capUsd: 5 },
     );
     expect(changed.statusCode).toBe(404);
-    for (const capUsd of [0, 0.01, 5.01])
+    for (const capUsd of [0, 0.01, 100.01])
       expect(
         (
           await link(ana.call, 'https://example.org/3', {

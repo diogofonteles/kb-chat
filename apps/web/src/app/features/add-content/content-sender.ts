@@ -307,7 +307,7 @@ export class ContentSender {
                 return EMPTY;
               }
               return check.verdict === 'resume'
-                ? of(check.media.id)
+                ? this.resumeAudio(entry, check.media.id)
                 : this.createAudio(entry, { file, sha256 });
             }),
           ),
@@ -317,6 +317,16 @@ export class ContentSender {
         return this.media.upload(id, file);
       }),
       map((event) => this.followAudio(key, event)),
+    );
+  }
+
+  /** One that stopped half-way goes on at the level chosen now, not then (ADR 0036 §5). */
+  private resumeAudio(entry: ContentSend, id: string): Observable<string> {
+    const { level } = entry.target;
+    if (level === null) return of(id);
+    return this.media.update(id, { level }).pipe(
+      this.again(entry.key),
+      map(() => id),
     );
   }
 

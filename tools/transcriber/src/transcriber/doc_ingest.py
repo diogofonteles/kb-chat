@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .kb_publish import KbPublisher, KbStepFailed
-from .recording_file import NotARecording, fetch_file, is_known_site
+from .recording_file import NotARecording, TooLarge, fetch_file, is_known_site
 
 # kb-map's project, next to this one in the repository (tools/kb-map).
 KB_MAP_PROJECT = Path(__file__).resolve().parents[3] / "kb-map"
@@ -35,7 +35,7 @@ MAP_TIMEOUT_S = 30 * 60
 RECORDING_TIMEOUT_S = 60 * 60
 LIST_TIMEOUT_S = 5 * 60
 # The most of a channel or playlist the app offers (RECORDING_LIST_MAX in the contracts).
-LIST_MAX = 200
+LIST_MAX = 5_000
 OUTPUT_CHARS = 2_000
 # How kb-map ends when its budget does.
 BUDGET_EXIT = 3
@@ -224,6 +224,17 @@ PASSING = re.compile(r"HTTP Error (403|429|5\d\d)|timed out|Connection reset", r
 DOWNLOAD_WAITS_S = (10, 30)
 
 
+# yt-dlp's words for what it was told not to take.
+LIVE = re.compile(r"does not pass filter|is_live|live event|Premieres in", re.IGNORECASE)
+LARGE = re.compile(r"larger than max-filesize", re.IGNORECASE)
+
+
+def refusal_of(output: str) -> str:
+    if LARGE.search(output):
+        return "too-large"
+    return "live" if LIVE.search(output) else "conversion-failed"
+
+
 def node_or_none() -> str | None:
     """Node on this Mac: on PATH (a LaunchAgent's has none of nvm's), else nvm's newest."""
     found = shutil.which("node")
@@ -260,6 +271,8 @@ class YtDlp:
         if not is_known_site(url):
             try:
                 return fetch_file(url, folder)
+            except TooLarge as err:
+                raise DocIngestFailed("too-large", str(err)) from err
             except NotARecording as err:
                 raise DocIngestFailed("conversion-failed", str(err)) from err
         # Named after the recording: the app takes its title from the file's name.
@@ -276,7 +289,7 @@ class YtDlp:
                 return found[0]
             output = (done.stdout + done.stderr).strip()
             if wait is None or not PASSING.search(output):
-                raise DocIngestFailed("conversion-failed", f"yt-dlp: {output}")
+                raise DocIngestFailed(refusal_of(output), f"yt-dlp: {output}")
             log.warning("yt-dlp was refused, again in %d s", wait)
             time.sleep(wait)
         raise AssertionError("unreachable")

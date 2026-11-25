@@ -51,6 +51,7 @@ const PAUSED = {
   offline: $localize`:@@addContent.paused.offline:Sem rede. Continua sozinho quando ela voltar.`,
   limit: $localize`:@@addContent.paused.limit:Muitos envios por minuto. Continua sozinho em instantes.`,
 } as const;
+const HERE_OR_COMING = $localize`:@@addContent.phase.hereOrComing:Já está aqui ou a caminho`;
 const ON_ITS_WAY = $localize`:@@addContent.phase.onItsWay:Já está a caminho`;
 
 /** One item of "Enviados agora" (KBC-184): how far it got, and what can be done about it. */
@@ -161,9 +162,10 @@ export class ContentSendRow {
   protected readonly tone = computed(() => LABELS[this.phase().kind].tone);
   protected readonly label = computed(() => {
     const phase = this.phase();
-    return phase.kind === 'duplicate' && phase.onItsWay
-      ? ON_ITS_WAY
-      : LABELS[phase.kind].text;
+    if (phase.kind !== 'duplicate') return LABELS[phase.kind].text;
+    // The library does not say whether the same audio is there or still being sent.
+    if (this.send().source.kind === 'audio') return HERE_OR_COMING;
+    return phase.onItsWay ? ON_ITS_WAY : LABELS.duplicate.text;
   });
   protected readonly percent = computed(() => {
     const phase = this.phase();

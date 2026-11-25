@@ -591,3 +591,18 @@ def test_a_budget_that_ended_waits_and_a_missing_key_is_configuration(tmp_path, 
         with pytest.raises(DocIngestFailed) as failed:
             answer(1, words).convert("t", "/x", **given)
         assert is_configuration_error(failed.value.detail), words
+
+
+@pytest.mark.parametrize(
+    ("output", "failure"),
+    [
+        ("[download] x does not pass filter (!is_live), skipping ..", "live"),
+        ("File is larger than max-filesize (3221225472 bytes > 2147483648 bytes)", "too-large"),
+        ("ERROR: Video unavailable", "conversion-failed"),
+    ],
+)
+def test_a_live_stream_and_a_too_large_file_say_so(tmp_path, monkeypatch, output, failure):
+    scripted(monkeypatch, (0 if failure != "conversion-failed" else 1, output, None))
+    with pytest.raises(DocIngestFailed) as refused:
+        YtDlp().download("https://youtu.be/x", tmp_path)
+    assert refused.value.failure == failure

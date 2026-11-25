@@ -4,6 +4,9 @@ import {
   isMediaHost,
   mediaLinkKind,
   mediaLinkOf,
+  sameLinkKey,
+} from './media-links.js';
+import {
   authorsIn,
   webSearchCredits,
   webSearchKeyRequestSchema,
@@ -199,5 +202,44 @@ describe('a candidate address', () => {
       'https://user:secret@example.org/a',
     ])
       expect(documentLinkSchema.safeParse(url).success).toBe(false);
+  });
+});
+
+describe('sameLinkKey (KBC-185)', () => {
+  it.each([
+    [
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      [
+        'https://youtu.be/dQw4w9WgXcQ',
+        'https://m.youtube.com/watch?v=dQw4w9WgXcQ&t=30s',
+        'http://youtube.com/shorts/dQw4w9WgXcQ',
+        'https://www.youtube.com/live/dQw4w9WgXcQ?si=x',
+        'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1',
+      ],
+    ],
+    [
+      'https://a.org/x?b=2&a=1',
+      ['http://www.a.org/x/?a=1&b=2', 'https://A.org/x?b=2&a=1&utm_source=y#z'],
+    ],
+    [
+      'https://podcasts.apple.com/br/podcast/x/id1?i=2',
+      ['https://podcasts.apple.com/us/podcast/x/id1?i=2&l=pt'],
+    ],
+  ])('%s is one link in any of its forms', (link, others) => {
+    for (const other of others)
+      expect(sameLinkKey(other), other).toBe(sameLinkKey(link));
+  });
+
+  it('another page is another link', () => {
+    const key = sameLinkKey('https://a.org/x?id=1');
+    for (const other of [
+      'https://a.org/x?id=2',
+      'https://a.org/X?id=1',
+      'https://b.org/x?id=1',
+      'https://a.org:8443/x?id=1',
+      'https://a.org/x',
+    ])
+      expect(sameLinkKey(other), other).not.toBe(key);
+    expect(sameLinkKey('upload/a.pdf')).toBe('upload/a.pdf');
   });
 });

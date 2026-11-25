@@ -49,6 +49,12 @@ export class UploadRecords {
     return changed;
   }
 
+  /** One record by others, in one save. */
+  replace(id: string, records: readonly DocumentUploadRecord[]): Promise<void> {
+    this.records.delete(id);
+    return this.put(...records);
+  }
+
   remove(...ids: readonly string[]): Promise<void> {
     for (const id of ids) this.records.delete(id);
     return this.save();

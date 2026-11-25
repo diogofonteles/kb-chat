@@ -60,7 +60,7 @@ export function toDocumentUpload(
     heldBy: state === 'received' ? input.heldBy : null,
     review: record.review,
     entries: record.state === 'choosing' ? [...record.entries] : [],
-    retriable: record.state === 'failed' && input.kept,
+    retriable: state === 'failed' && input.kept,
     progress: { ...input.place, media: media?.step ?? null },
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,

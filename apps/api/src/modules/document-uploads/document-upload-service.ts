@@ -75,12 +75,16 @@ export interface DocumentUploadServiceDeps {
   readonly now?: () => Date;
 }
 
-/** Uploads listed in "Documentos em processamento": a folder or two, the newest first. */
+/** Of what ended, the newest listed in "Documentos em processamento". */
 const LIST_LIMIT = 1_000;
 /** A file whose bytes stopped arriving this long ago is given up (as media, ADR 0033). */
 export const DOCUMENT_UPLOAD_ABANDON_MS = 7 * 24 * 60 * 60 * 1000;
 /** What ended this long ago leaves the record: the collection itself answers for it. */
 export const DOCUMENT_UPLOAD_KEEP_MS = 90 * 24 * 60 * 60 * 1000;
+
+const ENDED = new Set<DocumentUploadRecord['state']>(['mapped', 'failed']);
+/** Its recording is not in the library any more. */
+const GONE: MediaProgress = { state: 'failed', step: null };
 
 const notFound = () => new AppError('NOT_FOUND', 'No such document upload');
 const notWaiting = () =>
@@ -121,7 +125,12 @@ export class DocumentUploadService {
     const resumed = await this.resume(actor, { topic, key, level, batch });
     if (resumed)
       return { outcome: 'created', upload: await this.viewOf(resumed, actor) };
-    if (request.kind === 'file') await this.assertRoom(actor, request.bytes);
+    const free =
+      request.kind === 'file' ? await this.deps.files.freeBytes() : 0;
+    // From here to the record there is no wait: what several announce at once adds up.
+    const meanwhile = this.repeated(actor, topic, key);
+    if (meanwhile) return meanwhile;
+    if (request.kind === 'file') this.assertRoom(actor, request.bytes, free);
     const record = this.newRecord(actor, { topic, request, level, batch });
     await this.deps.records.put(record);
     return { outcome: 'created', upload: await this.viewOf(record, actor) };
@@ -160,9 +169,9 @@ export class DocumentUploadService {
   }
 
   /** A person's files waiting here are bounded, and the disk keeps its reserve (PD-11). */
-  private async assertRoom(actor: UploadActor, bytes: number): Promise<void> {
-    const waiting = this.deps.records
-      .all()
+  private assertRoom(actor: UploadActor, bytes: number, free: number): void {
+    const all = this.deps.records.all();
+    const waiting = all
       .filter(
         (one) =>
           one.owner.principal === actor.principal && this.holdsBytes(one),
@@ -174,8 +183,11 @@ export class DocumentUploadService {
         'Too many files waiting here',
         { details: { quotaBytes: DOCUMENT_WAITING_MAX_BYTES } },
       );
-    const free = await this.deps.files.freeBytes();
-    if (free - bytes < DOCUMENT_DISK_RESERVE_BYTES)
+    // Announced and not arrived yet: the disk does not show it, and it will come.
+    const coming = all
+      .filter((one) => one.state === 'receiving')
+      .reduce((sum, one) => sum + (one.bytes ?? 0), 0);
+    if (free - coming - bytes < DOCUMENT_DISK_RESERVE_BYTES)
       throw new AppError('STORAGE_FULL', 'No room left for files');
   }
 
@@ -242,9 +254,10 @@ export class DocumentUploadService {
    */
   private isLive(record: DocumentUploadRecord): boolean {
     if (record.state === 'failed' || record.state === 'receiving') return false;
+    // Taken off the list before it entered: it was cancelled.
+    if (record.dismissed && !ENTERED.has(record.state)) return false;
     if (!record.mediaId || !this.deps.mediaProgressOf) return true;
-    const progress = this.deps.mediaProgressOf(record.mediaId);
-    return progress !== null && progress.state !== 'failed';
+    return this.mediaOf(record)?.state !== 'failed';
   }
 
   /**
@@ -323,8 +336,6 @@ export class DocumentUploadService {
       throw new AppError('VALIDATION_FAILED', 'Not a recording of this list', {
         details: { field: 'urls' },
       });
-    // The list leaves first: a second press finds nothing to choose from.
-    await this.deps.records.remove(id);
     const fresh = urls.filter(
       (url) =>
         !this.repeated(actor, list.topic, {
@@ -332,8 +343,10 @@ export class DocumentUploadService {
           url: sameLinkKey(url),
         }),
     );
-    await this.deps.records.put(
-      ...fresh.map((url) => this.chosenOf(list, url)),
+    // One change: a second press finds nothing to choose from, and a crash loses nothing.
+    await this.deps.records.replace(
+      id,
+      fresh.map((url) => this.chosenOf(list, url)),
     );
     return { created: fresh.length, already: urls.length - fresh.length };
   }
@@ -350,6 +363,9 @@ export class DocumentUploadService {
       name: list.entries.find((one) => one.url === url)?.title ?? url,
       url,
       state: 'received',
+      failure: null,
+      detail: null,
+      lease: null,
       attempts: 0,
       spentUsd: 0,
       entries: [],
@@ -367,18 +383,33 @@ export class DocumentUploadService {
   async retry(actor: UploadActor, id: string): Promise<DocumentUpload> {
     const record = this.deps.records.get(id);
     if (!record || !this.mayManage(actor, record)) throw notFound();
-    if (record.state !== 'failed' || !(await this.isKept(record)))
+    if (!this.hasFailed(record) || !(await this.isKept(record)))
       throw notWaiting();
     const again = await this.deps.records.update(id, (current) => ({
       ...current,
       state: 'received',
       failure: null,
       detail: null,
+      mediaId: null,
       attempts: 0,
       updatedAt: this.now().toISOString(),
     }));
     if (!again) throw notFound();
     return this.viewOf(again, actor);
+  }
+
+  /** Its own end, or its recording's: failed, or deleted from the library. */
+  private hasFailed(record: DocumentUploadRecord): boolean {
+    if (record.state === 'failed') return true;
+    if (record.state !== 'transcribing') return false;
+    const media = this.mediaOf(record);
+    return media !== null && media.state === 'failed';
+  }
+
+  private mediaOf(record: DocumentUploadRecord): MediaProgress | null {
+    const { mediaProgressOf } = this.deps;
+    if (!record.mediaId || !mediaProgressOf) return null;
+    return mediaProgressOf(record.mediaId) ?? GONE;
   }
 
   /** A link is always there; a file, while its bytes are. */
@@ -487,9 +518,14 @@ export class DocumentUploadService {
 
   /** "Documentos em processamento": one's own; masters see everyone's. */
   async list(actor: UploadActor): Promise<DocumentUploadList> {
-    const records = this.visibleTo(actor)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, LIST_LIMIT);
+    const all = this.visibleTo(actor).sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt),
+    );
+    // What has not ended is always there; of what ended, the newest.
+    let ended = 0;
+    const records = all.filter(
+      (one) => !ENDED.has(one.state) || ++ended <= LIST_LIMIT,
+    );
     const moment = this.moment();
     const items = await Promise.all(
       records.map((one) => this.viewOf(one, actor, moment)),
@@ -554,9 +590,7 @@ export class DocumentUploadService {
       now.getTime() - Date.parse(record.updatedAt);
     const all = this.deps.records.all();
     const ended = all.filter(
-      (one) =>
-        ['mapped', 'failed', 'transcribing'].includes(one.state) &&
-        since(one) > DOCUMENT_UPLOAD_KEEP_MS,
+      (one) => since(one) > DOCUMENT_UPLOAD_KEEP_MS && this.isForgettable(one),
     );
     if (ended.length > 0)
       await this.deps.records.remove(...ended.map((one) => one.id));
@@ -566,6 +600,13 @@ export class DocumentUploadService {
       await this.deps.files.remove(record.id);
       if (record.state === 'receiving') await this.giveUp(record.id, now);
     }
+  }
+
+  /** The collection answers for a document; for a recording, only while it is not there. */
+  private isForgettable(record: DocumentUploadRecord): boolean {
+    if (ENDED.has(record.state) || record.dismissed)
+      return record.mediaId === null || this.hasFailed(record);
+    return this.hasFailed(record);
   }
 
   private async giveUp(id: string, now: Date): Promise<void> {
@@ -588,7 +629,7 @@ export class DocumentUploadService {
           ? await this.deps.files.offset(record.id)
           : record.bytes
         : null;
-    const kept = record.state === 'failed' && (await this.isKept(record));
+    const kept = this.hasFailed(record) && (await this.isKept(record));
     return this.viewNow(record, actor, { received, kept, moment });
   }
 
@@ -597,10 +638,7 @@ export class DocumentUploadService {
     actor: UploadActor,
     known: KnownOfUpload,
   ): DocumentUpload {
-    const media =
-      record.mediaId && this.deps.mediaProgressOf
-        ? this.deps.mediaProgressOf(record.mediaId)
-        : null;
+    const media = this.mediaOf(record);
     const arrived =
       record.document !== null &&
       this.deps.inCatalog(record.topic, record.document.id);
@@ -672,8 +710,15 @@ interface Moment {
 
 /** Received, or dropped by a Mac that stopped answering: the Mac may take it. */
 const waitsForMac = (record: DocumentUploadRecord, now: Date): boolean =>
-  record.state === 'received' ||
-  (WORKING_STATES.has(record.state) && !isWorking(record, now));
+  !record.dismissed &&
+  (record.state === 'received' ||
+    (WORKING_STATES.has(record.state) && !isWorking(record, now)));
+
+/** In the collection, or on its way to it through the library. */
+const ENTERED = new Set<DocumentUploadRecord['state']>([
+  'mapped',
+  'transcribing',
+]);
 
 /** What every upload starts with. */
 const NEW_RECORD = {

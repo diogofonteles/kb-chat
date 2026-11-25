@@ -10,6 +10,7 @@ declare class URL {
   readonly username: string;
   readonly password: string;
   readonly hostname: string;
+  readonly port: string;
   readonly host: string;
   readonly origin: string;
   readonly href: string;
@@ -18,6 +19,7 @@ declare class URL {
   hash: string;
   readonly searchParams: {
     get(name: string): string | null;
+    getAll(name: string): string[];
     has(name: string): boolean;
     keys(): IterableIterator<string>;
     delete(name: string): void;
