@@ -3,8 +3,8 @@
 Each source is converted (Docling, MarkItDown, Firecrawl/Jina, or kept as it is), its original
 stored in `raw/_originals/<sha256>.<ext>`, the Markdown handed to `kb ingest file`, and the
 provenance keys added to the document kb wrote. `--json` prints one JSON object per source
-(the Mac's doc-ingest job reads it). Exit 0 when every source ended converted or duplicate,
-1 when one failed or went to review, 3 when the budget stopped the run.
+(the Mac's doc-ingest job reads it). Exit 0 when every source ended converted (kb's review
+included) or duplicate, 1 when one failed or was refused, 3 when the budget stopped the run.
 """
 
 import argparse
@@ -13,13 +13,14 @@ import json
 from ..convert.factory import build_converters, build_ingest
 from ..convert.pipeline import Converting, Naming, Outcome
 from ..convert.sources import UnsupportedSource, source_of
+from ..layout import ReviewQueue, convert_queue_file
 from ..log import append_log
 from ..providers import BudgetExceeded, Ledger
 from ._common import add_topic, open_topic
 
 NAME = "convert"
 HELP = "convert files or links into a topic: structured Markdown, original kept, kb ingest"
-OK_STATES = ("converted", "duplicate")
+OK_STATES = ("converted", "review", "duplicate")
 
 
 def add_conversion_options(parser: argparse.ArgumentParser) -> None:
@@ -45,6 +46,7 @@ def register(sub) -> None:
     parser.add_argument("--year", help="the year, the last part of the name")
     parser.add_argument("--source-path", help="where the original came from (default: its path)")
     parser.add_argument("--budget", type=float, default=None, help="kb ingest's own --budget (US$)")
+    parser.add_argument("--upload-id", help="the app's upload this document comes from")
     parser.add_argument("--json", action="store_true", help="one JSON object per source")
     add_conversion_options(parser)
     parser.set_defaults(run=run)
@@ -55,13 +57,16 @@ def run(args: argparse.Namespace) -> int:
         raise SystemExit("kb-map: --name names one source only")
     ctx = open_topic(args)
     ledger = Ledger(_NoModel(), max_usd=args.max_usd)
+    # Kept apart from the map's: a `map/` folder says the collection has a map.
+    queue = ReviewQueue(ctx.layout, convert_queue_file(ctx.vault.root, ctx.topic.slug))
     converting = Converting(
         vault=ctx.vault,
         topic=ctx.topic,
         converters=build_converters(args, ctx.vault, ledger),
         ingest=build_ingest(args, ctx.vault),
-        queue=ctx.queue,
+        queue=queue,
         budget_usd=args.budget,
+        upload_id=args.upload_id,
     )
     naming = Naming(args.title, args.origin, args.year, args.source_path)
     outcomes: list[Outcome] = []
@@ -78,7 +83,7 @@ def run(args: argparse.Namespace) -> int:
     except BudgetExceeded as err:
         stopped = err
     finally:
-        ctx.queue.save()
+        queue.save()
     _log(ctx, outcomes, ledger)
     if stopped:
         raise stopped

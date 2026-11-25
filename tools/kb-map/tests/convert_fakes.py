@@ -102,10 +102,12 @@ class FakeKb:
     triage: str = "kept"
     usd: float = 0.0
     calls: list[tuple[str, str]] = field(default_factory=list)
+    budgets: list[float | None] = field(default_factory=list)
 
     def ingest_file(self, topic: str, path: Path, budget_usd: float | None) -> IngestResult:
         text = path.read_text(encoding="utf-8")
         self.calls.append((topic, text))
+        self.budgets.append(budget_usd)
         title = re.sub(r"^#+\s*", "", text.strip().splitlines()[0]).strip()
         relative = f"{topic}/raw/articles/{slugify(title)}.md"
         if self.triage == "duplicate-skipped":

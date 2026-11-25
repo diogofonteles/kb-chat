@@ -146,11 +146,16 @@ def now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
+def convert_queue_file(root: Path, slug: str) -> Path:
+    """What `kb-map convert` could not place, per topic, in kb's work area of the vault."""
+    return root / "_convert" / "review" / f"{slug.replace('/', '__')}.json"
+
+
 class ReviewQueue:
     """Items waiting for a person, keyed so the same problem is listed once."""
 
-    def __init__(self, layout: MapLayout) -> None:
-        self._path = layout.review_queue_file
+    def __init__(self, layout: MapLayout, path: Path | None = None) -> None:
+        self._path = path or layout.review_queue_file
         self._items: dict[str, dict[str, Any]] = {
             item["key"]: item for item in read_json(self._path, default=[])
         }

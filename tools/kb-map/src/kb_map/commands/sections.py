@@ -1,6 +1,7 @@
 """`kb-map sections <topic>`: each source cut into sections with propositions (KBC-139)."""
 
 import argparse
+import json
 
 from ..extract import DocOutcome, extract_document
 from ..log import append_log
@@ -47,6 +48,7 @@ def run(args: argparse.Namespace) -> int:
     if counts["written"] or counts["review"] or stopped:
         append_log(ctx.layout, "map", f"kb-map sections: {summary}", ledger.summary())
     print(f"kb-map sections: {summary} · {ledger.summary()}")
+    print(json.dumps({"spentUsd": round(ledger.spent_usd, 6)}), flush=True)
     if stopped:
         raise stopped
     return 0

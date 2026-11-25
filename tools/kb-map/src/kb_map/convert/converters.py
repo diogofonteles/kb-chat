@@ -16,6 +16,9 @@ tests replace the whole set through `pipeline.converter_factory`, so none runs i
 import csv
 import io
 import json
+import shutil
+import subprocess
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib import metadata
@@ -132,6 +135,29 @@ class DoclingConverter:
         return Conversion(self.markdown_of(source.path), self.name, self.version())
 
 
+# What MarkItDown does not read and the Mac's own `textutil` turns into Word.
+TEXTUTIL_EXTENSIONS = frozenset({".doc", ".odt", ".rtf"})
+TEXTUTIL_TIMEOUT_S = 120
+
+
+def as_docx(path: Path, folder: Path) -> Path:
+    """An old Word, OpenDocument or RTF file as .docx, with macOS's `textutil`."""
+    binary = shutil.which("textutil")
+    if binary is None:
+        raise ConverterMissing("textutil (macOS) is needed for .doc, .odt and .rtf")
+    target = folder / "document.docx"
+    command = [binary, "-convert", "docx", "-output", str(target), str(path.resolve())]
+    try:
+        done = subprocess.run(
+            command, capture_output=True, text=True, timeout=TEXTUTIL_TIMEOUT_S, check=False
+        )
+    except subprocess.TimeoutExpired as err:
+        raise ConversionFailed("textutil took too long") from err
+    if done.returncode != 0 or not target.is_file():
+        raise ConversionFailed(f"textutil: {(done.stderr or done.stdout).strip()[:500]}")
+    return target
+
+
 @dataclass
 class MarkItDownConverter:
     """Word, PowerPoint, Excel, EPUB and saved HTML to Markdown with headings and lists."""
@@ -145,8 +171,14 @@ class MarkItDownConverter:
         if source.path is None:
             raise ConversionFailed("markitdown converts files only")
         module = _require("markitdown")
+        if source.extension in TEXTUTIL_EXTENSIONS:
+            with tempfile.TemporaryDirectory() as folder:
+                return self._read(module, as_docx(source.path, Path(folder)))
+        return self._read(module, source.path)
+
+    def _read(self, module, path: Path) -> Conversion:
         try:
-            result = module.MarkItDown(enable_plugins=False).convert(str(source.path))
+            result = module.MarkItDown(enable_plugins=False).convert(str(path))
         except Exception as err:
             raise ConversionFailed(f"markitdown: {type(err).__name__}: {err}") from err
         text = (getattr(result, "text_content", None) or getattr(result, "markdown", "")).strip()
@@ -267,7 +299,13 @@ class ImageConverter:
         usd = 0.0
         generated = False
         if self.describe is not None:
-            description, usd = self.describe(source.path)
+            try:
+                description, usd = self.describe(source.path)
+            except ConversionFailed:
+                # The text read in the image is worth keeping without a description.
+                if not parts:
+                    raise
+                description = ""
             if description.strip():
                 generated = True
                 parts += [f"## {GENERATED_HEADING}", "", GENERATED_NOTE, "", description.strip()]

@@ -12,10 +12,12 @@ recording link. Under the same vault lock as kb-publish:
 kb-map, kb and yt-dlp are reached through ports, so tests run none of them.
 """
 
+import contextlib
 import json
 import logging
 import os
 import shutil
+import signal
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,6 +34,8 @@ LIST_TIMEOUT_S = 5 * 60
 # The most of a channel or playlist the app offers (RECORDING_LIST_MAX in the contracts).
 LIST_MAX = 200
 OUTPUT_CHARS = 2_000
+# The app's limit for a document's title (uploadedDocumentRefSchema).
+TITLE_CHARS = 500
 log = logging.getLogger("transcriber")
 
 
@@ -57,14 +61,25 @@ class Converted:
     title: str
     # What converting (a vision description) and `kb ingest` spent.
     usd: float = 0.0
+    # kb wrote it and put it in its own review queue.
+    review: bool = False
 
 
 class KbMapPort(Protocol):
     def convert(
-        self, topic: str, source: str, *, name: str | None, source_path: str, budget_usd: float
+        self,
+        topic: str,
+        source: str,
+        *,
+        name: str | None,
+        source_path: str,
+        budget_usd: float,
+        upload_id: str,
     ) -> dict: ...
 
-    def map_document(self, topic: str, doc_id: str, budget_usd: float) -> str: ...
+    def map_document(self, topic: str, doc_id: str, budget_usd: float) -> float:
+        """The document's sections in the collection's map; what that spent."""
+        ...
 
 
 class RecordingPort(Protocol):
@@ -74,10 +89,10 @@ class RecordingPort(Protocol):
 
 
 def failure_of(outcome: dict) -> DocIngestFailed:
-    """kb-map's failed or review outcome as the API's reason (AC-4)."""
+    """kb-map's failed or refused outcome as the API's reason (AC-4)."""
     detail = str(outcome.get("detail") or outcome.get("state") or "conversion failed")
     spent = usd_of(outcome)
-    if outcome.get("state") == "review":
+    if outcome.get("state") == "refused":
         return DocIngestFailed("not-accepted", detail, spent)
     if "empty or unreadable" in detail:
         return DocIngestFailed("empty", detail, spent)
@@ -117,23 +132,24 @@ class KbMapCli:
         ]
 
     def _run(self, command: list[str], timeout: float) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            command,
-            cwd=self.vault,
-            env={**os.environ, **self.env},
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
+        return run_whole(command, timeout, cwd=self.vault, env={**os.environ, **self.env})
 
     def convert(
-        self, topic: str, source: str, *, name: str | None, source_path: str, budget_usd: float
+        self,
+        topic: str,
+        source: str,
+        *,
+        name: str | None,
+        source_path: str,
+        budget_usd: float,
+        upload_id: str,
     ) -> dict:
-        args = ["convert", topic, source, "--json", "--source-path", source_path]
+        args = ["convert", topic, source, "--json", f"--source-path={source_path}"]
         args += ["--budget", f"{budget_usd:.4f}", "--max-usd", f"{budget_usd:.4f}"]
+        args += ["--upload-id", upload_id]
         if name:
-            args += ["--name", name]
+            # With "=": a name that starts with "-" is a name, not an option.
+            args.append(f"--name={name}")
         done = self._run(self._command(*args), CONVERT_TIMEOUT_S)
         lines = [line for line in done.stdout.splitlines() if line.startswith("{")]
         if not lines:
@@ -141,13 +157,58 @@ class KbMapCli:
             raise DocIngestFailed("conversion-failed", f"kb-map convert: {output}")
         return json.loads(lines[-1])
 
-    def map_document(self, topic: str, doc_id: str, budget_usd: float) -> str:
+    def map_document(self, topic: str, doc_id: str, budget_usd: float) -> float:
         args = ["sections", topic, "--doc", doc_id, "--max-usd", f"{budget_usd:.4f}"]
         done = self._run(self._command(*args), MAP_TIMEOUT_S)
-        output = (done.stdout + done.stderr).strip()
+        spent = spent_in(done.stdout)
         if done.returncode != 0:
-            raise KbStepFailed("kb-map sections", output)
-        return output
+            output = (done.stdout + done.stderr).strip()
+            raise KbStepFailed("kb-map sections", output, spent)
+        return spent
+
+
+def spent_in(output: str) -> float:
+    """What `kb-map sections` says it spent, in its last JSON line; 0 when it says nothing."""
+    for line in reversed(output.splitlines()):
+        if not line.startswith("{"):
+            continue
+        try:
+            spent = json.loads(line).get("spentUsd")
+        except json.JSONDecodeError:
+            continue
+        return float(spent) if isinstance(spent, int | float) else 0.0
+    return 0.0
+
+
+def run_whole(
+    command: list[str],
+    timeout: float,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess:
+    """Runs a command in a group of its own; past the time, the whole group ends (uv starts
+    kb-map, which starts kb: ending uv alone would leave the others writing the vault)."""
+    with subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    ) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as err:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.communicate()
+            # Trying again would take as long: it ends here, with why.
+            raise DocIngestFailed(
+                "conversion-failed", f"{Path(command[0]).name}: took more than {timeout:.0f} s"
+            ) from err
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
 @dataclass
@@ -160,8 +221,10 @@ class YtDlp:
     def download(self, url: str, folder: Path) -> Path:
         # Named after the recording: the app takes its title from the file's name.
         template = str(folder / "%(title).120B [%(id)s].%(ext)s")
-        command = [self.binary, "--no-playlist", "-x", "--audio-format", "m4a"]
-        command += ["-o", template, "--", url]
+        command = [self.binary, "--ignore-config", "--no-playlist", "--playlist-items", "1"]
+        # A live stream never ends; a file larger than the app takes back is not fetched.
+        command += ["--match-filter", "!is_live", "--max-filesize", "2G"]
+        command += ["-x", "--audio-format", "m4a", "-o", template, "--", url]
         done = self._run(command, RECORDING_TIMEOUT_S)
         found = sorted(folder.glob("*.m4a"))
         if done.returncode != 0 or not found:
@@ -170,8 +233,8 @@ class YtDlp:
         return found[0]
 
     def entries(self, url: str) -> list[dict]:
-        command = [self.binary, "--flat-playlist", "-J", "--playlist-end", str(LIST_MAX)]
-        command += ["--", url]
+        command = [self.binary, "--ignore-config", "--flat-playlist", "-J"]
+        command += ["--playlist-end", str(LIST_MAX), "--", url]
         done = self._run(command, LIST_TIMEOUT_S)
         if done.returncode != 0:
             output = (done.stdout + done.stderr).strip()
@@ -180,7 +243,7 @@ class YtDlp:
 
     @staticmethod
     def _run(command: list[str], timeout: float) -> subprocess.CompletedProcess:
-        return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
+        return run_whole(command, timeout)
 
 
 def entries_of(listing: dict) -> list[dict]:
@@ -226,7 +289,8 @@ def title_of(vault: Path, topic: str, doc_id: str) -> str:
         if line == "---":
             break
         if line.startswith("title:"):
-            return line.split(":", 1)[1].strip().strip('"').strip("'") or Path(doc_id).stem
+            title = line.split(":", 1)[1].strip().strip('"').strip("'")
+            return (title or Path(doc_id).stem)[:TITLE_CHARS]
     return Path(doc_id).stem
 
 
@@ -243,13 +307,27 @@ class DocIngester:
         kind = job["source"]["kind"]
         origin = job["source"]["url"] if kind == "url" else f"upload/{name}"
         outcome = self.kb_map.convert(
-            topic, source, name=name, source_path=origin, budget_usd=float(job["budgetUsd"])
+            topic,
+            source,
+            name=name,
+            source_path=origin,
+            budget_usd=float(job["budgetUsd"]),
+            upload_id=str(job["id"]),
         )
-        if outcome.get("state") not in ("converted", "duplicate") or not outcome.get("document"):
+        state = outcome.get("state")
+        if state not in ("converted", "review", "duplicate") or not outcome.get("document"):
             raise failure_of(outcome)
         document = str(outcome["document"])
         title = title_of(self.publisher.vault, topic, document)
-        return Converted(outcome["state"], document, title, usd_of(outcome))
+        # What this same upload wrote before a crash is not "already there": its steps go on.
+        repeated = state == "duplicate" and not outcome.get("own")
+        return Converted(
+            "duplicate" if repeated else "converted",
+            document,
+            title,
+            usd_of(outcome),
+            review=state == "review",
+        )
 
     def finish(self, job: dict, converted: Converted, say) -> float:
         """kb's steps and the map, for a new document; what the whole job spent."""
@@ -266,8 +344,15 @@ class DocIngester:
             err.spent += converted.usd
             raise
         spent += converted.usd
-        if (self.publisher.vault / topic / "map").is_dir():
+        # A collection has a map once its tree was built (the owner's step): `map/` alone does
+        # not say so, and this step is paid.
+        left = max(0.0, budget - spent)
+        if left > 0 and (self.publisher.vault / topic / "map" / "tree.json").is_file():
             say("mapping")
-            self.kb_map.map_document(topic, converted.document, max(0.0, budget - spent))
+            try:
+                spent += self.kb_map.map_document(topic, converted.document, left)
+            except KbStepFailed as err:
+                err.spent += spent
+                raise
         # The API refuses more than the job's budget: kb may pass it by the last call's cents.
         return min(spent, budget)

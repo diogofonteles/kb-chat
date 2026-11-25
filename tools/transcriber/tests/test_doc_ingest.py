@@ -1,5 +1,7 @@
 """Documents and links sent from the app (KBC-149): a fake kb-map, kb and yt-dlp."""
 
+import subprocess
+import time
 from pathlib import Path
 
 import numpy as np
@@ -12,9 +14,11 @@ from transcriber.doc_ingest import (
     DocIngestFailed,
     entries_of,
     failure_of,
+    run_whole,
+    spent_in,
     title_of,
 )
-from transcriber.kb_publish import KbPublisher, KbRun
+from transcriber.kb_publish import KbPublisher, KbRun, KbStepFailed
 from transcriber.worker import Worker
 
 from .conftest import MEDIA_ID, TOKEN, FakeModel
@@ -53,12 +57,14 @@ class FakeKbMap:
     def __init__(self, vault: Path, outcome: dict | None = None) -> None:
         self.vault = vault
         self.outcome = outcome
+        self.map_spend = 0.0
         self.converted: list[dict] = []
         self.mapped: list[tuple[str, str, float]] = []
 
-    def convert(self, topic, source, *, name, source_path, budget_usd):
+    def convert(self, topic, source, *, name, source_path, budget_usd, upload_id):
         self.converted.append(
             {
+                "upload_id": upload_id,
                 "topic": topic,
                 "source": source,
                 "name": name,
@@ -77,7 +83,7 @@ class FakeKbMap:
 
     def map_document(self, topic, doc_id, budget_usd):
         self.mapped.append((topic, doc_id, budget_usd))
-        return "written"
+        return self.map_spend
 
 
 class FakeRecordings:
@@ -127,9 +133,12 @@ def test_doc_ingest_is_asked_with_kb_publish_only_when_kb_map_is_here(fake_api, 
 
 
 def test_ac1_a_file_is_fetched_converted_classified_mapped_and_reported(fake_api, vault):
-    (vault / "hermetismo" / "map").mkdir()
+    tree = vault / "hermetismo" / "map" / "tree.json"
+    tree.parent.mkdir()
+    tree.write_text("{}", encoding="utf-8")
     fake_api.jobs[:] = [dict(FILE_JOB)]
     kb_map = FakeKbMap(vault)
+    kb_map.map_spend = 0.05
     kb = FakeKb(vault)
 
     assert worker(fake_api, vault, kb_map, kb).step() == "job"
@@ -147,8 +156,11 @@ def test_ac1_a_file_is_fetched_converted_classified_mapped_and_reported(fake_api
     assert result["outcome"] == {
         "state": "ready",
         "document": {"id": "raw/articles/o-caibalion.md", "title": "O Caibalion"},
+        "review": False,
     }
-    assert result["spendUsd"] == pytest.approx(0.0008)
+    # classify and link (0.0008) and the map's step: all on the owner's key.
+    assert result["spendUsd"] == pytest.approx(0.0508)
+    assert converted["upload_id"] == FILE_JOB["id"]
     assert fake_api.bodies("fail") == []
 
 
@@ -186,7 +198,7 @@ def test_ac3_a_document_already_there_is_reported_as_such_without_kb(fake_api, v
         ({"state": "failed", "detail": "firecrawl: HTTP 404; jina: HTTP 404"}, "conversion-failed"),
         ({"state": "failed", "detail": "empty or unreadable conversion (3 useful)"}, "empty"),
         (
-            {"state": "review", "document": "raw/x.md", "detail": "kb triage: review"},
+            {"state": "refused", "document": "raw/x.md", "detail": "kb triage: quarantined"},
             "not-accepted",
         ),
     ],
@@ -268,6 +280,106 @@ def test_a_conversion_that_fails_after_spending_reports_the_spend(fake_api, vaul
     assert worker(fake_api, vault, FakeKbMap(vault, outcome)).step() == "job"
     (result,) = fake_api.bodies("doc-result")
     assert result["spendUsd"] == pytest.approx(0.01)
+
+
+def test_a_map_folder_without_a_tree_turns_no_paid_step_on(fake_api, vault):
+    (vault / "hermetismo" / "map").mkdir()
+    fake_api.jobs[:] = [dict(URL_JOB)]
+    kb_map = FakeKbMap(vault)
+    assert worker(fake_api, vault, kb_map).step() == "job"
+    assert kb_map.mapped == []
+
+
+def test_a_map_step_that_fails_reports_all_that_was_spent(fake_api, vault):
+    tree = vault / "hermetismo" / "map" / "tree.json"
+    tree.parent.mkdir()
+    tree.write_text("{}", encoding="utf-8")
+    fake_api.jobs[:] = [dict(URL_JOB)]
+
+    class Failing(FakeKbMap):
+        def map_document(self, topic, doc_id, budget_usd):
+            raise KbStepFailed("kb-map sections", "502", 0.02)
+
+    assert worker(fake_api, vault, Failing(vault)).step() == "job"
+    (failed,) = fake_api.bodies("fail")
+    assert failed["spendUsd"] == pytest.approx(0.0208)
+
+
+def test_what_this_upload_wrote_before_a_crash_goes_on_to_ready(fake_api, vault):
+    doc = vault / "hermetismo" / "raw" / "a.md"
+    doc.write_text("---\ntitle: A\n---\ncorpo\n", encoding="utf-8")
+    fake_api.jobs[:] = [{**URL_JOB, "attempt": 2}]
+    own = {"state": "duplicate", "document": "raw/a.md", "own": True}
+    kb = FakeKb(vault)
+    assert worker(fake_api, vault, FakeKbMap(vault, own), kb).step() == "job"
+    assert [step for step, _, _ in kb.calls] == ["classify", "index", "link", "index"]
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["state"] == "ready"
+
+
+def test_kbs_review_is_ready_and_says_so(fake_api, vault):
+    doc = vault / "hermetismo" / "raw" / "a.md"
+    doc.write_text("---\ntitle: A\n---\ncorpo\n", encoding="utf-8")
+    fake_api.jobs[:] = [dict(URL_JOB)]
+    review = {"state": "review", "document": "raw/a.md"}
+    assert worker(fake_api, vault, FakeKbMap(vault, review)).step() == "job"
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"] == {
+        "state": "ready",
+        "document": {"id": "raw/a.md", "title": "A"},
+        "review": True,
+    }
+
+
+def test_without_kbs_key_a_document_waits_with_its_attempts_untouched(fake_api, vault):
+    fake_api.jobs[:] = [dict(URL_JOB)]
+    missing = {"state": "failed", "detail": "kb ingest: OPENROUTER_API_KEY is not set"}
+    assert worker(fake_api, vault, FakeKbMap(vault, missing)).step() == "job"
+    assert fake_api.bodies("doc-result") == []
+    (failed,) = fake_api.bodies("fail")
+    assert failed["failure"] == "not-configured"
+
+
+def test_a_download_holds_no_lock_on_the_vault(fake_api, vault):
+    fake_api.jobs[:] = [dict(RECORDING_JOB)]
+    mac = worker(fake_api, vault, recordings=FakeRecordings())
+    mac.publisher.locked = lambda: pytest.fail("the vault was locked for a download")
+    assert mac.step() == "job"
+    assert len([c for c in fake_api.calls if c[1].endswith("/recording-audio")]) == 1
+
+
+def test_a_command_that_takes_too_long_ends_with_all_it_started(tmp_path):
+    marker = tmp_path / "late"
+    script = f"(sleep 2; touch {marker}) & sleep 30"
+    started = time.monotonic()
+    with pytest.raises(DocIngestFailed, match="took more than"):
+        run_whole(["/bin/sh", "-c", script], 0.3)
+    assert time.monotonic() - started < 2
+    time.sleep(2.2)
+    assert not marker.exists()
+
+
+def test_the_spend_of_the_map_step_is_its_last_json_line():
+    assert spent_in('written a\nkb-map sections: 1 written\n{"spentUsd": 0.0123}\n') == 0.0123
+    assert spent_in("kb-map sections: nothing to do\n{oops\n") == 0.0
+
+
+def test_a_name_that_starts_with_a_dash_is_a_name(tmp_path, monkeypatch):
+    from transcriber import doc_ingest
+
+    seen = []
+
+    def fake(command, timeout, cwd=None, env=None):
+        seen.append(command)
+        return subprocess.CompletedProcess(command, 0, '{"state": "failed"}\n', "")
+
+    monkeypatch.setattr(doc_ingest, "run_whole", fake)
+    cli = doc_ingest.KbMapCli(tmp_path)
+    cli.convert(
+        "t", "/x", name="--topic.pdf", source_path="upload/-x", budget_usd=0.1, upload_id="u"
+    )
+    assert "--name=--topic.pdf" in seen[0]
+    assert "--source-path=upload/-x" in seen[0]
 
 
 def test_a_failing_kb_step_gives_the_job_back_with_kbs_output(fake_api, vault):

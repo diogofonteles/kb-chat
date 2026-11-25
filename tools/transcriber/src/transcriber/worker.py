@@ -385,28 +385,47 @@ class Worker:
         if self.docs is None or self.publisher is None:
             raise RuntimeError("leased a doc-ingest job without kb-map, a vault and kb")
         try:
-            with self.publisher.locked():
-                done = self._ingest_document(job, work, progress)
+            done = self._do_ingest(self.publisher, job, work, progress)
         except LeaseLost:
             log.warning("job %s: the lease was lost mid-way: dropped", job["id"])
-            return
         except DocIngestFailed as err:
-            log.error("job %s: the document did not enter: %s", job["id"], err.detail)
-            outcome = {"state": "failed", "failure": err.failure, "detail": err.detail}
-            self.api.doc_result(job, outcome, min(err.spent, float(job["budgetUsd"])))
-            return
+            self._ingest_failed(job, err)
         except KbStepFailed as err:
             if is_configuration_error(err.output):
                 self._not_configured(job, err)
-                return
-            self._publish_failed(job, err)
-            return
+            else:
+                self._publish_failed(job, err)
         except VaultBusy as err:
             self._publish_failed(job, err)
+        else:
+            if done is not None:
+                self._ingested(job, progress, *done)
+
+    def _do_ingest(
+        self, publisher: KbPublisher, job: dict, work: Path, progress: dict
+    ) -> tuple[dict, float] | None:
+        """What ended in the vault; None for what goes another way (a recording, a list)."""
+        # A download may take long and writes nothing in the vault: it holds no lock.
+        kind = job["source"]["kind"]
+        if kind == "recording":
+            self._recording(job, work)
+            return None
+        if kind == "list":
+            self._list(job)
+            return None
+        with publisher.locked():
+            return self._ingest_document(job, work, progress)
+
+    def _ingest_failed(self, job: dict, err: DocIngestFailed) -> None:
+        if is_configuration_error(err.detail):
+            # The Mac lacks something (kb's key): the document waits, its attempts untouched.
+            self._not_configured(job, KbStepFailed("convert", err.detail, err.spent))
             return
-        if done is None:
-            return
-        outcome, spent = done
+        log.error("job %s: the document did not enter: %s", job["id"], err.detail)
+        outcome = {"state": "failed", "failure": err.failure, "detail": err.detail}
+        self.api.doc_result(job, outcome, min(err.spent, float(job["budgetUsd"])))
+
+    def _ingested(self, job: dict, progress: dict, outcome: dict, spent: float) -> None:
         progress["percent"] = 100
         if self.sync is not None and outcome["state"] == "ready":
             self.sync.mark_pending()
@@ -421,12 +440,6 @@ class Worker:
         if self.docs is None or self.publisher is None:
             raise RuntimeError("leased a doc-ingest job without kb-map")
         source = job["source"]
-        if source["kind"] == "recording":
-            self._recording(job, work)
-            return None
-        if source["kind"] == "list":
-            self._list(job)
-            return None
         # A collection created on the screen gets its folder first (KBC-114, KBC-009 R2).
         self._make_folder(self.publisher, job)
         if source["kind"] == "file":
@@ -445,8 +458,9 @@ class Worker:
 
         spent = self.docs.finish(job, converted, say)
         document = {"id": converted.document, "title": converted.title}
-        state = "ready" if converted.state == "converted" else "duplicate"
-        return {"state": state, "document": document}, spent
+        if converted.state == "duplicate":
+            return {"state": "duplicate", "document": document}, spent
+        return {"state": "ready", "document": document, "review": converted.review}, spent
 
     @staticmethod
     def _make_folder(publisher: KbPublisher, job: dict) -> None:
@@ -496,6 +510,8 @@ class Worker:
             return
         if hasattr(self.publisher.kb, "env"):
             self.publisher.kb.env = env
+        if self.docs is not None and hasattr(self.docs.kb_map, "env"):
+            self.docs.kb_map.env = dict(env)
         self.unavailable = [one for one in self.unavailable if one not in missing]
         self.status.kinds = self.kinds
         self.status.unavailable = list(self.unavailable)

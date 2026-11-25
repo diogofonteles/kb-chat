@@ -41,6 +41,8 @@ class Outcome:
     detail: str = ""
     original: str | None = None
     usd: float = 0.0
+    # A duplicate this same upload wrote on an earlier attempt (the app's retry goes on).
+    own: bool = False
 
     def as_json(self) -> dict:
         return {
@@ -53,6 +55,7 @@ class Outcome:
                 "detail": self.detail or None,
                 "original": self.original,
                 "usd": round(self.usd, 6),
+                "own": self.own or None,
             }.items()
             if value is not None
         }
@@ -115,13 +118,18 @@ class Converting:
     ingest: KbIngestPort
     queue: ReviewQueue
     budget_usd: float | None = None
+    upload_id: str | None = None
 
     def convert(self, source: Source, naming: Naming) -> Outcome:
         shown = source.url or source.name
         sha = sha256_file(source.path) if source.path else None
         duplicate = find_duplicate(self.topic, sha, source.url)
         if duplicate:
-            return Outcome("duplicate", shown, doc=duplicate, detail="already in the collection")
+            own = self.upload_id is not None and (
+                _frontmatter_of(self.topic.dir / duplicate).get("upload_id") == self.upload_id
+            )
+            detail = "already in the collection"
+            return Outcome("duplicate", shown, doc=duplicate, detail=detail, own=own)
         try:
             conversion = self.converters.convert(source)
         except ConversionFailed as err:
@@ -145,6 +153,7 @@ class Converting:
         if source_path is None and source.path is not None:
             source_path = _vault_relative(self.vault, source.path) or source.name
         keys = provenance(conversion, sha, original_name, source_path)
+        keys["upload_id"] = self.upload_id
         return self._ingest(
             heading,
             conversion,
@@ -161,7 +170,9 @@ class Converting:
         staged = stage / "document.md"
         staged.write_text(f"# {heading}\n\n{conversion.markdown}", encoding="utf-8")
         try:
-            result = self.ingest.ingest_file(self.topic.slug, staged, self.budget_usd)
+            # What describing an image spent comes out of the same budget.
+            left = None if self.budget_usd is None else max(0.0, self.budget_usd - outcome.usd)
+            result = self.ingest.ingest_file(self.topic.slug, staged, left)
         except IngestFailed as err:
             self.queue.put("convert", outcome.source, source=outcome.source, reason=str(err))
             return _with(outcome, state="failed", detail=str(err), usd=outcome.usd + err.usd)
@@ -181,7 +192,8 @@ class Converting:
         written = self.vault.root / result.file_path
         write_atomic(written, set_keys(written.read_text(encoding="utf-8"), keys))
         doc = written.resolve().relative_to(self.topic.dir.resolve()).as_posix()
-        state = "converted" if result.triage == "kept" else "review"
+        # kb stores `review` in the collection (with its own queue); only `quarantined` is out.
+        state = {"kept": "converted", "review": "review"}.get(result.triage, "refused")
         detail = "" if state == "converted" else f"kb triage: {result.triage}"
         self.queue.drop("convert", outcome.source)
         return _with(outcome, state=state, doc=doc, detail=detail)

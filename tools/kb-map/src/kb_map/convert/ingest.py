@@ -97,9 +97,18 @@ class KbIngestCli:
             check=False,
         )
         output = (done.stdout + done.stderr).strip()
-        if done.returncode != 0:
+        try:
+            data = parse_result(done.stdout)
+        except IngestFailed as err:
+            if done.returncode == 0:
+                raise IngestFailed(str(err), spend_of(output)) from err
+            message = f"kb ingest: {output[-OUTPUT_CHARS:]}"
+            raise IngestFailed(message, spend_of(output)) from err
+        # kb writes the document before it judges and links it: an error after that leaves the
+        # document in the collection, so it goes on with its keys (the steps that follow judge
+        # and link it again).
+        if done.returncode != 0 and not data.get("filePath"):
             raise IngestFailed(f"kb ingest: {output[-OUTPUT_CHARS:]}", spend_of(output))
-        data = parse_result(done.stdout)
         return IngestResult(
             file_path=str(data.get("filePath") or ""),
             triage=str(data.get("triage") or ""),

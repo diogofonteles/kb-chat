@@ -2,11 +2,19 @@
 
 import io
 import json
+import shutil
+import subprocess
 import urllib.error
 
 import pytest
 
-from kb_map.convert.converters import ConversionFailed, DataPage
+from kb_map.convert.converters import (
+    ConversionFailed,
+    ConverterMissing,
+    DataPage,
+    ImageConverter,
+    as_docx,
+)
 from kb_map.convert.ingest import IngestFailed, KbIngestCli, parse_result, spend_of
 from kb_map.convert.naming import heading_of, title_from_name
 from kb_map.convert.pipeline import original_names
@@ -189,6 +197,71 @@ def test_kbs_receipts_are_its_spend_and_its_cap_is_not():
     )
     assert spend_of(output) == pytest.approx(0.002)
     assert spend_of("nothing") == 0
+
+
+def fake_kb(tmp_path, stdout: str, code: int) -> KbIngestCli:
+    binary = tmp_path / "kb"
+    binary.write_text(f"#!/bin/sh\ncat <<'EOF'\n{stdout}\nEOF\nexit {code}\n", encoding="utf-8")
+    binary.chmod(0o755)
+    return KbIngestCli(tmp_path, str(binary))
+
+
+def test_an_error_after_kb_wrote_the_document_keeps_the_document(tmp_path):
+    written = '{"topic": "t", "filePath": "t/raw/articles/a.md", "triage": "kept"}'
+    receipt = "decisions: 1 calls, 0 cache hits, US$ 0.0010"
+    result = fake_kb(tmp_path, f"{written}\n{receipt}", 1).ingest_file("t", tmp_path / "a.md", 0.1)
+    assert result.file_path == "t/raw/articles/a.md"
+    assert result.usd == pytest.approx(0.001)
+    with pytest.raises(IngestFailed) as failed:
+        fake_kb(tmp_path, receipt, 1).ingest_file("t", tmp_path / "a.md", 0.1)
+    assert failed.value.usd == pytest.approx(0.001)
+
+
+@pytest.mark.skipif(shutil.which("textutil") is None, reason="textutil is macOS")
+@pytest.mark.parametrize("extension", ["doc", "odt", "rtf"])
+def test_old_word_opendocument_and_rtf_become_word_first(tmp_path, extension):
+    source = tmp_path / "nota.txt"
+    source.write_text("O todo é mente.\n", encoding="utf-8")
+    old = tmp_path / f"nota.{extension}"
+    subprocess.run(
+        ["textutil", "-convert", extension, "-output", str(old), str(source)], check=True
+    )
+    folder = tmp_path / "out"
+    folder.mkdir()
+    docx = as_docx(old, folder)
+    assert docx.read_bytes()[:2] == b"PK"
+
+
+def test_without_textutil_an_old_format_says_what_is_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    with pytest.raises(ConverterMissing, match="textutil"):
+        as_docx(tmp_path / "a.doc", tmp_path)
+
+
+def test_an_image_keeps_its_text_when_the_description_fails(tmp_path):
+    image = tmp_path / "a.png"
+    image.write_bytes(b"png")
+
+    def broken(_path):
+        raise ConversionFailed("the vision model answered HTTP 502")
+
+    class Ocr:
+        text = "Texto da placa."
+
+        def markdown_of(self, _path):
+            return self.text
+
+        def version(self):
+            return "1"
+
+    ocr = Ocr()
+    source = Source("image", "a.png", path=image)
+    converted = ImageConverter(ocr=ocr, describe=broken).convert(source)
+    assert "Texto da placa." in converted.markdown
+    assert not converted.generated_description
+    ocr.text = ""
+    with pytest.raises(ConversionFailed, match="502"):
+        ImageConverter(ocr=ocr, describe=broken).convert(source)
 
 
 def test_kb_ingest_output_is_read_and_the_command_has_no_secret(tmp_path):

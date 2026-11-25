@@ -132,6 +132,10 @@ class Topic:
         return doc_id
 
 
+_SEGMENT = r"[A-Za-z0-9][A-Za-z0-9_.-]*"
+TOPIC_SLUG = re.compile(rf"{_SEGMENT}(/{_SEGMENT})?")
+
+
 @dataclass(frozen=True)
 class Vault:
     root: Path
@@ -151,9 +155,12 @@ class Vault:
         raise VaultError("no kb vault found: pass --vault <dir> or set KB_VAULT")
 
     def topic(self, slug: str) -> Topic:
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", slug):
+        # A sub-collection is `parent/child` (the app nests one level, ADR 0028).
+        if not TOPIC_SLUG.fullmatch(slug):
             raise VaultError(f"{slug!r} is not a topic slug")
         folder = self.root / slug
+        if not folder.resolve().is_relative_to(self.root.resolve()):
+            raise VaultError(f"{slug!r} is outside the vault")
         if not (folder / "topic.yaml").is_file():
             raise VaultError(f"{folder} is not a kb topic (no topic.yaml)")
         try:

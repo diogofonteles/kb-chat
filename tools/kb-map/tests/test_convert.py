@@ -12,8 +12,8 @@ from kb_map import cli
 from kb_map.convert import factory
 from kb_map.convert.converters import GENERATED_HEADING
 from kb_map.convert.originals import sha256_file
-from kb_map.layout import MapLayout, read_json
-from kb_map.vault import Vault, split_frontmatter
+from kb_map.layout import MapLayout, convert_queue_file, read_json
+from kb_map.vault import Vault, VaultError, split_frontmatter
 
 
 @pytest.fixture
@@ -193,7 +193,9 @@ def test_an_empty_conversion_writes_nothing_and_goes_to_review(
     assert "empty or unreadable" in result["detail"]
     assert kb.calls == []
     assert not (vault / TOPIC / "raw" / "_originals").exists()
-    queue = read_json(MapLayout(Vault(vault).topic(TOPIC)).review_queue_file)
+    queue = read_json(convert_queue_file(vault, TOPIC))
+    # A `map/` folder says the collection has a map: a failed conversion makes none.
+    assert not (vault / TOPIC / "map").exists()
     assert queue[0]["kind"] == "convert"
 
 
@@ -446,3 +448,61 @@ def test_what_kb_spent_ingesting_is_in_the_outcome(vault, tmp_path, kb, converte
     assert _run(vault, "convert", TOPIC, str(_pdf(tmp_path)), "--json") == 0
     outcome = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert outcome["usd"] == pytest.approx(0.0021)
+
+
+# ---- review A --------------------------------------------------------------------------------
+
+
+def test_a_sub_collection_takes_documents(vault, tmp_path, kb, converters, capsys):
+    child = vault / TOPIC / "aulas"
+    (child / "raw").mkdir(parents=True)
+    (child / "topic.yaml").write_text(f"slug: {TOPIC}/aulas\ntitle: Aulas\n", encoding="utf-8")
+    assert _run(vault, "convert", f"{TOPIC}/aulas", str(_pdf(tmp_path)), "--json") == 0
+    outcome = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert outcome["state"] == "converted"
+    assert (child / outcome["document"]).is_file()
+
+
+@pytest.mark.parametrize("slug", ["../fora", "a/../b", "a/b/c", "/abs", "a/", ".a"])
+def test_a_slug_that_is_not_a_topic_is_refused(vault, slug):
+    with pytest.raises(VaultError):
+        Vault(vault).topic(slug)
+
+
+def test_a_retry_of_the_same_upload_is_its_own_document_and_another_one_is_not(
+    vault, tmp_path, kb, converters, capsys
+):
+    pdf = str(_pdf(tmp_path))
+
+    def convert(upload_id):
+        _run(vault, "convert", TOPIC, pdf, "--json", "--upload-id", upload_id)
+        return json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+
+    first = convert("upload-1")
+    again = convert("upload-1")
+    other = convert("upload-2")
+    assert first["state"] == "converted"
+    assert (again["state"], again["own"]) == ("duplicate", True)
+    assert other["state"] == "duplicate"
+    assert "own" not in other
+    assert again["document"] == first["document"]
+
+
+def test_kbs_review_is_in_the_collection_and_its_quarantine_is_not(
+    vault, tmp_path, kb, converters, capsys
+):
+    for triage, state in (("review", "review"), ("quarantined", "refused")):
+        kb.triage = triage
+        pdf = _pdf(tmp_path, f"{triage}.pdf", triage.encode())
+        _run(vault, "convert", TOPIC, str(pdf), "--json")
+        outcome = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+        assert outcome["state"] == state
+
+
+def test_what_the_description_spent_is_out_of_what_kb_may_spend(
+    vault, tmp_path, kb, converters, capsys
+):
+    converters["set"] = stub_set(describe=lambda _path: ("Um desenho da árvore da vida.", 0.3))
+    image = _pdf(tmp_path, "arvore.png", b"png")
+    _run(vault, "convert", TOPIC, str(image), "--json", "--budget", "0.5")
+    assert kb.budgets == [pytest.approx(0.2)]
