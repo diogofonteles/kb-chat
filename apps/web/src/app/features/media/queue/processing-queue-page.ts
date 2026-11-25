@@ -15,6 +15,7 @@ import { formatDate } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import type {
+  DocumentUpload,
   MediaPreparation,
   ProcessingQueue,
   ProcessingQueueItem,
@@ -33,6 +34,7 @@ import {
   DocumentUploadsSection,
   type OpenedDocument,
 } from '@features/document-upload/document-uploads-section.js';
+import { phaseOf } from '@features/document-upload/document-progress.js';
 import { DocumentUploadsStore } from '@features/document-upload/document-uploads-store.js';
 
 /** The sections of the queue: what needs the person first (UP-02). */
@@ -125,37 +127,12 @@ export class ProcessingQueuePage {
   });
   /** The art's side: 208 on desktop, 120 on a phone. */
   protected readonly artSize = 208;
-  /** "3 itens · 2 precisam de você", under the title. */
-  protected readonly summary = computed(() => {
-    const items = this.store.items();
-    if (this.store.queue() === null) return '';
-    if (items.length === 0) return this.documentsSummary();
-    const need = items.filter((one) => one.phase === 'attention').length;
-    const next = items.filter((one) => one.phase === 'next').length;
-    const all =
-      items.length === 1
-        ? $localize`:@@queue.summaryOne:1 item`
-        : $localize`:@@queue.summaryMany:${items.length}:count: itens`;
-    const parts = [all];
-    if (need > 0)
-      parts.push(
-        need === 1
-          ? $localize`:@@queue.summaryNeedPart:1 precisa de você`
-          : $localize`:@@queue.summaryNeedMany:${need}:need: precisam de você`,
-      );
-    if (next > 0)
-      parts.push($localize`:@@queue.summaryNext:${next}:next: a seguir`);
-    return parts.join(' · ');
-  });
-  /** No audio at work: the sent documents (KBC-149), or nothing at all. */
-  private documentsSummary(): string {
-    const docs = this.documents.items().length;
-    if (docs === 0)
-      return $localize`:@@queue.summaryNone:Nada sendo processado agora`;
-    return docs === 1
-      ? $localize`:@@queue.summaryDocOne:1 documento enviado`
-      : $localize`:@@queue.summaryDocs:${docs}:count: documentos enviados`;
-  }
+  /** "32 itens · 2 precisam de você · 28 a seguir": audios and sent documents together. */
+  protected readonly summary = computed(() =>
+    this.store.queue() === null
+      ? ''
+      : summaryText(this.store.items(), this.documents.items()),
+  );
 
   /** "Aguardando o transcritor": the usual reason nothing moves, in a title and a line. */
   protected readonly transcriberText = computed(() => {
@@ -250,4 +227,35 @@ export class ProcessingQueuePage {
     this.refocusing = { mediaId, seen: this.store.queue() };
     this.store.refresh();
   }
+}
+
+/** What is ready waits for nothing: it is not being processed. */
+function summaryText(
+  items: readonly ProcessingQueueItem[],
+  documents: readonly DocumentUpload[],
+): string {
+  const sent = documents.map(phaseOf).filter((phase) => phase !== 'ready');
+  const total = items.length + sent.length;
+  if (total === 0)
+    return $localize`:@@queue.summaryNone:Nada sendo processado agora`;
+  const need =
+    items.filter((one) => one.phase === 'attention').length +
+    sent.filter((phase) => phase === 'yours' || phase === 'failed').length;
+  const next =
+    items.filter((one) => one.phase === 'next').length +
+    sent.filter((phase) => phase === 'waiting').length;
+  const parts = [
+    total === 1
+      ? $localize`:@@queue.summaryOne:1 item`
+      : $localize`:@@queue.summaryMany:${total}:count: itens`,
+  ];
+  if (need > 0)
+    parts.push(
+      need === 1
+        ? $localize`:@@queue.summaryNeedPart:1 precisa de você`
+        : $localize`:@@queue.summaryNeedMany:${need}:need: precisam de você`,
+    );
+  if (next > 0)
+    parts.push($localize`:@@queue.summaryNext:${next}:next: a seguir`);
+  return parts.join(' · ');
 }

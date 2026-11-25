@@ -5,11 +5,13 @@ import type {
 } from '@kb-chat/contracts';
 import type { Tone } from '@ui/pill.js';
 
+export interface StateLabel {
+  readonly text: () => string;
+  readonly tone: Tone;
+}
+
 /** Each state in words, with its tone (a word always, never only a colour, MA rules). */
-export const STATE_LABELS: Record<
-  DocumentUploadState,
-  { readonly text: () => string; readonly tone: Tone }
-> = {
+const STATE_LABELS: Record<DocumentUploadState, StateLabel> = {
   receiving: {
     text: () => $localize`:@@docUploads.state.receiving:Enviando`,
     tone: 'info',
@@ -80,10 +82,33 @@ export const isSettled = (state: DocumentUploadState): boolean =>
 export const isWorking = (state: DocumentUploadState): boolean =>
   state === 'converting' || state === 'classifying' || state === 'mapping';
 
+const DOWNLOADING: StateLabel = {
+  text: () => $localize`:@@docUploads.state.downloading:Baixando`,
+  tone: 'info',
+};
+const LISTING: StateLabel = {
+  text: () => $localize`:@@docUploads.state.listing:Lendo a lista`,
+  tone: 'info',
+};
+const YOURS: StateLabel = {
+  text: () => $localize`:@@docUploads.state.yours:Espera você`,
+  tone: 'warn',
+};
+
+/** Its state in words: what the Mac does depends on what it is. */
+export function labelOf(upload: DocumentUpload): StateLabel {
+  const { kind, state, progress } = upload;
+  if (state === 'converting' && kind === 'recording') return DOWNLOADING;
+  if (state === 'converting' && kind === 'list') return LISTING;
+  if (state === 'transcribing' && progress.media?.step === 'publishing')
+    return STATE_LABELS.classifying;
+  if (state === 'transcribing' && progress.media?.step === 'attention')
+    return YOURS;
+  return STATE_LABELS[state];
+}
+
 /** "No mapa" waits for the next sync to the app; the rest waits for the Mac. */
 const WAITING_HINTS: Partial<Record<DocumentUploadState, () => string>> = {
-  received: () =>
-    $localize`:@@docUploads.hint.received:Na vez do Mac: ele liga sozinho quando há trabalho.`,
   mapped: () =>
     $localize`:@@docUploads.hint.mapped:Chega à busca com a próxima sincronização do acervo.`,
   receiving: () =>

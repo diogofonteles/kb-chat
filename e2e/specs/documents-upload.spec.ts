@@ -430,3 +430,154 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     }
   });
 }
+
+/** Links sent from the page: each is an item of one inclusion. */
+async function includeLinks(
+  add: Locator,
+  links: readonly string[],
+  total = links.length,
+) {
+  await add.getByRole('button', { name: 'Links', exact: true }).click();
+  await add.getByLabel('Endereços').fill(links.join('\n'));
+  await add.getByRole('button', { name: /^Incluir \d+ ite/ }).click();
+  await expect(
+    add.getByText(new RegExp(`${total} de ${total} enviados`)),
+  ).toBeVisible();
+}
+
+/** The Mac as the API tells it, whatever the other tests paired. */
+async function withMac(page: Page, mac: object) {
+  await page.route('**/api/v1/document-uploads', async (route) => {
+    const answer = await route.fetch();
+    const body = (await answer.json()) as { work: object };
+    await route.fulfill({
+      response: answer,
+      json: { ...body, work: { ...body.work, busy: false, mac } },
+    });
+  });
+}
+
+test('KBC-184: what the Mac does now, the line, the time and what was spent; then the ready ones are cleared', async ({
+  browser,
+  viewport,
+}, testInfo) => {
+  const { page, topic, owner } = await person(browser, viewport);
+  const tag = uniqueTag();
+  const links = [1, 2, 3].map((n) => `https://example.org/${tag}/${n}`);
+  const add = await openAdd(page);
+  // Room for the others while the Mac holds one: each takes up to what the month lends.
+  await add.getByLabel('Teto desta inclusão (US$)').fill('5');
+  await includeLinks(add, links);
+  const held = await owner.post('/api/e2e/doc-ingest/run', {
+    headers: CSRF,
+    data: { topic, hold: true },
+  });
+  expect(held.status()).toBe(200);
+
+  const card = add.locator('app-document-work-card');
+  await expect(card.getByText('0 de 3 prontos')).toBeVisible();
+  await expect(card.getByText('1 em andamento · 2 na fila')).toBeVisible();
+  await expect(card.getByText('Mac conectado')).toBeVisible();
+  await expect(card.getByText(/\/1 — Classificando, há/)).toBeVisible();
+  await expect(card.getByText(/min no Mac/)).toBeVisible();
+  await expect(card.getByText(/US\$ 0,00 de US\$ 5,00/)).toBeVisible();
+  const working = processing(add, links[0] ?? '');
+  await expect(working.getByText(/^Há menos de 1 min/)).toBeVisible();
+  await expect(working.getByText('Etapa 3 de 5')).toBeAttached();
+  await expect(processing(add, links[1] ?? '')).toContainText(
+    /na fila|Próximo da fila/,
+  );
+  await card.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('progress.png') });
+
+  await runMac(owner, topic);
+  await expect(card.getByText('2 de 3 prontos')).toBeVisible();
+  await add.getByRole('button', { name: 'Limpar prontos (2)' }).click();
+  await expect(card.getByText('0 de 1 pronto', { exact: true })).toBeVisible();
+  await expect(processing(add, links[1] ?? '')).toHaveCount(0);
+});
+
+test('KBC-184: many items have filters, the queue counts them, and the Mac that is not there is said', async ({
+  browser,
+  viewport,
+}, testInfo) => {
+  const { page } = await person(browser, viewport);
+  const tag = uniqueTag();
+  const add = await openAdd(page);
+  await includeLinks(
+    add,
+    Array.from({ length: 14 }, (_, n) => `https://example.org/${tag}/${n}`),
+  );
+  const filters = add.getByRole('group', { name: 'Mostrar' });
+  await expect(filters.getByRole('button', { name: /^Todos/ })).toHaveText(
+    'Todos (14)',
+  );
+  await filters.getByRole('button', { name: 'Na fila (14)' }).click();
+  await expect(
+    add
+      .getByRole('region', { name: 'Documentos em processamento' })
+      .getByRole('listitem'),
+  ).toHaveCount(14);
+
+  await withMac(page, { state: 'none', lastSeenAt: null });
+  await page.goto('/fila');
+  const queue = page.locator('app-processing-queue-page');
+  // The phone's head has no room for the count: the card has it.
+  if (desktop(page)) await expect(queue.getByText(/^14 itens/)).toBeVisible();
+  await expect(queue.getByText('0 de 14 prontos')).toBeVisible();
+  await expect(queue.getByText('Nenhum Mac conectado')).toBeVisible();
+  await expect(queue.getByText(/Peça a um master/)).toBeVisible();
+  await expect(queue.getByText(/liga sozinho/)).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('queue-no-mac.png') });
+  const wide = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
+  );
+  expect(wide).toBeLessThanOrEqual(0);
+});
+
+for (const theme of ['light', 'dark', 'esoteric'] as const) {
+  test(`KBC-184: the progress passes axe in the ${theme} theme, at every state`, async ({
+    browser,
+    viewport,
+  }, testInfo) => {
+    const { page, topic, owner } = await person(browser, viewport);
+    await page.addInitScript(
+      (value) => localStorage.setItem('kb-chat.theme', value),
+      theme,
+    );
+    await withMac(page, {
+      state: 'off',
+      lastSeenAt: new Date(Date.now() - 7_200_000).toISOString(),
+    });
+    await page.reload();
+    const tag = uniqueTag();
+    const add = await openAdd(page);
+    await includeLinks(add, [
+      `https://example.org/${tag}`,
+      `https://quebrado.example/${tag}`,
+      `https://www.youtube.com/@canal${tag.replace(/[^a-z0-9]/gi, '')}`,
+    ]);
+    await runMac(owner, topic);
+    await includeLinks(add, [`https://example.org/${tag}/espera`], 4);
+    const section = add.getByRole('region', {
+      name: 'Documentos em processamento',
+    });
+    await expect(section.getByText('Mac desligado')).toBeVisible();
+    await expect(section.getByText(/Visto há 2 h/)).toBeVisible();
+    await expect(section.getByText('Falhou', { exact: true })).toBeVisible();
+    await section.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath(`progress-${theme}.png`),
+    });
+    const serious = (
+      await new AxeBuilder({ page })
+        .include('app-document-uploads-section')
+        .analyze()
+    ).violations.filter((v) =>
+      ['serious', 'critical'].includes(v.impact ?? ''),
+    );
+    expect(serious).toEqual([]);
+  });
+}

@@ -5,9 +5,11 @@ import {
 } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { DocumentUpload } from '@kb-chat/contracts';
+import { provideRouter } from '@angular/router';
+import type { DocumentUpload, DocumentWork } from '@kb-chat/contracts';
 import { MEDIA_POLL_MS } from '@features/media/media-polling.js';
-import { fireEvent, render, screen } from '@testing-library/angular';
+import { fireEvent, render, screen, within } from '@testing-library/angular';
+import { sessionAs } from '../../testing/media-fixtures.js';
 import { DocumentUploadsSection } from './document-uploads-section.js';
 import { DocumentUploadsStore, REFRESH_MS } from './document-uploads-store.js';
 
@@ -30,15 +32,44 @@ const upload = (fields: Partial<DocumentUpload>): DocumentUpload => ({
   batch: null,
   heldBy: null,
   retriable: false,
+  progress: {
+    startedAt: null,
+    position: null,
+    startsInSeconds: null,
+    takesSeconds: null,
+    media: null,
+  },
   entries: [],
   createdAt: '2026-11-16T10:00:00.000Z',
   updatedAt: '2026-11-16T10:00:00.000Z',
   ...fields,
 });
 
+const progress = (
+  fields: Partial<DocumentUpload['progress']>,
+): DocumentUpload['progress'] => ({
+  startedAt: null,
+  position: null,
+  startsInSeconds: null,
+  takesSeconds: null,
+  media: null,
+  ...fields,
+});
+
+const aWork = (fields: Partial<DocumentWork> = {}): DocumentWork => ({
+  mac: { state: 'on', lastSeenAt: new Date().toISOString() },
+  busy: false,
+  waiting: 0,
+  ...fields,
+});
+
+const secondsAgo = (seconds: number) =>
+  new Date(Date.now() - seconds * 1_000).toISOString();
+
 async function renderSection(
   items: DocumentUpload[],
   topic: string | null = null,
+  said: { work?: DocumentWork; master?: boolean } = {},
 ) {
   const opened = vi.fn();
   const view = await render(DocumentUploadsSection, {
@@ -46,6 +77,8 @@ async function renderSection(
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
+      provideRouter([]),
+      sessionAs({ features: ['media-upload'], master: said.master ?? false }),
       DocumentUploadsStore,
       { provide: MEDIA_POLL_MS, useValue: 20 },
     ],
@@ -54,7 +87,7 @@ async function renderSection(
   });
   const http = TestBed.inject(HttpTestingController);
   await new Promise((resolve) => setTimeout(resolve, 5));
-  http.expectOne(URL).flush({ items });
+  http.expectOne(URL).flush({ items, ...(said.work && { work: said.work }) });
   await view.fixture.whenStable();
   return { ...view, http, opened };
 }
@@ -246,5 +279,219 @@ describe('Documentos em processamento (KBC-149 FR-2)', () => {
     http.match(URL).forEach((one) => one.flush({ items: [] }));
     await fixture.whenStable();
     expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+});
+
+describe('what is being done (KBC-184)', () => {
+  const card = () =>
+    document.querySelector('app-document-work-card') as HTMLElement;
+  const rowOf = (name: string) =>
+    screen.getByText(name).closest('app-document-upload-row') as HTMLElement;
+  const batch = { id: crypto.randomUUID(), capUsd: 0.5, spentUsd: 0.018 };
+
+  it('says how everything stands, what the Mac does now, what is left and what was spent', async () => {
+    await renderSection(
+      [
+        upload({
+          name: 'a.pdf',
+          state: 'converting',
+          batch,
+          progress: progress({ startedAt: secondsAgo(70), takesSeconds: 30 }),
+        }),
+        upload({
+          name: 'b.pdf',
+          batch,
+          progress: progress({
+            position: 1,
+            startsInSeconds: 30,
+            takesSeconds: 60,
+          }),
+        }),
+        upload({
+          name: 'c.pdf',
+          batch,
+          progress: progress({
+            position: 2,
+            startsInSeconds: 90,
+            takesSeconds: 60,
+          }),
+        }),
+        upload({ name: 'd.pdf', state: 'failed', failure: 'empty', batch }),
+        upload({ name: 'e.pdf', state: 'ready', batch }),
+      ],
+      null,
+      { work: aWork({ busy: true, waiting: 2 }) },
+    );
+    const text = within(card());
+    expect(text.getByText('1 de 5 prontos')).toBeTruthy();
+    expect(
+      text.getByText('1 em andamento · 2 na fila · 1 falhou'),
+    ).toBeTruthy();
+    expect(text.getByText('Mac conectado')).toBeTruthy();
+    expect(text.getByText('a.pdf — Convertendo, há 1 min')).toBeTruthy();
+    // The last one starts in 90 s and takes 60.
+    expect(text.getByText('cerca de 3 min no Mac')).toBeTruthy();
+    expect(text.getByText(/US\$ 0[.,]02 de US\$ 0[.,]50/)).toBeTruthy();
+
+    expect(
+      within(rowOf('a.pdf')).getByText(/Há 1 min · falta menos de 1 min/),
+    ).toBeTruthy();
+    expect(within(rowOf('a.pdf')).getByText('Etapa 2 de 5')).toBeTruthy();
+    expect(
+      within(rowOf('b.pdf')).getByText(
+        'Próximo da fila · começa em menos de 1 min',
+      ),
+    ).toBeTruthy();
+    expect(
+      within(rowOf('c.pdf')).getByText('2º na fila · começa em cerca de 2 min'),
+    ).toBeTruthy();
+    // What needs a look first, then the line in its order, then what is done.
+    const names = screen
+      .getAllByRole('listitem')
+      .map((one) => one.querySelector('.name')?.textContent);
+    expect(names).toEqual(['a.pdf', 'd.pdf', 'b.pdf', 'c.pdf', 'e.pdf']);
+  });
+
+  it('with no Mac says so, and a master is led to link one', async () => {
+    const none = aWork({
+      mac: { state: 'none', lastSeenAt: null },
+      waiting: 1,
+    });
+    const waiting = upload({
+      progress: progress({ position: 1, takesSeconds: 60 }),
+    });
+    await renderSection([waiting], null, { work: none, master: true });
+    expect(screen.getByText('Nenhum Mac conectado')).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: 'Abrir Transcritores' })
+        .getAttribute('href'),
+    ).toBe('/configuracoes/transcritores');
+    expect(screen.queryByText(/liga sozinho/)).toBeNull();
+    expect(screen.getByText('Próximo da fila')).toBeTruthy();
+  });
+
+  it('a member is told who links one', async () => {
+    const none = aWork({
+      mac: { state: 'none', lastSeenAt: null },
+      waiting: 1,
+    });
+    await renderSection([upload({})], null, { work: none });
+    expect(screen.getByText(/Peça a um master/)).toBeTruthy();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('with the Mac off says since when, and that it comes on by itself', async () => {
+    const off = aWork({
+      mac: { state: 'off', lastSeenAt: secondsAgo(2 * 60 * 60) },
+      waiting: 1,
+    });
+    await renderSection([upload({})], null, { work: off });
+    expect(screen.getByText('Mac desligado')).toBeTruthy();
+    expect(screen.getByText(/Visto há 2 h\..*liga sozinho/)).toBeTruthy();
+  });
+
+  it('says it is at something else, and nothing of the Mac once all ended', async () => {
+    const { http, fixture } = await renderSection([upload({})], null, {
+      work: aWork({ busy: true, waiting: 1 }),
+    });
+    expect(screen.getByText(/outro acervo agora/)).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    http
+      .expectOne(URL)
+      .flush({ items: [upload({ state: 'ready' })], work: aWork() });
+    await fixture.whenStable();
+    expect(screen.queryByText(/Mac conectado/)).toBeNull();
+    expect(screen.getByText('1 de 1 pronto')).toBeTruthy();
+  });
+
+  it.each([
+    {
+      media: { step: 'preparing', percent: 40 },
+      pill: 'Transcrevendo',
+      text: 'Preparando o áudio · 40%',
+    },
+    {
+      media: { step: 'waiting', percent: null },
+      pill: 'Transcrevendo',
+      text: /esperando a vez de transcrever/,
+    },
+    {
+      media: { step: 'transcribing', percent: 12 },
+      pill: 'Transcrevendo',
+      text: /ouvindo e escrevendo · 12%/,
+    },
+    {
+      media: { step: 'publishing', percent: null },
+      pill: 'Classificando',
+      text: /o kb classifica e publica/,
+    },
+    {
+      media: { step: 'attention', percent: null },
+      pill: 'Espera você',
+      text: /esperam você na Fila/,
+    },
+  ] as const)(
+    'a recording in the library that is $media.step says so',
+    async ({ media, pill, text }) => {
+      await renderSection([
+        upload({
+          kind: 'recording',
+          state: 'transcribing',
+          progress: progress({ media }),
+        }),
+      ]);
+      expect(screen.getByText(pill)).toBeTruthy();
+      expect(screen.getByText(text)).toBeTruthy();
+    },
+  );
+
+  it('a recording on the Mac is being downloaded, and a list read', async () => {
+    await renderSection([
+      upload({ kind: 'recording', state: 'converting' }),
+      upload({ kind: 'list', state: 'converting' }),
+    ]);
+    expect(screen.getByText('Baixando')).toBeTruthy();
+    expect(screen.getByText('Lendo a lista')).toBeTruthy();
+  });
+
+  it('many items can be looked at by how they stand', async () => {
+    const { fixture } = await renderSection([
+      ...Array.from({ length: 12 }, (_, n) => upload({ name: `${n}.pdf` })),
+      upload({ name: 'falhou.pdf', state: 'failed', failure: 'empty' }),
+    ]);
+    const filters = within(screen.getByRole('group', { name: 'Mostrar' }));
+    expect(
+      filters.getAllByRole('button').map((one) => one.textContent?.trim()),
+    ).toEqual(['Todos (13)', 'Na fila (12)', 'Falharam (1)']);
+    fireEvent.click(filters.getByRole('button', { name: 'Falharam (1)' }));
+    await fixture.whenStable();
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    expect(screen.getByText('falhou.pdf')).toBeTruthy();
+  });
+
+  it('a few items have no filters', async () => {
+    await renderSection([upload({}), upload({})]);
+    expect(screen.queryByRole('group', { name: 'Mostrar' })).toBeNull();
+  });
+
+  it('what is ready is cleared together, and the focus stays in the section', async () => {
+    const { http, fixture } = await renderSection(
+      [upload({ state: 'ready' }), upload({ name: 'fica.pdf' })],
+      'hermetismo',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar prontos (1)' }));
+    const post = http.expectOne(`${URL}/clear-ready`);
+    expect(post.request.body).toEqual({ topic: 'hermetismo' });
+    expect(document.activeElement?.textContent).toContain(
+      'Documentos em processamento',
+    );
+    post.flush({ cleared: 1 });
+    http
+      .match(URL)
+      .forEach((one) => one.flush({ items: [upload({ name: 'fica.pdf' })] }));
+    await fixture.whenStable();
+    expect(screen.queryByRole('button', { name: /Limpar/ })).toBeNull();
+    expect(screen.getByText('fica.pdf')).toBeTruthy();
   });
 });

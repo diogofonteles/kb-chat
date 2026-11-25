@@ -39,6 +39,13 @@ const anUpload = (fields: Partial<DocumentUpload> = {}): DocumentUpload => ({
   batch: null,
   heldBy: null,
   retriable: false,
+  progress: {
+    startedAt: null,
+    position: null,
+    startsInSeconds: null,
+    takesSeconds: null,
+    media: null,
+  },
   entries: [],
   createdAt: '2026-11-25T10:00:00.000Z',
   updatedAt: '2026-11-25T10:00:00.000Z',
