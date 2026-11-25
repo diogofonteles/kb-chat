@@ -210,6 +210,14 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.editAboveYourLevel:Esta gravação tem faixas acima do seu nível. Só quem tem todos os níveis dela pode editá-la.`,
   LEVELS_CHANGED: () =>
     $localize`:@@error.levelsChanged:A escala mudou. Confira de novo.`,
+  WEB_SEARCH_NOT_CONNECTED: () =>
+    $localize`:@@error.webSearchNotConnected:A pesquisa na web não está ligada.`,
+  WEB_SEARCH_KEY_REJECTED: () =>
+    $localize`:@@error.webSearchKeyRejected:O Firecrawl não aceitou esta chave. Nada foi salvo.`,
+  WEB_SEARCH_NO_CREDITS: () =>
+    $localize`:@@error.webSearchNoCredits:Os créditos da pesquisa na web acabaram.`,
+  WEB_SEARCH_UNAVAILABLE: () =>
+    $localize`:@@error.webSearchUnavailable:Não consegui falar com o Firecrawl. Tente de novo em instantes.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

@@ -58,27 +58,29 @@ export interface DocumentUploadsWiring {
 
 /**
  * Documents and links sent from the app: people's routes, and the doc-ingest queue the Mac
- * leases through the worker routes. Returns the queue for the worker side and the waker.
+ * leases through the worker routes. Returns the queue for the worker side and the waker, and
+ * the service, which knows what is already in a collection (KBC-185).
  */
 export async function registerDocumentUploads(
   app: FastifyInstance,
   wiring: DocumentUploadsWiring,
-): Promise<DocIngestQueue> {
+): Promise<{ queue: DocIngestQueue; service: DocumentUploadService }> {
   const state = wiring.config.KB_CHAT_STATE_DIR;
   const records = await UploadRecords.open(
     new JsonDocumentUploadStore(join(state, 'document-uploads.json')),
   );
   const files = new FsDocumentUploadFiles(join(state, 'document-uploads'));
+  const service = uploadService(wiring, { records, files });
   await app.register(
     documentUploadRoutes({
-      service: uploadService(wiring, { records, files }),
+      service,
       actorOf: (request) => uploadActorOf(request, wiring.catalog),
       ...(wiring.createPerMinute && {
         createPerMinute: wiring.createPerMinute,
       }),
     }),
   );
-  return new DocIngestQueue({
+  const queue = new DocIngestQueue({
     records,
     files,
     budgetUsd: () => wiring.documents.kb.budgetUsd(),
@@ -87,6 +89,7 @@ export async function registerDocumentUploads(
     adoptAudio: (record, audio) => adoptAudio(app, wiring, { record, audio }),
     onError: (err, message) => app.log.error({ err }, message),
   });
+  return { queue, service };
 }
 
 function uploadService(
@@ -106,7 +109,7 @@ function uploadService(
 }
 
 /** BR-1: the media library's actor, plus the audit's name and the level of what it names. */
-function uploadActorOf(
+export function uploadActorOf(
   request: FastifyRequest,
   catalog: CatalogRegistry,
 ): UploadActor {

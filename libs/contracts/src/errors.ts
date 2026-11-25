@@ -95,6 +95,14 @@ export const API_ERROR_CODES = [
   'EDIT_ABOVE_YOUR_LEVEL',
   /** The scale changed since the preview a reorder or a delete was confirmed on (KBC-108 BR-3). */
   'LEVELS_CHANGED',
+  /** The web search has no key, or Firecrawl refused the stored one (KBC-185). */
+  'WEB_SEARCH_NOT_CONNECTED',
+  /** The key a master pasted was refused by Firecrawl: nothing was saved (KBC-185). */
+  'WEB_SEARCH_KEY_REJECTED',
+  /** The house's Firecrawl account has no credits left (KBC-185). */
+  'WEB_SEARCH_NO_CREDITS',
+  /** Firecrawl did not answer (KBC-185). */
+  'WEB_SEARCH_UNAVAILABLE',
   'INTERNAL',
 ] as const;
 

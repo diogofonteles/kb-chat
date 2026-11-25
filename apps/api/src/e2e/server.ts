@@ -45,6 +45,8 @@ import { registerOutbox } from './outbox-routes.js';
 import { SealedSettingsStore } from '../adapters/sealed-settings-store.js';
 import { SecretBox } from '../adapters/secret-box.js';
 import { createHouseAi } from '../house-ai-factory.js';
+import { createWebSearch } from '../web-search-factory.js';
+import { FakeFirecrawl } from '../testing/fake-firecrawl.js';
 import { FakeOpenRouter } from '../testing/fake-openrouter.js';
 import { startCodexRunner } from '../codex-runner/runner-server.js';
 import { DisabledLlm } from '../adapters/disabled-llm.js';
@@ -157,6 +159,7 @@ const config = loadConfig({
   // Every spec researches from the same address, at both widths.
   RESEARCH_RATE_LIMIT: '10000',
   MEDIA_CREATE_RATE_LIMIT: '10000',
+  WEB_SEARCH_RATE_LIMIT: '10000',
   KB_CHAT_CODEX_RUNNER_URL: codexRunner.url,
   // The media library (KBC-034) with the real worker below and real ffmpeg.
   KB_CHAT_MEDIA: 'on',
@@ -247,6 +250,15 @@ const house = await createHouseAi({
   fetch: openRouter.fetch,
   authorizeUrl: `http://127.0.0.1:${config.PORT}${E2E_AUTHORIZE_PATH}`,
 });
+// The web search (KBC-185) answers through a fake, with a key connected: a spec that needs
+// another balance pastes a key that says so ("…low-valid", "…empty-valid").
+const webSearch = await createWebSearch({
+  stateDir: config.KB_CHAT_STATE_DIR,
+  sealer,
+  log: logger,
+  fetch: new FakeFirecrawl().fetch,
+});
+await webSearch.connect('fc-e2e-house-key-valid', OWNER);
 /** A lent subscription that answers with the stub model, available while `available` says. */
 const stubSubscription = (available: () => boolean) => ({
   available,
@@ -335,6 +347,7 @@ const app = await buildApp({
   usage,
   conversations,
   house,
+  webSearch,
   collections,
   authorDirectory,
   levels: levelsOnDisk(config.KB_CHAT_STATE_DIR),

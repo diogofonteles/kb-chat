@@ -100,6 +100,21 @@ export class DocumentUploadService {
     return { outcome: 'created', upload: await this.viewOf(record, actor) };
   }
 
+  /**
+   * Whether a link is already in the collection or on its way (KBC-185), without sending it:
+   * what `create` would answer. The document is named only to who sees it, by its id in the
+   * collection asked about (a sub-collection's is under its folder, ADR 0028).
+   */
+  presenceOf(
+    actor: UploadActor,
+    topic: string,
+    url: string,
+  ): { document: UploadedDocumentRef | null } | null {
+    const repeated = this.repeated(actor, topic, { sha256: null, url });
+    if (repeated?.outcome !== 'duplicate') return null;
+    return { document: repeated.document };
+  }
+
   /** BR-3: the same original (or link) in the collection, or on its way, is not sent again. */
   private repeated(
     actor: UploadActor,
@@ -110,7 +125,7 @@ export class DocumentUploadService {
     const existing = this.deps.findExisting(scope, key);
     if (existing) {
       const seen = actor.seesDocument(existing.topic, existing.document.id);
-      const document = seen ? existing.document : null;
+      const document = seen ? inScope(topic, existing) : null;
       return { outcome: 'duplicate', document, upload: null };
     }
     const pending = this.deps.records
@@ -290,6 +305,12 @@ export class DocumentUploadService {
     return { ...view, document };
   }
 }
+
+/** A document found in the scope, by its id in the collection asked about (ADR 0028). */
+const inScope = (topic: string, { topic: home, document }: ExistingDocument) =>
+  home === topic
+    ? document
+    : { ...document, id: `${home.slice(topic.length + 1)}/${document.id}` };
 
 interface UploadKey {
   readonly sha256: string | null;

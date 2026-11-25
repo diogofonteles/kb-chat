@@ -67,7 +67,8 @@ export function isYoutubeUrl(url: string): boolean {
 
 /** A web link: http(s) with a host, nothing else (no file:, no credentials in it). */
 export const documentLinkSchema = z
-  .url({ protocol: /^https?$/, hostname: z.regexes.domain })
+  // `abort`: what is not a URL is refused here, never handed to the refinement to parse.
+  .url({ protocol: /^https?$/, hostname: z.regexes.domain, abort: true })
   .max(2_000)
   .refine((url) => {
     const parsed = new URL(url);

@@ -59,6 +59,8 @@ export const configSchema = z
     SEARCH_RATE_LIMIT: z.coerce.number().int().min(1).default(120),
     /** Research turns per minute per client: each may cost money (ND-22). */
     RESEARCH_RATE_LIMIT: z.coerce.number().int().min(1).default(20),
+    /** Web searches per minute per person (KBC-185): each costs the house's credits. */
+    WEB_SEARCH_RATE_LIMIT: z.coerce.number().int().min(1).default(10),
     /** Obsidian vault name for "Abrir no Obsidian"; default: the vault folder's name. */
     OBSIDIAN_VAULT: z.string().min(1).optional(),
     /** Paid provider key for the research agent; without it AI is disabled (LLM_NOT_CONFIGURED). */
