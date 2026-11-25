@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { closeApp } from '../test/ai-app-harness.js';
 import {
   kbResult,
+  expireKbLeases,
   leaseAs,
   leaseKb,
   mediaDb,
@@ -266,11 +267,7 @@ describe('kb-publish: track documents through the Mac (KBC-099)', () => {
     const job = await leaseKb(world.media, mac.token);
     // Held: the one job at a time of ADR 0023.
     expect((await leaseAs(world.media, mac.token)).statusCode).toBe(204);
-    const db = mediaDb(world.media);
-    db.exec(
-      `UPDATE kb_publish_jobs SET lease_until = 1 WHERE status = 'leased'`,
-    );
-    db.close();
+    expireKbLeases(world.media);
     const again = await leaseKb(world.media, mac.token);
     expect(again.id).toBe(job.id);
     expect(again.leaseId).not.toBe(job.leaseId);
