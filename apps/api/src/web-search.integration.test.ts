@@ -49,7 +49,10 @@ describe('Who searches the web (KBC-185, KBC-009 R4)', () => {
     const media = await startMedia();
     await connect(media.owner);
     const { call } = await ana(media);
-    const found = await call('POST', SEARCH, { query: ` ${QUERY} ` });
+    const found = await call('POST', SEARCH, {
+      query: ` ${QUERY} `,
+      sources: 9,
+    });
     expect(found.statusCode, found.body).toBe(200);
     const body = found.json<WebSearchResponse>();
     expect(body).toMatchObject({ partial: false, creditsUsed: 6, low: false });
@@ -85,20 +88,18 @@ describe('Who searches the web (KBC-185, KBC-009 R4)', () => {
       ['video', 'Hermes'],
       ['text', 'Manly Hall'],
     ]);
-    expect(media.started.firecrawl.searches.map((one) => one.body)).toEqual(
-      [
-        [`${QUERY} "Hermes"`, undefined],
-        [`${QUERY} "Hermes"`, ['youtube.com', 'vimeo.com']],
-        [`${QUERY} "Manly Hall"`, undefined],
-        [`${QUERY} "Manly Hall"`, ['youtube.com', 'vimeo.com']],
-      ].map(([query, includeDomains]) =>
-        expect.objectContaining({
-          query,
-          limit: 4,
-          ...(includeDomains && { includeDomains }),
-        }),
-      ),
-    );
+    expect(
+      media.started.firecrawl.searches.map(({ body }) => [
+        body['query'],
+        body['includeDomains'],
+        body['limit'],
+      ]),
+    ).toEqual([
+      [`${QUERY} Hermes`, undefined, 10],
+      [`${QUERY} Hermes`, ['youtube.com'], 10],
+      [`${QUERY} Manly Hall`, undefined, 10],
+      [`${QUERY} Manly Hall`, ['youtube.com'], 10],
+    ]);
     expect(body).toMatchObject({ creditsUsed: 8, creditsRemaining: null });
     const seen = await media.owner('POST', SEARCH, request);
     expect(seen.json()).toMatchObject({
@@ -152,7 +153,7 @@ describe('Who searches the web (KBC-185, KBC-009 R4)', () => {
     }
   });
 
-  it('refuses a short subject, an unknown kind, too many sources or authors', async () => {
+  it('refuses a short subject, an unknown kind, more than a step of sources or a repeated author', async () => {
     const media = await startMedia();
     await connect(media.owner);
     for (const body of [
@@ -161,7 +162,6 @@ describe('Who searches the web (KBC-185, KBC-009 R4)', () => {
       { query: QUERY, kinds: ['page'] },
       { query: QUERY, sources: 31 },
       { query: QUERY, authors: ['Hermes', 'hermes'] },
-      { query: QUERY, authors: ['1a', '2a', '3a', '4a', '5a', '6a'] },
     ])
       expect((await media.owner('POST', SEARCH, body)).statusCode).toBe(400);
     expect(media.started.firecrawl.searches).toEqual([]);
@@ -178,7 +178,10 @@ describe('Who searches the web (KBC-185, KBC-009 R4)', () => {
     expect(third.statusCode).toBe(429);
     expect(errorOf(third)).toBe('RATE_LIMITED');
     expect(await codes(media.owner)).toBe(200);
-    expect(media.started.firecrawl.searches).toHaveLength(3);
+    // The third was refused before anything was asked.
+    const asked = media.started.firecrawl.searches.length;
+    expect((await call('POST', SEARCH, TEXTS)).statusCode).toBe(429);
+    expect(media.started.firecrawl.searches).toHaveLength(asked);
   });
 });
 
@@ -257,8 +260,13 @@ describe('What the collection already has', () => {
     return started;
   }
 
+  /** Asked for what it has too (`again`): the first four are the subject's own texts. */
   const searched = async (call: Call) => {
-    const found = await call('POST', SEARCH, TEXTS);
+    const found = await call('POST', SEARCH, {
+      ...TEXTS,
+      sources: 4,
+      again: true,
+    });
     expect(found.statusCode, found.body).toBe(200);
     const { results } = found.json<WebSearchResponse>();
     return { body: found.body, already: results.map((one) => one.already) };
@@ -277,6 +285,11 @@ describe('What the collection already has', () => {
       { document: null },
       null,
     ]);
+    // Not asked, what the collection has stays out, and how much of it is said.
+    const fresh = await call('POST', SEARCH, { ...TEXTS, sources: 4 });
+    const left = fresh.json<WebSearchResponse>();
+    expect(left.skipped.already).toBe(3);
+    expect(left.results.every((one) => one.already === null)).toBe(true);
     expect(seen.body).not.toContain('Velado');
     expect(seen.body).not.toContain('tres.md');
     // The link of the sub-collection's document opens from the collection.

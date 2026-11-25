@@ -4,7 +4,8 @@ import {
   isMediaHost,
   mediaLinkKind,
   mediaLinkOf,
-  webSearchCalls,
+  authorsIn,
+  webSearchCredits,
   webSearchKeyRequestSchema,
   webSearchRequestSchema,
 } from './web-search.js';
@@ -19,6 +20,7 @@ describe('webSearchRequestSchema (KBC-185)', () => {
       sources: 10,
       kinds: ['text', 'audio', 'video'],
       authors: [],
+      again: false,
     });
   });
 
@@ -39,16 +41,15 @@ describe('webSearchRequestSchema (KBC-185)', () => {
     expect(takes({ kinds: ['video'] })).toBe(true);
   });
 
-  it('takes 1 to 30 sources and no other field', () => {
+  it('takes a step of the sources wanted at a time, and no other field', () => {
     const sources = [0, 1, 30, 31, 5.5].map((one) => takes({ sources: one }));
     expect(sources).toEqual([false, true, true, false, false]);
     expect(takes({ country: 'BR' })).toBe(false);
   });
 
-  it('takes up to 5 different authors of 2 to 80 characters', () => {
-    const names = ['Ana', 'Bia', 'Caio', 'Davi', 'Eva', 'Fábio'];
-    expect(takes({ authors: names.slice(0, 5) })).toBe(true);
-    expect(takes({ authors: names })).toBe(false);
+  it('takes as many different authors as are named, of 2 to 80 characters', () => {
+    const names = Array.from({ length: 30 }, (_, at) => `Autor ${at}`);
+    expect(takes({ authors: names })).toBe(true);
     expect(takes({ authors: ['Al'] })).toBe(true);
     expect(takes({ authors: [' A '] })).toBe(false);
     expect(takes({ authors: ['x'.repeat(80)] })).toBe(true);
@@ -66,11 +67,22 @@ describe('webSearchRequestSchema (KBC-185)', () => {
   });
 });
 
-describe('webSearchCalls', () => {
-  it('is one per kind, or per kind and author', () => {
-    expect(webSearchCalls(3, 0)).toBe(3);
-    expect(webSearchCalls(2, 1)).toBe(2);
-    expect(webSearchCalls(3, 5)).toBe(15);
+describe('authorsIn', () => {
+  it('is each name, however they are separated', () => {
+    expect(
+      authorsIn('Joseph Murphy, Helio  Couto;Maria do Socorro\nAmerico, '),
+    ).toEqual(['Joseph Murphy', 'Helio Couto', 'Maria do Socorro', 'Americo']);
+    expect(authorsIn(' , ; ')).toEqual([]);
+  });
+});
+
+describe('webSearchCredits', () => {
+  it('is two per query: one per kind and author at least, more for more sources', () => {
+    const credits = (sources: number, kinds: number, authors: number) =>
+      webSearchCredits({ sources, kinds, authors });
+    expect(credits(10, 3, 0)).toBe(6);
+    expect(credits(10, 3, 4)).toBe(24);
+    expect(credits(100, 3, 0)).toBe(50);
   });
 });
 

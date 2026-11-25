@@ -81,10 +81,11 @@ function registerSearch(app: FastifyInstance, deps: WebSearchRouteDeps): void {
       const { topic } = request.params;
       if (!deps.hasTopic(topic))
         throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
-      const found = await deps.service.search(
-        request.body,
-        deps.alreadyOf(request, topic),
-      );
+      const found = await deps.service.search(request.body, {
+        principal: principalOf(request),
+        topic,
+        alreadyOf: deps.alreadyOf(request, topic),
+      });
       // The balance is the masters' to see.
       return isMaster(viewerOf(request).person)
         ? found

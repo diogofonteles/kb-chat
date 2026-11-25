@@ -86,7 +86,8 @@ const HITS: Record<WebSearchKind, (query: string) => Hit[]> = {
 const kindOf = (body: Readonly<Record<string, unknown>>): WebSearchKind => {
   const domains = body['includeDomains'];
   if (!Array.isArray(domains)) return 'text';
-  return domains.includes('youtube.com') ? 'video' : 'audio';
+  const video = ['youtube.com', 'vimeo.com'];
+  return video.some((site) => domains.includes(site)) ? 'video' : 'audio';
 };
 
 /**

@@ -11,19 +11,28 @@ import type {
   WebSearchPort,
   WebSearchQuery,
 } from '../../ports/web-search.js';
-import { SETTINGS_TTL_MS, WebSearchService } from './index.js';
+import { SETTINGS_TTL_MS, SeenLinks, WebSearchService } from './index.js';
 
 const KEY = 'fc-house-key-valid';
 const REQUEST: WebSearchRequest = {
   query: 'hermetismo',
-  sources: 10,
+  sources: 9,
   kinds: ['text', 'audio', 'video'],
   authors: [],
+  again: false,
 };
-const NEW = () => null;
+const NEW = {
+  principal: 'ana',
+  topic: 'hermetismo',
+  alreadyOf: () => null,
+};
 
 function build(
-  options: { store?: DocumentStorePort; sealer?: SecretBox } = {},
+  options: {
+    store?: DocumentStorePort;
+    sealer?: SecretBox;
+    seen?: DocumentStorePort;
+  } = {},
 ) {
   const firecrawl = new FakeFirecrawl();
   const store = options.store ?? new MemoryDocumentStore();
@@ -34,6 +43,7 @@ function build(
     store,
     sealer,
     web: new FirecrawlClient({ fetch: firecrawl.fetch }),
+    seen: new SeenLinks(options.seen ?? new MemoryDocumentStore()),
     log,
     now: () => new Date(time),
   });
@@ -245,10 +255,7 @@ describe('WebSearchService: a search', () => {
   it('gives texts, audios and videos in turn, each with whether the collection has it', async () => {
     const { service } = build();
     await service.connect(KEY, 'owner');
-    const document = { id: 'raw/articles/x.md', title: 'X' };
-    const found = await service.search(REQUEST, (url) =>
-      url.endsWith('hermetismo/2') ? { document } : null,
-    );
+    const found = await service.search(REQUEST, NEW);
     expect(found.results.map((one) => [one.kind, one.url])).toEqual([
       ['text', 'https://www.exemplo.org/hermetismo/1'],
       ['audio', 'https://soundcloud.com/alguem/hermetismo'],
@@ -269,42 +276,114 @@ describe('WebSearchService: a search', () => {
       author: null,
       already: null,
     });
-    expect(found.results[3]?.already).toEqual({ document });
     expect(found).toMatchObject({
       partial: false,
+      exhausted: false,
+      skipped: { already: 0, seen: 0 },
       creditsUsed: 6,
       creditsRemaining: 994,
       low: false,
     });
   });
 
-  it('asks each search for its share of the sources, and gives no more than wanted', async () => {
+  it('leaves out what the collection has, and shows it when asked again', async () => {
+    const { service } = build();
+    await service.connect(KEY, 'owner');
+    const document = { id: 'raw/articles/x.md', title: 'X' };
+    const context = {
+      ...NEW,
+      alreadyOf: (url: string) =>
+        url.endsWith('hermetismo/2') ? { document } : null,
+    };
+    const request = { ...REQUEST, kinds: ['text' as const], sources: 4 };
+    const found = await service.search(request, context);
+    const urls = found.results.map((one) => one.url);
+    expect(urls).toHaveLength(4);
+    expect(urls).not.toContain('https://www.exemplo.org/hermetismo/2');
+    expect(found.skipped.already).toBe(1);
+    const again = await service.search({ ...request, again: true }, context);
+    expect(
+      again.results.find((one) => one.url.endsWith('hermetismo/2'))?.already,
+    ).toEqual({ document });
+  });
+
+  it('goes on, in other words, until it has the sources wanted', async () => {
     const { service, firecrawl } = build();
     await service.connect(KEY, 'owner');
-    const found = await service.search({ ...REQUEST, sources: 4 }, NEW);
-    expect(found.results).toHaveLength(4);
-    expect(
-      firecrawl.searches.map(({ body }) => [
-        body['limit'],
-        body['includeDomains'],
-      ]),
-    ).toEqual([
-      [5, undefined],
-      [5, ['soundcloud.com', 'archive.org', 'podcasts.apple.com']],
-      [5, ['youtube.com', 'vimeo.com']],
-    ]);
+    const found = await service.search({ ...REQUEST, sources: 20 }, NEW);
+    expect(found.results).toHaveLength(20);
+    expect(new Set(found.results.map((one) => one.url)).size).toBe(20);
+    expect(firecrawl.searches.length).toBeGreaterThan(3);
+    expect(firecrawl.searches.every(({ body }) => body['limit'] === 10)).toBe(
+      true,
+    );
+  });
+
+  it('asked again gives what comes next, what was found first and not given yet for free', async () => {
+    const { service, firecrawl } = build();
+    await service.connect(KEY, 'owner');
+    const request = { ...REQUEST, sources: 4 };
+    const first = await service.search(request, NEW);
+    const paid = firecrawl.searches.length;
+    const second = await service.search(request, NEW);
+    expect(firecrawl.searches).toHaveLength(paid);
+    expect(second.creditsUsed).toBe(0);
+    const third = await service.search({ ...request, sources: 9 }, NEW);
+    const all = [first, second, third].flatMap(({ results }) =>
+      results.map((one) => one.url),
+    );
+    expect(all).toHaveLength(17);
+    expect(new Set(all).size).toBe(17);
+  });
+
+  it('never gives again what it gave, after a restart too, unless asked', async () => {
+    const seen = new MemoryDocumentStore();
+    const first = build({ seen });
+    await first.service.connect(KEY, 'owner');
+    const given = await first.service.search(REQUEST, NEW);
+    const later = build({ ...first, seen });
+    await later.service.load();
+    const next = await later.service.search(REQUEST, NEW);
+    const before = new Set(given.results.map((one) => one.url));
+    expect(next.results.some((one) => before.has(one.url))).toBe(false);
+    expect(next.skipped.seen).toBe(9);
+    // Another person, or another collection, was given nothing yet.
+    const beto = { ...NEW, principal: 'beto' };
+    expect((await later.service.search(REQUEST, beto)).skipped.seen).toBe(0);
+    const again = await later.service.search({ ...REQUEST, again: true }, NEW);
+    expect(again.results.map((one) => one.url)).toEqual(
+      given.results.map((one) => one.url),
+    );
+  });
+
+  it('says when nothing else is found', async () => {
+    const { service, firecrawl } = build();
+    await service.connect(KEY, 'owner');
+    // The fake finds the same three videos, whatever the words.
+    const request = { ...REQUEST, kinds: ['video' as const], sources: 30 };
+    const found = await service.search(request, NEW);
+    expect(found.results).toHaveLength(3);
+    expect(found.exhausted).toBe(true);
+    // Two rounds with nothing new are enough.
+    expect(firecrawl.searches).toHaveLength(3);
+    const more = await service.search(request, NEW);
+    expect(more).toMatchObject({ results: [], exhausted: true });
+    expect(firecrawl.searches).toHaveLength(3);
   });
 
   it('makes one search, and spends for one, when one kind is asked', async () => {
     const { service, firecrawl } = build();
     await service.connect(KEY, 'owner');
-    const found = await service.search({ ...REQUEST, kinds: ['video'] }, NEW);
+    const found = await service.search(
+      { ...REQUEST, kinds: ['video'], sources: 3 },
+      NEW,
+    );
     expect(firecrawl.searches).toHaveLength(1);
     expect(found.results.every((one) => one.kind === 'video')).toBe(true);
     expect(found.creditsUsed).toBe(2);
   });
 
-  it('searches for each author by name, and says whose search found what', async () => {
+  it('searches for each author by name, unquoted, and says who each result names', async () => {
     const { service, firecrawl } = build();
     await service.connect(KEY, 'owner');
     const found = await service.search(
@@ -316,19 +395,17 @@ describe('WebSearchService: a search', () => {
       NEW,
     );
     expect(firecrawl.searches.map(({ body }) => body['query'])).toEqual([
-      'hermetismo "Manly P. Hall"',
-      'hermetismo "Manly P. Hall"',
-      'hermetismo "Hermes"',
-      'hermetismo "Hermes"',
+      'hermetismo Manly P. Hall',
+      'hermetismo Manly P. Hall',
+      'hermetismo Hermes',
+      'hermetismo Hermes',
     ]);
-    const authorsOf = (kind: string) => [
-      ...new Set(
-        found.results
-          .filter((one) => one.kind === kind)
-          .map((one) => one.author),
-      ),
-    ];
-    expect(authorsOf('text')).toEqual(['Manly "P." Hall', 'Hermes']);
+    const authors = new Set(
+      found.results
+        .filter((one) => one.kind === 'text')
+        .map((one) => one.author),
+    );
+    expect([...authors]).toEqual(['Manly "P." Hall', 'Hermes']);
     // Both found the same three videos: each is there once, for one of them.
     const videos = found.results.filter((one) => one.kind === 'video');
     expect(new Set(videos.map((one) => one.url)).size).toBe(videos.length);
@@ -342,6 +419,15 @@ describe('WebSearchService: a search', () => {
     const found = await service.search(REQUEST, NEW);
     expect(found.results).toHaveLength(4);
     expect(found).toMatchObject({ partial: true, creditsUsed: 2 });
+    // Asked again, what did not answer comes first; failing again it is let go.
+    const asked = firecrawl.searches.length;
+    await service.search(REQUEST, NEW);
+    const kinds = firecrawl.searches
+      .slice(asked, asked + 2)
+      .map(({ body }) => body['includeDomains']);
+    expect(kinds).toEqual([['podcasts.apple.com'], ['youtube.com']]);
+    const third = await service.search(REQUEST, NEW);
+    expect(third.results.length).toBeGreaterThan(0);
   });
 
   it('gives none, saying it is partial, when one found nothing and another did not answer', async () => {
@@ -359,7 +445,9 @@ describe('WebSearchService: a search', () => {
     expect(found).toMatchObject({
       results: [],
       partial: false,
-      creditsUsed: 6,
+      exhausted: true,
+      // Two rounds, three kinds: nothing new twice is the end.
+      creditsUsed: 12,
     });
   });
 
@@ -463,6 +551,7 @@ describe('WebSearchService: a search', () => {
 describe('WebSearchService: many searches of one request', () => {
   const FIFTEEN = {
     ...REQUEST,
+    sources: 5,
     authors: ['Ana', 'Bia', 'Caio', 'Davi', 'Eva'],
   };
 
@@ -489,6 +578,7 @@ describe('WebSearchService: many searches of one request', () => {
       store: new MemoryDocumentStore(),
       sealer: new SecretBox(randomBytes(32)),
       web,
+      seen: new SeenLinks(new MemoryDocumentStore()),
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     });
     await service.connect(KEY, 'owner');
@@ -497,21 +587,29 @@ describe('WebSearchService: many searches of one request', () => {
 
   const hit = (at: number): WebSearchAnswer => ({
     kind: 'ok',
-    hits: [{ url: `https://exemplo.org/${at}`, title: 'T', description: '' }],
+    hits: [
+      {
+        url: `https://exemplo.org/${at}`,
+        title: 'Hermetismo',
+        description: '',
+      },
+    ],
     creditsUsed: 2,
   });
 
-  it('makes every one, three at once, and adds up what they cost', async () => {
+  it('makes every one, four at once, and adds up what they cost', async () => {
     const { service, asked, running } = await slow(hit);
     const found = await service.search(
       { ...FIFTEEN, kinds: ['text', 'audio', 'video'] },
       NEW,
     );
     expect(asked).toHaveLength(15);
-    expect(running.most).toBe(3);
+    expect(running.most).toBe(4);
     expect(found).toMatchObject({ partial: false, creditsUsed: 30 });
-    // Only the texts are on a site a text may come from: one for each author, in order.
-    expect(found.results.map((one) => one.author)).toEqual(FIFTEEN.authors);
+    // Only the texts are on a site a text may come from: one for each author.
+    expect(found.results.map((one) => one.kind)).toEqual(
+      FIFTEEN.authors.map(() => 'text'),
+    );
   });
 
   it.each([
@@ -523,7 +621,7 @@ describe('WebSearchService: many searches of one request', () => {
       at === 1 ? hit(at) : failure,
     );
     const found = await service.search(FIFTEEN, NEW);
-    expect(asked.length).toBeLessThanOrEqual(4);
+    expect(asked.length).toBeLessThanOrEqual(5);
     expect(found).toMatchObject({ partial: true, creditsUsed: 2 });
     expect(found.results).toHaveLength(1);
   });

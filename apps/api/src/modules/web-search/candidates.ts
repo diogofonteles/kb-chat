@@ -7,7 +7,7 @@ import {
   type WebSearchResult,
 } from '@kb-chat/contracts';
 import type { WebHit } from '../../ports/web-search.js';
-import type { SearchGroup } from './search-plan.js';
+import { relevanceOf, type Relevance } from './relevance.js';
 
 /** A result before it is known whether the collection already has it. */
 export type Candidate = Omit<WebSearchResult, 'already'>;
@@ -20,9 +20,26 @@ const itemOf = (kind: MediaLinkKind) => (url: string) => {
   return item?.kind === kind ? item.url : null;
 };
 
+/**
+ * Sites that are no text to read: a social network answers with its sign-in page, a shop with
+ * its product, and the engine's own redirects lead nowhere.
+ */
+const NO_TEXT = [
+  /(^|\.)(instagram|tiktok|facebook|fb|threads|pinterest|twitter|x|linkedin|kwai)\.(com|net)(\.\w+)?$/,
+  /(^|\.)(amazon|mercadolivre|mercadolibre|shopee|magazineluiza|magalu|americanas|estantevirtual|aliexpress|ebay)\.\w+(\.\w+)?$/,
+  /(^|\.)google\.\w+(\.\w+)?$/,
+  /(^|\.)pinterest\.\w+(\.\w+)?$/,
+];
+
+const isText = (url: string): boolean => {
+  if (isMediaHost(url) || !URL.canParse(url)) return false;
+  const { hostname } = new URL(url);
+  return !NO_TEXT.some((site) => site.test(hostname));
+};
+
 /** The address a hit has as this kind, or null when it is not one. */
 const ADDRESS_OF: Record<WebSearchKind, (url: string) => string | null> = {
-  text: (url) => (isMediaHost(url) ? null : url),
+  text: (url) => (isText(url) ? url : null),
   audio: itemOf('audio'),
   video: itemOf('video'),
 };
@@ -32,27 +49,64 @@ const oneLine = (text: string, max: number): string => {
   return line.length <= max ? line : `${line.slice(0, max - 1).trimEnd()}…`;
 };
 
+/** What was asked: the subject, and the search that asked it. */
+export interface AskedOf {
+  readonly subject: string;
+  readonly kind: WebSearchKind;
+  readonly author: string | null;
+}
+
+/** Both, then the author's on something else, then the subject by anyone. */
+const rankOf = ({ subject, author }: Relevance): number =>
+  author ? (subject ? 0 : 1) : 2;
+
 /**
  * The hits of one search as candidates: only addresses the app takes as a link; an audio or
- * a video only as its own page, and a text never of an audio or video site.
+ * a video only as its own page, and a text never of an audio or video site, a social network
+ * or a shop; and only what has to do with the subject or the author, the closest first.
  */
 export function candidatesOf(
   hits: readonly WebHit[],
-  { kind, author }: Pick<SearchGroup, 'kind' | 'author'>,
+  asked: AskedOf,
 ): Candidate[] {
-  return hits.flatMap((hit) => {
-    const link = documentLinkSchema.safeParse(ADDRESS_OF[kind](hit.url));
-    if (!link.success) return [];
-    const site = new URL(link.data).hostname.replace(/^www\./, '');
-    return {
-      kind,
-      url: link.data,
-      title: oneLine(hit.title, TITLE_MAX) || site,
-      snippet: oneLine(hit.description, SNIPPET_MAX),
-      site,
-      author,
-    };
-  });
+  return hits
+    .flatMap((hit) => {
+      const link = documentLinkSchema.safeParse(
+        ADDRESS_OF[asked.kind](hit.url),
+      );
+      if (!link.success) return [];
+      const shown = { ...shownOf(hit), url: link.data };
+      const relevance = relevanceOf(shown, asked);
+      if (!relevance.subject && !relevance.author) return [];
+      return [
+        {
+          rank: rankOf(relevance),
+          candidate: toCandidate(shown, asked, relevance),
+        },
+      ];
+    })
+    .sort((one, other) => one.rank - other.rank)
+    .map(({ candidate }) => candidate);
+}
+
+const shownOf = (hit: WebHit) => ({
+  title: oneLine(hit.title, TITLE_MAX),
+  snippet: oneLine(hit.description, SNIPPET_MAX),
+});
+
+function toCandidate(
+  shown: { title: string; snippet: string; url: string },
+  { kind, author }: AskedOf,
+  relevance: Relevance,
+): Candidate {
+  const site = new URL(shown.url).hostname.replace(/^www\./, '');
+  return {
+    ...shown,
+    kind,
+    title: shown.title || site,
+    site,
+    author: relevance.author ? author : null,
+  };
 }
 
 /** What a link carries about who shared it, not about what it is. */
@@ -70,19 +124,20 @@ export function pageKey(url: string): string {
 }
 
 /**
- * The candidates of every search, one of each in turn, up to `sources`: no kind and no author
- * takes the list over. A page found by two searches stays with the first that reaches it.
+ * The candidates of every search, one of each in turn: no kind and no author takes the list
+ * over. A page found by two searches stays with the first that reaches it, and one in `known`
+ * is left out.
  */
 export function interleave(
   groups: readonly (readonly Candidate[])[],
-  sources: number,
+  known: ReadonlySet<string> = new Set(),
 ): Candidate[] {
   const queues = groups.map((group) => [...group]);
-  const seen = new Set<string>();
+  const seen = new Set(known);
   const taken: Candidate[] = [];
-  while (taken.length < sources && queues.some((queue) => queue.length > 0))
+  while (queues.some((queue) => queue.length > 0))
     taken.push(...queues.flatMap((queue) => nextUnseen(queue, seen)));
-  return taken.slice(0, sources);
+  return taken;
 }
 
 /** The first candidate of the queue not taken yet, marked as taken; none when it ended. */

@@ -13,10 +13,15 @@ export type WebSearchKind = z.infer<typeof webSearchKindSchema>;
 
 /** Firecrawl refuses a query longer than this. */
 export const WEB_SEARCH_QUERY = { min: 3, max: 500 } as const;
-/** The sources wanted in all, whatever the kinds and authors. */
-export const WEB_SEARCH_SOURCES = { min: 1, max: 30, default: 10 } as const;
+/** The sources wanted in all: as many as the person asks, the web being what ends them. */
+export const WEB_SEARCH_SOURCES = { min: 1, default: 10 } as const;
+/** What one request gives: a larger search is several, its results coming in as they arrive. */
+export const WEB_SEARCH_STEP = 30;
 /** Reference authors of one search, and the length of a name. */
-export const WEB_SEARCH_AUTHORS = { max: 5, nameMin: 2, nameMax: 80 } as const;
+export const WEB_SEARCH_AUTHORS = { max: 50, nameMin: 2, nameMax: 80 } as const;
+/** What a Firecrawl query costs, and what it usually brings that is about the subject. */
+export const WEB_SEARCH_QUERY_CREDITS = 2;
+const USEFUL_PER_QUERY = 4;
 /** Under this many credits left, the screens warn (KBC-009 R5). */
 export const WEB_SEARCH_LOW_CREDITS = 100;
 
@@ -38,13 +43,30 @@ export const webSearchAuthorSchema = z
     'Not a name',
   );
 
-/** Firecrawl searches one request makes: one per kind, or per kind and author. */
-export const webSearchCalls = (kinds: number, authors: number): number =>
-  kinds * Math.max(1, authors);
+/** The names typed at once, separated by commas, semicolons or lines. */
+export const authorsIn = (text: string): string[] =>
+  text
+    .split(/[,;\n]+/)
+    .map((name) => name.replace(/\s+/g, ' ').trim())
+    .filter((name) => name !== '');
+
+/** About how many Firecrawl credits a search takes: a query per kind and author at least. */
+export const webSearchCredits = (wanted: {
+  readonly sources: number;
+  readonly kinds: number;
+  readonly authors: number;
+}): number =>
+  WEB_SEARCH_QUERY_CREDITS *
+  Math.max(
+    wanted.kinds * Math.max(1, wanted.authors),
+    Math.ceil(wanted.sources / USEFUL_PER_QUERY),
+  );
 
 /**
  * POST /api/v1/topics/:topic/web-search: who may send documents searches the web. Nothing is
- * added by it: the person picks, and what was picked is sent as links (KBC-149).
+ * added by it: the person picks, and what was picked is sent as links (KBC-149). The same
+ * request again goes on from where it stopped: what the person was given does not come back,
+ * now or in another day's search of the collection, unless `again` asks for it.
  */
 export const webSearchRequestSchema = z.strictObject({
   query: z.string().trim().min(WEB_SEARCH_QUERY.min).max(WEB_SEARCH_QUERY.max),
@@ -52,7 +74,7 @@ export const webSearchRequestSchema = z.strictObject({
     .number()
     .int()
     .min(WEB_SEARCH_SOURCES.min)
-    .max(WEB_SEARCH_SOURCES.max)
+    .max(WEB_SEARCH_STEP)
     .default(WEB_SEARCH_SOURCES.default),
   kinds: z
     .array(webSearchKindSchema)
@@ -72,6 +94,8 @@ export const webSearchRequestSchema = z.strictObject({
       'Repeated author',
     )
     .default([]),
+  /** Also what the person was already given, and what the collection already has. */
+  again: z.boolean().default(false),
 });
 export type WebSearchRequest = z.infer<typeof webSearchRequestSchema>;
 export type WebSearchRequestInput = z.input<typeof webSearchRequestSchema>;
@@ -84,7 +108,7 @@ export const webSearchResultSchema = z.object({
   snippet: z.string().max(600),
   /** The address' host, without `www.`. */
   site: z.string().max(253),
-  /** The reference author whose search found it; null in a search without authors. */
+  /** The reference author it names; null when it names none (or none was asked). */
   author: z.string().nullable(),
   /**
    * The link is already in the collection (or on its way to it); `document` is null while it
@@ -100,6 +124,13 @@ export const webSearchResponseSchema = z.object({
   results: z.array(webSearchResultSchema),
   /** Some of the searches did not answer: the results are of the ones that did. */
   partial: z.boolean(),
+  /** Nothing else is found for this request: asking again gives nothing new. */
+  exhausted: z.boolean(),
+  /** Found and left out: the collection has it, or the person was given it before. */
+  skipped: z.object({
+    already: z.number().int().min(0),
+    seen: z.number().int().min(0),
+  }),
   creditsUsed: z.number().min(0),
   /** Masters only; null to anyone else, and while the balance is not known. */
   creditsRemaining: z.number().min(0).nullable(),
@@ -108,14 +139,6 @@ export const webSearchResponseSchema = z.object({
 export type WebSearchResponse = z.infer<typeof webSearchResponseSchema>;
 
 /* ---------- Links of audio and video the app takes as recordings (KBC-009 R6) ---------- */
-
-/** Where videos and audios are searched. */
-export const WEB_VIDEO_HOSTS: readonly string[] = ['youtube.com', 'vimeo.com'];
-export const WEB_AUDIO_HOSTS: readonly string[] = [
-  'soundcloud.com',
-  'archive.org',
-  'podcasts.apple.com',
-];
 
 export type MediaLinkKind = Exclude<WebSearchKind, 'text'>;
 
@@ -186,9 +209,10 @@ function archiveItem(url: URL): string | null {
 
 function podcastEpisode(url: URL): string | null {
   const episode = url.searchParams.get('i');
-  return episode && /^\d+$/.test(episode)
-    ? `https://podcasts.apple.com${url.pathname}?i=${episode}`
-    : null;
+  if (!episode || !/^\d+$/.test(episode)) return null;
+  // The same episode has an address per country: one of them is its address here.
+  const path = url.pathname.replace(/^\/[a-z]{2}\//, '/');
+  return `https://podcasts.apple.com/br${path}?i=${episode}`;
 }
 
 /** How each site's item is read from an address; anything else there is no item. */

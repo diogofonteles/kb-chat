@@ -7,6 +7,7 @@ import { uploadActorOf } from './document-uploads-factory.js';
 import type { CatalogRegistry } from './modules/catalog/index.js';
 import type { DocumentUploadService } from './modules/document-uploads/index.js';
 import {
+  SeenLinks,
   WebSearchService,
   webSearchRoutes,
 } from './modules/web-search/index.js';
@@ -26,10 +27,13 @@ export async function createWebSearch(
   options: WebSearchOptions,
 ): Promise<WebSearchService> {
   const { stateDir, sealer, log } = options;
+  const storeOf = (file: string) =>
+    stateDir
+      ? new JsonDocumentStore(join(stateDir, file))
+      : new MemoryDocumentStore();
   const service = new WebSearchService({
-    store: stateDir
-      ? new JsonDocumentStore(join(stateDir, 'web-search.json'))
-      : new MemoryDocumentStore(),
+    store: storeOf('web-search.json'),
+    seen: new SeenLinks(storeOf('web-search-seen.json')),
     sealer,
     web: new FirecrawlClient({ fetch: options.fetch }),
     log,
