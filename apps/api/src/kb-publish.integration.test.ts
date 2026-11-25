@@ -259,6 +259,23 @@ describe('kb-publish: track documents through the Mac (KBC-099)', () => {
     expect(again.items).toHaveLength(2);
   });
 
+  it('a lease that expired (the API restarted meanwhile) is taken back by the same Mac', async () => {
+    const world = await startWorld();
+    await publishedTracks(world);
+    const mac = await publisherMac(world.media);
+    const job = await leaseKb(world.media, mac.token);
+    // Held: the one job at a time of ADR 0023.
+    expect((await leaseAs(world.media, mac.token)).statusCode).toBe(204);
+    const db = mediaDb(world.media);
+    db.exec(
+      `UPDATE kb_publish_jobs SET lease_until = 1 WHERE status = 'leased'`,
+    );
+    db.close();
+    const again = await leaseKb(world.media, mac.token);
+    expect(again.id).toBe(job.id);
+    expect(again.leaseId).not.toBe(job.leaseId);
+  });
+
   it('a result or heartbeat on a lease that is not held is refused (409), another token sees nothing (404)', async () => {
     const world = await startWorld();
     await publishedTracks(world);

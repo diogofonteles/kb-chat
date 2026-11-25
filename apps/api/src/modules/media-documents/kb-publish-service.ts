@@ -174,7 +174,7 @@ export class KbPublishService {
   }
 
   isHeldBy(worker: string): boolean {
-    return this.deps.documents.holds(worker);
+    return this.deps.documents.holds(worker, this.now());
   }
 
   heartbeat(owner: LeaseOwner): void {
