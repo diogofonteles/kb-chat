@@ -20,7 +20,7 @@ Pedido do dono em 2026-11-25: "como faço pra remover um documento do acervo pel
 - BR-3: nada é apagado: o Mac usa a quarentena do próprio kb, e o original fica em `raw/_originals`.
 - BR-4: pede confirmação com o nome, o acervo e a informação de que dá para trazer de volta.
 - BR-5: uma resposta antiga mantém o texto; a fonte removida não abre, para ninguém.
-- BR-6: o que foi removido pode ser enviado de novo.
+- BR-6: o que foi removido pode ser enviado de novo por um master, e volta; quem não é master lê que um master o tirou do acervo (BR-1).
 - BR-7: a faixa de uma gravação e as páginas que o kb escreve (conceitos) não se removem por aqui.
 
 ## Functional requirements
@@ -34,7 +34,7 @@ Pedido do dono em 2026-11-25: "como faço pra remover um documento do acervo pel
 - AC-3: Given quem não é master, When tenta remover, listar ou trazer de volta, Then a API recusa (403) e a tela não oferece.
 - AC-4: Given o Mac que não conseguiu, Then a lista diz por quê, o documento continua fora, e "Tentar de novo" pede outra vez.
 - AC-5: Given uma conversa antiga que cita o removido, Then o texto fica e a fonte aparece como restrita.
-- AC-6: Given um removido, When o mesmo arquivo ou link é enviado, Then ele entra.
+- AC-6: Given um removido, When um master envia o mesmo arquivo ou link, Then ele volta; When quem não é master envia, Then lê que um master o tirou do acervo.
 
 ## References
 ADR 0041 §10; ADR 0036 §8; `apps/api/src/modules/document-removals`.
