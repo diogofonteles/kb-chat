@@ -9,6 +9,7 @@ import {
 import type {
   FastifyInstance,
   FastifyPluginAsync,
+  FastifyReply,
   FastifyRequest,
 } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -77,7 +78,7 @@ function registerSearch(app: FastifyInstance, deps: WebSearchRouteDeps): void {
   typed.post(
     '/api/v1/topics/:topic/web-search',
     searchOptions(deps.perMinute),
-    async (request) => {
+    async (request, reply) => {
       const { topic } = request.params;
       if (!deps.hasTopic(topic))
         throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
@@ -85,6 +86,7 @@ function registerSearch(app: FastifyInstance, deps: WebSearchRouteDeps): void {
         principal: principalOf(request),
         topic,
         alreadyOf: deps.alreadyOf(request, topic),
+        signal: goneSignal(reply),
       });
       // The balance is the masters' to see.
       return isMaster(viewerOf(request).person)
@@ -92,6 +94,15 @@ function registerSearch(app: FastifyInstance, deps: WebSearchRouteDeps): void {
         : { ...found, creditsRemaining: null };
     },
   );
+}
+
+/** Aborted when the person leaves before the answer goes. */
+function goneSignal(reply: FastifyReply): AbortSignal {
+  const gone = new AbortController();
+  reply.raw.on('close', () => {
+    if (!reply.raw.writableFinished) gone.abort();
+  });
+  return gone.signal;
 }
 
 function registerSettings(

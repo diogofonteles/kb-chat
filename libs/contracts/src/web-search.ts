@@ -17,8 +17,8 @@ export const WEB_SEARCH_QUERY = { min: 3, max: 500 } as const;
 export const WEB_SEARCH_SOURCES = { min: 1, default: 10 } as const;
 /** What one request gives: a larger search is several, its results coming in as they arrive. */
 export const WEB_SEARCH_STEP = 30;
-/** Reference authors of one search, and the length of a name. */
-export const WEB_SEARCH_AUTHORS = { max: 50, nameMin: 2, nameMax: 80 } as const;
+/** The length of a reference author's name; there are as many as are named. */
+export const WEB_SEARCH_AUTHORS = { nameMin: 2, nameMax: 80 } as const;
 /** What a Firecrawl query costs, and what it usually brings that is about the subject. */
 export const WEB_SEARCH_QUERY_CREDITS = 2;
 const USEFUL_PER_QUERY = 4;
@@ -65,10 +65,12 @@ export const webSearchCredits = (wanted: {
 /**
  * POST /api/v1/topics/:topic/web-search: who may send documents searches the web. Nothing is
  * added by it: the person picks, and what was picked is sent as links (KBC-149). The same
- * request again goes on from where it stopped: what the person was given does not come back,
+ * `search` again goes on from where it stopped: what the person was given does not come back,
  * now or in another day's search of the collection, unless `again` asks for it.
  */
 export const webSearchRequestSchema = z.strictObject({
+  /** This search: the same one goes on, another (or none) starts over. */
+  search: z.uuid().optional(),
   query: z.string().trim().min(WEB_SEARCH_QUERY.min).max(WEB_SEARCH_QUERY.max),
   sources: z
     .number()
@@ -84,7 +86,6 @@ export const webSearchRequestSchema = z.strictObject({
     .default([...WEB_SEARCH_KINDS]),
   authors: z
     .array(webSearchAuthorSchema)
-    .max(WEB_SEARCH_AUTHORS.max)
     .refine(
       (names) =>
         names.every(

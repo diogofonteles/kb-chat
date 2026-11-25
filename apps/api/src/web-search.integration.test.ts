@@ -102,9 +102,10 @@ describe('Who searches the web (KBC-185, KBC-009 R4)', () => {
     ]);
     expect(body).toMatchObject({ creditsUsed: 8, creditsRemaining: null });
     const seen = await media.owner('POST', SEARCH, request);
+    // The same thing, asked a moment later: not paid again.
     expect(seen.json()).toMatchObject({
-      creditsUsed: 8,
-      creditsRemaining: 984,
+      creditsUsed: 0,
+      creditsRemaining: 992,
     });
   });
 
@@ -230,7 +231,11 @@ describe('What a search answers when it cannot search', () => {
       kinds: ['text', 'video'],
     });
     expect(found.statusCode).toBe(200);
-    expect(found.json()).toMatchObject({ partial: true, creditsUsed: 2 });
+    const body = found.json<WebSearchResponse>();
+    expect(body.partial).toBe(true);
+    expect(new Set(body.results.map((one) => one.kind))).toEqual(
+      new Set(['text']),
+    );
   });
 });
 

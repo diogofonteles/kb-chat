@@ -47,6 +47,12 @@ describe('webSearchRequestSchema (KBC-185)', () => {
     expect(takes({ country: 'BR' })).toBe(false);
   });
 
+  it('takes the search it goes on with', () => {
+    const search = '11111111-1111-4111-8111-111111111111';
+    expect(takes({ search })).toBe(true);
+    expect(takes({ search: 'x' })).toBe(false);
+  });
+
   it('takes as many different authors as are named, of 2 to 80 characters', () => {
     const names = Array.from({ length: 30 }, (_, at) => `Autor ${at}`);
     expect(takes({ authors: names })).toBe(true);

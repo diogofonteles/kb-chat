@@ -23,11 +23,8 @@ import {
   pageKey,
   type Candidate,
 } from './candidates.js';
-import {
-  RESULTS_PER_SEARCH,
-  groupsOf,
-  type SearchGroup,
-} from './search-plan.js';
+import { AnswerCache } from './answer-cache.js';
+import { RESULTS_PER_SEARCH, type SearchGroup } from './search-plan.js';
 import { SearchSessions, type SearchSession } from './search-session.js';
 import type { SeenLinks, Searcher } from './seen-links.js';
 import {
@@ -53,6 +50,8 @@ export type AlreadyOf = (url: string) => WebSearchResult['already'];
 /** Who searches, for which collection, and what it already has. */
 export interface SearchContext extends Searcher {
   readonly alreadyOf: AlreadyOf;
+  /** The person left: nothing else is asked, and nothing is taken as given. */
+  readonly signal?: AbortSignal;
 }
 
 export interface WebSearchServiceDeps {
@@ -80,10 +79,10 @@ const UNKNOWN: Known = {
   askedAt: Number.NEGATIVE_INFINITY,
 };
 
-/** A search of the request and its answer; null when it was not made. */
+/** A search of the request and its answer. */
 interface GroupAnswer {
   readonly group: SearchGroup;
-  readonly answer: WebSearchAnswer | null;
+  readonly answer: WebSearchAnswer;
 }
 
 /** One search under way. */
@@ -102,6 +101,9 @@ const STOPS = new Set<WebSearchAnswer['kind']>([
 
 const notConnected = () =>
   new AppError('WEB_SEARCH_NOT_CONNECTED', 'The web search has no usable key');
+/** Said to no one: the person who asked is gone. */
+const stopped = () =>
+  new AppError('WEB_SEARCH_UNAVAILABLE', 'The search was stopped');
 const unavailable = () =>
   new AppError('WEB_SEARCH_UNAVAILABLE', 'The web search did not answer');
 
@@ -142,6 +144,7 @@ export class WebSearchService {
   private known: Known = UNKNOWN;
   private checking: Promise<void> | null = null;
   private readonly sessions = new SearchSessions();
+  private readonly answers = new AnswerCache();
   private readonly now: () => Date;
 
   constructor(private readonly deps: WebSearchServiceDeps) {
@@ -201,9 +204,8 @@ export class WebSearchService {
   /**
    * Round after round (a search per kind and author, each round in other words) until the
    * sources wanted are found, nothing new comes, or the answer would take too long. What the
-   * collection has and what the person was already given stay out, unless `again` asks.
-   * A search that does not answer leaves the others' results (`partial`) and is asked first
-   * the next time; with nothing found, why is said instead.
+   * collection has and what the person was already given stay out, unless `again` asks. With
+   * nothing found and a search refused, why is said instead.
    */
   async search(
     request: WebSearchRequest,
@@ -213,79 +215,109 @@ export class WebSearchService {
     const sealed = this.config.connection?.key;
     if (key === null || sealed === undefined) throw notConnected();
     const session = this.sessions.of(context, request, this.now().getTime());
+    return session.oneAtATime(() =>
+      this.searchIn({ request, context, session }, { key, sealed }),
+    );
+  }
+
+  private async searchIn(
+    search: Search,
+    { key, sealed }: { readonly key: string; readonly sealed: string },
+  ): Promise<WebSearchResponse> {
+    const { context, session } = search;
     session.skipped = { already: 0, seen: 0 };
-    const answers = await this.rounds(key, { request, context, session });
+    const answers = await this.rounds(key, search);
     const creditsUsed = answers.reduce((sum, one) => sum + usedBy(one), 0);
     const failures = answers.flatMap(failureOf);
     await this.settle(sealed, { creditsUsed, failures });
-    const found = session.waiting.splice(0, request.sources);
+    const found = this.waitingOf(search);
     this.deps.log.info(
       { searches: answers.length, results: found.length, creditsUsed },
       'web search',
     );
     if (found.length === 0) assertAnswered(answers, failures);
+    // Nobody is there to see them: they wait for the next request, given to no one.
+    if (context.signal?.aborted) throw stopped();
     await this.deps.seen.add(
       context,
       found.map((one) => pageKey(one.url)),
     );
-    return this.answerOf(found, { context, session, answers, creditsUsed });
+    session.waiting.splice(0, found.length);
+    return this.answerOf(found, { search, answers, creditsUsed });
+  }
+
+  /** What is to be given now: asked again whether it may, for it may have been given since. */
+  private waitingOf(search: Search): readonly Candidate[] {
+    const { session, request } = search;
+    const may = session.waiting.filter((one) => this.mayGive(one, search));
+    session.waiting.splice(0, session.waiting.length, ...may);
+    return may.slice(0, request.sources);
   }
 
   private answerOf(
     found: readonly Candidate[],
     of: {
-      readonly context: SearchContext;
-      readonly session: SearchSession;
+      readonly search: Search;
       readonly answers: readonly GroupAnswer[];
       readonly creditsUsed: number;
     },
   ): WebSearchResponse {
+    const { session, context } = of.search;
     return {
-      results: found.map((one) => resultOf(one, of.context.alreadyOf)),
-      partial: of.answers.some((one) => one.answer?.kind !== 'ok'),
-      exhausted: of.session.exhausted,
-      skipped: of.session.skipped,
+      results: found.map((one) => resultOf(one, context.alreadyOf)),
+      partial: of.answers.some((one) => one.answer.kind !== 'ok'),
+      exhausted: session.exhausted,
+      skipped: session.skipped,
       creditsUsed: of.creditsUsed,
       creditsRemaining: this.known.credits?.remaining ?? null,
       low: this.isLow(),
     };
   }
 
-  /** The rounds one answer takes; stops where going on would only be refused. */
+  /** A few searches at a time, while something is missing, there is time and someone waits. */
   private async rounds(key: string, search: Search): Promise<GroupAnswer[]> {
-    const { request, session } = search;
-    const until = Date.now() + ROUNDS_BUDGET_MS;
+    const { request, context, session } = search;
+    const until = this.now().getTime() + ROUNDS_BUDGET_MS;
     const all: GroupAnswer[] = [];
-    while (session.waiting.length < request.sources && Date.now() < until) {
-      const retrying = session.pending.length > 0;
-      const groups = nextGroups(request, session);
+    while (
+      session.waiting.length < request.sources &&
+      this.now().getTime() < until &&
+      !context.signal?.aborted
+    ) {
+      const groups = session.next(SEARCHES_AT_ONCE);
       if (groups.length === 0) break;
-      const answers = await this.ask(key, groups);
+      const answers = await Promise.all(
+        groups.map((group) => this.askOne(key, group)),
+      );
       all.push(...answers);
-      session.pending = pendingOf(answers, retrying);
-      const fresh = this.take(answers, search);
-      // A round cut short, or asked again, says nothing of what is left to find.
-      if (session.pending.length > 0) break;
-      if (!retrying) session.noteRound(fresh);
+      this.take(answers, search);
+      if (this.keepForLater(answers, session)) break;
     }
     return all;
   }
 
-  /** What a round found that may be given, into the session; how much of it there was. */
-  private take(
+  /** What was not answered, for later; whether going on would only be told the same. */
+  private keepForLater(
     answers: readonly GroupAnswer[],
-    { request, context, session }: Search,
-  ): number {
+    session: SearchSession,
+  ): boolean {
+    const refused = answers.filter(({ answer }) => STOPS.has(answer.kind));
+    session.putBack(refused.map(({ group }) => group));
+    for (const { group, answer } of answers)
+      if (answer.kind === 'unreachable') session.retryLater(group);
+    return refused.length > 0;
+  }
+
+  /** What was found that may be given, into the session. */
+  private take(answers: readonly GroupAnswer[], search: Search): void {
+    const { request, session } = search;
     const found = interleave(
       answers.map((one) => candidatesIn(one, request.query)),
-      session.known,
     );
-    for (const one of found) session.known.add(pageKey(one.url));
-    const given = found.filter((one) =>
-      this.mayGive(one, { request, context, session }),
-    );
+    const given = session
+      .unknownOf(found)
+      .filter((one) => this.mayGive(one, search));
     session.waiting.push(...given);
-    return given.length;
   }
 
   private mayGive(
@@ -302,43 +334,22 @@ export class WebSearchService {
     return false;
   }
 
-  /**
-   * Every search of a round, a few at once, in its order. After an answer that asking again
-   * would only repeat (no key, no credits, wait), the ones left are not made.
-   */
-  private async ask(
-    key: string,
-    groups: readonly SearchGroup[],
-  ): Promise<GroupAnswer[]> {
-    const answers: GroupAnswer[] = groups.map((group) => ({
-      group,
-      answer: null,
-    }));
-    const left = groups.map((group, at) => ({ group, at }));
-    const worker = async (): Promise<void> => {
-      for (let next = left.shift(); next; next = left.shift()) {
-        const { group, at } = next;
-        const answer = await this.askOne(key, group);
-        answers[at] = { group, answer };
-        if (STOPS.has(answer.kind)) left.length = 0;
-      }
-    };
-    await Promise.all(Array.from({ length: SEARCHES_AT_ONCE }, worker));
-    return answers;
-  }
-
-  private async askOne(
-    key: string,
-    { kind, query, domains }: SearchGroup,
-  ): Promise<WebSearchAnswer> {
+  /** One search, unless it was paid for a moment ago. */
+  private async askOne(key: string, group: SearchGroup): Promise<GroupAnswer> {
+    const kept = this.answers.get(group, this.now().getTime());
+    if (kept)
+      return { group, answer: { kind: 'ok', hits: kept, creditsUsed: 0 } };
+    const { kind, query, domains } = group;
     const answer = await this.deps.web.search({
       key,
       query,
       limit: RESULTS_PER_SEARCH,
       ...(domains && { domains }),
     });
-    if (answer.kind !== 'ok') this.warn(kind, answer);
-    return answer;
+    if (answer.kind === 'ok')
+      this.answers.put(group, answer.hits, this.now().getTime());
+    else this.warn(kind, answer);
+    return { group, answer };
   }
 
   /** What a search cost and showed about the key it was made with, unless it was replaced. */
@@ -466,16 +477,16 @@ export class WebSearchService {
 }
 
 const failureOf = ({ answer }: GroupAnswer): WebSearchFailure[] =>
-  answer === null || answer.kind === 'ok' ? [] : [answer];
+  answer.kind === 'ok' ? [] : [answer];
 
 const usedBy = ({ answer }: GroupAnswer): number =>
-  answer?.kind === 'ok' ? answer.creditsUsed : 0;
+  answer.kind === 'ok' ? answer.creditsUsed : 0;
 
 const candidatesIn = (
   { group, answer }: GroupAnswer,
   subject: string,
 ): Candidate[] =>
-  answer?.kind === 'ok' ? candidatesOf(answer.hits, { ...group, subject }) : [];
+  answer.kind === 'ok' ? candidatesOf(answer.hits, { ...group, subject }) : [];
 
 const resultOf = (one: Candidate, alreadyOf: AlreadyOf): WebSearchResult => ({
   kind: one.kind,
@@ -487,38 +498,12 @@ const resultOf = (one: Candidate, alreadyOf: AlreadyOf): WebSearchResult => ({
   already: alreadyOf(one.url),
 });
 
-/** To be asked again: what was not answered, but what did not answer twice. */
-const pendingOf = (
-  answers: readonly GroupAnswer[],
-  retrying: boolean,
-): SearchGroup[] =>
-  answers
-    .filter(({ answer }) =>
-      retrying
-        ? answer === null || STOPS.has(answer.kind)
-        : answer?.kind !== 'ok',
-    )
-    .map(({ group }) => group);
-
-/** What was not answered first; else the next round, which ends the session when there is none. */
-function nextGroups(
-  request: WebSearchRequest,
-  session: SearchSession,
-): readonly SearchGroup[] {
-  if (session.pending.length > 0) return session.pending;
-  if (session.ended) return [];
-  const groups = groupsOf(request, session.round);
-  session.round += 1;
-  if (groups.length === 0) session.ended = true;
-  return groups;
-}
-
 /** Nothing found: fine when every search that answered says so, else the reason is thrown. */
 function assertAnswered(
   answers: readonly GroupAnswer[],
   failures: readonly WebSearchFailure[],
 ): void {
-  const answered = answers.some((one) => one.answer?.kind === 'ok');
+  const answered = answers.some((one) => one.answer.kind === 'ok');
   const stopped = failures.filter((failure) => STOPS.has(failure.kind));
   const error = errorOf(answered ? stopped : failures);
   if (error) throw error;

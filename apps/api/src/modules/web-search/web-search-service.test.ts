@@ -12,15 +12,19 @@ import type {
   WebSearchQuery,
 } from '../../ports/web-search.js';
 import { SETTINGS_TTL_MS, SeenLinks, WebSearchService } from './index.js';
+import { ROUNDS_BUDGET_MS } from './web-search-service.js';
 
 const KEY = 'fc-house-key-valid';
 const REQUEST: WebSearchRequest = {
+  search: '11111111-1111-4111-8111-111111111111',
   query: 'hermetismo',
   sources: 9,
   kinds: ['text', 'audio', 'video'],
   authors: [],
   again: false,
 };
+/** Another search: it starts over. */
+const ANOTHER = '22222222-2222-4222-8222-222222222222';
 const NEW = {
   principal: 'ana',
   topic: 'hermetismo',
@@ -301,7 +305,10 @@ describe('WebSearchService: a search', () => {
     expect(urls).toHaveLength(4);
     expect(urls).not.toContain('https://www.exemplo.org/hermetismo/2');
     expect(found.skipped.already).toBe(1);
-    const again = await service.search({ ...request, again: true }, context);
+    const again = await service.search(
+      { ...request, search: ANOTHER, again: true },
+      context,
+    );
     expect(
       again.results.find((one) => one.url.endsWith('hermetismo/2'))?.already,
     ).toEqual({ document });
@@ -350,7 +357,10 @@ describe('WebSearchService: a search', () => {
     // Another person, or another collection, was given nothing yet.
     const beto = { ...NEW, principal: 'beto' };
     expect((await later.service.search(REQUEST, beto)).skipped.seen).toBe(0);
-    const again = await later.service.search({ ...REQUEST, again: true }, NEW);
+    const again = await later.service.search(
+      { ...REQUEST, search: ANOTHER, again: true },
+      NEW,
+    );
     expect(again.results.map((one) => one.url)).toEqual(
       given.results.map((one) => one.url),
     );
@@ -364,7 +374,7 @@ describe('WebSearchService: a search', () => {
     const found = await service.search(request, NEW);
     expect(found.results).toHaveLength(3);
     expect(found.exhausted).toBe(true);
-    // Two rounds with nothing new are enough.
+    // Two rounds with no page it did not know are enough.
     expect(firecrawl.searches).toHaveLength(3);
     const more = await service.search(request, NEW);
     expect(more).toMatchObject({ results: [], exhausted: true });
@@ -417,17 +427,18 @@ describe('WebSearchService: a search', () => {
     await service.connect(KEY, 'owner');
     firecrawl.breakSearchesOf('video', 'audio');
     const found = await service.search(REQUEST, NEW);
-    expect(found.results).toHaveLength(4);
-    expect(found).toMatchObject({ partial: true, creditsUsed: 2 });
-    // Asked again, what did not answer comes first; failing again it is let go.
-    const asked = firecrawl.searches.length;
-    await service.search(REQUEST, NEW);
-    const kinds = firecrawl.searches
-      .slice(asked, asked + 2)
-      .map(({ body }) => body['includeDomains']);
-    expect(kinds).toEqual([['podcasts.apple.com'], ['youtube.com']]);
-    const third = await service.search(REQUEST, NEW);
-    expect(third.results.length).toBeGreaterThan(0);
+    expect(found.results).toHaveLength(9);
+    expect(found.results.every((one) => one.kind === 'text')).toBe(true);
+    expect(found.partial).toBe(true);
+    // Each was asked again once, after the others, and then let go.
+    const broken = firecrawl.searches.filter(
+      ({ body }) =>
+        body['query'] === 'hermetismo' &&
+        ['podcasts.apple.com', 'youtube.com'].includes(
+          String(body['includeDomains']),
+        ),
+    );
+    expect(broken).toHaveLength(4);
   });
 
   it('gives none, saying it is partial, when one found nothing and another did not answer', async () => {
@@ -548,6 +559,109 @@ describe('WebSearchService: a search', () => {
   });
 });
 
+describe('WebSearchService: going on (review B)', () => {
+  it('goes past what was seen on another day, through the wordings not asked yet', async () => {
+    const seen = new MemoryDocumentStore();
+    const first = build({ seen });
+    await first.service.connect(KEY, 'owner');
+    const texts = { ...REQUEST, kinds: ['text' as const], sources: 16 };
+    // Four rounds' worth of texts, all of them given.
+    const given = await first.service.search(texts, NEW);
+    expect(given.results).toHaveLength(16);
+    const tomorrow = build({ ...first, seen });
+    await tomorrow.service.load();
+    const next = await tomorrow.service.search({ ...texts, sources: 4 }, NEW);
+    expect(next.results).toHaveLength(4);
+    expect(next.skipped.seen).toBe(16);
+    expect(next.exhausted).toBe(false);
+  });
+
+  it('stopped, what was found waits for the next request, given to no one', async () => {
+    const { service } = build();
+    await service.connect(KEY, 'owner');
+    const gone = new AbortController();
+    gone.abort();
+    const request = { ...REQUEST, sources: 4 };
+    const asked = service.search(request, { ...NEW, signal: gone.signal });
+    expect(await codeOf(asked)).toBe('WEB_SEARCH_UNAVAILABLE');
+    const half = new AbortController();
+    const searching = service.search(request, { ...NEW, signal: half.signal });
+    half.abort();
+    await codeOf(searching);
+    const back = await service.search({ ...REQUEST, sources: 9 }, NEW);
+    expect(back.results).toHaveLength(9);
+    expect(back.skipped.seen).toBe(0);
+  });
+
+  it('a write that fails gives nothing, and loses nothing', async () => {
+    const seen = new MemoryDocumentStore();
+    const { service, firecrawl } = build({ seen });
+    await service.connect(KEY, 'owner');
+    const write = vi
+      .spyOn(seen, 'write')
+      .mockRejectedValueOnce(new Error('disk full'));
+    await expect(service.search(REQUEST, NEW)).rejects.toThrow('disk full');
+    const paid = firecrawl.searches.length;
+    const again = await service.search(REQUEST, NEW);
+    expect(again.results).toHaveLength(9);
+    expect(firecrawl.searches).toHaveLength(paid);
+    write.mockRestore();
+  });
+
+  it('two at once of one search pay once, and give different things', async () => {
+    const { service, firecrawl } = build();
+    await service.connect(KEY, 'owner');
+    const request = { ...REQUEST, sources: 4 };
+    const [one, other] = await Promise.all([
+      service.search(request, NEW),
+      service.search(request, NEW),
+    ]);
+    const urls = [...one.results, ...other.results].map(({ url }) => url);
+    expect(new Set(urls).size).toBe(8);
+    expect(firecrawl.searches).toHaveLength(3);
+  });
+
+  it('what another search of the collection gave meanwhile is not given again', async () => {
+    const { service } = build();
+    await service.connect(KEY, 'owner');
+    const both = { ...REQUEST, kinds: ['text' as const, 'video' as const] };
+    const first = await service.search({ ...both, sources: 2 }, NEW);
+    const texts = await service.search(
+      { ...REQUEST, search: ANOTHER, kinds: ['text'], sources: 3 },
+      NEW,
+    );
+    const back = await service.search({ ...both, sources: 9 }, NEW);
+    const urls = [first, texts, back].flatMap(({ results }) =>
+      results.map(({ url }) => url),
+    );
+    expect(new Set(urls).size).toBe(urls.length);
+  });
+
+  it('the same thing asked anew within minutes is not paid again', async () => {
+    const { service, later } = build();
+    await service.connect(KEY, 'owner');
+    await service.search(REQUEST, NEW);
+    const anew = { ...REQUEST, search: ANOTHER, again: true };
+    expect((await service.search(anew, NEW)).creditsUsed).toBe(0);
+    later(60 * 60_000);
+    const third = '33333333-3333-4333-8333-333333333333';
+    const paid = await service.search({ ...anew, search: third }, NEW);
+    expect(paid.creditsUsed).toBeGreaterThan(0);
+  });
+
+  it('"again" brings everything back each time it is asked', async () => {
+    const { service } = build();
+    await service.connect(KEY, 'owner');
+    const ask = (search?: string) =>
+      service.search({ ...REQUEST, search, again: true }, NEW);
+    const one = await ask(REQUEST.search);
+    const two = await ask(ANOTHER);
+    expect(two.results.map(({ url }) => url)).toEqual(
+      one.results.map(({ url }) => url),
+    );
+  });
+});
+
 describe('WebSearchService: many searches of one request', () => {
   const FIFTEEN = {
     ...REQUEST,
@@ -556,7 +670,10 @@ describe('WebSearchService: many searches of one request', () => {
   };
 
   /** A service whose every search takes a moment and answers as told. */
-  async function slow(answerOf: (asked: number) => WebSearchAnswer) {
+  async function slow(
+    answerOf: (asked: number) => WebSearchAnswer,
+    now?: () => Date,
+  ) {
     const asked: WebSearchQuery[] = [];
     const running = { now: 0, most: 0 };
     const web: WebSearchPort = {
@@ -579,6 +696,7 @@ describe('WebSearchService: many searches of one request', () => {
       sealer: new SecretBox(randomBytes(32)),
       web,
       seen: new SeenLinks(new MemoryDocumentStore()),
+      ...(now && { now }),
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     });
     await service.connect(KEY, 'owner');
@@ -597,7 +715,7 @@ describe('WebSearchService: many searches of one request', () => {
     creditsUsed: 2,
   });
 
-  it('makes every one, four at once, and adds up what they cost', async () => {
+  it('makes a few at once, until it has what is wanted, and adds up what they cost', async () => {
     const { service, asked, running } = await slow(hit);
     const found = await service.search(
       { ...FIFTEEN, kinds: ['text', 'audio', 'video'] },
@@ -626,12 +744,28 @@ describe('WebSearchService: many searches of one request', () => {
     expect(found.results).toHaveLength(1);
   });
 
+  it('starts no other searches once it took long enough: the next request goes on', async () => {
+    const started = { at: 0 };
+    const { service, asked } = await slow(
+      (at) => {
+        started.at = at;
+        return hit(at);
+      },
+      () => new Date(started.at > 4 ? ROUNDS_BUDGET_MS * 2 : 0),
+    );
+    const request = { ...FIFTEEN, sources: 100 };
+    const found = await service.search(request, NEW);
+    expect(asked.length).toBeLessThanOrEqual(8);
+    expect(found).toMatchObject({ partial: false, exhausted: false });
+  });
+
   it('goes on after one that did not answer', async () => {
     const { service, asked } = await slow((at) =>
       at === 2 ? { kind: 'unreachable', status: null } : hit(at),
     );
     const found = await service.search(FIFTEEN, NEW);
-    expect(asked).toHaveLength(15);
-    expect(found).toMatchObject({ partial: true, creditsUsed: 28 });
+    expect(asked.length).toBeGreaterThan(15);
+    expect(found.partial).toBe(true);
+    expect(found.results).toHaveLength(5);
   });
 });
