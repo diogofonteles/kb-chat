@@ -260,17 +260,26 @@ async function adoptAudio(
     bytes: audio.bytes,
     ...(record.level && { level: record.level }),
   });
+  await receiveWhole(wiring.mediaService, actor, { id: item.id, audio });
+  return item.id;
+}
+
+/** Nothing half-sent stays in the library: the Mac sends it whole again. */
+async function receiveWhole(
+  media: MediaService,
+  actor: MediaActor,
+  input: { id: string; audio: { body: Readable; bytes: number } },
+): Promise<void> {
+  const { id, audio } = input;
   try {
-    await wiring.mediaService.receiveFile(actor, item.id, {
+    await media.receiveFile(actor, id, {
       body: audio.body,
       declaredBytes: audio.bytes,
     });
   } catch (err) {
-    // Nothing half-sent stays in the library: the Mac sends it whole again.
-    await wiring.mediaService.remove(actor, item.id).catch(() => undefined);
+    await media.remove(actor, id).catch(() => undefined);
     throw err;
   }
-  return item.id;
 }
 
 async function senderAsTheyStand(
