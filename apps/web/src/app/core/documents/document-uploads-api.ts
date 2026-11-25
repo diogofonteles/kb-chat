@@ -90,6 +90,11 @@ export class DocumentUploadsApi {
     return this.http.post(`${documentUploadsUrl()}/${id}/retry`, {});
   }
 
+  /** What the Mac left in the middle waits for a Mac again now (KBC-184). */
+  resume(id: string): Observable<unknown> {
+    return this.http.post(`${documentUploadsUrl()}/${id}/resume`, {});
+  }
+
   /** What kb refused enters the collection all the same (masters, KBC-009). */
   accept(id: string): Observable<unknown> {
     return this.http.post(`${documentUploadsUrl()}/${id}/accept`, {});

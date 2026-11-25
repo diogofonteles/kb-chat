@@ -12,7 +12,7 @@ depends_on: [KBC-148, KBC-149]
 ## Story
 Como quem cuida de um acervo, quero uma página em que eu escolha arquivos, uma pasta inteira, links ou áudios e veja o que aconteceu com cada um, para montar o acervo sem o terminal.
 
-Pedidos do dono em 2026-11-25: "todo o mecanismo atual de criar acervo e adicionar documentos … totalmente pronto no app"; "selecionar uma pasta e garantir que todos os arquivos da pasta sejam enviados"; "não vejo nenhum status de andamento... deveria ter mais detalhes"; "tem algum lugar no app para fazer essa revisão?".
+Pedidos do dono em 2026-11-25: "todo o mecanismo atual de criar acervo e adicionar documentos … totalmente pronto no app"; "selecionar uma pasta e garantir que todos os arquivos da pasta sejam enviados"; "não vejo nenhum status de andamento... deveria ter mais detalhes"; "tem algum lugar no app para fazer essa revisão?"; "deveríamos ter um aviso informando que a conversão está parada e um botão para retomá-la".
 
 ## Business rules
 - BR-1: só quem tem `media-upload` no acervo vê a página e os atalhos.
@@ -28,6 +28,7 @@ Pedidos do dono em 2026-11-25: "todo o mecanismo atual de criar acervo e adicion
 - AC-3 (negativo): Given quem não tem permissão, When abre o endereço, Then volta ao início e a API responde 403.
 - AC-4: Given itens esperando, When nenhum Mac está conectado, Then a tela diz isso e o que fazer.
 - AC-5: Given um item em curso, Then a etapa, a posição na fila, o tempo e o gasto aparecem.
+- AC-7: Given um item que o Mac deixou no meio, When passam dois minutos sem sinal, Then a linha diz "Parado", desde quando, com "Retomar"; When o mesmo Mac volta, Then ele retoma sozinho.
 - AC-6: Given um item recusado pelo kb, When um master escolhe "Incluir mesmo assim", Then ele entra no acervo; When escolhe "Deixar de fora", Then sai da lista e continua na quarentena do kb. Quem não é master vê o motivo e o que foi lido, e não decide (API 403).
 
 ## References

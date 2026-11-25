@@ -3,7 +3,10 @@ import type { DocumentUpload, DocumentWork } from '@kb-chat/contracts';
 /** Where an item is for the person: at work, in line, waiting for them, ended. */
 export type UploadPhase = 'active' | 'yours' | 'waiting' | 'failed' | 'ready';
 
-/** A choice, what kb refused (for who may decide), or a recording that waits for a person. */
+/**
+ * A choice, what kb refused (for who may decide), what the Mac left in the middle, or a
+ * recording that waits for a person.
+ */
 const waitsForPerson = ({
   state,
   progress,
@@ -11,6 +14,7 @@ const waitsForPerson = ({
 }: DocumentUpload): boolean =>
   state === 'choosing' ||
   refused?.acceptable === true ||
+  progress.stalledSince !== null ||
   (state === 'transcribing' && progress.media?.step === 'attention');
 
 export function phaseOf(upload: DocumentUpload): UploadPhase {
@@ -184,9 +188,17 @@ const STATUS_TEXTS: Partial<
   transcribing: mediaText,
 };
 
+/** "Parado: o Mac não dá sinal há 4 min…" */
+function stalledText({ progress }: DocumentUpload, now: number): string {
+  if (progress.stalledSince === null) return '';
+  const ago = durationText(secondsSince(progress.stalledSince, now));
+  return $localize`:@@docProgress.stalled:O Mac não dá sinal há ${ago}:time:. Retoma sozinho quando ele voltar, ou agora, pelo botão.`;
+}
+
 /** What is known of an item now, in a line; empty when its state says it all. */
 export const statusText = (upload: DocumentUpload, now: number): string =>
-  STATUS_TEXTS[upload.state]?.(upload) ?? workingText(upload, now);
+  stalledText(upload, now) ||
+  (STATUS_TEXTS[upload.state]?.(upload) ?? workingText(upload, now));
 
 /** How everything on the list stands; the parts always add up to `total`. */
 export interface UploadsSummary {

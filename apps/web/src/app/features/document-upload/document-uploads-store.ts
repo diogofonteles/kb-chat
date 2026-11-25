@@ -146,6 +146,11 @@ export class DocumentUploadsStore {
     this.act(upload.id, this.api.retry(upload.id));
   }
 
+  /** The Mac left it in the middle: it waits for a Mac again now. */
+  resume(upload: DocumentUpload): void {
+    this.act(upload.id, this.api.resume(upload.id));
+  }
+
   /** What kb refused enters all the same (masters). */
   accept(upload: DocumentUpload): void {
     this.act(upload.id, this.api.accept(upload.id));

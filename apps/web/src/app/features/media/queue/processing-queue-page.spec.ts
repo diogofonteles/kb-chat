@@ -305,6 +305,7 @@ describe('ProcessingQueuePage (T23, KBC-090)', () => {
       retriable: false,
       progress: {
         startedAt: null,
+        stalledSince: null,
         position: null,
         startsInSeconds: null,
         takesSeconds: null,
@@ -356,6 +357,7 @@ describe('ProcessingQueuePage (T23, KBC-090)', () => {
           retriable: false,
           progress: {
             startedAt: null,
+            stalledSince: null,
             position: null,
             startsInSeconds: null,
             takesSeconds: null,

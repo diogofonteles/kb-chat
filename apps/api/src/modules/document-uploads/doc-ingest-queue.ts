@@ -19,12 +19,12 @@ import {
   MIN_LEASE_USD,
   WORKING_STATES,
   isWorking,
+  DOC_INGEST_LEASE_MS,
+  isStalled,
 } from './upload-batches.js';
 import { inLineOrder } from './mac-line.js';
 import type { UploadRecords } from './upload-records.js';
 
-/** A Mac holds a doc-ingest job this long between heartbeats (conversion runs in steps). */
-export const DOC_INGEST_LEASE_MS = 10 * 60 * 1000;
 /** Crashes and lost leases a document survives before it is given up. */
 export const DOC_INGEST_MAX_ATTEMPTS = 3;
 
@@ -76,24 +76,35 @@ export class DocIngestQueue {
   leasableJobs(): number {
     if (this.deps.budgetUsd() < MIN_LEASE_USD) return 0;
     const ledger = this.ledger();
-    return this.deps.records.all().filter((one) => this.isLeasable(one, ledger))
-      .length;
+    return this.deps.records
+      .all()
+      .filter((one) => this.isLeasable(one, ledger, null)).length;
   }
 
   private ledger(): BatchLedger {
     return new BatchLedger(this.deps.records.all(), this.now());
   }
 
-  /** Waiting (or its lease expired), with something left of its inclusion's ceiling. */
+  /**
+   * Waiting (or its lease expired, or the Mac that asks went silent on it), with something
+   * left of its inclusion's ceiling. `worker` null: whoever asks.
+   */
   private isLeasable(
     record: DocumentUploadRecord,
     ledger: BatchLedger,
+    worker: string | null,
   ): boolean {
+    const now = this.now();
+    const { lease } = record;
+    // A Mac takes one at a time: asking for another, it is not at the one it went silent on.
+    const dropped =
+      lease !== null &&
+      (!isWorking(record, now) ||
+        (isStalled(record, now) &&
+          (worker === null || lease.worker === worker)));
     const waiting =
       record.state === 'received' ||
-      (WORKING_STATES.has(record.state) &&
-        record.lease !== null &&
-        !isWorking(record, this.now()));
+      (WORKING_STATES.has(record.state) && dropped);
     // Taken off the list: cancelled, whatever its attempts already spent.
     if (record.dismissed) return false;
     return waiting && ledger.leftFor(record) >= MIN_LEASE_USD;
@@ -107,7 +118,12 @@ export class DocIngestQueue {
     const now = this.now();
     return this.deps.records
       .all()
-      .some((one) => one.lease?.worker === worker && isWorking(one, now));
+      .some(
+        (one) =>
+          one.lease?.worker === worker &&
+          isWorking(one, now) &&
+          !isStalled(one, now),
+      );
   }
 
   /**
@@ -117,7 +133,7 @@ export class DocIngestQueue {
   lease(worker: string, topic?: string): DocIngestJob | null {
     const monthUsd = this.deps.budgetUsd();
     if (monthUsd < MIN_LEASE_USD) return null;
-    for (const record of this.waiting(topic)) {
+    for (const record of this.waiting(worker, topic)) {
       const attempts = record.attempts + (record.lease ? 1 : 0);
       if (attempts >= DOC_INGEST_MAX_ATTEMPTS) {
         this.later(this.giveUp(record, 'the Mac lost the job too many times'));
@@ -157,12 +173,15 @@ export class DocIngestQueue {
   }
 
   /** Oldest first; `topic` keeps to one collection (the E2E fake Mac, as kb-publish's). */
-  private waiting(topic?: string): DocumentUploadRecord[] {
+  private waiting(
+    worker: string | null,
+    topic?: string,
+  ): DocumentUploadRecord[] {
     const ledger = this.ledger();
     return this.deps.records
       .all()
       .filter((one) => topic === undefined || one.topic === topic)
-      .filter((one) => this.isLeasable(one, ledger))
+      .filter((one) => this.isLeasable(one, ledger, worker))
       .sort(inLineOrder);
   }
 

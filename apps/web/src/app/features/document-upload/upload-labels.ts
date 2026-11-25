@@ -131,10 +131,16 @@ const YOURS: StateLabel = {
   tone: 'warn',
 };
 
+const STALLED: StateLabel = {
+  text: () => $localize`:@@docUploads.state.stalled:Parado`,
+  tone: 'warn',
+};
+
 /** Its state in words: what the Mac does depends on what it is. */
 export function labelOf(upload: DocumentUpload): StateLabel {
   const { kind, state, progress } = upload;
   if (upload.refused?.acceptable) return YOURS;
+  if (progress.stalledSince !== null) return STALLED;
   if (state === 'converting' && kind === 'recording') return DOWNLOADING;
   if (state === 'converting' && kind === 'list') return LISTING;
   if (state === 'transcribing' && progress.media?.step === 'publishing')

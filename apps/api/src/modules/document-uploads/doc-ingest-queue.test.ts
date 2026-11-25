@@ -6,7 +6,8 @@ import type {
   DocumentUploadFilesPort,
   DocumentUploadRecord,
 } from '../../ports/document-uploads.js';
-import { DOC_INGEST_LEASE_MS, DocIngestQueue } from './doc-ingest-queue.js';
+import { DocIngestQueue } from './doc-ingest-queue.js';
+import { DOC_INGEST_LEASE_MS } from './upload-batches.js';
 import { UploadRecords } from './upload-records.js';
 import { toDocumentUpload } from './upload-view.js';
 
@@ -63,6 +64,7 @@ const record = (
 const NOT_HELD = {
   place: {
     startedAt: null,
+    stalledSince: null,
     position: null,
     startsInSeconds: null,
     takesSeconds: null,

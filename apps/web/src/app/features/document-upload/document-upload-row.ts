@@ -81,6 +81,17 @@ const ICONS = {
           <span i18n="@@docUploads.raise">Aumentar o teto em US$ 0,50</span>
         </button>
       }
+      @if (upload().progress.stalledSince) {
+        <button
+          uiButton="outline"
+          size="sm"
+          type="button"
+          [disabled]="busy()"
+          (click)="resumed.emit()"
+        >
+          <span i18n="@@docUploads.resume">Retomar</span>
+        </button>
+      }
       @if (upload().retriable) {
         <button
           uiButton="outline"
@@ -158,6 +169,7 @@ export class DocumentUploadRow {
   readonly raised = output();
   readonly retried = output();
   readonly accepted = output();
+  readonly resumed = output();
   readonly removed = output();
   readonly chosen = output<readonly string[]>();
 

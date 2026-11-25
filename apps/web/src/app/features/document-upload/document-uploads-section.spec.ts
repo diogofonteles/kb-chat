@@ -34,6 +34,7 @@ const upload = (fields: Partial<DocumentUpload>): DocumentUpload => ({
   retriable: false,
   progress: {
     startedAt: null,
+    stalledSince: null,
     position: null,
     startsInSeconds: null,
     takesSeconds: null,
@@ -51,6 +52,7 @@ const progress = (
   fields: Partial<DocumentUpload['progress']>,
 ): DocumentUpload['progress'] => ({
   startedAt: null,
+  stalledSince: null,
   position: null,
   startsInSeconds: null,
   takesSeconds: null,
@@ -341,9 +343,10 @@ describe('Documentos em processamento (KBC-149 FR-2)', () => {
   });
 });
 
+const card = () =>
+  document.querySelector('app-document-work-card') as HTMLElement;
+
 describe('what is being done (KBC-184)', () => {
-  const card = () =>
-    document.querySelector('app-document-work-card') as HTMLElement;
   const rowOf = (name: string) =>
     screen.getByText(name).closest('app-document-upload-row') as HTMLElement;
   const batch = { id: crypto.randomUUID(), capUsd: 0.5, spentUsd: 0.018 };
@@ -714,5 +717,50 @@ describe('what kb refused (KBC-009)', () => {
       upload({ kind: 'list', state: 'failed', failure: 'empty' }),
     ]);
     expect(screen.getByText('Não há gravações nesta lista.')).toBeTruthy();
+  });
+});
+
+describe('the Mac that stopped in the middle (KBC-184)', () => {
+  const stalled = () =>
+    upload({
+      name: 'livro.pdf',
+      state: 'converting',
+      progress: progress({ stalledSince: secondsAgo(250) }),
+    });
+
+  it('says it is stopped and since when, and one press resumes it', async () => {
+    const one = stalled();
+    const { http, fixture } = await renderSection([one], null, {
+      work: aWork(),
+    });
+    expect(screen.getByText('Parado')).toBeTruthy();
+    expect(screen.getByText(/não dá sinal há 4 min/)).toBeTruthy();
+    expect(card().textContent).toContain('1 espera você');
+    expect(card().textContent).not.toContain('Agora');
+    fireEvent.click(screen.getByRole('button', { name: 'Retomar' }));
+    http.expectOne(`${URL}/${one.id}/resume`).flush({});
+    http
+      .match(URL)
+      .forEach((req) => req.flush({ items: [{ ...one, state: 'received' }] }));
+    await fixture.whenStable();
+    expect(document.activeElement?.textContent).toContain(
+      'Documentos em processamento',
+    );
+  });
+
+  it('a Mac that came back meanwhile is told, and the list read again', async () => {
+    const one = stalled();
+    const { http, fixture } = await renderSection([one]);
+    fireEvent.click(screen.getByRole('button', { name: 'Retomar' }));
+    http
+      .expectOne(`${URL}/${one.id}/resume`)
+      .flush(
+        { error: { code: 'MEDIA_CONFLICT', message: 'x' } },
+        { status: 409, statusText: 'Conflict' },
+      );
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Este item mudou enquanto isso',
+    );
   });
 });

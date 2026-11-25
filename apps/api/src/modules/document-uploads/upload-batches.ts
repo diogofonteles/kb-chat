@@ -17,6 +17,19 @@ export const isWorking = (record: DocumentUploadRecord, now: Date): boolean =>
   record.lease !== null &&
   Date.parse(record.lease.until) > now.getTime();
 
+/** A Mac holds a doc-ingest job this long between heartbeats (conversion runs in steps). */
+export const DOC_INGEST_LEASE_MS = 10 * 60 * 1000;
+/** Eight heartbeats missed (one each 15 s): the Mac went away in the middle of it. */
+export const MAC_SILENT_MS = 2 * 60 * 1000;
+
+/** When the Mac last said it is at this item; its lease is renewed at each word. */
+export const lastWordOf = ({ lease }: DocumentUploadRecord): number =>
+  Date.parse(lease?.until ?? '') - DOC_INGEST_LEASE_MS;
+
+/** The Mac has it and stopped saying so, before its lease runs out. */
+export const isStalled = (record: DocumentUploadRecord, now: Date): boolean =>
+  isWorking(record, now) && now.getTime() - lastWordOf(record) > MAC_SILENT_MS;
+
 interface BatchTotals {
   readonly capUsd: number;
   readonly spentUsd: number;

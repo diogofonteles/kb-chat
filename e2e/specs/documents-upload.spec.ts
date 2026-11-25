@@ -588,6 +588,46 @@ test('KBC-009: what kb refused is read and decided on its own row: in all the sa
   await expect(processing(add, links[1] ?? '')).toHaveCount(0);
 });
 
+test('KBC-184: an item the Mac left in the middle says so, and is resumed', async ({
+  browser,
+  viewport,
+}, testInfo) => {
+  const { page, topic, owner } = await person(browser, viewport);
+  const tag = uniqueTag();
+  const link = `https://example.org/${tag}`;
+  const add = await openAdd(page);
+  await includeLinks(add, [link]);
+  // Nobody waits two minutes here: the API's own tests prove when it is told.
+  const uploads = '**/api/v1/document-uploads';
+  await page.route(uploads, async (route) => {
+    const answer = await route.fetch();
+    const body = (await answer.json()) as {
+      items: { state: string; progress: object }[];
+    };
+    const stalledSince = new Date(Date.now() - 250_000).toISOString();
+    const items = body.items.map((one) => ({
+      ...one,
+      state: 'converting',
+      progress: { ...one.progress, position: null, stalledSince },
+    }));
+    await route.fulfill({ response: answer, json: { ...body, items } });
+  });
+  await page.route('**/document-uploads/*/resume', async (route) => {
+    await page.unroute(uploads);
+    await route.fulfill({ json: {} });
+  });
+  const row = processing(add, link);
+  await page.reload();
+  await expect(row.getByText('Parado', { exact: true })).toBeVisible();
+  await expect(row.getByText(/não dá sinal há \d+ min/)).toBeVisible();
+  await row.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('stalled.png') });
+  await row.getByRole('button', { name: 'Retomar' }).click();
+  await expect(row.getByText('Recebido', { exact: true })).toBeVisible();
+  await runMac(owner, topic);
+  await expect(row.getByText('Pronto', { exact: true })).toBeVisible();
+});
+
 for (const theme of ['light', 'dark', 'esoteric'] as const) {
   test(`KBC-184: the progress passes axe in the ${theme} theme, at every state`, async ({
     browser,

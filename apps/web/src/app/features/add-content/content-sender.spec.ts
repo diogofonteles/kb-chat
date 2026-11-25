@@ -41,6 +41,7 @@ const anUpload = (fields: Partial<DocumentUpload> = {}): DocumentUpload => ({
   retriable: false,
   progress: {
     startedAt: null,
+    stalledSince: null,
     position: null,
     startsInSeconds: null,
     takesSeconds: null,

@@ -518,6 +518,33 @@ describe('What is being done, for the person (KBC-184)', () => {
     });
   });
 
+  it('resuming and accepting are refused to who may not, and when there is nothing to', async () => {
+    const { media, ana } = await world();
+    const sent = await sentFile(media, ana);
+    const [item] = await workOf(ana.call).then(({ items }) => items);
+    expect(sent).toBeDefined();
+    const path = (what: string) => `${UPLOADS}/${item?.id ?? ''}/${what}`;
+    const beto = await member(media, {
+      email: 'beto@example.com',
+      topics: ['hermetismo'],
+      features: ['search', 'media'],
+    });
+    const caio = await member(media, {
+      email: 'caio@example.com',
+      topics: ['hermetismo'],
+      features: ['search', 'media', 'media-upload'],
+    });
+    for (const what of ['resume', 'accept']) {
+      expect((await beto.call('POST', path(what), {})).statusCode).toBe(403);
+      expect((await caio.call('POST', path(what), {})).statusCode).toBe(404);
+    }
+    expect((await ana.call('POST', path('accept'), {})).statusCode).toBe(403);
+    expect((await ana.call('POST', path('resume'), {})).statusCode).toBe(409);
+    expect((await media.owner('POST', path('accept'), {})).statusCode).toBe(
+      409,
+    );
+  });
+
   it('clearing what is ready is for who may send, and takes no other field', async () => {
     const { media } = await world();
     const beto = await member(media, {

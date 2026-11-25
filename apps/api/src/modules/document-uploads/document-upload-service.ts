@@ -35,6 +35,7 @@ import {
   MIN_LEASE_USD,
   WORKING_STATES,
   isWorking,
+  isStalled,
 } from './upload-batches.js';
 import type { UploadKey, UploadRecords } from './upload-records.js';
 import { toDocumentUpload, type MediaProgress } from './upload-view.js';
@@ -426,6 +427,24 @@ export class DocumentUploadService {
     }));
     if (!accepted) throw notFound();
     return this.viewOf(accepted, actor);
+  }
+
+  /**
+   * The Mac went silent in the middle of it (KBC-184): it waits for a Mac again now, without
+   * waiting for the lease to run out. A Mac that was only away finds it is no longer its own.
+   */
+  async resumeStalled(actor: UploadActor, id: string): Promise<DocumentUpload> {
+    const record = this.deps.records.get(id);
+    if (!record || !this.mayManage(actor, record)) throw notFound();
+    if (!isStalled(record, this.now())) throw notWaiting();
+    const resumed = await this.deps.records.update(id, (current) => ({
+      ...current,
+      state: 'received',
+      lease: null,
+      updatedAt: this.now().toISOString(),
+    }));
+    if (!resumed) throw notFound();
+    return this.viewOf(resumed, actor);
   }
 
   private fromTheStart() {

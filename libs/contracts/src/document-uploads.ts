@@ -219,6 +219,8 @@ export type DocumentMediaStep = z.infer<typeof documentMediaStepSchema>;
 export const documentProgressSchema = z.object({
   /** Since when the Mac has it; null while it waits, and once it ended. */
   startedAt: z.iso.datetime().nullable(),
+  /** The Mac had it and went silent: since its last word. It goes on when the Mac is back. */
+  stalledSince: z.iso.datetime().nullable().default(null),
   /** Its place among everything that waits for the Mac, anyone's; 1 is next. */
   position: z.number().int().min(1).nullable(),
   /** About when its turn comes; null while no Mac is seen (nobody knows). */

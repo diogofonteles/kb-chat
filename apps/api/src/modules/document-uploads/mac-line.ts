@@ -1,7 +1,7 @@
 import type { ContentCosts, DocumentWork } from '@kb-chat/contracts';
 import type { DocumentUploadRecord } from '../../ports/document-uploads.js';
 import { costKindOf } from './content-costs.js';
-import { isWorking } from './upload-batches.js';
+import { isStalled, isWorking, lastWordOf } from './upload-batches.js';
 
 /** Reading a channel or a playlist is one short command. */
 const LIST_SECONDS = 20;
@@ -9,6 +9,7 @@ const LIST_SECONDS = 20;
 /** An item's place in the Mac's line, or how long it has been at it. */
 export interface PlaceInLine {
   readonly startedAt: string | null;
+  readonly stalledSince: string | null;
   readonly position: number | null;
   readonly startsInSeconds: number | null;
   readonly takesSeconds: number | null;
@@ -16,6 +17,7 @@ export interface PlaceInLine {
 
 const NOWHERE: PlaceInLine = {
   startedAt: null,
+  stalledSince: null,
   position: null,
   startsInSeconds: null,
   takesSeconds: null,
@@ -46,7 +48,16 @@ export class MacLine {
       readonly isWaiting: (record: DocumentUploadRecord) => boolean;
     },
   ) {
-    const working = records.filter((one) => isWorking(one, input.now));
+    const { now } = input;
+    const working = records.filter(
+      (one) => isWorking(one, now) && !isStalled(one, now),
+    );
+    for (const one of records)
+      if (isStalled(one, now))
+        this.places.set(one.id, {
+          ...NOWHERE,
+          stalledSince: new Date(lastWordOf(one)).toISOString(),
+        });
     const waiting = records.filter(input.isWaiting).sort(inLineOrder);
     this.busy = working.length > 0;
     this.waiting = waiting.length;
@@ -76,7 +87,7 @@ export class MacLine {
     for (const [at, record] of waiting.entries()) {
       const takesSeconds = this.secondsOf(record);
       this.places.set(record.id, {
-        startedAt: null,
+        ...NOWHERE,
         position: at + 1,
         startsInSeconds: known ? before : null,
         takesSeconds,

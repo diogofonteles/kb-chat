@@ -67,6 +67,7 @@ export const documentUploadRoutes =
     registerReads(app, deps);
     registerChanges(app, deps);
     registerSends(app, deps);
+    registerDecisions(app, deps);
     registerParts(app, deps);
   };
 
@@ -229,6 +230,20 @@ function registerSends(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
     RETRY_OPTIONS,
     async (request) =>
       deps.service.retry(deps.actorOf(request), request.params.id),
+  );
+}
+
+/** What a person decides of one that stopped, or that kb refused. */
+function registerDecisions(
+  app: FastifyInstance,
+  deps: DocumentUploadRouteDeps,
+) {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.post(
+    '/api/v1/document-uploads/:id/resume',
+    RETRY_OPTIONS,
+    async (request) =>
+      deps.service.resumeStalled(deps.actorOf(request), request.params.id),
   );
   // Of masters (the service says so): what kb refused enters all the same.
   typed.post(

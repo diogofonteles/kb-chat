@@ -330,6 +330,7 @@ describe('the Mac, its line and how far each item is', () => {
     });
     expect(third?.progress).toEqual({
       startedAt: null,
+      stalledSince: null,
       position: 2,
       startsInSeconds: 70,
       takesSeconds: 40,
@@ -750,5 +751,94 @@ describe('what kb refused, decided by a person (KBC-009)', () => {
       kind: 'recording',
       url,
     });
+  });
+});
+
+describe('a Mac that went silent in the middle of an item (KBC-184)', () => {
+  const MINUTE = 60_000;
+
+  async function silentFor(minutes: number) {
+    const made = await world({
+      deps: {
+        mac: () => ({ state: 'on', lastSeenAt: null, doing: null }),
+      },
+    });
+    const sent = await send(made.service, ana, link('https://a.example/1'));
+    const job = made.queue.lease('mac');
+    const next = await send(made.service, ana, link('https://a.example/2'));
+    made.clock.now = new Date(made.clock.now.getTime() + minutes * MINUTE);
+    const owner = {
+      jobId: sent.id,
+      worker: 'mac',
+      leaseId: job?.leaseId ?? '',
+    };
+    return { ...made, sent, next, owner };
+  }
+
+  it('a minute of silence is nothing; past two it is said, since its last word', async () => {
+    const quiet = await silentFor(1);
+    const [working] = await itemsOf(quiet.service, ana);
+    expect(working?.progress).toMatchObject({
+      startedAt: expect.any(String),
+      stalledSince: null,
+    });
+    const { service, clock, sent } = await silentFor(4);
+    const { items, work } = await service.list(ana);
+    const stalled = items.find((one) => one.id === sent.id);
+    expect(stalled).toMatchObject({
+      state: 'converting',
+      progress: {
+        startedAt: null,
+        stalledSince: new Date(clock.now.getTime() - 4 * MINUTE).toISOString(),
+      },
+    });
+    // The Mac is at nothing, and what waits is not behind what nobody does.
+    expect(work?.busy).toBe(false);
+    expect(items.find((one) => one.id !== sent.id)?.progress).toMatchObject({
+      position: 1,
+      startsInSeconds: 0,
+    });
+  });
+
+  it('a word from the Mac, and it is at work again', async () => {
+    const { service, queue, owner, sent } = await silentFor(4);
+    queue.heartbeat(owner);
+    const items = await itemsOf(service, ana);
+    expect(
+      items.find((one) => one.id === sent.id)?.progress.stalledSince,
+    ).toBeNull();
+    await expect(service.resumeStalled(ana, sent.id)).rejects.toMatchObject({
+      code: 'MEDIA_CONFLICT',
+    });
+  });
+
+  it('resumed by a person, any Mac takes it at once, and the old one finds it gone', async () => {
+    const { service, queue, owner, sent, records } = await silentFor(4);
+    expect(queue.lease('another')?.id).not.toBe(sent.id);
+    await expect(service.resumeStalled(beto, sent.id)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect((await service.resumeStalled(ana, sent.id)).state).toBe('received');
+    expect(queue.lease('another')?.id).toBe(sent.id);
+    expect(() => queue.heartbeat(owner)).toThrow(
+      expect.objectContaining({ code: 'MEDIA_CONFLICT' }),
+    );
+    // A person's press spends none of its attempts.
+    expect(records.get(sent.id)?.attempts).toBe(0);
+  });
+
+  it('started again, the same Mac takes it back by itself, before the rest of the line', async () => {
+    const { queue, sent, records } = await silentFor(4);
+    expect(queue.isHeldBy('mac')).toBe(false);
+    expect(queue.leasableJobs()).toBe(2);
+    expect(queue.lease('mac')?.id).toBe(sent.id);
+    expect(records.get(sent.id)?.attempts).toBe(1);
+  });
+
+  it('another Mac takes nothing from one that may only be away', async () => {
+    const { queue, sent, next } = await silentFor(4);
+    expect(queue.lease('another')?.id).toBe(next.id);
+    expect(queue.lease('another')).toBeNull();
+    expect(sent.id).not.toBe(next.id);
   });
 });
