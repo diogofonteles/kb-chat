@@ -128,6 +128,7 @@ export interface OpenedDocument {
                 @if (row.canRemove) {
                   <button
                     uiIconButton
+                    class="remove"
                     type="button"
                     [size]="44"
                     [attr.aria-label]="row.removeLabel"

@@ -337,7 +337,7 @@ describe('AddContentPage (KBC-184)', () => {
       await settle();
     }
     expect(bodies).toMatchObject([
-      { url: 'https://x.org/1', as: 'page' },
+      { url: 'https://x.org/1', as: 'page', title: 'https://x.org/1' },
       { url: 'https://youtu.be/abc', as: 'recording' },
     ]);
     expect(bodies[0].batch).toEqual(bodies[1].batch);

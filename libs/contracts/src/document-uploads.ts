@@ -135,6 +135,14 @@ export const createDocumentUploadRequestSchema = z.discriminatedUnion('kind', [
     url: documentLinkSchema,
     /** What the sender says it is; left out, the address decides (recordingLinkKind). */
     as: z.enum(['page', 'recording']).optional(),
+    /** How it is listed while on its way (the search's own title); else by its address. */
+    title: z
+      .string()
+      .trim()
+      .min(1)
+      .max(300)
+      .regex(/^\P{Cc}+$/u)
+      .optional(),
     level: levelRefSchema.optional(),
     batch: documentBatchRequestSchema.optional(),
   }),

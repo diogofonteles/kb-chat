@@ -124,7 +124,6 @@ function ingestQueue(
     adoptAudio: (record, audio) => adoptAudio(app, wiring, { record, audio }),
     onError: (err, message) => app.log.error({ err }, message),
   });
-  return { queue, service };
 }
 
 function uploadService(

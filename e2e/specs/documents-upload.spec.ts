@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type {
   APIRequestContext,
@@ -17,7 +17,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { aCollectionInVault, uniqueTag } from './media-helpers.js';
+import { aCollectionInVault, makeMp3, uniqueTag } from './media-helpers.js';
 import {
   chooseCollectionSlug,
   desktop,
@@ -228,6 +228,123 @@ test('KBC-184: a collection made on the screen takes its content right away', as
   await expect(processing(add, url).getByText('Pronto')).toBeVisible();
 });
 
+test('KBC-185: the web is searched here, what is picked has its estimate and enters with the rest', async ({
+  browser,
+  viewport,
+}, testInfo) => {
+  const { page, topic, owner } = await person(browser, viewport);
+  const subject = `os sete princípios ${uniqueTag()}`;
+  const add = await openAdd(page);
+  await add.getByRole('button', { name: 'Pesquisar na web' }).click();
+  await add.getByLabel('Assunto').fill(subject);
+  await add.getByLabel('Quantidade de fontes').fill('6');
+  await add.getByLabel('Autores de referência (opcional)').fill('Hermes');
+  await add.getByRole('button', { name: 'Pesquisar', exact: true }).click();
+  const all = add.getByRole('checkbox', { name: 'Selecionar todos' });
+  await expect(all).toBeChecked();
+  await page.screenshot({ path: testInfo.outputPath('search-found.png') });
+
+  // Two of them, a text and a video: the estimate follows what is picked.
+  await all.click();
+  await expect(
+    add.getByRole('button', { name: 'Incluir', exact: true }),
+  ).toBeDisabled();
+  const results = add.getByRole('group', { name: /^Resultados para/ });
+  const rowOf = (kind: string) =>
+    results
+      .getByRole('listitem')
+      .filter({ has: page.getByText(kind, { exact: true }) })
+      .first();
+  // The whole row is the label: a press anywhere on it picks it.
+  await rowOf('Texto').locator('label').click();
+  await rowOf('Vídeo').locator('label').click();
+  const estimate = add.getByRole('region', { name: 'Quanto deve custar' });
+  await expect(estimate.getByText('1 página da web')).toBeVisible();
+  await expect(estimate.getByText('1 áudio ou vídeo')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('search-picked.png') });
+  await add.getByRole('button', { name: 'Incluir 2 itens' }).click();
+  await expect(add.getByText(/2 de 2 enviados/)).toBeVisible();
+  await expect(results.getByText('Incluído agora')).toHaveCount(2);
+
+  await runMac(owner, topic);
+  const states = add
+    .getByRole('region', { name: 'Documentos em processamento' })
+    .getByRole('listitem');
+  await expect(states.filter({ hasText: 'Pronto' })).toHaveCount(1);
+  await expect(states.filter({ hasText: 'Transcrevendo' })).toHaveCount(1);
+});
+
+test('KBC-186: from a channel only what is chosen enters, and a video file enters by its sound', async ({
+  browser,
+  viewport,
+}, testInfo) => {
+  const { page, topic, owner } = await person(browser, viewport);
+  const tag = uniqueTag().replace(/[^a-z0-9]/gi, '');
+  const channel = `https://www.youtube.com/@canal${tag}`;
+  const add = await openAdd(page);
+  await add.getByRole('button', { name: 'Links', exact: true }).click();
+  await add.getByLabel('Endereços').fill(channel);
+  await expect(add.getByText('1 canal ou playlist')).toBeVisible();
+  await add.getByRole('button', { name: 'Incluir 1 item' }).click();
+  await expect(processing(add, channel)).toBeVisible();
+
+  await runMac(owner, topic);
+  const list = processing(add, channel);
+  await expect(list.getByText('Escolha o que entra')).toBeVisible();
+  // Nothing enters by itself: a channel has hundreds.
+  await expect(list.getByRole('checkbox', { name: /^Aula/ })).toHaveCount(3);
+  await expect(list.getByRole('checkbox', { checked: true })).toHaveCount(0);
+  await list.getByRole('checkbox', { name: /^Aula 1/ }).click();
+  await list.getByRole('checkbox', { name: /^Aula 3/ }).click();
+  await expect(list.getByText(/2 escolhidos · 40:00/)).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('channel.png') });
+  await list.getByRole('button', { name: 'Incluir 2 gravações' }).click();
+  await expect(list).toHaveCount(0);
+  const items = add
+    .getByRole('region', { name: 'Documentos em processamento' })
+    .getByRole('listitem');
+  await expect(items.filter({ hasText: 'Aula 1' })).toBeVisible();
+  await expect(items.filter({ hasText: 'Aula 3' })).toBeVisible();
+  await expect(items.filter({ hasText: 'Aula 2' })).toHaveCount(0);
+  await runMac(owner, topic);
+  await expect(items.filter({ hasText: 'Transcrevendo' })).toHaveCount(2);
+
+  const sound = await readFile(makeMp3(`aula-${tag}`, 1));
+  await add.getByRole('button', { name: 'Arquivos', exact: true }).click();
+  await add.locator(FILES).setInputFiles({
+    name: `Palestra ${tag}.mp4`,
+    mimeType: 'video/mp4',
+    buffer: sound,
+  });
+  await expect(add.getByText('1 vídeo', { exact: true })).toBeVisible();
+  await add.getByRole('button', { name: 'Incluir 1 item' }).click();
+  await expect(
+    sentNow(add, `Palestra ${tag}.mp4`).getByText('Recebido'),
+  ).toBeVisible();
+});
+
+test('the sends go on while the person uses the app, and are found on coming back', async ({
+  browser,
+  viewport,
+}) => {
+  const { page } = await person(browser, viewport);
+  const add = await openAdd(page);
+  const tag = uniqueTag();
+  // The API takes a while to answer: the person leaves meanwhile.
+  await page.route('**/api/v1/topics/*/documents', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    await route.continue();
+  });
+  await add.getByRole('button', { name: 'Links', exact: true }).click();
+  const links = [1, 2, 3].map((n) => `https://example.org/${tag}/${n}`);
+  await add.getByLabel('Endereços').fill(links.join('\n'));
+  await add.getByRole('button', { name: 'Incluir 3 itens' }).click();
+  await page.goBack();
+  await expect(page.getByLabel('Sua pergunta')).toBeVisible();
+  await openAdd(page);
+  await expect(add.getByText(/3 de 3 enviados/)).toBeVisible();
+});
+
 test('AC-2: Beto without the permission has no "Adicionar conteúdo", nor its page, and the API says 403', async ({
   browser,
   viewport,
@@ -258,7 +375,12 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     );
     await page.reload();
     const add = await openAdd(page);
-    for (const way of ['Arquivos', 'Links', 'Áudio e vídeo']) {
+    for (const way of [
+      'Arquivos',
+      'Links',
+      'Pesquisar na web',
+      'Áudio e vídeo',
+    ]) {
       await add.getByRole('button', { name: way, exact: true }).click();
       const serious = (
         await new AxeBuilder({ page }).analyze()

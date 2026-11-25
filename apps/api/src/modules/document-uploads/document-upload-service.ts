@@ -649,7 +649,7 @@ function sourceOf(
     };
   return {
     kind: linkKindOf(request),
-    name: request.url,
+    name: request.title ?? request.url,
     url: request.url,
     sha256: null,
     bytes: null,

@@ -63,45 +63,60 @@ export function registerDocIngestMac(
   );
 }
 
+type Owner = Parameters<DocIngestQueue['step']>[0];
+
 async function ingest(
   queue: DocIngestQueue,
   input: { job: DocIngestJob; vault: string },
 ): Promise<void> {
-  const { job, vault } = input;
+  const { job } = input;
   const owner = { jobId: job.id, worker: WORKER, leaseId: job.leaseId };
   const { source } = job;
-  if (source.kind !== 'file' && BROKEN_HOST.test(source.url)) {
-    await queue.complete(owner, {
-      ...owner,
-      outcome: {
-        state: 'failed',
-        failure: 'conversion-failed',
-        detail: 'firecrawl: HTTP 404; jina: HTTP 404',
-      },
-      spendUsd: 0,
-    });
-    return;
-  }
-  if (source.kind === 'list') {
-    // What `yt-dlp --flat-playlist` says of a channel: titles and durations, nothing taken.
-    const entries = [1, 2, 3].map((n) => ({
-      url: new URL(`/watch?v=${slugOf(source.url)}-aula${n}`, source.url).href,
-      title: `Aula ${n}`,
-      durationS: n * 600,
-    }));
-    await queue.list(owner, { ...owner, entries });
-    return;
-  }
-  if (source.kind === 'recording') {
-    // The sound yt-dlp would bring; its content is the link's own, so no two are the same.
-    const sound = Buffer.from(`ID3 sound of ${source.url}`);
-    await queue.adopt(owner, {
-      body: Readable.from([sound]),
-      bytes: sound.length,
-      name: `Gravação ${slugOf(source.url)}.m4a`,
-    });
-    return;
-  }
+  if (source.kind !== 'file' && BROKEN_HOST.test(source.url))
+    return broken(queue, owner);
+  if (source.kind === 'list')
+    return queue.list(owner, { ...owner, entries: entriesOf(source.url) });
+  if (source.kind === 'recording') return bringSound(queue, owner, source.url);
+  return write(queue, owner, input);
+}
+
+const broken = (queue: DocIngestQueue, owner: Owner): Promise<void> =>
+  queue.complete(owner, {
+    ...owner,
+    outcome: {
+      state: 'failed',
+      failure: 'conversion-failed',
+      detail: 'firecrawl: HTTP 404; jina: HTTP 404',
+    },
+    spendUsd: 0,
+  });
+
+/** What `yt-dlp --flat-playlist` says of a channel: titles and durations, nothing taken. */
+const entriesOf = (link: string) =>
+  [1, 2, 3].map((n) => ({
+    url: new URL(`/watch?v=${slugOf(link)}-aula${n}`, link).href,
+    title: `Aula ${n}`,
+    durationS: n * 600,
+  }));
+
+async function bringSound(
+  queue: DocIngestQueue,
+  owner: Owner,
+  link: string,
+): Promise<void> {
+  const sound = toneOf(link);
+  await queue.adopt(owner, {
+    body: Readable.from([sound]),
+    bytes: sound.length,
+    name: `Gravação ${slugOf(link)}.wav`,
+  });
+}
+
+async function write(
+  queue: DocIngestQueue,
+  owner: Owner,
+  { job, vault }: { job: DocIngestJob; vault: string },
+): Promise<void> {
   if (job.collection)
     await makeTopic(vault, { slug: job.topic, title: job.collection.title });
   for (const state of ['classifying', 'mapping'] as const)
@@ -112,6 +127,32 @@ async function ingest(
     outcome: { state: 'ready', document, review: false },
     spendUsd: 0,
   });
+}
+
+/** The sound yt-dlp would bring: a second of a tone, the link's own, so no two are the same. */
+function toneOf(link: string): Buffer {
+  const rate = 8_000;
+  const hertz = 200 + (createHash('sha256').update(link).digest()[0] ?? 0) * 4;
+  const samples = Buffer.alloc(rate * 2);
+  for (let at = 0; at < rate; at += 1)
+    samples.writeInt16LE(
+      Math.round(8_000 * Math.sin((2 * Math.PI * hertz * at) / rate)),
+      at * 2,
+    );
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + samples.length, 4);
+  header.write('WAVEfmt ', 8);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(rate, 24);
+  header.writeUInt32LE(rate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(samples.length, 40);
+  return Buffer.concat([header, samples]);
 }
 
 /** What kb-map convert would leave in the vault for the job's file or link. */

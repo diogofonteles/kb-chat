@@ -36,6 +36,7 @@ export type ContentSource =
       readonly url: string;
       /** What the search found it to be; left out, the address decides. */
       readonly as?: 'page' | 'recording';
+      readonly title?: string;
     };
 
 /** Where an item's send is; one at a time (PD-05: a union, never two flags). */
@@ -83,7 +84,7 @@ export interface SendSummary {
 const ACTIVE = new Set<SendPhase['kind']>(['waiting', 'hashing', 'sending']);
 
 const nameOf = (source: ContentSource): string =>
-  source.kind === 'url' ? source.url : source.path;
+  source.kind === 'url' ? (source.title ?? source.url) : source.path;
 
 const ALREADY: SendPhase = {
   kind: 'duplicate',
@@ -228,10 +229,15 @@ export class ContentSender {
 
   private sendLink(
     entry: ContentSend,
-    { url, as }: Extract<ContentSource, { kind: 'url' }>,
+    { url, as, title }: Extract<ContentSource, { kind: 'url' }>,
   ): Observable<unknown> {
     this.put(entry.key, { kind: 'sending', percent: 0 });
-    const request = { kind: 'url' as const, url, ...(as && { as }) };
+    const request = {
+      kind: 'url' as const,
+      url,
+      ...(as && { as }),
+      ...(title && { title }),
+    };
     return this.create(entry, request).pipe(
       map((answer) => this.answered(entry.key, answer)),
     );
@@ -323,7 +329,12 @@ export class ContentSender {
   private create(
     entry: ContentSend,
     source:
-      | { kind: 'url'; url: string; as?: 'page' | 'recording' }
+      | {
+          kind: 'url';
+          url: string;
+          as?: 'page' | 'recording';
+          title?: string;
+        }
       | { kind: 'file'; name: string; bytes: number; sha256: string },
   ): Observable<CreateDocumentUploadResponse> {
     const { topic, level, batch } = entry.target;

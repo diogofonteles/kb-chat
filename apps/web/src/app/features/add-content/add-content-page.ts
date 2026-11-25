@@ -121,6 +121,14 @@ const countsOfFiles = (files: readonly ChosenFile[]): ContentCounts => {
   };
 };
 
+/** A found page's title as the API takes it: one line, at most 300. */
+const titleOf = (title: string): string =>
+  title
+    .replace(/[\p{Cc}\s]+/gu, ' ')
+    .trim()
+    .slice(0, 300)
+    .trim();
+
 const countsOfPicks = (picks: readonly PickedWebResult[]): ContentCounts => {
   const page = picks.filter(({ kind }) => kind === 'text').length;
   return { ...NO_CONTENT, page, recording: picks.length - page };
@@ -449,9 +457,10 @@ export class AddContentPage {
         })),
       links: () => this.parsed().links.map(({ url }) => ({ kind: 'url', url })),
       search: () =>
-        this.picks().map(({ url, kind }) => ({
+        this.picks().map(({ url, title, kind }) => ({
           kind: 'url',
           url,
+          ...(titleOf(title) && { title: titleOf(title) }),
           as: kind === 'text' ? 'page' : 'recording',
         })),
       media: () => [],
