@@ -9,6 +9,7 @@ import http.client
 import ipaddress
 import socket
 import ssl
+import time
 import urllib.parse
 from collections.abc import Callable
 from pathlib import Path
@@ -29,6 +30,8 @@ EXTENSIONS = frozenset(
 MAX_BYTES = 2 * 1024**3
 MAX_REDIRECTS = 5
 TIMEOUT_S = 60
+# The whole of it: a server that drips must not hold this Mac.
+DEADLINE_S = 60 * 60
 CHUNK = 1024 * 1024
 PORTS = frozenset({80, 443})
 
@@ -60,7 +63,8 @@ def public_address(host: str, resolving: Resolve = resolve) -> str:
     """An address of `host` on the internet; one that answers with a private one is refused."""
     addresses = resolving(host)
     for address in addresses:
-        if not ipaddress.ip_address(address.split("%")[0]).is_global:
+        ip = ipaddress.ip_address(address.split("%")[0])
+        if not ip.is_global or ip.is_multicast:
             raise NotARecording(f"{host} is not a public address")
     if not addresses:
         raise NotARecording(f"{host} was not found")
@@ -92,7 +96,10 @@ def _open(url: str, resolving: Resolve) -> tuple[http.client.HTTPResponse, str]:
         if parts.scheme not in ("http", "https") or not parts.hostname:
             raise NotARecording("not a web address")
         connection = _connection(parts, public_address(parts.hostname, resolving))
-        target = urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, ""))
+        # As typed, an address may have accents and spaces: the wire has none.
+        path = urllib.parse.quote(parts.path or "/", safe="/%:@!$&'()*+,;=~-._")
+        query = urllib.parse.quote(parts.query, safe="/%:@!$&'()*+,;=~-._?")
+        target = urllib.parse.urlunsplit(("", "", path, query, ""))
         connection.request("GET", target, headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"})
         response = connection.getresponse()
         if response.status not in (301, 302, 303, 307, 308):
@@ -105,40 +112,71 @@ def _open(url: str, resolving: Resolve) -> tuple[http.client.HTTPResponse, str]:
     raise NotARecording("too many redirects")
 
 
-def _name_of(url: str, first: str) -> str:
+# What a file served with no name of its own is called.
+BY_KIND = {
+    "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/wav": "wav",
+    "audio/flac": "flac",
+    "audio/ogg": "ogg",
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
+}
+ANY_FILE = frozenset({"application/octet-stream", "binary/octet-stream"})
+
+
+def _name_of(url: str, first: str, kind: str) -> str:
+    last = ""
     for address in (first, url):
         name = Path(urllib.parse.unquote(urllib.parse.urlsplit(address).path)).name
+        name = "".join(one for one in name if one.isprintable() and one not in "/\\")
         if Path(name).suffix.lower().lstrip(".") in EXTENSIONS:
-            return name[-120:].replace("/", "_")
+            return name[-120:]
+        last = name or last
+    if kind in BY_KIND:
+        return f"{Path(last).stem[-100:] or 'gravacao'}.{BY_KIND[kind]}"
     raise NotARecording("not a sound or video file")
 
 
 def fetch_file(url: str, folder: Path, resolving: Resolve = resolve) -> Path:
     """The file at `url`, in `folder`; refused when it is not one, or is too large."""
     try:
-        response, final = _open(url, resolving)
-    except (OSError, http.client.HTTPException) as err:
+        return _fetch(url, folder, resolving)
+    # ValueError: an address http.client cannot take (a port out of range, a broken host).
+    except (OSError, http.client.HTTPException, ValueError) as err:
         raise NotARecording(f"it could not be fetched: {err}") from err
+
+
+def _fetch(url: str, folder: Path, resolving: Resolve) -> Path:
+    response, final = _open(url, resolving)
     with response:
         if response.status != 200:
             raise NotARecording(f"the site answered HTTP {response.status}")
         kind = (response.getheader("Content-Type") or "").split(";")[0].strip().lower()
-        if not kind.startswith(("audio/", "video/")) and kind != "application/octet-stream":
+        if not kind.startswith(("audio/", "video/")) and kind not in ANY_FILE:
             raise NotARecording(f"the address is {kind or 'of no kind'}, not a sound or video")
-        target = folder / _name_of(final, url)
+        target = folder / _name_of(final, url, kind)
         size = int(response.getheader("Content-Length") or 0)
         if size > MAX_BYTES:
             raise TooLarge("the file is larger than 2 GB")
-        _copy(response, target)
+        _copy(response, target, size)
     return target
 
 
-def _copy(response: http.client.HTTPResponse, target: Path) -> None:
+def _copy(response: http.client.HTTPResponse, target: Path, size: int) -> None:
     written = 0
+    until = time.monotonic() + DEADLINE_S
     with target.open("wb") as out:
-        while chunk := response.read(CHUNK):
+        # read1: what is there now, so a server that drips meets the deadline too.
+        while chunk := response.read1(CHUNK):
             written += len(chunk)
             if written > MAX_BYTES:
-                target.unlink(missing_ok=True)
                 raise TooLarge("the file is larger than 2 GB")
+            if time.monotonic() > until:
+                raise NotARecording("the site took too long")
             out.write(chunk)
+    # Cut half-way it would play, and enter as if it were the whole.
+    if size and written != size:
+        raise NotARecording(f"only {written} of {size} bytes came")

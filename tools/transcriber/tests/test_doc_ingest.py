@@ -549,7 +549,8 @@ def test_a_site_that_refuses_for_a_moment_is_asked_again(tmp_path, monkeypatch):
     found = YtDlp("yt-dlp", "/opt/node").download("https://youtu.be/x", tmp_path)
     assert found.name == "Aula [x].m4a"
     assert waited == [10]
-    assert runs[0][:4] == ["yt-dlp", "--ignore-config", "--js-runtimes", "node:/opt/node"]
+    assert runs[0][:4] == ["yt-dlp", "--ignore-config", "--use-extractors", "default,-generic"]
+    assert runs[0][4:6] == ["--js-runtimes", "node:/opt/node"]
 
 
 def test_what_will_not_pass_fails_at_once_and_refused_three_times_it_fails(tmp_path, monkeypatch):
@@ -591,7 +592,6 @@ def test_a_budget_that_ended_waits_and_a_missing_key_is_configuration(tmp_path, 
     for words in (
         "kb-map: no OpenRouter key: on this Mac run …",
         "kb-map: kb is not on PATH",
-        "firecrawl: no FIRECRAWL_API_KEY in the environment or the Keychain",
     ):
         with pytest.raises(DocIngestFailed) as failed:
             answer(1, words).convert("t", "/x", **given)
@@ -611,3 +611,19 @@ def test_a_live_stream_and_a_too_large_file_say_so(tmp_path, monkeypatch, output
     with pytest.raises(DocIngestFailed) as refused:
         YtDlp().download("https://youtu.be/x", tmp_path)
     assert refused.value.failure == failure
+
+
+def test_a_dead_link_without_a_firecrawl_key_is_only_a_dead_link(fake_api, vault):
+    """Firecrawl is optional (Jina reads without it): the Mac is not missing anything."""
+    fake_api.jobs[:] = [dict(URL_JOB)]
+    detail = (
+        "firecrawl: no FIRECRAWL_API_KEY in the environment or the Keychain; "
+        "jina: Jina answered HTTP 404"
+    )
+    mac = worker(fake_api, vault, FakeKbMap(vault, {"state": "failed", "detail": detail}))
+    kinds = mac.kinds
+    assert mac.step() == "job"
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["failure"] == "conversion-failed"
+    assert fake_api.bodies("fail") == []
+    assert mac.kinds == kinds

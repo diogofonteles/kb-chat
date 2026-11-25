@@ -61,3 +61,12 @@ def test_the_middle_of_a_page_is_never_touched():
     middle = "Este site usa cookies. Veja a nossa política de privacidade."
     lines = [f"linha {n}" for n in range(50)] + [middle] + [f"fim {n}" for n in range(50)]
     assert middle in clean_page("\n".join(lines))
+
+
+def test_an_article_about_cookies_keeps_its_paragraphs():
+    article = "# Cookies e consentimento\n\n" + "\n\n".join(
+        f"Parágrafo {n}: cookies pedem consentimento e privacidade." for n in range(12)
+    )
+    cleaned = clean_page(article)
+    assert "Parágrafo 0" in cleaned
+    assert "Parágrafo 8" in cleaned

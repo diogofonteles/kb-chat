@@ -58,6 +58,9 @@ def isolated_mac(tmp_path_factory, monkeypatch):
     """Every test: a HOME of its own, the config under it, and no real Keychain or launchctl."""
     home = tmp_path_factory.mktemp("home")
     monkeypatch.setenv("HOME", str(home))
+    # No test ever reads a real key: a failed assertion would print it.
+    for name in ("OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "FIRECRAWL_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
     # A test with the API down does not wait for it to come back.
     monkeypatch.setattr("transcriber.api.UNREACHABLE_WAITS_S", ())
     from transcriber import cli

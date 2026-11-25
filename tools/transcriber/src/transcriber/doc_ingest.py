@@ -267,7 +267,10 @@ class YtDlp:
 
     def _command(self, *args: str) -> list[str]:
         runtime = ["--js-runtimes", f"node:{self.node}"] if self.node else []
-        return [self.binary, "--ignore-config", *runtime, *args]
+        # Each site's own extractor: the generic one follows an address anywhere, this Mac's
+        # network included.
+        own = ["--use-extractors", "default,-generic"]
+        return [self.binary, "--ignore-config", *own, *runtime, *args]
 
     def download(self, url: str, folder: Path) -> Path:
         # Any other site is fetched by this Mac itself, never by yt-dlp (recording_file.py).

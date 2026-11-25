@@ -1,6 +1,7 @@
 """A recording that is a file: never from inside the owner's network, whatever the address says."""
 
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -70,6 +71,22 @@ class Site(BaseHTTPRequestHandler):
             self.end_headers()
             return
         body = b"ID3 som"
+        if self.path.endswith("corta.mp3"):
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/mpeg")
+            self.send_header("Content-Length", "1000000")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path.endswith("pinga.mp3"):
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/mpeg")
+            self.end_headers()
+            for _ in range(40):
+                self.wfile.write(b"x")
+                self.wfile.flush()
+                time.sleep(0.05)
+            return
         kind = "text/html" if self.path.endswith("pagina.mp3") else "audio/mpeg"
         self.send_response(200)
         self.send_header("Content-Type", kind)
@@ -119,7 +136,32 @@ def test_what_is_not_a_recording_or_is_too_large_says_so(site, tmp_path):
         fetch_file("http://podcast.example/pagina.mp3", tmp_path, resolving)
     with pytest.raises(TooLarge):
         fetch_file("http://podcast.example/grande.mp3", tmp_path, resolving)
-    with pytest.raises(NotARecording, match="not a sound or video file"):
-        fetch_file("http://podcast.example/arquivo", tmp_path, resolving)
+    # No name of its own, but the site says what it is.
+    assert fetch_file("http://podcast.example/arquivo", tmp_path, resolving).name == "arquivo.mp3"
     with pytest.raises(NotARecording, match="port"):
         fetch_file("http://podcast.example:8080/a.mp3", tmp_path, resolving)
+
+
+def test_a_recording_cut_half_way_is_not_the_whole(site, tmp_path):
+    with pytest.raises(NotARecording, match="only 7 of 1000000 bytes"):
+        fetch_file("http://podcast.example/corta.mp3", tmp_path, names(podcast=PUBLIC))
+
+
+def test_a_server_that_drips_meets_the_deadline(site, tmp_path, monkeypatch):
+    monkeypatch.setattr(recording_file, "DEADLINE_S", 0.3)
+    started = time.monotonic()
+    with pytest.raises(NotARecording, match="too long"):
+        fetch_file("http://podcast.example/pinga.mp3", tmp_path, names(podcast=PUBLIC))
+    assert time.monotonic() - started < 1.5
+
+
+def test_an_address_as_typed_works_and_a_broken_one_is_refused(site, tmp_path):
+    resolving = names(podcast=PUBLIC)
+    found = fetch_file("http://podcast.example/palestra coração.mp3?a=é", tmp_path, resolving)
+    assert found.name == "palestra coração.mp3"
+    for url in ("http://podcast.example:99999/a.mp3", "http://[bad/a.mp3"):
+        with pytest.raises((NotARecording, ValueError)):
+            fetch_file(url, tmp_path, resolving)
+    # A name with what no file system takes.
+    strange = fetch_file("http://podcast.example/a%00%2Fb.mp3", tmp_path, resolving)
+    assert strange.parent == tmp_path

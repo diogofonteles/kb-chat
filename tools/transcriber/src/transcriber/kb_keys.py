@@ -16,9 +16,10 @@ from collections.abc import Mapping
 from typing import Protocol
 
 KB_KEYS_SERVICE = "nova-alexandria-transcriber-kb"
-# What kb reads (kb 0.0.12): OpenRouter decides and generates; the others are kept for it.
+# What kb reads (kb 0.0.12): OpenRouter decides and generates; the others are kept for it. The
+# last is kb-map's, for reading links (without it, Jina reads them).
 REQUIRED_KEY = "OPENROUTER_API_KEY"
-KB_KEY_NAMES = (REQUIRED_KEY, "ANTHROPIC_API_KEY", "OPENAI_API_KEY")
+KB_KEY_NAMES = (REQUIRED_KEY, "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "FIRECRAWL_API_KEY")
 # A key goes into the line `security -i` reads: no space, quote or newline may end it early.
 KEY_PATTERN = re.compile(r"^[A-Za-z0-9_.:+/=-]{16,512}\Z")
 # What the app shows (the reason `kb-ai-key-missing`), with what to do on the Mac.
@@ -28,7 +29,7 @@ KB_MISSING = "o kb não está no PATH do serviço (ou a pasta do vault não exis
 # for a key or a kb that is not on this Mac.
 CONFIGURATION_ERROR = re.compile(
     r"_API_KEY is not set|model is required|missing API key|no OpenRouter key"
-    r"|kb is not on PATH|no FIRECRAWL_API_KEY in",
+    r"|kb is not on PATH",
     re.IGNORECASE,
 )
 

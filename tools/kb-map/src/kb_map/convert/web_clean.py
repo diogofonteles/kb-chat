@@ -6,6 +6,8 @@ import re
 
 # How many lines of each end may hold it.
 EDGE_LINES = 30
+# At the foot, less: an article's last paragraphs are its own.
+TAIL_LINES = 6
 # A consent notice is a paragraph or two; anything longer is the page's own text.
 NOTICE_CHARS = 1_500
 
@@ -36,13 +38,20 @@ def _is_around(line: str) -> bool:
     return len(text) <= NOTICE_CHARS and bool(_COOKIES.search(text) and _CONSENT.search(text))
 
 
+def _ends_of(lines: list[str]) -> tuple[int, int]:
+    """Where the page's text begins (its first heading, or a few lines) and ends."""
+    text = [at for at, line in enumerate(lines) if line.startswith("#")]
+    head = min(text[0] if text else EDGE_LINES, EDGE_LINES, len(lines))
+    return head, max(head, len(lines) - TAIL_LINES)
+
+
 def clean_page(markdown: str) -> str:
     """The page without what is around its text, at its two ends."""
     lines = markdown.splitlines()
-    tail = max(EDGE_LINES, len(lines) - EDGE_LINES)
+    head, tail = _ends_of(lines)
     kept = [
         line
         for at, line in enumerate(lines)
-        if not ((at < EDGE_LINES or at >= tail) and _is_around(line))
+        if not ((at < head or at >= tail) and _is_around(line))
     ]
     return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip() + "\n"
