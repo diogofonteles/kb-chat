@@ -55,6 +55,7 @@ export const RULES = [
 
   // Parts with their own tests.
   { match: /^tools\/transcriber\//, transcriber: true },
+  { match: /^tools\/kb-map\//, kbMap: true },
   { match: /^deploy\//, ...api, codex: true }, // deploy-limits.test.ts reads deploy/
   { match: /^e2e\/tools\// }, // scripts run by hand: lint and typecheck only
   { match: /^e2e\/tutorial\//, ...appE2e(['tutorial']) },
@@ -213,11 +214,20 @@ function e2eMatrix(e2e) {
   });
 }
 
-const selection = ({ reason, full, unit, transcriber, codex, e2e }) => ({
+const selection = ({
+  reason,
+  full,
+  unit,
+  transcriber,
+  kbMap,
+  codex,
+  e2e,
+}) => ({
   full,
   reason,
   unit: { include: unit.map((name) => UNITS[name]) },
   transcriber,
+  kbMap,
   codex,
   e2e: { include: e2eMatrix(e2e) },
 });
@@ -228,6 +238,7 @@ const fullSuite = (reason) =>
     reason,
     unit: Object.keys(UNITS),
     transcriber: true,
+    kbMap: true,
     codex: true,
     e2e: everyE2e,
   });
@@ -255,6 +266,7 @@ export function selectJobs({ event, base, paths }) {
       rules.some((rule) => rule.unit?.includes(name)),
     ),
     transcriber: rules.some((rule) => rule.transcriber),
+    kbMap: rules.some((rule) => rule.kbMap),
     codex: rules.some((rule) => rule.codex),
     e2e,
   });
@@ -280,6 +292,7 @@ function writeOutputs(chosen) {
     `unit=${JSON.stringify(chosen.unit)}`,
     `run_unit=${chosen.unit.include.length > 0}`,
     `transcriber=${chosen.transcriber}`,
+    `kb_map=${chosen.kbMap}`,
     `codex=${chosen.codex}`,
     `e2e=${JSON.stringify(chosen.e2e)}`,
     `run_e2e=${chosen.e2e.include.length > 0}`,

@@ -21,6 +21,7 @@ jobs:
       unit: ${{ steps.select.outputs.unit }}
       run_unit: ${{ steps.select.outputs.run_unit }}
       transcriber: ${{ steps.select.outputs.transcriber }}
+      kb_map: ${{ steps.select.outputs.kb_map }}
       codex: ${{ steps.select.outputs.codex }}
       e2e: ${{ steps.select.outputs.e2e }}
       run_e2e: ${{ steps.select.outputs.run_e2e }}
@@ -106,6 +107,30 @@ jobs:
           version: '0.13.6'
           enable-cache: true
           cache-dependency-glob: tools/transcriber/uv.lock
+      - run: ../ci/retry.sh 3 120 uv sync --locked
+        timeout-minutes: 7
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run pytest
+
+  kb-map:
+    # The collection map and the converters' seam (ADR 0039, KBC-148): Python. The converters
+    # themselves (Docling, MarkItDown) are only on the owner's Mac; the tests use fakes.
+    name: kb-map (ruff, pytest)
+    needs: changes
+    if: needs.changes.outputs.kb_map == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: tools/kb-map
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.6'
+          enable-cache: true
+          cache-dependency-glob: tools/kb-map/uv.lock
       - run: ../ci/retry.sh 3 120 uv sync --locked
         timeout-minutes: 7
       - run: uv run ruff check
@@ -238,7 +263,7 @@ jobs:
   verdict:
     name: CI verdict
     if: always()
-    needs: [changes, checks, test, transcriber, e2e, codex-sandbox, board-edge]
+    needs: [changes, checks, test, transcriber, kb-map, e2e, codex-sandbox, board-edge]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

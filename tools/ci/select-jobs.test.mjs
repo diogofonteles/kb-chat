@@ -30,6 +30,7 @@ function assertFull(chosen) {
   assert.equal(chosen.full, true);
   assert.deepEqual(unitNames(chosen), ['api', 'web', 'libs']);
   assert.equal(chosen.transcriber, true);
+  assert.equal(chosen.kbMap, true);
   assert.equal(chosen.codex, true);
   assert.deepEqual(e2eShards(chosen), FULL_E2E);
   assert.ok(chosen.e2e.include.every((job) => job.specs === ''));
@@ -110,6 +111,7 @@ for (const path of [
     assert.equal(chosen.full, false);
     assert.deepEqual(unitNames(chosen), []);
     assert.equal(chosen.transcriber, false);
+    assert.equal(chosen.kbMap, false);
     assert.equal(chosen.codex, false);
     assert.deepEqual(chosen.e2e.include, []);
   });
@@ -117,6 +119,15 @@ for (const path of [
 test('the transcriber runs alone', () => {
   const chosen = onPullRequest('tools/transcriber/src/main.py');
   assert.equal(chosen.transcriber, true);
+  assert.equal(chosen.kbMap, false);
+  assert.deepEqual(unitNames(chosen), []);
+  assert.deepEqual(chosen.e2e.include, []);
+});
+
+test('kb-map runs alone', () => {
+  const chosen = onPullRequest('tools/kb-map/src/kb_map/cli.py');
+  assert.equal(chosen.kbMap, true);
+  assert.equal(chosen.transcriber, false);
   assert.deepEqual(unitNames(chosen), []);
   assert.deepEqual(chosen.e2e.include, []);
 });
