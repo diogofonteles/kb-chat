@@ -61,6 +61,8 @@ EXCERPT_CHARS = 3_000
 # Where kb puts it: a document of the collection, out of it until a person says so.
 QUARANTINE = "raw/_quarantine/"
 QUARANTINED = re.compile(r"^raw/_quarantine/(?:[^/.][^/]*/)*[^/.][^/]*\.md\Z")
+# A document a person may take out: never kb's own folders.
+SOURCE = re.compile(r"^raw/(?!_)(?:[^/.][^/]*/)*[^/.][^/]*\.md\Z")
 log = logging.getLogger("transcriber")
 
 
@@ -503,6 +505,26 @@ class DocIngester:
         if not (folder / document).is_file():
             raise KbStepFailed("review accept", f"{document} was not restored")
         return Converted("converted", document, title_of(self.publisher.vault, topic, document))
+
+    def move(self, job: dict) -> None:
+        """Out of the collection, or back in it (KBC-187): where it already is, nothing moves."""
+        topic, document = job["topic"], str(job["source"]["document"])
+        if not SOURCE.match(document):
+            raise DocIngestFailed("not-accepted", f"not a document of a collection: {document}")
+        out = job["source"]["kind"] == "remove"
+        folder = self.publisher.vault / topic
+        inside = folder / document
+        if inside.is_file() != out:
+            return
+        if out:
+            self.publisher.quarantine(topic, document)
+        else:
+            if not (folder / document.replace("raw/", QUARANTINE, 1)).is_file():
+                raise DocIngestFailed("conversion-failed", "it is not in kb's quarantine any more")
+            self.publisher.restore(topic, document)
+        if inside.is_file() == out:
+            raise KbStepFailed("review accept", f"{document} was not moved")
+        self.publisher.reindex(topic)
 
     def finish(self, job: dict, converted: Converted, say) -> float:
         """kb's steps and the map, for a new document; what the whole job spent."""

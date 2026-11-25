@@ -88,6 +88,21 @@ class FakeKb:
         spend = 0.0 if step == "index" else self.spend
         return KbRun(ok=True, output=self.outputs.get(step, f"{step} ok"), spend_usd=spend)
 
+    def _decided(self, topic: str, item: str) -> KbRun | None:
+        """An item a person's decision left in kb's own file (KBC-187)."""
+        queue = self.vault / topic / ".decisions" / "review.jsonl"
+        rows = queue.read_text(encoding="utf-8").splitlines() if queue.is_file() else []
+        for row in map(json.loads, rows):
+            if row["id"] != item:
+                continue
+            inside = self.vault / topic / row["subject"]
+            apart = self.vault / topic / row["subject"].replace("raw/", "raw/_quarantine/", 1)
+            source, target = (inside, apart) if row["queue"] == "remove" else (apart, inside)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source.rename(target)
+            return KbRun(ok=True, output="moved")
+        return None
+
     def refusals(self, topic: str) -> KbRun:
         """kb's queue, with the notes it prints after the JSON."""
         refused = sorted((self.vault / topic / "raw" / "_quarantine").rglob("*.md"))
@@ -106,6 +121,9 @@ class FakeKb:
 
     def accept(self, topic: str, item: str) -> KbRun:
         self.calls.append(("accept", item, 0.0))
+        decided = self._decided(topic, item)
+        if decided:
+            return decided
         for one in (self.vault / topic / "raw" / "_quarantine").rglob(f"{item[3:]}.md"):
             inside = one.relative_to(self.vault / topic / "raw" / "_quarantine")
             target = self.vault / topic / "raw" / inside

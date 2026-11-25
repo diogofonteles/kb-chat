@@ -21,9 +21,11 @@ import os
 import re
 import shutil
 import subprocess
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
@@ -378,6 +380,49 @@ class KbPublisher:
             folder = target.parent
             if folder.is_dir() and not any(folder.iterdir()):
                 folder.rmdir()
+
+    def quarantine(self, topic: str, document: str) -> None:
+        """A document out of the collection (KBC-187): kb moves it to its quarantine, with what
+        it needs to bring it back, by an item of its own review queue that says a person did."""
+        self._decide(topic, document, queue="remove", action={"reason": "removed_by_person"})
+
+    def restore(self, topic: str, document: str) -> None:
+        """And back: by the item kb may have for it, or by one that says a person did."""
+        listed = self.kb.refusals(topic)
+        if listed.ok and review_item_of(listed.output, document):
+            self.accept(topic, document)
+            return
+        action = {"quarantined": True, "reason": "manual", "stage": "manual"}
+        self._decide(topic, document, queue="gate", action=action)
+
+    def _decide(self, topic: str, document: str, *, queue: str, action: dict) -> None:
+        item = f"rv-{uuid.uuid4().hex[:10]}"
+        row = {
+            "id": item,
+            "queue": queue,
+            "purpose": "manual",
+            "subject": document,
+            "question": "manual",
+            "probability": 1,
+            "receipt_key": "",
+            "evidence": "a person, in the app",
+            "action": action,
+            "status": "pending",
+            "created": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        folder = self.vault / topic / ".decisions"
+        folder.mkdir(exist_ok=True)
+        with (folder / "review.jsonl").open("a", encoding="utf-8") as queue_file:
+            queue_file.write(json.dumps(row, ensure_ascii=False) + "\n")
+        done = self.kb.accept(topic, item)
+        if not done.ok:
+            raise KbStepFailed("review accept", done.output)
+
+    def reindex(self, topic: str) -> None:
+        """The search index as the collection is now: local, spends nothing."""
+        run = self.kb.run("index", topic, 0.0)
+        if not run.ok:
+            raise KbStepFailed("index", run.output)
 
     def accept(self, topic: str, document: str) -> None:
         """The document kb refused, back in the collection, by its item in kb's review queue."""

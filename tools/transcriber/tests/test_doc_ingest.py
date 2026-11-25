@@ -773,3 +773,84 @@ def test_the_real_yt_dlp_opens_nothing_through_a_forwarding_page(tmp_path, monke
             YtDlp().download(url, tmp_path)
     server.shutdown()
     assert touched == []
+
+
+def move_job(kind: str, document: str) -> dict:
+    return {**FILE_JOB, "budgetUsd": 0, "source": {"kind": kind, "document": document}}
+
+
+def a_document(vault: Path) -> Path:
+    inside = vault / "hermetismo" / "raw" / "articles" / "o-caibalion.md"
+    inside.parent.mkdir(parents=True, exist_ok=True)
+    inside.write_text("---\ntitle: O Caibalion\n---\n", encoding="utf-8")
+    return inside
+
+
+def test_a_document_goes_out_of_the_collection_and_back(fake_api, vault):
+    inside = a_document(vault)
+    apart = vault / "hermetismo" / "raw" / "_quarantine" / "articles" / "o-caibalion.md"
+    kb = FakeKb(vault)
+    for kind, there, out in (("remove", apart, inside), ("restore", inside, apart)):
+        fake_api.jobs[:] = [move_job(kind, "raw/articles/o-caibalion.md")]
+        worker(fake_api, vault, kb=kb).step()
+        assert fake_api.bodies("doc-result")[-1]["outcome"] == {"state": "moved"}
+        assert there.is_file()
+        assert not out.is_file()
+    assert [step for step, *_ in kb.calls] == ["accept", "index", "accept", "index"]
+    # Nothing is paid for it.
+    assert all(budget == 0 for _step, _topic, budget in kb.calls)
+    assert [body["spendUsd"] for body in fake_api.bodies("doc-result")] == [0, 0]
+
+
+def test_what_is_where_it_was_asked_to_be_does_not_move_again(fake_api, vault):
+    inside = a_document(vault)
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("restore", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    inside.unlink()
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    states = [body["outcome"]["state"] for body in fake_api.bodies("doc-result")]
+    assert states == ["moved", "moved"]
+    assert kb.calls == []
+
+
+def test_what_is_not_in_the_quarantine_any_more_cannot_come_back(fake_api, vault):
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("restore", "raw/articles/sumiu.md")]
+    worker(fake_api, vault, kb=kb).step()
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["state"] == "failed"
+    assert "quarantine any more" in result["outcome"]["detail"]
+    assert kb.calls == []
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        "wiki/concepts/ritmo.md",
+        "raw/_originals/a.md",
+        "raw/../../outro/raw/a.md",
+        "raw/.git/a.md",
+        "raw/articles/a.txt",
+        "/raw/articles/a.md",
+    ],
+)
+def test_only_a_document_of_the_collection_is_moved(fake_api, vault, document):
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", document)]
+    worker(fake_api, vault, kb=kb).step()
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["state"] == "failed"
+    assert kb.calls == []
+
+
+def test_a_move_kb_refuses_goes_back_to_the_queue(fake_api, vault, monkeypatch):
+    inside = a_document(vault)
+    kb = FakeKb(vault)
+    monkeypatch.setattr(kb, "accept", lambda *_: KbRun(ok=False, output="kb: no such item"))
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    (failed,) = fake_api.bodies("fail")
+    assert "no such item" in failed["detail"]
+    assert inside.is_file()
