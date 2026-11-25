@@ -88,7 +88,8 @@ def provenance(
 
 def _frontmatter_of(path: Path) -> dict:
     with path.open(encoding="utf-8") as handle:
-        head = handle.read(8192)
+        # Long lists of tags and links go past a few KB: the keys are at the end of them.
+        head = handle.read(65_536)
     return split_frontmatter(head).data
 
 

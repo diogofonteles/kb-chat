@@ -57,7 +57,7 @@ const ON_ITS_WAY = $localize`:@@addContent.phase.onItsWay:Já está a caminho`;
         <ui-progress [value]="(percent() ?? 0) / 100" />
       }
       @if (error(); as message) {
-        <p class="problem" role="alert">{{ message }}</p>
+        <p class="problem">{{ message }}</p>
       }
     </div>
     <ui-pill [tone]="tone()">{{ label() }}</ui-pill>

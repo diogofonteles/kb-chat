@@ -20,7 +20,6 @@ export const DOCUMENT_UPLOAD_EXTENSIONS = [
   'docx',
   'doc',
   'pptx',
-  'ppt',
   'xlsx',
   'xls',
   'odt',

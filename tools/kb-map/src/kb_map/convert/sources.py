@@ -10,7 +10,6 @@ KINDS_BY_EXTENSION = {
     ".docx": "office",
     ".doc": "office",
     ".pptx": "office",
-    ".ppt": "office",
     ".xlsx": "office",
     ".xls": "office",
     ".odt": "office",

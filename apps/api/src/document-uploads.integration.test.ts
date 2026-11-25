@@ -2,6 +2,10 @@ import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CreateDocumentUploadResponse } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
+import { FsDocumentUploadFiles } from './adapters/fs-document-upload-files.js';
+import { JsonDocumentUploadStore } from './adapters/json-document-upload-store.js';
+import { DocIngestQueue } from './modules/document-uploads/doc-ingest-queue.js';
+import { UploadRecords } from './modules/document-uploads/upload-records.js';
 import { LOCAL, closeApp } from '../test/ai-app-harness.js';
 import {
   DOCUMENTS,
@@ -366,16 +370,23 @@ describe('Sending documents and links from the app (KBC-149)', () => {
   it('keeps the uploads across a restart', async () => {
     const { media, ana } = await world();
     const upload = await sentFile(media, ana);
-    const stored = JSON.parse(
-      await readFile(
+    // What the next start reads: the same item, still waiting, and the Mac can take it.
+    const records = await UploadRecords.open(
+      new JsonDocumentUploadStore(
         join(media.started.state, 'document-uploads.json'),
-        'utf8',
       ),
     );
-    expect(stored.uploads.map((one: { id: string }) => one.id)).toEqual([
-      upload.id,
-    ]);
-    expect(stored.uploads[0].owner.email).toBe('ana@example.com');
+    expect(records.get(upload.id)).toMatchObject({
+      state: 'received',
+      owner: { email: 'ana@example.com' },
+    });
+    const queue = new DocIngestQueue({
+      records,
+      files: new FsDocumentUploadFiles(join(media.started.state, 'gone')),
+      budgetUsd: () => 0.5,
+      now: () => new Date(),
+    });
+    expect(queue.lease('mac')?.id).toBe(upload.id);
   });
 });
 
