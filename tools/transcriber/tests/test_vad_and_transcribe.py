@@ -150,3 +150,11 @@ def test_spans_without_finite_times_are_dropped_before_upload():
     (segment,) = sanitized(result)["segments"]
     assert segment["text"] == " kept"
     assert [word["word"] for word in segment["words"]] == [" kept"]
+
+
+def test_an_endless_word_is_cut_instead_of_losing_the_whole_transcript():
+    word = {"word": "あ" * 5_000, "start": 0.0, "end": 1.0, "probability": 0.1}
+    segment = {"start": 0.0, "end": 1.0, "text": "x" * 20_000, "words": [word]}
+    (kept,) = sanitized({"segments": [segment]})["segments"]
+    assert len(kept["words"][0]["word"]) == 200
+    assert len(kept["text"]) == 10_000

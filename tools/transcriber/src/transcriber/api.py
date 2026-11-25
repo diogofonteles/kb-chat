@@ -27,6 +27,15 @@ class ApiError(Exception):
         self.status = status
 
 
+def _why(answer: bytes) -> str:
+    """The API's own words (": Invalid raw.chunks.3…"), when it said any."""
+    try:
+        message = json.loads(answer)["error"]["message"]
+    except (ValueError, KeyError, TypeError):
+        return ""
+    return f": {str(message)[:300]}"
+
+
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
@@ -247,12 +256,12 @@ class ApiClient:
     def _on_job(self, job: dict, action: str, body: dict) -> bool:
         """True on 204; False when the lease is no longer ours (409)."""
         payload = {"worker": self.worker, "leaseId": job["leaseId"], **body}
-        status, _ = self._post(f"/api/v1/media-worker/jobs/{job['id']}/{action}", payload)
+        status, answer = self._post(f"/api/v1/media-worker/jobs/{job['id']}/{action}", payload)
         if status == 204:
             return True
         if status == 409:
             return False
-        raise ApiError(f"{action} answered {status}", status)
+        raise ApiError(f"{action} answered {status}{_why(answer)}", status)
 
     def _post(self, path: str, body: dict) -> tuple[int, bytes]:
         # NaN is not JSON: the API would refuse the whole result (json_safe turns it to None).
