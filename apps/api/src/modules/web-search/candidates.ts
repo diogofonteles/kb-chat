@@ -24,8 +24,8 @@ const itemOf = (kind: MediaLinkKind) => (url: string) => {
 };
 
 /**
- * Sites that are no text to read: a social network answers with its sign-in page, a shop with
- * its product, a streaming service with its player, and the engine's own redirects lead nowhere.
+ * Sites that are no text to read: a social network has a post's caption, a shop has
+ * its product, a streaming service its player, and the engine's own redirects lead nowhere.
  */
 const NO_TEXT = [
   /(^|\.)(instagram|tiktok|facebook|fb|threads|pinterest|twitter|x|linkedin|kwai)\.(com|net)(\.\w+)?$/,

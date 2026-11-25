@@ -19,6 +19,7 @@ from typing import Any
 from ..providers.keys import read_keychain
 from .converters import Conversion, ConversionFailed
 from .sources import Source
+from .web_clean import clean_page
 
 FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v1/scrape"
 JINA_ENDPOINT = "https://r.jina.ai/"
@@ -82,7 +83,7 @@ class FirecrawlConverter:
         title = (data.get("metadata") or {}).get("title")
         html = str(data.get("rawHtml") or "")
         return Conversion(
-            markdown + "\n",
+            clean_page(markdown),
             self.name,
             self.version(),
             title=str(title).strip() if title else None,
@@ -120,7 +121,7 @@ class JinaConverter:
             raise ConversionFailed("Jina returned an empty page")
         html = _fetch(self.opener, self._request(source.url, "html"), "Jina")
         return Conversion(
-            markdown.strip() + "\n",
+            clean_page(markdown),
             self.name,
             self.version(),
             title=None,
