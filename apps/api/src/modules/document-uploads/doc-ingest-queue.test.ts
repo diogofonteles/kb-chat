@@ -73,6 +73,7 @@ const NOT_HELD = {
   batch: null,
   heldBy: null,
   kept: false,
+  seesLevel: true,
   mine: true,
 } as const;
 const BATCH = { id: '99999999-9999-4999-8999-999999999999', capUsd: 0.05 };

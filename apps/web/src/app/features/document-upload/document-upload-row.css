@@ -145,3 +145,9 @@ ui-pill {
   grid-column: 1 / -1;
   min-width: 0;
 }
+
+/* Beside the icon, under the words it goes with. */
+app-refused-review {
+  grid-column: 2 / -1;
+  min-width: 0;
+}

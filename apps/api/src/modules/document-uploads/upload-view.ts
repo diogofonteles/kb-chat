@@ -2,8 +2,12 @@ import type {
   DocumentBatch,
   DocumentProgress,
   DocumentUpload,
+  RefusedDocument,
 } from '@kb-chat/contracts';
-import type { DocumentUploadRecord } from '../../ports/document-uploads.js';
+import type {
+  DocumentUploadRecord,
+  RefusedRecord,
+} from '../../ports/document-uploads.js';
 import type { PlaceInLine } from './mac-line.js';
 import { WORKING_STATES, isWorking } from './upload-batches.js';
 
@@ -34,6 +38,8 @@ export interface UploadContext {
   readonly mine: boolean;
   /** A link, or a file whose bytes are still here: it can go again. */
   readonly kept: boolean;
+  /** Its level is one the person has now (it may have been lowered since). */
+  readonly seesLevel: boolean;
 }
 
 /** The contract's view: the Mac's words only for masters (they may name paths and keys). */
@@ -72,15 +78,24 @@ export function toDocumentUpload(
 const endIn = (
   { refused }: DocumentUploadRecord,
   state: DocumentUpload['state'],
-  { kept, isMaster }: UploadContext,
+  context: UploadContext,
 ): Pick<DocumentUpload, 'refused' | 'retriable'> => {
   const failed = state === 'failed';
-  const { reason: why = '', excerpt = '' } = refused ?? {};
   return {
-    refused: failed && refused ? { why, excerpt, acceptable: isMaster } : null,
-    retriable: failed && kept,
+    refused: failed && refused ? refusedView(refused, context) : null,
+    retriable: failed && context.kept,
   };
 };
+
+const refusedView = (
+  { reason, excerpt, accepted }: RefusedRecord,
+  { isMaster, seesLevel }: UploadContext,
+): RefusedDocument => ({
+  why: reason,
+  excerpt: seesLevel ? excerpt : null,
+  acceptable: isMaster,
+  accepted,
+});
 
 const entryCountOf = ({ state, entries }: DocumentUploadRecord): number =>
   state === 'choosing' ? entries.length : 0;

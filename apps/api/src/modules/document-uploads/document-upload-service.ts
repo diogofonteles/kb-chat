@@ -420,6 +420,10 @@ export class DocumentUploadService {
     if (!actor.isMaster)
       throw new AppError('FORBIDDEN', 'Only a master accepts what kb refused');
     if (record.state !== 'failed' || !record.refused) throw notWaiting();
+    // Two people may have sent it, each refused: accepted twice it would be there twice.
+    const key = keyOfRecord(record);
+    if (this.repeated(actor, record.topic, key))
+      throw new AppError('DOCUMENT_DUPLICATE', 'It is there, or on its way');
     const accepted = await this.deps.records.update(id, (current) => ({
       ...current,
       refused: current.refused && { ...current.refused, accepted: true },
@@ -736,6 +740,7 @@ export class DocumentUploadService {
       place: line.placeOf(record.id),
       now,
       mine: record.owner.principal === actor.principal,
+      seesLevel: seesLevel(actor, record),
     };
   }
 
@@ -751,6 +756,14 @@ export class DocumentUploadService {
     const month = this.deps.monthLeftUsd?.() ?? Number.POSITIVE_INFINITY;
     return month < MIN_LEASE_USD ? 'month-cap' : null;
   }
+}
+
+function seesLevel(
+  actor: UploadActor,
+  { topic, level }: Pick<DocumentUploadRecord, 'topic' | 'level'>,
+): boolean {
+  const allowed = actor.levelsIn(topic);
+  return level === null || allowed === null || allowed.includes(level);
 }
 
 /** A document found in the scope, by its id in the collection asked about (ADR 0028). */
@@ -852,6 +865,11 @@ function linkKindOf(
 const keyOf = (request: CreateDocumentUploadRequest): UploadKey => ({
   sha256: request.kind === 'file' ? request.sha256 : null,
   url: request.kind === 'url' ? sameLinkKey(request.url) : null,
+});
+
+const keyOfRecord = ({ sha256, url }: DocumentUploadRecord): UploadKey => ({
+  sha256,
+  url: url === null ? null : sameLinkKey(url),
 });
 
 const ownerOf = (actor: UploadActor): UploadOwner => ({

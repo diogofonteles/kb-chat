@@ -734,9 +734,94 @@ describe('what kb refused, decided by a person (KBC-009)', () => {
     });
   });
 
+  it('accepted and not done by the Mac, it says so, and may be decided again', async () => {
+    const { service, queue, records, sent } = await refusedPage();
+    await service.accept(master, sent.id);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const job = queue.lease('mac');
+      await queue.fail(
+        { jobId: sent.id, worker: 'mac', leaseId: job?.leaseId ?? '' },
+        { detail: 'kb review: no' },
+      );
+    }
+    const [view] = await itemsOf(service, master);
+    expect(view).toMatchObject({
+      state: 'failed',
+      failure: 'gave-up',
+      detail: 'kb review: no',
+      refused: { accepted: true, acceptable: true },
+    });
+    const again = await service.accept(master, sent.id);
+    expect(again).toMatchObject({ state: 'received', refused: null });
+    expect(records.get(sent.id)?.attempts).toBe(0);
+    // Refused at once by the Mac (decided elsewhere): it is still a decision not done.
+    const job = queue.lease('mac');
+    await queue.complete(
+      { jobId: sent.id, worker: 'mac', leaseId: job?.leaseId ?? '' },
+      {
+        worker: 'mac',
+        leaseId: job?.leaseId ?? '',
+        outcome: {
+          state: 'failed',
+          failure: 'conversion-failed',
+          detail: 'not in the quarantine any more',
+        },
+        spendUsd: 0,
+      },
+    );
+    const [ended] = await itemsOf(service, master);
+    expect(ended).toMatchObject({
+      state: 'failed',
+      failure: 'conversion-failed',
+      refused: { accepted: true },
+    });
+  });
+
+  it('the same link refused for two people is accepted once', async () => {
+    const { service, queue, sent } = await refusedPage();
+    const other = await send(service, master, link('https://a.example/1/'));
+    const job = queue.lease('mac');
+    await queue.complete(
+      { jobId: other.id, worker: 'mac', leaseId: job?.leaseId ?? '' },
+      {
+        worker: 'mac',
+        leaseId: job?.leaseId ?? '',
+        outcome: {
+          state: 'failed',
+          failure: 'not-accepted',
+          detail: '',
+          refused: { ...refused, document: 'raw/_quarantine/rasa-2.md' },
+        },
+        spendUsd: 0,
+      },
+    );
+    await service.accept(master, sent.id);
+    await expect(service.accept(master, other.id)).rejects.toMatchObject({
+      code: 'DOCUMENT_DUPLICATE',
+    });
+  });
+
+  it('how it begins is not read by who may no longer see its level', async () => {
+    const { service, records, sent } = await refusedPage();
+    await records.update(sent.id, (one) => ({ ...one, level: 'alto' }));
+    const lowered = { ...ana, levelsIn: () => ['baixo'] };
+    const [hers] = await itemsOf(service, lowered);
+    expect(hers?.refused).toMatchObject({ why: 'thin', excerpt: null });
+    const same = { ...ana, levelsIn: () => ['baixo', 'alto'] };
+    const [before] = await itemsOf(service, same);
+    expect(before?.refused?.excerpt).toBe('# Entrar no site');
+  });
+
   it('read again, what was refused is forgotten; a video page goes as a recording', async () => {
     const page = await refusedPage();
+    await page.service.accept(master, page.sent.id);
+    await page.records.update(page.sent.id, (one) => ({
+      ...one,
+      state: 'failed',
+      failure: 'gave-up',
+    }));
     await page.service.retry(ana, page.sent.id);
+    expect(page.records.get(page.sent.id)?.refused).toBeNull();
     expect(page.queue.lease('mac')?.source).toMatchObject({ kind: 'url' });
     const url = 'https://www.facebook.com/pessoa/videos/1849272622730358/';
     const video = await world();

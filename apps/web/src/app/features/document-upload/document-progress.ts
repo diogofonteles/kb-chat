@@ -4,8 +4,8 @@ import type { DocumentUpload, DocumentWork } from '@kb-chat/contracts';
 export type UploadPhase = 'active' | 'yours' | 'waiting' | 'failed' | 'ready';
 
 /**
- * A choice, what kb refused (for who may decide), what the Mac left in the middle, or a
- * recording that waits for a person.
+ * A choice, what kb refused (for who may decide, until they do), what the Mac left in the
+ * middle, or a recording that waits for a person.
  */
 const waitsForPerson = ({
   state,
@@ -13,7 +13,7 @@ const waitsForPerson = ({
   refused,
 }: DocumentUpload): boolean =>
   state === 'choosing' ||
-  refused?.acceptable === true ||
+  (refused?.acceptable === true && !refused.accepted) ||
   progress.stalledSince !== null ||
   (state === 'transcribing' && progress.media?.step === 'attention');
 

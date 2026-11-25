@@ -613,6 +613,7 @@ describe('what kb refused (KBC-009)', () => {
         why: 'thin',
         excerpt: '# Entrar\n\nEsqueceu a senha?',
         acceptable: true,
+        accepted: false,
         ...fields,
       },
     });
@@ -632,7 +633,8 @@ describe('what kb refused (KBC-009)', () => {
     fireEvent.click(show);
     await fixture.whenStable();
     expect(
-      screen.getByRole('region', { name: 'O que foi lido' }).textContent,
+      screen.getByRole('region', { name: 'O que foi lido de Vídeo do site' })
+        .textContent,
     ).toContain('Esqueceu a senha?');
     fireEvent.click(
       screen.getByRole('button', { name: 'Incluir mesmo assim' }),
@@ -648,6 +650,44 @@ describe('what kb refused (KBC-009)', () => {
     expect(document.activeElement?.textContent).toContain(
       'Documentos em processamento',
     );
+  });
+
+  it("accepted and not done by the Mac, it says so, with the Mac's words", async () => {
+    const one = {
+      ...refused({ accepted: true }),
+      failure: 'gave-up' as const,
+      detail: 'kb review: no item waits',
+    };
+    const { http, fixture } = await renderSection([one], null, {
+      master: true,
+    });
+    expect(screen.getByText('Falhou')).toBeTruthy();
+    expect(screen.getByText(/incluiu mesmo assim, mas o Mac/)).toBeTruthy();
+    expect(screen.getByText('kb review: no item waits')).toBeTruthy();
+    expect(screen.queryByText(/até você decidir/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver o que foi lido' }));
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Incluir mesmo assim' }),
+    );
+    http
+      .expectOne(`${URL}/${one.id}/accept`)
+      .flush(
+        { error: { code: 'DOCUMENT_DUPLICATE', message: 'x' } },
+        { status: 409, statusText: 'Conflict' },
+      );
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'O mesmo documento já está no acervo',
+    );
+  });
+
+  it('what was read of a level no longer theirs has nothing to open', async () => {
+    await renderSection([refused({ acceptable: false, excerpt: null })]);
+    expect(screen.getByText(/até um master decidir/)).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Ver o que foi lido' }),
+    ).toBeNull();
   });
 
   it('left out, it leaves the list', async () => {

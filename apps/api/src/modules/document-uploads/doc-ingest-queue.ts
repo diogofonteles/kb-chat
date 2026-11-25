@@ -272,7 +272,7 @@ export class DocIngestQueue {
       await this.deps.placeLevel?.(record, outcome.document.id);
     await this.deps.records.update(record.id, (current) => ({
       ...current,
-      ...endOf(outcome),
+      ...endOf(outcome, current),
       workMs: this.workedOn(record),
       lease: null,
       spentUsd: current.spentUsd + result.spendUsd,
@@ -408,9 +408,15 @@ export class DocIngestQueue {
   }
 }
 
+/** A decision the Mac could not carry out is still one: it is said as such. */
+const decidedOf = (
+  refused: DocumentUploadRecord['refused'],
+): DocumentUploadRecord['refused'] => (refused?.accepted ? refused : null);
+
 /** What a result leaves on the record: failed with why, or done on the Mac ("no mapa"). */
 function endOf(
   outcome: DocIngestResultRequest['outcome'],
+  { refused }: Pick<DocumentUploadRecord, 'refused'>,
 ): Pick<
   DocumentUploadRecord,
   'state' | 'failure' | 'detail' | 'document' | 'review' | 'refused'
@@ -422,7 +428,9 @@ function endOf(
       detail: outcome.detail,
       document: null,
       review: false,
-      refused: outcome.refused ? { ...outcome.refused, accepted: false } : null,
+      refused: outcome.refused
+        ? { ...outcome.refused, accepted: false }
+        : decidedOf(refused),
     };
   const repeated = outcome.state === 'duplicate';
   return {

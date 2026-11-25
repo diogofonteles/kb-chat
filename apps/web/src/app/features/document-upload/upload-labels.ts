@@ -96,6 +96,8 @@ export function failureTextOf({
   if (failure === 'empty' && kind === 'list')
     return $localize`:@@docUploads.failure.emptyList:Não há gravações nesta lista.`;
   if (!refused) return FAILURE_TEXTS[failure]();
+  if (refused.accepted)
+    return $localize`:@@docUploads.refused.accepted:Um master o incluiu mesmo assim, mas o Mac não conseguiu colocá-lo no acervo.`;
   const why =
     REFUSED_TEXTS[refused.why]?.() ??
     $localize`:@@docUploads.refused.other:O kb não o reconheceu como conteúdo deste acervo.`;
@@ -139,7 +141,7 @@ const STALLED: StateLabel = {
 /** Its state in words: what the Mac does depends on what it is. */
 export function labelOf(upload: DocumentUpload): StateLabel {
   const { kind, state, progress } = upload;
-  if (upload.refused?.acceptable) return YOURS;
+  if (upload.refused?.acceptable && !upload.refused.accepted) return YOURS;
   if (progress.stalledSince !== null) return STALLED;
   if (state === 'converting' && kind === 'recording') return DOWNLOADING;
   if (state === 'converting' && kind === 'list') return LISTING;

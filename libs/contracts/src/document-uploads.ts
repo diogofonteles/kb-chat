@@ -259,9 +259,12 @@ export type DocumentWork = z.infer<typeof documentWorkSchema>;
  */
 export const refusedDocumentSchema = z.object({
   why: z.string().max(60),
-  excerpt: z.string().max(3_000),
+  /** Null to who may no longer see its level. */
+  excerpt: z.string().max(3_000).nullable(),
   /** Only masters put it in the collection all the same. */
   acceptable: z.boolean(),
+  /** A master put it in, and the Mac could not do it: `failure` says why. */
+  accepted: z.boolean().default(false),
 });
 export type RefusedDocument = z.infer<typeof refusedDocumentSchema>;
 

@@ -133,10 +133,10 @@ const ICONS = {
         <span class="visually-hidden">{{ text }}</span>
       }
     }
-    @if (upload().refused; as refused) {
+    @if (refused(); as refused) {
       <app-refused-review
-        class="chooser"
         [refused]="refused"
+        [name]="upload().name"
         [disabled]="busy()"
         (accepted)="accepted.emit()"
         (discarded)="removed.emit()"
@@ -181,12 +181,17 @@ export class DocumentUploadRow {
     if (!steps || steps.at >= steps.words.length) return '';
     return $localize`:@@docProgress.stepOf:Etapa ${steps.at + 1}:at: de ${steps.words.length}:total:`;
   });
+  /** What was read of it is there to see. */
+  protected readonly refused = computed(() => {
+    const { refused } = this.upload();
+    return refused && refused.excerpt !== null ? refused : null;
+  });
   protected readonly hint = computed(() => hintOf(this.upload()));
   protected readonly failure = computed(() => failureTextOf(this.upload()));
   /** What was refused is said in words: kb's own add nothing. */
   protected readonly detail = computed(() => {
     const { detail, refused } = this.upload();
-    return refused ? null : detail;
+    return refused && !refused.accepted ? null : detail;
   });
   protected readonly status = computed(() =>
     statusText(this.upload(), this.at()),

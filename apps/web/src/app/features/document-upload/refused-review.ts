@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   input,
   output,
   signal,
@@ -38,8 +39,7 @@ let nextId = 0;
           class="text"
           tabindex="0"
           role="region"
-          aria-label="O que foi lido"
-          i18n-aria-label="@@refused.text"
+          [attr.aria-label]="label()"
           >{{ refused().excerpt || nothing }}</pre>
         @if (refused().acceptable) {
           <div class="decide">
@@ -107,11 +107,16 @@ let nextId = 0;
 })
 export class RefusedReview {
   readonly refused = input.required<RefusedDocument>();
+  /** Of which item: two may be open at once. */
+  readonly name = input.required<string>();
   readonly disabled = input(false);
   readonly accepted = output();
   readonly discarded = output();
 
   protected readonly id = `refused-review-${nextId++}`;
   protected readonly open = signal(false);
+  protected readonly label = computed(
+    () => $localize`:@@refused.text:O que foi lido de ${this.name()}:name:`,
+  );
   protected readonly nothing = $localize`:@@refused.nothing:(nenhum texto)`;
 }
