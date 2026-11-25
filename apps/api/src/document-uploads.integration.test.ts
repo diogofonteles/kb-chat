@@ -1,6 +1,9 @@
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { CreateDocumentUploadResponse } from '@kb-chat/contracts';
+import type {
+  CreateDocumentUploadResponse,
+  DocumentUploadList,
+} from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FsDocumentUploadFiles } from './adapters/fs-document-upload-files.js';
 import { JsonDocumentUploadStore } from './adapters/json-document-upload-store.js';
@@ -454,6 +457,81 @@ describe('A recording link goes through the transcriber (KBC-142 BR-5)', () => {
     expect(seen).toEqual(['not-allowed']);
     const library = await media.owner('GET', '/api/v1/topics/hermetismo/media');
     expect(library.json()).toMatchObject({ items: [] });
+  });
+});
+
+describe('What is being done, for the person (KBC-184)', () => {
+  const workOf = async (call: Media['owner']) =>
+    (await call('GET', UPLOADS)).json<DocumentUploadList>();
+
+  it('says no Mac is there until one that publishes is paired, then that it is on and at it', async () => {
+    const { media, ana } = await world();
+    await sentFile(media, ana);
+    const before = await workOf(ana.call);
+    expect(before.work).toEqual({
+      mac: { state: 'none', lastSeenAt: null },
+      busy: false,
+      waiting: 1,
+    });
+    expect(before.items[0]?.progress).toMatchObject({
+      position: 1,
+      startsInSeconds: null,
+    });
+
+    const mac = await docMac(media);
+    const job = await leaseDoc(media, mac.token);
+    await docState(media, { token: mac.token, job, state: 'classifying' });
+    const now = await workOf(ana.call);
+    expect(now.work).toMatchObject({
+      mac: { state: 'on', lastSeenAt: expect.any(String) },
+      busy: true,
+      waiting: 0,
+    });
+    expect(now.items[0]).toMatchObject({
+      state: 'classifying',
+      progress: { startedAt: expect.any(String), position: null },
+    });
+  });
+
+  it('a recording in the library says where it is there', async () => {
+    const { media, ana } = await world();
+    await ana.call('POST', DOCUMENTS, {
+      kind: 'url',
+      url: 'https://www.youtube.com/watch?v=abc123',
+    });
+    const mac = await docMac(media);
+    const job = await leaseDoc(media, mac.token);
+    const given = await media.started.app.inject({
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${job.id}/recording-audio?leaseId=${job.leaseId}&name=a.m4a`,
+      headers: {
+        ...localHeaders(mac.token),
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('ID3 fake'),
+    });
+    expect(given.statusCode, given.body).toBe(200);
+    const { items } = await workOf(ana.call);
+    expect(items[0]).toMatchObject({
+      state: 'transcribing',
+      progress: { startedAt: null, media: { step: 'preparing' } },
+    });
+  });
+
+  it('clearing what is ready is for who may send, and takes no other field', async () => {
+    const { media } = await world();
+    const beto = await member(media, {
+      email: 'beto@example.com',
+      topics: ['hermetismo'],
+      features: ['search', 'media'],
+    });
+    const path = `${UPLOADS}/clear-ready`;
+    expect((await beto.call('POST', path, {})).statusCode).toBe(403);
+    expect((await media.owner('POST', path, {})).json()).toEqual({
+      cleared: 0,
+    });
+    const odd = await media.owner('POST', path, { all: true });
+    expect(odd.statusCode).toBe(400);
   });
 });
 

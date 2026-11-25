@@ -177,4 +177,13 @@ describe('TranscriberStatusBoard: the Mac publishes again (KBC-117)', () => {
     board.record(MAC.id, missing);
     expect(board.whyNot('kb-publish')).toBe('kb-ai-key-missing');
   });
+
+  it('says how far a transcription is, only while its holder says it', () => {
+    const board = boardOf(MAC);
+    const mediaId = MAC.currentJob?.mediaId ?? '';
+    expect(board.percentOf(mediaId)).toBeNull();
+    board.record(MAC.id, working);
+    expect(board.percentOf(mediaId)).toBe(10);
+    expect(board.percentOf('66666666-6666-4666-8666-666666666666')).toBeNull();
+  });
 });

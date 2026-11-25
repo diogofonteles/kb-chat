@@ -26,7 +26,9 @@ const SHARE = 0.9;
 
 const IMAGE = /\.(png|jpe?g|tiff?|webp)$/i;
 
-const kindOf = (record: DocumentUploadRecord): ContentCostKind | null => {
+export const costKindOf = (
+  record: DocumentUploadRecord,
+): ContentCostKind | null => {
   if (record.kind === 'url') return 'page';
   if (record.kind === 'recording') return 'recording';
   if (record.kind !== 'file') return null;
@@ -67,7 +69,7 @@ export function contentCostsOf(
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const of = (kind: ContentCostKind): ContentCost =>
     measured(
-      latest.filter((one) => kindOf(one) === kind).slice(0, MAX_SAMPLES),
+      latest.filter((one) => costKindOf(one) === kind).slice(0, MAX_SAMPLES),
       FIRST_COSTS[kind],
     );
   return {

@@ -60,6 +60,13 @@ const record = (
 });
 
 const NOT_HELD = {
+  place: {
+    startedAt: null,
+    position: null,
+    startsInSeconds: null,
+    takesSeconds: null,
+  },
+  now: new Date('2026-11-25T12:00:00.000Z'),
   batch: null,
   heldBy: null,
   kept: false,
@@ -388,7 +395,7 @@ describe('the upload as people see it', () => {
       toDocumentUpload(recording, {
         showsDetail: false,
         received: null,
-        media: 'failed',
+        media: { state: 'failed', step: null },
         arrived: false,
         ...NOT_HELD,
       }),
