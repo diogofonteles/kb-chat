@@ -423,6 +423,38 @@ describe('A recording link goes through the transcriber (KBC-142 BR-5)', () => {
     expect(item.statusCode, item.body).toBe(200);
     expect(item.json()).toMatchObject({ title: 'Uma aula' });
   });
+
+  it('a sender who may no longer send gets nothing, and the Mac is free for the next', async () => {
+    const { media, ana } = await world();
+    await ana.call('POST', DOCUMENTS, {
+      kind: 'url',
+      url: 'https://www.youtube.com/watch?v=abc123',
+    });
+    const mac = await docMac(media);
+    const job = await leaseDoc(media, mac.token);
+    const people = await media.owner('GET', '/api/v1/people');
+    const listed = people.json<{ items: { id: string; email: string }[] }>();
+    const id = listed.items.find((one) => one.email === 'ana@example.com')?.id;
+    const changed = await media.owner('PATCH', `/api/v1/people/${id}`, {
+      features: ['search', 'media'],
+    });
+    expect(changed.statusCode, changed.body).toBe(200);
+    const given = await media.started.app.inject({
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${job.id}/recording-audio?leaseId=${job.leaseId}&name=a.m4a`,
+      headers: {
+        ...localHeaders(mac.token),
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('ID3 fake'),
+    });
+    expect(given.statusCode, given.body).toBe(200);
+    expect(given.json()).toEqual({ mediaId: null });
+    const seen = (await uploadsOf(media.owner)).map((one) => one.failure);
+    expect(seen).toEqual(['not-allowed']);
+    const library = await media.owner('GET', '/api/v1/topics/hermetismo/media');
+    expect(library.json()).toMatchObject({ items: [] });
+  });
 });
 
 describe('One inclusion and its ceiling (KBC-009 R2, R3)', () => {

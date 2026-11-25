@@ -223,7 +223,7 @@ describe('DocIngestQueue (KBC-149, ADR 0040)', () => {
     expect(await adopt()).toBeNull();
     expect(opened.get(record().id)).toMatchObject({
       state: 'failed',
-      failure: 'not-accepted',
+      failure: 'not-allowed',
       detail: 'past the quota',
       lease: null,
     });

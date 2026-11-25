@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
+import { Readable } from 'node:stream';
 import type { DocIngestJob } from '@kb-chat/contracts';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -78,6 +79,26 @@ async function ingest(
         detail: 'firecrawl: HTTP 404; jina: HTTP 404',
       },
       spendUsd: 0,
+    });
+    return;
+  }
+  if (source.kind === 'list') {
+    // What `yt-dlp --flat-playlist` says of a channel: titles and durations, nothing taken.
+    const entries = [1, 2, 3].map((n) => ({
+      url: new URL(`/watch?v=${slugOf(source.url)}-aula${n}`, source.url).href,
+      title: `Aula ${n}`,
+      durationS: n * 600,
+    }));
+    await queue.list(owner, { ...owner, entries });
+    return;
+  }
+  if (source.kind === 'recording') {
+    // The sound yt-dlp would bring; its content is the link's own, so no two are the same.
+    const sound = Buffer.from(`ID3 sound of ${source.url}`);
+    await queue.adopt(owner, {
+      body: Readable.from([sound]),
+      bytes: sound.length,
+      name: `Gravação ${slugOf(source.url)}.m4a`,
     });
     return;
   }

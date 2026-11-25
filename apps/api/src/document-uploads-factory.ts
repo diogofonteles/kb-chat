@@ -9,6 +9,7 @@ import type { AppConfig } from './config.js';
 import type { MediaDeps } from './media-factory.js';
 import type { MediaDocuments } from './media-documents-factory.js';
 import { sameLinkKey } from '@kb-chat/contracts';
+import { AppError } from './app-error.js';
 import { collectionOf } from './modules/media-documents/index.js';
 import { refreshSoon } from './refresh-soon.js';
 import type { DocumentUploadRecord } from './ports/document-uploads.js';
@@ -247,7 +248,8 @@ async function adoptAudio(
   const { record, audio } = input;
   const actor = await senderAsTheyStand(app, wiring, record.owner.principal);
   if (!actor.canUpload || !actor.canSee(record.topic))
-    throw new Error(
+    throw new AppError(
+      'FORBIDDEN',
       'the sender of this link may no longer send to this collection',
     );
   const item = wiring.mediaService.create(actor, record.topic, {
@@ -257,10 +259,16 @@ async function adoptAudio(
     bytes: audio.bytes,
     ...(record.level && { level: record.level }),
   });
-  await wiring.mediaService.receiveFile(actor, item.id, {
-    body: audio.body,
-    declaredBytes: audio.bytes,
-  });
+  try {
+    await wiring.mediaService.receiveFile(actor, item.id, {
+      body: audio.body,
+      declaredBytes: audio.bytes,
+    });
+  } catch (err) {
+    // Nothing half-sent stays in the library: the Mac sends it whole again.
+    await wiring.mediaService.remove(actor, item.id).catch(() => undefined);
+    throw err;
+  }
   return item.id;
 }
 
@@ -274,7 +282,10 @@ async function senderAsTheyStand(
     (one) => people.viewerOf(one).principal === principal,
   );
   if (!person)
-    throw new Error('the sender of this link is no longer a person here');
+    throw new AppError(
+      'FORBIDDEN',
+      'the sender of this link is no longer a person here',
+    );
   const viewer = people.viewerOf(person);
   const parentOf = app.topicParentOf ?? NO_PARENT;
   return {

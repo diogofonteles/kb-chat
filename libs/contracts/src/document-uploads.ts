@@ -172,6 +172,8 @@ export const DOCUMENT_UPLOAD_FAILURES = [
   'empty',
   /** kb refused or sent it to review (quarantine, quality). */
   'not-accepted',
+  /** A recording past its sender's quota, or whose sender may not send here any more. */
+  'not-allowed',
   /** The Mac gave up after its attempts. */
   'gave-up',
   /** Its bytes never all arrived. */

@@ -320,7 +320,7 @@ export class DocIngestQueue {
     } catch (err) {
       if (!(err instanceof AppError)) throw err;
       // Refused for good (the sender's quota, level or rights): trying again changes nothing.
-      const failure = { failure: 'not-accepted', detail: err.message } as const;
+      const failure = { failure: 'not-allowed', detail: err.message } as const;
       await this.ended(record.id, { state: 'failed', ...failure });
       return null;
     }

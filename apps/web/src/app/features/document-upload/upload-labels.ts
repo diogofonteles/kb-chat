@@ -60,6 +60,8 @@ export const FAILURE_TEXTS: Record<DocumentUploadFailure, () => string> = {
     $localize`:@@docUploads.failure.empty:A conversão saiu vazia ou ilegível. Um escaneado muito apagado? Tente um arquivo melhor.`,
   'not-accepted': () =>
     $localize`:@@docUploads.failure.notAccepted:O kb não aceitou o documento no acervo; ele ficou para revisão do dono.`,
+  'not-allowed': () =>
+    $localize`:@@docUploads.failure.notAllowed:A gravação passa da cota de envio de quem a incluiu, ou essa pessoa não pode mais enviar para este acervo. Fale com um master.`,
   'gave-up': () =>
     $localize`:@@docUploads.failure.gaveUp:O Mac tentou três vezes e desistiu. Envie de novo mais tarde.`,
   'upload-abandoned': () =>
