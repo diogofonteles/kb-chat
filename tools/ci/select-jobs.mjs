@@ -214,15 +214,7 @@ function e2eMatrix(e2e) {
   });
 }
 
-const selection = ({
-  reason,
-  full,
-  unit,
-  transcriber,
-  kbMap,
-  codex,
-  e2e,
-}) => ({
+const selection = ({ reason, full, unit, transcriber, kbMap, codex, e2e }) => ({
   full,
   reason,
   unit: { include: unit.map((name) => UNITS[name]) },

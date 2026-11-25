@@ -263,7 +263,17 @@ jobs:
   verdict:
     name: CI verdict
     if: always()
-    needs: [changes, checks, test, transcriber, kb-map, e2e, codex-sandbox, board-edge]
+    needs:
+      [
+        changes,
+        checks,
+        test,
+        transcriber,
+        kb-map,
+        e2e,
+        codex-sandbox,
+        board-edge,
+      ]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
