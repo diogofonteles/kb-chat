@@ -140,6 +140,19 @@ fieldset {
   cursor: pointer;
 }
 
+/* Some picked, not all: a dash (never the look of none). */
+.all .ui-check:indeterminate {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.all .ui-check:indeterminate::after {
+  content: '';
+  width: 0.5rem;
+  height: 2px;
+  background: var(--color-on-accent);
+}
+
 .rows {
   display: grid;
   gap: var(--space-1);
@@ -208,6 +221,7 @@ fieldset {
 
 .there-words {
   display: inline-flex;
+  vertical-align: bottom;
   align-items: center;
   gap: var(--space-1);
   margin-right: var(--space-2);
