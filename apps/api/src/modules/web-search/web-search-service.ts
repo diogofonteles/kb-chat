@@ -293,6 +293,7 @@ export class WebSearchService {
       this.take(answers, search);
       if (this.keepForLater(answers, session)) break;
     }
+    session.rest();
     return all;
   }
 
@@ -302,19 +303,13 @@ export class WebSearchService {
     session: SearchSession,
   ): boolean {
     const refused = answers.filter(({ answer }) => STOPS.has(answer.kind));
-    const silent = answers.filter(
-      ({ answer }) => answer.kind === 'unreachable',
-    );
-    // Nothing answers: the engine is away, and asking on would use up every wording.
-    const first = silent.filter(({ group }) => !session.wasRetried(group));
-    if (first.length === answers.length) {
-      session.putBack(silent.map(({ group }) => group));
-      return true;
-    }
-    if (answers.some(({ answer }) => answer.kind === 'ok'))
-      session.noteAnswered();
+    const silent = answers
+      .filter(({ answer }) => answer.kind === 'unreachable')
+      .map(({ group }) => group);
+    if (silent.length === answers.length) return session.isAway(silent);
+    if (answers.some(({ answer }) => answer.kind === 'ok')) session.heard();
     session.putBack(refused.map(({ group }) => group));
-    for (const { group } of silent) session.retryLater(group);
+    for (const group of silent) session.retryLater(group);
     return refused.length > 0;
   }
 

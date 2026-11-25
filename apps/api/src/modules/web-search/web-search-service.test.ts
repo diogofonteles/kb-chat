@@ -1,11 +1,11 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { WebSearchRequest } from '@kb-chat/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { FirecrawlClient } from '../../adapters/firecrawl-client.js';
 import { MemoryDocumentStore } from '../../adapters/memory-document-store.js';
 import { SecretBox } from '../../adapters/secret-box.js';
 import type { DocumentStorePort } from '../../ports/document-store.js';
-import { FakeFirecrawl } from '../../testing/fake-firecrawl.js';
+import { FakeFirecrawl, type Hit } from '../../testing/fake-firecrawl.js';
 import type {
   WebSearchAnswer,
   WebSearchPort,
@@ -781,5 +781,115 @@ describe('WebSearchService: many searches of one request', () => {
     expect(asked.length).toBeGreaterThan(15);
     expect(found.partial).toBe(true);
     expect(found.results).toHaveLength(5);
+  });
+});
+
+describe('WebSearchService: as many as are asked for (QA IMP-2 and IMP-4)', () => {
+  const TEXTS = {
+    ...REQUEST,
+    query: 'hermetismo',
+    kinds: ['text' as const],
+    sources: 30,
+  };
+  /** A word of letters alone, of no family with another's. */
+  const wordOf = (n: number): string =>
+    [...createHash('sha256').update(String(n)).digest().subarray(0, 10)]
+      .map((byte) => String.fromCharCode(97 + (byte % 26)))
+      .join('');
+
+  /** Ten pages no other query gave, each with a word of its own in its title. */
+  function endless() {
+    const pages = new Map<string, number>();
+    return (query: string): Hit[] => {
+      const first = pages.get(query) ?? pages.size * 10;
+      pages.set(query, first);
+      return Array.from({ length: 10 }, (_, at) => ({
+        url: `https://exemplo.org/${first + at}`,
+        title: `Hermetismo e ${wordOf(first + at)}`,
+        description: 'Um texto sobre hermetismo.',
+      }));
+    };
+  }
+
+  /** Presses until what is wanted came, the search ended, or it was pressed too often. */
+  async function pressUntil(
+    service: ReturnType<typeof build>['service'],
+    wanted: number,
+  ) {
+    const urls = new Set<string>();
+    let exhausted = false;
+    let refused = 0;
+    for (let press = 0; press < 60; press += 1) {
+      const answer = await service.search(TEXTS, NEW).catch(() => null);
+      if (answer === null) refused += 1;
+      for (const { url } of answer?.results ?? []) urls.add(url);
+      exhausted = answer?.exhausted ?? exhausted;
+      if (urls.size >= wanted || exhausted) break;
+    }
+    return { found: urls.size, exhausted, refused };
+  }
+
+  it('goes on while new things come: 500 asked, 500 given, none twice', async () => {
+    const { service, firecrawl } = build();
+    await service.connect(KEY, 'owner');
+    firecrawl.searchWith(endless());
+    const { found, exhausted } = await pressUntil(service, 500);
+    expect(found).toBeGreaterThanOrEqual(500);
+    expect(exhausted).toBe(false);
+    const queries = firecrawl.searches.map(({ body }) => body['query']);
+    expect(new Set(queries).size).toBe(queries.length);
+  });
+
+  it('ends when nothing new comes, whatever the words', async () => {
+    const { service, firecrawl } = build();
+    await service.connect(KEY, 'owner');
+    const page = endless();
+    firecrawl.searchWith(() => page('sempre'));
+    const { found, exhausted } = await pressUntil(service, 500);
+    expect([found, exhausted]).toEqual([10, true]);
+    expect(firecrawl.searches.length).toBeLessThan(6);
+  });
+
+  it('a wording the engine never answers does not stop the others', async () => {
+    const { service, firecrawl } = build();
+    await service.connect(KEY, 'owner');
+    const page = endless();
+    const bad = /artigo|ensinamentos|livro/;
+    firecrawl.searchWith((query) => (bad.test(query) ? null : page(query)));
+    const { found, refused } = await pressUntil(service, 300);
+    expect(found).toBeGreaterThanOrEqual(300);
+    expect(refused).toBeLessThan(4);
+  });
+
+  it('rounds nobody answered say nothing of what is left (I3)', async () => {
+    const { service, firecrawl } = build();
+    await service.connect(KEY, 'owner');
+    const page = endless();
+    const bad = /artigo|ensinamentos|o que é|livro/;
+    firecrawl.searchWith((query) => (bad.test(query) ? null : page(query)));
+    const { found, exhausted } = await pressUntil(service, 60);
+    expect(found).toBeGreaterThanOrEqual(60);
+    expect(exhausted).toBe(false);
+  });
+
+  it('an engine that comes and goes loses no wording', async () => {
+    const { service, firecrawl } = build();
+    await service.connect(KEY, 'owner');
+    const page = endless();
+    firecrawl.searchWith(page);
+    let asked = 0;
+    const urls = new Set<string>();
+    for (let press = 0; press < 12; press += 1) {
+      if (press % 2 === 0) firecrawl.goDown();
+      else firecrawl.comeBack();
+      const answer = await service.search(TEXTS, NEW).catch(() => null);
+      for (const { url } of answer?.results ?? []) urls.add(url);
+      asked = firecrawl.searches.length;
+    }
+    const queries = firecrawl.searches.map(({ body }) => String(body['query']));
+    expect(new Set(queries).size).toBe(asked);
+    for (const word of ['artigo', 'ensinamentos', 'livro', 'estudo'])
+      expect(queries.some((query) => query.includes(word))).toBe(true);
+    expect(urls.size).toBe(asked * 10);
   });
 });

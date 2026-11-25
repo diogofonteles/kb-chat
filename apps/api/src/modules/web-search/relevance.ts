@@ -13,11 +13,16 @@ const wordsOf = (text: string): string[] =>
     .split(/[^\p{L}\p{N}]+/u)
     .filter((word) => word !== '');
 
+/** Of the same family: "cocriação" and "cocriar". */
+export const isKin = (one: string, other: string): boolean =>
+  one.startsWith(rootOf(other, 0.5)) || other.startsWith(rootOf(one, 0.5));
+
 /** The start of a word its family shares: "cocriação", "cocriar", "cocriador". */
 const rootOf = (word: string, share: number): string =>
   word.slice(0, Math.max(4, Math.ceil(word.length * share)));
 
-const telling = (text: string): string[] =>
+/** The words that say something of a text, as compared: no accents, no short or empty ones. */
+export const telling = (text: string): string[] =>
   wordsOf(text).filter((word) => word.length > 2 && !EMPTY_WORDS.has(word));
 
 /** A text to look in: its words, also with the hyphens joined ("co-criação"), and all as one. */

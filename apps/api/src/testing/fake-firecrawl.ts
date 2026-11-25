@@ -6,7 +6,7 @@ export interface FirecrawlSearchCall {
   readonly body: Readonly<Record<string, unknown>>;
 }
 
-interface Hit {
+export interface Hit {
   readonly url: string;
   readonly title: string;
   readonly description: string;
@@ -104,6 +104,7 @@ export class FakeFirecrawl {
   private down = false;
   private limited = 0;
   private readonly broken = new Set<WebSearchKind>();
+  private engine: ((query: string) => readonly Hit[] | null) | null = null;
 
   /** Every key is refused from now on, as if revoked in Firecrawl's dashboard. */
   revokeKeys(): void {
@@ -127,6 +128,11 @@ export class FakeFirecrawl {
   /** The searches of these kinds fail with a 500. */
   breakSearchesOf(...kinds: WebSearchKind[]): void {
     for (const kind of kinds) this.broken.add(kind);
+  }
+
+  /** Another engine's answers; null: that query is never answered. */
+  searchWith(engine: (query: string) => readonly Hit[] | null): void {
+    this.engine = engine;
   }
 
   readonly fetch: typeof fetch = async (input, init) => {
@@ -181,7 +187,15 @@ export class FakeFirecrawl {
         { success: false, error: 'Insufficient credits' },
         { status: 402 },
       );
-    return this.found(key, { kind, query: String(body['query']) });
+    const query = String(body['query']);
+    if (this.engine?.(query) === null)
+      return new Response('bad query', { status: 400 });
+    return this.found(key, { kind, query });
+  }
+
+  private hitsOf(kind: WebSearchKind, query: string): readonly Hit[] {
+    if (this.engine) return this.engine(query) ?? [];
+    return query.includes('vazio') ? [] : HITS[kind](query);
   }
 
   private found(
@@ -191,7 +205,7 @@ export class FakeFirecrawl {
     this.spent.set(key, (this.spent.get(key) ?? 0) + CREDITS_PER_SEARCH);
     return Response.json({
       success: true,
-      data: { web: query.includes('vazio') ? [] : HITS[kind](query) },
+      data: { web: this.hitsOf(kind, query) },
       creditsUsed: CREDITS_PER_SEARCH,
     });
   }

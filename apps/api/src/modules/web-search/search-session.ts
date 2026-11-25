@@ -1,12 +1,15 @@
 import type { WebSearchRequest } from '@kb-chat/contracts';
 import { pageKey, type Candidate } from './candidates.js';
-import { groupsOf, type SearchGroup } from './search-plan.js';
+import { isKin, telling } from './relevance.js';
+import { groupsOf, hasOwnWords, type SearchGroup } from './search-plan.js';
 import type { Searcher } from './seen-links.js';
 
 /** A search left alone this long is forgotten. */
 const SESSION_TTL_MS = 60 * 60_000;
 /** Rounds in a row that found no page it did not know before the request is exhausted. */
 const DRY_ROUNDS = 2;
+/** A word of a title shorter than this tells little. */
+const WORD_CHARS = 5;
 
 /**
  * Where one person's search of one collection is (in memory): the same search again goes on
@@ -26,6 +29,13 @@ export class SearchSession {
   private answered = false;
   private queue: SearchGroup[] = [];
   private readonly retried = new Set<SearchGroup>();
+  /** Silent before, with nothing else heard then. */
+  private readonly doubted = new Set<SearchGroup>();
+  /** Silent again: kept apart until something is heard, or nothing else is left to ask. */
+  private aside: SearchGroup[] = [];
+  /** The words of what was found, and how many titles have each. */
+  private readonly words = new Map<string, number>();
+  private readonly usedWords: string[] = [];
   /** The pages this search already found, given or left out. */
   private readonly known = new Set<string>();
   private turn: Promise<unknown> = Promise.resolve();
@@ -62,9 +72,35 @@ export class SearchSession {
     this.fresh = 0;
     this.answered = false;
     this.queue =
-      this.dry < DRY_ROUNDS ? groupsOf(this.request, this.round) : [];
+      this.dry < DRY_ROUNDS
+        ? groupsOf(this.request, this.round, this.wordFound())
+        : [];
     this.round += 1;
     if (this.queue.length === 0) this.ended = true;
+  }
+
+  /** Past the words of each kind: the one most titles found have, not used yet. */
+  private wordFound(): string | null {
+    const { kinds, query, authors } = this.request;
+    if (hasOwnWords(kinds, this.round)) return null;
+    const asked = [
+      ...telling([query, ...authors].join(' ')),
+      ...this.usedWords,
+    ];
+    const [best] = [...this.words]
+      .filter(([word]) => !asked.some((one) => isKin(one, word)))
+      .sort(([, a], [, b]) => b - a);
+    if (!best) return null;
+    this.usedWords.push(best[0]);
+    return best[0];
+  }
+
+  private learnWords(found: readonly Candidate[]): void {
+    const words = found
+      .flatMap(({ title }) => [...new Set(telling(title))])
+      .filter((word) => word.length >= WORD_CHARS && !/\d/.test(word));
+    for (const word of words)
+      this.words.set(word, (this.words.get(word) ?? 0) + 1);
   }
 
   /** Not asked, or refused for now: first again the next time. */
@@ -72,12 +108,31 @@ export class SearchSession {
     this.queue.unshift(...groups);
   }
 
-  noteAnswered(): void {
-    this.answered = true;
+  /**
+   * All asked at once were silent: the engine is away, or it never answers these. The first
+   * time they are put back and the request stops (true); silent again, they are kept apart
+   * and the next ones tell which it is.
+   */
+  isAway(silent: readonly SearchGroup[]): boolean {
+    // One that others' answers showed to be the trouble had its second time: it is let go.
+    const open = silent.filter((group) => !this.retried.has(group));
+    const fresh = open.filter((group) => !this.doubted.has(group));
+    this.aside.push(...open.filter((group) => this.doubted.has(group)));
+    for (const group of fresh) this.doubted.add(group);
+    this.putBack(fresh);
+    return fresh.length > 0;
   }
 
-  wasRetried(group: SearchGroup): boolean {
-    return this.retried.has(group);
+  /** The engine answers others: what was kept apart is asked once more, then let go. */
+  heard(): void {
+    this.answered = true;
+    for (const group of this.aside.splice(0)) this.retryLater(group);
+  }
+
+  /** The request ends: what was kept apart waits, unless nothing else is left to ask. */
+  rest(): void {
+    const apart = this.aside.splice(0);
+    if (!this.ended || this.queue.length > 0) this.putBack(apart);
   }
 
   /** It did not answer: asked once more, after the others; then it is let go. */
@@ -92,6 +147,7 @@ export class SearchSession {
     const fresh = found.filter((one) => !this.known.has(pageKey(one.url)));
     for (const one of fresh) this.known.add(pageKey(one.url));
     this.fresh += fresh.length;
+    this.learnWords(fresh);
     return fresh;
   }
 }

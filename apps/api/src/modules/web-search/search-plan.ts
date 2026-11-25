@@ -70,6 +70,33 @@ const WORDINGS: Record<WebSearchKind, readonly Wording[]> = {
   ],
 };
 
+/** Where an audio or a video is looked for once its own words are over, in turns. */
+const SITES: Record<WebSearchKind, readonly (string | undefined)[]> = {
+  text: [undefined],
+  audio: [PODCASTS, SOUNDCLOUD],
+  video: [YOUTUBE],
+};
+
+/** How the kind is asked for in this round: its own words first, then what was found gives. */
+function wordingOf(
+  kind: WebSearchKind,
+  round: number,
+  found: string | null,
+): Wording | null {
+  const own = WORDINGS[kind][round];
+  if (own) return own;
+  if (found === null) return null;
+  const sites = SITES[kind];
+  const site = sites[round % sites.length];
+  return { word: found, ...(site !== undefined && { site }) };
+}
+
+/** Every kind still has words of its own in this round: none needs what was found. */
+export const hasOwnWords = (
+  kinds: readonly WebSearchKind[],
+  round: number,
+): boolean => kinds.every((kind) => round < WORDINGS[kind].length);
+
 const oneLine = (parts: readonly string[]): string =>
   parts.filter((part) => part !== '').join(' ');
 
@@ -89,16 +116,18 @@ export function queryOf(
 
 /**
  * The searches of one round: one per author and kind that still has another way to be asked.
- * None when every way was used: the request is exhausted.
+ * Past its own words a kind is asked for with one taken from what was found (`found`): there
+ * is no last round while new things come. None when there is no word left.
  */
 export function groupsOf(
   request: Pick<WebSearchRequest, 'query' | 'kinds' | 'authors'>,
   round: number,
+  found: string | null = null,
 ): SearchGroup[] {
   const authors = request.authors.length > 0 ? request.authors : [null];
   return authors.flatMap((author) =>
     request.kinds.flatMap((kind) => {
-      const wording = WORDINGS[kind][round];
+      const wording = wordingOf(kind, round, found);
       if (!wording) return [];
       const query = queryOf(request.query, author, wording.word);
       const domains = wording.site && { domains: [wording.site] };
