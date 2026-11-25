@@ -185,6 +185,7 @@ const DECLARED: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     listMedia: 'the reconciler of track documents, never a person',
   },
   'modules/document-removals/removal-service.ts': {
+    get: "the collection's title, for the masters' list of what was removed",
     scopeView:
       'masters only (the route): finds the document by its scope id, then asks seesDocument (KBC-187)',
   },
