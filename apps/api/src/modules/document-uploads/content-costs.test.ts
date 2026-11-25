@@ -30,6 +30,8 @@ const done = (
   batch: null,
   attempts: 0,
   spentUsd: 0.001,
+  dismissed: false,
+  review: false,
   workMs: 10_000,
   entries: [],
   createdAt: '2026-11-25T10:00:00.000Z',

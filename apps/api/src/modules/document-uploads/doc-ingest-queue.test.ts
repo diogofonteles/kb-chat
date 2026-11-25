@@ -1,5 +1,7 @@
+import { Readable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { MemoryDocumentUploadStore } from '../../adapters/json-document-upload-store.js';
+import { AppError } from '../../app-error.js';
 import type {
   DocumentUploadFilesPort,
   DocumentUploadRecord,
@@ -14,6 +16,7 @@ const files: DocumentUploadFilesPort = {
   append: () => Promise.resolve(0),
   sha256: () => Promise.resolve(''),
   find: () => Promise.resolve(null),
+  freeBytes: () => Promise.resolve(Number.MAX_SAFE_INTEGER),
   remove: (id) => {
     removed.push(id);
     return Promise.resolve();
@@ -47,6 +50,8 @@ const record = (
   batch: null,
   attempts: 0,
   spentUsd: 0,
+  dismissed: false,
+  review: false,
   workMs: null,
   entries: [],
   createdAt: '2026-11-16T10:00:00.000Z',
@@ -54,7 +59,12 @@ const record = (
   ...fields,
 });
 
-const NOT_HELD = { batch: null, heldBy: null, kept: false } as const;
+const NOT_HELD = {
+  batch: null,
+  heldBy: null,
+  kept: false,
+  mine: true,
+} as const;
 const BATCH = { id: '99999999-9999-4999-8999-999999999999', capUsd: 0.05 };
 const SECOND = '22222222-2222-4222-8222-222222222222';
 
@@ -140,6 +150,101 @@ describe('DocIngestQueue (KBC-149, ADR 0040)', () => {
     const { queue } = await queueWith([record()], { clock, budget: 0 });
     expect(queue.leasableJobs()).toBe(0);
     expect(queue.lease('mac')).toBeNull();
+  });
+
+  it('a month with next to nothing left waits instead of spoiling what it could not judge', async () => {
+    const clock = { now: new Date() };
+    const { queue } = await queueWith([record()], { clock, budget: 0.0001 });
+    expect(queue.leasableJobs()).toBe(0);
+    expect(queue.lease('mac')).toBeNull();
+  });
+
+  it('a change made while the result was being written is not undone', async () => {
+    const clock = { now: new Date('2026-11-25T12:00:00.000Z') };
+    const batch = { id: '99999999-9999-4999-8999-999999999999', capUsd: 0.5 };
+    const store = new MemoryDocumentUploadStore();
+    store.records = [record({ level: 'qs', batch })];
+    const opened = await UploadRecords.open(store);
+    const queue = new DocIngestQueue({
+      records: opened,
+      files,
+      budgetUsd: () => 0.5,
+      now: () => clock.now,
+      placeLevel: async () => {
+        await opened.update(record().id, (one) => ({
+          ...one,
+          batch: { ...batch, capUsd: 5 },
+        }));
+      },
+    });
+    const job = queue.lease('mac');
+    await queue.complete(
+      { jobId: record().id, worker: 'mac', leaseId: job?.leaseId ?? '' },
+      {
+        worker: 'mac',
+        leaseId: job?.leaseId ?? '',
+        outcome: {
+          state: 'ready',
+          document: { id: 'raw/a.md', title: 'A' },
+          review: true,
+        },
+        spendUsd: 0.1,
+      },
+    );
+    expect(opened.get(record().id)).toMatchObject({
+      state: 'mapped',
+      review: true,
+      batch: { capUsd: 5 },
+      spentUsd: 0.1,
+    });
+  });
+
+  it('a recording refused for good says why and frees the Mac; any other trouble is tried again', async () => {
+    const clock = { now: new Date('2026-11-25T12:00:00.000Z') };
+    const problems: Error[] = [
+      new AppError('MEDIA_QUOTA_EXCEEDED', 'past the quota'),
+      new Error('disk'),
+    ];
+    const store = new MemoryDocumentUploadStore();
+    store.records = [record({ kind: 'recording' })];
+    const opened = await UploadRecords.open(store);
+    const queue = new DocIngestQueue({
+      records: opened,
+      files,
+      budgetUsd: () => 0.5,
+      now: () => clock.now,
+      adoptAudio: () => Promise.reject(problems.shift() ?? new Error('none')),
+    });
+    const audio = { body: Readable.from(['x']), bytes: 1, name: 'a.m4a' };
+    const adopt = () => {
+      const leaseId = queue.lease('mac')?.leaseId ?? '';
+      return queue.adopt({ jobId: record().id, worker: 'mac', leaseId }, audio);
+    };
+    expect(await adopt()).toBeNull();
+    expect(opened.get(record().id)).toMatchObject({
+      state: 'failed',
+      failure: 'not-accepted',
+      detail: 'past the quota',
+      lease: null,
+    });
+    await opened.put(record({ kind: 'recording' }));
+    await expect(adopt()).rejects.toThrow('disk');
+    expect(opened.get(record().id)?.lease).not.toBeNull();
+  });
+
+  it('answers quickly with thousands of items that ended', async () => {
+    const clock = { now: new Date('2026-11-25T12:00:00.000Z') };
+    const ended = Array.from({ length: 5_000 }, (_, n) =>
+      record({
+        id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+        state: 'mapped',
+        batch: { id: '99999999-9999-4999-8999-999999999999', capUsd: 5 },
+      }),
+    );
+    const { queue } = await queueWith([...ended, record()], { clock });
+    const before = performance.now();
+    expect(queue.leasableJobs()).toBe(1);
+    expect(performance.now() - before).toBeLessThan(100);
   });
 
   it('a setup failure waits without spending an attempt', async () => {
@@ -236,7 +341,11 @@ describe('the ceiling of one inclusion (KBC-009 R3)', () => {
         {
           worker: 'mac',
           leaseId: job?.leaseId ?? '',
-          outcome: { state, document: { id: 'raw/a.md', title: 'A' } },
+          outcome: {
+            state,
+            document: { id: 'raw/a.md', title: 'A' },
+            review: false,
+          },
           spendUsd: 0,
         },
       );

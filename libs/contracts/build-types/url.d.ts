@@ -19,6 +19,7 @@ declare class URL {
   readonly searchParams: {
     get(name: string): string | null;
     has(name: string): boolean;
+    keys(): IterableIterator<string>;
     delete(name: string): void;
     toString(): string;
   };

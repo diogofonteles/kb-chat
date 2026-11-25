@@ -15,9 +15,10 @@ import type {
 } from '../../ports/document-uploads.js';
 import type { LeaseOwner } from '../../ports/media-store.js';
 import {
+  BatchLedger,
   MIN_LEASE_USD,
   WORKING_STATES,
-  batchLeftUsd,
+  isWorking,
 } from './upload-batches.js';
 import type { UploadRecords } from './upload-records.js';
 
@@ -72,22 +73,27 @@ export class DocIngestQueue {
 
   /** Documents a Mac could lease now (for the waker); none with the ceiling spent. */
   leasableJobs(): number {
-    if (this.deps.budgetUsd() <= 0) return 0;
-    const now = this.now().getTime();
-    return this.deps.records.all().filter((one) => this.isLeasable(one, now))
+    if (this.deps.budgetUsd() < MIN_LEASE_USD) return 0;
+    const ledger = this.ledger();
+    return this.deps.records.all().filter((one) => this.isLeasable(one, ledger))
       .length;
   }
 
+  private ledger(): BatchLedger {
+    return new BatchLedger(this.deps.records.all(), this.now());
+  }
+
   /** Waiting (or its lease expired), with something left of its inclusion's ceiling. */
-  private isLeasable(record: DocumentUploadRecord, now: number): boolean {
-    if (batchLeftUsd(this.deps.records.all(), record) < MIN_LEASE_USD)
-      return false;
-    if (record.state === 'received') return true;
-    return (
-      WORKING_STATES.has(record.state) &&
-      record.lease !== null &&
-      Date.parse(record.lease.until) <= now
-    );
+  private isLeasable(
+    record: DocumentUploadRecord,
+    ledger: BatchLedger,
+  ): boolean {
+    const waiting =
+      record.state === 'received' ||
+      (WORKING_STATES.has(record.state) &&
+        record.lease !== null &&
+        !isWorking(record, this.now()));
+    return waiting && ledger.leftFor(record) >= MIN_LEASE_USD;
   }
 
   isJob(jobId: string): boolean {
@@ -95,15 +101,10 @@ export class DocIngestQueue {
   }
 
   isHeldBy(worker: string): boolean {
-    const now = this.now().getTime();
+    const now = this.now();
     return this.deps.records
       .all()
-      .some(
-        (one) =>
-          one.lease?.worker === worker &&
-          WORKING_STATES.has(one.state) &&
-          Date.parse(one.lease.until) > now,
-      );
+      .some((one) => one.lease?.worker === worker && isWorking(one, now));
   }
 
   /**
@@ -112,9 +113,8 @@ export class DocIngestQueue {
    */
   lease(worker: string, topic?: string): DocIngestJob | null {
     const monthUsd = this.deps.budgetUsd();
-    if (monthUsd <= 0) return null;
-    const now = this.now();
-    for (const record of this.waiting(now, topic)) {
+    if (monthUsd < MIN_LEASE_USD) return null;
+    for (const record of this.waiting(topic)) {
       const attempts = record.attempts + (record.lease ? 1 : 0);
       if (attempts >= DOC_INGEST_MAX_ATTEMPTS) {
         this.later(this.giveUp(record, 'the Mac lost the job too many times'));
@@ -147,21 +147,19 @@ export class DocIngestQueue {
         worker,
         until: new Date(now.getTime() + DOC_INGEST_LEASE_MS).toISOString(),
         since: now.toISOString(),
-        budgetUsd: Math.min(
-          monthUsd,
-          batchLeftUsd(this.deps.records.all(), record),
-        ),
+        budgetUsd: Math.min(monthUsd, this.ledger().leftFor(record)),
       },
       updatedAt: now.toISOString(),
     };
   }
 
   /** Oldest first; `topic` keeps to one collection (the E2E fake Mac, as kb-publish's). */
-  private waiting(now: Date, topic?: string): DocumentUploadRecord[] {
+  private waiting(topic?: string): DocumentUploadRecord[] {
+    const ledger = this.ledger();
     return this.deps.records
       .all()
-      .filter((one) => this.isLeasable(one, now.getTime()))
       .filter((one) => topic === undefined || one.topic === topic)
+      .filter((one) => this.isLeasable(one, ledger))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
@@ -250,14 +248,14 @@ export class DocIngestQueue {
     // A level placed before the document arrives: it is never "Sem nível" (ADR 0036 §5).
     if (outcome.state === 'ready' && record.level)
       await this.deps.placeLevel?.(record, outcome.document.id);
-    await this.deps.records.put({
-      ...record,
+    await this.deps.records.update(record.id, (current) => ({
+      ...current,
       ...endOf(outcome),
       workMs: this.workedOn(record),
       lease: null,
-      spentUsd: record.spentUsd + result.spendUsd,
+      spentUsd: current.spentUsd + result.spendUsd,
       updatedAt: this.now().toISOString(),
-    });
+    }));
     if (result.spendUsd > 0) this.deps.book?.(record, result.spendUsd);
     // A failed one keeps its file for a while: the person may send it again as it is.
     if (outcome.state !== 'failed') await this.deps.files.remove(record.id);
@@ -311,19 +309,33 @@ export class DocIngestQueue {
       readonly bytes: number;
       readonly name: string;
     },
-  ): Promise<string> {
+  ): Promise<string | null> {
     const record = this.held(owner);
     if (record.kind !== 'recording' || !this.deps.adoptAudio)
       throw new AppError('NOT_FOUND', 'No such audio for this job');
-    const mediaId = await this.deps.adoptAudio(record, audio);
-    await this.deps.records.put({
-      ...record,
-      state: 'transcribing',
-      mediaId,
+    try {
+      const mediaId = await this.deps.adoptAudio(record, audio);
+      await this.ended(record.id, { state: 'transcribing', mediaId });
+      return mediaId;
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err;
+      // Refused for good (the sender's quota, level or rights): trying again changes nothing.
+      const failure = { failure: 'not-accepted', detail: err.message } as const;
+      await this.ended(record.id, { state: 'failed', ...failure });
+      return null;
+    }
+  }
+
+  private async ended(
+    id: string,
+    end: Partial<DocumentUploadRecord>,
+  ): Promise<void> {
+    await this.deps.records.update(id, (current) => ({
+      ...current,
+      ...end,
       lease: null,
       updatedAt: this.now().toISOString(),
-    });
-    return mediaId;
+    }));
   }
 
   /** A list read on the Mac: it waits for the person to choose (KBC-186 R7). */
@@ -364,13 +376,17 @@ export class DocIngestQueue {
 /** What a result leaves on the record: failed with why, or done on the Mac ("no mapa"). */
 function endOf(
   outcome: DocIngestResultRequest['outcome'],
-): Pick<DocumentUploadRecord, 'state' | 'failure' | 'detail' | 'document'> {
+): Pick<
+  DocumentUploadRecord,
+  'state' | 'failure' | 'detail' | 'document' | 'review'
+> {
   if (outcome.state === 'failed')
     return {
       state: 'failed',
       failure: outcome.failure,
       detail: outcome.detail,
       document: null,
+      review: false,
     };
   const repeated = outcome.state === 'duplicate';
   return {
@@ -378,6 +394,7 @@ function endOf(
     failure: null,
     detail: repeated ? 'already in the collection' : null,
     document: outcome.document,
+    review: outcome.state === 'ready' && outcome.review,
   };
 }
 

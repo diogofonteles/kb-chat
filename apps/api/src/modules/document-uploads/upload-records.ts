@@ -34,8 +34,23 @@ export class UploadRecords {
     return this.save();
   }
 
-  remove(id: string): Promise<void> {
-    this.records.delete(id);
+  /**
+   * Changes the record as it is now, not as the caller read it before a wait: two changes at
+   * once never undo each other. Answers it changed, or undefined when it is gone.
+   */
+  async update(
+    id: string,
+    change: (current: DocumentUploadRecord) => DocumentUploadRecord,
+  ): Promise<DocumentUploadRecord | undefined> {
+    const current = this.records.get(id);
+    if (!current) return undefined;
+    const changed = change(current);
+    await this.put(changed);
+    return changed;
+  }
+
+  remove(...ids: readonly string[]): Promise<void> {
+    for (const id of ids) this.records.delete(id);
     return this.save();
   }
 

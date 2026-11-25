@@ -8,6 +8,7 @@ import { startOfAppMonth } from './app-calendar.js';
 import type { AppConfig } from './config.js';
 import type { MediaDeps } from './media-factory.js';
 import type { MediaDocuments } from './media-documents-factory.js';
+import { sameLinkKey } from '@kb-chat/contracts';
 import { collectionOf } from './modules/media-documents/index.js';
 import { refreshSoon } from './refresh-soon.js';
 import type { DocumentUploadRecord } from './ports/document-uploads.js';
@@ -69,14 +70,33 @@ export async function registerDocumentUploads(
     new JsonDocumentUploadStore(join(state, 'document-uploads.json')),
   );
   const files = new FsDocumentUploadFiles(join(state, 'document-uploads'));
+  const service = uploadService(wiring, { records, files });
+  keepSwept(app, service);
   await app.register(
     documentUploadRoutes({
-      service: uploadService(wiring, { records, files }),
+      service,
       actorOf: (request) => uploadActorOf(request, wiring.catalog),
       createPerMinute: wiring.config.DOCUMENT_CREATE_RATE_LIMIT,
     }),
   );
   return ingestQueue(app, wiring, { records, files });
+}
+
+/** What is old leaves by itself (PD-11), at the start and then now and then. */
+const SWEEP_MS = 6 * 60 * 60 * 1000;
+
+function keepSwept(app: FastifyInstance, service: DocumentUploadService): void {
+  const sweep = () => {
+    service
+      .sweep()
+      .catch((err: unknown) =>
+        app.log.warn({ err }, 'document uploads: the sweep failed'),
+      );
+  };
+  sweep();
+  const timer = setInterval(sweep, SWEEP_MS);
+  timer.unref();
+  app.addHook('onClose', () => clearInterval(timer));
 }
 
 function ingestQueue(
@@ -147,7 +167,9 @@ function findExisting(
 ): ExistingDocument | null {
   const same = (entry: CatalogEntry) =>
     (key.sha256 !== null && entry.original?.sha256 === key.sha256) ||
-    (key.url !== null && entry.sourcePath === key.url);
+    (key.url !== null &&
+      entry.sourcePath !== null &&
+      sameLinkKey(entry.sourcePath) === key.url);
   for (const topic of scope) {
     const entries = [...(catalog.get(topic)?.entries.values() ?? [])];
     const entry = entries.find(same);

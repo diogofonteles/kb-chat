@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import {
   DOCUMENT_BATCH_DEFAULT_USD,
+  DOCUMENT_DISK_RESERVE_BYTES,
+  DOCUMENT_WAITING_MAX_BYTES,
   recordingLinkKind,
+  sameLinkKey,
   type ContentCosts,
   type ChooseRecordingsRequest,
   type ChooseRecordingsResponse,
@@ -23,12 +26,7 @@ import type {
 import { UploadRefusedError } from '../../ports/media-files.js';
 import { chosenLevel, type MediaActor } from '../media/index.js';
 import { contentCostsOf } from './content-costs.js';
-import {
-  MIN_LEASE_USD,
-  batchLeftUsd,
-  batchOf,
-  isWorking,
-} from './upload-batches.js';
+import { BatchLedger, MIN_LEASE_USD, isWorking } from './upload-batches.js';
 import type { UploadRecords } from './upload-records.js';
 import { toDocumentUpload, type MediaProgress } from './upload-view.js';
 
@@ -64,8 +62,6 @@ export interface DocumentUploadServiceDeps {
   readonly mediaProgressOf?: (mediaId: string) => MediaProgress | null;
   /** What the media month still has (ADR 0035 §11): at zero, everything waits. */
   readonly monthLeftUsd?: () => number;
-  /** A job is waiting: the Mac is started when it runs only on demand (KBC-114). */
-  readonly wake?: () => void;
   readonly now?: () => Date;
 }
 
@@ -73,6 +69,8 @@ export interface DocumentUploadServiceDeps {
 const LIST_LIMIT = 1_000;
 /** A file whose bytes stopped arriving this long ago is given up (as media, ADR 0033). */
 export const DOCUMENT_UPLOAD_ABANDON_MS = 7 * 24 * 60 * 60 * 1000;
+/** What ended this long ago leaves the record: the collection itself answers for it. */
+export const DOCUMENT_UPLOAD_KEEP_MS = 90 * 24 * 60 * 60 * 1000;
 
 const notFound = () => new AppError('NOT_FOUND', 'No such document upload');
 const notWaiting = () =>
@@ -110,10 +108,65 @@ export class DocumentUploadService {
     const repeated = this.repeated(actor, topic, key);
     if (repeated) return repeated;
     const batch = this.batchFor(actor, request);
+    const resumed = await this.resume(actor, { topic, key, level, batch });
+    if (resumed)
+      return { outcome: 'created', upload: await this.viewOf(resumed, actor) };
+    if (request.kind === 'file') await this.assertRoom(actor, request.bytes);
     const record = this.newRecord(actor, { topic, request, level, batch });
     await this.deps.records.put(record);
-    if (record.state === 'received') this.deps.wake?.();
     return { outcome: 'created', upload: await this.viewOf(record, actor) };
+  }
+
+  /**
+   * The person's own file that stopped half-way, sent again to the same collection: its bytes
+   * go on from where they are, with the level and the inclusion chosen now.
+   */
+  private async resume(
+    actor: UploadActor,
+    input: {
+      readonly topic: string;
+      readonly key: UploadKey;
+      readonly level: string | null;
+      readonly batch: UploadBatch;
+    },
+  ): Promise<DocumentUploadRecord | undefined> {
+    const { topic, key, level, batch } = input;
+    const stopped = this.deps.records
+      .all()
+      .find(
+        (one) =>
+          one.state === 'receiving' &&
+          one.topic === topic &&
+          one.owner.principal === actor.principal &&
+          isSame(one, key),
+      );
+    if (!stopped) return undefined;
+    return this.deps.records.update(stopped.id, (current) => ({
+      ...current,
+      level,
+      batch,
+      updatedAt: this.now().toISOString(),
+    }));
+  }
+
+  /** A person's files waiting here are bounded, and the disk keeps its reserve (PD-11). */
+  private async assertRoom(actor: UploadActor, bytes: number): Promise<void> {
+    const waiting = this.deps.records
+      .all()
+      .filter(
+        (one) =>
+          one.owner.principal === actor.principal && this.holdsBytes(one),
+      )
+      .reduce((sum, one) => sum + (one.bytes ?? 0), 0);
+    if (!actor.isMaster && waiting + bytes > DOCUMENT_WAITING_MAX_BYTES)
+      throw new AppError(
+        'MEDIA_QUOTA_EXCEEDED',
+        'Too many files waiting here',
+        { details: { quotaBytes: DOCUMENT_WAITING_MAX_BYTES } },
+      );
+    const free = await this.deps.files.freeBytes();
+    if (free - bytes < DOCUMENT_DISK_RESERVE_BYTES)
+      throw new AppError('STORAGE_FULL', 'No room left for files');
   }
 
   /** BR-3: the same original (or link) in the collection, or on its way, is not sent again. */
@@ -131,13 +184,41 @@ export class DocumentUploadService {
     }
     const pending = this.deps.records
       .all()
-      .find((one) => scope.includes(one.topic) && isSameLive(one, key));
+      .find(
+        (one) =>
+          scope.includes(one.topic) && isSame(one, key) && this.isLive(one),
+      );
     if (!pending) return null;
     const mine = pending.owner.principal === actor.principal || actor.isMaster;
     const upload = mine
-      ? this.viewNow(pending, actor, { received: null, kept: false })
+      ? this.viewNow(pending, actor, {
+          received: null,
+          kept: false,
+          ledger: this.ledger(),
+        })
       : null;
     return { outcome: 'duplicate', document: upload?.document ?? null, upload };
+  }
+
+  /** Its file is here: arriving, waiting for the Mac, or kept after it failed. */
+  private holdsBytes(record: DocumentUploadRecord): boolean {
+    if (record.kind !== 'file' || record.state === 'mapped') return false;
+    if (record.state !== 'failed') return true;
+    const age = this.now().getTime() - Date.parse(record.updatedAt);
+    return (
+      record.failure !== 'upload-abandoned' && age <= DOCUMENT_UPLOAD_ABANDON_MS
+    );
+  }
+
+  /**
+   * Received and not failed: it is in the collection or on its way. One still receiving its
+   * bytes blocks nobody (its sender may never come back), nor does a recording that failed.
+   */
+  private isLive(record: DocumentUploadRecord): boolean {
+    if (record.state === 'failed' || record.state === 'receiving') return false;
+    if (!record.mediaId || !this.deps.mediaProgressOf) return true;
+    const progress = this.deps.mediaProgressOf(record.mediaId);
+    return progress !== null && progress !== 'failed';
   }
 
   /**
@@ -170,8 +251,7 @@ export class DocumentUploadService {
     await this.deps.records.put(
       ...items.map((one) => ({ ...one, batch: { id, capUsd } })),
     );
-    this.deps.wake?.();
-    const changed = batchOf(this.deps.records.all(), id);
+    const changed = this.ledger().viewOf(id);
     if (!changed) throw notFound();
     return changed;
   }
@@ -183,10 +263,16 @@ export class DocumentUploadService {
   async remove(actor: UploadActor, id: string): Promise<void> {
     const record = this.deps.records.get(id);
     if (!record || !this.mayManage(actor, record)) throw notFound();
-    if (isWorking(record) || this.receiving.has(id))
+    if (isWorking(record, this.now()) || this.receiving.has(id))
       throw new AppError('MEDIA_CONFLICT', 'The Mac is working on it');
     await this.deps.files.remove(id);
-    await this.deps.records.remove(id);
+    // What it spent still counts in its inclusion, and what it became is still there.
+    if (record.spentUsd > 0 || record.state === 'mapped')
+      await this.deps.records.update(id, (one) => ({
+        ...one,
+        dismissed: true,
+      }));
+    else await this.deps.records.remove(id);
   }
 
   /**
@@ -210,12 +296,15 @@ export class DocumentUploadService {
     // The list leaves first: a second press finds nothing to choose from.
     await this.deps.records.remove(id);
     const fresh = urls.filter(
-      (url) => !this.repeated(actor, list.topic, { sha256: null, url }),
+      (url) =>
+        !this.repeated(actor, list.topic, {
+          sha256: null,
+          url: sameLinkKey(url),
+        }),
     );
     await this.deps.records.put(
       ...fresh.map((url) => this.chosenOf(list, url)),
     );
-    if (fresh.length > 0) this.deps.wake?.();
     return { created: fresh.length, already: urls.length - fresh.length };
   }
 
@@ -250,16 +339,15 @@ export class DocumentUploadService {
     if (!record || !this.mayManage(actor, record)) throw notFound();
     if (record.state !== 'failed' || !(await this.isKept(record)))
       throw notWaiting();
-    const again: DocumentUploadRecord = {
-      ...record,
+    const again = await this.deps.records.update(id, (current) => ({
+      ...current,
       state: 'received',
       failure: null,
       detail: null,
       attempts: 0,
       updatedAt: this.now().toISOString(),
-    };
-    await this.deps.records.put(again);
-    this.deps.wake?.();
+    }));
+    if (!again) throw notFound();
     return this.viewOf(again, actor);
   }
 
@@ -288,21 +376,13 @@ export class DocumentUploadService {
   ): DocumentUploadRecord {
     const at = this.now().toISOString();
     return {
+      ...NEW_RECORD,
+      ...sourceOf(input.request),
       id: randomUUID(),
       topic: input.topic,
-      ...sourceOf(input.request),
       level: input.level,
       batch: input.batch,
       owner: ownerOf(actor),
-      failure: null,
-      detail: null,
-      document: null,
-      mediaId: null,
-      lease: null,
-      attempts: 0,
-      spentUsd: 0,
-      workMs: null,
-      entries: [],
       createdAt: at,
       updatedAt: at,
     };
@@ -360,12 +440,11 @@ export class DocumentUploadService {
       await this.deps.files.remove(record.id);
       return 0;
     }
-    await this.deps.records.put({
-      ...record,
+    await this.deps.records.update(record.id, (current) => ({
+      ...current,
       state: 'received',
       updatedAt: this.now().toISOString(),
-    });
-    this.deps.wake?.();
+    }));
     return record.bytes ?? 0;
   }
 
@@ -378,44 +457,61 @@ export class DocumentUploadService {
 
   /** "Documentos em processamento": one's own; masters see everyone's. */
   async list(actor: UploadActor): Promise<DocumentUpload[]> {
-    await this.sweep();
     const records = this.deps.records
       .all()
       .filter(
         (one) =>
+          !one.dismissed &&
           (actor.isMaster || one.owner.principal === actor.principal) &&
           actor.canSee(one.topic),
       )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, LIST_LIMIT);
-    return Promise.all(records.map((one) => this.viewOf(one, actor)));
+    const ledger = this.ledger();
+    return Promise.all(records.map((one) => this.viewOf(one, actor, ledger)));
   }
 
-  /** A week on: bytes that stopped arriving are given up, a failed file's bytes go. */
-  private async sweep(): Promise<void> {
-    const limit = this.now().getTime() - DOCUMENT_UPLOAD_ABANDON_MS;
-    for (const record of this.deps.records.all())
-      if (record.state === 'failed' && Date.parse(record.updatedAt) < limit)
-        await this.deps.files.remove(record.id);
-    const stale = this.deps.records
-      .all()
-      .filter(
-        (one) => one.state === 'receiving' && Date.parse(one.updatedAt) < limit,
-      );
-    for (const record of stale) {
+  private ledger(): BatchLedger {
+    return new BatchLedger(this.deps.records.all(), this.now());
+  }
+
+  /**
+   * A week on: bytes that stopped arriving are given up, and a failed file's bytes go. Three
+   * months on, what ended leaves the record. Run by the API now and then.
+   */
+  async sweep(): Promise<void> {
+    const now = this.now();
+    const since = (record: DocumentUploadRecord) =>
+      now.getTime() - Date.parse(record.updatedAt);
+    const all = this.deps.records.all();
+    const ended = all.filter(
+      (one) =>
+        ['mapped', 'failed', 'transcribing'].includes(one.state) &&
+        since(one) > DOCUMENT_UPLOAD_KEEP_MS,
+    );
+    if (ended.length > 0)
+      await this.deps.records.remove(...ended.map((one) => one.id));
+    for (const record of all) {
+      if (since(record) <= DOCUMENT_UPLOAD_ABANDON_MS) continue;
+      if (record.state !== 'failed' && record.state !== 'receiving') continue;
       await this.deps.files.remove(record.id);
-      await this.deps.records.put({
-        ...record,
-        state: 'failed',
-        failure: 'upload-abandoned',
-        updatedAt: this.now().toISOString(),
-      });
+      if (record.state === 'receiving') await this.giveUp(record.id, now);
     }
+  }
+
+  private async giveUp(id: string, now: Date): Promise<void> {
+    await this.deps.records.update(id, (current) => ({
+      ...current,
+      state: 'failed',
+      failure: 'upload-abandoned',
+      updatedAt: now.toISOString(),
+    }));
   }
 
   private async viewOf(
     record: DocumentUploadRecord,
     actor: UploadActor,
+    ledger = this.ledger(),
   ): Promise<DocumentUpload> {
     const received =
       record.kind === 'file'
@@ -424,13 +520,13 @@ export class DocumentUploadService {
           : record.bytes
         : null;
     const kept = record.state === 'failed' && (await this.isKept(record));
-    return this.viewNow(record, actor, { received, kept });
+    return this.viewNow(record, actor, { received, kept, ledger });
   }
 
   private viewNow(
     record: DocumentUploadRecord,
     actor: UploadActor,
-    known: { readonly received: number | null; readonly kept: boolean },
+    known: KnownOfUpload,
   ): DocumentUpload {
     const media =
       record.mediaId && this.deps.mediaProgressOf
@@ -440,14 +536,9 @@ export class DocumentUploadService {
       record.document !== null &&
       this.deps.inCatalog(record.topic, record.document.id);
     const view = toDocumentUpload(record, {
-      showsDetail: actor.isMaster,
-      ...known,
+      ...this.contextOf(record, actor, known),
       media,
       arrived,
-      batch: record.batch
-        ? batchOf(this.deps.records.all(), record.batch.id)
-        : null,
-      heldBy: this.heldBy(record),
     });
     // A document above the person's level is not named, even as their own upload's result.
     const document =
@@ -457,24 +548,66 @@ export class DocumentUploadService {
     return { ...view, document };
   }
 
-  /** The ceiling a waiting item is behind: its inclusion's, or the media month's. */
-  private heldBy(record: DocumentUploadRecord): DocumentUpload['heldBy'] {
-    if (batchLeftUsd(this.deps.records.all(), record) < MIN_LEASE_USD)
-      return 'batch-cap';
-    return (this.deps.monthLeftUsd?.() ?? 1) <= 0 ? 'month-cap' : null;
+  private contextOf(
+    record: DocumentUploadRecord,
+    actor: UploadActor,
+    known: KnownOfUpload,
+  ) {
+    return {
+      showsDetail: actor.isMaster,
+      received: known.received,
+      kept: known.kept,
+      batch: record.batch ? known.ledger.viewOf(record.batch.id) : null,
+      heldBy: this.heldBy(record, known.ledger),
+      mine: record.owner.principal === actor.principal,
+    };
+  }
+
+  /**
+   * The ceiling a waiting item is behind: its inclusion's (what was really spent of it, not
+   * what the Mac holds for another item), or the media month's.
+   */
+  private heldBy(
+    record: DocumentUploadRecord,
+    ledger: BatchLedger,
+  ): DocumentUpload['heldBy'] {
+    if (ledger.unspentOf(record) < MIN_LEASE_USD) return 'batch-cap';
+    const month = this.deps.monthLeftUsd?.() ?? Number.POSITIVE_INFINITY;
+    return month < MIN_LEASE_USD ? 'month-cap' : null;
   }
 }
+
+/** What the view needs that takes a wait, or is read once for a whole list. */
+interface KnownOfUpload {
+  readonly received: number | null;
+  readonly kept: boolean;
+  readonly ledger: BatchLedger;
+}
+
+/** What every upload starts with. */
+const NEW_RECORD = {
+  failure: null,
+  detail: null,
+  document: null,
+  mediaId: null,
+  lease: null,
+  attempts: 0,
+  spentUsd: 0,
+  dismissed: false,
+  review: false,
+  workMs: null,
+  entries: [],
+} as const;
 
 interface UploadKey {
   readonly sha256: string | null;
   readonly url: string | null;
 }
 
-/** An upload of the same original (or link) that did not fail: on its way, or done. */
-const isSameLive = (one: DocumentUploadRecord, key: UploadKey): boolean =>
-  one.state !== 'failed' &&
-  ((key.sha256 !== null && one.sha256 === key.sha256) ||
-    (key.url !== null && one.url === key.url));
+/** An upload of the same original, or of the same link. */
+const isSame = (one: DocumentUploadRecord, key: UploadKey): boolean =>
+  (key.sha256 !== null && one.sha256 === key.sha256) ||
+  (key.url !== null && one.url !== null && sameLinkKey(one.url) === key.url);
 
 /** What an upload is, from what was sent: a file waits for its bytes, a link for the Mac. */
 function sourceOf(
@@ -512,7 +645,7 @@ function linkKindOf(
 
 const keyOf = (request: CreateDocumentUploadRequest): UploadKey => ({
   sha256: request.kind === 'file' ? request.sha256 : null,
-  url: request.kind === 'url' ? request.url : null,
+  url: request.kind === 'url' ? sameLinkKey(request.url) : null,
 });
 
 const ownerOf = (actor: UploadActor): UploadOwner => ({

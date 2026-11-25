@@ -11,41 +11,63 @@ export const WORKING_STATES: ReadonlySet<string> = new Set([
   'mapping',
 ]);
 
-export const isWorking = (record: DocumentUploadRecord): boolean =>
-  WORKING_STATES.has(record.state) && record.lease !== null;
+/** The Mac has it now: its lease is live. One whose lease expired is nobody's. */
+export const isWorking = (record: DocumentUploadRecord, now: Date): boolean =>
+  WORKING_STATES.has(record.state) &&
+  record.lease !== null &&
+  Date.parse(record.lease.until) > now.getTime();
 
-const sum = (values: readonly number[]): number =>
-  values.reduce((total, value) => total + value, 0);
-
-const itemsOf = (
-  records: readonly DocumentUploadRecord[],
-  id: string,
-): DocumentUploadRecord[] => records.filter((one) => one.batch?.id === id);
-
-/** An inclusion's ceiling and what its items spent so far; null when nothing is in it. */
-export function batchOf(
-  records: readonly DocumentUploadRecord[],
-  id: string,
-): DocumentBatch | null {
-  const items = itemsOf(records, id);
-  const capUsd = items[0]?.batch?.capUsd;
-  if (capUsd === undefined) return null;
-  return { id, capUsd, spentUsd: sum(items.map((one) => one.spentUsd)) };
+interface BatchTotals {
+  readonly capUsd: number;
+  readonly spentUsd: number;
+  /** What the items the Mac has now may still spend. */
+  readonly heldUsd: number;
 }
 
 /**
- * What `record` may still spend of its inclusion's ceiling: the ceiling less what was spent
- * and what the other items hold on the Mac now. No inclusion: nothing limits it here.
+ * The inclusions' account at one moment, read once over all the items: what each spent
+ * (items taken off the list included) and what it holds on the Mac now.
  */
-export function batchLeftUsd(
-  records: readonly DocumentUploadRecord[],
-  record: DocumentUploadRecord,
-): number {
-  if (!record.batch) return Number.POSITIVE_INFINITY;
-  const items = itemsOf(records, record.batch.id);
-  const held = items
-    .filter((one) => one.id !== record.id && isWorking(one))
-    .map((one) => one.lease?.budgetUsd ?? 0);
-  const spent = items.map((one) => one.spentUsd);
-  return record.batch.capUsd - sum(spent) - sum(held);
+export class BatchLedger {
+  private readonly totals = new Map<string, BatchTotals>();
+
+  constructor(
+    records: readonly DocumentUploadRecord[],
+    private readonly now: Date,
+  ) {
+    for (const record of records) {
+      if (!record.batch) continue;
+      const before = this.totals.get(record.batch.id);
+      this.totals.set(record.batch.id, {
+        capUsd: record.batch.capUsd,
+        spentUsd: (before?.spentUsd ?? 0) + record.spentUsd,
+        heldUsd: (before?.heldUsd ?? 0) + this.heldBy(record),
+      });
+    }
+  }
+
+  private heldBy(record: DocumentUploadRecord): number {
+    return isWorking(record, this.now) ? (record.lease?.budgetUsd ?? 0) : 0;
+  }
+
+  viewOf(id: string): DocumentBatch | null {
+    const totals = this.totals.get(id);
+    return totals
+      ? { id, capUsd: totals.capUsd, spentUsd: totals.spentUsd }
+      : null;
+  }
+
+  /** The ceiling less what was really spent: what the person is told. */
+  unspentOf(record: DocumentUploadRecord): number {
+    const totals = record.batch && this.totals.get(record.batch.id);
+    return totals ? totals.capUsd - totals.spentUsd : Number.POSITIVE_INFINITY;
+  }
+
+  /** What `record` may take now: less what the other items hold on the Mac too. */
+  leftFor(record: DocumentUploadRecord): number {
+    const totals = record.batch && this.totals.get(record.batch.id);
+    if (!totals) return Number.POSITIVE_INFINITY;
+    const others = totals.heldUsd - this.heldBy(record);
+    return totals.capUsd - totals.spentUsd - others;
+  }
 }

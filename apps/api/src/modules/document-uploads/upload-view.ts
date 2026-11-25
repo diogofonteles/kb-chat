@@ -17,6 +17,8 @@ export interface UploadContext {
   readonly batch: DocumentBatch | null;
   /** The spending ceiling that makes it wait, if any (KBC-009 R3). */
   readonly heldBy: DocumentUpload['heldBy'];
+  /** Only its sender sends its bytes. */
+  readonly mine: boolean;
   /** A link, or a file whose bytes are still here: it can go again. */
   readonly kept: boolean;
 }
@@ -39,9 +41,13 @@ export function toDocumentUpload(
     mediaId: record.mediaId,
     bytes: record.bytes,
     received: record.kind === 'file' ? input.received : null,
-    uploadUrl: record.state === 'receiving' ? uploadUrlOf(record.id) : null,
+    uploadUrl:
+      record.state === 'receiving' && input.mine
+        ? uploadUrlOf(record.id)
+        : null,
     batch: input.batch,
     heldBy: record.state === 'received' ? input.heldBy : null,
+    review: record.review,
     entries: record.state === 'choosing' ? [...record.entries] : [],
     retriable: record.state === 'failed' && input.kept,
     createdAt: record.createdAt,

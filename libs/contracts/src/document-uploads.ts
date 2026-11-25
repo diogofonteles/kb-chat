@@ -94,6 +94,23 @@ export type ChangeDocumentBatchRequest = z.infer<
   typeof changeDocumentBatchRequestSchema
 >;
 
+/** What a person may have waiting here at once (masters: the disk is the limit). */
+export const DOCUMENT_WAITING_MAX_BYTES = 5 * 1024 ** 3;
+/** The disk keeps at least this free: the rest of the app lives there too. */
+export const DOCUMENT_DISK_RESERVE_BYTES = 5 * 1024 ** 3;
+
+const TRACKING = /^(utm_\w+|fbclid|gclid|igsh|si)$/i;
+
+/** The same page under another address (its fragment, a campaign's marks) is one link. */
+export function sameLinkKey(link: string): string {
+  if (!URL.canParse(link)) return link;
+  const url = new URL(link);
+  url.hash = '';
+  for (const name of [...url.searchParams.keys()])
+    if (TRACKING.test(name)) url.searchParams.delete(name);
+  return url.toString();
+}
+
 /**
  * POST /api/v1/topics/:topic/documents (FR-1): a file announced (its bytes go by tus to the
  * upload's `uploadUrl`) or a link. `level` is required in a collection with levels.
@@ -106,6 +123,7 @@ export const createDocumentUploadRequestSchema = z.discriminatedUnion('kind', [
       .trim()
       .min(1)
       .max(255)
+      .regex(/^\P{Cc}+$/u, 'A name has no control characters')
       .refine(hasDocumentExtension, 'Not a document this app converts'),
     bytes: z.number().int().min(1).max(DOCUMENT_UPLOAD_MAX_BYTES),
     sha256: mediaSha256Schema,
@@ -204,6 +222,8 @@ export const documentUploadSchema = z.object({
   batch: documentBatchSchema.nullable(),
   /** Why it waits although the Mac could take it: a spending ceiling was reached. */
   heldBy: z.enum(['batch-cap', 'month-cap']).nullable(),
+  /** In the collection, and waiting for a person in kb's review queue. */
+  review: z.boolean(),
   /** A list's recordings, while `choosing`; empty otherwise. */
   entries: z.array(recordingEntrySchema),
   /** It failed, and the app still has what was sent: it can go again as it is. */
@@ -356,6 +376,8 @@ export const docIngestResultRequestSchema = docLeaseSchema.extend({
     z.object({
       state: z.literal('ready'),
       document: uploadedDocumentRefSchema,
+      /** kb wrote it and put it in its own review queue: it is in the collection. */
+      review: z.boolean().default(false),
     }),
     z.object({
       state: z.literal('duplicate'),

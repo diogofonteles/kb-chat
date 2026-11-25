@@ -88,7 +88,7 @@ async function ingest(
   const document = await converted(queue, { job, vault });
   await queue.complete(owner, {
     ...owner,
-    outcome: { state: 'ready', document },
+    outcome: { state: 'ready', document, review: false },
     spendUsd: 0,
   });
 }

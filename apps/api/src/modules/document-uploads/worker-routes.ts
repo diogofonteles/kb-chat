@@ -152,7 +152,8 @@ function registerAudio(app: FastifyInstance, deps: DocIngestWorkerRoutesDeps) {
       schema: {
         params: jobParams,
         querystring: audioQuery,
-        response: { 200: z.object({ mediaId: z.uuid() }) },
+        // Null: refused for good (the sender's quota, level or rights), and the upload says why.
+        response: { 200: z.object({ mediaId: z.uuid().nullable() }) },
       },
     },
     async (request) => {

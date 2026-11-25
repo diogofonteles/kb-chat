@@ -154,6 +154,8 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.mediaConflict:Esta mídia mudou enquanto você agia. Atualize a lista e tente de novo.`,
   MEDIA_DUPLICATE: () =>
     $localize`:@@error.mediaDuplicate:Este arquivo já está no acervo.`,
+  STORAGE_FULL: () =>
+    $localize`:@@error.storageFull:Não há espaço para guardar o arquivo agora. Fale com o dono.`,
   MEDIA_QUOTA_EXCEEDED: () =>
     $localize`:@@error.mediaQuota:Este envio passa da sua cota. Fale com um master para aumentar.`,
   MEDIA_UPLOAD_EXPIRED: () =>

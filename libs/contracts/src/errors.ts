@@ -43,6 +43,8 @@ export const API_ERROR_CODES = [
   'MEDIA_DUPLICATE',
   /** The upload would pass the person's quota; `details.quotaBytes` says it (KBC-035 BR-1). */
   'MEDIA_QUOTA_EXCEEDED',
+  /** The disk keeps a reserve and this file would pass it (KBC-184). */
+  'STORAGE_FULL',
   /** A body the route does not read: a part of an upload in another format (KBC-035). */
   'UNSUPPORTED_MEDIA_TYPE',
   /** The interrupted upload's parts were deleted after 24 h (KBC-035 BR-3). */

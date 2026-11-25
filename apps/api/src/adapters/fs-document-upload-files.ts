@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, rm, stat, truncate } from 'node:fs/promises';
+import { mkdir, rm, stat, statfs, truncate } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Transform, type Readable, type TransformCallback } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -87,6 +87,12 @@ export class FsDocumentUploadFiles implements DocumentUploadFilesPort {
     for await (const chunk of createReadStream(this.pathOf(id)))
       hash.update(chunk as Buffer);
     return hash.digest('hex');
+  }
+
+  async freeBytes(): Promise<number> {
+    await mkdir(this.root, { recursive: true, mode: 0o700 });
+    const disk = await statfs(this.root);
+    return disk.bavail * disk.bsize;
   }
 
   async find(id: string): Promise<{ path: string; size: number } | null> {

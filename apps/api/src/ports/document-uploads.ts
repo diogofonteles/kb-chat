@@ -58,6 +58,10 @@ export interface DocumentUploadRecord {
   /** Attempts the Mac spent on it (a crash or a lost lease counts; its own setup does not). */
   readonly attempts: number;
   readonly spentUsd: number;
+  /** Taken off the list by a person: kept for its inclusion's account until it is pruned. */
+  readonly dismissed: boolean;
+  /** kb wrote it and asked for a person's review (its own queue). */
+  readonly review: boolean;
   /** How long the Mac worked on it, once done (the estimate of the next ones). */
   readonly workMs: number | null;
   /** What a list holds, once the Mac read it and until the person chose. */
@@ -79,6 +83,8 @@ export interface DocumentUploadFilesPort {
   /** Appends a part, never past `maxBytes` in all; answers the new offset. */
   append(id: string, body: Readable, maxBytes: number): Promise<number>;
   sha256(id: string): Promise<string>;
+  /** What is left on the disk the files live on. */
+  freeBytes(): Promise<number>;
   /** The file on disk, for the Mac's download; null when gone. */
   find(id: string): Promise<{ path: string; size: number } | null>;
   remove(id: string): Promise<void>;
