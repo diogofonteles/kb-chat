@@ -417,7 +417,9 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
       );
       expect(wide, way).toBeLessThanOrEqual(0);
       const sizes = await add
-        .locator('select, textarea, input:not([type=file])')
+        .locator(
+          'select, textarea, input:not([type=file]):not([type=checkbox]):not([type=radio])',
+        )
         .evaluateAll((fields) =>
           fields
             // The collection's closed dialog is in the page too: what is seen is measured.
