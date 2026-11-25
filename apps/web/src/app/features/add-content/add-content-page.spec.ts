@@ -213,6 +213,17 @@ describe('AddContentPage (KBC-184)', () => {
     expect(drop.defaultPrevented).toBe(true);
   });
 
+  it('two presses on "Incluir" in the same frame send once (PD-02)', async () => {
+    const { http, fixture } = await renderPage();
+    await typeLinks('https://example.org/1', fixture);
+    const button = include();
+    button.click();
+    button.click();
+    await fixture.whenStable();
+    http.expectOne((one) => one.method === 'POST');
+    expect(TestBed.inject(ContentSender).sends()).toHaveLength(1);
+  });
+
   it('takes as many links as are pasted', async () => {
     const { fixture } = await renderPage();
     const many = Array.from(
