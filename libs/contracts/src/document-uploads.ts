@@ -251,6 +251,18 @@ export const documentWorkSchema = z.object({
 });
 export type DocumentWork = z.infer<typeof documentWorkSchema>;
 
+/**
+ * What kb refused (its quarantine, BR-4: nothing is deleted), for the person who decides. `why`
+ * is kb's own reason (`thin`, `paywall`, `off_topic`…); the excerpt is how the text begins.
+ */
+export const refusedDocumentSchema = z.object({
+  why: z.string().max(60),
+  excerpt: z.string().max(3_000),
+  /** Only masters put it in the collection all the same. */
+  acceptable: z.boolean(),
+});
+export type RefusedDocument = z.infer<typeof refusedDocumentSchema>;
+
 export const documentUploadSchema = z.object({
   id: z.uuid(),
   topic: topicSlugSchema,
@@ -280,6 +292,8 @@ export const documentUploadSchema = z.object({
   entryCount: z.number().int().min(0),
   /** Sent by the person who asks (masters see everyone's). */
   mine: z.boolean(),
+  /** kb refused it, and it waits for a person's decision. */
+  refused: refusedDocumentSchema.nullable().default(null),
   /** It failed, and the app still has what was sent: it can go again as it is. */
   retriable: z.boolean(),
   progress: documentProgressSchema,
@@ -389,6 +403,8 @@ export const docIngestSourceSchema = z.discriminatedUnion('kind', [
     filePath: z.string(),
   }),
   z.object({ kind: z.literal('url'), url: z.string() }),
+  /** A person said it enters all the same: kb takes it out of its quarantine (KBC-009). */
+  z.object({ kind: z.literal('accept'), document: z.string() }),
   /** Downloaded on the Mac and given back as audio to `audioPath` (POST, octet-stream). */
   z.object({
     kind: z.literal('recording'),
@@ -465,6 +481,17 @@ export const docIngestResultRequestSchema = docLeaseSchema.extend({
         'upload-abandoned',
       ]),
       detail: z.string().max(2_000),
+      /** Only of `not-accepted`: what kb put in its quarantine. */
+      refused: z
+        .object({
+          document: z
+            .string()
+            .max(500)
+            .regex(/^raw\/_quarantine\/(?:[^/.][^/]*\/)*[^/.][^/]*\.md$/),
+          reason: z.string().max(60),
+          excerpt: z.string().max(3_000),
+        })
+        .optional(),
     }),
   ]),
   /** What kb spent on the owner's key, booked on the media month (ADR 0035 §11). */

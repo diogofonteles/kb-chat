@@ -33,6 +33,7 @@ const done = (
   dismissed: false,
   review: false,
   workMs: 10_000,
+  refused: null,
   entries: [],
   createdAt: '2026-11-25T10:00:00.000Z',
   updatedAt: new Date(Date.UTC(2026, 10, 25, 10, 0, n)).toISOString(),

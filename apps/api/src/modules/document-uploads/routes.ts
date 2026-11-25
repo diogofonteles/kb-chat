@@ -230,6 +230,13 @@ function registerSends(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
     async (request) =>
       deps.service.retry(deps.actorOf(request), request.params.id),
   );
+  // Of masters (the service says so): what kb refused enters all the same.
+  typed.post(
+    '/api/v1/document-uploads/:id/accept',
+    RETRY_OPTIONS,
+    async (request) =>
+      deps.service.accept(deps.actorOf(request), request.params.id),
+  );
 }
 
 const PART_OPTIONS = {

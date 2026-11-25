@@ -12,6 +12,9 @@ import type { DocIngestQueue } from '../modules/document-uploads/index.js';
 const WORKER = 'transcriber:e2e-mac';
 /** A link whose host says so does not convert (KBC-149 AC-4). */
 const BROKEN_HOST = /quebrado/;
+/** And one whose host says so has nothing to read: kb puts it in its quarantine. */
+const SHALLOW_HOST = /^https?:\/\/raso\.example\//;
+const QUARANTINE = 'raw/_quarantine/articles/';
 
 const runBody = z.object({
   topic: z.string().min(1),
@@ -95,13 +98,36 @@ async function ingest(
   const { job } = input;
   const owner = { jobId: job.id, worker: WORKER, leaseId: job.leaseId };
   const { source } = job;
-  if (source.kind !== 'file' && BROKEN_HOST.test(source.url))
+  if (source.kind === 'url' && SHALLOW_HOST.test(source.url))
+    return refuse(queue, owner, source.url);
+  if ('url' in source && BROKEN_HOST.test(source.url))
     return broken(queue, owner);
   if (source.kind === 'list')
     return queue.list(owner, { ...owner, entries: entriesOf(source.url) });
   if (source.kind === 'recording') return bringSound(queue, owner, source.url);
   return write(queue, owner, input);
 }
+
+/** kb's quarantine for a page with nothing to read: a person decides (KBC-009). */
+const refuse = (
+  queue: DocIngestQueue,
+  owner: Owner,
+  link: string,
+): Promise<void> =>
+  queue.complete(owner, {
+    ...owner,
+    outcome: {
+      state: 'failed',
+      failure: 'not-accepted',
+      detail: 'kb triage: quarantined',
+      refused: {
+        document: `${QUARANTINE}${slugOf(link)}.md`,
+        reason: 'thin',
+        excerpt: `# ${slugOf(link)}\n\nEntrar\n\nEsqueceu a senha?`,
+      },
+    },
+    spendUsd: 0,
+  });
 
 const broken = (queue: DocIngestQueue, owner: Owner): Promise<void> =>
   queue.complete(owner, {
@@ -184,6 +210,12 @@ async function converted(
   { job, vault }: { job: DocIngestJob; vault: string },
 ): Promise<{ id: string; title: string }> {
   const { source } = job;
+  if (source.kind === 'accept')
+    return writePage(
+      vault,
+      job.topic,
+      `https://raso.example/${source.document.slice(QUARANTINE.length, -'.md'.length)}`,
+    );
   if (source.kind !== 'file') return writePage(vault, job.topic, source.url);
   const owner = { jobId: job.id, worker: WORKER, leaseId: job.leaseId };
   const bytes = await readFile((await queue.fileOf(owner)).path);

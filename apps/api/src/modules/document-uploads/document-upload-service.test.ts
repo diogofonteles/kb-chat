@@ -657,3 +657,98 @@ describe('the third review (review C)', () => {
     });
   });
 });
+
+describe('what kb refused, decided by a person (KBC-009)', () => {
+  const refused = {
+    document: 'raw/_quarantine/articles/rasa.md',
+    reason: 'thin',
+    excerpt: '# Entrar no site',
+  };
+
+  async function refusedPage(url = 'https://a.example/1') {
+    const made = await world();
+    const sent = await send(made.service, ana, link(url));
+    const job = made.queue.lease('mac');
+    await made.queue.complete(
+      { jobId: sent.id, worker: 'mac', leaseId: job?.leaseId ?? '' },
+      {
+        worker: 'mac',
+        leaseId: job?.leaseId ?? '',
+        outcome: {
+          state: 'failed',
+          failure: 'not-accepted',
+          detail: 'kb triage: quarantined',
+          refused,
+        },
+        spendUsd: 0.001,
+      },
+    );
+    return { ...made, sent };
+  }
+
+  it('says why and how it begins to who sent it, and only masters may accept', async () => {
+    const { service, sent } = await refusedPage();
+    const [hers] = await itemsOf(service, ana);
+    expect(hers).toMatchObject({
+      state: 'failed',
+      refused: { why: 'thin', excerpt: '# Entrar no site', acceptable: false },
+    });
+    const [masters] = await itemsOf(service, master);
+    expect(masters?.refused?.acceptable).toBe(true);
+    expect(await itemsOf(service, beto)).toEqual([]);
+    await expect(service.accept(ana, sent.id)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    await expect(service.accept(beto, sent.id)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('accepted, the Mac is asked to take it out of the quarantine, and it ends ready', async () => {
+    const { service, queue, records, sent } = await refusedPage();
+    const view = await service.accept(master, sent.id);
+    expect(view).toMatchObject({ state: 'received', refused: null });
+    await expect(service.accept(master, sent.id)).rejects.toMatchObject({
+      code: 'MEDIA_CONFLICT',
+    });
+    const job = queue.lease('mac');
+    expect(job?.source).toEqual({ kind: 'accept', document: refused.document });
+    await queue.complete(
+      { jobId: sent.id, worker: 'mac', leaseId: job?.leaseId ?? '' },
+      {
+        worker: 'mac',
+        leaseId: job?.leaseId ?? '',
+        outcome: {
+          state: 'ready',
+          document: { id: 'raw/articles/rasa.md', title: 'Rasa' },
+          review: false,
+        },
+        spendUsd: 0,
+      },
+    );
+    expect(records.get(sent.id)).toMatchObject({
+      state: 'mapped',
+      refused: null,
+      spentUsd: 0.001,
+    });
+  });
+
+  it('read again, what was refused is forgotten; a video page goes as a recording', async () => {
+    const page = await refusedPage();
+    await page.service.retry(ana, page.sent.id);
+    expect(page.queue.lease('mac')?.source).toMatchObject({ kind: 'url' });
+    const url = 'https://www.facebook.com/pessoa/videos/1849272622730358/';
+    const video = await world();
+    const sent = await send(video.service, ana, link(url, { as: 'page' }));
+    await video.records.update(sent.id, (one) => ({
+      ...one,
+      state: 'failed',
+      failure: 'not-accepted',
+    }));
+    await video.service.retry(ana, sent.id);
+    expect(video.queue.lease('mac')?.source).toMatchObject({
+      kind: 'recording',
+      url,
+    });
+  });
+});

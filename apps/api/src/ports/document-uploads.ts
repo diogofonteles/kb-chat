@@ -34,6 +34,16 @@ export interface UploadBatch {
   readonly capUsd: number;
 }
 
+/** What kb put in its quarantine, as the Mac read it. */
+export interface RefusedRecord {
+  /** Relative to the collection: `raw/_quarantine/…`. */
+  readonly document: string;
+  readonly reason: string;
+  readonly excerpt: string;
+  /** A person said it enters all the same. */
+  readonly accepted: boolean;
+}
+
 /** One document or link sent from the app, from its first byte to the collection (ADR 0040). */
 export interface DocumentUploadRecord {
   readonly id: string;
@@ -62,6 +72,8 @@ export interface DocumentUploadRecord {
   readonly dismissed: boolean;
   /** kb wrote it and asked for a person's review (its own queue). */
   readonly review: boolean;
+  /** kb refused it: kept for a person's decision. */
+  readonly refused: RefusedRecord | null;
   /** How long the Mac worked on it, once done (the estimate of the next ones). */
   readonly workMs: number | null;
   /** What a list holds, once the Mac read it and until the person chose. */

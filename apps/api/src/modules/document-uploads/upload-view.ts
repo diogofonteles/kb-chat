@@ -19,7 +19,8 @@ export const uploadUrlOf = (id: string): string =>
 
 /** What the view needs besides the record itself. */
 export interface UploadContext {
-  readonly showsDetail: boolean;
+  /** Masters read the Mac's words, and put in the collection what kb refused. */
+  readonly isMaster: boolean;
   readonly received: number | null;
   readonly media: MediaProgress | null;
   readonly place: PlaceInLine;
@@ -49,7 +50,7 @@ export function toDocumentUpload(
     name: record.name,
     state,
     failure: media?.state === 'failed' ? 'conversion-failed' : record.failure,
-    detail: input.showsDetail ? record.detail : null,
+    detail: input.isMaster ? record.detail : null,
     document: record.document,
     mediaId: record.mediaId,
     bytes: record.bytes,
@@ -60,12 +61,26 @@ export function toDocumentUpload(
     review: record.review,
     entryCount: entryCountOf(record),
     mine: input.mine,
-    retriable: state === 'failed' && input.kept,
+    ...endIn(record, state, input),
     progress: { ...input.place, media: media?.step ?? null },
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
 }
+
+/** What can still be done about one that failed. */
+const endIn = (
+  { refused }: DocumentUploadRecord,
+  state: DocumentUpload['state'],
+  { kept, isMaster }: UploadContext,
+): Pick<DocumentUpload, 'refused' | 'retriable'> => {
+  const failed = state === 'failed';
+  const { reason: why = '', excerpt = '' } = refused ?? {};
+  return {
+    refused: failed && refused ? { why, excerpt, acceptable: isMaster } : null,
+    retriable: failed && kept,
+  };
+};
 
 const entryCountOf = ({ state, entries }: DocumentUploadRecord): number =>
   state === 'choosing' ? entries.length : 0;

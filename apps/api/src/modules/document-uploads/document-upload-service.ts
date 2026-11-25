@@ -401,15 +401,42 @@ export class DocumentUploadService {
       throw notWaiting();
     const again = await this.deps.records.update(id, (current) => ({
       ...current,
+      kind: kindAgainOf(current),
+      refused: null,
+      ...this.fromTheStart(),
+    }));
+    if (!again) throw notFound();
+    return this.viewOf(again, actor);
+  }
+
+  /**
+   * What kb refused enters all the same (KBC-009): only a master says so, having read what was
+   * read; the Mac takes it out of kb's quarantine and the usual steps follow.
+   */
+  async accept(actor: UploadActor, id: string): Promise<DocumentUpload> {
+    const record = this.deps.records.get(id);
+    if (!record || !this.mayManage(actor, record)) throw notFound();
+    if (!actor.isMaster)
+      throw new AppError('FORBIDDEN', 'Only a master accepts what kb refused');
+    if (record.state !== 'failed' || !record.refused) throw notWaiting();
+    const accepted = await this.deps.records.update(id, (current) => ({
+      ...current,
+      refused: current.refused && { ...current.refused, accepted: true },
+      ...this.fromTheStart(),
+    }));
+    if (!accepted) throw notFound();
+    return this.viewOf(accepted, actor);
+  }
+
+  private fromTheStart() {
+    return {
       state: 'received',
       failure: null,
       detail: null,
       mediaId: null,
       attempts: 0,
       updatedAt: this.now().toISOString(),
-    }));
-    if (!again) throw notFound();
-    return this.viewOf(again, actor);
+    } as const;
   }
 
   /** Its own end, or its recording's: failed, or deleted from the library. */
@@ -682,7 +709,7 @@ export class DocumentUploadService {
   ) {
     const { ledger, line, now } = known.moment;
     return {
-      showsDetail: actor.isMaster,
+      isMaster: actor.isMaster,
       received: known.received,
       kept: known.kept,
       batch: record.batch ? ledger.viewOf(record.batch.id) : null,
@@ -752,6 +779,7 @@ const NEW_RECORD = {
   dismissed: false,
   review: false,
   workMs: null,
+  refused: null,
   entries: [],
 } as const;
 
@@ -782,6 +810,19 @@ function sourceOf(
 }
 
 /** What a link becomes: as its sender says, or as its address tells. */
+/** A page kb refused, at an address that is a recording's: its sound is what there is of it. */
+const kindAgainOf = ({
+  kind,
+  url,
+  failure,
+}: DocumentUploadRecord): DocumentUploadRecord['kind'] =>
+  kind === 'url' &&
+  failure === 'not-accepted' &&
+  url !== null &&
+  recordingLinkKind(url) === 'recording'
+    ? 'recording'
+    : kind;
+
 function linkKindOf(
   request: Extract<CreateDocumentUploadRequest, { kind: 'url' }>,
 ): 'url' | 'recording' | 'list' {

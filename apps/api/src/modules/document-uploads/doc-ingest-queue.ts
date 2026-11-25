@@ -394,7 +394,7 @@ function endOf(
   outcome: DocIngestResultRequest['outcome'],
 ): Pick<
   DocumentUploadRecord,
-  'state' | 'failure' | 'detail' | 'document' | 'review'
+  'state' | 'failure' | 'detail' | 'document' | 'review' | 'refused'
 > {
   if (outcome.state === 'failed')
     return {
@@ -403,6 +403,7 @@ function endOf(
       detail: outcome.detail,
       document: null,
       review: false,
+      refused: outcome.refused ? { ...outcome.refused, accepted: false } : null,
     };
   const repeated = outcome.state === 'duplicate';
   return {
@@ -411,6 +412,7 @@ function endOf(
     detail: repeated ? 'already in the collection' : null,
     document: outcome.document,
     review: outcome.state === 'ready' && outcome.review,
+    refused: null,
   };
 }
 
@@ -418,6 +420,8 @@ const jobPath = (id: string, what: string) =>
   `/api/v1/media-worker/jobs/${id}/${what}`;
 
 function sourceOf(record: DocumentUploadRecord): DocIngestSource {
+  if (record.refused?.accepted)
+    return { kind: 'accept', document: record.refused.document };
   if (record.kind === 'file')
     return {
       kind: 'file',

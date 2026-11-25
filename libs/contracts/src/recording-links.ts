@@ -49,6 +49,25 @@ const INSTAGRAM: Site = {
       : null,
 };
 
+const FACEBOOK: Site = {
+  hosts: [
+    'facebook.com',
+    'm.facebook.com',
+    'web.facebook.com',
+    'pt-br.facebook.com',
+    'fb.watch',
+  ],
+  kindOf: (url) => {
+    if (url.hostname.endsWith('fb.watch'))
+      return matches(url, /^\/[\w-]+$/) ? 'recording' : null;
+    if (path(url) === '/watch')
+      return url.searchParams.get('v') ? 'recording' : null;
+    return matches(url, /^(\/[^/]+\/videos(\/[^/]+)?\/\d+|\/reel\/\d+)$/)
+      ? 'recording'
+      : null;
+  },
+};
+
 const SOUNDCLOUD: Site = {
   hosts: ['soundcloud.com', 'm.soundcloud.com'],
   kindOf: (url) => {
@@ -65,7 +84,7 @@ const APPLE_PODCASTS: Site = {
       : null,
 };
 
-const SITES = [YOUTUBE, VIMEO, INSTAGRAM, SOUNDCLOUD, APPLE_PODCASTS];
+const SITES = [YOUTUBE, VIMEO, INSTAGRAM, FACEBOOK, SOUNDCLOUD, APPLE_PODCASTS];
 
 const bareHost = (url: URL): string =>
   url.hostname.toLowerCase().replace(/^www\./, '');

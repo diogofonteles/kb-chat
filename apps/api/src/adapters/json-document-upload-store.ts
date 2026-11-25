@@ -48,6 +48,15 @@ const recordSchema = z.object({
   spentUsd: z.number(),
   dismissed: z.boolean().default(false),
   review: z.boolean().default(false),
+  refused: z
+    .object({
+      document: z.string(),
+      reason: z.string(),
+      excerpt: z.string(),
+      accepted: z.boolean(),
+    })
+    .nullable()
+    .default(null),
   workMs: z.number().nullable().default(null),
   entries: z.array(recordingEntrySchema).default([]),
   createdAt: z.string(),

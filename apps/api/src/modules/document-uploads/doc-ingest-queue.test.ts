@@ -53,6 +53,7 @@ const record = (
   dismissed: false,
   review: false,
   workMs: null,
+  refused: null,
   entries: [],
   createdAt: '2026-11-16T10:00:00.000Z',
   updatedAt: '2026-11-16T10:00:00.000Z',
@@ -392,7 +393,7 @@ describe('the upload as people see it', () => {
     });
     expect(
       toDocumentUpload(done, {
-        showsDetail: false,
+        isMaster: false,
         received: null,
         media: null,
         arrived: false,
@@ -401,7 +402,7 @@ describe('the upload as people see it', () => {
     ).toMatchObject({ state: 'mapped', detail: null, uploadUrl: null });
     expect(
       toDocumentUpload(done, {
-        showsDetail: true,
+        isMaster: true,
         received: null,
         media: null,
         arrived: true,
@@ -415,7 +416,7 @@ describe('the upload as people see it', () => {
     });
     expect(
       toDocumentUpload(recording, {
-        showsDetail: false,
+        isMaster: false,
         received: null,
         media: { state: 'failed', step: null },
         arrived: false,
