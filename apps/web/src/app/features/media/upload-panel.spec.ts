@@ -147,7 +147,9 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     await renderPanel();
     expect(screen.getByRole('dialog', { name: 'Enviar áudio' })).toBeTruthy();
     expect(
-      screen.getByText('mp3, m4a, wav, flac, ogg, opus ou vídeo (mp4, mov, webm, mkv) · até 4 GB cada'),
+      screen.getByText(
+        'mp3, m4a, wav, flac, ogg, opus ou vídeo (mp4, mov, webm, mkv) · até 4 GB cada',
+      ),
     ).toBeTruthy();
   });
 

@@ -470,7 +470,9 @@ test('"Enviar mídia": empty, chosen, repeated, not audio, sending', async ({
       buffer: Buffer.from('%PDF-1.4'),
     });
     await expect(
-      dialog.getByRole('alert').filter({ hasText: 'não é um áudio nem um vídeo aceito' }),
+      dialog
+        .getByRole('alert')
+        .filter({ hasText: 'não é um áudio nem um vídeo aceito' }),
     ).toBeVisible();
     await shoot(page, 'media-upload-bad-type', width);
     await takeOut();
