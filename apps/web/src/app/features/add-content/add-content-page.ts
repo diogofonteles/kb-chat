@@ -34,9 +34,10 @@ import { levelChoicesOf } from '@features/media/level-choices.js';
 import { LevelField } from '@features/media/level-field.js';
 import { UploadPanel } from '@features/media/upload-panel.js';
 import {
-  WebSearchSection,
+  WebSearchRun,
   type PickedWebResult,
-} from '@features/web-search/web-search-section.js';
+} from '@features/web-search/web-search-run.js';
+import { WebSearchSection } from '@features/web-search/web-search-section.js';
 import { UiBanner, UiButton, UiChip, UiIcon, UiIconButton } from '@ui/index.js';
 import type { IconName } from '@ui/icons.js';
 import { map } from 'rxjs';
@@ -57,7 +58,7 @@ import {
   type ContentCounts,
 } from './content-costs-store.js';
 import { ContentEstimate } from './content-estimate.js';
-import { MAX_LINKS, parseLinks, type ContentLink } from './content-links.js';
+import { parseLinks, type ContentLink } from './content-links.js';
 import { ContentSender, type ContentSource } from './content-sender.js';
 import { ContentSends } from './content-sends.js';
 
@@ -188,6 +189,7 @@ export class AddContentPage {
   protected readonly sender = inject(ContentSender);
   protected readonly uploads = inject(DocumentUploadsStore);
   private readonly costs = inject(ContentCostsStore);
+  private readonly searchRun = inject(WebSearchRun);
   private readonly heading =
     viewChild.required<ElementRef<HTMLElement>>('heading');
 
@@ -240,17 +242,10 @@ export class AddContentPage {
   protected readonly dragging = signal(false);
   protected readonly text = signal('');
   protected readonly parsed = computed(() => parseLinks(this.text()));
-  protected readonly tooManyLinks = computed(
-    () => this.parsed().links.length > MAX_LINKS,
+  /** What is picked now in this collection's search. */
+  protected readonly picks = computed(() =>
+    this.searchRun.picksOf(this.topic()),
   );
-  /** What is picked in the search now, and what of it went already to this collection. */
-  protected readonly picks = signal<readonly PickedWebResult[]>([]);
-  protected readonly taken = linkedSignal<string, ReadonlySet<string>>({
-    source: this.topic,
-    computation: () => new Set<string>(),
-  });
-  /** Kept once opened: a search is paid, and another tab must not lose its results. */
-  protected readonly searchOpened = signal(false);
   protected readonly uploadingMedia = signal(false);
   private readonly submitted = signal(false);
   private lastFile = 0;
@@ -329,7 +324,6 @@ export class AddContentPage {
       this.count() > 0 &&
       this.topic() !== '' &&
       this.capUsd() !== null &&
-      !(this.way() === 'links' && this.tooManyLinks()) &&
       !this.levels.failedWhereLevelsMayBe(this.root()),
   );
   protected readonly includeLabel = computed(() => {
@@ -368,7 +362,6 @@ export class AddContentPage {
 
   protected choose(way: Way): void {
     this.way.set(way);
-    if (way === 'search') this.searchOpened.set(true);
   }
 
   protected chooseTopic(slug: string): void {
@@ -471,10 +464,8 @@ export class AddContentPage {
   private clearSent(): void {
     if (this.way() === 'files') this.files.set([]);
     if (this.way() === 'links') this.text.set(this.parsed().refused.join('\n'));
-    if (this.way() === 'search') {
-      const went = this.picks().map(({ url }) => url);
-      this.taken.update((before) => new Set([...before, ...went]));
-    }
+    if (this.way() === 'search')
+      this.searchRun.take(this.picks().map(({ url }) => url));
   }
 
   protected openDocument(doc: OpenedDocument): void {

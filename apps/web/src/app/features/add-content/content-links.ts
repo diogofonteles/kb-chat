@@ -13,9 +13,6 @@ export interface ParsedLinks {
   readonly refused: readonly string[];
 }
 
-/** The most links one inclusion takes (the ceiling bounds the rest). */
-export const MAX_LINKS = 50;
-
 /**
  * One address per line; several on one line (spaces, commas) count each. A line with no
  * address in it is refused whole, as typed; a repeated address counts once.

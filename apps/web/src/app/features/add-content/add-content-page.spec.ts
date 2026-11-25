@@ -175,15 +175,15 @@ describe('AddContentPage (KBC-184)', () => {
     },
   );
 
-  it('more than 50 links at once are refused', async () => {
+  it('takes as many links as are pasted', async () => {
     const { fixture } = await renderPage();
     const many = Array.from(
-      { length: 51 },
+      { length: 120 },
       (_, n) => `https://example.org/${n}`,
     );
     await typeLinks(many.join('\n'), fixture);
-    expect(screen.getByText('Inclua até 50 endereços por vez.')).toBeTruthy();
-    expect(include().disabled).toBe(true);
+    expect(screen.getByText('120 endereços prontos')).toBeTruthy();
+    expect(include().disabled).toBe(false);
   });
 
   it('in a collection with levels nothing goes without one', async () => {
@@ -314,7 +314,8 @@ describe('AddContentPage (KBC-184)', () => {
           result('video', 'https://youtu.be/abc'),
         ],
         ...{ creditsUsed: 2, creditsRemaining: 900 },
-        ...{ low: false, partial: false },
+        ...{ low: false, partial: false, exhausted: true },
+        skipped: { already: 0, seen: 0 },
       });
     await settle();
     expect(screen.getByText('1 página da web')).toBeTruthy();

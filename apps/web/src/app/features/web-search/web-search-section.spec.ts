@@ -12,6 +12,7 @@ import { ChatStore } from '@features/chat/chat-store.js';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { sessionAs } from '../../testing/media-fixtures.js';
 import { WebSearchForm } from './web-search-form.js';
+import { WebSearchRun } from './web-search-run.js';
 import { WebSearchSection } from './web-search-section.js';
 
 const AVAILABLE = '/api/v1/web-search/available';
@@ -46,6 +47,9 @@ const aResponse = (
 ): WebSearchResponse => ({
   results: THREE,
   partial: false,
+  // The whole answer, unless a test goes on.
+  exhausted: true,
+  skipped: { already: 0, seen: 0 },
   creditsUsed: 6,
   creditsRemaining: null,
   low: false,
@@ -58,12 +62,10 @@ interface Setup {
   readonly inputs?: {
     topic?: string;
     disabled?: boolean;
-    taken?: ReadonlySet<string>;
   };
 }
 
 async function open(setup: Setup = {}) {
-  const selection = vi.fn();
   const chat = { open: vi.fn() };
   const view = await render(WebSearchSection, {
     providers: [
@@ -78,7 +80,6 @@ async function open(setup: Setup = {}) {
       }),
     ],
     inputs: { topic: 'hermetismo', ...setup.inputs },
-    on: { selection },
   });
   const http = TestBed.inject(HttpTestingController);
   // Not whenStable: it waits for the search on its way, whose state is what is looked at.
@@ -92,7 +93,8 @@ async function open(setup: Setup = {}) {
     available.flush('', { status: 500, statusText: 'x' });
   else available.flush(setup.available ?? { connected: true, low: false });
   await settle();
-  return { ...view, http, settle, selection, chat };
+  const run = TestBed.inject(WebSearchRun);
+  return { ...view, http, settle, run, chat };
 }
 
 type Opened = Awaited<ReturnType<typeof open>>;
@@ -114,11 +116,9 @@ const status = () =>
     .map((one) => one.textContent?.trim())
     .join(' ');
 
-/** The addresses picked now, as the page is told. */
+/** The addresses picked now, as the page reads them. */
 const pickedNow = (opened: Opened): string[] =>
-  (opened.selection.mock.lastCall?.[0] ?? []).map(
-    (one: { url: string }) => one.url,
-  );
+  opened.run.picksOf('hermetismo').map((one) => one.url);
 
 /** A subject typed and "Pesquisar" pressed: the request that left. */
 async function searched(opened: Opened, text = 'hermetismo') {
@@ -149,8 +149,8 @@ async function failed(opened: Opened, error: { status: number; code: string }) {
 }
 
 describe('WebSearchSection: the form (KBC-185)', () => {
-  it('asks for a subject, 10 sources, every kind and no author, and says how many searches it makes', async () => {
-    await open();
+  it('asks for a subject, 10 sources, every kind and no author, and tells masters what it takes', async () => {
+    await open({ master: true });
     expect(subject().value).toBe('');
     expect(sources().value).toBe('10');
     for (const name of ['Texto', 'Áudio', 'Vídeo'])
@@ -161,7 +161,7 @@ describe('WebSearchSection: the form (KBC-185)', () => {
     expect(searchButton().getAttribute('aria-describedby')).toBe(
       'web-search-calls',
     );
-    expect(screen.getByText('Faz até 3 consultas no Firecrawl.')).toBeTruthy();
+    expect(screen.getByText('Cerca de 6 créditos do Firecrawl.')).toBeTruthy();
   });
 
   it('sends what was asked', async () => {
@@ -171,7 +171,6 @@ describe('WebSearchSection: the form (KBC-185)', () => {
     type(authors(), ' Manly  Hall ');
     fireEvent.keyDown(authors(), { key: 'Enter' });
     await opened.settle();
-    expect(screen.getByText('Faz até 2 consultas no Firecrawl.')).toBeTruthy();
     const request = await searched(opened, '  os sete princípios ');
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({
@@ -179,6 +178,7 @@ describe('WebSearchSection: the form (KBC-185)', () => {
       sources: 4,
       kinds: ['text', 'video'],
       authors: ['Manly Hall'],
+      again: false,
     });
   });
 
@@ -196,12 +196,14 @@ describe('WebSearchSection: the form (KBC-185)', () => {
     expect(screen.queryByText('Escreva pelo menos 3 letras.')).toBeNull();
   });
 
-  it.each(['0', '31', '2.5', ''])('refuses %s sources', async (value) => {
+  it.each(['0', '-3', '2.5', ''])('refuses %s sources', async (value) => {
     const opened = await open();
     type(sources(), value);
     type(subject(), 'hermetismo');
     await opened.settle();
-    expect(screen.getByText('Use um número inteiro de 1 a 30.')).toBeTruthy();
+    expect(
+      screen.getByText('Use um número inteiro, a partir de 1.'),
+    ).toBeTruthy();
     fireEvent.click(searchButton());
     await opened.settle();
     opened.http.expectNone(SEARCH);
@@ -222,10 +224,10 @@ describe('WebSearchSection: the form (KBC-185)', () => {
     opened.http.expectNone(SEARCH);
     fireEvent.click(chip('Vídeo'));
     await opened.settle();
-    expect(screen.getByText('Faz 1 consulta no Firecrawl.')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('adds authors by Enter or "Adicionar", up to 5, and removes them, the focus never lost', async () => {
+  it('adds authors by Enter or "Adicionar", several at once by commas, and removes them, the focus never lost', async () => {
     const opened = await open();
     const add = async (name: string, how: 'enter' | 'button' = 'button') => {
       type(authors(), name);
@@ -242,13 +244,23 @@ describe('WebSearchSection: the form (KBC-185)', () => {
     expect(authors().getAttribute('aria-invalid')).toBe('true');
     await add(' " ');
     expect(screen.getByText(/Escreva o nome do autor/)).toBeTruthy();
-    for (const name of ['Ana', 'Bia', 'Caio', 'Davi']) await add(name);
-    await add('Eva');
-    expect(screen.getByText(/Já são 5 autores, o máximo/)).toBeTruthy();
-    expect(screen.getByText('Faz até 15 consultas no Firecrawl.')).toBeTruthy();
+    // As the owner typed them on 2026-11-25: four names, not one.
+    await add('Joseph Murphy, Helio Couto; Maria do Socorro, Americo Barbosa');
+    expect(TestBed.inject(WebSearchForm).authors()).toEqual([
+      'Hermes',
+      'Joseph Murphy',
+      'Helio Couto',
+      'Maria do Socorro',
+      'Americo Barbosa',
+    ]);
+    await add('Bia, hermes');
+    expect(screen.getByText('Este autor já está na lista.')).toBeTruthy();
+    expect(authors().value).toBe('Bia, hermes');
+    await add('x'.repeat(81));
+    expect(screen.getByText(/Separe os autores por vírgula/)).toBeTruthy();
     const list = screen.getByRole('list', { name: 'Autores incluídos' });
     expect(within(list).getAllByRole('listitem')).toHaveLength(5);
-    fireEvent.click(chip('Remover Bia'));
+    fireEvent.click(chip('Remover Helio Couto'));
     await opened.settle();
     expect(within(list).getAllByRole('listitem')).toHaveLength(4);
     expect(document.activeElement).toBe(authors());
@@ -292,7 +304,7 @@ describe('WebSearchSection: what it answers', () => {
     searchButton().click();
     await opened.settle();
     const request = opened.http.expectOne(SEARCH);
-    expect(status()).toContain('Pesquisando na web…');
+    expect(status()).toContain('Procurando… 0 de 10.');
     expect(searchButton().getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(searchButton());
     await opened.settle();
@@ -305,7 +317,7 @@ describe('WebSearchSection: what it answers', () => {
   it('gives the candidates picked, but what the collection has, and says how many', async () => {
     const opened = await open();
     await found(opened);
-    expect(status()).toContain('3 resultados, 1 já está no acervo.');
+    expect(status()).toContain('3 resultados.');
     const group = screen.getByRole('group', {
       name: 'Resultados para “hermetismo”',
     });
@@ -332,10 +344,10 @@ describe('WebSearchSection: what it answers', () => {
     ).toContain('Já está no acervo');
   });
 
-  it('tells the page what is picked, in order', async () => {
+  it('what is picked is for the page to include, in order', async () => {
     const opened = await open();
     await found(opened);
-    expect(opened.selection).toHaveBeenLastCalledWith([
+    expect(opened.run.picksOf('hermetismo')).toEqual([
       {
         url: 'https://www.exemplo.org/1',
         title: 'O Caibalion comentado',
@@ -347,6 +359,8 @@ describe('WebSearchSection: what it answers', () => {
         kind: 'video',
       },
     ]);
+    // Another collection's page has none of it.
+    expect(opened.run.picksOf('alquimia')).toEqual([]);
   });
 
   it('what was included stays listed, cannot go twice, and what was left out stays out', async () => {
@@ -354,21 +368,106 @@ describe('WebSearchSection: what it answers', () => {
     await found(opened);
     fireEvent.click(box('Aula em vídeo'));
     await opened.settle();
-    await opened.rerender({
-      inputs: {
-        topic: 'hermetismo',
-        taken: new Set(['https://www.exemplo.org/1']),
-      },
-      on: { selection: opened.selection },
-    });
+    opened.run.take(['https://www.exemplo.org/1']);
     await opened.settle();
     const went = box('O Caibalion comentado');
     expect([went.checked, went.disabled]).toEqual([false, true]);
     expect(screen.getByText('Incluído agora')).toBeTruthy();
     expect(box('Aula em vídeo').checked).toBe(false);
     expect(pickedNow(opened)).toEqual([]);
-    // It is not "already there": the count is the search's own.
-    expect(status()).toContain('3 resultados, 1 já está no acervo.');
+  });
+
+  const one = (n: number) =>
+    aResult({ url: `https://www.exemplo.org/n${n}`, title: `Texto ${n}` });
+  const some = (from: number, many: number) =>
+    Array.from({ length: many }, (_, at) => one(from + at));
+
+  it('goes on until it has what was asked, showing each part as it comes', async () => {
+    const opened = await open();
+    type(sources(), '25');
+    const going = { exhausted: false };
+    const first = await searched(opened);
+    expect(first.request.body.sources).toBe(10);
+    first.flush(aResponse({ ...going, results: some(0, 10) }));
+    await opened.settle();
+    expect(status()).toContain('Procurando… 10 de 25.');
+    expect(screen.getAllByRole('checkbox', { name: /^Texto/ })).toHaveLength(
+      10,
+    );
+    const second = opened.http.expectOne(SEARCH);
+    second.flush(aResponse({ ...going, results: some(10, 10) }));
+    await opened.settle();
+    const third = opened.http.expectOne(SEARCH);
+    expect(third.request.body.sources).toBe(5);
+    third.flush(aResponse({ ...going, results: some(20, 5) }));
+    await opened.settle();
+    opened.http.expectNone(SEARCH);
+    expect(status()).toContain('25 resultados.');
+    expect(pickedNow(opened)).toHaveLength(25);
+  });
+
+  it('"Buscar mais" brings as many more, keeping what is there and what was left out', async () => {
+    const opened = await open();
+    type(sources(), '5');
+    await found(opened, aResponse({ exhausted: false, results: some(0, 5) }));
+    fireEvent.click(box('Texto 0'));
+    type(sources(), '7');
+    await opened.settle();
+    fireEvent.click(chip('Buscar mais 7'));
+    await opened.settle();
+    const more = opened.http.expectOne(SEARCH);
+    expect(more.request.body).toMatchObject({
+      query: 'hermetismo',
+      sources: 7,
+    });
+    more.flush(aResponse({ exhausted: true, results: some(5, 3) }));
+    await opened.settle();
+    expect(screen.getAllByRole('checkbox', { name: /^Texto/ })).toHaveLength(8);
+    expect(box('Texto 0').checked).toBe(false);
+    expect(pickedNow(opened)).toHaveLength(7);
+    // Nothing else is to be found: said, and not offered.
+    expect(screen.getByText(/Não achei mais nada novo/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Buscar mais/ })).toBeNull();
+  });
+
+  it('can be stopped, with what came kept', async () => {
+    const opened = await open();
+    type(sources(), '30');
+    const first = await searched(opened);
+    first.flush(aResponse({ exhausted: false, results: some(0, 10) }));
+    await opened.settle();
+    const second = opened.http.expectOne(SEARCH);
+    fireEvent.click(chip('Parar'));
+    await opened.settle();
+    expect(second.cancelled).toBe(true);
+    expect(status()).toContain('10 resultados.');
+    expect(chip('Buscar mais 30')).toBeTruthy();
+    expect(document.activeElement).toBe(searchButton());
+  });
+
+  it('says what was left out, and brings it when asked', async () => {
+    const opened = await open();
+    await found(opened, aResponse({ skipped: { already: 4, seen: 1 } }));
+    expect(
+      screen.getByText(
+        'Ficaram de fora: 4 que já estão no acervo e 1 que já apareceu antes.',
+      ),
+    ).toBeTruthy();
+    fireEvent.click(
+      box('Trazer também o que já apareceu antes ou já está no acervo'),
+    );
+    await opened.settle();
+    const again = await searched(opened);
+    expect(again.request.body.again).toBe(true);
+    again.flush(aResponse());
+    await opened.settle();
+  });
+
+  it('is not lost by leaving the page: a search is paid', async () => {
+    const opened = await open();
+    await found(opened);
+    opened.fixture.destroy();
+    expect(opened.run.of('hermetismo')?.results).toHaveLength(3);
   });
 
   it('picks and unpicks one, or all', async () => {
@@ -429,18 +528,19 @@ describe('WebSearchSection: what it answers', () => {
     expect(screen.queryByRole('list')).toBeNull();
   });
 
-  it('says some searches did not answer, and asks them all again', async () => {
+  it('says some searches did not answer, and asks again keeping what is there', async () => {
     const opened = await open();
-    await found(opened, aResponse({ partial: true }));
+    await found(opened, aResponse({ partial: true, exhausted: false }));
     expect(screen.getByRole('alert').textContent).toContain(
       'Algumas consultas não responderam',
     );
     expect(pickedNow(opened)).toHaveLength(2);
     fireEvent.click(chip('Tentar de novo'));
     await opened.settle();
-    opened.http.expectOne(SEARCH).flush(aResponse());
+    opened.http.expectOne(SEARCH).flush(aResponse({ results: [one(9)] }));
     await opened.settle();
     expect(screen.queryByRole('alert')).toBeNull();
+    expect(pickedNow(opened)).toHaveLength(3);
   });
 
   it('starts over in another collection, dropping the answer on its way', async () => {
@@ -451,7 +551,7 @@ describe('WebSearchSection: what it answers', () => {
     request.flush(aResponse());
     await opened.settle();
     expect(status()).not.toContain('resultados');
-    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByRole('group', { name: /Resultados/ })).toBeNull();
     expect(subject().value).toBe('hermetismo');
     fireEvent.click(searchButton());
     await opened.settle();

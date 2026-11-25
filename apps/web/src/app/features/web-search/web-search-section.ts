@@ -8,15 +8,9 @@ import {
   computed,
   inject,
   input,
-  linkedSignal,
   signal,
   viewChild,
 } from '@angular/core';
-import {
-  outputFromObservable,
-  rxResource,
-  toObservable,
-} from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import {
   WEB_SEARCH_AUTHORS,
@@ -26,16 +20,11 @@ import {
   webSearchAvailabilitySchema,
   type UploadedDocumentRef,
   type WebSearchKind,
-  type WebSearchRequest,
-  type WebSearchResponse,
   type WebSearchResult,
 } from '@kb-chat/contracts';
-import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import { errorMessage, type UiErrorCode } from '@core/api/api-error.js';
 import { SessionStore } from '@core/auth/session-store.js';
-import {
-  WebSearchApi,
-  webSearchAvailableUrl,
-} from '@core/web-search/web-search-api.js';
+import { webSearchAvailableUrl } from '@core/web-search/web-search-api.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import {
   UiBanner,
@@ -43,6 +32,7 @@ import {
   UiChip,
   UiIcon,
   UiPill,
+  UiProgress,
   fieldDescribedBy,
   type IconName,
 } from '@ui/index.js';
@@ -50,29 +40,19 @@ import { WebSearchForm, type AuthorProblem } from './web-search-form.js';
 import {
   AUTHOR_PROBLEMS,
   KIND_LABELS,
-  callsLabel,
   countLabel,
+  creditsEstimate,
   creditsLabel,
+  moreLabel,
+  progressLabel,
+  skippedLabel,
 } from './web-search-labels.js';
+import { WebSearchRun, type SearchAsked } from './web-search-run.js';
 
-/** What is picked now: the parent sends it as links (KBC-149), with the estimate beside it. */
-export interface PickedWebResult {
-  readonly url: string;
-  readonly title: string;
-  readonly kind: WebSearchKind;
-}
-
-/** A search as asked: kept to ask it again. */
-interface Asked {
-  readonly topic: string;
-  readonly request: WebSearchRequest;
-}
-
-/** What is under the form; one at a time (PD-05: a union, never flags). */
-type View =
-  | { readonly kind: 'idle' | 'loading' | 'off' | 'no-credits' | 'limited' }
-  | { readonly kind: 'failed'; readonly message: string }
-  | { readonly kind: 'found'; readonly response: WebSearchResponse };
+/** What stopped the search; one at a time (PD-05: a union, never flags). */
+type Problem =
+  | { readonly kind: 'off' | 'no-credits' | 'limited' }
+  | { readonly kind: 'failed'; readonly message: string };
 
 interface Row extends WebSearchResult {
   readonly id: string;
@@ -89,8 +69,8 @@ const KIND_ICONS: Record<WebSearchKind, IconName> = {
 
 /**
  * "Pesquisar na web" (KBC-185): texts, audios and videos found on the web, to pick from. They
- * come picked, but what the collection already has; nothing is added here: `selection` says
- * what is picked now, and the page includes it as it includes files and links.
+ * come picked, but what the collection already has; nothing is added here: what is picked
+ * (`WebSearchRun`) the page includes as it includes files and links.
  */
 @Component({
   selector: 'app-web-search-section',
@@ -102,13 +82,14 @@ const KIND_ICONS: Record<WebSearchKind, IconName> = {
     UiChip,
     UiIcon,
     UiPill,
+    UiProgress,
   ],
   templateUrl: './web-search-section.html',
   styleUrl: './web-search-section.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WebSearchSection {
-  private readonly api = inject(WebSearchApi);
+  private readonly run = inject(WebSearchRun);
   private readonly chat = inject(ChatStore);
   private readonly router = inject(Router);
   private readonly locale = inject(LOCALE_ID);
@@ -119,8 +100,6 @@ export class WebSearchSection {
   readonly topic = input.required<string>();
   /** The parent is busy sending, or may not send now. */
   readonly disabled = input(false);
-  /** The addresses already included from here: they stay listed, and cannot go twice. */
-  readonly taken = input<ReadonlySet<string>>(new Set());
 
   private readonly subjectInput =
     viewChild<ElementRef<HTMLInputElement>>('subjectInput');
@@ -137,7 +116,7 @@ export class WebSearchSection {
     label: KIND_LABELS[kind](),
   }));
   protected readonly subjectLimits = WEB_SEARCH_QUERY;
-  protected readonly sourcesLimits = WEB_SEARCH_SOURCES;
+  protected readonly sourcesMin = WEB_SEARCH_SOURCES.min;
   protected readonly authorLimits = WEB_SEARCH_AUTHORS;
   protected readonly settingsLink = '/configuracoes/pesquisa-na-web';
   protected readonly skeletons = [0, 1, 2, 3];
@@ -147,57 +126,46 @@ export class WebSearchSection {
   });
   /** A search was tried with something missing: say what, until it is there. */
   private readonly tried = signal(false);
-  /** Another collection starts over: what is "already there" is the collection's. */
-  private readonly asked = linkedSignal<string, Asked | null>({
-    source: this.topic,
-    computation: () => null,
-  });
-  private readonly found = rxResource({
-    params: () => this.asked() ?? undefined,
-    stream: ({ params: { topic, request } }) => this.api.search(topic, request),
-  });
-
   /** With no key there is nothing to fill in. */
   protected readonly unavailable = computed(
     () => this.available.hasValue() && !this.available.value().connected,
   );
-  protected readonly loading = this.found.isLoading;
-  protected readonly view = computed<View>(() => {
-    if (this.loading()) return { kind: 'loading' };
-    const error = this.found.error();
-    if (error) return failedView(error);
-    return this.found.hasValue()
-      ? { kind: 'found', response: this.found.value() }
-      : { kind: 'idle' };
+  /** This collection's search; another one's is not shown here. */
+  protected readonly search = computed(() => this.run.of(this.topic()));
+  protected readonly searching = computed(
+    () => this.search()?.searching === true,
+  );
+  protected readonly problem = computed<Problem | null>(() => {
+    const error = this.search()?.error ?? null;
+    return error && problemOf(error);
   });
-  private readonly response = computed(() => {
-    const view = this.view();
-    return view.kind === 'found' ? view.response : null;
-  });
+  protected readonly problemKind = computed(() => this.problem()?.kind ?? null);
   protected readonly failure = computed(() => {
-    const view = this.view();
-    return view.kind === 'failed' ? view.message : '';
+    const problem = this.problem();
+    return problem?.kind === 'failed' ? problem.message : '';
   });
   protected readonly partial = computed(
-    () => this.response()?.partial === true,
+    () => this.search()?.partial === true && !this.searching(),
   );
   protected readonly askedSubject = computed(
-    () => this.asked()?.request.query ?? '',
+    () => this.search()?.asked.request.query ?? '',
   );
   protected readonly low = computed(
     () =>
-      this.response()?.low ??
+      this.search()?.low === true ||
       (this.available.hasValue() && this.available.value().low),
   );
-  protected readonly calls = computed(() => {
-    const calls = this.form.calls();
-    return calls > 0 ? callsLabel(calls) : '';
-  });
+  /** Masters know the balance: what this would take of it. */
+  protected readonly estimate = computed(() =>
+    this.isMaster() && this.form.kinds().length > 0
+      ? creditsEstimate(this.form.credits())
+      : '',
+  );
   /** What the search cost and left: masters only. */
   protected readonly credits = computed(() => {
-    const response = this.response();
-    if (!response || !this.isMaster()) return '';
-    const { creditsUsed, creditsRemaining } = response;
+    const search = this.search();
+    if (!search || !this.isMaster() || search.creditsUsed === 0) return '';
+    const { creditsUsed, creditsRemaining } = search;
     const left =
       creditsRemaining === null
         ? null
@@ -205,39 +173,22 @@ export class WebSearchSection {
     return creditsLabel(creditsUsed, left);
   });
 
-  protected readonly rows = computed<readonly Row[]>(() =>
-    (this.response()?.results ?? []).map((result, at) => ({
+  protected readonly rows = computed<readonly Row[]>(() => {
+    const search = this.search();
+    if (!search) return [];
+    return search.results.map((result, at) => ({
       ...result,
       id: `web-result-${at}`,
       kindLabel: KIND_LABELS[result.kind](),
-      taken: this.taken().has(result.url),
-    })),
-  );
+      taken: search.taken.has(result.url),
+    }));
+  });
   protected readonly selectable = computed(() =>
     this.rows().filter((row) => row.already === null && !row.taken),
   );
-  /** Every candidate comes picked, but what the collection already has. */
-  protected readonly selected = linkedSignal<
-    { readonly of: WebSearchResponse | null; readonly rows: readonly Row[] },
-    ReadonlySet<string>
-  >({
-    source: () => ({ of: this.response(), rows: this.selectable() }),
-    computation: ({ of, rows }, before) => {
-      const urls = rows.map((row) => row.url);
-      // The same answer with some of it included: what was left out stays out.
-      const kept =
-        before?.source.of === of
-          ? urls.filter((url) => before.value.has(url))
-          : urls;
-      return new Set(kept);
-    },
-  });
-  private readonly chosen = computed<readonly PickedWebResult[]>(() =>
-    this.rows()
-      .filter((row) => this.selected().has(row.url))
-      .map(({ url, title, kind }) => ({ url, title, kind })),
+  protected readonly selected = computed<ReadonlySet<string>>(
+    () => new Set(this.run.picksOf(this.topic()).map(({ url }) => url)),
   );
-  readonly selection = outputFromObservable(toObservable(this.chosen));
   protected readonly allSelected = computed(
     () =>
       this.selected().size > 0 &&
@@ -246,20 +197,42 @@ export class WebSearchSection {
   protected readonly someSelected = computed(
     () => this.selected().size > 0 && !this.allSelected(),
   );
+  protected readonly loading = computed(
+    () => this.searching() && this.rows().length === 0,
+  );
+  protected readonly share = computed(() => {
+    const search = this.search();
+    return search ? Math.min(1, search.results.length / search.wanted) : 0;
+  });
+  /** The search ended: it can go on, or there is nothing else. */
+  protected readonly ended = computed(
+    () => this.search() !== null && !this.searching(),
+  );
+  protected readonly exhausted = computed(
+    () => this.ended() && this.search()?.exhausted === true,
+  );
+  protected readonly canGoOn = computed(
+    () => this.ended() && !this.exhausted() && this.problem() === null,
+  );
+  protected readonly moreText = computed(() =>
+    moreLabel(this.form.sources() ?? WEB_SEARCH_SOURCES.default),
+  );
+  protected readonly skipped = computed(() => {
+    const search = this.search();
+    return search ? skippedLabel(search.skipped) : '';
+  });
   /** Said to a screen reader too, when it changes (aria-live). */
   protected readonly status = computed(() => {
-    const view = this.view();
-    if (view.kind === 'loading')
-      return $localize`:@@webSearch.loading:Pesquisando na web…`;
-    if (view.kind !== 'found') return '';
-    const found =
-      this.rows().length > 0
-        ? countLabel(
-            this.rows().length,
-            this.rows().filter((row) => row.already === null).length,
-          )
-        : $localize`:@@webSearch.none:Nada encontrado para “${this.askedSubject()}:subject:”`;
-    return [`${found}.`, this.credits()].filter(Boolean).join(' ');
+    const search = this.search();
+    if (!search) return '';
+    const found = search.results.length;
+    if (search.searching) return progressLabel(found, search.wanted);
+    if (search.error && found === 0) return '';
+    const text =
+      found > 0
+        ? countLabel(found)
+        : $localize`:@@webSearch.none:Nada encontrado para “${search.asked.request.query}:subject:”`;
+    return [`${text}.`, this.credits()].filter(Boolean).join(' ');
   });
 
   protected readonly subjectProblem = computed(() =>
@@ -269,7 +242,7 @@ export class WebSearchSection {
   );
   protected readonly sourcesProblem = computed(() =>
     this.form.sources() === null
-      ? $localize`:@@webSearch.sourcesRange:Use um número inteiro de 1 a 30.`
+      ? $localize`:@@webSearch.sourcesNumber:Use um número inteiro, a partir de 1.`
       : '',
   );
   protected readonly kindsProblem = computed(() =>
@@ -296,7 +269,10 @@ export class WebSearchSection {
     }),
   );
   protected readonly sourcesDescribedBy = computed(() =>
-    fieldDescribedBy('web-search-sources', { error: this.sourcesProblem() }),
+    fieldDescribedBy('web-search-sources', {
+      error: this.sourcesProblem(),
+      hint: 'yes',
+    }),
   );
   protected readonly authorDescribedBy = computed(() =>
     fieldDescribedBy('web-search-author', {
@@ -319,7 +295,7 @@ export class WebSearchSection {
 
   protected addAuthor(): void {
     if (this.disabled()) return;
-    const problem = this.form.addAuthor(this.typedAuthor());
+    const problem = this.form.addAuthors(this.typedAuthor());
     this.refusedAuthor.set(problem);
     if (problem === null) this.typedAuthor.set('');
     this.authorInput()?.nativeElement.focus();
@@ -333,33 +309,36 @@ export class WebSearchSection {
   }
 
   /** One search at a time: a second press while one runs does nothing (it is paid, PD-02). */
-  protected search(event: Event): void {
+  protected searchNow(event: Event): void {
     event.preventDefault();
-    if (this.disabled() || this.loading()) return;
+    if (this.disabled() || this.searching()) return;
     this.tried.set(true);
-    const request = this.request();
-    if (!request) return this.focusProblem();
+    const asked = this.asked();
+    const sources = this.form.sources();
+    if (!asked || sources === null) return this.focusProblem();
     this.tried.set(false);
-    this.asked.set({ topic: this.topic(), request });
+    this.run.start(asked, sources);
   }
 
-  /** The form as a request; null while something in it is missing. */
-  private request(): WebSearchRequest | null {
+  /** The form as a search; null while something in it is missing. */
+  private asked(): SearchAsked | null {
     // A name typed and not added yet is wanted too.
     if (this.typedAuthor().trim() !== '') {
-      const problem = this.form.addAuthor(this.typedAuthor());
+      const problem = this.form.addAuthors(this.typedAuthor());
       this.refusedAuthor.set(problem);
       if (problem !== null) return null;
       this.typedAuthor.set('');
     }
-    const sources = this.form.sources();
-    const ready = this.form.subjectValid() && this.form.kinds().length > 0;
-    if (!ready || sources === null) return null;
+    if (!this.form.subjectValid() || this.form.kinds().length === 0)
+      return null;
     return {
-      query: this.form.subject().trim(),
-      sources,
-      kinds: [...this.form.kinds()],
-      authors: [...this.form.authors()],
+      topic: this.topic(),
+      request: {
+        query: this.form.subject().trim(),
+        kinds: [...this.form.kinds()],
+        authors: [...this.form.authors()],
+        again: this.form.again(),
+      },
     };
   }
 
@@ -378,22 +357,24 @@ export class WebSearchSection {
   /** The same search again. The button pressed goes away: the focus stays in the form. */
   protected retry(): void {
     this.searchButton()?.nativeElement.focus();
-    this.found.reload();
+    this.run.retry();
+  }
+
+  protected more(): void {
+    this.run.more(this.form.sources() ?? WEB_SEARCH_SOURCES.default);
+  }
+
+  protected stop(): void {
+    this.searchButton()?.nativeElement.focus();
+    this.run.stop();
   }
 
   protected toggle(url: string): void {
-    this.selected.update((before) => {
-      const after = new Set(before);
-      if (!after.delete(url)) after.add(url);
-      return after;
-    });
+    this.run.toggle(url);
   }
 
   protected toggleAll(): void {
-    const urls = this.allSelected()
-      ? []
-      : this.selectable().map((row) => row.url);
-    this.selected.set(new Set(urls));
+    this.run.toggleAll();
   }
 
   /** The document the collection already has, in the conversation's reading panel. */
@@ -403,8 +384,7 @@ export class WebSearchSection {
   }
 }
 
-function failedView(error: unknown): View {
-  const code = toUiErrorCode(error);
+function problemOf(code: UiErrorCode): Problem {
   if (code === 'WEB_SEARCH_NOT_CONNECTED') return { kind: 'off' };
   if (code === 'WEB_SEARCH_NO_CREDITS') return { kind: 'no-credits' };
   if (code === 'RATE_LIMITED') return { kind: 'limited' };

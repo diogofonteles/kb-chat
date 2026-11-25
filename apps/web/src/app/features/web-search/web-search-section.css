@@ -5,11 +5,6 @@
   min-width: 0;
 }
 
-/* Out of sight in another tab of the page, its results kept (a search is paid). */
-:host([hidden]) {
-  display: none;
-}
-
 fieldset {
   min-width: 0;
   margin: 0;
@@ -343,4 +338,15 @@ fieldset {
   .pair {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* After the results: what was left out, and more of the same. */
+.foot {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.more {
+  min-height: 2.75rem;
 }

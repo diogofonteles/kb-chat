@@ -263,11 +263,7 @@
             gravação. De um canal ou playlist, você escolhe o que entra.
           </p>
           <p class="count" id="add-links-count" role="status">
-            @if (tooManyLinks()) {
-              <span class="problem" i18n="@@addContent.tooMany"
-                >Inclua até 50 endereços por vez.</span
-              >
-            } @else if (parsed().links.length > 0) {
+            @if (parsed().links.length > 0) {
               <span
                 i18n="@@addContent.linkCount"
                 >{parsed().links.length, plural,
@@ -283,6 +279,9 @@
             }
           </p>
         </div>
+      }
+      @case ('search') {
+        <app-web-search-section [topic]="topic()" />
       }
       @case ('media') {
         <div class="drop">
@@ -302,15 +301,6 @@
           </p>
         </div>
       }
-    }
-
-    @if (searchOpened()) {
-      <app-web-search-section
-        [topic]="topic()"
-        [taken]="taken()"
-        [hidden]="way() !== 'search'"
-        (selection)="picks.set($event)"
-      />
     }
 
     @if (way() !== 'media') {

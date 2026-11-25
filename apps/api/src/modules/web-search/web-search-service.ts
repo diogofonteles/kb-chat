@@ -241,10 +241,7 @@ export class WebSearchService {
     },
   ): WebSearchResponse {
     return {
-      results: found.map(({ rank: _rank, ...one }) => ({
-        ...one,
-        already: of.context.alreadyOf(one.url),
-      })),
+      results: found.map((one) => resultOf(one, of.context.alreadyOf)),
       partial: of.answers.some((one) => one.answer?.kind !== 'ok'),
       exhausted: of.session.exhausted,
       skipped: of.session.skipped,
@@ -479,6 +476,16 @@ const candidatesIn = (
   subject: string,
 ): Candidate[] =>
   answer?.kind === 'ok' ? candidatesOf(answer.hits, { ...group, subject }) : [];
+
+const resultOf = (one: Candidate, alreadyOf: AlreadyOf): WebSearchResult => ({
+  kind: one.kind,
+  url: one.url,
+  title: one.title,
+  snippet: one.snippet,
+  site: one.site,
+  author: one.author,
+  already: alreadyOf(one.url),
+});
 
 /** To be asked again: what was not answered, but what did not answer twice. */
 const pendingOf = (

@@ -20,7 +20,7 @@
     </ui-banner>
   }
 
-  <form class="form" novalidate (submit)="search($event)">
+  <form class="form" novalidate (submit)="searchNow($event)">
     <div class="ui-field" [class.ui-field--invalid]="!!subjectProblem()">
       <label
         class="ui-field__label"
@@ -71,8 +71,7 @@
           type="number"
           inputmode="numeric"
           step="1"
-          [min]="sourcesLimits.min"
-          [max]="sourcesLimits.max"
+          [min]="sourcesMin"
           [attr.aria-invalid]="sourcesProblem() ? 'true' : null"
           [attr.aria-describedby]="sourcesDescribedBy()"
           [value]="form.sourcesText()"
@@ -84,6 +83,13 @@
             <ui-icon name="warn" [size]="14" />{{ problem }}
           </p>
         }
+        <p
+          class="ui-field__hint"
+          id="web-search-sources-hint"
+          i18n="@@webSearch.sourcesHint"
+        >
+          Sem limite: a busca continua até chegar lá ou não achar mais.
+        </p>
       </div>
 
       <fieldset class="ui-field">
@@ -156,8 +162,8 @@
         id="web-search-author-hint"
         i18n="@@webSearch.authorsHint"
       >
-        Escreva um nome e tecle Enter, até 5 nomes. Cada autor é uma consulta
-        por tipo.
+        Um ou vários, separados por vírgula. Cada autor é procurado em cada
+        tipo.
       </p>
       @if (authorChips().length > 0) {
         <ul
@@ -184,6 +190,20 @@
       }
     </div>
 
+    <label class="all">
+      <input
+        #againInput
+        class="ui-check"
+        type="checkbox"
+        [checked]="form.again()"
+        [disabled]="disabled()"
+        (change)="form.setAgain(againInput.checked)"
+      />
+      <span i18n="@@webSearch.again"
+        >Trazer também o que já apareceu antes ou já está no acervo</span
+      >
+    </label>
+
     <div class="send">
       <button
         #searchButton
@@ -192,28 +212,37 @@
         class="go"
         aria-describedby="web-search-calls"
         [disabled]="disabled()"
-        [attr.aria-disabled]="loading() ? 'true' : null"
+        [attr.aria-disabled]="searching() ? 'true' : null"
       >
         <ui-icon name="search" [size]="18" />
         <span i18n="@@webSearch.go">Pesquisar</span>
       </button>
-      <p class="calls" id="web-search-calls">{{ calls() }}</p>
+      @if (searching()) {
+        <button uiButton="outline" type="button" (click)="stop()">
+          <span i18n="@@webSearch.stop">Parar</span>
+        </button>
+      }
+      <p class="calls" id="web-search-calls">{{ estimate() }}</p>
     </div>
   </form>
 
   <p class="status" role="status" [class.empty]="!status()">{{ status() }}</p>
 
-  @switch (view().kind) {
-    @case ('loading') {
-      <div class="rows" aria-hidden="true">
-        @for (one of skeletons; track one) {
-          <div class="skeleton">
-            <span></span>
-            <span></span>
-          </div>
-        }
-      </div>
-    }
+  @if (searching()) {
+    <ui-progress [value]="share()" />
+  }
+  @if (loading()) {
+    <div class="rows" aria-hidden="true">
+      @for (one of skeletons; track one) {
+        <div class="skeleton">
+          <span></span>
+          <span></span>
+        </div>
+      }
+    </div>
+  }
+
+  @switch (problemKind()) {
     @case ('off') {
       <ng-container *ngTemplateOutlet="off" />
     }
@@ -280,119 +309,134 @@
         </button>
       </ui-banner>
     }
-    @case ('found') {
-      @if (partial()) {
-        <ui-banner
-          role="alert"
-          tone="warn"
-          title="Algumas consultas não responderam"
-          i18n-title="@@webSearch.partial"
-        >
-          <span i18n="@@webSearch.partialText"
-            >Os resultados são das que responderam.</span
-          >
-          <button
-            uiBannerAction
-            uiButton="white"
-            size="sm"
-            type="button"
-            class="retry"
-            (click)="retry()"
-          >
-            <span i18n="@@webSearch.retry">Tentar de novo</span>
-          </button>
-        </ui-banner>
+  }
+
+  @if (partial()) {
+    <ui-banner
+      role="alert"
+      tone="warn"
+      title="Algumas consultas não responderam"
+      i18n-title="@@webSearch.partial"
+    >
+      <span i18n="@@webSearch.partialText"
+        >Os resultados são das que responderam.</span
+      >
+      <button
+        uiBannerAction
+        uiButton="white"
+        size="sm"
+        type="button"
+        class="retry"
+        (click)="retry()"
+      >
+        <span i18n="@@webSearch.retry">Tentar de novo</span>
+      </button>
+    </ui-banner>
+  }
+  @if (rows().length > 0) {
+    <fieldset class="results">
+      <legend class="legend" i18n="@@webSearch.results">
+        Resultados para “{{ askedSubject() }}”
+      </legend>
+      @if (selectable().length > 0) {
+        <label class="all">
+          <input
+            class="ui-check"
+            type="checkbox"
+            [checked]="allSelected()"
+            [indeterminate]="someSelected()"
+            [disabled]="disabled()"
+            (change)="toggleAll()"
+          />
+          <span i18n="@@webSearch.all">Selecionar todos</span>
+        </label>
       }
-      @if (rows().length === 0) {
-        <p class="none" i18n="@@webSearch.noneText">
-          Tente outras palavras, outros tipos ou menos autores.
+      <ul class="rows">
+        @for (row of rows(); track row.url) {
+          <li class="row" [class.there]="row.already || row.taken">
+            <input
+              class="ui-check"
+              type="checkbox"
+              [id]="row.id"
+              [checked]="selected().has(row.url)"
+              [disabled]="disabled() || row.already !== null || row.taken"
+              [attr.aria-describedby]="row.id + '-about'"
+              (change)="toggle(row.url)"
+            />
+            <div class="text">
+              <label class="title" [for]="row.id">{{ row.title }}</label>
+              <p class="about" [id]="row.id + '-about'">
+                <span class="visually-hidden">{{ row.kindLabel }}.</span>
+                @if (row.taken) {
+                  <span class="there-words">
+                    <ui-icon name="checkcircle" [size]="14" />
+                    <span i18n="@@webSearch.taken">Incluído agora</span>
+                  </span>
+                } @else if (row.already) {
+                  <span class="there-words">
+                    <ui-icon name="checkcircle" [size]="14" />
+                    <span i18n="@@webSearch.already">Já está no acervo</span>
+                  </span>
+                }
+                {{ row.snippet }}
+              </p>
+              <p class="meta">
+                <ui-pill aria-hidden="true">{{ row.kindLabel }}</ui-pill>
+                @if (row.author; as name) {
+                  <span class="by">{{ name }}</span>
+                }
+                <a
+                  class="action"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  [href]="row.url"
+                  ><span class="site">{{ row.site }}</span>
+                  <ui-icon name="external" [size]="14" />
+                  <span class="visually-hidden" i18n="@@webSearch.newTab"
+                    >: {{ row.title }} (abre em outra aba)</span
+                  ></a
+                >
+                @if (row.already?.document; as document) {
+                  <button
+                    type="button"
+                    class="action"
+                    (click)="openDocument(document)"
+                  >
+                    <ui-icon name="doc" [size]="14" />
+                    <span i18n="@@webSearch.open">Abrir no acervo</span>
+                    <span class="visually-hidden">: {{ document.title }}</span>
+                  </button>
+                }
+              </p>
+            </div>
+          </li>
+        }
+      </ul>
+    </fieldset>
+  }
+  @if (ended()) {
+    <div class="foot">
+      @if (skipped(); as text) {
+        <p class="none">{{ text }}</p>
+      }
+      @if (exhausted()) {
+        <p class="none" i18n="@@webSearch.exhausted">
+          Não achei mais nada novo sobre isso. Tente outras palavras, outros
+          tipos ou outros autores.
         </p>
-      } @else {
-        <fieldset class="results">
-          <legend class="legend" i18n="@@webSearch.results">
-            Resultados para “{{ askedSubject() }}”
-          </legend>
-          @if (selectable().length > 0) {
-            <label class="all">
-              <input
-                class="ui-check"
-                type="checkbox"
-                [checked]="allSelected()"
-                [indeterminate]="someSelected()"
-                [disabled]="disabled()"
-                (change)="toggleAll()"
-              />
-              <span i18n="@@webSearch.all">Selecionar todos</span>
-            </label>
-          }
-          <ul class="rows">
-            @for (row of rows(); track row.url) {
-              <li class="row" [class.there]="row.already || row.taken">
-                <input
-                  class="ui-check"
-                  type="checkbox"
-                  [id]="row.id"
-                  [checked]="selected().has(row.url)"
-                  [disabled]="disabled() || row.already !== null || row.taken"
-                  [attr.aria-describedby]="row.id + '-about'"
-                  (change)="toggle(row.url)"
-                />
-                <div class="text">
-                  <label class="title" [for]="row.id">{{ row.title }}</label>
-                  <p class="about" [id]="row.id + '-about'">
-                    <span class="visually-hidden">{{ row.kindLabel }}.</span>
-                    @if (row.taken) {
-                      <span class="there-words">
-                        <ui-icon name="checkcircle" [size]="14" />
-                        <span i18n="@@webSearch.taken">Incluído agora</span>
-                      </span>
-                    } @else if (row.already) {
-                      <span class="there-words">
-                        <ui-icon name="checkcircle" [size]="14" />
-                        <span i18n="@@webSearch.already"
-                          >Já está no acervo</span
-                        >
-                      </span>
-                    }
-                    {{ row.snippet }}
-                  </p>
-                  <p class="meta">
-                    <ui-pill aria-hidden="true">{{ row.kindLabel }}</ui-pill>
-                    @if (row.author; as name) {
-                      <span class="by">{{ name }}</span>
-                    }
-                    <a
-                      class="action"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      [href]="row.url"
-                      ><span class="site">{{ row.site }}</span>
-                      <ui-icon name="external" [size]="14" />
-                      <span class="visually-hidden" i18n="@@webSearch.newTab"
-                        >: {{ row.title }} (abre em outra aba)</span
-                      ></a
-                    >
-                    @if (row.already?.document; as document) {
-                      <button
-                        type="button"
-                        class="action"
-                        (click)="openDocument(document)"
-                      >
-                        <ui-icon name="doc" [size]="14" />
-                        <span i18n="@@webSearch.open">Abrir no acervo</span>
-                        <span class="visually-hidden"
-                          >: {{ document.title }}</span
-                        >
-                      </button>
-                    }
-                  </p>
-                </div>
-              </li>
-            }
-          </ul>
-        </fieldset>
+      } @else if (canGoOn()) {
+        <button
+          uiButton="outline"
+          type="button"
+          class="more"
+          [disabled]="disabled()"
+          (click)="more()"
+        >
+          <ui-icon name="search" [size]="18" />
+          {{ moreText() }}
+        </button>
       }
-    }
+    </div>
   }
 }
 
