@@ -44,12 +44,17 @@ const record = (
   document: null,
   mediaId: null,
   lease: null,
+  batch: null,
   attempts: 0,
   spentUsd: 0,
   createdAt: '2026-11-16T10:00:00.000Z',
   updatedAt: '2026-11-16T10:00:00.000Z',
   ...fields,
 });
+
+const NOT_HELD = { batch: null, heldBy: null } as const;
+const BATCH = { id: '99999999-9999-4999-8999-999999999999', capUsd: 0.05 };
+const SECOND = '22222222-2222-4222-8222-222222222222';
 
 async function queueWith(
   records: DocumentUploadRecord[],
@@ -109,6 +114,7 @@ describe('DocIngestQueue (KBC-149, ADR 0040)', () => {
             leaseId: 'x',
             worker: 'mac',
             until: '2026-11-16T11:00:00.000Z',
+            budgetUsd: 0.5,
           },
         }),
       ],
@@ -147,6 +153,94 @@ describe('DocIngestQueue (KBC-149, ADR 0040)', () => {
   });
 });
 
+describe('the ceiling of one inclusion (KBC-009 R3)', () => {
+  const clock = { now: new Date('2026-11-25T12:00:00.000Z') };
+
+  it('a job may spend what is left of the month or of its inclusion, the smaller', async () => {
+    const { queue } = await queueWith(
+      [record({ batch: { ...BATCH, capUsd: 0.3 }, spentUsd: 0.1 })],
+      { clock, budget: 0.5 },
+    );
+    expect(queue.lease('mac')?.budgetUsd).toBeCloseTo(0.2);
+  });
+
+  it('what another item of the inclusion holds on the Mac is not given out twice', async () => {
+    const { queue } = await queueWith(
+      [record({ batch: BATCH }), record({ id: SECOND, batch: BATCH })],
+      { clock },
+    );
+    expect(queue.lease('mac')?.budgetUsd).toBeCloseTo(0.05);
+    expect(queue.leasableJobs()).toBe(0);
+    expect(queue.lease('mac')).toBeNull();
+  });
+
+  it('a spent inclusion waits, while another inclusion goes on', async () => {
+    const other = { id: '88888888-8888-4888-8888-888888888888', capUsd: 0.5 };
+    const { queue } = await queueWith(
+      [
+        record({ batch: BATCH, state: 'mapped', spentUsd: 0.05 }),
+        record({
+          id: SECOND,
+          batch: BATCH,
+          createdAt: '2026-11-16T10:01:00.000Z',
+        }),
+        record({
+          id: '33333333-3333-4333-8333-333333333333',
+          batch: other,
+          createdAt: '2026-11-16T10:02:00.000Z',
+        }),
+      ],
+      { clock },
+    );
+    expect(queue.leasableJobs()).toBe(1);
+    expect(queue.lease('mac')?.id).toBe('33333333-3333-4333-8333-333333333333');
+  });
+
+  it('what a failed attempt spent counts against the ceiling', async () => {
+    const { queue, opened } = await queueWith([record({ batch: BATCH })], {
+      clock,
+    });
+    const job = queue.lease('mac');
+    await queue.fail(
+      { jobId: record().id, worker: 'mac', leaseId: job?.leaseId ?? '' },
+      { detail: 'kb link: 502', spendUsd: 0.02 },
+    );
+    expect(opened.get(record().id)?.spentUsd).toBeCloseTo(0.02);
+    expect(queue.lease('mac')?.budgetUsd).toBeCloseTo(0.03);
+  });
+
+  it('an upload from before inclusions keeps the month as its only ceiling', async () => {
+    const { queue } = await queueWith([record()], { clock, budget: 0.4 });
+    expect(queue.lease('mac')?.budgetUsd).toBe(0.4);
+  });
+
+  it('says a document was written only when a new one was', async () => {
+    const written: string[] = [];
+    const store = new MemoryDocumentUploadStore();
+    store.records = [record(), record({ id: SECOND })];
+    const queue = new DocIngestQueue({
+      records: await UploadRecords.open(store),
+      files,
+      budgetUsd: () => 0.5,
+      written: (topic) => written.push(topic),
+      now: () => clock.now,
+    });
+    for (const state of ['ready', 'duplicate'] as const) {
+      const job = queue.lease('mac');
+      await queue.complete(
+        { jobId: job?.id ?? '', worker: 'mac', leaseId: job?.leaseId ?? '' },
+        {
+          worker: 'mac',
+          leaseId: job?.leaseId ?? '',
+          outcome: { state, document: { id: 'raw/a.md', title: 'A' } },
+          spendUsd: 0,
+        },
+      );
+    }
+    expect(written).toEqual(['hermetismo']);
+  });
+});
+
 describe('the upload as people see it', () => {
   it('shows the Mac\'s words to masters only, and "pronto" once the document arrived', () => {
     const done = record({
@@ -160,6 +254,7 @@ describe('the upload as people see it', () => {
         received: null,
         media: null,
         arrived: false,
+        ...NOT_HELD,
       }),
     ).toMatchObject({ state: 'mapped', detail: null, uploadUrl: null });
     expect(
@@ -168,6 +263,7 @@ describe('the upload as people see it', () => {
         received: null,
         media: null,
         arrived: true,
+        ...NOT_HELD,
       }),
     ).toMatchObject({ state: 'ready', detail: 'kb: ok' });
     const youtube = record({
@@ -181,6 +277,7 @@ describe('the upload as people see it', () => {
         received: null,
         media: 'failed',
         arrived: false,
+        ...NOT_HELD,
       }),
     ).toMatchObject({ state: 'failed', failure: 'conversion-failed' });
   });

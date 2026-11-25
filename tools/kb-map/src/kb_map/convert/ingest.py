@@ -9,6 +9,7 @@ adds the provenance keys to that frontmatter. Tests use a fake kb; the binary ne
 
 import json
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,8 +19,22 @@ INGEST_TIMEOUT_S = 30 * 60
 OUTPUT_CHARS = 2_000
 
 
+# kb's receipt: "decisions: N calls, N cache hits, US$ 0.0004", and the same for
+# "generation:". The "budget: US$ … limit reached" line is the cap, never a spend.
+_RECEIPT = re.compile(r"^(?:decisions|generation):.*US\$ (\d+(?:\.\d+)?)", re.MULTILINE)
+
+
+def spend_of(output: str) -> float:
+    """What kb says it spent in this run (the inclusion's ceiling counts it, KBC-009 R3)."""
+    return sum(float(value) for value in _RECEIPT.findall(output))
+
+
 class IngestFailed(Exception):
     """kb ingest exited with an error or printed no result: the message is kb's output."""
+
+    def __init__(self, message: str, usd: float = 0.0) -> None:
+        super().__init__(message)
+        self.usd = usd
 
 
 @dataclass(frozen=True)
@@ -29,6 +44,7 @@ class IngestResult:
     duplicate_of: str | None = None
     reason: str | None = None
     output: str = ""
+    usd: float = 0.0
 
 
 class KbIngestPort(Protocol):
@@ -82,7 +98,7 @@ class KbIngestCli:
         )
         output = (done.stdout + done.stderr).strip()
         if done.returncode != 0:
-            raise IngestFailed(f"kb ingest: {output[-OUTPUT_CHARS:]}")
+            raise IngestFailed(f"kb ingest: {output[-OUTPUT_CHARS:]}", spend_of(output))
         data = parse_result(done.stdout)
         return IngestResult(
             file_path=str(data.get("filePath") or ""),
@@ -90,4 +106,5 @@ class KbIngestCli:
             duplicate_of=data.get("duplicate_of") or None,
             reason=data.get("triage_reason") or None,
             output=output[-OUTPUT_CHARS:],
+            usd=spend_of(output),
         )

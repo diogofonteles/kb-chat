@@ -74,6 +74,41 @@ export const documentLinkSchema = z
     return parsed.username === '' && parsed.password === '';
   }, 'A link with credentials is refused');
 
+/* ---------- One inclusion (batch) and its ceiling (KBC-009 R3) ---------- */
+
+/** What one inclusion may spend when the person does not say. */
+export const DOCUMENT_BATCH_DEFAULT_USD = 0.5;
+export const DOCUMENT_BATCH_MIN_USD = 0.05;
+export const DOCUMENT_BATCH_MAX_USD = 5;
+
+const batchCapSchema = z
+  .number()
+  .min(DOCUMENT_BATCH_MIN_USD)
+  .max(DOCUMENT_BATCH_MAX_USD);
+
+/** The inclusion this item belongs to: the same id for everything sent together. */
+export const documentBatchRequestSchema = z.strictObject({
+  id: z.uuid(),
+  capUsd: batchCapSchema,
+});
+export type DocumentBatchRequest = z.infer<typeof documentBatchRequestSchema>;
+
+/** An inclusion as the screen shows it: its ceiling and what it already spent. */
+export const documentBatchSchema = z.object({
+  id: z.uuid(),
+  capUsd: z.number(),
+  spentUsd: z.number().min(0),
+});
+export type DocumentBatch = z.infer<typeof documentBatchSchema>;
+
+/** PATCH /api/v1/document-batches/:id: a new ceiling (what waited for it goes on). */
+export const changeDocumentBatchRequestSchema = z.strictObject({
+  capUsd: batchCapSchema,
+});
+export type ChangeDocumentBatchRequest = z.infer<
+  typeof changeDocumentBatchRequestSchema
+>;
+
 /**
  * POST /api/v1/topics/:topic/documents (FR-1): a file announced (its bytes go by tus to the
  * upload's `uploadUrl`) or a link. `level` is required in a collection with levels.
@@ -90,11 +125,13 @@ export const createDocumentUploadRequestSchema = z.discriminatedUnion('kind', [
     bytes: z.number().int().min(1).max(DOCUMENT_UPLOAD_MAX_BYTES),
     sha256: mediaSha256Schema,
     level: levelRefSchema.optional(),
+    batch: documentBatchRequestSchema.optional(),
   }),
   z.strictObject({
     kind: z.literal('url'),
     url: documentLinkSchema,
     level: levelRefSchema.optional(),
+    batch: documentBatchRequestSchema.optional(),
   }),
 ]);
 export type CreateDocumentUploadRequest = z.infer<
@@ -163,6 +200,10 @@ export const documentUploadSchema = z.object({
   received: z.number().int().min(0).nullable(),
   /** tus target for the bytes, while `receiving`. */
   uploadUrl: z.string().nullable(),
+  /** The inclusion it belongs to; null for one sent before inclusions had a ceiling. */
+  batch: documentBatchSchema.nullable(),
+  /** Why it waits although the Mac could take it: a spending ceiling was reached. */
+  heldBy: z.enum(['batch-cap', 'month-cap']).nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });

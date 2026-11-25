@@ -37,7 +37,7 @@ from .kb_keys import KEY_MISSING, REQUIRED_KEY, is_configuration_error
 from .kb_publish import KbPublisher, KbStepFailed, UnsafePath, VaultBusy
 from .secret import TokenError
 from .status import StatusReporter, WorkerStatus
-from .topic import TopicConflict
+from .topic import TopicConflict, ensure_topic
 from .transcribe import Stopped, TokenCounter, WhisperModel, build_prompt, estimate_tokens
 from .transcribe import transcribe_track as run_track
 from .vad import SpeechFinder
@@ -393,7 +393,7 @@ class Worker:
         except DocIngestFailed as err:
             log.error("job %s: the document did not enter: %s", job["id"], err.detail)
             outcome = {"state": "failed", "failure": err.failure, "detail": err.detail}
-            self.api.doc_result(job, outcome)
+            self.api.doc_result(job, outcome, min(err.spent, float(job["budgetUsd"])))
             return
         except KbStepFailed as err:
             if is_configuration_error(err.output):
@@ -418,12 +418,14 @@ class Worker:
 
     def _ingest_document(self, job: dict, work: Path, progress: dict) -> tuple[dict, float] | None:
         """The steps under the vault lock; None when the job is no longer ours."""
-        if self.docs is None:
+        if self.docs is None or self.publisher is None:
             raise RuntimeError("leased a doc-ingest job without kb-map")
         source = job["source"]
         if source["kind"] == "youtube":
             self._youtube(job, work)
             return None
+        # A collection created on the screen gets its folder first (KBC-114, KBC-009 R2).
+        self._make_folder(self.publisher, job)
         if source["kind"] == "file":
             path = self.api.download_document(job, work)
             if path is None:
@@ -442,6 +444,16 @@ class Worker:
         document = {"id": converted.document, "title": converted.title}
         state = "ready" if converted.state == "converted" else "duplicate"
         return {"state": state, "document": document}, spent
+
+    @staticmethod
+    def _make_folder(publisher: KbPublisher, job: dict) -> None:
+        try:
+            made = ensure_topic(publisher.vault, job["topic"], job.get("collection"), publisher.kb)
+        except (UnsafePath, TopicConflict) as err:
+            # Trying again would find the same folder: it ends here, with why (R2).
+            raise DocIngestFailed("conversion-failed", str(err)) from err
+        if made:
+            log.info("kb topic new: %s", ", ".join(made))
 
     def _youtube(self, job: dict, work: Path) -> None:
         """KBC-142 BR-5: the link's audio goes to the API and takes the media path."""

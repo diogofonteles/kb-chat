@@ -164,9 +164,10 @@ class Converting:
             result = self.ingest.ingest_file(self.topic.slug, staged, self.budget_usd)
         except IngestFailed as err:
             self.queue.put("convert", outcome.source, source=outcome.source, reason=str(err))
-            return _with(outcome, state="failed", detail=str(err))
+            return _with(outcome, state="failed", detail=str(err), usd=outcome.usd + err.usd)
         finally:
             shutil.rmtree(stage, ignore_errors=True)
+        outcome = _with(outcome, usd=outcome.usd + result.usd)
         if result.triage == "duplicate-skipped":
             return _with(
                 outcome,

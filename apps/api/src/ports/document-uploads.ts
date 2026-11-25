@@ -21,6 +21,14 @@ export interface UploadLease {
   readonly leaseId: string;
   readonly worker: string;
   readonly until: string;
+  /** What this lease may spend: held back from its inclusion's ceiling until it ends. */
+  readonly budgetUsd: number;
+}
+
+/** The inclusion an item belongs to and its ceiling (KBC-009 R3), on each of its items. */
+export interface UploadBatch {
+  readonly id: string;
+  readonly capUsd: number;
 }
 
 /** One document or link sent from the app, from its first byte to the collection (ADR 0040). */
@@ -42,6 +50,8 @@ export interface DocumentUploadRecord {
   readonly document: UploadedDocumentRef | null;
   readonly mediaId: string | null;
   readonly lease: UploadLease | null;
+  /** Null for an upload from before inclusions had a ceiling. */
+  readonly batch: UploadBatch | null;
   /** Attempts the Mac spent on it (a crash or a lost lease counts; its own setup does not). */
   readonly attempts: number;
   readonly spentUsd: number;

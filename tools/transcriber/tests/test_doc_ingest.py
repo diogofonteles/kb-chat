@@ -7,7 +7,7 @@ import pytest
 
 from transcriber.api import ApiClient
 from transcriber.doc_ingest import DocIngester, DocIngestFailed, failure_of, title_of
-from transcriber.kb_publish import KbPublisher
+from transcriber.kb_publish import KbPublisher, KbRun
 from transcriber.worker import Worker
 
 from .conftest import MEDIA_ID, TOKEN, FakeModel
@@ -192,6 +192,71 @@ def test_ac4_a_link_that_does_not_convert_fails_with_why(fake_api, vault, outcom
     assert result["outcome"]["detail"] == outcome["detail"]
     assert kb.calls == []
     assert fake_api.bodies("doc-state") == []
+
+
+class ScaffoldingKb(FakeKb):
+    """`kb topic new` as kb 0.0.12 makes the folder."""
+
+    def __init__(self, vault: Path) -> None:
+        super().__init__(vault)
+        self.made: list[tuple[str, str, str]] = []
+
+    def new_topic(self, slug: str, title: str, domain: str) -> KbRun:
+        self.made.append((slug, title, domain))
+        (self.vault / slug).mkdir(parents=True)
+        (self.vault / slug / "topic.yaml").write_text(f"slug: {slug}\n", encoding="utf-8")
+        return KbRun(ok=True, output="made", spend_usd=0.0)
+
+
+def test_a_collection_made_on_the_screen_gets_its_folder_before_its_first_document(fake_api, vault):
+    collection = {"title": "Cocreation", "domain": "espiritualidade", "parent": None}
+    fake_api.jobs[:] = [{**URL_JOB, "topic": "cocreation", "collection": collection}]
+    kb = ScaffoldingKb(vault)
+    kb_map = FakeKbMap(vault)
+
+    assert worker(fake_api, vault, kb_map, kb).step() == "job"
+
+    assert kb.made == [("cocreation", "Cocreation", "espiritualidade")]
+    assert kb_map.converted[0]["topic"] == "cocreation"
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["state"] == "ready"
+
+
+def test_a_folder_kb_did_not_make_in_the_way_ends_the_job_with_why(fake_api, vault):
+    (vault / "cocreation").mkdir()
+    collection = {"title": "Cocreation", "domain": "espiritualidade", "parent": None}
+    fake_api.jobs[:] = [{**URL_JOB, "topic": "cocreation", "collection": collection}]
+    kb_map = FakeKbMap(vault)
+
+    assert worker(fake_api, vault, kb_map, ScaffoldingKb(vault)).step() == "job"
+
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["state"] == "failed"
+    assert "topic.yaml" in result["outcome"]["detail"]
+    assert kb_map.converted == []
+    assert fake_api.bodies("fail") == []
+
+
+def test_what_the_conversion_spent_counts_in_the_result_and_in_what_kb_may_spend(fake_api, vault):
+    fake_api.jobs[:] = [dict(URL_JOB)]
+    doc = vault / "hermetismo" / "raw" / "a.md"
+    doc.write_text("---\ntitle: A\n---\ncorpo\n", encoding="utf-8")
+    converted = {"state": "converted", "document": "raw/a.md", "usd": 0.2}
+    kb = FakeKb(vault)
+
+    assert worker(fake_api, vault, FakeKbMap(vault, converted), kb).step() == "job"
+
+    assert kb.calls[0][2] == pytest.approx(0.3)
+    (result,) = fake_api.bodies("doc-result")
+    assert result["spendUsd"] == pytest.approx(0.2008)
+
+
+def test_a_conversion_that_fails_after_spending_reports_the_spend(fake_api, vault):
+    fake_api.jobs[:] = [dict(URL_JOB)]
+    outcome = {"state": "failed", "detail": "kb wrote nothing ()", "usd": 0.01}
+    assert worker(fake_api, vault, FakeKbMap(vault, outcome)).step() == "job"
+    (result,) = fake_api.bodies("doc-result")
+    assert result["spendUsd"] == pytest.approx(0.01)
 
 
 def test_a_failing_kb_step_gives_the_job_back_with_kbs_output(fake_api, vault):

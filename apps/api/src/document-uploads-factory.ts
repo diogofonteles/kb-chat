@@ -8,6 +8,8 @@ import { startOfAppMonth } from './app-calendar.js';
 import type { AppConfig } from './config.js';
 import type { MediaDeps } from './media-factory.js';
 import type { MediaDocuments } from './media-documents-factory.js';
+import { collectionOf } from './modules/media-documents/index.js';
+import { refreshSoon } from './refresh-soon.js';
 import type { DocumentUploadRecord } from './ports/document-uploads.js';
 import {
   levelViewOf,
@@ -82,6 +84,16 @@ export async function registerDocumentUploads(
     records,
     files,
     budgetUsd: () => wiring.documents.kb.budgetUsd(),
+    // A collection made on the screen gets its vault folder with its first document (R2).
+    collectionOf: (topic) =>
+      collectionOf(
+        wiring.catalog.topics().map((one) => one.topic),
+        topic,
+      ),
+    written: refreshSoon((topic) => wiring.catalog.refresh(topic), {
+      onError: (err) =>
+        app.log.warn({ err }, 'document uploads: the collection was not read'),
+    }),
     placeLevel: (record, id) => placeLevel(app, wiring, { record, id }),
     book: (record, usd) => book(wiring.media, { record, usd }),
     adoptAudio: (record, audio) => adoptAudio(app, wiring, { record, audio }),
@@ -102,6 +114,7 @@ function uploadService(
     findExisting: (scope, key) => findExisting(catalog, scope, key),
     inCatalog: (topic, id) => catalog.get(topic)?.entries.has(id) === true,
     mediaProgressOf: (mediaId) => mediaProgressOf(wiring, mediaId),
+    monthLeftUsd: () => wiring.documents.kb.budgetUsd(),
   });
 }
 

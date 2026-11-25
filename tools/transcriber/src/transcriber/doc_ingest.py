@@ -35,10 +35,12 @@ log = logging.getLogger("transcriber")
 class DocIngestFailed(Exception):
     """The document cannot enter: `failure` is the API's code, `detail` the tool's words."""
 
-    def __init__(self, failure: str, detail: str) -> None:
+    def __init__(self, failure: str, detail: str, spent: float = 0.0) -> None:
         super().__init__(detail)
         self.failure = failure
         self.detail = detail[-OUTPUT_CHARS:]
+        # What the conversion spent before it failed: booked all the same (KBC-009 R3).
+        self.spent = spent
 
 
 class LeaseLost(Exception):
@@ -50,6 +52,8 @@ class Converted:
     state: str  # "converted" | "duplicate"
     document: str  # topic-relative id
     title: str
+    # What converting (a vision description) and `kb ingest` spent.
+    usd: float = 0.0
 
 
 class KbMapPort(Protocol):
@@ -67,11 +71,18 @@ class YoutubePort(Protocol):
 def failure_of(outcome: dict) -> DocIngestFailed:
     """kb-map's failed or review outcome as the API's reason (AC-4)."""
     detail = str(outcome.get("detail") or outcome.get("state") or "conversion failed")
+    spent = usd_of(outcome)
     if outcome.get("state") == "review":
-        return DocIngestFailed("not-accepted", detail)
+        return DocIngestFailed("not-accepted", detail, spent)
     if "empty or unreadable" in detail:
-        return DocIngestFailed("empty", detail)
-    return DocIngestFailed("conversion-failed", detail)
+        return DocIngestFailed("empty", detail, spent)
+    return DocIngestFailed("conversion-failed", detail, spent)
+
+
+def usd_of(outcome: dict) -> float:
+    """kb-map's own count of what the conversion spent; 0 when it says nothing."""
+    usd = outcome.get("usd")
+    return float(usd) if isinstance(usd, int | float) else 0.0
 
 
 @dataclass
@@ -196,17 +207,25 @@ class DocIngester:
             raise failure_of(outcome)
         document = str(outcome["document"])
         title = title_of(self.publisher.vault, topic, document)
-        return Converted(outcome["state"], document, title)
+        return Converted(outcome["state"], document, title, usd_of(outcome))
 
     def finish(self, job: dict, converted: Converted, say) -> float:
-        """kb's steps and the map, for a new document; what kb spent."""
+        """kb's steps and the map, for a new document; what the whole job spent."""
         if converted.state == "duplicate":
-            return 0.0
+            return converted.usd
         topic = job["topic"]
+        budget = float(job["budgetUsd"])
         say("classifying")
-        spent, _undecided, _unnamed = self.publisher.run_kb(topic, float(job["budgetUsd"]))
+        try:
+            spent, _undecided, _unnamed = self.publisher.run_kb(
+                topic, max(0.0, budget - converted.usd)
+            )
+        except KbStepFailed as err:
+            err.spent += converted.usd
+            raise
+        spent += converted.usd
         if (self.publisher.vault / topic / "map").is_dir():
             say("mapping")
-            left = max(0.0, float(job["budgetUsd"]) - spent)
-            self.kb_map.map_document(topic, converted.document, left)
-        return spent
+            self.kb_map.map_document(topic, converted.document, max(0.0, budget - spent))
+        # The API refuses more than the job's budget: kb may pass it by the last call's cents.
+        return min(spent, budget)

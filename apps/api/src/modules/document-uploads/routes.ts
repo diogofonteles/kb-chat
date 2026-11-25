@@ -1,6 +1,8 @@
 import {
+  changeDocumentBatchRequestSchema,
   createDocumentUploadRequestSchema,
   createDocumentUploadResponseSchema,
+  documentBatchSchema,
   documentUploadListSchema,
   topicSlugSchema,
 } from '@kb-chat/contracts';
@@ -55,6 +57,7 @@ export const documentUploadRoutes =
     );
     registerCreate(app, deps);
     registerList(app, deps);
+    registerChanges(app, deps);
     registerParts(app, deps);
   };
 
@@ -98,6 +101,39 @@ function registerList(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
     async (request) => ({
       items: await deps.service.list(deps.actorOf(request)),
     }),
+  );
+}
+
+/** An inclusion's ceiling, and an item taken out (KBC-009 R3). */
+function registerChanges(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.patch(
+    '/api/v1/document-batches/:id',
+    {
+      config: { access: UPLOAD },
+      schema: {
+        params: uploadParams,
+        body: changeDocumentBatchRequestSchema,
+        response: { 200: documentBatchSchema },
+      },
+    },
+    async (request) =>
+      deps.service.changeBatch(
+        deps.actorOf(request),
+        request.params.id,
+        request.body.capUsd,
+      ),
+  );
+  typed.delete(
+    '/api/v1/document-uploads/:id',
+    {
+      config: { access: UPLOAD },
+      schema: { params: uploadParams, response: { 204: z.undefined() } },
+    },
+    async (request, reply) => {
+      await deps.service.remove(deps.actorOf(request), request.params.id);
+      return reply.code(204).send();
+    },
   );
 }
 

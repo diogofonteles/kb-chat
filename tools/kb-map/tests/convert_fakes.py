@@ -100,6 +100,7 @@ class FakeKb:
 
     vault: Path
     triage: str = "kept"
+    usd: float = 0.0
     calls: list[tuple[str, str]] = field(default_factory=list)
 
     def ingest_file(self, topic: str, path: Path, budget_usd: float | None) -> IngestResult:
@@ -108,7 +109,9 @@ class FakeKb:
         title = re.sub(r"^#+\s*", "", text.strip().splitlines()[0]).strip()
         relative = f"{topic}/raw/articles/{slugify(title)}.md"
         if self.triage == "duplicate-skipped":
-            return IngestResult("", self.triage, duplicate_of="raw/articles/existing.md")
+            return IngestResult(
+                "", self.triage, duplicate_of="raw/articles/existing.md", usd=self.usd
+            )
         target = self.vault / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(
@@ -125,4 +128,4 @@ class FakeKb:
             f"---\n{text}",
             encoding="utf-8",
         )
-        return IngestResult(relative, self.triage)
+        return IngestResult(relative, self.triage, usd=self.usd)

@@ -29,8 +29,17 @@ export class UploadRecords {
   }
 
   /** Puts the record and saves; every save writes the latest map, one after the other. */
-  put(record: DocumentUploadRecord): Promise<void> {
-    this.records.set(record.id, record);
+  put(...records: readonly DocumentUploadRecord[]): Promise<void> {
+    for (const record of records) this.records.set(record.id, record);
+    return this.save();
+  }
+
+  remove(id: string): Promise<void> {
+    this.records.delete(id);
+    return this.save();
+  }
+
+  private save(): Promise<void> {
     const next = this.saving
       .catch(() => undefined)
       .then(() => this.store.save(this.all()));

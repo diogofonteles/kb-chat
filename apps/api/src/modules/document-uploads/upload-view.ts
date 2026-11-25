@@ -1,4 +1,4 @@
-import type { DocumentUpload } from '@kb-chat/contracts';
+import type { DocumentBatch, DocumentUpload } from '@kb-chat/contracts';
 import type { DocumentUploadRecord } from '../../ports/document-uploads.js';
 
 /** Where a YouTube link's media item is now (it goes through the library, KBC-142 BR-5). */
@@ -16,6 +16,9 @@ export function toDocumentUpload(
     readonly media: MediaProgress | null;
     /** The document it became is in the app's catalog now (search, map): "pronto". */
     readonly arrived: boolean;
+    readonly batch: DocumentBatch | null;
+    /** The spending ceiling that makes it wait, if any (KBC-009 R3). */
+    readonly heldBy: DocumentUpload['heldBy'];
   },
 ): DocumentUpload {
   const fromMedia = mediaStateOf(record, input.media);
@@ -32,6 +35,8 @@ export function toDocumentUpload(
     bytes: record.bytes,
     received: record.kind === 'file' ? input.received : null,
     uploadUrl: record.state === 'receiving' ? uploadUrlOf(record.id) : null,
+    batch: input.batch,
+    heldBy: record.state === 'received' ? input.heldBy : null,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };

@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import {
+  DOCUMENT_BATCH_DEFAULT_USD,
   isYoutubeUrl,
   type CreateDocumentUploadRequest,
   type CreateDocumentUploadResponse,
+  type DocumentBatch,
   type DocumentUpload,
   type LevelChoice,
   type UploadedDocumentRef,
@@ -12,10 +14,17 @@ import { AppError } from '../../app-error.js';
 import type {
   DocumentUploadFilesPort,
   DocumentUploadRecord,
+  UploadBatch,
   UploadOwner,
 } from '../../ports/document-uploads.js';
 import { UploadRefusedError } from '../../ports/media-files.js';
 import { chosenLevel, type MediaActor } from '../media/index.js';
+import {
+  MIN_LEASE_USD,
+  batchLeftUsd,
+  batchOf,
+  isWorking,
+} from './upload-batches.js';
 import type { UploadRecords } from './upload-records.js';
 import { toDocumentUpload, type MediaProgress } from './upload-view.js';
 
@@ -49,6 +58,8 @@ export interface DocumentUploadServiceDeps {
   readonly inCatalog: (topic: string, id: string) => boolean;
   /** Where a YouTube link's media item is now. */
   readonly mediaProgressOf?: (mediaId: string) => MediaProgress | null;
+  /** What the media month still has (ADR 0035 §11): at zero, everything waits. */
+  readonly monthLeftUsd?: () => number;
   /** A job is waiting: the Mac is started when it runs only on demand (KBC-114). */
   readonly wake?: () => void;
   readonly now?: () => Date;
@@ -94,7 +105,8 @@ export class DocumentUploadService {
     const key = keyOf(request);
     const repeated = this.repeated(actor, topic, key);
     if (repeated) return repeated;
-    const record = this.newRecord(actor, { topic, request, level });
+    const batch = this.batchFor(actor, request);
+    const record = this.newRecord(actor, { topic, request, level, batch });
     await this.deps.records.put(record);
     if (record.state === 'received') this.deps.wake?.();
     return { outcome: 'created', upload: await this.viewOf(record, actor) };
@@ -122,12 +134,69 @@ export class DocumentUploadService {
     return { outcome: 'duplicate', document: upload?.document ?? null, upload };
   }
 
+  /**
+   * The inclusion the item enters (R3): the one the person is sending, with the ceiling it
+   * already has; a new one otherwise. Someone else's inclusion is never joined.
+   */
+  private batchFor(
+    actor: UploadActor,
+    request: CreateDocumentUploadRequest,
+  ): UploadBatch {
+    const asked = request.batch;
+    if (!asked) return { id: randomUUID(), capUsd: DOCUMENT_BATCH_DEFAULT_USD };
+    const same = this.deps.records
+      .all()
+      .find((one) => one.batch?.id === asked.id);
+    if (same && same.owner.principal !== actor.principal) throw notFound();
+    return { id: asked.id, capUsd: same?.batch?.capUsd ?? asked.capUsd };
+  }
+
+  /** A new ceiling for an inclusion (its sender, or a master): what waited goes on. */
+  async changeBatch(
+    actor: UploadActor,
+    id: string,
+    capUsd: number,
+  ): Promise<DocumentBatch> {
+    const items = this.deps.records
+      .all()
+      .filter((one) => one.batch?.id === id && this.mayManage(actor, one));
+    if (items.length === 0) throw notFound();
+    await this.deps.records.put(
+      ...items.map((one) => ({ ...one, batch: { id, capUsd } })),
+    );
+    this.deps.wake?.();
+    const changed = batchOf(this.deps.records.all(), id);
+    if (!changed) throw notFound();
+    return changed;
+  }
+
+  /**
+   * Takes an item out: one that did not reach the Mac is cancelled, one that ended leaves the
+   * list (its document stays). While the Mac works on it, 409.
+   */
+  async remove(actor: UploadActor, id: string): Promise<void> {
+    const record = this.deps.records.get(id);
+    if (!record || !this.mayManage(actor, record)) throw notFound();
+    if (isWorking(record) || this.receiving.has(id))
+      throw new AppError('MEDIA_CONFLICT', 'The Mac is working on it');
+    await this.deps.files.remove(id);
+    await this.deps.records.remove(id);
+  }
+
+  private mayManage(actor: UploadActor, record: DocumentUploadRecord): boolean {
+    return (
+      actor.canSee(record.topic) &&
+      (actor.isMaster || record.owner.principal === actor.principal)
+    );
+  }
+
   private newRecord(
     actor: UploadActor,
     input: {
       topic: string;
       request: CreateDocumentUploadRequest;
       level: string | null;
+      batch: UploadBatch;
     },
   ): DocumentUploadRecord {
     const at = this.now().toISOString();
@@ -136,6 +205,7 @@ export class DocumentUploadService {
       topic: input.topic,
       ...sourceOf(input.request),
       level: input.level,
+      batch: input.batch,
       owner: ownerOf(actor),
       failure: null,
       detail: null,
@@ -281,6 +351,10 @@ export class DocumentUploadService {
       received,
       media,
       arrived,
+      batch: record.batch
+        ? batchOf(this.deps.records.all(), record.batch.id)
+        : null,
+      heldBy: this.heldBy(record),
     });
     // A document above the person's level is not named, even as their own upload's result.
     const document =
@@ -288,6 +362,13 @@ export class DocumentUploadService {
         ? view.document
         : null;
     return { ...view, document };
+  }
+
+  /** The ceiling a waiting item is behind: its inclusion's, or the media month's. */
+  private heldBy(record: DocumentUploadRecord): DocumentUpload['heldBy'] {
+    if (batchLeftUsd(this.deps.records.all(), record) < MIN_LEASE_USD)
+      return 'batch-cap';
+    return (this.deps.monthLeftUsd?.() ?? 1) <= 0 ? 'month-cap' : null;
   }
 }
 

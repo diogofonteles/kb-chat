@@ -7,7 +7,7 @@ import urllib.error
 import pytest
 
 from kb_map.convert.converters import ConversionFailed, DataPage
-from kb_map.convert.ingest import IngestFailed, KbIngestCli, parse_result
+from kb_map.convert.ingest import IngestFailed, KbIngestCli, parse_result, spend_of
 from kb_map.convert.naming import heading_of, title_from_name
 from kb_map.convert.pipeline import original_names
 from kb_map.convert.provenance import replace_body, set_keys
@@ -179,6 +179,16 @@ def test_the_vision_model_comes_from_kb_toml_or_the_default(tmp_path):
 
     text, usd = VisionDescriber(model="m", key=lambda: "or-secret", opener=opener)(image)
     assert (text, usd) == ("Um diagrama.", 0.0002)
+
+
+def test_kbs_receipts_are_its_spend_and_its_cap_is_not():
+    output = (
+        "decisions: 6 calls, 0 cache hits, US$ 0.0014\n"
+        "generation: 1 calls, 0 cache hits, US$ 0.0006\n"
+        "budget: US$ 0.5000 limit reached\n"
+    )
+    assert spend_of(output) == pytest.approx(0.002)
+    assert spend_of("nothing") == 0
 
 
 def test_kb_ingest_output_is_read_and_the_command_has_no_secret(tmp_path):

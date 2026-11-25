@@ -439,3 +439,10 @@ def test_track_documents_and_plain_text_originals_are_left_alone(vault, converte
 
     assert "kb-map reconvert: 1 skip" in capsys.readouterr().out
     assert converters["set"].pdf.seen == []
+
+
+def test_what_kb_spent_ingesting_is_in_the_outcome(vault, tmp_path, kb, converters, capsys):
+    kb.usd = 0.0021
+    assert _run(vault, "convert", TOPIC, str(_pdf(tmp_path)), "--json") == 0
+    outcome = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert outcome["usd"] == pytest.approx(0.0021)

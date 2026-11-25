@@ -413,6 +413,123 @@ describe('A YouTube link goes through the transcriber (KBC-142 BR-5)', () => {
   });
 });
 
+describe('One inclusion and its ceiling (KBC-009 R2, R3)', () => {
+  const BATCH = '99999999-9999-4999-8999-999999999999';
+  const link = (call: Media['owner'], url: string, fields: object = {}) =>
+    call('POST', DOCUMENTS, { kind: 'url', url, ...fields });
+
+  it('a collection made on the screen takes documents, and its job says how to make its folder', async () => {
+    const { media } = await world();
+    const made = await media.owner('POST', '/api/v1/topics', {
+      title: 'Cocreation',
+      description: '',
+    });
+    expect(made.statusCode, made.body).toBe(201);
+    const sent = await media.owner(
+      'POST',
+      '/api/v1/topics/cocreation/documents',
+      {
+        kind: 'url',
+        url: 'https://example.org/artigo',
+      },
+    );
+    expect(sent.statusCode, sent.body).toBe(201);
+    const mac = await docMac(media);
+    const job = await leaseDoc(media, mac.token);
+    expect(job.topic).toBe('cocreation');
+    expect(job.collection).toMatchObject({ title: 'Cocreation', parent: null });
+  });
+
+  it('items sent together share the ceiling; spent, the rest waits until it is raised', async () => {
+    const { media, ana } = await world();
+    const batch = { id: BATCH, capUsd: 0.05 };
+    for (const url of ['https://example.org/1', 'https://example.org/2']) {
+      const sent = await link(ana.call, url, { batch });
+      expect(sent.statusCode, sent.body).toBe(201);
+    }
+    const mac = await docMac(media);
+    const job = await leaseDoc(media, mac.token);
+    expect(job.budgetUsd).toBeCloseTo(0.05);
+    await docResult(media, {
+      token: mac.token,
+      job,
+      outcome: { state: 'ready', document: { id: 'raw/a.md', title: 'A' } },
+      spendUsd: 0.05,
+    });
+    expect((await leaseAs(media, mac.token, ['doc-ingest'])).statusCode).toBe(
+      204,
+    );
+    const held = (await uploadsOf(ana.call)).find(
+      (one) => one.state === 'received',
+    );
+    expect(held).toMatchObject({
+      heldBy: 'batch-cap',
+      batch: { id: BATCH, capUsd: 0.05, spentUsd: 0.05 },
+    });
+
+    const raised = await ana.call(
+      'PATCH',
+      `/api/v1/document-batches/${BATCH}`,
+      {
+        capUsd: 0.2,
+      },
+    );
+    expect(raised.statusCode, raised.body).toBe(200);
+    expect(raised.json()).toEqual({ id: BATCH, capUsd: 0.2, spentUsd: 0.05 });
+    expect((await leaseDoc(media, mac.token)).budgetUsd).toBeCloseTo(0.15);
+  });
+
+  it('nobody else joins or changes an inclusion, and a ceiling out of range is refused', async () => {
+    const { media, ana } = await world();
+    const beto = await member(media, {
+      email: 'beto@example.com',
+      topics: ['hermetismo'],
+      features: ['search', 'media', 'media-upload'],
+    });
+    const batch = { id: BATCH, capUsd: 0.5 };
+    await link(ana.call, 'https://example.org/1', { batch });
+    const joined = await link(beto.call, 'https://example.org/2', { batch });
+    expect(joined.statusCode).toBe(404);
+    const changed = await beto.call(
+      'PATCH',
+      `/api/v1/document-batches/${BATCH}`,
+      { capUsd: 5 },
+    );
+    expect(changed.statusCode).toBe(404);
+    for (const capUsd of [0, 0.01, 5.01])
+      expect(
+        (
+          await link(ana.call, 'https://example.org/3', {
+            batch: { id: BATCH, capUsd },
+          })
+        ).statusCode,
+      ).toBe(400);
+  });
+
+  it('an item is taken out before the Mac has it; while it works, 409; the document stays', async () => {
+    const { media, ana } = await world();
+    const beto = await member(media, {
+      email: 'beto@example.com',
+      topics: ['hermetismo'],
+      features: ['search', 'media', 'media-upload'],
+    });
+    const sent = created((await link(ana.call, 'https://example.org/1')).body);
+    const url = `${UPLOADS}/${sent.id}`;
+    expect((await beto.call('DELETE', url)).statusCode).toBe(404);
+    const mac = await docMac(media);
+    const job = await leaseDoc(media, mac.token);
+    expect((await ana.call('DELETE', url)).statusCode).toBe(409);
+    await docResult(media, {
+      token: mac.token,
+      job,
+      outcome: { state: 'failed', failure: 'conversion-failed', detail: '404' },
+    });
+    expect((await ana.call('DELETE', url)).statusCode).toBe(204);
+    expect(await uploadsOf(ana.call)).toEqual([]);
+    expect((await ana.call('DELETE', url)).statusCode).toBe(404);
+  });
+});
+
 describe('Levels (ADR 0036 §5)', () => {
   it('in a collection with levels a level is required, and the document is born at it', async () => {
     const { vault, media, ana } = await world();

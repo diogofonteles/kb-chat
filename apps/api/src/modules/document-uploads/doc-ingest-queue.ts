@@ -13,15 +13,17 @@ import type {
   DocumentUploadRecord,
 } from '../../ports/document-uploads.js';
 import type { LeaseOwner } from '../../ports/media-store.js';
+import {
+  MIN_LEASE_USD,
+  WORKING_STATES,
+  batchLeftUsd,
+} from './upload-batches.js';
 import type { UploadRecords } from './upload-records.js';
 
 /** A Mac holds a doc-ingest job this long between heartbeats (conversion runs in steps). */
 export const DOC_INGEST_LEASE_MS = 10 * 60 * 1000;
 /** Crashes and lost leases a document survives before it is given up. */
 export const DOC_INGEST_MAX_ATTEMPTS = 3;
-
-/** The states the Mac works in: a lease in one of them is live until it expires. */
-const WORKING = new Set(['converting', 'classifying', 'mapping']);
 
 export interface DocIngestQueueDeps {
   readonly records: UploadRecords;
@@ -46,6 +48,8 @@ export interface DocIngestQueueDeps {
       readonly name: string;
     },
   ) => Promise<string>;
+  /** The Mac wrote a document in the vault: an API that reads the same vault looks again. */
+  readonly written?: (topic: string) => void;
   readonly onError?: (err: unknown, message: string) => void;
   readonly now?: () => Date;
 }
@@ -73,10 +77,13 @@ export class DocIngestQueue {
       .length;
   }
 
+  /** Waiting (or its lease expired), with something left of its inclusion's ceiling. */
   private isLeasable(record: DocumentUploadRecord, now: number): boolean {
+    if (batchLeftUsd(this.deps.records.all(), record) < MIN_LEASE_USD)
+      return false;
     if (record.state === 'received') return true;
     return (
-      WORKING.has(record.state) &&
+      WORKING_STATES.has(record.state) &&
       record.lease !== null &&
       Date.parse(record.lease.until) <= now
     );
@@ -93,7 +100,7 @@ export class DocIngestQueue {
       .some(
         (one) =>
           one.lease?.worker === worker &&
-          WORKING.has(one.state) &&
+          WORKING_STATES.has(one.state) &&
           Date.parse(one.lease.until) > now,
       );
   }
@@ -103,8 +110,8 @@ export class DocIngestQueue {
    * map at once (one writer), saved in the background: a lease lost to a crash is leased again.
    */
   lease(worker: string, topic?: string): DocIngestJob | null {
-    const budgetUsd = this.deps.budgetUsd();
-    if (budgetUsd <= 0) return null;
+    const monthUsd = this.deps.budgetUsd();
+    if (monthUsd <= 0) return null;
     const now = this.now();
     for (const record of this.waiting(now, topic)) {
       const attempts = record.attempts + (record.lease ? 1 : 0);
@@ -112,6 +119,10 @@ export class DocIngestQueue {
         this.later(this.giveUp(record, 'the Mac lost the job too many times'));
         continue;
       }
+      const budgetUsd = Math.min(
+        monthUsd,
+        batchLeftUsd(this.deps.records.all(), record),
+      );
       const leased: DocumentUploadRecord = {
         ...record,
         attempts,
@@ -120,6 +131,7 @@ export class DocIngestQueue {
           leaseId: randomUUID(),
           worker,
           until: new Date(now.getTime() + DOC_INGEST_LEASE_MS).toISOString(),
+          budgetUsd,
         },
         updatedAt: now.toISOString(),
       };
@@ -161,7 +173,7 @@ export class DocIngestQueue {
       !record.lease ||
       record.lease.leaseId !== owner.leaseId ||
       record.lease.worker !== owner.worker ||
-      !WORKING.has(record.state)
+      !WORKING_STATES.has(record.state)
     )
       throw leaseLost();
     return record;
@@ -170,14 +182,14 @@ export class DocIngestQueue {
   heartbeat(owner: LeaseOwner): void {
     const record = this.held(owner);
     const until = new Date(this.now().getTime() + DOC_INGEST_LEASE_MS);
-    const lease = { ...owner, until: until.toISOString() };
     this.later(
       this.deps.records.put({
         ...record,
         lease: {
-          leaseId: lease.leaseId,
-          worker: lease.worker,
-          until: lease.until,
+          leaseId: owner.leaseId,
+          worker: owner.worker,
+          until: until.toISOString(),
+          budgetUsd: record.lease?.budgetUsd ?? 0,
         },
       }),
     );
@@ -231,6 +243,7 @@ export class DocIngestQueue {
     });
     if (result.spendUsd > 0) this.deps.book?.(record, result.spendUsd);
     await this.deps.files.remove(record.id);
+    if (outcome.state === 'ready') this.deps.written?.(record.topic);
   }
 
   /**
@@ -247,15 +260,18 @@ export class DocIngestQueue {
   ): Promise<void> {
     const record = this.held(owner);
     const attempts = record.attempts + (failure.configuration ? 0 : 1);
-    if ((failure.spendUsd ?? 0) > 0)
-      this.deps.book?.(record, failure.spendUsd ?? 0);
+    const spend = failure.spendUsd ?? 0;
+    if (spend > 0) this.deps.book?.(record, spend);
+    // What a failed attempt spent counts against its inclusion's ceiling too (R3).
+    const spentUsd = record.spentUsd + spend;
     if (attempts >= DOC_INGEST_MAX_ATTEMPTS) {
-      await this.giveUp({ ...record, attempts }, failure.detail);
+      await this.giveUp({ ...record, attempts, spentUsd }, failure.detail);
       return;
     }
     await this.deps.records.put({
       ...record,
       attempts,
+      spentUsd,
       state: 'received',
       detail: failure.detail,
       lease: null,

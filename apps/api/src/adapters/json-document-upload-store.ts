@@ -31,8 +31,17 @@ const recordSchema = z.object({
   document: z.object({ id: z.string(), title: z.string() }).nullable(),
   mediaId: z.string().nullable(),
   lease: z
-    .object({ leaseId: z.string(), worker: z.string(), until: z.string() })
+    .object({
+      leaseId: z.string(),
+      worker: z.string(),
+      until: z.string(),
+      budgetUsd: z.number().default(0),
+    })
     .nullable(),
+  batch: z
+    .object({ id: z.uuid(), capUsd: z.number() })
+    .nullable()
+    .default(null),
   attempts: z.number(),
   spentUsd: z.number(),
   createdAt: z.string(),
