@@ -5,16 +5,16 @@ KBC-140 and KBC-141). It compiles the wiki the LLM Wiki pattern describes on top
 sources, on the owner's Mac. The API never writes it (Q7). `deploy/scripts/sync-vault.sh`
 sends it to production, and only after `kb-map check` passes.
 
-| Step | Command | Writes |
-|---|---|---|
-| Sections (KBC-139) | `kb-map sections <topic> [--doc <path>]` | `map/sections/<doc>.json` |
-| Tree (KBC-140) | `kb-map tree build <topic>` | `map/tree.json`, `map/tree-review.md`, `index.md` |
-| Owner review | `kb-map tree review <topic>` / `kb-map tree apply <topic> <corrections.yaml>` | `map/owner-edits.json` |
-| Dossiers (KBC-141) | `kb-map dossier <topic> [--node <id>]` | `map/dossiers/*.json`, `wiki/concepts` (stubs only), `wiki/subjects`, `wiki/entities`, `map/entities.json`, `map/affects.json`, `index.md` |
-| Convert (KBC-148) | `kb-map convert <topic> <file\|url>... [--json]` | `raw/_originals/<sha256>.<ext>`, the document through `kb ingest file`, provenance keys |
-| Reconvert (KBC-148) | `kb-map reconvert <topic> [--from <dir>] [--dry-run] [--limit n] [--retry]` | the body and provenance keys of plain-text sources |
-| Check | `kb-map check <topic>` | nothing (exit 1 lists each problem) |
-| Owned paths | `kb-map paths <topic>` | nothing (what the sync holds back on a failed check) |
+| Step                | Command                                                                       | Writes                                                                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Sections (KBC-139)  | `kb-map sections <topic> [--doc <path>]`                                      | `map/sections/<doc>.json`                                                                                                                  |
+| Tree (KBC-140)      | `kb-map tree build <topic>`                                                   | `map/tree.json`, `map/tree-review.md`, `index.md`                                                                                          |
+| Owner review        | `kb-map tree review <topic>` / `kb-map tree apply <topic> <corrections.yaml>` | `map/owner-edits.json`                                                                                                                     |
+| Dossiers (KBC-141)  | `kb-map dossier <topic> [--node <id>]`                                        | `map/dossiers/*.json`, `wiki/concepts` (stubs only), `wiki/subjects`, `wiki/entities`, `map/entities.json`, `map/affects.json`, `index.md` |
+| Convert (KBC-148)   | `kb-map convert <topic> <file\|url>... [--json]`                              | `raw/_originals/<sha256>.<ext>`, the document through `kb ingest file`, provenance keys                                                    |
+| Reconvert (KBC-148) | `kb-map reconvert <topic> [--from <dir>] [--dry-run] [--limit n] [--retry]`   | the body and provenance keys of plain-text sources                                                                                         |
+| Check               | `kb-map check <topic>`                                                        | nothing (exit 1 lists each problem)                                                                                                        |
+| Owned paths         | `kb-map paths <topic>`                                                        | nothing (what the sync holds back on a failed check)                                                                                       |
 
 Every step that changes the map appends an entry to `<topic>/log.md` in kb's format.
 
