@@ -198,6 +198,9 @@ const DECLARED: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   'track-subjects-factory.ts': {
     get: "the collection's concept names and title, for an edit already admitted",
   },
+  'web-search-factory.ts': {
+    get: 'whether the collection exists, no entries',
+  },
 };
 
 const isAllowedPlace = (path: string) =>

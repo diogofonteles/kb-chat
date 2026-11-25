@@ -104,6 +104,8 @@ import type { SpendLedgerPort } from './ports/spend-ledger.js';
 import type { UsageLogPort } from './ports/usage-log.js';
 import type { VaultReaderPort } from './ports/vault-reader.js';
 import { registerDocumentUploads } from './document-uploads-factory.js';
+import { createWebSearch, registerWebSearch } from './web-search-factory.js';
+import type { WebSearchService } from './modules/web-search/index.js';
 import type { DocIngestQueue } from './modules/document-uploads/index.js';
 import { MemoryUsageLog } from './adapters/memory-usage-log.js';
 import { MemoryConversationStore } from './adapters/memory-conversation-store.js';
@@ -281,6 +283,11 @@ export interface AppDeps {
    * never call it); `ai` must then be built with the same `house` to lend it.
    */
   readonly house?: HouseAi;
+  /**
+   * The web search (KBC-185). When not given: in memory, with no key, and Firecrawl
+   * unreachable (tests never call it).
+   */
+  readonly webSearch?: WebSearchService;
   /** The media library (ADR 0022); without it no media route exists (KB_CHAT_MEDIA=off). */
   readonly media?: MediaDeps;
   /**
@@ -314,6 +321,7 @@ export interface LevelDeps {
 type FullDeps = AppDeps & {
   auth: AuthDeps & { actAs: ActAsService };
   house: HouseAi;
+  webSearch: WebSearchService;
   access: AccessDeps;
   ai: AiProviders;
   agent: ResearchAgent;
@@ -578,6 +586,8 @@ interface MediaWiring {
   readonly authors: AuthorsService;
   /** The app's AI a master connected: the media AI runs on it (KBC-067, ADR 0016). */
   readonly house: HouseAi;
+  /** What may be added to a collection, found on the web (KBC-185). */
+  readonly webSearch: WebSearchService;
   /** Track documents (KBC-099/100): every change reconciles them. */
   readonly documents?: MediaDocuments;
   /** The scales and their audit (KBC-105): an audio's level is one of its collection's. */
@@ -1333,7 +1343,10 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   startJanitor(app, { ...measures, ...edited, media: wiring.media, groq });
 }
 
-/** Documents and links sent from the app (KBC-149, ADR 0040): people's routes, the queue. */
+/**
+ * Documents and links sent from the app (KBC-149, ADR 0040): people's routes, the queue, and
+ * the web search that finds links to send (KBC-185).
+ */
 async function startDocumentUploads(
   app: FastifyInstance,
   input: {
@@ -1343,7 +1356,7 @@ async function startDocumentUploads(
   },
 ): Promise<DocIngestQueue> {
   const { wiring, media, documents } = input;
-  const queue = await registerDocumentUploads(app, {
+  const { queue, service } = await registerDocumentUploads(app, {
     ...wiring,
     mediaService: media,
     documents,
@@ -1354,6 +1367,12 @@ async function startDocumentUploads(
     },
   });
   wiring.onDocIngest?.(queue);
+  await registerWebSearch(app, {
+    service: wiring.webSearch,
+    catalog: wiring.catalog,
+    uploads: service,
+    perMinute: wiring.config.WEB_SEARCH_RATE_LIMIT,
+  });
   return queue;
 }
 
@@ -1884,7 +1903,7 @@ const inMemoryAi = (
     ledger: wiring.ledger,
   });
 
-/** OpenRouter never answers in a test that did not bring its own fake. */
+/** OpenRouter and Firecrawl never answer in a test that did not bring its own fake. */
 const offline: typeof fetch = async () => {
   throw new Error('No network in tests');
 };
@@ -1893,6 +1912,13 @@ const inMemoryHouse = (config: AppConfig): Promise<HouseAi> =>
   createHouseAi({
     sealer: new SecretBox(randomBytes(32)),
     webOrigin: config.WEB_ORIGIN,
+    fetch: offline,
+  });
+
+const inMemoryWebSearch = (deps: AppDeps): Promise<WebSearchService> =>
+  createWebSearch({
+    sealer: new SecretBox(randomBytes(32)),
+    log: deps.logger ?? createLogger(deps.config.LOG_LEVEL),
     fetch: offline,
   });
 
@@ -1979,6 +2005,11 @@ const agentOf = (
     mainAuthorOf: (topic) => built.authors.mainVoiceOf(topic),
   });
 
+const accessAndWebSearch = async (deps: AppDeps) => ({
+  access: deps.access ?? inMemoryAccess(),
+  webSearch: deps.webSearch ?? (await inMemoryWebSearch(deps)),
+});
+
 /** Fills what the caller left out: in-memory stores, the agent and the providers. */
 async function completeDeps(given: AppDeps): Promise<FullDeps> {
   const deps = withCollections(given);
@@ -1992,7 +2023,7 @@ async function completeDeps(given: AppDeps): Promise<FullDeps> {
     ...deps,
     auth,
     house,
-    access: deps.access ?? inMemoryAccess(),
+    ...(await accessAndWebSearch(deps)),
     ai:
       deps.ai ??
       (await inMemoryAi(deps.config, { agent, house, auth, ledger })),

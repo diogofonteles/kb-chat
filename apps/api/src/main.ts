@@ -15,6 +15,7 @@ import {
 import { SealedSettingsStore } from './adapters/sealed-settings-store.js';
 import { SecretBox, deriveKey, loadSecretsKey } from './adapters/secret-box.js';
 import { createHouseAi } from './house-ai-factory.js';
+import { createWebSearch } from './web-search-factory.js';
 import { JsonDocumentStore } from './adapters/json-document-store.js';
 import { createDelivery } from './delivery-factory.js';
 import { JsonPeopleStore } from './adapters/json-people-store.js';
@@ -114,6 +115,12 @@ const house = await createHouseAi({
   webOrigin: config.WEB_ORIGIN,
   warn: (message) => logger.warn(message),
 });
+// The house's Firecrawl key, connected by a master in the UI (KBC-185).
+const webSearch = await createWebSearch({
+  stateDir: config.KB_CHAT_STATE_DIR,
+  sealer,
+  log: logger,
+});
 // Settings first, then the environment, resolved per request (KBC-007, ADR 0007).
 const ai = await createAiProviders({
   config,
@@ -168,6 +175,7 @@ const app = await buildApp({
   usage,
   conversations,
   house,
+  webSearch,
   media,
   collections,
   authorDirectory,

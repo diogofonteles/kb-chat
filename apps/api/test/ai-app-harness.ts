@@ -45,6 +45,8 @@ import { buildApp } from '../src/app.js';
 import { levelsOnDisk } from '../src/levels-factory.js';
 import { loadConfig, type AppConfig } from '../src/config.js';
 import { createHouseAi } from '../src/house-ai-factory.js';
+import { createWebSearch } from '../src/web-search-factory.js';
+import { FakeFirecrawl } from '../src/testing/fake-firecrawl.js';
 import { PeopleService, SessionService } from '../src/modules/auth/index.js';
 import {
   AuthorDirectory,
@@ -79,6 +81,8 @@ export interface Started {
   readonly gemini: FakeGemini;
   /** Groq for the media library (KBC-037). */
   readonly groq: FakeGroq;
+  /** Firecrawl for the web search (KBC-185); no key is connected. */
+  readonly firecrawl: FakeFirecrawl;
   readonly ledger: SpendLedgerPort;
   readonly logs: string[];
   /** The vault's catalog: a test that writes a document refreshes its collection. */
@@ -307,6 +311,22 @@ const testMedia = (
     { fetch: groq.fetch, launchctl },
   );
 
+/**
+ * The web search (KBC-185) in the state folder, over the fake Firecrawl. One master key, as
+ * a restart over the same files has.
+ */
+const testWebSearch = (built: {
+  readonly config: AppConfig;
+  readonly logger: FastifyBaseLogger;
+  readonly firecrawl: FakeFirecrawl;
+}) =>
+  createWebSearch({
+    stateDir: built.config.KB_CHAT_STATE_DIR,
+    sealer: new SecretBox(Buffer.alloc(32, 5)),
+    log: built.logger,
+    fetch: built.firecrawl.fetch,
+  });
+
 /** No test ever reaches the real launchctl (KBC-114). */
 const refuseLaunchctl: LaunchctlRunner = () =>
   Promise.reject(new Error('the real launchctl is never run by a test'));
@@ -321,14 +341,16 @@ async function appOf(
     readonly house: Awaited<ReturnType<typeof buildAi>>['house'];
     readonly logger: FastifyBaseLogger;
     readonly groq: FakeGroq;
+    readonly firecrawl: FakeFirecrawl;
   },
   options: StartOptions,
 ): Promise<FastifyInstance> {
-  const { config, core, groq, ...rest } = built;
+  const { config, core, groq, firecrawl, ...rest } = built;
   const app = await buildApp({
     config,
     ...core,
     ...rest,
+    webSearch: await testWebSearch({ config, firecrawl, ...rest }),
     media: await testMedia(config, groq, options.launchctl),
     // Access levels on disk (KBC-103), as main builds them.
     levels: levelsOnDisk(config.KB_CHAT_STATE_DIR),
@@ -359,9 +381,9 @@ export async function start(options: StartOptions = {}): Promise<Started> {
   const core = await buildCore(config, logger);
   const auth = testAuth(state, keys);
   const { house, ai } = await buildAi({ config, core, auth, fetch, env });
-  const groq = new FakeGroq();
+  const fakes = { groq: new FakeGroq(), firecrawl: new FakeFirecrawl() };
   current = await appOf(
-    { config, core, ai, auth, house, logger, groq },
+    { config, core, ai, auth, house, logger, ...fakes },
     options,
   );
   // The CLI reaches the turn's MCP endpoint over HTTP, so this app really listens.
@@ -373,7 +395,7 @@ export async function start(options: StartOptions = {}): Promise<Started> {
     state,
     fake,
     gemini,
-    groq,
+    ...fakes,
     ledger: core.ledger,
     logs,
     catalog: core.catalog,

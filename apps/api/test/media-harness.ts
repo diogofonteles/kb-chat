@@ -16,6 +16,7 @@ import {
   start,
   type Call,
   type Started,
+  type StartOptions,
 } from './ai-app-harness.js';
 import { FIXTURE_VAULT } from './fixture-paths.js';
 
@@ -42,7 +43,7 @@ export interface Media {
 }
 
 export async function startMedia(
-  options: { readonly vault?: string; readonly state?: string } = {},
+  options: Pick<StartOptions, 'vault' | 'state' | 'env'> = {},
 ): Promise<Media> {
   const started = await start({ media: true, ...options });
   const ownerHeaders = await signIn(started, 'owner@example.com');
