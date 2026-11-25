@@ -12,6 +12,7 @@ from transcriber.doc_ingest import (
     LIST_MAX,
     DocIngester,
     DocIngestFailed,
+    YtDlp,
     entries_of,
     failure_of,
     run_whole,
@@ -514,3 +515,54 @@ def test_an_answer_is_never_said_again(monkeypatch):
     with pytest.raises(ApiError):
         api._on_job({"id": "j", "leaseId": "l"}, "doc-result", {})
     assert len(calls) == 1
+
+
+def scripted(monkeypatch, *answers):
+    """yt-dlp answering as told, one answer per run, and the waits between them."""
+    from transcriber import doc_ingest
+
+    runs, waited = [], []
+
+    def run(command, timeout, **_kwargs):
+        runs.append(command)
+        code, output, name = answers[len(runs) - 1]
+        if name:
+            template = Path(command[command.index("-o") + 1])
+            (template.parent / name).write_bytes(b"m4a")
+        return subprocess.CompletedProcess(command, code, output, "")
+
+    monkeypatch.setattr(doc_ingest, "run_whole", run)
+    monkeypatch.setattr(doc_ingest.time, "sleep", waited.append)
+    return runs, waited
+
+
+def test_a_site_that_refuses_for_a_moment_is_asked_again(tmp_path, monkeypatch):
+    runs, waited = scripted(
+        monkeypatch, (1, "ERROR: HTTP Error 403: Forbidden", None), (0, "", "Aula [x].m4a")
+    )
+    found = YtDlp("yt-dlp", "/opt/node").download("https://youtu.be/x", tmp_path)
+    assert found.name == "Aula [x].m4a"
+    assert waited == [10]
+    assert runs[0][:4] == ["yt-dlp", "--ignore-config", "--js-runtimes", "node:/opt/node"]
+
+
+def test_what_will_not_pass_fails_at_once_and_refused_three_times_it_fails(tmp_path, monkeypatch):
+    runs, _ = scripted(monkeypatch, (1, "ERROR: Private video", None))
+    with pytest.raises(DocIngestFailed, match="Private video"):
+        YtDlp().download("https://youtu.be/x", tmp_path)
+    assert len(runs) == 1
+    runs, waited = scripted(monkeypatch, *[(1, "HTTP Error 429", None)] * 3)
+    with pytest.raises(DocIngestFailed):
+        YtDlp().download("https://youtu.be/x", tmp_path)
+    assert waited == [10, 30]
+
+
+def test_node_is_nvms_newest_when_it_is_not_on_path(tmp_path, monkeypatch):
+    from transcriber import doc_ingest
+
+    for version in ("v9.11.0", "v22.23.2", "v22.4.0"):
+        node = Path.home() / ".nvm" / "versions" / "node" / version / "bin" / "node"
+        node.parent.mkdir(parents=True)
+        node.touch(mode=0o755)
+    monkeypatch.setattr(doc_ingest.shutil, "which", lambda _name: None)
+    assert "v22.23.2" in (doc_ingest.node_or_none() or "")

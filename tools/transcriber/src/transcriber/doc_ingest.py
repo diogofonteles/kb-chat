@@ -16,9 +16,11 @@ import contextlib
 import json
 import logging
 import os
+import re
 import shutil
 import signal
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -211,29 +213,64 @@ def run_whole(
     return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
+# What a site answers for a moment, and the waits before asking again.
+PASSING = re.compile(r"HTTP Error (403|429|5\d\d)|timed out|Connection reset", re.IGNORECASE)
+DOWNLOAD_WAITS_S = (10, 30)
+
+
+def node_or_none() -> str | None:
+    """Node on this Mac: on PATH (a LaunchAgent's has none of nvm's), else nvm's newest."""
+    found = shutil.which("node")
+    if found:
+        return found
+    versions = [
+        path
+        for path in (Path.home() / ".nvm" / "versions" / "node").glob("v*/bin/node")
+        if os.access(path, os.X_OK)
+    ]
+    newest = max(versions, key=_version_of, default=None)
+    return str(newest) if newest else None
+
+
+def _version_of(node: Path) -> tuple[int, ...]:
+    return tuple(int(part) for part in re.findall(r"\d+", node.parent.parent.name))
+
+
 @dataclass
 class YtDlp:
     """The audio of a recording link, as m4a, and what a list holds, with `yt-dlp` on PATH;
     never run by the tests."""
 
     binary: str = "yt-dlp"
+    # YouTube's player is a program: without something to run it some videos answer 403.
+    node: str | None = None
+
+    def _command(self, *args: str) -> list[str]:
+        runtime = ["--js-runtimes", f"node:{self.node}"] if self.node else []
+        return [self.binary, "--ignore-config", *runtime, *args]
 
     def download(self, url: str, folder: Path) -> Path:
         # Named after the recording: the app takes its title from the file's name.
         template = str(folder / "%(title).120B [%(id)s].%(ext)s")
-        command = [self.binary, "--ignore-config", "--no-playlist", "--playlist-items", "1"]
+        command = self._command("--no-playlist", "--playlist-items", "1")
         # A live stream never ends; a file larger than the app takes back is not fetched.
         command += ["--match-filter", "!is_live", "--max-filesize", "2G"]
         command += ["-x", "--audio-format", "m4a", "-o", template, "--", url]
-        done = self._run(command, RECORDING_TIMEOUT_S)
-        found = sorted(folder.glob("*.m4a"))
-        if done.returncode != 0 or not found:
+        # A site refuses now and then what it gives a moment later (403, 429, a timeout).
+        for wait in (*DOWNLOAD_WAITS_S, None):
+            done = self._run(command, RECORDING_TIMEOUT_S)
+            found = sorted(folder.glob("*.m4a"))
+            if done.returncode == 0 and found:
+                return found[0]
             output = (done.stdout + done.stderr).strip()
-            raise DocIngestFailed("conversion-failed", f"yt-dlp: {output}")
-        return found[0]
+            if wait is None or not PASSING.search(output):
+                raise DocIngestFailed("conversion-failed", f"yt-dlp: {output}")
+            log.warning("yt-dlp was refused, again in %d s", wait)
+            time.sleep(wait)
+        raise AssertionError("unreachable")
 
     def entries(self, url: str) -> list[dict]:
-        command = [self.binary, "--ignore-config", "--flat-playlist", "-J"]
+        command = self._command("--flat-playlist", "-J")
         command += ["--playlist-end", str(LIST_MAX), "--", url]
         done = self._run(command, LIST_TIMEOUT_S)
         if done.returncode != 0:

@@ -195,12 +195,13 @@ def docs_of(publisher, env: dict | None = None):
     (tools/kb-map, through uv) and, for recording links, yt-dlp when it is on PATH."""
     if publisher is None:
         return None
-    from .doc_ingest import DocIngester, YtDlp, kb_map_or_none
+    from .doc_ingest import DocIngester, YtDlp, kb_map_or_none, node_or_none
 
     kb_map = kb_map_or_none(publisher.vault, env)
     if kb_map is None:
         return None
-    recordings = YtDlp(shutil.which("yt-dlp")) if shutil.which("yt-dlp") else None
+    yt_dlp = shutil.which("yt-dlp")
+    recordings = YtDlp(yt_dlp, node_or_none()) if yt_dlp else None
     return DocIngester(publisher, kb_map, recordings)
 
 
