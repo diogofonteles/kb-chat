@@ -41,6 +41,9 @@ OUTPUT_CHARS = 2_000
 BUDGET_EXIT = 3
 # The app's limit for a document's title (uploadedDocumentRefSchema).
 TITLE_CHARS = 500
+# And for an entry of a list (recordingEntrySchema).
+ENTRY_TITLE_CHARS = 300
+URL_CHARS = 2_000
 log = logging.getLogger("transcriber")
 
 
@@ -310,6 +313,11 @@ class YtDlp:
         return run_whole(command, timeout)
 
 
+def cut(text: str, units: int) -> str:
+    """The first `units` UTF-16 units, as the app counts them, never half a character."""
+    return text.encode("utf-16-le")[: units * 2].decode("utf-16-le", errors="ignore")
+
+
 def entries_of(listing: dict) -> list[dict]:
     """yt-dlp's listing as the app's entries: addresses with a title; a channel's tabs (lists
     inside the list) are opened one level, and what has no address is left out."""
@@ -323,11 +331,14 @@ def entries_of(listing: dict) -> list[dict]:
         url = entry.get("webpage_url") or entry.get("url")
         if not isinstance(url, str) or not url.startswith(("https://", "http://")):
             continue
+        # The app's limits: one entry it refuses would take the whole list with it.
+        if len(url) > URL_CHARS:
+            continue
         duration = entry.get("duration")
         found.append(
             {
                 "url": url,
-                "title": (str(entry.get("title") or "").strip() or url)[:300],
+                "title": cut(str(entry.get("title") or "").strip() or url, ENTRY_TITLE_CHARS),
                 "durationS": int(duration) if isinstance(duration, int | float) else None,
             }
         )
@@ -354,7 +365,7 @@ def title_of(vault: Path, topic: str, doc_id: str) -> str:
             break
         if line.startswith("title:"):
             title = line.split(":", 1)[1].strip().strip('"').strip("'")
-            return (title or Path(doc_id).stem)[:TITLE_CHARS]
+            return cut(title or Path(doc_id).stem, TITLE_CHARS)
     return Path(doc_id).stem
 
 

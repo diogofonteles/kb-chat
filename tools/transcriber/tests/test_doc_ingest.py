@@ -441,8 +441,13 @@ def test_a_listing_keeps_what_has_an_address_and_opens_the_tabs_of_a_channel():
         {"url": "https://youtu.be/2", "title": "https://youtu.be/2", "durationS": None},
     ]
     assert entries_of({}) == []
-    many = {"entries": [{"url": f"https://youtu.be/{n}", "title": "t"} for n in range(300)]}
-    assert len(entries_of(many)) == LIST_MAX
+    many = [{"url": f"https://youtu.be/{n}", "title": "t"} for n in range(LIST_MAX + 1)]
+    assert len(entries_of({"entries": many})) == LIST_MAX
+    # One the app would refuse does not take the others with it.
+    long = {"url": "https://a.org/" + "x" * 2_000, "title": "t"}
+    emoji = {"url": "https://youtu.be/3", "title": "😱" * 300}
+    (kept,) = entries_of({"entries": [long, emoji]})
+    assert len(kept["title"].encode("utf-16-le")) // 2 <= 300
 
 
 def test_without_yt_dlp_a_recording_link_fails_with_why(fake_api, vault):
