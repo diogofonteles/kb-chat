@@ -294,6 +294,21 @@ const NO_AUTHOR = '';
         @if (failure(); as message) {
           <p class="error" role="alert">{{ message }}</p>
         }
+        @if (offersContent() && !editing()) {
+          <!-- KBC-184: an empty collection is no use; its content is the next step. -->
+          <button
+            uiButton="outline"
+            type="button"
+            class="create-and-add"
+            [disabled]="busy() || invalid()"
+            (click)="save(true)"
+          >
+            <ui-icon name="plus" [size]="18" />
+            <span i18n="@@collection.createAndAdd"
+              >Criar e adicionar conteúdo</span
+            >
+          </button>
+        }
         @if (!phone) {
           <div class="actions">
             <button
@@ -346,7 +361,11 @@ export class CollectionDialog {
 
   /** Every collection the person sees; the top-level ones they open can hold a new one. */
   readonly topics = input.required<readonly Topic[]>();
+  /** Whoever opens it can take the person to "Adicionar conteúdo" (KBC-184). */
+  readonly offersContent = input(false);
   readonly saved = output<Topic>();
+  /** Created by "Criar e adicionar conteúdo": its content comes next (after `saved`). */
+  readonly contentWanted = output<Topic>();
   readonly closed = output();
 
   /** The phone's "Criar" says the whole action aloud (its visible word first). */
@@ -470,7 +489,7 @@ export class CollectionDialog {
     this.dialog().nativeElement.close();
   }
 
-  protected save(): void {
+  protected save(thenAdd = false): void {
     const title = this.name().trim();
     if (!topicSlugOf(title)) {
       this.invalid.set(true);
@@ -484,6 +503,7 @@ export class CollectionDialog {
         this.busy.set(false);
         this.saved.emit(topic);
         this.close();
+        if (thenAdd) this.contentWanted.emit(topic);
       },
       error: (error: unknown) => {
         this.busy.set(false);

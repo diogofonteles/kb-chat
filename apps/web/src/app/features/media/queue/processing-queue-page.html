@@ -32,7 +32,7 @@
       }
     </div>
   </header>
-  <div class="body">
+  <div class="body" #body>
     @if (transcriberText(); as banner) {
       <div class="banner warn" role="status">
         <ui-icon name="clock" [size]="20" />
@@ -82,6 +82,11 @@
         >
       </div>
     } @else {
+      <app-document-uploads-section
+        [titles]="titles()"
+        (documentOpened)="openDocument($event)"
+        (listEnded)="focusHeading()"
+      />
       @for (section of sections(); track section.phase) {
         <section class="group" [attr.aria-label]="section.title">
           <h3>{{ section.title }}</h3>

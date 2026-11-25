@@ -1,0 +1,153 @@
+:host {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-menu);
+}
+
+:host(:hover) {
+  background: var(--overlay-2);
+}
+
+/* On a phone: the cross beside the name, the state and what can be done under it. */
+.actions {
+  display: contents;
+}
+
+ui-pill {
+  grid-column: 2 / -1;
+  justify-self: start;
+}
+
+.actions button {
+  grid-column: 2 / -1;
+  justify-self: start;
+  min-height: 2.75rem;
+}
+
+.actions .remove {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.art {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-cover);
+  background: var(--color-elevated);
+  color: var(--color-text-muted);
+}
+
+.text {
+  min-width: 0;
+}
+
+.text p {
+  margin: 0;
+}
+
+.name {
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  font-size: var(--text-item);
+}
+
+.meta,
+.hint,
+.now,
+.detail {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.now {
+  color: var(--color-text);
+}
+
+.detail {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, monospace;
+}
+
+.why {
+  color: var(--color-danger);
+  font-size: var(--text-meta);
+}
+
+/* The way, a bar per step; on a phone only the current one's word fits. */
+.steps {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  grid-column: 2 / -1;
+  gap: var(--space-1);
+  max-width: 34rem;
+}
+
+.step {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.step::before {
+  content: '';
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-3);
+}
+
+.step.done::before {
+  background: var(--color-accent);
+}
+
+.step.now::before {
+  background: var(--color-text);
+}
+
+@media (min-width: 1024px) {
+  :host {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+
+  ui-pill {
+    grid-column: auto;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .actions:empty {
+    display: none;
+  }
+
+  .step::after {
+    content: attr(data-word);
+  }
+
+  .step.now {
+    color: var(--color-text);
+    font-weight: 700;
+  }
+}
+
+.chooser {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+/* Beside the icon, under the words it goes with. */
+app-refused-review {
+  grid-column: 2 / -1;
+  min-width: 0;
+}

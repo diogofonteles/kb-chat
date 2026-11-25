@@ -1,8 +1,10 @@
 """The worker protocol over HTTPS (ADR 0022 §3, ADR 0023): the token, never a session."""
 
 import json
+import logging
 import shutil
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -26,6 +28,20 @@ class ApiError(Exception):
         super().__init__(message)
         self.status = status
 
+
+def _why(answer: bytes) -> str:
+    """The API's own words (": Invalid raw.chunks.3…"), when it said any."""
+    try:
+        message = json.loads(answer)["error"]["message"]
+    except (ValueError, KeyError, TypeError):
+        return ""
+    return f": {str(message)[:300]}"
+
+
+# Waits before saying again what the API was not there to hear (under a lease's 10 min).
+UNREACHABLE_WAITS_S = (2, 5, 10, 20, 40)
+GATEWAY_ERRORS = frozenset({502, 503, 504})
+log = logging.getLogger("transcriber")
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
@@ -74,7 +90,7 @@ class ApiClient:
         if status == 204:
             return None
         if status != 200:
-            raise ApiError(f"lease answered {status}")
+            raise ApiError(f"lease answered {status}", status)
         job = json.loads(body)
         if job.get("kind") not in kinds:
             raise ApiError(f"leased a job of another kind: {job.get('kind')}")
@@ -162,6 +178,63 @@ class ApiClient:
         """What kb did to a kb-publish job's documents (KBC-099 FR-2)."""
         return self._on_job(job, "kb-result", result)
 
+    def download_document(self, job: dict, directory: Path) -> Path | None:
+        """A doc-ingest job's file as sent (KBC-149); None when it is not ours (404)."""
+        query = urllib.parse.urlencode({"leaseId": job["leaseId"]})
+        name = Path(job["source"]["name"]).name
+        suffix = "".join(Path(name).suffixes[-1:]) or ".bin"
+        request = self._build("GET", f"{job['source']['filePath']}?{query}")
+        try:
+            with (
+                self._opener.open(request, timeout=self._timeout) as response,
+                tempfile.NamedTemporaryFile(dir=directory, suffix=suffix, delete=False) as out,
+            ):
+                shutil.copyfileobj(response, out, length=1024 * 1024)
+                return Path(out.name)
+        except urllib.error.HTTPError as err:
+            if err.code == 401:
+                self._forget_token()
+                raise Unauthorized from err
+            if err.code == 404:
+                return None
+            raise ApiError(f"document answered {err.code}", err.code) from err
+        except (urllib.error.URLError, TimeoutError, OSError) as err:
+            raise ApiError(f"document download failed: {err}") from err
+
+    def doc_state(self, job: dict, state: str) -> bool:
+        """The step a doc-ingest job is on (converting, classifying, mapping)."""
+        return self._on_job(job, "doc-state", {"state": state})
+
+    def doc_result(self, job: dict, outcome: dict, spend_usd: float = 0.0) -> bool:
+        """How a doc-ingest job ended: ready, duplicate, or failed with why (AC-4)."""
+        body = {"outcome": outcome, "spendUsd": round(min(spend_usd, 0.5), 6)}
+        return self._on_job(job, "doc-result", body)
+
+    def doc_entries(self, job: dict, entries: list[dict]) -> bool:
+        """What a channel or playlist holds, for the person to choose from (KBC-186)."""
+        return self._on_job(job, "doc-entries", {"entries": entries})
+
+    def upload_recording_audio(self, job: dict, audio: Path) -> str | None:
+        """A recording link's audio, back to the API as the sender's recording (KBC-142 BR-5)."""
+        query = urllib.parse.urlencode({"leaseId": job["leaseId"], "name": audio.name})
+        size = audio.stat().st_size
+        with audio.open("rb") as body:
+            request = self._build("POST", f"{job['source']['audioPath']}?{query}", body)
+            request.add_header("content-type", "application/octet-stream")
+            request.add_header("content-length", str(size))
+            try:
+                with self._opener.open(request, timeout=max(self._timeout, 600)) as response:
+                    return json.loads(response.read())["mediaId"]
+            except urllib.error.HTTPError as err:
+                if err.code == 401:
+                    self._forget_token()
+                    raise Unauthorized from err
+                if err.code == 409:
+                    return None
+                raise ApiError(f"recording audio answered {err.code}", err.code) from err
+            except (urllib.error.URLError, TimeoutError, OSError) as err:
+                raise ApiError(f"recording audio upload failed: {err}") from err
+
     def report_sync(self, report: dict) -> None:
         """What the last automatic sync with production did (KBC-100 FR-4)."""
         status, _ = self._post("/api/v1/media-worker/vault-sync", report)
@@ -190,12 +263,31 @@ class ApiClient:
     def _on_job(self, job: dict, action: str, body: dict) -> bool:
         """True on 204; False when the lease is no longer ours (409)."""
         payload = {"worker": self.worker, "leaseId": job["leaseId"], **body}
-        status, _ = self._post(f"/api/v1/media-worker/jobs/{job['id']}/{action}", payload)
+        path = f"/api/v1/media-worker/jobs/{job['id']}/{action}"
+        status, answer = self._post_once_reachable(path, payload)
         if status == 204:
             return True
         if status == 409:
             return False
-        raise ApiError(f"{action} answered {status}", status)
+        raise ApiError(f"{action} answered {status}{_why(answer)}", status)
+
+    def _post_once_reachable(self, path: str, body: dict) -> tuple[int, bytes]:
+        """The API restarting (a deploy) must not cost the minutes a job took: what a job
+        says is said again for a while. Answered twice, the second says the lease is gone."""
+        for wait in (*UNREACHABLE_WAITS_S, None):
+            try:
+                status, answer = self._post(path, body)
+                # Behind its proxy an API that restarts is a gateway's error.
+                if status not in GATEWAY_ERRORS or wait is None:
+                    return status, answer
+                why = f"HTTP {status}"
+            except ApiError as err:
+                if err.status is not None or wait is None:
+                    raise
+                why = str(err)
+            log.warning("the API is unreachable, again in %d s: %s", wait, why)
+            time.sleep(wait)
+        raise AssertionError("unreachable")
 
     def _post(self, path: str, body: dict) -> tuple[int, bytes]:
         # NaN is not JSON: the API would refuse the whole result (json_safe turns it to None).
@@ -206,7 +298,7 @@ class ApiClient:
         if forget is not None:
             forget()
 
-    def _build(self, method: str, path: str, data: bytes | None = None) -> urllib.request.Request:
+    def _build(self, method: str, path: str, data=None) -> urllib.request.Request:
         headers = {"authorization": f"Bearer {self._token()}"}
         if method == "POST":
             headers["content-type"] = "application/json"

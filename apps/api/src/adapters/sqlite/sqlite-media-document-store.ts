@@ -597,13 +597,15 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       .run(input.now.toISOString(), input.now.getTime(), input.maxAttempts);
   }
 
-  holds(worker: string): boolean {
+  holds(worker: string, now: Date): boolean {
     return (
       this.db
         .prepare(
-          `SELECT 1 FROM kb_publish_jobs WHERE worker = ? AND status = 'leased' LIMIT 1`,
+          // An expired lease is nobody's: held for ever by its own worker, it was never taken back.
+          `SELECT 1 FROM kb_publish_jobs
+           WHERE worker = ? AND status = 'leased' AND lease_until >= ? LIMIT 1`,
         )
-        .get(worker) !== undefined
+        .get(worker, now.getTime()) !== undefined
     );
   }
 

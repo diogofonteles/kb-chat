@@ -1,7 +1,7 @@
 ---
 id: KBC-009
 title: Montar ou ampliar um acervo (arquivos locais e pesquisa na web)
-status: draft
+status: in-review
 slice: release-2
 outcome: o dono cria e amplia acervos sem usar o terminal
 depends_on: [KBC-007]

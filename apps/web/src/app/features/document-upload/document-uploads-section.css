@@ -1,0 +1,46 @@
+.group {
+  display: grid;
+  gap: var(--space-3);
+}
+
+h3 {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+h3:focus {
+  outline: none;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.filters button {
+  min-height: 2.75rem;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.none {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.foot button {
+  min-height: 2.75rem;
+}

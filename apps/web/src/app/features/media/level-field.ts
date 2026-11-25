@@ -38,6 +38,8 @@ export class LevelField {
   /** Asked again after a failure: the button stays, busy, and keeps the focus. */
   readonly retrying = input(false);
   readonly disabled = input(false);
+  /** Who has the level hears a recording, and reads a document. */
+  readonly of = input<'recording' | 'content'>('recording');
   /** The level id chosen; null: none yet. */
   readonly level = model<string | null>(null);
   /** "Carregar níveis de novo" after the levels could not be had (MA-26). */

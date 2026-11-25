@@ -1,6 +1,7 @@
 """Track documents through kb (KBC-099): a fake kb, never the real binary nor a model."""
 
 import fcntl
+import json
 from pathlib import Path
 
 import numpy as np
@@ -86,6 +87,32 @@ class FakeKb:
                 file.write_text(text.replace("---\n", f"---\n{facets}", 1), encoding="utf-8")
         spend = 0.0 if step == "index" else self.spend
         return KbRun(ok=True, output=self.outputs.get(step, f"{step} ok"), spend_usd=spend)
+
+    def refusals(self, topic: str) -> KbRun:
+        """kb's queue, with the notes it prints after the JSON."""
+        refused = sorted((self.vault / topic / "raw" / "_quarantine").rglob("*.md"))
+        items = [
+            {
+                "id": f"rv-{one.stem}",
+                "queue": "gate",
+                "subject": "raw/"
+                + one.relative_to(self.vault / topic / "raw" / "_quarantine").as_posix(),
+                "action": {"quarantined": True, "reason": "thin"},
+            }
+            for one in refused
+        ]
+        listing = json.dumps({"counts": {}, "items": items}, indent=2)
+        return KbRun(ok=True, output=f"{listing}\nsources per raw/ folder: raw/articles 1")
+
+    def accept(self, topic: str, item: str) -> KbRun:
+        self.calls.append(("accept", item, 0.0))
+        for one in (self.vault / topic / "raw" / "_quarantine").rglob(f"{item[3:]}.md"):
+            inside = one.relative_to(self.vault / topic / "raw" / "_quarantine")
+            target = self.vault / topic / "raw" / inside
+            target.parent.mkdir(parents=True, exist_ok=True)
+            one.rename(target)
+            return KbRun(ok=True, output="restored")
+        return KbRun(ok=False, output=f"unknown review item {item}")
 
 
 @pytest.fixture
@@ -188,6 +215,36 @@ def test_the_real_kb_commands_follow_adr_0035():
     ]
     # kb 0.0.12: `kb index --topic t --budget x` exits 1 ("unknown flag: --budget").
     assert cli.command("index", "hermetismo", 0.25) == ["kb", "index", "--topic", "hermetismo"]
+
+
+def test_only_the_collections_own_documents_are_embedded(tmp_path):
+    calls = tmp_path / "calls"
+    for name in ("kb", "qmd"):
+        binary = tmp_path / name
+        binary.write_text(f'#!/bin/sh\necho "{name} $*" >> {calls}\n', encoding="utf-8")
+        binary.chmod(0o755)
+    cli = KbCli(tmp_path, str(tmp_path / "kb"), qmd=str(tmp_path / "qmd"))
+    assert cli.run("index", "udv/palavra-do-mestre", 0.5).ok
+    assert calls.read_text(encoding="utf-8").splitlines() == [
+        "kb index --topic udv/palavra-do-mestre --embed=false",
+        "qmd embed -c udv/palavra-do-mestre --timeout 0",
+    ]
+
+
+def test_a_failed_embedding_fails_the_step_and_a_failed_index_embeds_nothing(tmp_path):
+    calls = tmp_path / "calls"
+
+    def binary(name, code):
+        path = tmp_path / name
+        path.write_text(f'#!/bin/sh\necho "{name}" >> {calls}\nexit {code}\n', encoding="utf-8")
+        path.chmod(0o755)
+        return str(path)
+
+    cli = KbCli(tmp_path, binary("kb", 0), qmd=binary("qmd", 1))
+    assert not cli.run("index", "t", 0.5).ok
+    cli = KbCli(tmp_path, binary("kb", 1), qmd=binary("qmd", 0))
+    assert not cli.run("index", "t", 0.5).ok
+    assert calls.read_text(encoding="utf-8").split() == ["kb", "qmd", "kb"]
 
 
 def test_kb_is_off_without_a_vault(tmp_path):

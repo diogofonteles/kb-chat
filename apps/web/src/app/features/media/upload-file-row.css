@@ -298,14 +298,16 @@
   }
 }
 
-/* What refuses a file in one line beside its ✕ icon (media-upload-bad-type); a phone says it
-   shorter, without the icon (…@mobile: "Não é um áudio aceito…"). */
+/* What refuses a file beside its ✕ icon (media-upload-bad-type), in as many lines as it needs:
+   in one, it ran over the options beside it. A phone says it shorter, without the icon
+   (…@mobile: "Não é um áudio aceito…"). */
 .error.refused {
   flex-wrap: nowrap;
 }
 
 .refused-words {
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .refused-words.narrow {

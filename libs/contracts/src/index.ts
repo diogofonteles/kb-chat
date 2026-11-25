@@ -35,3 +35,7 @@ export * from './cited-passage.js';
 export * from './transcript-corrections.js';
 export * from './transcript-learning.js';
 export * from './access-levels.js';
+export * from './document-uploads.js';
+export * from './recording-links.js';
+export * from './media-links.js';
+export * from './web-search.js';

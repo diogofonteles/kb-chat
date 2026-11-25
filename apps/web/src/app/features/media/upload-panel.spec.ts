@@ -147,7 +147,9 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     await renderPanel();
     expect(screen.getByRole('dialog', { name: 'Enviar áudio' })).toBeTruthy();
     expect(
-      screen.getByText('mp3, m4a, wav, flac, ogg ou opus · até 4 GB cada'),
+      screen.getByText(
+        'mp3, m4a, wav, flac, ogg, opus ou vídeo (mp4, mov, webm, mkv) · até 4 GB cada',
+      ),
     ).toBeTruthy();
   });
 
@@ -171,7 +173,7 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     choose(panel.container, audio('apostila.pdf'));
     await panel.fixture.whenStable();
     expect(screen.getByRole('alert').textContent).toContain(
-      'Este arquivo não é um áudio aceito. Envie mp3, m4a, wav, flac, ogg ou opus.',
+      'Este arquivo não é um áudio nem um vídeo aceito. Envie mp3, m4a, wav, flac, ogg, opus, mp4, mov, webm ou mkv.',
     );
     panel.http.expectNone(`${TOPIC}/check`);
   });
@@ -762,7 +764,7 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       );
     await panel.fixture.whenStable();
     expect(screen.getByRole('alert').textContent).toContain(
-      'Envie um áudio de até 4 GB (mp3, m4a, wav, flac, ogg ou opus).',
+      'Envie um áudio ou vídeo de até 4 GB (mp3, m4a, wav, flac, ogg, opus, mp4, mov, webm ou mkv).',
     );
   });
 

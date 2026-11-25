@@ -1,7 +1,7 @@
 ---
 id: KBC-149
 title: "Enviar documento e link pelo app: PDF, Office, EPUB, imagem, URL e YouTube entram no acervo com o mesmo tratamento de um texto"
-status: ready
+status: in-review
 slice: complete-answers
 outcome: quem tem permissão acrescenta textos ao acervo pela tela, sem passar pelo Mac à mão, e eles entram no mapa como qualquer outro
 depends_on: [KBC-148, KBC-142]

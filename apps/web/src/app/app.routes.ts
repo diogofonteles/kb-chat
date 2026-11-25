@@ -1,6 +1,7 @@
 import { isDevMode } from '@angular/core';
 import type { Routes } from '@angular/router';
 import { PRIVACY_PATH, TUTORIAL_PATH } from '@core/routing/public-pages.js';
+import { ADD_CONTENT_ROUTES } from './features/add-content/add-content-routes.js';
 import { LEVELS_ROUTES } from './features/collections/levels-routes.js';
 import { MEDIA_ROUTES } from './features/media/media-routes.js';
 import { SETTINGS_ROUTES } from './features/settings/settings-routes.js';
@@ -17,6 +18,7 @@ export const routes: Routes = [
     children: [
       { path: '', children: [] },
       ...MEDIA_ROUTES,
+      ...ADD_CONTENT_ROUTES,
       ...LEVELS_ROUTES,
       ...SETTINGS_ROUTES,
       {

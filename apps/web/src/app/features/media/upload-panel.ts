@@ -675,7 +675,7 @@ function problemOf(err: unknown): string {
     return $localize`:@@media.upload.corrupted:O arquivo chegou diferente do original. Tente de novo: o envio recomeça.`;
   const code = toUiErrorCode(err);
   return code === 'VALIDATION_FAILED'
-    ? $localize`:@@media.upload.refused:Envie um áudio de até 4 GB (mp3, m4a, wav, flac, ogg ou opus).`
+    ? $localize`:@@media.upload.refused:Envie um áudio ou vídeo de até 4 GB (mp3, m4a, wav, flac, ogg, opus, mp4, mov, webm ou mkv).`
     : errorMessage(code);
 }
 

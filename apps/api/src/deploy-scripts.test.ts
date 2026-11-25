@@ -420,6 +420,80 @@ describe('sync-vault.sh (KBC-100 FR-4, BR-7)', () => {
   });
 });
 
+/** A Mac whose hermetismo topic has a collection map, and a fake kb-map (ADR 0039). */
+async function aMacWithMap(check: 'ok' | 'fails') {
+  const mac = await aMac();
+  const vault = mac.env.KB_VAULT;
+  await mkdir(join(vault, 'hermetismo', 'map'), { recursive: true });
+  await fakeBin(
+    join(mac.home, 'bin'),
+    'kb-map',
+    [
+      `echo "kb-map $*" >>"${mac.log}"`,
+      'case "$3" in',
+      `  check) ${check === 'ok' ? 'echo "kb-map check: hermetismo: 0 problems"; exit 0' : 'echo "unplaced: raw/a.md#s001: an ok section is in no node of the tree"; exit 1'} ;;`,
+      "  paths) printf 'map/\\nindex.md\\nwiki/concepts/Sete Princípios.md\\n' ;;",
+      'esac',
+    ].join('\n'),
+  );
+  return {
+    ...mac,
+    env: { ...mac.env, KB_MAP: join(mac.home, 'bin', 'kb-map') },
+  };
+}
+
+describe('sync-vault.sh and the collection map (KBC-141 FR-3)', () => {
+  it('AC-5: a failing kb-map check holds the map back, says why, and the rest is sent', async () => {
+    const mac = await aMacWithMap('fails');
+    const done = await run(join(SCRIPTS, 'sync-vault.sh'), {
+      args: ['--host', 'ubuntu@vm', '--dry-run'],
+      env: mac.env,
+    });
+
+    expect(done.code, done.output).toBe(0);
+    expect(done.output).toContain('kb-map check failed for hermetismo');
+    expect(done.output).toContain('an ok section is in no node of the tree');
+    const rsyncs = (await calls(mac.log))
+      .split('\n')
+      .filter((line) => line.startsWith('rsync'));
+    expect(rsyncs).toHaveLength(2);
+    for (const line of rsyncs) {
+      expect(line).toContain('[--exclude=/hermetismo/map/]');
+      expect(line).toContain('[--exclude=/hermetismo/index.md]');
+      expect(line).toContain(
+        '[--exclude=/hermetismo/wiki/concepts/Sete Princípios.md]',
+      );
+      expect(line).not.toContain('--delete-excluded');
+    }
+  });
+
+  it('a passing check sends the map like the rest of the vault', async () => {
+    const mac = await aMacWithMap('ok');
+    const done = await run(join(SCRIPTS, 'sync-vault.sh'), {
+      args: ['--host', 'ubuntu@vm', '--dry-run'],
+      env: mac.env,
+    });
+
+    expect(done.code, done.output).toBe(0);
+    expect(done.output).toContain('kb-map check hermetismo: ok');
+    const log = await calls(mac.log);
+    expect(log).toContain('kb-map --vault');
+    expect(log).not.toContain(' paths ');
+    expect(log).not.toContain('--exclude=/hermetismo/');
+  });
+
+  it('a topic without a map never runs kb-map', async () => {
+    const mac = await aMac();
+    const done = await run(join(SCRIPTS, 'sync-vault.sh'), {
+      args: ['--host', 'ubuntu@vm', '--dry-run'],
+      env: { ...mac.env, KB_MAP: '/nonexistent/kb-map' },
+    });
+
+    expect(done.code, done.output).toBe(0);
+    expect(await calls(mac.log)).not.toContain('kb-map');
+  });
+});
+
 /** A VM for the media scripts (KBC-116): the deploy folder, fake docker, flock, id and chown. */
 async function aMediaVm(options: {
   media: 'on' | 'off';
