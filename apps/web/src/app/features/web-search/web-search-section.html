@@ -1,0 +1,433 @@
+@if (unavailable()) {
+  <ng-container *ngTemplateOutlet="off" />
+} @else {
+  @if (low()) {
+    <ui-banner
+      tone="warn"
+      title="Restam poucos créditos de pesquisa"
+      i18n-title="@@webSearch.low"
+    >
+      @if (isMaster()) {
+        <a
+          class="banner-link"
+          [routerLink]="settingsLink"
+          i18n="@@webSearch.lowMaster"
+          >Ver o saldo nas Configurações</a
+        >
+      } @else {
+        <span i18n="@@webSearch.lowMember">Avise um master.</span>
+      }
+    </ui-banner>
+  }
+
+  <form class="form" novalidate (submit)="search($event)">
+    <div class="ui-field" [class.ui-field--invalid]="!!subjectProblem()">
+      <label
+        class="ui-field__label"
+        for="web-search-subject"
+        i18n="@@webSearch.subject"
+        >Assunto</label
+      >
+      <input
+        #subjectInput
+        id="web-search-subject"
+        class="ui-input big"
+        type="text"
+        enterkeyhint="search"
+        autocomplete="off"
+        [attr.maxlength]="subjectLimits.max"
+        [attr.aria-invalid]="subjectProblem() ? 'true' : null"
+        [attr.aria-describedby]="subjectDescribedBy()"
+        [value]="form.subject()"
+        [disabled]="disabled()"
+        (input)="form.setSubject(subjectInput.value)"
+      />
+      @if (subjectProblem(); as problem) {
+        <p class="ui-field__error" id="web-search-subject-error">
+          <ui-icon name="warn" [size]="14" />{{ problem }}
+        </p>
+      }
+      <p
+        class="ui-field__hint"
+        id="web-search-subject-hint"
+        i18n="@@webSearch.hint"
+      >
+        A pesquisa só mostra candidatos. Nada entra no acervo sem você escolher.
+      </p>
+    </div>
+
+    <div class="pair">
+      <div class="ui-field" [class.ui-field--invalid]="!!sourcesProblem()">
+        <label
+          class="ui-field__label"
+          for="web-search-sources"
+          i18n="@@webSearch.sources"
+          >Quantidade de fontes</label
+        >
+        <input
+          #sourcesInput
+          id="web-search-sources"
+          class="ui-input big"
+          type="number"
+          inputmode="numeric"
+          step="1"
+          [min]="sourcesLimits.min"
+          [max]="sourcesLimits.max"
+          [attr.aria-invalid]="sourcesProblem() ? 'true' : null"
+          [attr.aria-describedby]="sourcesDescribedBy()"
+          [value]="form.sourcesText()"
+          [disabled]="disabled()"
+          (input)="form.setSources(sourcesInput.value)"
+        />
+        @if (sourcesProblem(); as problem) {
+          <p class="ui-field__error" id="web-search-sources-error" role="alert">
+            <ui-icon name="warn" [size]="14" />{{ problem }}
+          </p>
+        }
+      </div>
+
+      <fieldset class="ui-field">
+        <legend class="ui-field__label legend-label" i18n="@@webSearch.kinds">
+          Tipos
+        </legend>
+        <div class="kinds">
+          @for (chip of chips; track chip.kind) {
+            <button
+              uiChip
+              type="button"
+              class="kind"
+              [selected]="form.kinds().includes(chip.kind)"
+              [disabled]="disabled()"
+              (click)="form.toggleKind(chip.kind)"
+            >
+              <ui-icon [name]="chip.icon" [size]="16" />
+              {{ chip.label }}
+            </button>
+          }
+        </div>
+        @if (kindsProblem(); as problem) {
+          <p class="ui-field__error" role="alert">
+            <ui-icon name="warn" [size]="14" />{{ problem }}
+          </p>
+        }
+      </fieldset>
+    </div>
+
+    <div class="ui-field" [class.ui-field--invalid]="!!authorProblem()">
+      <label
+        class="ui-field__label"
+        for="web-search-author"
+        i18n="@@webSearch.authors"
+        >Autores de referência (opcional)</label
+      >
+      <div class="author-row">
+        <input
+          #authorInput
+          id="web-search-author"
+          class="ui-input big"
+          type="text"
+          autocomplete="off"
+          enterkeyhint="done"
+          [attr.maxlength]="authorLimits.nameMax"
+          [attr.aria-invalid]="authorProblem() ? 'true' : null"
+          [attr.aria-describedby]="authorDescribedBy()"
+          [value]="typedAuthor()"
+          [disabled]="disabled()"
+          (input)="editAuthor($event)"
+          (keydown.enter)="authorEntered($event)"
+        />
+        <button
+          uiButton="outline"
+          type="button"
+          class="add"
+          [disabled]="disabled()"
+          (click)="addAuthor()"
+        >
+          <span i18n="@@webSearch.addAuthor">Adicionar</span>
+        </button>
+      </div>
+      @if (authorProblem(); as problem) {
+        <p class="ui-field__error" id="web-search-author-error" role="alert">
+          <ui-icon name="warn" [size]="14" />{{ problem }}
+        </p>
+      }
+      <p
+        class="ui-field__hint"
+        id="web-search-author-hint"
+        i18n="@@webSearch.authorsHint"
+      >
+        Escreva um nome e tecle Enter, até 5 nomes. Cada autor é uma consulta
+        por tipo.
+      </p>
+      @if (authorChips().length > 0) {
+        <ul
+          class="authors"
+          aria-label="Autores incluídos"
+          i18n-aria-label="@@webSearch.authorsAdded"
+        >
+          @for (author of authorChips(); track author.name) {
+            <li>
+              <button
+                uiChip
+                type="button"
+                class="author"
+                [attr.aria-label]="author.remove"
+                [disabled]="disabled()"
+                (click)="removeAuthor(author.name)"
+              >
+                <span class="author-name">{{ author.name }}</span>
+                <ui-icon name="close" [size]="14" />
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+
+    <div class="send">
+      <button
+        #searchButton
+        uiButton="white"
+        type="submit"
+        class="go"
+        aria-describedby="web-search-calls"
+        [disabled]="disabled()"
+        [attr.aria-disabled]="loading() ? 'true' : null"
+      >
+        <ui-icon name="search" [size]="18" />
+        <span i18n="@@webSearch.go">Pesquisar</span>
+      </button>
+      <p class="calls" id="web-search-calls">{{ calls() }}</p>
+    </div>
+  </form>
+
+  <p class="status" role="status" [class.empty]="!status()">{{ status() }}</p>
+
+  @switch (view().kind) {
+    @case ('loading') {
+      <div class="rows" aria-hidden="true">
+        @for (one of skeletons; track one) {
+          <div class="skeleton">
+            <span></span>
+            <span></span>
+          </div>
+        }
+      </div>
+    }
+    @case ('off') {
+      <ng-container *ngTemplateOutlet="off" />
+    }
+    @case ('no-credits') {
+      <ui-banner
+        role="alert"
+        tone="err"
+        title="Os créditos da pesquisa na web acabaram"
+        i18n-title="@@webSearch.noCredits"
+      >
+        @if (isMaster()) {
+          <a
+            class="banner-link"
+            [routerLink]="settingsLink"
+            i18n="@@webSearch.lowMaster"
+            >Ver o saldo nas Configurações</a
+          >
+        } @else {
+          <span i18n="@@webSearch.noCreditsMember"
+            >Peça a um master para renovar. Você ainda pode colar links.</span
+          >
+        }
+      </ui-banner>
+    }
+    @case ('limited') {
+      <ui-banner
+        role="alert"
+        tone="warn"
+        title="Muitas pesquisas em pouco tempo"
+        i18n-title="@@webSearch.limited"
+      >
+        <span i18n="@@webSearch.limitedText"
+          >Espere um minuto e tente de novo.</span
+        >
+        <button
+          uiBannerAction
+          uiButton="white"
+          size="sm"
+          type="button"
+          class="retry"
+          (click)="retry()"
+        >
+          <span i18n="@@webSearch.retry">Tentar de novo</span>
+        </button>
+      </ui-banner>
+    }
+    @case ('failed') {
+      <ui-banner
+        role="alert"
+        tone="err"
+        title="Não consegui pesquisar"
+        i18n-title="@@webSearch.failed"
+      >
+        {{ failure() }}
+        <button
+          uiBannerAction
+          uiButton="white"
+          size="sm"
+          type="button"
+          class="retry"
+          (click)="retry()"
+        >
+          <span i18n="@@webSearch.retry">Tentar de novo</span>
+        </button>
+      </ui-banner>
+    }
+    @case ('found') {
+      @if (partial()) {
+        <ui-banner
+          role="alert"
+          tone="warn"
+          title="Algumas consultas não responderam"
+          i18n-title="@@webSearch.partial"
+        >
+          <span i18n="@@webSearch.partialText"
+            >Os resultados são das que responderam.</span
+          >
+          <button
+            uiBannerAction
+            uiButton="white"
+            size="sm"
+            type="button"
+            class="retry"
+            (click)="retry()"
+          >
+            <span i18n="@@webSearch.retry">Tentar de novo</span>
+          </button>
+        </ui-banner>
+      }
+      @if (rows().length === 0) {
+        <p class="none" i18n="@@webSearch.noneText">
+          Tente outras palavras, outros tipos ou menos autores.
+        </p>
+      } @else {
+        <fieldset class="results">
+          <legend class="legend" i18n="@@webSearch.results">
+            Resultados para “{{ askedSubject() }}”
+          </legend>
+          @if (selectable().length > 0) {
+            <label class="all">
+              <input
+                class="ui-check"
+                type="checkbox"
+                [checked]="allSelected()"
+                [indeterminate]="someSelected()"
+                [disabled]="disabled()"
+                (change)="toggleAll()"
+              />
+              <span i18n="@@webSearch.all">Selecionar todos</span>
+            </label>
+          }
+          <ul class="rows">
+            @for (row of rows(); track row.url) {
+              <li class="row" [class.there]="row.already">
+                <input
+                  class="ui-check"
+                  type="checkbox"
+                  [id]="row.id"
+                  [checked]="selected().has(row.url)"
+                  [disabled]="disabled() || row.already !== null"
+                  [attr.aria-describedby]="row.id + '-about'"
+                  (change)="toggle(row.url)"
+                />
+                <div class="text">
+                  <label class="title" [for]="row.id">{{ row.title }}</label>
+                  <p class="about" [id]="row.id + '-about'">
+                    <span class="visually-hidden">{{ row.kindLabel }}.</span>
+                    @if (row.already) {
+                      <span class="there-words">
+                        <ui-icon name="checkcircle" [size]="14" />
+                        <span i18n="@@webSearch.already"
+                          >Já está no acervo</span
+                        >
+                      </span>
+                    }
+                    {{ row.snippet }}
+                  </p>
+                  <p class="meta">
+                    <ui-pill aria-hidden="true">{{ row.kindLabel }}</ui-pill>
+                    @if (row.author; as name) {
+                      <span class="by">{{ name }}</span>
+                    }
+                    <a
+                      class="action"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      [href]="row.url"
+                      ><span class="site">{{ row.site }}</span>
+                      <ui-icon name="external" [size]="14" />
+                      <span class="visually-hidden" i18n="@@webSearch.newTab"
+                        >: {{ row.title }} (abre em outra aba)</span
+                      ></a
+                    >
+                    @if (row.already?.document; as document) {
+                      <button
+                        type="button"
+                        class="action"
+                        (click)="openDocument(document)"
+                      >
+                        <ui-icon name="doc" [size]="14" />
+                        <span i18n="@@webSearch.open">Abrir no acervo</span>
+                        <span class="visually-hidden"
+                          >: {{ document.title }}</span
+                        >
+                      </button>
+                    }
+                  </p>
+                </div>
+              </li>
+            }
+          </ul>
+        </fieldset>
+        @if (selectable().length > 0) {
+          <div class="foot">
+            <button
+              uiButton="primary"
+              type="button"
+              class="include"
+              [attr.aria-disabled]="cannotInclude() ? 'true' : null"
+              (click)="include()"
+            >
+              <ui-icon name="plus" [size]="18" />
+              {{ includeLabel() }}
+            </button>
+          </div>
+        }
+      }
+    }
+  }
+}
+
+<ng-template #off>
+  <ui-banner
+    tone="info"
+    title="A pesquisa na web não está ligada"
+    i18n-title="@@webSearch.off"
+    role="status"
+  >
+    @if (isMaster()) {
+      <span i18n="@@webSearch.offMaster"
+        >Conecte a chave do Firecrawl para procurar textos, áudios e vídeos
+        daqui.</span
+      >
+      <a
+        class="banner-link"
+        [routerLink]="settingsLink"
+        i18n="@@webSearch.offLink"
+        >Abrir Configurações</a
+      >
+    } @else {
+      <span i18n="@@webSearch.offMember"
+        >Peça a um master para conectar a pesquisa na web. Enquanto isso, você
+        pode colar links.</span
+      >
+    }
+  </ui-banner>
+</ng-template>

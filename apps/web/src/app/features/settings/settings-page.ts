@@ -27,6 +27,7 @@ import { HouseAiPanel } from '@features/house-ai/house-ai-panel.js';
 import { PeoplePanel } from '@features/people/people-panel.js';
 import { ExistingTracks } from '@features/transcribers/existing-tracks.js';
 import { GroqPanel } from '@features/transcribers/groq-panel.js';
+import { WebSearchSettingsPanel } from '@features/web-search/web-search-settings.js';
 import { LearningPanel } from '@features/transcribers/learning-panel.js';
 import { TermsPanel } from '@features/transcribers/terms-panel.js';
 import { TranscribersPanel } from '@features/transcribers/transcribers-panel.js';
@@ -137,6 +138,7 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
     TermsPanel,
     LearningPanel,
     GroqPanel,
+    WebSearchSettingsPanel,
     VoiceProfilesPanel,
     ActAsAudit,
     MyAccesses,

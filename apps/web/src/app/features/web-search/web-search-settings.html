@@ -1,0 +1,165 @@
+<p class="lead" i18n="@@webSearch.settings.lead">
+  Com a chave do Firecrawl, quem pode enviar documentos procura na web textos,
+  áudios e vídeos para um acervo. Cada consulta gasta cerca de 2 créditos da
+  conta. Nada entra no acervo sem alguém escolher.
+</p>
+
+@if (loaded.error()) {
+  <div class="notice" role="alert">
+    <p i18n="@@webSearch.settings.loadFailed">
+      Não consegui carregar a pesquisa na web.
+    </p>
+    <button
+      type="button"
+      class="secondary"
+      (click)="loaded.reload()"
+      i18n="@@webSearch.retry"
+    >
+      Tentar de novo
+    </button>
+  </div>
+} @else if (settings(); as current) {
+  <form class="block" (submit)="save($event)" novalidate>
+    <h3 class="block-title" i18n="@@webSearch.settings.keyTitle">Conexão</h3>
+    @if (current.problem === 'key-rejected') {
+      <p class="key-problem">
+        <span aria-hidden="true">⚠</span>
+        <ng-container i18n="@@webSearch.settings.keyRefused"
+          >O Firecrawl recusou a chave guardada. Cole uma chave nova para voltar
+          a pesquisar.</ng-container
+        >
+      </p>
+    } @else if (current.connected) {
+      <p class="connected">
+        <ui-icon name="checkcircle" [size]="20" />
+        <span class="connected-words" i18n="@@webSearch.settings.isConnected"
+          >Chave conectada, terminada em {{ current.keyHint }}. Ela fica cifrada
+          e não aparece de novo.</span
+        >
+      </p>
+    }
+    @if (current.problem === 'unreachable') {
+      <ui-banner
+        tone="warn"
+        title="Não consegui falar com o Firecrawl agora"
+        i18n-title="@@webSearch.settings.unreachable"
+      >
+        <p i18n="@@webSearch.settings.unreachableText">
+          O saldo abaixo pode estar desatualizado.
+        </p>
+      </ui-banner>
+    }
+    <label class="label" for="web-search-key">
+      @if (current.connected) {
+        <ng-container i18n="@@webSearch.settings.newKeyLabel"
+          >Trocar a chave da API do Firecrawl</ng-container
+        >
+      } @else {
+        <ng-container i18n="@@webSearch.settings.keyLabel"
+          >Chave da API do Firecrawl</ng-container
+        >
+      }
+    </label>
+    <input
+      #keyInput
+      id="web-search-key"
+      class="input"
+      type="password"
+      autocomplete="off"
+      spellcheck="false"
+      maxlength="500"
+      [attr.aria-describedby]="describedBy()"
+      [value]="key()"
+      (input)="editKey($event)"
+    />
+    <p
+      class="status key-status"
+      id="web-search-key-status"
+      role="status"
+      [class.error]="notice()?.kind === 'error'"
+      [class.empty]="!busy() && !notice()"
+    >
+      @if (busy()) {
+        <ng-container i18n="@@webSearch.settings.testing"
+          >Testando…</ng-container
+        >
+      } @else if (notice(); as said) {
+        <ui-icon
+          [name]="said.kind === 'error' ? 'warn' : 'checkcircle'"
+          [size]="14"
+        />
+        {{ said.text }}
+      }
+    </p>
+    <p
+      class="hint"
+      id="web-search-key-hint"
+      i18n="@@webSearch.settings.keyHint"
+    >
+      Crie em firecrawl.dev/app, em "API Keys", e cole aqui. Ela só é salva se o
+      Firecrawl aceitar.
+    </p>
+    <div class="row key-actions">
+      <button
+        type="submit"
+        class="secondary"
+        [attr.aria-disabled]="busy() ? 'true' : null"
+        i18n="@@webSearch.settings.save"
+      >
+        Testar e salvar
+      </button>
+      @if (current.connected) {
+        <button
+          type="button"
+          class="link remove"
+          [attr.aria-disabled]="busy() ? 'true' : null"
+          (click)="remove()"
+          i18n="@@webSearch.settings.remove"
+        >
+          Remover chave
+        </button>
+      }
+    </div>
+  </form>
+
+  @if (current.connected) {
+    <section class="block" aria-labelledby="web-search-balance-title">
+      <h3
+        class="block-title"
+        id="web-search-balance-title"
+        i18n="@@webSearch.settings.balanceTitle"
+      >
+        Saldo
+      </h3>
+      @if (balance(); as parts) {
+        <div class="month">
+          <p class="spent">
+            <span class="spent-amount">{{ parts.remaining }}</span
+            >&ngsp;<span class="spent-cap">{{ parts.rest }}</span>
+          </p>
+          @if (parts.share !== null) {
+            <ui-progress [value]="parts.share" />
+          }
+        </div>
+        @if (current.low) {
+          <ui-banner
+            tone="warn"
+            title="Restam menos de 100 créditos"
+            i18n-title="@@webSearch.settings.low"
+          >
+            <p i18n="@@webSearch.settings.lowText">
+              Sem créditos, a pesquisa na web para até a conta renovar ou ser
+              recarregada no Firecrawl.
+            </p>
+          </ui-banner>
+        }
+      } @else {
+        <p class="hint" i18n="@@webSearch.settings.balanceUnknown">
+          Ainda não consegui ler o saldo.
+        </p>
+      }
+    </section>
+  }
+} @else {
+  <p class="hint" i18n="@@webSearch.settings.loading">Carregando…</p>
+}

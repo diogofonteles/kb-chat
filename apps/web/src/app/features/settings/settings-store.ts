@@ -39,6 +39,7 @@ export type SettingsSection =
   | 'transcribers'
   | 'terms'
   | 'groq'
+  | 'web-search'
   | 'voice-profiles'
   | 'audit'
   | 'accesses'
