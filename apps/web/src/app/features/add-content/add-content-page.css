@@ -56,10 +56,15 @@
 }
 
 .where {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   gap: var(--space-3);
   align-items: end;
+}
+
+/* To the edge, like the fields below, when there is no button beside it. */
+.where .ui-field {
+  flex: 1;
+  min-width: 0;
 }
 
 /* At least 16 px: a phone's browser zooms in on a smaller field. */
@@ -68,6 +73,7 @@
 }
 
 .new-collection {
+  flex: none;
   min-height: 2.75rem;
 }
 

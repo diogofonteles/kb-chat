@@ -26,6 +26,7 @@ fieldset {
   display: grid;
   grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
   gap: var(--space-4);
+  align-items: start;
 }
 
 .legend-label {
