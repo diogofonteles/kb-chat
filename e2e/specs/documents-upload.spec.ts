@@ -288,8 +288,10 @@ test('KBC-185: the web is searched here, what is picked has its estimate and ent
   const states = add
     .getByRole('region', { name: 'Documentos em processamento' })
     .getByRole('listitem');
-  await expect(states.filter({ hasText: 'Pronto' })).toHaveCount(1);
-  await expect(states.filter({ hasText: 'Transcrevendo' })).toHaveCount(1);
+  const inState = (state: string) =>
+    states.filter({ has: page.getByText(state, { exact: true }) });
+  await expect(inState('Pronto')).toHaveCount(1);
+  await expect(inState('Transcrevendo')).toHaveCount(1);
 });
 
 test('KBC-186: from a channel only what is chosen enters, and a video file enters by its sound', async ({
