@@ -6,7 +6,7 @@ import type { RemovalQueue } from './removal-queue.js';
 export interface VaultJobsDeps {
   readonly docs: DocIngestWork;
   readonly removals: RemovalQueue;
-  /** A document entered under this id: if one was removed from there, it is another now. */
+  /** A document sent is there, under this id: one removed from there may be back with it. */
   readonly entered: (jobId: string, documentId: string) => Promise<void>;
 }
 
@@ -57,7 +57,7 @@ export class VaultJobs implements DocIngestWork {
   ): Promise<void> {
     await this.of(owner.jobId).complete(owner, result);
     const { outcome } = result;
-    if (outcome.state === 'ready')
+    if (outcome.state === 'ready' || outcome.state === 'duplicate')
       await this.deps.entered(owner.jobId, outcome.document.id);
   }
 

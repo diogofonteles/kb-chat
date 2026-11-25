@@ -287,6 +287,34 @@ describe('Removing a document from its collection in the app (KBC-187)', () => {
     });
   });
 
+  it('one the Mac could not take, sent again, is there again (BR-6)', async () => {
+    const made = await withDocument();
+    const { media, mac, ana } = made;
+    await removed(made);
+    const outcome = {
+      state: 'failed',
+      failure: 'conversion-failed',
+      detail: 'frontmatter: invalid_yaml',
+    };
+    await docResult(media, {
+      token: mac.token,
+      job: await leaseDoc(media, mac.token),
+      outcome,
+    });
+    await sentFile(media, ana);
+    await docResult(media, {
+      token: mac.token,
+      job: await leaseDoc(media, mac.token),
+      outcome: {
+        state: 'duplicate',
+        document: { id: ID, title: 'O Caibalion' },
+      },
+    });
+    await media.started.catalog.refresh('hermetismo');
+    expect(await listed(made)).toEqual([]);
+    expect(await reach(media, ana.call)).toMatchObject({ read: 200 });
+  });
+
   it('one asked for while the document was entering stands (I-3)', async () => {
     const made = await world();
     const { vault, media, ana, master } = made;

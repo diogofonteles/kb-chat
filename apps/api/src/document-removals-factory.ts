@@ -48,14 +48,19 @@ export async function registerDocumentRemovals(
       actorOf: (request) => actorOf(app, request, catalog),
     }),
   );
+  const moved = refreshSoon((topic) => catalog.refresh(topic), {
+    onError: (err) =>
+      app.log.warn({ err }, 'document removals: a collection was not read'),
+  });
   const jobs = new VaultJobs({
     docs: wiring.docs,
-    removals: removalQueue(app, wiring),
+    removals: removalQueue(app, wiring, moved),
     entered: async (jobId, documentId) => {
       const topic = uploads.topicOf(jobId);
       const removed = topic ? records.of(topic, documentId) : undefined;
-      // One asked for while it was entering stands: what came back is what the Mac had taken.
-      if (removed?.isQuarantined) await records.remove(removed.id);
+      if (!removed || !cameBack(removed)) return;
+      await records.remove(removed.id);
+      moved(removed.topic);
     },
   });
   wiring.onDocIngest?.(jobs);
@@ -96,16 +101,21 @@ function actorOf(
   };
 }
 
+/**
+ * Sent again, it is there: the Mac had taken it and brought it back, or could not take it. One
+ * asked for while the document was entering stands.
+ */
+const cameBack = ({ isQuarantined, failed }: RemovalRecord): boolean =>
+  isQuarantined === true || failed;
+
 const removalQueue = (
   app: FastifyInstance,
-  { records, catalog, levels }: DocumentRemovalsWiring,
+  { records, levels }: DocumentRemovalsWiring,
+  moved: (topic: string) => void,
 ): RemovalQueue =>
   new RemovalQueue({
     records,
-    moved: refreshSoon((topic) => catalog.refresh(topic), {
-      onError: (err) =>
-        app.log.warn({ err }, 'document removals: a collection was not read'),
-    }),
+    moved,
     placeLevel: (record) => placeLevel(app, { levels }, record),
     onError: (err, message) => app.log.error({ err }, message),
   });
