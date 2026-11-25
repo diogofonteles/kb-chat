@@ -202,6 +202,36 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
     expect(screen.queryByText('José Laércio do Egito')).toBeNull();
   });
 
+  it('offers "Ver original" when the document keeps its original (KBC-148 FR-3)', async () => {
+    await renderWith(
+      {},
+      aDocument({
+        original: { name: 'O Caibalion.pdf', generatedDescription: false },
+      }),
+    );
+    const link = screen.getByRole('link', { name: 'Ver original' });
+    expect(link.getAttribute('href')).toBe(`${URL}/original`);
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('title')).toBe('O Caibalion.pdf');
+    expect(screen.queryByText('Contém uma descrição gerada')).toBeNull();
+  });
+
+  it('has no "Ver original" without one', async () => {
+    await renderWith({});
+    expect(screen.queryByRole('link', { name: 'Ver original' })).toBeNull();
+  });
+
+  it('marks a body that holds a generated description (BR-4)', async () => {
+    await renderWith(
+      {},
+      aDocument({
+        original: { name: 'mandala.png', generatedDescription: true },
+      }),
+    );
+    expect(screen.getByText('Contém uma descrição gerada')).toBeTruthy();
+    expect(screen.getByText(/Não é texto do autor/)).toBeTruthy();
+  });
+
   it('shows the OCR badge', async () => {
     await renderWith({}, aDocument({ origin: 'ocr' }));
     expect(screen.getByText(/Texto extraído de imagem \(OCR\)/)).toBeTruthy();

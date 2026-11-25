@@ -29,6 +29,9 @@ import type { Observable } from 'rxjs';
 import { ProcessingQueueStore } from './processing-queue-store.js';
 import { UiButton, UiCover, UiIcon } from '@ui/index.js';
 import { QueueRow, type QueueMove } from './queue-row.js';
+import type { OpenedDocument } from '@features/document-upload/document-upload-dialog.js';
+import { DocumentUploadsSection } from '@features/document-upload/document-uploads-section.js';
+import { DocumentUploadsStore } from '@features/document-upload/document-uploads-store.js';
 
 /** The sections of the queue: what needs the person first (UP-02). */
 const SECTIONS: readonly {
@@ -54,7 +57,16 @@ const SECTIONS: readonly {
  */
 @Component({
   selector: 'app-processing-queue-page',
-  imports: [RouterLink, QueueRow, UiButton, UiCover, UiIcon],
+  imports: [
+    RouterLink,
+    QueueRow,
+    DocumentUploadsSection,
+    UiButton,
+    UiCover,
+    UiIcon,
+  ],
+  // KBC-149: the sent documents, read for this page only.
+  providers: [DocumentUploadsStore],
   templateUrl: './processing-queue-page.html',
   styleUrls: [
     '../preparation/preparation-buttons.css',
@@ -73,6 +85,7 @@ export class ProcessingQueuePage {
     viewChild.required<ElementRef<HTMLElement>>('heading');
   private readonly rows = viewChildren(QueueRow);
   protected readonly store = inject(ProcessingQueueStore);
+  private readonly documents = inject(DocumentUploadsStore);
 
   /** The audio a press is on: one at a time, and read before anything else (PD-02). */
   protected readonly acting = signal<string | null>(null);
@@ -88,7 +101,10 @@ export class ProcessingQueuePage {
     () => this.store.queue() !== null && this.store.failed(),
   );
   protected readonly empty = computed(
-    () => this.store.queue() !== null && this.store.items().length === 0,
+    () =>
+      this.store.queue() !== null &&
+      this.store.items().length === 0 &&
+      this.documents.items().length === 0,
   );
   /** Each row with the name of its collection, read once per reading (NG-08). */
   protected readonly sections = computed(() => {
@@ -111,8 +127,7 @@ export class ProcessingQueuePage {
   protected readonly summary = computed(() => {
     const items = this.store.items();
     if (this.store.queue() === null) return '';
-    if (items.length === 0)
-      return $localize`:@@queue.summaryNone:Nada sendo processado agora`;
+    if (items.length === 0) return this.documentsSummary();
     const need = items.filter((one) => one.phase === 'attention').length;
     const next = items.filter((one) => one.phase === 'next').length;
     const all =
@@ -130,6 +145,16 @@ export class ProcessingQueuePage {
       parts.push($localize`:@@queue.summaryNext:${next}:next: a seguir`);
     return parts.join(' · ');
   });
+  /** No audio at work: the sent documents (KBC-149), or nothing at all. */
+  private documentsSummary(): string {
+    const docs = this.documents.items().length;
+    if (docs === 0)
+      return $localize`:@@queue.summaryNone:Nada sendo processado agora`;
+    return docs === 1
+      ? $localize`:@@queue.summaryDocOne:1 documento enviado`
+      : $localize`:@@queue.summaryDocs:${docs}:count: documentos enviados`;
+  }
+
   /** "Aguardando o transcritor": the usual reason nothing moves, in a title and a line. */
   protected readonly transcriberText = computed(() => {
     const queue = this.store.queue();
@@ -148,7 +173,7 @@ export class ProcessingQueuePage {
         : $localize`:@@queue.transcriberWaitingText:Nada anda até ele voltar.`,
     };
   });
-  private readonly titles = computed(
+  protected readonly titles = computed(
     () => new Map(this.chat.topicList().map((one) => [one.slug, one.title])),
   );
 
@@ -176,6 +201,12 @@ export class ProcessingQueuePage {
     const row = this.rows().find((one) => one.item().mediaId === mediaId);
     if (row) row.focusTitle();
     else this.heading().nativeElement.focus();
+  }
+
+  /** A sent document, ready: it opens in the conversation's reading panel, as the sidebar's. */
+  protected openDocument(doc: OpenedDocument): void {
+    this.chat.open(doc.topic, { id: doc.id, title: doc.title });
+    void this.router.navigateByUrl('/');
   }
 
   protected reload(): void {

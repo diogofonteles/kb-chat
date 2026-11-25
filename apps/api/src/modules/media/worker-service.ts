@@ -12,6 +12,8 @@ import {
   type TranscribeJob,
   type TranscriptionRoute,
   type VoiceProfileJob,
+  type DocIngestJob,
+  type WorkerLeasedJob,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { MediaFilesPort } from '../../ports/media-files.js';
@@ -39,7 +41,25 @@ export interface WorkerServiceDeps {
   readonly tracks?: Pick<TrackItemStorePort, 'cutOrder'>;
   /** The kb-publish queue (KBC-099), kept apart from `jobs`: it has no media item. */
   readonly kb?: KbPublishQueue;
+  /** Documents and links sent from the app (KBC-149, ADR 0040): no media item either. */
+  readonly docs?: DocIngestJobs;
   readonly now?: () => Date;
+}
+
+/** The doc-ingest queue as the worker protocol sees it (leased like kb-publish). */
+export interface DocIngestJobs {
+  lease(worker: string): DocIngestJob | null;
+  isJob(jobId: string): boolean;
+  heartbeat(owner: LeaseOwner): void;
+  fail(
+    owner: LeaseOwner,
+    failure: {
+      readonly detail: string;
+      readonly configuration?: boolean;
+      readonly spendUsd?: number;
+    },
+  ): Promise<void>;
+  isHeldBy(worker: string): boolean;
 }
 
 /** A collection's track documents for the Mac to write and pass through kb (ADR 0035 §3). */
@@ -64,6 +84,9 @@ export interface KbPublishQueue {
 }
 
 const KB_PUBLISH = 'kb-publish';
+const DOC_INGEST = 'doc-ingest';
+/** The queues kept apart from `jobs` (no media item). */
+const OWN_QUEUES: readonly MediaJobKind[] = [KB_PUBLISH, DOC_INGEST];
 
 const leaseOf = (done: CompleteTranscodeRequest) => ({
   worker: done.worker,
@@ -104,12 +127,12 @@ export class WorkerService {
       readonly oneAtATime?: boolean;
       readonly transcribeRoute?: TranscriptionRoute;
     },
-  ): LeasedWorkerJob | null {
+  ): WorkerLeasedJob | null {
     // ADR 0023: one job at a time, whichever queue it came from.
-    if (request.oneAtATime && this.deps.kb?.isHeldBy?.(request.worker))
+    if (request.oneAtATime && this.holdsOwnQueueLease(request.worker))
       return null;
     const job = this.leaseMediaJob(request);
-    if (!job) return this.leaseKb(request);
+    if (!job) return this.leaseKb(request) ?? this.leaseDocs(request);
     if (job.kind === 'transcribe' && request.transcribeRoute === 'groq')
       return this.groqJob(job);
     if (job.kind === 'silences') return this.silencesJob(job);
@@ -151,7 +174,9 @@ export class WorkerService {
       readonly transcribeRoute?: TranscriptionRoute;
     },
   ): LeasedJob | null {
-    const kinds = this.kindsFor(request).filter((kind) => kind !== KB_PUBLISH);
+    const kinds = this.kindsFor(request).filter(
+      (kind) => !OWN_QUEUES.includes(kind),
+    );
     if (kinds.length === 0) return null;
     return this.deps.store.leaseJob({
       kinds,
@@ -171,6 +196,23 @@ export class WorkerService {
     if (!kb || !request.kinds.includes(KB_PUBLISH)) return null;
     if (request.oneAtATime && store.holdsLease(request.worker)) return null;
     return kb.lease(request.worker);
+  }
+
+  private holdsOwnQueueLease(worker: string): boolean {
+    return (
+      this.deps.kb?.isHeldBy?.(worker) === true ||
+      this.deps.docs?.isHeldBy(worker) === true
+    );
+  }
+
+  /** Sent documents wait behind the media jobs and the track documents (ADR 0040). */
+  private leaseDocs(
+    request: LeaseRequest & { readonly oneAtATime?: boolean },
+  ): DocIngestJob | null {
+    const { docs, store } = this.deps;
+    if (!docs || !request.kinds.includes(DOC_INGEST)) return null;
+    if (request.oneAtATime && store.holdsLease(request.worker)) return null;
+    return docs.lease(request.worker);
   }
 
   /** Measuring the audio rendition on the shared disk (KBC-044 FR-1). */
@@ -253,10 +295,19 @@ export class WorkerService {
   kindOf(jobId: string): MediaJobKind | null {
     const kind = this.deps.store.kindOfJob(jobId);
     if (kind) return kind;
-    return this.deps.kb?.isJob(jobId) ? KB_PUBLISH : null;
+    if (this.deps.kb?.isJob(jobId)) return KB_PUBLISH;
+    return this.deps.docs?.isJob(jobId) ? DOC_INGEST : null;
   }
 
   heartbeat(jobId: string, beat: HeartbeatRequest): void {
+    if (this.deps.docs?.isJob(jobId)) {
+      this.deps.docs.heartbeat({
+        jobId,
+        worker: beat.worker,
+        leaseId: beat.leaseId,
+      });
+      return;
+    }
     if (this.deps.kb?.isJob(jobId)) {
       this.deps.kb.heartbeat({
         jobId,
@@ -374,15 +425,7 @@ export class WorkerService {
    * it). A crash keeps the original: the job is retried, or a master may "Tentar de novo".
    */
   async fail(jobId: string, failure: FailJobRequest): Promise<void> {
-    if (this.deps.kb?.isJob(jobId)) {
-      const owner = { jobId, worker: failure.worker, leaseId: failure.leaseId };
-      this.deps.kb.fail(owner, {
-        detail: failure.detail,
-        configuration: failure.failure === 'not-configured',
-        ...(failure.spendUsd !== undefined && { spendUsd: failure.spendUsd }),
-      });
-      return;
-    }
+    if (await this.failOwnQueue(jobId, failure)) return;
     const mediaId = this.deps.store.mediaOfJob(jobId);
     const kind = this.deps.store.kindOfJob(jobId);
     const recorded = this.deps.store.failJob({
@@ -401,6 +444,26 @@ export class WorkerService {
     if (kind === 'transcribe') return this.afterTranscriptionFailure(mediaId);
     if (failure.failure === 'invalid-audio')
       await this.deps.files.discardUpload(mediaId);
+  }
+
+  /** A kb-publish or doc-ingest job: kept apart from `jobs`; false for any other. */
+  private async failOwnQueue(
+    jobId: string,
+    failure: FailJobRequest,
+  ): Promise<boolean> {
+    const queue = this.deps.docs?.isJob(jobId)
+      ? this.deps.docs
+      : this.deps.kb?.isJob(jobId)
+        ? this.deps.kb
+        : null;
+    if (!queue) return false;
+    const owner = { jobId, worker: failure.worker, leaseId: failure.leaseId };
+    await queue.fail(owner, {
+      detail: failure.detail,
+      configuration: failure.failure === 'not-configured',
+      ...(failure.spendUsd !== undefined && { spendUsd: failure.spendUsd }),
+    });
+    return true;
   }
 
   /** A transcription given up for good keeps no FLAC (ADR 0022 §4: made for it only). */

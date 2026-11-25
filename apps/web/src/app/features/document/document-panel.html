@@ -191,6 +191,21 @@
           }</span>
         </button>
       }
+      @if (doc.original; as original) {
+        <!-- KBC-148 FR-3: the file it was converted from, under the document's own level. -->
+        <a
+          [uiButton]="inSource() ? 'outline' : 'ghost'"
+          size="sm"
+          class="original"
+          [href]="originalUrl()"
+          target="_blank"
+          rel="noopener"
+          [attr.title]="original.name"
+        >
+          <ui-icon name="file" [size]="inSource() ? 16 : 24" />
+          <span class="tool-label" i18n="@@panel.original">Ver original</span>
+        </a>
+      }
       <a
         uiIconButton
         class="obsidian"
@@ -385,6 +400,20 @@
               }
             </ul>
           </details>
+        }
+        @if (doc.original?.generatedDescription) {
+          <!-- KBC-148 BR-4: a model's description never passes for the author's text. -->
+          <ui-banner
+            class="generated"
+            tone="info"
+            title="Contém uma descrição gerada"
+            i18n-title="@@panel.generatedTitle"
+          >
+            <span i18n="@@panel.generatedText"
+              >A parte "Descrição gerada" foi escrita por um modelo de visão a partir da
+              imagem. Não é texto do autor.</span
+            >
+          </ui-banner>
         }
         @if (earlierPercent() > 0) {
           <button

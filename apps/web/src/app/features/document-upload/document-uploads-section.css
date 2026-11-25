@@ -1,0 +1,81 @@
+.group h3 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-md);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-menu);
+}
+
+.row:hover {
+  background: var(--overlay-2);
+}
+
+.row > button {
+  grid-column: 2 / -1;
+  justify-self: start;
+}
+
+.art {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-cover);
+  background: var(--color-elevated);
+  color: var(--color-text-muted);
+}
+
+.text {
+  min-width: 0;
+}
+
+.text p {
+  margin: 0;
+}
+
+.name {
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  font-size: var(--text-item);
+}
+
+.meta,
+.hint,
+.detail {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.detail {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, monospace;
+}
+
+.why {
+  color: var(--color-danger);
+  font-size: var(--text-meta);
+}
+
+@media (min-width: 1024px) {
+  .row {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+
+  .row > button {
+    grid-column: auto;
+  }
+}

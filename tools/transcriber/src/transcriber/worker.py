@@ -32,6 +32,7 @@ from .config import (
     UNAUTHORIZED_BACKOFF_S,
 )
 from .diarize import Diarizer, separate
+from .doc_ingest import DocIngester, DocIngestFailed, LeaseLost
 from .kb_keys import KEY_MISSING, REQUIRED_KEY, is_configuration_error
 from .kb_publish import KbPublisher, KbStepFailed, UnsafePath, VaultBusy
 from .secret import TokenError
@@ -89,6 +90,10 @@ class Worker:
     print_ack_s: float = PRINT_ACK_S
     # Track documents (KBC-099): without a vault and kb, the worker never asks for them.
     publisher: KbPublisher | None = None
+    # Documents and links sent from the app (KBC-149): with kb-map here and kb-publish on.
+    docs: DocIngester | None = None
+    # The API answered 400 to doc-ingest (an API from before KBC-149): not asked again.
+    _docs_refused: bool = field(default=False, init=False, repr=False)
     # The automatic sync with production (KBC-100): without a host, the owner syncs by hand.
     sync: VaultSync | None = None
     # The sign of life the app shows to masters (KBC-114): kept always, sent with a reporter.
@@ -142,6 +147,13 @@ class Worker:
         if self._publishes() and self.publisher is not None and self.publisher.busy():
             return tuple(kind for kind in self.kinds if kind != "kb-publish")
         return self.kinds
+
+    def _lease_kinds(self, kinds: tuple[str, ...]) -> tuple[str, ...]:
+        """What to ask for: doc-ingest goes with kb-publish (same vault, same lock, KBC-149)."""
+        if "kb-publish" not in kinds or self.docs is None or self._docs_refused:
+            return kinds
+        at = kinds.index("kb-publish")
+        return (*kinds[:at], "doc-ingest", *kinds[at:])
 
     def run(self, *, once: bool = False, exit_when_idle: bool = False) -> int:
         """Runs until stopped; `once` handles at most one job, `exit_when_idle` stops at 204."""
@@ -199,14 +211,20 @@ class Worker:
         or 'job-error' (a job that broke: given back, never a reason to stop)."""
         self._recheck_keys()
         kinds = self._kinds_now()
+        asked = self._lease_kinds(kinds)
         try:
-            job = self.api.lease(kinds)
+            job = self.api.lease(asked)
         except (Unauthorized, TokenError) as err:
             message = REVOKED if isinstance(err, Unauthorized) else str(err)
             log.error(message)
             self._say("error", message)
             return "revoked"
         except ApiError as err:
+            if err.status == 400 and "doc-ingest" in asked:
+                # An API from before KBC-149 does not know the kind: the rest goes on.
+                log.warning("the API does not take doc-ingest yet: not asked again")
+                self._docs_refused = True
+                return "lease-error"
             log.warning("could not lease a job: %s", err)
             self._say("error", f"sem resposta da API: {err}")
             return "lease-error"
@@ -298,6 +316,7 @@ class Worker:
                     "diarize": self._diarize,
                     "voice-profile": self._voice_profile,
                     "kb-publish": self._kb_publish,
+                    "doc-ingest": self._doc_ingest,
                 }.get(job["kind"], self._transcribe)
                 handler(job, Path(work), progress, stop)
         finally:
@@ -360,6 +379,80 @@ class Worker:
             self._sync_if_due()
         else:
             log.warning("job %s: the lease was lost before the result: dropped", job["id"])
+
+    def _doc_ingest(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
+        """A sent document or link into the collection, step by step (KBC-149 FR-2)."""
+        if self.docs is None or self.publisher is None:
+            raise RuntimeError("leased a doc-ingest job without kb-map, a vault and kb")
+        try:
+            with self.publisher.locked():
+                done = self._ingest_document(job, work, progress)
+        except LeaseLost:
+            log.warning("job %s: the lease was lost mid-way: dropped", job["id"])
+            return
+        except DocIngestFailed as err:
+            log.error("job %s: the document did not enter: %s", job["id"], err.detail)
+            outcome = {"state": "failed", "failure": err.failure, "detail": err.detail}
+            self.api.doc_result(job, outcome)
+            return
+        except KbStepFailed as err:
+            if is_configuration_error(err.output):
+                self._not_configured(job, err)
+                return
+            self._publish_failed(job, err)
+            return
+        except VaultBusy as err:
+            self._publish_failed(job, err)
+            return
+        if done is None:
+            return
+        outcome, spent = done
+        progress["percent"] = 100
+        if self.sync is not None and outcome["state"] == "ready":
+            self.sync.mark_pending()
+        if self.api.doc_result(job, outcome, spent):
+            log.info("job %s: %s in %s", job["id"], outcome["state"], job["topic"])
+            self._sync_if_due()
+        else:
+            log.warning("job %s: the lease was lost before the result: dropped", job["id"])
+
+    def _ingest_document(self, job: dict, work: Path, progress: dict) -> tuple[dict, float] | None:
+        """The steps under the vault lock; None when the job is no longer ours."""
+        if self.docs is None:
+            raise RuntimeError("leased a doc-ingest job without kb-map")
+        source = job["source"]
+        if source["kind"] == "youtube":
+            self._youtube(job, work)
+            return None
+        if source["kind"] == "file":
+            path = self.api.download_document(job, work)
+            if path is None:
+                log.warning("job %s: its file is not ours (404): dropped", job["id"])
+                return None
+            converted = self.docs.convert(job, str(path), source["name"])
+        else:
+            converted = self.docs.convert(job, source["url"], None)
+        progress["percent"] = 40
+
+        def say(state: str) -> None:
+            if not self.api.doc_state(job, state):
+                raise LeaseLost(job["id"])
+
+        spent = self.docs.finish(job, converted, say)
+        document = {"id": converted.document, "title": converted.title}
+        state = "ready" if converted.state == "converted" else "duplicate"
+        return {"state": state, "document": document}, spent
+
+    def _youtube(self, job: dict, work: Path) -> None:
+        """KBC-142 BR-5: the link's audio goes to the API and takes the media path."""
+        if self.docs is None or self.docs.youtube is None:
+            raise DocIngestFailed("conversion-failed", "yt-dlp is not on this Mac")
+        audio = self.docs.youtube.download(job["source"]["url"], work)
+        media_id = self.api.upload_youtube_audio(job, audio)
+        if media_id:
+            log.info("job %s: the YouTube audio is the recording %s", job["id"], media_id)
+        else:
+            log.warning("job %s: the lease was lost before the audio: dropped", job["id"])
 
     def _recheck_keys(self) -> None:
         """While the kb's key is missing, the Keychain is asked again (at most every

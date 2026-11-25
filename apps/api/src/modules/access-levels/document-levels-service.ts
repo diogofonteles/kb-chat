@@ -69,6 +69,12 @@ export interface Classifier {
   readonly log?: ReconcileLog;
 }
 
+/** A document on its way to the vault (KBC-149): only its collection and id are known. */
+interface Arriving {
+  readonly topic: string;
+  readonly entry: Pick<CatalogEntry, 'id'>;
+}
+
 /** One document of the scope, in its own collection. */
 interface Target {
   readonly topic: string;
@@ -160,6 +166,26 @@ export class DocumentLevelsService {
     });
   }
 
+  /**
+   * KBC-149 (ADR 0040): a document sent from the app, placed at the level its sender chose
+   * (checked then, at or below their own) before it reaches the catalog, so it never shows
+   * as "Sem nível". A level deleted meanwhile places nothing (the document arrives unassigned).
+   */
+  placeArriving(
+    who: Pick<Classifier, 'actor' | 'log'>,
+    target: { readonly topic: string; readonly id: string; level: string },
+  ): Promise<boolean> {
+    return this.serial(async () => {
+      const chosen = this.deps.gate
+        .scaleOf(target.topic)
+        .find((one) => one.id === target.level);
+      if (!chosen) return false;
+      const arriving = { topic: target.topic, entry: { id: target.id } };
+      await this.write(who, { level: chosen, targets: [arriving] });
+      return true;
+    });
+  }
+
   /** FR-2, BR-2, BR-3: a level for a selection or for the queue a filter keeps. */
   bulk(
     who: Classifier,
@@ -236,17 +262,18 @@ export class DocumentLevelsService {
   }
 
   /** One write of `document-levels.json` and one of the audit (NFR-1, BR-4). */
-  private async write(who: Classifier, change: LevelChange): Promise<void> {
+  private async write(
+    who: Pick<Classifier, 'actor' | 'log'>,
+    change: LevelChange,
+  ): Promise<void> {
     const { actor } = who;
     const at = new Date().toISOString();
     const placed = { level: change.level.id, setBy: actor.by, setAt: at };
     const byCollection: Record<string, Record<string, typeof placed>> = {};
     for (const { topic, entry } of change.targets)
       (byCollection[topic] ??= {})[entry.id] = placed;
-    const lines = auditLines(
-      { at, by: actor.by, ...(actor.actingAs && { actingAs: actor.actingAs }) },
-      change,
-      (topic, id) => this.deps.directory.placementsOf(topic)[id]?.level ?? null,
+    const lines = auditLines(auditBaseOf(actor, at), change, (topic, id) =>
+      this.levelBefore(topic, id),
     );
     if (change.targets.length > 0)
       await this.deps.directory.place(byCollection);
@@ -265,6 +292,10 @@ export class DocumentLevelsService {
       );
       throw err;
     });
+  }
+
+  private levelBefore(topic: string, id: string): string | null {
+    return this.deps.directory.placementsOf(topic)[id]?.level ?? null;
   }
 
   /** The level asked for, if it exists and is at or below the caller's (403 above). */
@@ -437,7 +468,8 @@ const appliedOf = (change: LevelChange) => ({
 /** What one write sets: a level on documents, and for a bulk its line (BR-4). */
 interface LevelChange {
   readonly level: StoredLevel;
-  readonly targets: readonly Target[];
+  /** A document arriving from an upload is not in the catalog yet: its id is enough. */
+  readonly targets: readonly (Target | Arriving)[];
   readonly bulk?: {
     readonly root: string;
     readonly filter: BulkAuditFilter;
@@ -448,6 +480,12 @@ interface LevelChange {
 type AuditBase = Pick<LevelAuditEntry, 'at' | 'by' | 'actingAs'>;
 
 /** The bulk's line (when it is one) and one line per document, before → after. */
+const auditBaseOf = (actor: LevelActor, at: string): AuditBase => ({
+  at,
+  by: actor.by,
+  ...(actor.actingAs && { actingAs: actor.actingAs }),
+});
+
 function auditLines(
   base: AuditBase,
   change: LevelChange,

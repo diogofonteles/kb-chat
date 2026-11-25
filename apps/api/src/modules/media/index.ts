@@ -16,6 +16,7 @@ export {
 export {
   MediaService,
   NO_LEVELS,
+  chosenLevel,
   type MediaActor,
   type MediaLevels,
   type MediaServiceDeps,
