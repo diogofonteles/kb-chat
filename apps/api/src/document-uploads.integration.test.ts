@@ -397,7 +397,7 @@ describe('A recording link goes through the transcriber (KBC-142 BR-5)', () => {
     const audio = Buffer.from('ID3 fake m4a audio from youtube');
     const given = await media.started.app.inject({
       method: 'POST',
-      url: `/api/v1/media-worker/jobs/${job.id}/recording-audio?leaseId=${job.leaseId}&name=abc123.m4a`,
+      url: `/api/v1/media-worker/jobs/${job.id}/recording-audio?leaseId=${job.leaseId}&name=${encodeURIComponent('Uma aula [abc123].m4a')}`,
       headers: {
         ...localHeaders(mac.token),
         'content-type': 'application/octet-stream',
@@ -410,7 +410,7 @@ describe('A recording link goes through the transcriber (KBC-142 BR-5)', () => {
     expect(mine).toMatchObject({ state: 'transcribing', mediaId });
     const item = await ana.call('GET', `/api/v1/media/${mediaId}`);
     expect(item.statusCode, item.body).toBe(200);
-    expect(item.json()).toMatchObject({ title: 'YouTube abc123' });
+    expect(item.json()).toMatchObject({ title: 'Uma aula' });
   });
 });
 
@@ -576,6 +576,145 @@ describe('One inclusion and its ceiling (KBC-009 R2, R3)', () => {
     expect((await ana.call('DELETE', url)).statusCode).toBe(204);
     expect(await uploadsOf(ana.call)).toEqual([]);
     expect((await ana.call('DELETE', url)).statusCode).toBe(404);
+  });
+});
+
+describe('Recordings, lists and their cost (KBC-186)', () => {
+  const PLAYLIST = 'https://www.youtube.com/playlist?list=PL1';
+  const ENTRIES = [1, 2, 3].map((n) => ({
+    url: `https://www.youtube.com/watch?v=${n}`,
+    title: `Aula ${n}`,
+    durationS: n * 60,
+  }));
+  const send = (call: Media['owner'], body: object) =>
+    call('POST', DOCUMENTS, { kind: 'url', ...body });
+
+  it.each([
+    [{ url: 'https://vimeo.com/123' }, 'recording'],
+    [{ url: 'https://example.org/aula.mp3' }, 'recording'],
+    [{ url: 'https://example.org/artigo' }, 'url'],
+    [{ url: 'https://example.org/artigo', as: 'recording' }, 'recording'],
+    [{ url: 'https://vimeo.com/123', as: 'page' }, 'url'],
+    [{ url: PLAYLIST }, 'list'],
+  ])('%o is a %s', async (body, kind) => {
+    const { ana } = await world();
+    const sent = created((await send(ana.call, body)).body);
+    expect(sent.kind).toBe(kind);
+  });
+
+  async function listed() {
+    const { media, ana } = await world();
+    const batch = { id: '99999999-9999-4999-8999-999999999999', capUsd: 1 };
+    const list = created((await send(ana.call, { url: PLAYLIST, batch })).body);
+    const mac = await docMac(media);
+    const job = await leaseDoc(media, mac.token);
+    const entries = (body: object) =>
+      asMac(media, mac.token, {
+        method: 'POST',
+        url: `/api/v1/media-worker/jobs/${job.id}/doc-entries`,
+        payload: { worker: 'mac', leaseId: job.leaseId, ...body },
+      });
+    return { media, ana, list, mac, job, entries };
+  }
+
+  it('a playlist waits for the person, and only the chosen recordings enter, in its inclusion', async () => {
+    const { media, ana, list, mac, job, entries } = await listed();
+    expect(job.source).toMatchObject({ kind: 'list', url: PLAYLIST });
+    expect((await entries({ entries: ENTRIES })).statusCode).toBe(204);
+    const [waiting] = await uploadsOf(ana.call);
+    expect(waiting).toMatchObject({ state: 'choosing', entries: ENTRIES });
+    // Nothing is on its way before the choice.
+    expect((await leaseAs(media, mac.token, ['doc-ingest'])).statusCode).toBe(
+      204,
+    );
+
+    const url = `${UPLOADS}/${list.id}/choose`;
+    const urls = [ENTRIES[0]?.url, ENTRIES[2]?.url];
+    const chosen = await ana.call('POST', url, { urls });
+    expect(chosen.statusCode, chosen.body).toBe(200);
+    expect(chosen.json()).toEqual({ created: 2, already: 0 });
+    const uploads = await uploadsOf(ana.call);
+    expect(uploads.map((one) => one.name).sort()).toEqual(['Aula 1', 'Aula 3']);
+    expect(uploads[0]).toMatchObject({
+      kind: 'recording',
+      state: 'received',
+      batch: { capUsd: 1 },
+      entries: [],
+    });
+    // A second press finds nothing to choose from.
+    expect((await ana.call('POST', url, { urls })).statusCode).toBe(404);
+  });
+
+  it('the same list later: what is on its way counts as already there', async () => {
+    const { media, ana, list, mac, entries } = await listed();
+    await entries({ entries: ENTRIES });
+    const first = [ENTRIES[0]?.url];
+    await ana.call('POST', `${UPLOADS}/${list.id}/choose`, { urls: first });
+    const again = created((await send(ana.call, { url: PLAYLIST })).body);
+    // The chosen recording is first in line; its audio given back, the list comes.
+    const recording = await leaseDoc(media, mac.token);
+    const given = await media.started.app.inject({
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${recording.id}/recording-audio?leaseId=${recording.leaseId}&name=a.m4a`,
+      headers: {
+        ...localHeaders(mac.token),
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('ID3 fake audio'),
+    });
+    expect(given.statusCode, given.body).toBe(200);
+    const job = await leaseDoc(media, mac.token);
+    expect(job.id).toBe(again.id);
+    await asMac(media, mac.token, {
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${job.id}/doc-entries`,
+      payload: { worker: 'mac', leaseId: job.leaseId, entries: ENTRIES },
+    });
+    const chosen = await ana.call('POST', `${UPLOADS}/${again.id}/choose`, {
+      urls: ENTRIES.map((one) => one.url),
+    });
+    expect(chosen.json()).toEqual({ created: 2, already: 1 });
+  });
+
+  it('refuses a recording the list does not have, another person, and a list not read yet', async () => {
+    const { media, ana, list, entries } = await listed();
+    const url = `${UPLOADS}/${list.id}/choose`;
+    const urls = [ENTRIES[0]?.url];
+    expect((await ana.call('POST', url, { urls })).statusCode).toBe(409);
+    await entries({ entries: ENTRIES });
+    const beto = await member(media, {
+      email: 'beto@example.com',
+      topics: ['hermetismo'],
+      features: ['search', 'media', 'media-upload'],
+    });
+    expect((await beto.call('POST', url, { urls })).statusCode).toBe(404);
+    const other = { urls: ['https://youtu.be/outra'] };
+    expect((await ana.call('POST', url, other)).statusCode).toBe(400);
+    expect((await ana.call('POST', url, { urls: [] })).statusCode).toBe(400);
+  });
+
+  it('an empty list fails with why; an entry that is not a web address is refused', async () => {
+    const { ana, entries } = await listed();
+    const file = { url: 'file:///x', title: 'x', durationS: null };
+    expect((await entries({ entries: [file] })).statusCode).toBe(400);
+    expect((await entries({ entries: [] })).statusCode).toBe(204);
+    expect((await uploadsOf(ana.call))[0]).toMatchObject({
+      state: 'failed',
+      failure: 'empty',
+    });
+  });
+
+  it('says what each kind costs here, to who may send', async () => {
+    const { media, ana } = await world();
+    const costs = await ana.call('GET', `${UPLOADS}/costs`);
+    expect(costs.statusCode, costs.body).toBe(200);
+    expect(costs.json()).toMatchObject({ document: { samples: 0 } });
+    const beto = await member(media, {
+      email: 'beto@example.com',
+      topics: ['hermetismo'],
+      features: ['search', 'media'],
+    });
+    expect((await beto.call('GET', `${UPLOADS}/costs`)).statusCode).toBe(403);
   });
 });
 

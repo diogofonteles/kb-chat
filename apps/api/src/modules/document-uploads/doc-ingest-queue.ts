@@ -146,6 +146,7 @@ export class DocIngestQueue {
         leaseId: randomUUID(),
         worker,
         until: new Date(now.getTime() + DOC_INGEST_LEASE_MS).toISOString(),
+        since: now.toISOString(),
         budgetUsd: Math.min(
           monthUsd,
           batchLeftUsd(this.deps.records.all(), record),
@@ -203,6 +204,7 @@ export class DocIngestQueue {
           leaseId: owner.leaseId,
           worker: owner.worker,
           until: until.toISOString(),
+          since: record.lease?.since ?? '',
           budgetUsd: record.lease?.budgetUsd ?? 0,
         },
       }),
@@ -251,6 +253,7 @@ export class DocIngestQueue {
     await this.deps.records.put({
       ...record,
       ...endOf(outcome),
+      workMs: this.workedOn(record),
       lease: null,
       spentUsd: record.spentUsd + result.spendUsd,
       updatedAt: this.now().toISOString(),
@@ -259,6 +262,12 @@ export class DocIngestQueue {
     // A failed one keeps its file for a while: the person may send it again as it is.
     if (outcome.state !== 'failed') await this.deps.files.remove(record.id);
     if (outcome.state === 'ready') this.deps.written?.(record.topic);
+  }
+
+  /** From the lease to now; null for a lease from before this was measured. */
+  private workedOn(record: DocumentUploadRecord): number | null {
+    const since = Date.parse(record.lease?.since ?? '');
+    return Number.isNaN(since) ? null : this.now().getTime() - since;
   }
 
   /**

@@ -2,6 +2,7 @@ import {
   changeDocumentBatchRequestSchema,
   chooseRecordingsRequestSchema,
   chooseRecordingsResponseSchema,
+  contentCostsSchema,
   createDocumentUploadRequestSchema,
   createDocumentUploadResponseSchema,
   documentBatchSchema,
@@ -61,6 +62,7 @@ export const documentUploadRoutes =
     registerCreate(app, deps);
     registerList(app, deps);
     registerChanges(app, deps);
+    registerSends(app, deps);
     registerParts(app, deps);
   };
 
@@ -105,6 +107,14 @@ function registerList(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
       items: await deps.service.list(deps.actorOf(request)),
     }),
   );
+  app.withTypeProvider<ZodTypeProvider>().get(
+    '/api/v1/document-uploads/costs',
+    {
+      config: { access: UPLOAD },
+      schema: { response: { 200: contentCostsSchema } },
+    },
+    async () => deps.service.costs(),
+  );
 }
 
 const BATCH_OPTIONS = {
@@ -145,6 +155,19 @@ function registerChanges(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
       request.body.capUsd,
     ),
   );
+  typed.delete(
+    '/api/v1/document-uploads/:id',
+    REMOVE_OPTIONS,
+    async (request, reply) => {
+      await deps.service.remove(deps.actorOf(request), request.params.id);
+      return reply.code(204).send();
+    },
+  );
+}
+
+/** A list's chosen recordings, and a failed item sent again (KBC-186). */
+function registerSends(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
   typed.post(
     '/api/v1/document-uploads/:id/choose',
     CHOOSE_OPTIONS,
@@ -160,14 +183,6 @@ function registerChanges(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
     RETRY_OPTIONS,
     async (request) =>
       deps.service.retry(deps.actorOf(request), request.params.id),
-  );
-  typed.delete(
-    '/api/v1/document-uploads/:id',
-    REMOVE_OPTIONS,
-    async (request, reply) => {
-      await deps.service.remove(deps.actorOf(request), request.params.id);
-      return reply.code(204).send();
-    },
   );
 }
 

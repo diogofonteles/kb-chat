@@ -254,6 +254,34 @@ export type ChooseRecordingsResponse = z.infer<
   typeof chooseRecordingsResponseSchema
 >;
 
+/* ---------- What an inclusion will cost, before it is sent (KBC-186) ---------- */
+
+/** What the estimate tells apart. */
+export const CONTENT_COST_KINDS = [
+  'document',
+  'image',
+  'page',
+  'recording',
+] as const;
+export const contentCostKindSchema = z.enum(CONTENT_COST_KINDS);
+export type ContentCostKind = z.infer<typeof contentCostKindSchema>;
+
+/** One item of a kind: its usual cost and time on the Mac, and how many it is measured on. */
+export const contentCostSchema = z.object({
+  usd: z.number().min(0),
+  seconds: z.number().min(0),
+  /** 0: nothing of this kind was added here yet, so the first measurements are used. */
+  samples: z.number().int().min(0),
+});
+export type ContentCost = z.infer<typeof contentCostSchema>;
+
+/** GET /api/v1/document-uploads/costs: what each kind really took here, the latest ones. */
+export const contentCostsSchema = z.record(
+  contentCostKindSchema,
+  contentCostSchema,
+);
+export type ContentCosts = z.infer<typeof contentCostsSchema>;
+
 /* ---------- The Mac's side: the doc-ingest job ---------- */
 
 export const docIngestSourceSchema = z.discriminatedUnion('kind', [

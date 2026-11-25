@@ -36,6 +36,7 @@ const recordSchema = z.object({
       leaseId: z.string(),
       worker: z.string(),
       until: z.string(),
+      since: z.string().default(''),
       budgetUsd: z.number().default(0),
     })
     .nullable(),
@@ -45,6 +46,7 @@ const recordSchema = z.object({
     .default(null),
   attempts: z.number(),
   spentUsd: z.number(),
+  workMs: z.number().nullable().default(null),
   entries: z.array(recordingEntrySchema).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),

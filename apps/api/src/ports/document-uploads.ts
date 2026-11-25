@@ -22,6 +22,8 @@ export interface UploadLease {
   readonly leaseId: string;
   readonly worker: string;
   readonly until: string;
+  /** When the Mac took it: how long the work took is measured from here. */
+  readonly since: string;
   /** What this lease may spend: held back from its inclusion's ceiling until it ends. */
   readonly budgetUsd: number;
 }
@@ -56,6 +58,8 @@ export interface DocumentUploadRecord {
   /** Attempts the Mac spent on it (a crash or a lost lease counts; its own setup does not). */
   readonly attempts: number;
   readonly spentUsd: number;
+  /** How long the Mac worked on it, once done (the estimate of the next ones). */
+  readonly workMs: number | null;
   /** What a list holds, once the Mac read it and until the person chose. */
   readonly entries: readonly RecordingEntry[];
   readonly createdAt: string;

@@ -3,6 +3,7 @@ import type { Readable } from 'node:stream';
 import {
   DOCUMENT_BATCH_DEFAULT_USD,
   recordingLinkKind,
+  type ContentCosts,
   type ChooseRecordingsRequest,
   type ChooseRecordingsResponse,
   type CreateDocumentUploadRequest,
@@ -21,6 +22,7 @@ import type {
 } from '../../ports/document-uploads.js';
 import { UploadRefusedError } from '../../ports/media-files.js';
 import { chosenLevel, type MediaActor } from '../media/index.js';
+import { contentCostsOf } from './content-costs.js';
 import {
   MIN_LEASE_USD,
   batchLeftUsd,
@@ -210,7 +212,9 @@ export class DocumentUploadService {
     const fresh = urls.filter(
       (url) => !this.repeated(actor, list.topic, { sha256: null, url }),
     );
-    await this.deps.records.put(...fresh.map((url) => this.chosenOf(list, url)));
+    await this.deps.records.put(
+      ...fresh.map((url) => this.chosenOf(list, url)),
+    );
     if (fresh.length > 0) this.deps.wake?.();
     return { created: fresh.length, already: urls.length - fresh.length };
   }
@@ -233,6 +237,11 @@ export class DocumentUploadService {
       createdAt: at,
       updatedAt: at,
     };
+  }
+
+  /** What each kind took here, for the estimate shown before anything is sent (KBC-186). */
+  costs(): ContentCosts {
+    return contentCostsOf(this.deps.records.all());
   }
 
   /** A failed item goes again as it was sent, with its attempts renewed. */
@@ -292,6 +301,7 @@ export class DocumentUploadService {
       lease: null,
       attempts: 0,
       spentUsd: 0,
+      workMs: null,
       entries: [],
       createdAt: at,
       updatedAt: at,
