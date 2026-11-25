@@ -27,6 +27,17 @@ describe('sortFile (KBC-184)', () => {
     expect(sorted.problem).not.toBe('');
   });
 
+  it.each(['Cofre/.obsidian/app.json', 'p/.git/config.txt', 'a/.trash/b.md'])(
+    '%s is in a hidden folder: not content',
+    (path) => {
+      const name = path.split('/').at(-1) ?? '';
+      expect(sortFile(file(name), path)).toEqual({
+        role: 'ignored',
+        problem: 'Fica numa pasta oculta.',
+      });
+    },
+  );
+
   it('an empty document or audio does not go and says why', () => {
     expect(sortFile(file('a.pdf', 0))).toMatchObject({ role: 'refused' });
     expect(sortFile(file('a.mp3', 0))).toMatchObject({ role: 'refused' });

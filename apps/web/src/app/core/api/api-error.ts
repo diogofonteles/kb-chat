@@ -111,7 +111,7 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
   ANSWER_IN_PROGRESS: () =>
     $localize`:@@error.answerInProgress:Esta resposta ainda está sendo escrita.`,
   RATE_LIMITED: () =>
-    $localize`:@@error.rateLimited:Muitas buscas em pouco tempo. Espere um instante e tente de novo.`,
+    $localize`:@@error.rateLimited:Muitos pedidos em pouco tempo. Espere um instante e tente de novo.`,
   FORBIDDEN_HOST: () =>
     $localize`:@@error.forbiddenHost:Acesso recusado pelo servidor.`,
   UNAUTHENTICATED: () =>
@@ -149,7 +149,7 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
   MEDIA_NOT_READY: () =>
     $localize`:@@error.mediaNotReady:Esta mídia ainda não está pronta para tocar.`,
   PAYLOAD_TOO_LARGE: () =>
-    $localize`:@@error.payloadTooLarge:O arquivo é maior do que o permitido. Envie um áudio de até 4 GB.`,
+    $localize`:@@error.payloadTooLarge:O arquivo é maior do que o permitido.`,
   MEDIA_CONFLICT: () =>
     $localize`:@@error.mediaConflict:Esta mídia mudou enquanto você agia. Atualize a lista e tente de novo.`,
   MEDIA_DUPLICATE: () =>
@@ -202,8 +202,7 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.levelCodeTaken:Já existe um nível com esse código.`,
   LEVELS_PENDING: () =>
     $localize`:@@error.levelsPending:Este acervo tem níveis de acesso: isto ainda não está disponível para você nele.`,
-  LEVEL_REQUIRED: () =>
-    $localize`:@@error.levelRequired:Escolha o nível deste áudio.`,
+  LEVEL_REQUIRED: () => $localize`:@@error.levelRequired:Escolha o nível.`,
   LEVEL_ABOVE_YOURS: () =>
     $localize`:@@error.levelAboveYours:Este nível está acima do seu. Escolha o seu ou um abaixo.`,
   LEVEL_BELOW_RECORDING: () =>

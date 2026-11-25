@@ -32,6 +32,10 @@ const LABELS: Record<
     text: $localize`:@@addContent.phase.sending:Enviando`,
     tone: 'info',
   },
+  paused: {
+    text: $localize`:@@addContent.phase.paused:Esperando`,
+    tone: 'warn',
+  },
   sent: { text: $localize`:@@addContent.phase.sent:Recebido`, tone: 'ok' },
   duplicate: {
     text: $localize`:@@addContent.phase.duplicate:Já está no acervo`,
@@ -43,6 +47,10 @@ const LABELS: Record<
   },
 };
 const ICONS = { file: 'file', audio: 'music', url: 'link' } as const;
+const PAUSED = {
+  offline: $localize`:@@addContent.paused.offline:Sem rede. Continua sozinho quando ela voltar.`,
+  limit: $localize`:@@addContent.paused.limit:Muitos envios por minuto. Continua sozinho em instantes.`,
+} as const;
 const ON_ITS_WAY = $localize`:@@addContent.phase.onItsWay:Já está a caminho`;
 
 /** One item of "Enviados agora" (KBC-184): how far it got, and what can be done about it. */
@@ -53,6 +61,12 @@ const ON_ITS_WAY = $localize`:@@addContent.phase.onItsWay:Já está a caminho`;
     <ui-icon [name]="icon()" [size]="20" />
     <div class="text">
       <p class="name">{{ send().name }}</p>
+      @if (topicTitle(); as title) {
+        <p class="meta">{{ title }}</p>
+      }
+      @if (paused(); as why) {
+        <p class="meta">{{ why }}</p>
+      }
       @if (percent() !== null) {
         <ui-progress [value]="(percent() ?? 0) / 100" />
       }
@@ -118,6 +132,11 @@ const ON_ITS_WAY = $localize`:@@addContent.phase.onItsWay:Já está a caminho`;
       overflow-wrap: anywhere;
     }
 
+    .meta {
+      color: var(--color-text-muted);
+      font-size: var(--text-meta);
+    }
+
     .problem {
       color: var(--color-danger);
       font-size: var(--text-meta);
@@ -127,6 +146,8 @@ const ON_ITS_WAY = $localize`:@@addContent.phase.onItsWay:Já está a caminho`;
 })
 export class ContentSendRow {
   readonly send = input.required<ContentSend>();
+  /** Its collection's name, when the list mixes collections. */
+  readonly topicTitle = input('');
   readonly retried = output();
   readonly removed = output();
   readonly opened = output<UploadedDocumentRef>();
@@ -149,6 +170,10 @@ export class ContentSendRow {
     return phase.kind === 'hashing' || phase.kind === 'sending'
       ? phase.percent
       : null;
+  });
+  protected readonly paused = computed(() => {
+    const phase = this.phase();
+    return phase.kind === 'paused' ? PAUSED[phase.why] : '';
   });
   protected readonly error = computed(() => {
     const phase = this.phase();

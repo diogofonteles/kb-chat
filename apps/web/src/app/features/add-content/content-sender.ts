@@ -8,10 +8,14 @@ import type {
   UploadedDocumentRef,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { MediaApi, type UploadEvent } from '@core/media/media-api.js';
 import { DocumentUploadsApi } from '@core/documents/document-uploads-api.js';
 import { hashFile } from '@features/media/file-hash.js';
-import { titleFromFileName } from '@features/media/upload-rules.js';
+import {
+  titleFromFileName,
+  unreadableFile,
+} from '@features/media/upload-rules.js';
 import {
   EMPTY,
   Subject,
@@ -44,6 +48,8 @@ export type SendPhase =
   | { readonly kind: 'waiting' }
   | { readonly kind: 'hashing'; readonly percent: number }
   | { readonly kind: 'sending'; readonly percent: number }
+  /** No network, or the limit per minute: it goes on by itself. */
+  | { readonly kind: 'paused'; readonly why: 'offline' | 'limit' }
   | { readonly kind: 'sent' }
   | {
       readonly kind: 'duplicate';
@@ -79,9 +85,19 @@ export interface SendSummary {
   readonly sent: number;
   readonly already: number;
   readonly failed: number;
+  /** Failed and taken off the list: they did not arrive, whatever the list shows. */
+  readonly givenUp: number;
 }
 
-const ACTIVE = new Set<SendPhase['kind']>(['waiting', 'hashing', 'sending']);
+const ACTIVE = new Set<SendPhase['kind']>([
+  'waiting',
+  'hashing',
+  'sending',
+  'paused',
+]);
+
+/** The file changed, moved or was deleted after it was chosen. */
+class UnreadableFile extends Error {}
 
 const nameOf = (source: ContentSource): string =>
   source.kind === 'url' ? (source.title ?? source.url) : source.path;
@@ -95,13 +111,10 @@ const ALREADY: SendPhase = {
 const percentOf = (loaded: number, total: number): number =>
   Math.floor((loaded / Math.max(total, 1)) * 100);
 
-/** What passes by itself (the limit per minute, the network) is tried again after a wait. */
-const again = <T>() =>
-  retry<T>({
-    count: TRIES,
-    delay: (err: unknown) =>
-      PASSING.has(toUiErrorCode(err)) ? timer(WAIT_MS) : throwError(() => err),
-  });
+const messageOf = (err: unknown): string =>
+  err instanceof UnreadableFile
+    ? unreadableFile()
+    : errorMessage(toUiErrorCode(err));
 
 /**
  * Sends what the person included (KBC-184), one item after the other: a file is hashed in the
@@ -117,6 +130,7 @@ export class ContentSender {
   private readonly media = inject(MediaApi);
   private readonly line = new Subject<number>();
   private readonly entries = signal<readonly ContentSend[]>([]);
+  private readonly givenUp = signal(0);
   private lastKey = 0;
 
   readonly sends = this.entries.asReadonly();
@@ -135,19 +149,18 @@ export class ContentSender {
       sent: of('sent'),
       already: of('duplicate'),
       failed: of('error'),
+      givenUp: this.givenUp(),
     };
   });
 
   constructor() {
+    inject(BusyWork).holdWhile(this.busy);
     this.line
       .pipe(
         concatMap((key) =>
           this.run(key).pipe(
             catchError((err: unknown) => {
-              this.put(key, {
-                kind: 'error',
-                message: errorMessage(toUiErrorCode(err)),
-              });
+              this.put(key, { kind: 'error', message: messageOf(err) });
               return EMPTY;
             }),
           ),
@@ -166,6 +179,7 @@ export class ContentSender {
   }
 
   add(sources: readonly ContentSource[], target: ContentTarget): void {
+    if (this.entries().length === 0) this.givenUp.set(0);
     const added = sources.map((source): ContentSend => ({
       key: ++this.lastKey,
       name: nameOf(source),
@@ -202,6 +216,7 @@ export class ContentSender {
   remove(key: number): void {
     const kind = this.entryOf(key)?.phase.kind;
     if (kind === 'hashing' || kind === 'sending') return;
+    if (kind === 'error') this.givenUp.update((n) => n + 1);
     this.entries.update((all) => all.filter((one) => one.key !== key));
   }
 
@@ -265,6 +280,7 @@ export class ContentSender {
         return event.kind === 'done';
       }),
       map((event) => (event.kind === 'done' ? event.sha256 : '')),
+      catchError(() => throwError(() => new UnreadableFile())),
     );
   }
 
@@ -276,7 +292,7 @@ export class ContentSender {
         this.media
           .check(target.topic, { sha256, bytes: file.size, durationMs: null })
           .pipe(
-            again(),
+            this.again(key),
             concatMap((check) => {
               if (
                 check.verdict === 'duplicate' ||
@@ -300,7 +316,7 @@ export class ContentSender {
   }
 
   private createAudio(
-    { target }: ContentSend,
+    { key, target }: ContentSend,
     { file, sha256 }: { readonly file: File; readonly sha256: string },
   ): Observable<string> {
     const request = {
@@ -312,7 +328,7 @@ export class ContentSender {
       ...(target.level !== null && { level: target.level }),
     };
     return this.media.create(target.topic, request).pipe(
-      again(),
+      this.again(key),
       map((item) => item.id),
     );
   }
@@ -343,7 +359,21 @@ export class ContentSender {
       ...(level !== null && { level }),
       batch,
     };
-    return this.api.create(topic, request).pipe(again());
+    return this.api.create(topic, request).pipe(this.again(entry.key));
+  }
+
+  /** What passes by itself (the limit per minute, the network) is tried again after a wait. */
+  private again<T>(key: number) {
+    return retry<T>({
+      count: TRIES,
+      delay: (err: unknown) => {
+        const code = toUiErrorCode(err);
+        if (!PASSING.has(code)) return throwError(() => err);
+        const why = code === 'OFFLINE' ? 'offline' : 'limit';
+        this.put(key, { kind: 'paused', why });
+        return timer(WAIT_MS);
+      },
+    });
   }
 
   /** The bytes of a new upload, with the progress on screen; none for a duplicate. */

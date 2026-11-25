@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  Injector,
   LOCALE_ID,
   afterNextRender,
   computed,
@@ -21,6 +22,7 @@ import {
   DOCUMENT_BATCH_MIN_USD,
   type Topic,
 } from '@kb-chat/contracts';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { openable, treeTitle } from '@core/topics/topic-tree.js';
 import { ChatStore } from '@features/chat/chat-store.js';
@@ -179,6 +181,11 @@ const rootIn = (topics: readonly Topic[], slug: string): string =>
   templateUrl: './add-content-page.html',
   styleUrl: './add-content-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // A file dropped beside the box would open in the place of the app.
+  host: {
+    '(window:dragover)': '$event.preventDefault()',
+    '(window:drop)': '$event.preventDefault()',
+  },
 })
 export class AddContentPage {
   private readonly route = inject(ActivatedRoute);
@@ -190,8 +197,13 @@ export class AddContentPage {
   protected readonly uploads = inject(DocumentUploadsStore);
   private readonly costs = inject(ContentCostsStore);
   private readonly searchRun = inject(WebSearchRun);
+  private readonly injector = inject(Injector);
   private readonly heading =
     viewChild.required<ElementRef<HTMLElement>>('heading');
+  private readonly levelField = viewChild(LevelField);
+  private readonly foundText = viewChild<ElementRef<HTMLElement>>('foundText');
+  private readonly chooseFiles =
+    viewChild<ElementRef<HTMLElement>>('chooseFiles');
 
   protected readonly ways = WAYS;
   protected readonly accept = FILE_ACCEPT;
@@ -213,6 +225,12 @@ export class AddContentPage {
       (slug) => slug !== null && slugs.includes(slug),
     );
     return wanted ?? slugs[0] ?? '';
+  });
+  /** The address asked for a collection that is not there for this person. */
+  protected readonly askedMissing = computed(() => {
+    const asked = this.asked();
+    const slugs = this.topics().map((one) => one.slug);
+    return asked !== null && slugs.length > 0 && !slugs.includes(asked);
   });
   protected readonly topicTitle = computed(
     () =>
@@ -255,8 +273,9 @@ export class AddContentPage {
     formatNumber(DOCUMENT_BATCH_DEFAULT_USD, this.locale, '1.2-2'),
   );
   protected readonly capUsd = computed<number | null>(() => {
-    const value = Number(this.capText().trim().replace(',', '.'));
-    return this.capText().trim() !== '' &&
+    const text = this.capText().trim().replace(',', '.');
+    const value = Number(text);
+    return /^\d+(\.\d+)?$/.test(text) &&
       value >= DOCUMENT_BATCH_MIN_USD &&
       value <= DOCUMENT_BATCH_MAX_USD
       ? value
@@ -266,6 +285,8 @@ export class AddContentPage {
   /** A dropped folder is being read: its files come together, at the end. */
   protected readonly reading = signal(false);
   protected readonly readFailed = signal(false);
+  /** A folder with nothing in it was dropped: said, not ignored. */
+  protected readonly emptyDrop = signal(false);
   protected readonly going = computed(() =>
     this.files().filter(({ role }) => GOING.has(role)),
   );
@@ -340,6 +361,15 @@ export class AddContentPage {
     const cap = this.capUsd();
     return cap !== null && this.estimateUsd() > cap;
   });
+  /** Not even the largest ceiling holds it: the rest waits, and is raised later. */
+  protected readonly overMax = computed(
+    () => this.overCap() && this.estimateUsd() > DOCUMENT_BATCH_MAX_USD,
+  );
+  protected readonly maxCap = formatNumber(
+    DOCUMENT_BATCH_MAX_USD,
+    this.locale,
+    '1.2-2',
+  );
   protected readonly enoughCap = computed(() =>
     formatNumber(
       Math.min(Math.ceil(this.estimateUsd() * 10) / 10, DOCUMENT_BATCH_MAX_USD),
@@ -352,6 +382,10 @@ export class AddContentPage {
     // DOM only: the page's own title takes the focus, as the other pages do.
     afterNextRender(() =>
       this.heading().nativeElement.focus({ preventScroll: true }),
+    );
+    // A new version of the app does not reload over what was chosen or typed.
+    inject(BusyWork).holdWhile(
+      computed(() => this.files().length > 0 || this.text().trim() !== ''),
     );
     // What was just sent shows up in "Em processamento" without waiting for the next beat:
     // by how many arrived, never by the progress of each.
@@ -387,8 +421,11 @@ export class AddContentPage {
     if (!data) return;
     this.reading.set(true);
     this.readFailed.set(false);
+    this.emptyDrop.set(false);
     try {
-      this.take(await droppedFiles(data));
+      const found = await droppedFiles(data);
+      this.emptyDrop.set(found.length === 0);
+      this.take(found);
     } catch {
       // Part of a folder is worse than none: the person would think it was all there.
       this.readFailed.set(true);
@@ -402,7 +439,7 @@ export class AddContentPage {
     const added = picked
       .filter((one) => !known.has(identityOf(one)))
       .map(({ file, path }) => ({
-        ...sortFile(file),
+        ...sortFile(file, path),
         key: ++this.lastFile,
         file,
         path,
@@ -412,6 +449,7 @@ export class AddContentPage {
 
   protected clearFiles(): void {
     this.files.set([]);
+    this.focusFiles();
   }
 
   protected useEnoughCap(): void {
@@ -422,14 +460,24 @@ export class AddContentPage {
     return $localize`:@@addContent.remove:Tirar ${name}:name: da lista`;
   }
 
+  /** The button pressed goes away: the focus goes to what was found, or to choosing. */
   protected removeFile(key: number): void {
     this.files.update((all) => all.filter((one) => one.key !== key));
+    this.focusFiles();
+  }
+
+  private focusFiles(): void {
+    afterNextRender(
+      () => (this.foundText() ?? this.chooseFiles())?.nativeElement.focus(),
+      { injector: this.injector },
+    );
   }
 
   /** "Incluir": everything valid goes as one inclusion, and the form is ready for the next. */
   protected include(): void {
     this.submitted.set(true);
     const capUsd = this.capUsd();
+    if (this.levelInvalid()) this.levelField()?.focusChoice();
     if (!this.canSend() || capUsd === null || this.levelInvalid()) return;
     this.sender.add(this.sources(), {
       topic: this.topic(),
@@ -466,6 +514,10 @@ export class AddContentPage {
     if (this.way() === 'links') this.text.set(this.parsed().refused.join('\n'));
     if (this.way() === 'search')
       this.searchRun.take(this.picks().map(({ url }) => url));
+  }
+
+  protected focusHeading(): void {
+    this.heading().nativeElement.focus({ preventScroll: true });
   }
 
   protected openDocument(doc: OpenedDocument): void {

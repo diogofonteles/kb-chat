@@ -54,12 +54,27 @@ function documentProblem(file: File): string {
     : '';
 }
 
+/** In a folder the system or an app hides (`.git`, `.obsidian`, `.trash`): not content. */
+const isInHiddenFolder = (path: string): boolean =>
+  path
+    .split('/')
+    .slice(0, -1)
+    .some((folder) => folder.startsWith('.'));
+
 /** What the file becomes. Nothing is left out in silence: what does not go says why. */
-export function sortFile(file: File): Pick<ChosenFile, 'role' | 'problem'> {
+export function sortFile(
+  file: File,
+  path = file.name,
+): Pick<ChosenFile, 'role' | 'problem'> {
   if (isSystemFile(file.name))
     return {
       role: 'ignored',
       problem: $localize`:@@addContent.systemFile:Arquivo do sistema.`,
+    };
+  if (isInHiddenFolder(path))
+    return {
+      role: 'ignored',
+      problem: $localize`:@@addContent.hiddenFolder:Fica numa pasta oculta.`,
     };
   if (hasDocumentExtension(file.name)) {
     const problem = documentProblem(file);

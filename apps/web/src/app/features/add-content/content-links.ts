@@ -13,6 +13,12 @@ export interface ParsedLinks {
   readonly refused: readonly string[];
 }
 
+/** "exemplo.com/pagina" and "www.exemplo.com" are addresses too, as a browser takes them. */
+const withScheme = (part: string): string =>
+  /^[\p{L}\p{N}-]+(\.[\p{L}\p{N}-]+)*\.\p{L}{2,}([/?#]\S*)?$/u.test(part)
+    ? `https://${part}`
+    : part;
+
 /**
  * One address per line; several on one line (spaces, commas) count each. A line with no
  * address in it is refused whole, as typed; a repeated address counts once.
@@ -26,7 +32,8 @@ export function parseLinks(text: string): ParsedLinks {
       /https?:\/\//i.test(line)
         ? line.split(/[\s,;]+/).filter(Boolean)
         : [line],
-    );
+    )
+    .map(withScheme);
   const links = new Map<string, ContentLink>();
   const refused: string[] = [];
   for (const part of new Set(parts)) {

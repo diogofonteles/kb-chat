@@ -20,6 +20,18 @@ describe('parseLinks (KBC-184)', () => {
     ]);
   });
 
+  it('takes an address without its scheme, as a browser does', () => {
+    const { links, refused } = parseLinks(
+      'exemplo.com/pagina\nwww.exemplo.org\nyoutu.be/abc\nnota.\nfim',
+    );
+    expect(links.map((one) => [one.url, one.kind])).toEqual([
+      ['https://exemplo.com/pagina', 'page'],
+      ['https://www.exemplo.org', 'page'],
+      ['https://youtu.be/abc', 'recording'],
+    ]);
+    expect(refused).toEqual(['nota.', 'fim']);
+  });
+
   it('refuses, whole and as typed, what is not a web address', () => {
     const { links, refused } = parseLinks(
       'não é link\nfile:///etc/passwd\nhttps://user:pw@example.org/x',

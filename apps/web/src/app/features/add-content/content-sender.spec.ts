@@ -6,7 +6,9 @@ import type {
   CreateDocumentUploadResponse,
   DocumentUpload,
 } from '@kb-chat/contracts';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { MediaApi } from '@core/media/media-api.js';
+import { unreadableFile } from '@features/media/upload-rules.js';
 import {
   DocumentUploadsApi,
   type SendEvent,
@@ -126,6 +128,7 @@ describe('ContentSender (KBC-184)', () => {
       sent: 2,
       already: 0,
       failed: 0,
+      givenUp: 0,
     });
     expect(sender.busy()).toBe(false);
     expect(api.asked[0]).toEqual({
@@ -180,7 +183,8 @@ describe('ContentSender (KBC-184)', () => {
           return tries === 1 ? throwError(() => passing) : of(created());
         });
       sender.add([link('https://example.org/1')], TARGET);
-      expect(phases(sender)).toEqual(['sending']);
+      expect(phases(sender)).toEqual(['paused']);
+      expect(sender.busy()).toBe(true);
       expect(sender.busy()).toBe(true);
       vi.advanceTimersByTime(15_000);
       expect(phases(sender)).toEqual(['sent']);
@@ -279,6 +283,56 @@ describe('ContentSender (KBC-184)', () => {
     expect(phases(sender)).toEqual(['error']);
     sender.retryFailed();
     expect(phases(sender)).toEqual(['sent']);
+  });
+
+  it('a failed item taken off the list still counts as not arrived', () => {
+    const { api, sender } = setup();
+    api.answer = (n) =>
+      n === 1
+        ? throwError(() => apiError(404, 'TOPIC_NOT_FOUND'))
+        : of(created());
+    sender.add(
+      [link('https://example.org/1'), link('https://example.org/2')],
+      TARGET,
+    );
+    sender.remove(sender.sends()[0]?.key ?? 0);
+    expect(sender.summary()).toMatchObject({ total: 1, sent: 1, givenUp: 1 });
+    // Another inclusion, once the list is empty, starts the account over.
+    sender.clearDone();
+    sender.add([link('https://example.org/3')], TARGET);
+    expect(sender.summary().givenUp).toBe(0);
+  });
+
+  it('a file changed or deleted after it was chosen says so, and the next goes', async () => {
+    const { sender } = setup();
+    const gone = new File(['x'], 'sumiu.pdf');
+    vi.spyOn(gone, 'slice').mockReturnValue({
+      arrayBuffer: () =>
+        Promise.reject(new DOMException('gone', 'NotReadableError')),
+    } as unknown as Blob);
+    sender.add(
+      [
+        { kind: 'file', file: gone, path: 'sumiu.pdf' },
+        link('https://example.org/1'),
+      ],
+      TARGET,
+    );
+    await vi.waitFor(() => expect(phases(sender)).toEqual(['error', 'sent']));
+    const [first] = sender.sends();
+    expect(first?.phase).toMatchObject({ message: unreadableFile() });
+  });
+
+  it('holds a reload of the app while something is on its way', () => {
+    const { api, sender } = setup();
+    const waiting = new Subject<CreateDocumentUploadResponse>();
+    api.answer = () => waiting;
+    const busy = TestBed.inject(BusyWork);
+    expect(busy.inProgress()).toBe(false);
+    sender.add([link('https://example.org/1')], TARGET);
+    expect(busy.inProgress()).toBe(true);
+    waiting.next(created());
+    waiting.complete();
+    expect(busy.inProgress()).toBe(false);
   });
 
   it('says what is already in the collection, or on its way', () => {

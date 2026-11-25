@@ -15,6 +15,7 @@ import {
   provideRouter,
 } from '@angular/router';
 import type { Feature, Topic } from '@kb-chat/contracts';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { MEDIA_POLL_MS } from '@features/media/media-polling.js';
@@ -132,7 +133,7 @@ describe('AddContentPage (KBC-184)', () => {
 
   it('sends several links as one inclusion with its ceiling, and keeps what was refused', async () => {
     const { http, fixture } = await renderPage();
-    expect(include().disabled).toBe(true);
+    expect(include().getAttribute('aria-disabled')).toBe('true');
     await typeLinks(
       'https://example.org/1\nhttps://example.org/2\nnão é link',
       fixture,
@@ -171,9 +172,46 @@ describe('AddContentPage (KBC-184)', () => {
       });
       await fixture.whenStable();
       expect(screen.getByText('De 0,05 a 5,00.')).toBeTruthy();
-      expect(include().disabled).toBe(true);
+      expect(include().getAttribute('aria-disabled')).toBe('true');
     },
   );
+
+  it('a missing level takes the focus, on a phone too', async () => {
+    const { fixture } = await renderPage({
+      levels: [{ id: 'qs', code: 'QS' }],
+    });
+    await typeLinks('https://example.org/1', fixture);
+    fireEvent.click(include());
+    await fixture.whenStable();
+    expect(
+      screen.getByText('Escolha o nível do que vai incluir.'),
+    ).toBeTruthy();
+    expect(document.activeElement).toBe(
+      screen.getByRole('radio', { name: /QS/ }),
+    );
+  });
+
+  it('a new version of the app does not reload over what was typed or chosen', async () => {
+    const { fixture } = await renderPage();
+    const busy = TestBed.inject(BusyWork);
+    expect(busy.busy()).toBe(false);
+    await typeLinks('https://example.org/1', fixture);
+    expect(busy.busy()).toBe(true);
+    fixture.destroy();
+    expect(busy.busy()).toBe(false);
+  });
+
+  it('an address of a collection that is not there says so', async () => {
+    await renderPage({ asked: 'sumiu' });
+    expect(screen.getByText('Não achei o acervo do endereço')).toBeTruthy();
+  });
+
+  it('a file dropped beside the box does not open in the place of the app', async () => {
+    await renderPage();
+    const drop = new Event('drop', { cancelable: true, bubbles: true });
+    document.body.dispatchEvent(drop);
+    expect(drop.defaultPrevented).toBe(true);
+  });
 
   it('takes as many links as are pasted', async () => {
     const { fixture } = await renderPage();
@@ -183,7 +221,7 @@ describe('AddContentPage (KBC-184)', () => {
     );
     await typeLinks(many.join('\n'), fixture);
     expect(screen.getByText('120 endereços prontos')).toBeTruthy();
-    expect(include().disabled).toBe(false);
+    expect(include().getAttribute('aria-disabled')).toBeNull();
   });
 
   it('in a collection with levels nothing goes without one', async () => {
@@ -241,7 +279,7 @@ describe('AddContentPage (KBC-184)', () => {
     expect(include().textContent).toContain('Incluir 1 item');
     fireEvent.click(screen.getByRole('button', { name: 'Limpar' }));
     await fixture.whenStable();
-    expect(include().disabled).toBe(true);
+    expect(include().getAttribute('aria-disabled')).toBe('true');
   });
 
   it('a folder with images, audios and videos is estimated by kind; a video goes by its sound', async () => {
@@ -343,7 +381,7 @@ describe('AddContentPage (KBC-184)', () => {
     ]);
     expect(bodies[0].batch).toEqual(bodies[1].batch);
     expect(screen.getAllByText('Incluído agora')).toHaveLength(2);
-    expect(include().disabled).toBe(true);
+    expect(include().getAttribute('aria-disabled')).toBe('true');
     fixture.destroy();
   });
 

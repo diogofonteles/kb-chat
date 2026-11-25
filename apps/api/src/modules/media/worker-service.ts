@@ -83,6 +83,8 @@ export interface KbPublishQueue {
   isHeldBy?(worker: string): boolean;
 }
 
+/** Sent documents one worker takes before a recording's turn (KBC-184). */
+export const DOCUMENTS_IN_A_ROW = 5;
 const KB_PUBLISH = 'kb-publish';
 const DOC_INGEST = 'doc-ingest';
 /** The queues kept apart from `jobs` (no media item). */
@@ -112,6 +114,8 @@ const leaseLost = () =>
  * it. Each call names its lease; a worker that lost it gets 409 and drops its work.
  */
 export class WorkerService {
+  private readonly documentsInARow = new Map<string, number>();
+
   private readonly now: () => Date;
 
   constructor(private readonly deps: WorkerServiceDeps) {
@@ -131,6 +135,8 @@ export class WorkerService {
     // ADR 0023: one job at a time, whichever queue it came from.
     if (request.oneAtATime && this.holdsOwnQueueLease(request.worker))
       return null;
+    const document = this.leaseDocsFirst(request);
+    if (document) return document;
     const job = this.leaseMediaJob(request);
     if (!job) return this.leaseKb(request) ?? this.leaseDocs(request);
     if (job.kind === 'transcribe' && request.transcribeRoute === 'groq')
@@ -143,6 +149,20 @@ export class WorkerService {
     return job.kind === 'transcribe'
       ? this.transcribeJob(job)
       : this.transcodeJob(job);
+  }
+
+  /**
+   * A document takes a minute and a recording many: documents go first, a few in a row, then
+   * what else waits has its turn (a folder of hundreds must not hold the recordings back).
+   */
+  private leaseDocsFirst(
+    request: LeaseRequest & { readonly oneAtATime?: boolean },
+  ): WorkerLeasedJob | null {
+    const { worker } = request;
+    const inARow = this.documentsInARow.get(worker) ?? 0;
+    const document = inARow < DOCUMENTS_IN_A_ROW && this.leaseDocs(request);
+    this.documentsInARow.set(worker, document ? inARow + 1 : 0);
+    return document || null;
   }
 
   private kindsFor(request: {
