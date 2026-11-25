@@ -59,6 +59,9 @@ export const documentLinkSchema = z
     return parsed.username === '' && parsed.password === '';
   }, 'A link with credentials is refused');
 
+/** Under this the masters are warned that kb's account is ending (KBC-009 BR-3). */
+export const KB_LOW_BALANCE_USD = 1;
+
 /* ---------- One inclusion (batch) and its ceiling (KBC-009 R3) ---------- */
 
 /** What one inclusion may spend when the person does not say. */
@@ -175,6 +178,8 @@ export const DOCUMENT_UPLOAD_FAILURES = [
   'not-accepted',
   /** A recording past its sender's quota, or whose sender may not send here any more. */
   'not-allowed',
+  /** A master took what it is out of the collection: only a master sends it back (KBC-187). */
+  'removed',
   /** The Mac gave up after its attempts. */
   'gave-up',
   /** Its bytes never all arrived. */
@@ -245,6 +250,8 @@ export const documentWorkSchema = z.object({
     lastSeenAt: z.iso.datetime().nullable(),
     /** What else it does now: it takes one thing at a time. */
     doing: z.enum(['recording', 'publishing']).nullable().default(null),
+    /** What kb's OpenRouter account has left, when low: masters only, and when it is known. */
+    lowBalanceUsd: z.number().nullable().optional(),
   }),
   /** The Mac has an item now, whoever sent it. */
   busy: z.boolean(),
@@ -410,6 +417,10 @@ export const docIngestSourceSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('url'), url: z.string() }),
   /** A person said it enters all the same: kb takes it out of its quarantine (KBC-009). */
   z.object({ kind: z.literal('accept'), document: z.string() }),
+  /** A master took it out of the collection: kb moves it to its quarantine (KBC-187). */
+  z.object({ kind: z.literal('remove'), document: z.string() }),
+  /** And brought it back. */
+  z.object({ kind: z.literal('restore'), document: z.string() }),
   /** Downloaded on the Mac and given back as audio to `audioPath` (POST, octet-stream). */
   z.object({
     kind: z.literal('recording'),
@@ -437,6 +448,8 @@ export const docIngestJobSchema = z.object({
   source: docIngestSourceSchema,
   /** What `kb topic new` needs when the vault has no folder for it (as kb-publish). */
   collection: kbCollectionSchema.optional(),
+  /** Its sender may bring back what a master took out of the collection (KBC-187 BR-1). */
+  mayBringBack: z.boolean().optional(),
 });
 export type DocIngestJob = z.infer<typeof docIngestJobSchema>;
 
@@ -479,6 +492,8 @@ export const docIngestResultRequestSchema = docLeaseSchema.extend({
       state: z.literal('duplicate'),
       document: uploadedDocumentRefSchema,
     }),
+    /** Of `remove` and `restore`: it is where it was asked to be. */
+    z.object({ state: z.literal('moved') }),
     z.object({
       state: z.literal('failed'),
       failure: documentUploadFailureSchema.exclude([

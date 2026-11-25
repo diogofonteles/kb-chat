@@ -1229,6 +1229,8 @@ export const transcriberStatusReportSchema = z.strictObject({
   /** The kb vault on the Mac, when it publishes (KBC-099). */
   vaultPath: z.string().max(500).nullable(),
   kbVersion: z.string().max(100).nullable(),
+  /** What is left in the OpenRouter account kb spends from (KBC-009 BR-3), when it can tell. */
+  kbBalanceUsd: z.number().optional(),
   /** Kinds it cannot do now, and why (KBC-117); absent from a worker before it. */
   unavailable: z
     .array(

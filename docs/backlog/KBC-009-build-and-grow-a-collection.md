@@ -47,6 +47,9 @@ Pedido do dono em 2026-10-24:
 - BR-4: nada é apagado. O que os gates do kb recusam vai para a quarentena e aparece na revisão, como no kb.
 - BR-5: só o dono usa esta tela na release 1. Com convidados (release 2), a tela fica restrita ao dono.
 
+## Como ficou (25/11/2026)
+- BR-3: o aviso de saldo da OpenRouter (abaixo de US$ 1, no cartão do que está sendo processado, só para masters) e o da Firecrawl (abaixo de 100 créditos, KBC-185). Os limites são fixos e o aviso não segura a inclusão: o saldo é o último que o Mac leu. Limites em Configurações ficam para quando o dono pedir.
+
 ## Open questions
 - Teto de gasto por ingestão: usar o teto diário do chat ou um teto próprio? — dono
 - Pastas locais permitidas: qualquer pasta ou só uma lista configurada (segurança)? — dono

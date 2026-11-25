@@ -91,6 +91,18 @@ const DOING_TEXTS: Record<
         }
       </div>
     }
+    @if (lowBalance(); as text) {
+      <p class="low">
+        {{ text }}
+        <a
+          href="https://openrouter.ai/settings/credits"
+          target="_blank"
+          rel="noopener"
+          i18n="@@docProgress.lowBalanceAdd"
+          >Adicionar saldo</a
+        >
+      </p>
+    }
     @if (now() || left() || spent()) {
       <dl>
         @if (now(); as text) {
@@ -172,6 +184,18 @@ export class DocumentWorkCard {
     const state = macStateOf(work);
     if (state === 'on') return this.macOn(work);
     return state === 'none' ? this.macNone() : this.macOff(work);
+  });
+
+  /** kb's account is ending (KBC-009 BR-3): the API says it to masters alone. */
+  protected readonly lowBalance = computed(() => {
+    const usd = this.work()?.mac.lowBalanceUsd ?? null;
+    if (usd === null) return '';
+    const left = formatNumber(
+      Math.floor(Math.max(0, usd) * 100) / 100,
+      this.locale,
+      '1.2-2',
+    );
+    return $localize`:@@docProgress.lowBalance:A conta da OpenRouter do kb está no fim: US$ ${left}:usd:. Sem saldo, o Mac não consegue incluir documentos.`;
   });
 
   private macOn({ busy, mac }: DocumentWork): MacLine {

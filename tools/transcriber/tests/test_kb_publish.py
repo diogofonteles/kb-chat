@@ -88,9 +88,74 @@ class FakeKb:
         spend = 0.0 if step == "index" else self.spend
         return KbRun(ok=True, output=self.outputs.get(step, f"{step} ok"), spend_usd=spend)
 
+    def _rows(self, topic: str) -> list[dict]:
+        queue = self.vault / topic / ".decisions" / "review.jsonl"
+        text = queue.read_text(encoding="utf-8", errors="replace") if queue.is_file() else ""
+        rows = []
+        for line in text.splitlines():
+            try:
+                rows.append(json.loads(line))
+            except ValueError:
+                continue
+        return rows
+
+    def _close(self, topic: str, item: str, status: str) -> None:
+        queue = self.vault / topic / ".decisions" / "review.jsonl"
+        rows = [
+            {**row, "status": status} if row["id"] == item else row for row in self._rows(topic)
+        ]
+        queue.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    def _decided(self, topic: str, item: str) -> KbRun | None:
+        """An item a person's decision left in kb's own file (KBC-187), as kb 0.0.12 takes it."""
+        for row in self._rows(topic):
+            if row["id"] != item:
+                continue
+            if row["status"] != "pending":
+                return KbRun(ok=False, output=f"review item {item} is already {row['status']}")
+            inside = self.vault / topic / row["subject"]
+            apart = self.vault / topic / row["subject"].replace("raw/", "raw/_quarantine/", 1)
+            subject = row["subject"]
+            apart_id = subject.replace("raw/", "raw/_quarantine/", 1)
+            if row["queue"] == "remove":
+                apart.parent.mkdir(parents=True, exist_ok=True)
+                reason = row["action"]["reason"]
+                text = inside.read_text(encoding="utf-8")
+                # As kb 0.0.12: a reason judged before stays in the document.
+                if "triage_reason:" not in text:
+                    text = text.replace("---\n", f"---\ntriage_reason: {reason}\n", 1)
+                apart.write_text(text, encoding="utf-8")
+                inside.unlink()
+                self._ledger(
+                    topic, {"op": "move", "file": apart_id, "original": subject, "reason": reason}
+                )
+            elif row["queue"] == "gate" and row["action"].get("quarantined"):
+                inside.parent.mkdir(parents=True, exist_ok=True)
+                apart.rename(inside)
+                self._ledger(topic, {"op": "restore", "file": subject, "original": apart_id})
+            else:
+                return KbRun(ok=False, output=f"unknown queue {row['queue']}")
+            self._close(topic, item, "accepted")
+            return KbRun(ok=True, output="moved")
+        return None
+
+    def _ledger(self, topic: str, row: dict) -> None:
+        ledger = self.vault / topic / ".decisions" / "quarantine-ledger.jsonl"
+        with ledger.open("a", encoding="utf-8") as rows:
+            rows.write(json.dumps(row) + "\n")
+
+    def reject(self, topic: str, item: str) -> KbRun:
+        self.calls.append(("reject", item, 0.0))
+        self._close(topic, item, "rejected")
+        return KbRun(ok=True, output="rejected")
+
     def refusals(self, topic: str) -> KbRun:
         """kb's queue, with the notes it prints after the JSON."""
-        refused = sorted((self.vault / topic / "raw" / "_quarantine").rglob("*.md"))
+        apart = sorted((self.vault / topic / "raw" / "_quarantine").rglob("*.md"))
+        # What a person took out waits for nobody: it is no item of the gate.
+        ledger = self.vault / topic / ".decisions" / "quarantine-ledger.jsonl"
+        moved = ledger.read_text(encoding="utf-8") if ledger.is_file() else ""
+        refused = [one for one in apart if one.name not in moved]
         items = [
             {
                 "id": f"rv-{one.stem}",
@@ -106,6 +171,9 @@ class FakeKb:
 
     def accept(self, topic: str, item: str) -> KbRun:
         self.calls.append(("accept", item, 0.0))
+        decided = self._decided(topic, item)
+        if decided:
+            return decided
         for one in (self.vault / topic / "raw" / "_quarantine").rglob(f"{item[3:]}.md"):
             inside = one.relative_to(self.vault / topic / "raw" / "_quarantine")
             target = self.vault / topic / "raw" / inside

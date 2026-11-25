@@ -451,12 +451,17 @@ async function includeLinks(
 /** The Mac as the API tells it, whatever the other tests paired. */
 async function withMac(page: Page, mac: object) {
   await page.route('**/api/v1/document-uploads', async (route) => {
-    const answer = await route.fetch();
-    const body = (await answer.json()) as { work: object };
-    await route.fulfill({
-      response: answer,
-      json: { ...body, work: { ...body.work, busy: false, mac } },
-    });
+    // A reading still on its way when the test ends finds no page: it is let go.
+    try {
+      const answer = await route.fetch();
+      const body = (await answer.json()) as { work: object };
+      await route.fulfill({
+        response: answer,
+        json: { ...body, work: { ...body.work, busy: false, mac } },
+      });
+    } catch {
+      await route.abort().catch(() => undefined);
+    }
   });
 }
 
@@ -672,3 +677,66 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     expect(serious).toEqual([]);
   });
 }
+
+test('KBC-187: a master takes a document out of the collection, gone for everyone at once, and brings it back', async ({
+  browser,
+  viewport,
+}, testInfo) => {
+  const { page, topic, owner } = await person(browser, viewport);
+  const link = `https://example.org/${uniqueTag()}`;
+  const add = await openAdd(page);
+  await includeLinks(add, [link]);
+  await runMac(owner, topic);
+  const row = processing(add, link);
+  await expect(row.getByText('Pronto', { exact: true })).toBeVisible();
+
+  const master = await pageWith(browser, OWNER_EMAIL, { viewport });
+  await master.goto(`/adicionar?acervo=${topic}`);
+  await processing(master.locator('app-add-content-page'), link)
+    .getByRole('button', { name: 'Abrir' })
+    .click();
+  const panel = master.locator('app-document-panel');
+  const title = (await panel.getByRole('heading').first().innerText()).trim();
+  await panel.getByRole('button', { name: 'Mais opções' }).first().click();
+  await master.getByRole('menuitem', { name: 'Remover do acervo' }).click();
+  const dialog = master.getByRole('dialog', { name: 'Remover do acervo' });
+  await expect(dialog.getByText(/Nada é apagado/)).toBeVisible();
+  await master.screenshot({ path: testInfo.outputPath('asked.png') });
+  const serious = (
+    await new AxeBuilder({ page: master })
+      .include('app-remove-document-dialog')
+      .analyze()
+  ).violations.filter((v) => ['serious', 'critical'].includes(v.impact ?? ''));
+  expect(serious).toEqual([]);
+  // Escape is the question's: the document stays open.
+  await master.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(panel.getByRole('heading').first()).toBeVisible();
+  await panel.getByRole('button', { name: 'Mais opções' }).first().click();
+  await master.getByRole('menuitem', { name: 'Remover do acervo' }).click();
+  await dialog.getByRole('button', { name: 'Remover do acervo' }).click();
+  await expect(dialog.getByText(/saiu do acervo/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Concluir' }).click();
+  await expect(panel).toHaveCount(0);
+
+  // Gone for who sent it, before the Mac moved anything.
+  await page.reload();
+  await expect(processing(add, link)).toHaveCount(0);
+
+  await master.goto('/configuracoes/removidos');
+  const removed = master
+    .locator('app-removed-documents')
+    .getByRole('listitem')
+    .filter({ hasText: title });
+  await expect(removed.getByText(/o Mac ainda move/)).toBeVisible();
+  await runMac(owner, topic);
+  await expect(removed.getByText('Removido', { exact: true })).toBeVisible();
+  await master.screenshot({ path: testInfo.outputPath('removed.png') });
+  await removed.getByRole('button', { name: /Trazer de volta/ }).click();
+  await expect(removed.getByText(/Voltando/)).toBeVisible();
+  await runMac(owner, topic);
+  await expect(removed).toHaveCount(0);
+  // A member has no such section.
+  await page.goto('/configuracoes/removidos');
+  await expect(page.locator('app-removed-documents')).toHaveCount(0);
+});

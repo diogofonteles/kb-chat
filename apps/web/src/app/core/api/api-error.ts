@@ -152,6 +152,8 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.payloadTooLarge:O arquivo é maior do que o permitido.`,
   MEDIA_CONFLICT: () =>
     $localize`:@@error.mediaConflict:Esta mídia mudou enquanto você agia. Atualize a lista e tente de novo.`,
+  DOCUMENT_REMOVED: () =>
+    $localize`:@@error.documentRemoved:Um master tirou este documento do acervo. Peça a um master para trazê-lo de volta.`,
   DOCUMENT_DUPLICATE: () =>
     $localize`:@@error.documentDuplicate:O mesmo documento já está no acervo, ou a caminho dele. Este pode ficar de fora.`,
   MEDIA_DUPLICATE: () =>

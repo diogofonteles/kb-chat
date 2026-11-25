@@ -68,6 +68,13 @@ export interface DocumentUploadServiceDeps {
   ) => ExistingDocument | null;
   /** The document is in the app's catalog (the sync brought it): the upload is "pronto". */
   readonly inCatalog: (topic: string, id: string) => boolean;
+  /** It was taken out of the collection (KBC-187). */
+  readonly isRemoved?: (topic: string, id: string) => boolean;
+  /** A master took out what this original or link became: only a master brings it back. */
+  readonly wasRemoved?: (
+    scope: readonly string[],
+    key: { readonly sha256: string | null; readonly url: string | null },
+  ) => boolean;
   /** Where a recording link's media item is now. */
   readonly mediaProgressOf?: (mediaId: string) => MediaProgress | null;
   /** The Mac that publishes to the collections: paired, seen in the last minutes, or not. */
@@ -116,16 +123,14 @@ export class DocumentUploadService {
     topic: string,
     request: CreateDocumentUploadRequest,
   ): Promise<CreateDocumentUploadResponse> {
-    if (!actor.canUpload)
-      throw new AppError('FORBIDDEN', 'You may not send documents');
-    if (!actor.canSee(topic) || !this.deps.hasTopic(topic))
-      throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
+    this.assertMaySendTo(actor, topic);
     const level = chosenLevel(actor, {
       topic,
       scale: this.deps.scaleOf(topic),
       asked: request.level,
     });
     const key = keyOf(request);
+    this.assertNotRemoved(actor, topic, key);
     const repeated = this.repeated(actor, topic, key);
     if (repeated) return repeated;
     const batch = this.batchFor(actor, request);
@@ -241,6 +246,27 @@ export class DocumentUploadService {
     return { outcome: 'duplicate', document: upload?.document ?? null, upload };
   }
 
+  private assertMaySendTo(actor: UploadActor, topic: string): void {
+    if (!actor.canUpload)
+      throw new AppError('FORBIDDEN', 'You may not send documents');
+    if (!actor.canSee(topic) || !this.deps.hasTopic(topic))
+      throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
+  }
+
+  /** What a master took out of the collection only a master sends back (KBC-187 BR-1). */
+  private assertNotRemoved(
+    actor: UploadActor,
+    topic: string,
+    key: UploadKey,
+  ): void {
+    const scope = this.deps.scopeOf(topic);
+    if (!actor.isMaster && this.deps.wasRemoved?.(scope, key))
+      throw new AppError(
+        'DOCUMENT_REMOVED',
+        'A master took it out of the collection',
+      );
+  }
+
   /** Its file is here: arriving, waiting for the Mac, or kept after it failed. */
   private holdsBytes(record: DocumentUploadRecord): boolean {
     if (record.kind !== 'file' || record.state === 'mapped') return false;
@@ -259,6 +285,7 @@ export class DocumentUploadService {
     if (record.state === 'failed' || record.state === 'receiving') return false;
     // Taken off the list before it entered: it was cancelled.
     if (record.dismissed && !ENTERED.has(record.state)) return false;
+    if (this.hasLeft(record)) return false;
     if (!record.mediaId || !this.deps.mediaProgressOf) return true;
     return this.mediaOf(record)?.state !== 'failed';
   }
@@ -400,6 +427,7 @@ export class DocumentUploadService {
     if (!record || !this.mayManage(actor, record)) throw notFound();
     if (!this.hasFailed(record) || !(await this.isKept(record)))
       throw notWaiting();
+    this.assertNotRemoved(actor, record.topic, keyOfRecord(record));
     const again = await this.deps.records.update(id, (current) => ({
       ...current,
       kind: kindAgainOf(current),
@@ -422,7 +450,10 @@ export class DocumentUploadService {
     if (record.state !== 'failed' || !record.refused) throw notWaiting();
     // Two people may have sent it, each refused: accepted twice it would be there twice.
     const key = keyOfRecord(record);
-    if (this.repeated(actor, record.topic, key))
+    const there = this.repeated(actor, record.topic, key);
+    // Taken out of the quarantine and then failed in kb's steps, it is its own document.
+    const own = record.refused.document.replace('raw/_quarantine/', 'raw/');
+    if (there?.outcome === 'duplicate' && there.document?.id !== own)
       throw new AppError('DOCUMENT_DUPLICATE', 'It is there, or on its way');
     const accepted = await this.deps.records.update(id, (current) => ({
       ...current,
@@ -441,6 +472,7 @@ export class DocumentUploadService {
     const record = this.deps.records.get(id);
     if (!record || !this.mayManage(actor, record)) throw notFound();
     if (!isStalled(record, this.now())) throw notWaiting();
+    this.assertNotRemoved(actor, record.topic, keyOfRecord(record));
     const resumed = await this.deps.records.update(id, (current) => ({
       ...current,
       state: 'received',
@@ -595,7 +627,22 @@ export class DocumentUploadService {
       records.map((one) => this.viewOf(one, actor, moment)),
     );
     const { busy, waiting } = moment.line;
-    return { items, work: { mac: moment.mac, busy, waiting } };
+    // What kb's account has is the masters' to know.
+    const { state, lastSeenAt, doing } = moment.mac;
+    const mac = actor.isMaster ? moment.mac : { state, lastSeenAt, doing };
+    return { items, work: { mac, busy, waiting } };
+  }
+
+  /**
+   * What it became is out of the collection (KBC-187): it may be sent again (BR-6), and its row
+   * is back only if the document is. What kb keeps apart was never in it.
+   */
+  private hasLeft({ topic, document }: DocumentUploadRecord): boolean {
+    if (!document) return false;
+    return (
+      document.id.startsWith('raw/_quarantine/') ||
+      this.deps.isRemoved?.(topic, document.id) === true
+    );
   }
 
   private visibleTo(actor: UploadActor): DocumentUploadRecord[] {
@@ -604,6 +651,7 @@ export class DocumentUploadService {
       .filter(
         (one) =>
           !one.dismissed &&
+          !this.hasLeft(one) &&
           (actor.isMaster || one.owner.principal === actor.principal) &&
           actor.canSee(one.topic),
       );
@@ -628,6 +676,17 @@ export class DocumentUploadService {
       ...ready.map((one) => ({ ...one, dismissed: true })),
     );
     return ready.length;
+  }
+
+  /** Where it was sent and by whom; undefined for what was not sent from the app. */
+  sentOf(
+    id: string,
+  ): { topic: string; by: string; isMaster: boolean } | undefined {
+    const record = this.deps.records.get(id);
+    const { topic, owner } = record ?? {};
+    return topic && owner
+      ? { topic, by: owner.principal, isMaster: owner.isMaster }
+      : undefined;
   }
 
   /** Everything a view is told of besides its own item, read once for a whole list. */

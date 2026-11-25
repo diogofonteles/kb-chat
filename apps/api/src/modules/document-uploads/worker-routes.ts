@@ -16,12 +16,12 @@ import { Readable } from 'node:stream';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import { PUBLIC } from '../auth/index.js';
-import type { DocIngestQueue } from './doc-ingest-queue.js';
+import type { DocIngestWork } from './doc-ingest-queue.js';
 
 const AUDIO_TYPE = 'application/octet-stream';
 
 export interface DocIngestWorkerRoutesDeps {
-  readonly queue: DocIngestQueue;
+  readonly queue: DocIngestWork;
   /** The worker the lease names (a paired transcriber's is its token's name). */
   readonly ownerOf: (
     request: FastifyRequest,

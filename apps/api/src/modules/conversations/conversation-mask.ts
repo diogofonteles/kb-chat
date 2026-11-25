@@ -91,3 +91,33 @@ export function maskConversation(
     turns: conversation.turns.map((turn) => maskTurn(turn, visible)),
   };
 }
+
+/** Taken out of the collection in the app (KBC-187). */
+export type IsRemoved = (topic: string, id: string) => boolean;
+
+/**
+ * The same for what was removed from the collection, for everyone, masters included: the prose
+ * stays, its source is no longer there to open.
+ */
+export function maskRemoved(
+  conversation: Conversation,
+  isRemoved: IsRemoved,
+): Conversation {
+  if (conversation.kind !== 'research') return conversation;
+  const { topic, turns } = conversation;
+  const visible: Visible = (id) => !isRemoved(topic, id);
+  const cites = (turn: SavedResearchTurn) =>
+    idsOf(turn).some((id) => isRemoved(topic, id));
+  if (!turns.some(cites)) return conversation;
+  return {
+    ...conversation,
+    turns: turns.map((turn) => (cites(turn) ? maskTurn(turn, visible) : turn)),
+  };
+}
+
+/** The documents a turn names: its sources, and what its sweep found or stopped at. */
+const idsOf = ({ sources, sweep }: SavedResearchTurn): string[] => [
+  ...sources.flatMap((one) => (isRestrictedSource(one) ? [] : one.id)),
+  ...(sweep?.findings ?? []).map(({ id }) => id),
+  ...(sweep?.after === undefined ? [] : [sweep.after]),
+];

@@ -854,6 +854,18 @@ export class ChatPage {
     });
   }
 
+  /** It left the collection (KBC-187): nothing to read, and one document less. */
+  protected documentRemoved(): void {
+    this.closeDocument();
+    this.store.topics.reload();
+  }
+
+  protected titleOf(topic: string): string {
+    return (
+      this.store.topicList().find((one) => one.slug === topic)?.title ?? ''
+    );
+  }
+
   protected closeDocument(): void {
     const closedId = this.opened()?.id;
     const track = this.track() !== null;

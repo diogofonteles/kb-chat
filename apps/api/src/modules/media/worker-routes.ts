@@ -52,7 +52,7 @@ import type { VoicePrintService } from './voice-print-service.js';
 import type { WorkerService } from './worker-service.js';
 import {
   docIngestWorkerRoutes,
-  type DocIngestQueue,
+  type DocIngestWork,
 } from '../document-uploads/index.js';
 
 declare module 'fastify' {
@@ -87,7 +87,7 @@ export interface WorkerRoutesDeps {
   /** Each paired transcriber's own status (KBC-114 FR-8). */
   readonly statusBoard?: TranscriberStatusBoard;
   /** Documents and links sent from the app (KBC-149, ADR 0040). */
-  readonly docIngest?: DocIngestQueue;
+  readonly docIngest?: DocIngestWork;
 }
 
 /** Who keeps the Mac's sync reports: the track documents' side, outside this module. */
@@ -318,7 +318,7 @@ const groqRoutes = (groq: GroqService, transcription: TranscriptionService) =>
   });
 
 /** Documents sent from the app (KBC-149): only a Mac that publishes touches their jobs. */
-const docRoutes = (service: WorkerService, queue: DocIngestQueue) =>
+const docRoutes = (service: WorkerService, queue: DocIngestWork) =>
   docIngestWorkerRoutes({
     queue,
     ownerOf,

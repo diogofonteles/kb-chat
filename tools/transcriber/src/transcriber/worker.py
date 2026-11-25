@@ -429,7 +429,7 @@ class Worker:
 
     def _ingested(self, job: dict, progress: dict, outcome: dict, spent: float) -> None:
         progress["percent"] = 100
-        if self.sync is not None and outcome["state"] == "ready":
+        if self.sync is not None and outcome["state"] in ("ready", "moved"):
             self.sync.mark_pending()
         if self.api.doc_result(job, outcome, spent):
             log.info("job %s: %s in %s", job["id"], outcome["state"], job["topic"])
@@ -442,6 +442,9 @@ class Worker:
         if self.docs is None or self.publisher is None:
             raise RuntimeError("leased a doc-ingest job without kb-map")
         source = job["source"]
+        if source["kind"] in ("remove", "restore"):
+            self.docs.move(job)
+            return {"state": "moved"}, 0.0
         # A collection created on the screen gets its folder first (KBC-114, KBC-009 R2).
         self._make_folder(self.publisher, job)
         if source["kind"] == "file":

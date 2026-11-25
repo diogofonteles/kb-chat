@@ -105,3 +105,29 @@ def test_broken_coverage_and_orphans_fail(vault):
 
     kinds = _kinds(run_check(topic))
     assert {"sections", "orphan", "tree"} <= set(kinds)
+
+
+def test_what_a_person_took_out_keeps_its_place_in_the_map(vault):
+    """KBC-187: it may come back, and the map is whole meanwhile."""
+    topic, _layout, _model = _complete_map(vault)
+    assert run_check(topic) == []
+    inside = vault / TOPIC / "raw/articles/ritmo-ml.md"
+    apart = vault / TOPIC / "raw/_quarantine/articles/ritmo-ml.md"
+    apart.parent.mkdir(parents=True)
+    # kb keeps the reason it had judged before in the document: its ledger says who moved it.
+    text = inside.read_text(encoding="utf-8").replace("---\n", "---\ntriage_reason: thin\n", 1)
+    apart.write_text(text, encoding="utf-8")
+    inside.unlink()
+    ledger = vault / TOPIC / ".decisions" / "quarantine-ledger.jsonl"
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    original, file = "raw/articles/ritmo-ml.md", "raw/_quarantine/articles/ritmo-ml.md"
+    move = {"op": "move", "file": file, "original": original, "reason": "removed_by_person"}
+    ledger.write_text(json.dumps(move) + "\n", encoding="utf-8")
+    assert run_check(topic) == []
+    # What kb itself refused, or brought back, is an orphan as ever.
+    back = {"op": "restore", "file": original, "original": file}
+    ledger.write_text(json.dumps(move) + "\n" + json.dumps(back) + "\n", encoding="utf-8")
+    assert "orphan" in _kinds(run_check(topic))
+    refused = {**move, "reason": "thin"}
+    ledger.write_text(json.dumps(refused) + "\n", encoding="utf-8")
+    assert "orphan" in _kinds(run_check(topic))

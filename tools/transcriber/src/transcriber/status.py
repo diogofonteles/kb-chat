@@ -9,6 +9,7 @@ and shows it to masters. A report that fails is logged and never stops the worke
 
 import logging
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
@@ -65,6 +66,8 @@ class WorkerStatus:
         self.kinds: tuple[str, ...] = kinds
         # Kinds this Mac cannot do now and why (KBC-117: the kb's AI key missing).
         self.unavailable: list[dict] = []
+        # What is left in the account kb spends from (KBC-009 BR-3).
+        self.kb_balance: Callable[[], float | None] | None = None
         self._vault_path = vault_path
         self._kb_version = kb_version
         self._started_at = now_iso()
@@ -135,6 +138,7 @@ class WorkerStatus:
 
     def snapshot(self) -> dict:
         """The body of POST /api/v1/media-worker/status."""
+        balance = self.kb_balance() if self.kb_balance else None
         with self._lock:
             current = None
             if self._job is not None:
@@ -158,6 +162,8 @@ class WorkerStatus:
                 "kbVersion": self._kb_version,
                 # Only when there is something: an API before KBC-117 refuses the field.
                 **({"unavailable": unavailable} if unavailable else {}),
+                # The same: an API before this one does not know it.
+                **({} if balance is None else {"kbBalanceUsd": balance}),
             }
 
 

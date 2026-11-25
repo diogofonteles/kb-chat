@@ -17,12 +17,18 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { documentSchema, type DocumentRef } from '@kb-chat/contracts';
+import {
+  documentSchema,
+  type DocumentRef,
+  type KbDocument,
+} from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { documentUrl } from '@core/api/kb-api.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import type { CitedSource } from '@features/chat/chat-store.js';
+import { RemoveDocumentDialog } from '@features/document-removals/remove-document-dialog.js';
 import {
   UiBanner,
   UiButton,
@@ -106,6 +112,7 @@ let nextPanel = 0;
   selector: 'app-document-panel',
   imports: [
     NgTemplateOutlet,
+    RemoveDocumentDialog,
     SeeAlsoSection,
     AuthorshipBadge,
     DocumentLevel,
@@ -148,6 +155,8 @@ export class DocumentPanel {
   private readonly heading =
     viewChild.required<ElementRef<HTMLHeadingElement>>('heading');
   private readonly bodyRef = viewChild<ElementRef<HTMLElement>>('body');
+  private readonly removal = viewChild<RemoveDocumentDialog>('removal');
+  private readonly session = inject(SessionStore);
 
   readonly topic = input.required<string>();
   readonly documentId = input.required<string>();
@@ -186,6 +195,10 @@ export class DocumentPanel {
   /** A track linked in "Veja também" opens the T22 panel (KBC-101 AC-7). */
   readonly trackOpened = output<TrackOpening>();
   readonly conceptSelected = output<string>();
+  /** The collection's name, for what is asked about leaving it (KBC-187). */
+  readonly collectionTitle = input('');
+  /** It left the collection: there is nothing to read here any more. */
+  readonly removed = output();
 
   protected readonly document = httpResource(
     () => documentUrl(this.topic(), this.documentId()),
@@ -206,6 +219,21 @@ export class DocumentPanel {
   );
   /** A subject's synthesis (a concept's article): its shelves instead of "Sobre este documento". */
   protected readonly subject = computed(() => !!this.loaded()?.concept);
+  /** Masters, and what was put in the collection: kb's own pages come from the documents. */
+  protected readonly canRemove = computed(
+    () =>
+      this.session.isMaster() &&
+      // Where the Mac that moves it is (the routes are there with the media library).
+      this.session.me()?.media === true &&
+      !this.subject() &&
+      !this.inSource(),
+  );
+  /** The document whose removal is asked: the dialog is there once it is. */
+  protected readonly removing = signal<{
+    readonly topic: string;
+    readonly id: string;
+    readonly title: string;
+  } | null>(null);
   protected readonly facets = computed(() => {
     const doc = this.loaded();
     return doc ? describeFacets(doc) : '';
@@ -409,6 +437,14 @@ export class DocumentPanel {
     }));
     // A new object every time, so picking the same section again scrolls again.
     this.pendingSection.set({ id: headingId(section.title) });
+  }
+
+  /** ⋯ "Remover do acervo" (KBC-187): asked first. */
+  protected askRemoval(doc: KbDocument): void {
+    // What is named is what leaves, whatever the panel reads by then.
+    const [topic, id] = [this.topic(), this.documentId()];
+    this.removing.set({ topic, id, title: doc.title });
+    afterNextRender(() => this.removal()?.open(), { injector: this.injector });
   }
 
   /** ⋯ "Sobre este documento": where the text ends, its authorship, subjects and copies. */

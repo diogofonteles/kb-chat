@@ -414,6 +414,24 @@ describe('what is being done (KBC-184)', () => {
     expect(names).toEqual(['a.pdf', 'd.pdf', 'b.pdf', 'c.pdf', 'e.pdf']);
   });
 
+  it("says kb's account is ending, and where to add to it (KBC-009 BR-3)", async () => {
+    const low = aWork({
+      mac: { state: 'on', lastSeenAt: null, doing: null, lowBalanceUsd: 0.41 },
+    });
+    await renderSection([upload({})], null, { work: low, master: true });
+    expect(screen.getByText(/está no fim: US\$ 0,41/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: 'Adicionar saldo' })
+        .getAttribute('href'),
+    ).toBe('https://openrouter.ai/settings/credits');
+  });
+
+  it('says nothing of the account while it is not known, or is enough', async () => {
+    await renderSection([upload({})], null, { work: aWork(), master: true });
+    expect(screen.queryByText(/OpenRouter do kb/)).toBeNull();
+  });
+
   it('with no Mac says so, and a master is led to link one', async () => {
     const none = aWork({
       mac: { state: 'none', lastSeenAt: null, doing: null },

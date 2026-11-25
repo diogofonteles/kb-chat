@@ -109,7 +109,13 @@ import {
 } from './document-uploads-factory.js';
 import { createWebSearch, registerWebSearch } from './web-search-factory.js';
 import type { WebSearchService } from './modules/web-search/index.js';
-import type { DocIngestQueue } from './modules/document-uploads/index.js';
+import type { DocIngestWork } from './modules/document-uploads/index.js';
+import {
+  RemovalRecords,
+  RemovedVault,
+} from './modules/document-removals/index.js';
+import { registerDocumentRemovals } from './document-removals-factory.js';
+import { MemoryDocumentRemovalStore } from './adapters/json-document-removal-store.js';
 import { MemoryUsageLog } from './adapters/memory-usage-log.js';
 import { MemoryConversationStore } from './adapters/memory-conversation-store.js';
 import type { ConversationStorePort } from './ports/conversation-store.js';
@@ -297,12 +303,17 @@ export interface AppDeps {
    * Told the doc-ingest queue once it is built (KBC-149): the E2E server's fake Mac plays
    * the owner's Mac on it, with no transcriber paired. Production passes nothing.
    */
-  readonly onDocIngest?: (queue: DocIngestQueue) => void;
+  readonly onDocIngest?: (queue: DocIngestWork) => void;
   /**
    * Collections created on the screen (ADR 0028). When given, `vault` must already be its
    * CollectionsVault (main builds the catalog before the app); in memory when not given.
    */
   readonly collections?: CollectionRegistry;
+  /**
+   * What was taken out of its collection (KBC-187). When given, `vault` must already be its
+   * RemovedVault, as with `collections`; in memory when not given.
+   */
+  readonly removals?: RemovalRecords;
   /**
    * The authors of each collection (KBC-049, ADR 0030), loaded; in memory when not given.
    * When `agent` is given it must have been built with the same directory's main authors.
@@ -322,6 +333,7 @@ export interface LevelDeps {
 }
 
 type FullDeps = AppDeps & {
+  removals: RemovalRecords;
   auth: AuthDeps & { actAs: ActAsService };
   house: HouseAi;
   webSearch: WebSearchService;
@@ -568,6 +580,7 @@ async function registerRoutes(
   const conversations = new ConversationsService({
     store: deps.conversations,
     scopeOf: (topic) => deps.catalog.scopeView(topic),
+    isRemoved: (topic, id) => deps.removals.isRemovedIn(topic, id),
     isLive: (principal, turnId) => turns.isLive(principal, turnId),
     ceilingMs: TURN_CEILING_MS,
   });
@@ -595,8 +608,10 @@ interface MediaWiring {
   readonly documents?: MediaDocuments;
   /** The scales and their audit (KBC-105): an audio's level is one of its collection's. */
   readonly levels: FullDeps['levels'];
+  /** What was taken out of its collection (KBC-187). */
+  readonly removals: RemovalRecords;
   /** The E2E server's fake Mac (KBC-149); nothing in production. */
-  readonly onDocIngest?: (queue: DocIngestQueue) => void;
+  readonly onDocIngest?: (queue: DocIngestWork) => void;
 }
 
 /** The collections' scales as media reads them (KBC-105, ADR 0036 §1). */
@@ -723,7 +738,7 @@ interface WorkerWiring {
   readonly statusBoard: TranscriberStatusBoard;
   readonly learning: LearningService;
   /** Documents and links sent from the app (KBC-149, ADR 0040). */
-  readonly docIngest: DocIngestQueue;
+  readonly docIngest: DocIngestWork;
 }
 
 async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
@@ -768,7 +783,7 @@ function workerService(
     groq: GroqService;
     documents: MediaDocuments;
     learning: LearningService;
-    docIngest: DocIngestQueue;
+    docIngest: DocIngestWork;
   },
 ): WorkerService {
   return new WorkerService({
@@ -1058,7 +1073,7 @@ async function registerTranscribers(
     wiring: MediaWiring;
     documents: MediaDocuments;
     learning: LearningService;
-    docIngest: DocIngestQueue;
+    docIngest: DocIngestWork;
   },
 ): Promise<TranscriberStatusBoard> {
   const { transcribers, media, wiring, learning } = input;
@@ -1115,7 +1130,7 @@ async function registerTranscriberStatus(
     transcribers: TranscriberService;
     documents: MediaDocuments;
     wiring: MediaWiring;
-    docIngest: DocIngestQueue;
+    docIngest: DocIngestWork;
   },
 ): Promise<TranscriberStatusBoard> {
   const { transcribers, documents, wiring, docIngest } = input;
@@ -1141,7 +1156,7 @@ async function registerTranscriberStatus(
 
 const publishingBacklog = (
   documents: MediaDocuments,
-  docIngest: DocIngestQueue,
+  docIngest: DocIngestWork,
 ) => ({
   kind: 'kb-publish' as const,
   ready: documents.kb.leasableJobs() + docIngest.leasableJobs(),
@@ -1156,7 +1171,7 @@ function transcriberWaker(
     kbWaiting: () => number;
     wiring: MediaWiring;
     documents: MediaDocuments;
-    docIngest: DocIngestQueue;
+    docIngest: DocIngestWork;
   },
 ): TranscriberWaker {
   const { local, board, kbWaiting, wiring, documents, docIngest } = input;
@@ -1358,6 +1373,7 @@ const macOf = (
   isPaired: () => transcribers.presence('kb-publish').transcriber !== 'none',
   lastSeenAt: () => transcribers.lastSeenAt('kb-publish'),
   doing: () => boardNow()?.doing() ?? null,
+  kbBalanceUsd: () => boardNow()?.kbBalanceUsd() ?? null,
   percentOf: (id) => boardNow()?.percentOf(id) ?? null,
 });
 
@@ -1373,7 +1389,7 @@ async function startDocumentUploads(
     documents: MediaDocuments;
     mac: DocumentUploadsWiring['mac'];
   },
-): Promise<DocIngestQueue> {
+): Promise<DocIngestWork> {
   const { wiring, media, documents, mac } = input;
   const { queue, service } = await registerDocumentUploads(app, {
     ...wiring,
@@ -1386,14 +1402,14 @@ async function startDocumentUploads(
     },
     mac,
   });
-  wiring.onDocIngest?.(queue);
   await registerWebSearch(app, {
     service: wiring.webSearch,
     catalog: wiring.catalog,
     uploads: service,
     perMinute: wiring.config.WEB_SEARCH_RATE_LIMIT,
   });
-  return queue;
+  const sent = { uploads: service, docs: queue, records: wiring.removals };
+  return registerDocumentRemovals(app, { ...wiring, ...sent });
 }
 
 /** People's routes over their media: details, the guided flow's plans, tracks. */
@@ -1957,6 +1973,16 @@ const inMemoryAccess = (): AccessDeps => ({
   delivery: { email: new MemoryOutbox(), sms: null },
 });
 
+/** The removals and the vault seen without them (KBC-187); in memory when not given. */
+async function withRemovals<T extends AppDeps>(
+  given: T,
+): Promise<T & { removals: RemovalRecords }> {
+  if (given.removals) return { ...given, removals: given.removals };
+  const removals = await RemovalRecords.open(new MemoryDocumentRemovalStore());
+  const vault = new RemovedVault(given.vault, removals);
+  return { ...given, vault, removals };
+}
+
 /** The registry and the vault seen through it (ADR 0028); in memory when not given. */
 function withCollections(
   given: AppDeps,
@@ -1967,8 +1993,13 @@ function withCollections(
   return { ...given, vault, collections };
 }
 
-async function loadedCatalog(vault: VaultReaderPort): Promise<CatalogRegistry> {
-  const catalog = new CatalogRegistry(vault);
+async function loadedCatalog({
+  vault,
+  removals,
+}: AppDeps & { removals: RemovalRecords }): Promise<CatalogRegistry> {
+  const catalog = new CatalogRegistry(vault, (topic, id) =>
+    removals.isRemoved(topic, id),
+  );
   await catalog.load();
   return catalog;
 }
@@ -2032,8 +2063,8 @@ const accessAndWebSearch = async (deps: AppDeps) => ({
 
 /** Fills what the caller left out: in-memory stores, the agent and the providers. */
 async function completeDeps(given: AppDeps): Promise<FullDeps> {
-  const deps = withCollections(given);
-  const catalog = deps.catalog ?? (await loadedCatalog(deps.vault));
+  const deps = await withRemovals(withCollections(given));
+  const catalog = deps.catalog ?? (await loadedCatalog(deps));
   const { authors, seeded } = await loadedAuthors(deps, catalog);
   const ledger = deps.ledger ?? new MemorySpendLedger();
   const agent = deps.agent ?? agentOf(deps, { catalog, ledger, authors });

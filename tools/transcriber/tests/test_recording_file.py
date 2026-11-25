@@ -256,3 +256,21 @@ def test_a_share_buttons_address_is_followed_before_yt_dlp(tmp_path, monkeypatch
     with pytest.raises(DocIngestFailed, match="where this link leads"):
         YtDlp().download("https://fb.watch/outro", tmp_path)
     assert len(given) == 1
+
+
+def test_yt_dlp_gets_the_address_written_again_never_the_link_as_it_came(tmp_path, monkeypatch):
+    given = []
+
+    def run(command, _timeout):
+        given.append(command[-1])
+        (tmp_path / "Aula [x].m4a").write_bytes(b"m4a")
+        return subprocess.CompletedProcess(command, 0, '{"entries": []}', "")
+
+    monkeypatch.setattr(YtDlp, "_run", staticmethod(run))
+    inside = "q=http%3A%2F%2F127.0.0.1%2F"
+    YtDlp().download(f"http://www.youtube.com/watch?{inside}&v=x#!/{inside}", tmp_path)
+    YtDlp().entries(f"http://www.youtube.com/playlist?{inside}&list=PL1#{inside}")
+    assert given == [
+        "https://www.youtube.com/watch?v=x",
+        "https://www.youtube.com/playlist?list=PL1",
+    ]

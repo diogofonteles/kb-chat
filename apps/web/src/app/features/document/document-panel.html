@@ -269,6 +269,12 @@
                 {{ section.title }}
               </button>
             }
+            @if (canRemove()) {
+              <button uiMenuItem type="button" (click)="askRemoval(doc)">
+                <ui-icon name="trash" [size]="18" />
+                <span i18n="@@panel.remove">Remover do acervo</span>
+              </button>
+            }
           </ui-menu>
         }
       }
@@ -631,3 +637,15 @@
     <ui-icon name="chevDown" [size]="16" />
   </button>
 </ng-template>
+
+@if (removing(); as doc) {
+  <app-remove-document-dialog
+    #removal
+    [topic]="doc.topic"
+    [documentId]="doc.id"
+    [title]="doc.title"
+    [collection]="collectionTitle() || topic()"
+    (removed)="removed.emit()"
+    (keydown.escape)="$event.stopPropagation()"
+  />
+}
