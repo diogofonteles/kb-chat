@@ -78,6 +78,11 @@ async function renderPage(
   await waitFor(() => http.expectOne('/api/v1/document-uploads')).then((one) =>
     one.flush({ items: [] }),
   );
+  const costs = await waitFor(() =>
+    http.expectOne('/api/v1/document-uploads/costs'),
+  );
+  const cost = { usd: 0.003, seconds: 60, samples: 0 };
+  costs.flush({ document: cost, image: cost, page: cost, recording: cost });
   const levels = await waitFor(() =>
     http.expectOne((request) => request.url.endsWith('/media/levels')),
   );
