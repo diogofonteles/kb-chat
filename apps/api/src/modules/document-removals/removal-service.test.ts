@@ -152,11 +152,24 @@ describe('a reading of the collection under way (I-1, R2-I1)', () => {
     const loading = catalog.load();
     await held.reached;
     gate.wait = undefined;
-    // Back now, with no Mac asked: its own reading would end first, were they not in turn.
+    // Back now, with no Mac asked; its own reading is not held, and is given time to end.
     const back = service.restore(master, id);
+    await new Promise((resolve) => setTimeout(resolve, 30));
     held.go();
     await Promise.all([loading, back]);
     expect(has('hermetismo', 'raw/livro.md')).toBe(true);
+  });
+
+  it('never brings back what was removed while one collection was read again', async () => {
+    const gate: Gate = {};
+    const { service, catalog, has } = await world(gate);
+    const held = hold(gate);
+    const refreshing = catalog.refresh('hermetismo');
+    await held.reached;
+    await service.remove(master, 'hermetismo', 'raw/livro.md');
+    held.go();
+    await refreshing;
+    expect(has('hermetismo', 'raw/livro.md')).toBe(false);
   });
 });
 

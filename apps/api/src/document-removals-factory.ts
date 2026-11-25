@@ -104,7 +104,8 @@ async function sentAgain(
 ): Promise<void> {
   const sent = uploads.sentOf(input.jobId);
   const removed = sent && records.of(sent.topic, input.documentId);
-  if (!sent || !removed || !cameBack(removed)) return;
+  // Only a master's sending brings back what a master took out (BR-1); the Mac is told so.
+  if (!sent?.isMaster || !removed || !cameBack(removed)) return;
   await records.remove(removed.id);
   input.moved(removed.topic);
   const { topic, by } = sent;

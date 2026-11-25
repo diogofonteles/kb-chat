@@ -644,6 +644,17 @@ def refused_page(vault: Path) -> Path:
         '---\ntitle: "Rasa"\ntriage: quarantined\ntriage_reason: thin\n---\n# Rasa\n\nEntrar.\n',
         encoding="utf-8",
     )
+    # kb's own ledger has its refusals too, with its reason (R3-I2).
+    move = {
+        "op": "move",
+        "file": REFUSED,
+        "original": REFUSED.replace("_quarantine/", ""),
+        "reason": "thin",
+    }
+    decisions = vault / "hermetismo" / ".decisions"
+    decisions.mkdir(exist_ok=True)
+    with (decisions / "quarantine-ledger.jsonl").open("a", encoding="utf-8") as rows:
+        rows.write(json.dumps(move) + "\n")
     return page
 
 
@@ -919,7 +930,7 @@ def test_what_a_person_took_out_sent_again_comes_back(fake_api, vault, judged):
     fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
     worker(fake_api, vault, kb=kb).step()
     apart = "raw/_quarantine/articles/o-caibalion.md"
-    fake_api.jobs[:] = [dict(URL_JOB)]
+    fake_api.jobs[:] = [{**URL_JOB, "mayBringBack": True}]
     outcome = {"state": "duplicate", "document": apart, "usd": 0.001}
     worker(fake_api, vault, FakeKbMap(vault, outcome), kb=kb).step()
     result = fake_api.bodies("doc-result")[-1]
@@ -1019,3 +1030,31 @@ def test_included_all_the_same_with_no_item_of_kb_left(fake_api, vault, monkeypa
     (result,) = fake_api.bodies("doc-result")
     assert result["outcome"]["state"] == "ready"
     assert not page.exists()
+
+
+def test_the_same_text_sent_by_who_is_no_master_stays_out(fake_api, vault):
+    """Another original of the same text: kb finds it in its quarantine (KBC-187 BR-1)."""
+    inside = a_document(vault)
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    fake_api.jobs[:] = [{**URL_JOB, "mayBringBack": False}]
+    outcome = {"state": "duplicate", "document": "raw/_quarantine/articles/o-caibalion.md"}
+    worker(fake_api, vault, FakeKbMap(vault, outcome), kb=kb).step()
+    result = fake_api.bodies("doc-result")[-1]
+    assert result["outcome"]["failure"] == "removed"
+    assert not inside.is_file()
+
+
+def test_a_ledger_cut_in_a_character_is_read_all_the_same(fake_api, vault):
+    a_document(vault)
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    ledger = vault / "hermetismo" / ".decisions" / "quarantine-ledger.jsonl"
+    with ledger.open("ab") as rows:
+        rows.write('{"op": "move", "file": "raw/ação'.encode()[:-1])
+    from transcriber.kb_publish import taken_out_by_person
+
+    apart = "raw/_quarantine/articles/o-caibalion.md"
+    assert taken_out_by_person(vault / "hermetismo", apart)

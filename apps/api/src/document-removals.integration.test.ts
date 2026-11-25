@@ -4,6 +4,7 @@ import type { DocIngestJob, DocumentRemoval } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { closeApp } from '../test/ai-app-harness.js';
 import {
+  UPLOADS,
   announce,
   docMac,
   docResult,
@@ -281,6 +282,46 @@ describe('Removing a document from its collection in the app (KBC-187)', () => {
     });
     const byMaster = await announce(master);
     expect(byMaster.json()).toMatchObject({ outcome: 'created' });
+  });
+
+  it('who is no master brings nothing back by sending again what failed before (R3-B1)', async () => {
+    const made = await world();
+    const { vault, media, ana, master } = made;
+    const mac = await docMac(media);
+    const hers = await sentFile(media, ana);
+    await docResult(media, {
+      token: mac.token,
+      job: await leaseDoc(media, mac.token),
+      outcome: { state: 'failed', failure: 'conversion-failed', detail: 'x' },
+    });
+    const own = await sentFile(media, ownerOf(media));
+    const job = await leaseDoc(media, mac.token);
+    expect(job.id).toBe(own.id);
+    expect(job.mayBringBack).toBe(true);
+    await docResult(media, {
+      token: mac.token,
+      job,
+      outcome: { state: 'ready', document: { id: ID, title: 'O Caibalion' } },
+    });
+    await writeConverted(media, {
+      vault,
+      id: ID,
+      title: 'O Caibalion',
+      sha256: PDF_SHA,
+    });
+    const asked = await master('POST', `${url()}/removal`);
+    expect(asked.statusCode).toBe(200);
+    const again = await ana.call('POST', `${UPLOADS}/${hers.id}/retry`);
+    expect(again.json()).toMatchObject({ error: { code: 'DOCUMENT_REMOVED' } });
+    expect(await listed(made)).toHaveLength(1);
+  });
+
+  it('the Mac is told whether the sender may bring back what was taken out', async () => {
+    const made = await world();
+    const { media, ana } = made;
+    const mac = await docMac(media);
+    await sentFile(media, ana);
+    expect((await leaseDoc(media, mac.token)).mayBringBack).toBe(false);
   });
 
   it('a Mac from before, that calls it a repeat, leaves nothing that cannot be sent (BR-6)', async () => {

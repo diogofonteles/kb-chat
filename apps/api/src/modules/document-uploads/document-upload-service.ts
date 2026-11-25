@@ -427,6 +427,7 @@ export class DocumentUploadService {
     if (!record || !this.mayManage(actor, record)) throw notFound();
     if (!this.hasFailed(record) || !(await this.isKept(record)))
       throw notWaiting();
+    this.assertNotRemoved(actor, record.topic, keyOfRecord(record));
     const again = await this.deps.records.update(id, (current) => ({
       ...current,
       kind: kindAgainOf(current),
@@ -471,6 +472,7 @@ export class DocumentUploadService {
     const record = this.deps.records.get(id);
     if (!record || !this.mayManage(actor, record)) throw notFound();
     if (!isStalled(record, this.now())) throw notWaiting();
+    this.assertNotRemoved(actor, record.topic, keyOfRecord(record));
     const resumed = await this.deps.records.update(id, (current) => ({
       ...current,
       state: 'received',
@@ -677,9 +679,14 @@ export class DocumentUploadService {
   }
 
   /** Where it was sent and by whom; undefined for what was not sent from the app. */
-  sentOf(id: string): { topic: string; by: string } | undefined {
+  sentOf(
+    id: string,
+  ): { topic: string; by: string; isMaster: boolean } | undefined {
     const record = this.deps.records.get(id);
-    return record && { topic: record.topic, by: record.owner.principal };
+    const { topic, owner } = record ?? {};
+    return topic && owner
+      ? { topic, by: owner.principal, isMaster: owner.isMaster }
+      : undefined;
   }
 
   /** Everything a view is told of besides its own item, read once for a whole list. */

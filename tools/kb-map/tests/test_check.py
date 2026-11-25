@@ -128,3 +128,6 @@ def test_what_a_person_took_out_keeps_its_place_in_the_map(vault):
     back = {"op": "restore", "file": original, "original": file}
     ledger.write_text(json.dumps(move) + "\n" + json.dumps(back) + "\n", encoding="utf-8")
     assert "orphan" in _kinds(run_check(topic))
+    refused = {**move, "reason": "thin"}
+    ledger.write_text(json.dumps(refused) + "\n", encoding="utf-8")
+    assert "orphan" in _kinds(run_check(topic))

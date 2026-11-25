@@ -500,6 +500,11 @@ class DocIngester:
             refused = refused_in(vault, topic, {"document": apart})
             detail = "kb had refused the same text before"
             raise DocIngestFailed("not-accepted", detail, usd, refused)
+        # Only a master brings back what a master took out (KBC-187 BR-1).
+        if not job.get("mayBringBack"):
+            raise DocIngestFailed(
+                "removed", "a master took the same text out of the collection", usd
+            )
         document = apart.replace(QUARANTINE, "raw/", 1)
         self.publisher.restore(topic, document)
         if not (vault / topic / document).is_file():

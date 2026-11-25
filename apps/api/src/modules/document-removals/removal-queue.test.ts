@@ -231,8 +231,36 @@ describe('what failed is not what is asked now (S-r2-2)', () => {
     });
     expect(records.get(ID)).toMatchObject({ failed: false, attempts: 0 });
     expect(queue.lease('mac')?.source.kind).toBe('restore');
+  });
+
+  it('a crash of the way out, asked back meanwhile, spends no attempt of the way back', async () => {
+    const { queue, records, owner } = await world({ attempts: 2 });
+    queue.lease('mac');
+    await records.update(ID, (one) => ({ ...one, wish: 'present' }));
     await queue.fail(owner(), { detail: 'crash' });
-    expect(records.get(ID)).toMatchObject({ failed: false });
+    expect(records.get(ID)).toMatchObject({ failed: false, attempts: 0 });
+    expect(queue.lease('mac')?.source.kind).toBe('restore');
+  });
+});
+
+describe('what it was made of (S-r3-1)', () => {
+  it('is known by its original and by its link, where it was taken out', async () => {
+    const { records } = await world({
+      source: { sha256: 'a'.repeat(64), url: 'https://example.org/livro' },
+    });
+    const scope = ['hermetismo', 'hermetismo/aulas'];
+    expect(records.madeOf(scope, { sha256: 'a'.repeat(64), url: null })).toBe(
+      true,
+    );
+    expect(
+      records.madeOf(scope, { sha256: null, url: 'https://example.org/livro' }),
+    ).toBe(true);
+    expect(
+      records.madeOf(['outro'], { sha256: 'a'.repeat(64), url: null }),
+    ).toBe(false);
+    expect(records.madeOf(scope, { sha256: null, url: 'https://x.org' })).toBe(
+      false,
+    );
   });
 });
 

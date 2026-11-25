@@ -213,6 +213,7 @@ export class DocIngestQueue {
       leaseMs: DOC_INGEST_LEASE_MS,
       budgetUsd: record.lease?.budgetUsd ?? 0,
       source: sourceOf(record),
+      mayBringBack: record.owner.isMaster,
     };
   }
 

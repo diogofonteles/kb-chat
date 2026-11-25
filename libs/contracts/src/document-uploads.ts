@@ -178,6 +178,8 @@ export const DOCUMENT_UPLOAD_FAILURES = [
   'not-accepted',
   /** A recording past its sender's quota, or whose sender may not send here any more. */
   'not-allowed',
+  /** A master took what it is out of the collection: only a master sends it back (KBC-187). */
+  'removed',
   /** The Mac gave up after its attempts. */
   'gave-up',
   /** Its bytes never all arrived. */
@@ -446,6 +448,8 @@ export const docIngestJobSchema = z.object({
   source: docIngestSourceSchema,
   /** What `kb topic new` needs when the vault has no folder for it (as kb-publish). */
   collection: kbCollectionSchema.optional(),
+  /** Its sender may bring back what a master took out of the collection (KBC-187 BR-1). */
+  mayBringBack: z.boolean().optional(),
 });
 export type DocIngestJob = z.infer<typeof docIngestJobSchema>;
 
