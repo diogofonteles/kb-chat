@@ -239,7 +239,8 @@ async function vaultOf(config: AppConfig) {
 
 /** The vault, its index and catalog, the spend ledger and the research agent. */
 async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
-  const { collections, removals, vault } = await vaultOf(config);
+  const opened = await vaultOf(config);
+  const { vault } = opened;
   const index = await createSearchIndex({ config, vault, log: logger });
   const catalog = new CatalogRegistry(vault);
   await catalog.load();
@@ -259,16 +260,7 @@ async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
     ledger,
     mainAuthorOf: (topic) => authors.mainVoiceOf(topic),
   });
-  return {
-    vault,
-    removals,
-    index,
-    catalog,
-    ledger,
-    agent,
-    collections,
-    authorDirectory,
-  };
+  return { ...opened, index, catalog, ledger, agent, authorDirectory };
 }
 
 interface AiWiring {
