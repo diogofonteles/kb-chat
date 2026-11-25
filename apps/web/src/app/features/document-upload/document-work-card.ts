@@ -48,6 +48,17 @@ const PART_TEXTS: Record<
 };
 const PARTS = ['active', 'waiting', 'yours', 'failed'] as const;
 
+/** What else the Mac is at: it takes one thing at a time. */
+const DOING_TEXTS: Record<
+  NonNullable<DocumentWork['mac']['doing']>,
+  () => string
+> = {
+  recording: () =>
+    $localize`:@@docProgress.mac.recording:Está transcrevendo uma gravação agora.`,
+  publishing: () =>
+    $localize`:@@docProgress.mac.publishing:Está publicando uma transcrição no acervo agora.`,
+};
+
 /**
  * How everything that was sent stands (KBC-184): how many are ready, what the Mac does now,
  * how long is left, what was spent, and whether the Mac is there at all.
@@ -163,10 +174,11 @@ export class DocumentWorkCard {
     return state === 'none' ? this.macNone() : this.macOff(work);
   });
 
-  private macOn({ busy }: DocumentWork): MacLine {
+  private macOn({ busy, mac }: DocumentWork): MacLine {
     const { working, counts } = this.summary();
-    const text =
-      busy && !working
+    const text = mac.doing
+      ? DOING_TEXTS[mac.doing]()
+      : busy && !working
         ? $localize`:@@docProgress.mac.other:Está com um item de outra pessoa ou de outro acervo agora.`
         : !busy && counts.waiting > 0
           ? $localize`:@@docProgress.mac.idle:Começa o próximo em instantes.`
@@ -195,6 +207,8 @@ export class DocumentWorkCard {
   }
 
   private money(usd: number): string {
-    return formatNumber(Math.ceil(usd * 100) / 100, this.locale, '1.2-2');
+    // Up to the cent, whatever a float adds to 0.07.
+    const cents = Math.ceil(usd * 100 - 1e-9);
+    return formatNumber(cents / 100, this.locale, '1.2-2');
   }
 }

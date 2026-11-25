@@ -22,6 +22,8 @@ export class SearchSession {
   private dry = 0;
   /** Pages of the round under way that this search did not know. */
   private fresh = 0;
+  /** A search of the round under way was answered. */
+  private answered = false;
   private queue: SearchGroup[] = [];
   private readonly retried = new Set<SearchGroup>();
   /** The pages this search already found, given or left out. */
@@ -54,8 +56,11 @@ export class SearchSession {
 
   private startRound(): void {
     if (this.ended) return;
-    if (this.round > 0) this.dry = this.fresh > 0 ? 0 : this.dry + 1;
+    // A round nobody answered says nothing of what is left to find.
+    if (this.round > 0 && this.answered)
+      this.dry = this.fresh > 0 ? 0 : this.dry + 1;
     this.fresh = 0;
+    this.answered = false;
     this.queue =
       this.dry < DRY_ROUNDS ? groupsOf(this.request, this.round) : [];
     this.round += 1;
@@ -65,6 +70,14 @@ export class SearchSession {
   /** Not asked, or refused for now: first again the next time. */
   putBack(groups: readonly SearchGroup[]): void {
     this.queue.unshift(...groups);
+  }
+
+  noteAnswered(): void {
+    this.answered = true;
+  }
+
+  wasRetried(group: SearchGroup): boolean {
+    return this.retried.has(group);
   }
 
   /** It did not answer: asked once more, after the others; then it is let go. */

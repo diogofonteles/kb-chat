@@ -165,6 +165,19 @@ export class TranscriberStatusBoard {
       : report.currentJob.progress;
   }
 
+  /** What a transcriber says it does now, besides sent documents; null when nothing. */
+  doing(): 'recording' | 'publishing' | null {
+    const kinds = [...this.reports.values()]
+      .filter(
+        (one) =>
+          this.now().getTime() - Date.parse(one.receivedAt) <=
+          TRANSCRIBER_STATUS_STALE_MS,
+      )
+      .flatMap((one) => one.currentJob?.kind ?? []);
+    if (kinds.some((kind) => RECORDING_JOBS.has(kind))) return 'recording';
+    return kinds.includes('kb-publish') ? 'publishing' : null;
+  }
+
   /** Whether a transcriber said anything at or after this moment. */
   saidSince(at: Date): boolean {
     return [...this.reports.values()].some(
@@ -180,6 +193,12 @@ export class TranscriberStatusBoard {
     );
   }
 }
+
+const RECORDING_JOBS = new Set<MediaJobKind>([
+  'transcribe',
+  'diarize',
+  'voice-profile',
+]);
 
 /** It says it publishes now: kb-publish among its kinds, and nothing missing for it. */
 const publishes = (report: TranscriberStatusReport): boolean =>

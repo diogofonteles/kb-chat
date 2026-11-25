@@ -1326,7 +1326,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const media = mediaService({ ...wiring, transcribers, groq, documents });
   // The status board is built further on: what it knows is asked for when it is there.
   let board: TranscriberStatusBoard | null = null;
-  const mac = macOf(transcribers, (id) => board?.percentOf(id) ?? null);
+  const mac = macOf(transcribers, () => board);
   const uploads = { wiring, media, documents, mac };
   const docIngest = await startDocumentUploads(app, uploads);
   const publisher = trackPublisher(wiring, documents);
@@ -1353,11 +1353,12 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
 /** The Mac marked "Publica no acervo": it takes the sent documents too (ADR 0040 §10). */
 const macOf = (
   transcribers: TranscriberService,
-  percentOf: (mediaId: string) => number | null,
+  boardNow: () => TranscriberStatusBoard | null,
 ): DocumentUploadsWiring['mac'] => ({
   isPaired: () => transcribers.presence('kb-publish').transcriber !== 'none',
   lastSeenAt: () => transcribers.lastSeenAt('kb-publish'),
-  percentOf,
+  doing: () => boardNow()?.doing() ?? null,
+  percentOf: (id) => boardNow()?.percentOf(id) ?? null,
 });
 
 /**

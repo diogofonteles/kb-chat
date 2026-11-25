@@ -230,6 +230,21 @@ describe('sameLinkKey (KBC-185)', () => {
       expect(sameLinkKey(other), other).toBe(sameLinkKey(link));
   });
 
+  it.each([
+    [
+      'https://archive.org/details/palestras/01.mp3',
+      'https://archive.org/details/palestras/02.mp3',
+    ],
+    [
+      'https://a.org/manual?feature=login',
+      'https://a.org/manual?feature=busca',
+    ],
+    ['https://a.org/#/aula-1', 'https://a.org/#/aula-2'],
+    ['https://a.org/x?p=1&p=2', 'https://a.org/x?p=2&p=1'],
+  ])('%s is not %s', (one, other) => {
+    expect(sameLinkKey(one)).not.toBe(sameLinkKey(other));
+  });
+
   it('another page is another link', () => {
     const key = sameLinkKey('https://a.org/x?id=1');
     for (const other of [

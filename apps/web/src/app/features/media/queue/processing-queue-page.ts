@@ -34,7 +34,10 @@ import {
   DocumentUploadsSection,
   type OpenedDocument,
 } from '@features/document-upload/document-uploads-section.js';
-import { phaseOf } from '@features/document-upload/document-progress.js';
+import {
+  phaseOf,
+  type UploadPhase,
+} from '@features/document-upload/document-progress.js';
 import { DocumentUploadsStore } from '@features/document-upload/document-uploads-store.js';
 
 /** The sections of the queue: what needs the person first (UP-02). */
@@ -175,11 +178,15 @@ export class ProcessingQueuePage {
     });
   }
 
+  protected focusHeading(): void {
+    this.heading().nativeElement.focus();
+  }
+
   /** The button pressed may be gone, and the row too: the focus never falls to the page. */
   private focusRow(mediaId: string): void {
     const row = this.rows().find((one) => one.item().mediaId === mediaId);
     if (row) row.focusTitle();
-    else this.heading().nativeElement.focus();
+    else this.focusHeading();
   }
 
   /** A sent document, ready: it opens in the conversation's reading panel, as the sidebar's. */
@@ -229,12 +236,26 @@ export class ProcessingQueuePage {
   }
 }
 
-/** What is ready waits for nothing: it is not being processed. */
+/**
+ * How each sent document stands. What is ready waits for nothing: it is not being processed; and
+ * a recording that came by its link is in both lists, as one thing.
+ */
+function sentPhases(
+  items: readonly ProcessingQueueItem[],
+  documents: readonly DocumentUpload[],
+): readonly UploadPhase[] {
+  const recordings = new Set(items.map((one) => one.mediaId));
+  return documents
+    .filter((one) => one.mediaId === null || !recordings.has(one.mediaId))
+    .map(phaseOf)
+    .filter((phase) => phase !== 'ready');
+}
+
 function summaryText(
   items: readonly ProcessingQueueItem[],
   documents: readonly DocumentUpload[],
 ): string {
-  const sent = documents.map(phaseOf).filter((phase) => phase !== 'ready');
+  const sent = sentPhases(items, documents);
   const total = items.length + sent.length;
   if (total === 0)
     return $localize`:@@queue.summaryNone:Nada sendo processado agora`;

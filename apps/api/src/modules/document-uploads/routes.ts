@@ -9,6 +9,7 @@ import {
   createDocumentUploadResponseSchema,
   documentBatchSchema,
   documentUploadListSchema,
+  recordingEntryListSchema,
   documentUploadSchema,
   topicSlugSchema,
 } from '@kb-chat/contracts';
@@ -63,6 +64,7 @@ export const documentUploadRoutes =
     );
     registerCreate(app, deps);
     registerList(app, deps);
+    registerReads(app, deps);
     registerChanges(app, deps);
     registerSends(app, deps);
     registerParts(app, deps);
@@ -115,9 +117,21 @@ function registerList(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
       async (request) => ({
         cleared: await deps.service.clearReady(
           deps.actorOf(request),
-          request.body.topic,
+          request.body.ids,
         ),
       }),
+    );
+}
+
+/** What a list holds, and what each kind costs here: read apart, when asked. */
+function registerReads(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
+  app
+    .withTypeProvider<ZodTypeProvider>()
+    .get(
+      '/api/v1/document-uploads/:id/entries',
+      ENTRIES_OPTIONS,
+      async (request) =>
+        deps.service.entriesOf(deps.actorOf(request), request.params.id),
     );
   app.withTypeProvider<ZodTypeProvider>().get(
     '/api/v1/document-uploads/costs',
@@ -138,6 +152,14 @@ const BATCH_OPTIONS = {
   },
 };
 
+const ENTRIES_OPTIONS = {
+  config: { access: UPLOAD },
+  schema: {
+    params: uploadParams,
+    response: { 200: recordingEntryListSchema },
+  },
+};
+
 const CLEAR_OPTIONS = {
   config: { access: UPLOAD },
   schema: {
@@ -151,7 +173,11 @@ const REMOVE_OPTIONS = {
   schema: { params: uploadParams, response: { 204: z.undefined() } },
 };
 
+/** Thousands of addresses chosen at once. */
+const CHOOSE_MAX_BYTES = 12 * 1024 * 1024;
+
 const CHOOSE_OPTIONS = {
+  bodyLimit: CHOOSE_MAX_BYTES,
   config: { access: UPLOAD },
   schema: {
     params: uploadParams,

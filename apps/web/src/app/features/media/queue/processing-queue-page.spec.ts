@@ -280,7 +280,10 @@ describe('ProcessingQueuePage (T23, KBC-090)', () => {
     const { http, fixture } = await open(
       aQueue({ active: 1, items: [aQueueItem({ phase: 'attention' })] }),
     );
-    const sent = (state: DocumentUpload['state']): DocumentUpload => ({
+    const sent = (
+      state: DocumentUpload['state'],
+      mediaId: string | null = null,
+    ): DocumentUpload => ({
       id: crypto.randomUUID(),
       topic: 'hermetismo',
       kind: 'url',
@@ -289,14 +292,15 @@ describe('ProcessingQueuePage (T23, KBC-090)', () => {
       failure: null,
       detail: null,
       document: null,
-      mediaId: null,
+      mediaId,
       bytes: null,
       received: null,
       uploadUrl: null,
       batch: null,
       heldBy: null,
       review: false,
-      entries: [],
+      entryCount: 0,
+      mine: true,
       retriable: false,
       progress: {
         startedAt: null,
@@ -314,6 +318,8 @@ describe('ProcessingQueuePage (T23, KBC-090)', () => {
         sent('received'),
         sent('failed'),
         sent('ready'),
+        // In the audios' list already.
+        sent('transcribing', MEDIA_ID),
       ],
     });
     await settle(fixture);

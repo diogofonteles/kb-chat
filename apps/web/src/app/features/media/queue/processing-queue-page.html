@@ -85,6 +85,7 @@
       <app-document-uploads-section
         [titles]="titles()"
         (documentOpened)="openDocument($event)"
+        (listEnded)="focusHeading()"
       />
       @for (section of sections(); track section.phase) {
         <section class="group" [attr.aria-label]="section.title">

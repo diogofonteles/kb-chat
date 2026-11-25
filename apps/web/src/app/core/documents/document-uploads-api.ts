@@ -19,6 +19,9 @@ import { Observable, map } from 'rxjs';
 
 /** "Documentos em processamento" (KBC-149): one's own sent documents; masters, everyone's. */
 export const documentUploadsUrl = (): string => '/api/v1/document-uploads';
+/** What a channel or playlist holds, to choose from (KBC-186). */
+export const listEntriesUrl = (id: string): string =>
+  `${documentUploadsUrl()}/${encodeURIComponent(id)}/entries`;
 /** What each kind of content cost here (KBC-186): the estimate before sending. */
 export const contentCostsUrl = (): string => `${documentUploadsUrl()}/costs`;
 export const documentsUrl = (topic: string): string =>
@@ -51,11 +54,8 @@ export class DocumentUploadsApi {
   }
 
   /** What is ready leaves the list (it stays in the collection). */
-  clearReady(topic: string | null): Observable<unknown> {
-    return this.http.post(
-      `${documentUploadsUrl()}/clear-ready`,
-      topic === null ? {} : { topic },
-    );
+  clearReady(ids: readonly string[]): Observable<unknown> {
+    return this.http.post(`${documentUploadsUrl()}/clear-ready`, { ids });
   }
 
   /** A file announced (its bytes go by `send`) or a link; or what is already there (BR-3). */

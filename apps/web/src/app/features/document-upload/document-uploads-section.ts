@@ -3,10 +3,12 @@ import {
   Component,
   ElementRef,
   computed,
+  effect,
   inject,
   input,
   output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import type { DocumentUpload } from '@kb-chat/contracts';
@@ -200,6 +202,8 @@ export class DocumentUploadsSection {
   /** Collection names by slug, for the line under each name. */
   readonly titles = input<ReadonlyMap<string, string>>(new Map());
   readonly documentOpened = output<OpenedDocument>();
+  /** The list ended with the focus in it: the page takes it. */
+  readonly listEnded = output();
 
   protected readonly all = signal(false);
   protected readonly filter = signal<Filter>('all');
@@ -238,9 +242,24 @@ export class DocumentUploadsSection {
   protected readonly hidden = computed(
     () => this.found().length - this.shown().length,
   );
-  protected readonly ready = computed(
-    () => this.rows().filter(({ phase }) => phase === 'ready').length,
+  /** One's own: another person's is for them to see ready. */
+  private readonly readyIds = computed(() =>
+    this.rows()
+      .filter(({ phase, upload }) => phase === 'ready' && upload.mine)
+      .map(({ upload }) => upload.id),
   );
+  protected readonly ready = computed(() => this.readyIds().length);
+
+  constructor() {
+    // Before the section goes away with its last row, and its focus with it (WCAG 2.4.3).
+    effect(() => {
+      if (this.rows().length > 0) return;
+      const title = untracked(this.title)?.nativeElement;
+      const section = title?.closest('section');
+      if (section?.contains(section.ownerDocument.activeElement))
+        this.listEnded.emit();
+    });
+  }
 
   private topicTitleOf({ topic }: DocumentUpload): string {
     return this.topic() === null ? (this.titles().get(topic) ?? topic) : '';
@@ -257,7 +276,7 @@ export class DocumentUploadsSection {
 
   protected clear(): void {
     this.act();
-    this.store.clearReady(this.topic());
+    this.store.clearReady(this.readyIds());
   }
 }
 

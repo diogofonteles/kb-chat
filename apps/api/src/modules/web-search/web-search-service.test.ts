@@ -608,6 +608,20 @@ describe('WebSearchService: going on (review B)', () => {
     write.mockRestore();
   });
 
+  it('an engine away for a moment ends nothing: the same search goes on when it is back', async () => {
+    const { service, firecrawl } = build();
+    await service.connect(KEY, 'owner');
+    firecrawl.goDown();
+    for (let press = 0; press < 3; press += 1)
+      expect(await codeOf(service.search(REQUEST, NEW))).toBe(
+        'WEB_SEARCH_UNAVAILABLE',
+      );
+    firecrawl.comeBack();
+    const back = await service.search(REQUEST, NEW);
+    expect(back.results).toHaveLength(9);
+    expect(back.exhausted).toBe(false);
+  });
+
   it('two at once of one search pay once, and give different things', async () => {
     const { service, firecrawl } = build();
     await service.connect(KEY, 'owner');

@@ -39,7 +39,8 @@ const upload = (fields: Partial<DocumentUpload>): DocumentUpload => ({
     takesSeconds: null,
     media: null,
   },
-  entries: [],
+  entryCount: 0,
+  mine: true,
   createdAt: '2026-11-16T10:00:00.000Z',
   updatedAt: '2026-11-16T10:00:00.000Z',
   ...fields,
@@ -57,7 +58,7 @@ const progress = (
 });
 
 const aWork = (fields: Partial<DocumentWork> = {}): DocumentWork => ({
-  mac: { state: 'on', lastSeenAt: new Date().toISOString() },
+  mac: { state: 'on', lastSeenAt: new Date().toISOString(), doing: null },
   busy: false,
   waiting: 0,
   ...fields,
@@ -66,12 +67,15 @@ const aWork = (fields: Partial<DocumentWork> = {}): DocumentWork => ({
 const secondsAgo = (seconds: number) =>
   new Date(Date.now() - seconds * 1_000).toISOString();
 
+const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
+
 async function renderSection(
   items: DocumentUpload[],
   topic: string | null = null,
-  said: { work?: DocumentWork; master?: boolean } = {},
+  said: { work?: DocumentWork; master?: boolean; listing?: boolean } = {},
 ) {
   const opened = vi.fn();
+  const listEnded = vi.fn();
   const view = await render(DocumentUploadsSection, {
     providers: [
       provideZonelessChangeDetection(),
@@ -83,13 +87,14 @@ async function renderSection(
       { provide: MEDIA_POLL_MS, useValue: 20 },
     ],
     inputs: { topic, titles: new Map([['hermetismo', 'Hermetismo']]) },
-    on: { documentOpened: opened },
+    on: { documentOpened: opened, listEnded },
   });
   const http = TestBed.inject(HttpTestingController);
   await new Promise((resolve) => setTimeout(resolve, 5));
   http.expectOne(URL).flush({ items, ...(said.work && { work: said.work }) });
-  await view.fixture.whenStable();
-  return { ...view, http, opened };
+  // A list is being read: the page is not at rest until it comes.
+  await (said.listing ? tick() : view.fixture.whenStable());
+  return { ...view, http, opened, listEnded };
 }
 
 describe('Documentos em processamento (KBC-149 FR-2)', () => {
@@ -284,13 +289,20 @@ describe('Documentos em processamento (KBC-149 FR-2)', () => {
       kind: 'list',
       name: 'https://www.youtube.com/playlist?list=PL1',
       state: 'choosing',
+      entryCount: 2,
+    });
+    const { http, fixture } = await renderSection([list], null, {
+      listing: true,
+    });
+    expect(screen.getByText('Escolha o que entra')).toBeTruthy();
+    expect(screen.getByText('Lendo a lista…')).toBeTruthy();
+    http.expectOne(`${URL}/${list.id}/entries`).flush({
       entries: [
         { url: 'https://youtu.be/1', title: 'Aula 1', durationS: 60 },
         { url: 'https://youtu.be/2', title: 'Aula 2', durationS: null },
       ],
     });
-    const { http, fixture } = await renderSection([list]);
-    expect(screen.getByText('Escolha o que entra')).toBeTruthy();
+    await fixture.whenStable();
     http.expectNone((request) => request.method === 'POST');
     fireEvent.click(screen.getByRole('checkbox', { name: /Aula 2/ }));
     await fixture.whenStable();
@@ -301,6 +313,24 @@ describe('Documentos em processamento (KBC-149 FR-2)', () => {
     http.match(URL).forEach((one) => one.flush({ items: [] }));
     await fixture.whenStable();
     expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('a list that could not be read says so, and is read again when asked', async () => {
+    const list = upload({ kind: 'list', state: 'choosing', entryCount: 1 });
+    const { http, fixture } = await renderSection([list], null, {
+      listing: true,
+    });
+    http
+      .expectOne(`${URL}/${list.id}/entries`)
+      .flush(null, { status: 503, statusText: 'Service Unavailable' });
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    await tick();
+    http.expectOne(`${URL}/${list.id}/entries`).flush({
+      entries: [{ url: 'https://youtu.be/1', title: 'Aula 1', durationS: 60 }],
+    });
+    await fixture.whenStable();
+    expect(screen.getByRole('checkbox', { name: /Aula 1/ })).toBeTruthy();
   });
 });
 
@@ -376,7 +406,7 @@ describe('what is being done (KBC-184)', () => {
 
   it('with no Mac says so, and a master is led to link one', async () => {
     const none = aWork({
-      mac: { state: 'none', lastSeenAt: null },
+      mac: { state: 'none', lastSeenAt: null, doing: null },
       waiting: 1,
     });
     const waiting = upload({
@@ -395,7 +425,7 @@ describe('what is being done (KBC-184)', () => {
 
   it('a member is told who links one', async () => {
     const none = aWork({
-      mac: { state: 'none', lastSeenAt: null },
+      mac: { state: 'none', lastSeenAt: null, doing: null },
       waiting: 1,
     });
     await renderSection([upload({})], null, { work: none });
@@ -405,7 +435,7 @@ describe('what is being done (KBC-184)', () => {
 
   it('with the Mac off says since when, and that it comes on by itself', async () => {
     const off = aWork({
-      mac: { state: 'off', lastSeenAt: secondsAgo(2 * 60 * 60) },
+      mac: { state: 'off', lastSeenAt: secondsAgo(2 * 60 * 60), doing: null },
       waiting: 1,
     });
     await renderSection([upload({})], null, { work: off });
@@ -451,7 +481,7 @@ describe('what is being done (KBC-184)', () => {
     {
       media: { step: 'attention', percent: null },
       pill: 'Espera você',
-      text: /esperam você na Fila/,
+      text: /espera você na Fila/,
     },
   ] as const)(
     'a recording in the library that is $media.step says so',
@@ -498,13 +528,14 @@ describe('what is being done (KBC-184)', () => {
   });
 
   it('what is ready is cleared together, and the focus stays in the section', async () => {
+    const done = upload({ state: 'ready' });
     const { http, fixture } = await renderSection(
-      [upload({ state: 'ready' }), upload({ name: 'fica.pdf' })],
+      [done, upload({ name: 'fica.pdf' })],
       'hermetismo',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Limpar prontos (1)' }));
     const post = http.expectOne(`${URL}/clear-ready`);
-    expect(post.request.body).toEqual({ topic: 'hermetismo' });
+    expect(post.request.body).toEqual({ ids: [done.id] });
     expect(document.activeElement?.textContent).toContain(
       'Documentos em processamento',
     );
@@ -516,4 +547,45 @@ describe('what is being done (KBC-184)', () => {
     expect(screen.queryByRole('button', { name: /Limpar/ })).toBeNull();
     expect(screen.getByText('fica.pdf')).toBeTruthy();
   });
+
+  it("another person's ready item is theirs to clear", async () => {
+    await renderSection([upload({ state: 'ready', mine: false })], null, {
+      master: true,
+    });
+    expect(screen.queryByRole('button', { name: /Limpar/ })).toBeNull();
+  });
+
+  it('cleared to nothing, the page is told to take the focus (WCAG 2.4.3)', async () => {
+    const { http, fixture, listEnded } = await renderSection([
+      upload({ state: 'ready' }),
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar prontos (1)' }));
+    http.expectOne(`${URL}/clear-ready`).flush({ cleared: 1 });
+    expect(listEnded).not.toHaveBeenCalled();
+    http.match(URL).forEach((one) => one.flush({ items: [] }));
+    await fixture.whenStable();
+    expect(screen.queryByText('Documentos em processamento')).toBeNull();
+    expect(listEnded).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['recording', 'Está transcrevendo uma gravação agora.'],
+    ['publishing', 'Está publicando uma transcrição no acervo agora.'],
+  ] as const)(
+    'the Mac at something else (%s) says so, never "em instantes"',
+    async (doing, text) => {
+      await renderSection(
+        [upload({ progress: progress({ position: 1, takesSeconds: 60 }) })],
+        null,
+        {
+          work: aWork({
+            mac: { state: 'on', lastSeenAt: secondsAgo(1), doing },
+            waiting: 1,
+          }),
+        },
+      );
+      expect(card().textContent).toContain(text);
+      expect(document.body.textContent).not.toContain('em instantes');
+    },
+  );
 });

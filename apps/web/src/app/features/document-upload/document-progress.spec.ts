@@ -23,7 +23,8 @@ const upload = (fields: Partial<DocumentUpload>): DocumentUpload => ({
   batch: null,
   heldBy: null,
   review: false,
-  entries: [],
+  entryCount: 0,
+  mine: true,
   retriable: false,
   progress: {
     startedAt: null,
@@ -64,6 +65,9 @@ describe('how far an item is (KBC-184)', () => {
     [59, 'menos de 1 min'],
     [90, '2 min'],
     [59 * 60, '59 min'],
+    [59 * 60 + 45, '1 h'],
+    [60 * 60 + 59 * 60 + 45, '2 h'],
+    [23 * 60 * 60 + 59 * 60 + 45, '1 dia'],
     [60 * 60, '1 h'],
     [80 * 60, '1 h 20 min'],
     [25 * 60 * 60, '1 dia'],
@@ -120,7 +124,7 @@ describe('how everything stands', () => {
   });
 
   it('a Mac that has an item now is there, whatever was last heard', () => {
-    const mac = { state: 'off', lastSeenAt: null } as const;
+    const mac = { state: 'off', lastSeenAt: null, doing: null } as const;
     expect(macStateOf({ mac, busy: true, waiting: 0 })).toBe('on');
     expect(macStateOf({ mac, busy: false, waiting: 0 })).toBe('off');
   });

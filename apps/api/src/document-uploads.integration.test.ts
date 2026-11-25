@@ -469,7 +469,7 @@ describe('What is being done, for the person (KBC-184)', () => {
     await sentFile(media, ana);
     const before = await workOf(ana.call);
     expect(before.work).toEqual({
-      mac: { state: 'none', lastSeenAt: null },
+      mac: { state: 'none', lastSeenAt: null, doing: null },
       busy: false,
       waiting: 1,
     });
@@ -526,12 +526,13 @@ describe('What is being done, for the person (KBC-184)', () => {
       features: ['search', 'media'],
     });
     const path = `${UPLOADS}/clear-ready`;
-    expect((await beto.call('POST', path, {})).statusCode).toBe(403);
-    expect((await media.owner('POST', path, {})).json()).toEqual({
+    const body = { ids: ['11111111-1111-4111-8111-111111111111'] };
+    expect((await beto.call('POST', path, body)).statusCode).toBe(403);
+    expect((await media.owner('POST', path, body)).json()).toEqual({
       cleared: 0,
     });
-    const odd = await media.owner('POST', path, { all: true });
-    expect(odd.statusCode).toBe(400);
+    for (const odd of [{}, { ids: [] }, { ...body, all: true }])
+      expect((await media.owner('POST', path, odd)).statusCode).toBe(400);
   });
 });
 
@@ -743,7 +744,12 @@ describe('Recordings, lists and their cost (KBC-186)', () => {
     expect(job.source).toMatchObject({ kind: 'list', url: PLAYLIST });
     expect((await entries({ entries: ENTRIES })).statusCode).toBe(204);
     const [waiting] = await uploadsOf(ana.call);
-    expect(waiting).toMatchObject({ state: 'choosing', entries: ENTRIES });
+    expect(waiting).toMatchObject({
+      state: 'choosing',
+      entryCount: ENTRIES.length,
+    });
+    const held = await ana.call('GET', `${UPLOADS}/${list.id}/entries`);
+    expect(held.json()).toEqual({ entries: ENTRIES });
     // Nothing is on its way before the choice.
     expect((await leaseAs(media, mac.token, ['doc-ingest'])).statusCode).toBe(
       204,
@@ -760,7 +766,7 @@ describe('Recordings, lists and their cost (KBC-186)', () => {
       kind: 'recording',
       state: 'received',
       batch: { capUsd: 1 },
-      entries: [],
+      entryCount: 0,
     });
     // A second press finds nothing to choose from.
     expect((await ana.call('POST', url, { urls })).statusCode).toBe(404);

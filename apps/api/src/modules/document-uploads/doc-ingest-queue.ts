@@ -318,7 +318,8 @@ export class DocIngestQueue {
       throw new AppError('NOT_FOUND', 'No such audio for this job');
     try {
       const mediaId = await this.deps.adoptAudio(record, audio);
-      await this.ended(record.id, { state: 'transcribing', mediaId });
+      const workMs = this.workedOn(record);
+      await this.ended(record.id, { state: 'transcribing', mediaId, workMs });
       return mediaId;
     } catch (err) {
       if (!(err instanceof AppError)) throw err;

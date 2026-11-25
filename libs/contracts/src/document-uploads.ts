@@ -241,6 +241,8 @@ export const documentWorkSchema = z.object({
     /** None paired to publish, seen in the last minutes, or not. */
     state: z.enum(['none', 'off', 'on']),
     lastSeenAt: z.iso.datetime().nullable(),
+    /** What else it does now: it takes one thing at a time. */
+    doing: z.enum(['recording', 'publishing']).nullable().default(null),
   }),
   /** The Mac has an item now, whoever sent it. */
   busy: z.boolean(),
@@ -275,7 +277,9 @@ export const documentUploadSchema = z.object({
   /** In the collection, and waiting for a person in kb's review queue. */
   review: z.boolean(),
   /** A list's recordings, while `choosing`; empty otherwise. */
-  entries: z.array(recordingEntrySchema),
+  entryCount: z.number().int().min(0),
+  /** Sent by the person who asks (masters see everyone's). */
+  mine: z.boolean(),
   /** It failed, and the app still has what was sent: it can go again as it is. */
   retriable: z.boolean(),
   progress: documentProgressSchema,
@@ -313,8 +317,8 @@ export type DocumentUploadList = z.infer<typeof documentUploadListSchema>;
 
 /** POST /api/v1/document-uploads/clear-ready: what is ready leaves the list (not the collection). */
 export const clearReadyUploadsRequestSchema = z.strictObject({
-  /** Only this collection's; left out, every one the person sees. */
-  topic: topicSlugSchema.optional(),
+  /** The ones the person saw ready: what became ready since is seen first. */
+  ids: z.array(z.uuid()).min(1).max(10_000),
 });
 export type ClearReadyUploadsRequest = z.infer<
   typeof clearReadyUploadsRequestSchema
@@ -322,6 +326,12 @@ export type ClearReadyUploadsRequest = z.infer<
 export const clearReadyUploadsResponseSchema = z.object({
   cleared: z.number().int().min(0),
 });
+
+/** GET /api/v1/document-uploads/:id/entries: what a list holds, to choose from (R7). */
+export const recordingEntryListSchema = z.object({
+  entries: z.array(recordingEntrySchema),
+});
+export type RecordingEntryList = z.infer<typeof recordingEntryListSchema>;
 
 /** POST /api/v1/document-uploads/:id/choose: the list's recordings that enter (R7). */
 export const chooseRecordingsRequestSchema = z.strictObject({

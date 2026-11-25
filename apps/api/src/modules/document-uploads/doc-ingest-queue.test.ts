@@ -239,6 +239,28 @@ describe('DocIngestQueue (KBC-149, ADR 0040)', () => {
     expect(opened.get(record().id)?.lease).not.toBeNull();
   });
 
+  it('keeps how long the Mac had a recording: the next estimate reads it', async () => {
+    const clock = { now: new Date('2026-11-25T12:00:00.000Z') };
+    const store = new MemoryDocumentUploadStore();
+    store.records = [record({ kind: 'recording' })];
+    const opened = await UploadRecords.open(store);
+    const mediaId = '33333333-3333-4333-8333-333333333333';
+    const queue = new DocIngestQueue({
+      records: opened,
+      files,
+      budgetUsd: () => 0.5,
+      now: () => clock.now,
+      adoptAudio: () => Promise.resolve(mediaId),
+    });
+    const leaseId = queue.lease('mac')?.leaseId ?? '';
+    clock.now = new Date(clock.now.getTime() + 45_000);
+    await queue.adopt(
+      { jobId: record().id, worker: 'mac', leaseId },
+      { body: Readable.from(['x']), bytes: 1, name: 'a.m4a' },
+    );
+    expect(opened.get(record().id)).toMatchObject({ mediaId, workMs: 45_000 });
+  });
+
   it('answers quickly with thousands of items that ended', async () => {
     const clock = { now: new Date('2026-11-25T12:00:00.000Z') };
     const ended = Array.from({ length: 5_000 }, (_, n) =>

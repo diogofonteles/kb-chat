@@ -298,7 +298,11 @@ describe('what is old leaves (review A, I12)', () => {
 });
 
 describe('the Mac, its line and how far each item is', () => {
-  const MAC = { state: 'on', lastSeenAt: '2026-11-25T12:00:00.000Z' } as const;
+  const MAC = {
+    state: 'on',
+    lastSeenAt: '2026-11-25T12:00:00.000Z',
+    doing: null,
+  } as const;
 
   it('says the place and the time of each, counting everyone’s without naming them', async () => {
     const { service, queue, clock } = await world({ deps: { mac: () => MAC } });
@@ -334,7 +338,7 @@ describe('the Mac, its line and how far each item is', () => {
   });
 
   it('with the Mac off the place is known and the time is not', async () => {
-    const off = { state: 'off', lastSeenAt: null } as const;
+    const off = { state: 'off', lastSeenAt: null, doing: null } as const;
     const { service } = await world({ deps: { mac: () => off } });
     await send(service, ana, link('https://a.example/1'));
     const { items, work } = await service.list(ana);
@@ -349,7 +353,7 @@ describe('the Mac, its line and how far each item is', () => {
   it('with none paired, that is what is said', async () => {
     const { service } = await world();
     const { work } = await service.list(ana);
-    expect(work?.mac).toEqual({ state: 'none', lastSeenAt: null });
+    expect(work?.mac).toEqual({ state: 'none', lastSeenAt: null, doing: null });
   });
 
   it('an item behind a ceiling has no place in the line', async () => {
@@ -404,8 +408,11 @@ describe('the Mac, its line and how far each item is', () => {
     const gone = await done('https://a.example/1');
     const elsewhere = await done('https://a.example/2', 'hermetismo/sub');
     const waiting = await send(service, ana, link('https://a.example/3'));
-    expect(await service.clearReady(beto)).toBe(0);
-    expect(await service.clearReady(ana, 'hermetismo')).toBe(1);
+    const ids = [gone, waiting.id];
+    expect(await service.clearReady(beto, ids)).toBe(0);
+    // A master sees everyone's, and clears only their own: Ana must see hers ready.
+    expect(await service.clearReady(master, ids)).toBe(0);
+    expect(await service.clearReady(ana, ids)).toBe(1);
     const left = (await itemsOf(service, ana)).map((one) => one.id);
     expect(left.sort()).toEqual([elsewhere, waiting.id].sort());
     expect(records.get(gone)?.dismissed).toBe(true);
@@ -550,5 +557,103 @@ describe('the second review (review B)', () => {
     const raised = await service.changeBatch(ana, BATCH.id, 20);
     expect(raised.capUsd).toBe(20);
     expect(sent.batch?.capUsd).toBe(5);
+  });
+});
+
+describe('the third review (review C)', () => {
+  it('cancelled after its lease ran out, a Mac that wakes later brings nothing in (I12)', async () => {
+    const { service, queue, records, clock } = await world();
+    const sent = await send(service, ana, link('https://a.example/1'));
+    await records.update(sent.id, (one) => ({ ...one, spentUsd: 0.01 }));
+    const job = queue.lease('mac');
+    clock.now = new Date(clock.now.getTime() + 11 * 60_000);
+    await service.remove(ana, sent.id);
+    const late = queue.complete(
+      { jobId: sent.id, worker: 'mac', leaseId: job?.leaseId ?? '' },
+      {
+        worker: 'mac',
+        leaseId: job?.leaseId ?? '',
+        outcome: {
+          state: 'ready',
+          document: { id: 'raw/a.md', title: 'A' },
+          review: false,
+        },
+        spendUsd: 0.02,
+      },
+    );
+    await expect(late).rejects.toMatchObject({ code: 'MEDIA_CONFLICT' });
+    expect(records.get(sent.id)).toMatchObject({
+      state: expect.not.stringMatching('mapped'),
+      spentUsd: 0.01,
+    });
+  });
+
+  it('choosing thousands from a list answers quickly, and its entries come apart (I6)', async () => {
+    const { service, records } = await world();
+    const channel = await send(
+      service,
+      ana,
+      link('https://www.youtube.com/@canal'),
+    );
+    const entries = Array.from({ length: 3_000 }, (_, n) => ({
+      url: `https://www.youtube.com/watch?v=${String(n).padStart(11, '0')}`,
+      title: `Aula ${n}`,
+      durationS: 60,
+    }));
+    await records.update(channel.id, (one) => ({
+      ...one,
+      state: 'choosing',
+      entries,
+    }));
+    const [listed] = await itemsOf(service, ana);
+    expect(listed).toMatchObject({ entryCount: 3_000, mine: true });
+    expect(JSON.stringify(listed).length).toBeLessThan(2_000);
+    expect(service.entriesOf(ana, channel.id).entries).toHaveLength(3_000);
+    expect(() => service.entriesOf(beto, channel.id)).toThrow(
+      expect.objectContaining({ code: 'NOT_FOUND' }),
+    );
+    const before = performance.now();
+    const chosen = await service.choose(ana, channel.id, {
+      urls: entries.map((one) => one.url),
+    });
+    expect(performance.now() - before).toBeLessThan(1_000);
+    expect(chosen).toEqual({ created: 3_000, already: 0 });
+  });
+
+  it('a recording whose publication failed goes again from the queue, not from its link (I5)', async () => {
+    const { service, records } = await world({
+      deps: {
+        mediaProgressOf: () => ({
+          state: 'transcribing',
+          step: { step: 'attention', percent: null },
+        }),
+      },
+    });
+    const sent = await send(service, ana, link('https://youtu.be/abc'));
+    await records.update(sent.id, (one) => ({
+      ...one,
+      state: 'transcribing',
+      mediaId: '11111111-1111-4111-8111-111111111111',
+    }));
+    const [seen] = await itemsOf(service, ana);
+    expect(seen).toMatchObject({ state: 'transcribing', retriable: false });
+    await expect(service.retry(ana, sent.id)).rejects.toMatchObject({
+      code: 'MEDIA_CONFLICT',
+    });
+  });
+
+  it('nobody knows when the next starts while the Mac is at something else (I8)', async () => {
+    const { service } = await world({
+      deps: {
+        mac: () => ({ state: 'on', lastSeenAt: null, doing: 'recording' }),
+      },
+    });
+    await send(service, ana, link('https://a.example/1'));
+    const { items, work } = await service.list(ana);
+    expect(work?.mac.doing).toBe('recording');
+    expect(items[0]?.progress).toMatchObject({
+      position: 1,
+      startsInSeconds: null,
+    });
   });
 });

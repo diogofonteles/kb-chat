@@ -16,7 +16,7 @@ Pedidos do dono em 2026-11-25: "todo o mecanismo atual de criar acervo e adicion
 
 ## Business rules
 - BR-1: só quem tem `media-upload` no acervo vê a página e os atalhos.
-- BR-2: cada inclusão tem um teto (padrão US$ 0,50, de 0,05 a 5), e o que não cabe espera, com o motivo.
+- BR-2: cada inclusão tem um teto (padrão US$ 0,50, de 0,05 a 100), e o que não cabe espera, com o motivo.
 - BR-3: a conta do envio sempre fecha; o que não entra aparece com o motivo, e o que falhou e foi tirado da lista continua dito.
 - BR-4: o envio continua enquanto a pessoa usa o app; fechar a aba avisa antes.
 - BR-5: um acervo criado na tela ganha a pasta no cofre com o primeiro item.

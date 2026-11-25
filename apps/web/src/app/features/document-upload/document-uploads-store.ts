@@ -34,6 +34,9 @@ import { isSettled } from './upload-labels.js';
 /** A folder sends many at once: the list is read at most this often, and once at the end. */
 export const REFRESH_MS = 1_500;
 
+/** Up to this many items the list is read at every beat. */
+const ITEMS_PER_BEAT = 300;
+
 /** What `busyId` says while the ready ones are cleared. */
 const CLEARING = 'clear-ready';
 
@@ -76,8 +79,15 @@ export class DocumentUploadsStore {
       this.items().some((one) => !isSettled(one.state)),
   );
 
+  /** A list of thousands is large, and takes days: it is read less often. */
+  private readonly everyBeats = computed(() =>
+    Math.max(1, Math.ceil(this.items().length / ITEMS_PER_BEAT)),
+  );
+
   constructor() {
-    const beats = timer(0, this.pollMs).pipe(filter(() => this.moving()));
+    const beats = timer(0, this.pollMs).pipe(
+      filter((beat) => this.moving() && beat % this.everyBeats() === 0),
+    );
     merge(
       beats.pipe(exhaustMap(() => this.list())),
       this.asked.pipe(
@@ -128,9 +138,9 @@ export class DocumentUploadsStore {
     this.act(upload.id, this.api.retry(upload.id));
   }
 
-  /** What is ready leaves the list, of one collection or of all. */
-  clearReady(topic: string | null): void {
-    this.act(CLEARING, this.api.clearReady(topic));
+  /** These, seen ready, leave the list. */
+  clearReady(ids: readonly string[]): void {
+    this.act(CLEARING, this.api.clearReady(ids));
   }
 
   private list(): Observable<DocumentUploadList> {

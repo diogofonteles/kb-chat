@@ -14,6 +14,7 @@ import {
   type DocumentBatch,
   type DocumentUpload,
   type DocumentUploadList,
+  type RecordingEntryList,
   type DocumentWork,
   type LevelChoice,
   type UploadedDocumentRef,
@@ -35,7 +36,7 @@ import {
   WORKING_STATES,
   isWorking,
 } from './upload-batches.js';
-import type { UploadRecords } from './upload-records.js';
+import type { UploadKey, UploadRecords } from './upload-records.js';
 import { toDocumentUpload, type MediaProgress } from './upload-view.js';
 
 /** Who sends: the media library's actor (BR-1: the same permission) plus the audit's name. */
@@ -83,6 +84,11 @@ export const DOCUMENT_UPLOAD_ABANDON_MS = 7 * 24 * 60 * 60 * 1000;
 export const DOCUMENT_UPLOAD_KEEP_MS = 90 * 24 * 60 * 60 * 1000;
 
 const ENDED = new Set<DocumentUploadRecord['state']>(['mapped', 'failed']);
+const NO_MAC: DocumentWork['mac'] = {
+  state: 'none',
+  lastSeenAt: null,
+  doing: null,
+};
 /** Its recording is not in the library any more. */
 const GONE: MediaProgress = { state: 'failed', step: null };
 
@@ -151,13 +157,12 @@ export class DocumentUploadService {
   ): Promise<DocumentUploadRecord | undefined> {
     const { topic, key, level, batch } = input;
     const stopped = this.deps.records
-      .all()
+      .sameAs(key)
       .find(
         (one) =>
           one.state === 'receiving' &&
           one.topic === topic &&
-          one.owner.principal === actor.principal &&
-          isSame(one, key),
+          one.owner.principal === actor.principal,
       );
     if (!stopped) return undefined;
     return this.deps.records.update(stopped.id, (current) => ({
@@ -221,11 +226,8 @@ export class DocumentUploadService {
       return { outcome: 'duplicate', document, upload: null };
     }
     const pending = this.deps.records
-      .all()
-      .find(
-        (one) =>
-          scope.includes(one.topic) && isSame(one, key) && this.isLive(one),
-      );
+      .sameAs(key)
+      .find((one) => scope.includes(one.topic) && this.isLive(one));
     if (!pending) return null;
     const mine = pending.owner.principal === actor.principal || actor.isMaster;
     const upload = mine
@@ -314,6 +316,8 @@ export class DocumentUploadService {
       await this.deps.records.update(id, (one) => ({
         ...one,
         dismissed: true,
+        // A Mac that lost it and wakes later must not bring it in.
+        lease: null,
       }));
     else await this.deps.records.remove(id);
   }
@@ -344,23 +348,33 @@ export class DocumentUploadService {
         }),
     );
     // One change: a second press finds nothing to choose from, and a crash loses nothing.
+    const titles = new Map(list.entries.map((one) => [one.url, one.title]));
     await this.deps.records.replace(
       id,
-      fresh.map((url) => this.chosenOf(list, url)),
+      fresh.map((url) => this.chosenOf(list, url, titles.get(url) ?? url)),
     );
     return { created: fresh.length, already: urls.length - fresh.length };
+  }
+
+  /** What a list holds, for who may choose from it. */
+  entriesOf(actor: UploadActor, id: string): RecordingEntryList {
+    const list = this.deps.records.get(id);
+    if (!list || !this.mayManage(actor, list)) throw notFound();
+    if (list.state !== 'choosing') throw notWaiting();
+    return { entries: [...list.entries] };
   }
 
   private chosenOf(
     list: DocumentUploadRecord,
     url: string,
+    name: string,
   ): DocumentUploadRecord {
     const at = this.now().toISOString();
     return {
       ...list,
       id: randomUUID(),
       kind: 'recording',
-      name: list.entries.find((one) => one.url === url)?.title ?? url,
+      name,
       url,
       state: 'received',
       failure: null,
@@ -546,11 +560,17 @@ export class DocumentUploadService {
   }
 
   /** What is ready leaves the list; it stays in the collection, and in its inclusion's account. */
-  async clearReady(actor: UploadActor, topic?: string): Promise<number> {
+  async clearReady(
+    actor: UploadActor,
+    ids: readonly string[],
+  ): Promise<number> {
     const moment = this.moment();
+    const asked = new Set(ids);
+    // Only what the person saw ready, and sent: another one's is for them to see.
     const ready = this.visibleTo(actor).filter(
       (one) =>
-        (topic === undefined || one.topic === topic) &&
+        asked.has(one.id) &&
+        one.owner.principal === actor.principal &&
         this.viewNow(one, actor, { received: null, kept: false, moment })
           .state === 'ready',
     );
@@ -565,11 +585,11 @@ export class DocumentUploadService {
     const now = this.now();
     const records = this.deps.records.all();
     const ledger = new BatchLedger(records, now);
-    const mac = this.deps.mac?.() ?? { state: 'none', lastSeenAt: null };
+    const mac = this.deps.mac?.() ?? NO_MAC;
     const line = new MacLine(records, {
       now,
       costs: contentCostsOf(records),
-      mac: mac.state,
+      mac,
       isWaiting: (one) =>
         waitsForMac(one, now) && this.heldBy(one, ledger) === null,
     });
@@ -734,16 +754,6 @@ const NEW_RECORD = {
   workMs: null,
   entries: [],
 } as const;
-
-interface UploadKey {
-  readonly sha256: string | null;
-  readonly url: string | null;
-}
-
-/** An upload of the same original, or of the same link. */
-const isSame = (one: DocumentUploadRecord, key: UploadKey): boolean =>
-  (key.sha256 !== null && one.sha256 === key.sha256) ||
-  (key.url !== null && one.url !== null && sameLinkKey(one.url) === key.url);
 
 /** What an upload is, from what was sent: a file waits for its bytes, a link for the Mac. */
 function sourceOf(

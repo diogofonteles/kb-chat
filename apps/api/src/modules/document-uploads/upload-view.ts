@@ -41,15 +41,14 @@ export function toDocumentUpload(
   input: UploadContext,
 ): DocumentUpload {
   const media = mediaOf(record, input.media);
-  const fromMedia = media?.state ?? null;
-  const state = fromMedia ?? stateOf(record, input);
+  const state = media?.state ?? stateOf(record, input);
   return {
     id: record.id,
     topic: record.topic,
     kind: record.kind,
     name: record.name,
     state,
-    failure: fromMedia === 'failed' ? 'conversion-failed' : record.failure,
+    failure: media?.state === 'failed' ? 'conversion-failed' : record.failure,
     detail: input.showsDetail ? record.detail : null,
     document: record.document,
     mediaId: record.mediaId,
@@ -59,13 +58,17 @@ export function toDocumentUpload(
     batch: input.batch,
     heldBy: state === 'received' ? input.heldBy : null,
     review: record.review,
-    entries: record.state === 'choosing' ? [...record.entries] : [],
+    entryCount: entryCountOf(record),
+    mine: input.mine,
     retriable: state === 'failed' && input.kept,
     progress: { ...input.place, media: media?.step ?? null },
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
 }
+
+const entryCountOf = ({ state, entries }: DocumentUploadRecord): number =>
+  state === 'choosing' ? entries.length : 0;
 
 const sendsTo = (record: DocumentUploadRecord, mine: boolean) =>
   record.state === 'receiving' && mine ? uploadUrlOf(record.id) : null;

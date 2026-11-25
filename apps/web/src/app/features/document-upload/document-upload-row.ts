@@ -15,7 +15,7 @@ import {
 } from '@kb-chat/contracts';
 import { UiButton, UiIcon, UiIconButton, UiPill } from '@ui/index.js';
 import { statusText, stepsOf } from './document-progress.js';
-import { RecordingChooser } from './recording-chooser.js';
+import { ListEntries } from './list-entries.js';
 import { FAILURE_TEXTS, hintOf, isWorking, labelOf } from './upload-labels.js';
 
 const ICONS = {
@@ -32,7 +32,7 @@ const ICONS = {
  */
 @Component({
   selector: 'app-document-upload-row',
-  imports: [RecordingChooser, UiButton, UiIcon, UiIconButton, UiPill],
+  imports: [ListEntries, UiButton, UiIcon, UiIconButton, UiPill],
   template: `
     <span class="art" aria-hidden="true">
       <ui-icon [name]="icon()" [size]="20" />
@@ -121,10 +121,10 @@ const ICONS = {
         <span class="visually-hidden">{{ text }}</span>
       }
     }
-    @if (upload().entries.length > 0) {
-      <app-recording-chooser
+    @if (upload().entryCount > 0) {
+      <app-list-entries
         class="chooser"
-        [entries]="upload().entries"
+        [listId]="upload().id"
         [disabled]="busy()"
         (picked)="chosen.emit($event)"
       />

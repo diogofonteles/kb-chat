@@ -81,11 +81,13 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 /** "menos de 1 min", "12 min", "2 h", "1 h 20 min", "3 dias". */
-export function durationText(seconds: number): string {
-  if (seconds < MINUTE)
+export function durationText(exact: number): string {
+  if (exact < MINUTE)
     return $localize`:@@docProgress.underMinute:menos de 1 min`;
+  // To the minute first: 59 min and a half are an hour, never "60 min".
+  const seconds = Math.round(exact / MINUTE) * MINUTE;
   if (seconds < HOUR) {
-    const minutes = Math.round(seconds / MINUTE);
+    const minutes = seconds / MINUTE;
     return $localize`:@@docProgress.minutes:${minutes}:n: min`;
   }
   if (seconds < DAY) return hoursText(seconds);
@@ -97,7 +99,7 @@ export function durationText(seconds: number): string {
 
 function hoursText(seconds: number): string {
   const hours = Math.floor(seconds / HOUR);
-  const minutes = Math.round((seconds % HOUR) / MINUTE);
+  const minutes = (seconds % HOUR) / MINUTE;
   return minutes === 0
     ? $localize`:@@docProgress.hours:${hours}:h: h`
     : $localize`:@@docProgress.hoursMinutes:${hours}:h: h ${minutes}:n: min`;
@@ -155,7 +157,7 @@ function mediaText({ progress }: DocumentUpload): string {
     publishing: () =>
       $localize`:@@docProgress.media.publishing:Transcrito; o kb classifica e publica`,
     attention: () =>
-      $localize`:@@docProgress.media.attention:Transcrito; as faixas esperam você na Fila`,
+      $localize`:@@docProgress.media.attention:Transcrito; espera você na Fila de processamento`,
   };
   const text = texts[media.step]();
   return media.percent === null

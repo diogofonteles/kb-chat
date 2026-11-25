@@ -41,7 +41,7 @@ export class MacLine {
     private readonly input: {
       readonly now: Date;
       readonly costs: ContentCosts;
-      readonly mac: DocumentWork['mac']['state'];
+      readonly mac: DocumentWork['mac'];
       /** Waiting for the Mac, and not for a ceiling. */
       readonly isWaiting: (record: DocumentUploadRecord) => boolean;
     },
@@ -69,8 +69,9 @@ export class MacLine {
     waiting: readonly DocumentUploadRecord[],
     ahead: number,
   ): void {
-    // Nobody knows when a Mac that is off comes back.
-    const known = this.busy || this.input.mac === 'on';
+    // Nobody knows when a Mac that is off comes back, or ends what else it is doing.
+    const { state, doing } = this.input.mac;
+    const known = this.busy || (state === 'on' && doing === null);
     let before = ahead;
     for (const [at, record] of waiting.entries()) {
       const takesSeconds = this.secondsOf(record);

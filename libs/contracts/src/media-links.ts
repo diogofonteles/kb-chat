@@ -118,24 +118,49 @@ export function isMediaHost(url: string): boolean {
 }
 
 /** What a link carries about who shared it, not about what it is. */
-const TRACKING =
-  /^(utm_\w+|fbclid|gclid|igsh|igshid|si|mc_cid|mc_eid|ref_src|feature)$/i;
+const TRACKING = /^(utm_\w+|fbclid|gclid|igsh|igshid|mc_cid|mc_eid|ref_src)$/i;
+/** Marks of one site only: elsewhere they may be the page itself. */
+const TRACKING_OF: readonly {
+  readonly hosts: RegExp;
+  readonly names: RegExp;
+}[] = [
+  { hosts: /(^|\.)(youtube\.com|youtu\.be)$/, names: /^(si|feature|pp)$/i },
+  { hosts: /(^|\.)(spotify|soundcloud)\.com$/, names: /^(si|in)$/i },
+];
+
+const isTracking = (host: string, name: string): boolean =>
+  TRACKING.test(name) ||
+  TRACKING_OF.some(({ hosts, names }) => hosts.test(host) && names.test(name));
+
+/** A page drawn by its fragment (`#/aula-2`, `#!x`) is another page; a place in one is not. */
+const routeOf = (hash: string): string => (/^#[!/]/.test(hash) ? hash : '');
+
+/** The one address of a recording, but the Archive's: its items hold many, by their path. */
+function canonicalOf(link: string): string {
+  const media = mediaLinkOf(link);
+  return media && !media.url.startsWith('https://archive.org/')
+    ? media.url
+    : link;
+}
 
 /**
  * The same page, recording or file, whatever the scheme, the `www.`, the place in it, the
  * form of its address or who shared it: one key. A link that is no address is its own key.
  */
 export function sameLinkKey(link: string): string {
-  const url = parsedLink(mediaLinkOf(link)?.url ?? link);
+  const url = parsedLink(canonicalOf(link));
   if (!url) return link;
-  const kept = [...url.searchParams.keys()]
-    .filter((name, at, all) => !TRACKING.test(name) && all.indexOf(name) === at)
+  const host = url.hostname.toLowerCase().replace(/^www\./, '');
+  const names = new Set(
+    [...url.searchParams.keys()].filter((name) => !isTracking(host, name)),
+  );
+  const kept = [...names]
+    .sort()
     .flatMap((name) =>
       url.searchParams.getAll(name).map((value) => `${name}=${value}`),
-    )
-    .sort();
-  const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    );
   const port = url.port === '' ? '' : `:${url.port}`;
   const query = kept.length > 0 ? `?${kept.join('&')}` : '';
-  return `${host}${port}${url.pathname.replace(/\/+$/, '')}${query}`;
+  const path = url.pathname.replace(/\/+$/, '');
+  return `${host}${port}${path}${query}${routeOf(url.hash)}`;
 }

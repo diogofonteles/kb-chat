@@ -69,6 +69,8 @@ export interface DocumentUploadsWiring {
   readonly mac: {
     readonly isPaired: () => boolean;
     readonly lastSeenAt: () => string | null;
+    /** What else it does now (it takes one thing at a time). */
+    readonly doing: () => DocumentWork['mac']['doing'];
     readonly percentOf: (mediaId: string) => number | null;
   };
 }
@@ -230,9 +232,11 @@ function originIndexOf(catalog: TopicCatalog): OriginIndex {
   return index;
 }
 
+const ATTENTION = { step: 'attention', percent: null } as const;
+
 /** A recording link's media item: failed, live in the collection (ready), or on its way. */
-function mediaProgressOf(
-  wiring: DocumentUploadsWiring,
+export function mediaProgressOf(
+  wiring: Pick<DocumentUploadsWiring, 'media' | 'documents' | 'mac'>,
   mediaId: string,
 ): MediaProgress | null {
   const media = wiring.media.store.getMedia(mediaId);
@@ -240,7 +244,9 @@ function mediaProgressOf(
   if (media.status === 'failed') return { state: 'failed', step: null };
   const publication = wiring.documents.status.of(mediaId);
   if (publication?.state === 'live') return { state: 'ready', step: null };
-  if (publication?.state === 'failed') return { state: 'failed', step: null };
+  // Its recording is whole in the library: it goes again from its own place in the queue.
+  if (publication?.state === 'failed')
+    return { state: 'transcribing', step: ATTENTION };
   return {
     state: 'transcribing',
     step: mediaStepOf(media, {
@@ -263,6 +269,8 @@ function mediaStepOf(
   const { jobStatus, version } = media.transcription;
   if (jobStatus === 'leased')
     return { step: 'transcribing', percent: known.percentOf(media.id) };
+  // It did not transcribe: its "Tentar de novo" is in the queue.
+  if (jobStatus === 'failed') return ATTENTION;
   if (version === null) return { step: 'waiting', percent: null };
   // Transcribed, with no document of its own: its tracks wait for a person.
   return { step: known.published ? 'publishing' : 'attention', percent: null };
@@ -271,7 +279,7 @@ function mediaStepOf(
 /** Seen in the last minutes is on: it runs only while it has work, and says so every 30 s. */
 function macNow(mac: DocumentUploadsWiring['mac']): DocumentWork['mac'] {
   const lastSeenAt = mac.lastSeenAt();
-  if (!mac.isPaired()) return { state: 'none', lastSeenAt: null };
+  if (!mac.isPaired()) return { state: 'none', lastSeenAt: null, doing: null };
   const age =
     lastSeenAt === null
       ? Number.POSITIVE_INFINITY
@@ -279,6 +287,7 @@ function macNow(mac: DocumentUploadsWiring['mac']): DocumentWork['mac'] {
   return {
     state: age <= TRANSCRIBER_STATUS_STALE_MS ? 'on' : 'off',
     lastSeenAt,
+    doing: mac.doing(),
   };
 }
 
