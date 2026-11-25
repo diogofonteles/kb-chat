@@ -23,6 +23,7 @@ const a = (url: string, author: string | null = null): Candidate => ({
   snippet: '',
   site: 'a.org',
   author,
+  rank: 0,
 });
 const urls = (candidates: readonly Candidate[]) =>
   candidates.map((one) => one.url);
@@ -39,6 +40,7 @@ describe('candidatesOf (KBC-185)', () => {
         snippet: 'De Hermes',
         site: 'a.org',
         author: 'Hermes',
+        rank: 0,
       },
     ]);
     const [other] = candidatesOf([hit('https://www.a.org/x')], asked);
@@ -57,8 +59,8 @@ describe('candidatesOf (KBC-185)', () => {
     );
     expect(urls(found)).toEqual([
       'https://a.org/4',
-      'https://a.org/3',
       'https://a.org/1',
+      'https://a.org/3',
     ]);
   });
 
@@ -70,6 +72,7 @@ describe('candidatesOf (KBC-185)', () => {
     'https://x.com/a/status/1',
     'https://www.amazon.com.br/livro/dp/1',
     'https://produto.mercadolivre.com.br/MLB-1',
+    'https://open.spotify.com/episode/1',
     'https://www.google.com/goto?url=abc',
   ])('%s is no text to read', (url) => {
     expect(candidatesOf([hit(url)], TEXT)).toEqual([]);
@@ -182,6 +185,18 @@ describe('interleave', () => {
       ['https://a.org/1', 'Ana'],
       ['https://b.org/1', 'Bia'],
       ['https://a.org/2', 'Ana'],
+    ]);
+  });
+
+  it('gives what is about the subject before a name alone, whatever the search', () => {
+    const groups = [
+      [{ ...a('https://a.org/1'), rank: 2 }],
+      [a('https://b.org/1'), { ...a('https://b.org/2'), rank: 1 }],
+    ];
+    expect(urls(interleave(groups))).toEqual([
+      'https://b.org/1',
+      'https://b.org/2',
+      'https://a.org/1',
     ]);
   });
 

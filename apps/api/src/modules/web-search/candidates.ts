@@ -9,8 +9,11 @@ import {
 import type { WebHit } from '../../ports/web-search.js';
 import { relevanceOf, type Relevance } from './relevance.js';
 
-/** A result before it is known whether the collection already has it. */
-export type Candidate = Omit<WebSearchResult, 'already'>;
+/** A result before it is known whether the collection already has it, and how close it is. */
+export interface Candidate extends Omit<WebSearchResult, 'already'> {
+  /** 0: the subject by the author asked; 1: the subject; 2: the author on something else. */
+  readonly rank: number;
+}
 
 const TITLE_MAX = 300;
 const SNIPPET_MAX = 600;
@@ -22,11 +25,12 @@ const itemOf = (kind: MediaLinkKind) => (url: string) => {
 
 /**
  * Sites that are no text to read: a social network answers with its sign-in page, a shop with
- * its product, and the engine's own redirects lead nowhere.
+ * its product, a streaming service with its player, and the engine's own redirects lead nowhere.
  */
 const NO_TEXT = [
   /(^|\.)(instagram|tiktok|facebook|fb|threads|pinterest|twitter|x|linkedin|kwai)\.(com|net)(\.\w+)?$/,
   /(^|\.)(amazon|mercadolivre|mercadolibre|shopee|magazineluiza|magalu|americanas|estantevirtual|aliexpress|ebay)\.\w+(\.\w+)?$/,
+  /(^|\.)(spotify|deezer|tidal)\.com$/,
   /(^|\.)google\.\w+(\.\w+)?$/,
   /(^|\.)pinterest\.\w+(\.\w+)?$/,
 ];
@@ -56,9 +60,11 @@ export interface AskedOf {
   readonly author: string | null;
 }
 
-/** Both, then the author's on something else, then the subject by anyone. */
-const rankOf = ({ subject, author }: Relevance): number =>
-  author ? (subject ? 0 : 1) : 2;
+/** Both, then the subject by anyone, then a name alone (it may be someone else's). */
+const rankOf = ({ subject, author }: Relevance): number => {
+  if (!subject) return 2;
+  return author ? 0 : 1;
+};
 
 /**
  * The hits of one search as candidates: only addresses the app takes as a link; an audio or
@@ -78,15 +84,9 @@ export function candidatesOf(
       const shown = { ...shownOf(hit), url: link.data };
       const relevance = relevanceOf(shown, asked);
       if (!relevance.subject && !relevance.author) return [];
-      return [
-        {
-          rank: rankOf(relevance),
-          candidate: toCandidate(shown, asked, relevance),
-        },
-      ];
+      return [toCandidate(shown, asked, relevance)];
     })
-    .sort((one, other) => one.rank - other.rank)
-    .map(({ candidate }) => candidate);
+    .sort((one, other) => one.rank - other.rank);
 }
 
 const shownOf = (hit: WebHit) => ({
@@ -105,6 +105,8 @@ function toCandidate(
     kind,
     title: shown.title || site,
     site,
+    // Asked without authors, the subject alone is as close as it gets.
+    rank: author === null ? 0 : rankOf(relevance),
     author: relevance.author ? author : null,
   };
 }
@@ -124,20 +126,25 @@ export function pageKey(url: string): string {
 }
 
 /**
- * The candidates of every search, one of each in turn: no kind and no author takes the list
- * over. A page found by two searches stays with the first that reaches it, and one in `known`
- * is left out.
+ * The candidates of every search, the closest first and, as close, one of each search in
+ * turn: no kind and no author takes the list over. A page found by two searches stays with
+ * the first that reaches it, and one in `known` is left out.
  */
 export function interleave(
   groups: readonly (readonly Candidate[])[],
   known: ReadonlySet<string> = new Set(),
 ): Candidate[] {
-  const queues = groups.map((group) => [...group]);
   const seen = new Set(known);
-  const taken: Candidate[] = [];
-  while (queues.some((queue) => queue.length > 0))
-    taken.push(...queues.flatMap((queue) => nextUnseen(queue, seen)));
-  return taken;
+  const ranks = [...new Set(groups.flat().map((one) => one.rank))].sort();
+  return ranks.flatMap((rank) => {
+    const queues = groups.map((group) =>
+      group.filter((one) => one.rank === rank),
+    );
+    const taken: Candidate[] = [];
+    while (queues.some((queue) => queue.length > 0))
+      taken.push(...queues.flatMap((queue) => nextUnseen(queue, seen)));
+    return taken;
+  });
 }
 
 /** The first candidate of the queue not taken yet, marked as taken; none when it ended. */

@@ -241,7 +241,7 @@ export class WebSearchService {
     },
   ): WebSearchResponse {
     return {
-      results: found.map((one) => ({
+      results: found.map(({ rank: _rank, ...one }) => ({
         ...one,
         already: of.context.alreadyOf(one.url),
       })),
