@@ -162,7 +162,7 @@ describe('AddContentPage (KBC-184)', () => {
     expect(screen.getByRole('region', { name: 'Enviados agora' })).toBeTruthy();
   });
 
-  it.each(['', 'abc', '0,01', '5,01'])(
+  it.each(['', 'abc', '0,01', '100,01'])(
     'a ceiling of "%s" is refused with its range',
     async (value) => {
       const { fixture } = await renderPage();
@@ -171,7 +171,7 @@ describe('AddContentPage (KBC-184)', () => {
         target: { value },
       });
       await fixture.whenStable();
-      expect(screen.getByText('De 0,05 a 5,00.')).toBeTruthy();
+      expect(screen.getByText('De 0,05 a 100,00.')).toBeTruthy();
       expect(include().getAttribute('aria-disabled')).toBe('true');
     },
   );

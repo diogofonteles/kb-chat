@@ -354,7 +354,7 @@
           <p class="ui-field__hint" id="add-cap-hint">
             @if (capUsd() === null) {
               <span class="problem" i18n="@@addContent.capRange"
-                >De 0,05 a 5,00.</span
+                >De {{ minCap }} a {{ maxCap }}.</span
               >
             } @else {
               <span i18n="@@addContent.capHint"

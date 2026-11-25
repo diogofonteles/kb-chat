@@ -370,6 +370,11 @@ export class AddContentPage {
   protected readonly overMax = computed(
     () => this.overCap() && this.estimateUsd() > DOCUMENT_BATCH_MAX_USD,
   );
+  protected readonly minCap = formatNumber(
+    DOCUMENT_BATCH_MIN_USD,
+    this.locale,
+    '1.2-2',
+  );
   protected readonly maxCap = formatNumber(
     DOCUMENT_BATCH_MAX_USD,
     this.locale,

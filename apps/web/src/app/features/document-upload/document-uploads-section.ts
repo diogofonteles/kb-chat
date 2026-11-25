@@ -141,10 +141,10 @@ interface Row {
                 [busy]="store.busyId() !== null"
                 [at]="store.now()"
                 (opened)="open(row.upload.topic, $event)"
-                (raised)="store.raise(row.upload)"
-                (retried)="store.retry(row.upload)"
-                (removed)="store.remove(row.upload)"
-                (chosen)="store.choose(row.upload, $event)"
+                (raised)="act(); store.raise(row.upload)"
+                (retried)="act(); store.retry(row.upload)"
+                (removed)="act(); store.remove(row.upload)"
+                (chosen)="act(); store.choose(row.upload, $event)"
               />
             </li>
           }
@@ -250,9 +250,13 @@ export class DocumentUploadsSection {
     this.documentOpened.emit({ topic, ...doc });
   }
 
-  /** The button goes away with what it clears: the focus stays in the section. */
+  /** The button pressed is off, or goes away with its row: the focus stays in the section. */
+  protected act(): void {
+    this.title()?.nativeElement.focus({ preventScroll: true });
+  }
+
   protected clear(): void {
-    this.title()?.nativeElement.focus();
+    this.act();
     this.store.clearReady(this.topic());
   }
 }

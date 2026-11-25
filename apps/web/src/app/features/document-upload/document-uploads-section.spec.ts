@@ -199,11 +199,33 @@ describe('Documentos em processamento (KBC-149 FR-2)', () => {
   });
 
   it('an inclusion at the largest ceiling cannot be raised further', async () => {
-    const batch = { id: crypto.randomUUID(), capUsd: 5, spentUsd: 5 };
+    const batch = { id: crypto.randomUUID(), capUsd: 100, spentUsd: 100 };
     await renderSection([upload({ heldBy: 'batch-cap', batch })]);
     expect(
       screen.queryByRole('button', { name: /Aumentar o teto/ }),
     ).toBeNull();
+  });
+
+  it('the focus is never lost with the button that goes away (review B, I3)', async () => {
+    const { http, fixture } = await renderSection([
+      upload({
+        name: 'a.pdf',
+        state: 'failed',
+        failure: 'empty',
+        retriable: true,
+      }),
+    ]);
+    const title = screen.getByRole('heading', {
+      name: 'Documentos em processamento',
+    });
+    const button = screen.getByRole('button', { name: /^Tirar/ });
+    button.focus();
+    fireEvent.click(button);
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(title);
+    http
+      .expectOne((one) => one.method === 'DELETE')
+      .flush('', { status: 500, statusText: 'x' });
   });
 
   it('a failed item the app still has goes again; one it does not have is not offered', async () => {
