@@ -2,6 +2,8 @@ import {
   changeDocumentBatchRequestSchema,
   chooseRecordingsRequestSchema,
   chooseRecordingsResponseSchema,
+  clearReadyUploadsRequestSchema,
+  clearReadyUploadsResponseSchema,
   contentCostsSchema,
   createDocumentUploadRequestSchema,
   createDocumentUploadResponseSchema,
@@ -103,10 +105,20 @@ function registerList(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
       config: { access: UPLOAD },
       schema: { response: { 200: documentUploadListSchema } },
     },
-    async (request) => ({
-      items: await deps.service.list(deps.actorOf(request)),
-    }),
+    async (request) => deps.service.list(deps.actorOf(request)),
   );
+  app
+    .withTypeProvider<ZodTypeProvider>()
+    .post(
+      '/api/v1/document-uploads/clear-ready',
+      CLEAR_OPTIONS,
+      async (request) => ({
+        cleared: await deps.service.clearReady(
+          deps.actorOf(request),
+          request.body.topic,
+        ),
+      }),
+    );
   app.withTypeProvider<ZodTypeProvider>().get(
     '/api/v1/document-uploads/costs',
     {
@@ -123,6 +135,14 @@ const BATCH_OPTIONS = {
     params: uploadParams,
     body: changeDocumentBatchRequestSchema,
     response: { 200: documentBatchSchema },
+  },
+};
+
+const CLEAR_OPTIONS = {
+  config: { access: UPLOAD },
+  schema: {
+    body: clearReadyUploadsRequestSchema,
+    response: { 200: clearReadyUploadsResponseSchema },
   },
 };
 

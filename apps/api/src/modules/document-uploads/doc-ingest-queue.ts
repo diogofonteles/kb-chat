@@ -20,6 +20,7 @@ import {
   WORKING_STATES,
   isWorking,
 } from './upload-batches.js';
+import { inLineOrder } from './mac-line.js';
 import type { UploadRecords } from './upload-records.js';
 
 /** A Mac holds a doc-ingest job this long between heartbeats (conversion runs in steps). */
@@ -160,7 +161,7 @@ export class DocIngestQueue {
       .all()
       .filter((one) => topic === undefined || one.topic === topic)
       .filter((one) => this.isLeasable(one, ledger))
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      .sort(inLineOrder);
   }
 
   private jobOf(record: DocumentUploadRecord): DocIngestJob {

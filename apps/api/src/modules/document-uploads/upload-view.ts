@@ -1,8 +1,18 @@
-import type { DocumentBatch, DocumentUpload } from '@kb-chat/contracts';
+import type {
+  DocumentBatch,
+  DocumentProgress,
+  DocumentUpload,
+} from '@kb-chat/contracts';
 import type { DocumentUploadRecord } from '../../ports/document-uploads.js';
+import type { PlaceInLine } from './mac-line.js';
+import { WORKING_STATES, isWorking } from './upload-batches.js';
 
 /** Where a recording link's media item is now (it goes through the library, KBC-142 BR-5). */
-export type MediaProgress = 'transcribing' | 'ready' | 'failed';
+export interface MediaProgress {
+  readonly state: 'transcribing' | 'ready' | 'failed';
+  /** Where it is while `transcribing`. */
+  readonly step: NonNullable<DocumentProgress['media']> | null;
+}
 
 export const uploadUrlOf = (id: string): string =>
   `/api/v1/document-uploads/${id}/upload`;
@@ -12,6 +22,8 @@ export interface UploadContext {
   readonly showsDetail: boolean;
   readonly received: number | null;
   readonly media: MediaProgress | null;
+  readonly place: PlaceInLine;
+  readonly now: Date;
   /** The document it became is in the app's catalog now (search, map): "pronto". */
   readonly arrived: boolean;
   readonly batch: DocumentBatch | null;
@@ -28,39 +40,51 @@ export function toDocumentUpload(
   record: DocumentUploadRecord,
   input: UploadContext,
 ): DocumentUpload {
-  const fromMedia = mediaStateOf(record, input.media);
+  const media = mediaOf(record, input.media);
+  const fromMedia = media?.state ?? null;
+  const state = fromMedia ?? stateOf(record, input);
   return {
     id: record.id,
     topic: record.topic,
     kind: record.kind,
     name: record.name,
-    state: fromMedia ?? stateOf(record, input.arrived),
+    state,
     failure: fromMedia === 'failed' ? 'conversion-failed' : record.failure,
     detail: input.showsDetail ? record.detail : null,
     document: record.document,
     mediaId: record.mediaId,
     bytes: record.bytes,
     received: record.kind === 'file' ? input.received : null,
-    uploadUrl:
-      record.state === 'receiving' && input.mine
-        ? uploadUrlOf(record.id)
-        : null,
+    uploadUrl: sendsTo(record, input.mine),
     batch: input.batch,
-    heldBy: record.state === 'received' ? input.heldBy : null,
+    heldBy: state === 'received' ? input.heldBy : null,
     review: record.review,
     entries: record.state === 'choosing' ? [...record.entries] : [],
     retriable: record.state === 'failed' && input.kept,
+    progress: { ...input.place, media: media?.step ?? null },
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
 }
 
-const mediaStateOf = (
+const sendsTo = (record: DocumentUploadRecord, mine: boolean) =>
+  record.state === 'receiving' && mine ? uploadUrlOf(record.id) : null;
+
+const mediaOf = (
   record: DocumentUploadRecord,
   media: MediaProgress | null,
 ): MediaProgress | null =>
   record.kind === 'recording' && record.mediaId && media ? media : null;
 
-/** Done on the Mac is "no mapa" until the sync brings it to the catalog: then "pronto". */
-const stateOf = (record: DocumentUploadRecord, arrived: boolean) =>
-  record.state === 'mapped' && arrived ? 'ready' : record.state;
+/**
+ * Done on the Mac is "no mapa" until the sync brings it to the catalog: then "pronto". One the
+ * Mac dropped (its lease ran out) waits again.
+ */
+function stateOf(
+  record: DocumentUploadRecord,
+  { arrived, now }: Pick<UploadContext, 'arrived' | 'now'>,
+): DocumentUpload['state'] {
+  if (record.state === 'mapped' && arrived) return 'ready';
+  const dropped = WORKING_STATES.has(record.state) && !isWorking(record, now);
+  return dropped ? 'received' : record.state;
+}

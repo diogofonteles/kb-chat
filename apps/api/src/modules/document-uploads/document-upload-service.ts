@@ -13,6 +13,8 @@ import {
   type CreateDocumentUploadResponse,
   type DocumentBatch,
   type DocumentUpload,
+  type DocumentUploadList,
+  type DocumentWork,
   type LevelChoice,
   type UploadedDocumentRef,
 } from '@kb-chat/contracts';
@@ -26,7 +28,13 @@ import type {
 import { UploadRefusedError } from '../../ports/media-files.js';
 import { chosenLevel, type MediaActor } from '../media/index.js';
 import { contentCostsOf } from './content-costs.js';
-import { BatchLedger, MIN_LEASE_USD, isWorking } from './upload-batches.js';
+import { MacLine } from './mac-line.js';
+import {
+  BatchLedger,
+  MIN_LEASE_USD,
+  WORKING_STATES,
+  isWorking,
+} from './upload-batches.js';
 import type { UploadRecords } from './upload-records.js';
 import { toDocumentUpload, type MediaProgress } from './upload-view.js';
 
@@ -60,6 +68,8 @@ export interface DocumentUploadServiceDeps {
   readonly inCatalog: (topic: string, id: string) => boolean;
   /** Where a recording link's media item is now. */
   readonly mediaProgressOf?: (mediaId: string) => MediaProgress | null;
+  /** The Mac that publishes to the collections: paired, seen in the last minutes, or not. */
+  readonly mac?: () => DocumentWork['mac'];
   /** What the media month still has (ADR 0035 §11): at zero, everything waits. */
   readonly monthLeftUsd?: () => number;
   readonly now?: () => Date;
@@ -210,7 +220,7 @@ export class DocumentUploadService {
       ? this.viewNow(pending, actor, {
           received: null,
           kept: false,
-          ledger: this.ledger(),
+          moment: this.moment(),
         })
       : null;
     return { outcome: 'duplicate', document: upload?.document ?? null, upload };
@@ -234,7 +244,7 @@ export class DocumentUploadService {
     if (record.state === 'failed' || record.state === 'receiving') return false;
     if (!record.mediaId || !this.deps.mediaProgressOf) return true;
     const progress = this.deps.mediaProgressOf(record.mediaId);
-    return progress !== null && progress !== 'failed';
+    return progress !== null && progress.state !== 'failed';
   }
 
   /**
@@ -283,7 +293,11 @@ export class DocumentUploadService {
       throw new AppError('MEDIA_CONFLICT', 'The Mac is working on it');
     await this.deps.files.remove(id);
     // What it spent still counts in its inclusion, and what it became is still there.
-    if (record.spentUsd > 0 || record.state === 'mapped')
+    if (
+      record.spentUsd > 0 ||
+      record.state === 'mapped' ||
+      record.mediaId !== null
+    )
       await this.deps.records.update(id, (one) => ({
         ...one,
         dismissed: true,
@@ -472,19 +486,58 @@ export class DocumentUploadService {
   }
 
   /** "Documentos em processamento": one's own; masters see everyone's. */
-  async list(actor: UploadActor): Promise<DocumentUpload[]> {
-    const records = this.deps.records
+  async list(actor: UploadActor): Promise<DocumentUploadList> {
+    const records = this.visibleTo(actor)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, LIST_LIMIT);
+    const moment = this.moment();
+    const items = await Promise.all(
+      records.map((one) => this.viewOf(one, actor, moment)),
+    );
+    const { busy, waiting } = moment.line;
+    return { items, work: { mac: moment.mac, busy, waiting } };
+  }
+
+  private visibleTo(actor: UploadActor): DocumentUploadRecord[] {
+    return this.deps.records
       .all()
       .filter(
         (one) =>
           !one.dismissed &&
           (actor.isMaster || one.owner.principal === actor.principal) &&
           actor.canSee(one.topic),
-      )
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, LIST_LIMIT);
-    const ledger = this.ledger();
-    return Promise.all(records.map((one) => this.viewOf(one, actor, ledger)));
+      );
+  }
+
+  /** What is ready leaves the list; it stays in the collection, and in its inclusion's account. */
+  async clearReady(actor: UploadActor, topic?: string): Promise<number> {
+    const moment = this.moment();
+    const ready = this.visibleTo(actor).filter(
+      (one) =>
+        (topic === undefined || one.topic === topic) &&
+        this.viewNow(one, actor, { received: null, kept: false, moment })
+          .state === 'ready',
+    );
+    await this.deps.records.put(
+      ...ready.map((one) => ({ ...one, dismissed: true })),
+    );
+    return ready.length;
+  }
+
+  /** Everything a view is told of besides its own item, read once for a whole list. */
+  private moment(): Moment {
+    const now = this.now();
+    const records = this.deps.records.all();
+    const ledger = new BatchLedger(records, now);
+    const mac = this.deps.mac?.() ?? { state: 'none', lastSeenAt: null };
+    const line = new MacLine(records, {
+      now,
+      costs: contentCostsOf(records),
+      mac: mac.state,
+      isWaiting: (one) =>
+        waitsForMac(one, now) && this.heldBy(one, ledger) === null,
+    });
+    return { now, ledger, line, mac };
   }
 
   private ledger(): BatchLedger {
@@ -527,7 +580,7 @@ export class DocumentUploadService {
   private async viewOf(
     record: DocumentUploadRecord,
     actor: UploadActor,
-    ledger = this.ledger(),
+    moment = this.moment(),
   ): Promise<DocumentUpload> {
     const received =
       record.kind === 'file'
@@ -536,7 +589,7 @@ export class DocumentUploadService {
           : record.bytes
         : null;
     const kept = record.state === 'failed' && (await this.isKept(record));
-    return this.viewNow(record, actor, { received, kept, ledger });
+    return this.viewNow(record, actor, { received, kept, moment });
   }
 
   private viewNow(
@@ -569,12 +622,15 @@ export class DocumentUploadService {
     actor: UploadActor,
     known: KnownOfUpload,
   ) {
+    const { ledger, line, now } = known.moment;
     return {
       showsDetail: actor.isMaster,
       received: known.received,
       kept: known.kept,
-      batch: record.batch ? known.ledger.viewOf(record.batch.id) : null,
-      heldBy: this.heldBy(record, known.ledger),
+      batch: record.batch ? ledger.viewOf(record.batch.id) : null,
+      heldBy: this.heldBy(record, ledger),
+      place: line.placeOf(record.id),
+      now,
       mine: record.owner.principal === actor.principal,
     };
   }
@@ -603,8 +659,21 @@ const inScope = (topic: string, { topic: home, document }: ExistingDocument) =>
 interface KnownOfUpload {
   readonly received: number | null;
   readonly kept: boolean;
-  readonly ledger: BatchLedger;
+  readonly moment: Moment;
 }
+
+/** The inclusions' account, the Mac and its line, at one moment. */
+interface Moment {
+  readonly now: Date;
+  readonly ledger: BatchLedger;
+  readonly line: MacLine;
+  readonly mac: DocumentWork['mac'];
+}
+
+/** Received, or dropped by a Mac that stopped answering: the Mac may take it. */
+const waitsForMac = (record: DocumentUploadRecord, now: Date): boolean =>
+  record.state === 'received' ||
+  (WORKING_STATES.has(record.state) && !isWorking(record, now));
 
 /** What every upload starts with. */
 const NEW_RECORD = {

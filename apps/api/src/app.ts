@@ -103,7 +103,10 @@ import type { SearchIndexPort } from './ports/search-index.js';
 import type { SpendLedgerPort } from './ports/spend-ledger.js';
 import type { UsageLogPort } from './ports/usage-log.js';
 import type { VaultReaderPort } from './ports/vault-reader.js';
-import { registerDocumentUploads } from './document-uploads-factory.js';
+import {
+  registerDocumentUploads,
+  type DocumentUploadsWiring,
+} from './document-uploads-factory.js';
 import { createWebSearch, registerWebSearch } from './web-search-factory.js';
 import type { WebSearchService } from './modules/web-search/index.js';
 import type { DocIngestQueue } from './modules/document-uploads/index.js';
@@ -1321,13 +1324,17 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const groq = createGroq({ media: wiring.media, transcribers, log: app.log });
   const documents = await startDocuments(app, { ...wiring, transcribers });
   const media = mediaService({ ...wiring, transcribers, groq, documents });
-  const uploads = { wiring, media, documents };
+  // The status board is built further on: what it knows is asked for when it is there.
+  let board: TranscriberStatusBoard | null = null;
+  const mac = macOf(transcribers, (id) => board?.percentOf(id) ?? null);
+  const uploads = { wiring, media, documents, mac };
   const docIngest = await startDocumentUploads(app, uploads);
   const publisher = trackPublisher(wiring, documents);
   const withDocuments = { ...wiring, documents };
   await registerPublication(app, { documents, media });
   const setup = { transcribers, media, wiring, documents, learning, docIngest };
   const statusBoard = await registerTranscribers(app, setup);
+  board = statusBoard;
   await app.register(groqRoutes({ groq, media }));
   const listeners = { media, transcribers, publisher };
   await registerListening(app, withDocuments, listeners);
@@ -1343,6 +1350,16 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   startJanitor(app, { ...measures, ...edited, media: wiring.media, groq });
 }
 
+/** The Mac marked "Publica no acervo": it takes the sent documents too (ADR 0040 §10). */
+const macOf = (
+  transcribers: TranscriberService,
+  percentOf: (mediaId: string) => number | null,
+): DocumentUploadsWiring['mac'] => ({
+  isPaired: () => transcribers.presence('kb-publish').transcriber !== 'none',
+  lastSeenAt: () => transcribers.lastSeenAt('kb-publish'),
+  percentOf,
+});
+
 /**
  * Documents and links sent from the app (KBC-149, ADR 0040): people's routes, the queue, and
  * the web search that finds links to send (KBC-185).
@@ -1353,9 +1370,10 @@ async function startDocumentUploads(
     wiring: MediaWiring;
     media: MediaService;
     documents: MediaDocuments;
+    mac: DocumentUploadsWiring['mac'];
   },
 ): Promise<DocIngestQueue> {
-  const { wiring, media, documents } = input;
+  const { wiring, media, documents, mac } = input;
   const { queue, service } = await registerDocumentUploads(app, {
     ...wiring,
     mediaService: media,
@@ -1365,6 +1383,7 @@ async function startDocumentUploads(
       documents: wiring.levels.documents,
       scaleOf: mediaLevelsOf(wiring).scaleOf,
     },
+    mac,
   });
   wiring.onDocIngest?.(queue);
   await registerWebSearch(app, {

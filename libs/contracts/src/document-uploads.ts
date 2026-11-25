@@ -209,6 +209,54 @@ export const recordingEntrySchema = z.object({
 });
 export type RecordingEntry = z.infer<typeof recordingEntrySchema>;
 
+/**
+ * Where a recording is in the library, once the Mac brought its sound: being converted,
+ * waiting for the transcriber, being transcribed, being published, or waiting for a person.
+ */
+export const DOCUMENT_MEDIA_STEPS = [
+  'preparing',
+  'waiting',
+  'transcribing',
+  'publishing',
+  'attention',
+] as const;
+export const documentMediaStepSchema = z.enum(DOCUMENT_MEDIA_STEPS);
+export type DocumentMediaStep = z.infer<typeof documentMediaStepSchema>;
+
+/** How far an item is (KBC-184): when the Mac took it, or its place in the Mac's line. */
+export const documentProgressSchema = z.object({
+  /** Since when the Mac has it; null while it waits, and once it ended. */
+  startedAt: z.iso.datetime().nullable(),
+  /** Its place among everything that waits for the Mac, anyone's; 1 is next. */
+  position: z.number().int().min(1).nullable(),
+  /** About when its turn comes; null while no Mac is seen (nobody knows). */
+  startsInSeconds: z.number().int().min(0).nullable(),
+  /** About how long one like it takes on the Mac, of what is still to be done. */
+  takesSeconds: z.number().int().min(0).nullable(),
+  /** A recording in the library: its step, and how far when it is known. */
+  media: z
+    .object({
+      step: documentMediaStepSchema,
+      percent: z.number().int().min(0).max(100).nullable(),
+    })
+    .nullable(),
+});
+export type DocumentProgress = z.infer<typeof documentProgressSchema>;
+
+/** The Mac that puts what is sent into the collections, as the screen says it. */
+export const documentWorkSchema = z.object({
+  mac: z.object({
+    /** None paired to publish, seen in the last minutes, or not. */
+    state: z.enum(['none', 'off', 'on']),
+    lastSeenAt: z.iso.datetime().nullable(),
+  }),
+  /** The Mac has an item now, whoever sent it. */
+  busy: z.boolean(),
+  /** Everything that waits for the Mac, whoever sent it. */
+  waiting: z.number().int().min(0),
+});
+export type DocumentWork = z.infer<typeof documentWorkSchema>;
+
 export const documentUploadSchema = z.object({
   id: z.uuid(),
   topic: topicSlugSchema,
@@ -238,6 +286,7 @@ export const documentUploadSchema = z.object({
   entries: z.array(recordingEntrySchema),
   /** It failed, and the app still has what was sent: it can go again as it is. */
   retriable: z.boolean(),
+  progress: documentProgressSchema,
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -265,8 +314,22 @@ export type CreateDocumentUploadResponse = z.infer<
 /** GET /api/v1/document-uploads: "Documentos em processamento" (the person's own; masters all). */
 export const documentUploadListSchema = z.object({
   items: z.array(documentUploadSchema),
+  /** Null from an API that does not say it. */
+  work: documentWorkSchema.nullable().default(null),
 });
 export type DocumentUploadList = z.infer<typeof documentUploadListSchema>;
+
+/** POST /api/v1/document-uploads/clear-ready: what is ready leaves the list (not the collection). */
+export const clearReadyUploadsRequestSchema = z.strictObject({
+  /** Only this collection's; left out, every one the person sees. */
+  topic: topicSlugSchema.optional(),
+});
+export type ClearReadyUploadsRequest = z.infer<
+  typeof clearReadyUploadsRequestSchema
+>;
+export const clearReadyUploadsResponseSchema = z.object({
+  cleared: z.number().int().min(0),
+});
 
 /** POST /api/v1/document-uploads/:id/choose: the list's recordings that enter (R7). */
 export const chooseRecordingsRequestSchema = z.strictObject({

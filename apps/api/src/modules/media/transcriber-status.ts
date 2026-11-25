@@ -148,6 +148,23 @@ export class TranscriberStatusBoard {
     return said?.reason ?? 'not-installed';
   }
 
+  /** How far the transcription of a media is, as the transcriber that holds it last said. */
+  percentOf(mediaId: string): number | null {
+    const holder = this.deps.transcribers
+      .list()
+      .find(
+        (one) =>
+          one.currentJob?.mediaId === mediaId &&
+          one.currentJob.kind === 'transcribe',
+      );
+    const report = holder && this.reports.get(holder.id);
+    if (!report || report.currentJob?.kind !== 'transcribe') return null;
+    const age = this.now().getTime() - Date.parse(report.receivedAt);
+    return age > TRANSCRIBER_STATUS_STALE_MS
+      ? null
+      : report.currentJob.progress;
+  }
+
   /** Whether a transcriber said anything at or after this moment. */
   saidSince(at: Date): boolean {
     return [...this.reports.values()].some(

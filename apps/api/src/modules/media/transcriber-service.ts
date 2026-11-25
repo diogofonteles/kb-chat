@@ -145,6 +145,15 @@ export class TranscriberService {
     return { transcriber: 'off', offSince: [...times].sort().at(-1) ?? null };
   }
 
+  /** When a transcriber that leases `kind` was last heard from; null when none ever was. */
+  lastSeenAt(kind: MediaJobKind): string | null {
+    const seen = this.deps.store
+      .list()
+      .filter((record) => record.kinds.includes(kind))
+      .flatMap((record) => (record.lastSeenAt ? [record.lastSeenAt] : []));
+    return seen.sort().at(-1) ?? null;
+  }
+
   private seen(id: string): void {
     const now = this.now();
     if (now.getTime() - (this.lastTouch.get(id) ?? 0) < TOUCH_EVERY_MS) return;

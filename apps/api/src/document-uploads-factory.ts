@@ -8,11 +8,16 @@ import { startOfAppMonth } from './app-calendar.js';
 import type { AppConfig } from './config.js';
 import type { MediaDeps } from './media-factory.js';
 import type { MediaDocuments } from './media-documents-factory.js';
-import { sameLinkKey } from '@kb-chat/contracts';
+import {
+  TRANSCRIBER_STATUS_STALE_MS,
+  sameLinkKey,
+  type DocumentWork,
+} from '@kb-chat/contracts';
 import { AppError } from './app-error.js';
 import { collectionOf } from './modules/media-documents/index.js';
 import { refreshSoon } from './refresh-soon.js';
 import type { DocumentUploadRecord } from './ports/document-uploads.js';
+import type { MediaRecord } from './ports/media-store.js';
 import {
   levelViewOf,
   type DocumentLevelsService,
@@ -55,6 +60,12 @@ export interface DocumentUploadsWiring {
     readonly scaleOf: (
       topic: string,
     ) => readonly { id: string; code: string }[];
+  };
+  /** The Mac that publishes, as it was last heard from, and how far its transcription is. */
+  readonly mac: {
+    readonly isPaired: () => boolean;
+    readonly lastSeenAt: () => string | null;
+    readonly percentOf: (mediaId: string) => number | null;
   };
 }
 
@@ -139,6 +150,7 @@ function uploadService(
     findExisting: (scope, key) => findExisting(catalog, scope, key),
     inCatalog: (topic, id) => catalog.get(topic)?.entries.has(id) === true,
     mediaProgressOf: (mediaId) => mediaProgressOf(wiring, mediaId),
+    mac: () => macNow(wiring.mac),
     monthLeftUsd: () => wiring.documents.kb.budgetUsd(),
   });
 }
@@ -187,11 +199,49 @@ function mediaProgressOf(
 ): MediaProgress | null {
   const media = wiring.media.store.getMedia(mediaId);
   if (!media) return null;
-  if (media.status === 'failed') return 'failed';
+  if (media.status === 'failed') return { state: 'failed', step: null };
   const publication = wiring.documents.status.of(mediaId);
-  if (publication?.state === 'live') return 'ready';
-  if (publication?.state === 'failed') return 'failed';
-  return 'transcribing';
+  if (publication?.state === 'live') return { state: 'ready', step: null };
+  if (publication?.state === 'failed') return { state: 'failed', step: null };
+  return {
+    state: 'transcribing',
+    step: mediaStepOf(media, {
+      published: publication !== null,
+      percentOf: wiring.mac.percentOf,
+    }),
+  };
+}
+
+/** Where a recording is in the library, as its own item tells it. */
+function mediaStepOf(
+  media: MediaRecord,
+  known: {
+    readonly published: boolean;
+    readonly percentOf: (mediaId: string) => number | null;
+  },
+): MediaProgress['step'] {
+  if (media.status !== 'ready')
+    return { step: 'preparing', percent: media.progress };
+  const { jobStatus, version } = media.transcription;
+  if (jobStatus === 'leased')
+    return { step: 'transcribing', percent: known.percentOf(media.id) };
+  if (version === null) return { step: 'waiting', percent: null };
+  // Transcribed, with no document of its own: its tracks wait for a person.
+  return { step: known.published ? 'publishing' : 'attention', percent: null };
+}
+
+/** Seen in the last minutes is on: it runs only while it has work, and says so every 30 s. */
+function macNow(mac: DocumentUploadsWiring['mac']): DocumentWork['mac'] {
+  const lastSeenAt = mac.lastSeenAt();
+  if (!mac.isPaired()) return { state: 'none', lastSeenAt: null };
+  const age =
+    lastSeenAt === null
+      ? Number.POSITIVE_INFINITY
+      : Date.now() - Date.parse(lastSeenAt);
+  return {
+    state: age <= TRANSCRIBER_STATUS_STALE_MS ? 'on' : 'off',
+    lastSeenAt,
+  };
 }
 
 /** ADR 0036 §5: the document is placed at its level before it arrives (audited). */
