@@ -219,8 +219,8 @@ function testAuth(state: string, keys: TestKeys) {
   };
 }
 
-/** The vault, its index and catalog, the spend ledger and the research agent. */
-async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
+/** The vault as main opens it: with the screen's collections, without what was removed. */
+async function vaultOf(config: AppConfig) {
   const collections = new CollectionRegistry(
     new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'collections.json')),
   );
@@ -234,6 +234,12 @@ async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
     collections,
   );
   const vault = new RemovedVault(collected, removals);
+  return { collections, removals, vault };
+}
+
+/** The vault, its index and catalog, the spend ledger and the research agent. */
+async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
+  const { collections, removals, vault } = await vaultOf(config);
   const index = await createSearchIndex({ config, vault, log: logger });
   const catalog = new CatalogRegistry(vault);
   await catalog.load();
