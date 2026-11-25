@@ -52,6 +52,11 @@ import {
   AuthorDirectory,
   AuthorsService,
 } from '../src/modules/authors/index.js';
+import { JsonDocumentRemovalStore } from '../src/adapters/json-document-removal-store.js';
+import {
+  RemovalRecords,
+  RemovedVault,
+} from '../src/modules/document-removals/index.js';
 import { CatalogRegistry } from '../src/modules/catalog/index.js';
 import { createAiProviders } from '../src/providers/create-ai-providers.js';
 import { createResearchAgent } from '../src/research-agent-factory.js';
@@ -219,10 +224,16 @@ async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
   const collections = new CollectionRegistry(
     new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'collections.json')),
   );
-  const vault = new CollectionsVault(
+  const removals = await RemovalRecords.open(
+    new JsonDocumentRemovalStore(
+      join(config.KB_CHAT_STATE_DIR, 'document-removals.json'),
+    ),
+  );
+  const collected = new CollectionsVault(
     new FsVaultAdapter(config.KB_VAULT),
     collections,
   );
+  const vault = new RemovedVault(collected, removals);
   const index = await createSearchIndex({ config, vault, log: logger });
   const catalog = new CatalogRegistry(vault);
   await catalog.load();
@@ -242,7 +253,16 @@ async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
     ledger,
     mainAuthorOf: (topic) => authors.mainVoiceOf(topic),
   });
-  return { vault, index, catalog, ledger, agent, collections, authorDirectory };
+  return {
+    vault,
+    removals,
+    index,
+    catalog,
+    ledger,
+    agent,
+    collections,
+    authorDirectory,
+  };
 }
 
 interface AiWiring {
