@@ -397,6 +397,11 @@
             }
           </ui-banner>
         }
+      </div>
+      <div class="go" [class.stuck]="count() > 0">
+        @if (count() > 0) {
+          <p class="go-text">{{ goText() }}</p>
+        }
         <button
           uiButton="primary"
           type="button"

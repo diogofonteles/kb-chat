@@ -356,6 +356,11 @@ export class AddContentPage {
   });
   private readonly sentCount = computed(() => this.sender.summary().sent);
   private readonly estimateUsd = computed(() => this.costs.usd(this.counts()));
+  /** "até US$ 0,02", beside the button that is always in reach. */
+  protected readonly goText = computed(() => {
+    const usd = formatNumber(this.estimateUsd(), this.locale, '1.2-2');
+    return $localize`:@@addContent.goText:até US$ ${usd}:usd:`;
+  });
   /** The whole inclusion would not fit in the ceiling: said before, not in the middle. */
   protected readonly overCap = computed(() => {
     const cap = this.capUsd();
