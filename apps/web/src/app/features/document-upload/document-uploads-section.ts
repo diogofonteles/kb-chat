@@ -15,12 +15,20 @@ import {
 } from '@kb-chat/contracts';
 import { UiBanner, UiButton, UiIcon, UiIconButton, UiPill } from '@ui/index.js';
 import { DocumentUploadsStore } from './document-uploads-store.js';
+import { RecordingChooser } from './recording-chooser.js';
 import {
   FAILURE_TEXTS,
   STATE_LABELS,
   WAITING_HINTS,
   isWorking,
 } from './upload-labels.js';
+
+const ICONS = {
+  file: 'file',
+  url: 'link',
+  recording: 'music',
+  list: 'list',
+} as const;
 
 /** Rows shown before "Ver os outros". */
 const FIRST_ROWS = 30;
@@ -39,7 +47,7 @@ export interface OpenedDocument {
  */
 @Component({
   selector: 'app-document-uploads-section',
-  imports: [UiBanner, UiButton, UiIcon, UiIconButton, UiPill],
+  imports: [RecordingChooser, UiBanner, UiButton, UiIcon, UiIconButton, UiPill],
   template: `
     @if (rows().length > 0) {
       <section class="group" aria-labelledby="doc-uploads-title">
@@ -130,6 +138,14 @@ export interface OpenedDocument {
                   </button>
                 }
               </div>
+              @if (row.upload.entries.length > 0) {
+                <app-recording-chooser
+                  class="chooser"
+                  [entries]="row.upload.entries"
+                  [disabled]="store.busyId() !== null"
+                  (picked)="store.choose(row.upload, $event)"
+                />
+              }
             </li>
           }
         </ul>
@@ -189,7 +205,7 @@ export class DocumentUploadsSection {
       upload,
       state: label.text(),
       tone: label.tone,
-      icon: upload.kind === 'file' ? ('file' as const) : ('link' as const),
+      icon: ICONS[upload.kind],
       topicTitle: namesTopic
         ? (this.titles().get(upload.topic) ?? upload.topic)
         : '',

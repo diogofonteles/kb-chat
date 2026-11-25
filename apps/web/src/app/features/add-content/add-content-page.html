@@ -118,8 +118,9 @@
           </div>
           <p class="hint" i18n="@@addContent.fileTypes">
             PDF (também escaneado), Word, PowerPoint, Excel, EPUB, TXT,
-            Markdown, imagem, CSV, JSON e áudio. De uma pasta, entra tudo,
-            também das subpastas; o que não puder entrar aparece com o motivo.
+            Markdown, imagem, CSV, JSON, áudio e vídeo (entra a transcrição). De
+            uma pasta, entra tudo, também das subpastas; o que não puder entrar
+            aparece com o motivo.
           </p>
           <p class="status" role="status">
             @if (reading()) {
@@ -208,7 +209,7 @@
                 @for (one of going(); track one.key) {
                   <li class="row">
                     <ui-icon
-                      [name]="one.role === 'audio' ? 'music' : 'file'"
+                      [name]="one.role === 'document' ? 'file' : 'music'"
                       [size]="20"
                     />
                     <div class="row-text">
@@ -257,8 +258,9 @@
             id="add-links-hint"
             i18n="@@addContent.linksHint"
           >
-            Um por linha. Uma página vira texto; um vídeo do YouTube é
-            transcrito e entra como gravação.
+            Um por linha. Uma página vira texto; um vídeo ou áudio (YouTube,
+            Vimeo, Instagram, SoundCloud, podcast) é transcrito e entra como
+            gravação. De um canal ou playlist, você escolhe o que entra.
           </p>
           <p class="count" id="add-links-count" role="status">
             @if (tooManyLinks()) {
@@ -295,13 +297,17 @@
           </button>
           <p class="hint" i18n="@@addContent.mediaHint">
             O áudio é transcrito, pode ser dividido em faixas e fica para ouvir
-            na Biblioteca. A transcrição entra no acervo.
+            na Biblioteca. De um vídeo entra só o som. A transcrição entra no
+            acervo.
           </p>
         </div>
       }
     }
 
     @if (way() !== 'media') {
+      @if (count() > 0) {
+        <app-content-estimate [counts]="counts()" />
+      }
       <div class="send">
         <div class="ui-field cap" [class.ui-field--invalid]="capUsd() === null">
           <label class="ui-field__label" for="add-cap" i18n="@@addContent.cap"
@@ -323,11 +329,6 @@
             @if (capUsd() === null) {
               <span class="problem" i18n="@@addContent.capRange"
                 >De 0,05 a 5,00.</span
-              >
-            } @else if (count() > 0) {
-              <span i18n="@@addContent.estimate"
-                >Estimativa: até US$ {{ estimate() }}. Ao chegar ao teto, o
-                resto espera e nada se perde.</span
               >
             } @else {
               <span i18n="@@addContent.capHint"

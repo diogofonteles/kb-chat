@@ -9,6 +9,8 @@ describe('sortFile (KBC-184)', () => {
     ['foto.jpeg', 'document'],
     ['aula.mp3', 'audio'],
     ['aula.OPUS', 'audio'],
+    ['aula.mp4', 'video'],
+    ['aula.MKV', 'video'],
   ])('%s goes as %s', (name, role) => {
     expect(sortFile(file(name))).toEqual({ role, problem: '' });
   });

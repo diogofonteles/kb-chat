@@ -29,6 +29,7 @@ const upload = (fields: Partial<DocumentUpload>): DocumentUpload => ({
   batch: null,
   heldBy: null,
   retriable: false,
+  entries: [],
   createdAt: '2026-11-16T10:00:00.000Z',
   updatedAt: '2026-11-16T10:00:00.000Z',
   ...fields,
@@ -195,5 +196,29 @@ describe('Documentos em processamento (KBC-149 FR-2)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ver os outros 15' }));
     await fixture.whenStable();
     expect(screen.getAllByRole('listitem')).toHaveLength(45);
+  });
+
+  it('a list offers what it holds; what is chosen goes, and nothing before', async () => {
+    const list = upload({
+      kind: 'list',
+      name: 'https://www.youtube.com/playlist?list=PL1',
+      state: 'choosing',
+      entries: [
+        { url: 'https://youtu.be/1', title: 'Aula 1', durationS: 60 },
+        { url: 'https://youtu.be/2', title: 'Aula 2', durationS: null },
+      ],
+    });
+    const { http, fixture } = await renderSection([list]);
+    expect(screen.getByText('Escolha o que entra')).toBeTruthy();
+    http.expectNone((request) => request.method === 'POST');
+    fireEvent.click(screen.getByRole('checkbox', { name: /Aula 2/ }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Incluir 1 gravação' }));
+    const post = http.expectOne(`${URL}/${list.id}/choose`);
+    expect(post.request.body).toEqual({ urls: ['https://youtu.be/2'] });
+    post.flush({ created: 1, already: 0 });
+    http.match(URL).forEach((one) => one.flush({ items: [] }));
+    await fixture.whenStable();
+    expect(screen.queryByRole('checkbox')).toBeNull();
   });
 });

@@ -2,12 +2,13 @@ import {
   DOCUMENT_UPLOAD_EXTENSIONS,
   DOCUMENT_UPLOAD_MAX_BYTES,
   MEDIA_UPLOAD_EXTENSIONS,
+  MEDIA_VIDEO_EXTENSIONS,
   hasDocumentExtension,
 } from '@kb-chat/contracts';
 import { fileProblemOf } from '@features/media/upload-rules.js';
 
-/** What a chosen file becomes: a document, a recording, or nothing (and why). */
-export type FileRole = 'document' | 'audio' | 'refused' | 'ignored';
+/** What a chosen file becomes: a document, a recording (a video's sound), or nothing. */
+export type FileRole = 'document' | 'audio' | 'video' | 'refused' | 'ignored';
 
 /** A chosen file, where it was in its folder, and why it does not go ('' when it does). */
 export interface ChosenFile {
@@ -22,6 +23,7 @@ export interface ChosenFile {
 export const FILE_ACCEPT = [
   ...DOCUMENT_UPLOAD_EXTENSIONS,
   ...MEDIA_UPLOAD_EXTENSIONS,
+  ...MEDIA_VIDEO_EXTENSIONS,
 ]
   .map((one) => `.${one}`)
   .join(',');
@@ -38,6 +40,11 @@ const extensionOf = (name: string): string =>
 
 const isAudio = (name: string): boolean =>
   (MEDIA_UPLOAD_EXTENSIONS as readonly string[]).includes(extensionOf(name));
+const isVideo = (name: string): boolean =>
+  (MEDIA_VIDEO_EXTENSIONS as readonly string[]).includes(extensionOf(name));
+/** An image is described by a vision model: it costs a little more than a text. */
+export const isImage = (name: string): boolean =>
+  /\.(png|jpe?g|tiff?|webp)$/i.test(name);
 
 function documentProblem(file: File): string {
   if (file.size > DOCUMENT_UPLOAD_MAX_BYTES)
@@ -58,9 +65,10 @@ export function sortFile(file: File): Pick<ChosenFile, 'role' | 'problem'> {
     const problem = documentProblem(file);
     return { role: problem ? 'refused' : 'document', problem };
   }
-  if (isAudio(file.name)) {
+  if (isAudio(file.name) || isVideo(file.name)) {
     const problem = fileProblemOf(file) ?? '';
-    return { role: problem ? 'refused' : 'audio', problem };
+    const role = isVideo(file.name) ? 'video' : 'audio';
+    return { role: problem ? 'refused' : role, problem };
   }
   return {
     role: 'refused',

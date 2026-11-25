@@ -124,7 +124,10 @@ describe('AddContentPage (KBC-184)', () => {
     );
     expect(screen.getByText('2 endereços prontos')).toBeTruthy();
     expect(screen.getByText(/Não é um endereço: não é link/)).toBeTruthy();
-    expect(screen.getByText(/Estimativa: até US\$/)).toBeTruthy();
+    expect(
+      screen.getByRole('region', { name: 'Quanto deve custar' }),
+    ).toBeTruthy();
+    expect(screen.getByText('2 páginas da web')).toBeTruthy();
     fireEvent.input(screen.getByLabelText(/Teto desta inclusão/), {
       target: { value: '1,25' },
     });
@@ -224,6 +227,19 @@ describe('AddContentPage (KBC-184)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Limpar' }));
     await fixture.whenStable();
     expect(include().disabled).toBe(true);
+  });
+
+  it('a folder with images, audios and videos is estimated by kind; a video goes by its sound', async () => {
+    const { http, fixture } = await renderPage();
+    const files = ['a.pdf', 'b.png', 'c.mp3', 'd.mp4'].map(
+      (name) => new File(['x'], name),
+    );
+    await pick('input[type="file"]:not(.folder-input)', files, fixture);
+    expect(screen.getByText('2 documentos · 1 áudio · 1 vídeo')).toBeTruthy();
+    expect(screen.getByText('1 documento')).toBeTruthy();
+    expect(screen.getByText('1 imagem')).toBeTruthy();
+    expect(screen.getByText('2 áudios e vídeos')).toBeTruthy();
+    http.expectNone((request) => request.method === 'POST');
   });
 
   it('a folder past the ceiling says so before, and one press fits it', async () => {

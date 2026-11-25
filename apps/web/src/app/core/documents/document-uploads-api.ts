@@ -2,9 +2,11 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
   MEDIA_UPLOAD_PART_BYTES,
+  chooseRecordingsResponseSchema,
   createDocumentUploadResponseSchema,
   documentBatchSchema,
   documentUploadListSchema,
+  type ChooseRecordingsResponse,
   type CreateDocumentUploadRequest,
   type CreateDocumentUploadResponse,
   type DocumentBatch,
@@ -17,6 +19,8 @@ import { Observable, map } from 'rxjs';
 
 /** "Documentos em processamento" (KBC-149): one's own sent documents; masters, everyone's. */
 export const documentUploadsUrl = (): string => '/api/v1/document-uploads';
+/** What each kind of content cost here (KBC-186): the estimate before sending. */
+export const contentCostsUrl = (): string => `${documentUploadsUrl()}/costs`;
 export const documentsUrl = (topic: string): string =>
   `/api/v1/topics/${encodeURIComponent(topic)}/documents`;
 export const parseDocumentUploads = (body: unknown) =>
@@ -63,6 +67,16 @@ export class DocumentUploadsApi {
     return this.http
       .patch(`/api/v1/document-batches/${id}`, { capUsd })
       .pipe(map((body) => documentBatchSchema.parse(body)));
+  }
+
+  /** The recordings of a list that enter (KBC-186). */
+  choose(
+    id: string,
+    urls: readonly string[],
+  ): Observable<ChooseRecordingsResponse> {
+    return this.http
+      .post(`${documentUploadsUrl()}/${id}/choose`, { urls })
+      .pipe(map((body) => chooseRecordingsResponseSchema.parse(body)));
   }
 
   /** A failed item goes again as it was sent. */

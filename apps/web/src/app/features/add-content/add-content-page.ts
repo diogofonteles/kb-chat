@@ -39,13 +39,20 @@ import {
   FILE_ACCEPT,
   canPickFolder,
   droppedFiles,
+  isImage,
   pickedOf,
   sortFile,
   type ChosenFile,
   type FileRole,
   type PickedFile,
 } from './content-files.js';
-import { MAX_LINKS, parseLinks } from './content-links.js';
+import {
+  ContentCostsStore,
+  NO_CONTENT,
+  type ContentCounts,
+} from './content-costs-store.js';
+import { ContentEstimate } from './content-estimate.js';
+import { MAX_LINKS, parseLinks, type ContentLink } from './content-links.js';
 import { ContentSender, type ContentSource } from './content-sender.js';
 import { ContentSends } from './content-sends.js';
 
@@ -73,12 +80,6 @@ const WAYS: readonly {
   },
 ];
 
-/**
- * What judging and filing one document costs, rounded up: the dearest of the 46 measured on
- * 2026-11-25 was US$ 0.0026. Shown as "até", the ceiling is what really limits it.
- */
-export const ESTIMATED_USD_PER_DOCUMENT = 0.003;
-
 const documentsText = (n: number): string =>
   n === 1
     ? $localize`:@@addContent.oneDocument:1 documento`
@@ -87,10 +88,39 @@ const audiosText = (n: number): string =>
   n === 1
     ? $localize`:@@addContent.oneAudio:1 áudio`
     : $localize`:@@addContent.audios:${n}:count: áudios`;
+const videosText = (n: number): string =>
+  n === 1
+    ? $localize`:@@addContent.oneVideo:1 vídeo`
+    : $localize`:@@addContent.videos:${n}:count: vídeos`;
 const leftText = (n: number): string =>
   n === 1
     ? $localize`:@@addContent.oneLeft:1 não entra`
     : $localize`:@@addContent.leftCount:${n}:count: não entram`;
+
+/** What goes: a video by its sound alone. */
+const GOING: ReadonlySet<FileRole> = new Set(['document', 'audio', 'video']);
+
+const countsOfFiles = (files: readonly ChosenFile[]): ContentCounts => {
+  const documents = files.filter(({ role }) => role === 'document');
+  const image = documents.filter(({ file }) => isImage(file.name)).length;
+  return {
+    ...NO_CONTENT,
+    image,
+    document: documents.length - image,
+    recording: files.length - documents.length,
+  };
+};
+
+const countsOfLinks = (links: readonly ContentLink[]): ContentCounts => {
+  const of = (kind: ContentLink['kind']) =>
+    links.filter((one) => one.kind === kind).length;
+  return {
+    ...NO_CONTENT,
+    page: of('page'),
+    recording: of('recording'),
+    list: of('list'),
+  };
+};
 
 /** The same file chosen twice (alone and in its folder too) stays once. */
 const identityOf = ({ file, path }: PickedFile): string =>
@@ -109,6 +139,7 @@ const rootIn = (topics: readonly Topic[], slug: string): string =>
   imports: [
     RouterLink,
     CollectionDialog,
+    ContentEstimate,
     ContentSends,
     DocumentUploadsSection,
     LevelField,
@@ -119,7 +150,7 @@ const rootIn = (topics: readonly Topic[], slug: string): string =>
     UiIconButton,
     UploadPanel,
   ],
-  providers: [ContentSender, DocumentUploadsStore],
+  providers: [ContentCostsStore, ContentSender, DocumentUploadsStore],
   templateUrl: './add-content-page.html',
   styleUrl: './add-content-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -133,6 +164,7 @@ export class AddContentPage {
   protected readonly chat = inject(ChatStore);
   protected readonly sender = inject(ContentSender);
   protected readonly uploads = inject(DocumentUploadsStore);
+  private readonly costs = inject(ContentCostsStore);
   private readonly heading =
     viewChild.required<ElementRef<HTMLElement>>('heading');
 
@@ -209,7 +241,7 @@ export class AddContentPage {
   protected readonly reading = signal(false);
   protected readonly readFailed = signal(false);
   protected readonly going = computed(() =>
-    this.files().filter(({ role }) => role === 'document' || role === 'audio'),
+    this.files().filter(({ role }) => GOING.has(role)),
   );
   /** What was found and does not go, each with why: nothing is left out in silence. */
   protected readonly left = computed(() =>
@@ -218,15 +250,20 @@ export class AddContentPage {
   protected readonly tally = computed(() => {
     const of = (role: FileRole) =>
       this.files().filter((one) => one.role === role).length;
-    return { documents: of('document'), audios: of('audio') };
+    return {
+      documents: of('document'),
+      audios: of('audio'),
+      videos: of('video'),
+    };
   });
   /** "110 documentos · 12 áudios · 6 não entram": only what there is. */
   protected readonly foundParts = computed(() => {
-    const { documents, audios } = this.tally();
+    const { documents, audios, videos } = this.tally();
     const left = this.left().length;
     const parts = [
       { n: documents, text: documentsText(documents) },
       { n: audios, text: audiosText(audios) },
+      { n: videos, text: videosText(videos) },
       { n: left, text: leftText(left) },
     ];
     return parts
@@ -241,10 +278,12 @@ export class AddContentPage {
         ? this.parsed().links.length
         : 0,
   );
-  /** Only a document is judged on the house's key; an audio is transcribed on the Mac. */
-  private readonly judged = computed(() =>
-    this.way() === 'files' ? this.tally().documents : this.count(),
-  );
+  /** What is about to be sent, by what it costs. */
+  protected readonly counts = computed<ContentCounts>(() => {
+    if (this.way() === 'files') return countsOfFiles(this.going());
+    if (this.way() === 'links') return countsOfLinks(this.parsed().links);
+    return NO_CONTENT;
+  });
   protected readonly levelInvalid = computed(
     () =>
       this.submitted() &&
@@ -266,14 +305,7 @@ export class AddContentPage {
       ? $localize`:@@addContent.includeOne:Incluir 1 item`
       : $localize`:@@addContent.includeMany:Incluir ${count}:count: itens`;
   });
-  private readonly estimateUsd = computed(() =>
-    this.judged() === 0
-      ? 0
-      : Math.max(this.judged() * ESTIMATED_USD_PER_DOCUMENT, 0.01),
-  );
-  protected readonly estimate = computed(() => {
-    return formatNumber(this.estimateUsd(), this.locale, '1.2-2');
-  });
+  private readonly estimateUsd = computed(() => this.costs.usd(this.counts()));
   /** The whole inclusion would not fit in the ceiling: said before, not in the middle. */
   protected readonly overCap = computed(() => {
     const cap = this.capUsd();
@@ -372,7 +404,7 @@ export class AddContentPage {
     const sources: readonly ContentSource[] =
       this.way() === 'files'
         ? this.going().map(({ file, path, role }) => ({
-            kind: role === 'audio' ? 'audio' : 'file',
+            kind: role === 'document' ? 'file' : 'audio',
             file,
             path,
           }))

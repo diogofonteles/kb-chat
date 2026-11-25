@@ -25,6 +25,10 @@ export const STATE_LABELS: Record<
     text: () => $localize`:@@docUploads.state.transcribing:Transcrevendo`,
     tone: 'info',
   },
+  choosing: {
+    text: () => $localize`:@@docUploads.state.choosing:Escolha o que entra`,
+    tone: 'warn',
+  },
   classifying: {
     text: () => $localize`:@@docUploads.state.classifying:Classificando`,
     tone: 'info',
@@ -63,7 +67,7 @@ export const FAILURE_TEXTS: Record<DocumentUploadFailure, () => string> = {
 
 /** States that will not change by themselves: nothing more to poll for. */
 export const isSettled = (state: DocumentUploadState): boolean =>
-  state === 'ready' || state === 'failed';
+  state === 'ready' || state === 'failed' || state === 'choosing';
 
 /** The Mac has it, or its bytes are arriving: it cannot be taken out now. */
 export const isWorking = (state: DocumentUploadState): boolean =>

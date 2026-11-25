@@ -1,10 +1,10 @@
-import { documentLinkSchema, isYoutubeUrl } from '@kb-chat/contracts';
+import { documentLinkSchema, recordingLinkKind } from '@kb-chat/contracts';
 
 /** A pasted line that is a web address, and what it becomes in the collection. */
 export interface ContentLink {
   readonly url: string;
-  /** A page becomes text; a video's speech is transcribed. */
-  readonly kind: 'page' | 'video';
+  /** A page becomes text; a recording is transcribed; a list is chosen from. */
+  readonly kind: 'page' | 'recording' | 'list';
 }
 
 export interface ParsedLinks {
@@ -39,7 +39,7 @@ export function parseLinks(text: string): ParsedLinks {
       continue;
     }
     const url = parsed.data;
-    links.set(url, { url, kind: isYoutubeUrl(url) ? 'video' : 'page' });
+    links.set(url, { url, kind: recordingLinkKind(url) ?? 'page' });
   }
   return { links: [...links.values()], refused };
 }

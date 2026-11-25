@@ -35,7 +35,12 @@ import {
 export type ContentSource =
   | { readonly kind: 'file'; readonly file: File; readonly path: string }
   | { readonly kind: 'audio'; readonly file: File; readonly path: string }
-  | { readonly kind: 'url'; readonly url: string };
+  | {
+      readonly kind: 'url';
+      readonly url: string;
+      /** What the search found it to be; left out, the address decides. */
+      readonly as?: 'page' | 'recording';
+    };
 
 /** Where an item's send is; one at a time (PD-05: a union, never two flags). */
 export type SendPhase =
@@ -207,16 +212,20 @@ export class ContentSender {
       const entry = this.entryOf(key);
       if (!entry) return EMPTY;
       const { source } = entry;
-      if (source.kind === 'url') return this.sendLink(entry, source.url);
+      if (source.kind === 'url') return this.sendLink(entry, source);
       return source.kind === 'audio'
         ? this.sendAudio(entry, source.file)
         : this.sendFile(entry, source.file);
     });
   }
 
-  private sendLink(entry: ContentSend, url: string): Observable<unknown> {
+  private sendLink(
+    entry: ContentSend,
+    { url, as }: Extract<ContentSource, { kind: 'url' }>,
+  ): Observable<unknown> {
     this.put(entry.key, { kind: 'sending', percent: 0 });
-    return this.create(entry, { kind: 'url', url }).pipe(
+    const request = { kind: 'url' as const, url, ...(as && { as }) };
+    return this.create(entry, request).pipe(
       map((answer) => this.answered(entry.key, answer)),
     );
   }
@@ -307,7 +316,7 @@ export class ContentSender {
   private create(
     entry: ContentSend,
     source:
-      | { kind: 'url'; url: string }
+      | { kind: 'url'; url: string; as?: 'page' | 'recording' }
       | { kind: 'file'; name: string; bytes: number; sha256: string },
   ): Observable<CreateDocumentUploadResponse> {
     const { topic, level, batch } = entry.target;

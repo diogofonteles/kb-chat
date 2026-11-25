@@ -7,7 +7,7 @@ describe('parseLinks (KBC-184)', () => {
     );
     expect(links).toEqual([
       { url: 'https://example.org/a', kind: 'page' },
-      { url: 'https://youtu.be/abc', kind: 'video' },
+      { url: 'https://youtu.be/abc', kind: 'recording' },
     ]);
     expect(refused).toEqual([]);
   });

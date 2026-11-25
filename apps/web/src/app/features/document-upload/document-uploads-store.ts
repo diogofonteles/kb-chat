@@ -94,6 +94,11 @@ export class DocumentUploadsStore {
     this.act(upload.id, this.api.changeBatch(batch.id, capUsd));
   }
 
+  /** The recordings of a list that enter: each becomes an item of its own. */
+  choose(upload: DocumentUpload, urls: readonly string[]): void {
+    this.act(upload.id, this.api.choose(upload.id, urls));
+  }
+
   /** A failed item goes again as it was sent. */
   retry(upload: DocumentUpload): void {
     this.act(upload.id, this.api.retry(upload.id));

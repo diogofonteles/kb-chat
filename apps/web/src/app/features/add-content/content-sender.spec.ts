@@ -36,6 +36,7 @@ const anUpload = (fields: Partial<DocumentUpload> = {}): DocumentUpload => ({
   batch: null,
   heldBy: null,
   retriable: false,
+  entries: [],
   createdAt: '2026-11-25T10:00:00.000Z',
   updatedAt: '2026-11-25T10:00:00.000Z',
   ...fields,
@@ -135,6 +136,17 @@ describe('ContentSender (KBC-184)', () => {
         batch: TARGET.batch,
       },
     });
+  });
+
+  it('a link says what the search found it to be; without it the address decides', () => {
+    const { api, sender } = setup();
+    const url = 'https://example.org/podcast';
+    sender.add([{ kind: 'url', url, as: 'recording' }, link(url)], TARGET);
+    expect(api.asked.map(({ request }) => 'as' in request)).toEqual([
+      true,
+      false,
+    ]);
+    expect(api.asked[0]?.request).toMatchObject({ as: 'recording' });
   });
 
   it('one that fails says why, never stops the next ones, and goes again when asked', () => {
