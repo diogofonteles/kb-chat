@@ -84,7 +84,7 @@ export class DocumentUploadsStore {
     () =>
       !this.read() ||
       this.lost() ||
-      this.items().some((one) => !isSettled(one.state)),
+      this.items().some((one) => !isSettled(one)),
   );
 
   /** A list of thousands is large, and takes days: it is read less often. */

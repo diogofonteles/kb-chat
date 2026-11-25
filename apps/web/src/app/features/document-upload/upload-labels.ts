@@ -105,9 +105,14 @@ export function failureTextOf({
   return `${why} ${who}`;
 }
 
-/** States that will not change by themselves: nothing more to poll for. */
-export const isSettled = (state: DocumentUploadState): boolean =>
-  state === 'ready' || state === 'failed' || state === 'choosing';
+/**
+ * It will not change by itself: nothing more to poll for. What waits for a master's decision
+ * may, for who sent it.
+ */
+export const isSettled = ({ state, refused }: DocumentUpload): boolean =>
+  state === 'ready' ||
+  state === 'choosing' ||
+  (state === 'failed' && (refused === null || refused.acceptable));
 
 /** The Mac has it, or its bytes are arriving: it cannot be taken out now. */
 export const isWorking = (state: DocumentUploadState): boolean =>

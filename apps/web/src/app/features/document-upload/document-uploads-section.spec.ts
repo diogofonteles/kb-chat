@@ -673,6 +673,22 @@ describe('what kb refused (KBC-009)', () => {
     ).toBeNull();
   });
 
+  it('what a master decides comes to who sent it by itself', async () => {
+    const one = refused({ acceptable: false });
+    const { http, fixture } = await renderSection([one]);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    http
+      .match(URL)
+      .forEach((req) =>
+        req.flush({ items: [{ ...one, state: 'received', refused: null }] }),
+      );
+    await fixture.whenStable();
+    expect(screen.queryByText(/até um master decidir/)).toBeNull();
+    expect(
+      screen.getByText('Recebido', { selector: 'ui-pill, ui-pill *' }),
+    ).toBeTruthy();
+  });
+
   it('decided in another place first, it says so and reads the list again', async () => {
     const one = refused();
     const { http, fixture } = await renderSection([one]);
