@@ -9,7 +9,7 @@ text gets, over the whole topic: `classify`, `index`, `link`, `index`. kb is rea
 
 The flags and receipts below are the ones the owner's spike verified on kb 0.0.12
 (2026-11-06): `--budget` exists on `classify` and `link` only (`kb index --topic <t>` is
-local and refuses it); the spend is the `decisions:` and `generation:` receipt lines; a
+local and refuses it; with `--embed=false` QMD then embeds only this topic); the spend is the `decisions:` and `generation:` receipt lines; a
 budget reached leaves documents "undecided" with exit 0, which is reported as incomplete.
 """
 
@@ -122,15 +122,28 @@ class KbCli:
     binary: str = "kb"
     # The kb's AI keys (KBC-117): only in kb's own environment, never in the worker's.
     env: dict[str, str] = field(default_factory=dict, repr=False)
+    # QMD's own binary: embeds one collection; without it, kb embeds them all.
+    qmd: str | None = None
     _version: str | None = field(default=None, init=False, repr=False, compare=False)
 
     def command(self, step: str, topic: str, budget_usd: float) -> list[str]:
-        if step not in BUDGETED:
-            return [self.binary, step, "--topic", topic]
-        return [self.binary, step, topic, "--budget", f"{budget_usd:.4f}"]
+        if step in BUDGETED:
+            return [self.binary, step, topic, "--budget", f"{budget_usd:.4f}"]
+        command = [self.binary, step, "--topic", topic]
+        return [*command, "--embed=false"] if self._embeds_apart(step) else command
 
     def run(self, step: str, topic: str, budget_usd: float) -> KbRun:
-        return self._run(self.command(step, topic, budget_usd))
+        done = self._run(self.command(step, topic, budget_usd))
+        if not done.ok or not self._embeds_apart(step):
+            return done
+        # `kb index` embeds every collection's pending documents, not only this one's: after
+        # a reconversion that is thousands, and this document would wait an hour for them.
+        embedded = self._run([str(self.qmd), "embed", "-c", topic, "--timeout", "0"])
+        output = f"{done.output}\n{embedded.output}".strip()
+        return KbRun(ok=embedded.ok, output=output, spend_usd=done.spend_usd)
+
+    def _embeds_apart(self, step: str) -> bool:
+        return step == "index" and self.qmd is not None
 
     def topic_command(self, slug: str, title: str, domain: str) -> list[str]:
         """Each value its own argument: a title with spaces or a colon is never split."""
@@ -185,7 +198,9 @@ def kb_or_none(vault: str | None, env: dict[str, str] | None = None) -> KbCli | 
     if not vault or not Path(vault).is_dir():
         return None
     binary = shutil.which("kb")
-    return KbCli(Path(vault), binary, env=dict(env or {})) if binary else None
+    if not binary:
+        return None
+    return KbCli(Path(vault), binary, env=dict(env or {}), qmd=shutil.which("qmd"))
 
 
 def _scalar(value: str) -> str | int | float:

@@ -190,6 +190,36 @@ def test_the_real_kb_commands_follow_adr_0035():
     assert cli.command("index", "hermetismo", 0.25) == ["kb", "index", "--topic", "hermetismo"]
 
 
+def test_only_the_collections_own_documents_are_embedded(tmp_path):
+    calls = tmp_path / "calls"
+    for name in ("kb", "qmd"):
+        binary = tmp_path / name
+        binary.write_text(f'#!/bin/sh\necho "{name} $*" >> {calls}\n', encoding="utf-8")
+        binary.chmod(0o755)
+    cli = KbCli(tmp_path, str(tmp_path / "kb"), qmd=str(tmp_path / "qmd"))
+    assert cli.run("index", "udv/palavra-do-mestre", 0.5).ok
+    assert calls.read_text(encoding="utf-8").splitlines() == [
+        "kb index --topic udv/palavra-do-mestre --embed=false",
+        "qmd embed -c udv/palavra-do-mestre --timeout 0",
+    ]
+
+
+def test_a_failed_embedding_fails_the_step_and_a_failed_index_embeds_nothing(tmp_path):
+    calls = tmp_path / "calls"
+
+    def binary(name, code):
+        path = tmp_path / name
+        path.write_text(f'#!/bin/sh\necho "{name}" >> {calls}\nexit {code}\n', encoding="utf-8")
+        path.chmod(0o755)
+        return str(path)
+
+    cli = KbCli(tmp_path, binary("kb", 0), qmd=binary("qmd", 1))
+    assert not cli.run("index", "t", 0.5).ok
+    cli = KbCli(tmp_path, binary("kb", 1), qmd=binary("qmd", 0))
+    assert not cli.run("index", "t", 0.5).ok
+    assert calls.read_text(encoding="utf-8").split() == ["kb", "qmd", "kb"]
+
+
 def test_kb_is_off_without_a_vault(tmp_path):
     assert kb_or_none(None) is None
     assert kb_or_none(str(tmp_path / "missing")) is None
