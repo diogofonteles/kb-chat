@@ -83,6 +83,7 @@ reason and writes nothing.
 A Mac that publishes (above) also takes the documents and links people send from the app
 (`doc-ingest` jobs, ADR 0040): no other marking. With `uv` on PATH and `tools/kb-map` next to
 this tool, the worker asks for them with `kb-publish` and, under the same vault lock:
+
 - a file (fetched from the API) or a web link goes through
   `uv run --project tools/kb-map --extra convert kb-map convert <collection> <file|url> --json`
   (Docling, MarkItDown, Firecrawl or Jina; the original kept in `raw/_originals/`; the Markdown
